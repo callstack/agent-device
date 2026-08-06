@@ -7,7 +7,12 @@ const LARGEST_TYPE_CYCLE_ZONE_CEILINGS: Readonly<Record<string, number>> = {
   client: 1,
   commands: 33,
   core: 10,
-  'daemon-server': 18,
+  // 20 -> 21 (#1629): deferred-interaction-outcome.ts is the choke point between the
+  // marking members (interaction-common, request-generic-dispatch) and the resolving
+  // member (snapshot-capture), so it sits inline on value paths that already ran
+  // member-to-member — one more node in the cycle, zero new edges. Shrinking the
+  // cycle itself is #1632's hub work, not this seam's.
+  'daemon-server': 21,
   platforms: 7,
 };
 

@@ -321,7 +321,7 @@ The perfect-shape refactor is complete and merged. Its end-state:
   theirs.
 - Type-cycle growth (R9). R4 keeps the VALUE import graph acyclic, so every remaining cycle is
   created by type-only imports — free at runtime, invisible to R5/R6, and the largest single
-  obstacle to reading a subsystem in isolation: inside a strongly-connected component of 74 files,
+  obstacle to reading a subsystem in isolation: inside a strongly-connected component of 77 files,
   no file has a self-contained slice. `TYPE_CYCLE_BASELINE`, derived from the zone ceilings in
   `scripts/layering/daemon-modularity.ts`, ratchets it for **growth only**, deliberately unlike R6: reducing it
   is a real refactor rather than a file move, so a hard equality would turn every unrelated
@@ -329,7 +329,7 @@ The perfect-shape refactor is complete and merged. Its end-state:
   failing. Hubs by in-component dependents: `runtime-contract.ts` (25),
   `commands/runtime-types.ts` (21), `backend.ts` (15), `commands/runtime-common.ts` (12).
 - Daemon modularity ratchets (R10). The same tooling-only declaration pins R7's writer-owned
-  field/owner-claim counts, R9's 74 members by zone (`commands` 33, `daemon-server` 18, `core` 10,
+  field/owner-claim counts, R9's 77 members by zone (`commands` 33, `daemon-server` 21, `core` 10,
   `platforms` 7, root 5, `client` 1), and the external production importers of `daemon/types.ts`
   (down to 2: the client normalizers and remote artifacts). R7 counts and external importers may
   only shrink; no zone may grow inside R9, and replay/Maestro/replay-test engine files remain outside
