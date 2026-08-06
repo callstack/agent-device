@@ -130,18 +130,138 @@ export function resolveRunnerRequestSignal(options: {
   return AbortSignal.any([registeredSignal, options.signal]);
 }
 
+type RunnerErrorMatch = {
+  /** Required `AppError.code`; absent = any AppError. */
+  code?: string;
+  /** Every entry must appear in the lowercased message. */
+  messageIncludesAll?: readonly string[];
+  /** Required details evidence beyond code/message. */
+  details?: 'retriable' | 'usbmux-device-unattached';
+};
+
+type RunnerErrorVerdicts = {
+  /** isRetryableRunnerError: transport error worth a same-session resend. */
+  retryable?: boolean;
+  /** shouldRetryRunnerConnectError: connect loop may keep waiting for the runner. */
+  connectRetry?: boolean;
+  /** Session-fatal classification: invalidate the cached runner session with this reason. */
+  sessionFatalReason?: string;
+  /** Connect-shaped failure before the command was sent: restart the session and replay. */
+  restartBeforeSend?: boolean;
+};
+
+type RunnerErrorRule = {
+  /** Stable rule name for tests and diagnostics. */
+  reason: string;
+  match: RunnerErrorMatch;
+  verdicts: RunnerErrorVerdicts;
+};
+
+/**
+ * The one declaration of runner error classes (#1631), mirroring
+ * RUNNER_COMMAND_TRAIT_MANIFEST's role for commands: every recovery predicate
+ * below derives from this table instead of keeping its own substring chain.
+ * Per axis, the FIRST matching rule that defines the axis wins — which is why
+ * `flagged_retriable` precedes the denials (an explicitly retriable error
+ * stays retriable whatever its message says), and `usbmux_device_unattached`
+ * sits first (retrying cannot attach a cable, and its typed verdict carries
+ * the recovery hint a generic connect failure would replace).
+ */
+export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
+  {
+    reason: 'usbmux_device_unattached',
+    match: { code: 'DEVICE_NOT_FOUND', details: 'usbmux-device-unattached' },
+    verdicts: { connectRetry: false },
+  },
+  {
+    reason: 'flagged_retriable',
+    match: { code: 'COMMAND_FAILED', details: 'retriable' },
+    verdicts: { retryable: true },
+  },
+  {
+    reason: 'xcodebuild_exited_early',
+    match: { code: 'COMMAND_FAILED', messageIncludesAll: ['xcodebuild exited early'] },
+    verdicts: { retryable: false, connectRetry: false },
+  },
+  {
+    reason: 'device_busy_connecting',
+    match: { code: 'COMMAND_FAILED', messageIncludesAll: ['device is busy', 'connecting'] },
+    verdicts: { retryable: false },
+  },
+  {
+    reason: 'runner_connect_refused',
+    match: { code: 'COMMAND_FAILED', messageIncludesAll: ['runner did not accept connection'] },
+    verdicts: { retryable: true, restartBeforeSend: true },
+  },
+  {
+    reason: 'fetch_failed',
+    match: { code: 'COMMAND_FAILED', messageIncludesAll: ['fetch failed'] },
+    verdicts: { retryable: true },
+  },
+  {
+    reason: 'econnrefused',
+    match: { code: 'COMMAND_FAILED', messageIncludesAll: ['econnrefused'] },
+    verdicts: { retryable: true },
+  },
+  {
+    reason: 'socket_hang_up',
+    match: { code: 'COMMAND_FAILED', messageIncludesAll: ['socket hang up'] },
+    verdicts: { retryable: true },
+  },
+  {
+    reason: 'ax_snapshot_failure',
+    match: { code: 'IOS_AX_SNAPSHOT_FAILED' },
+    verdicts: { sessionFatalReason: 'ax_snapshot_failure' },
+  },
+  {
+    reason: 'xctest_recorded_failure',
+    match: { code: 'XCTEST_RECORDED_FAILURE' },
+    verdicts: { sessionFatalReason: 'xctest_recorded_failure' },
+  },
+  {
+    // The runner reported its main thread stuck in abandoned work past the wedge
+    // threshold (#1105): only a restart cures it. The per-request recycle budget
+    // still bounds how many boots one request pays for.
+    reason: 'runner_main_thread_wedged',
+    match: { code: 'RUNNER_WEDGED' },
+    verdicts: { sessionFatalReason: 'runner_main_thread_wedged' },
+  },
+];
+
+function matchesRunnerErrorRule(error: AppError, match: RunnerErrorMatch): boolean {
+  if (match.code !== undefined && error.code !== match.code) return false;
+  if (!matchesRunnerErrorDetails(error, match.details)) return false;
+  return matchesRunnerErrorMessage(error, match.messageIncludesAll);
+}
+
+function matchesRunnerErrorDetails(error: AppError, details: RunnerErrorMatch['details']): boolean {
+  if (details === undefined) return true;
+  if (details === 'retriable') return error.details?.retriable === true;
+  return isUsbmuxDeviceUnattachedError(error);
+}
+
+function matchesRunnerErrorMessage(error: AppError, parts: readonly string[] | undefined): boolean {
+  if (!parts) return true;
+  const message = `${error.message ?? ''}`.toLowerCase();
+  return parts.every((part) => message.includes(part));
+}
+
+function runnerErrorVerdict<Axis extends keyof RunnerErrorVerdicts>(
+  error: unknown,
+  axis: Axis,
+): RunnerErrorVerdicts[Axis] | undefined {
+  if (!(error instanceof AppError)) return undefined;
+  for (const rule of RUNNER_ERROR_RULES) {
+    if (rule.verdicts[axis] === undefined) continue;
+    if (matchesRunnerErrorRule(error, rule.match)) return rule.verdicts[axis];
+  }
+  return undefined;
+}
+
 export function isRetryableRunnerError(err: unknown): boolean {
   if (!(err instanceof AppError)) return false;
   if (err.code !== 'COMMAND_FAILED') return false;
-  if (err.details?.retriable === true) return true;
-  const message = `${err.message ?? ''}`.toLowerCase();
-  if (message.includes('xcodebuild exited early')) return false;
-  if (message.includes('device is busy') && message.includes('connecting')) return false;
-  if (message.includes('runner did not accept connection')) return true;
-  if (message.includes('fetch failed')) return true;
-  if (message.includes('econnrefused')) return true;
-  if (message.includes('socket hang up')) return true;
-  return false;
+  return runnerErrorVerdict(err, 'retryable') ?? false;
 }
 
 /**
@@ -161,14 +281,33 @@ export function isUsbmuxDeviceUnattachedError(error: unknown): boolean {
 }
 
 export function shouldRetryRunnerConnectError(error: unknown): boolean {
-  // Retrying cannot attach a cable, and the typed verdict carries the recovery
-  // hint that a generic connect failure would replace.
-  if (isUsbmuxDeviceUnattachedError(error)) return false;
-  if (!(error instanceof AppError)) return true;
-  if (error.code !== 'COMMAND_FAILED') return true;
-  const message = String(error.message ?? '').toLowerCase();
-  if (message.includes('xcodebuild exited early')) return false;
-  return true;
+  return runnerErrorVerdict(error, 'connectRetry') ?? true;
+}
+
+/**
+ * Session-fatal classification for a runner response error: when defined, the
+ * cached runner session must be invalidated with this reason instead of being
+ * reused (see ADR 0005 and the Selector Capture Reliability Contract's
+ * runnerFatal rule).
+ */
+export function resolveRunnerFatalErrorReason(error: unknown): string | undefined {
+  return runnerErrorVerdict(error, 'sessionFatalReason');
+}
+
+/**
+ * A connect-shaped failure that surfaced before the command was sent: restart
+ * the runner session and replay the command, rather than probing a runner
+ * that never accepted the connection. Composed with the connect-retry axis so
+ * a terminal connect verdict (cable unattached, xcodebuild exited early)
+ * still refuses the restart. Matching is table-driven and therefore
+ * case-insensitive, unlike the raw-message check it replaced; the message is
+ * our own transport literal, so no real error changes class.
+ */
+export function shouldRestartRunnerBeforeCommandSend(error: unknown): boolean {
+  return (
+    (runnerErrorVerdict(error, 'restartBeforeSend') ?? false) &&
+    shouldRetryRunnerConnectError(error)
+  );
 }
 
 export function resolveRunnerEarlyExitHint(

@@ -18,6 +18,7 @@ import {
   shouldRetryRunnerConnectError,
   withRunnerCommandId,
   type RunnerCommand,
+  shouldRestartRunnerBeforeCommandSend,
 } from './runner-contract.ts';
 import type {
   AppleRunnerCommandOptions,
@@ -293,13 +294,7 @@ export async function executeRunnerCommand(
       await invalidateRunnerSessionBestEffort(session, 'runner_startup_request_canceled');
       throw err;
     }
-    if (
-      appErr.code === 'COMMAND_FAILED' &&
-      typeof appErr.message === 'string' &&
-      appErr.message.includes('Runner did not accept connection') &&
-      shouldRetryRunnerConnectError(appErr) &&
-      session
-    ) {
+    if (shouldRestartRunnerBeforeCommandSend(appErr) && session) {
       assertRunnerRequestActive(options.requestId);
       return await restartSessionAndRunCommand({
         device,
