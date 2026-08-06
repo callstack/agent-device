@@ -23,7 +23,7 @@ import type { SelectorResolutionPolicy } from './resolution-policy.ts';
  * forced every caller to re-derive its own contract inline.
  */
 
-export type PolicyResolutionOutcome =
+export type AstPolicyResolutionOutcome =
   /** No selector alternative matched anything. */
   | { kind: 'none' }
   /**
@@ -55,7 +55,7 @@ export function resolveSelectorChainWithPolicy(
   chain: SelectorChain,
   policy: SelectorResolutionPolicy,
   options: SelectorMatchOptions,
-): PolicyResolutionOutcome {
+): AstPolicyResolutionOutcome {
   const matchOptions = { ...options, requireRect: policy.requireRect };
 
   if (policy.ambiguity === 'reject-candidates') {
@@ -106,7 +106,7 @@ export function resolveSelectorChainWithPolicy(
 
 function resolvedFromList(
   list: NonNullable<ReturnType<typeof listSelectorChainMatches>>,
-): PolicyResolutionOutcome {
+): AstPolicyResolutionOutcome {
   const node = list.matchedNodes[0];
   if (!node) return { kind: 'none' };
   return {

@@ -65,6 +65,31 @@ test('a unique match resolves under every policy', () => {
   }
 });
 
+test('the façade returns selector TEXT under every policy, never a parser node', () => {
+  // #1589 made the root façade string-in/string-out and confined parser
+  // objects to `@agent-device/selectors/ast`. A nested return type reopens
+  // that boundary invisibly: the package-boundary gate filters exported
+  // *names*, so `PolicyResolutionOutcome.resolution` typed as the AST shape
+  // stayed green while production read `outcome.resolution.selector.raw`.
+  // Every row, and both branches that carry a selector.
+  for (const name of Object.keys(
+    SELECTOR_RESOLUTION_POLICIES,
+  ) as (keyof typeof SELECTOR_RESOLUTION_POLICIES)[]) {
+    const resolved = outcomeFor(name, UNIQUE_TREE);
+    assert.equal(resolved.kind, 'resolved', name);
+    if (resolved.kind === 'resolved') {
+      assert.equal(typeof resolved.resolution.selector, 'string', name);
+      assert.equal(resolved.resolution.selector, 'label="Save"', name);
+    }
+    const ambiguous = outcomeFor(name, AMBIGUOUS_TREE);
+    if (ambiguous.kind === 'ambiguous') {
+      assert.equal(typeof ambiguous.selector, 'string', name);
+    } else if (ambiguous.kind === 'resolved') {
+      assert.equal(typeof ambiguous.resolution.selector, 'string', name);
+    }
+  }
+});
+
 test('no match resolves to none under every policy', () => {
   for (const name of Object.keys(
     SELECTOR_RESOLUTION_POLICIES,

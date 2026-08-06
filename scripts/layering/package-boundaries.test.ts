@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { listSourceFiles } from './check.ts';
-import { readDirectNamedExports, readNamedExports } from './facade-exports.ts';
+import { readDirectNamedExports, readNamedExports, readReExportSources } from './facade-exports.ts';
 import {
   checkPackageBoundaries,
   checkPackageInternalSites,
@@ -397,6 +397,25 @@ test('the real tree parses, declares, and passes R11', () => {
     ),
     [],
     'selectors façade keeps AST and grammar internals private',
+  );
+  // Named exports are not the whole boundary. A parser-side type reached
+  // through a NESTED field — `PolicyResolutionOutcome.resolution` typed as
+  // `AstSelectorResolution` — leaks the same objects while exporting none of
+  // their names, and the assertion above stays green on it (#1649). What
+  // separates the two is which module the type is re-exported FROM:
+  // `public-resolution-types.ts` holds the string-flattened shapes,
+  // `resolve-with-policy.ts` and `resolve.ts` hold the parser-side ones. A
+  // resolution type re-exported from either of the latter means a flattening
+  // step at the façade was skipped.
+  const selectorsReExports = readReExportSources(
+    fs.readFileSync(path.join(repoRoot, 'packages/selectors/src/index.ts'), 'utf8'),
+  );
+  assert.deepEqual(
+    ['PolicyResolutionOutcome', 'SelectorResolution', 'SelectorChainMatchList'].filter(
+      (name) => selectorsReExports.get(name) !== './internal/public-resolution-types.ts',
+    ),
+    [],
+    'selectors façade must publish resolution shapes from public-resolution-types.ts, not from the parser-side modules',
   );
   // The AST subpath's one in-repo consumer is the published SDK re-export.
   // Anything else importing it means the string-only façade was bypassed.

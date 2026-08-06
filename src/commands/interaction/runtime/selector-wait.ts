@@ -45,7 +45,7 @@ function policyMatchList(outcome: PolicyResolutionOutcome): SelectorChainMatchLi
   }
   if (outcome.kind === 'resolved') {
     return {
-      selector: outcome.resolution.selector.raw,
+      selector: outcome.resolution.selector,
       selectorIndex: outcome.resolution.selectorIndex,
       // Every candidate, not just the winner: the landmark check is satisfied
       // when SOME match carries the recorded identity, so a first impostor

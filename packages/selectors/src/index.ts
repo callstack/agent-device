@@ -1,6 +1,7 @@
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import type { Selector } from './internal/parse.ts';
 import type {
+  PolicyResolutionOutcome,
   SelectorChainMatch,
   SelectorChainMatchList,
   SelectorMatchOptions,
@@ -61,6 +62,7 @@ import {
 export type { FindAction, FindLocator } from './internal/find.ts';
 export type { IsPredicate } from './internal/predicates.ts';
 export type {
+  PolicyResolutionOutcome,
   SelectorChainMatchList,
   SelectorChainMatch,
   SelectorResolution,
@@ -269,16 +271,36 @@ export type {
   SelectorResolutionPolicy,
 } from './internal/resolution-policy.ts';
 import type { SelectorResolutionPolicy } from './internal/resolution-policy.ts';
-import type { PolicyResolutionOutcome } from './internal/resolve-with-policy.ts';
-export type { PolicyResolutionOutcome } from './internal/resolve-with-policy.ts';
 
-/** Public façade wrapper that accepts selector text, never an AST. */
+/**
+ * Public façade wrapper that accepts selector text and returns selector text —
+ * never an AST, in either direction.
+ *
+ * The return leg is the half that is easy to miss: the parser-side outcome
+ * carries the winning `Selector` node inside `resolution`, and returning it
+ * unchanged would put a package-private parser object back in every caller's
+ * hands through a nested field. The façade's own boundary gate reads exported
+ * *names*, so it cannot see that; `selector-wait.ts` reading
+ * `outcome.resolution.selector.raw` was the runtime proof it had happened.
+ * Flattening here is the same treatment `resolveSelectorChain` above gives
+ * `AstSelectorResolution` (#1589).
+ */
 function resolveSelectorChainWithPolicy(
   nodes: SnapshotState['nodes'],
   expression: string,
   policy: SelectorResolutionPolicy,
   options: SelectorMatchOptions,
 ): PolicyResolutionOutcome {
-  return resolveSelectorChainWithPolicyAst(nodes, parseSelectorChain(expression), policy, options);
+  const outcome = resolveSelectorChainWithPolicyAst(
+    nodes,
+    parseSelectorChain(expression),
+    policy,
+    options,
+  );
+  if (outcome.kind !== 'resolved') return outcome;
+  return {
+    ...outcome,
+    resolution: { ...outcome.resolution, selector: outcome.resolution.selector.raw },
+  };
 }
 export { resolveSelectorChainWithPolicy };

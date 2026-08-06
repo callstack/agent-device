@@ -96,3 +96,27 @@ export function readDirectNamedExports(source: string): string[] {
   }
   return [...names].sort();
 }
+
+/**
+ * Which module each name in `source` is re-exported FROM, for names that come
+ * from a re-export rather than a local declaration.
+ *
+ * A façade's export *names* are only half its boundary: a type re-exported
+ * from the right module and one re-exported from a package-private module read
+ * identically in the name list, while only the second leaks. #1649 shipped
+ * exactly that — a policy outcome re-exported from the parser-side module, so
+ * its nested `resolution` field handed callers the private AST — and the
+ * name-list gate stayed green throughout.
+ */
+export function readReExportSources(source: string): Map<string, string> {
+  const parsed = parseSync('facade-reexport-source-scan.ts', source);
+  const sources = new Map<string, string>();
+  for (const staticExport of parsed.module.staticExports) {
+    for (const entry of staticExport.entries) {
+      if (entry.exportName.kind !== 'Name' || !entry.exportName.name) continue;
+      if (!entry.moduleRequest) continue;
+      sources.set(entry.exportName.name, entry.moduleRequest.value);
+    }
+  }
+  return sources;
+}
