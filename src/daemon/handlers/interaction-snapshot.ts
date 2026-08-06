@@ -37,9 +37,7 @@ export async function captureSnapshotForSession(
   const effectiveFlags = {
     ...(flags ?? {}),
     snapshotInteractiveOnly: options.interactiveOnly,
-    ...(options.preferredBackend
-      ? { snapshotPreferredBackend: options.preferredBackend }
-      : {}),
+    ...(options.preferredBackend ? { snapshotPreferredBackend: options.preferredBackend } : {}),
   };
   const dispatchContext = contextFromFlags(
     effectiveFlags,
