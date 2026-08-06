@@ -1363,7 +1363,8 @@ extension RunnerTests {
       interactiveOnly: command.interactiveOnly ?? false,
       depth: command.depth,
       scope: command.scope,
-      raw: command.raw ?? false
+      raw: command.raw ?? false,
+      preferredBackend: command.preferredBackend
     )
     do {
       let payload: DataPayload

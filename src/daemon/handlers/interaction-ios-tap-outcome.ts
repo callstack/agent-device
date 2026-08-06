@@ -53,7 +53,11 @@ export async function corroborateIosTapFailure(
   const baseline = readCorroborationBaseline(params.session.snapshot);
   if (!baseline) return undefined;
 
-  const after = await captureCorroborationSnapshot(params, baseline.presentation);
+  const after = await captureCorroborationSnapshot(
+    params,
+    baseline.snapshot.snapshotQuality?.backend,
+    baseline.presentation,
+  );
   if (!after || !hasMatchingPresentation(baseline.snapshot, after, params.command)) {
     return undefined;
   }
@@ -92,6 +96,7 @@ function readCorroborationBaseline(
 
 async function captureCorroborationSnapshot(
   params: IosTapCorroborationParams,
+  baselineBackend: string | undefined,
   presentation: SnapshotPresentation | undefined,
 ): Promise<SnapshotState | undefined> {
   try {
@@ -102,6 +107,11 @@ async function captureCorroborationSnapshot(
       params.contextFromFlags,
       {
         interactiveOnly: presentation?.interactiveOnly ?? true,
+        // Evidence comparison is only valid same-backend, and the recorded-failure
+        // screens are exactly where the capture plan flips between XCTest and
+        // private-AX (the penalty boundary) — pin the probe to the baseline's
+        // backend instead of failing closed on the mismatch.
+        ...(baselineBackend === 'private-ax' ? { preferredBackend: 'private-ax' as const } : {}),
         signal: getRequestSignal(params.requestId),
       },
     );

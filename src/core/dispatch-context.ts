@@ -33,6 +33,7 @@ export type DispatchContext = ScreenshotDispatchFlags & {
   runnerLeaseContext?: RunnerLogicalLeaseContext;
   screenshotCaptureBackend?: 'runner';
   snapshotInteractiveOnly?: boolean;
+  snapshotPreferredBackend?: 'private-ax';
   snapshotDepth?: number;
   snapshotScope?: string;
   snapshotRaw?: boolean;

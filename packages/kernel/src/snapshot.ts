@@ -40,6 +40,13 @@ export type SnapshotOptions = {
   depth?: number;
   scope?: string;
   raw?: boolean;
+  /**
+   * Internal (never CLI-exposed): capture with this backend first regardless of
+   * channel health. Evidence comparisons are only valid same-backend (backends
+   * are not comparable views of a screen), so a corroboration probe must be
+   * captured the way its baseline was.
+   */
+  preferredBackend?: 'private-ax';
 };
 
 export type SnapshotPresentationFlagInput = {

@@ -168,6 +168,17 @@ extension RunnerTests {
     }
   }
 
+  /// Pure gate: a capture is planned as penalized when the channel penalty is
+  /// active OR the daemon pinned the private-AX backend (same-backend evidence
+  /// probe) — both mean "do not enter XCTest tree work first, and stamp the
+  /// pre-selection as 'deferred' rather than a degradation".
+  static func snapshotXCTestChannelTreatedAsPenalized(
+    penalized: Bool,
+    preferredBackend: String?
+  ) -> Bool {
+    penalized || preferredBackend == SnapshotBackendKind.privateAX.rawValue
+  }
+
   /// Pure plan-reorder rule: a penalized XCTest accessibility channel uses independent backends
   /// when the platform has one, otherwise it keeps XCTest work on a short probe. The raw
   /// diagnostic plan keeps tree-first errors, and unknown plans are left untouched.
@@ -222,9 +233,15 @@ extension RunnerTests {
     // Reorder is iOS-only because hostile screens can make XCTest tree/query work grind while
     // the app remains visually responsive. Simulators can avoid that channel through private AX;
     // physical devices have no independent semantic backend yet, so they use a bounded probe.
+    // A daemon-preferred private-AX capture (same-backend evidence probe) takes the exact
+    // penalized route: privateAX-first plan, 'deferred' verdict — the backend was pre-selected
+    // deliberately, so no degradation warning should render for it.
     var xCTestChannelPenalized = false
 #if os(iOS)
-    xCTestChannelPenalized = isSnapshotXCTestChannelPenalized(bundleId: currentBundleId)
+    xCTestChannelPenalized = Self.snapshotXCTestChannelTreatedAsPenalized(
+      penalized: isSnapshotXCTestChannelPenalized(bundleId: currentBundleId),
+      preferredBackend: options.preferredBackend
+    )
 #endif
     let effective = Self.effectiveSnapshotCapturePlan(
       plan,
@@ -666,6 +683,30 @@ extension RunnerTests {
     XCTAssertNil(Self.xcTestChannelStateFirstFailure(.normal))
     XCTAssertEqual(Self.xcTestChannelStateFirstFailure(.deferredToIndependentBackend)?.code, "deferred")
     XCTAssertEqual(Self.xcTestChannelStateFirstFailure(.boundedXCTestProbe)?.code, "budget")
+  }
+
+  /// Same-backend evidence probes: a daemon-pinned private-AX capture takes the
+  /// penalized route even with a healthy channel, so tap-outcome corroboration
+  /// baselines and probes are always captured by the same backend (backends are
+  /// never comparable views of a screen). Composed with the plan rule, the pin
+  /// yields the privateAX-first deferred plan.
+  func testPreferredPrivateAXBackendPlansAsPenalized() {
+    XCTAssertTrue(
+      Self.snapshotXCTestChannelTreatedAsPenalized(penalized: false, preferredBackend: "private-ax"))
+    XCTAssertTrue(
+      Self.snapshotXCTestChannelTreatedAsPenalized(penalized: true, preferredBackend: nil))
+    XCTAssertFalse(
+      Self.snapshotXCTestChannelTreatedAsPenalized(penalized: false, preferredBackend: nil))
+    XCTAssertFalse(
+      Self.snapshotXCTestChannelTreatedAsPenalized(penalized: false, preferredBackend: "tree"))
+
+    let pinned = Self.effectiveSnapshotCapturePlan(
+      Self.regularVisiblePlan,
+      xCTestChannelPenalized: Self.snapshotXCTestChannelTreatedAsPenalized(
+        penalized: false, preferredBackend: "private-ax")
+    )
+    XCTAssertEqual(pinned.plan, [.privateAX])
+    XCTAssertEqual(pinned.xCTestChannelState, .deferredToIndependentBackend)
   }
 
   func testEffectiveSnapshotCapturePlanDefersXCTestBackedTiersOnlyWhenPenalizedRegularPlan() {

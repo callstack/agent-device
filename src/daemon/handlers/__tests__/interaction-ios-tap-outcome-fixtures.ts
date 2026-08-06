@@ -37,12 +37,15 @@ export const imageViewerNodes: RawSnapshotNode[] = [
   },
 ];
 
-export function snapshot(nodes: RawSnapshotNode[]) {
+export function snapshot(
+  nodes: RawSnapshotNode[],
+  backend: 'tree' | 'queries' | 'private-ax' = 'tree',
+) {
   return buildSnapshotState(
     {
       nodes,
       backend: 'xctest',
-      quality: { state: 'healthy', backend: 'tree' },
+      quality: { state: 'healthy', backend },
     },
     { snapshotInteractiveOnly: false },
   );

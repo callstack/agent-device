@@ -75,6 +75,7 @@ export function createAppleInteractor(
                 command: 'snapshot',
                 appBundleId: options?.appBundleId,
                 interactiveOnly: options?.interactiveOnly,
+                preferredBackend: options?.preferredBackend,
                 depth: options?.depth,
                 scope: options?.scope,
                 raw: options?.raw,

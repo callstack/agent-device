@@ -71,6 +71,8 @@ export type CliFlags = CloudProviderProfileFields &
     cost?: boolean;
     responseLevel?: ResponseLevel;
     snapshotInteractiveOnly?: boolean;
+    /** Internal (no CLI flag): pin the capture backend for same-backend evidence probes. */
+    snapshotPreferredBackend?: 'private-ax';
     snapshotDiff?: boolean;
     snapshotDepth?: number;
     snapshotScope?: string;
