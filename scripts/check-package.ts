@@ -33,9 +33,19 @@ type PackedManifest = PackedDependencies & {
 };
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
+const packDestinationFlag = '--pack-destination';
+const suppliedPackDestination = process.argv
+  .slice(2)
+  .find((arg, index, args) => (args[index - 1] === packDestinationFlag ? arg : undefined));
+if (process.argv.includes(packDestinationFlag) && !suppliedPackDestination) {
+  throw new Error(`${packDestinationFlag} requires a destination directory.`);
+}
 // `npm install` resolves `file:` tarballs through the real path, and macOS `/var` is a symlink to
 // `/private/var`; resolving up front keeps the paths this script prints equal to the ones npm uses.
 const workDir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'agent-device-package-'));
+const packDestination = suppliedPackDestination
+  ? path.resolve(repoRoot, suppliedPackDestination)
+  : workDir;
 const consumerDir = path.join(workDir, 'consumer');
 
 /** Stdout is captured for the callers that parse it; stderr passes through so failures are readable. */
@@ -70,10 +80,15 @@ function packTarball(): string {
   if (!fs.existsSync(path.join(repoRoot, 'dist', 'src'))) {
     throw new Error('No dist/src build found. Run `pnpm build` first.');
   }
+  fs.mkdirSync(packDestination, { recursive: true });
   const packed = JSON.parse(
-    run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', workDir], repoRoot),
+    run(
+      'npm',
+      ['pack', '--ignore-scripts', '--json', '--pack-destination', packDestination],
+      repoRoot,
+    ),
   ) as [{ filename: string }];
-  return path.join(workDir, packed[0].filename);
+  return path.join(packDestination, packed[0].filename);
 }
 
 function lintTarball(tarball: string): void {
