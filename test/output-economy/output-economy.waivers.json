@@ -6,5 +6,13 @@
   "workflow.mutation-tail.cli.text": {
     "bytes": 173,
     "reason": "ADR 0014: the routine-workflow mutation-tail step renders the same pinned tail refs in human-CLI text (+8 bytes). See settle-tail.default.text."
+  },
+  "settle.default.text": {
+    "bytes": 161,
+    "reason": "ADR 0014 (#1638 follow-up): the settled diff's ADDED lines now render their refs pinned too (+8 bytes for the two added-line pins), closing the gap where the tail was paste-ready but the diff — the primary payload — was not. A settled diff activates a PARTIAL frame, which admits only the pinned form, so a caller copying the bare @eN the diff handed them got plain_ref_requires_complete_frame. Same policy as settle-tail.default.text: JSON and MCP keep the single response-level refsGeneration; only human-CLI text carries the pins."
+  },
+  "workflow.mutation-confirm.cli.text": {
+    "bytes": 161,
+    "reason": "ADR 0014 (#1638 follow-up): the routine-workflow mutation-confirm step renders the same pinned added-line refs in human-CLI text (+8 bytes). See settle.default.text."
   }
 }

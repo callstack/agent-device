@@ -21,7 +21,7 @@
     "shape": "$.nodeCount:number|$.refs:array|$.refsGeneration:number|$.refs[].label:string|$.refs[].ref:string|$.refs[]:object|$.truncated:boolean|$.visibility.partial:boolean|$.visibility.reasons:array|$.visibility.totalNodeCount:number|$.visibility.visibleNodeCount:number|$.visibility:object|$:object"
   },
   "settle.default.text": {
-    "bytes": 153,
+    "bytes": 161,
     "lines": 5,
     "refs": 3,
     "hints": 0,
@@ -168,7 +168,7 @@
     "shape": "text"
   },
   "workflow.mutation-confirm.cli.text": {
-    "bytes": 153,
+    "bytes": 161,
     "lines": 5,
     "refs": 3,
     "hints": 0,
