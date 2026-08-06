@@ -41,6 +41,26 @@ extension RunnerTests {
     }
   }
 
+  func testSynthesizedFirstResponderTypeRequiresHiddenKeyboardTapWitness() {
+    let cases: [(TextTypingRepairMode, Bool, Bool, Bool)] = [
+      (.none, true, false, true),
+      (.none, true, true, false),
+      (.none, false, false, false),
+      (.append, true, false, false),
+      (.replacement, true, false, false),
+    ]
+    for (mode, fromTapWitness, softwareKeyboardVisible, expected) in cases {
+      XCTAssertEqual(
+        Self.shouldUseSynthesizedFirstResponderType(
+          repairMode: mode,
+          fromTapWitness: fromTapWitness,
+          softwareKeyboardVisible: softwareKeyboardVisible
+        ),
+        expected
+      )
+    }
+  }
+
 #if os(iOS)
   func testSynthesizedTextEntryFallsBackOnlyWhenPrivateSynthesisIsUnavailable() {
     XCTAssertEqual(

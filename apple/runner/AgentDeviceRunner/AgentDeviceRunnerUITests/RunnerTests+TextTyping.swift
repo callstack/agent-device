@@ -45,6 +45,11 @@ extension RunnerTests {
         activeTarget = fallbackTarget
       }
     }
+    let shouldUseSynthesizedFirstResponderType = Self.shouldUseSynthesizedFirstResponderType(
+      repairMode: repairMode,
+      fromTapWitness: activeTarget.fromTapWitness,
+      softwareKeyboardVisible: isKeyboardVisible(app: app)
+    )
     let initialResolveStartedAt = Date()
     let initialTarget = resolveTextEntryElement(app: app, target: activeTarget)
     activeTarget = activeTarget.withElement(initialTarget)
@@ -99,11 +104,30 @@ extension RunnerTests {
       }
     }
 
-    func typeIntoCurrentTarget(_ value: String) -> (element: XCUIElement?, dispatched: Bool) {
+    func typeIntoCurrentTarget(_ value: String) -> (element: XCUIElement?, dispatched: Bool, failure: TextEntryFailure?) {
+#if os(iOS)
+      if shouldUseSynthesizedFirstResponderType,
+        let currentTarget = resolveTextEntryElement(app: app, target: activeTarget)
+      {
+        textEntryRoute = "synthesized-first-responder"
+        NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=synthesized-first-responder")
+        switch synthesizer.enterText(app: app, text: value, replacingExistingText: false) {
+        case .continueTyping:
+          return (currentTarget, true, nil)
+        case .fallback:
+          return (nil, false, .synthesisUnavailable)
+        case .raise(let message):
+          NSException(
+            name: NSExceptionName.internalInconsistencyException,
+            reason: message ?? "private XCTest text synthesis failed"
+          ).raise()
+        }
+      }
+#endif
       if let currentTarget = resolveTextEntryElement(app: app, target: activeTarget) {
         textEntryRoute = "xctest-element"
         currentTarget.typeText(value)
-        return (currentTarget, true)
+        return (currentTarget, true, nil)
       } else if activeTarget.prefersFocusedElement && isKeyboardVisible(app: app) {
 #if os(iOS)
         textEntryRoute = "synthesized-first-responder"
@@ -128,19 +152,19 @@ extension RunnerTests {
 #else
         app.typeText(value)
 #endif
-        return (resolveTextEntryElement(app: app, target: activeTarget), true)
+        return (resolveTextEntryElement(app: app, target: activeTarget), true, nil)
       }
-      return (nil, false)
+      return (nil, false, .notFocused)
     }
 
-    func dispatchFailureResult() -> TextEntryResult {
+    func dispatchFailureResult(_ failure: TextEntryFailure) -> TextEntryResult {
       TextEntryResult(
         verified: nil,
         repaired: false,
         expectedText: expectedText,
         observedText: nil,
         textEntryRoute: textEntryRoute,
-        failure: .notFocused
+        failure: failure
       )
     }
 
@@ -165,7 +189,7 @@ extension RunnerTests {
       for (index, character) in characters.enumerated() {
         let dispatch = typeIntoCurrentTarget(String(character))
         guard dispatch.dispatched else {
-          return dispatchFailureResult()
+          return dispatchFailureResult(dispatch.failure ?? .notFocused)
         }
         typedTarget = dispatch.element ?? typedTarget
         if index + 1 < characters.count {
@@ -214,7 +238,7 @@ extension RunnerTests {
       let firstStartedAt = Date()
       let firstDispatch = typeIntoCurrentTarget(firstCharacter)
       guard firstDispatch.dispatched else {
-        return dispatchFailureResult()
+        return dispatchFailureResult(firstDispatch.failure ?? .notFocused)
       }
       var firstTypedTarget = firstDispatch.element
       logTextEntryPhase(
@@ -243,7 +267,7 @@ extension RunnerTests {
       let remainingStartedAt = Date()
       let remainingDispatch = typeIntoCurrentTarget(remainingText)
       guard remainingDispatch.dispatched else {
-        return dispatchFailureResult()
+        return dispatchFailureResult(remainingDispatch.failure ?? .notFocused)
       }
       firstTypedTarget = remainingDispatch.element ?? firstTypedTarget
       logTextEntryPhase(
@@ -258,7 +282,7 @@ extension RunnerTests {
       let typeStartedAt = Date()
       let dispatch = typeIntoCurrentTarget(text)
       guard dispatch.dispatched else {
-        return dispatchFailureResult()
+        return dispatchFailureResult(dispatch.failure ?? .notFocused)
       }
       typedTarget = dispatch.element
       logTextEntryPhase(

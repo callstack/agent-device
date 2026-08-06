@@ -6,11 +6,14 @@ import XCTest
 extension RunnerTests {
   enum TextEntryFailure: String {
     case notFocused = "TEXT_INPUT_NOT_FOCUSED"
+    case synthesisUnavailable = "TEXT_INPUT_SYNTHESIS_UNAVAILABLE"
 
     var message: String {
       switch self {
       case .notFocused:
         return "No focused text input was available for typing."
+      case .synthesisUnavailable:
+        return "Reliable text synthesis is unavailable while the software keyboard is hidden."
       }
     }
 
@@ -18,6 +21,8 @@ extension RunnerTests {
       switch self {
       case .notFocused:
         return "Focus a visible text input, then retry type or fill. If the input is not exposed by accessibility, use a coordinate focus command before typing."
+      case .synthesisUnavailable:
+        return "Show the software keyboard, then retry type or fill."
       }
     }
   }
@@ -50,6 +55,19 @@ extension RunnerTests {
     let element: XCUIElement?
     let refreshPoint: CGPoint?
     let prefersFocusedElement: Bool
+    let fromTapWitness: Bool
+
+    init(
+      element: XCUIElement?,
+      refreshPoint: CGPoint?,
+      prefersFocusedElement: Bool,
+      fromTapWitness: Bool = false
+    ) {
+      self.element = element
+      self.refreshPoint = refreshPoint
+      self.prefersFocusedElement = prefersFocusedElement
+      self.fromTapWitness = fromTapWitness
+    }
 
     func withElement(_ nextElement: XCUIElement?) -> TextEntryTarget {
       guard let nextElement else {
@@ -60,7 +78,8 @@ extension RunnerTests {
       return TextEntryTarget(
         element: nextElement,
         refreshPoint: point,
-        prefersFocusedElement: prefersFocusedElement
+        prefersFocusedElement: prefersFocusedElement,
+        fromTapWitness: fromTapWitness
       )
     }
   }
@@ -165,7 +184,12 @@ extension RunnerTests {
     // Keep the target scoped to the element that the preceding tap actually selected. Do not
     // attach a refresh point: if that element disappeared, bare type must fail closed rather
     // than rediscovering a different field or dispatching unscoped app.typeText.
-    return TextEntryTarget(element: element, refreshPoint: nil, prefersFocusedElement: false)
+    return TextEntryTarget(
+      element: element,
+      refreshPoint: nil,
+      prefersFocusedElement: false,
+      fromTapWitness: true
+    )
   }
 
   func stabilizeTextInputBeforeTyping(

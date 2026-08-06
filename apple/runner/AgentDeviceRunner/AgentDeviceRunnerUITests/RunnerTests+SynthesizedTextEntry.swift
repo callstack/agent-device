@@ -151,6 +151,14 @@ extension RunnerTests {
     !hasResolvedElement && hasRefreshPoint && xCTestChannelPenalized
   }
 
+  static func shouldUseSynthesizedFirstResponderType(
+    repairMode: TextTypingRepairMode,
+    fromTapWitness: Bool,
+    softwareKeyboardVisible: Bool
+  ) -> Bool {
+    repairMode == .none && fromTapWitness && !softwareKeyboardVisible
+  }
+
   static func shouldUseResolvedCoordinateTextEntryRoute(
     repairMode: TextTypingRepairMode,
     hasX: Bool,

@@ -392,6 +392,7 @@ extension RunnerTests {
 
     XCTAssertTrue(typeResponse.ok, String(describing: typeResponse.error))
     XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertEqual(typeResponse.data?.textEntryRoute, "synthesized-first-responder")
     XCTAssertEqual(String(describing: textField.value ?? ""), "hardware-keyboard")
 
     let secondFailureCountBefore = currentXCTestFailureCount()
