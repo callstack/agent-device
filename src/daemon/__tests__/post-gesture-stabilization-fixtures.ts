@@ -3,11 +3,13 @@ import { makeSnapshotState } from '../../__tests__/test-utils/index.ts';
 import type { SessionState } from '../types.ts';
 
 /**
- * Shared fixtures for post-gesture-stabilization.test.ts (the async capture
- * loop) and post-gesture-stabilization-verdict.test.ts (the pure
- * verdict/classifier coverage) — split by subject per #1563 review, to stay
- * under the repo's 500-line test-file tripwire (AGENTS.md). Not a `.test.ts`
- * file, so vitest never tries to run it directly.
+ * Shared fixtures for the deferred-interaction-outcome test cluster:
+ * post-gesture-stabilization.test.ts (the async capture loop),
+ * post-gesture-stabilization-verdict.test.ts (the pure verdict/classifier
+ * coverage — split by subject per #1563 review, to stay under the repo's
+ * 500-line test-file tripwire, AGENTS.md), deferred-interaction-outcome.test.ts,
+ * and android-snapshot-freshness.test.ts. Not a `.test.ts` file, so vitest
+ * never tries to run it directly.
  */
 
 export function pickupSnapshot(y = 500) {

@@ -35,7 +35,7 @@ import {
 import { countConfiguredRuntimeHints, setSessionRuntimeHintsForOpen } from './session-runtime.ts';
 import { STARTUP_SAMPLE_METHOD, type StartupPerfSample } from './session-startup-metrics.ts';
 import { buildNextOpenSession, buildOpenResult } from './session-open-surface.ts';
-import { markAndroidSnapshotFreshness } from '../android-snapshot-freshness.ts';
+import { markDeferredInteractionOutcome } from '../deferred-interaction-outcome.ts';
 import { resetAndroidFramePerfStats } from '../../platforms/android/perf.ts';
 import { activateAndroidTestIme } from '../../platforms/android/ime-lifecycle.ts';
 import { withKeyedLock } from '../../utils/keyed-lock.ts';
@@ -395,9 +395,14 @@ async function completeOpenCommand(params: {
   }
 
   if (existingSession) {
-    // Mark freshness before buildNextOpenSession clears the stored snapshot. `open` is one of
-    // the few nav-sensitive commands that would otherwise lose its pre-action baseline.
-    markAndroidSnapshotFreshness(existingSession, 'open', existingSession.snapshot);
+    // Mark before buildNextOpenSession clears the stored snapshot. `open` is one of the few
+    // nav-sensitive commands that would otherwise lose its pre-action freshness baseline.
+    markDeferredInteractionOutcome({
+      session: existingSession,
+      command: 'open',
+      positionals: [],
+      flags: undefined,
+    });
   }
   const nextSession = buildNextOpenSession({
     existingSession: openDispatchSession,

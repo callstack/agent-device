@@ -4,15 +4,8 @@ import type { DaemonCommandContext } from '../context.ts';
 import { recordTouchVisualizationEvent } from '../recording-gestures.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
-import {
-  isNavigationSensitiveAction,
-  markAndroidSnapshotFreshness,
-} from '../android-snapshot-freshness.ts';
-import {
-  markPendingInteractionOutcome,
-  stripInternalInteractionFlags,
-} from '../interaction-outcome-policy.ts';
-import { markPostGestureStabilization } from '../post-gesture-stabilization.ts';
+import { markDeferredInteractionOutcome } from '../deferred-interaction-outcome.ts';
+import { stripInternalInteractionFlags } from '../interaction-outcome-policy.ts';
 import { computeTargetEvidence, type RecordedTargetCapture } from '../session-target-evidence.ts';
 import type { MultiTargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { inferFillText } from '../action-utils.ts';
@@ -91,23 +84,15 @@ export function finalizeTouchInteraction(params: {
     ...(targetEvidence ? { targetEvidence } : {}),
     ...(targetEvidences ? { targetEvidences } : {}),
   });
-  if (scheduleInteractionOutcomeRetry) {
-    markPendingInteractionOutcome({
-      session,
-      command,
-      positionals: retryPositionals ?? positionals,
-      flags,
-      preSnapshot: session.snapshot,
-    });
-  }
-  if (isNavigationSensitiveAction(actionCommand)) {
-    markAndroidSnapshotFreshness(
-      session,
-      actionCommand,
-      androidFreshnessBaseline ?? session.snapshot,
-    );
-  }
-  markPostGestureStabilization(session, actionCommand, retryPositionals ?? positionals, flags);
+  markDeferredInteractionOutcome({
+    session,
+    command,
+    action: actionCommand,
+    positionals: retryPositionals ?? positionals,
+    flags,
+    scheduleOutcomeRetry: scheduleInteractionOutcomeRetry,
+    androidFreshnessBaseline,
+  });
   recordTouchVisualizationEvent(
     session,
     actionCommand,

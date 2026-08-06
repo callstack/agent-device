@@ -114,6 +114,15 @@ task touches:
 - Ref generation pin: optional `~s<n>` suffix on an @ref carrying the snapshot generation it was
   minted from. Accepted as input everywhere, emitted by no tree output (snapshot token budget),
   auto-appended by the MCP layer, stripped and ignored by replay.
+- Deferred interaction outcome: the daemon's post-response answer to "did that mutation actually
+  take effect" — pending interaction outcome retry, post-gesture stabilization, and Android
+  snapshot freshness recovery. `src/daemon/deferred-interaction-outcome.ts` is its one interface:
+  every mutating route marks through it after dispatch, and every snapshot capture resolves
+  through it; the three `SessionState` fields and their owner modules are implementation. Marking
+  order is load-bearing (pending outcome retry before stabilization), each marker keeps its own
+  eligibility gate, and the module owns only these post-action markers — never ADR 0014 ref-frame
+  expiry or the ADR 0012/0016 staged protocols. Distinct from the same-response settled
+  observation below.
 - Settled observation: opt-in (`--settle`) post-action payload on press/click/fill/longpress — the
   quiet-window stable loop re-captures until the UI settles, and the response carries the diff vs the
   pre-action tree (changed lines only, added lines with fresh refs, `refsGeneration` when the settled
@@ -312,7 +321,7 @@ The perfect-shape refactor is complete and merged. Its end-state:
   theirs.
 - Type-cycle growth (R9). R4 keeps the VALUE import graph acyclic, so every remaining cycle is
   created by type-only imports — free at runtime, invisible to R5/R6, and the largest single
-  obstacle to reading a subsystem in isolation: inside a strongly-connected component of 76 files,
+  obstacle to reading a subsystem in isolation: inside a strongly-connected component of 74 files,
   no file has a self-contained slice. `TYPE_CYCLE_BASELINE`, derived from the zone ceilings in
   `scripts/layering/daemon-modularity.ts`, ratchets it for **growth only**, deliberately unlike R6: reducing it
   is a real refactor rather than a file move, so a hard equality would turn every unrelated
@@ -320,7 +329,7 @@ The perfect-shape refactor is complete and merged. Its end-state:
   failing. Hubs by in-component dependents: `runtime-contract.ts` (25),
   `commands/runtime-types.ts` (21), `backend.ts` (15), `commands/runtime-common.ts` (12).
 - Daemon modularity ratchets (R10). The same tooling-only declaration pins R7's writer-owned
-  field/owner-claim counts, R9's 76 members by zone (`commands` 33, `daemon-server` 20, `core` 10,
+  field/owner-claim counts, R9's 74 members by zone (`commands` 33, `daemon-server` 18, `core` 10,
   `platforms` 7, root 5, `client` 1), and the external production importers of `daemon/types.ts`
   (down to 2: the client normalizers and remote artifacts). R7 counts and external importers may
   only shrink; no zone may grow inside R9, and replay/Maestro/replay-test engine files remain outside

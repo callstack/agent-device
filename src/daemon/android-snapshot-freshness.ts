@@ -101,6 +101,57 @@ export function isLikelyStaleSnapshotDrop(previousCount: number, currentCount: n
   return currentCount <= Math.floor(previousCount * 0.2);
 }
 
+export type AndroidFreshnessReason = 'empty-interactive' | 'sharp-drop' | 'stuck-route';
+export type AndroidFreshnessMode = 'default' | 'ref-refresh';
+
+/**
+ * The whole "is this capture suspicious?" decision, in one place with its
+ * thresholds: which of the three staleness shapes (if any) the attempt
+ * matches against an active freshness window. `rawNodeCount` is the capture
+ * backend's pre-filter node count when it disclosed one.
+ */
+export function getAndroidFreshnessReason(
+  attempt: { snapshot: SnapshotState; rawNodeCount: number | undefined },
+  freshness: AndroidSnapshotFreshness,
+  options: { interactiveOnly: boolean; mode?: AndroidFreshnessMode },
+): AndroidFreshnessReason | null {
+  // When interactive-only filtering produces zero visible nodes from ≥12 raw nodes,
+  // the dump likely captured a transitional frame.  The 12-node floor avoids
+  // false positives on deliberately minimal screens (splash, loading).
+  if (
+    options.interactiveOnly &&
+    attempt.snapshot.nodes.length === 0 &&
+    attempt.rawNodeCount !== undefined &&
+    attempt.rawNodeCount >= 12
+  ) {
+    return 'empty-interactive';
+  }
+
+  if (options.mode === 'ref-refresh') {
+    return null;
+  }
+
+  if (isLikelyStaleSnapshotDrop(freshness.baselineCount, attempt.snapshot.nodes.length)) {
+    return !hasMeaningfulSnapshotContent(attempt.snapshot) ? 'sharp-drop' : null;
+  }
+
+  return freshness.routeComparable &&
+    isNavigationSensitiveAction(freshness.action) &&
+    isLikelySnapshotStuckOnPreviousRoute(freshness.baselineSignatures, attempt.snapshot.nodes)
+    ? 'stuck-route'
+    : null;
+}
+
+function hasMeaningfulSnapshotContent(snapshot: SnapshotState): boolean {
+  return snapshot.nodes.some(
+    (node) =>
+      node.hittable === true ||
+      Boolean(node.label?.trim()) ||
+      Boolean(node.value?.trim()) ||
+      Boolean(node.identifier?.trim()),
+  );
+}
+
 export function isLikelySnapshotStuckOnPreviousRoute(
   previousSignatures: string[] | undefined,
   currentNodes: SnapshotState['nodes'],
