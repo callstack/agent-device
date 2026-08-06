@@ -79,6 +79,11 @@
       "exports": ["*"]
     },
     {
+      "comment": "#1642: its three consumers (src/__tests__/cli-device-status.test.ts, src/daemon/__tests__/device-claims.test.ts, src/daemon/__tests__/device-claim-prune.test.ts) all reach it the only way a Vitest module mock can — `vi.mock(path, async (importOriginal) => (await import('...host-process-mock.ts')).pinOwnProcessStartTime(importOriginal))`. Dependency analysis cannot follow that dynamic import to a consumer, the same limitation the daemon route-handler entry above records.",
+      "file": "src/__tests__/test-utils/host-process-mock.ts",
+      "exports": ["pinOwnProcessStartTime"]
+    },
+    {
       "comment": "Tool config default exports, loaded by the tool rather than imported.",
       "file": "{tsdown.config.ts,vitest.mutation.config.ts,website/rspress.config.ts}",
       "exports": ["default"]
