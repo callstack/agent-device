@@ -1286,6 +1286,7 @@ test('captureSnapshot retries pending tap outcome before post-gesture stabilizat
   };
   session.postGestureStabilization = {
     action: 'click',
+    positionals: [],
     markedAt: Date.now(),
   };
 
@@ -1361,6 +1362,7 @@ test('captureSnapshot composes post-gesture stabilization with Android freshness
   };
   session.postGestureStabilization = {
     action: 'click',
+    positionals: [],
     markedAt: Date.now(),
   };
 

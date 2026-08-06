@@ -18,7 +18,7 @@ import type {
   DaemonRequest as WireRequest,
 } from '@agent-device/kernel/contracts';
 import type { DeviceInfo, Platform, PlatformSelector } from '@agent-device/kernel/device';
-import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { Rect, SnapshotState, SnapshotCaptureBackend } from '@agent-device/kernel/snapshot';
 import type { ExecBackgroundResult, ExecResult } from '../utils/exec.ts';
 // Type-only import; erased at runtime. ref-frame.ts imports SessionState from
 // here, so this back-edge must stay type-only to avoid a runtime cycle.
@@ -239,9 +239,9 @@ export type InteractionSurfaceEntry = {
 
 export type PostGestureStabilization = {
   action: string;
-  /** The gesture's own positionals (e.g. scroll direction) — wording input for
-   * the #1600 no-effect warning; never re-dispatched. */
-  positionals?: string[];
+  /** The gesture's own positionals — wording input for the #1600 no-effect
+   * warning; never re-dispatched. Always set by the only writer. */
+  positionals: string[];
   markedAt: number;
   /**
    * Pre-gesture interaction-surface signature, captured from the session's
@@ -261,7 +261,7 @@ export type PostGestureStabilization = {
    * a different backend can only be re-baselined against, never concluded from
    * (#1569).
    */
-  baselineBackend?: string;
+  baselineBackend?: SnapshotCaptureBackend;
 };
 
 export type PendingInteractionOutcome = {

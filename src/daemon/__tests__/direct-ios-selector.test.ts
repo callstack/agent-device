@@ -108,7 +108,7 @@ test('isLocalIosRunnerSession: iOS local sessions are eligible, Android and unde
 
 test('isLocalIosRunnerSession: skipPendingPostGestureStabilization:true excludes a pending session (the tap fast path)', () => {
   const pending = makeSession('ios', {
-    postGestureStabilization: { action: 'scroll', markedAt: Date.now() },
+    postGestureStabilization: { action: 'scroll', positionals: [], markedAt: Date.now() },
   });
   assert.equal(
     isLocalIosRunnerSession(pending, { skipPendingPostGestureStabilization: true }),
@@ -118,7 +118,7 @@ test('isLocalIosRunnerSession: skipPendingPostGestureStabilization:true excludes
 
 test('isLocalIosRunnerSession: skipPendingPostGestureStabilization:false keeps a pending session eligible (the offscreen double-check)', () => {
   const pending = makeSession('ios', {
-    postGestureStabilization: { action: 'scroll', markedAt: Date.now() },
+    postGestureStabilization: { action: 'scroll', positionals: [], markedAt: Date.now() },
   });
   assert.equal(
     isLocalIosRunnerSession(pending, { skipPendingPostGestureStabilization: false }),

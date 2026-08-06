@@ -8,9 +8,7 @@ import type { SnapshotCaptureAnnotations } from '@agent-device/contracts/capture
  * raw `swipe` worked where scroll/fling/pan all silently no-opped).
  */
 export function formatGestureNoEffectWarning(action: string, positionals: string[]): string {
-  const gesture = [action, ...positionals.filter((value) => !/^[\d.-]+$/.test(value))]
-    .join(' ')
-    .trim();
+  const gesture = [action, ...positionals].join(' ').trim();
   return (
     `${gesture} produced no visible change: the tree still matches its pre-gesture state. ` +
     'Either the container is already at its edge, or it ignores synthesized scrolls — ' +

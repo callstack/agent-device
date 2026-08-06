@@ -849,7 +849,7 @@ test('click simple iOS id selector waits for snapshot path after pending gesture
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-direct-selector-after-swipe';
   const session = makeIosSession(sessionName, { appBundleId: 'com.example.app' });
-  session.postGestureStabilization = { action: 'swipe', markedAt: Date.now() };
+  session.postGestureStabilization = { action: 'swipe', positionals: [], markedAt: Date.now() };
   sessionStore.set(sessionName, session);
 
   mockDispatch.mockImplementation(async (_device, command, positionals) => {
@@ -3107,7 +3107,7 @@ test('is simple iOS selector falls back to snapshot while gesture stabilization 
   const sessionStore = makeSessionStore();
   const sessionName = 'is-selected-ios-stabilizing';
   const session = makeIosSession(sessionName, { appBundleId: 'com.example.app' });
-  session.postGestureStabilization = { action: 'swipe', markedAt: Date.now() };
+  session.postGestureStabilization = { action: 'swipe', positionals: [], markedAt: Date.now() };
   sessionStore.set(sessionName, session);
 
   mockDispatch.mockImplementation(async (_device, command) => {

@@ -6,9 +6,18 @@
  * snapshot-quality.ts so SnapshotNode can reference it without a cyclic import;
  * snapshot-quality.ts (the validation logic) re-exports it for existing callers.
  */
+/**
+ * Which capture STRATEGY produced a snapshot, within one platform's plan —
+ * distinct from `SnapshotBackend`, which names the platform channel
+ * (`xctest`/`android`/…). The iOS plan walks these in order, so one session can
+ * change strategy mid-sequence, and two strategies do not return comparable
+ * views of one screen (#1569).
+ */
+export type SnapshotCaptureBackend = 'tree' | 'queries' | 'private-ax';
+
 export type SnapshotQualityVerdict = {
   state: 'healthy' | 'recovered' | 'sparse';
-  backend: 'tree' | 'queries' | 'private-ax';
+  backend: SnapshotCaptureBackend;
   reason?: string;
   // 'deferred' = the penalty circuit breaker pre-selected a non-XCTest backend; nothing new
   // degraded on THIS capture (no repeated warning, no settle budget reset).

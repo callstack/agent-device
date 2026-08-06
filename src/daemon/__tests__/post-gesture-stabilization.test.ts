@@ -250,8 +250,10 @@ test('scope drift accepts stale but is vetoed from claiming no-effect (#1601 P1 
 });
 
 test('formatGestureNoEffectWarning names the gesture and the raw-drag escape hatch', () => {
+  // Positionals echo verbatim: the warning names the gesture the agent issued,
+  // and `scroll down 1` is what they issued.
   const scrollWarning = formatGestureNoEffectWarning('scroll', ['down', '1']);
-  assert.match(scrollWarning, /scroll down produced no visible change/);
+  assert.match(scrollWarning, /scroll down 1 produced no visible change/);
   assert.match(scrollWarning, /swipe x1 y1 x2 y2/);
   assert.match(scrollWarning, /already at its edge/);
 
@@ -260,6 +262,11 @@ test('formatGestureNoEffectWarning names the gesture and the raw-drag escape hat
 
   const bareWarning = formatGestureNoEffectWarning('swipe', []);
   assert.match(bareWarning, /swipe produced no visible change/);
+
+  // The regression the deleted heuristic caused: every positional of a swipe is
+  // a coordinate, so "drop anything numeric-looking" left a contentless "swipe".
+  const swipeWarning = formatGestureNoEffectWarning('swipe', ['10', '20', '30', '40']);
+  assert.match(swipeWarning, /^swipe 10 20 30 40 produced no visible change/);
 });
 
 test('capturePostGestureStabilizedResult trusts a quiet signature once content genuinely differs from the baseline (iOS)', async () => {

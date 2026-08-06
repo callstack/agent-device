@@ -177,6 +177,23 @@ export function classifyInteractionSurfaceChange(
   return 'changed';
 }
 
+/**
+ * Shared rect-tolerance comparison for the surface-stability checks in this
+ * module. Entry rects are already rounded by `buildInteractionSurfaceEntry`,
+ * so one `RECT_TOLERANCE_PX` band absorbs residual drift consistently.
+ */
+function rectsWithinTolerance(
+  a: Pick<InteractionSurfaceSignature[number], 'x' | 'y' | 'width' | 'height'>,
+  b: Pick<InteractionSurfaceSignature[number], 'x' | 'y' | 'width' | 'height'>,
+): boolean {
+  return (
+    Math.abs(a.x - b.x) <= RECT_TOLERANCE_PX &&
+    Math.abs(a.y - b.y) <= RECT_TOLERANCE_PX &&
+    Math.abs(a.width - b.width) <= RECT_TOLERANCE_PX &&
+    Math.abs(a.height - b.height) <= RECT_TOLERANCE_PX
+  );
+}
+
 export function areInteractionSurfaceSignaturesStable(
   left: InteractionSurfaceSignature,
   right: InteractionSurfaceSignature,
@@ -186,10 +203,7 @@ export function areInteractionSurfaceSignaturesStable(
     const a = left[index];
     const b = right[index];
     if (!a || !b || a.key !== b.key) return false;
-    if (Math.abs(a.x - b.x) > RECT_TOLERANCE_PX) return false;
-    if (Math.abs(a.y - b.y) > RECT_TOLERANCE_PX) return false;
-    if (Math.abs(a.width - b.width) > RECT_TOLERANCE_PX) return false;
-    if (Math.abs(a.height - b.height) > RECT_TOLERANCE_PX) return false;
+    if (!rectsWithinTolerance(a, b)) return false;
   }
   return true;
 }
@@ -252,14 +266,7 @@ export function classifyBaselineSurfaceEvidence(
       continue;
     }
     shared += 1;
-    if (
-      Math.abs(seen.entry.x - now.entry.x) > RECT_TOLERANCE_PX ||
-      Math.abs(seen.entry.y - now.entry.y) > RECT_TOLERANCE_PX ||
-      Math.abs(seen.entry.width - now.entry.width) > RECT_TOLERANCE_PX ||
-      Math.abs(seen.entry.height - now.entry.height) > RECT_TOLERANCE_PX
-    ) {
-      return 'changed';
-    }
+    if (!rectsWithinTolerance(seen, now)) return 'changed';
   }
   if (shared === 0) return 'ambiguous';
   const addedSinceBaseline = after.size > shared;
@@ -278,11 +285,11 @@ export function classifyBaselineSurfaceEvidence(
  */
 function identifiedContent(
   signature: InteractionSurfaceSignature,
-): Map<string, { entry: InteractionSurfaceSignature[number] }> {
-  const content = new Map<string, { entry: InteractionSurfaceSignature[number] }>();
+): Map<string, InteractionSurfaceSignature[number]> {
+  const content = new Map<string, InteractionSurfaceSignature[number]>();
   for (const entry of signature) {
     if (!entry.identity || !entry.discriminating) continue;
-    if (!content.has(entry.identity)) content.set(entry.identity, { entry });
+    if (!content.has(entry.identity)) content.set(entry.identity, entry);
   }
   return content;
 }
@@ -300,6 +307,13 @@ function identifiedContent(
  * tolerance) vetoes that shape: any appeared or vanished real element kills
  * the claim. Scope drift between baseline and capture vetoes too — silence
  * is the safe failure mode for a message that steers the agent's next move.
+ *
+ * Matches on `key`, not the flip-tolerant `identity` that
+ * `classifyBaselineSurfaceEvidence` uses — deliberately the opposite choice.
+ * That oracle must not lose evidence to a volatile-state flip; this runs only
+ * after it already returned `'unchanged'`, and a veto wants precision over
+ * recall: any flip makes the keys mismatch and returns `false`, withholding
+ * the claim rather than falsifying anything.
  */
 export function haveIdenticalDiscriminatingSurfaces(
   left: InteractionSurfaceSignature,
@@ -313,14 +327,7 @@ export function haveIdenticalDiscriminatingSurfaces(
   for (const entry of leftEntries) {
     const other = rightByKey.get(entry.key);
     if (!other) return false;
-    if (
-      Math.abs(entry.x - other.x) > RECT_TOLERANCE_PX ||
-      Math.abs(entry.y - other.y) > RECT_TOLERANCE_PX ||
-      Math.abs(entry.width - other.width) > RECT_TOLERANCE_PX ||
-      Math.abs(entry.height - other.height) > RECT_TOLERANCE_PX
-    ) {
-      return false;
-    }
+    if (!rectsWithinTolerance(entry, other)) return false;
   }
   return true;
 }
