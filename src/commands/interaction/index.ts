@@ -19,17 +19,9 @@ import type {
   TypeTextOptions,
 } from '@agent-device/contracts/client';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
-import {
-  commandSupportsSettleObservation,
-  commandSupportsVerifyEvidence,
-} from '../../core/command-descriptor/registry.ts';
-import {
-  REPEATED_TOUCH_FLAGS,
-  SELECTOR_SNAPSHOT_FLAGS,
-  SETTLE_FLAGS,
-} from '../cli-grammar/flag-groups.ts';
-import { type FlagKey } from '../cli-grammar/flag-types.ts';
+import { REPEATED_TOUCH_FLAGS, SELECTOR_SNAPSHOT_FLAGS } from '../cli-grammar/flag-groups.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
+import { postActionObservationCliFlags } from '../post-action-observation-grammar.ts';
 import {
   commonToClientOptions,
   toClientElementTarget,
@@ -137,20 +129,15 @@ const interactionCliSchemas = {
     ],
   },
   scroll: {
-    usageOverride: 'scroll <direction|top|bottom> [amount] [--pixels <n>] [--duration-ms <ms>]',
+    usageOverride:
+      'scroll <direction|top|bottom> [amount] [--pixels <n>] [--duration-ms <ms>] [--settle]',
     positionalArgs: ['directionOrEdge', 'amount?'],
-    allowedFlags: ['pixels', 'durationMs'],
+    allowedFlags: ['pixels', 'durationMs', ...postActionObservationCliFlags('scroll')],
   },
 } as const satisfies Record<string, CommandSchemaOverride>;
 
 type InteractionCommandMetadata = (typeof interactionCommandMetadata)[number];
 type InteractionCommandName = InteractionCommandMetadata['name'];
-function postActionObservationCliFlags(command: InteractionCommandName): readonly FlagKey[] {
-  const flags: FlagKey[] = [];
-  if (commandSupportsVerifyEvidence(command)) flags.push('verify');
-  if (commandSupportsSettleObservation(command)) flags.push(...SETTLE_FLAGS);
-  return flags;
-}
 
 const clickCommandDefinition = defineExecutableCommand(metadata('click'), (client, input) =>
   client.interactions.click(toClickOptions(input)),
@@ -318,6 +305,7 @@ const scrollCommandFacet = defineCommandFacet({
   cliSchema: interactionCliSchemas.scroll,
   cliReader: interactionCliReaders.scroll,
   daemonWriter: interactionDaemonWriters.scroll,
+  cliOutputFormatter: interactionCliOutputFormatters.scroll,
 });
 
 const getCommandFacet = defineCommandFacet({

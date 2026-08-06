@@ -53,6 +53,8 @@ import {
   type GestureCommandOptions,
   type GestureCommandResult,
 } from './gesture-command.ts';
+import { settleObservationCommand, type SettleObservationCommandOptions } from './settle.ts';
+import type { SettleObservation } from '@agent-device/contracts/interaction';
 
 export type SelectorCommands = {
   find: RuntimeCommand<FindReadCommandOptions, FindReadCommandResult>;
@@ -78,6 +80,13 @@ export type InteractionCommands = {
   longPress: RuntimeCommand<LongPressCommandOptions, LongPressCommandResult>;
   scroll: RuntimeCommand<ScrollCommandOptions, ScrollCommandResult>;
   gesture: RuntimeCommand<GestureCommandOptions, GestureCommandResult>;
+  /**
+   * #1638: the observation half of `--settle` for mutations that resolve no
+   * element (`scroll`/`back`). It performs no device action — the caller's
+   * command already did — so it lives here purely as the seam the generic
+   * daemon route reaches the settle engine through.
+   */
+  settleObservation: RuntimeCommand<SettleObservationCommandOptions, SettleObservation>;
 };
 
 export type BoundSelectorCommands = {
@@ -135,6 +144,7 @@ export type BoundInteractionCommands = {
   ) => Promise<LongPressCommandResult>;
   scroll: BoundRuntimeCommand<ScrollCommandOptions, ScrollCommandResult>;
   gesture: BoundRuntimeCommand<GestureCommandOptions, GestureCommandResult>;
+  settleObservation: BoundRuntimeCommand<SettleObservationCommandOptions, SettleObservation>;
 };
 
 export const selectorCommands: SelectorCommands = {
@@ -158,6 +168,7 @@ export const interactionCommands: InteractionCommands = {
   longPress: longPressCommand,
   scroll: scrollCommand,
   gesture: gestureCommand,
+  settleObservation: settleObservationCommand,
 };
 
 export function bindSelectorCommands(runtime: AgentDeviceRuntime): BoundSelectorCommands {
@@ -188,6 +199,7 @@ export function bindInteractionCommands(runtime: AgentDeviceRuntime): BoundInter
       interactionCommands.longPress(runtime, { ...options, target }),
     scroll: (options) => interactionCommands.scroll(runtime, options),
     gesture: (options) => interactionCommands.gesture(runtime, options),
+    settleObservation: (options) => interactionCommands.settleObservation(runtime, options),
   };
 }
 

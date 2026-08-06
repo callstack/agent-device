@@ -38,7 +38,8 @@ import {
   type DirectIosSelectorTarget,
 } from '../direct-ios-selector.ts';
 import { expireRefFrame } from '../ref-frame.ts';
-import { markSessionPartialRefsIssued, resolveRefStalenessWarning } from '../session-snapshot.ts';
+import { resolveRefStalenessWarning } from '../session-snapshot.ts';
+import { issueSettleRefs } from '../settle-ref-issuance.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
 import {
   assertAndroidPressStayedInApp,
@@ -326,39 +327,8 @@ async function buildTargetedTouchResponsePayloads(params: {
     referenceFrame,
     extra,
     staleRefsWarning: params.staleRefsWarning,
-    settleRefsGeneration: settleRefsGenerationIssue(session, result),
+    settleRefsGeneration: issueSettleRefs(session, result.settle),
   });
-}
-
-/**
- * #1101 `--settle`: a settle observation carrying a diff hands the client refs
- * minted from the freshly stored settled tree (added lines carry them), which
- * makes the response ref-issuing like snapshot/find: it activates a PARTIAL
- * frame (ADR 0014) authorizing exactly those bodies, and the stored tree's
- * generation rides inside the settle payload for MCP per-ref pinning. Without a
- * diff — never captured, or sparse-quality capture that was not stored — nothing
- * was issued and the frame is left as the press's leaf seam expired it.
- */
-function settleRefsGenerationIssue(
-  session: SessionState,
-  result: PressCommandResult | FillCommandResult | LongPressCommandResult,
-): number | undefined {
-  if (!result.settle?.diff) return undefined;
-  // ADR 0014: a settled diff publishes the refs it exposed, so it activates a
-  // PARTIAL frame authorizing exactly those bodies (not the whole tree).
-  markSessionPartialRefsIssued(session, collectSettleIssuedRefBodies(result.settle));
-  return session.snapshotGeneration;
-}
-
-/** The reusable refs a settled diff exposed: added diff lines, `refs`, `tail`. */
-function collectSettleIssuedRefBodies(settle: NonNullable<PressCommandResult['settle']>): string[] {
-  const bodies: string[] = [];
-  for (const line of settle.diff?.lines ?? []) {
-    if (line.ref) bodies.push(line.ref);
-  }
-  for (const entry of settle.refs ?? []) bodies.push(entry.ref);
-  for (const entry of settle.tail ?? []) bodies.push(entry.ref);
-  return bodies;
 }
 
 function readLongPressResultDuration(result: TargetedTouchResult): number | undefined {
@@ -787,7 +757,7 @@ function buildFillResponsePayloads(params: {
     referenceFrame,
     extra: { text: params.text, ...maestroFallback.extra },
     staleRefsWarning: params.staleRefsWarning,
-    settleRefsGeneration: settleRefsGenerationIssue(session, result),
+    settleRefsGeneration: issueSettleRefs(session, result.settle),
   });
 }
 

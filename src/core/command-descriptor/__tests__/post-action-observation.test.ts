@@ -15,6 +15,8 @@ const SETTLE_OBSERVATION_COMMANDS = [
   PUBLIC_COMMANDS.fill,
   PUBLIC_COMMANDS.longPress,
   PUBLIC_COMMANDS.press,
+  PUBLIC_COMMANDS.scroll,
+  PUBLIC_COMMANDS.back,
 ] as const;
 
 test('post-action observation descriptor traits are the source for settle command support', () => {
@@ -31,6 +33,12 @@ test('post-action observation descriptor traits are the source for settle comman
   assert.equal(resolveCommandPostActionObservationSupport('fill'), 'settle-and-verify');
   assert.equal(resolveCommandPostActionObservationSupport('longpress'), 'settle');
   assert.equal(commandSupportsVerifyEvidence('longpress'), false);
+  // #1638: the generic-route pair resolves no element, so there is nothing to
+  // digest into --verify evidence — the settled diff IS the observation.
+  assert.equal(resolveCommandPostActionObservationSupport('scroll'), 'settle');
+  assert.equal(resolveCommandPostActionObservationSupport('back'), 'settle');
+  assert.equal(commandSupportsVerifyEvidence('scroll'), false);
+  assert.equal(commandSupportsVerifyEvidence('back'), false);
 });
 
 test('post-action observation CLI flags follow descriptor traits', () => {

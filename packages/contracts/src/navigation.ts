@@ -1,5 +1,6 @@
 import type { BackMode } from './back-mode.ts';
 import type { DeviceRotation } from './device-rotation.ts';
+import type { SettleObservation } from './interaction.ts';
 import type { TvRemoteButton } from './tv-remote.ts';
 
 /**
@@ -18,11 +19,17 @@ export type HomeCommandResult = {
   message: string;
 };
 
-/** `back` — `{ action: 'back', mode, message: 'Back' }`; `mode` defaults to `'in-app'`. */
+/**
+ * `back` — `{ action: 'back', mode, message: 'Back' }`; `mode` defaults to
+ * `'in-app'`. The one field the generic route may add on top of the dispatch
+ * handler's literal return: `settle`, the opt-in `--settle` observation
+ * (#1638), attached after the command by the generic dispatcher.
+ */
 export type BackCommandResult = {
   action: 'back';
   mode: BackMode;
   message: string;
+  settle?: SettleObservation;
 };
 
 /** `orientation` — `{ action: 'orientation', orientation, message: 'Rotated to <orientation>' }`. */

@@ -10,6 +10,7 @@ import {
   type BackMode,
   type TvRemoteButton,
 } from '@agent-device/contracts/interaction';
+import type { SettleCommandOptions } from '@agent-device/contracts/client';
 import type { ExecutableCommandProjection } from '../command-contract.ts';
 
 declare const navigationCommandProjectionType: unique symbol;
@@ -39,7 +40,17 @@ function defineNavigationCommandProjection<
 }
 
 export const NAVIGATION_COMMAND_PROJECTIONS = {
-  back: defineNavigationCommandProjection<{ mode?: BackMode }, BackCommandResult, false, 'back'>({
+  // #1638: `back` carries the settle observation trait, so its options include
+  // the shared `--settle` triple and its result may carry the settled diff.
+  // The output schema stays the closed dispatch shape here; the opt-in
+  // observation property is grafted on where `settleObservationSchema` lives
+  // (src/mcp/command-output-schemas.ts), which this layer must not import.
+  back: defineNavigationCommandProjection<
+    { mode?: BackMode } & SettleCommandOptions,
+    BackCommandResult,
+    false,
+    'back'
+  >({
     clientMethod: 'back',
     outputSchema: {
       type: 'object',

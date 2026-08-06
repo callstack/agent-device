@@ -131,11 +131,16 @@ task touches:
   eligibility gate, and the module owns only these post-action markers — never ADR 0014 ref-frame
   expiry or the ADR 0012/0016 staged protocols. Distinct from the same-response settled
   observation below.
-- Settled observation: opt-in (`--settle`) post-action payload on press/click/fill/longpress — the
-  quiet-window stable loop re-captures until the UI settles, and the response carries the diff vs the
-  pre-action tree (changed lines only, added lines with fresh refs, `refsGeneration` when the settled
-  tree was stored). Best-effort: never fails the action; `settled: false` plus a hint on never-quiet
-  content.
+- Settled observation: opt-in (`--settle`) post-action payload on press/click/fill/longpress and, on
+  the generic route, scroll/back — the quiet-window stable loop re-captures until the UI settles, and
+  the response carries the diff vs the pre-action tree (changed lines only, added lines with fresh
+  refs, `refsGeneration` when the settled tree was stored). Best-effort: never fails the action;
+  `settled: false` plus a hint on never-quiet content. Which commands support it is a descriptor
+  trait (`postActionObservation`), and the CLI flags, MCP fields, timeout envelope, and ref-pinning
+  all derive from it. The two routes differ in ONE way, deliberately: the touch commands diff against
+  the freshly resolved pre-action capture, while scroll/back — which resolve nothing — diff against
+  the session's stored pre-action tree, so their diff reads "settled tree vs the last tree you
+  observed".
 - Resolution disclosure (ADR 0012 decision 2): additive `resolution` field on
   press/click/fill/longpress responses discloses how the acting path resolved its target —
   `runtime`/`unique` or `runtime`/`disambiguated` (with `matchCount`/`winnerDiagnostic`/`tiebreak`/

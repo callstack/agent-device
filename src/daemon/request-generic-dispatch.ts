@@ -1,4 +1,6 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
+import type { SettleObservation } from '@agent-device/contracts/interaction';
+import { commandSupportsSettleObservation } from '../core/command-descriptor/registry.ts';
 import { dispatchCommand } from '../core/dispatch.ts';
 import { requireCommandSupported } from './handlers/response.ts';
 import { SessionStore } from './session-store.ts';
@@ -51,6 +53,19 @@ export async function dispatchGenericCommand(params: {
 
   const readinessResponse = await ensureGenericCommandReady(session, platformCommand);
   if (readinessResponse) return readinessResponse;
+  // #1638: freeze the settled diff's baseline before anything can mutate the
+  // screen or the stored snapshot — including the Android dialog preflight.
+  const settlePlan = await planGenericSettleObservation({
+    req,
+    session,
+    sessionName: params.sessionName,
+    logPath,
+    sessionStore,
+    contextFromFlags,
+    command: platformCommand,
+    flags: req.flags,
+  });
+  if ('response' in settlePlan) return settlePlan.response;
   const preflightReadiness = await ensureNoAndroidBlockingDialogReady(session, platformCommand);
   if ('response' in preflightReadiness) return preflightReadiness.response;
 
@@ -117,7 +132,52 @@ export async function dispatchGenericCommand(params: {
     flags: req.flags,
   });
 
+  // Strictly after the deferred-outcome markers so settle's first capture folds
+  // in the #1542 post-gesture stabilization, and after the recorded action so
+  // the session history keeps the ACTION's own timing rather than the
+  // observation wait that followed it.
+  if (settlePlan.observe) {
+    const settle = await settlePlan.observe();
+    if (settle) data = { ...(data ?? {}), settle };
+  }
+
   return { ok: true, data: data ?? {} };
+}
+
+/**
+ * `--settle` (#1638) is opt-in and its observation runs the interaction
+ * runtime — a subgraph this dispatcher otherwise never touches, and one that a
+ * static edge would fold into the daemon-server type cycle. Reach it through a
+ * lazy seam instead, gated on the caller actually passing a settle flag, and
+ * hold only the returned closure so no type edge exists either. A scroll/back
+ * without settle, and every non-settle generic leaf, load nothing.
+ */
+async function planGenericSettleObservation(params: {
+  req: DaemonRequest;
+  session: SessionState;
+  sessionName: string;
+  logPath: string;
+  sessionStore: SessionStore;
+  contextFromFlags: (
+    flags: CommandFlags | undefined,
+    appBundleId?: string,
+    traceLogPath?: string,
+  ) => DaemonCommandContext;
+  command: string;
+  flags: CommandFlags | undefined;
+}): Promise<
+  { response: DaemonResponse } | { observe?: () => Promise<SettleObservation | undefined> }
+> {
+  if (!commandSupportsSettleObservation(params.command) || !usesSettleFlags(params.flags)) {
+    return {};
+  }
+  const settle = await import('./generic-settle.ts');
+  return settle.planGenericSettleObservation(params);
+}
+
+/** Any settle flag at all — `--settle-quiet` alone still owes the caller its rejection. */
+function usesSettleFlags(flags: CommandFlags | undefined): boolean {
+  return flags?.settle === true || flags?.settleQuietMs !== undefined;
 }
 
 async function ensureNoAndroidBlockingDialogReady(

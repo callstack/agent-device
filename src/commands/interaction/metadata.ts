@@ -16,11 +16,6 @@ import {
   type SwipeGesturePayload,
   type TransformGesturePayload,
 } from '@agent-device/contracts/interaction';
-import type { PostActionObservationSupportFor } from '../../core/command-descriptor/post-action-observation.ts';
-import {
-  commandSupportsSettleObservation,
-  commandSupportsVerifyEvidence,
-} from '../../core/command-descriptor/registry.ts';
 import { FIND_LOCATORS } from '@agent-device/selectors';
 import { defineCommandMetadata } from '../command-contract.ts';
 import {
@@ -44,6 +39,7 @@ import {
   type InferCommandInput,
 } from '../command-input.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
+import { postActionObservationFields } from '../post-action-observation-grammar.ts';
 import { SCROLL_INPUT_DIRECTIONS } from './runtime/gestures.ts';
 
 const FIND_ACTION_VALUES = [
@@ -79,37 +75,6 @@ const interactionCommandDescriptions = {
 } as const;
 
 type InteractionCommandName = keyof typeof interactionCommandDescriptions;
-
-const verifyField = () =>
-  booleanField(
-    'Capture cheap post-action evidence (AX digest, node counts, changedFromBefore) instead of a follow-up snapshot.',
-  );
-
-const settleFields = () => ({
-  settle: booleanField(
-    'After the action, wait for the UI to go quiet and return the settled diff vs the pre-action tree in the same response. Best-effort; never fails the action.',
-  ),
-  settleQuietMs: integerField('Settle: quiet window in milliseconds (default 500).', { min: 0 }),
-  timeoutMs: integerField('Settle: wait deadline in milliseconds (default 10000).', { min: 1 }),
-});
-
-type VerifyFieldMap = { verify: ReturnType<typeof verifyField> };
-type SettleFieldMap = ReturnType<typeof settleFields>;
-type PostActionObservationFields<TName extends string> =
-  PostActionObservationSupportFor<TName> extends 'settle-and-verify'
-    ? VerifyFieldMap & SettleFieldMap
-    : PostActionObservationSupportFor<TName> extends 'settle'
-      ? SettleFieldMap
-      : {};
-
-function postActionObservationFields<const TName extends InteractionCommandName>(
-  command: TName,
-): PostActionObservationFields<TName> {
-  return {
-    ...(commandSupportsVerifyEvidence(command) ? { verify: verifyField() } : {}),
-    ...(commandSupportsSettleObservation(command) ? settleFields() : {}),
-  } as PostActionObservationFields<TName>;
-}
 
 const clickFields = {
   target: requiredField(interactionTargetField()),
@@ -170,6 +135,7 @@ const scrollFields = {
     min: 0,
     max: SCROLL_DURATION_MAX_MS,
   }),
+  ...postActionObservationFields('scroll'),
 };
 
 // #1271 stage 2 (ADR 0012 amendment): `get`/`is`/`find` are observation-only,

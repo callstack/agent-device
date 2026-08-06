@@ -10,6 +10,7 @@ import {
   resultOutput,
   type CliOutputFormatter,
 } from '../output-common.ts';
+import { messageWithSettleOutput } from '../settle-output.ts';
 
 function appStateCliOutput(result: AppStateCommandResult): CliOutput {
   return {
@@ -42,7 +43,8 @@ function clipboardCliOutput(result: ClipboardCommandResult): CliOutput {
 
 export const systemCliOutputFormatters = {
   appstate: resultOutput(appStateCliOutput),
-  back: messageOutput,
+  // #1638: back is settle-capable, so its line carries the settled diff.
+  back: messageWithSettleOutput,
   home: messageOutput,
   orientation: messageOutput,
   'app-switcher': messageOutput,

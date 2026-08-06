@@ -304,6 +304,14 @@ const targetShutdownResultSchema: JsonSchema = objectSchema(
   ['success', 'exitCode', 'stdout', 'stderr'],
 );
 
+/** Grafts the opt-in `--settle` observation onto an otherwise closed schema. */
+function withSettleObservation(schema: JsonSchema): JsonSchema {
+  return {
+    ...schema,
+    properties: { ...(schema.properties ?? {}), settle: settleObservationSchema },
+  };
+}
+
 const tapInteractionResponseDataSchema = interactionResponseDataSchema({
   properties: {
     evidence: interactionEvidenceSchema,
@@ -380,6 +388,11 @@ export const COMMAND_OUTPUT_SCHEMAS = {
 
   // packages/contracts/src/navigation.ts, projected from executable command contracts.
   ...projectedSystemCommandOutputSchemas,
+  // #1638: the projected navigation schema is the closed dispatch shape. `back`
+  // is settle-capable on the generic route, so the opt-in observation is added
+  // here — the projection layer sits below this module and cannot reach
+  // `settleObservationSchema`.
+  back: withSettleObservation(projectedSystemCommandOutputSchemas.back),
 
   // packages/contracts/src/wait.ts — compact public daemon projection.
   wait: objectSchema(

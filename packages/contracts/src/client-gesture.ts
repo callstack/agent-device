@@ -135,9 +135,10 @@ export type RotateGestureOptions = DeviceCommandBaseOptions & {
 
 export type TransformGestureOptions = DeviceCommandBaseOptions & TransformGestureParams;
 
-export type ScrollOptions = DeviceCommandBaseOptions & {
-  direction: ScrollInputDirection;
-  amount?: number;
-  pixels?: number;
-  durationMs?: number;
-};
+export type ScrollOptions = DeviceCommandBaseOptions &
+  SettleCommandOptions & {
+    direction: ScrollInputDirection;
+    amount?: number;
+    pixels?: number;
+    durationMs?: number;
+  };

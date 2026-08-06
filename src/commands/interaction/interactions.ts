@@ -97,6 +97,7 @@ export const interactionCliReaders = {
   },
   scroll: (positionals, flags) => ({
     ...commonInputFromFlags(flags),
+    ...settleInputFromFlags(flags),
     direction: readScrollDirection(positionals[0]),
     amount: optionalCliNumber(positionals[1]),
     pixels: flags.pixels,

@@ -287,10 +287,21 @@ const FILL_INTERACTION_RESPONSE_DATA_TRANSFORM = {
   },
 } as const satisfies CommandResponseDataTransform;
 
-function interactionTimeoutPolicy(command: string): CommandTimeoutPolicy {
+/**
+ * A settle-capable command spends its `--timeout` on the post-action wait, so
+ * the envelope has to widen by that budget wherever the trait is declared —
+ * interaction route or generic route (#1638). `withoutObservation` is the
+ * policy the command would carry if the trait were dropped, so removing a
+ * trait restores the command's own envelope instead of silently leaving it on
+ * the settle one.
+ */
+function postActionObservationTimeoutPolicy(
+  command: string,
+  withoutObservation: CommandTimeoutPolicy,
+): CommandTimeoutPolicy {
   return resolvePostActionObservationSupport(command) !== undefined
     ? SETTLE_FLAG_PRESERVE_DAEMON_TIMEOUT_POLICY
-    : PRESERVE_DAEMON_TIMEOUT_POLICY;
+    : withoutObservation;
 }
 
 function postActionObservation(command: string): PostActionObservationSupport {
@@ -903,7 +914,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
       androidBlockingDialogGuard: true,
     },
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
-    timeoutPolicy: interactionTimeoutPolicy('click'),
+    timeoutPolicy: postActionObservationTimeoutPolicy('click', PRESERVE_DAEMON_TIMEOUT_POLICY),
     postActionObservation: postActionObservation('click'),
     responseDataTransform: TOUCH_INTERACTION_RESPONSE_DATA_TRANSFORM,
     batchable: true,
@@ -922,7 +933,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     dispatch: {},
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
-    timeoutPolicy: interactionTimeoutPolicy('fill'),
+    timeoutPolicy: postActionObservationTimeoutPolicy('fill', PRESERVE_DAEMON_TIMEOUT_POLICY),
     postActionObservation: postActionObservation('fill'),
     responseDataTransform: FILL_INTERACTION_RESPONSE_DATA_TRANSFORM,
     batchable: true,
@@ -965,7 +976,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     dispatch: {},
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
-    timeoutPolicy: interactionTimeoutPolicy('press'),
+    timeoutPolicy: postActionObservationTimeoutPolicy('press', PRESERVE_DAEMON_TIMEOUT_POLICY),
     postActionObservation: postActionObservation('press'),
     responseDataTransform: TOUCH_INTERACTION_RESPONSE_DATA_TRANSFORM,
     batchable: true,
@@ -983,7 +994,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     dispatch: {},
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
-    timeoutPolicy: interactionTimeoutPolicy('type'),
+    timeoutPolicy: postActionObservationTimeoutPolicy('type', PRESERVE_DAEMON_TIMEOUT_POLICY),
     batchable: true,
   },
   {
@@ -995,7 +1006,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     recordingEffect: 'observes-app',
     daemon: { route: 'interaction', refFrameEffect: 'preserve' },
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
-    timeoutPolicy: interactionTimeoutPolicy('get'),
+    timeoutPolicy: postActionObservationTimeoutPolicy('get', PRESERVE_DAEMON_TIMEOUT_POLICY),
     batchable: true,
   },
   {
@@ -1016,7 +1027,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     recordingEffect: 'observes-app',
     daemon: { route: 'interaction', refFrameEffect: 'preserve' },
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
-    timeoutPolicy: interactionTimeoutPolicy('is'),
+    timeoutPolicy: postActionObservationTimeoutPolicy('is', PRESERVE_DAEMON_TIMEOUT_POLICY),
     batchable: true,
   },
 
@@ -1030,6 +1041,8 @@ export const RAW_COMMAND_DESCRIPTORS = [
       ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS.capability,
       vega: VEGA_VVD,
     },
+    timeoutPolicy: postActionObservationTimeoutPolicy('back', DEFAULT_TIMEOUT_POLICY),
+    postActionObservation: postActionObservation('back'),
   },
   {
     name: 'gesture',
@@ -1103,6 +1116,8 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS,
+    timeoutPolicy: postActionObservationTimeoutPolicy('scroll', DEFAULT_TIMEOUT_POLICY),
+    postActionObservation: postActionObservation('scroll'),
   },
   {
     name: 'swipe',

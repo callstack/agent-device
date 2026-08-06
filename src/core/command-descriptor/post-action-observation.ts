@@ -1,10 +1,18 @@
 export type PostActionObservationSupport = 'settle' | 'settle-and-verify';
 
+// `scroll` and `back` are settle-only (#1638): both mutate the screen without
+// resolving an element, so there is no target to re-digest into `--verify`
+// evidence — the settled diff IS the observation. They also run the generic
+// daemon route rather than the interaction route, which is why the settle
+// engine takes its diff baseline from the caller (the stored pre-action tree)
+// instead of a resolution's `preActionNodes`.
 const POST_ACTION_OBSERVATION_BY_COMMAND = {
   click: 'settle-and-verify',
   press: 'settle-and-verify',
   fill: 'settle-and-verify',
   longpress: 'settle',
+  scroll: 'settle',
+  back: 'settle',
 } as const satisfies Record<string, PostActionObservationSupport>;
 
 export type PostActionObservationCommandName = keyof typeof POST_ACTION_OBSERVATION_BY_COMMAND;

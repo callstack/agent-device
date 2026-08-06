@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { AgentDeviceClient } from '../../client/client-types.ts';
 import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts';
-import { resolveCommandRecordsSessionAction } from '../../core/command-descriptor/registry.ts';
+import {
+  commandSupportsSettleObservation,
+  resolveCommandRecordsSessionAction,
+} from '../../core/command-descriptor/registry.ts';
 import { COMMAND_OUTPUT_SCHEMAS } from '../command-output-schemas.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { NAVIGATION_COMMAND_PROJECTIONS } from '../../commands/system/navigation-projection.ts';
@@ -447,10 +450,21 @@ test('MCP tv remote outputSchema advertises button values', () => {
 
 test('MCP navigation output schemas are projected from the canonical executable contracts', () => {
   for (const [name, projection] of Object.entries(NAVIGATION_COMMAND_PROJECTIONS)) {
-    assert.equal(
-      COMMAND_OUTPUT_SCHEMAS[name as keyof typeof COMMAND_OUTPUT_SCHEMAS],
-      projection.outputSchema,
-    );
+    const schema = COMMAND_OUTPUT_SCHEMAS[name as keyof typeof COMMAND_OUTPUT_SCHEMAS];
+    if (!commandSupportsSettleObservation(name)) {
+      assert.equal(schema, projection.outputSchema, `${name}: must be the projection itself`);
+      continue;
+    }
+    // #1638: a settle-capable navigation command adds exactly ONE property on
+    // top of its projected dispatch shape — the opt-in `--settle` observation,
+    // grafted where `settleObservationSchema` lives because the projection
+    // layer sits below the MCP schema module. Everything else must still come
+    // from the projection verbatim.
+    const observed = schema as { properties?: Record<string, unknown>; required?: unknown };
+    const { settle, ...projectedProperties } = observed.properties ?? {};
+    assert.ok(settle, `${name}: settle-capable schema must advertise the observation`);
+    assert.deepEqual(projectedProperties, projection.outputSchema?.properties);
+    assert.deepEqual(observed.required, projection.outputSchema?.required);
   }
 });
 

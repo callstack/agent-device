@@ -544,3 +544,103 @@ test('ref-pin store leaves existing pins untouched for a mutating find without r
   );
   assert.deepEqual(pinned, { session: 'demo', target: { kind: 'ref', ref: '@e2~s7' } });
 });
+
+// --- #1638: the generic-route settle commands pin on identical terms ---
+
+test('ref-pin store merges per-ref pins from a scroll settle diff', () => {
+  const pins = makeStore();
+
+  pins.mergeCommandResult(
+    'snapshot',
+    { nodes: [{ ref: 'e2' }, { ref: 'e37' }], truncated: false, refsGeneration: 7 },
+    undefined,
+    'demo',
+  );
+  pins.mergeCommandResult(
+    'scroll',
+    {
+      direction: 'down',
+      message: 'Scrolled down',
+      settle: {
+        settled: true,
+        waitedMs: 800,
+        captures: 3,
+        quietMs: 500,
+        timeoutMs: 10_000,
+        refsGeneration: 8,
+        diff: {
+          summary: { additions: 1, removals: 1, unchanged: 1 },
+          lines: [
+            { kind: 'removed', text: '@e2 [cell] "General"' },
+            { kind: 'added', text: '@e4 [cell] "Developer"', ref: 'e4' },
+          ],
+        },
+      },
+    },
+    undefined,
+    'demo',
+  );
+
+  // The scrolled-in ref pins at the settle generation; a ref the settle never
+  // republished keeps its older snapshot pin, so the daemon still warns on it.
+  assert.deepEqual(
+    pins.pinInput('press', { session: 'demo', target: { kind: 'ref', ref: '@e4' } }, undefined),
+    { session: 'demo', target: { kind: 'ref', ref: '@e4~s8' } },
+  );
+  assert.deepEqual(
+    pins.pinInput('press', { session: 'demo', target: { kind: 'ref', ref: '@e37' } }, undefined),
+    { session: 'demo', target: { kind: 'ref', ref: '@e37~s7' } },
+  );
+});
+
+test('ref-pin store merges per-ref pins from a back settle tail', () => {
+  const pins = makeStore();
+
+  pins.mergeCommandResult(
+    'back',
+    {
+      action: 'back',
+      mode: 'in-app',
+      message: 'Back',
+      settle: {
+        settled: true,
+        waitedMs: 770,
+        captures: 3,
+        quietMs: 500,
+        timeoutMs: 10_000,
+        refsGeneration: 12,
+        diff: { summary: { additions: 0, removals: 2, unchanged: 3 }, lines: [] },
+        tail: [{ ref: 'e6', role: 'cell', label: 'Camera' }],
+      },
+    },
+    undefined,
+    'demo',
+  );
+
+  assert.deepEqual(
+    pins.pinInput('press', { session: 'demo', target: { kind: 'ref', ref: '@e6' } }, undefined),
+    { session: 'demo', target: { kind: 'ref', ref: '@e6~s12' } },
+  );
+});
+
+test('ref-pin store leaves pins untouched for a scroll with no settle payload', () => {
+  const pins = makeStore();
+
+  pins.mergeCommandResult(
+    'snapshot',
+    { nodes: [{ ref: 'e2' }], truncated: false, refsGeneration: 7 },
+    undefined,
+    'demo',
+  );
+  pins.mergeCommandResult(
+    'scroll',
+    { direction: 'down', message: 'Scrolled down' },
+    undefined,
+    'demo',
+  );
+
+  assert.deepEqual(
+    pins.pinInput('press', { session: 'demo', target: { kind: 'ref', ref: '@e2' } }, undefined),
+    { session: 'demo', target: { kind: 'ref', ref: '@e2~s7' } },
+  );
+});

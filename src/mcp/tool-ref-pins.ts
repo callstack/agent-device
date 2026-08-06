@@ -1,6 +1,11 @@
+import type { SettleObservation } from '@agent-device/contracts/interaction';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import type { CommandName } from '../commands/command-metadata.ts';
+import { isCommandName, type CommandName } from '../commands/command-metadata.ts';
 import type { CommandExecutionResult } from '../commands/command-surface.ts';
+import {
+  commandDescriptors,
+  commandSupportsSettleObservation,
+} from '../core/command-descriptor/registry.ts';
 import { asOptionalRecord } from '../utils/parsing.ts';
 
 export type ToolRefPinStore = {
@@ -52,20 +57,24 @@ export function createToolRefPinStore(): ToolRefPinStore {
 const REF_ISSUING_TOOLS: ReadonlySet<CommandName> = new Set(['snapshot', 'find'] as const);
 
 /**
- * `--settle` (#1101) makes an interaction response CONDITIONALLY ref-issuing:
- * when it carries `settle.diff` + `settle.refsGeneration`, the diff's added
- * lines hand out refs minted from the freshly stored settled tree. These tools
- * are NOT in REF_ISSUING_TOOLS on purpose — a plain (non-settle) press carries
- * no generation, and treating that as "issuing response without a generation"
+ * `--settle` (#1101) makes a response CONDITIONALLY ref-issuing: when it
+ * carries `settle.diff` + `settle.refsGeneration`, the diff's added lines hand
+ * out refs minted from the freshly stored settled tree. These tools are NOT in
+ * REF_ISSUING_TOOLS on purpose — a plain (non-settle) press carries no
+ * generation, and treating that as "issuing response without a generation"
  * would clear the scope's pins on every ordinary tap. Absent or diff-less
  * settle payloads leave pins untouched.
+ *
+ * Derived from the descriptor trait rather than hand-listed: a command that
+ * grows `--settle` (scroll/back, #1638) issues refs the moment it can produce a
+ * settled diff, and a hand list would silently stop pinning them.
  */
-const SETTLE_REF_ISSUING_TOOLS: ReadonlySet<CommandName> = new Set([
-  'press',
-  'click',
-  'fill',
-  'longpress',
-] as const);
+const SETTLE_REF_ISSUING_TOOLS: ReadonlySet<CommandName> = new Set(
+  commandDescriptors
+    .map((descriptor) => descriptor.name)
+    .filter(isCommandName)
+    .filter((name) => commandSupportsSettleObservation(name)),
+);
 
 const TARGET_REF_TOOLS: ReadonlySet<CommandName> = new Set([
   'press',
@@ -111,11 +120,7 @@ function mergeCommandResult(
 ): void {
   const scopeKey = makeScopeKey(stateDir, session);
   if (SETTLE_REF_ISSUING_TOOLS.has(name)) {
-    mergeSettleIssuedRefPins(
-      refPinsByScope,
-      scopeKey,
-      result as CommandExecutionResult<'press' | 'click' | 'fill' | 'longpress'>,
-    );
+    mergeSettleIssuedRefPins(refPinsByScope, scopeKey, readSettleObservation(result));
     return;
   }
   if (!REF_ISSUING_TOOLS.has(name)) return;
@@ -199,14 +204,23 @@ function mergeFindRefPins(
 function mergeSettleIssuedRefPins(
   refPinsByScope: Map<string, Map<string, number>>,
   scopeKey: string,
-  result: CommandExecutionResult<'press' | 'click' | 'fill' | 'longpress'>,
+  settle: SettleObservation | undefined,
 ): void {
-  const { settle } = result;
   if (settle?.refsGeneration === undefined) return;
   const issuedRefs = [...(settle.diff?.lines ?? []), ...(settle.refs ?? []), ...(settle.tail ?? [])]
     .map((entry) => entry.ref)
     .filter((ref): ref is string => typeof ref === 'string');
   mergeIntoScopedPins(refPinsByScope, scopeKey, issuedRefs, settle.refsGeneration);
+}
+
+/**
+ * The settle payload as this layer reads it. `scroll`/`back` results are not in
+ * the typed-result spine (CommandResultMap), so the field is read structurally
+ * rather than through a per-command result union.
+ */
+function readSettleObservation(result: CommandExecutionResult): SettleObservation | undefined {
+  const settle = (result as { settle?: unknown }).settle;
+  return settle !== null && typeof settle === 'object' ? (settle as SettleObservation) : undefined;
 }
 
 /** Shared merge-only tail: skip empty issuance, else create-or-reuse the scope's pin map and record. */

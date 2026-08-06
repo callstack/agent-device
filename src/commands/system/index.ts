@@ -16,6 +16,7 @@ import {
   optionalString,
   request,
   requiredDaemonString,
+  settleInputFromFlags,
 } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
@@ -32,6 +33,10 @@ import {
   projectCommandOutputSchemas,
 } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
+import {
+  postActionObservationCliFlags,
+  postActionObservationFields,
+} from '../post-action-observation-grammar.ts';
 import { NAVIGATION_COMMAND_PROJECTIONS } from './navigation-projection.ts';
 import { systemCliOutputFormatters } from './output.ts';
 
@@ -71,6 +76,7 @@ const appStateCommandMetadata = defineFieldCommandMetadata(
 
 const backCommandMetadata = defineFieldCommandMetadata(BACK_COMMAND_NAME, backCommandDescription, {
   mode: enumField(BACK_MODES),
+  ...postActionObservationFields(BACK_COMMAND_NAME),
 });
 
 const homeCommandMetadata = defineFieldCommandMetadata(
@@ -172,8 +178,8 @@ const tvRemoteCommandDefinition = defineExecutableCommand(
 const appStateCliSchema = {} as const satisfies CommandSchemaOverride;
 
 const backCliSchema = {
-  usageOverride: 'back [--in-app|--system]',
-  allowedFlags: ['backMode'],
+  usageOverride: 'back [--in-app|--system] [--settle]',
+  allowedFlags: ['backMode', ...postActionObservationCliFlags(BACK_COMMAND_NAME)],
 } as const satisfies CommandSchemaOverride;
 
 const homeCliSchema = {} as const satisfies CommandSchemaOverride;
@@ -210,6 +216,7 @@ export const appSwitcherCliReader: CliReader = (_positionals, flags) => commonIn
 
 export const backCliReader: CliReader = (_positionals, flags) => ({
   ...commonInputFromFlags(flags),
+  ...settleInputFromFlags(flags),
   mode: flags.backMode,
 });
 

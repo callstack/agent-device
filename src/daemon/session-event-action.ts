@@ -296,7 +296,8 @@ const SAFE_ACTION_FLAG_SPECS: Record<string, SafeFlagSpec> = {
   [PUBLIC_COMMANDS.fill]: textEntrySafeFlagSpec(),
   [PUBLIC_COMMANDS.type]: textEntrySafeFlagSpec(),
   [PUBLIC_COMMANDS.scroll]: {
-    numbers: [{ source: 'pixels' }, { source: 'durationMs' }],
+    booleans: [{ source: 'settle' }],
+    numbers: [{ source: 'pixels' }, { source: 'durationMs' }, { source: 'settleQuietMs' }],
   },
   [PUBLIC_COMMANDS.gesture]: gestureSafeFlagSpec(),
   [PUBLIC_COMMANDS.swipe]: gestureSafeFlagSpec(),
@@ -322,6 +323,8 @@ const SAFE_ACTION_FLAG_SPECS: Record<string, SafeFlagSpec> = {
     numbers: [{ source: 'snapshotDepth', output: 'depth' }],
   },
   [PUBLIC_COMMANDS.back]: {
+    booleans: [{ source: 'settle' }],
+    numbers: [{ source: 'settleQuietMs' }],
     enums: [{ source: 'backMode', output: 'mode', values: BACK_MODES }],
   },
   [PUBLIC_COMMANDS.record]: {

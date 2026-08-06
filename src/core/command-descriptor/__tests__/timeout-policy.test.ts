@@ -68,10 +68,13 @@ test('daemon-preserving timeout commands are a bounded, reviewed set', () => {
   // Interaction commands joined in #1105: their target resolution runs the
   // same capture as snapshot, and resetting the daemon on a wedged capture
   // destroyed healthy app sessions.
+  // scroll/back joined in #1638: `--settle` gives them the same post-action
+  // capture loop, so a wedged bridge is now their dominant hang mode too.
   const preserving = commandDescriptors
     .filter((descriptor) => descriptor.timeoutPolicy.onTimeout === 'preserve-daemon')
     .map((descriptor) => descriptor.name);
   assert.deepEqual(preserving.sort(), [
+    'back',
     'click',
     'fill',
     'find',
@@ -79,6 +82,7 @@ test('daemon-preserving timeout commands are a bounded, reviewed set', () => {
     'is',
     'longpress',
     'press',
+    'scroll',
     'snapshot',
     'type',
     'wait',

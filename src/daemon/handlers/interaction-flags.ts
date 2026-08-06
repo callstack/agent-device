@@ -1,5 +1,4 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { PostActionObservationCommandName } from '../../core/command-descriptor/post-action-observation.ts';
 import type { SettleParams } from '@agent-device/contracts/interaction';
 import type { DaemonResponse } from '../types.ts';
 import { errorResponse } from './response.ts';
@@ -42,9 +41,12 @@ export function unsupportedRefSnapshotFlags(flags: CommandFlags | undefined): st
  * for a bare `--timeout` without `--settle`: older touch commands silently
  * ignored it. Only `--settle-quiet` is settle-specific enough to reject when
  * orphaned.
+ *
+ * `command` names the command in the error message only; callers gate on the
+ * descriptor trait (`commandSupportsSettleObservation`) before reaching here.
  */
 export function settleFlagGuardResponse(
-  command: PostActionObservationCommandName,
+  command: string,
   flags: CommandFlags | undefined,
 ): DaemonResponse | null {
   if (!flags || flags.settle === true) return null;

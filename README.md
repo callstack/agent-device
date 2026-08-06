@@ -61,6 +61,8 @@ agent-device close
 
 Use refs only from the latest output. Do not assume an earlier `@eN` still identifies the same element. After a command with `--settle`, use the refs in its diff. Take another snapshot only if the diff omits what you need.
 
+`--settle` works the same way on `scroll` and `back`, so scroll-then-observe and back-then-observe are one call too.
+
 Snapshots use the app's accessibility tree. Clear labels, roles, and test IDs make agent runs more reliable. Use screenshots and videos as evidence or when accessibility data is poor. Use refs and selectors for actions and assertions when you can.
 
 ![agent-device demo showing Codex using agent-device to create a new contact in the iOS Contacts app from a simple prompt](./website/docs/public/agent-device-contacts.gif)
