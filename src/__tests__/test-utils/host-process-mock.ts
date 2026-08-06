@@ -17,6 +17,10 @@ type HostProcessModule = typeof import('../../utils/host-process.ts');
  * Usage: `vi.mock('<path>/utils/host-process.ts', async (importOriginal) =>
  * (await import('<path>/test-utils/host-process-mock.ts')).pinOwnProcessStartTime(importOriginal))`
  */
+// Consumed by three suites, but only through `(await import(...)).pinOwnProcessStartTime`
+// inside `vi.mock` factories — vitest hoists those above static imports, so the dynamic
+// form is required and fallow cannot trace the consumers statically.
+// fallow-ignore-next-line unused-export
 export async function pinOwnProcessStartTime(
   importOriginal: () => Promise<HostProcessModule>,
 ): Promise<HostProcessModule> {
