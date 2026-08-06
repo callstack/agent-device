@@ -146,6 +146,23 @@ test('knobs stay consistent with the ambiguity each knob-backed row names', () =
   }
 });
 
+/**
+ * The matrix may only declare what it can enforce (#1649 review). An earlier
+ * revision carried occlusion / off-screen / promotion / poll columns that no
+ * code consumed, so changing them left both behavior and the suite green —
+ * an unverifiable claim reading as truth. This fails if such a field returns
+ * without behavioral coverage.
+ */
+test('policy rows declare only the fields this matrix actually enforces', () => {
+  for (const [name, policy] of Object.entries(SELECTOR_RESOLUTION_POLICIES)) {
+    assert.deepEqual(
+      Object.keys(policy).sort(),
+      ['ambiguity', 'requireRect'],
+      `${name} declares a field the matrix cannot enforce`,
+    );
+  }
+});
+
 test('the documented per-caller contracts are the ones declared', () => {
   assert.equal(SELECTOR_RESOLUTION_POLICIES.act.ambiguity, 'disambiguate');
   assert.equal(SELECTOR_RESOLUTION_POLICIES.readText.ambiguity, 'disambiguate');

@@ -21,11 +21,18 @@ import type { SelectorResolutionOptions } from './public-resolution-types.ts';
  *   Declaration-only: enforced by find's own narrowing logic, not by engine
  *   knobs, so `selectorResolutionKnobs` rejects it at the type level.
  *
- * The structural columns (`occlusion`, `offscreenGuard`, `promotion`, `poll`)
- * document which pipeline hosts each policy; the pipelines live in the
- * callers, and resolution-policy-parity.test.ts gate-tests these claims
- * against the callers' actual imports so the matrix cannot drift into
- * fiction (the ADR 0011 declared-plus-gate-tested pattern).
+ * Scope, deliberately narrow: this matrix declares the **ambiguity contract
+ * and the rect requirement**, and nothing else. Both are consumed by
+ * `resolveSelectorChainWithPolicy` and pinned behaviorally in
+ * resolution-policy-parity.test.ts, so a row that stops matching its
+ * documented semantics fails a test.
+ *
+ * The surrounding pipeline stages — occlusion, the off-screen guard,
+ * hittable-ancestor promotion, and the wait poll budget — still live in the
+ * callers and are NOT declared here. An earlier revision listed them as
+ * columns; nothing consumed them, so they were unverifiable claims that read
+ * as truth while being free to drift (#1649 review). Routing them into typed
+ * behavior is tracked in #1656.
  */
 
 export type KnobBackedSelectorAmbiguity = 'disambiguate' | 'fail-closed' | 'first-match';
@@ -35,14 +42,6 @@ export type SelectorResolutionPolicy = {
   ambiguity: SelectorAmbiguityPolicy;
   /** Only nodes carrying a rect participate (acting paths need a tap point). */
   requireRect: boolean;
-  /** Occlusion filtering / covered-target rejection runs in this pipeline. */
-  occlusion: boolean;
-  /** The winner is checked against the viewport (with the iOS rescue probe). */
-  offscreenGuard: boolean;
-  /** Hittable-ancestor promotion may move the dispatch point. */
-  promotion: boolean;
-  /** Single capture (`none`) or the wait loop's poll budget. */
-  poll: 'none' | 'wait-budget';
 };
 
 export const SELECTOR_RESOLUTION_POLICIES = {
@@ -50,64 +49,36 @@ export const SELECTOR_RESOLUTION_POLICIES = {
   act: {
     ambiguity: 'disambiguate',
     requireRect: true,
-    occlusion: true,
-    offscreenGuard: true,
-    promotion: true,
-    poll: 'none',
   },
   /** The post-miss diagnosis probe deciding "no match" vs "matched but covered". */
   actCoveredDiagnosis: {
     ambiguity: 'first-match',
     requireRect: true,
-    occlusion: true,
-    offscreenGuard: false,
-    promotion: false,
-    poll: 'none',
   },
   /** `get text` — reads through the same tiebreak acting uses. */
   readText: {
     ambiguity: 'disambiguate',
     requireRect: false,
-    occlusion: false,
-    offscreenGuard: false,
-    promotion: false,
-    poll: 'none',
   },
   /** `is` non-exists predicates and `get attrs` — ties reject, never guess. */
   readUnique: {
     ambiguity: 'fail-closed',
     requireRect: false,
-    occlusion: false,
-    offscreenGuard: false,
-    promotion: false,
-    poll: 'none',
   },
   /** `exists` and find's read-only actions — presence is the question. */
   readAny: {
     ambiguity: 'first-match',
     requireRect: false,
-    occlusion: false,
-    offscreenGuard: false,
-    promotion: false,
-    poll: 'none',
   },
   /** `wait` — first match per poll, under the wait budget. */
   wait: {
     ambiguity: 'first-match',
     requireRect: false,
-    occlusion: false,
-    offscreenGuard: false,
-    promotion: false,
-    poll: 'wait-budget',
   },
   /** Mutating `find` (#1625): candidates reject unless explicitly narrowed. */
   findAct: {
     ambiguity: 'reject-candidates',
     requireRect: true,
-    occlusion: true,
-    offscreenGuard: false,
-    promotion: true,
-    poll: 'none',
   },
 } as const satisfies Record<string, SelectorResolutionPolicy>;
 
