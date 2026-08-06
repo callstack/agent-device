@@ -1182,6 +1182,118 @@ test('a failed platform close retains the device claim and reports it', async ()
   }
 });
 
+// The retention decision has TWO inputs — `platformCloseError ?? cleanupAggregate` — and the test
+// above only drives the first. A best-effort cleanup failure is the branch operators actually hit
+// more often (a wedged perfetto stop, a dead helper), and it reaches the same retention through a
+// different value, so it needs its own pin: making the aggregate stop blocking the claim would
+// leave the test above green.
+test('a failing best-effort cleanup also retains the device claim and reports it', async () => {
+  const claimsRoot = mkdtempForTestSync('agent-device-session-close-claim-cleanup-failure-');
+  const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
+  process.env.AGENT_DEVICE_CLAIMS_DIR = claimsRoot;
+  try {
+    const sessionStore = makeSessionStore();
+    const sessionName = 'close-claim-cleanup-failure-session';
+    const device = {
+      platform: 'android' as const,
+      id: 'emulator-5556',
+      name: 'Pixel',
+      kind: 'emulator' as const,
+      booted: true,
+    };
+    const acquired = await acquireAdvisoryDeviceClaim({
+      device,
+      session: sessionName,
+      workspace: process.cwd(),
+      stateDir: sessionStore.resolveDaemonStateDir(),
+    });
+    if (!acquired.ownership) {
+      throw new Error('expected the test session to acquire a device claim');
+    }
+    const session = {
+      ...makeSession(sessionName, device),
+      appBundleId: 'com.example.app',
+      nativePerf: {
+        android: {
+          type: 'trace',
+          kind: 'perfetto',
+          packageName: 'com.example.app',
+          appPid: '1234',
+          profilerPid: '5678',
+          remotePath: '/data/misc/perfetto-traces/app.perfetto-trace',
+          outPath: '/tmp/app.perfetto-trace',
+          startedAt: Date.now(),
+          state: 'running',
+        },
+      },
+      deviceClaim: acquired.ownership,
+    } as unknown as SessionState;
+    sessionStore.set(sessionName, session);
+
+    // The platform close itself succeeds; only the best-effort cleanup step fails, so the
+    // blocking error arrives as the cleanup aggregate rather than as platformCloseError.
+    mockCleanupAndroidNativePerfSession.mockRejectedValueOnce(
+      new AppError('COMMAND_FAILED', 'perfetto stop failed'),
+    );
+
+    const diagnosticsLogPath = path.join(claimsRoot, 'diagnostics.ndjson');
+    const thrown = await withDiagnosticsScope(
+      { session: sessionName, command: 'close', logPath: diagnosticsLogPath },
+      async () => {
+        let caught: unknown;
+        try {
+          await handleSessionCommands({
+            req: {
+              token: 't',
+              session: sessionName,
+              command: 'close',
+              positionals: [],
+              flags: {},
+            },
+            sessionName,
+            logPath: path.join(os.tmpdir(), 'daemon.log'),
+            sessionStore,
+            invoke: noopInvoke,
+          });
+        } catch (error) {
+          caught = error;
+        }
+        flushDiagnosticsToSessionFile({ force: true });
+        return caught;
+      },
+    );
+
+    expect(thrown).toMatchObject({
+      details: expect.objectContaining({
+        reason: 'session_cleanup_incomplete',
+        failedSteps: ['android_native_perf'],
+      }),
+    });
+    expect(sessionStore.get(sessionName)).toBeUndefined();
+
+    const claimState = inspectDeviceClaims({ serial: device.id })[0];
+    expect(claimState?.classification).toBe('live');
+    expect(claimState?.claim?.session).toBe(sessionName);
+
+    const rows = fs
+      .readFileSync(diagnosticsLogPath, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    expect(rows).toContainEqual(
+      expect.objectContaining({
+        level: 'warn',
+        phase: 'device_claim_close_effects_unconfirmed',
+        data: { deviceKey: acquired.ownership.deviceKey, session: sessionName },
+      }),
+    );
+  } finally {
+    if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
+    else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
+    fs.rmSync(claimsRoot, { recursive: true, force: true });
+  }
+});
+
 test('a successful close clears the device claim', async () => {
   const claimsRoot = mkdtempForTestSync('agent-device-session-close-claim-cleared-');
   const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
