@@ -11,6 +11,8 @@ test('records session snapshot timing stats', () => {
   recordSnapshotTiming(session, { durationMs: 400, backend: 'android', platform: 'android' });
   recordSnapshotTiming(session, { durationMs: 2_100, backend: 'android', platform: 'android' });
 
+  // Two samples cannot distinguish chronic slowness from a one-off — stats are
+  // reported, but no warning fires.
   expect(summarizeSnapshotDiagnostics(session)).toEqual({
     stats: {
       count: 2,
@@ -21,8 +23,34 @@ test('records session snapshot timing stats', () => {
       platform: 'android',
       backends: { android: 2 },
     },
-    warning: expect.stringContaining('p95 2100ms over 2 captures'),
   });
+});
+
+test('a slow cold-start capture alone does not warn', () => {
+  const session = {};
+
+  // First capture folds runner/helper startup (12s); warm captures are fast.
+  recordSnapshotTiming(session, { durationMs: 12_400, backend: 'xctest', platform: 'ios' });
+  for (const durationMs of [520, 540, 510, 530, 525]) {
+    recordSnapshotTiming(session, { durationMs, backend: 'xctest', platform: 'ios' });
+  }
+
+  const summary = summarizeSnapshotDiagnostics(session);
+  expect(summary?.warning).toBeUndefined();
+  // The cold sample still shows in the full stats.
+  expect(summary?.stats).toMatchObject({ count: 6, maxMs: 12_400 });
+});
+
+test('chronically slow warm captures warn without counting the cold start', () => {
+  const session = {};
+
+  recordSnapshotTiming(session, { durationMs: 12_400, backend: 'xctest', platform: 'ios' });
+  for (const durationMs of [2_600, 2_700, 2_500, 2_800]) {
+    recordSnapshotTiming(session, { durationMs, backend: 'xctest', platform: 'ios' });
+  }
+
+  const summary = summarizeSnapshotDiagnostics(session);
+  expect(summary?.warning).toContain('p95 2800ms over 4 captures');
 });
 
 test('merges snapshot diagnostics without inflating capture count', () => {

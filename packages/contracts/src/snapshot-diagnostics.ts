@@ -4,6 +4,9 @@ import { isRecord } from './json.ts';
 
 const SLOW_SNAPSHOT_P95_WARNING_MS = 1_500;
 
+/** Warm captures needed before chronic slowness is distinguishable from noise. */
+const MIN_WARNING_SAMPLE_COUNT = 3;
+
 export type SnapshotTimingSample = {
   durationMs: number;
   backend?: SnapshotBackend;
@@ -47,7 +50,24 @@ export function summarizeSnapshotDiagnostics(
 ): SnapshotDiagnosticsSummary | undefined {
   const samples = session?.snapshotDiagnostics?.samples;
   if (!samples || samples.length === 0) return undefined;
-  return summarizeSnapshotTimingSamples(samples);
+  const stats = buildSnapshotTimingStats(samples);
+  // The session's FIRST capture folds one-time startup (runner launch, helper
+  // install) into its duration, and nearest-rank p95 over a small run equals
+  // its largest one or two samples — together they made a single cold start
+  // read as "device degraded" with restart-inviting hints. The warning judges
+  // only warm captures, and only once there are enough to mean anything; the
+  // displayed stats still cover every sample.
+  const warmSamples = samples.slice(1);
+  const warmStats =
+    warmSamples.length >= MIN_WARNING_SAMPLE_COUNT
+      ? buildSnapshotTimingStats(warmSamples)
+      : undefined;
+  return {
+    stats,
+    ...(warmStats && warmStats.p95Ms >= SLOW_SNAPSHOT_P95_WARNING_MS
+      ? { warning: formatSlowSnapshotWarning(warmStats) }
+      : {}),
+  };
 }
 
 export function summarizeSnapshotTimingSamples(
