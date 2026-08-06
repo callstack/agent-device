@@ -11,6 +11,7 @@ import {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { shellQuoteIfNeeded } from '../../utils/shell-quote.ts';
 import {
   resolveAndroidAdbExecutor,
   resolveAndroidTextInjector,
@@ -392,7 +393,12 @@ async function typeAndroidShell(
 async function typeAndroidShellChunk(device: DeviceInfo, text: string): Promise<void> {
   if (!text) return;
   try {
-    await runAndroidAdb(device, ['shell', 'input', 'text', encodeAndroidInputText(text)]);
+    await runAndroidAdb(device, [
+      'shell',
+      'input',
+      'text',
+      shellQuoteIfNeeded(encodeAndroidInputText(text)),
+    ]);
   } catch (error) {
     if (isAndroidInputTextUnsupported(error)) {
       throw unsupportedAndroidShellTextError(text, error);

@@ -1,6 +1,7 @@
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { shellQuoteIfNeeded } from '../../utils/shell-quote.ts';
 import { isClipboardShellUnsupported, sleep } from './adb.ts';
 import {
   androidAdbResultError,
@@ -308,7 +309,7 @@ export async function writeAndroidClipboardWithAdb(
 ): Promise<void> {
   await runAndroidClipboardShellCommand(
     adb,
-    ['shell', 'cmd', 'clipboard', 'set', 'text', text],
+    ['shell', 'cmd', 'clipboard', 'set', 'text', shellQuoteIfNeeded(text)],
     'write',
   );
 }

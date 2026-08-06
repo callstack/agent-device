@@ -263,14 +263,31 @@ function createAndroidProviderShellState(): AndroidProviderShellState {
   return { searchText: '', clipboardText: 'hello' };
 }
 
+const ANDROID_CLIPBOARD_SET_TEXT_PREFIX = ['shell', 'cmd', 'clipboard', 'set', 'text'];
+
 function updateAndroidProviderShellState(args: string[], state: AndroidProviderShellState): void {
   if (args[0] === 'shell' && args[1] === 'input' && args[2] === 'text') {
     state.searchText = String(args[3] ?? '').replaceAll('%s', ' ');
     return;
   }
-  if (args.join(' ') === 'shell cmd clipboard set text android otp') {
-    state.clipboardText = 'android otp';
+  if (argsStartWith(args, ANDROID_CLIPBOARD_SET_TEXT_PREFIX)) {
+    state.clipboardText = unquoteAndroidShellArg(
+      String(args[ANDROID_CLIPBOARD_SET_TEXT_PREFIX.length] ?? ''),
+    );
   }
+}
+
+function argsStartWith(args: string[], prefix: string[]): boolean {
+  return prefix.every((value, index) => args[index] === value);
+}
+
+// The real device shell unwraps a single-quoted argument (and collapses the
+// `'\''` escape back to `'`) before `cmd` ever sees it, so this harness has
+// to mirror that unwrap to keep modelling what the device actually receives
+// — the inverse of the quoting in src/utils/shell-quote.ts.
+function unquoteAndroidShellArg(value: string): string {
+  if (!value.startsWith("'") || !value.endsWith("'") || value.length < 2) return value;
+  return value.slice(1, -1).replaceAll("'\\''", "'");
 }
 
 function androidDeviceStateAdbResult(

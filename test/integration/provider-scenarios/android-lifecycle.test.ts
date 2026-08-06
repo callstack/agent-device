@@ -1482,7 +1482,7 @@ function assertAndroidPushAndEventContract(world: AndroidSettingsWorld): void {
     'com.example.demo',
   ]);
   assertCommandCall(adbCalls, ['shell', 'cmd', 'clipboard', 'get', 'text']);
-  assertCommandCall(adbCalls, ['shell', 'cmd', 'clipboard', 'set', 'text', 'android otp']);
+  assertCommandCall(adbCalls, ['shell', 'cmd', 'clipboard', 'set', 'text', "'android otp'"]);
   assertCommandCall(adbCalls, ['shell', 'dumpsys', 'input_method']);
 }
 

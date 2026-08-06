@@ -7,6 +7,7 @@ import {
   dismissAndroidKeyboard,
   getAndroidKeyboardState,
   getAndroidKeyboardStatusWithAdb,
+  writeAndroidClipboardWithAdb,
 } from '../device-input-state.ts';
 import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../../utils/diagnostics.ts';
 import { assertRejectsAppError, withFakeAdb } from '../../../__tests__/test-utils/index.ts';
@@ -204,6 +205,30 @@ test('getAndroidKeyboardState treats stale input view as hidden when the IME win
       assert.equal(state.type, 'email');
     },
   );
+});
+
+test('writeAndroidClipboardWithAdb shell-quotes text containing metacharacters', async () => {
+  const calls: string[][] = [];
+  const adb: AndroidAdbExecutor = async (args) => {
+    calls.push(args);
+    return { stdout: '', stderr: '', exitCode: 0 };
+  };
+
+  await writeAndroidClipboardWithAdb(adb, 'otp; echo pwned');
+
+  assert.deepEqual(calls, [['shell', 'cmd', 'clipboard', 'set', 'text', "'otp; echo pwned'"]]);
+});
+
+test('writeAndroidClipboardWithAdb leaves safe text unquoted', async () => {
+  const calls: string[][] = [];
+  const adb: AndroidAdbExecutor = async (args) => {
+    calls.push(args);
+    return { stdout: '', stderr: '', exitCode: 0 };
+  };
+
+  await writeAndroidClipboardWithAdb(adb, 'android-otp');
+
+  assert.deepEqual(calls, [['shell', 'cmd', 'clipboard', 'set', 'text', 'android-otp']]);
 });
 
 test('dismissAndroidKeyboard skips keyevent when keyboard is already hidden', async () => {

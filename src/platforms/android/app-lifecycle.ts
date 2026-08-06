@@ -7,6 +7,7 @@ import { sleep } from '../../utils/timeouts.ts';
 import type { AppsFilter } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
+import { shellQuoteIfNeeded } from '../../utils/shell-quote.ts';
 import { createAppResolutionCache, type AppResolutionCacheScope } from '../app-resolution-cache.ts';
 import { waitForAndroidBoot } from './emulator-lifecycle.ts';
 import { runAndroidAdb } from './adb.ts';
@@ -306,13 +307,8 @@ export type OpenAndroidAppOptions = {
 // characters, so they round-trip untouched. URLs and launch arguments are
 // user-supplied and may contain JSON, spaces, `#`, or `&`; each is single-quoted
 // unless it consists entirely of safe shell characters.
-function quoteAndroidShellArg(arg: string): string {
-  if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(arg)) return arg;
-  return `'${arg.replace(/'/g, `'\\''`)}'`;
-}
-
 function androidLaunchArgs(options: OpenAndroidAppOptions): string[] {
-  return (options.launchArgs ?? []).map(quoteAndroidShellArg);
+  return (options.launchArgs ?? []).map(shellQuoteIfNeeded);
 }
 
 export async function openAndroidApp(
@@ -367,7 +363,7 @@ async function openAndroidDeepLink(
     '-a',
     'android.intent.action.VIEW',
     '-d',
-    quoteAndroidShellArg(target),
+    shellQuoteIfNeeded(target),
     ...androidDeepLinkPackageArgs(options.appBundleId),
     ...androidLaunchArgs(options),
   ]);
@@ -398,7 +394,7 @@ async function openAndroidAppBoundDeepLink(
     '-a',
     'android.intent.action.VIEW',
     '-d',
-    quoteAndroidShellArg(deepLinkUrl),
+    shellQuoteIfNeeded(deepLinkUrl),
     '-p',
     resolved,
     ...androidLaunchArgs(options),

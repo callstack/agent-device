@@ -202,6 +202,31 @@ test('typeAndroid sends one character at a time when delay is requested', async 
   );
 });
 
+test('typeAndroid shell-quotes text containing shell metacharacters', async () => {
+  await withFakeAdb(
+    () => undefined,
+    async ({ calls, device }) => {
+      await typeAndroid(device, 'otp; echo pwned');
+      // The chunk carrying `;` is single-quoted so the device shell cannot
+      // re-tokenize it into a second command.
+      assert.deepEqual(shellInputTextCalls(calls), [
+        ['shell', 'input', 'text', "'otp;%sech'"],
+        ['shell', 'input', 'text', 'o%spwned'],
+      ]);
+    },
+  );
+});
+
+test('typeAndroid leaves safe text unquoted', async () => {
+  await withFakeAdb(
+    () => undefined,
+    async ({ calls, device }) => {
+      await typeAndroid(device, 'hello');
+      assert.deepEqual(shellInputTextCalls(calls), [['shell', 'input', 'text', 'hello']]);
+    },
+  );
+});
+
 test('fillAndroid uses chunk-safe shell input and retries when verification still fails', async () => {
   // First `input text` writes a wrong partial value, so attempt 1 fails
   // verification and production retries with the smaller chunk size.
