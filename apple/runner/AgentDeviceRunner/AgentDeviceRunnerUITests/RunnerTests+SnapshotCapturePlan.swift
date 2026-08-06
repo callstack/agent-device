@@ -685,6 +685,35 @@ extension RunnerTests {
     XCTAssertEqual(Self.xcTestChannelStateFirstFailure(.boundedXCTestProbe)?.code, "budget")
   }
 
+  /// #1634 P2: the decoded wire field must reach capture options and its
+  /// applicable plan. A pinned REGULAR capture defers to privateAX-first; the
+  /// RAW diagnostic plan is never rerouted by the pin — raw keeps tree-first
+  /// error propagation, which is exactly why raw baselines are excluded from
+  /// corroboration daemon-side.
+  func testDecodedPreferredBackendReachesOptionsAndApplicablePlan() throws {
+    let json = #"{"command":"snapshot","preferredBackend":"private-ax"}"#
+    let command = try JSONDecoder().decode(Command.self, from: Data(json.utf8))
+    let options = Self.snapshotOptions(from: command)
+    XCTAssertEqual(options.preferredBackend, "private-ax")
+    XCTAssertFalse(options.raw)
+
+    let treated = Self.snapshotXCTestChannelTreatedAsPenalized(
+      penalized: false, preferredBackend: options.preferredBackend)
+    let pinned = Self.effectiveSnapshotCapturePlan(
+      Self.regularVisiblePlan, xCTestChannelPenalized: treated)
+    XCTAssertEqual(pinned.plan, [.privateAX])
+    XCTAssertEqual(pinned.xCTestChannelState, .deferredToIndependentBackend)
+
+    let raw = Self.effectiveSnapshotCapturePlan(
+      Self.rawDiagnosticPlan, xCTestChannelPenalized: treated)
+    XCTAssertEqual(raw.plan, Self.rawDiagnosticPlan)
+
+    // A command without the field decodes to no pin and a normal plan.
+    let bare = try JSONDecoder().decode(
+      Command.self, from: Data(#"{"command":"snapshot"}"#.utf8))
+    XCTAssertNil(Self.snapshotOptions(from: bare).preferredBackend)
+  }
+
   /// Same-backend evidence probes: a daemon-pinned private-AX capture takes the
   /// penalized route even with a healthy channel, so tap-outcome corroboration
   /// baselines and probes are always captured by the same backend (backends are

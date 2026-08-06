@@ -157,6 +157,39 @@ test('a private-ax baseline pins the corroboration probe to private-ax', async (
   expect(snapshotContexts[0]?.snapshotPreferredBackend).toBe('private-ax');
 });
 
+test('a raw baseline is excluded from corroboration entirely (#1634 P1)', async () => {
+  // The raw diagnostic plan keeps tree-first error propagation by contract and
+  // is never rerouted by the pin, so a raw private-AX baseline could not be
+  // matched same-backend — corroboration must decline up front (no probe
+  // capture at all) and the recorded failure surfaces unchanged.
+  const sessionName = 'ios-raw-baseline-no-corroboration';
+  const sessionStore = makeSessionStore();
+  sessionStore.set(
+    sessionName,
+    makeIosSession(sessionName, {
+      appBundleId: 'com.example.app',
+      snapshot: snapshot(profileNodes, 'private-ax', { raw: true }),
+    }),
+  );
+  mockDispatch.mockImplementation(async (_device, command) => {
+    if (command === 'press') {
+      throw new AppError(
+        'XCTEST_RECORDED_FAILURE',
+        'XCTest recorded a failure while executing tap; the action may not have been performed.',
+      );
+    }
+    if (command === 'snapshot') return snapshotPayload(imageViewerNodes, 'private-ax');
+    return {};
+  });
+
+  const response = await runClick(sessionStore, sessionName);
+
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) expect(response.error.code).toBe('XCTEST_RECORDED_FAILURE');
+  // Declined before any probe: no corroboration snapshot was dispatched.
+  expect(mockDispatch.mock.calls.filter((call) => call[1] === 'snapshot')).toHaveLength(0);
+});
+
 test('a tree baseline does not pin the corroboration probe backend', async () => {
   const sessionName = 'ios-tree-baseline-unpinned-corroboration';
   const sessionStore = makeSessionStore();

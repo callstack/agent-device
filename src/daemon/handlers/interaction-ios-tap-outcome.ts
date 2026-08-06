@@ -91,6 +91,20 @@ function readCorroborationBaseline(
   }
   const presentation = readSnapshotPresentation(snapshot.presentationKey);
   if (!presentation) return undefined;
+  // Raw baselines are excluded from corroboration entirely: the probe would
+  // replay `raw: true`, and the raw diagnostic plan keeps tree-first error
+  // propagation by contract — it is never rerouted by the penalty or by a
+  // preferred backend, so a raw private-AX baseline could not be matched
+  // same-backend and would recreate the mismatch false failure. Raw captures
+  // are diagnostics, not evidence baselines.
+  if (presentation.raw) {
+    emitDiagnostic({
+      level: 'debug',
+      phase: 'ios_tap_failure_corroboration_raw_baseline',
+      data: { presentationKey: snapshot.presentationKey },
+    });
+    return undefined;
+  }
   return { snapshot, presentation };
 }
 
