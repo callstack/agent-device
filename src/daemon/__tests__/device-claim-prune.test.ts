@@ -2,12 +2,39 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, test } from 'vitest';
+import { afterEach, test, vi } from 'vitest';
 import { pruneDeadDeviceClaims } from '../device-claims.ts';
 import { resolveDeviceClaimPath } from '../device-claim-paths.ts';
 import { acquireProcessLock } from '../../utils/process-lock.ts';
 import { readCurrentOwnerIdentity } from '../../utils/owner-identity.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+
+// readProcessStartTime shells out to `ps` with a 1s timeout (see
+// utils/host-process.ts). This file seeds "live" claims from our own identity
+// via readCurrentOwnerIdentity(), then the prune's classification re-reads our
+// start time; under full-suite CPU contention that second `ps` call can miss
+// its deadline and return null, mismatching the seeded value and flipping a
+// genuinely-live claim to 'owner-process-dead'. Cache our own pid's start time
+// after the first (real) read so every later read is self-consistent with the
+// fixtures instead of racing a fresh `ps` call. isProcessAlive is left real (a
+// plain `kill(pid, 0)` syscall, not a subprocess), so the fabricated dead-pid
+// fixtures still classify as dead through that real, non-flaky check.
+vi.mock('../../utils/host-process.ts', async () => {
+  const actual = await vi.importActual<typeof import('../../utils/host-process.ts')>(
+    '../../utils/host-process.ts',
+  );
+  let cachedOwnStartTime: string | null | undefined;
+  return {
+    ...actual,
+    readProcessStartTime: (pid: number) => {
+      if (pid !== process.pid) return null;
+      if (cachedOwnStartTime === undefined) {
+        cachedOwnStartTime = actual.readProcessStartTime(process.pid);
+      }
+      return cachedOwnStartTime;
+    },
+  };
+});
 
 const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
 

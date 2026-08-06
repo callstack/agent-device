@@ -12,6 +12,33 @@ import { inspectDeviceClaims } from '../device-claim-inspection.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
+// readProcessStartTime shells out to `ps` with a 1s timeout (see
+// utils/host-process.ts). acquireAdvisoryDeviceClaim records our own identity
+// into each claim, then later acquire/inspect calls classify that claim by
+// re-reading our start time; under full-suite CPU contention that second `ps`
+// call can miss its deadline and return null, mismatching the recorded value
+// and flipping a genuinely-live claim to 'owner-process-dead'. Cache our own
+// pid's start time after the first (real) read so every later read is
+// self-consistent instead of racing a fresh `ps` call. isProcessAlive is left
+// real (a plain `kill(pid, 0)` syscall, not a subprocess), so the fabricated
+// dead-pid fixture still classifies as dead through that real, non-flaky check.
+vi.mock('../../utils/host-process.ts', async () => {
+  const actual = await vi.importActual<typeof import('../../utils/host-process.ts')>(
+    '../../utils/host-process.ts',
+  );
+  let cachedOwnStartTime: string | null | undefined;
+  return {
+    ...actual,
+    readProcessStartTime: (pid: number) => {
+      if (pid !== process.pid) return null;
+      if (cachedOwnStartTime === undefined) {
+        cachedOwnStartTime = actual.readProcessStartTime(process.pid);
+      }
+      return cachedOwnStartTime;
+    },
+  };
+});
+
 const device: DeviceInfo = {
   platform: 'android',
   id: 'emulator-5554',
