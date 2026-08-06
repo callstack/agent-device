@@ -54,7 +54,7 @@ import {
   BIN_FILE,
   localAliasLiterals,
   registryAliasTokens,
-  usageTextCallsResolver,
+  usageTextDelegationFailure,
 } from './bin-alias-fast-path.ts';
 import {
   backEdgePair,
@@ -383,8 +383,11 @@ function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): Layer
  * three facts below, together, are what closes the gap the original drift exploited — import
  * presence and literal absence alone still pass a bin.ts that imports the resolver and never
  * calls it (or calls it on something unrelated) while `buildCommandUsageText(helpTarget)` runs
- * raw, which is exactly the P2 a maintainer review caught. Fact 3 is what closes that: it
- * requires the actual composition at the actual call site, bound by the import's local name.
+ * raw, which is exactly the P2 a maintainer review caught. Fact 3 is what closes that: EVERY
+ * `buildCommandUsageText` call must receive the imported resolver applied to the fast path's own
+ * help-target binding, with neither name shadowed by a local declaration. The universal
+ * quantifier is the follow-up P2 — an existential one is satisfied by a decoy call that resolves
+ * an unrelated literal while the shipped call still runs raw.
  */
 function checkBinAliasFastPath(sources: ReadonlyMap<string, string>): LayeringViolation[] {
   const registrySource = sources.get(ALIAS_REGISTRY_FILE);
@@ -413,17 +416,18 @@ function checkBinAliasFastPath(sources: ReadonlyMap<string, string>): LayeringVi
         `${ALIAS_REGISTRY_FILE} — the --help fast path cannot delegate alias resolution to the ` +
         'registry without it.',
     });
-  } else if (!usageTextCallsResolver(binSource, resolverLocalName)) {
-    violations.push({
-      rule: 'R12 bin-alias-fast-path',
-      file: BIN_FILE,
-      line: 1,
-      message:
-        `imports normalizeCliCommandAlias (locally ${resolverLocalName}) but never passes ` +
-        `${resolverLocalName}(...) as the argument to buildCommandUsageText — the import alone ` +
-        'does not prove the --help fast path actually delegates; call ' +
-        `buildCommandUsageText(${resolverLocalName}(helpTarget)) at the fast-path call site.`,
-    });
+  } else {
+    const delegationFailure = usageTextDelegationFailure(binSource, resolverLocalName);
+    if (delegationFailure !== null) {
+      violations.push({
+        rule: 'R12 bin-alias-fast-path',
+        file: BIN_FILE,
+        line: 1,
+        message:
+          `imports normalizeCliCommandAlias (locally ${resolverLocalName}) but ` +
+          `${delegationFailure}`,
+      });
+    }
   }
 
   const localLiterals = localAliasLiterals(binSource, registryAliasTokens(registrySource));

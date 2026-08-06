@@ -16,15 +16,34 @@
 //      wired to delegate.
 //   2. bin.ts never itself contains one of the registry's OWN alias tokens as a string literal —
 //      so it cannot be re-declaring a parallel mapping instead of actually calling the import.
-//   3. bin.ts's call to `buildCommandUsageText` receives, as an argument, a call to the LOCAL
-//      binding fact 1 imported — the actual composition the fast path needs
-//      (`buildCommandUsageText(normalizeCliCommandAlias(helpTarget))`), not merely the import's
-//      presence. Facts 1 and 2 alone still pass if bin.ts imports the resolver and never calls
-//      it, or calls it on something unrelated (`void normalizeCliCommandAlias`) while
+//   3. EVERY call to `buildCommandUsageText` in bin.ts receives `<resolver>(<helpTarget>)` — the
+//      LOCAL binding fact 1 imported, applied to the binding the fast path's own
+//      `resolveSimpleHelpTarget(...)` produced. This is the actual composition the fast path
+//      needs (`buildCommandUsageText(normalizeCliCommandAlias(helpTarget))`), not merely the
+//      import's presence. Facts 1 and 2 alone still pass if bin.ts imports the resolver and never
+//      calls it, or calls it on something unrelated (`void normalizeCliCommandAlias`) while
 //      `buildCommandUsageText(helpTarget)` runs raw — a real gap a maintainer review caught
-//      (the guard's own P2 follow-up). Fact 3 binds by the import's LOCAL name, following any
-//      `as` alias, so `import { normalizeCliCommandAlias as resolveAlias }` still passes and an
-//      unrelated same-named local does not.
+//      (the guard's own P2 follow-up).
+//
+// Fact 3 is deliberately UNIVERSAL and VALUE-BOUND, not existential, which is the second P2 from
+// the same review. An "is there any `buildCommandUsageText(resolver(...))` somewhere" phrasing is
+// satisfied by a decoy that never runs on the help target:
+//
+//     void buildCommandUsageText(normalizeCliCommandAlias('press'));   // decoy, satisfies ∃
+//     const commandHelp = buildCommandUsageText(helpTarget);           // what actually ships
+//
+// Requiring every usage-text call to receive the resolver applied to the help-target binding
+// rejects both lines: the decoy resolves a literal rather than the fast path's own value, and the
+// shipped call is raw. The help-target binding is discovered from bin.ts's source (the variable
+// initialized by `resolveSimpleHelpTarget(...)`) rather than hard-coded, so renaming the local
+// does not silently disarm the guard — it re-points it.
+//
+// Fact 3 binds by the import's LOCAL name, following any `as` alias, so
+// `import { normalizeCliCommandAlias as resolveAlias }` still passes. Because that is a
+// name-based claim about binding identity, fact 3 additionally requires that no local
+// declaration in bin.ts SHADOWS either name: a local `const normalizeCliCommandAlias = (c) => c`
+// would otherwise let the composition read correctly while calling something else entirely, and
+// a second `helpTarget` declaration would let the resolver run on an unrelated value.
 //
 // All three were false on the pre-fix bin.ts (no import; both 'long-press' and 'metrics' present
 // as literals; no composition to find), so the set is a real regression pin, not just a
@@ -90,9 +109,10 @@ export function registryAliasTokens(registrySource: string): string[] {
  * `import type { normalizeCliCommandAlias as x }` (erased at compile time, no runtime delegation
  * at all) cannot pass as a real import the way a line match on the specifier text would.
  *
- * Reporting the LOCAL name (not just a boolean) is what lets `usageTextCallsResolver` below bind
- * by the name bin.ts actually calls, so a renamed import (`... as resolveAlias`) still verifies,
- * while a same-named unrelated local elsewhere in the file cannot be mistaken for it.
+ * Reporting the LOCAL name (not just a boolean) is what lets `usageTextDelegationFailure` below
+ * bind by the name bin.ts actually calls, so a renamed import (`... as resolveAlias`) still
+ * verifies, while a same-named unrelated local cannot be mistaken for it (that one is enforced,
+ * not assumed — see the shadow check there).
  */
 export function aliasResolverLocalName(binSource: string): string | null {
   const parsed = parseSync(BIN_FILE, binSource);
@@ -116,6 +136,9 @@ export function importsAliasResolver(binSource: string): boolean {
   return aliasResolverLocalName(binSource) !== null;
 }
 
+const USAGE_TEXT_CALLEE = 'buildCommandUsageText';
+const HELP_TARGET_PRODUCER = 'resolveSimpleHelpTarget';
+
 function isCallTo(node: unknown, calleeName: string): boolean {
   if (node === null || typeof node !== 'object') return false;
   const record = node as Record<string, unknown>;
@@ -124,26 +147,178 @@ function isCallTo(node: unknown, calleeName: string): boolean {
   return callee?.['type'] === 'Identifier' && callee['name'] === calleeName;
 }
 
+function isIdentifierNamed(node: unknown, name: string): boolean {
+  if (node === null || typeof node !== 'object') return false;
+  const record = node as Record<string, unknown>;
+  return record['type'] === 'Identifier' && record['name'] === name;
+}
+
+/** A short, quotable rendering of an argument expression, for the violation message. */
+function describeArgument(node: unknown): string {
+  if (node === null || typeof node !== 'object') return String(node);
+  const record = node as Record<string, unknown>;
+  if (record['type'] === 'Identifier') return String(record['name']);
+  if (record['type'] === 'Literal') return JSON.stringify(record['value']);
+  if (record['type'] === 'CallExpression') {
+    const callee = record['callee'] as Record<string, unknown> | undefined;
+    const calleeName = callee?.['type'] === 'Identifier' ? String(callee['name']) : '<expr>';
+    const args = Array.isArray(record['arguments']) ? record['arguments'] : [];
+    return `${calleeName}(${args.map(describeArgument).join(', ')})`;
+  }
+  return `<${String(record['type'])}>`;
+}
+
 /**
- * Whether `binSource` calls `buildCommandUsageText` with an argument that is ITSELF a call to
- * `resolverLocalName` — the composition the `--help` fast path actually needs
- * (`buildCommandUsageText(normalizeCliCommandAlias(helpTarget))`), not merely both names
- * appearing somewhere in the file. Import presence and literal absence (facts 1 and 2 above)
- * both still hold if bin.ts imports the resolver and never calls it, or calls it on something
- * unrelated while `buildCommandUsageText(helpTarget)` runs raw — this is the fact that closes
- * that gap: it inspects the actual argument expression at the actual call site, not just whether
- * both identifiers occur in the source.
+ * The LOCAL name of the fast path's help-target binding — the variable initialized by
+ * `resolveSimpleHelpTarget(...)` — or `null` if bin.ts no longer produces one that way.
+ *
+ * Read from the source rather than hard-coded so that renaming the local re-points the guard
+ * instead of disarming it, and so `helpTarget` never has to be maintained as a magic string in
+ * two places.
  */
-export function usageTextCallsResolver(binSource: string, resolverLocalName: string): boolean {
+export function helpTargetBindingName(binSource: string): string | null {
   const parsed = parseSync(BIN_FILE, binSource);
-  let found = false;
+  let name: string | null = null;
   visit(parsed.program, (record) => {
-    if (found || !isCallTo(record, 'buildCommandUsageText')) return;
-    const args = record['arguments'];
-    if (!Array.isArray(args)) return;
-    found = args.some((arg) => isCallTo(arg, resolverLocalName));
+    if (name !== null || record['type'] !== 'VariableDeclarator') return;
+    if (!isCallTo(record['init'], HELP_TARGET_PRODUCER)) return;
+    const id = record['id'] as Record<string, unknown> | undefined;
+    if (id?.['type'] === 'Identifier') name = String(id['name']);
   });
-  return found;
+  return name;
+}
+
+/**
+ * Every VALUE binding `binSource` declares locally under `name` — variable declarators, function
+ * and class declarations, function parameters, and catch clauses.
+ *
+ * This is what makes fact 3's binding-identity claim real rather than nominal: the composition
+ * `buildCommandUsageText(normalizeCliCommandAlias(helpTarget))` reads as delegation whether the
+ * callee is the import or a local shadow that happens to share its name, and only a declaration
+ * scan can tell those apart. Over-collection is the safe direction here — a false positive on
+ * these two specific names fails the gate loudly rather than passing a shadowed call silently —
+ * so patterns are walked whole, with type annotations skipped (a type named `helpTarget` binds
+ * nothing at runtime and must not count as a shadow).
+ */
+export function countLocalBindings(binSource: string, name: string): number {
+  const parsed = parseSync(BIN_FILE, binSource);
+  let count = 0;
+  const scanPattern = (node: unknown): void => {
+    visitSkippingTypes(node, (record) => {
+      if (isIdentifierNamed(record, name)) count += 1;
+    });
+  };
+  visit(parsed.program, (record) => {
+    switch (record['type']) {
+      case 'VariableDeclarator':
+        scanPattern(record['id']);
+        return;
+      case 'FunctionDeclaration':
+      case 'FunctionExpression':
+      case 'ArrowFunctionExpression':
+      case 'ClassDeclaration':
+      case 'ClassExpression':
+        if (isIdentifierNamed(record['id'], name)) count += 1;
+        scanPattern(record['params']);
+        return;
+      case 'CatchClause':
+        scanPattern(record['param']);
+        return;
+      default:
+    }
+  });
+  return count;
+}
+
+/** `visit`, minus type-position subtrees — type names bind nothing at runtime. */
+function visitSkippingTypes(
+  node: unknown,
+  onNode: (record: Record<string, unknown>) => void,
+): void {
+  if (node === null || typeof node !== 'object') return;
+  if (Array.isArray(node)) {
+    for (const child of node) visitSkippingTypes(child, onNode);
+    return;
+  }
+  const record = node as Record<string, unknown>;
+  onNode(record);
+  for (const key of Object.keys(record)) {
+    if (key === 'typeAnnotation' || key === 'returnType' || key === 'typeParameters') continue;
+    visitSkippingTypes(record[key], onNode);
+  }
+}
+
+/**
+ * Why `binSource` fails fact 3, or `null` if it holds.
+ *
+ * Fact 3 is universal and value-bound: EVERY `buildCommandUsageText(...)` call in bin.ts must
+ * receive `resolverLocalName(<helpTarget>)`, where `<helpTarget>` is the binding
+ * `resolveSimpleHelpTarget(...)` produced. The existential phrasing this replaces ("some call
+ * somewhere wraps the resolver") is satisfied by a decoy that resolves an unrelated value while
+ * the shipped call runs raw — see the module comment for that exact fixture.
+ *
+ * Returning the reason rather than a boolean lets the gate say which of the several distinct
+ * ways to fail actually happened; a bare `false` sent a maintainer back to re-derive it.
+ */
+export function usageTextDelegationFailure(
+  binSource: string,
+  resolverLocalName: string,
+): string | null {
+  if (countLocalBindings(binSource, resolverLocalName) > 0) {
+    return (
+      `declares a local binding named ${resolverLocalName}, shadowing the imported resolver — ` +
+      `a call to ${resolverLocalName}(...) then proves nothing about delegating to ` +
+      `${ALIAS_REGISTRY_FILE}. Remove the shadow (or import the resolver under a different name).`
+    );
+  }
+
+  const helpTarget = helpTargetBindingName(binSource);
+  if (helpTarget === null) {
+    return (
+      `has no variable initialized by ${HELP_TARGET_PRODUCER}(...), so the --help fast path's ` +
+      'help-target binding cannot be located and its delegation cannot be checked. Keep the ' +
+      'fast path resolving its target through that helper, or re-point this rule at its ' +
+      'replacement.'
+    );
+  }
+  if (countLocalBindings(binSource, helpTarget) > 1) {
+    return (
+      `declares ${helpTarget} more than once, so "${USAGE_TEXT_CALLEE}(${resolverLocalName}(` +
+      `${helpTarget}))" no longer names one value — the resolver could be running on an ` +
+      'unrelated binding that shares the name.'
+    );
+  }
+
+  const parsed = parseSync(BIN_FILE, binSource);
+  const calls: Record<string, unknown>[] = [];
+  visit(parsed.program, (record) => {
+    if (isCallTo(record, USAGE_TEXT_CALLEE)) calls.push(record);
+  });
+
+  if (calls.length === 0) {
+    return (
+      `never calls ${USAGE_TEXT_CALLEE} — the --help fast path that alias resolution exists to ` +
+      'serve is gone, so this rule is checking nothing. Restore the fast path or retire R12.'
+    );
+  }
+
+  for (const call of calls) {
+    const args = Array.isArray(call['arguments']) ? call['arguments'] : [];
+    const first = args[0];
+    const wraps = isCallTo(first, resolverLocalName);
+    const resolverArgs =
+      wraps && Array.isArray((first as Record<string, unknown>)['arguments'])
+        ? ((first as Record<string, unknown>)['arguments'] as unknown[])
+        : [];
+    if (wraps && isIdentifierNamed(resolverArgs[0], helpTarget)) continue;
+    return (
+      `calls ${USAGE_TEXT_CALLEE}(${describeArgument(first)}) — every ${USAGE_TEXT_CALLEE} call ` +
+      `must receive ${resolverLocalName}(${helpTarget}), the imported resolver applied to the ` +
+      'fast path’s own help target. A call that resolves something else (or nothing) leaves ' +
+      'the shipped path un-delegated while looking wired.'
+    );
+  }
+  return null;
 }
 
 /**
