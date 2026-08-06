@@ -30,7 +30,9 @@ function anonymousNodes(count: number): RawSnapshotNode[] {
   return Array.from({ length: count }, (_, index) => ({ index, type: 'View' }));
 }
 
-function freshnessRecord(overrides: Partial<AndroidSnapshotFreshness> = {}): AndroidSnapshotFreshness {
+function freshnessRecord(
+  overrides: Partial<AndroidSnapshotFreshness> = {},
+): AndroidSnapshotFreshness {
   return {
     action: 'click',
     markedAt: Date.now(),
