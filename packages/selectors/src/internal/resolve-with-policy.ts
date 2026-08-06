@@ -26,8 +26,18 @@ import type { SelectorResolutionPolicy } from './resolution-policy.ts';
 export type PolicyResolutionOutcome =
   /** No selector alternative matched anything. */
   | { kind: 'none' }
-  /** Exactly the node this policy authorizes acting on. */
-  | { kind: 'resolved'; resolution: AstSelectorResolution }
+  /**
+   * The node this policy authorizes acting on, plus the full candidate set
+   * of the alternative it came from. Callers that verify identity across
+   * candidates (wait's #1349 landmark check) need the whole set — a policy
+   * that picks one winner must not throw the rest away, or a first impostor
+   * would hide a later genuine match.
+   */
+  | {
+      kind: 'resolved';
+      resolution: AstSelectorResolution;
+      matchedNodes: SnapshotState['nodes'];
+    }
   /**
    * Several matches and the policy refuses to choose. `fail-closed` returns
    * this instead of guessing; `reject-candidates` returns it so the caller
@@ -73,7 +83,14 @@ export function resolveSelectorChainWithPolicy(
     requireUnique: true,
     disambiguateAmbiguous: policy.ambiguity === 'disambiguate',
   });
-  if (resolution) return { kind: 'resolved', resolution };
+  if (resolution) {
+    const list = listSelectorChainMatches(nodes, chain, matchOptions);
+    return {
+      kind: 'resolved',
+      resolution,
+      matchedNodes: list?.matchedNodes ?? [resolution.node],
+    };
+  }
 
   // Distinguish "nothing matched" from "matched but this policy will not
   // choose" — a fail-closed caller must report ambiguity, not absence.
@@ -94,6 +111,7 @@ function resolvedFromList(
   if (!node) return { kind: 'none' };
   return {
     kind: 'resolved',
+    matchedNodes: list.matchedNodes,
     resolution: {
       node,
       selector: list.selector,

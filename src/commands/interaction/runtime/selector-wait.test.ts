@@ -123,6 +123,57 @@ function landmarkWaitDevice(captures: Array<ReturnType<typeof landmarkScreen>>) 
   return device;
 }
 
+/**
+ * The within-one-poll twin of the test below (#1649 review P1): both
+ * candidates are on screen in the SAME capture, impostor first. The landmark
+ * check is satisfied when SOME match carries the recorded identity, so
+ * resolution must hand it every candidate — a policy that returns only its
+ * first-match winner would hide the genuine landmark behind the impostor and
+ * make this wait time out.
+ */
+function twoCandidateScreen(): ReturnType<typeof landmarkScreen> {
+  return makeSnapshotState([
+    { index: 0, depth: 0, type: 'Other', label: 'List Screen' },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'StaticText',
+      label: 'Screen X',
+      rect: { x: 0, y: 0, width: 100, height: 20 },
+    },
+    { index: 2, depth: 0, type: 'Other', label: 'Detail Screen' },
+    {
+      index: 3,
+      depth: 1,
+      parentIndex: 2,
+      type: 'StaticText',
+      label: 'Screen X',
+      rect: { x: 0, y: 40, width: 100, height: 20 },
+    },
+  ]);
+}
+
+test('runtime wait finds the recorded landmark behind a same-selector impostor in one capture', async () => {
+  const recorded = recordedLandmarkFor(landmarkScreen('Detail Screen'));
+  const device = landmarkWaitDevice([twoCandidateScreen()]);
+
+  const result = await device.selectors.wait({
+    session: 'default',
+    target: {
+      kind: 'selector',
+      selector: 'label="Screen X"',
+      timeoutMs: 2_000,
+      recordedLandmark: recorded,
+    },
+  });
+
+  assert.equal(result.kind, 'selector');
+  if (result.kind !== 'selector') throw new Error('unreachable');
+  // The SECOND candidate is the one carrying the recorded ancestry.
+  assert.equal(result.node?.index, 3);
+});
+
 test('runtime wait keeps polling past a same-selector impostor and succeeds on the recorded landmark', async () => {
   const recordTime = landmarkScreen('Detail Screen');
   const recorded = recordedLandmarkFor(recordTime);

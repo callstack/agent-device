@@ -47,7 +47,10 @@ function policyMatchList(outcome: PolicyResolutionOutcome): SelectorChainMatchLi
     return {
       selector: outcome.resolution.selector.raw,
       selectorIndex: outcome.resolution.selectorIndex,
-      matchedNodes: [outcome.resolution.node],
+      // Every candidate, not just the winner: the landmark check is satisfied
+      // when SOME match carries the recorded identity, so a first impostor
+      // must not hide a later genuine landmark (#1349).
+      matchedNodes: outcome.matchedNodes,
     };
   }
   return undefined;
