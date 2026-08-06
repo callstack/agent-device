@@ -545,16 +545,65 @@ function resolvePreviousOwnDaemonAuthToken(
     // masquerade as a credential that provably belongs to the *previous*
     // endpoint. Only a token the previous config file itself declares counts
     // here; the env fallback is rule 2's job, gated on matching endpoints.
-    return readRemoteConfigFile({
+    const { profile } = readRemoteConfigFile({
       configPath: previous.remoteConfigPath,
       cwd,
       env,
-    }).profile.daemonAuthToken;
+    });
+    if (!profile.daemonAuthToken) return undefined;
+    // The path alone is not provenance. `remoteConfigPath` names a file *now*,
+    // while the claim being made is about what that file declared when the
+    // previous connection was established — and a config path is routinely
+    // reused (edited in place, re-pointed at a second environment) between the
+    // two. Without this check, "connect to A from ./remote.json, re-point
+    // ./remote.json at B, connect --force" reads B's token as A's own and
+    // sends it to A during lease release: the same cross-endpoint leak the
+    // env-merge fix closed, arriving through the file instead.
+    return previousConfigStillSpeaksForPreviousEndpoint(previous, profile.daemonBaseUrl)
+      ? profile.daemonAuthToken
+      : undefined;
   } catch {
     // A missing/unparseable previous config is the "cannot authenticate"
     // case handled by the caller, not an error to propagate here.
     return undefined;
   }
+}
+
+/**
+ * Whether the previous connection's config file can still vouch for a token as
+ * belonging to the previous connection's endpoint.
+ *
+ * Two independent ways to establish that, in order:
+ *
+ * 1. **The file has not changed since connect time.** `remoteConfigHash` is a
+ *    hash of the file's bytes taken when the connection was recorded, so an
+ *    exact match means this is literally the declaration that stood up the
+ *    previous connection. Nothing further to verify.
+ * 2. **The file changed, but still declares the same endpoint.** The common
+ *    benign case is a rotated credential in an otherwise unchanged profile,
+ *    which is still the previous endpoint's own credential and should still
+ *    release its lease. Endpoint equality is what separates that from the
+ *    re-pointed-file case, so it — not the mere fact of an edit — is the test.
+ *
+ * The endpoint comparison runs both sides through
+ * `buildRemoteConnectionDaemonState`, the same normalizer that produced the
+ * stored `daemon.baseUrl`, so it compares like with like rather than raw
+ * strings that differ only by a trailing slash.
+ *
+ * A file that changed and no longer declares an endpoint at all cannot vouch
+ * for anything: the caller then falls back to rule 2 (matching endpoints) or
+ * reports the lease as unreleasable, which is a warning and an orphaned lease
+ * — the correct price for not sending a credential somewhere it may not belong.
+ */
+function previousConfigStillSpeaksForPreviousEndpoint(
+  previous: RemoteConnectionState,
+  declaredDaemonBaseUrl: string | undefined,
+): boolean {
+  if (hashRemoteConfigFile(previous.remoteConfigPath) === previous.remoteConfigHash) return true;
+  const declared = buildRemoteConnectionDaemonState({
+    daemonBaseUrl: declaredDaemonBaseUrl,
+  })?.baseUrl;
+  return declared !== undefined && declared === previous.daemon?.baseUrl;
 }
 
 export async function releasePreviousLease(

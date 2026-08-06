@@ -2236,6 +2236,157 @@ test('connect --force does not misclassify an env-sourced new token as the previ
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
+test('connect --force does not treat a re-pointed config path’s token as the previous endpoint’s own', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connect-force-repointed-path-');
+  const stateDir = path.join(tempRoot, '.state');
+  // ONE path, reused. The previous connection was made against old.example
+  // through this file; the file is then edited in place to describe a
+  // different endpoint with a different credential. Distinct old/new paths
+  // cannot express this: the leak is that `remoteConfigPath` still resolves,
+  // and still parses, while no longer describing the connection it is being
+  // consulted about.
+  const remoteConfigPath = path.join(tempRoot, 'remote.json');
+  fs.writeFileSync(
+    remoteConfigPath,
+    JSON.stringify({
+      daemonBaseUrl: 'https://old.example',
+      daemonAuthToken: 'test-old-not-a-real-token',
+    }),
+  );
+  writeRemoteConnectionState({
+    stateDir,
+    state: {
+      version: 1,
+      session: 'adc-android',
+      remoteConfigPath,
+      // Recorded while the file still described old.example — the fact that
+      // makes the later edit detectable.
+      remoteConfigHash: hashRemoteConfigFile(remoteConfigPath),
+      tenant: 'acme',
+      runId: 'run-old',
+      leaseId: 'lease-old',
+      leaseBackend: 'android-instance',
+      daemon: { baseUrl: 'https://old.example' },
+      connectedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  });
+  // The edit: same path, now endpoint B with token B.
+  fs.writeFileSync(
+    remoteConfigPath,
+    JSON.stringify({
+      daemonBaseUrl: 'https://new.example',
+      daemonAuthToken: 'test-new-not-a-real-token',
+    }),
+  );
+  let releaseRequest: Parameters<AgentDeviceClient['leases']['release']>[0] | undefined;
+
+  const stdout = await captureStdout(async () => {
+    await connectCommand({
+      positionals: [],
+      flags: {
+        json: false,
+        help: false,
+        version: false,
+        force: true,
+        stateDir,
+        remoteConfig: remoteConfigPath,
+        daemonBaseUrl: 'https://new.example',
+        tenant: 'acme',
+        runId: 'run-new',
+        session: 'adc-android',
+        platform: 'android',
+      },
+      client: createTestClient({
+        release: async (request) => {
+          releaseRequest = request;
+          return { released: true };
+        },
+      }),
+    });
+  });
+
+  // No request at all — not merely a request carrying a different token.
+  assert.equal(releaseRequest, undefined);
+  assert.match(stdout, /Could not release the previous lease lease-old/);
+  assert.match(stdout, /old\.example/);
+  assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-android' })?.runId, 'run-new');
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('connect --force still releases with a rotated credential when the config keeps the same endpoint', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connect-force-rotated-token-');
+  const stateDir = path.join(tempRoot, '.state');
+  const remoteConfigPath = path.join(tempRoot, 'remote.json');
+  const newRemoteConfigPath = path.join(tempRoot, 'new-remote.json');
+  fs.writeFileSync(
+    remoteConfigPath,
+    JSON.stringify({
+      daemonBaseUrl: 'https://old.example',
+      daemonAuthToken: 'test-old-not-a-real-token',
+    }),
+  );
+  fs.writeFileSync(newRemoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://new.example' }));
+  writeRemoteConnectionState({
+    stateDir,
+    state: {
+      version: 1,
+      session: 'adc-android',
+      remoteConfigPath,
+      remoteConfigHash: hashRemoteConfigFile(remoteConfigPath),
+      tenant: 'acme',
+      runId: 'run-old',
+      leaseId: 'lease-old',
+      leaseBackend: 'android-instance',
+      daemon: { baseUrl: 'https://old.example' },
+      connectedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  });
+  // The file changed — so the hash no longer matches — but it still describes
+  // old.example, so the rotated token is still that endpoint's own credential
+  // and must still release its lease. This is the case an edit-detecting rule
+  // must not break: refusing here would orphan leases on every key rotation.
+  fs.writeFileSync(
+    remoteConfigPath,
+    JSON.stringify({
+      daemonBaseUrl: 'https://old.example',
+      daemonAuthToken: 'test-rotated-not-a-real-token',
+    }),
+  );
+  let releaseRequest: Parameters<AgentDeviceClient['leases']['release']>[0] | undefined;
+
+  await captureStdout(async () => {
+    await connectCommand({
+      positionals: [],
+      flags: {
+        json: true,
+        help: false,
+        version: false,
+        force: true,
+        stateDir,
+        remoteConfig: newRemoteConfigPath,
+        daemonBaseUrl: 'https://new.example',
+        tenant: 'acme',
+        runId: 'run-new',
+        session: 'adc-android',
+        platform: 'android',
+      },
+      client: createTestClient({
+        release: async (request) => {
+          releaseRequest = request;
+          return { released: true };
+        },
+      }),
+    });
+  });
+
+  assert.equal(releaseRequest?.leaseId, 'lease-old');
+  assert.equal(releaseRequest?.daemonBaseUrl, 'https://old.example');
+  assert.equal(releaseRequest?.daemonAuthToken, 'test-rotated-not-a-real-token');
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
 test('connect --force reuses the ambient token to release the previous lease when the endpoint is unchanged', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-force-same-endpoint-');
   const stateDir = path.join(tempRoot, '.state');
