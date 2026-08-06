@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { makeSnapshotState } from '../../__tests__/test-utils/index.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { countDiagnosticEventsByPhase, withDiagnosticsScope } from '../../utils/diagnostics.ts';
 import {
   buildInteractionSurfaceSignature,
@@ -40,12 +43,24 @@ function markPostGestureStabilization(
   markDeferredInteractionOutcome({ session, command: action, positionals, flags });
 }
 
+/**
+ * Runs the loop under a diagnostics scope that also writes its NDJSON trace to
+ * a file, and returns the veto events parsed back out of it.
+ *
+ * The counts alone are not the behavior under test: what an operator reads on
+ * a `--debug` run is the emitted `reason` and divergence numbers, and a
+ * regression that emits the wrong reason — or drops the counts entirely —
+ * keeps every count at 1. Reading the serialized line (rather than an
+ * in-memory event array) pins what actually reaches the log, redaction
+ * included.
+ */
 async function runStabilization(
   session: ReturnType<typeof makeSession>,
   capture: () => ReturnType<typeof makeSnapshotState>,
 ) {
   const captureFn = vi.fn(async () => capture());
-  const resultPromise = withDiagnosticsScope({}, async () => {
+  const traceLogPath = path.join(mkdtempForTestSync('agent-device-veto-trace-'), 'trace.ndjson');
+  const resultPromise = withDiagnosticsScope({ traceLogPath }, async () => {
     const result = await capturePostGestureStabilizedResult({
       session,
       capture: captureFn,
@@ -59,7 +74,20 @@ async function runStabilization(
     };
   });
   await vi.advanceTimersByTimeAsync(10_000);
-  return await resultPromise;
+  const outcome = await resultPromise;
+  return { ...outcome, vetoEvents: readVetoEvents(traceLogPath) };
+}
+
+/** The `post_gesture_no_effect_vetoed` payloads written to a diagnostics trace. */
+function readVetoEvents(traceLogPath: string): Record<string, unknown>[] {
+  if (!fs.existsSync(traceLogPath)) return [];
+  return fs
+    .readFileSync(traceLogPath, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as { phase: string; data?: Record<string, unknown> })
+    .filter((event) => event.phase === 'post_gesture_no_effect_vetoed')
+    .map((event) => event.data ?? {});
 }
 
 test('a backend flip mid-poll withholds the no-effect claim, and records the reason (#1620)', async () => {
@@ -89,16 +117,29 @@ test('a backend flip mid-poll withholds the no-effect claim, and records the rea
       rect: { x: 20, y: -80, width: 200, height: 44 },
     },
   ];
-  const { result, staleAccepts, rebased, vetoed } = await runStabilization(session, () =>
-    makeSnapshotState(privateAxNodes, {
-      snapshotQuality: { state: 'recovered', backend: 'private-ax' },
-    }),
+  const { result, staleAccepts, rebased, vetoed, vetoEvents } = await runStabilization(
+    session,
+    () =>
+      makeSnapshotState(privateAxNodes, {
+        snapshotQuality: { state: 'recovered', backend: 'private-ax' },
+      }),
   );
 
   assert.equal(rebased, 1);
   assert.equal(staleAccepts, 1, 'the loop still accepts the stale read after the distrust budget');
   assert.equal(result.gestureNoEffect, undefined);
-  assert.equal(vetoed, 1, 'the withheld claim must be observable (reason: baseline_rebased)');
+  assert.equal(vetoed, 1, 'the withheld claim must be observable');
+  // The reason is the point: a rebase means the corroboration pair is
+  // cross-backend, which is a categorically different answer from "the
+  // surfaces moved" and must not be reported as one. No divergence counts
+  // ride along, because there is no comparable pair to count over.
+  assert.deepEqual(vetoEvents, [
+    {
+      action: 'scroll',
+      backend: 'private-ax',
+      reason: 'baseline_rebased',
+    },
+  ]);
 });
 
 test('a successful scroll that flips the capture backend must not claim no-effect', async () => {
@@ -114,7 +155,7 @@ test('a successful scroll that flips the capture backend must not claim no-effec
   });
   markPostGestureStabilization(session, 'scroll', ['down']);
 
-  const { result, rebased, vetoed } = await runStabilization(session, () =>
+  const { result, rebased, vetoed, vetoEvents } = await runStabilization(session, () =>
     makeSnapshotState(chromeWithListSnapshot(['row-3', 'row-4']).nodes, {
       snapshotQuality: { state: 'recovered', backend: 'private-ax' },
     }),
@@ -127,6 +168,17 @@ test('a successful scroll that flips the capture backend must not claim no-effec
     'the scroll swapped every list cell — a no-effect claim here is a false positive',
   );
   assert.equal(vetoed, 1);
+  // Rebase wins the reason even though the surfaces also genuinely diverged:
+  // once the pair is cross-backend the divergence counts would describe two
+  // incomparable captures, and reporting them as movement is the exact
+  // misreading #1620 spent weeks on.
+  assert.deepEqual(vetoEvents, [
+    {
+      action: 'scroll',
+      backend: 'private-ax',
+      reason: 'baseline_rebased',
+    },
+  ]);
 });
 
 test('no pre-gesture snapshot means no baseline, no rebase, and no no-effect claim', async () => {
@@ -174,11 +226,31 @@ test('scope drift accepts stale but is vetoed from claiming no-effect, observabl
       (node) => node.type !== 'Cell',
     ) as never,
   );
-  const { result, staleAccepts, vetoed } = await runStabilization(session, () => narrowed);
+  const { result, staleAccepts, vetoed, vetoEvents } = await runStabilization(
+    session,
+    () => narrowed,
+  );
 
   assert.equal(staleAccepts, 1);
   assert.equal(result.gestureNoEffect, undefined);
-  assert.equal(vetoed, 1, 'reason: surface_divergence — rows only in the baseline');
+  assert.equal(vetoed, 1);
+  // Scope drift reads as one-sided membership, never as movement: both cells
+  // are missing from the narrowed capture, the shared chrome button has not
+  // moved. An operator seeing rectMismatched: 0 alongside onlyInBaseline: 2
+  // can tell "unexamined" from "moved" without re-deriving it.
+  // No `backend` key at all: this capture carries no snapshotQuality, and the
+  // serialized line omits the field rather than writing a null an aggregator
+  // would have to special-case.
+  assert.deepEqual(vetoEvents, [
+    {
+      action: 'scroll',
+      reason: 'surface_divergence',
+      onlyInBaseline: 2,
+      onlyInCurrent: 0,
+      rectMismatched: 0,
+      shared: 1,
+    },
+  ]);
 });
 
 test('same-backend membership drift vetoes the claim and records the divergence (#1620 truncation drift)', async () => {
@@ -208,16 +280,33 @@ test('same-backend membership drift vetoes the claim and records the divergence 
       rect: { x: 0, y: 220, width: 390, height: 60 },
     },
   ];
-  const { result, staleAccepts, rebased, vetoed } = await runStabilization(session, () =>
-    makeSnapshotState(driftedNodes, {
-      snapshotQuality: { state: 'recovered', backend: 'private-ax' },
-    }),
+  const { result, staleAccepts, rebased, vetoed, vetoEvents } = await runStabilization(
+    session,
+    () =>
+      makeSnapshotState(driftedNodes, {
+        snapshotQuality: { state: 'recovered', backend: 'private-ax' },
+      }),
   );
 
   assert.equal(rebased, 0, 'same backend throughout: this is drift, not a flip');
   assert.equal(staleAccepts, 1);
   assert.equal(result.gestureNoEffect, undefined);
   assert.equal(vetoed, 1);
+  // The counts are what distinguish this from the scope-drift case above:
+  // one extra key on the CURRENT side, everything shared unmoved. Same veto,
+  // opposite direction of membership drift — indistinguishable from an event
+  // tally alone.
+  assert.deepEqual(vetoEvents, [
+    {
+      action: 'scroll',
+      backend: 'private-ax',
+      reason: 'surface_divergence',
+      onlyInBaseline: 0,
+      onlyInCurrent: 1,
+      rectMismatched: 0,
+      shared: 3,
+    },
+  ]);
 });
 
 test('summarizeDiscriminatingSurfaceDivergence counts one-sided keys and moved rects, excluding non-discriminating entries', () => {
