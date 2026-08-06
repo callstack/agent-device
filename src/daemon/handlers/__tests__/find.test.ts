@@ -597,6 +597,121 @@ test('handleFindCommands ambiguous match with few candidates lists them all unca
   ]);
 });
 
+// #1625 decision 1: `find <q> list` is the read-only inspection surface the
+// recovery hint points at — every match with its ref, unique match included,
+// and never a tap (the old hint's "run bare find to list" clicked a unique
+// match and navigated).
+test('handleFindCommands list returns every match without acting', async () => {
+  const follow = (ref: string, index: number, x: number) => ({
+    index,
+    ref,
+    type: 'Button',
+    label: 'Follow',
+    hittable: true,
+    rect: { x, y: 100, width: 80, height: 40 },
+    parentIndex: 0,
+  });
+
+  const { response, invokeCalls } = await runFindClickScenario({
+    positionals: ['text', 'Follow', 'list'],
+    nodes: [
+      { index: 0, ref: 'e1', type: 'Application', rect: { x: 0, y: 0, width: 800, height: 1200 } },
+      follow('e2', 1, 0),
+      follow('e3', 2, 90),
+      follow('e4', 3, 180),
+    ],
+  });
+
+  expect(response.ok).toBe(true);
+  if (!response.ok) return;
+  const matches = response.data?.matches as Array<{ ref: string }>;
+  expect(matches.map((match) => match.ref)).toEqual(['@e2', '@e3', '@e4']);
+  // Inspection only: nothing was clicked, focused, or filled.
+  expect(invokeCalls).toHaveLength(0);
+});
+
+test('handleFindCommands list on a unique match still lists instead of tapping', async () => {
+  const { response, invokeCalls } = await runFindClickScenario({
+    positionals: ['Dictionary', 'list'],
+    nodes: [
+      { index: 0, ref: 'e1', type: 'Application', rect: { x: 0, y: 0, width: 800, height: 1200 } },
+      {
+        index: 1,
+        ref: 'e2',
+        type: 'Cell',
+        label: 'Dictionary',
+        hittable: true,
+        rect: { x: 0, y: 100, width: 800, height: 44 },
+        parentIndex: 0,
+      },
+    ],
+  });
+
+  expect(response.ok).toBe(true);
+  if (!response.ok) return;
+  const matches = response.data?.matches as Array<{ ref: string }>;
+  expect(matches).toHaveLength(1);
+  expect(matches[0]?.ref).toBe('@e2');
+  expect(invokeCalls).toHaveLength(0);
+});
+
+// #1625 decision 2: selector-shaped and text-shaped queries share one
+// ambiguity contract. Selectors used to take the first match silently — the
+// exact mis-binding path the AMBIGUOUS_MATCH recovery advice pointed at.
+test('handleFindCommands selector-shaped find rejects multiple matches with candidates', async () => {
+  const button = (ref: string, index: number, label: string, x: number) => ({
+    index,
+    ref,
+    type: 'Button',
+    label,
+    hittable: true,
+    rect: { x, y: 100, width: 80, height: 40 },
+    parentIndex: 0,
+  });
+
+  const { response, invokeCalls } = await runFindClickScenario({
+    positionals: ['role=button', 'click'],
+    nodes: [
+      { index: 0, ref: 'e1', type: 'Application', rect: { x: 0, y: 0, width: 800, height: 1200 } },
+      button('e2', 1, 'Follow', 0),
+      button('e3', 2, 'Share', 90),
+      button('e4', 3, 'Reply', 180),
+    ],
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('AMBIGUOUS_MATCH');
+  expect(response.error.details?.matches).toBe(3);
+  expect(Array.isArray(response.error.details?.candidates)).toBe(true);
+  expect(invokeCalls).toHaveLength(0);
+});
+
+test('handleFindCommands selector-shaped find honors the explicit --first opt-out', async () => {
+  const button = (ref: string, index: number, label: string, x: number) => ({
+    index,
+    ref,
+    type: 'Button',
+    label,
+    hittable: true,
+    rect: { x, y: 100, width: 80, height: 40 },
+    parentIndex: 0,
+  });
+
+  const { response, invokeCalls } = await runFindClickScenario({
+    positionals: ['role=button', 'click'],
+    flags: { findFirst: true },
+    nodes: [
+      { index: 0, ref: 'e1', type: 'Application', rect: { x: 0, y: 0, width: 800, height: 1200 } },
+      button('e2', 1, 'Follow', 0),
+      button('e3', 2, 'Share', 90),
+    ],
+  });
+
+  expect(response.ok).toBe(true);
+  expect(invokeCalls[0]?.positionals?.[0]).toBe('@e2');
+});
+
 test('handleFindCommands focus uses the promoted actionable node center', async () => {
   const { response } = await runFindClickScenario({
     positionals: ['Account', 'focus'],

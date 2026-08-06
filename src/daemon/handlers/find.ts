@@ -6,7 +6,7 @@ import {
   checkFindArgs,
   parseFindSelectorExpression,
   type FindLocator,
-  resolveSelectorChain,
+  listSelectorChainMatches,
 } from '@agent-device/selectors';
 import { centerOfRect, type SnapshotState } from '@agent-device/kernel/snapshot';
 import { expireRefFrame } from '../ref-frame.ts';
@@ -81,7 +81,7 @@ export async function handleFindCommands(params: {
   if (req.flags?.record && !isReadOnlyFindAction(action)) {
     return errorResponse(
       'INVALID_ARGS',
-      `find ${action} is a mutating action and is always recorded; --record only applies to a read-only find (exists, wait, get text, get attrs).`,
+      `find ${action} is a mutating action and is always recorded; --record only applies to a read-only find (exists, wait, list, get text, get attrs).`,
     );
   }
   const runtimeResponse = await dispatchFindReadOnlyViaRuntime({
@@ -91,7 +91,7 @@ export async function handleFindCommands(params: {
     sessionStore,
   });
   if (runtimeResponse) return runtimeResponse;
-  // Read-only find actions (exists/wait/get_text/get_attrs) always return from
+  // Read-only find actions (exists/wait/list/get_text/get_attrs) always return from
   // the selector runtime above, so only mutating actions (click/fill/focus/type)
   // reach this point — and every mutating find needs an active session.
   const session = sessionStore.get(sessionName);
@@ -246,34 +246,34 @@ function resolveFindMatch(params: {
 }): FindMatchResult {
   const { nodes, locator, query, selectorExpression, flags, platform } = params;
   const searchableNodes = nodes.filter((node) => !isRootInteractionContainer(node, nodes[0]));
+  // #1625: selector-shaped and text-shaped queries share ONE ambiguity
+  // contract — multiple matches reject with candidates unless --first/--last
+  // explicitly opts into positional narrowing. Selectors used to take the
+  // first match silently, which was exactly the mis-binding path the error's
+  // own recovery advice ("use a selector") pointed agents at.
+  let matches: SnapshotState['nodes'];
   if (selectorExpression) {
-    const resolved = resolveSelectorChain(searchableNodes, selectorExpression, {
-      platform,
+    matches =
+      listSelectorChainMatches(searchableNodes, selectorExpression, {
+        platform,
+        requireRect: true,
+      })?.matchedNodes ?? [];
+  } else {
+    matches = findBestMatchesByLocator(searchableNodes, locator, query, {
       requireRect: true,
-      requireUnique: false,
-    });
-    if (!resolved) {
-      return {
-        ok: false,
-        response: errorResponse('COMMAND_FAILED', 'find did not match any element'),
-      };
-    }
-    return { ok: true, node: resolved.node };
+    }).matches;
   }
-  const bestMatches = findBestMatchesByLocator(searchableNodes, locator, query, {
-    requireRect: true,
-  });
-  bestMatches.matches = preferOnscreenMatches(bestMatches.matches, nodes);
+  matches = preferOnscreenMatches(matches, nodes);
 
-  if (bestMatches.matches.length > 1) {
-    const narrowed = narrowMultipleMatches(bestMatches.matches, flags);
+  if (matches.length > 1) {
+    const narrowed = narrowMultipleMatches(matches, flags);
     if (!narrowed) {
-      return { ok: false, response: buildAmbiguousMatchError(bestMatches.matches, locator, query) };
+      return { ok: false, response: buildAmbiguousMatchError(matches, locator, query) };
     }
-    bestMatches.matches = narrowed;
+    matches = narrowed;
   }
 
-  const node = bestMatches.matches[0] ?? null;
+  const node = matches[0] ?? null;
   if (!node) {
     return {
       ok: false,

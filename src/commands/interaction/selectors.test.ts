@@ -10,16 +10,31 @@ const BASE_FLAGS: CliFlags = { json: false, help: false, version: false };
 // separate from packages/selectors/src/internal/find.ts's raw-positional
 // parser (the daemon-side path). Both must carry the same recovery hint —
 // this pins the reader actually reachable from `agent-device find <text>
-// press` on the terminal.
+// longpress` on the terminal.
 test('find CLI reader attaches the supported-actions hint on an unsupported action', () => {
   try {
-    selectorCliReaders.find(['text', 'Follow', 'press'], BASE_FLAGS);
+    selectorCliReaders.find(['text', 'Follow', 'longpress'], BASE_FLAGS);
     expect.unreachable('find CLI reader should have thrown for an unsupported action');
   } catch (error) {
     expect(error).toBeInstanceOf(AppError);
     const appError = error as AppError;
     expect(appError.code).toBe('INVALID_ARGS');
-    expect(appError.message).toBe('Unsupported find action: press');
+    expect(appError.message).toBe('Unsupported find action: longpress');
     expect(appError.details?.hint).toBe(UNSUPPORTED_FIND_ACTION_HINT);
   }
+});
+
+// #1625: press/tap are the same action as click everywhere else in the CLI,
+// so the reader accepts them as aliases; list is the read-only inspection
+// action the recovery hint points at.
+test('find CLI reader accepts press/tap aliases and the list action', () => {
+  expect(selectorCliReaders.find(['text', 'Follow', 'press'], BASE_FLAGS)).toMatchObject({
+    action: 'click',
+  });
+  expect(selectorCliReaders.find(['Follow', 'tap'], BASE_FLAGS)).toMatchObject({
+    action: 'click',
+  });
+  expect(selectorCliReaders.find(['text', 'Settings', 'list'], BASE_FLAGS)).toMatchObject({
+    action: 'list',
+  });
 });

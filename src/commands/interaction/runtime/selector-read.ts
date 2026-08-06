@@ -9,6 +9,7 @@ import {
   checkIsPredicate,
   evaluateIsPredicate,
   IS_TEXT_VALUE_REQUIRED_MESSAGE,
+  listSelectorChainMatches,
   readSelectorAlternatives,
   parseFindSelectorExpression,
   type FindAction,
@@ -60,14 +61,16 @@ export type { ElementTarget, ResolvedTarget, SelectorTarget };
 export type FindReadCommandOptions = CommandContext & {
   locator?: FindLocator;
   query: string;
-  action: Extract<FindAction['kind'], 'exists' | 'wait' | 'get_text' | 'get_attrs'>;
+  action: Extract<FindAction['kind'], 'exists' | 'wait' | 'get_text' | 'get_attrs' | 'list'>;
   timeoutMs?: number;
 } & SelectorSnapshotOptions;
 
 export type FindReadCommandResult =
   | { kind: 'found'; found: true; waitedMs?: number }
   | { kind: 'text'; ref: string; text: string; node: SnapshotNode }
-  | { kind: 'attrs'; ref: string; node: SnapshotNode };
+  | { kind: 'attrs'; ref: string; node: SnapshotNode }
+  /** #1625: the read-only inspection surface — every match, never a tap. */
+  | { kind: 'list'; matches: Array<{ ref: string; node: SnapshotNode }> };
 
 export type GetCommandOptions = CommandContext &
   SelectorSnapshotOptions & {
@@ -161,6 +164,9 @@ export const findCommand: RuntimeCommand<FindReadCommandOptions, FindReadCommand
   }
   if (options.action === 'wait') {
     return await waitForFindMatch(runtime, options, locator);
+  }
+  if (options.action === 'list') {
+    return await listFindMatches(runtime, options, locator);
   }
 
   const { capture, match } = await findFirstLocatorMatch(runtime, options, locator);
@@ -416,6 +422,39 @@ async function waitForFindMatch(
     await polling.sleepUntilNextPoll();
   }
   throw waitTimeoutError('find wait timed out', polling, deadline);
+}
+
+/**
+ * `find <q> list` (#1625): the inspection path. Returns EVERY match — unique
+ * included — with its ref, and never narrows or taps. The old recovery hint
+ * told agents to run bare `find` to "list matches", which clicks a unique
+ * match; this is the surface that guidance actually needed.
+ */
+async function listFindMatches(
+  runtime: AgentDeviceRuntime,
+  options: FindReadCommandOptions,
+  locator: FindLocator,
+): Promise<Extract<FindReadCommandResult, { kind: 'list' }>> {
+  const selectorExpression = parseFindSelectorExpression(locator, options.query);
+  // Deliberately UNSCOPED: findSnapshotScope narrows the capture to the first
+  // label match, which is exactly wrong for an action whose purpose is to show
+  // every match.
+  const capture = await captureSelectorSnapshot(runtime, options, {
+    updateSession: true,
+    ...deriveSelectorCapturePolicy(),
+  });
+  if (isSparseSnapshotQualityVerdict(capture.snapshot.snapshotQuality)) {
+    throw sparseSelectorSnapshotError(capture.snapshot.snapshotQuality);
+  }
+  const matched = selectorExpression
+    ? (listSelectorChainMatches(capture.snapshot.nodes, selectorExpression, {
+        platform: runtime.backend.platform,
+      })?.matchedNodes ?? [])
+    : findBestMatchesByLocator(capture.snapshot.nodes, locator, options.query, {}).matches;
+  return {
+    kind: 'list',
+    matches: matched.map((node) => ({ ref: `@${node.ref}`, node })),
+  };
 }
 
 async function findFirstLocatorMatch(

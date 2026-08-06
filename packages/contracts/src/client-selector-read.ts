@@ -54,6 +54,6 @@ export type FindBaseOptions = DeviceCommandBaseOptions &
   };
 
 export type FindOptions =
-  | (FindBaseOptions & { action?: 'click' | 'focus' | 'exists' | 'getText' | 'getAttrs' })
+  | (FindBaseOptions & { action?: 'click' | 'focus' | 'exists' | 'getText' | 'getAttrs' | 'list' })
   | (FindBaseOptions & { action: 'wait'; timeoutMs?: number })
   | (FindBaseOptions & { action: 'fill' | 'type'; value: string });

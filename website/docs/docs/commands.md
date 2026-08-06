@@ -432,7 +432,10 @@ Two-finger `gesture pan` and `gesture transform` are supported on Android and iO
 agent-device find "Sign In" click
 agent-device find label "Email" fill "user@example.com"
 agent-device find role button click
+agent-device find "Follow" list
 ```
+
+Actions: `click` (default; `press`/`tap` are aliases), `list`, `focus`, `fill`, `type`, `exists`, `wait`, `get text`, `get attrs`. `list` is read-only — it returns every match with its `@ref` and never taps, so use it to inspect before acting. Ambiguous matches are rejected with a candidates listing for text and selector queries alike; `--first`/`--last` opt into positional narrowing explicitly.
 
 ## Assertions
 

@@ -113,12 +113,21 @@ export async function dispatchFindReadOnlyViaRuntime(
     // refs that match the stored tree again. As a ref-issuing response it also
     // carries the stored tree's generation ONCE (`refsGeneration`) so clients
     // can pin the ref (`@e12~s3`).
-    if (typeof data.ref === 'string') {
+    const publishedRefs =
+      typeof data.ref === 'string'
+        ? [data.ref]
+        : Array.isArray(data.matches)
+          ? data.matches
+              .map((match) => (match as { ref?: unknown }).ref)
+              .filter((ref): ref is string => typeof ref === 'string')
+          : [];
+    if (publishedRefs.length > 0) {
       const session = params.sessionStore.get(params.sessionName);
       if (session) {
-        // ADR 0014: a read-only find publishes exactly its one returned ref, so
-        // it activates a PARTIAL frame authorizing only that ref body.
-        markSessionPartialRefsIssued(session, [data.ref]);
+        // ADR 0014: a read-only find publishes exactly the refs it returned —
+        // one for single-match actions, every listed ref for `list` — so it
+        // activates a PARTIAL frame authorizing exactly those ref bodies.
+        markSessionPartialRefsIssued(session, publishedRefs);
         params.sessionStore.set(params.sessionName, session);
         if (session.snapshotGeneration !== undefined) {
           return { ...data, refsGeneration: session.snapshotGeneration };

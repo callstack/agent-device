@@ -345,6 +345,11 @@ export const COMMAND_OUTPUT_SCHEMAS = {
       waitedMs: numberSchema('Milliseconds waited for a read-only find condition.'),
       text: stringSchema('Text value returned by find get_text.'),
       node: looseObjectSchema('Snapshot node for find get_attrs/get_text.'),
+      matches: {
+        type: 'array',
+        description: 'Every match for the read-only find list action (#1625): { ref, node } each.',
+        items: looseObjectSchema('One listed match with its snapshot ref and node.'),
+      },
       locator: stringSchema('Locator kind used for the find action.'),
       query: stringSchema('Query argument used for the find action.'),
       x: numberSchema('Resolved x coordinate for mutating find actions.'),

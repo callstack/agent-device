@@ -49,16 +49,17 @@ test('parseFindArgs throws on unsupported action', () => {
 // dispatch the gesture, e.g. press, as its own command).
 test('parseFindArgs attaches the supported-actions hint with the two-step recovery shape on an unsupported action', () => {
   try {
-    parseFindArgs(['text', 'Follow', 'press']);
+    parseFindArgs(['text', 'Follow', 'longpress']);
     expect.unreachable('parseFindArgs should have thrown for an unsupported action');
   } catch (error) {
     expect(error).toMatchObject({
       code: 'INVALID_ARGS',
-      message: 'Unsupported find action: press',
+      message: 'Unsupported find action: longpress',
       details: { hint: UNSUPPORTED_FIND_ACTION_HINT },
     });
   }
-  expect(UNSUPPORTED_FIND_ACTION_HINT).toContain('click (default)');
+  expect(UNSUPPORTED_FIND_ACTION_HINT).toContain('click (default; press/tap are aliases)');
+  expect(UNSUPPORTED_FIND_ACTION_HINT).toContain('list');
   expect(UNSUPPORTED_FIND_ACTION_HINT).toContain('focus');
   expect(UNSUPPORTED_FIND_ACTION_HINT).toContain('fill');
   expect(UNSUPPORTED_FIND_ACTION_HINT).toContain('type');
@@ -66,8 +67,22 @@ test('parseFindArgs attaches the supported-actions hint with the two-step recove
   expect(UNSUPPORTED_FIND_ACTION_HINT).toContain('wait');
   expect(UNSUPPORTED_FIND_ACTION_HINT).toContain('get text');
   expect(UNSUPPORTED_FIND_ACTION_HINT).toContain('get attrs');
-  expect(UNSUPPORTED_FIND_ACTION_HINT).toMatch(/find "<text>" to list matches/);
-  expect(UNSUPPORTED_FIND_ACTION_HINT).toMatch(/press @eNN/);
+  // #1625: inspection guidance must point at the read-only list action, never
+  // at bare `find` (which clicks a unique match).
+  expect(UNSUPPORTED_FIND_ACTION_HINT).toMatch(/find "<text>" list to inspect/);
+  expect(UNSUPPORTED_FIND_ACTION_HINT).not.toMatch(/find "<text>" to list matches/);
+});
+
+test('parseFindArgs accepts press and tap as click aliases (#1625)', () => {
+  expect(parseFindArgs(['text', 'Follow', 'press']).action).toBe('click');
+  expect(parseFindArgs(['Follow', 'tap']).action).toBe('click');
+  expect(parseFindArgs(['Follow', 'PRESS']).action).toBe('click');
+});
+
+test('parseFindArgs parses the read-only list action (#1625)', () => {
+  const parsed = parseFindArgs(['text', 'Settings', 'list']);
+  expect(parsed.action).toBe('list');
+  expect(isReadOnlyFindAction(parsed.action)).toBe(true);
 });
 
 test('parseFindArgs with bare locator yields empty query', () => {

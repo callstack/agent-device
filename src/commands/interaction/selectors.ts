@@ -4,6 +4,7 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   checkIsPredicate,
+  normalizeFindActionToken,
   normalizeIsPositionals,
   UNSUPPORTED_FIND_ACTION_HINT,
 } from '@agent-device/selectors';
@@ -47,6 +48,7 @@ function findPositionals(input: FindOptions): string[] {
     case 'click':
     case 'focus':
     case 'exists':
+    case 'list':
       return input.action ? [...args, input.action] : args;
     case 'getText':
       return [...args, 'get', 'text'];
@@ -73,7 +75,7 @@ function readFindOptionsFromPositionals(positionals: string[], flags: CliFlags):
   const hasExplicitLocator = locator !== undefined;
   const query = hasExplicitLocator ? positionals[1] : positionals[0];
   const actionOffset = hasExplicitLocator ? 2 : 1;
-  const action = positionals[actionOffset];
+  const action = normalizeFindActionToken(positionals[actionOffset]);
   if (action === undefined) return { ...base, locator, query: readRequiredQuery(query) };
   if (action === 'get') {
     const subcommand = positionals[actionOffset + 1];
@@ -103,10 +105,10 @@ function readFindOptionsFromPositionals(positionals: string[], flags: CliFlags):
       value: positionals.slice(actionOffset + 1).join(' '),
     };
   }
-  if (action === 'click' || action === 'focus' || action === 'exists') {
+  if (action === 'click' || action === 'focus' || action === 'exists' || action === 'list') {
     return { ...base, locator, query: readRequiredQuery(query), action };
   }
-  throw new AppError('INVALID_ARGS', `Unsupported find action: ${action}`, {
+  throw new AppError('INVALID_ARGS', `Unsupported find action: ${positionals[actionOffset]}`, {
     hint: UNSUPPORTED_FIND_ACTION_HINT,
   });
 }

@@ -20,9 +20,22 @@ export type FindAction =
   | { kind: 'get_text' }
   | { kind: 'get_attrs' }
   | { kind: 'exists' }
-  | { kind: 'wait'; timeoutMs?: number };
+  | { kind: 'wait'; timeoutMs?: number }
+  | { kind: 'list' };
 
-export type ReadOnlyFindAction = 'exists' | 'wait' | 'get_text' | 'get_attrs';
+export type ReadOnlyFindAction = 'exists' | 'wait' | 'get_text' | 'get_attrs' | 'list';
+
+/**
+ * `press` and `tap` are the same action as `click` everywhere else in this CLI
+ * (the interaction layer treats them as synonyms), so `find` accepts them as
+ * aliases of its click action instead of rejecting the vocabulary agents
+ * already use. longpress/swipe stay real exclusions — they are different
+ * gestures with no find form.
+ */
+export function normalizeFindActionToken(token: string | undefined): string | undefined {
+  const lowered = token?.toLowerCase();
+  return lowered === 'press' || lowered === 'tap' ? 'click' : lowered;
+}
 
 /**
  * `find` is the one command whose observation-vs-mutation split is a
@@ -35,7 +48,11 @@ export type ReadOnlyFindAction = 'exists' | 'wait' | 'get_text' | 'get_attrs';
  */
 export function isReadOnlyFindAction(action: FindAction['kind']): action is ReadOnlyFindAction {
   return (
-    action === 'exists' || action === 'wait' || action === 'get_text' || action === 'get_attrs'
+    action === 'exists' ||
+    action === 'wait' ||
+    action === 'get_text' ||
+    action === 'get_attrs' ||
+    action === 'list'
   );
 }
 
@@ -138,14 +155,17 @@ export const FIND_VALUE_REQUIRED_MESSAGE = 'find requires a value';
 /**
  * Shared by both `Unsupported find action` throw sites (this file's raw-token
  * parser and `src/commands/interaction/selectors.ts`'s typed CLI reader) so
- * the recovery guidance cannot drift between them. `find` has no press/
- * longpress/swipe action of its own — the fix is to resolve the ref through
- * `find`, then dispatch the gesture as its own top-level command.
+ * the recovery guidance cannot drift between them. `find` has no longpress/
+ * swipe action of its own — the fix is to inspect matches with the read-only
+ * `list` action, then dispatch the gesture on the chosen @ref as its own
+ * top-level command. (#1625: the old guidance said to run bare `find`, which
+ * CLICKS a unique match — inspection guidance must never point at a mutation.)
  */
 export const UNSUPPORTED_FIND_ACTION_HINT =
-  'find actions: click (default), focus, fill, type, exists, wait, get text, get attrs — ' +
-  'there is no press/longpress/swipe find action. Run find "<text>" to list matches, then ' +
-  'act on the resolved @ref directly, e.g. press @eNN.';
+  'find actions: click (default; press/tap are aliases), list, focus, fill, type, exists, ' +
+  'wait, get text, get attrs — there is no longpress/swipe find action. Run ' +
+  'find "<text>" list to inspect every match with its @ref without acting, then dispatch ' +
+  'the gesture on the chosen ref, e.g. longpress @eNN.';
 
 export type FindArgumentCheck =
   | { ok: true; parsed: ParsedFindArgs }
@@ -196,7 +216,7 @@ export function parseFindArgs(args: string[]): ParsedFindArgs {
   if (actionTokens.length === 0) {
     return { locator, query, action: 'click' };
   }
-  const action = actionTokens[0]?.toLowerCase();
+  const action = normalizeFindActionToken(actionTokens[0]);
   if (action === 'get') {
     const sub = actionTokens[1]?.toLowerCase();
     if (sub === 'text') return { locator, query, action: 'get_text' };
@@ -208,6 +228,7 @@ export function parseFindArgs(args: string[]): ParsedFindArgs {
     return { locator, query, action: 'wait', timeoutMs: timeoutMs ?? undefined };
   }
   if (action === 'exists') return { locator, query, action: 'exists' };
+  if (action === 'list') return { locator, query, action: 'list' };
   if (action === 'click') return { locator, query, action: 'click' };
   if (action === 'focus') return { locator, query, action: 'focus' };
   if (action === 'fill') {
