@@ -1,4 +1,5 @@
 import type {
+  ScreenshotResultData,
   SnapshotCaptureAnnotations,
   SnapshotDiagnosticsSummary,
 } from '@agent-device/contracts/capture';
@@ -10,6 +11,7 @@ import type {
   BackMode,
   ClickButton,
   GesturePlan,
+  RepeatedInput,
   ScrollDirection,
   TvRemoteButton,
 } from '@agent-device/contracts/interaction';
@@ -29,8 +31,6 @@ import type {
   SnapshotOptions,
   SnapshotState,
 } from '@agent-device/kernel/snapshot';
-import type { RepeatedInput } from './commands/command-input.ts';
-import type { ScreenshotResultData } from './utils/screenshot-result.ts';
 
 // The backend's public leaf platform (approach b): backends distinguish iOS from
 // macOS (e.g. snapshot backend routing, the macOS surface guard), so this carries the

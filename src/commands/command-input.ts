@@ -12,6 +12,7 @@ import {
   type PlatformSelector,
 } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import type { RepeatedInput } from '@agent-device/contracts/interaction';
 import type { JsonSchema } from './command-contract.ts';
 
 const INTERACTION_TARGET_KINDS = ['ref', 'selector', 'point'] as const;
@@ -43,13 +44,7 @@ export type ElementTargetInput =
   | { kind: 'ref'; ref: string; label?: string }
   | { kind: 'selector'; selector: string };
 
-export type RepeatedInput = {
-  count?: number;
-  intervalMs?: number;
-  holdMs?: number;
-  jitterPx?: number;
-  doubleTap?: boolean;
-};
+export type { RepeatedInput } from '@agent-device/contracts/interaction';
 
 export type SelectorSnapshotInput = {
   depth?: number;

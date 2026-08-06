@@ -373,3 +373,18 @@ export type FindCommandResponseData = {
   settle?: SettleObservation;
   cost?: ResponseCost;
 };
+
+/**
+ * Repeated-activation options shared by tap-like interactions: how many
+ * times, how fast, how long each contact holds, and whether the pair is a
+ * double-tap. Declared here (below both its consumers) so the backend
+ * surface and the command-input parsers agree on one shape without either
+ * importing the other.
+ */
+export type RepeatedInput = {
+  count?: number;
+  intervalMs?: number;
+  holdMs?: number;
+  jitterPx?: number;
+  doubleTap?: boolean;
+};

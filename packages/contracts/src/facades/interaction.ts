@@ -94,6 +94,7 @@ export type {
   PressCommandResult,
   RecordingTargetOverride,
   RefTarget,
+  RepeatedInput,
   ResolutionDiagnosticEntry,
   ResolutionDisclosure,
   ResolvedInteractionTarget,

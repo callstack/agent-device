@@ -51,8 +51,8 @@ test('daemon modularity baseline records the measured R7 ownership pressure', ()
     Object.values(SESSION_STATE_FIELD_OWNERS).reduce((sum, owners) => sum + owners.length, 0),
     DAEMON_MODULARITY_BASELINE.sessionState.ownerFileClaims,
   );
-  assert.equal(TYPE_CYCLE_BASELINE, 76);
-  assert.equal(DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers['daemon-server'], 20);
+  assert.equal(TYPE_CYCLE_BASELINE, 49);
+  assert.equal(DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers['daemon-server'], 19);
   assert.equal('daemon' in DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers, false);
 });
 
@@ -174,7 +174,7 @@ test('R9 records zone ceilings and keeps engine files outside the largest compon
   ]);
 
   assert.equal(violations.length, 3);
-  assert.ok(violations.some(({ message }) => /contains 34 commands file/.test(message)));
+  assert.ok(violations.some(({ message }) => /contains 15 commands file/.test(message)));
   assert.ok(violations.some(({ message }) => /contains 1 ad-replay file/.test(message)));
   assert.ok(violations.some(({ message }) => /engine file entered/.test(message)));
 });
