@@ -18,17 +18,12 @@ typedef id (*RunnerAXObjectMsgSend)(id, SEL);
 typedef NSInteger (*RunnerAXIntegerMsgSend)(id, SEL);
 typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
 
-/// A childless serialized node remembered with its depth. Nodes at the deepest
-/// observed level of a depth-capped capture are the truncation frontier: the AX
-/// server withholds children uniformly at its per-request cap, so every capped
-/// branch ends at the same level (observed one BELOW the requested maxDepth —
-/// the server counts node levels, not edges).
-@interface RunnerAXSnapshotFrontier : NSObject
-@property(nonatomic, strong) id snapshot;
-@property(nonatomic, strong) NSMutableDictionary *node;
-@property(nonatomic, assign) NSInteger depth;
-@end
-
+// A childless serialized node remembered with its depth (interface in the
+// header for the unit bundle). Nodes at the deepest observed level of a
+// depth-capped capture are the truncation frontier: the AX server withholds
+// children uniformly at its per-request cap, so every capped branch ends at
+// the same level (observed one BELOW the requested maxDepth — the server
+// counts node levels, not edges).
 @implementation RunnerAXSnapshotFrontier
 @end
 

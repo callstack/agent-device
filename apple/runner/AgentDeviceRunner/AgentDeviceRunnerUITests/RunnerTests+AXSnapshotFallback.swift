@@ -366,6 +366,50 @@ extension RunnerTests {
     XCTAssertEqual(Self.privateAXAttemptDepths(requestedDepth: 24, rememberedDepth: 56), [24, 12])
   }
 
+  /// Executed producer contract for the #1627 review blocker: a frontier whose
+  /// live element vanished, and one whose re-rooted request fails, must BOTH
+  /// count as missed — an all-miss extension reporting itself drained would
+  /// present a capped capture as complete. Goes red if either miss-path
+  /// increment in extendSnapshotFrontiers is removed.
+  func testDeepExtensionCountsMissedFrontiers() {
+    // Element vanished (list churn between serialization and extension): the
+    // fabricated snapshot answers nil for accessibilityElement — missed, and
+    // no request call is consumed. (An explicit nil property: bare NSObject
+    // resolves the key through a UIKit category and would take the call path.)
+    let orphan = RunnerAXSnapshotFrontier()
+    orphan.snapshot = FrontierSnapshotWithoutElementForTesting()
+    orphan.node = NSMutableDictionary()
+    // Re-rooted request fails: the element resolves but the client cannot
+    // serve requestSnapshotForElement — one consumed call AND a miss.
+    let unreachable = RunnerAXSnapshotFrontier()
+    unreachable.snapshot = FrontierSnapshotWithElementForTesting()
+    unreachable.node = NSMutableDictionary()
+
+    var nodeCount = 0
+    var truncated = ObjCBool(false)
+    let outcome = RunnerAXSnapshotBridge.extend(
+      NSMutableArray(array: [orphan, unreachable]),
+      axClient: NSObject(),
+      attributes: [],
+      maxDepth: 56,
+      maxNodes: 5_000,
+      nodeCount: &nodeCount,
+      truncated: &truncated,
+      callsAllowed: 8,
+      deadline: nil
+    )
+
+    XCTAssertEqual(outcome?[RunnerAXSnapshotDeepExtensionMissedKey] as? Int, 2)
+    XCTAssertEqual(outcome?[RunnerAXSnapshotDeepExtensionCallsKey] as? Int, 1)
+    XCTAssertEqual(outcome?[RunnerAXSnapshotDeepExtensionPendingKey] as? Int, 0)
+    XCTAssertEqual(outcome?[RunnerAXSnapshotDeepExtensionNodesAddedKey] as? Int, 0)
+    XCTAssertFalse(truncated.boolValue)
+    // And the consumer verdict over exactly this outcome: still depth-limited.
+    XCTAssertTrue(
+      Self.privateAXDepthLimited(
+        effectiveDepth: 56, requestedDepth: 64, pendingFrontiers: 0, missedFrontiers: 2))
+  }
+
   func testPrivateAXDepthLimitedRequiresEveryFrontierResolved() {
     // Un-capped capture is never depth-limited, extension or not.
     XCTAssertFalse(
@@ -554,5 +598,17 @@ extension RunnerTests {
     )
     XCTAssertFalse(labels.contains("Admin settings"))
   }
+}
+
+/// Minimal snapshot stand-in whose accessibilityElement resolves (so the
+/// extension proceeds to the request) while the paired fake client cannot
+/// serve it — the failed-re-root miss path.
+private final class FrontierSnapshotWithElementForTesting: NSObject {
+  @objc let accessibilityElement = NSObject()
+}
+
+/// The vanished-element case: KVC resolves the property and gets nil.
+private final class FrontierSnapshotWithoutElementForTesting: NSObject {
+  @objc let accessibilityElement: NSObject? = nil
 }
 #endif
