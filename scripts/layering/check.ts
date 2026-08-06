@@ -28,6 +28,9 @@
 //     engine files, and planned logical modules start with zero forbidden/internal imports (R10).
 //   - Over the WORKSPACE PACKAGES: no root back-imports, no relative tunnelling past
 //     an exports map, and every workspace specifier declared + exports-named (R11).
+//   - Over BIN.TS'S ALIAS RESOLUTION: it must delegate to the one alias registry instead of
+//     re-declaring a parallel mapping of its own (R12) — the same "delegate to your single
+//     owner" shape as R7's SessionState ownership, applied to bin.ts's `--help` fast path.
 // Only `(root)` is unranked among src/ zones (see `UNRANKED_ZONES` in model.ts):
 // it holds entrypoints and composition roots. Extracted workspace package zones
 // are classified separately and held behind R11 instead of the src folder spine.
@@ -45,6 +48,13 @@ import {
   STORE_OWNED_SESSION_STATE_FIELDS,
 } from './session-state.ts';
 import { uninstallableImports, zeroDepClosureFiles, zeroDepJobs } from './zero-dep-jobs.ts';
+import {
+  ALIAS_REGISTRY_FILE,
+  BIN_FILE,
+  importsAliasResolver,
+  localAliasLiterals,
+  registryAliasTokens,
+} from './bin-alias-fast-path.ts';
 import {
   backEdgePair,
   findValueImportCycles,
@@ -366,6 +376,55 @@ function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): Layer
   return violations;
 }
 
+/**
+ * R12: bin.ts's `--help` fast path must delegate command-alias resolution to the one alias
+ * registry instead of re-declaring its own mapping. See bin-alias-fast-path.ts for why the
+ * two facts below, together, are what closes the gap the original drift exploited.
+ */
+function checkBinAliasFastPath(sources: ReadonlyMap<string, string>): LayeringViolation[] {
+  const registrySource = sources.get(ALIAS_REGISTRY_FILE);
+  const binSource = sources.get(BIN_FILE);
+  if (!registrySource || !binSource) {
+    const missing = !registrySource ? ALIAS_REGISTRY_FILE : BIN_FILE;
+    return [
+      {
+        rule: 'R12 bin-alias-fast-path',
+        file: missing,
+        line: 1,
+        message: `${missing} is missing, so bin.ts's alias delegation cannot be checked.`,
+      },
+    ];
+  }
+
+  const violations: LayeringViolation[] = [];
+  if (!importsAliasResolver(binSource)) {
+    violations.push({
+      rule: 'R12 bin-alias-fast-path',
+      file: BIN_FILE,
+      line: 1,
+      message:
+        'does not hold a value import of normalizeCliCommandAlias from ' +
+        `${ALIAS_REGISTRY_FILE} — the --help fast path cannot delegate alias resolution to the ` +
+        'registry without it.',
+    });
+  }
+
+  const localLiterals = localAliasLiterals(binSource, registryAliasTokens(registrySource));
+  if (localLiterals.length > 0) {
+    violations.push({
+      rule: 'R12 bin-alias-fast-path',
+      file: BIN_FILE,
+      line: 1,
+      message:
+        `contains the registry's own alias token(s) (${localLiterals.join(', ')}) as string ` +
+        'literals — a local alias-mapping table, hand-rolled instead of delegated to ' +
+        `${ALIAS_REGISTRY_FILE}. Delegate through normalizeCliCommandAlias instead of ` +
+        're-declaring the mapping.',
+    });
+  }
+  return violations;
+}
+
 // R8: a CI job that runs with `install-deps: false` has no `node_modules`, so every script it
 // reaches must import only Node builtins and other repo files. Locally the opposite is true —
 // `node_modules` is always present — which is why this needs a gate rather than a convention.
@@ -441,7 +500,9 @@ function report(
         `inversions match the R6 ratchet (${Object.values(TYPE_INVERSION_BASELINE).reduce((sum, count) => sum + count, 0)} remaining); ` +
         `all ${sessionStateFieldCount()} SessionState fields are classified and every write is ` +
         `inside its declared owner (R7); every zero-dep CI job resolves without ` +
-        `node_modules (R8); ${typeCycleNote(typeCycle)}; ${daemonModularitySummary()}; and ${packageBoundariesSummary(repoRoot)}.\n`,
+        `node_modules (R8); ${typeCycleNote(typeCycle)}; ${daemonModularitySummary()}; ` +
+        `${packageBoundariesSummary(repoRoot)}; and bin.ts delegates command-alias resolution ` +
+        `to the registry with no local alias literals (R12).\n`,
     );
     return 0;
   }
@@ -482,6 +543,7 @@ export function main(): number {
     ...checkSessionStateOwnership(sources),
     ...checkDaemonModularityRatchets(edges, typeCycleMembers),
     ...checkZeroDepJobs(),
+    ...checkBinAliasFastPath(sources),
     ...checkPackageBoundaries(
       repoRoot,
       zeroDepClosureFiles(repoZeroDepJobs(), readSourceOrNull, fileExists),
