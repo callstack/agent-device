@@ -7,6 +7,7 @@ import type {
   SelectorResolution,
   SelectorResolutionOptions,
 } from './internal/public-resolution-types.ts';
+import { resolveSelectorChainWithPolicy as resolveSelectorChainWithPolicyAst } from './internal/resolve-with-policy.ts';
 import {
   checkElementTargetArgs,
   checkGetFormat,
@@ -267,3 +268,17 @@ export type {
   KnobBackedSelectorAmbiguity,
   SelectorResolutionPolicy,
 } from './internal/resolution-policy.ts';
+import type { SelectorResolutionPolicy } from './internal/resolution-policy.ts';
+import type { PolicyResolutionOutcome } from './internal/resolve-with-policy.ts';
+export type { PolicyResolutionOutcome } from './internal/resolve-with-policy.ts';
+
+/** Public façade wrapper that accepts selector text, never an AST. */
+function resolveSelectorChainWithPolicy(
+  nodes: SnapshotState['nodes'],
+  expression: string,
+  policy: SelectorResolutionPolicy,
+  options: SelectorMatchOptions,
+): PolicyResolutionOutcome {
+  return resolveSelectorChainWithPolicyAst(nodes, parseSelectorChain(expression), policy, options);
+}
+export { resolveSelectorChainWithPolicy };

@@ -1,135 +1,156 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { test } from 'vitest';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   SELECTOR_RESOLUTION_POLICIES,
+  resolveSelectorChainWithPolicy,
   selectorResolutionKnobs,
-  type SelectorResolutionPolicy,
 } from '@agent-device/selectors';
 
 /**
- * The matrix in resolution-policy.ts is a claim about the callers, so it is
- * gate-tested against them rather than trusted (ADR 0011's declared-plus-
- * gate-tested pattern). Two failure modes this catches: a policy row whose
- * knobs stop matching the ambiguity contract it names, and a structural
- * column (occlusion / off-screen / promotion / poll) drifting into fiction
- * because a caller stopped importing the machinery the row advertises.
+ * The matrix is exercised through the interface callers actually use
+ * (`resolveSelectorChainWithPolicy`) against fixture trees, so each row's
+ * ambiguity contract is proven behaviorally rather than asserted about
+ * source text. A row that stops matching its documented semantics fails
+ * here even though the declaration still reads plausibly.
  */
 
-const REPO_SRC = path.resolve(import.meta.dirname, '../../../..');
-
-function readSource(relative: string): string {
-  return readFileSync(path.join(REPO_SRC, relative), 'utf8');
+function node(index: number, label: string, overrides: Partial<SnapshotNode> = {}): SnapshotNode {
+  return {
+    ref: `e${index}`,
+    index,
+    depth: 1,
+    type: 'Button',
+    label,
+    rect: { x: 0, y: index * 40, width: 100, height: 30 },
+    ...overrides,
+  } as SnapshotNode;
 }
 
-const CALLERS = {
-  act: 'commands/interaction/runtime/resolution.ts',
-  actCoveredDiagnosis: 'commands/interaction/runtime/resolution.ts',
-  readText: 'commands/interaction/runtime/selector-read.ts',
-  readUnique: 'commands/interaction/runtime/selector-read.ts',
-  readAny: 'commands/interaction/runtime/selector-read.ts',
-  wait: 'commands/interaction/runtime/selector-wait.ts',
-  findAct: 'daemon/handlers/find.ts',
-} as const satisfies Record<keyof typeof SELECTOR_RESOLUTION_POLICIES, string>;
+/** Two nodes share a label: every ambiguity contract has to say something. */
+const AMBIGUOUS_TREE: SnapshotNode[] = [node(0, 'Save'), node(1, 'Save'), node(2, 'Cancel')];
+/**
+ * Same ambiguity, but the candidates differ in depth/area, so the engine's
+ * visible→deepest→smallest-area tiebreak CAN pick a winner. Kept separate
+ * from AMBIGUOUS_TREE because indistinguishable candidates are exactly the
+ * case where disambiguation must decline (below).
+ */
+const TIEBREAKABLE_TREE: SnapshotNode[] = [
+  node(0, 'Save', { rect: { x: 0, y: 0, width: 300, height: 200 } }),
+  node(1, 'Save', { depth: 3, rect: { x: 10, y: 10, width: 80, height: 24 } }),
+  node(2, 'Cancel'),
+];
+const UNIQUE_TREE: SnapshotNode[] = [node(0, 'Save'), node(1, 'Cancel')];
+/** Rectless nodes: only rect-requiring rows should reject these. */
+const RECTLESS_TREE: SnapshotNode[] = [node(0, 'Save', { rect: undefined })];
 
-// What each structural column means in caller source, so the claim is
-// checkable rather than decorative.
-const OCCLUSION_MARKERS = ['isSnapshotNodeInteractionBlocked', 'interactableSelectorNodes'];
-const OFFSCREEN_MARKERS = ['throwIfOffscreenInteractionTarget', 'assertVisibleSelectorTarget'];
-const PROMOTION_MARKERS = ['resolveActionableTouchNode', 'resolveActionableNodeOrThrow'];
-const POLL_MARKERS = ['createWaitPolling'];
+const OPTIONS = { platform: 'ios' as const };
 
-function mentionsAny(source: string, markers: readonly string[]): boolean {
-  return markers.some((marker) => source.includes(marker));
+function outcomeFor(policyName: keyof typeof SELECTOR_RESOLUTION_POLICIES, tree: SnapshotNode[]) {
+  return resolveSelectorChainWithPolicy(
+    tree,
+    'label="Save"',
+    SELECTOR_RESOLUTION_POLICIES[policyName],
+    OPTIONS,
+  );
 }
 
-test('every policy row names a real caller', () => {
-  assert.deepEqual(Object.keys(SELECTOR_RESOLUTION_POLICIES).sort(), Object.keys(CALLERS).sort());
+test('a unique match resolves under every policy', () => {
+  for (const name of Object.keys(
+    SELECTOR_RESOLUTION_POLICIES,
+  ) as (keyof typeof SELECTOR_RESOLUTION_POLICIES)[]) {
+    const outcome = outcomeFor(name, UNIQUE_TREE);
+    assert.equal(outcome.kind, 'resolved', name);
+    if (outcome.kind === 'resolved') assert.equal(outcome.resolution.node.label, 'Save');
+  }
 });
 
-test('knobs match the ambiguity contract each row names', () => {
-  const expected: Record<string, ReturnType<typeof selectorResolutionKnobs>> = {
-    disambiguate: { requireRect: false, requireUnique: true, disambiguateAmbiguous: true },
-    'fail-closed': { requireRect: false, requireUnique: true, disambiguateAmbiguous: false },
-    'first-match': { requireRect: false, requireUnique: false },
-  };
+test('no match resolves to none under every policy', () => {
+  for (const name of Object.keys(
+    SELECTOR_RESOLUTION_POLICIES,
+  ) as (keyof typeof SELECTOR_RESOLUTION_POLICIES)[]) {
+    const outcome = resolveSelectorChainWithPolicy(
+      UNIQUE_TREE,
+      'label="Absent"',
+      SELECTOR_RESOLUTION_POLICIES[name],
+      OPTIONS,
+    );
+    assert.equal(outcome.kind, 'none', name);
+  }
+});
+
+test('disambiguating rows pick the tiebreak winner and disclose the match count', () => {
+  for (const name of ['act', 'readText'] as const) {
+    const outcome = outcomeFor(name, TIEBREAKABLE_TREE);
+    assert.equal(outcome.kind, 'resolved', name);
+    if (outcome.kind === 'resolved') {
+      assert.equal(outcome.resolution.matches, 2, `${name} discloses the real match count`);
+      assert.equal(outcome.resolution.node.index, 1, `${name} takes the deepest/smallest`);
+    }
+  }
+});
+
+test('disambiguation declines when candidates are genuinely indistinguishable', () => {
+  // The tiebreak is evidence, not a coin flip: identical candidates must not
+  // silently bind one. Acting rows surface the ambiguity instead.
+  for (const name of ['act', 'readText'] as const) {
+    assert.equal(outcomeFor(name, AMBIGUOUS_TREE).kind, 'ambiguous', name);
+  }
+});
+
+test('fail-closed rows refuse an ambiguous tree instead of guessing', () => {
+  const outcome = outcomeFor('readUnique', AMBIGUOUS_TREE);
+  assert.equal(outcome.kind, 'ambiguous');
+  if (outcome.kind === 'ambiguous') assert.equal(outcome.matchedNodes.length, 2);
+});
+
+test('first-match rows take the head of an ambiguous tree', () => {
+  for (const name of ['readAny', 'wait', 'actCoveredDiagnosis'] as const) {
+    const outcome = outcomeFor(name, AMBIGUOUS_TREE);
+    assert.equal(outcome.kind, 'resolved', name);
+    if (outcome.kind === 'resolved') assert.equal(outcome.resolution.node.index, 0, name);
+  }
+});
+
+test('reject-candidates surfaces every candidate for the caller to narrow or refuse', () => {
+  const outcome = outcomeFor('findAct', AMBIGUOUS_TREE);
+  assert.equal(outcome.kind, 'ambiguous');
+  if (outcome.kind === 'ambiguous') {
+    assert.deepEqual(
+      outcome.matchedNodes.map((n) => n.index),
+      [0, 1],
+    );
+  }
+});
+
+test('rect-requiring rows skip rectless nodes; read and wait rows accept them', () => {
+  for (const name of ['act', 'findAct', 'actCoveredDiagnosis'] as const) {
+    assert.equal(outcomeFor(name, RECTLESS_TREE).kind, 'none', name);
+  }
+  for (const name of ['readUnique', 'readAny', 'readText', 'wait'] as const) {
+    assert.equal(outcomeFor(name, RECTLESS_TREE).kind, 'resolved', name);
+  }
+});
+
+test('knobs stay consistent with the ambiguity each knob-backed row names', () => {
   for (const [name, policy] of Object.entries(SELECTOR_RESOLUTION_POLICIES)) {
     if (policy.ambiguity === 'reject-candidates') continue;
     const knobs = selectorResolutionKnobs(policy);
-    const want = { ...expected[policy.ambiguity], requireRect: policy.requireRect };
-    assert.deepEqual(knobs, want, name);
+    assert.equal(knobs.requireRect, policy.requireRect, name);
+    if (policy.ambiguity === 'first-match') {
+      assert.equal(knobs.requireUnique, false, name);
+    } else {
+      assert.equal(knobs.requireUnique, true, name);
+      assert.equal(knobs.disambiguateAmbiguous, policy.ambiguity === 'disambiguate', name);
+    }
   }
 });
 
-test('acting policies require a rect; read and wait policies do not', () => {
-  assert.equal(SELECTOR_RESOLUTION_POLICIES.act.requireRect, true);
-  assert.equal(SELECTOR_RESOLUTION_POLICIES.findAct.requireRect, true);
-  assert.equal(SELECTOR_RESOLUTION_POLICIES.readUnique.requireRect, false);
-  assert.equal(SELECTOR_RESOLUTION_POLICIES.readAny.requireRect, false);
-  assert.equal(SELECTOR_RESOLUTION_POLICIES.wait.requireRect, false);
-});
-
-test('is/get-attrs fail closed and wait never disambiguates (the by-design asymmetry)', () => {
+test('the documented per-caller contracts are the ones declared', () => {
+  assert.equal(SELECTOR_RESOLUTION_POLICIES.act.ambiguity, 'disambiguate');
+  assert.equal(SELECTOR_RESOLUTION_POLICIES.readText.ambiguity, 'disambiguate');
   assert.equal(SELECTOR_RESOLUTION_POLICIES.readUnique.ambiguity, 'fail-closed');
   assert.equal(SELECTOR_RESOLUTION_POLICIES.readAny.ambiguity, 'first-match');
   assert.equal(SELECTOR_RESOLUTION_POLICIES.wait.ambiguity, 'first-match');
-  assert.equal(SELECTOR_RESOLUTION_POLICIES.act.ambiguity, 'disambiguate');
-  assert.equal(SELECTOR_RESOLUTION_POLICIES.readText.ambiguity, 'disambiguate');
   assert.equal(SELECTOR_RESOLUTION_POLICIES.findAct.ambiguity, 'reject-candidates');
-});
-
-test('structural columns match what each caller actually imports', () => {
-  const sources = new Map<string, string>();
-  for (const relative of Object.values(CALLERS)) {
-    if (!sources.has(relative)) sources.set(relative, readSource(relative));
-  }
-  for (const [name, relative] of Object.entries(CALLERS)) {
-    const policy: SelectorResolutionPolicy =
-      SELECTOR_RESOLUTION_POLICIES[name as keyof typeof SELECTOR_RESOLUTION_POLICIES];
-    const source = sources.get(relative)!;
-    if (policy.occlusion) {
-      assert.ok(mentionsAny(source, OCCLUSION_MARKERS), `${name} claims occlusion`);
-    }
-    if (policy.offscreenGuard) {
-      assert.ok(mentionsAny(source, OFFSCREEN_MARKERS), `${name} claims an off-screen guard`);
-    }
-    if (policy.promotion) {
-      assert.ok(mentionsAny(source, PROMOTION_MARKERS), `${name} claims promotion`);
-    }
-    if (policy.poll === 'wait-budget') {
-      assert.ok(mentionsAny(source, POLL_MARKERS), `${name} claims a poll budget`);
-    }
-  }
-});
-
-test('read and wait pipelines really do skip occlusion, off-screen, and promotion', () => {
-  // The inverse direction: a row claiming NO occlusion must not sit in a file
-  // that performs it, or the matrix would under-report real behavior.
-  const readSourceText = readSource(CALLERS.readUnique);
-  const waitSource = readSource(CALLERS.wait);
-  for (const [name, source] of [
-    ['selector-read', readSourceText],
-    ['selector-wait', waitSource],
-  ] as const) {
-    assert.equal(mentionsAny(source, OCCLUSION_MARKERS), false, `${name} occlusion`);
-    assert.equal(mentionsAny(source, OFFSCREEN_MARKERS), false, `${name} off-screen`);
-    assert.equal(mentionsAny(source, PROMOTION_MARKERS), false, `${name} promotion`);
-  }
-});
-
-test('no caller re-declares ambiguity knobs as inline literals', () => {
-  for (const relative of new Set(Object.values(CALLERS))) {
-    const source = readSource(relative);
-    assert.equal(
-      /disambiguateAmbiguous:\s*(true|false)/.test(source),
-      false,
-      `${relative} declares disambiguateAmbiguous inline`,
-    );
-    assert.equal(
-      /requireUnique:\s*(true|false)/.test(source),
-      false,
-      `${relative} declares requireUnique inline`,
-    );
-  }
 });

@@ -15,8 +15,10 @@ import {
 import type { PublicPlatform } from '@agent-device/kernel/device';
 import {
   checkWaitText,
-  listSelectorChainMatches,
   type SelectorChainMatchList,
+  SELECTOR_RESOLUTION_POLICIES,
+  resolveSelectorChainWithPolicy,
+  type PolicyResolutionOutcome,
 } from '@agent-device/selectors';
 import { deriveSelectorCapturePolicy } from './selector-capture-policy.ts';
 import { findNodeByLabel, resolveRefLabel } from './selector-read-utils.ts';
@@ -26,6 +28,30 @@ import {
   type WaitPollDeadline,
   waitTimeoutError,
 } from './wait-polling.ts';
+
+/**
+ * The landmark check (#1349) needs the full candidate set, which the policy
+ * outcome carries in either shape: a `first-match` resolution exposes the
+ * winner, and the ambiguous branch exposes all candidates. Wait's row never
+ * refuses, so this only ever adapts — it does not re-decide anything.
+ */
+function policyMatchList(outcome: PolicyResolutionOutcome): SelectorChainMatchList | undefined {
+  if (outcome.kind === 'ambiguous') {
+    return {
+      selector: outcome.selector,
+      selectorIndex: outcome.selectorIndex,
+      matchedNodes: outcome.matchedNodes,
+    };
+  }
+  if (outcome.kind === 'resolved') {
+    return {
+      selector: outcome.resolution.selector.raw,
+      selectorIndex: outcome.resolution.selectorIndex,
+      matchedNodes: [outcome.resolution.node],
+    };
+  }
+  return undefined;
+}
 
 type WaitCommandContext = {
   session?: string;
@@ -248,9 +274,15 @@ async function waitForSelector<Runtime extends SelectorWaitRuntime>(
     const capture = poll.value;
     if (capture) {
       const nodes = capture.snapshot.nodes;
-      const matchList = listSelectorChainMatches(nodes, selectorExpression, {
-        platform: runtime.backend.platform,
-      });
+      const outcome = resolveSelectorChainWithPolicy(
+        nodes,
+        selectorExpression,
+        SELECTOR_RESOLUTION_POLICIES.wait,
+        { platform: runtime.backend.platform },
+      );
+      // The wait row is `first-match`, so a multi-match screen resolves rather
+      // than refusing; the landmark check below is what decides satisfaction.
+      const matchList = policyMatchList(outcome);
       if (matchList) {
         const landmark = resolveLandmarkMatch(nodes, matchList, recordedLandmark);
         if (landmark.kind === 'satisfied') {

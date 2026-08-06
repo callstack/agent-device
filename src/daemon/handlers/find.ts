@@ -6,8 +6,10 @@ import {
   checkFindArgs,
   parseFindSelectorExpression,
   type FindLocator,
-  listSelectorChainMatches,
   SELECTOR_RESOLUTION_POLICIES,
+  resolveSelectorChainWithPolicy,
+  type PolicyResolutionOutcome,
+  type SelectorResolutionPolicy,
 } from '@agent-device/selectors';
 import {
   centerOfRect,
@@ -33,6 +35,24 @@ import { stripInternalInteractionFlags } from '../interaction-outcome-policy.ts'
 import { dispatchFindReadOnlyViaRuntime } from '../selector-runtime.ts';
 import { createSelectorCaptureRuntime } from '../selector-capture-runtime.ts';
 import { isSparseSnapshotQualityVerdict } from '../../snapshot/snapshot-quality.ts';
+
+/**
+ * Both branches of the `reject-candidates` contract produce a candidate set:
+ * a single resolved match, or the full ambiguous set find must refuse (or
+ * narrow) explicitly.
+ */
+function policyMatchedNodes(outcome: PolicyResolutionOutcome): SnapshotState['nodes'] {
+  if (outcome.kind === 'ambiguous') return outcome.matchedNodes;
+  if (outcome.kind === 'resolved') return [outcome.resolution.node];
+  return [];
+}
+
+function assertRejectsCandidates(policy: SelectorResolutionPolicy): void {
+  if (policy.ambiguity !== 'reject-candidates') {
+    throw new Error(`find's resolution policy must reject candidates, got "${policy.ambiguity}"`);
+  }
+}
+
 type FindContext = {
   req: DaemonRequest;
   sessionName: string;
@@ -256,11 +276,14 @@ function resolveFindMatch(params: {
   const policy = SELECTOR_RESOLUTION_POLICIES.findAct;
   let matches: SnapshotState['nodes'];
   if (selectorExpression) {
-    matches =
-      listSelectorChainMatches(searchableNodes, selectorExpression, {
-        platform,
-        requireRect: policy.requireRect,
-      })?.matchedNodes ?? [];
+    // Selector-shaped queries resolve through the policy interface, so the
+    // `reject-candidates` contract is the matrix's decision rather than a
+    // local convention. The locator branch cannot: it matches by fuzzy text
+    // scoring, not by selector chains, so it produces its candidate set with
+    // its own matcher and joins the shared contract below.
+    matches = policyMatchedNodes(
+      resolveSelectorChainWithPolicy(searchableNodes, selectorExpression, policy, { platform }),
+    );
   } else {
     matches = findBestMatchesByLocator(searchableNodes, locator, query, {
       requireRect: policy.requireRect,
@@ -269,6 +292,10 @@ function resolveFindMatch(params: {
   matches = preferOnscreenMatches(matches, nodes);
 
   if (matches.length > 1) {
+    // The row says candidates reject unless the caller narrowed explicitly;
+    // assert that rather than assuming, so a future row edit cannot silently
+    // turn this into first-match.
+    assertRejectsCandidates(policy);
     const narrowed = narrowMultipleMatches(matches, flags);
     if (!narrowed) {
       return { ok: false, response: buildAmbiguousMatchError(matches, locator, query) };
