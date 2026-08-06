@@ -26,10 +26,23 @@ export type FakeRunnerServer = {
   close: () => Promise<void>;
 };
 
+/**
+ * Per-command scripts. Production sends a readiness `uptime` probe before a
+ * mutating command, and recovery sends `status` afterwards, so a rigid
+ * one-queue script couples every test to that ordering; keying by command
+ * lets a test say only what it cares about. Each command's list is consumed
+ * in order, and a command with no script left answers `ok` with no data.
+ */
+export type FakeRunnerCommandScript = Record<string, FakeRunnerResponse[]>;
+
 export async function startFakeRunnerServer(
-  script: FakeRunnerResponse[],
+  script: FakeRunnerResponse[] | FakeRunnerCommandScript,
 ): Promise<FakeRunnerServer> {
-  const remaining = [...script];
+  const sequential = Array.isArray(script) ? [...script] : undefined;
+  const byCommand = Array.isArray(script)
+    ? undefined
+    : Object.fromEntries(Object.entries(script).map(([key, list]) => [key, [...list]]));
+  const remaining = sequential ?? [];
   const requests: FakeRunnerRequest[] = [];
   const server = http.createServer((req, res) => {
     let raw = '';
@@ -39,7 +52,9 @@ export async function startFakeRunnerServer(
     req.on('end', () => {
       const body = parseBody(raw);
       requests.push({ command: String(body.command ?? ''), body });
-      const next = remaining.shift();
+      const next = byCommand
+        ? (byCommand[String(body.command ?? '')]?.shift() ?? { kind: 'ok' as const, data: {} })
+        : remaining.shift();
       if (!next) {
         res.statusCode = 500;
         res.end(JSON.stringify({ ok: false, error: { message: 'fake runner script exhausted' } }));
