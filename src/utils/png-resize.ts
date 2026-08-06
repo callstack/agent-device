@@ -1,33 +1,25 @@
 import { promises as fs } from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
+import { SCREENSHOT_SCALE_LIMITS } from '@agent-device/contracts/capture';
 import { PNG } from './png.ts';
 import { decodePngAsync, encodePngAsync } from './png-worker-client.ts';
 
-/** Resizes a PNG in place by a proportional scale factor from 0.01 through 1. */
+/**
+ * Resizes a PNG file in place by a proportional scale factor. Decode and
+ * encode run on the PNG worker thread (daemon screenshot `--scale` path);
+ * the in-memory box-filter resample itself is cheap enough to stay inline.
+ */
 export async function resizePngFileToScale(filePath: string, scale: number): Promise<void> {
-  if (!Number.isFinite(scale) || scale < 0.01 || scale > 1) {
-    throw new AppError('INVALID_ARGS', 'Screenshot scale must be between 0.01 and 1');
+  const { min, max } = SCREENSHOT_SCALE_LIMITS;
+  if (!Number.isFinite(scale) || scale < min || scale > max) {
+    throw new AppError('INVALID_ARGS', `Screenshot scale must be between ${min} and ${max}`);
   }
   if (scale === 1) return;
 
-  const source = await readPng(filePath);
+  const source = await decodePngAsync(await fs.readFile(filePath), 'screenshot');
   const width = Math.max(1, Math.round(source.width * scale));
   const height = Math.max(1, Math.round(source.height * scale));
-  await writeResizedPng(filePath, source, width, height);
-}
-
-async function readPng(filePath: string): Promise<PNG> {
-  return await decodePngAsync(await fs.readFile(filePath), 'screenshot');
-}
-
-async function writeResizedPng(
-  filePath: string,
-  source: PNG,
-  width: number,
-  height: number,
-): Promise<void> {
-  const resized = resizePngBox(source, width, height);
-  await fs.writeFile(filePath, await encodePngAsync(resized));
+  await fs.writeFile(filePath, await encodePngAsync(resizePngBox(source, width, height)));
 }
 
 export async function resizePngFile(

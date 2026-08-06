@@ -60,6 +60,24 @@ test('record replay script parses fps, quality, and hide-touches flags', () => {
   assert.equal(parsed[0]?.flags.hideTouches, true);
 });
 
+// Frozen replay-compat witnesses: these exact `--max-size` lines shipped in
+// released `.ad` scripts. The retired flag must be refused with migration
+// guidance — it must never silently degrade into extra positionals and a
+// native-size capture. Do not update these inputs; they pin released syntax.
+test('released screenshot --max-size lines are refused with migration guidance', () => {
+  assert.throws(() => parseReplayScriptDetailed('screenshot "./page.png" --max-size 1024\n'), {
+    code: 'INVALID_ARGS',
+    message: /screenshot --max-size was removed; use --scale/,
+  });
+});
+
+test('released record --max-size lines are refused with migration guidance', () => {
+  assert.throws(() => parseReplayScriptDetailed('record start "./capture.mp4" --max-size 1024\n'), {
+    code: 'INVALID_ARGS',
+    message: /record --max-size was removed/,
+  });
+});
+
 test('screenshot replay script round-trips screenshot flags', () => {
   const actions: SessionAction[] = [
     {

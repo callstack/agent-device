@@ -1,7 +1,10 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { recordingQualityInputToExportQuality } from '@agent-device/contracts/recording';
 import { describeReplayGestureArityError } from '@agent-device/contracts/interaction';
-import { readScreenshotScriptFlag } from '@agent-device/contracts/capture';
+import {
+  RETIRED_SCREENSHOT_MAX_SIZE,
+  readScreenshotScriptFlag,
+} from '@agent-device/contracts/capture';
 import type { DeviceTarget, PlatformSelector } from '@agent-device/kernel/device';
 import { PLATFORM_SELECTORS } from '@agent-device/kernel/device';
 import { parseReplayOpenFlags } from './open-script.ts';
@@ -415,6 +418,9 @@ function parseReplayScriptLine(line: string): SessionAction | null {
     const positionals: string[] = [];
     for (let index = 0; index < args.length; index += 1) {
       const token = args[index]!;
+      if (token === RETIRED_SCREENSHOT_MAX_SIZE.cliToken) {
+        throw new AppError('INVALID_ARGS', RETIRED_SCREENSHOT_MAX_SIZE.migration.record);
+      }
       if (token === '--hide-touches') {
         action.flags.hideTouches = true;
         continue;

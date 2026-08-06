@@ -66,6 +66,58 @@ test('screenshot scale supports env defaults with CLI precedence', async () => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+test('retired screenshot max-size env var fails closed for sizing commands only', async () => {
+  const { root, home, project } = makeTempWorkspace();
+  const env = { HOME: home, AGENT_DEVICE_SCREENSHOT_MAX_SIZE: '900' };
+
+  const screenshot = await runCliCapture(['screenshot', 'env.png'], {
+    cwd: project,
+    env,
+    defaultResponse: { ok: true, data: { path: 'env.png' } },
+  });
+  assert.equal(screenshot.code, 1);
+  assert.match(screenshot.stderr, /AGENT_DEVICE_SCREENSHOT_MAX_SIZE was removed/);
+  assert.match(screenshot.stderr, /use --scale/);
+  assert.equal(screenshot.calls.length, 0);
+
+  const record = await runCliCapture(['record', 'stop'], {
+    cwd: project,
+    env,
+    defaultResponse: { ok: true, data: {} },
+  });
+  assert.equal(record.code, 1);
+  assert.match(record.stderr, /AGENT_DEVICE_SCREENSHOT_MAX_SIZE was removed/);
+
+  const unaffected = await runCliCapture(['devices', '--json'], {
+    cwd: project,
+    env,
+    defaultResponse: { ok: true, data: { devices: [] } },
+  });
+  assert.equal(unaffected.code, null);
+
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('retired screenshotMaxSize config key is refused with migration guidance', async () => {
+  const { root, home, project } = makeTempWorkspace();
+  fs.writeFileSync(
+    path.join(project, 'agent-device.json'),
+    JSON.stringify({ screenshotMaxSize: 900 }),
+  );
+
+  const result = await runCliCapture(['screenshot', 'config.png'], {
+    cwd: project,
+    env: { HOME: home },
+    defaultResponse: { ok: true, data: { path: 'config.png' } },
+  });
+
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /"screenshotMaxSize".*was removed/);
+  assert.match(result.stderr, /screenshotScale/);
+
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
 test('config can set appsFilter through canonical enum values', async () => {
   const { root, home, project } = makeTempWorkspace();
   fs.mkdirSync(path.join(home, '.agent-device'), { recursive: true });

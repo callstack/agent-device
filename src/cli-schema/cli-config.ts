@@ -10,6 +10,7 @@ import {
   parseOptionValueFromSource,
 } from './option-schema.ts';
 import { parseInstallSourceConfig } from '../utils/install-source-config.ts';
+import { RETIRED_SCREENSHOT_MAX_SIZE } from '@agent-device/contracts/capture';
 import type { EnvMap } from '../utils/env-map.ts';
 
 export function resolveConfigBackedFlagDefaults(options: {
@@ -199,6 +200,12 @@ function parseConfigObject(
     const key = rawKey as FlagKey;
     const spec = getOptionSpec(key);
     if (!spec) {
+      if (rawKey === RETIRED_SCREENSHOT_MAX_SIZE.flagKey) {
+        throw new AppError(
+          'INVALID_ARGS',
+          `Config key "${rawKey}" in ${origin.label} was removed; use "screenshotScale" (0.01-1) to downscale screenshots. Recordings capture at native resolution.`,
+        );
+      }
       throw new AppError('INVALID_ARGS', `Unknown config key "${rawKey}" in ${origin.label}.`);
     }
     if (!spec.configurable) {
@@ -227,7 +234,24 @@ function parseConfigObject(
   return flags;
 }
 
+// Commands that honored AGENT_DEVICE_SCREENSHOT_MAX_SIZE in released versions.
+// A stale env var must fail closed for them (sizing must not silently vanish)
+// while every other command keeps working.
+const RETIRED_MAX_SIZE_ENV_COMMANDS = new Set(['screenshot', 'record']);
+
 function readEnvFlagDefaults(env: EnvMap, command: string | null): Partial<CliFlags> {
+  const retiredEnvValue = env[RETIRED_SCREENSHOT_MAX_SIZE.envVar];
+  if (
+    command !== null &&
+    RETIRED_MAX_SIZE_ENV_COMMANDS.has(command) &&
+    typeof retiredEnvValue === 'string' &&
+    retiredEnvValue.trim().length > 0
+  ) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `${RETIRED_SCREENSHOT_MAX_SIZE.envVar} was removed. ${RETIRED_SCREENSHOT_MAX_SIZE.migration[command === 'record' ? 'record' : 'screenshot']}`,
+    );
+  }
   const flags: Partial<CliFlags> = {};
   for (const spec of getConfigurableOptionSpecs(command)) {
     if (spec.key === 'installSource') continue;

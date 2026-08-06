@@ -1,5 +1,49 @@
 import { AppError } from '@agent-device/kernel/errors';
 
+export const SCREENSHOT_SCALE_LIMITS = { min: 0.01, max: 1 } as const;
+
+/**
+ * `--max-size` shipped in released CLIs, `.ad` scripts, Node options
+ * (`maxSize`), request flags (`screenshotMaxSize`), and the derived
+ * `AGENT_DEVICE_SCREENSHOT_MAX_SIZE` env var. Every surface that used to honor
+ * it must refuse with this migration guidance — sizing must never disappear
+ * silently.
+ */
+export const RETIRED_SCREENSHOT_MAX_SIZE = {
+  flagKey: 'screenshotMaxSize',
+  cliToken: '--max-size',
+  envVar: 'AGENT_DEVICE_SCREENSHOT_MAX_SIZE',
+  publicOptionKey: 'maxSize',
+  migration: {
+    screenshot:
+      'screenshot --max-size was removed; use --scale <0.01-1> (or AGENT_DEVICE_SCREENSHOT_SCALE) to downscale proportionally',
+    record: 'record --max-size was removed; recordings capture at native resolution',
+  },
+} as const;
+
+type RetiredMaxSizeCommand = keyof typeof RETIRED_SCREENSHOT_MAX_SIZE.migration;
+
+export function retiredScreenshotMaxSizeFlagError(
+  command: RetiredMaxSizeCommand,
+  flags: object | undefined,
+): string | undefined {
+  return flags && Object.hasOwn(flags, RETIRED_SCREENSHOT_MAX_SIZE.flagKey)
+    ? RETIRED_SCREENSHOT_MAX_SIZE.migration[command]
+    : undefined;
+}
+
+export function validateNoRetiredScreenshotMaxSize(
+  command: RetiredMaxSizeCommand,
+  input: object,
+): void {
+  if (
+    Object.hasOwn(input, RETIRED_SCREENSHOT_MAX_SIZE.publicOptionKey) ||
+    Object.hasOwn(input, RETIRED_SCREENSHOT_MAX_SIZE.flagKey)
+  ) {
+    throw new AppError('INVALID_ARGS', RETIRED_SCREENSHOT_MAX_SIZE.migration[command]);
+  }
+}
+
 export const SCREENSHOT_COMMAND_FLAG_KEYS = [
   'out',
   'overlayRefs',
@@ -52,8 +96,8 @@ export const SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS: readonly ScreenshotSpecificFl
     key: 'screenshotScale',
     names: ['--scale'],
     type: 'number',
-    min: 0.01,
-    max: 1,
+    min: SCREENSHOT_SCALE_LIMITS.min,
+    max: SCREENSHOT_SCALE_LIMITS.max,
     usageLabel: '--scale <0.01-1>',
     usageDescription:
       'Screenshot: resize both dimensions by this factor (or use AGENT_DEVICE_SCREENSHOT_SCALE)',
@@ -95,8 +139,8 @@ const SCREENSHOT_SCRIPT_NUMBER_FLAGS = [
     token: '--scale',
     key: 'screenshotScale',
     label: 'screenshot --scale',
-    min: 0.01,
-    max: 1,
+    min: SCREENSHOT_SCALE_LIMITS.min,
+    max: SCREENSHOT_SCALE_LIMITS.max,
   },
 ] as const;
 
@@ -173,6 +217,11 @@ export function screenshotFlagsFromOptions(
   });
 }
 
+/**
+ * Also maps the public `scale` option. `screenshotFlagsFromOptions` is fed
+ * generic cross-command option bags where a bare `scale` key belongs to the
+ * pinch gesture, so only this screenshot-boundary projection may read it.
+ */
 export function screenshotFlagsFromPublicOptions(
   options: ScreenshotPublicOptions & Partial<ScreenshotRequestFlags> = {},
 ): Partial<ScreenshotRequestFlags> {
@@ -183,11 +232,12 @@ export function screenshotFlagsFromPublicOptions(
 }
 
 export function validateScreenshotScale(options: Pick<ScreenshotPublicOptions, 'scale'>): void {
+  const { min, max } = SCREENSHOT_SCALE_LIMITS;
   if (
     options.scale !== undefined &&
-    (!Number.isFinite(options.scale) || options.scale < 0.01 || options.scale > 1)
+    (!Number.isFinite(options.scale) || options.scale < min || options.scale > max)
   ) {
-    throw new AppError('INVALID_ARGS', 'screenshot scale must be between 0.01 and 1');
+    throw new AppError('INVALID_ARGS', `screenshot scale must be between ${min} and ${max}`);
   }
 }
 
@@ -213,6 +263,9 @@ export function readScreenshotScriptFlag(params: {
 }): { handled: true; nextIndex: number } | { handled: false } {
   const { args, flags, index } = params;
   const token = args[index];
+  if (token === RETIRED_SCREENSHOT_MAX_SIZE.cliToken) {
+    throw new AppError('INVALID_ARGS', RETIRED_SCREENSHOT_MAX_SIZE.migration.screenshot);
+  }
   return (
     readScreenshotBooleanScriptFlag(token, flags, index) ??
     readScreenshotIntScriptFlag({ args, index, flags, token }) ??

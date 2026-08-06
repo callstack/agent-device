@@ -549,7 +549,9 @@ test('record start rejects the removed max-size field from older remote clients'
     throw new Error(`expected recording start failure, got ${JSON.stringify(start)}`);
   }
   expect(start.error.code).toBe('INVALID_ARGS');
-  expect(start.error.message).toBe('record --max-size is not supported');
+  expect(start.error.message).toBe(
+    'record --max-size was removed; recordings capture at native resolution',
+  );
 });
 
 test('record start web requires an existing browser session', async () => {

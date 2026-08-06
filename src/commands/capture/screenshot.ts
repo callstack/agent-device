@@ -3,8 +3,10 @@ import type { CaptureScreenshotOptions } from '@agent-device/contracts/client';
 import { SESSION_SURFACES } from '@agent-device/contracts/session';
 import {
   SCREENSHOT_COMMAND_FLAG_KEYS,
+  SCREENSHOT_SCALE_LIMITS,
   screenshotFlagsFromPublicOptions,
   screenshotOptionsFromFlags,
+  validateNoRetiredScreenshotMaxSize,
   validateScreenshotScale,
 } from '@agent-device/contracts/capture';
 import {
@@ -34,7 +36,7 @@ const screenshotCommandMetadata = defineFieldCommandMetadata(
       min: 1,
     }),
     fullscreen: booleanField(),
-    scale: numberField('Screenshot scale factor.', { min: 0.01, max: 1 }),
+    scale: numberField('Screenshot scale factor.', SCREENSHOT_SCALE_LIMITS),
     stabilize: booleanField(),
     normalizeStatusBar: booleanField(),
     surface: enumField(SESSION_SURFACES),
@@ -62,6 +64,7 @@ export const screenshotCliReader: CliReader = (positionals, flags) => ({
 });
 
 export const screenshotDaemonWriter: DaemonWriter = (input) => {
+  validateNoRetiredScreenshotMaxSize('screenshot', input);
   validateScreenshotScale(input as CaptureScreenshotOptions);
   return request(PUBLIC_COMMANDS.screenshot, optionalString(input.path), {
     ...input,

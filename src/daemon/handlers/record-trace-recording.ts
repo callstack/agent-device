@@ -8,6 +8,7 @@ import {
   recordingQualityInputToExportQuality,
 } from '@agent-device/contracts/recording';
 import { AppError, toAppErrorCode } from '@agent-device/kernel/errors';
+import { retiredScreenshotMaxSizeFlagError } from '@agent-device/contracts/capture';
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveTargetDevice } from '../../core/dispatch.ts';
@@ -249,10 +250,8 @@ function validateRecordingStartFlags(flags: {
 }
 
 function validateRemovedRecordingMaxSizeFlag(flags: DaemonRequest['flags']): DaemonResponse | null {
-  const rawFlags = flags as Record<string, unknown> | undefined;
-  return rawFlags && Object.hasOwn(rawFlags, 'screenshotMaxSize')
-    ? errorResponse('INVALID_ARGS', 'record --max-size is not supported')
-    : null;
+  const message = retiredScreenshotMaxSizeFlagError('record', flags);
+  return message ? errorResponse('INVALID_ARGS', message) : null;
 }
 
 function validateRecordingFpsFlag(fpsFlag: number | undefined): DaemonResponse | null {

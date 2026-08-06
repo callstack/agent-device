@@ -20,7 +20,7 @@ vi.mock('../../platforms/android/app-lifecycle.ts', async (importOriginal) => {
 import { dispatchCommand } from '../../core/dispatch.ts';
 import { createRequestHandler } from '../request-router.ts';
 import { dispatchScreenshotViaRuntime } from '../screenshot-runtime.ts';
-import type { SessionState } from '../types.ts';
+import type { DaemonRequest, SessionState } from '../types.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { PNG } from '../../utils/png.ts';
@@ -485,6 +485,38 @@ test('iOS simulator screenshot omits logical density metadata after --scale down
     expect(response.data).not.toHaveProperty('logicalWidth');
     expect(response.data).not.toHaveProperty('logicalHeight');
     expect(response.data).not.toHaveProperty('pixelDensity');
+  }
+});
+
+test('screenshot rejects the removed max-size field from older remote clients', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-screenshot-');
+  sessionStore.set('default', makeIosSession('default'));
+
+  mockDispatch.mockImplementation(async () => {
+    throw new Error('dispatch should not run for a retired-flag request');
+  });
+
+  const handler = createRequestHandler({
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    token: 'test-token',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    trackDownloadableArtifact: () => 'artifact-id',
+  });
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'default',
+    command: 'screenshot',
+    positionals: ['./legacy-max-size.png'],
+    flags: { screenshotMaxSize: 720 } as unknown as DaemonRequest['flags'],
+    meta: { requestId: 'req-ios-screenshot-legacy-max-size' },
+  });
+
+  expect(response.ok).toBe(false);
+  if (!response.ok) {
+    expect(response.error.code).toBe('INVALID_ARGS');
+    expect(response.error.message).toContain('screenshot --max-size was removed; use --scale');
   }
 });
 

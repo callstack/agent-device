@@ -9,6 +9,7 @@ import {
   screenshotFlagsFromOptions,
   screenshotFlagsFromPublicOptions,
   screenshotOptionsFromFlags,
+  validateNoRetiredScreenshotMaxSize,
   validateScreenshotScale,
 } from '@agent-device/contracts/capture';
 
@@ -62,6 +63,23 @@ test('screenshot scale is bounded', () => {
   assert.doesNotThrow(() => validateScreenshotScale({ scale: 0.3 }));
   assert.throws(() => validateScreenshotScale({ scale: 0 }), /between 0\.01 and 1/);
   assert.throws(() => validateScreenshotScale({ scale: 1.01 }), /between 0\.01 and 1/);
+});
+
+test('retired max-size inputs are refused with migration guidance', () => {
+  assert.throws(
+    () => readScreenshotScriptFlag({ args: ['--max-size', '640'], index: 0, flags: {} }),
+    {
+      code: 'INVALID_ARGS',
+      message: /screenshot --max-size was removed; use --scale/,
+    },
+  );
+  assert.throws(() => validateNoRetiredScreenshotMaxSize('screenshot', { maxSize: 1024 }), {
+    message: /screenshot --max-size was removed/,
+  });
+  assert.throws(() => validateNoRetiredScreenshotMaxSize('record', { screenshotMaxSize: 720 }), {
+    message: /record --max-size was removed/,
+  });
+  assert.doesNotThrow(() => validateNoRetiredScreenshotMaxSize('screenshot', { scale: 0.3 }));
 });
 
 test('screenshot script flags use the shared recorded flag contract', () => {

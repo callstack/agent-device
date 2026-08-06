@@ -1,3 +1,4 @@
+import { RETIRED_SCREENSHOT_MAX_SIZE } from '@agent-device/contracts/capture';
 import { listCliCommandNames } from '../../command-catalog.ts';
 
 /**
@@ -161,6 +162,9 @@ export function formatUnknownFlagMessage(token: string): string {
   }
   if (REMOVED_SESSION_LOCK_ALIASES.has(token.toLowerCase())) {
     return `Unknown flag: ${token}. Use --session-lock reject|strip instead.`;
+  }
+  if (token.toLowerCase() === RETIRED_SCREENSHOT_MAX_SIZE.cliToken) {
+    return `Unknown flag: ${token}. ${RETIRED_SCREENSHOT_MAX_SIZE.migration.screenshot}. ${RETIRED_SCREENSHOT_MAX_SIZE.migration.record}.`;
   }
   return `Unknown flag: ${token}`;
 }

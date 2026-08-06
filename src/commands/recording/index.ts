@@ -1,4 +1,5 @@
 import type { RecordOptions } from '@agent-device/contracts/client';
+import { validateNoRetiredScreenshotMaxSize } from '@agent-device/contracts/capture';
 import {
   RECORDING_EXPORT_QUALITIES,
   RECORDING_SCOPE_VALUES,
@@ -94,9 +95,14 @@ export const traceCliReader: CliReader = (positionals, flags) => ({
   path: positionals[1],
 });
 
-export const recordDaemonWriter: DaemonWriter = direct(RECORD_COMMAND_NAME, (input) =>
+const recordDirectWriter = direct(RECORD_COMMAND_NAME, (input) =>
   recordingPositionals(input as RecordOptions),
 );
+
+export const recordDaemonWriter: DaemonWriter = (input) => {
+  validateNoRetiredScreenshotMaxSize('record', input);
+  return recordDirectWriter(input);
+};
 
 export const traceDaemonWriter: DaemonWriter = direct(TRACE_COMMAND_NAME, (input) =>
   recordingPositionals(input as RecordOptions),

@@ -1241,6 +1241,38 @@ test('gesture scale does not leak into screenshot sizing flags', async () => {
   await client.interactions.pinch({ scale: 0.8 });
 });
 
+// Released Node callers passed `{ maxSize }`; it must be refused with migration
+// guidance instead of being silently dropped into a native-size capture.
+test('capture.screenshot rejects the removed maxSize option before transport', async () => {
+  const setup = createTransport(async () => {
+    throw new Error('transport should not be reached for a retired option');
+  });
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  await assert.rejects(
+    () =>
+      client.capture.screenshot({ maxSize: 1024 } as Parameters<
+        typeof client.capture.screenshot
+      >[0]),
+    /screenshot --max-size was removed; use --scale/,
+  );
+});
+
+test('recording.record rejects the removed maxSize option before transport', async () => {
+  const setup = createTransport(async () => {
+    throw new Error('transport should not be reached for a retired option');
+  });
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  await assert.rejects(
+    () =>
+      client.recording.record({ action: 'start', maxSize: 720 } as Parameters<
+        typeof client.recording.record
+      >[0]),
+    /record --max-size was removed/,
+  );
+});
+
 test('capture.snapshot passes a digest (non-default level) payload through unnormalized', async () => {
   const digest = {
     nodeCount: 3,

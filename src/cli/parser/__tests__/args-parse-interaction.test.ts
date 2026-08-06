@@ -211,13 +211,23 @@ test('parseArgs recognizes record --quality flag', () => {
   assert.equal(parsed.flags.quality, 'high');
 });
 
-test('parseArgs rejects removed record --max-size flag', () => {
+test('parseArgs rejects removed record --max-size flag with migration guidance', () => {
   assert.throws(
     () =>
       parseArgs(['record', 'start', './capture.mp4', '--max-size', '1024'], {
         strictFlags: true,
       }),
-    /Unknown flag: --max-size/,
+    /Unknown flag: --max-size\. .*record --max-size was removed/,
+  );
+});
+
+test('parseArgs rejects removed screenshot --max-size flag with migration guidance', () => {
+  assert.throws(
+    () =>
+      parseArgs(['screenshot', 'page.png', '--max-size', '1024'], {
+        strictFlags: true,
+      }),
+    /Unknown flag: --max-size\. screenshot --max-size was removed; use --scale/,
   );
 });
 
