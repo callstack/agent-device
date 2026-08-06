@@ -201,6 +201,17 @@ test('scroll --settle answers with the settled diff against the stored pre-actio
     text: expect.stringContaining('Load more'),
     ref: 'e2',
   });
+  // `SettleDiffLine`: removed lines never carry a ref — their refs would name
+  // nodes of the REPLACED tree, and ref bodies are index-derived, so `@e2` on a
+  // removed line is a different element in the settled tree that took its slot.
+  // Enforced in snapshot-diff (removed lines are built without one); asserted
+  // here because this route is the one that diffs against the STORED session
+  // snapshot, whose nodes all carry refs, so it is where a regression would
+  // first publish one.
+  const removed = settle.diff?.lines.find((line) => line.kind === 'removed');
+  expect(removed?.text).toContain('Continue');
+  expect(removed?.ref).toBeUndefined();
+
   // The settled tree became the stored snapshot, and its refs were published:
   // a partial frame is active at the generation the payload reports.
   const stored = sessionStore.get(sessionName) as SessionState;

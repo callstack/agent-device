@@ -109,6 +109,40 @@ describe('press CLI output', () => {
     );
   });
 
+  // ADR 0014: a settled diff activates a PARTIAL frame, so only the pinned form
+  // of the refs it issued is admitted. The diff has to hand the CLI caller that
+  // form directly or a copied `@e9` bounces with plain_ref_requires_complete_frame.
+  test('renders added-line refs pinned at the settle generation', () => {
+    const output = formatPress({
+      message: 'Tapped (278, 817)',
+      x: 278,
+      y: 817,
+      settle: {
+        settled: true,
+        waitedMs: 1200,
+        refsGeneration: 41,
+        diff: {
+          summary: { additions: 1, removals: 1, unchanged: 8 },
+          lines: [
+            { kind: 'removed', text: '@e4 [button] "Search"' },
+            { kind: 'added', text: '@e9 [text] "Notifications"', ref: 'e9' },
+          ],
+        },
+      },
+    });
+
+    expect(output.text).toBe(
+      [
+        'Tapped (278, 817)',
+        'settled after 1200ms: +1 -1 (~8 unchanged)',
+        // A removed line names an element that just left: rendered verbatim,
+        // never as a paste-ready target.
+        '- @e4 [button] "Search"',
+        '+ @e9~s41 [text] "Notifications"',
+      ].join('\n'),
+    );
+  });
+
   test('prints the response warning after the tap line', () => {
     const output = formatPress({
       message: 'Tapped (278, 817)',

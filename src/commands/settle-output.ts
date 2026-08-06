@@ -22,7 +22,7 @@ type SettleTextView = {
   hint?: string;
   diff?: {
     summary?: { additions?: number; removals?: number; unchanged?: number };
-    lines?: Array<{ kind?: string; text?: string }>;
+    lines?: Array<{ kind?: string; text?: string; ref?: string }>;
     truncated?: boolean;
   };
   tail?: Array<{ ref?: string; role?: string; label?: string }>;
@@ -51,19 +51,40 @@ function formatSettleText(settle: unknown): string {
   const view = settle as SettleTextView;
   const parts = [
     formatSettleVerdict(view),
-    ...formatSettleDiffLines(view.diff),
+    ...formatSettleDiffLines(view),
     ...formatSettleTailLines(view),
   ];
   if (view.hint) parts.push(`hint: ${view.hint}`);
   return `\n${parts.join('\n')}`;
 }
 
-function formatSettleDiffLines(diff: SettleTextView['diff']): string[] {
+function formatSettleDiffLines(view: SettleTextView): string[] {
+  const diff = view.diff;
   const lines = (diff?.lines ?? []).map(
-    (line) => `${line.kind === 'removed' ? '-' : '+'} ${line.text ?? ''}`,
+    (line) =>
+      `${line.kind === 'removed' ? '-' : '+'} ${pinnedDiffLineText(line, view.refsGeneration)}`,
   );
   if (diff?.truncated) lines.push('… changed lines truncated');
   return lines;
+}
+
+/**
+ * ADR 0014: a settled diff publishes a PARTIAL frame, which admits only the
+ * pinned form of the refs it issued — so a CLI caller who copies a bare `@eN`
+ * out of the diff gets `plain_ref_requires_complete_frame`. Render the added
+ * line's ref in the same paste-ready `@eN~s<gen>` form the tail already uses.
+ * Only added lines carry a ref (`SettleDiffLine`); removed lines render
+ * verbatim, since nothing there is a target.
+ */
+function pinnedDiffLineText(
+  line: { text?: string; ref?: string },
+  refsGeneration: number | undefined,
+): string {
+  const text = line.text ?? '';
+  const pinned = pinnedRefText(line.ref, refsGeneration);
+  if (!pinned || !line.ref) return text;
+  const plain = `@${line.ref}`;
+  return text.startsWith(`${plain} `) ? `${pinned}${text.slice(plain.length)}` : text;
 }
 
 // Unchanged interactive tail: only present when the diff's added lines
