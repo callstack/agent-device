@@ -79,7 +79,7 @@ const AGENT_START_LINES = [
   // Haiku from 0/2 baseline to 4/4; generic structured-hint recovery passed 8/8
   // uncoached output cases versus 7/8 with the longer special-case prose.
   'Default app loop: agent-device open <app> -> agent-device snapshot -i -> mutate a current target with --settle -> continue from that settled diff -> agent-device close.',
-  'Use --settle only on planned press, click, fill, or longpress commands; never add it to open, snapshot, or close. type never accepts --settle: run agent-device type "text", then diff snapshot if verification is needed. Once the task\'s requested end state or an explicit success confirmation is visible, stop; do not tap transient follow-up controls or navigate away only to re-verify.',
+  'Use --settle only on planned press, click, fill, longpress, scroll, or back commands; never add it to open, snapshot, or close. type never accepts --settle: run agent-device type "text", then diff snapshot if verification is needed. Once the task\'s requested end state or an explicit success confirmation is visible, stop; do not tap transient follow-up controls or navigate away only to re-verify.',
   'Follow structured command hints before choosing a recovery action.',
   'Targets are concrete refs or selectors: @e12, label="Query", role=button label="Submit".',
   'Selector keys are only: id, role, text, label, value, appname, windowtitle, visible, hidden, editable, selected, focused, enabled, hittable. placeholder, index, and key are not selector keys.',

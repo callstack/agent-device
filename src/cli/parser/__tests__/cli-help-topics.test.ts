@@ -91,7 +91,7 @@ test('usage includes agent workflows, config, environment, and examples footers'
   assert.match(usageText, /Default app loop: agent-device open <app>/);
   assert.match(
     usageText,
-    /Use --settle only on planned press, click, fill, or longpress commands; never add it to open, snapshot, or close/,
+    /Use --settle only on planned press, click, fill, longpress, scroll, or back commands; never add it to open, snapshot, or close/,
   );
   assert.match(usageText, /type never accepts --settle/);
   assert.match(usageText, /explicit success confirmation is visible, stop/);

@@ -317,6 +317,27 @@ test('a settle observation that cannot build a runtime degrades instead of faili
   expect(captureObservations).toEqual([]);
 });
 
+test('a generic command without the observation trait ignores a stray settle flag', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'generic-settle-traitless';
+  const session = seedSession(sessionName, sessionStore);
+  mockDispatch.mockResolvedValue({ action: 'home', message: 'Home' });
+
+  // A hand-built daemon request can put settle flags on any command; only the
+  // descriptor trait admits them to the observation path. `home` has no trait,
+  // so the flag is ignored: no captures, no settle payload, no rejection.
+  const response = await dispatchGeneric({
+    sessionName,
+    sessionStore,
+    session,
+    command: 'home',
+    flags: { settle: true },
+  });
+
+  expect(expectOkData(response).settle).toBeUndefined();
+  expect(captureObservations).toEqual([]);
+});
+
 test('an orphaned --settle-quiet is rejected before the command dispatches', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'generic-settle-orphan';

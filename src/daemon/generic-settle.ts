@@ -6,8 +6,8 @@ import type { ContextFromFlags } from './handlers/interaction-common.ts';
 import { readSettleRequest, settleFlagGuardResponse } from './handlers/interaction-flags.ts';
 import { createInteractionRuntime } from './handlers/interaction-runtime.ts';
 import { captureSnapshotForSession } from './handlers/interaction-snapshot.ts';
+import { issueSettleRefs } from './session-snapshot.ts';
 import type { SessionStore } from './session-store.ts';
-import { issueSettleRefs } from './settle-ref-issuance.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 
 /**

@@ -27,6 +27,7 @@ import {
   tvRemoteDaemonWriter,
   systemCommandFamily,
 } from './index.ts';
+import { systemCliOutputFormatters } from './output.ts';
 
 function flags(overrides: Partial<CliFlags> = {}): CliFlags {
   return overrides as CliFlags;
@@ -116,6 +117,50 @@ describe('system command interface', () => {
           .options as Record<string, unknown>
       ).backMode,
     ).toBeUndefined();
+  });
+
+  // #1638: --settle has to survive BOTH back seams — the reader that builds the
+  // input and the writer that turns it into daemon request options.
+  test('back reader and writer carry the settle request through to daemon flags', () => {
+    const input = backCliReader([], flags({ settle: true, settleQuietMs: 250, timeoutMs: 8_000 }));
+    expect(input).toMatchObject({ settle: true, settleQuietMs: 250, timeoutMs: 8_000 });
+    expect(backDaemonWriter(input).options).toMatchObject({
+      settle: true,
+      settleQuietMs: 250,
+      timeoutMs: 8_000,
+    });
+    expect(backCliReader([], flags()).settle).toBeUndefined();
+  });
+
+  test('back CLI output renders the settled observation', () => {
+    const output = systemCliOutputFormatters.back({
+      input: {},
+      result: {
+        action: 'back',
+        mode: 'in-app',
+        message: 'Back',
+        settle: {
+          settled: true,
+          waitedMs: 300,
+          diff: {
+            summary: { additions: 1, removals: 2, unchanged: 5 },
+            lines: [
+              { kind: 'removed', text: '@e9 [button] "Save"' },
+              { kind: 'added', text: '@e3 [button] "Edit"', ref: 'e3' },
+            ],
+          },
+        },
+      },
+    });
+
+    expect(output.text).toBe(
+      [
+        'Back',
+        'settled after 300ms: +1 -2 (~5 unchanged)',
+        '- @e9 [button] "Save"',
+        '+ @e3 [button] "Edit"',
+      ].join('\n'),
+    );
   });
 
   test('orientation reader and writer normalize orientation', () => {

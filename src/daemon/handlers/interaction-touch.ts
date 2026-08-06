@@ -38,8 +38,7 @@ import {
   type DirectIosSelectorTarget,
 } from '../direct-ios-selector.ts';
 import { expireRefFrame } from '../ref-frame.ts';
-import { resolveRefStalenessWarning } from '../session-snapshot.ts';
-import { issueSettleRefs } from '../settle-ref-issuance.ts';
+import { issueSettleRefs, resolveRefStalenessWarning } from '../session-snapshot.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
 import {
   assertAndroidPressStayedInApp,
