@@ -254,7 +254,12 @@ test('.ad replay normalizes resolved gesture and swipe syntax into structured da
 test('runReplayScriptFile reports snapshot diagnostics from per-action session samples', async () => {
   const root = mkdtempForTestSync('agent-device-replay-snapshot-samples-');
   const scriptPath = path.join(root, 'flow.ad');
-  fs.writeFileSync(scriptPath, ['snapshot', 'snapshot', ''].join('\n'));
+  // Four warm captures beyond the cold start: the slow-run warning judges warm
+  // samples only and needs at least three of them.
+  fs.writeFileSync(
+    scriptPath,
+    ['snapshot', 'snapshot', 'snapshot', 'snapshot', 'snapshot', ''].join('\n'),
+  );
   const sessionStore = new SessionStore(path.join(root, 'state'));
   sessionStore.set(
     's',
@@ -305,14 +310,19 @@ test('runReplayScriptFile reports snapshot diagnostics from per-action session s
   const diagnostics = response.data?.snapshotDiagnostics as
     | { stats?: { count?: number }; warning?: string }
     | undefined;
-  assert.equal(diagnostics?.stats?.count, 2);
-  assert.match(String(diagnostics?.warning), /p95 1900ms over 2 captures/);
+  assert.equal(diagnostics?.stats?.count, 5);
+  assert.match(String(diagnostics?.warning), /p95 1900ms over 4 captures/);
 });
 
 test('runReplayScriptFile reports snapshot diagnostics on replay failure', async () => {
   const root = mkdtempForTestSync('agent-device-replay-snapshot-failure-');
   const scriptPath = path.join(root, 'flow.ad');
-  fs.writeFileSync(scriptPath, ['snapshot', 'click "Missing"', ''].join('\n'));
+  // Three warm captures precede the failing click so the failure-path summary
+  // has enough warm samples to judge.
+  fs.writeFileSync(
+    scriptPath,
+    ['snapshot', 'snapshot', 'snapshot', 'snapshot', 'click "Missing"', ''].join('\n'),
+  );
   const sessionStore = new SessionStore(path.join(root, 'state'));
   sessionStore.set(
     's',
@@ -341,7 +351,7 @@ test('runReplayScriptFile reports snapshot diagnostics on replay failure', async
         backend: 'xctest',
         platform: 'ios',
       });
-      if (captures === 1) return { ok: true, data: {} };
+      if (captures < 5) return { ok: true, data: {} };
       return { ok: false, error: { code: 'COMMAND_FAILED', message: 'button missing' } };
     },
   });
@@ -350,9 +360,9 @@ test('runReplayScriptFile reports snapshot diagnostics on replay failure', async
   const diagnostics = response.error.details?.snapshotDiagnostics as
     | { stats?: { count?: number; p95Ms?: number }; warning?: string }
     | undefined;
-  assert.equal(diagnostics?.stats?.count, 2);
+  assert.equal(diagnostics?.stats?.count, 5);
   assert.equal(diagnostics?.stats?.p95Ms, 2_100);
-  assert.match(String(diagnostics?.warning), /p95 2100ms over 2 captures/);
+  assert.match(String(diagnostics?.warning), /p95 2100ms over 4 captures/);
 });
 
 test('runReplayScriptFile applies CLI env overrides before Maestro compat mapping', async () => {

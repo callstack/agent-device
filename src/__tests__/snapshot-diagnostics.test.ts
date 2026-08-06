@@ -3,6 +3,7 @@ import {
   mergeSnapshotDiagnostics,
   recordSnapshotTiming,
   summarizeSnapshotDiagnostics,
+  summarizeSnapshotTimingSamples,
 } from '@agent-device/contracts/capture';
 
 test('records session snapshot timing stats', () => {
@@ -27,29 +28,25 @@ test('records session snapshot timing stats', () => {
 });
 
 test('a slow cold-start capture alone does not warn', () => {
-  const session = {};
-
   // First capture folds runner/helper startup (12s); warm captures are fast.
-  recordSnapshotTiming(session, { durationMs: 12_400, backend: 'xctest', platform: 'ios' });
-  for (const durationMs of [520, 540, 510, 530, 525]) {
-    recordSnapshotTiming(session, { durationMs, backend: 'xctest', platform: 'ios' });
-  }
+  const samples = [12_400, 520, 540, 510, 530, 525].map((durationMs) => ({
+    durationMs,
+    platform: 'ios' as const,
+  }));
 
-  const summary = summarizeSnapshotDiagnostics(session);
+  const summary = summarizeSnapshotTimingSamples(samples);
   expect(summary?.warning).toBeUndefined();
   // The cold sample still shows in the full stats.
   expect(summary?.stats).toMatchObject({ count: 6, maxMs: 12_400 });
 });
 
 test('chronically slow warm captures warn without counting the cold start', () => {
-  const session = {};
+  const samples = [12_400, 2_600, 2_700, 2_500, 2_800].map((durationMs) => ({
+    durationMs,
+    platform: 'ios' as const,
+  }));
 
-  recordSnapshotTiming(session, { durationMs: 12_400, backend: 'xctest', platform: 'ios' });
-  for (const durationMs of [2_600, 2_700, 2_500, 2_800]) {
-    recordSnapshotTiming(session, { durationMs, backend: 'xctest', platform: 'ios' });
-  }
-
-  const summary = summarizeSnapshotDiagnostics(session);
+  const summary = summarizeSnapshotTimingSamples(samples);
   expect(summary?.warning).toContain('p95 2800ms over 4 captures');
 });
 
@@ -84,5 +81,25 @@ test('merges snapshot diagnostics without inflating capture count', () => {
     maxMs: 1_900,
     platform: 'android',
   });
-  expect(merged?.warning).toContain('p95 1900ms over 3 captures');
+  // Neither constituent judged a warning (reconstructed samples are lossy and
+  // order-less), so the merge must not resurrect one from the aggregate.
+  expect(merged?.warning).toBeUndefined();
+});
+
+test('merge carries a warning only when a constituent run judged one', () => {
+  const stats = {
+    count: 4,
+    p50Ms: 2_600,
+    p95Ms: 2_800,
+    maxMs: 2_800,
+    slowThresholdMs: 1_500,
+    platform: 'ios',
+  } as const;
+
+  const merged = mergeSnapshotDiagnostics([
+    { stats: { ...stats } },
+    { stats: { ...stats }, warning: 'Warning: ios snapshots are slow in this run: …' },
+  ]);
+
+  expect(merged?.warning).toContain('snapshots are slow in this run');
 });

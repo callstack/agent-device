@@ -467,8 +467,12 @@ test('test aggregates snapshot diagnostics from replay session samples', async (
       maxMs: 1_900,
       platform: 'android',
     },
-    warning: expect.stringContaining('p95 1900ms over 2 captures'),
   });
+  // Neither single-capture run had enough warm samples to judge slowness, so
+  // the merged suite report must not resurrect a warning from the aggregate.
+  expect(
+    (data.snapshotDiagnostics as Record<string, unknown> | undefined)?.warning,
+  ).toBeUndefined();
   expect((data.tests as Array<Record<string, unknown>>)[1]?.snapshotDiagnostics).toMatchObject({
     stats: {
       count: 1,
@@ -516,14 +520,18 @@ test('test aggregates snapshot diagnostics from failed replay session samples', 
 
   const data = expectOkData(response);
   expect(data.failed).toBe(1);
+  // A single capture is indistinguishable from a cold start — diagnostics are
+  // reported without a slow-run warning.
   expect(data.snapshotDiagnostics).toMatchObject({
     stats: {
       count: 1,
       p95Ms: 2_100,
       platform: 'android',
     },
-    warning: expect.stringContaining('p95 2100ms over 1 captures'),
   });
+  expect(
+    (data.snapshotDiagnostics as Record<string, unknown> | undefined)?.warning,
+  ).toBeUndefined();
   expect((data.tests as Array<Record<string, unknown>>)[0]).toMatchObject({
     status: 'failed',
     snapshotDiagnostics: {

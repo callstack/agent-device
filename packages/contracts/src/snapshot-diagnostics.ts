@@ -5,7 +5,7 @@ import { isRecord } from './json.ts';
 const SLOW_SNAPSHOT_P95_WARNING_MS = 1_500;
 
 /** Warm captures needed before chronic slowness is distinguishable from noise. */
-const MIN_WARNING_SAMPLE_COUNT = 3;
+const MIN_WARM_SAMPLE_COUNT = 3;
 
 export type SnapshotTimingSample = {
   durationMs: number;
@@ -50,37 +50,21 @@ export function summarizeSnapshotDiagnostics(
 ): SnapshotDiagnosticsSummary | undefined {
   const samples = session?.snapshotDiagnostics?.samples;
   if (!samples || samples.length === 0) return undefined;
-  const stats = buildSnapshotTimingStats(samples);
-  // The session's FIRST capture folds one-time startup (runner launch, helper
-  // install) into its duration, and nearest-rank p95 over a small run equals
-  // its largest one or two samples — together they made a single cold start
-  // read as "device degraded" with restart-inviting hints. The warning judges
-  // only warm captures, and only once there are enough to mean anything; the
-  // displayed stats still cover every sample.
-  const warmSamples = samples.slice(1);
-  const warmStats =
-    warmSamples.length >= MIN_WARNING_SAMPLE_COUNT
-      ? buildSnapshotTimingStats(warmSamples)
-      : undefined;
-  return {
-    stats,
-    ...(warmStats && warmStats.p95Ms >= SLOW_SNAPSHOT_P95_WARNING_MS
-      ? { warning: formatSlowSnapshotWarning(warmStats) }
-      : {}),
-  };
+  return summarizeSnapshotTimingSamples(samples);
 }
 
 export function summarizeSnapshotTimingSamples(
   samples: SnapshotTimingSample[],
 ): SnapshotDiagnosticsSummary | undefined {
   if (samples.length === 0) return undefined;
-  const stats = buildSnapshotTimingStats(samples);
-  return {
-    stats,
-    ...(stats.p95Ms >= SLOW_SNAPSHOT_P95_WARNING_MS
-      ? { warning: formatSlowSnapshotWarning(stats) }
-      : {}),
-  };
+  // The first capture folds one-time startup (runner launch, helper install)
+  // into its duration, and nearest-rank p95 over a small sample set is just
+  // its max — so the warning judges warm captures only, and only once enough
+  // exist to mean anything. Displayed stats still cover every sample.
+  const warm = samples.slice(1);
+  const judged =
+    warm.length >= MIN_WARM_SAMPLE_COUNT ? buildSnapshotTimingStats(warm) : undefined;
+  return toSummary(buildSnapshotTimingStats(samples), judged);
 }
 
 export function mergeSnapshotDiagnostics(
@@ -89,10 +73,26 @@ export function mergeSnapshotDiagnostics(
   const samples = summaries.flatMap((summary) => samplesFromStats(summary?.stats));
   if (samples.length === 0) return undefined;
   const stats = buildSnapshotTimingStats(samples);
+  // Reconstructed samples are lossy and order-less (a run's cold start comes
+  // back as both its p95 and its max), so only layers holding ordered live
+  // samples judge slowness; merge aggregates display stats and carries a
+  // warning only when a constituent run judged one itself.
   return {
     stats,
-    ...(stats.p95Ms >= SLOW_SNAPSHOT_P95_WARNING_MS
+    ...(summaries.some((summary) => summary?.warning)
       ? { warning: formatSlowSnapshotWarning(stats) }
+      : {}),
+  };
+}
+
+function toSummary(
+  stats: SnapshotTimingStats,
+  judged: SnapshotTimingStats | undefined,
+): SnapshotDiagnosticsSummary {
+  return {
+    stats,
+    ...(judged && judged.p95Ms >= SLOW_SNAPSHOT_P95_WARNING_MS
+      ? { warning: formatSlowSnapshotWarning(judged) }
       : {}),
   };
 }
