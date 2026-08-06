@@ -10,13 +10,18 @@ import { formatRecordTraceExecFailure } from '../record-trace-errors.ts';
 import { errorResponse } from './response.ts';
 import { deriveAndroidChunkOutPath } from './record-trace-android-chunks.ts';
 import {
+  androidRemoteFileExists,
+  checkRecoverableAndroidScreenrecord,
+  findLiveAndroidScreenrecordByPath,
+  type AndroidScreenrecordProbe,
+} from './record-trace-android-liveness.ts';
+import {
   androidRecoveryMetadataPathForRemotePath,
   androidRecoveryMetadataPaths,
   buildAndroidRecoveryManifest,
   buildAndroidRecoveryPendingManifest,
   buildAndroidRecoveryRotatingManifest,
   parseAndroidRecoveryManifest,
-  parseRecoverableAndroidScreenrecord,
   type AndroidRecordingRecoveryChunk,
   type AndroidRecordingRecoveryManifest,
   type AndroidRecordingRecoveryMetadata,
@@ -30,7 +35,6 @@ const ANDROID_RECOVERY_FINISHED_WARNING =
   'Recovered Android recording after daemon restart from durable device manifest; the screenrecord process was no longer running, so the MP4 may be truncated.';
 const ANDROID_RECOVERY_ROTATION_WARNING =
   'Recovered Android recording from an interrupted chunk rotation; returning chunks known to be safely owned by the durable manifest.';
-const ANDROID_RECOVERY_MANIFEST_STAT_SIZE_BYTES = 1;
 const ANDROID_RECOVERY_PROBE_TIMEOUT_MS = 5_000;
 
 type AndroidDevice = SessionState['device'];
@@ -58,8 +62,6 @@ type AndroidRecoveryResolution =
   | { kind: 'live'; manifest: AndroidRecordingRecoveryCandidate }
   | { kind: 'stale' }
   | { kind: 'uncertain' };
-type AndroidScreenrecordProbe = AndroidRecordingRecoveryMetadata | 'uncertain' | undefined;
-
 type AndroidRecoveryManifestScan = {
   live: AndroidRecordingRecoveryCandidate[];
   uncertain: AndroidRecordingRecoveryManifest[];
@@ -270,110 +272,6 @@ function liveAndroidRecoveryCandidate(params: {
       ...(recoveryWarning ? { recoveryWarning } : {}),
     },
   };
-}
-
-async function checkRecoverableAndroidScreenrecord(
-  deviceId: string,
-  metadata: AndroidRecordingRecoveryMetadata,
-): Promise<'live' | 'stale' | 'uncertain' | 'finished'> {
-  const result = await runAndroidRecoveryAdb(
-    deviceId,
-    ['shell', 'ps', '-o', 'pid=,args=', '-p', metadata.remotePid],
-    {
-      allowFailure: true,
-      timeoutMs: ANDROID_RECOVERY_PROBE_TIMEOUT_MS,
-    },
-  );
-  if (result.exitCode !== 0) {
-    // toybox `ps -p <missing-pid>` exits non-zero with no output at all — the normal signature
-    // of an exited process, not an adb failure (transport failures leave stderr and exec-layer
-    // timeouts throw before this branch). Corroborate with the full process list so a healthy
-    // device recovers the finished recording while a broken transport stays uncertain.
-    if (result.stdout.trim().length === 0 && result.stderr.trim().length === 0) {
-      return await resolveExitedAndroidScreenrecord(deviceId, metadata);
-    }
-    emitDiagnostic({
-      level: 'debug',
-      phase: 'record_stop_android_recovery_metadata_probe_uncertain',
-      data: {
-        deviceId,
-        remotePid: metadata.remotePid,
-        remotePath: metadata.remotePath,
-        exitCode: result.exitCode,
-        stdout: result.stdout.trim(),
-        stderr: result.stderr.trim(),
-      },
-    });
-    return 'uncertain';
-  }
-  const lines = result.stdout.split(/\r?\n/);
-  const pidLine = lines
-    .map((line) => line.trim())
-    .find((line) => line.startsWith(metadata.remotePid));
-  const matched = lines
-    .map(parseRecoverableAndroidScreenrecord)
-    .some(
-      (candidate) =>
-        candidate?.remotePid === metadata.remotePid && candidate.remotePath === metadata.remotePath,
-    );
-  if (matched) {
-    return 'live';
-  }
-  if (pidLine?.includes('screenrecord')) return 'uncertain';
-  if (pidLine) return 'stale';
-  return (await androidRemoteFileExists(deviceId, metadata.remotePath)) ? 'finished' : 'stale';
-}
-
-async function resolveExitedAndroidScreenrecord(
-  deviceId: string,
-  metadata: AndroidRecordingRecoveryMetadata,
-): Promise<'live' | 'stale' | 'uncertain' | 'finished'> {
-  const listed = await findLiveAndroidScreenrecordByPath(deviceId, metadata.remotePath);
-  if (listed === 'uncertain') {
-    return 'uncertain';
-  }
-  if (listed) {
-    return listed.remotePid === metadata.remotePid ? 'live' : 'uncertain';
-  }
-  return (await androidRemoteFileExists(deviceId, metadata.remotePath)) ? 'finished' : 'stale';
-}
-
-async function findLiveAndroidScreenrecordByPath(
-  deviceId: string,
-  remotePath: string,
-): Promise<AndroidRecordingRecoveryMetadata | 'uncertain' | undefined> {
-  const result = await runAndroidRecoveryAdb(deviceId, ['shell', 'ps', '-A', '-o', 'pid=,args='], {
-    allowFailure: true,
-    timeoutMs: ANDROID_RECOVERY_PROBE_TIMEOUT_MS,
-  });
-  if (result.exitCode !== 0) {
-    emitDiagnostic({
-      level: 'debug',
-      phase: 'record_stop_android_recovery_ps_failed',
-      data: {
-        deviceId,
-        remotePath,
-        exitCode: result.exitCode,
-        stdout: result.stdout.trim(),
-        stderr: result.stderr.trim(),
-      },
-    });
-    return 'uncertain';
-  }
-
-  return result.stdout
-    .split(/\r?\n/)
-    .map(parseRecoverableAndroidScreenrecord)
-    .find((match): match is NonNullable<typeof match> => match?.remotePath === remotePath);
-}
-
-async function androidRemoteFileExists(deviceId: string, remotePath: string): Promise<boolean> {
-  const result = await runAndroidRecoveryAdb(deviceId, ['shell', 'stat', '-c', '%s', remotePath], {
-    allowFailure: true,
-    timeoutMs: ANDROID_RECOVERY_PROBE_TIMEOUT_MS,
-  });
-  const size = result.exitCode === 0 ? Number(result.stdout.trim()) : NaN;
-  return Number.isFinite(size) && size >= ANDROID_RECOVERY_MANIFEST_STAT_SIZE_BYTES;
 }
 
 function chunksThroughRemotePath(

@@ -13,17 +13,18 @@ import {
   assertRpcOk,
 } from './assertions.ts';
 import { PROVIDER_SCENARIO_ANDROID } from './fixtures.ts';
-import {
-  restoreEnv,
-  createProviderScenarioHarness,
-  likelyPlayableMp4Container,
-  withProviderScenarioTempDir,
-} from './harness.ts';
+import { createProviderScenarioHarness, withProviderScenarioTempDir } from './harness.ts';
 import { ANDROID_RECORDING_CONTRACT_EVIDENCE } from './android-recording.coverage.ts';
-
-type ProviderScenarioDaemon = Awaited<ReturnType<typeof createProviderScenarioHarness>>;
-type ProviderScenarioRpcResult = Awaited<ReturnType<ProviderScenarioDaemon['callCommand']>>;
-type PullCall = { remotePath: string; localPath: string };
+import {
+  androidAdbResult,
+  buildAndroidRecordingManifest,
+  stopAndroidRecording,
+  withAndroidProviderScenarioEnv,
+  writePlayableMp4,
+  type ProviderScenarioDaemon,
+  type ProviderScenarioRpcResult,
+  type PullCall,
+} from './android-recording-fixtures.ts';
 
 test(ANDROID_RECORDING_CONTRACT_EVIDENCE.testName, async () => {
   await withProviderScenarioTempDir(
@@ -38,13 +39,6 @@ test('Provider-backed integration Android record stop recovers missing daemon re
     runAndroidManifestRecoveryScenario,
   );
 });
-
-test('Provider-backed integration Android record stop retries the pull until in-place moov finalization lands', async () => {
-  await withProviderScenarioTempDir(
-    'agent-device-provider-scenario-android-record-finalize-race-',
-    runAndroidRemoteFinalizeRaceScenario,
-  );
-}, 15_000);
 
 test('Provider-backed integration Android record stop recovers cwd-scoped durable manifest', async () => {
   await withProviderScenarioTempDir(
@@ -258,13 +252,6 @@ test('Provider-backed integration Android record stop recovers while another dev
   );
 });
 
-test('Provider-backed integration Android record stop recovers finished recording after dead-pid probe', async () => {
-  await withProviderScenarioTempDir(
-    'agent-device-provider-scenario-android-record-dead-pid-recovery-',
-    runAndroidDeadPidRecoveryScenario,
-  );
-});
-
 test('Provider-backed integration Android record stop keeps valid metadata on uncertain liveness probe', async () => {
   await withProviderScenarioTempDir(
     'agent-device-provider-scenario-android-record-uncertain-metadata-',
@@ -313,64 +300,6 @@ async function runAndroidManifestRecoveryScenario(tmpDir: string): Promise<void>
       assertAndroidManifestRecovery(recordStop, { ...context, recordingPath, remotePath });
     } finally {
       await context.daemon.close();
-    }
-  });
-}
-
-async function runAndroidRemoteFinalizeRaceScenario(tmpDir: string): Promise<void> {
-  const remotePath = '/sdcard/agent-device-recording-523456789.mp4';
-  const recordingPath = path.join(tmpDir, 'finalize-race.mp4');
-  const recordingSize = 3232;
-  const streamingBytes = unfinalizedMp4Container(recordingSize);
-  const finalizedBytes = finalizedMp4Container(recordingSize);
-  // screenrecord finalizes by patching a front-reserved moov in place: the size never changes,
-  // only the content does, so the copy path must detect finalization from re-pulled bytes.
-  assert.equal(streamingBytes.length, finalizedBytes.length);
-  const manifest = buildAndroidRecordingManifest({
-    outPath: recordingPath,
-    remotePath,
-    sessionName: 'default',
-  });
-  let pullCount = 0;
-  const adbProvider: AndroidAdbProvider = {
-    exec: async (args) => {
-      const command = args.join(' ');
-      if (command === 'shell cat /sdcard/agent-device-recording-active.json') {
-        return { stdout: JSON.stringify(manifest), stderr: '', exitCode: 0 };
-      }
-      if (command === 'shell ps -o pid=,args= -p 4321') {
-        return {
-          stdout: `4321 screenrecord --bit-rate 8000000 ${remotePath}\n`,
-          stderr: '',
-          exitCode: 0,
-        };
-      }
-      return androidAdbResult(args);
-    },
-    pull: async (from, to) => {
-      pullCount += 1;
-      assert.equal(from, remotePath);
-      // Finalization lands after the second pull, past the first retry delay — inside the
-      // 1-3s window observed live on a loaded emulator.
-      fs.writeFileSync(to, pullCount <= 2 ? streamingBytes : finalizedBytes);
-      return { stdout: '', stderr: '', exitCode: 0 };
-    },
-  };
-  const daemon = await createProviderScenarioHarness({
-    androidAdbProvider: () => adbProvider,
-    deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
-  });
-
-  await withAndroidProviderScenarioEnv(tmpDir, async () => {
-    try {
-      const recordStop = await stopAndroidRecording(daemon, recordingPath);
-      const data = assertRpcOk<{ recording?: unknown; outPath?: unknown }>(recordStop);
-      assert.equal(data.recording, 'stopped');
-      assert.equal(data.outPath, recordingPath);
-      assert.equal(pullCount, 3);
-      assert.equal(fs.existsSync(recordingPath), true);
-    } finally {
-      await daemon.close();
     }
   });
 }
@@ -846,16 +775,6 @@ async function createAndroidSingleManifestRecoveryContext(options: {
   return { adbCalls, pullCalls, daemon };
 }
 
-async function stopAndroidRecording(
-  daemon: ProviderScenarioDaemon,
-  outPath?: string,
-): Promise<ProviderScenarioRpcResult> {
-  return await daemon.callCommand('record', outPath ? ['stop', outPath] : ['stop'], {
-    platform: 'android',
-    serial: PROVIDER_SCENARIO_ANDROID.id,
-  });
-}
-
 function assertAndroidManifestRecovery(
   recordStop: ProviderScenarioRpcResult,
   context: {
@@ -1231,68 +1150,6 @@ async function runAndroidDeviceMismatchManifestScenario(tmpDir: string): Promise
   }
 }
 
-async function runAndroidDeadPidRecoveryScenario(tmpDir: string): Promise<void> {
-  const adbCalls: string[][] = [];
-  const pullCalls: PullCall[] = [];
-  const remotePath = '/sdcard/agent-device-recording-623456789.mp4';
-  const recordingPath = path.join(tmpDir, 'dead-pid-recovered.mp4');
-  const manifest = buildAndroidRecordingManifest({
-    outPath: recordingPath,
-    remotePath,
-    sessionName: 'default',
-  });
-  const daemon = await createProviderScenarioHarness({
-    androidAdbProvider: () => ({
-      exec: async (args) => {
-        adbCalls.push([...args]);
-        const command = args.join(' ');
-        if (command === 'shell cat /sdcard/agent-device-recording-active.json') {
-          return { stdout: JSON.stringify(manifest), stderr: '', exitCode: 0 };
-        }
-        // toybox signature for a pid that no longer exists: exit 1, no output at all.
-        if (command === 'shell ps -o pid=,args= -p 4321') {
-          return { stdout: '', stderr: '', exitCode: 1 };
-        }
-        // The device is otherwise responsive: the full listing succeeds and shows no
-        // screenrecord, and the finalized remote MP4 is present.
-        if (command === 'shell ps -A -o pid=,args=') {
-          return { stdout: '1 init\n', stderr: '', exitCode: 0 };
-        }
-        return androidAdbResult(args);
-      },
-      pull: async (from, to) => {
-        pullCalls.push({ remotePath: from, localPath: to });
-        writePlayableMp4(to);
-        return { stdout: '', stderr: '', exitCode: 0 };
-      },
-    }),
-    deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
-  });
-
-  await withAndroidProviderScenarioEnv(tmpDir, async () => {
-    try {
-      const recordStop = await stopAndroidRecording(daemon, recordingPath);
-      const data = assertRpcOk<{ recording?: unknown; outPath?: unknown; warning?: unknown }>(
-        recordStop,
-      );
-      assert.equal(data.recording, 'stopped');
-      assert.equal(data.outPath, recordingPath);
-      assert.match(String(data.warning), /durable device manifest/);
-      assert.match(String(data.warning), /no longer running/);
-      assert.deepEqual(pullCalls, [{ remotePath, localPath: recordingPath }]);
-      assert.equal(fs.existsSync(recordingPath), true);
-      assertCommandCall(adbCalls, [
-        'shell',
-        'rm',
-        '-f',
-        '/sdcard/agent-device-recording-active.json',
-      ]);
-    } finally {
-      await daemon.close();
-    }
-  });
-}
-
 async function runAndroidUncertainMetadataScenario(tmpDir: string): Promise<void> {
   const adbCalls: string[][] = [];
   const remotePath = '/sdcard/agent-device-recording-123456789.mp4';
@@ -1423,22 +1280,6 @@ function assertAndroidSessionlessRecording(adbCalls: string[][], logPath: string
     false,
   );
   assert.deepEqual(readLoggedArgs(logPath), []);
-}
-
-async function withAndroidProviderScenarioEnv(
-  tmpDir: string,
-  runScenario: () => Promise<void>,
-): Promise<void> {
-  const previousPath = process.env.PATH;
-  const previousSwiftCacheDir = process.env.AGENT_DEVICE_SWIFT_CACHE_DIR;
-  process.env.PATH = tmpDir;
-  process.env.AGENT_DEVICE_SWIFT_CACHE_DIR = path.join(tmpDir, 'swift-cache');
-  try {
-    await runScenario();
-  } finally {
-    restoreEnv('PATH', previousPath);
-    restoreEnv('AGENT_DEVICE_SWIFT_CACHE_DIR', previousSwiftCacheDir);
-  }
 }
 
 function createPullingAndroidProvider(params: {
@@ -1606,107 +1447,8 @@ function androidRecoveryAdbResult(
   return androidAdbResult(args);
 }
 
-type AndroidRecordingManifestFixtureOptions = {
-  outPath: string;
-  remotePath: string;
-  sessionName: string;
-  sessionScope?: { kind: 'cwd'; id: string };
-  status?: 'pending' | 'live' | 'rotating';
-  pendingRemotePath?: string;
-  pendingRemotePid?: string;
-  remotePid?: string;
-  startedAt?: number;
-  chunks?: Array<{ index: number; path: string; remotePath: string }>;
-};
-
-function buildAndroidRecordingManifest(options: AndroidRecordingManifestFixtureOptions) {
-  const startedAt = options.startedAt ?? 123456789;
-  const status = options.status ?? 'live';
-  return {
-    version: 1,
-    sessionName: options.sessionName,
-    sessionScope: options.sessionScope,
-    recordingId: `recording-${startedAt}`,
-    deviceId: PROVIDER_SCENARIO_ANDROID.id,
-    startedAt,
-    outPath: options.outPath,
-    showTouches: true,
-    exportQuality: 'medium',
-    current: buildAndroidRecordingManifestCurrent(options, startedAt, status),
-    pending: buildAndroidRecordingManifestPending(options, status),
-    pendingRemotePid: options.pendingRemotePid ?? (status === 'rotating' ? '4322' : '4321'),
-    chunks: buildAndroidRecordingManifestChunks(options),
-  };
-}
-
-function buildAndroidRecordingManifestCurrent(
-  options: AndroidRecordingManifestFixtureOptions,
-  startedAt: number,
-  status: 'pending' | 'live' | 'rotating',
-) {
-  if (status === 'pending') return undefined;
-  return {
-    remotePath: options.remotePath,
-    remotePid: options.remotePid ?? '4321',
-    startedAt,
-  };
-}
-
-function buildAndroidRecordingManifestPending(
-  options: AndroidRecordingManifestFixtureOptions,
-  status: 'pending' | 'live' | 'rotating',
-) {
-  return status === 'pending' || status === 'rotating'
-    ? { remotePath: options.pendingRemotePath ?? options.remotePath }
-    : undefined;
-}
-
-function buildAndroidRecordingManifestChunks(options: AndroidRecordingManifestFixtureOptions) {
-  return (
-    options.chunks ?? [
-      {
-        index: 1,
-        path: options.outPath,
-        remotePath: options.remotePath,
-      },
-    ]
-  );
-}
-
 function hashScopeRoot(scopeRoot: string): string {
   return crypto.createHash('sha256').update(scopeRoot).digest('hex').slice(0, 16);
-}
-
-function androidAdbResult(args: string[]): {
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-  stdoutBuffer?: Buffer;
-} {
-  const command = args.join(' ');
-  if (command === 'shell getprop sys.boot_completed') {
-    return { stdout: '1\n', stderr: '', exitCode: 0 };
-  }
-  if (isAndroidScreenrecordStartCommand(command)) {
-    return { stdout: '4321\n', stderr: '', exitCode: 0 };
-  }
-  if (/^shell stat -c %s \/sdcard\/agent-device-recording-\d+\.mp4$/.test(command)) {
-    return { stdout: '2048\n', stderr: '', exitCode: 0 };
-  }
-  if (args[0] === 'pull' && typeof args[2] === 'string') {
-    writePlayableMp4(args[2]);
-    return { stdout: '', stderr: '', exitCode: 0 };
-  }
-  if (command === 'shell ps -o pid= -p 4321') {
-    return { stdout: '', stderr: '', exitCode: 1 };
-  }
-  return { stdout: '', stderr: '', exitCode: 0 };
-}
-
-function isAndroidScreenrecordStartCommand(command: string): boolean {
-  return /^shell screenrecord --bit-rate (?:8000000|20000000) \/sdcard\/agent-device-recording-\d+\.mp4 >\/dev\/null 2>&1 & echo \$!$/.test(
-    command,
-  );
 }
 
 function isAndroidHighQualityScreenrecordStartCommand(command: string): boolean {
@@ -1731,34 +1473,4 @@ function readLoggedArgs(logPath: string): string[] {
 }
 
 // A screenrecord capture pulled mid-finalization: the moov space is still a `free` placeholder.
-function unfinalizedMp4Container(totalSize: number): Buffer {
-  return mp4WithMoovSlot('free', totalSize);
-}
-
 // The same capture after screenrecord patched the reserved slot into a real moov atom.
-function finalizedMp4Container(totalSize: number): Buffer {
-  return mp4WithMoovSlot('moov', totalSize);
-}
-
-function mp4WithMoovSlot(slotType: 'free' | 'moov', totalSize: number): Buffer {
-  const ftyp = mp4Atom('ftyp', Buffer.from('isom0000isom', 'latin1'));
-  const slot = mp4Atom(slotType, Buffer.alloc(1024));
-  const mdat = mp4Atom('mdat', Buffer.alloc(totalSize - ftyp.length - slot.length - 8));
-  return Buffer.concat([ftyp, slot, mdat]);
-}
-
-function mp4Atom(type: string, payload: Buffer): Buffer {
-  const header = Buffer.alloc(8);
-  header.writeUInt32BE(8 + payload.length, 0);
-  header.write(type, 4, 4, 'latin1');
-  return Buffer.concat([header, payload]);
-}
-
-function writePlayableMp4(filePath: string): void {
-  const fixturePath = path.join(process.cwd(), 'website/docs/public/agent-device-contacts.mp4');
-  if (fs.existsSync(fixturePath)) {
-    fs.copyFileSync(fixturePath, filePath);
-    return;
-  }
-  fs.writeFileSync(filePath, likelyPlayableMp4Container());
-}
