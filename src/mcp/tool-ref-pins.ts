@@ -130,8 +130,9 @@ function mergeCommandResult(
  * MERGE-ONLY update rule: refs present in the issuing response move to its
  * generation; absent refs keep their older pins (an old pin on a replaced
  * tree is exactly what makes the daemon warn). A ref-issuing response WITHOUT
- * a `refsGeneration` (older daemon, find with no ref match) clears the whole
- * scope — never guess.
+ * a `refsGeneration` (older remote daemon, find with no ref match) clears the
+ * whole scope — never guess. (A local daemon always matches the client
+ * version; see the version-skew invariant in CONTEXT.md.)
  */
 type SnapshotPinView = {
   refsGeneration?: number;
