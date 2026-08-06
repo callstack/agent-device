@@ -332,6 +332,39 @@ export function haveIdenticalDiscriminatingSurfaces(
   return true;
 }
 
+/**
+ * Why `haveIdenticalDiscriminatingSurfaces` said no, in counts a diagnostics
+ * reader can aggregate. #1620 spent weeks unable to tell a cross-backend pair
+ * from capture drift from real movement, because a withheld no-effect claim
+ * looks identical to a gesture that simply worked: one-sided keys are
+ * membership drift (depth truncation, capture composition), `rectMismatched`
+ * is movement. Emitted on the accept-stale veto path so the distinction is
+ * readable from a `--debug` run instead of re-derived from absence.
+ */
+export function summarizeDiscriminatingSurfaceDivergence(
+  baseline: InteractionSurfaceSignature,
+  current: InteractionSurfaceSignature,
+): { onlyInBaseline: number; onlyInCurrent: number; rectMismatched: number; shared: number } {
+  const currentByKey = new Map(
+    current.filter((entry) => entry.discriminating).map((entry) => [entry.key, entry]),
+  );
+  let onlyInBaseline = 0;
+  let rectMismatched = 0;
+  let shared = 0;
+  for (const entry of baseline) {
+    if (!entry.discriminating) continue;
+    const other = currentByKey.get(entry.key);
+    if (!other) {
+      onlyInBaseline += 1;
+      continue;
+    }
+    currentByKey.delete(entry.key);
+    shared += 1;
+    if (!rectsWithinTolerance(entry, other)) rectMismatched += 1;
+  }
+  return { onlyInBaseline, onlyInCurrent: currentByKey.size, rectMismatched, shared };
+}
+
 function supportsInteractionOutcomePolicy(session: SessionState): boolean {
   return isMobilePlatform(session.device);
 }

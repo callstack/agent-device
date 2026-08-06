@@ -8,7 +8,6 @@ import {
   capturePostGestureStabilizedResult,
   markDeferredInteractionOutcome,
 } from '../deferred-interaction-outcome.ts';
-import { formatGestureNoEffectWarning } from '../gesture-no-effect.ts';
 import type { SessionState } from '../types.ts';
 import {
   chromeWithListSnapshot,
@@ -20,8 +19,10 @@ import {
 } from './post-gesture-stabilization-fixtures.ts';
 
 // Pure verdict/classifier coverage (decidePostGestureStabilityVerdict) lives
-// in the sibling post-gesture-stabilization-verdict.test.ts — split per
-// #1563 review to stay under the repo's 500-line test-file tripwire.
+// in the sibling post-gesture-stabilization-verdict.test.ts, and the
+// agent-facing no-effect claim (corroboration, vetoes, warning wording) in
+// post-gesture-no-effect-claim.test.ts — split by subject per #1563 review to
+// stay under the repo's 500-line test-file tripwire.
 
 afterEach(() => {
   vi.useRealTimers();
@@ -123,7 +124,10 @@ test('markPostGestureStabilization tolerates a missing pre-gesture snapshot on i
 
   markPostGestureStabilization(session, 'scroll');
 
-  assert.deepEqual(session.postGestureStabilization?.baselineSignature, []);
+  // "No usable baseline" has exactly one representation: the field is absent,
+  // so nothing downstream ever has to distinguish `undefined` from `[]` — and
+  // the loop cannot rebase a baseline that was never really there.
+  assert.equal(session.postGestureStabilization?.baselineSignature, undefined);
 });
 
 // ---------------------------------------------------------------------------
@@ -208,65 +212,6 @@ test('a replaced list under fixed chrome now settles outright, and still claims 
 
   assert.equal(staleAccepts, 0);
   assert.equal(result.gestureNoEffect, undefined);
-});
-
-test('scope drift accepts stale but is vetoed from claiming no-effect (#1601 P1 gate)', async () => {
-  // #1601's full-surface gate stays load-bearing, and #1569 makes it more so.
-  // The classifier treats a one-sided difference as scope drift rather than
-  // movement, so a narrower quiet capture of an unmoved screen still reaches
-  // accept-stale — and the agent-facing claim must not follow it there, because
-  // the missing rows are unexamined, not proven absent.
-  vi.useFakeTimers();
-  const session = makeSession('ios');
-  session.snapshot = chromeWithListSnapshot(['row-1', 'row-2']);
-  markPostGestureStabilization(session, 'scroll');
-
-  // Same screen, but the quiet captures see only the chrome — the shape a
-  // broad baseline followed by an interactive-only capture produces.
-  const narrowed = makeSnapshotState(
-    chromeWithListSnapshot(['row-1', 'row-2']).nodes.filter(
-      (node) => node.type !== 'Cell',
-    ) as never,
-  );
-  const capture = vi.fn(async () => narrowed);
-
-  const resultPromise = withDiagnosticsScope({}, async () => {
-    const result = await capturePostGestureStabilizedResult({
-      session,
-      capture,
-      readSnapshot: (snapshot) => snapshot,
-    });
-    return {
-      result,
-      staleAccepts: countDiagnosticEventsByPhase(['post_gesture_snapshot_stale_accept']),
-    };
-  });
-
-  await vi.advanceTimersByTimeAsync(10_000);
-  const { result, staleAccepts } = await resultPromise;
-
-  assert.equal(staleAccepts, 1);
-  assert.equal(result.gestureNoEffect, undefined);
-});
-
-test('formatGestureNoEffectWarning names the gesture and the raw-drag escape hatch', () => {
-  // Positionals echo verbatim: the warning names the gesture the agent issued,
-  // and `scroll down 1` is what they issued.
-  const scrollWarning = formatGestureNoEffectWarning('scroll', ['down', '1']);
-  assert.match(scrollWarning, /scroll down 1 produced no visible change/);
-  assert.match(scrollWarning, /swipe x1 y1 x2 y2/);
-  assert.match(scrollWarning, /already at its edge/);
-
-  const gestureWarning = formatGestureNoEffectWarning('gesture', ['swipe', 'left']);
-  assert.match(gestureWarning, /gesture swipe left produced no visible change/);
-
-  const bareWarning = formatGestureNoEffectWarning('swipe', []);
-  assert.match(bareWarning, /swipe produced no visible change/);
-
-  // The regression the deleted heuristic caused: every positional of a swipe is
-  // a coordinate, so "drop anything numeric-looking" left a contentless "swipe".
-  const swipeWarning = formatGestureNoEffectWarning('swipe', ['10', '20', '30', '40']);
-  assert.match(swipeWarning, /^swipe 10 20 30 40 produced no visible change/);
 });
 
 test('capturePostGestureStabilizedResult trusts a quiet signature once content genuinely differs from the baseline (iOS)', async () => {

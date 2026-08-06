@@ -22,6 +22,7 @@ import {
   emitInteractionSettleTimeout,
   getActivePendingInteractionOutcome,
   haveIdenticalDiscriminatingSurfaces,
+  summarizeDiscriminatingSurfaceDivergence,
   markPendingInteractionOutcome,
   retryPendingInteractionOutcome,
 } from './interaction-outcome-policy.ts';
@@ -98,17 +99,23 @@ function markPostGestureStabilization(
 ): void {
   if (!supportsPostGestureStabilization(session.device)) return;
   if (!isPostGestureStabilizingAction(action, positionals, flags)) return;
+  // No extra capture: `session.snapshot` is still whatever was captured
+  // before this gesture dispatched (this call happens post-dispatch,
+  // pre-capture — the same "last known pre-action snapshot" idiom
+  // `markPendingInteractionOutcome` already relies on). Like that sibling, an
+  // empty signature is never stored: "no usable baseline" has exactly one
+  // representation (absent), so no consumer has to tell `undefined` from `[]`
+  // — and the loop cannot rebase a baseline that was never really there.
+  const baselineSignature = requiresPostGestureBaselineDistrust(session.device)
+    ? buildInteractionSurfaceSignature(session.snapshot?.nodes ?? [])
+    : undefined;
   session.postGestureStabilization = {
     action,
     positionals,
     markedAt: Date.now(),
-    // No extra capture: `session.snapshot` is still whatever was captured
-    // before this gesture dispatched (this call happens post-dispatch,
-    // pre-capture — the same "last known pre-action snapshot" idiom
-    // `markPendingInteractionOutcome` already relies on).
-    ...(requiresPostGestureBaselineDistrust(session.device)
+    ...(baselineSignature?.length
       ? {
-          baselineSignature: buildInteractionSurfaceSignature(session.snapshot?.nodes ?? []),
+          baselineSignature,
           // Recorded so the loop can tell a comparable quiet capture from one
           // served by a different backend, which is not comparable at all.
           baselineBackend: session.snapshot?.snapshotQuality?.backend,
@@ -339,6 +346,7 @@ export async function capturePostGestureStabilizedResult<T>(params: {
       signaturesStable: areInteractionSurfaceSignaturesStable,
       classifyBaselineEvidence: classifyBaselineSurfaceEvidence,
       surfacesIdentical: haveIdenticalDiscriminatingSurfaces,
+      summarizeDivergence: summarizeDiscriminatingSurfaceDivergence,
     },
   });
   clearPostGestureStabilization(session);

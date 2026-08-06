@@ -52,6 +52,8 @@ export type PostGestureStabilityHooks<T, S extends readonly unknown[]> = {
   classifyBaselineEvidence: (baseline: S, quiet: S) => BaselineSurfaceEvidence;
   /** Full-surface both-direction agreement — the no-effect corroboration bar. */
   surfacesIdentical: (baseline: S, current: S) => boolean;
+  /** Why `surfacesIdentical` said no, for the veto diagnostic. */
+  summarizeDivergence: (baseline: S, current: S) => Record<string, number>;
 };
 
 export type PostGestureStabilityOutcome<T> = {
@@ -108,6 +110,7 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
   let previous = await captureSurface(hooks, params.initial);
   let baselineSignature = pending.baselineSignature;
   let baselineBackend = pending.baselineBackend;
+  let baselineRebased = false;
   // Extended past STABILIZATION_DEADLINE_MS only when the distrust verdict
   // fires below; the ordinary (non-distrust) timeout path is unaffected.
   let effectiveDeadlineMs = STABILIZATION_DEADLINE_MS;
@@ -131,6 +134,7 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
         });
         baselineSignature = current.signature;
         baselineBackend = current.backend;
+        baselineRebased = true;
         previous = current;
         continue;
       }
@@ -148,7 +152,7 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
         continue;
       }
       emitSettleDiagnostic(verdict, pending.action, attempts, elapsedMs);
-      return buildAcceptedOutcome(verdict, pending, current, hooks);
+      return buildAcceptedOutcome(verdict, pending, current, hooks, baselineRebased);
     }
     previous = current;
   }
@@ -206,23 +210,49 @@ function emitSettleDiagnostic(
  * baseline — deliberately NOT a mid-loop rebased one, so a backend flip can
  * never launder a cross-backend pair into a no-effect claim. The verdict
  * alone is subset-tolerant (#1601 review P1).
+ *
+ * A veto here is invisible from the outside: the response looks exactly like
+ * a gesture that worked. #1620 could not tell the two apart on live hostile
+ * screens, so every veto on an accept-stale verdict records WHY — a rebase
+ * (the pair is cross-backend) or the divergence counts that failed set
+ * equality.
  */
 function buildAcceptedOutcome<T, S extends readonly unknown[]>(
   verdict: 'trust' | 'accept-stale',
   pending: PostGestureStabilityPending<S>,
   current: CapturedSurface<T, S>,
   hooks: PostGestureStabilityHooks<T, S>,
+  baselineRebased: boolean,
 ): PostGestureStabilityOutcome<T> {
-  const corroborated =
-    verdict === 'accept-stale' &&
-    pending.baselineSignature !== undefined &&
-    hooks.surfacesIdentical(pending.baselineSignature, current.signature);
-  if (!corroborated) return { value: current.value };
-  return {
-    value: current.value,
-    gestureNoEffect: {
+  if (verdict !== 'accept-stale') return { value: current.value };
+  const baselineSignature = pending.baselineSignature;
+  if (
+    baselineSignature !== undefined &&
+    hooks.surfacesIdentical(baselineSignature, current.signature)
+  ) {
+    return {
+      value: current.value,
+      gestureNoEffect: {
+        action: pending.action,
+        positionals: pending.positionals,
+      },
+    };
+  }
+  emitDiagnostic({
+    level: 'info',
+    phase: 'post_gesture_no_effect_vetoed',
+    data: {
       action: pending.action,
-      positionals: pending.positionals,
+      backend: current.backend,
+      ...(baselineRebased
+        ? { reason: 'baseline_rebased' }
+        : {
+            reason: 'surface_divergence',
+            ...(baselineSignature === undefined
+              ? {}
+              : hooks.summarizeDivergence(baselineSignature, current.signature)),
+          }),
     },
-  };
+  });
+  return { value: current.value };
 }
