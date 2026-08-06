@@ -1,3 +1,4 @@
+import type { CliFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
 import { mergeDefinedFlags } from '../../utils/merge-flags.ts';
 import {
@@ -6,7 +7,6 @@ import {
   getCommandSchema,
   getFlagDefinition,
   getFlagDefinitions,
-  type CliFlags,
   type FlagDefinition,
   type FlagKey,
 } from '../../cli-schema/command-schema.ts';

@@ -1,4 +1,3 @@
-import type { CliFlags } from '@agent-device/contracts/command';
 import type { CliCommandName } from '../command-catalog.ts';
 import { listCommandMetadata } from '../commands/command-metadata.ts';
 import type { CommandSchema } from './types.ts';
@@ -11,7 +10,7 @@ import {
 import { type FlagDefinition, type FlagKey } from '../commands/cli-grammar/flag-types.ts';
 import { AppError } from '@agent-device/kernel/errors';
 
-export type { CliFlags, FlagDefinition, FlagKey };
+export type { FlagDefinition, FlagKey };
 export type { CommandSchema };
 export { getFlagDefinition, getFlagDefinitions, GLOBAL_FLAG_KEYS };
 
