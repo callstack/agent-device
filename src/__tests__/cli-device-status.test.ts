@@ -6,33 +6,9 @@ import { readCurrentOwnerIdentity } from '../utils/owner-identity.ts';
 import { runCliCapture } from './cli-capture.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
-// readProcessStartTime shells out to `ps` with a 1s timeout (see
-// utils/host-process.ts). This file's fixtures read our own start time once
-// to build a "live" claim, then production re-reads it during classification
-// to confirm identity; under full-suite CPU contention that second `ps` call
-// can miss its deadline and return null, mismatching the cached value and
-// flipping a genuinely-live claim to 'owner-process-dead'. Cache our own
-// pid's start time after the first (real) read so every later read is
-// self-consistent with the fixtures instead of racing a fresh `ps` call.
-// isProcessAlive is left real (a plain `kill(pid, 0)` syscall, not a
-// subprocess), so the fabricated-dead-pid fixtures below still classify as
-// stale through that real, non-flaky check.
-vi.mock('../utils/host-process.ts', async () => {
-  const actual = await vi.importActual<typeof import('../utils/host-process.ts')>(
-    '../utils/host-process.ts',
-  );
-  let cachedOwnStartTime: string | null | undefined;
-  return {
-    ...actual,
-    readProcessStartTime: (pid: number) => {
-      if (pid !== process.pid) return null;
-      if (cachedOwnStartTime === undefined) {
-        cachedOwnStartTime = actual.readProcessStartTime(process.pid);
-      }
-      return cachedOwnStartTime;
-    },
-  };
-});
+vi.mock('../utils/host-process.ts', async (importOriginal) =>
+  (await import('./test-utils/host-process-mock.ts')).pinOwnProcessStartTime(importOriginal),
+);
 
 test('device status is daemonless and does not send a daemon request', async () => {
   const result = await runCliCapture(['device', 'status', '--json']);
