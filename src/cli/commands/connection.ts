@@ -43,6 +43,7 @@ import {
   presentConnectReadiness,
   renderConnectSuccess,
   serializeConnectionState,
+  type PreviousLeaseReleaseNotice,
   type RuntimePreparationNotice,
 } from './connection-presentation.ts';
 
@@ -81,14 +82,20 @@ export const connectCommand: ClientCommandHandler = async ({ positionals, flags,
     remoteConfigPath: resolved.remoteConfigPath,
   });
   writeRemoteConnectionState({ stateDir, state });
-  await cleanupForcedPreviousConnection(client, stateDir, connectFlags, context.previous);
+  const previousLeaseNotice = await cleanupForcedPreviousConnection(
+    client,
+    stateDir,
+    connectFlags,
+    context.previous,
+    state.daemon?.baseUrl,
+  );
   const runtimePreparation = buildRuntimePreparationNotice(connectFlags, state);
   const readiness = presentConnectReadiness(state, verification);
 
   writeCommandOutput(
     connectFlags,
-    serializeConnectionState({ state, runtimePreparation, readiness }),
-    () => renderConnectSuccess({ state, runtimePreparation, readiness }),
+    serializeConnectionState({ state, runtimePreparation, readiness, previousLeaseNotice }),
+    () => renderConnectSuccess({ state, runtimePreparation, readiness, previousLeaseNotice }),
   );
   return true;
 };
@@ -240,11 +247,17 @@ async function cleanupForcedPreviousConnection(
   stateDir: string,
   flags: CliFlags,
   previous: RemoteConnectionState | null,
-): Promise<void> {
-  if (!previous || !flags.force) return;
+  nextDaemonBaseUrl: string | undefined,
+): Promise<PreviousLeaseReleaseNotice | undefined> {
+  if (!previous || !flags.force) return undefined;
   await stopMetroCleanup(previous.metro);
   await stopReactDevtoolsCleanup({ stateDir, state: previous });
-  await releasePreviousLease(client, previous, flags.daemonAuthToken);
+  return await releasePreviousLease(client, previous, {
+    nextDaemonBaseUrl,
+    ambientDaemonAuthToken: flags.daemonAuthToken,
+    cwd: process.cwd(),
+    env: process.env,
+  });
 }
 
 function readRemoteConfigConnectionMetadata(

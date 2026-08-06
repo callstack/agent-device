@@ -1881,7 +1881,16 @@ test('connect --force stops replaced Metro companion after state is updated', as
   const stateDir = path.join(tempRoot, '.state');
   const oldRemoteConfigPath = path.join(tempRoot, 'old-remote.json');
   const newRemoteConfigPath = path.join(tempRoot, 'new-remote.json');
-  fs.writeFileSync(oldRemoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://old.example' }));
+  fs.writeFileSync(
+    oldRemoteConfigPath,
+    JSON.stringify({
+      daemonBaseUrl: 'https://old.example',
+      // Recoverable from the previous connection's own profile (plan 007
+      // rule 1) so the forced release authenticates against old.example with
+      // its own credential, not the new connection's.
+      daemonAuthToken: 'test-old-not-a-real-token',
+    }),
+  );
   fs.writeFileSync(newRemoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://new.example' }));
   writeRemoteConnectionState({
     stateDir,
@@ -1920,6 +1929,7 @@ test('connect --force stops replaced Metro companion after state is updated', as
         stateDir,
         remoteConfig: newRemoteConfigPath,
         daemonBaseUrl: 'https://new.example',
+        daemonAuthToken: 'test-new-not-a-real-token',
         tenant: 'acme',
         runId: 'run-new',
         session: 'adc-android',
@@ -1942,6 +1952,7 @@ test('connect --force stops replaced Metro companion after state is updated', as
   assert.equal(releaseRequest?.leaseId, 'lease-old');
   assert.equal(releaseRequest?.daemonBaseUrl, 'https://old.example');
   assert.equal(releaseRequest?.daemonTransport, 'http');
+  assert.equal(releaseRequest?.daemonAuthToken, 'test-old-not-a-real-token');
   assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-android' })?.runId, 'run-new');
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
@@ -1951,7 +1962,13 @@ test('connect --force without a session replaces the active generated connection
   const stateDir = path.join(tempRoot, '.state');
   const oldRemoteConfigPath = path.join(tempRoot, 'old-remote.json');
   const newRemoteConfigPath = path.join(tempRoot, 'new-remote.json');
-  fs.writeFileSync(oldRemoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://old.example' }));
+  fs.writeFileSync(
+    oldRemoteConfigPath,
+    JSON.stringify({
+      daemonBaseUrl: 'https://old.example',
+      daemonAuthToken: 'test-old-not-a-real-token',
+    }),
+  );
   fs.writeFileSync(newRemoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://new.example' }));
   writeRemoteConnectionState({
     stateDir,
@@ -1990,6 +2007,7 @@ test('connect --force without a session replaces the active generated connection
         stateDir,
         remoteConfig: newRemoteConfigPath,
         daemonBaseUrl: 'https://new.example',
+        daemonAuthToken: 'test-new-not-a-real-token',
         tenant: 'acme',
         runId: 'run-new',
         platform: 'android',
@@ -2012,6 +2030,7 @@ test('connect --force without a session replaces the active generated connection
   assert.equal(activeState?.runId, 'run-new');
   assert.equal(activeState?.remoteConfigPath, newRemoteConfigPath);
   assert.equal(releaseRequest?.leaseId, 'lease-old');
+  assert.equal(releaseRequest?.daemonAuthToken, 'test-old-not-a-real-token');
   assert.deepEqual(vi.mocked(stopMetroCompanion).mock.calls[0]?.[0], {
     projectRoot: '/tmp/old-project',
     profileKey: oldRemoteConfigPath,
@@ -2019,6 +2038,191 @@ test('connect --force without a session replaces the active generated connection
   });
   assert.equal(storedSessions.length, 1);
 
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test("connect --force releases the previous lease with the previous connection's own token, not the new one", async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connect-force-prev-token-');
+  const stateDir = path.join(tempRoot, '.state');
+  const oldRemoteConfigPath = path.join(tempRoot, 'old-remote.json');
+  const newRemoteConfigPath = path.join(tempRoot, 'new-remote.json');
+  fs.writeFileSync(
+    oldRemoteConfigPath,
+    JSON.stringify({
+      daemonBaseUrl: 'https://old.example',
+      // Token A: belongs to the previous (old) connection's own profile.
+      daemonAuthToken: 'test-old-not-a-real-token',
+    }),
+  );
+  fs.writeFileSync(newRemoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://new.example' }));
+  writeRemoteConnectionState({
+    stateDir,
+    state: {
+      version: 1,
+      session: 'adc-android',
+      remoteConfigPath: oldRemoteConfigPath,
+      remoteConfigHash: hashRemoteConfigFile(oldRemoteConfigPath),
+      tenant: 'acme',
+      runId: 'run-old',
+      leaseId: 'lease-old',
+      leaseBackend: 'android-instance',
+      daemon: { baseUrl: 'https://old.example' },
+      connectedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  });
+  let releaseRequest: Parameters<AgentDeviceClient['leases']['release']>[0] | undefined;
+
+  await captureStdout(async () => {
+    await connectCommand({
+      positionals: [],
+      flags: {
+        json: true,
+        help: false,
+        version: false,
+        force: true,
+        stateDir,
+        remoteConfig: newRemoteConfigPath,
+        daemonBaseUrl: 'https://new.example',
+        // Token B: the new connection's credential; must never reach old.example.
+        daemonAuthToken: 'test-new-not-a-real-token',
+        tenant: 'acme',
+        runId: 'run-new',
+        session: 'adc-android',
+        platform: 'android',
+      },
+      client: createTestClient({
+        release: async (request) => {
+          releaseRequest = request;
+          return { released: true };
+        },
+      }),
+    });
+  });
+
+  assert.equal(releaseRequest?.leaseId, 'lease-old');
+  assert.equal(releaseRequest?.daemonBaseUrl, 'https://old.example');
+  assert.equal(releaseRequest?.daemonAuthToken, 'test-old-not-a-real-token');
+  assert.notEqual(releaseRequest?.daemonAuthToken, 'test-new-not-a-real-token');
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('connect --force skips releasing the previous lease when its token cannot be recovered and the endpoint differs', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connect-force-unreleasable-');
+  const stateDir = path.join(tempRoot, '.state');
+  const oldRemoteConfigPath = path.join(tempRoot, 'old-remote.json');
+  const newRemoteConfigPath = path.join(tempRoot, 'new-remote.json');
+  // No daemonAuthToken in the previous connection's own profile: its
+  // credential cannot be recovered, and the new endpoint differs.
+  fs.writeFileSync(oldRemoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://old.example' }));
+  fs.writeFileSync(newRemoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://new.example' }));
+  writeRemoteConnectionState({
+    stateDir,
+    state: {
+      version: 1,
+      session: 'adc-android',
+      remoteConfigPath: oldRemoteConfigPath,
+      remoteConfigHash: hashRemoteConfigFile(oldRemoteConfigPath),
+      tenant: 'acme',
+      runId: 'run-old',
+      leaseId: 'lease-old',
+      leaseBackend: 'android-instance',
+      daemon: { baseUrl: 'https://old.example' },
+      connectedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  });
+  let releaseCalled = false;
+
+  const stdout = await captureStdout(async () => {
+    await connectCommand({
+      positionals: [],
+      flags: {
+        json: false,
+        help: false,
+        version: false,
+        force: true,
+        stateDir,
+        remoteConfig: newRemoteConfigPath,
+        daemonBaseUrl: 'https://new.example',
+        daemonAuthToken: 'test-new-not-a-real-token',
+        tenant: 'acme',
+        runId: 'run-new',
+        session: 'adc-android',
+        platform: 'android',
+      },
+      client: createTestClient({
+        release: async () => {
+          releaseCalled = true;
+          return { released: true };
+        },
+      }),
+    });
+  });
+
+  assert.equal(releaseCalled, false);
+  assert.match(stdout, /Could not release the previous lease lease-old/);
+  assert.match(stdout, /tenant acme, run run-old/);
+  assert.match(stdout, /old\.example/);
+  // Reconnect still succeeds despite the orphaned previous lease.
+  assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-android' })?.runId, 'run-new');
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('connect --force reuses the ambient token to release the previous lease when the endpoint is unchanged', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connect-force-same-endpoint-');
+  const stateDir = path.join(tempRoot, '.state');
+  const remoteConfigPath = path.join(tempRoot, 'remote.json');
+  // No daemonAuthToken on the profile itself: the ambient flag is the only
+  // source, matching an ordinary same-profile --force reconnect.
+  fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
+  writeRemoteConnectionState({
+    stateDir,
+    state: {
+      version: 1,
+      session: 'adc-android',
+      remoteConfigPath,
+      remoteConfigHash: hashRemoteConfigFile(remoteConfigPath),
+      tenant: 'acme',
+      runId: 'run-old',
+      leaseId: 'lease-old',
+      leaseBackend: 'android-instance',
+      daemon: { baseUrl: 'https://daemon.example' },
+      connectedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  });
+  let releaseRequest: Parameters<AgentDeviceClient['leases']['release']>[0] | undefined;
+
+  await captureStdout(async () => {
+    await connectCommand({
+      positionals: [],
+      flags: {
+        json: true,
+        help: false,
+        version: false,
+        force: true,
+        stateDir,
+        remoteConfig: remoteConfigPath,
+        daemonBaseUrl: 'https://daemon.example',
+        daemonAuthToken: 'test-ambient-not-a-real-token',
+        tenant: 'acme',
+        runId: 'run-new',
+        session: 'adc-android',
+        platform: 'android',
+      },
+      client: createTestClient({
+        release: async (request) => {
+          releaseRequest = request;
+          return { released: true };
+        },
+      }),
+    });
+  });
+
+  assert.equal(releaseRequest?.leaseId, 'lease-old');
+  assert.equal(releaseRequest?.daemonBaseUrl, 'https://daemon.example');
+  assert.equal(releaseRequest?.daemonAuthToken, 'test-ambient-not-a-real-token');
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 

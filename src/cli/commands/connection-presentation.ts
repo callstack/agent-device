@@ -20,6 +20,11 @@ export type LeasePreparationNotice = {
   nextSteps: string[];
 };
 
+export type PreviousLeaseReleaseNotice = {
+  status: 'unreleased';
+  message: string;
+};
+
 export function buildLeasePreparationNotice(
   state: RemoteConnectionState,
   verification?: ConnectVerification,
@@ -77,14 +82,16 @@ export function renderConnectSuccess(options: {
   state: RemoteConnectionState;
   readiness?: ConnectReadiness;
   runtimePreparation?: RuntimePreparationNotice;
+  previousLeaseNotice?: PreviousLeaseReleaseNotice;
 }): string {
-  const { state, readiness, runtimePreparation } = options;
+  const { state, readiness, runtimePreparation, previousLeaseNotice } = options;
   if (!readiness) {
     const leasePreparation = buildLeasePreparationNotice(state);
     return [
       `Configured remote session "${state.session}" tenant "${state.tenant}" run "${state.runId}"${state.leaseId ? ` lease ${state.leaseId}` : ''}.`,
       leasePreparation?.message,
       runtimePreparation?.message,
+      previousLeaseNotice?.message,
     ]
       .filter((line): line is string => Boolean(line))
       .join('\n');
@@ -104,6 +111,7 @@ export function renderConnectSuccess(options: {
   lines.push(...readiness.nextSteps.map((step) => `  ${step}`));
   lines.push(...(readiness.notes ?? []));
   if (runtimePreparation) lines.push(runtimePreparation.message);
+  if (previousLeaseNotice) lines.push(previousLeaseNotice.message);
   return lines.join('\n');
 }
 
@@ -111,10 +119,10 @@ export function serializeConnectionState(options: {
   state: RemoteConnectionState;
   runtimePreparation?: RuntimePreparationNotice;
   readiness?: ConnectReadiness;
+  previousLeaseNotice?: PreviousLeaseReleaseNotice;
 }): Record<string, unknown> {
-  const { state, runtimePreparation, readiness } = options;
+  const { state, runtimePreparation, readiness, previousLeaseNotice } = options;
   const leasePreparation = buildLeasePreparationNotice(state, readiness);
-  const nextSteps = readiness?.nextSteps ?? leasePreparation?.nextSteps ?? [];
   return {
     connected: true,
     session: state.session,
@@ -129,31 +137,53 @@ export function serializeConnectionState(options: {
     remoteConfig: state.remoteConfigPath,
     remoteConfigHash: state.remoteConfigHash,
     daemonBaseUrlFingerprint: fingerprint(state.daemon?.baseUrl),
-    liveSession: {
-      status: state.leaseId ? 'created' : 'not-created',
-      ...(state.leaseId ? { leaseId: state.leaseId } : {}),
-    },
-    ...(readiness
-      ? {
-          verification: {
-            status: connectionVerificationStatus(readiness),
-            service: readiness.service,
-            message: readiness.verificationMessage,
-            ...(readiness.project ? { project: readiness.project } : {}),
-          },
-          ...(readiness.device ? { device: readiness.device } : {}),
-          ...(readiness.app ? { app: readiness.app } : {}),
-          nextSteps,
-          ...(readiness.notes ? { notes: readiness.notes } : {}),
-        }
-      : {}),
+    liveSession: buildLiveSessionField(state),
+    ...buildReadinessFields(readiness, leasePreparation),
     metro: state.metro
       ? { prepared: true, projectRoot: state.metro.projectRoot }
       : { prepared: false },
-    ...(leasePreparation ? { leasePreparation } : {}),
-    ...(runtimePreparation ? { runtimePreparation } : {}),
+    ...buildConnectionNoticeFields({ leasePreparation, runtimePreparation, previousLeaseNotice }),
     connectedAt: state.connectedAt,
     updatedAt: state.updatedAt,
+  };
+}
+
+function buildLiveSessionField(state: RemoteConnectionState): Record<string, unknown> {
+  return {
+    status: state.leaseId ? 'created' : 'not-created',
+    ...(state.leaseId ? { leaseId: state.leaseId } : {}),
+  };
+}
+
+function buildReadinessFields(
+  readiness: ConnectReadiness | undefined,
+  leasePreparation: LeasePreparationNotice | undefined,
+): Record<string, unknown> {
+  if (!readiness) return {};
+  return {
+    verification: {
+      status: connectionVerificationStatus(readiness),
+      service: readiness.service,
+      message: readiness.verificationMessage,
+      ...(readiness.project ? { project: readiness.project } : {}),
+    },
+    ...(readiness.device ? { device: readiness.device } : {}),
+    ...(readiness.app ? { app: readiness.app } : {}),
+    nextSteps: readiness.nextSteps ?? leasePreparation?.nextSteps ?? [],
+    ...(readiness.notes ? { notes: readiness.notes } : {}),
+  };
+}
+
+function buildConnectionNoticeFields(options: {
+  leasePreparation?: LeasePreparationNotice;
+  runtimePreparation?: RuntimePreparationNotice;
+  previousLeaseNotice?: PreviousLeaseReleaseNotice;
+}): Record<string, unknown> {
+  const { leasePreparation, runtimePreparation, previousLeaseNotice } = options;
+  return {
+    ...(leasePreparation ? { leasePreparation } : {}),
+    ...(runtimePreparation ? { runtimePreparation } : {}),
+    ...(previousLeaseNotice ? { previousLeaseNotice } : {}),
   };
 }
 

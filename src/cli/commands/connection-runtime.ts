@@ -32,6 +32,7 @@ import { readMetroPrepareKind } from '../../commands/metro/prepare-kind.ts';
 import { connectionProviderRequiresRemoteDaemon } from '../connection/provider-policy.ts';
 import { readCloudDeviceFeatureProfileFields } from '../connection/profile-fields.ts';
 import { isCloudWebDriverProviderName } from '@agent-device/provider-webdriver';
+import type { PreviousLeaseReleaseNotice } from './connection-presentation.ts';
 
 const leaseDeferredCommands = new Set([
   'artifacts',
@@ -504,17 +505,93 @@ export async function releaseRemoteConnectionLease(
   return result;
 }
 
+// A forced reconnect releases the *previous* connection's lease, which must be
+// authenticated against the *previous* endpoint's own credential — never the
+// new connection's token (that would send an unrelated endpoint's secret to
+// an endpoint it was never issued for). See plans/007 for the full rule.
+type PreviousLeaseAuthResolution =
+  | { canAuthenticate: true; daemonAuthToken?: string }
+  | { canAuthenticate: false };
+
+function resolvePreviousLeaseAuth(options: {
+  previous: RemoteConnectionState;
+  nextDaemonBaseUrl?: string;
+  ambientDaemonAuthToken?: string;
+  cwd: string;
+  env: Record<string, string | undefined>;
+}): PreviousLeaseAuthResolution {
+  const ownToken = resolvePreviousOwnDaemonAuthToken(options.previous, options.cwd, options.env);
+  if (ownToken) return { canAuthenticate: true, daemonAuthToken: ownToken };
+  if (options.previous.daemon?.baseUrl === options.nextDaemonBaseUrl) {
+    // Same endpoint: the ambient credential plausibly belongs to it too.
+    return { canAuthenticate: true, daemonAuthToken: options.ambientDaemonAuthToken };
+  }
+  return { canAuthenticate: false };
+}
+
+function resolvePreviousOwnDaemonAuthToken(
+  previous: RemoteConnectionState,
+  cwd: string,
+  env: Record<string, string | undefined>,
+): string | undefined {
+  try {
+    return resolveRemoteConfigProfile({
+      configPath: previous.remoteConfigPath,
+      cwd,
+      env,
+    }).profile.daemonAuthToken;
+  } catch {
+    // A missing/unparseable previous config is the "cannot authenticate"
+    // case handled by the caller, not an error to propagate here.
+    return undefined;
+  }
+}
+
 export async function releasePreviousLease(
   client: AgentDeviceClient,
   previous: RemoteConnectionState,
-  daemonAuthToken?: string,
-): Promise<void> {
-  if (!previous.leaseId) return;
-  try {
-    await releaseRemoteConnectionLease(client, previous, daemonAuthToken);
-  } catch {
-    // Reconnect must succeed even if the old lease was already released.
+  options: {
+    nextDaemonBaseUrl?: string;
+    ambientDaemonAuthToken?: string;
+    cwd: string;
+    env: Record<string, string | undefined>;
+  },
+): Promise<PreviousLeaseReleaseNotice | undefined> {
+  if (!previous.leaseId) return undefined;
+  const auth = resolvePreviousLeaseAuth({
+    previous,
+    nextDaemonBaseUrl: options.nextDaemonBaseUrl,
+    ambientDaemonAuthToken: options.ambientDaemonAuthToken,
+    cwd: options.cwd,
+    env: options.env,
+  });
+  if (!auth.canAuthenticate) {
+    return buildUnreleasedPreviousLeaseNotice(
+      previous,
+      'no credential known to belong to that endpoint was available',
+    );
   }
+  try {
+    await releaseRemoteConnectionLease(client, previous, auth.daemonAuthToken);
+    return undefined;
+  } catch {
+    // Reconnect must still succeed; surface the failure instead of hiding it.
+    return buildUnreleasedPreviousLeaseNotice(previous, 'the release request failed');
+  }
+}
+
+function buildUnreleasedPreviousLeaseNotice(
+  previous: RemoteConnectionState,
+  reason: string,
+): PreviousLeaseReleaseNotice {
+  return {
+    status: 'unreleased',
+    message:
+      `Could not release the previous lease ${previous.leaseId} ` +
+      `(tenant ${previous.tenant}, run ${previous.runId}) ` +
+      `at ${previous.daemon?.baseUrl ?? 'its daemon'}: ${reason}. ` +
+      'It was left in place — release it manually if it is still active.',
+  };
 }
 
 async function releaseAcquiredLeaseOnWriteFailure(
