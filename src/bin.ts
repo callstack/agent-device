@@ -1,3 +1,5 @@
+import { normalizeCliCommandAlias } from './commands/cli-command-aliases.ts';
+
 const argv = process.argv.slice(2);
 
 declare const __AGENT_DEVICE_VERSION__: string;
@@ -54,7 +56,7 @@ function runHelpFastPath(argv: string[]): boolean {
         process.stdout.write(`${buildUsageText()}\n`);
         return;
       }
-      const commandHelp = buildCommandUsageText(normalizeHelpTarget(helpTarget));
+      const commandHelp = buildCommandUsageText(normalizeCliCommandAlias(helpTarget));
       if (commandHelp) {
         process.stdout.write(commandHelp);
         return;
@@ -95,12 +97,6 @@ function resolveTrailingHelpTarget(
   helpArg: string | undefined,
 ): string | undefined {
   return isHelpFlag(helpArg) ? command : undefined;
-}
-
-function normalizeHelpTarget(command: string): string {
-  if (command === 'long-press') return 'longpress';
-  if (command === 'metrics') return 'perf';
-  return command;
 }
 
 function isHelpCommand(command: string | undefined): boolean {
