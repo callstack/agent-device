@@ -1052,6 +1052,41 @@ const UNDESCRIBED_TOOL_INPUTS = new Set([
   'wait.timeoutMs',
 ]);
 
+// Retired-input regressions run the REAL command route (no runCommand
+// injection): field projection used to silently drop the removed `maxSize`
+// key before the daemon writers could refuse it, returning native-size
+// success. The retired-field seam must refuse at projection, before any
+// client method or transport is reached.
+test('MCP screenshot refuses the removed maxSize input with migration guidance', async () => {
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+  });
+
+  const result = await executor.execute('screenshot', { maxSize: 1024 });
+
+  assert.equal(result.isError, true);
+  assert.match(result.content[0]?.text ?? '', /screenshot --max-size was removed; use --scale/);
+});
+
+test('MCP record refuses the removed maxSize input with migration guidance', async () => {
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+  });
+
+  const result = await executor.execute('record', { action: 'start', maxSize: 720 });
+
+  assert.equal(result.isError, true);
+  assert.match(result.content[0]?.text ?? '', /record --max-size was removed/);
+});
+
+test('MCP screenshot and record schemas do not advertise the retired maxSize input', () => {
+  for (const name of ['screenshot', 'record']) {
+    const tool = listCommandTools().find((candidate) => candidate.name === name);
+    assert.ok(tool);
+    assert.equal('maxSize' in (tool.inputSchema.properties ?? {}), false);
+  }
+});
+
 test('MCP tool inputs do not add undocumented properties', () => {
   const undescribed: string[] = [];
   for (const tool of listCommandTools()) {

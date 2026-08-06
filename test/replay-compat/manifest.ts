@@ -22,6 +22,7 @@ export const REPLAY_COMPAT_RELEASED_TAGS: readonly string[] = [
   'v0.16.0',
   'v0.16.8',
   'v0.20.0',
+  'v0.20.5',
 ];
 
 /**
@@ -49,6 +50,7 @@ export type ReplayCompatCoverage =
   | 'context-header'
   | 'env-vars'
   | 'quoting'
+  | 'retired-capture-size'
   | 'retired-gesture'
   | 'target-annotation'
   | 'wait-landmark';
@@ -395,5 +397,39 @@ export const REPLAY_COMPAT_CORPUS: ReplayCompatEntry[] = [
       hint: 'gesture swipe accepts 1 argument: preset (line 4). The trailing durationMs positional was removed: use "gesture swipe up", or gesture pan for timed movement.',
     },
     note: 'Pre-removal `gesture swipe` durationMs positional as the v0.16.8 recorder wrote it.',
+  },
+  {
+    id: 'docs/screenshot-max-size@v0.20.5',
+    file: 'scripts/docs/screenshot-max-size.v0.20.5.ad',
+    recordedBy: 'v0.20.5',
+    provenance: {
+      kind: 'derived',
+      from: 'packages/contracts/src/screenshot.ts@v0.20.5 (appendScreenshotScriptFlags emitted `--max-size <px>` on recorded screenshot lines)',
+      sha256: '1e575d82ae56e0a828a09d220459ae1aab3059076817f1f64dc3cef243f19889',
+    },
+    covers: ['context-header', 'wait-landmark', 'quoting', 'retired-capture-size'],
+    verdict: {
+      kind: 'fails',
+      code: 'INVALID_ARGS',
+      hint: 'screenshot --max-size was removed; use --scale <0.01-1> (or AGENT_DEVICE_SCREENSHOT_SCALE) to downscale proportionally',
+    },
+    note: 'Pre-removal screenshot `--max-size` flag as the v0.20.5 recorder wrote it. Sole witness of the screenshot sizing migration refusal; without it a parser change could silently demote the flag to ignored positionals and capture at native size.',
+  },
+  {
+    id: 'docs/record-max-size@v0.20.5',
+    file: 'scripts/docs/record-max-size.v0.20.5.ad',
+    recordedBy: 'v0.20.5',
+    provenance: {
+      kind: 'derived',
+      from: 'packages/ad-script/src/internal/script-utils.ts@v0.20.5 (appendRecordActionScriptArgs emitted `--max-size <px>` between `--fps` and `--quality`)',
+      sha256: '882b415a1eb03fedae22526fa48ab6a46cd796d6341aadb0fc783682e2844378',
+    },
+    covers: ['context-header', 'retired-capture-size'],
+    verdict: {
+      kind: 'fails',
+      code: 'INVALID_ARGS',
+      hint: 'record --max-size was removed; recordings capture at native resolution',
+    },
+    note: 'Pre-removal record `--max-size` flag in the full recorded flag order as the v0.20.5 recorder wrote it. Sole witness of the recording sizing migration refusal.',
   },
 ];

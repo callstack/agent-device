@@ -25,6 +25,7 @@ const REQUIRED_COVERAGE_KEYS: Record<ReplayCompatCoverage, true> = {
   'context-header': true,
   'env-vars': true,
   quoting: true,
+  'retired-capture-size': true,
   'retired-gesture': true,
   'target-annotation': true,
   'wait-landmark': true,

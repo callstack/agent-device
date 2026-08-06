@@ -2,6 +2,7 @@ import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { CaptureScreenshotOptions } from '@agent-device/contracts/client';
 import { SESSION_SURFACES } from '@agent-device/contracts/session';
 import {
+  RETIRED_SCREENSHOT_MAX_SIZE,
   SCREENSHOT_COMMAND_FLAG_KEYS,
   SCREENSHOT_SCALE_LIMITS,
   screenshotFlagsFromPublicOptions,
@@ -14,6 +15,7 @@ import {
   enumField,
   integerField,
   numberField,
+  retiredField,
   stringField,
 } from '../command-input.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
@@ -38,6 +40,7 @@ const screenshotCommandMetadata = defineFieldCommandMetadata(
     }),
     fullscreen: booleanField(),
     scale: numberField('Screenshot scale factor.', SCREENSHOT_SCALE_LIMITS),
+    maxSize: retiredField(RETIRED_SCREENSHOT_MAX_SIZE.migration.screenshot),
     stabilize: booleanField(),
     normalizeStatusBar: booleanField(),
     surface: enumField(SESSION_SURFACES),

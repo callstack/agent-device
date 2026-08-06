@@ -1,5 +1,8 @@
 import type { RecordOptions } from '@agent-device/contracts/client';
-import { validateNoRetiredScreenshotMaxSize } from '@agent-device/contracts/capture';
+import {
+  RETIRED_SCREENSHOT_MAX_SIZE,
+  validateNoRetiredScreenshotMaxSize,
+} from '@agent-device/contracts/capture';
 import {
   RECORDING_EXPORT_QUALITIES,
   RECORDING_SCOPE_VALUES,
@@ -14,6 +17,7 @@ import {
   enumField,
   integerField,
   requiredField,
+  retiredField,
   stringField,
 } from '../command-input.ts';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
@@ -36,6 +40,7 @@ export const recordCommandMetadata = defineFieldCommandMetadata(
     action: requiredField(enumField(RECORDING_ACTION_VALUES)),
     path: stringField(),
     fps: integerField(),
+    maxSize: retiredField(RETIRED_SCREENSHOT_MAX_SIZE.migration.record),
     quality: enumField(RECORDING_EXPORT_QUALITIES),
     hideTouches: booleanField(),
     recordingScope: enumField(RECORDING_SCOPE_VALUES),

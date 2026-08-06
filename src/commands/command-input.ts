@@ -141,6 +141,7 @@ export type CommandField<T> = {
   schema: JsonSchema;
   required: boolean;
   read: FieldReader<T>;
+  retired?: true;
 };
 
 export type CommandFieldMap = Record<string, CommandField<unknown>>;
@@ -170,6 +171,26 @@ export function requiredField<T>(
 
 export function stringField(description?: string): CommandField<string> {
   return optionalField(stringSchema(description), optionalString);
+}
+
+/**
+ * A released input key that was removed. Declared in the field map so the
+ * projection seam (`readFieldInput`) refuses it with migration guidance
+ * instead of silently dropping it; excluded from the JSON schema so tools no
+ * longer advertise it.
+ */
+export function retiredField(message: string): CommandField<never> {
+  return {
+    schema: { type: 'null' },
+    required: false,
+    retired: true,
+    read: (record, key) => {
+      if (Object.hasOwn(record, key)) {
+        throw new AppError('INVALID_ARGS', message);
+      }
+      return undefined;
+    },
+  };
 }
 
 export function numberField(
@@ -543,7 +564,11 @@ function integerSchemaWithBounds(
 }
 
 function fieldProperties(fields: CommandFieldMap): Record<string, JsonSchema> {
-  return Object.fromEntries(Object.entries(fields).map(([key, field]) => [key, field.schema]));
+  return Object.fromEntries(
+    Object.entries(fields)
+      .filter(([, field]) => !field.retired)
+      .map(([key, field]) => [key, field.schema]),
+  );
 }
 
 function requiredFieldNames(fields: CommandFieldMap): string[] {

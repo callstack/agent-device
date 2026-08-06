@@ -1,0 +1,7 @@
+context platform=ios
+
+open "Agent Device Tester" --relaunch
+record start "./capture.mp4" --fps 24 --max-size 1024 --quality high --hide-touches
+wait "Gesture lab" 30000
+record stop
+close
