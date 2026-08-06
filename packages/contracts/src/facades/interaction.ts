@@ -100,6 +100,7 @@ export type {
   ResolvedTarget,
   SelectorTarget,
   SettleDiffLine,
+  FindReadResult,
   SettleObservation,
   SettleParams,
   SettleTailEntry,

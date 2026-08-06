@@ -1,5 +1,6 @@
 import type { DaemonRequest } from './types.ts';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { FindReadResult } from '@agent-device/contracts/interaction';
 import { stripAndroidSystemChromeProvenanceFromNode } from '@agent-device/contracts/platform';
 import { SessionStore } from './session-store.ts';
 import { isInteractiveObservation } from './session-action-recorder.ts';
@@ -32,11 +33,9 @@ export function buildFindRecordResult(
   };
 }
 
-type DaemonFindResult =
-  | { kind: 'found'; waitedMs?: number }
-  | { kind: 'text'; ref: string; text: string; node: SnapshotNode }
-  | { kind: 'attrs'; ref: string; node: SnapshotNode }
-  | { kind: 'list'; matches: Array<{ ref: string; node: SnapshotNode }> };
+// The daemon consumes the engine's find result verbatim; the shape lives in
+// contracts (below both zones) per R2.
+type DaemonFindResult = FindReadResult;
 
 export function toDaemonFindData(result: DaemonFindResult): Record<string, unknown> {
   if (result.kind === 'found') {

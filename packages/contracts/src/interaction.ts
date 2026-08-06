@@ -180,6 +180,18 @@ export type SettleParams = {
   timeoutMs?: number;
 };
 
+/**
+ * The find read-action result, consumed verbatim on both sides of the
+ * daemon/engine boundary (R2: the shape lives below both zones — a daemon-side
+ * structural twin drifted into an identical clone before it moved here).
+ */
+export type FindReadResult =
+  | { kind: 'found'; found: true; waitedMs?: number }
+  | { kind: 'text'; ref: string; text: string; node: SnapshotNode }
+  | { kind: 'attrs'; ref: string; node: SnapshotNode }
+  /** #1625: the read-only inspection surface — every match, never a tap. */
+  | { kind: 'list'; matches: Array<{ ref: string; node: SnapshotNode }> };
+
 export type SettleObservation = {
   settled: boolean;
   waitedMs: number;

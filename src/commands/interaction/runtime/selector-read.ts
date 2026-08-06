@@ -16,6 +16,7 @@ import {
   type FindLocator,
 } from '@agent-device/selectors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { FindReadResult } from '@agent-device/contracts/interaction';
 import { isSparseSnapshotQualityVerdict } from '../../../snapshot/snapshot-quality.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -65,12 +66,7 @@ export type FindReadCommandOptions = CommandContext & {
   timeoutMs?: number;
 } & SelectorSnapshotOptions;
 
-export type FindReadCommandResult =
-  | { kind: 'found'; found: true; waitedMs?: number }
-  | { kind: 'text'; ref: string; text: string; node: SnapshotNode }
-  | { kind: 'attrs'; ref: string; node: SnapshotNode }
-  /** #1625: the read-only inspection surface — every match, never a tap. */
-  | { kind: 'list'; matches: Array<{ ref: string; node: SnapshotNode }> };
+export type FindReadCommandResult = FindReadResult;
 
 export type GetCommandOptions = CommandContext &
   SelectorSnapshotOptions & {

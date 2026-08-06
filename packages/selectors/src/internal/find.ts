@@ -204,6 +204,14 @@ export function checkFindArgs(
   return { ok: true, parsed };
 }
 
+/** Single-token actions carrying no extra arguments. */
+const BARE_FIND_ACTIONS = ['exists', 'list', 'click', 'focus'] as const;
+type BareFindAction = (typeof BARE_FIND_ACTIONS)[number];
+
+function isBareFindAction(action: string | undefined): action is BareFindAction {
+  return BARE_FIND_ACTIONS.includes(action as BareFindAction);
+}
+
 export function parseFindArgs(args: string[]): ParsedFindArgs {
   let locator: FindLocator = 'any';
   let queryIndex = 0;
@@ -217,31 +225,27 @@ export function parseFindArgs(args: string[]): ParsedFindArgs {
     return { locator, query, action: 'click' };
   }
   const action = normalizeFindActionToken(actionTokens[0]);
+  if (isBareFindAction(action)) return { locator, query, action };
   if (action === 'get') {
-    const sub = actionTokens[1]?.toLowerCase();
-    if (sub === 'text') return { locator, query, action: 'get_text' };
-    if (sub === 'attrs') return { locator, query, action: 'get_attrs' };
-    throw new AppError('INVALID_ARGS', 'find get only supports text or attrs');
+    return { locator, query, action: parseFindGetSubAction(actionTokens[1]) };
   }
   if (action === 'wait') {
     const timeoutMs = parseTimeout(actionTokens[1]);
     return { locator, query, action: 'wait', timeoutMs: timeoutMs ?? undefined };
   }
-  if (action === 'exists') return { locator, query, action: 'exists' };
-  if (action === 'list') return { locator, query, action: 'list' };
-  if (action === 'click') return { locator, query, action: 'click' };
-  if (action === 'focus') return { locator, query, action: 'focus' };
-  if (action === 'fill') {
-    const value = actionTokens.slice(1).join(' ');
-    return { locator, query, action: 'fill', value };
-  }
-  if (action === 'type') {
-    const value = actionTokens.slice(1).join(' ');
-    return { locator, query, action: 'type', value };
+  if (action === 'fill' || action === 'type') {
+    return { locator, query, action, value: actionTokens.slice(1).join(' ') };
   }
   throw new AppError('INVALID_ARGS', `Unsupported find action: ${actionTokens[0]}`, {
     hint: UNSUPPORTED_FIND_ACTION_HINT,
   });
+}
+
+function parseFindGetSubAction(token: string | undefined): 'get_text' | 'get_attrs' {
+  const sub = token?.toLowerCase();
+  if (sub === 'text') return 'get_text';
+  if (sub === 'attrs') return 'get_attrs';
+  throw new AppError('INVALID_ARGS', 'find get only supports text or attrs');
 }
 
 export function parseFindSelectorExpression(locator: FindLocator, query: string): string | null {
