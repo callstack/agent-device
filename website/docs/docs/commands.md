@@ -386,6 +386,7 @@ agent-device gesture transform 200 420 80 -40 2 35 700 # combined pan, zoom, and
 `fill` clears then types. `type` does not clear.
 `type` accepts text only. Do not pass `@ref` to `type`; use `fill @ref "text"` to target a field directly, or `press @ref` then `type "text"` to append in the focused field.
 If `type` reports `TEXT_INPUT_NOT_FOCUSED`, focus a visible text input and retry; when accessibility does not expose the input, use a coordinate focus command before typing.
+On iOS, if `type` reports `TEXT_INPUT_SYNTHESIS_UNAVAILABLE` while the software keyboard is hidden, show the software keyboard, then retry `type` or `fill`. The runner reports this error instead of risking partial input through an unreliable text-entry path.
 Use plain `fill` or `type` first for ordinary login and form fields. Use `--delay-ms` on `type` or `fill` only when a debounced search field or search-as-you-type input actually misses characters, or when the app must receive incremental updates.
 Delayed typing intentionally prefers paced character entry over clipboard-style fallbacks so the target field receives each incremental update.
 On Android, `fill` also verifies text and treats IME-owned capture as a terminal failure instead of retrying against the wrong field.
