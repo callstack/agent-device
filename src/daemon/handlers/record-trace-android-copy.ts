@@ -7,10 +7,11 @@ import { formatRecordTraceExecFailure } from '../record-trace-errors.ts';
 import type { SessionState } from '../types.ts';
 import type { RecordTraceDeps } from './record-trace-types.ts';
 
-const ANDROID_REMOTE_FILE_POLL_MS = 250;
-const ANDROID_REMOTE_FILE_ATTEMPTS = 20;
-const ANDROID_LOCAL_VIDEO_ATTEMPTS = 2;
-const ANDROID_LOCAL_VIDEO_RETRY_DELAY_MS = 750;
+// After `kill -2`, screenrecord needs 1-3s under load to finalize the MP4, and it does so by
+// patching a front-reserved moov in place — the remote file size never changes, so the only way
+// to observe finalization is to re-pull and validate. The escalating delays must outlast that
+// finalization window with margin.
+const ANDROID_LOCAL_VIDEO_RETRY_DELAYS_MS = [750, 1_500, 3_000];
 
 type AndroidRecording = Extract<NonNullable<SessionState['recording']>, { platform: 'android' }>;
 
@@ -42,7 +43,11 @@ async function copyAndroidRecordingWithValidation(params: {
   const { deps, deviceId, remotePath, outPath } = params;
   let lastCopyError: string | undefined;
 
-  for (let attempt = 0; attempt < ANDROID_LOCAL_VIDEO_ATTEMPTS; attempt += 1) {
+  for (let attempt = 0; attempt <= ANDROID_LOCAL_VIDEO_RETRY_DELAYS_MS.length; attempt += 1) {
+    const retryDelayMs = ANDROID_LOCAL_VIDEO_RETRY_DELAYS_MS[attempt - 1];
+    if (retryDelayMs !== undefined) {
+      await sleep(retryDelayMs);
+    }
     removeLocalRecordingCandidate(outPath);
 
     const device = androidDeviceForSerial(deviceId);
@@ -52,43 +57,36 @@ async function copyAndroidRecordingWithValidation(params: {
     });
     if (pullResult.exitCode !== 0) {
       lastCopyError = formatRecordTraceExecFailure(pullResult, 'adb pull');
-    } else {
-      await deps.waitForStableFile(outPath, {
-        pollMs: ANDROID_REMOTE_FILE_POLL_MS,
-        attempts: ANDROID_REMOTE_FILE_ATTEMPTS,
-      });
-      const playable = await deps.isPlayableVideo(outPath);
-      emitDiagnostic({
-        level: 'debug',
-        phase: 'record_stop_android_pull_validation',
-        data: {
-          deviceId,
-          remotePath,
-          outPath,
-          attempt: attempt + 1,
-          fileSize: readFileSize(outPath),
-          playable,
-        },
-      });
-      if (playable) {
-        return undefined;
-      }
-
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'record_stop_android_invalid_video_retry',
-        data: {
-          deviceId,
-          remotePath,
-          outPath,
-          attempt: attempt + 1,
-        },
-      });
+      continue;
     }
 
-    if (attempt < ANDROID_LOCAL_VIDEO_ATTEMPTS - 1) {
-      await sleep(ANDROID_LOCAL_VIDEO_RETRY_DELAY_MS);
+    const playable = await deps.isPlayableVideo(outPath);
+    emitDiagnostic({
+      level: 'debug',
+      phase: 'record_stop_android_pull_validation',
+      data: {
+        deviceId,
+        remotePath,
+        outPath,
+        attempt: attempt + 1,
+        fileSize: readFileSize(outPath),
+        playable,
+      },
+    });
+    if (playable) {
+      return undefined;
     }
+
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'record_stop_android_invalid_video_retry',
+      data: {
+        deviceId,
+        remotePath,
+        outPath,
+        attempt: attempt + 1,
+      },
+    });
   }
 
   if (lastCopyError) {

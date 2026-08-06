@@ -285,6 +285,13 @@ async function checkRecoverableAndroidScreenrecord(
     },
   );
   if (result.exitCode !== 0) {
+    // toybox `ps -p <missing-pid>` exits non-zero with no output at all — the normal signature
+    // of an exited process, not an adb failure (transport failures leave stderr and exec-layer
+    // timeouts throw before this branch). Corroborate with the full process list so a healthy
+    // device recovers the finished recording while a broken transport stays uncertain.
+    if (result.stdout.trim().length === 0 && result.stderr.trim().length === 0) {
+      return await resolveExitedAndroidScreenrecord(deviceId, metadata);
+    }
     emitDiagnostic({
       level: 'debug',
       phase: 'record_stop_android_recovery_metadata_probe_uncertain',
@@ -314,6 +321,20 @@ async function checkRecoverableAndroidScreenrecord(
   }
   if (pidLine?.includes('screenrecord')) return 'uncertain';
   if (pidLine) return 'stale';
+  return (await androidRemoteFileExists(deviceId, metadata.remotePath)) ? 'finished' : 'stale';
+}
+
+async function resolveExitedAndroidScreenrecord(
+  deviceId: string,
+  metadata: AndroidRecordingRecoveryMetadata,
+): Promise<'live' | 'stale' | 'uncertain' | 'finished'> {
+  const listed = await findLiveAndroidScreenrecordByPath(deviceId, metadata.remotePath);
+  if (listed === 'uncertain') {
+    return 'uncertain';
+  }
+  if (listed) {
+    return listed.remotePid === metadata.remotePid ? 'live' : 'uncertain';
+  }
   return (await androidRemoteFileExists(deviceId, metadata.remotePath)) ? 'finished' : 'stale';
 }
 

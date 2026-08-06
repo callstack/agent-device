@@ -4,6 +4,8 @@ import { runCmd } from './exec.ts';
 import { buildSwiftToolEnv, compileSwiftSourceText } from './swift-cache.ts';
 import { sleep } from './timeouts.ts';
 
+// Duration zero must pass: a recording of a fully static screen legitimately contains a single
+// frame (screenrecord only encodes on screen updates), and AVFoundation reports its duration as 0.
 const VIDEO_VALIDATION_SCRIPT = `
 import Foundation
 import AVFoundation
@@ -18,7 +20,7 @@ Task {
   do {
     let playable = try await asset.load(.isPlayable)
     let duration = try await asset.load(.duration)
-    if playable && duration.isValid && !duration.isIndefinite && CMTimeGetSeconds(duration) > 0 {
+    if playable && duration.isValid && !duration.isIndefinite {
       exitCode = 0
     }
   } catch {
@@ -64,6 +66,12 @@ export async function waitForStableFile(
 }
 
 export async function isPlayableVideo(filePath: string): Promise<boolean> {
+  // The moov sniff is the finalization oracle: screen recorders reserve moov space up front
+  // and patch it in place on stop, so a capture pulled too early has a `free` placeholder where
+  // the moov belongs — moov presence, not AVFoundation parseability, tells finalized apart.
+  if (!hasLikelyPlayableVideoContainer(filePath)) {
+    return false;
+  }
   try {
     const validatorPath = await getVideoValidatorExecutablePath();
     const result = await runCmd(validatorPath, [filePath], {
@@ -74,13 +82,10 @@ export async function isPlayableVideo(filePath: string): Promise<boolean> {
     if (result.exitCode === 0) {
       return true;
     }
-    if (isSwiftVideoValidatorUnavailable(result.stderr, result.stdout)) {
-      return hasLikelyPlayableVideoContainer(filePath);
-    }
-    return false;
+    return isSwiftVideoValidatorUnavailable(result.stderr, result.stdout);
   } catch (error) {
     if (isSwiftVideoValidatorError(error)) {
-      return hasLikelyPlayableVideoContainer(filePath);
+      return true;
     }
     throw error;
   }
