@@ -7,7 +7,12 @@ static NSString *const RunnerAXSnapshotOkKey = @"ok";
 static NSString *const RunnerAXSnapshotErrorKey = @"error";
 static NSString *const RunnerAXSnapshotRootKey = @"root";
 static NSString *const RunnerAXSnapshotTruncatedKey = @"truncated";
-static NSString *const RunnerAXSnapshotDeepExtensionKey = @"deepExtension";
+
+NSString *const RunnerAXSnapshotDeepExtensionKey = @"deepExtension";
+NSString *const RunnerAXSnapshotDeepExtensionCallsKey = @"calls";
+NSString *const RunnerAXSnapshotDeepExtensionNodesAddedKey = @"nodesAdded";
+NSString *const RunnerAXSnapshotDeepExtensionPendingKey = @"pendingFrontiers";
+NSString *const RunnerAXSnapshotDeepExtensionMissedKey = @"missedFrontiers";
 
 typedef id (*RunnerAXObjectMsgSend)(id, SEL);
 typedef NSInteger (*RunnerAXIntegerMsgSend)(id, SEL);
@@ -32,18 +37,7 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
 + (NSDictionary<NSString *, id> *)snapshotTreeForApplication:(XCUIApplication *)application
                                                     maxDepth:(NSInteger)maxDepth
                                                     maxNodes:(NSInteger)maxNodes
-{
-  return [self snapshotTreeForApplication:application
-                                 maxDepth:maxDepth
-                                 maxNodes:maxNodes
-                       deepExtensionCalls:0
-                                 deadline:nil];
-}
-
-+ (NSDictionary<NSString *, id> *)snapshotTreeForApplication:(XCUIApplication *)application
-                                                    maxDepth:(NSInteger)maxDepth
-                                                    maxNodes:(NSInteger)maxNodes
-                                          deepExtensionCalls:(NSInteger)deepExtensionCalls
+                                      deepExtensionCallLimit:(NSInteger)deepExtensionCallLimit
                                                     deadline:(nullable NSDate *)deadline
 {
   @try {
@@ -71,7 +65,10 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
 
     BOOL truncated = NO;
     NSInteger nodeCount = 0;
-    NSMutableArray<RunnerAXSnapshotFrontier *> *candidates = [NSMutableArray array];
+    // nil disables candidate collection entirely — exact --depth captures pay
+    // zero extension bookkeeping.
+    NSMutableArray<RunnerAXSnapshotFrontier *> *candidates =
+        deepExtensionCallLimit > 0 ? [NSMutableArray array] : nil;
     NSMutableDictionary *rootNode = [self dictionaryForSnapshot:root
                                                           depth:0
                                                        maxDepth:maxDepth
@@ -84,7 +81,7 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
     }
 
     NSMutableArray<RunnerAXSnapshotFrontier *> *frontiers =
-        [self cappedFrontiersFromCandidates:candidates maxDepth:maxDepth];
+        [self cappedFrontiersFromCandidates:candidates ?: @[] maxDepth:maxDepth];
     NSDictionary *deepExtension = [self extendSnapshotFrontiers:frontiers
                                                        axClient:axClient
                                                      attributes:attributes
@@ -92,7 +89,7 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
                                                        maxNodes:maxNodes
                                                       nodeCount:&nodeCount
                                                       truncated:&truncated
-                                                   callsAllowed:deepExtensionCalls
+                                                   callsAllowed:deepExtensionCallLimit
                                                        deadline:deadline];
 
     NSMutableDictionary *response = [NSMutableDictionary dictionaryWithDictionary:@{
@@ -130,6 +127,11 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
   }
   NSInteger callsUsed = 0;
   NSInteger nodesAdded = 0;
+  // A frontier whose live element vanished (list churn between serialization
+  // and extension) or whose re-rooted request failed leaves its subtree
+  // unresolved — it must count as missed, never as drained, or an all-miss
+  // extension would present a capped capture as complete.
+  NSInteger missedFrontiers = 0;
   while (frontiers.count > 0) {
     if (callsUsed >= callsAllowed || *nodeCount >= maxNodes
         || (nil != deadline && deadline.timeIntervalSinceNow <= 0)) {
@@ -140,6 +142,8 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
     [frontiers removeObjectAtIndex:0];
     id element = [self accessibilityElementForSnapshot:frontier.snapshot];
     if (nil == element) {
+      missedFrontiers += 1;
+      NSLog(@"AGENT_DEVICE_RUNNER_PRIVATE_AX_DEEP_EXTENSION_MISS=element unavailable");
       continue;
     }
     callsUsed += 1;
@@ -151,6 +155,7 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
                                         maxNodes:maxNodes - *nodeCount
                                            error:&error];
     if (nil == subRoot) {
+      missedFrontiers += 1;
       NSLog(@"AGENT_DEVICE_RUNNER_PRIVATE_AX_DEEP_EXTENSION_MISS=%@",
             error.localizedDescription ?: @"nil subtree");
       continue;
@@ -181,12 +186,13 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
     [frontiers addObjectsFromArray:[self cappedFrontiersFromCandidates:subCandidates
                                                               maxDepth:maxDepth]];
   }
-  NSLog(@"AGENT_DEVICE_RUNNER_PRIVATE_AX_DEEP_EXTENSION calls=%ld nodes=%ld pending=%ld",
-        (long)callsUsed, (long)nodesAdded, (long)frontiers.count);
+  NSLog(@"AGENT_DEVICE_RUNNER_PRIVATE_AX_DEEP_EXTENSION calls=%ld nodes=%ld pending=%ld missed=%ld",
+        (long)callsUsed, (long)nodesAdded, (long)frontiers.count, (long)missedFrontiers);
   return @{
-    @"calls": @(callsUsed),
-    @"nodesAdded": @(nodesAdded),
-    @"pendingFrontiers": @(frontiers.count),
+    RunnerAXSnapshotDeepExtensionCallsKey: @(callsUsed),
+    RunnerAXSnapshotDeepExtensionNodesAddedKey: @(nodesAdded),
+    RunnerAXSnapshotDeepExtensionPendingKey: @(frontiers.count),
+    RunnerAXSnapshotDeepExtensionMissedKey: @(missedFrontiers),
   };
 }
 
@@ -223,6 +229,14 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
 {
   SEL requestSelector = NSSelectorFromString(@"requestSnapshotForElement:attributes:parameters:error:");
   if (![axClient respondsToSelector:requestSelector]) {
+    if (NULL != error) {
+      *error = [NSError errorWithDomain:@"agent-device.runner"
+                                   code:1
+                               userInfo:@{
+                                 NSLocalizedDescriptionKey:
+                                     @"AX client does not support requestSnapshotForElement"
+                               }];
+    }
     return nil;
   }
   NSMutableDictionary *parameters = [NSMutableDictionary dictionary];
@@ -411,11 +425,13 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
       }
     }
   }
-  if (children.count == 0 && nil != frontiers) {
-    // Childless node: either a real leaf or a branch whose children the AX
-    // server withheld at its cap. The two are indistinguishable here, so all
-    // childless nodes become candidates; the caller keeps only the deepest
-    // observed level, where every capped branch necessarily ends.
+  if (children.count == 0 && nil != frontiers && depth >= maxDepth - 1) {
+    // Childless node at the cap boundary: either a real leaf or a branch whose
+    // children the AX server withheld. The two are indistinguishable here, so
+    // boundary childless nodes become candidates; the caller keeps only the
+    // deepest observed level, where every capped branch necessarily ends.
+    // Shallower childless nodes are provably real leaves and are never
+    // collected.
     RunnerAXSnapshotFrontier *frontier = [[RunnerAXSnapshotFrontier alloc] init];
     frontier.snapshot = snapshot;
     frontier.node = result;

@@ -7,7 +7,23 @@ extension RunnerTests {
   /// depth-capped Bluesky-class tree resolves in 1-3 chained requests (~100-300ms
   /// each); the bound exists so a pathological tree cannot stack requests past
   /// the capture-plan deadline, which is also enforced per call.
-  static let privateAXDeepExtensionCallLimit = 8
+  private static let privateAXDeepExtensionCallLimit = 8
+
+  /// A capture is depth-limited unless its frontier extension resolved every
+  /// capped node: frontiers left pending (budget/deadline) or missed (element
+  /// vanished, re-rooted request failed) mean subtrees are still absent, and
+  /// presenting such a capture as complete would hide exactly the content the
+  /// extension exists to recover. nil extension counts = extension never ran.
+  static func privateAXDepthLimited(
+    effectiveDepth: Int,
+    requestedDepth: Int,
+    pendingFrontiers: Int?,
+    missedFrontiers: Int?
+  ) -> Bool {
+    guard effectiveDepth < requestedDepth else { return false }
+    guard let pendingFrontiers, let missedFrontiers else { return true }
+    return pendingFrontiers > 0 || missedFrontiers > 0
+  }
   /// Deep React Native trees make the AX server reject bulk snapshot requests outright with
   /// kAXErrorIllegalArgument once the requested depth crosses a tree-size-dependent limit
   /// (observed between depth 56 and 64 on the Bluesky Home feed; the limit moves with live
@@ -70,15 +86,16 @@ extension RunnerTests {
   ) -> SnapshotBackendCapture? {
     #if os(iOS) && targetEnvironment(simulator)
       let requestedDepth = options.depth ?? 64
-      // An explicit --depth request is honored as asked; only default-depth captures consult
-      // (and feed) the accepted-depth memory.
+      // An explicit --depth request is honored as asked: no accepted-depth
+      // memory, no frontier extension past it.
+      let exactDepthRequested = options.depth != nil
       let rememberedDepth =
-        options.depth == nil
-        ? rememberedPrivateAXAcceptedDepth(
+        exactDepthRequested
+        ? nil
+        : rememberedPrivateAXAcceptedDepth(
           bundleId: currentBundleId,
           processIdentifier: currentAppProcessIdentifier
         )
-        : nil
       let attemptDepths = Self.privateAXAttemptDepths(
         requestedDepth: requestedDepth,
         rememberedDepth: rememberedDepth
@@ -98,8 +115,7 @@ extension RunnerTests {
           for: app,
           maxDepth: depth,
           maxNodes: Self.privateAXSnapshotMaxNodes,
-          // An explicit --depth request is a precise ask — no extension past it.
-          deepExtensionCalls: options.depth == nil ? Self.privateAXDeepExtensionCallLimit : 0,
+          deepExtensionCallLimit: exactDepthRequested ? 0 : Self.privateAXDeepExtensionCallLimit,
           deadline: deadline
         )
         if response["ok"] as? Bool == true {
@@ -120,7 +136,7 @@ extension RunnerTests {
       // Only a capture that actually descended records memory: a first-rung success on a
       // remembered depth deliberately does NOT refresh the TTL, so expiry re-probes the full
       // requested depth once per window instead of capping this screen class forever.
-      if options.depth == nil, effectiveDepth != attemptDepths.first {
+      if !exactDepthRequested, effectiveDepth != attemptDepths.first {
         rememberPrivateAXAcceptedDepth(
           bundleId: currentBundleId,
           processIdentifier: currentAppProcessIdentifier,
@@ -149,18 +165,22 @@ extension RunnerTests {
         return nil
       }
 
-      // A capture whose frontier extension drained every capped node is complete
-      // despite the per-request depth cap — reporting it as depth-limited would
-      // send agents chasing a --depth re-run that cannot add anything.
-      let deepExtension = response["deepExtension"] as? [String: Any]
-      let extensionDrained =
-        deepExtension != nil && (deepExtension?["pendingFrontiers"] as? Int ?? 1) == 0
-      let depthLimited = effectiveDepth < requestedDepth && !extensionDrained
+      // A capture whose frontier extension resolved every capped node is
+      // complete despite the per-request depth cap — reporting it as
+      // depth-limited would send agents chasing deeper content that is not
+      // there. Pending or missed frontiers keep the depth-limited verdict.
+      let deepExtension = response[RunnerAXSnapshotDeepExtensionKey] as? [String: Any]
+      let depthLimited = Self.privateAXDepthLimited(
+        effectiveDepth: effectiveDepth,
+        requestedDepth: requestedDepth,
+        pendingFrontiers: deepExtension?[RunnerAXSnapshotDeepExtensionPendingKey] as? Int,
+        missedFrontiers: deepExtension?[RunnerAXSnapshotDeepExtensionMissedKey] as? Int
+      )
       NSLog(
         "AGENT_DEVICE_RUNNER_PRIVATE_AX_SNAPSHOT_USED nodes=%ld depth=%ld extended=%ld",
         nodes.count,
         effectiveDepth,
-        deepExtension?["nodesAdded"] as? Int ?? 0
+        deepExtension?[RunnerAXSnapshotDeepExtensionNodesAddedKey] as? Int ?? 0
       )
       return SnapshotBackendCapture(
         payload: DataPayload(nodes: nodes, truncated: (response["truncated"] as? Bool) == true),
@@ -344,6 +364,31 @@ extension RunnerTests {
     )
     // A shallower explicit request keeps its own rungs; deeper stale memory is ignored.
     XCTAssertEqual(Self.privateAXAttemptDepths(requestedDepth: 24, rememberedDepth: 56), [24, 12])
+  }
+
+  func testPrivateAXDepthLimitedRequiresEveryFrontierResolved() {
+    // Un-capped capture is never depth-limited, extension or not.
+    XCTAssertFalse(
+      Self.privateAXDepthLimited(
+        effectiveDepth: 64, requestedDepth: 64, pendingFrontiers: nil, missedFrontiers: nil))
+    // Capped with no extension outcome (never ran) stays depth-limited.
+    XCTAssertTrue(
+      Self.privateAXDepthLimited(
+        effectiveDepth: 56, requestedDepth: 64, pendingFrontiers: nil, missedFrontiers: nil))
+    // Fully drained extension clears the verdict.
+    XCTAssertFalse(
+      Self.privateAXDepthLimited(
+        effectiveDepth: 56, requestedDepth: 64, pendingFrontiers: 0, missedFrontiers: 0))
+    // Budget exhaustion (pending frontiers) keeps it.
+    XCTAssertTrue(
+      Self.privateAXDepthLimited(
+        effectiveDepth: 56, requestedDepth: 64, pendingFrontiers: 2, missedFrontiers: 0))
+    // The #1627 review blocker: an all-miss extension (elements vanished or
+    // re-rooted requests failed) resolved nothing — it must NOT present the
+    // capture as complete just because the queue emptied.
+    XCTAssertTrue(
+      Self.privateAXDepthLimited(
+        effectiveDepth: 56, requestedDepth: 64, pendingFrontiers: 0, missedFrontiers: 8))
   }
 
   func testPrivateAXAcceptedDepthMemoryMatchesBundleProcessAndExpires() {

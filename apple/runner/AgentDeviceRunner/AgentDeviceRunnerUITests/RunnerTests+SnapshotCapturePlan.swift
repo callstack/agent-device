@@ -553,8 +553,11 @@ extension RunnerTests {
       )
     }
     if let depth = quality.effectiveDepth {
+      // No --depth remedy here: an explicit --depth capture disables the
+      // frontier extension, so following it would return strictly less than
+      // this capture did. A plain re-run retries with a fresh extension budget.
       parts.append(
-        "The accessibility server rejected deeper requests; this tree is capped at depth \(depth) — re-run with --depth \(depth) --scope <container> for deeper content."
+        "The accessibility server rejected deeper requests; content below depth \(depth) may be missing — re-run snapshot to retry deeper content."
       )
     }
     return parts.isEmpty ? nil : parts.joined(separator: " ")
