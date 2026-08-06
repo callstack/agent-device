@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { buildInteractionSurfaceSignature } from '../interaction-outcome-policy.ts';
-import { decidePostGestureStabilityVerdict } from '../post-gesture-stabilization.ts';
+import { decidePostGestureStabilityVerdict } from '../deferred-interaction-outcome.ts';
 import {
   applicationRootNode,
   keyboardWindowNodes,

@@ -1,7 +1,7 @@
 import { isIosFamily } from '@agent-device/kernel/device';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';
-import { isPostGestureStabilizationPending } from './post-gesture-stabilization.ts';
+import { isPostGestureStabilizationPending } from './deferred-interaction-outcome.ts';
 import type { SessionState } from './types.ts';
 import { readSimpleSelectorTarget } from '@agent-device/selectors';
 import { asAppError } from '@agent-device/kernel/errors';

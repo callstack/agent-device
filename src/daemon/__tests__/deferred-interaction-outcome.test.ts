@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
 import {
+  isPostGestureStabilizationPending,
   markDeferredInteractionOutcome,
   resolveDeferredInteractionOutcome,
   type DeferredOutcomeSnapshotAttempt,
 } from '../deferred-interaction-outcome.ts';
-import { isPostGestureStabilizationPending } from '../post-gesture-stabilization.ts';
 import type { SessionState } from '../types.ts';
 import {
   deliverySnapshot,

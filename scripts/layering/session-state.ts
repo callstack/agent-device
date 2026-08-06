@@ -79,7 +79,7 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
   nativePerf: ['src/daemon/session-teardown.ts'],
   audioProbe: ['src/daemon/audio-probe.ts'],
   pendingInteractionOutcome: ['src/daemon/interaction-outcome-policy.ts'],
-  postGestureStabilization: ['src/daemon/post-gesture-stabilization.ts'],
+  postGestureStabilization: ['src/daemon/deferred-interaction-outcome.ts'],
 
   // Snapshot lineage on a freshly BUILT record. snapshot-runtime.ts constructs a new
   // SessionState rather than mutating the stored one, so it cannot call setSessionSnapshot —
