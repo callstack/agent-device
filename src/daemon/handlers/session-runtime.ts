@@ -1,6 +1,6 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
-import type { CommandFlags } from '../../core/dispatch.ts';
 import type { DaemonRequest, SessionRuntimeHints, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import {

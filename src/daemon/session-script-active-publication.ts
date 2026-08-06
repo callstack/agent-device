@@ -1,10 +1,10 @@
+import type { SessionAction } from '@agent-device/contracts/session';
 import { resolveCommandRecordingEffect } from '../core/command-descriptor/registry.ts';
 import { parseWaitPositionals } from '../core/wait-positionals.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { isTouchTargetCommand } from '@agent-device/ad-script';
 import { dragGesturePayloadFromPositionals } from '@agent-device/contracts/interaction';
 import { isValidSelectorExpression } from '@agent-device/selectors';
-import type { SessionAction } from './types.ts';
 
 export function validateActivePublicationActions(actions: SessionAction[]): void {
   const openIndexes = actions.flatMap((action, index) =>

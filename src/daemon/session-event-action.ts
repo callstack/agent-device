@@ -1,6 +1,6 @@
 import { BACK_MODES, CLICK_BUTTONS, SWIPE_PATTERNS } from '@agent-device/contracts/interaction';
 import { RECORDING_SCOPE_VALUES } from '@agent-device/contracts/recording';
-import { SESSION_SURFACES } from '@agent-device/contracts/session';
+import { SESSION_SURFACES, type SessionAction } from '@agent-device/contracts/session';
 import { DEVICE_TARGETS, PLATFORM_SELECTORS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../command-catalog.ts';
 import {
@@ -15,7 +15,6 @@ import {
   readSessionEventNumber as readNumber,
   readBoundedSessionEventString as readString,
 } from './session-event-request.ts';
-import type { SessionAction } from './types.ts';
 
 export function buildActionSummary(action: SessionAction): string {
   switch (action.command) {

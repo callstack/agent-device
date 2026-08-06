@@ -1,4 +1,4 @@
-import type { SessionAction } from './types.ts';
+import type { SessionAction } from '@agent-device/contracts/session';
 
 export function inferFillText(action: SessionAction): string {
   const resultText = action.result?.text;

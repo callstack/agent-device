@@ -1,3 +1,4 @@
+import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import http from 'node:http';
@@ -25,7 +26,6 @@ import {
   shouldResetDaemonAfterRequestTimeout,
 } from '../../daemon/client/daemon-client-timeout.ts';
 import { resolveDaemonPaths } from '../../daemon/config.ts';
-import type { RequestProgressEvent } from '../../request/progress.ts';
 import {
   isProcessAlive,
   readProcessCommand,

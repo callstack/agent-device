@@ -1,5 +1,6 @@
+import type { SessionAction } from '@agent-device/contracts/session';
 import path from 'node:path';
-import type { SessionAction, SessionState } from '../types.ts';
+import type { SessionState } from '../types.ts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { isApplePlatform, publicPlatformString } from '@agent-device/kernel/device';
 import { tryGetPlugin } from '../../core/platform-plugin-registry.ts';

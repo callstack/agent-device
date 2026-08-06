@@ -1,3 +1,4 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
 import { test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
@@ -53,7 +54,6 @@ import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { PNG } from '../../../utils/png.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../types.ts';
-import type { CommandFlags } from '../../../core/dispatch.ts';
 import { SessionStore } from '../../session-store.ts';
 import { makeAndroidSession, makeIosSession } from '../../../__tests__/test-utils/index.ts';
 import { runReplayScriptFile } from '../session-replay-runtime.ts';

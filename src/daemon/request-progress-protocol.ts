@@ -1,5 +1,5 @@
+import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import type { DaemonRequest, DaemonResponse } from './types.ts';
-import type { RequestProgressEvent } from '../request/progress.ts';
 
 export type DaemonProgressEnvelope = {
   type: 'progress';

@@ -1,3 +1,4 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
 import fs from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
 import {
@@ -7,11 +8,7 @@ import {
   type MaestroPlatform,
 } from '@agent-device/maestro';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  dispatchGestureViewport,
-  resolveTargetDevice,
-  type CommandFlags,
-} from '../../core/dispatch.ts';
+import { dispatchGestureViewport, resolveTargetDevice } from '../../core/dispatch.ts';
 import { getRequestSignal } from '../../request/cancel.ts';
 import { stripUndefined } from '../../utils/parsing.ts';
 import {

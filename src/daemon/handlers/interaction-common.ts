@@ -1,4 +1,4 @@
-import type { CommandFlags } from '../../core/dispatch.ts';
+import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import type { DaemonCommandContext } from '../context.ts';
 import { recordTouchVisualizationEvent } from '../recording-gestures.ts';

@@ -1,6 +1,5 @@
 import type { InternalRequestOptions } from '@agent-device/contracts/client';
-import type { CommandFlags } from '../../core/dispatch-context.ts';
-import type { CliFlags } from '@agent-device/contracts/command';
+import type { CliFlags, CommandFlags } from '@agent-device/contracts/command';
 import type { ClickButton } from '@agent-device/contracts/interaction';
 
 export type DaemonCommandRequest = {

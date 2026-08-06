@@ -1,7 +1,8 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
 import { isIosFamily } from '@agent-device/kernel/device';
 import type { ProviderDeviceInstallResult } from '@agent-device/contracts/device';
 import { installProviderDeviceInstallablePath } from '../../provider-device-runtime.ts';
-import { resolveTargetDevice, type CommandFlags } from '../../core/dispatch.ts';
+import { resolveTargetDevice } from '../../core/dispatch.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
 import { getRequestSignal } from '../../request/cancel.ts';
 import {

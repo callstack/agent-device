@@ -1,9 +1,10 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
 import type {
   AgentDeviceBackend,
   BackendSnapshotOptions,
   BackendSnapshotResult,
 } from '../backend.ts';
-import { resolveTargetDevice, type CommandFlags } from '../core/dispatch.ts';
+import { resolveTargetDevice } from '../core/dispatch.ts';
 import { createAgentDevice } from '../runtime.ts';
 import { isMacOs, isApplePlatform, publicPlatformString } from '@agent-device/kernel/device';
 import { noActiveSessionError, requireCommandSupported } from './handlers/response.ts';

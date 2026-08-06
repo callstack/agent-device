@@ -1,6 +1,7 @@
 import {
   snapshotCaptureAnnotationsFrom,
   summarizeSnapshotDiagnostics,
+  type SnapshotDiffSummary,
 } from '@agent-device/contracts/capture';
 import { stripAndroidSystemChromeProvenance } from '@agent-device/contracts/platform';
 import { isIosFamily, publicPlatformString } from '@agent-device/kernel/device';
@@ -8,7 +9,6 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { AgentDeviceBackend, BackendSnapshotResult } from '../backend.ts';
 import type { CommandSessionRecord } from '../runtime.ts';
 import { createAgentDevice } from '../runtime.ts';
-import type { SnapshotDiffSummary } from '../snapshot/snapshot-diff.ts';
 import { maybeBuildAndroidSnapshotTimeoutFailure } from './android-snapshot-timeout-evidence.ts';
 import { errorResponse, requireCommandSupported } from './handlers/response.ts';
 import { captureSnapshot, resolveSnapshotScope } from './handlers/snapshot-capture.ts';

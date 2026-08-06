@@ -44,8 +44,6 @@ export type SnapshotCommandResult = {
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
 } & PublicSnapshotCaptureAnnotations;
 
-export type { DiffSnapshotCommandResult } from '@agent-device/contracts/capture';
-
 type SnapshotCapture = {
   snapshot: SnapshotState;
   result: BackendSnapshotResult;

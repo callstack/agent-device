@@ -1,4 +1,5 @@
-import { dispatchCommand, type CommandFlags } from '../core/dispatch.ts';
+import type { CommandFlags } from '@agent-device/contracts/command';
+import { dispatchCommand } from '../core/dispatch.ts';
 import { isMobilePlatform } from '@agent-device/kernel/device';
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { collectKeyboardChromeRefs } from '../core/snapshot-chrome.ts';

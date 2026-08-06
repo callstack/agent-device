@@ -1,7 +1,8 @@
+import type { SessionAction } from '@agent-device/contracts/session';
 import { expect, test } from 'vitest';
 import { makeIosSession } from '../../../__tests__/test-utils/index.ts';
 import { recordActionEntry } from '../../session-action-recorder.ts';
-import type { DaemonRequest, SessionAction } from '../../types.ts';
+import type { DaemonRequest } from '../../types.ts';
 import { invokeReplayAction } from '../session-replay-action-runtime.ts';
 import { resolveReplayAction } from '@agent-device/ad-script';
 

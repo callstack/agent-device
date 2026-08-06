@@ -1,7 +1,8 @@
-import type { CommandFlags } from '../core/dispatch.ts';
+import type { SessionAction } from '@agent-device/contracts/session';
+import type { CommandFlags } from '@agent-device/contracts/command';
 import { SCREENSHOT_ACTION_FLAG_KEYS } from '@agent-device/contracts/capture';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
-import type { DaemonRequest, SessionAction, SessionRuntimeHints, SessionState } from './types.ts';
+import type { DaemonRequest, SessionRuntimeHints, SessionState } from './types.ts';
 import { applyRecordedSaveScriptFlags } from './session-script-publication-capability.ts';
 import { repairSessionBoundary } from './session-replay-transaction.ts';
 import type { MultiTargetAnnotationV1, TargetAnnotationV1 } from '@agent-device/contracts/replay';

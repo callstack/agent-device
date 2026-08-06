@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import type { SnapshotDiffLine } from '../../../src/snapshot/snapshot-diff.ts';
+import type { SnapshotDiffLine } from '@agent-device/contracts/capture';
 import {
   assertFilesDiffer,
   assertJsonContains,

@@ -1,7 +1,5 @@
 import type { CliFlags } from '@agent-device/contracts/command';
 
-export type { CliFlags } from '@agent-device/contracts/command';
-
 export type FlagKey = keyof CliFlags;
 type FlagType = 'boolean' | 'int' | 'enum' | 'string' | 'booleanOrString';
 

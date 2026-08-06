@@ -1,4 +1,4 @@
-import type { CommandFlags } from '../core/dispatch.ts';
+import type { CommandFlags } from '@agent-device/contracts/command';
 import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
 import type { AndroidAdbExecutor } from '../platforms/android/adb-executor.ts';
 import { AppError } from '@agent-device/kernel/errors';

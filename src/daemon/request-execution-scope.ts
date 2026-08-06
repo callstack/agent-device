@@ -1,4 +1,4 @@
-import type { CommandFlags } from '../core/dispatch.ts';
+import type { CommandFlags } from '@agent-device/contracts/command';
 import type { DaemonArtifactType } from '@agent-device/kernel/contracts';
 import {
   emitDiagnostic,

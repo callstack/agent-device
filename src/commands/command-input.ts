@@ -44,8 +44,6 @@ export type ElementTargetInput =
   | { kind: 'ref'; ref: string; label?: string }
   | { kind: 'selector'; selector: string };
 
-export type { RepeatedInput } from '@agent-device/contracts/interaction';
-
 export type SelectorSnapshotInput = {
   depth?: number;
   scope?: string;

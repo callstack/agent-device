@@ -33,7 +33,7 @@ import { readNotificationPayload } from './dispatch-payload.ts';
 import { getInteractor } from './interactors.ts';
 import { readViewportDimension } from './viewport-dimension.ts';
 
-export type { CommandFlags, DispatchContext } from './dispatch-context.ts';
+export type { DispatchContext } from './dispatch-context.ts';
 export { resolveTargetDevice } from './dispatch-resolve.ts';
 
 export async function dispatchCommand(

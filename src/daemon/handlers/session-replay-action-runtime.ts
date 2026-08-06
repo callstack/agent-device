@@ -1,5 +1,6 @@
-import type { CommandFlags } from '../../core/dispatch.ts';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionAction } from '../types.ts';
+import type { SessionAction } from '@agent-device/contracts/session';
+import type { CommandFlags } from '@agent-device/contracts/command';
+import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../types.ts';
 import { mergeParentFlags } from '../../core/batch.ts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {

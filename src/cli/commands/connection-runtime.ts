@@ -1,3 +1,4 @@
+import type { MetroBridgeScope } from '@agent-device/contracts/remote';
 import { resolveDaemonPaths } from '../../daemon/config.ts';
 import { stopReactDevtoolsCompanion } from '../../client/client-react-devtools-companion.ts';
 import { stopMetroTunnel } from '../../metro/metro.ts';
@@ -10,7 +11,6 @@ import {
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 import { shouldAgentCdpUseRemoteBridgeUrl } from './agent-cdp.ts';
-import type { MetroBridgeScope } from '../../client/client-companion-tunnel-contract.ts';
 import {
   buildRemoteConnectionDaemonState,
   buildRemoteConnectionRequestMetadata,

@@ -7,8 +7,6 @@ import {
   formatSnapshotLine,
 } from './snapshot-lines.ts';
 
-export type { SnapshotDiffLine, SnapshotDiffSummary } from '@agent-device/contracts/capture';
-
 export type SnapshotDiffResult = {
   summary: SnapshotDiffSummary;
   lines: SnapshotDiffLine[];

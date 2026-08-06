@@ -1,3 +1,4 @@
+import type { SessionAction } from '@agent-device/contracts/session';
 import fs from 'node:fs';
 import path from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
@@ -6,7 +7,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { redactDiagnosticData } from '@agent-device/kernel/redaction';
 import { emitDiagnostic, getDiagnosticsMeta } from '../utils/diagnostics.ts';
 import { isRecord } from '../utils/parsing.ts';
-import type { DaemonRequest, DaemonResponse, SessionAction } from './types.ts';
+import type { DaemonRequest, DaemonResponse } from './types.ts';
 import { buildActionDetails, buildActionSummary } from './session-event-action.ts';
 import { buildRequestSuccessEventPresentation } from './session-event-request.ts';
 

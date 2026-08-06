@@ -38,7 +38,7 @@ export type {
 // fallow-ignore-next-line unused-type
 export type { TargetShutdownResult } from '@agent-device/contracts/device';
 // fallow-ignore-next-line unused-type
-export type { MetroBridgeScope } from './client-companion-tunnel-contract.ts';
+export type { MetroBridgeScope } from '@agent-device/contracts/remote';
 // fallow-ignore-next-line unused-type
 export type { AppsFilter } from '@agent-device/contracts/device';
 // fallow-ignore-next-line unused-type

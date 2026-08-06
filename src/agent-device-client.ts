@@ -1,3 +1,4 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
 import {
   readSerializedSnapshotCaptureAnnotations,
   readSnapshotDiagnosticsSummary,
@@ -68,7 +69,6 @@ import {
 import { systemCommandFamily } from './commands/system/index.ts';
 import type { ProjectedNavigationCommandClient } from './commands/system/navigation-projection.ts';
 import type { CommandResult } from './core/command-descriptor/command-result.ts';
-import type { CommandFlags } from './core/dispatch-context.ts';
 import { sendToDaemon } from './daemon/client/daemon-client.ts';
 import { resolveDaemonPaths } from './daemon/config.ts';
 import { prepareMetroRuntime, reloadMetro } from './metro/client-metro.ts';

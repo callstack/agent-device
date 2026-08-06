@@ -8,7 +8,11 @@ import {
   type FindLocator,
   resolveSelectorChain,
 } from '@agent-device/selectors';
-import { centerOfRect, type SnapshotState } from '@agent-device/kernel/snapshot';
+import {
+  centerOfRect,
+  type SnapshotQualityVerdict,
+  type SnapshotState,
+} from '@agent-device/kernel/snapshot';
 import { expireRefFrame } from '../ref-frame.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
@@ -27,10 +31,7 @@ import { recordSessionAction } from './handler-utils.ts';
 import { stripInternalInteractionFlags } from '../interaction-outcome-policy.ts';
 import { dispatchFindReadOnlyViaRuntime } from '../selector-runtime.ts';
 import { createSelectorCaptureRuntime } from '../selector-capture-runtime.ts';
-import {
-  isSparseSnapshotQualityVerdict,
-  type SnapshotQualityVerdict,
-} from '../../snapshot/snapshot-quality.ts';
+import { isSparseSnapshotQualityVerdict } from '../../snapshot/snapshot-quality.ts';
 type FindContext = {
   req: DaemonRequest;
   sessionName: string;

@@ -1,9 +1,9 @@
+import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import type { Socket } from 'node:net';
 import { test } from 'vitest';
 import type { DaemonRequest, DaemonResponse } from '../daemon/types.ts';
-import type { RequestProgressEvent } from '../request/progress.ts';
 import { readDaemonSocketProgressResponse } from '../daemon/client/daemon-client-progress.ts';
 import { AppError } from '@agent-device/kernel/errors';
 

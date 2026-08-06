@@ -1,4 +1,4 @@
-import type { CommandFlags } from '../../core/dispatch.ts';
+import type { CommandFlags } from '@agent-device/contracts/command';
 import type { ReplayScriptMetadata } from '@agent-device/ad-script';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';

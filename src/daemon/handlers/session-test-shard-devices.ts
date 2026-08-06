@@ -1,3 +1,4 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
 import { listDeviceInventory, type DeviceInventoryRequest } from '../../core/dispatch-resolve.ts';
 import {
   resolveAndroidSerialAllowlist,
@@ -10,7 +11,6 @@ import {
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import type { CommandFlags } from '../../core/dispatch.ts';
 import type {
   ReplayTestShardMode,
   ReplayTestResolveShardTargets,

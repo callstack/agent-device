@@ -1,8 +1,8 @@
 // extractReplayTargetToken / readRefLabel — token extraction for each
 // eligible command shape, and the point-target / ineligible-command guards.
+import type { SessionAction } from '@agent-device/contracts/session';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import type { SessionAction } from '../../types.ts';
 import { extractReplayTargetToken, readRefLabel } from '../session-replay-target-token.ts';
 
 // ---------------------------------------------------------------------------

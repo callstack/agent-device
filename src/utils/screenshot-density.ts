@@ -1,6 +1,6 @@
+import type { ScreenshotResultData } from '@agent-device/contracts/capture';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import type { ScreenshotResultData } from './screenshot-result.ts';
 import { readPngSize } from './png-size.ts';
 
 type ScreenshotDensityDevice = Pick<DeviceInfo, 'platform' | 'appleOs' | 'kind'>;

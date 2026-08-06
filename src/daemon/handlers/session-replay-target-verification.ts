@@ -1,3 +1,4 @@
+import type { SessionAction } from '@agent-device/contracts/session';
 import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
@@ -29,7 +30,7 @@ import {
 } from '@agent-device/contracts/replay';
 import { resolveTargetIdentityVerification } from '../../core/command-descriptor/registry.ts';
 import { parseWaitPositionals } from '../../core/wait-positionals.ts';
-import type { DaemonResponse, SessionAction, SessionState } from '../types.ts';
+import type { DaemonResponse, SessionState } from '../types.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { ReplayResumeStamper } from '../session-replay-coordinator.ts';
 import type { InternalObservationEvidence } from '../internal-observation.ts';

@@ -1,3 +1,4 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
 import { test, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,7 +10,6 @@ import {
   makeAuthoringSession,
 } from '../../../__tests__/test-utils/session-factories.ts';
 import { SessionScriptWriter } from '../../session-script-writer.ts';
-import type { CommandFlags } from '../../../core/dispatch.ts';
 import type { SessionState } from '../../types.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 

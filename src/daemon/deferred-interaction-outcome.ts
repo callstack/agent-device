@@ -1,7 +1,7 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SnapshotCaptureAnnotations } from '@agent-device/contracts/capture';
 import { isApplePlatform, isMobilePlatform } from '@agent-device/kernel/device';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
-import type { CommandFlags } from '../core/dispatch.ts';
 import { sleep } from '../utils/timeouts.ts';
 import {
   captureAndroidFreshnessRecoveredAttempt,

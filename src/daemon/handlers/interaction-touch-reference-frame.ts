@@ -1,4 +1,4 @@
-import type { CommandFlags } from '../../core/dispatch.ts';
+import type { CommandFlags } from '@agent-device/contracts/command';
 import type { GestureReferenceFrame } from '@agent-device/contracts/interaction';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { getAndroidScreenSize } from '../../platforms/android/input-actions.ts';

@@ -23,17 +23,14 @@ import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { isMacOs, isTvOsDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { withMethodScope } from '../../utils/method-scope.ts';
-import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode, SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import type {
   Interactor,
   RunnerCallOptions,
   RunnerContext,
   ScreenshotOptions,
 } from '@agent-device/contracts/interaction';
-import {
-  readSnapshotQualityVerdict,
-  type SnapshotQualityVerdict,
-} from '../../snapshot/snapshot-quality.ts';
+import { readSnapshotQualityVerdict } from '../../snapshot/snapshot-quality.ts';
 
 export function createAppleInteractor(
   device: DeviceInfo,

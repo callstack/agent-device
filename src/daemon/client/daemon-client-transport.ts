@@ -1,3 +1,4 @@
+import type { RequestProgressSink } from '@agent-device/contracts/progress';
 import net from 'node:net';
 import http from 'node:http';
 import https from 'node:https';
@@ -17,7 +18,6 @@ import { handleRequestTimeout } from './daemon-client-timeout.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '../http-health.ts';
 import { readVersion } from '../../utils/version.ts';
-import type { RequestProgressSink } from '../../request/progress.ts';
 
 type ResolvedDaemonTransport = 'socket' | 'http';
 type SendRequestOptions = {

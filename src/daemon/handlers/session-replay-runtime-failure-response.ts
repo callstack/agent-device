@@ -1,8 +1,9 @@
+import type { SessionAction } from '@agent-device/contracts/session';
 import { scrubReplayVarValues, type ReplayVarScrubEntry } from '@agent-device/contracts/divergence';
 import { formatDivergenceActionLabel } from '@agent-device/ad-script';
 import type { SnapshotDiagnosticsSummary } from '@agent-device/contracts/capture';
 import { buildDisplayPositionals } from '../session-event-action.ts';
-import type { DaemonResponse, SessionAction } from '../types.ts';
+import type { DaemonResponse } from '../types.ts';
 
 export type ReplayFailureCause = Extract<DaemonResponse, { ok: false }>['error'];
 

@@ -1,4 +1,4 @@
-import type { CommandFlags } from '../../core/dispatch.ts';
+import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../types.ts';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';

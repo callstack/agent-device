@@ -1,6 +1,6 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import type { CommandFlags } from '../../core/dispatch.ts';
 import { contextFromFlags } from '../context.ts';
 
 test('contextFromFlags propagates back mode into the dispatch context', () => {

@@ -1,13 +1,11 @@
+import type { CompanionTunnelScope } from '@agent-device/contracts/remote';
 import {
   ensureCompanionTunnel,
   stopCompanionTunnel,
   type CompanionTunnelDefinition,
   type EnsureCompanionTunnelResult,
 } from './client-companion-tunnel.ts';
-import {
-  REACT_DEVTOOLS_COMPANION_RUN_ARG,
-  type CompanionTunnelScope,
-} from './client-companion-tunnel-contract.ts';
+import { REACT_DEVTOOLS_COMPANION_RUN_ARG } from './client-companion-tunnel-contract.ts';
 
 const REACT_DEVTOOLS_LOCAL_BASE_URL = 'http://127.0.0.1:8097';
 const REACT_DEVTOOLS_DEVICE_PORT = 8097;

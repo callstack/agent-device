@@ -2,6 +2,7 @@
 // without depending on this zone; re-exported here for existing consumers.
 export type { PrepareMetroRuntimeResult, ReloadMetroResult } from '@agent-device/contracts/remote';
 import type {
+  MetroBridgeScope,
   MetroPrepareKind,
   PrepareMetroRuntimeResult,
   ReloadMetroResult,
@@ -11,7 +12,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { sleep } from '../utils/timeouts.ts';
 import { ensureMetroCompanion } from './client-metro-companion.ts';
-import type { MetroBridgeScope } from '../client/client-companion-tunnel-contract.ts';
 import type {
   MetroBridgeDescriptor,
   MetroBridgeResult,
@@ -41,7 +41,7 @@ const METRO_KILL_TIMEOUT_MS = 1_000;
 type EnvSource = NodeJS.ProcessEnv | Record<string, string | undefined>;
 type RepackBundlerKind = 'rspack' | 'webpack';
 
-export type { MetroBridgeScope } from '../client/client-companion-tunnel-contract.ts';
+export type { MetroBridgeScope } from '@agent-device/contracts/remote';
 
 type PackageManagerConfig = {
   command: string;

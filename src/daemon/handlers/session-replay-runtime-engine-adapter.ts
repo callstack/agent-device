@@ -1,4 +1,5 @@
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionAction } from '../types.ts';
+import type { SessionAction } from '@agent-device/contracts/session';
+import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../types.ts';
 import type { SessionStore } from '../session-store.ts';
 import { errorResponse } from './response.ts';
 import { readReplaySelectorDisplayValue } from '@agent-device/selectors';

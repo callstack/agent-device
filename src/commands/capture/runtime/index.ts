@@ -1,3 +1,4 @@
+import type { DiffSnapshotCommandResult } from '@agent-device/contracts/capture';
 import type {
   BoundOf,
   DiffSnapshotCommandOptions,
@@ -11,12 +12,7 @@ import {
   type DiffScreenshotCommandResult,
 } from './diff-screenshot.ts';
 import { screenshotCommand, type ScreenshotCommandResult } from './screenshot.ts';
-import {
-  diffSnapshotCommand,
-  snapshotCommand,
-  type DiffSnapshotCommandResult,
-  type SnapshotCommandResult,
-} from './snapshot.ts';
+import { diffSnapshotCommand, snapshotCommand, type SnapshotCommandResult } from './snapshot.ts';
 
 export type CaptureCommands = {
   screenshot: RuntimeCommand<ScreenshotCommandOptions, ScreenshotCommandResult>;

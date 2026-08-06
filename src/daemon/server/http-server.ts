@@ -1,3 +1,4 @@
+import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import http, { type IncomingHttpHeaders } from 'node:http';
 import { AppError, normalizeError, toAppErrorCode } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
@@ -19,7 +20,7 @@ import {
 } from '../../request/cancel.ts';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { type RequestProgressEvent, withRequestProgressSink } from '../../request/progress.ts';
+import { withRequestProgressSink } from '../../request/progress.ts';
 import {
   serializeDaemonProgressEnvelope,
   serializeDaemonRpcResponseEnvelope,

@@ -2,6 +2,7 @@ import type {
   ClickButton,
   FillCommandResult,
   PressCommandResult,
+  RepeatedInput,
   ResolvedTarget,
 } from '@agent-device/contracts/interaction';
 import { AppError } from '@agent-device/kernel/errors';
@@ -12,7 +13,6 @@ import { successText } from '../../../utils/success-text.ts';
 import { findMistargetedTypeRefToken } from '../../../utils/type-target-warning.ts';
 import { requireIntInRange } from '../../../utils/validation.ts';
 import { attachResolvedInteractionTarget } from '../../../contracts/interaction-outcome.ts';
-import type { RepeatedInput } from '../../command-input.ts';
 import { toBackendContext } from '../../runtime-common.ts';
 import {
   toBackendResult,

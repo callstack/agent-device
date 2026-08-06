@@ -19,7 +19,6 @@ export const ENV_COMPANION_TUNNEL_SESSION = 'AGENT_DEVICE_COMPANION_TUNNEL_SESSI
 
 // The scope SHAPE is declared in contracts/ so zones that only need the shape do not have to
 // declare themselves in terms of client/. Re-exported here for this module's existing consumers.
-export type { CompanionTunnelScope, MetroBridgeScope } from '@agent-device/contracts/remote';
 import type { CompanionTunnelScope } from '@agent-device/contracts/remote';
 
 export class MissingCompanionEnvError extends Error {

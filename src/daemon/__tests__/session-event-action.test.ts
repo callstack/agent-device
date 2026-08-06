@@ -1,8 +1,8 @@
+import type { SessionAction } from '@agent-device/contracts/session';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { buildActionEventResult } from '../session-event-action-presentation.ts';
 import { buildActionDetails, buildActionSummary } from '../session-event-action.ts';
-import type { SessionAction } from '../types.ts';
 
 function action(
   command: string,

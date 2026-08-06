@@ -19,7 +19,7 @@
 // hand-off cannot be reproduced from a seed.
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { CommandFlags } from '../../../../src/core/dispatch-context.ts';
+import type { CommandFlags } from '@agent-device/contracts/command';
 import type { DaemonRequest } from '../../../../src/daemon/types.ts';
 import type { SessionStore } from '../../../../src/daemon/session-store.ts';
 import { resolveRequestExecutionLockKeys } from '../../../../src/daemon/request-binding.ts';

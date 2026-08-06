@@ -1,3 +1,4 @@
+import type { SessionAction } from '@agent-device/contracts/session';
 import { test, expect, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -13,7 +14,6 @@ import {
 import { markRepairTransactionComplete } from '../session-replay-transaction.ts';
 import { NO_SCRIPT_PUBLICATION, scriptTargetPath } from '../session-script-publication-state.ts';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
-import type { SessionAction } from '../types.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 function action(overrides: Partial<SessionAction> = {}): SessionAction {

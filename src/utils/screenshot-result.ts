@@ -2,8 +2,6 @@ import type { ScreenshotResultData } from '@agent-device/contracts/capture';
 import type { ScreenshotOverlayRef } from '@agent-device/kernel/snapshot';
 import { isRecord, parsePoint, parseRect } from './parsing.ts';
 
-export type { ScreenshotResultData } from '@agent-device/contracts/capture';
-
 export function pickScreenshotResultData(value: ScreenshotResultData): ScreenshotResultData {
   return {
     ...(typeof value.path === 'string' ? { path: value.path } : {}),

@@ -1,3 +1,4 @@
+import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import { test, expect, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
@@ -23,7 +24,7 @@ import path from 'node:path';
 import { handleSessionCommands } from '../session.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData } from '../../types.ts';
-import { type RequestProgressEvent, withRequestProgressSink } from '../../../request/progress.ts';
+import { withRequestProgressSink } from '../../../request/progress.ts';
 import {
   clearRequestCanceled,
   getRequestSignal,

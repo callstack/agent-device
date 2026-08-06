@@ -4,7 +4,6 @@ import type { RequestProgressEvent, RequestProgressSink } from '@agent-device/co
 // The event vocabulary is a wire contract shared with the CLI reporter path, so it lives in
 // `@agent-device/contracts/progress`. This module owns only the request-global plumbing that
 // carries it: the per-request sink and its AsyncLocalStorage binding.
-export type { RequestProgressEvent, RequestProgressSink } from '@agent-device/contracts/progress';
 
 const requestProgress = new AsyncLocalStorage<RequestProgressSink | undefined>();
 

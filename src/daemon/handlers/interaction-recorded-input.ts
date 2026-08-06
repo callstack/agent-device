@@ -1,4 +1,4 @@
-import type { CommandFlags } from '../../core/dispatch.ts';
+import type { CommandFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
 import { validateRecordedInputVariableName } from '../../replay/recorded-input.ts';
 import type { SessionState } from '../types.ts';

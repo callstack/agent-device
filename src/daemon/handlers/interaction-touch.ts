@@ -1,3 +1,4 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
 import type {
   FillCommandResult,
   GestureReferenceFrame,
@@ -17,7 +18,7 @@ import {
   commandSupportsSettleObservation,
   commandSupportsVerifyEvidence,
 } from '../../core/command-descriptor/registry.ts';
-import { dispatchCommand, type CommandFlags } from '../../core/dispatch.ts';
+import { dispatchCommand } from '../../core/dispatch.ts';
 import {
   transformInteractionResponseData,
   type InteractionResponseDataTransformCommand,

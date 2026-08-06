@@ -1,4 +1,5 @@
-import type { CommandFlags, DispatchContext } from '../core/dispatch-context.ts';
+import type { CommandFlags } from '@agent-device/contracts/command';
+import type { DispatchContext } from '../core/dispatch-context.ts';
 import { resolveClickButton } from '@agent-device/contracts/interaction';
 import {
   screenshotFlagsFromOptions,

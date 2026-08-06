@@ -1,9 +1,9 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DaemonRequest, SessionState } from './types.ts';
 import { SessionStore } from './session-store.ts';
-import type { CommandFlags } from '../core/dispatch.ts';
 
 const DEFAULT_SESSION_NAME = 'default';
 const IMPLICIT_SESSION_KEY_PREFIX = 'cwd';

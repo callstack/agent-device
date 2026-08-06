@@ -1,4 +1,5 @@
-import { dispatchCommand, type CommandFlags } from '../core/dispatch.ts';
+import type { CommandFlags } from '@agent-device/contracts/command';
+import { dispatchCommand } from '../core/dispatch.ts';
 import { requireCommandSupported } from './handlers/response.ts';
 import { SessionStore } from './session-store.ts';
 import type { DaemonCommandContext } from './context.ts';

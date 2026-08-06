@@ -1,8 +1,9 @@
+import type { SessionAction } from '@agent-device/contracts/session';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { buildReplayDivergenceResume } from '../session-replay-resume.ts';
 import { stampPendingRecordAndHealWatermark } from '../../session-replay-coordinator.ts';
-import type { SessionAction, SessionState } from '../../types.ts';
+import type { SessionState } from '../../types.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 
 function action(overrides: Partial<SessionAction> = {}): SessionAction {

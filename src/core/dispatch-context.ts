@@ -1,7 +1,6 @@
 // CommandFlags and MaestroRuntimeFlags are declared in contracts/ so both sides of the process
 // boundary can be stated in terms of them; re-exported here because this is where consumers
 // already import them from.
-export type { CommandFlags } from '@agent-device/contracts/command';
 import type { ScreenshotDispatchFlags } from '@agent-device/contracts/capture';
 import type {
   BackMode,

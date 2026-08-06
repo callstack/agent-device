@@ -1,11 +1,6 @@
-import type { CommandFlags } from '../../core/dispatch.ts';
-import type {
-  DaemonInvokeFn,
-  DaemonRequest,
-  DaemonResponse,
-  SessionAction,
-  SessionState,
-} from '../types.ts';
+import type { SessionAction } from '@agent-device/contracts/session';
+import type { CommandFlags } from '@agent-device/contracts/command';
+import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { ReplayCoordinator } from '../session-replay-coordinator.ts';
 import { errorResponse } from './response.ts';

@@ -1,6 +1,5 @@
 // The step SHAPE lives in contracts/ so the public API vocabulary can be stated in terms of it
 // without depending on core/; re-exported here for this module's existing consumers.
-export type { DaemonBatchStep } from '@agent-device/contracts/command';
 import type { DaemonBatchStep } from '@agent-device/contracts/command';
 import {
   type DaemonRequest,

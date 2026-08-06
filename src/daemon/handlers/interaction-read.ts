@@ -1,5 +1,6 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
 import { isIosFamily } from '@agent-device/kernel/device';
-import { dispatchCommand, type CommandFlags } from '../../core/dispatch.ts';
+import { dispatchCommand } from '../../core/dispatch.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { extractNodeReadText } from '../../snapshot/snapshot-processing.ts';
 import type { SessionState } from '../types.ts';

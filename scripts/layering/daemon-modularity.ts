@@ -7,7 +7,7 @@ const LARGEST_TYPE_CYCLE_ZONE_CEILINGS: Readonly<Record<string, number>> = {
   client: 1,
   commands: 14,
   core: 10,
-  'daemon-server': 19,
+  'daemon-server': 17,
   platforms: 2,
 };
 

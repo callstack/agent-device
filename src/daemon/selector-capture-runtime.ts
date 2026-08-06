@@ -1,5 +1,5 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
 import type { BackendSnapshotResult } from '../backend.ts';
-import type { CommandFlags } from '../core/dispatch.ts';
 import {
   buildSnapshotPresentationKey,
   snapshotPresentationOptionsFromFlags,

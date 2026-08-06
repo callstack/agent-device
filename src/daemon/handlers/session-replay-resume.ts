@@ -1,4 +1,4 @@
-import type { SessionAction } from '../types.ts';
+import type { SessionAction } from '@agent-device/contracts/session';
 import type { ReplayDivergenceResume, ReplayRepairHint } from '@agent-device/contracts/divergence';
 import type { ReplayResumeStamper } from '../session-replay-coordinator.ts';
 

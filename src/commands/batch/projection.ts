@@ -7,8 +7,8 @@ import {
   parseBatchStepRuntime,
   readBatchStepInputObject,
   readBatchStepRecord,
+  type DaemonBatchStep,
 } from '@agent-device/contracts/command';
-import type { DaemonBatchStep } from '../../core/batch.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { request } from '../cli-grammar/common.ts';
 import type { CommandInput, DaemonCommandRequest, DaemonWriter } from '../cli-grammar/types.ts';

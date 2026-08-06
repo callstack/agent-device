@@ -1,6 +1,7 @@
+import type { SessionAction } from '@agent-device/contracts/session';
 import path from 'node:path';
 import type { ReplayDivergenceResume, ReplayRepairHint } from '@agent-device/contracts/divergence';
-import type { DaemonResponse, SessionAction, SessionState } from './types.ts';
+import type { DaemonResponse, SessionState } from './types.ts';
 import type { SessionStore } from './session-store.ts';
 import { isRecord } from '../utils/parsing.ts';
 import {

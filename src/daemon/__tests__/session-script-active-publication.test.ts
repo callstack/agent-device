@@ -1,6 +1,6 @@
+import type { SessionAction } from '@agent-device/contracts/session';
 import { describe, expect, test } from 'vitest';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
-import type { SessionAction } from '../types.ts';
 import {
   assertActivePublicationPortability,
   validateActivePublicationActions,

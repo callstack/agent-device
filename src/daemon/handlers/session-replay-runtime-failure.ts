@@ -1,3 +1,4 @@
+import type { SessionAction } from '@agent-device/contracts/session';
 import type { AdReplayScrubValue } from '@agent-device/ad-replay';
 import {
   summarizeSnapshotTimingSamples,
@@ -6,7 +7,7 @@ import {
 } from '@agent-device/contracts/capture';
 import type { SessionStore } from '../session-store.ts';
 import type { ReplayResumeStamper } from '../session-replay-coordinator.ts';
-import type { DaemonRequest, DaemonResponse, SessionAction } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { buildReplayFailureDivergence } from './session-replay-divergence.ts';
 import {
   buildReplayDivergenceFailureResponse,

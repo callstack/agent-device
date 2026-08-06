@@ -1,3 +1,4 @@
+import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import { beforeEach, test, onTestFinished, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -40,10 +41,7 @@ vi.mock('../../../../utils/host-process.ts', async (importOriginal) => {
 });
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import {
-  type RequestProgressEvent,
-  withRequestProgressSink,
-} from '../../../../request/progress.ts';
+import { withRequestProgressSink } from '../../../../request/progress.ts';
 import { createRequestCanceledError, isRequestCanceledError } from '../../../../request/cancel.ts';
 import {
   flushDiagnosticsToSessionFile,

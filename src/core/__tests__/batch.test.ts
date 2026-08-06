@@ -1,11 +1,7 @@
+import type { DaemonBatchStep } from '@agent-device/contracts/command';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import {
-  runBatch,
-  validateAndNormalizeBatchSteps,
-  type BatchRequest,
-  type DaemonBatchStep,
-} from '../batch.ts';
+import { runBatch, validateAndNormalizeBatchSteps, type BatchRequest } from '../batch.ts';
 import type { DaemonResponse, ResponseLevel } from '@agent-device/kernel/contracts';
 
 test('validateAndNormalizeBatchSteps rejects unknown top-level step fields', () => {

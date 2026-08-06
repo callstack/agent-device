@@ -1,10 +1,10 @@
+import type { RefFrameEffect } from '@agent-device/contracts/replay';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { PUBLIC_COMMANDS } from '../../../command-catalog.ts';
 import {
   DAEMON_COMMAND_DESCRIPTORS,
   resolveRefFrameEffect,
-  type RefFrameEffect,
 } from '../../../daemon/daemon-command-registry.ts';
 import type { DaemonRequest } from '../../../daemon/types.ts';
 

@@ -1,6 +1,6 @@
+import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import type { RefTarget, SelectorTarget } from '@agent-device/contracts/interaction';
 import { AppError } from '@agent-device/kernel/errors';
-import type { SnapshotQualityVerdict } from '../../../snapshot/snapshot-quality.ts';
 import type { FindLocator } from '@agent-device/selectors';
 
 export { findNodeByLabel, resolveRefLabel } from '../../../snapshot/snapshot-processing.ts';

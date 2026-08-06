@@ -1,3 +1,4 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
 import path from 'node:path';
 import type {
   MaestroObservation,
@@ -7,7 +8,6 @@ import type {
   MaestroTargetMatch,
   MaestroTargetQuery,
 } from '@agent-device/maestro';
-import type { CommandFlags } from '../../../core/dispatch.ts';
 import type {
   DaemonInvokeFn,
   DaemonRequest,

@@ -1,3 +1,4 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
 import { beforeEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -8,7 +9,6 @@ import { handleSnapshotCommands } from '../snapshot.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
-import type { CommandFlags } from '../../../core/dispatch.ts';
 import { SessionScriptWriter } from '../../session-script-writer.ts';
 import { runReplayScriptFile } from '../session-replay-runtime.ts';
 import {

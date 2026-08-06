@@ -1,3 +1,4 @@
+import type { SessionAction } from '@agent-device/contracts/session';
 import { DEVICE_ROTATIONS } from '@agent-device/contracts/device';
 import { BACK_MODES, TV_REMOTE_BUTTONS } from '@agent-device/contracts/interaction';
 import { PUBLIC_COMMANDS } from '../command-catalog.ts';
@@ -12,7 +13,7 @@ import {
   readSessionEventNumber,
   readSessionEventString,
 } from './session-event-request.ts';
-import type { DaemonRequest, SessionAction } from './types.ts';
+import type { DaemonRequest } from './types.ts';
 
 const SCROLL_DIRECTIONS = ['up', 'down', 'left', 'right'] as const;
 const SCROLL_EDGES = ['top', 'bottom'] as const;

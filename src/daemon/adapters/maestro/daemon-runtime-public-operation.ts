@@ -1,8 +1,8 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
 import type {
   MaestroDispatchSelector,
   MaestroSinglePointerGestureInput,
 } from '@agent-device/maestro';
-import type { CommandFlags } from '../../../core/dispatch.ts';
 import type { DaemonRequest } from '../../types.ts';
 import type { Point, Rect } from '@agent-device/kernel/snapshot';
 

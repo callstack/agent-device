@@ -1,4 +1,4 @@
-import type { CommandFlags } from '../../core/dispatch.ts';
+import type { CommandFlags } from '@agent-device/contracts/command';
 
 export const REPLAY_ONLY_TEST_FLAG_REJECTIONS = [
   {

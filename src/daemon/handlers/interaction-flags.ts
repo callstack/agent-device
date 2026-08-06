@@ -1,4 +1,4 @@
-import type { CommandFlags } from '../../core/dispatch.ts';
+import type { CommandFlags } from '@agent-device/contracts/command';
 import type { PostActionObservationCommandName } from '../../core/command-descriptor/post-action-observation.ts';
 import type { SettleParams } from '@agent-device/contracts/interaction';
 import type { DaemonResponse } from '../types.ts';

@@ -1,10 +1,11 @@
+import type { SessionAction } from '@agent-device/contracts/session';
+import type { CommandFlags } from '@agent-device/contracts/command';
 import { sleep } from '../../utils/timeouts.ts';
 import {
   isSparseSnapshotQualityVerdict,
   isUnreadableCaptureContentError,
 } from '../../snapshot/snapshot-quality.ts';
 import { displayLabel, formatRole } from '../../snapshot/snapshot-lines.ts';
-import type { CommandFlags } from '../../core/dispatch.ts';
 import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
@@ -27,7 +28,7 @@ import {
 import { boundReplayDivergenceForSession } from './session-replay-divergence-publication.ts';
 import type { ReplayReportAction } from './session-replay-report-action.ts';
 import { rankAndDedupeReplaySuggestions } from './session-replay-suggestion-ranking.ts';
-import type { SessionAction, SessionState } from '../types.ts';
+import type { SessionState } from '../types.ts';
 import {
   REPLAY_DIVERGENCE_SUGGESTION_LIMIT,
   createReplayDivergenceSanitizer,

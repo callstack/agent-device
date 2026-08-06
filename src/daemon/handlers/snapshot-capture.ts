@@ -1,3 +1,4 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
 import {
   recordSnapshotTiming,
   snapshotCaptureAnnotationsFrom,
@@ -14,7 +15,7 @@ import {
   type SnapshotBackend,
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
-import { dispatchCommand, type CommandFlags } from '../../core/dispatch.ts';
+import { dispatchCommand } from '../../core/dispatch.ts';
 import { runMacOsSnapshotAction } from '../../platforms/apple/os/macos/helper.ts';
 import { snapshotLinux } from '../../platforms/linux/snapshot.ts';
 import { isAndroidInputMethodSnapshotNode } from '../../snapshot/android-input-method-overlays.ts';

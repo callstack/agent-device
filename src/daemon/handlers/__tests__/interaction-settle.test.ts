@@ -1,8 +1,8 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
 import { test, expect, vi, beforeEach } from 'vitest';
 import { handleInteractionCommands } from '../interaction.ts';
 import type { SessionStore } from '../../session-store.ts';
 import type { SessionState } from '../../types.ts';
-import type { CommandFlags } from '../../../core/dispatch.ts';
 import type { SnapshotBackend } from '@agent-device/kernel/snapshot';
 import { buildSnapshotState } from '../snapshot-capture.ts';
 import { setSessionSnapshot } from '../../session-snapshot.ts';

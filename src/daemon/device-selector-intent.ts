@@ -1,4 +1,4 @@
-import type { CommandFlags } from '../core/dispatch.ts';
+import type { CommandFlags } from '@agent-device/contracts/command';
 
 const EXPLICIT_DEVICE_SELECTOR_KEYS: ReadonlyArray<keyof CommandFlags> = [
   'platform',

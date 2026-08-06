@@ -1,3 +1,4 @@
+import type { SessionAction } from '@agent-device/contracts/session';
 import fs from 'node:fs';
 import path from 'node:path';
 import { publicPlatformString } from '@agent-device/kernel/device';
@@ -16,7 +17,7 @@ import {
   stripRecordedRefGeneration,
 } from '@agent-device/ad-script';
 import { expandSessionPath, safeSessionName } from './session-paths.ts';
-import type { SessionAction, SessionState } from './types.ts';
+import type { SessionState } from './types.ts';
 import {
   NO_SCRIPT_PUBLICATION,
   commitRepair,

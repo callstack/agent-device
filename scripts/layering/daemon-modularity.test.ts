@@ -51,8 +51,8 @@ test('daemon modularity baseline records the measured R7 ownership pressure', ()
     Object.values(SESSION_STATE_FIELD_OWNERS).reduce((sum, owners) => sum + owners.length, 0),
     DAEMON_MODULARITY_BASELINE.sessionState.ownerFileClaims,
   );
-  assert.equal(TYPE_CYCLE_BASELINE, 49);
-  assert.equal(DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers['daemon-server'], 19);
+  assert.equal(TYPE_CYCLE_BASELINE, 47);
+  assert.equal(DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers['daemon-server'], 17);
   assert.equal('daemon' in DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers, false);
 });
 

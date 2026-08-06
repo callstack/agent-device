@@ -2,7 +2,6 @@ import type { SnapshotNode, SnapshotQualityVerdict } from '@agent-device/kernel/
 
 // The type lives in snapshot.ts (the foundational type module) to avoid a cyclic
 // import with SnapshotNode; re-exported here so existing callers are unaffected.
-export type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 
 const SNAPSHOT_QUALITY_STATES = new Set<SnapshotQualityVerdict['state']>([
   'healthy',
