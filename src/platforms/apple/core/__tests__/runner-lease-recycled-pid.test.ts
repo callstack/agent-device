@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { spawn, type ChildProcess } from 'node:child_process';
-import { afterEach, test } from 'vitest';
+import { afterEach, beforeEach, test } from 'vitest';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { runCmdBackground, type ExecBackgroundResult } from '../../../../utils/exec.ts';
 import { readProcessStartTime } from '../../../../utils/host-process.ts';
 import {
   RUNNER_OWNER_TOKEN,
@@ -42,11 +42,26 @@ import {
  * pinning the read is the point rather than a workaround.
  */
 
-let child: ChildProcess | undefined;
+// Process execution goes through utils/exec.ts, never node:child_process
+// directly (AGENTS.md hard rule) — including in tests.
+let child: ExecBackgroundResult | undefined;
+let previousLeaseDir: string | undefined;
+
+beforeEach(() => {
+  // Leases default to the REAL ~/.agent-device tree; redirect them so the
+  // suite never writes into the developer's own runner state.
+  previousLeaseDir = process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR;
+  process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR = mkdtempForTestSync('agent-device-lease-root-');
+});
 
 afterEach(() => {
-  child?.kill('SIGKILL');
+  child?.child.kill('SIGKILL');
   child = undefined;
+  if (previousLeaseDir === undefined) {
+    delete process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR;
+  } else {
+    process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR = previousLeaseDir;
+  }
 });
 
 function recordingCleanup(): {
@@ -67,8 +82,11 @@ function recordingCleanup(): {
 }
 
 async function spawnRealChild(): Promise<{ pid: number; startTime: string | null }> {
-  child = spawn('sleep', ['30'], { stdio: 'ignore' });
-  const pid = child.pid;
+  child = runCmdBackground('sleep', ['30'], { stdio: 'ignore', captureOutput: false });
+  // The cleanup SIGKILL below makes `wait` reject; own that here so it is a
+  // deliberate no-op rather than an unhandled rejection.
+  child.wait.catch(() => {});
+  const pid = child.child.pid;
   assert.ok(pid, 'the OS gave the child a pid');
   // `readProcessStartTime` shells out to `ps`, which under full-suite CPU
   // contention can miss its own timeout and return null. The budget is
@@ -130,7 +148,7 @@ test('a lease whose runner pid was recycled is never signalled', async () => {
     [undefined, undefined],
     'both the SIGTERM and SIGKILL passes refuse the unverified pid',
   );
-  assert.equal(child?.killed, false, 'the real process was left alone');
+  assert.equal(child?.child.killed, false, 'the real process was left alone');
   // Guards the assertion above against passing for the wrong reason: cleanup
   // must actually have run (a lease that classified as anything but `owned`
   // would also produce no signals).
