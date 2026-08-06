@@ -37,6 +37,7 @@ import type { AgentDeviceClient } from '../agent-device-client.ts';
 afterEach(() => {
   vi.clearAllMocks();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 const unexpectedCommandCall = async (): Promise<never> => {
@@ -2165,6 +2166,72 @@ test('connect --force skips releasing the previous lease when its token cannot b
   assert.match(stdout, /tenant acme, run run-old/);
   assert.match(stdout, /old\.example/);
   // Reconnect still succeeds despite the orphaned previous lease.
+  assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-android' })?.runId, 'run-new');
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('connect --force does not misclassify an env-sourced new token as the previous connection’s own credential', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connect-force-env-token-');
+  const stateDir = path.join(tempRoot, '.state');
+  const oldRemoteConfigPath = path.join(tempRoot, 'old-remote.json');
+  const newRemoteConfigPath = path.join(tempRoot, 'new-remote.json');
+  // Neither config file declares daemonAuthToken; the only source of a token
+  // anywhere is the environment, which is global and belongs to the *new*
+  // connection, not provably to old.example.
+  fs.writeFileSync(oldRemoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://old.example' }));
+  fs.writeFileSync(newRemoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://new.example' }));
+  // Token B, supplied through the environment — not via --daemon-auth-token —
+  // which is precisely the gap a merged-profile read would miss.
+  vi.stubEnv('AGENT_DEVICE_DAEMON_AUTH_TOKEN', 'test-env-not-a-real-token');
+  writeRemoteConnectionState({
+    stateDir,
+    state: {
+      version: 1,
+      session: 'adc-android',
+      remoteConfigPath: oldRemoteConfigPath,
+      remoteConfigHash: hashRemoteConfigFile(oldRemoteConfigPath),
+      tenant: 'acme',
+      runId: 'run-old',
+      leaseId: 'lease-old',
+      leaseBackend: 'android-instance',
+      daemon: { baseUrl: 'https://old.example' },
+      connectedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  });
+  let releaseRequest: Parameters<AgentDeviceClient['leases']['release']>[0] | undefined;
+
+  const stdout = await captureStdout(async () => {
+    await connectCommand({
+      positionals: [],
+      flags: {
+        json: false,
+        help: false,
+        version: false,
+        force: true,
+        stateDir,
+        remoteConfig: newRemoteConfigPath,
+        daemonBaseUrl: 'https://new.example',
+        // No daemonAuthToken flag: the ambient token below flows in purely
+        // through the environment, matching production's resolution chain.
+        tenant: 'acme',
+        runId: 'run-new',
+        session: 'adc-android',
+        platform: 'android',
+      },
+      client: createTestClient({
+        release: async (request) => {
+          releaseRequest = request;
+          return { released: true };
+        },
+      }),
+    });
+  });
+
+  assert.equal(releaseRequest, undefined);
+  assert.match(stdout, /Could not release the previous lease lease-old/);
+  assert.match(stdout, /tenant acme, run run-old/);
+  assert.match(stdout, /old\.example/);
   assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-android' })?.runId, 'run-new');
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });

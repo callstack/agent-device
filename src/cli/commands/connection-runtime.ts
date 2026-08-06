@@ -3,6 +3,10 @@ import { resolveDaemonPaths } from '../../daemon/config.ts';
 import { stopReactDevtoolsCompanion } from '../../client/client-react-devtools-companion.ts';
 import { stopMetroTunnel } from '../../metro/metro.ts';
 import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
+// Provenance-preserving file-only read (no ambient env defaults merged in) —
+// see resolvePreviousOwnDaemonAuthToken below for why this must not be
+// resolveRemoteConfigProfile.
+import { readRemoteConfigFile } from '../../remote/remote-config-core.ts';
 import {
   deviceFieldsFromPublicPlatform,
   isIosFamily,
@@ -535,7 +539,13 @@ function resolvePreviousOwnDaemonAuthToken(
   env: Record<string, string | undefined>,
 ): string | undefined {
   try {
-    return resolveRemoteConfigProfile({
+    // readRemoteConfigFile, not resolveRemoteConfigProfile: the latter merges
+    // ambient environment defaults (e.g. AGENT_DEVICE_DAEMON_AUTH_TOKEN) into
+    // the profile, which would let the *new* connection's env-sourced token
+    // masquerade as a credential that provably belongs to the *previous*
+    // endpoint. Only a token the previous config file itself declares counts
+    // here; the env fallback is rule 2's job, gated on matching endpoints.
+    return readRemoteConfigFile({
       configPath: previous.remoteConfigPath,
       cwd,
       env,
