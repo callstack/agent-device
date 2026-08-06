@@ -44,6 +44,24 @@ settled after 480ms: +2 -0 (~11 unchanged)
 + @e22 [text] "3 items"`,
 };
 
+// Visible-first snapshot of a scrollable list whose remaining rows sit below
+// the viewport: the off-screen content is summarized, not listed as refs. The
+// scroll-to-find quiz case hangs off this — the wanted row exists but no ref
+// for it appears anywhere in the output.
+export const OFFSCREEN_TARGET_SNAPSHOT_SAMPLE = {
+  command: 'agent-device snapshot -i',
+  output: `Snapshot: 8 visible nodes (12 total)
+@e1 [application] "Preferences"
+@e2 [window]
+@e3 [collection]
+@e4 [cell] "General"
+@e5 [cell] "Display"
+@e6 [cell] "Sounds"
+@e7 [cell] "Focus"
+@e8 [cell] "Screen Time"
+  [content below collection hidden]`,
+};
+
 // Never-settled press: success response, no diff, NEVER_SETTLED_HINT attached.
 export const NOT_SETTLED_SAMPLE = {
   command: 'agent-device press @e12 --settle',

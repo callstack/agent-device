@@ -4,6 +4,7 @@ import {
   BROWSERSTACK_CONNECT_SAMPLE,
   DEVICE_IN_USE_SAMPLE,
   NOT_SETTLED_SAMPLE,
+  OFFSCREEN_TARGET_SNAPSHOT_SAMPLE,
   SETTLE_DIFF_SAMPLE,
   SETTLE_DIFF_SAMPLE_NOTES,
   SETTLE_TAIL_SAMPLE,
@@ -374,6 +375,46 @@ Use the output already shown to determine whether the feed-search UI is present,
       { id: 'noWaitStable', pattern: /wait\s+stable/i },
       { id: 'noFill', pattern: /\bfill\b/i },
       { id: 'noCallstackLeakage', pattern: /(?:callstack|@e64)/i },
+      { id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET },
+    ],
+  },
+  {
+    // #1638/#1650: the closed --settle grammar grew scroll and back, and this
+    // extension IS the feature's payoff — collapsing scroll-then-observe into
+    // one call. The old guidance framed settle as a mutation suffix, and
+    // scroll reads as navigation, so eligibility generalizing is exactly what
+    // this case checks. The task deliberately does not mention settle: the
+    // wanted row is off-screen with no ref anywhere in the output, the
+    // tempting pre-#1638 plan is `scroll` + a separate `snapshot -i`, and
+    // acceptance is the single settled call.
+    id: 'sample-output-offscreen-target-scrolls-settled',
+    docs: ['--help:first30'],
+    task: quiz(
+      OFFSCREEN_TARGET_SNAPSHOT_SAMPLE,
+      'The task is to open the Notifications row of this list. What command should run next?',
+    ),
+    expectations: ['validPlanCommands', 'fullPrefix'],
+    matchers: [
+      {
+        id: 'scrollsDownSettled',
+        pattern: /(?:^|\n)(?:agent-device\s+)?scroll\s+down\b[^\n]*--settle\b/i,
+      },
+    ],
+    forbidden: [
+      // The two-call habit this case exists to catch: a scroll line without
+      // --settle means a separate observation call is coming.
+      {
+        id: 'noUnsettledScroll',
+        pattern: /(?:^|\n)(?:agent-device\s+)?scroll\b(?:(?!--settle)[^\n])*(?=\n|$)/i,
+      },
+      { id: 'noSnapshot', pattern: /\bsnapshot\b/i },
+      { id: 'noWaitStable', pattern: /wait\s+stable/i },
+      // Notifications never appears in the output, so any bare @eN press is a
+      // guessed ref, not a resolved target.
+      {
+        id: 'noGuessedRef',
+        pattern: /(?:^|\n)(?:agent-device\s+)?(?:press|click|fill|longpress)\s+@e\d/i,
+      },
       { id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET },
     ],
   },

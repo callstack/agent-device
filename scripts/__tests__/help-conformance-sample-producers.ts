@@ -5,6 +5,7 @@ import {
   BROWSERSTACK_CONNECT_SAMPLE,
   DEVICE_IN_USE_SAMPLE,
   NOT_SETTLED_SAMPLE,
+  OFFSCREEN_TARGET_SNAPSHOT_SAMPLE,
   PRIVATE_AX_RECOVERY_SAMPLE,
   SETTLE_DIFF_SAMPLE,
   SETTLE_DIFF_SAMPLE_NOTES,
@@ -206,6 +207,64 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
         warnings: renderSnapshotQualityWarnings(verdict, nodes),
         interactiveOnly: true,
       }).trimEnd();
+    },
+  },
+  {
+    name: 'OFFSCREEN_TARGET_SNAPSHOT_SAMPLE',
+    producer: 'the visible-first snapshot renderer with off-screen rows summarized',
+    sample: OFFSCREEN_TARGET_SNAPSHOT_SAMPLE,
+    render: () => {
+      // A settings-style scrollable list in an 800pt viewport: five rows fit,
+      // four more (Privacy & Security, Notifications, Wallpaper, Developer) are
+      // laid out below it, so visible-first presentation summarizes them and
+      // none of their refs reach the output.
+      const row = (index: number, ref: string, label: string, y: number) => ({
+        index,
+        ref,
+        parentIndex: 2,
+        type: 'Cell',
+        label,
+        interactive: true,
+        hittable: y < 800,
+        rect: { x: 0, y, width: 390, height: 120 },
+      });
+      const nodes = [
+        {
+          index: 0,
+          ref: 'e1',
+          type: 'Application',
+          label: 'Preferences',
+          rect: { x: 0, y: 0, width: 390, height: 800 },
+        },
+        {
+          index: 1,
+          ref: 'e2',
+          parentIndex: 0,
+          type: 'Window',
+          rect: { x: 0, y: 0, width: 390, height: 800 },
+        },
+        {
+          index: 2,
+          ref: 'e3',
+          parentIndex: 1,
+          type: 'CollectionView',
+          interactive: true,
+          rect: { x: 0, y: 60, width: 390, height: 740 },
+        },
+        row(3, 'e4', 'General', 60),
+        row(4, 'e5', 'Display', 190),
+        row(5, 'e6', 'Sounds', 320),
+        row(6, 'e7', 'Focus', 450),
+        row(7, 'e8', 'Screen Time', 580),
+        row(8, 'e9', 'Privacy & Security', 900),
+        row(9, 'e10', 'Notifications', 1030),
+        row(10, 'e11', 'Wallpaper', 1160),
+        row(11, 'e12', 'Developer', 1290),
+      ];
+      return formatSnapshotText(
+        { nodes, backend: 'xctest', truncated: false },
+        { interactiveOnly: true },
+      ).trimEnd();
     },
   },
   {
