@@ -97,6 +97,7 @@ function makeSessionStore(): SessionStore {
 async function runSuiteThroughReporter(params: {
   root: string;
   requestId: string;
+  inputs?: string[];
   flags?: DaemonRequest['flags'];
   invoke: (req: DaemonRequest) => Promise<DaemonResponse>;
   devices?: DeviceInfo[];
@@ -112,7 +113,7 @@ async function runSuiteThroughReporter(params: {
             token: 't',
             session: 'default',
             command: 'test',
-            positionals: [params.root],
+            positionals: params.inputs ?? [params.root],
             meta: { cwd: params.root, requestId: params.requestId },
             flags: params.flags,
           },
@@ -157,6 +158,9 @@ async function runRetrySuite(): Promise<{
   const run = await runSuiteThroughReporter({
     root,
     requestId: 'suite-reporter',
+    // Explicit file inputs keep argument order; a directory input enumerates
+    // in native readdir order, which is not lexicographic on every filesystem.
+    inputs: [path.join(root, '01-untyped.ad'), path.join(root, '02-retry.ad')],
     flags: { platform: 'android' },
     invoke: async () => {
       attempts += 1;
