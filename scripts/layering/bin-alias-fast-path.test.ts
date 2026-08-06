@@ -7,10 +7,12 @@ import path from 'node:path';
 import { test } from 'node:test';
 import {
   ALIAS_REGISTRY_FILE,
+  aliasResolverLocalName,
   BIN_FILE,
   importsAliasResolver,
   localAliasLiterals,
   registryAliasTokens,
+  usageTextCallsResolver,
 } from './bin-alias-fast-path.ts';
 
 const REGISTRY_FIXTURE = `
@@ -83,6 +85,84 @@ test('importsAliasResolver is false when the import is missing or from the wrong
   );
 });
 
+test('aliasResolverLocalName resolves the LOCAL binding, following an `as` alias', () => {
+  assert.equal(
+    aliasResolverLocalName(
+      "import { normalizeCliCommandAlias } from './commands/cli-command-aliases.ts';\n",
+    ),
+    'normalizeCliCommandAlias',
+  );
+  assert.equal(
+    aliasResolverLocalName(
+      "import { normalizeCliCommandAlias as resolveAlias } from './commands/cli-command-aliases.ts';\n",
+    ),
+    'resolveAlias',
+  );
+});
+
+test('aliasResolverLocalName is null when there is no matching value import', () => {
+  assert.equal(aliasResolverLocalName('const x = 1;\n'), null);
+  assert.equal(
+    aliasResolverLocalName(
+      "import type { normalizeCliCommandAlias } from './commands/cli-command-aliases.ts';\n",
+    ),
+    null,
+  );
+});
+
+test('usageTextCallsResolver is true for the real composition, by local name', () => {
+  assert.equal(
+    usageTextCallsResolver(
+      'const commandHelp = buildCommandUsageText(normalizeCliCommandAlias(helpTarget));\n',
+      'normalizeCliCommandAlias',
+    ),
+    true,
+  );
+  // Binds by whatever LOCAL name the caller passes — an aliased import's local name must still
+  // be found at the call site, since that is the only name available to call it by.
+  assert.equal(
+    usageTextCallsResolver(
+      'const commandHelp = buildCommandUsageText(resolveAlias(helpTarget));\n',
+      'resolveAlias',
+    ),
+    true,
+  );
+});
+
+test('usageTextCallsResolver is false for a raw call, with no wrapping resolver call', () => {
+  assert.equal(
+    usageTextCallsResolver(
+      'const commandHelp = buildCommandUsageText(helpTarget);\n',
+      'normalizeCliCommandAlias',
+    ),
+    false,
+  );
+});
+
+// #P2 (maintainer review of the original R12): import presence and literal absence both still
+// pass a bin.ts that imports the resolver and never calls it, or calls it on something unrelated,
+// while buildCommandUsageText runs on the raw, unresolved helpTarget. These two fixtures are
+// exactly that regression — the import is real and even "used", but never as the argument
+// buildCommandUsageText receives — and usageTextCallsResolver must reject both.
+test('usageTextCallsResolver rejects a present-but-unused import', () => {
+  const source = `
+import { normalizeCliCommandAlias } from './commands/cli-command-aliases.ts';
+const commandHelp = buildCommandUsageText(helpTarget);
+`;
+  assert.equal(importsAliasResolver(source), true);
+  assert.equal(usageTextCallsResolver(source, aliasResolverLocalName(source)!), false);
+});
+
+test('usageTextCallsResolver rejects an import used only unrelated to buildCommandUsageText', () => {
+  const source = `
+import { normalizeCliCommandAlias } from './commands/cli-command-aliases.ts';
+void normalizeCliCommandAlias;
+const commandHelp = buildCommandUsageText(helpTarget);
+`;
+  assert.equal(importsAliasResolver(source), true);
+  assert.equal(usageTextCallsResolver(source, aliasResolverLocalName(source)!), false);
+});
+
 test('localAliasLiterals reports every requested token present as a string literal', () => {
   // The pre-fix bin.ts shape: a hand-written table re-declaring two of the five tokens.
   const preFixBinSource = `
@@ -116,11 +196,13 @@ const commandHelp = buildCommandUsageText(normalizeCliCommandAlias(helpTarget));
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 
-test('the real tree imports the resolver, holds no local alias literals, and passes R12', () => {
+test('the real tree imports the resolver, calls it into buildCommandUsageText, holds no local alias literals, and passes R12', () => {
   const registrySource = readFileSync(path.join(repoRoot, ALIAS_REGISTRY_FILE), 'utf8');
   const binSource = readFileSync(path.join(repoRoot, BIN_FILE), 'utf8');
   const tokens = registryAliasTokens(registrySource);
   assert.deepEqual(tokens, ['launch', 'long-press', 'metrics', 'relaunch', 'tap']);
-  assert.equal(importsAliasResolver(binSource), true);
+  const localName = aliasResolverLocalName(binSource);
+  assert.equal(localName, 'normalizeCliCommandAlias');
+  assert.equal(usageTextCallsResolver(binSource, localName!), true);
   assert.deepEqual(localAliasLiterals(binSource, tokens), []);
 });

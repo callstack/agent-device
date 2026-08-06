@@ -50,10 +50,11 @@ import {
 import { uninstallableImports, zeroDepClosureFiles, zeroDepJobs } from './zero-dep-jobs.ts';
 import {
   ALIAS_REGISTRY_FILE,
+  aliasResolverLocalName,
   BIN_FILE,
-  importsAliasResolver,
   localAliasLiterals,
   registryAliasTokens,
+  usageTextCallsResolver,
 } from './bin-alias-fast-path.ts';
 import {
   backEdgePair,
@@ -379,7 +380,11 @@ function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): Layer
 /**
  * R12: bin.ts's `--help` fast path must delegate command-alias resolution to the one alias
  * registry instead of re-declaring its own mapping. See bin-alias-fast-path.ts for why the
- * two facts below, together, are what closes the gap the original drift exploited.
+ * three facts below, together, are what closes the gap the original drift exploited — import
+ * presence and literal absence alone still pass a bin.ts that imports the resolver and never
+ * calls it (or calls it on something unrelated) while `buildCommandUsageText(helpTarget)` runs
+ * raw, which is exactly the P2 a maintainer review caught. Fact 3 is what closes that: it
+ * requires the actual composition at the actual call site, bound by the import's local name.
  */
 function checkBinAliasFastPath(sources: ReadonlyMap<string, string>): LayeringViolation[] {
   const registrySource = sources.get(ALIAS_REGISTRY_FILE);
@@ -397,7 +402,8 @@ function checkBinAliasFastPath(sources: ReadonlyMap<string, string>): LayeringVi
   }
 
   const violations: LayeringViolation[] = [];
-  if (!importsAliasResolver(binSource)) {
+  const resolverLocalName = aliasResolverLocalName(binSource);
+  if (resolverLocalName === null) {
     violations.push({
       rule: 'R12 bin-alias-fast-path',
       file: BIN_FILE,
@@ -406,6 +412,17 @@ function checkBinAliasFastPath(sources: ReadonlyMap<string, string>): LayeringVi
         'does not hold a value import of normalizeCliCommandAlias from ' +
         `${ALIAS_REGISTRY_FILE} — the --help fast path cannot delegate alias resolution to the ` +
         'registry without it.',
+    });
+  } else if (!usageTextCallsResolver(binSource, resolverLocalName)) {
+    violations.push({
+      rule: 'R12 bin-alias-fast-path',
+      file: BIN_FILE,
+      line: 1,
+      message:
+        `imports normalizeCliCommandAlias (locally ${resolverLocalName}) but never passes ` +
+        `${resolverLocalName}(...) as the argument to buildCommandUsageText — the import alone ` +
+        'does not prove the --help fast path actually delegates; call ' +
+        `buildCommandUsageText(${resolverLocalName}(helpTarget)) at the fast-path call site.`,
     });
   }
 
@@ -501,8 +518,9 @@ function report(
         `all ${sessionStateFieldCount()} SessionState fields are classified and every write is ` +
         `inside its declared owner (R7); every zero-dep CI job resolves without ` +
         `node_modules (R8); ${typeCycleNote(typeCycle)}; ${daemonModularitySummary()}; ` +
-        `${packageBoundariesSummary(repoRoot)}; and bin.ts delegates command-alias resolution ` +
-        `to the registry with no local alias literals (R12).\n`,
+        `${packageBoundariesSummary(repoRoot)}; and bin.ts imports normalizeCliCommandAlias, ` +
+        `actually passes it into buildCommandUsageText, and holds no local alias literals ` +
+        `(R12).\n`,
     );
     return 0;
   }

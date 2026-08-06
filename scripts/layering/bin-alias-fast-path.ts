@@ -10,17 +10,25 @@
 // "cannot safely unit-import this file" constraint) and is deliberately excluded from coverage
 // (`vitest.config.ts`), so no unit test can call into it directly.
 //
-// Two structural facts, read from bin.ts's source text rather than by importing and running it,
-// close the gap without needing to import it:
+// Three structural facts, read from bin.ts's source text rather than by importing and running
+// it, close the gap without needing to import it:
 //   1. bin.ts holds a VALUE import of `normalizeCliCommandAlias` from the registry — so it is
 //      wired to delegate.
 //   2. bin.ts never itself contains one of the registry's OWN alias tokens as a string literal —
-//      so it cannot be re-declaring a parallel mapping instead of actually calling the import
-//      (fact 1 alone would still pass if bin.ts imported the function and never called it, or
-//      called it beside a leftover local table; fact 2 is what makes the pair exhaustive).
+//      so it cannot be re-declaring a parallel mapping instead of actually calling the import.
+//   3. bin.ts's call to `buildCommandUsageText` receives, as an argument, a call to the LOCAL
+//      binding fact 1 imported — the actual composition the fast path needs
+//      (`buildCommandUsageText(normalizeCliCommandAlias(helpTarget))`), not merely the import's
+//      presence. Facts 1 and 2 alone still pass if bin.ts imports the resolver and never calls
+//      it, or calls it on something unrelated (`void normalizeCliCommandAlias`) while
+//      `buildCommandUsageText(helpTarget)` runs raw — a real gap a maintainer review caught
+//      (the guard's own P2 follow-up). Fact 3 binds by the import's LOCAL name, following any
+//      `as` alias, so `import { normalizeCliCommandAlias as resolveAlias }` still passes and an
+//      unrelated same-named local does not.
 //
-// Both were false on the pre-fix bin.ts (no import; both 'long-press' and 'metrics' present as
-// literals), so the pair is a real regression pin, not just a description of intent.
+// All three were false on the pre-fix bin.ts (no import; both 'long-press' and 'metrics' present
+// as literals; no composition to find), so the set is a real regression pin, not just a
+// description of intent.
 //
 // AST-based (`oxc-parser`, the standing precedent in this directory — session-state.ts,
 // facade-exports.ts, zero-dep-jobs.ts), not a line scan: a line scan reading raw text for
@@ -75,24 +83,67 @@ export function registryAliasTokens(registrySource: string): string[] {
 }
 
 /**
- * Whether `binSource` holds a VALUE (not type-only) import of `normalizeCliCommandAlias` from
- * the alias registry. Reads `oxc-parser`'s own resolved import-entry table
- * (`module.staticImports`), the same source `zero-dep-jobs.ts`'s `moduleSpecifiers` uses — not a
- * regex, so `import type { normalizeCliCommandAlias as x }` (erased at compile time, no runtime
- * delegation at all) cannot pass as a real import the way a line match on the specifier text
- * would.
+ * The LOCAL binding name `binSource` imports `normalizeCliCommandAlias` as — following any `as`
+ * alias — for a VALUE (not type-only) import from the alias registry, or `null` if there is no
+ * such import. Reads `oxc-parser`'s own resolved import-entry table (`module.staticImports`),
+ * the same source `zero-dep-jobs.ts`'s `moduleSpecifiers` uses — not a regex, so
+ * `import type { normalizeCliCommandAlias as x }` (erased at compile time, no runtime delegation
+ * at all) cannot pass as a real import the way a line match on the specifier text would.
+ *
+ * Reporting the LOCAL name (not just a boolean) is what lets `usageTextCallsResolver` below bind
+ * by the name bin.ts actually calls, so a renamed import (`... as resolveAlias`) still verifies,
+ * while a same-named unrelated local elsewhere in the file cannot be mistaken for it.
  */
-export function importsAliasResolver(binSource: string): boolean {
+export function aliasResolverLocalName(binSource: string): string | null {
   const parsed = parseSync(BIN_FILE, binSource);
-  return parsed.module.staticImports.some((entry) => {
-    if (entry.moduleRequest.value !== ALIAS_REGISTRY_SPECIFIER) return false;
-    return entry.entries.some(
-      (specifier) =>
+  for (const entry of parsed.module.staticImports) {
+    if (entry.moduleRequest.value !== ALIAS_REGISTRY_SPECIFIER) continue;
+    for (const specifier of entry.entries) {
+      if (
         !specifier.isType &&
         specifier.importName.kind === 'Name' &&
-        specifier.importName.name === ALIAS_RESOLVER_EXPORT,
-    );
+        specifier.importName.name === ALIAS_RESOLVER_EXPORT
+      ) {
+        return specifier.localName.value;
+      }
+    }
+  }
+  return null;
+}
+
+/** Whether `binSource` holds a VALUE import of `normalizeCliCommandAlias` from the registry. */
+export function importsAliasResolver(binSource: string): boolean {
+  return aliasResolverLocalName(binSource) !== null;
+}
+
+function isCallTo(node: unknown, calleeName: string): boolean {
+  if (node === null || typeof node !== 'object') return false;
+  const record = node as Record<string, unknown>;
+  if (record['type'] !== 'CallExpression') return false;
+  const callee = record['callee'] as Record<string, unknown> | undefined;
+  return callee?.['type'] === 'Identifier' && callee['name'] === calleeName;
+}
+
+/**
+ * Whether `binSource` calls `buildCommandUsageText` with an argument that is ITSELF a call to
+ * `resolverLocalName` — the composition the `--help` fast path actually needs
+ * (`buildCommandUsageText(normalizeCliCommandAlias(helpTarget))`), not merely both names
+ * appearing somewhere in the file. Import presence and literal absence (facts 1 and 2 above)
+ * both still hold if bin.ts imports the resolver and never calls it, or calls it on something
+ * unrelated while `buildCommandUsageText(helpTarget)` runs raw — this is the fact that closes
+ * that gap: it inspects the actual argument expression at the actual call site, not just whether
+ * both identifiers occur in the source.
+ */
+export function usageTextCallsResolver(binSource: string, resolverLocalName: string): boolean {
+  const parsed = parseSync(BIN_FILE, binSource);
+  let found = false;
+  visit(parsed.program, (record) => {
+    if (found || !isCallTo(record, 'buildCommandUsageText')) return;
+    const args = record['arguments'];
+    if (!Array.isArray(args)) return;
+    found = args.some((arg) => isCallTo(arg, resolverLocalName));
   });
+  return found;
 }
 
 /**
