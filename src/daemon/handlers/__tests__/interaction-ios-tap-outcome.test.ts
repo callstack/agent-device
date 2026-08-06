@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
+import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
 import { handleInteractionCommands } from '../interaction.ts';
 import { handleSnapshotCommands } from '../snapshot.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
@@ -339,6 +340,52 @@ test('a changed capture with a different presentation keeps the tap failure', as
   expect(response?.ok).toBe(false);
   if (response && !response.ok) expect(response.error.code).toBe('XCTEST_RECORDED_FAILURE');
   expect(sessionStore.get(sessionName)?.actions).toHaveLength(0);
+});
+
+test('corroborates a tap when the request carries no flags and the baseline used a non-default scope', async () => {
+  const sessionName = 'ios-no-flags-tap-corroboration';
+  const sessionStore = makeSessionStore();
+  const baseline = snapshot(profileNodes);
+  baseline.presentationKey = buildSnapshotPresentationKey({ depth: 2, raw: false });
+  sessionStore.set(
+    sessionName,
+    makeIosSession(sessionName, {
+      appBundleId: 'com.example.app',
+      snapshot: baseline,
+    }),
+  );
+  mockDispatch.mockImplementation(async (_device, command) => {
+    if (command === 'press') {
+      throw new AppError(
+        'XCTEST_RECORDED_FAILURE',
+        'XCTest recorded a failure while executing tap; the action may not have been performed.',
+      );
+    }
+    if (command === 'snapshot') return snapshotPayload(imageViewerNodes);
+    return {};
+  });
+
+  // Deliberately built without a `flags` key at all (not `flags: {}`) — this
+  // mirrors the real production paths (batch steps with no flags, JSON-RPC
+  // requests that omit the key) that hide the bug this test pins.
+  const response = await handleInteractionCommands({
+    req: {
+      token: 'test',
+      session: sessionName,
+      command: 'click',
+      positionals: ['id="unfollow"'],
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+  });
+
+  expect(response?.ok).toBe(true);
+  if (response?.ok) {
+    expect(response.data?.warning).toMatch(/post-action accessibility capture changed/);
+    expect(response.data?.selector).toBe('id="unfollow"');
+  }
+  expect(sessionStore.get(sessionName)?.actions).toHaveLength(1);
 });
 
 test('a changed capture against a stale baseline keeps the tap failure', async () => {
