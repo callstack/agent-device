@@ -11,6 +11,7 @@ import { isFillableType } from '@agent-device/contracts/snapshot';
 import { successText } from '../../../utils/success-text.ts';
 import { findMistargetedTypeRefToken } from '../../../utils/type-target-warning.ts';
 import { requireIntInRange } from '../../../utils/validation.ts';
+import { attachResolvedInteractionTarget } from '../../../contracts/interaction-outcome.ts';
 import type { RepeatedInput } from '../../command-input.ts';
 import { toBackendContext } from '../../runtime-common.ts';
 import {
@@ -196,14 +197,23 @@ async function tapCommand(
     throw new AppError('UNSUPPORTED_OPERATION', 'tap is not supported by this backend');
   }
   const point = requireResolvedPoint(resolved);
-  const backendResult = await runtime.backend.tap(toBackendContext(runtime, options), point, {
-    button: options.button,
-    count: options.count,
-    intervalMs: options.intervalMs,
-    holdMs: options.holdMs,
-    jitterPx: options.jitterPx,
-    doubleTap: options.doubleTap,
-  });
+  let backendResult;
+  try {
+    backendResult = await runtime.backend.tap(toBackendContext(runtime, options), point, {
+      button: options.button,
+      count: options.count,
+      intervalMs: options.intervalMs,
+      holdMs: options.holdMs,
+      jitterPx: options.jitterPx,
+      doubleTap: options.doubleTap,
+    });
+  } catch (error) {
+    // Resolution is complete before the backend call. Preserve it out of
+    // band so a daemon-level failure corroboration can still record the same
+    // target identity if the backend reports an ambiguous tap outcome.
+    attachResolvedInteractionTarget(error, resolved);
+    throw error;
+  }
   const formattedBackendResult = toBackendResult(backendResult);
   return await applyPostActionObservation(
     runtime,

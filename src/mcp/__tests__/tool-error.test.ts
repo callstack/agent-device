@@ -38,17 +38,16 @@ test('formatToolErrorText omits the candidates block for non-ambiguous errors', 
   assert.equal(text.includes('Candidates:'), false);
 });
 
-// P2 review on #1597: device-domain AMBIGUOUS_MATCH (findBootedAppleSimulatorWithApp,
-// src/core/dispatch-resolve.ts) reuses `details.candidates` for `{ id, name }`
-// device objects with no `matches` field — must never render as
-// "Candidates:\n  [object Object]" on the MCP text path either.
-test('formatToolErrorText renders device-domain candidate objects as nothing, never [object Object]', () => {
+// Device-domain AMBIGUOUS_MATCH (findBootedAppleSimulatorWithApp,
+// src/core/dispatch-resolve.ts) keys its list `devices`, so the MCP text path
+// carries the udids the hint asks for — same block as the CLI.
+test('formatToolErrorText lists device-domain candidates udid-first', () => {
   const err = new AppError(
     'AMBIGUOUS_MATCH',
     'Multiple booted iOS simulators have com.example.app installed',
     {
       appTarget: 'com.example.app',
-      candidates: [
+      devices: [
         { id: 'SIM-001', name: 'iPhone 17 Pro' },
         { id: 'SIM-002', name: 'iPhone 17' },
       ],
@@ -57,6 +56,6 @@ test('formatToolErrorText renders device-domain candidate objects as nothing, ne
 
   const text = formatToolErrorText(normalizeToolError(err));
 
+  assert.match(text, /Devices:\n {2}SIM-001 {2}iPhone 17 Pro\n {2}SIM-002 {2}iPhone 17/);
   assert.equal(text.includes('[object Object]'), false);
-  assert.equal(text.includes('Candidates:'), false);
 });

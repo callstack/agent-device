@@ -24,7 +24,8 @@ import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 
 const SCREENSHOT_COMMAND_NAME = 'screenshot';
 
-const screenshotCommandDescription = 'Capture a screenshot.';
+const screenshotCommandDescription =
+  'Capture a screenshot of the active app or web session. Choose the capture scope, density, size, or annotations through the corresponding input fields when needed.';
 
 const screenshotCommandMetadata = defineFieldCommandMetadata(
   SCREENSHOT_COMMAND_NAME,
@@ -49,10 +50,6 @@ const screenshotCommandDefinition = defineExecutableCommand(
 );
 
 const screenshotCliSchema = {
-  helpDescription:
-    'Capture screenshot (web defaults to the viewport; use --fullscreen, --full, or -f for the entire page. iOS simulators default to 1x logical-point output; use --pixel-density to request a different screenshot density. macOS app sessions default to the app window; use --fullscreen for full desktop, --scale to downscale, --overlay-refs to annotate current refs, --normalize-status-bar for deterministic iOS simulator chrome, or --no-stabilize for low-latency Android capture loops)',
-  summary:
-    'Capture screenshot with optional density, full-page, desktop, downscale, or ref overlay modes',
   positionalArgs: ['path?'],
   allowedFlags: SCREENSHOT_COMMAND_FLAG_KEYS,
 } as const;
@@ -74,6 +71,11 @@ export const screenshotDaemonWriter: DaemonWriter = (input) => {
 
 export const screenshotCommandFacet = defineCommandFacet({
   name: SCREENSHOT_COMMAND_NAME,
+  text: {
+    summary: 'Capture a screenshot',
+    cliDetail:
+      'Web defaults to the viewport; use --fullscreen, --full, or -f for the entire page. iOS simulators default to 1x logical-point output; use --pixel-density to request a different screenshot density. macOS app sessions default to the app window; use --fullscreen for full desktop, --scale to downscale, --overlay-refs to annotate current refs, --normalize-status-bar for deterministic iOS simulator chrome, or --no-stabilize for low-latency Android capture loops.',
+  },
   metadata: screenshotCommandMetadata,
   definition: screenshotCommandDefinition,
   cliSchema: screenshotCliSchema,

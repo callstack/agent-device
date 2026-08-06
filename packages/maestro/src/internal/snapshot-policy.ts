@@ -3,8 +3,13 @@ import {
   findNearestScrollableAncestor,
   findSnapshotAncestor,
   isUsefulVisibilityAnchor,
+  isViewportRootNode,
 } from '@agent-device/contracts/snapshot';
-import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
+import {
+  containsPoint,
+  isPositiveFiniteRect,
+  isRectVisibleInViewport,
+} from '@agent-device/kernel/rect';
 import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 
 export function isMaestroNodeVisible(
@@ -47,15 +52,12 @@ function isVisibleInEffectiveViewport(node: SnapshotNode, nodes: SnapshotNode[])
   const viewport =
     findNearestScrollableAncestor(node, byIndex, (ancestor) => Boolean(ancestor.rect))?.rect ??
     resolveRootViewport(nodes, node.rect);
-  return viewport ? rectsOverlap(node.rect, viewport) : true;
+  return viewport ? isRectVisibleInViewport(node.rect, viewport) : true;
 }
 
 function resolveRootViewport(nodes: SnapshotNode[], target: Rect): Rect | null {
   const viewportRects = nodes
-    .filter((node) => {
-      const type = (node.type ?? '').toLowerCase();
-      return node.rect && (type.includes('application') || type.includes('window'));
-    })
+    .filter((node) => node.rect && isViewportRootNode(node))
     .map((node) => node.rect!)
     .sort((left, right) => right.width * right.height - left.width * left.height);
   const centerX = target.x + target.width / 2;
@@ -63,15 +65,4 @@ function resolveRootViewport(nodes: SnapshotNode[], target: Rect): Rect | null {
   return (
     viewportRects.find((rect) => containsPoint(rect, centerX, centerY)) ?? viewportRects[0] ?? null
   );
-}
-
-function rectsOverlap(left: Rect, right: Rect): boolean {
-  return (
-    Math.max(left.x, right.x) <= Math.min(left.x + left.width, right.x + right.width) &&
-    Math.max(left.y, right.y) <= Math.min(left.y + left.height, right.y + right.height)
-  );
-}
-
-function containsPoint(rect: Rect, x: number, y: number): boolean {
-  return x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height;
 }

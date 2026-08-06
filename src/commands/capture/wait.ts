@@ -27,7 +27,8 @@ import { WAIT_KIND_VALUES } from './wait-command-contract.ts';
 
 const WAIT_COMMAND_NAME = 'wait';
 
-const waitCommandDescription = 'Wait for duration, text, ref, selector, or stable UI.';
+const waitCommandDescription =
+  'Wait for a duration, text, snapshot ref, selector, or stable UI. Use text, ref, or selector for a specific readiness condition; stable waits until the UI stays quiet for the requested window.';
 
 const waitCommandMetadata = defineFieldCommandMetadata(WAIT_COMMAND_NAME, waitCommandDescription, {
   kind: enumField(WAIT_KIND_VALUES),
@@ -63,6 +64,9 @@ export const waitDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.wait, (inpu
 
 export const waitCommandFacet = defineCommandFacet({
   name: WAIT_COMMAND_NAME,
+  text: {
+    summary: 'Wait for a duration, text, selector, or stable UI',
+  },
   metadata: waitCommandMetadata,
   definition: waitCommandDefinition,
   cliSchema: waitCliSchema,

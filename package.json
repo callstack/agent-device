@@ -2,7 +2,7 @@
   "name": "agent-device",
   "version": "0.20.5",
   "description": "Agent-native CLI for AI app automation across iOS, Android, tvOS, Android TV, macOS, Linux, and web.",
-  "mcpName": "io.github.callstackincubator/agent-device",
+  "mcpName": "io.github.callstack/agent-device",
   "license": "MIT",
   "author": "Callstack",
   "homepage": "https://agent-device.dev/",

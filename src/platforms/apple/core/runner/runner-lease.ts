@@ -5,7 +5,11 @@ import path from 'node:path';
 import { emitDiagnostic } from '../../../../utils/diagnostics.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { acquireProcessLock } from '../../../../utils/process-lock.ts';
-import { readProcessStartTime } from '../../../../utils/host-process.ts';
+import {
+  isProcessAlive,
+  readProcessCommand,
+  readProcessStartTime,
+} from '../../../../utils/host-process.ts';
 import { classifyOwnerLiveness } from '../../../../utils/owner-identity.ts';
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/platform';
 
@@ -29,6 +33,7 @@ export type RunnerLease = {
   ownerStateDir?: string;
   sessionId: string;
   runnerPid: number | null;
+  runnerStartTime?: string | null;
   port: number;
   xctestrunPath: string;
   jsonPath: string;
@@ -76,6 +81,7 @@ export function buildRunnerLease(params: {
     ownerStateDir: readCurrentStateDir(),
     sessionId: params.sessionId,
     runnerPid: params.runnerPid ?? null,
+    runnerStartTime: params.runnerPid ? readProcessStartTime(params.runnerPid) : null,
     port: params.port,
     xctestrunPath: params.xctestrunPath,
     jsonPath: params.jsonPath,
@@ -372,6 +378,7 @@ function normalizeRunnerLease(value: unknown, deviceId: string): RunnerLease | n
     ownerStartTime: readOptionalString(raw.ownerStartTime),
     ownerStateDir: readOptionalString(raw.ownerStateDir) ?? undefined,
     runnerPid: readPositiveInteger(raw.runnerPid),
+    runnerStartTime: readOptionalString(raw.runnerStartTime),
   };
 }
 
@@ -455,12 +462,59 @@ async function cleanupLeasedRunnerProcesses(
       reason,
     },
   });
-  await cleanup.cleanupRunnerProcessTree(lease.runnerPid ?? undefined, 'SIGTERM');
+  await cleanup.cleanupRunnerProcessTree(resolveVerifiedLeaseRunnerPid(lease), 'SIGTERM');
   await cleanup.cleanupRunnerXcodebuildProcesses(lease.deviceId, lease.ownerToken);
-  await cleanup.cleanupRunnerProcessTree(lease.runnerPid ?? undefined, 'SIGKILL');
+  await cleanup.cleanupRunnerProcessTree(resolveVerifiedLeaseRunnerPid(lease), 'SIGKILL');
   cleanup.cleanupTempFile(lease.xctestrunPath);
   cleanup.cleanupTempFile(lease.jsonPath);
   releaseRunnerLease(lease);
+}
+
+/**
+ * A lease file can outlive its runner by days (SIGKILLed daemon), and pids are
+ * recycled — killing `lease.runnerPid` raw would signal whatever process now
+ * holds that pid, including its whole process group (#1596). Only return the
+ * pid when the live process is provably still the leased runner. Callers must
+ * resolve immediately before each signal and never reuse a resolved pid across
+ * an await: the runner usually dies on SIGTERM, and its pid can be recycled
+ * while the awaited xcodebuild sweep runs before the SIGKILL escalation. The
+ * pattern-based xcodebuild pkill in the cleanup adapter is unaffected and
+ * still collects genuinely stray runner processes.
+ */
+function resolveVerifiedLeaseRunnerPid(lease: RunnerLease): number | undefined {
+  const pid = lease.runnerPid ?? undefined;
+  if (!pid || !isProcessAlive(pid)) return undefined;
+  if (verifyLeaseRunnerPidIdentity(lease, pid)) return pid;
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'ios_runner_lease_recycled_pid_skipped',
+    data: {
+      deviceId: lease.deviceId,
+      runnerPid: pid,
+      runnerStartTime: lease.runnerStartTime ?? null,
+      sessionId: lease.sessionId,
+    },
+  });
+  return undefined;
+}
+
+/**
+ * Is the live process holding `pid` provably still the runner this lease
+ * recorded? Matching recorded start time, or — for leases written before
+ * `runnerStartTime` existed — a command line that looks like the runner's
+ * xcodebuild. Shared with adoption: an unverified pid must never be adopted,
+ * because adoption re-stamps the lease with the live pid's start time and
+ * would launder a recycled pid into a strongly-verified lease that disposal
+ * later kills (#1596).
+ */
+export function verifyLeaseRunnerPidIdentity(lease: RunnerLease, pid: number): boolean {
+  return lease.runnerStartTime
+    ? readProcessStartTime(pid) === lease.runnerStartTime
+    : isRunnerXcodebuildCommand(readProcessCommand(pid));
+}
+
+function isRunnerXcodebuildCommand(command: string | null): boolean {
+  return !!command && command.includes('xcodebuild') && command.includes('AgentDeviceRunner');
 }
 
 function buildRunnerOwnerToken(pid: number, startTime: string | null): string {

@@ -16,36 +16,51 @@ type SnapshotVisibilityNode = Pick<
 >;
 
 /**
+ * The application/window root: the node a target rect is measured against, and
+ * the node whose own rect is invariant under any gesture.
+ *
+ * One definition for the whole repo. It reads `type`, `role` AND `subrole`
+ * because the macOS helper is the only backend that populates the latter two,
+ * and it is the only backend that can emit a window whose `type` does not say
+ * so — `normalizedSnapshotType` returns the raw subrole for a non-standard
+ * window, so an `AXWindow` with subrole `AXSystemDialog` or `AXUnknown` reads
+ * as neither from `type` alone while `role` names it exactly.
+ *
+ * Substring, not equality: macOS emits unmapped roles with their `AX` prefix
+ * intact and subroles like `AXFloatingWindow` that are windows by any reading.
+ * iOS emits a closed set of 31 short names in which only `Application` and
+ * `Window` contain either word, so substring and equality agree there. Android
+ * emits fully-qualified Java class names and no root node at all, so no
+ * spelling of this predicate matches anything on Android — see
+ * `resolveViewportRect`'s third fallback, which is what Android actually uses.
+ */
+export function isViewportRootNode(node: Pick<SnapshotNode, 'type' | 'role' | 'subrole'>): boolean {
+  const kind = [node.type, node.role, node.subrole]
+    .map((value) => normalizeType(value ?? ''))
+    .join(' ');
+  return kind.includes('application') || kind.includes('window');
+}
+
+/**
  * The root viewport a target rect is measured against: the largest
  * Application/Window rect containing the target's center, falling back to the
  * largest such rect, then to the largest containing rect of any node.
  */
 export function resolveViewportRect(nodes: RawSnapshotNode[], targetRect: Rect): Rect | null {
   const targetCenter = centerOfRect(targetRect);
-  const rectNodes = nodes.filter((node) => hasValidRect(node.rect));
-  const viewportNodes = rectNodes.filter((node) => {
-    const type = (node.type ?? '').toLowerCase();
-    return type.includes('application') || type.includes('window');
-  });
-
-  const containingViewport = pickLargestRect(
-    viewportNodes
-      .map((node) => node.rect as Rect)
-      .filter((rect) => containsPoint(rect, targetCenter.x, targetCenter.y)),
+  const rects = nodes.flatMap((node) =>
+    hasValidRect(node.rect) ? [{ node, rect: node.rect }] : [],
   );
-  if (containingViewport) return containingViewport;
+  const viewportRects = rects
+    .filter((entry) => isViewportRootNode(entry.node))
+    .map((entry) => entry.rect);
+  const contains = (rect: Rect) => containsPoint(rect, targetCenter.x, targetCenter.y);
 
-  const viewportFallback = pickLargestRect(viewportNodes.map((node) => node.rect as Rect));
-  if (viewportFallback) return viewportFallback;
-
-  const genericContaining = pickLargestRect(
-    rectNodes
-      .map((node) => node.rect as Rect)
-      .filter((rect) => containsPoint(rect, targetCenter.x, targetCenter.y)),
+  return (
+    pickLargestRect(viewportRects.filter(contains)) ??
+    pickLargestRect(viewportRects) ??
+    pickLargestRect(rects.map((entry) => entry.rect).filter(contains))
   );
-  if (genericContaining) return genericContaining;
-
-  return null;
 }
 
 function hasValidRect(rect: Rect | undefined): rect is Rect {

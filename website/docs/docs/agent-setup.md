@@ -88,7 +88,7 @@ No global install variant. Pin a user- or project-selected package version for u
 }
 ```
 
-Registry metadata uses MCP name `io.github.callstackincubator/agent-device`, npm package `agent-device`, stdio transport, `mcpName` package verification, `server.json`, `glama.json`, and `smithery.yaml`. Glama lists the server at [callstack/agent-device](https://glama.ai/mcp/servers/callstack/agent-device).
+Registry metadata uses MCP name `io.github.callstack/agent-device`, npm package `agent-device`, stdio transport, `mcpName` package verification, `server.json`, `glama.json`, and `smithery.yaml`. Glama lists the server at [callstack/agent-device](https://glama.ai/mcp/servers/callstack/agent-device).
 
 ## Cursor
 

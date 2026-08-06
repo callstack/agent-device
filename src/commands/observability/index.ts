@@ -32,10 +32,13 @@ const NETWORK_ACTION_VALUES = ['dump', 'log'] as const;
 const AUDIO_ACTION_VALUES = ['probe'] as const;
 const AUDIO_PROBE_ACTION_VALUES = ['start', 'status', 'stop'] as const;
 
-const logsCommandDescription = 'Manage session app logs.';
-const eventsCommandDescription = 'Read the session event timeline.';
-const networkCommandDescription = 'Show recent HTTP traffic.';
-const audioCommandDescription = 'Probe audio levels.';
+const logsCommandDescription =
+  'Session app log info, start/stop streaming, diagnostics, and markers';
+const eventsCommandDescription =
+  'Read the daemon-owned session event timeline as paged JSON-friendly entries';
+const networkCommandDescription = 'Dump recent HTTP(s) traffic parsed from the session app log';
+const audioCommandDescription =
+  'Measure browser or host-rendered simulator/emulator audio as compact dBFS buckets. Start a probe before requesting its status or stopping it.';
 
 export const logsCommandMetadata = defineFieldCommandMetadata(
   LOGS_COMMAND_NAME,
@@ -99,8 +102,6 @@ export const audioCommandDefinition = defineExecutableCommand(
 const logsCliSchema = {
   usageOverride:
     'logs path | logs start | logs stop | logs clear [--restart] | logs doctor | logs mark [message...]',
-  helpDescription: 'Session app log info, start/stop streaming, diagnostics, and markers',
-  summary: 'Manage session app logs',
   positionalArgs: ['path|start|stop|clear|doctor|mark', 'message?'],
   allowsExtraPositionals: true,
   allowedFlags: ['restart'],
@@ -109,8 +110,6 @@ const logsCliSchema = {
 const eventsCliSchema = {
   usageOverride: 'events [limit] [cursor]',
   listUsageOverride: 'events',
-  helpDescription: 'Read the daemon-owned session event timeline as paged JSON-friendly entries',
-  summary: 'Read session event timeline',
   positionalArgs: ['limit?', 'cursor?'],
 } as const satisfies CommandSchemaOverride;
 
@@ -118,9 +117,6 @@ const networkCliSchema = {
   usageOverride:
     'network dump [limit] [summary|headers|body|all] [--include summary|headers|body|all] | network log [limit] [summary|headers|body|all] [--include summary|headers|body|all]',
   listUsageOverride: 'network',
-  helpDescription: 'Dump recent HTTP(s) traffic parsed from the session app log',
-  summary:
-    'Inspect HTTP(S) traffic parsed from session app logs, including summaries, headers, and bodies',
   positionalArgs: ['dump|log', 'limit?', 'include?'],
   allowedFlags: ['networkInclude'],
 } as const satisfies CommandSchemaOverride;
@@ -129,9 +125,6 @@ const audioCliSchema = {
   usageOverride:
     'audio probe start [durationSeconds] [bucketMs] | audio probe status | audio probe stop',
   listUsageOverride: 'audio',
-  helpDescription:
-    'Probe browser or host-rendered simulator/emulator audio as compact dBFS buckets',
-  summary: 'Probe audio levels',
   positionalArgs: ['probe', 'start|status|stop', 'durationSeconds?', 'bucketMs?'],
 } as const satisfies CommandSchemaOverride;
 
@@ -181,6 +174,9 @@ export const audioDaemonWriter: DaemonWriter = (input) =>
 
 const logsCommandFacet = defineCommandFacet({
   name: LOGS_COMMAND_NAME,
+  text: {
+    summary: 'Manage session app logs',
+  },
   metadata: logsCommandMetadata,
   definition: logsCommandDefinition,
   cliSchema: logsCliSchema,
@@ -191,6 +187,9 @@ const logsCommandFacet = defineCommandFacet({
 
 const eventsCommandFacet = defineCommandFacet({
   name: EVENTS_COMMAND_NAME,
+  text: {
+    summary: 'Read session event timeline',
+  },
   metadata: eventsCommandMetadata,
   definition: eventsCommandDefinition,
   cliSchema: eventsCliSchema,
@@ -201,6 +200,9 @@ const eventsCommandFacet = defineCommandFacet({
 
 const networkCommandFacet = defineCommandFacet({
   name: NETWORK_COMMAND_NAME,
+  text: {
+    summary: 'Inspect HTTP(S) traffic from session logs',
+  },
   metadata: networkCommandMetadata,
   definition: networkCommandDefinition,
   cliSchema: networkCliSchema,
@@ -211,6 +213,9 @@ const networkCommandFacet = defineCommandFacet({
 
 const audioCommandFacet = defineCommandFacet({
   name: AUDIO_COMMAND_NAME,
+  text: {
+    summary: 'Probe audio levels',
+  },
   metadata: audioCommandMetadata,
   definition: audioCommandDefinition,
   cliSchema: audioCliSchema,

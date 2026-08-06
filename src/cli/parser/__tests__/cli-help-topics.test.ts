@@ -5,20 +5,14 @@ import { usage, usageForCommand } from '../args.ts';
 
 test('usage includes concise top-level commands', async () => {
   const usageText = await usage();
-  assert.match(
-    usageText,
-    /install-from-source\s{2,}Install app builds from URLs, remote source specs, or CI artifacts/,
-  );
-  assert.match(usageText, /prepare\s{2,}Pre-warm platform helpers/);
-  assert.match(
-    usageText,
-    /metro\s{2,}Prepare Metro\/Re\.Pack reachability for React Native\/Expo apps or trigger app reloads/,
-  );
+  assert.match(usageText, /install-from-source\s{2,}Install app builds from URLs or CI artifacts/);
+  assert.match(usageText, /prepare\s{2,}Pre-warm platform helpers before automation/);
+  assert.match(usageText, /metro\s{2,}Prepare the dev server or reload apps/);
   assert.match(usageText, /batch --steps <json> \| --steps-file <path>/);
-  assert.match(usageText, /network\s{2,}Inspect HTTP\(S\) traffic parsed from session app logs/);
+  assert.match(usageText, /network\s{2,}Inspect HTTP\(S\) traffic from session logs/);
   assert.match(usageText, /clipboard read \| clipboard write <text>/);
   assert.match(usageText, /keyboard \[action\]/);
-  assert.match(usageText, /trigger-app-event\s{2,}Invoke app-defined automation\/test events/);
+  assert.match(usageText, /trigger-app-event\s{2,}Invoke an app-defined automation event/);
   assert.match(usageText, /gesture <pan\|fling\|swipe\|pinch\|rotate\|transform\|drag> \.\.\./);
   assert.doesNotMatch(
     usageText,
@@ -136,7 +130,7 @@ test('usage includes agent workflows, config, environment, and examples footers'
   assert.match(usageText, /After mutation: refs are stale/);
   assert.match(usageText, /use its selector directly; otherwise refresh with snapshot -i/);
   assert.match(usageText, /fill <targetOrX> <yOrText> \[text\]\s+Replace text in/);
-  assert.match(usageText, /type <text>\s+Append text to the focused field/);
+  assert.match(usageText, /type <text>\s+Append text to the focused input/);
   assert.match(usageText, /macOS context menus use click <ref> --button secondary/);
   assert.match(
     usageText,
@@ -710,24 +704,15 @@ test('usage renders concise commands inline with descriptions', async () => {
   assert.match(help, /Commands:[\s\S]*\n  boot\s{2,}Boot target device\/simulator/);
   assert.match(help, /Commands:[\s\S]*\n  shutdown\s{2,}Shutdown target simulator\/emulator/);
   assert.match(help, /  prepare\s{2,}Pre-warm platform helpers/);
-  assert.match(
-    help,
-    /  metro\s{2,}Prepare Metro\/Re\.Pack reachability for React Native\/Expo apps/,
-  );
-  assert.match(help, /  perf\s{2,}Check runtime metrics, frames, memory, CPU profiles/);
-  assert.match(help, /  cdp\s{2,}Inspect React Native CDP targets, JS heap growth/);
-  assert.match(help, /  react-devtools\s{2,}Inspect React Native components, props, hooks/);
-  assert.match(help, /  proxy\s{2,}Expose a local daemon through cloudflared, ngrok/);
+  assert.match(help, /  metro\s{2,}Prepare the dev server or reload apps/);
+  assert.match(help, /  perf\s{2,}Check metrics, frames, memory, or profiles/);
+  assert.match(help, /  cdp\s{2,}Inspect CDP targets, JS heap, and leaks/);
+  assert.match(help, /  react-devtools\s{2,}Inspect components, hooks, and render profiles/);
+  assert.match(help, /  proxy\s{2,}Expose a local daemon through an HTTP tunnel/);
   assert.match(help, /  batch --steps <json> \| --steps-file <path>\s{2,}Run multiple commands/);
   assert.match(help, /  test <path-or-glob>\.\.\.\s{2,}Run replay test suites/);
-  assert.match(
-    help,
-    /  screenshot \[path\]\s{2,}Capture screenshot with optional density, full-page, desktop/,
-  );
-  assert.match(
-    help,
-    /  session\s{2,}List active sessions, print the effective daemon state directory, or publish/,
-  );
+  assert.match(help, /  screenshot \[path\]\s{2,}Capture a screenshot/);
+  assert.match(help, /  session\s{2,}List sessions, show the state dir, or publish a script/);
   assert.doesNotMatch(help, /  metro prepare[^\n]*--project-root/);
   assert.doesNotMatch(help, /\n  batch\s{2,}Run multiple commands/);
   assert.doesNotMatch(help, /agent-device-proxy/);

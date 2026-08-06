@@ -25,21 +25,29 @@ import {
 import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 
-const pushCommandMetadata = defineFieldCommandMetadata('push', 'Deliver a push payload.', {
-  app: requiredField(stringField()),
-  payload: requiredField(
-    jsonSchemaField<string | JsonObject>({
-      oneOf: [stringSchema(), looseObjectSchema()],
-    }),
-  ),
-});
+const pushCommandMetadata = defineFieldCommandMetadata(
+  'push',
+  'Deliver push notification payloads to an installed app.',
+  {
+    app: requiredField(stringField()),
+    payload: requiredField(
+      jsonSchemaField<string | JsonObject>({
+        oneOf: [stringSchema(), looseObjectSchema()],
+      }),
+    ),
+  },
+);
 
 const triggerAppEventCommandMetadata = defineFieldCommandMetadata(
   'trigger-app-event',
-  'Trigger an app-defined event.',
+  'Ask the app to handle an app-defined automation or test event, with an optional structured payload. Call this only for event names and payload shapes the app documents.',
   {
-    event: requiredField(stringField()),
-    payload: jsonObjectField(),
+    event: requiredField(
+      stringField('Name of an app-defined automation or test event the app documents.'),
+    ),
+    payload: jsonObjectField(
+      'Structured payload passed to the event, in the shape the app documents for it.',
+    ),
   },
 );
 
@@ -54,17 +62,12 @@ const triggerAppEventCommandDefinition = defineExecutableCommand(
 
 const pushCliSchema = {
   listUsageOverride: 'push',
-  helpDescription: 'Deliver push notification payloads to an installed app.',
-  summary: 'Deliver push notification payloads to an installed app',
   positionalArgs: ['bundleOrPackage', 'payloadOrJson'],
 } as const satisfies CommandSchemaOverride;
 
 const triggerAppEventCliSchema = {
   usageOverride: 'trigger-app-event <event> [payloadJson]',
   listUsageOverride: 'trigger-app-event',
-  helpDescription:
-    'Invoke app-defined automation or test events with an optional structured payload.',
-  summary: 'Invoke app-defined automation/test events with optional structured payloads',
   positionalArgs: ['event', 'payloadJson?'],
 } as const satisfies CommandSchemaOverride;
 
@@ -90,6 +93,9 @@ const triggerAppEventDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.trigger
 
 const pushCommandFacet = defineCommandFacet({
   name: 'push',
+  text: {
+    summary: 'Deliver a push notification payload',
+  },
   metadata: pushCommandMetadata,
   definition: pushCommandDefinition,
   cliSchema: pushCliSchema,
@@ -99,6 +105,9 @@ const pushCommandFacet = defineCommandFacet({
 
 const triggerAppEventCommandFacet = defineCommandFacet({
   name: 'trigger-app-event',
+  text: {
+    summary: 'Invoke an app-defined automation event',
+  },
   metadata: triggerAppEventCommandMetadata,
   definition: triggerAppEventCommandDefinition,
   cliSchema: triggerAppEventCliSchema,
@@ -119,6 +128,6 @@ function triggerEventPositionals(input: AppTriggerEventOptions): string[] {
   return [input.event, ...(input.payload ? [JSON.stringify(input.payload)] : [])];
 }
 
-function jsonObjectField(): CommandField<JsonObject> {
-  return looseObjectField() as CommandField<JsonObject>;
+function jsonObjectField(description?: string): CommandField<JsonObject> {
+  return looseObjectField(description) as CommandField<JsonObject>;
 }

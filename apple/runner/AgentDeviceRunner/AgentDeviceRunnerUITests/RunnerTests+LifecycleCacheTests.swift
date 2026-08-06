@@ -134,6 +134,8 @@ extension RunnerTests {
     currentAppProcessIdentifier = 42
     snapshotXCTestPenaltyWarmupExemptionPending = true
     needsFirstInteractionDelay = false
+    penalizeSnapshotXCTestChannel(bundleId: "com.example.app", reason: "test")
+    XCTAssertTrue(isSnapshotXCTestChannelPenalized(bundleId: "com.example.app"))
 
     let response = resetTargetAfterExternalRelaunch()
 
@@ -142,6 +144,7 @@ extension RunnerTests {
     XCTAssertNil(currentBundleId)
     XCTAssertNil(currentAppProcessIdentifier)
     XCTAssertFalse(snapshotXCTestPenaltyWarmupExemptionPending)
+    XCTAssertFalse(isSnapshotXCTestChannelPenalized(bundleId: "com.example.app"))
     XCTAssertTrue(needsFirstInteractionDelay)
   }
 #endif

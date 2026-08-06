@@ -18,8 +18,6 @@ const batchCommandDefinition = defineExecutableCommand(batchCommandMetadata, (cl
 const batchCliSchema = {
   usageOverride: 'batch [--steps <json> | --steps-file <path>]',
   listUsageOverride: 'batch --steps <json> | --steps-file <path>',
-  helpDescription: 'Execute multiple commands in one daemon request',
-  summary: 'Run multiple commands',
   allowedFlags: ['steps', 'stepsFile', 'batchOnError', 'batchMaxSteps', 'out'],
 } as const satisfies CommandSchemaOverride;
 
@@ -33,6 +31,9 @@ const batchCliReader: CliReader = (_positionals, flags) => ({
 
 const batchCommandFacet = defineCommandFacet({
   name: 'batch',
+  text: {
+    summary: 'Run multiple commands',
+  },
   metadata: batchCommandMetadata,
   definition: batchCommandDefinition,
   cliSchema: batchCliSchema,

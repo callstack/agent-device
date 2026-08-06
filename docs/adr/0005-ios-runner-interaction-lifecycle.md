@@ -64,7 +64,8 @@ normal activation path.
 
 An external iOS simulator relaunch also invalidates process-bound target state. After replacing the
 app process, the daemon sends a lifecycle reset to the retained runner so the next command reacquires
-`XCUIApplication`; if that reset cannot be confirmed, the daemon discards the runner session.
+`XCUIApplication`; the reset also clears process-bound snapshot penalty and private-AX depth state. If
+that reset cannot be confirmed, the daemon discards the runner session.
 
 The snapshot surface intentionally has two AX-failure shapes. Interactive fast snapshots return a
 truncated success payload with `runnerFatal` so agents can still see that AX state is unavailable
@@ -93,8 +94,15 @@ Apps with broken accessibility trees may still be impossible for XCTest to inspe
 failed snapshot no longer teaches the runner to keep using a suspect cached app target or to amplify
 the failure by walking every interactive element query.
 
+An `XCTEST_RECORDED_FAILURE` returned after a tap is treated as an ambiguous outcome at the daemon
+boundary. When a usable retained snapshot exists, the daemon takes one same-presentation post-action
+capture. A changed accessibility digest is reported as success with an explicit warning so agents do
+not blindly repeat a tap that may already have navigated; unchanged, sparse, mismatched, or unavailable
+evidence remains the original failure.
+
 Simulator relaunch keeps the healthy XCTest process warm without carrying an app target across
-process identity. The reset adds one local runner request instead of paying for a runner restart.
+process identity. The reset adds one local runner request instead of paying for a runner restart and
+clears the old process's hostile-screen capture penalty before the replacement is reacquired.
 
 Future optimization work should only reduce these preflights after the runner exposes status in a
 way that survives command-induced XCTest teardown and can prove the session is still serving new

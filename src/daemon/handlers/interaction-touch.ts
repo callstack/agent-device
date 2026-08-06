@@ -4,6 +4,7 @@ import type {
   InteractionTarget,
   LongPressCommandResult,
   PressCommandResult,
+  ResolvedInteractionTarget,
 } from '@agent-device/contracts/interaction';
 import {
   buttonTag,
@@ -25,6 +26,7 @@ import { normalizeAppleRunnerResultForResponse } from '../../platforms/apple/cor
 import type { ReplayTargetGuardDenotation } from '@agent-device/contracts/replay';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { getActiveAndroidSnapshotFreshness } from '../android-snapshot-freshness.ts';
+import { readResolvedInteractionTarget } from '../../contracts/interaction-outcome.ts';
 import {
   ensureAndroidBlockingSystemDialogReady,
   type AndroidBlockingDialogReadinessResult,
@@ -58,6 +60,7 @@ import {
 } from './interaction-touch-reference-frame.ts';
 import {
   buildInteractionResponseData,
+  buildCorroboratedTapResponseData,
   type InteractionResponsePayloads,
 } from './interaction-touch-response.ts';
 import {
@@ -66,6 +69,7 @@ import {
   parseLongPressTarget,
   parseTouchTarget,
 } from './interaction-touch-targets.ts';
+import { corroborateIosTapFailure, interactionTargetExtra } from './interaction-ios-tap-outcome.ts';
 import { errorResponse, noActiveSessionError, requireCommandSupported } from './response.ts';
 
 export async function handleTouchInteractionCommands(
@@ -196,6 +200,16 @@ async function dispatchTargetedTouchViaRuntime(
             staleRefsWarning,
           }
         : undefined,
+    iosTapCorroboration: {
+      target: parsedTarget.target,
+      extra:
+        command === 'longpress'
+          ? {
+              ...(durationMs !== undefined ? { durationMs } : {}),
+              gesture: 'longpress',
+            }
+          : resultButtonTag,
+    },
     run: async (runtime) =>
       await runTargetedTouchInteraction({
         runtime,
@@ -394,7 +408,7 @@ function hasNonDefaultClickOptions(flags: CommandFlags | undefined): boolean {
 }
 
 async function dispatchDirectIosSelectorTap(
-  params: InteractionHandlerParams,
+  params: InteractionHandlerParams & { captureSnapshotForSession: CaptureSnapshotForSession },
   session: SessionState,
   selector: DirectIosSelectorTarget,
 ): Promise<DaemonResponse | null> {
@@ -410,7 +424,7 @@ async function dispatchDirectIosSelectorTap(
 }
 
 async function dispatchDirectIosSelectorInteraction(params: {
-  params: InteractionHandlerParams;
+  params: InteractionHandlerParams & { captureSnapshotForSession: CaptureSnapshotForSession };
   session: SessionState;
   selector: DirectIosSelectorTarget;
   command: 'press' | 'fill';
@@ -452,7 +466,7 @@ async function dispatchDirectIosSelectorInteraction(params: {
       flags: handlerParams.req.flags,
       data,
     });
-    const fallbackDetails = maestroFallbackDetails(
+    const maestroFallback = maestroFallbackDisclosure(
       selector.allowNonHittableCoordinateFallback === true,
       data,
     );
@@ -463,12 +477,12 @@ async function dispatchDirectIosSelectorInteraction(params: {
         data,
         publicData,
         point,
-        maestroFallbackUsed: fallbackDetails.maestroNonHittableCoordinateFallbackUsed === true,
+        maestroCoordinateFallbackDispatched: maestroFallback.used,
       },
       referenceFrame: readReferenceFrameFromDirectSelectorTapResult(data),
       extra: {
         ...extra,
-        ...fallbackDetails,
+        ...maestroFallback.extra,
       },
     });
     return finalizeTouchInteraction({
@@ -484,6 +498,15 @@ async function dispatchDirectIosSelectorInteraction(params: {
       actionFinishedAt,
     });
   } catch (error) {
+    const corroboratedResponse = await buildDirectIosCorroboratedResponse({
+      error,
+      handlerParams,
+      session,
+      extra,
+      positionals,
+      actionStartedAt,
+    });
+    if (corroboratedResponse) return corroboratedResponse;
     // ADR 0011 delegation-on-error: semantic runner failures fall back to the
     // tree-based runtime path — except for Maestro replay dispatches, whose
     // runner-native error shapes must be preserved.
@@ -503,6 +526,49 @@ async function dispatchDirectIosSelectorInteraction(params: {
     });
     return null;
   }
+}
+
+async function buildDirectIosCorroboratedResponse(params: {
+  error: unknown;
+  handlerParams: InteractionHandlerParams & {
+    captureSnapshotForSession: CaptureSnapshotForSession;
+  };
+  session: SessionState;
+  extra: Record<string, unknown>;
+  positionals: string[];
+  actionStartedAt: number;
+}): Promise<DaemonResponse | undefined> {
+  const { error, handlerParams, session, extra, positionals, actionStartedAt } = params;
+  const corroboration = await corroborateIosTapFailure({
+    error,
+    command: handlerParams.req.command,
+    requestId: handlerParams.req.meta?.requestId,
+    flags: handlerParams.req.flags,
+    session,
+    sessionStore: handlerParams.sessionStore,
+    contextFromFlags: handlerParams.contextFromFlags,
+    captureSnapshotForSession: handlerParams.captureSnapshotForSession,
+  });
+  if (!corroboration) return undefined;
+
+  const { result, responseData } = buildCorroboratedTapResponseData({
+    targetKind: 'selector',
+    warning: corroboration.warning,
+    resolution: { source: 'direct-ios', kind: 'not-observed' },
+    extra,
+  });
+  return finalizeTouchInteraction({
+    session,
+    sessionStore: handlerParams.sessionStore,
+    command: handlerParams.req.command,
+    positionals: handlerParams.req.positionals ?? positionals,
+    flags: handlerParams.req.flags,
+    result,
+    responseData,
+    scheduleInteractionOutcomeRetry: false,
+    actionStartedAt,
+    actionFinishedAt: Date.now(),
+  });
 }
 
 function transformTouchResponseData(params: {
@@ -532,16 +598,36 @@ function readInteractionResponseDataTransformCommand(
   return dispatchCommand;
 }
 
-function maestroFallbackDetails(
+/** The response fields disclosing the Maestro coordinate fallback's policy and outcome. */
+type MaestroFallbackResponseFields = {
+  maestroNonHittableCoordinateFallbackAllowed?: true;
+  maestroNonHittableCoordinateFallbackUsed?: boolean;
+  maestroFallbackReason?: 'non-hittable-coordinate';
+};
+
+type MaestroFallbackDisclosure = {
+  /**
+   * The runner EXECUTED the coordinate fallback. Separate from the response
+   * fields because it also selects the dispatch path the response builder
+   * discloses a resolution for (interaction-touch-response.ts).
+   */
+  used: boolean;
+  extra: MaestroFallbackResponseFields;
+};
+
+function maestroFallbackDisclosure(
   allowed: boolean,
   data: Record<string, unknown> | undefined,
-): Record<string, unknown> {
-  if (!allowed) return {};
+): MaestroFallbackDisclosure {
+  if (!allowed) return { used: false, extra: {} };
   const used = data?.maestroNonHittableCoordinateFallbackUsed === true;
   return {
-    maestroNonHittableCoordinateFallbackAllowed: true,
-    maestroNonHittableCoordinateFallbackUsed: used,
-    ...(used ? { maestroFallbackReason: 'non-hittable-coordinate' } : {}),
+    used,
+    extra: {
+      maestroNonHittableCoordinateFallbackAllowed: true,
+      maestroNonHittableCoordinateFallbackUsed: used,
+      ...(used ? { maestroFallbackReason: 'non-hittable-coordinate' as const } : {}),
+    },
   };
 }
 
@@ -677,7 +763,7 @@ function buildFillResponsePayloads(params: {
   staleRefsWarning: string | undefined;
 }): InteractionResponsePayloads {
   const { session, result } = params;
-  const fallbackDetails = maestroFallbackDetails(
+  const maestroFallback = maestroFallbackDisclosure(
     params.flags?.maestro?.allowNonHittableCoordinateFallback === true,
     result.backendResult,
   );
@@ -695,10 +781,10 @@ function buildFillResponsePayloads(params: {
         flags: params.flags,
         data: result.backendResult,
       }),
-      maestroFallbackUsed: fallbackDetails.maestroNonHittableCoordinateFallbackUsed === true,
+      maestroCoordinateFallbackDispatched: maestroFallback.used,
     },
     referenceFrame,
-    extra: { text: params.text, ...fallbackDetails },
+    extra: { text: params.text, ...maestroFallback.extra },
     staleRefsWarning: params.staleRefsWarning,
     settleRefsGeneration: settleRefsGenerationIssue(session, result),
   });
@@ -718,6 +804,11 @@ async function dispatchRuntimeInteraction<
      * admission rejection built from this context.
      */
     refContext?: RefAdmissionContext;
+    /** A failed local iOS tap may be corroborated against one same-scope capture. */
+    iosTapCorroboration?: {
+      target: InteractionTarget;
+      extra: Record<string, unknown>;
+    };
     run(runtime: ReturnType<typeof createInteractionRuntime>): Promise<TResult>;
     /** May return a warning to append to the successful response (e.g. a pending Android permission dialog). */
     afterRun?(result: TResult): Promise<string | undefined>;
@@ -777,8 +868,102 @@ async function dispatchRuntimeInteraction<
   } catch (error) {
     const appError = asAppError(error);
     if (isAndroidEscapeError(appError)) throw appError;
+    const corroboratedResponse = await buildRuntimeIosCorroboratedResponse({
+      error,
+      handlerParams: params,
+      session,
+      target: options.iosTapCorroboration?.target,
+      extra: options.iosTapCorroboration?.extra,
+      actionStartedAt,
+      androidFreshnessBaseline: options.androidFreshnessBaseline,
+    });
+    if (corroboratedResponse) return corroboratedResponse;
     return appErrorResponse(error);
   }
+}
+
+async function buildRuntimeIosCorroboratedResponse(params: {
+  error: unknown;
+  handlerParams: InteractionHandlerParams & {
+    captureSnapshotForSession: CaptureSnapshotForSession;
+  };
+  session: SessionState;
+  target: InteractionTarget | undefined;
+  extra: Record<string, unknown> | undefined;
+  actionStartedAt: number;
+  androidFreshnessBaseline: SessionState['snapshot'] | undefined;
+}): Promise<DaemonResponse | undefined> {
+  if (!params.target) return undefined;
+  const resolvedTarget = readResolvedInteractionTarget(params.error);
+  if (!resolvedTarget && params.session.recordSession) return undefined;
+  const corroboration = await corroborateIosTapFailure({
+    error: params.error,
+    command: params.handlerParams.req.command,
+    requestId: params.handlerParams.req.meta?.requestId,
+    flags: params.handlerParams.req.flags,
+    session: params.session,
+    sessionStore: params.handlerParams.sessionStore,
+    contextFromFlags: params.handlerParams.contextFromFlags,
+    captureSnapshotForSession: params.handlerParams.captureSnapshotForSession,
+  });
+  if (!corroboration) return undefined;
+
+  const payloads = buildIosCorroboratedPayloads({
+    target: params.target,
+    resolvedTarget,
+    warning: corroboration.warning,
+    referenceFrame: readSnapshotNodesReferenceFrame(params.session.snapshot?.nodes ?? []),
+    extra: params.extra,
+  });
+  return finalizeTouchInteraction({
+    session: params.session,
+    sessionStore: params.handlerParams.sessionStore,
+    command: params.handlerParams.req.command,
+    positionals: params.handlerParams.req.positionals ?? [],
+    flags: params.handlerParams.req.flags,
+    result: payloads.result,
+    responseData: payloads.responseData,
+    recordedTarget: payloads.recordedTarget,
+    scheduleInteractionOutcomeRetry: false,
+    actionStartedAt: params.actionStartedAt,
+    actionFinishedAt: Date.now(),
+    androidFreshnessBaseline: params.androidFreshnessBaseline,
+  });
+}
+
+function buildIosCorroboratedPayloads(params: {
+  target: InteractionTarget;
+  resolvedTarget: ResolvedInteractionTarget | undefined;
+  warning: string;
+  referenceFrame: GestureReferenceFrame | undefined;
+  extra: Record<string, unknown> | undefined;
+}): InteractionResponsePayloads {
+  if (params.resolvedTarget) {
+    return buildInteractionResponseData({
+      source: {
+        kind: 'runtime',
+        result: { ...params.resolvedTarget, warning: params.warning },
+      },
+      referenceFrame: params.referenceFrame,
+      extra: params.extra,
+    });
+  }
+  return buildCorroboratedTapResponseData({
+    targetKind: params.target.kind,
+    point: pointFromInteractionTarget(params.target),
+    warning: params.warning,
+    referenceFrame: params.referenceFrame,
+    extra: {
+      ...interactionTargetExtra(params.target),
+      ...(params.extra ?? {}),
+    },
+  });
+}
+
+function pointFromInteractionTarget(
+  target: InteractionTarget,
+): { x: number; y: number } | undefined {
+  return target.kind === 'point' ? { x: target.x, y: target.y } : undefined;
 }
 
 type RefAdmissionContext = {

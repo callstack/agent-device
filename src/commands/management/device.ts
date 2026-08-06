@@ -8,17 +8,21 @@ import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { managementCliOutputFormatters } from './output.ts';
 
-const devicesCommandMetadata = defineFieldCommandMetadata('devices', 'List available devices.', {});
+const devicesCommandMetadata = defineFieldCommandMetadata(
+  'devices',
+  'List available devices and simulators that can be selected for automation. Use platform, device, udid, or serial inputs on later commands to target one result.',
+  {},
+);
 
 const capabilitiesCommandMetadata = defineFieldCommandMetadata(
   'capabilities',
-  'List commands supported by the selected device.',
+  'List the commands supported by the selected device or active session. Use device-selection inputs when checking support before a session is open.',
   {},
 );
 
 const bootCommandMetadata = defineFieldCommandMetadata(
   'boot',
-  'Boot or prepare a selected device without using CLI positional arguments.',
+  'Boot or prepare the selected device or simulator so later commands can target it. The device is chosen through the device-selection inputs, not by naming it here.',
   {
     headless: booleanField('Boot without showing simulator UI when supported.'),
   },
@@ -49,19 +53,14 @@ const shutdownCommandDefinition = defineExecutableCommand(
 );
 
 const bootCliSchema = {
-  summary: 'Boot target device/simulator',
   allowedFlags: ['headless'],
 } as const satisfies CommandSchemaOverride;
 
-const capabilitiesCliSchema = {
-  summary: 'List supported commands for the selected device',
-  helpDescription:
-    'List command names supported by the selected session device or explicit --platform/--device/--udid/--serial target.',
-} as const satisfies CommandSchemaOverride;
+const devicesCliSchema = {} as const satisfies CommandSchemaOverride;
 
-const shutdownCliSchema = {
-  summary: 'Shutdown target simulator/emulator',
-} as const satisfies CommandSchemaOverride;
+const capabilitiesCliSchema = {} as const satisfies CommandSchemaOverride;
+
+const shutdownCliSchema = {} as const satisfies CommandSchemaOverride;
 
 const commonCliReader: CliReader = (_positionals, flags) => commonInputFromFlags(flags);
 
@@ -77,8 +76,12 @@ const shutdownDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.shutdown);
 
 const devicesCommandFacet = defineCommandFacet({
   name: 'devices',
+  text: {
+    summary: 'List available devices and simulators',
+  },
   metadata: devicesCommandMetadata,
   definition: devicesCommandDefinition,
+  cliSchema: devicesCliSchema,
   cliReader: commonCliReader,
   daemonWriter: devicesDaemonWriter,
   cliOutputFormatter: managementCliOutputFormatters.devices,
@@ -86,6 +89,10 @@ const devicesCommandFacet = defineCommandFacet({
 
 const capabilitiesCommandFacet = defineCommandFacet({
   name: 'capabilities',
+  text: {
+    summary: 'List supported commands for the selected device',
+    cliDetail: 'Select an explicit target with --platform/--device/--udid/--serial.',
+  },
   metadata: capabilitiesCommandMetadata,
   definition: capabilitiesCommandDefinition,
   cliSchema: capabilitiesCliSchema,
@@ -96,6 +103,9 @@ const capabilitiesCommandFacet = defineCommandFacet({
 
 const bootCommandFacet = defineCommandFacet({
   name: 'boot',
+  text: {
+    summary: 'Boot target device/simulator',
+  },
   metadata: bootCommandMetadata,
   definition: bootCommandDefinition,
   cliSchema: bootCliSchema,
@@ -106,6 +116,9 @@ const bootCommandFacet = defineCommandFacet({
 
 const shutdownCommandFacet = defineCommandFacet({
   name: 'shutdown',
+  text: {
+    summary: 'Shutdown target simulator/emulator',
+  },
   metadata: shutdownCommandMetadata,
   definition: shutdownCommandDefinition,
   cliSchema: shutdownCliSchema,

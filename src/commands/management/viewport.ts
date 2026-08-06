@@ -12,7 +12,7 @@ import { managementCliOutputFormatters } from './output.ts';
 
 const viewportCommandMetadata = defineFieldCommandMetadata(
   'viewport',
-  'Resize the active web viewport.',
+  'Resize the active web viewport before taking snapshots or screenshots. Useful for fixed-layout or 100vh apps where changing the viewport reveals different content.',
   {
     width: requiredField(integerField('Viewport width in CSS pixels.', { min: 1 })),
     height: requiredField(integerField('Viewport height in CSS pixels.', { min: 1 })),
@@ -25,9 +25,6 @@ const viewportCommandDefinition = defineExecutableCommand(
 );
 
 const viewportCliSchema = {
-  helpDescription:
-    'Resize the active web viewport before taking snapshots or screenshots. Useful for fixed-layout or 100vh apps where changing the viewport reveals different content.',
-  summary: 'Resize the active web viewport for the current session',
   positionalArgs: ['width', 'height'],
 } as const satisfies CommandSchemaOverride;
 
@@ -44,6 +41,9 @@ const viewportDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.viewport, (inp
 
 export const viewportCommandFacet = defineCommandFacet({
   name: 'viewport',
+  text: {
+    summary: 'Resize the active web viewport for the current session',
+  },
   metadata: viewportCommandMetadata,
   definition: viewportCommandDefinition,
   cliSchema: viewportCliSchema,

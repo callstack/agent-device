@@ -67,8 +67,6 @@ const interactionCliSchemas = {
   },
   find: {
     usageOverride: 'find <locator|text> <action> [value] [--first|--last]',
-    helpDescription: 'Find by text/label/value/role/id and run action',
-    summary: 'Find an element and act',
     positionalArgs: ['query', 'action', 'value?'],
     allowsExtraPositionals: true,
     allowedFlags: ['snapshotDepth', 'snapshotRaw', 'findFirst', 'findLast', 'record'],
@@ -91,8 +89,6 @@ const interactionCliSchemas = {
   },
   press: {
     usageOverride: 'press <x y|@ref|selector>',
-    helpDescription:
-      'Short press a semantic UI target by ref, selector, or point. For native context menus or hold gestures, use longpress <target> <durationMs> instead of press --hold-ms.',
     positionalArgs: ['targetOrX', 'y?'],
     allowsExtraPositionals: true,
     allowedFlags: [
@@ -103,14 +99,11 @@ const interactionCliSchemas = {
   },
   longpress: {
     usageOverride: 'longpress <x y|@ref|selector> [durationMs]',
-    helpDescription:
-      'Open native context menus or long-press targets by ref, selector, or point. Duration is positional, for example longpress @e12 800 or longpress 300 500 800.',
     positionalArgs: ['targetOrX', 'yOrDurationMs?', 'durationMs?'],
     allowsExtraPositionals: true,
     allowedFlags: [...postActionObservationCliFlags('longpress'), ...SELECTOR_SNAPSHOT_FLAGS],
   },
   swipe: {
-    helpDescription: 'Quick coordinate fling with optional repeat pattern.',
     positionalArgs: ['x1', 'y1', 'x2', 'y2'],
     // Arity is enforced by swipePayloadFromPositionals (assertGestureArity), so
     // an extra positional reaches that migration-hint error, not this schema's.
@@ -120,9 +113,6 @@ const interactionCliSchemas = {
   gesture: {
     usageOverride: 'gesture <pan|fling|swipe|pinch|rotate|transform|drag> ...',
     listUsageOverride: 'gesture <pan|fling|swipe|pinch|rotate|transform|drag> ...',
-    helpDescription:
-      'Run touch gestures: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance], swipe <left|right|left-edge|right-edge>, pinch <scale> [x] [y], rotate <degrees> [x] [y], transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs], or drag <source-selector|pinned-ref> <destination-selector|pinned-ref> [sourceHoldMs] [moveMs] [destinationHoldMs]. For command plans, output only command lines. Android transform verification should use all app-observable effects, for example wait text "pan changed yes", wait text "pinch changed yes", and wait text "rotate changed yes", not exact transform values.',
-    summary: 'Run pan, fling, swipe, pinch, rotate, transform, or drag gestures',
     positionalArgs: ['pan|fling|swipe|pinch|rotate|transform|drag', 'args?'],
     allowsExtraPositionals: true,
     allowedFlags: ['pointerCount'],
@@ -148,8 +138,6 @@ const interactionCliSchemas = {
   },
   scroll: {
     usageOverride: 'scroll <direction|top|bottom> [amount] [--pixels <n>] [--duration-ms <ms>]',
-    helpDescription: 'Scroll in a direction, or toward the top/bottom edge of scrollable content.',
-    summary: 'Scroll in a direction or to an edge',
     positionalArgs: ['directionOrEdge', 'amount?'],
     allowedFlags: ['pixels', 'durationMs'],
   },
@@ -232,6 +220,9 @@ const gestureCommandDefinition = defineExecutableCommand(
 
 const clickCommandFacet = defineCommandFacet({
   name: 'click',
+  text: {
+    summary: 'Click or tap a UI target',
+  },
   metadata: metadata('click'),
   definition: clickCommandDefinition,
   cliSchema: interactionCliSchemas.click,
@@ -242,6 +233,10 @@ const clickCommandFacet = defineCommandFacet({
 
 const pressCommandFacet = defineCommandFacet({
   name: 'press',
+  text: {
+    summary: 'Short-press a UI target',
+    cliDetail: 'The hold duration is positional on longpress, not press --hold-ms.',
+  },
   metadata: metadata('press'),
   definition: pressCommandDefinition,
   cliSchema: interactionCliSchemas.press,
@@ -252,6 +247,9 @@ const pressCommandFacet = defineCommandFacet({
 
 const fillCommandFacet = defineCommandFacet({
   name: 'fill',
+  text: {
+    summary: 'Replace text in a UI input',
+  },
   metadata: metadata('fill'),
   definition: fillCommandDefinition,
   cliSchema: interactionCliSchemas.fill,
@@ -262,6 +260,10 @@ const fillCommandFacet = defineCommandFacet({
 
 const longPressCommandFacet = defineCommandFacet({
   name: 'longpress',
+  text: {
+    summary: 'Hold a UI target to open a context menu',
+    cliDetail: 'Duration is positional, for example longpress @e12 800 or longpress 300 500 800.',
+  },
   metadata: metadata('longpress'),
   definition: longPressCommandDefinition,
   cliSchema: interactionCliSchemas.longpress,
@@ -272,6 +274,9 @@ const longPressCommandFacet = defineCommandFacet({
 
 const swipeCommandFacet = defineCommandFacet({
   name: 'swipe',
+  text: {
+    summary: 'Fling between coordinates',
+  },
   metadata: metadata('swipe'),
   definition: swipeCommandDefinition,
   cliSchema: interactionCliSchemas.swipe,
@@ -281,6 +286,9 @@ const swipeCommandFacet = defineCommandFacet({
 
 const focusCommandFacet = defineCommandFacet({
   name: 'focus',
+  text: {
+    summary: 'Focus input at screen coordinates',
+  },
   metadata: metadata('focus'),
   definition: focusCommandDefinition,
   cliSchema: interactionCliSchemas.focus,
@@ -290,6 +298,9 @@ const focusCommandFacet = defineCommandFacet({
 
 const typeCommandFacet = defineCommandFacet({
   name: 'type',
+  text: {
+    summary: 'Append text to the focused input',
+  },
   metadata: metadata('type'),
   definition: typeCommandDefinition,
   cliSchema: interactionCliSchemas.type,
@@ -299,6 +310,9 @@ const typeCommandFacet = defineCommandFacet({
 
 const scrollCommandFacet = defineCommandFacet({
   name: 'scroll',
+  text: {
+    summary: 'Scroll in a direction or to an edge',
+  },
   metadata: metadata('scroll'),
   definition: scrollCommandDefinition,
   cliSchema: interactionCliSchemas.scroll,
@@ -308,6 +322,9 @@ const scrollCommandFacet = defineCommandFacet({
 
 const getCommandFacet = defineCommandFacet({
   name: 'get',
+  text: {
+    summary: 'Read element text or attributes',
+  },
   metadata: metadata('get'),
   definition: getCommandDefinition,
   cliSchema: interactionCliSchemas.get,
@@ -318,6 +335,9 @@ const getCommandFacet = defineCommandFacet({
 
 const isCommandFacet = defineCommandFacet({
   name: 'is',
+  text: {
+    summary: 'Check a UI predicate on a selector',
+  },
   metadata: metadata('is'),
   definition: isCommandDefinition,
   cliSchema: interactionCliSchemas.is,
@@ -328,6 +348,9 @@ const isCommandFacet = defineCommandFacet({
 
 const findCommandFacet = defineCommandFacet({
   name: 'find',
+  text: {
+    summary: 'Find an element and act',
+  },
   metadata: metadata('find'),
   definition: findCommandDefinition,
   cliSchema: interactionCliSchemas.find,
@@ -338,6 +361,11 @@ const findCommandFacet = defineCommandFacet({
 
 const gestureCommandFacet = defineCommandFacet({
   name: 'gesture',
+  text: {
+    summary: 'Run pan, fling, swipe, pinch, rotate, transform, or drag gestures',
+    cliDetail:
+      'Argument shapes: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance], swipe <left|right|left-edge|right-edge>, pinch <scale> [x] [y], rotate <degrees> [x] [y], transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs], or drag <source-selector|pinned-ref> <destination-selector|pinned-ref> [sourceHoldMs] [moveMs] [destinationHoldMs]. For command plans, output only command lines. Android transform verification should use all app-observable effects, for example wait text "pan changed yes", wait text "pinch changed yes", and wait text "rotate changed yes", not exact transform values.',
+  },
   metadata: metadata('gesture'),
   definition: gestureCommandDefinition,
   cliSchema: interactionCliSchemas.gesture,

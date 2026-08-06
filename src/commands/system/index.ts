@@ -48,14 +48,20 @@ const TV_REMOTE_LONGPRESS_PRESET_MS = 500;
 const CLIPBOARD_ACTION_VALUES = ['read', 'write'] as const;
 const KEYBOARD_METADATA_ACTION_VALUES = ['status', 'dismiss'] as const;
 
-const appStateCommandDescription = 'Show foreground app or activity.';
-const backCommandDescription = 'Navigate back.';
-const homeCommandDescription = 'Go to the home screen.';
-const orientationCommandDescription = 'Set device orientation.';
-const appSwitcherCommandDescription = 'Open the app switcher.';
-const keyboardCommandDescription = 'Inspect or dismiss the keyboard.';
-const clipboardCommandDescription = 'Read or write clipboard text.';
-const tvRemoteCommandDescription = 'Press a TV remote/D-pad button.';
+const appStateCommandDescription = 'Show foreground app/activity';
+const backCommandDescription =
+  'Navigate back in the app or through system navigation. Use in-app for the app navigation stack and system when the platform back behavior is required.';
+const homeCommandDescription =
+  'Send the selected device to its home screen. This leaves the app session open but moves the foreground away from the app.';
+const orientationCommandDescription = 'Set device orientation on iOS and Android';
+const appSwitcherCommandDescription =
+  'Open the device app switcher to inspect or change foreground apps. This changes the visible system UI and may move focus away from the current app.';
+const keyboardCommandDescription =
+  'Inspect Android keyboard visibility/type or press/dismiss the device keyboard. To hide the keyboard, use keyboard dismiss. It taps the keyboard dismiss/hide key when one is exposed, verifies the keyboard closed, and reports UNSUPPORTED_OPERATION when no dismiss key exists \u2014 background taps are never attempted.';
+const clipboardCommandDescription =
+  'Read the current device clipboard text, or replace its contents with the given text.';
+const tvRemoteCommandDescription =
+  'Press or long-press a TV remote or D-pad button on Android TV, tvOS, or Vega OS. Choose the button and optional hold duration through the input fields. The aliases ok, center, and enter all map to select.';
 
 const appStateCommandMetadata = defineFieldCommandMetadata(
   APPSTATE_COMMAND_NAME,
@@ -163,33 +169,30 @@ const tvRemoteCommandDefinition = defineExecutableCommand(
   NAVIGATION_COMMAND_PROJECTIONS['tv-remote'],
 );
 
-const appStateCliSchema = {
-  helpDescription: 'Show foreground app/activity',
-} as const satisfies CommandSchemaOverride;
+const appStateCliSchema = {} as const satisfies CommandSchemaOverride;
 
 const backCliSchema = {
   usageOverride: 'back [--in-app|--system]',
   allowedFlags: ['backMode'],
 } as const satisfies CommandSchemaOverride;
 
+const homeCliSchema = {} as const satisfies CommandSchemaOverride;
+
+const appSwitcherCliSchema = {} as const satisfies CommandSchemaOverride;
+
 const orientationCliSchema = {
   usageOverride: 'orientation <portrait|portrait-upside-down|landscape-left|landscape-right>',
-  helpDescription: 'Set device orientation on iOS and Android',
   positionalArgs: ['orientation'],
 } as const satisfies CommandSchemaOverride;
 
 const keyboardCliSchema = {
   usageOverride: 'keyboard [status|get|dismiss|enter|return]',
-  helpDescription:
-    'Inspect Android keyboard visibility/type or press/dismiss the device keyboard. To hide the keyboard, use keyboard dismiss. It taps the keyboard dismiss/hide key when one is exposed, verifies the keyboard closed, and reports UNSUPPORTED_OPERATION when no dismiss key exists — background taps are never attempted.',
-  summary: 'Inspect, press, or dismiss the device keyboard',
   positionalArgs: ['action?'],
 } as const satisfies CommandSchemaOverride;
 
 const clipboardCliSchema = {
   usageOverride: 'clipboard read | clipboard write <text>',
   listUsageOverride: 'clipboard read | clipboard write <text>',
-  helpDescription: 'Read or write device clipboard text',
   positionalArgs: ['read|write', 'text?'],
   allowsExtraPositionals: true,
 } as const satisfies CommandSchemaOverride;
@@ -197,9 +200,6 @@ const clipboardCliSchema = {
 const tvRemoteCliSchema = {
   usageOverride: `tv-remote [press|longpress] ${TV_REMOTE_BUTTON_USAGE} [--duration-ms <ms>]`,
   listUsageOverride: 'tv-remote press|longpress <button> [--duration-ms <ms>]',
-  helpDescription:
-    'Press a TV remote/D-pad button on Android TV, tvOS, or Vega OS. Use longpress for a 500ms held remote button; --duration-ms overrides the preset. Aliases ok, center, and enter map to select.',
-  summary: 'Press a TV remote/D-pad button',
   positionalArgs: ['press|longpress?', 'button'],
   allowedFlags: ['durationMs'],
 } as const satisfies CommandSchemaOverride;
@@ -236,7 +236,10 @@ export const tvRemoteCliReader: CliReader = (positionals, flags) => ({
 export const appStateDaemonWriter: DaemonWriter = direct(APPSTATE_COMMAND_NAME);
 
 export const backDaemonWriter: DaemonWriter = (input) =>
-  request(BACK_COMMAND_NAME, [], { ...input, backMode: readBackMode(input.mode) });
+  request(BACK_COMMAND_NAME, [], {
+    ...input,
+    backMode: readBackMode(input.mode),
+  });
 
 export const homeDaemonWriter: DaemonWriter = direct(HOME_COMMAND_NAME);
 
@@ -260,6 +263,9 @@ export const tvRemoteDaemonWriter: DaemonWriter = direct(TV_REMOTE_COMMAND_NAME,
 
 const appStateCommandFacet = defineCommandFacet({
   name: APPSTATE_COMMAND_NAME,
+  text: {
+    summary: 'Show the foreground app and activity',
+  },
   metadata: appStateCommandMetadata,
   definition: appStateCommandDefinition,
   clientMethod: 'appState',
@@ -271,6 +277,9 @@ const appStateCommandFacet = defineCommandFacet({
 
 const backCommandFacet = defineCommandFacet({
   name: BACK_COMMAND_NAME,
+  text: {
+    summary: 'Navigate back in the app or system',
+  },
   metadata: backCommandMetadata,
   definition: backCommandDefinition,
   cliSchema: backCliSchema,
@@ -281,8 +290,12 @@ const backCommandFacet = defineCommandFacet({
 
 const homeCommandFacet = defineCommandFacet({
   name: HOME_COMMAND_NAME,
+  text: {
+    summary: 'Go to the device home screen',
+  },
   metadata: homeCommandMetadata,
   definition: homeCommandDefinition,
+  cliSchema: homeCliSchema,
   cliReader: homeCliReader,
   daemonWriter: homeDaemonWriter,
   cliOutputFormatter: systemCliOutputFormatters.home,
@@ -290,6 +303,9 @@ const homeCommandFacet = defineCommandFacet({
 
 const orientationCommandFacet = defineCommandFacet({
   name: ORIENTATION_COMMAND_NAME,
+  text: {
+    summary: 'Set device orientation',
+  },
   metadata: orientationCommandMetadata,
   definition: orientationCommandDefinition,
   cliSchema: orientationCliSchema,
@@ -300,8 +316,12 @@ const orientationCommandFacet = defineCommandFacet({
 
 const appSwitcherCommandFacet = defineCommandFacet({
   name: APP_SWITCHER_COMMAND_NAME,
+  text: {
+    summary: 'Open the device app switcher',
+  },
   metadata: appSwitcherCommandMetadata,
   definition: appSwitcherCommandDefinition,
+  cliSchema: appSwitcherCliSchema,
   cliReader: appSwitcherCliReader,
   daemonWriter: appSwitcherDaemonWriter,
   cliOutputFormatter: systemCliOutputFormatters['app-switcher'],
@@ -309,6 +329,9 @@ const appSwitcherCommandFacet = defineCommandFacet({
 
 const keyboardCommandFacet = defineCommandFacet({
   name: KEYBOARD_COMMAND_NAME,
+  text: {
+    summary: 'Inspect, press, or dismiss the device keyboard',
+  },
   metadata: keyboardCommandMetadata,
   definition: keyboardCommandDefinition,
   clientMethod: 'keyboard',
@@ -320,6 +343,9 @@ const keyboardCommandFacet = defineCommandFacet({
 
 const clipboardCommandFacet = defineCommandFacet({
   name: CLIPBOARD_COMMAND_NAME,
+  text: {
+    summary: 'Read or write device clipboard text',
+  },
   metadata: clipboardCommandMetadata,
   definition: clipboardCommandDefinition,
   clientMethod: 'clipboard',
@@ -331,6 +357,10 @@ const clipboardCommandFacet = defineCommandFacet({
 
 const tvRemoteCommandFacet = defineCommandFacet({
   name: TV_REMOTE_COMMAND_NAME,
+  text: {
+    summary: 'Press a TV remote/D-pad button',
+    cliDetail: 'longpress holds for 500ms by default; --duration-ms overrides the preset.',
+  },
   metadata: tvRemoteCommandMetadata,
   definition: tvRemoteCommandDefinition,
   cliSchema: tvRemoteCliSchema,

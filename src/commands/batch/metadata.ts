@@ -49,7 +49,7 @@ export function createBatchCommandMetadata(
   const fields = batchFields(nestedCommands);
   return defineCommandMetadata({
     name: 'batch',
-    description: 'Run multiple structured command steps in one daemon request.',
+    description: 'Execute multiple commands in one daemon request',
     inputSchema: fieldsInputSchema(fields),
     readInput: (input) => readBatchInput(input, fields),
   });

@@ -58,18 +58,23 @@ const FIND_ACTION_VALUES = [
 ] as const;
 
 const interactionCommandDescriptions = {
-  click: 'Click or tap a semantic UI target by ref, selector, or point.',
-  press: 'Press a semantic UI target by ref, selector, or point.',
-  fill: 'Replace text in a semantic UI target by ref, selector, or point.',
-  longpress: 'Long press by ref, selector, or point.',
-  swipe: 'Swipe between two points.',
-  focus: 'Focus input at coordinates.',
-  type: 'Append text to the focused field.',
-  scroll: 'Scroll in a direction or to an edge.',
-  get: 'Get element text or attributes.',
-  is: 'Assert UI state.',
-  find: 'Find an element and optionally act on it.',
-  gesture: 'Run a structured gesture.',
+  click:
+    'Activate a UI target by snapshot ref, selector, or coordinates. Prefer a ref or selector after a snapshot; use coordinates only when semantic targeting is unavailable. This can change app state; use settle or verify to confirm the result without a follow-up snapshot.',
+  press:
+    'Short-press a UI target by snapshot ref, selector, or coordinates. Use longpress instead when the target requires a context-menu or hold gesture.',
+  fill: 'Replace text in a UI input selected by snapshot ref, selector, or coordinates. Prefer refs or selectors after snapshot; use recordAs to keep sensitive text out of a recorded replay while sending it to the live app.',
+  longpress:
+    'Hold a UI target by snapshot ref, selector, or coordinates to open a context menu or perform another hold gesture. Set durationMs when the default hold duration is unsuitable.',
+  swipe: 'Quick coordinate fling with optional repeat pattern.',
+  focus:
+    'Move input focus to explicit screen coordinates without entering text. Prefer semantic interactions when a snapshot ref or selector is available; use type or fill after focus.',
+  type: 'Append text to the currently focused input. Use fill when the existing field value should be replaced, and focus first when no input is active.',
+  scroll: 'Scroll in a direction, or toward the top/bottom edge of scrollable content.',
+  get: 'Read text or accessibility attributes from a snapshot ref or selector without changing the app. Use format text for visible content or attrs for the element attribute map.',
+  is: 'Check whether a selector satisfies a UI predicate such as visible, hidden, editable, selected, focused, or text. Use wait when the condition may appear asynchronously.',
+  find: 'Find by text/label/value/role/id and run action',
+  gesture:
+    'Perform a structured pan, fling, swipe, pinch, rotate, transform, or drag gesture. Select the gesture kind, then provide only the inputs that apply to that kind.',
 } as const;
 
 type InteractionCommandName = keyof typeof interactionCommandDescriptions;

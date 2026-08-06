@@ -4,6 +4,7 @@ import {
   MAESTRO_COMPATIBILITY_ADR_URL,
   MAESTRO_COMPATIBILITY_ISSUE_URL,
 } from '@agent-device/maestro';
+import { helpBody } from '../../commands/command-text.ts';
 import {
   getCliCommandSchema,
   getCommandSchema,
@@ -1332,7 +1333,7 @@ function renderCommandSection(
     'Commands:',
     commands.map((command) => ({
       label: command.usage,
-      description: command.schema.summary ?? command.schema.helpDescription,
+      description: command.schema.text.summary,
     })),
   );
 }
@@ -1353,12 +1354,11 @@ export function buildCommandUsageText(commandName: string): string | null {
   }
   const flagsSections = sections.length > 0 ? `\n\n${sections.join('\n\n')}` : '';
 
-  return `agent-device ${usage}
+  // One synopsis, not two: the header used to repeat the Usage block verbatim.
+  return `Usage:
+  agent-device ${usage}
 
-${schema.helpDescription}
-
-Usage:
-  agent-device ${usage}${flagsSections}
+${helpBody(schema.text)}${flagsSections}
 `;
 }
 

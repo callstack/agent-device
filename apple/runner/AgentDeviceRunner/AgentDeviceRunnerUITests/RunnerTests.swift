@@ -120,6 +120,42 @@ final class RunnerTests: XCTestCase {
   // seconds on remote-hosted consent dialogs and bypass the plan budget (#1244).
   let systemModalProbeBudget: TimeInterval = 4
   #if AGENT_DEVICE_RUNNER_UNIT_TESTS
+  // #1605 merge gate: deterministic live reproduction of the field ambiguity —
+  // a tap whose coordinate activation LANDS while XCTest bookkeeping records a
+  // failure. Armed by writing a decrementing count to the flag file below
+  // (the daemon regenerates tampered xctestrun templates, so env plumbing
+  // cannot reach a daemon-spawned runner); consumed one injection per tap.
+  // The injection records a real XCTIssue AFTER the real gesture, so
+  // `xctestRecordedFailureResponse` and target invalidation fire byte-for-byte
+  // like a field failure. Production builds compile none of this.
+  static let injectedTapFailureFlagPathForTesting =
+    "/tmp/agent-device-inject-tap-recorded-failure-for-testing"
+
+  static func shouldInjectTapRecordedFailure(command: CommandType, remaining: Int) -> Bool {
+    command == .tap && remaining > 0
+  }
+
+  func consumeInjectedTapRecordedFailureForTesting(command: CommandType) -> Bool {
+    guard
+      let raw = try? String(
+        contentsOfFile: Self.injectedTapFailureFlagPathForTesting,
+        encoding: .utf8
+      ),
+      let remaining = Int(raw.trimmingCharacters(in: .whitespacesAndNewlines))
+    else {
+      return false
+    }
+    guard Self.shouldInjectTapRecordedFailure(command: command, remaining: remaining) else {
+      return false
+    }
+    try? String(remaining - 1).write(
+      toFile: Self.injectedTapFailureFlagPathForTesting,
+      atomically: true,
+      encoding: .utf8
+    )
+    return true
+  }
+
   // Unit-test-only injectable override for the system-modal probe (see
   // `boundedBlockingSystemAlertSnapshot` in RunnerTests+Snapshot.swift): when set, a test's probe
   // body runs in place of `blockingSystemAlertSnapshot` so it can force a real timeout without a

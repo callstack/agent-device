@@ -10,6 +10,7 @@ import { withRunnerCommandId } from './runner-contract.ts';
 import {
   buildRunnerLease,
   readStaleRunnerLease,
+  verifyLeaseRunnerPidIdentity,
   writeRunnerLease,
   type RunnerLease,
 } from './runner-lease.ts';
@@ -69,12 +70,26 @@ export async function tryAdoptRunnerSessionFromLease(
   const runnerPid = lease.runnerPid;
   if (!runnerPid) return skip('runner_pid_missing');
   if (!isProcessAlive(runnerPid)) return skip('runner_process_dead');
+  // The adopted session later signals this pid on disposal — and adoption
+  // re-stamps the lease with the live pid's start time — so a pid that cannot
+  // be proven to still be the leased runner must never be adopted, even if
+  // some process answers the leased port. Legacy leases without a recorded
+  // start time fall back to the runner-shaped command-line check.
+  if (!verifyLeaseRunnerPidIdentity(lease, runnerPid)) {
+    return skip('runner_pid_recycled');
+  }
   const expectedDerived = resolveExpectedDerivedPath(device);
   if (!expectedDerived) return skip('expected_derived_unresolved');
   if (!lease.xctestrunPath.startsWith(`${expectedDerived}${path.sep}`)) {
     return skip('artifact_fingerprint_mismatch');
   }
   if (!(await probeRunnerAnswersUptime(device, lease.port))) return skip('probe_failed');
+  // The probe awaited network I/O — the xcodebuild can have exited and its pid
+  // been recycled while the old port still answers. Re-verify before the
+  // adopted lease re-stamps the pid; everything below is synchronous.
+  if (!isProcessAlive(runnerPid) || !verifyLeaseRunnerPidIdentity(lease, runnerPid)) {
+    return skip('runner_pid_recycled');
+  }
 
   const session = buildAdoptedRunnerSession(device, lease, runnerPid, expectedDerived, options);
   try {

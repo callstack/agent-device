@@ -204,7 +204,7 @@ function describeCommandText(
     (candidate): candidate is CommandFamilyMetadata => candidate.name === descriptor.name,
   );
   return (
-    metadata?.description ?? cliSchema?.helpDescription ?? `Internal command ${descriptor.name}`
+    metadata?.description ?? cliSchema?.text.description ?? `Internal command ${descriptor.name}`
   );
 }
 

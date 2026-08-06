@@ -41,7 +41,7 @@ test('usageForCommand documents tv-remote longpress preset', async () => {
   assert.equal(help === null, false);
   assert.match(help ?? '', /agent-device tv-remote \[press\|longpress\]/);
   assert.match(help ?? '', /--duration-ms <ms>/);
-  assert.match(help ?? '', /Use longpress for a 500ms held remote button/);
+  assert.match(help ?? '', /longpress holds for 500ms by default/);
 });
 
 test('usageForCommand supports legacy long-press alias', async () => {
@@ -244,7 +244,10 @@ test('snapshot command usage documents diff alias', async () => {
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /agent-device snapshot \[--diff\]/);
   assert.match(help, /--timeout <ms>/);
-  assert.match(help, /Capture accessibility tree or diff against the previous session baseline/);
+  assert.match(
+    help,
+    /Capture the accessibility tree or compare it with the previous session baseline/,
+  );
   assert.match(help, /inspect rects with snapshot -i --json/);
   assert.match(help, /verify with diff snapshot -i or snapshot --diff/);
 });
@@ -314,7 +317,7 @@ test('command usage shows record touch-overlay opt-out flag', async () => {
 test('command usage keeps detailed descriptions', async () => {
   const help = await usageForCommand('metro');
   if (help === null) throw new Error('Expected command help text');
-  assert.match(help, /Prepare a local React Native dev-server runtime/);
+  assert.match(help, /Prepare a React Native development server or ask connected apps to reload/);
   assert.match(help, /metro reload/);
   assert.match(help, /--metro-host <host>/);
   assert.match(help, /AGENT_DEVICE_METRO_BEARER_TOKEN/);
@@ -356,7 +359,7 @@ test('clipboard command usage is documented', async () => {
   const help = await usageForCommand('clipboard');
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /clipboard read \| clipboard write <text>/);
-  assert.match(help, /Read or write device clipboard text/);
+  assert.match(help, /Read the current device clipboard text, or replace its contents/);
 });
 
 test('keyboard command usage is documented', async () => {

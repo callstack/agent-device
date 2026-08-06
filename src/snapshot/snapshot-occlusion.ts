@@ -2,7 +2,7 @@ import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 import { centerOfRect } from '@agent-device/kernel/snapshot';
 import { areRectsApproximatelyEqual, normalizeRect } from '../utils/rect-center.ts';
 import { containsPoint } from '@agent-device/kernel/rect';
-import { normalizeType } from '@agent-device/contracts/snapshot';
+import { normalizeType, isViewportRootNode } from '@agent-device/contracts/snapshot';
 
 const COVERED_PRESENTATION_HINT = 'covered';
 const OVERLAY_KIND_FRAGMENTS = [
@@ -220,7 +220,7 @@ function isOverlayLikeNode(
   options: SnapshotOcclusionOptions,
 ): boolean {
   if (!positiveRect(node.rect)) return false;
-  if (isViewportRoot(node)) return false;
+  if (isViewportRootNode(node)) return false;
   if (isFullViewportChromeContainer(node, byIndex)) return false;
   // This is a presentation-order heuristic: only known floating UI chrome should cover
   // later targets. Generic hittable containers can appear later without being visually on top.
@@ -241,7 +241,7 @@ function isFullViewportChromeContainer(
   let current = typeof node.parentIndex === 'number' ? byIndex.get(node.parentIndex) : undefined;
   const visited = new Set<number>();
   while (current && !visited.has(current.index)) {
-    if (isViewportRoot(current)) {
+    if (isViewportRootNode(current)) {
       const viewportRect = positiveRect(current.rect);
       return Boolean(viewportRect && areRectsApproximatelyEqual(rect, viewportRect));
     }
@@ -295,7 +295,7 @@ function isRenderableAdditionalOverlayNode(
   return (
     options.isAdditionalOverlayNode?.(node) === true &&
     positiveRect(node.rect) !== null &&
-    !isViewportRoot(node)
+    !isViewportRootNode(node)
   );
 }
 
@@ -319,11 +319,6 @@ function nodeKindIncludesAny(
 // into this private function directly.
 function normalizeNodeKind(node: Pick<RawSnapshotNode, 'type' | 'role' | 'subrole'>): string {
   return [node.type, node.role, node.subrole].map((value) => normalizeType(value ?? '')).join(' ');
-}
-
-function isViewportRoot(node: RawSnapshotNode): boolean {
-  const normalized = normalizeNodeKind(node);
-  return normalized.includes('application') || normalized.includes('window');
 }
 
 function areRelatedSnapshotNodes(

@@ -1,9 +1,11 @@
 import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { iosRunnerOverrides, performGestureApple } from '../../interactions.ts';
 import { runAppleRunnerCommand } from '../runner/runner-client.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import type { GesturePlan } from '@agent-device/contracts/interaction';
+import { TEXT_ENTRY_ROUTES, type GesturePlan } from '@agent-device/contracts/interaction';
 import { requireGestureSupported } from '../../../../core/capabilities.ts';
 import {
   IOS_TEST_DEVICE,
@@ -361,4 +363,57 @@ test('iosRunnerOverrides rejects macOS desktop scroll duration above the shared 
     code: 'INVALID_ARGS',
   });
   assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
+});
+
+// #1588 widened `Interactor.type` to a bag purely so a `textEntryRoute` string
+// could escape the runner. This narrowing replaced it: the runner wire payload
+// is untrusted JSON, and exactly one typed field crosses into
+// TypeTextBackendResult.
+test('iosRunnerOverrides narrows the runner type payload to the text-entry route', async () => {
+  mockRunAppleRunnerCommand.mockResolvedValueOnce({
+    textEntryRoute: 'synthesized-first-responder',
+    verified: true,
+    referenceWidth: 400,
+    referenceHeight: 800,
+  });
+
+  const { overrides } = iosRunnerOverrides(IOS_TEST_SIMULATOR, {
+    appBundleId: 'com.example.App',
+  });
+
+  assert.deepEqual(await overrides.type('hello', 25), {
+    textEntryRoute: 'synthesized-first-responder',
+  });
+});
+
+test('iosRunnerOverrides reports no route when the runner names one it does not model', async () => {
+  mockRunAppleRunnerCommand.mockResolvedValueOnce({ textEntryRoute: 'unmodelled-route' });
+
+  const { overrides } = iosRunnerOverrides(IOS_TEST_SIMULATOR, {
+    appBundleId: 'com.example.App',
+  });
+
+  assert.deepEqual(await overrides.type('hello'), {});
+});
+
+// Route parity: dropping an unmodelled route (above) is only safe while the TS
+// union names every route the Swift runner can assign. Read the producers
+// rather than trusting the union — a fifth route added on the Swift side would
+// otherwise disappear from the `type` response with nothing turning red.
+test('TEXT_ENTRY_ROUTES names every route the Swift runner assigns', () => {
+  const runnerTestsDir = path.resolve(
+    import.meta.dirname,
+    '../../../../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests',
+  );
+  const swiftRoutes = new Set<string>();
+  for (const entry of fs.readdirSync(runnerTestsDir)) {
+    if (!entry.endsWith('.swift')) continue;
+    const source = fs.readFileSync(path.join(runnerTestsDir, entry), 'utf8');
+    for (const match of source.matchAll(/textEntryRoute[^"\n]*"([^"\n]+)"/g)) {
+      swiftRoutes.add(match[1]!);
+    }
+  }
+
+  assert.ok(swiftRoutes.size > 0, 'expected to find textEntryRoute literals in the runner sources');
+  assert.deepEqual([...swiftRoutes].sort(), [...TEXT_ENTRY_ROUTES].sort());
 });

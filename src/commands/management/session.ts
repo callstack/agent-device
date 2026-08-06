@@ -10,7 +10,7 @@ import { managementCliOutputFormatters } from './output.ts';
 
 const sessionCommandMetadata = defineFieldCommandMetadata(
   'session',
-  'List active sessions or print daemon state directory.',
+  'List active sessions, print the effective daemon state directory, or publish an armed open-to-destination script without closing its session',
   {
     action: enumField(
       ['list', 'state-dir', 'save-script'],
@@ -39,8 +39,6 @@ const sessionCommandDefinition = defineExecutableCommand(
 const sessionCliSchema = {
   usageOverride: 'session list | session state-dir | session save-script [path] [--force]',
   listUsageOverride: 'session',
-  helpDescription:
-    'List active sessions, print the effective daemon state directory, or publish an armed open-to-destination script without closing its session',
   positionalArgs: ['list|state-dir|save-script?', 'path?'],
   allowedFlags: ['force'],
 } as const satisfies CommandSchemaOverride;
@@ -54,6 +52,9 @@ const sessionCliReader: CliReader = (positionals, flags) => ({
 
 export const sessionCommandFacet = defineCommandFacet({
   name: 'session',
+  text: {
+    summary: 'List sessions, show the state dir, or publish a script',
+  },
   metadata: sessionCommandMetadata,
   definition: sessionCommandDefinition,
   cliSchema: sessionCliSchema,

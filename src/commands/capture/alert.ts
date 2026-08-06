@@ -17,7 +17,8 @@ import { AppError } from '@agent-device/kernel/errors';
 
 const ALERT_COMMAND_NAME = 'alert';
 
-const alertCommandDescription = 'Inspect or handle platform alerts.';
+const alertCommandDescription =
+  'Inspect, wait for, accept, or dismiss a platform alert. Use get before acting when the alert content matters; accept and dismiss change the active alert state.';
 
 const alertCommandMetadata = defineFieldCommandMetadata(
   ALERT_COMMAND_NAME,
@@ -48,6 +49,9 @@ export const alertDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.alert, (in
 
 export const alertCommandFacet = defineCommandFacet({
   name: ALERT_COMMAND_NAME,
+  text: {
+    summary: 'Inspect, accept, or dismiss a platform alert',
+  },
   metadata: alertCommandMetadata,
   definition: alertCommandDefinition,
   cliSchema: alertCliSchema,

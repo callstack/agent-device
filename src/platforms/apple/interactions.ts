@@ -3,12 +3,15 @@ import {
   normalizeScrollDurationMs,
   SCROLL_DURATION_MAX_MS,
   singlePointerPlanEndpoints,
+  TEXT_ENTRY_ROUTES,
   type BackMode,
   type GesturePlan,
   type Interactor,
   type RunnerCallOptions,
   type RunnerContext,
   type ScrollDirection,
+  type TextEntryRoute,
+  type TypeTextBackendResult,
 } from '@agent-device/contracts/interaction';
 import { assertAppleMultiTouchSupported } from '@agent-device/contracts/platform';
 import { isIosFamily, isMacOs, isTvOsDevice, type DeviceInfo } from '@agent-device/kernel/device';
@@ -115,16 +118,18 @@ export function iosRunnerOverrides(
         return await runAppleRunnerCommand(device, iosTapCommand(device, ctx, x, y), runnerOpts);
       },
       type: async (text, delayMs) => {
-        return await runAppleRunnerCommand(
-          device,
-          {
-            command: 'type',
-            text,
-            delayMs,
-            textEntryMode: text === '\n' ? undefined : 'append',
-            appBundleId: ctx.appBundleId,
-          },
-          runnerOpts,
+        return readTypeTextBackendResult(
+          await runAppleRunnerCommand(
+            device,
+            {
+              command: 'type',
+              text,
+              delayMs,
+              textEntryMode: text === '\n' ? undefined : 'append',
+              appBundleId: ctx.appBundleId,
+            },
+            runnerOpts,
+          ),
         );
       },
       fillElementSelector: async (selector, text, delayMs) => {
@@ -182,6 +187,20 @@ export function iosRunnerOverrides(
       },
     },
   };
+}
+
+/**
+ * The runner wire payload is untrusted JSON; this is the one place a `type`
+ * response becomes the typed {@link TypeTextBackendResult} its only consumer
+ * (handleTypeCommand, src/core/dispatch-interactions.ts) reads.
+ */
+function readTypeTextBackendResult(result: Record<string, unknown>): TypeTextBackendResult {
+  const route = result.textEntryRoute;
+  return isTextEntryRoute(route) ? { textEntryRoute: route } : {};
+}
+
+function isTextEntryRoute(value: unknown): value is TextEntryRoute {
+  return typeof value === 'string' && (TEXT_ENTRY_ROUTES as readonly string[]).includes(value);
 }
 
 function readGestureViewport(result: Record<string, unknown>) {

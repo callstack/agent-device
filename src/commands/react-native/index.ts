@@ -10,7 +10,8 @@ import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 const REACT_NATIVE_COMMAND_NAME = 'react-native';
 const REACT_NATIVE_ACTION_VALUES = ['dismiss-overlay'] as const;
 
-const reactNativeCommandDescription = 'Run supported React Native app automation helpers.';
+const reactNativeCommandDescription =
+  'Run supported React Native automation helpers. Use dismiss-overlay to close a visible development error overlay before continuing normal UI automation.';
 
 export const reactNativeCommandMetadata = defineFieldCommandMetadata(
   REACT_NATIVE_COMMAND_NAME,
@@ -42,6 +43,9 @@ export const reactNativeDaemonWriter: DaemonWriter = direct(REACT_NATIVE_COMMAND
 
 const reactNativeCommandFacet = defineCommandFacet({
   name: REACT_NATIVE_COMMAND_NAME,
+  text: {
+    summary: 'Run React Native automation helpers',
+  },
   metadata: reactNativeCommandMetadata,
   definition: reactNativeCommandDefinition,
   cliSchema: reactNativeCliSchema,

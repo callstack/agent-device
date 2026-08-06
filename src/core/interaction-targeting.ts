@@ -1,7 +1,7 @@
 import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { centerOfRect } from '@agent-device/kernel/snapshot';
 import { containsPoint, pickLargestRect } from '@agent-device/kernel/rect';
-import { normalizeType } from '@agent-device/contracts/snapshot';
+import { normalizeType, isViewportRootNode } from '@agent-device/contracts/snapshot';
 import { findNearestHittableAncestor } from '../snapshot/snapshot-processing.ts';
 import { isSnapshotNodeInteractionBlocked } from '../snapshot/snapshot-occlusion.ts';
 import {
@@ -158,10 +158,7 @@ function isScrollingContainer(node: SnapshotNode): boolean {
 function resolveRootViewportRect(nodes: SnapshotNode[], targetRect: Rect): Rect | null {
   const targetCenter = centerOfRect(targetRect);
   const viewportRects = nodes
-    .filter((node) => {
-      const type = (node.type ?? '').toLowerCase();
-      return type.includes('application') || type.includes('window');
-    })
+    .filter(isViewportRootNode)
     .map((node) => normalizeRect(node.rect))
     .filter((rect): rect is Rect => rect !== null);
   if (viewportRects.length === 0) return null;

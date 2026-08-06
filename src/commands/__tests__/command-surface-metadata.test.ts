@@ -20,6 +20,9 @@ import {
   listCommandFamilyMetadata,
 } from '../family/registry.ts';
 import { listExecutableCommandNames } from '../command-surface.ts';
+import { helpBody, mcpBody } from '../command-text.ts';
+import { explainCommand } from '../command-explain.ts';
+import { getDaemonRouteOwnerFiles } from '../../daemon/route-owner-files.ts';
 
 test('MCP exposed command names have metadata and executable command definitions', () => {
   const mcpExposedNames = listMcpExposedCommandNames().sort();
@@ -41,12 +44,96 @@ test('CI-only prepare command stays out of MCP tool surface', () => {
   assert.equal(listMcpExposedCommandNames().includes('prepare'), false);
 });
 
+test('every surface reports the same canonical description', () => {
+  const cliSchemas = listCommandFamilyCliSchemas();
+  const definitionsByName = new Map(
+    listCommandFamilyDefinitions().map((definition) => [definition.name, definition] as const),
+  );
+
+  for (const metadata of listCommandMetadata()) {
+    const definition = definitionsByName.get(metadata.name);
+    assert.equal(
+      definition?.description,
+      metadata.description,
+      `${metadata.name}: executable definition description drifted from metadata`,
+    );
+    assert.equal(
+      describeCommand(metadata.name),
+      metadata.description,
+      `${metadata.name}: explain reports a description other than the canonical body`,
+    );
+    const text = cliSchemas[metadata.name]?.text;
+    assert.ok(text, `${metadata.name}: missing command text`);
+    assert.equal(
+      text.description,
+      metadata.description,
+      `${metadata.name}: CLI text description drifted from metadata`,
+    );
+    // Surfaces may only extend the body, never replace it.
+    assert.ok(
+      helpBody(text).startsWith(metadata.description),
+      `${metadata.name}: help replaces body`,
+    );
+    assert.ok(
+      mcpBody(metadata).startsWith(metadata.description),
+      `${metadata.name}: MCP replaces body`,
+    );
+  }
+});
+
+test('every command states a summary that is shorter than its description', () => {
+  for (const [name, schema] of Object.entries(listCommandFamilyCliSchemas())) {
+    const { summary, description } = schema.text;
+    assert.ok(summary.length > 0, `${name}: summary must not be empty`);
+    assert.ok(
+      summary.length <= 72,
+      `${name}: summary is ${summary.length} chars; the command list wants one short line`,
+    );
+    assert.ok(
+      !summary.endsWith('.'),
+      `${name}: summary should read as a label, without a trailing period`,
+    );
+    // Compare loosely: `push` differed from its description only by a trailing period.
+    assert.notEqual(
+      summary
+        .toLowerCase()
+        .replace(/[^a-z0-9 ]/g, '')
+        .trim(),
+      description
+        .toLowerCase()
+        .replace(/[^a-z0-9 ]/g, '')
+        .trim(),
+      `${name}: summary duplicates the description`,
+    );
+  }
+});
+
+test('open keeps flag guidance on the CLI surface only', () => {
+  const cliSchemas = listCommandFamilyCliSchemas();
+  const open = listMcpCommandMetadata().find((metadata) => metadata.name === 'open');
+  assert.match(mcpBody(open!), /foreground automation target/);
+  assert.match(helpBody(cliSchemas.open!.text), /foreground automation target/);
+  assert.match(helpBody(cliSchemas.open!.text), /--launch-console/);
+});
+
+test('MCP tool descriptions avoid CLI syntax', () => {
+  const cliSyntax = [/--[a-z]/, /<[^>]+>|\[[^\]]+\]/, /agent-device/, /\bpositional\b/];
+  for (const metadata of listMcpCommandMetadata()) {
+    const description = mcpBody(metadata);
+    for (const pattern of cliSyntax) {
+      assert.doesNotMatch(description, pattern, `${metadata.name} contains CLI syntax`);
+    }
+  }
+});
+
 test('common command input accepts web platform selector', () => {
   const snapshotMetadata = listCommandMetadata().find((metadata) => metadata.name === 'snapshot');
   if (!snapshotMetadata) throw new Error('Expected snapshot command metadata');
 
   const platformSchema = snapshotMetadata.inputSchema.properties?.platform;
-  const input = snapshotMetadata.readInput({ platform: 'web' }) as { platform?: unknown };
+  const input = snapshotMetadata.readInput({ platform: 'web' }) as {
+    platform?: unknown;
+  };
   assert.deepEqual(platformSchema?.enum, [
     'apple',
     'android',
@@ -64,7 +151,11 @@ test('trigger-app-event rejects non-object payloads at command input read time',
   if (!metadata) throw new Error('Expected trigger-app-event command metadata');
 
   assert.throws(
-    () => metadata.readInput({ event: 'screenshot_taken', payload: 'not-json-object' }),
+    () =>
+      metadata.readInput({
+        event: 'screenshot_taken',
+        payload: 'not-json-object',
+      }),
     /Expected payload to be an object\./,
   );
 });
@@ -147,3 +238,10 @@ test('command family facets keep daemon writers as an explicit projection subset
     assert.ok(metadataNames.has(name), `${name} daemon writer must belong to command metadata`);
   }
 });
+
+const daemonRouteOwnerFiles = getDaemonRouteOwnerFiles();
+
+function describeCommand(name: string): string | undefined {
+  const result = explainCommand(name, { daemonRouteOwnerFiles });
+  return result.found ? result.explanation.description : undefined;
+}

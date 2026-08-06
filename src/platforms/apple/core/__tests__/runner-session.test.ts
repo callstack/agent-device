@@ -24,6 +24,7 @@ const {
   mockIsProcessAlive,
   mockIsProcessGroupAlive,
   mockPrepareXctestrunWithEnv,
+  mockReadProcessCommand,
   mockReadProcessStartTime,
   mockResolveExpectedRunnerCacheMetadata,
   mockResolveRunnerDerivedPath,
@@ -46,6 +47,7 @@ const {
   // shells out to `ps` with a 1s timeout that can miss under CPU contention,
   // flipping a live owner to 'owner-process-dead'. Deterministic value, no
   // shell-out; identity is still enforced by pid in beforeEach below.
+  mockReadProcessCommand: vi.fn((_pid: number) => null as string | null),
   mockReadProcessStartTime: vi.fn((_pid: number) => 'fixed-test-owner-start-time' as string | null),
   mockResolveExpectedRunnerCacheMetadata: vi.fn(),
   mockResolveRunnerDerivedPath: vi.fn(),
@@ -75,6 +77,7 @@ vi.mock('../../../../utils/host-process.ts', async () => {
     ...actual,
     isProcessAlive: mockIsProcessAlive,
     isProcessGroupAlive: mockIsProcessGroupAlive,
+    readProcessCommand: mockReadProcessCommand,
     readProcessStartTime: mockReadProcessStartTime,
   };
 });
@@ -129,11 +132,13 @@ import {
 } from '../runner/runner-session.ts';
 import {
   cleanupRunnerLeasesForOwner,
+  prepareRunnerLeaseForStartup,
   RUNNER_OWNER_START_TIME,
   RUNNER_OWNER_TOKEN,
   setRunnerLeaseOwnerStateDir,
   writeRunnerLease,
   type RunnerLease,
+  type RunnerLeaseCleanupAdapter,
 } from '../runner/runner-lease.ts';
 
 beforeEach(async () => {
@@ -164,6 +169,7 @@ beforeEach(async () => {
   mockRunAppleToolCommand.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
   mockIsProcessAlive.mockReturnValue(true);
   mockIsProcessGroupAlive.mockReturnValue(false);
+  mockReadProcessCommand.mockReturnValue(null);
   // Our pid reads back its fixed start time; any other pid reads as
   // not-found, same as a real `ps` miss. Dead-lease tests use fabricated
   // pids already rejected by mockIsProcessAlive before this is consulted.
@@ -1111,6 +1117,138 @@ test('runner session startup reclaims dead foreign runner lease before launching
     String(pkillCalls[0]?.[1]?.[2] ?? ''),
     /xcodebuild\.\*test-without-building\.\*AgentDeviceRunner\\\.env\\\.session-runner-session-dead-lease-sim-owner-dead-foreign-/,
   );
+});
+
+// #1596: lease files outlive their runner (SIGKILLed daemon) and pids get
+// recycled — the stale-lease cleanup must never signal a pid it cannot prove
+// is still the leased runner. The recording adapter observes exactly which
+// pid the cleanup would kill; the pattern-based xcodebuild pkill is a
+// separate adapter call and must keep running either way.
+function makeRecordingCleanupAdapter() {
+  const treeKills: Array<{ pid: number | undefined; signal: string }> = [];
+  const xcodebuildCleanups: Array<{ deviceId: string; ownerToken: string | undefined }> = [];
+  const adapter: RunnerLeaseCleanupAdapter = {
+    async cleanupRunnerProcessTree(pid, signal) {
+      treeKills.push({ pid, signal });
+    },
+    async cleanupRunnerXcodebuildProcesses(deviceId, ownerToken) {
+      xcodebuildCleanups.push({ deviceId, ownerToken });
+    },
+    cleanupTempFile() {},
+  };
+  return { adapter, treeKills, xcodebuildCleanups };
+}
+
+function writeStaleLeaseWithRunner(
+  deviceId: string,
+  runner: Pick<RunnerLease, 'runnerPid' | 'runnerStartTime'>,
+): void {
+  mockIsProcessAlive.mockImplementation((pid) => pid !== 999_999_999);
+  writeRunnerLease(
+    makeRunnerLease({
+      deviceId,
+      ownerToken: 'owner-dead-recycled',
+      ownerPid: 999_999_999,
+      ...runner,
+    }),
+  );
+}
+
+test('stale-lease cleanup does not signal a recycled runner pid (start time mismatch)', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-lease-recycled-pid-sim' };
+  writeStaleLeaseWithRunner(device.id, { runnerPid: 55_555, runnerStartTime: 'lease-time-start' });
+  mockReadProcessStartTime.mockImplementation((pid: number) =>
+    pid === 55_555 ? 'different-newer-start' : null,
+  );
+  const { adapter, treeKills, xcodebuildCleanups } = makeRecordingCleanupAdapter();
+
+  await prepareRunnerLeaseForStartup(device.id, adapter);
+
+  assert.deepEqual(treeKills, [
+    { pid: undefined, signal: 'SIGTERM' },
+    { pid: undefined, signal: 'SIGKILL' },
+  ]);
+  assert.deepEqual(xcodebuildCleanups, [
+    { deviceId: device.id, ownerToken: 'owner-dead-recycled' },
+  ]);
+});
+
+test('stale-lease cleanup signals the runner pid when its start time still matches', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-lease-verified-pid-sim' };
+  writeStaleLeaseWithRunner(device.id, { runnerPid: 55_555, runnerStartTime: 'lease-time-start' });
+  mockReadProcessStartTime.mockImplementation((pid: number) =>
+    pid === 55_555 ? 'lease-time-start' : null,
+  );
+  const { adapter, treeKills } = makeRecordingCleanupAdapter();
+
+  await prepareRunnerLeaseForStartup(device.id, adapter);
+
+  assert.deepEqual(treeKills, [
+    { pid: 55_555, signal: 'SIGTERM' },
+    { pid: 55_555, signal: 'SIGKILL' },
+  ]);
+});
+
+test('stale-lease cleanup re-verifies the pid before the SIGKILL escalation', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-lease-recycled-between-signals-sim' };
+  writeStaleLeaseWithRunner(device.id, { runnerPid: 55_555, runnerStartTime: 'lease-time-start' });
+  // The runner dies on SIGTERM and its pid is recycled while the awaited
+  // xcodebuild sweep runs — the SIGKILL escalation must not trust the
+  // verification performed for SIGTERM.
+  let verifications = 0;
+  mockReadProcessStartTime.mockImplementation((pid: number) =>
+    pid === 55_555 ? (++verifications === 1 ? 'lease-time-start' : 'recycled-newer-start') : null,
+  );
+  const { adapter, treeKills } = makeRecordingCleanupAdapter();
+
+  await prepareRunnerLeaseForStartup(device.id, adapter);
+
+  assert.deepEqual(treeKills, [
+    { pid: 55_555, signal: 'SIGTERM' },
+    { pid: undefined, signal: 'SIGKILL' },
+  ]);
+});
+
+test('stale-lease cleanup without a recorded start time trusts only runner-shaped commands', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-lease-legacy-pid-sim' };
+
+  writeStaleLeaseWithRunner(device.id, { runnerPid: 55_555, runnerStartTime: null });
+  mockReadProcessCommand.mockImplementation((pid: number) =>
+    pid === 55_555 ? 'node /usr/local/bin/opencode run --model gpt-high' : null,
+  );
+  const foreign = makeRecordingCleanupAdapter();
+  await prepareRunnerLeaseForStartup(device.id, foreign.adapter);
+  assert.deepEqual(foreign.treeKills, [
+    { pid: undefined, signal: 'SIGTERM' },
+    { pid: undefined, signal: 'SIGKILL' },
+  ]);
+
+  writeStaleLeaseWithRunner(device.id, { runnerPid: 55_555, runnerStartTime: null });
+  mockReadProcessCommand.mockImplementation((pid: number) =>
+    pid === 55_555
+      ? 'xcodebuild test-without-building -xctestrun /tmp/AgentDeviceRunner.env.session-x.xctestrun'
+      : null,
+  );
+  const runner = makeRecordingCleanupAdapter();
+  await prepareRunnerLeaseForStartup(device.id, runner.adapter);
+  assert.deepEqual(runner.treeKills, [
+    { pid: 55_555, signal: 'SIGTERM' },
+    { pid: 55_555, signal: 'SIGKILL' },
+  ]);
+});
+
+test('stale-lease cleanup skips a dead runner pid entirely', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-lease-dead-pid-sim' };
+  writeStaleLeaseWithRunner(device.id, { runnerPid: 55_555, runnerStartTime: 'lease-time-start' });
+  mockIsProcessAlive.mockImplementation((pid) => pid !== 999_999_999 && pid !== 55_555);
+  const { adapter, treeKills } = makeRecordingCleanupAdapter();
+
+  await prepareRunnerLeaseForStartup(device.id, adapter);
+
+  assert.deepEqual(treeKills, [
+    { pid: undefined, signal: 'SIGTERM' },
+    { pid: undefined, signal: 'SIGKILL' },
+  ]);
 });
 
 test('runner session startup reclaims a foreign runner lease whose owner state dir is gone', async () => {

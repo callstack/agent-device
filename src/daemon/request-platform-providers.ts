@@ -13,11 +13,11 @@ import type {
 } from '../platforms/apple/core/tool-provider.ts';
 import type { LinuxToolProvider } from '../platforms/linux/tool-provider.ts';
 import type { VegaToolProvider } from '../platforms/vega/tool-provider.ts';
-import type { WebProvider } from '../platforms/web/provider.ts';
+import { withWebProvider, type WebProvider } from '../platforms/web/provider.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppLogProvider } from './app-log.ts';
 import { hasExplicitDeviceSelector } from './device-selector-intent.ts';
-import type { RecordingProvider } from './recording-provider.ts';
+import { withRecordingProvider, type RecordingProvider } from './recording-provider.ts';
 import type { DaemonRequest, SessionState } from './types.ts';
 import { resolveProviderDeviceResolutionIntent } from './daemon-command-registry.ts';
 
@@ -261,7 +261,6 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
     },
     async appendWrapper(scopedProviders, wrappers) {
       if (!scopedProviders.web?.provider) return;
-      const { withWebProvider } = await import('../platforms/web/provider.ts');
       appendRequestProviderWrapper(wrappers, scopedProviders.web, withWebProvider);
     },
   },
@@ -287,7 +286,6 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
     },
     async appendWrapper(scopedProviders, wrappers) {
       if (!scopedProviders.recording?.provider) return;
-      const { withRecordingProvider } = await import('./recording-provider.ts');
       appendRequestProviderWrapper(wrappers, scopedProviders.recording, withRecordingProvider);
     },
   },

@@ -1,5 +1,5 @@
 import type { AgentDeviceClient } from '../../client/client-types.ts';
-import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
+import type { CommandSchema, CommandSchemaOverride } from '../../cli-schema/types.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import type {
   CommandMetadata,
@@ -7,12 +7,14 @@ import type {
   JsonSchema,
 } from '../command-contract.ts';
 import type { CliOutputFormatter } from '../output-common.ts';
+import { resolveFacetText, type FacetCommandText } from '../command-text.ts';
 
 export type AnyCommandMetadata<Name extends string = string> = CommandMetadata<Name, unknown>;
 
 export type AnyCommandDefinition<Name extends string = string> = {
   name: Name;
   description: string;
+  mcpDetail?: string;
   inputSchema: JsonSchema;
   invoke: (client: AgentDeviceClient, input: unknown) => Promise<unknown>;
   projection?: ExecutableCommandProjection;
@@ -24,13 +26,17 @@ export type CommandFamilyFacet<TCommandName extends string = string> = {
   metadata: readonly AnyCommandMetadata<TCommandName>[];
   definitions: readonly AnyCommandDefinition<TCommandName>[];
   clientCommandMethods?: Readonly<Record<string, TCommandName>>;
-  cliSchemas?: Readonly<Partial<Record<TCommandName, CommandSchemaOverride>>>;
+  cliSchemas?: Readonly<Partial<Record<TCommandName, CommandSchema>>>;
   cliReaders: Readonly<Record<TCommandName, CliReader>>;
   daemonWriters?: Readonly<Record<string, DaemonWriter>>;
   cliOutputFormatters?: Readonly<Partial<Record<TCommandName, CliOutputFormatter>>>;
 };
 
-export type CommandFacet<TCommandName extends string = string> = {
+/**
+ * What a command file authors. `cliSchema` carries grammar only and may be omitted entirely;
+ * `text` is required, because a command with no list line has nowhere to appear in `--help`.
+ */
+export type CommandFacetInput<TCommandName extends string = string> = {
   name: TCommandName;
   metadata: AnyCommandMetadata<TCommandName>;
   definition: AnyCommandDefinition<TCommandName>;
@@ -39,6 +45,15 @@ export type CommandFacet<TCommandName extends string = string> = {
   cliReader: CliReader;
   daemonWriter?: DaemonWriter;
   cliOutputFormatter?: CliOutputFormatter;
+  text: FacetCommandText;
+};
+
+/**
+ * What `defineCommandFacet` returns: the same facet with its schema completed. Stating this as a
+ * distinct type is what lets the registry read `cliSchema` without asserting it is populated.
+ */
+export type CommandFacet<TCommandName extends string = string> = CommandFacetInput<TCommandName> & {
+  cliSchema: CommandSchema;
 };
 
 type CommandFacetMetadata<TCommands extends readonly CommandFacet[]> = {
@@ -60,25 +75,32 @@ export type ProjectedCommandOutputSchemas<TDefinitions extends readonly AnyComma
 
 export function defineCommandFacet<
   const TCommandName extends string,
-  const TCommand extends CommandFacet<TCommandName>,
->(command: TCommand): TCommand {
-  return command;
+  const TCommand extends CommandFacetInput<TCommandName>,
+>(command: TCommand): TCommand & { cliSchema: CommandSchema } {
+  // The metadata already holds the canonical description, so the facet never repeats it; the
+  // resolved text is what every surface renders from.
+  const text = resolveFacetText(command.text, command.metadata.description);
+  const mcpTail = text.mcpDetail ? { mcpDetail: text.mcpDetail } : {};
+  return {
+    ...command,
+    metadata: { ...command.metadata, ...mcpTail },
+    definition: { ...command.definition, ...mcpTail },
+    cliSchema: { ...command.cliSchema, text },
+  };
 }
 
 export function defineCommandFamilyFromFacets<
   const TFamilyName extends string,
   const TCommands extends readonly CommandFacet[],
 >(family: { name: TFamilyName; clientSurface?: boolean; commands: TCommands }) {
-  const cliSchemas: Record<string, CommandSchemaOverride> = {};
+  const cliSchemas: Record<string, CommandSchema> = {};
   const clientCommandMethods: Record<string, string> = {};
   const cliReaders: Record<string, CliReader> = {};
   const daemonWriters: Record<string, DaemonWriter> = {};
   const cliOutputFormatters: Record<string, CliOutputFormatter> = {};
 
   for (const command of family.commands) {
-    if (command.cliSchema) {
-      addRecordEntry(cliSchemas, 'CLI schema', command.name, command.cliSchema);
-    }
+    addRecordEntry(cliSchemas, 'CLI schema', command.name, command.cliSchema);
     const clientMethod = command.definition.projection?.clientMethod ?? command.clientMethod;
     if (clientMethod) {
       addRecordEntry(clientCommandMethods, 'client command method', clientMethod, command.name);
@@ -105,7 +127,7 @@ export function defineCommandFamilyFromFacets<
       (command) => command.definition,
     ) as CommandFacetDefinitions<TCommands>,
     clientCommandMethods: clientCommandMethods as Record<string, CommandFacetName<TCommands>>,
-    cliSchemas: cliSchemas as Partial<Record<CommandFacetName<TCommands>, CommandSchemaOverride>>,
+    cliSchemas: cliSchemas as Partial<Record<CommandFacetName<TCommands>, CommandSchema>>,
     cliReaders: cliReaders as Record<CommandFacetName<TCommands>, CliReader>,
     daemonWriters,
     cliOutputFormatters: cliOutputFormatters as Partial<
