@@ -1353,6 +1353,39 @@ test('interactions expose targetKind-discriminated public response data', async 
   );
 });
 
+// #1625: `find … list` through the typed client — `matches` is part of the
+// public response type and rides with the issuing generation, so a caller can
+// pin any listed ref for its next command.
+test('typed client find list returns every match with the issuing generation', async () => {
+  const setup = createTransport(async (req) => {
+    if (req.command === 'find') {
+      assert.deepEqual(req.positionals, ['label', 'Foo', 'list']);
+      return {
+        ok: true,
+        data: {
+          matches: [
+            { ref: '@e5', node: { ref: 'e5', type: 'Button', label: 'Foo' } },
+            { ref: '@e9', node: { ref: 'e9', type: 'Cell', label: 'Foo bar' } },
+          ],
+          refsGeneration: 42,
+        },
+      };
+    }
+    throw new Error(`unexpected command: ${req.command}`);
+  });
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const list = await client.interactions.find({ locator: 'label', query: 'Foo', action: 'list' });
+
+  const listType: Equal<typeof list, FindCommandResponseData> = true;
+  assert.ok(listType);
+  assert.deepEqual(
+    list.matches?.map((match) => match.ref),
+    ['@e5', '@e9'],
+  );
+  assert.equal(list.refsGeneration, 42);
+});
+
 test('interaction responses expose additive cost and direct-iOS Maestro fallback fields', async () => {
   const setup = createTransport(async (req) => {
     if (req.command === 'press') {

@@ -50,6 +50,37 @@ test('ref-pin store pins the find-issued ref to the find generation', () => {
   });
 });
 
+test('ref-pin store pins every listed ref from a find list response', () => {
+  const pins = makeStore();
+
+  pins.mergeCommandResult(
+    'find',
+    {
+      matches: [
+        { ref: '@e5', node: { ref: 'e5', type: 'button', label: 'Add' } },
+        { ref: '@e9', node: { ref: 'e9', type: 'cell', label: 'Add another account' } },
+      ],
+      refsGeneration: 500014,
+    },
+    undefined,
+    'demo',
+  );
+
+  const first = pins.pinInput(
+    'press',
+    { session: 'demo', target: { kind: 'ref', ref: '@e5' } },
+    undefined,
+  );
+  const second = pins.pinInput(
+    'press',
+    { session: 'demo', target: { kind: 'ref', ref: '@e9' } },
+    undefined,
+  );
+
+  assert.deepEqual(first, { session: 'demo', target: { kind: 'ref', ref: '@e5~s500014' } });
+  assert.deepEqual(second, { session: 'demo', target: { kind: 'ref', ref: '@e9~s500014' } });
+});
+
 test('ref-pin store pins wait refs and get targets from the per-ref map', () => {
   const pins = makeStore();
 

@@ -50,6 +50,7 @@ const FIND_ACTION_VALUES = [
   'click',
   'focus',
   'exists',
+  'list',
   'getText',
   'getAttrs',
   'wait',

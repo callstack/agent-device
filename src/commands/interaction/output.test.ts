@@ -50,6 +50,34 @@ describe('find CLI output', () => {
     const output = formatFind({ found: true });
     expect(output.text).toBe('Found: true');
   });
+
+  test('list renders every match with a pinned, paste-ready ref', () => {
+    const output = formatFind({
+      matches: [
+        { ref: '@e5', node: { ref: 'e5', type: 'Button', label: 'Add' } },
+        { ref: '@e9', node: { ref: 'e9', type: 'Cell', value: 'Add another account' } },
+        { ref: '@e12', node: { ref: 'e12', type: 'Other' } },
+      ],
+      refsGeneration: 500014,
+    });
+
+    expect(output.text).toBe(
+      [
+        '3 matches:',
+        '= @e5~s500014 [button] "Add"',
+        '= @e9~s500014 [cell] "Add another account"',
+        '= @e12~s500014 [other]',
+      ].join('\n'),
+    );
+  });
+
+  test('list without a generation still lists refs unpinned rather than hiding them', () => {
+    const output = formatFind({
+      matches: [{ ref: '@e5', node: { ref: 'e5', type: 'Button', label: 'Add' } }],
+    });
+
+    expect(output.text).toBe(['1 match:', '= @e5 [button] "Add"'].join('\n'));
+  });
 });
 
 describe('press CLI output', () => {

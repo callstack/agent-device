@@ -1,5 +1,7 @@
 import type { CommandRequestResult } from '@agent-device/contracts/client';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { CliOutput } from '../command-contract.ts';
+import { displayLabel, formatRole } from '../../snapshot/snapshot-lines.ts';
 import { readCommandMessage } from '../../utils/success-text.ts';
 import { messageCliOutput, resultOutput, type CliOutputFormatter } from '../output-common.ts';
 
@@ -32,12 +34,37 @@ function findCliOutput(result: CommandRequestResult): CliOutput {
   const message = readCommandMessage(data);
   if (message) return { data, text: message };
   if (typeof data.text === 'string') return { data, text: data.text };
+  if (Array.isArray(data.matches)) {
+    return { data, text: formatFindMatchLines(data.matches, data.refsGeneration) };
+  }
   // A read-only find that returns a reusable ref renders it pinned (ADR 0014).
   const pinned = pinnedRefText(data.ref, data.refsGeneration);
   if (pinned) return { data, text: `Found: ${pinned}` };
   if (typeof data.found === 'boolean') return { data, text: `Found: ${data.found}` };
   if (data.node) return { data, text: JSON.stringify(data.node, null, 2) };
   return defaultCommandCliOutput(data);
+}
+
+type FindMatchView = { ref?: string; node?: SnapshotNode };
+
+// `find … list` (#1625): every match on its own line with a pinned, paste-ready
+// ref (ADR 0014) — the whole point of list is that ANY listed ref can drive the
+// next command, so no line may render a bare `@eN` the daemon would reject.
+// Role/label display goes through the snapshot-line normalizers so a list line
+// reads exactly like the snapshot line for the same node on every platform.
+function formatFindMatchLines(matches: unknown[], refsGeneration: unknown): string {
+  const heading = `${matches.length} match${matches.length === 1 ? '' : 'es'}:`;
+  const lines = matches.map((entry) => formatFindMatchLine(entry as FindMatchView, refsGeneration));
+  return [heading, ...lines].join('\n');
+}
+
+function formatFindMatchLine(view: FindMatchView, refsGeneration: unknown): string {
+  const plain = view.ref ?? '';
+  const body = plain.startsWith('@') ? plain.slice(1) : plain;
+  const ref = pinnedRefText(plain, refsGeneration) ?? `@${body}`;
+  const role = formatRole(view.node?.type ?? 'Element');
+  const label = view.node ? displayLabel(view.node, role) : '';
+  return `= ${ref} [${role}]${label ? ` "${label}"` : ''}`;
 }
 
 function isCliOutput(result: CommandRequestResult): CliOutput {

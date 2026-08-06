@@ -132,6 +132,65 @@ test('MCP tool schemas add MCP client config fields at the MCP boundary', () => 
   );
 });
 
+// #1625: `list` must be accepted by the MCP input surface, not only the CLI
+// parser — the enum here is what the MCP server validates tool calls against.
+test('MCP find tool schema accepts the read-only list action', () => {
+  const findTool = listCommandTools().find((tool) => tool.name === 'find');
+
+  assert.ok(findTool);
+  const actionEnum = (findTool.inputSchema.properties?.action as { enum?: unknown[] } | undefined)
+    ?.enum;
+  assert.ok(actionEnum?.includes('list'), `find action enum missing 'list': ${actionEnum}`);
+});
+
+// #1625 command-surface chain: after `find … list`, the daemon's PARTIAL frame
+// admits only pinned refs it issued — so the pin store must learn EVERY listed
+// ref, and a follow-up press typed with a plain `@eN` must forward pinned.
+test('MCP pins every find-list ref so a plain follow-up press forwards pinned', async () => {
+  const calls: Array<{ name: string; input: Record<string, unknown> }> = [];
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async (_client, name, input) => {
+      calls.push({ name, input: input as Record<string, unknown> });
+      if (name === 'find') {
+        return {
+          matches: [
+            { ref: '@e5', node: { ref: 'e5', type: 'Button', label: 'Add' } },
+            { ref: '@e9', node: { ref: 'e9', type: 'Cell', label: 'Add another account' } },
+          ],
+          refsGeneration: 41,
+        };
+      }
+      return { ref: 'e9', x: 1, y: 2, message: 'Tapped @e9 (1, 2)' };
+    },
+  });
+
+  const listResult = await executor.execute('find', {
+    session: 'demo',
+    query: 'Add',
+    action: 'list',
+  });
+  // Every match renders as its own line with a paste-ready pinned ref (the
+  // same formatter the CLI uses; singular read-only find already renders
+  // pinned through MCP).
+  assert.equal(
+    listResult.content[0]?.text,
+    ['2 matches:', '= @e5~s41 [button] "Add"', '= @e9~s41 [cell] "Add another account"'].join('\n'),
+  );
+
+  await executor.execute('press', { session: 'demo', target: { kind: 'ref', ref: '@e9' } });
+  await executor.execute('press', { session: 'demo', target: { kind: 'ref', ref: '@e5' } });
+
+  const presses = calls.filter((call) => call.name === 'press');
+  assert.deepEqual(
+    presses.map((call) => call.input.target),
+    [
+      { kind: 'ref', ref: '@e9~s41' },
+      { kind: 'ref', ref: '@e5~s41' },
+    ],
+  );
+});
+
 test('MCP gesture tool exposes and forwards two-finger pan topology', async () => {
   const gesture = listCommandTools().find((tool) => tool.name === 'gesture');
   assert.ok(gesture);

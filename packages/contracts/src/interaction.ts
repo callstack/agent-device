@@ -377,6 +377,8 @@ export type FindCommandResponseData = {
   waitedMs?: number;
   text?: string;
   node?: SnapshotNode;
+  /** Every match of the read-only `list` action (#1625), each ref pinnable at `refsGeneration`. */
+  matches?: Array<{ ref: string; node: SnapshotNode }>;
   locator?: string;
   query?: string;
   x?: number;

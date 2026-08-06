@@ -168,13 +168,23 @@ function mergeFindRefPins(
   // identity WITHOUT `refsGeneration` — it is explicitly non-issuing and must
   // leave remembered pins untouched (forwarding the old pin on a later ref is
   // how the daemon produces a precise stale rejection). Only a read-only find
-  // that genuinely found a ref with a generation gets pinned.
+  // that genuinely found refs with a generation gets pinned: the singular
+  // `ref` for single-match actions, every `matches[]` ref for `list` (the
+  // daemon published a partial frame for exactly those bodies, so an unpinned
+  // plain `@eN` follow-up would be rejected with
+  // `plain_ref_requires_complete_frame`).
   const refsGeneration = result.refsGeneration;
-  const ref = result.ref;
-  if (typeof refsGeneration !== 'number' || typeof ref !== 'string' || !ref.startsWith('@')) {
-    return;
+  if (typeof refsGeneration !== 'number') return;
+  const issued: string[] = [];
+  if (typeof result.ref === 'string' && result.ref.startsWith('@')) {
+    issued.push(result.ref.slice(1));
   }
-  mergeIntoScopedPins(refPinsByScope, scopeKey, [ref.slice(1)], refsGeneration);
+  for (const match of result.matches ?? []) {
+    if (typeof match.ref === 'string' && match.ref.length > 0) {
+      issued.push(match.ref.startsWith('@') ? match.ref.slice(1) : match.ref);
+    }
+  }
+  mergeIntoScopedPins(refPinsByScope, scopeKey, issued, refsGeneration);
 }
 
 /**

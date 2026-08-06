@@ -612,7 +612,7 @@ test('handleFindCommands list returns every match without acting', async () => {
     parentIndex: 0,
   });
 
-  const { response, invokeCalls } = await runFindClickScenario({
+  const { response, invokeCalls, session } = await runFindClickScenario({
     positionals: ['text', 'Follow', 'list'],
     nodes: [
       { index: 0, ref: 'e1', type: 'Application', rect: { x: 0, y: 0, width: 800, height: 1200 } },
@@ -628,6 +628,13 @@ test('handleFindCommands list returns every match without acting', async () => {
   expect(matches.map((match) => match.ref)).toEqual(['@e2', '@e3', '@e4']);
   // Inspection only: nothing was clicked, focused, or filled.
   expect(invokeCalls).toHaveLength(0);
+  // Ref-issuing: the response carries the generation and the partial frame
+  // authorizes EVERY listed body, so any `@eN~sG` from the list can drive the
+  // next command (a plain `@eN` still requires a complete frame by design —
+  // the MCP/CLI layers pin from `matches` + `refsGeneration`).
+  expect(typeof response.data?.refsGeneration).toBe('number');
+  expect(session.refFrameState).toBe('active');
+  expect([...(session.refFrameScope ?? [])].sort()).toEqual(['e2', 'e3', 'e4']);
 });
 
 test('handleFindCommands list on a unique match still lists instead of tapping', async () => {
