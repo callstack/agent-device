@@ -2,6 +2,12 @@ import XCTest
 
 extension RunnerTests {
   private static let privateAXSnapshotMaxNodes = 5_000
+
+  /// Upper bound on element-rooted follow-up snapshot requests per capture. A
+  /// depth-capped Bluesky-class tree resolves in 1-3 chained requests (~100-300ms
+  /// each); the bound exists so a pathological tree cannot stack requests past
+  /// the capture-plan deadline, which is also enforced per call.
+  static let privateAXDeepExtensionCallLimit = 8
   /// Deep React Native trees make the AX server reject bulk snapshot requests outright with
   /// kAXErrorIllegalArgument once the requested depth crosses a tree-size-dependent limit
   /// (observed between depth 56 and 64 on the Bluesky Home feed; the limit moves with live
@@ -91,7 +97,10 @@ extension RunnerTests {
         response = RunnerAXSnapshotBridge.snapshotTree(
           for: app,
           maxDepth: depth,
-          maxNodes: Self.privateAXSnapshotMaxNodes
+          maxNodes: Self.privateAXSnapshotMaxNodes,
+          // An explicit --depth request is a precise ask — no extension past it.
+          deepExtensionCalls: options.depth == nil ? Self.privateAXDeepExtensionCallLimit : 0,
+          deadline: deadline
         )
         if response["ok"] as? Bool == true {
           effectiveDepth = depth
@@ -140,11 +149,18 @@ extension RunnerTests {
         return nil
       }
 
-      let depthLimited = effectiveDepth < requestedDepth
+      // A capture whose frontier extension drained every capped node is complete
+      // despite the per-request depth cap — reporting it as depth-limited would
+      // send agents chasing a --depth re-run that cannot add anything.
+      let deepExtension = response["deepExtension"] as? [String: Any]
+      let extensionDrained =
+        deepExtension != nil && (deepExtension?["pendingFrontiers"] as? Int ?? 1) == 0
+      let depthLimited = effectiveDepth < requestedDepth && !extensionDrained
       NSLog(
-        "AGENT_DEVICE_RUNNER_PRIVATE_AX_SNAPSHOT_USED nodes=%ld depth=%ld",
+        "AGENT_DEVICE_RUNNER_PRIVATE_AX_SNAPSHOT_USED nodes=%ld depth=%ld extended=%ld",
         nodes.count,
-        effectiveDepth
+        effectiveDepth,
+        deepExtension?["nodesAdded"] as? Int ?? 0
       )
       return SnapshotBackendCapture(
         payload: DataPayload(nodes: nodes, truncated: (response["truncated"] as? Bool) == true),
