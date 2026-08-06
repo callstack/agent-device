@@ -230,7 +230,7 @@ export function areInteractionSurfaceSignaturesStable(
  *   so there is nothing comparable. Never treated as a match.
  *
  * Both signatures must come from the same snapshot backend; the caller owns
- * that invariant (see `post-gesture-stabilization.ts`). Backends disagree about
+ * that invariant (see `deferred-interaction-outcome.ts`). Backends disagree about
  * which nodes exist, so a cross-backend pair differs for reasons that have
  * nothing to do with the gesture.
  */

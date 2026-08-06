@@ -148,6 +148,23 @@ test('snapshot over the injected transport keeps the shared xctest result shape'
   assert.equal(result.nodes?.length, 2);
 });
 
+// #1634 P2: the backend pin must actually reach the wire — the daemon test
+// stops at the dispatch context and the Swift test starts at the parsed
+// command, so this is the assertion that fails if the interactor stops
+// forwarding preferredBackend into the emitted RunnerCommand.
+test('snapshot forwards preferredBackend into the emitted runner command', async () => {
+  const calls: RecordedRunnerCall[] = [];
+  const interactor = createAppleInteractor(IOS_SIMULATOR, {}, recordingRunnerProvider(calls));
+
+  await interactor.snapshot({ preferredBackend: 'private-ax' });
+  await interactor.snapshot();
+
+  const snapshots = calls.filter((call) => call.command.command === 'snapshot');
+  assert.equal(snapshots.length, 2);
+  assert.equal(snapshots[0]?.command.preferredBackend, 'private-ax');
+  assert.equal(snapshots[1]?.command.preferredBackend, undefined);
+});
+
 function recordingRunnerProvider(calls: RecordedRunnerCall[]): AppleRunnerProvider {
   return {
     runCommand: async (_device, command, options) => {

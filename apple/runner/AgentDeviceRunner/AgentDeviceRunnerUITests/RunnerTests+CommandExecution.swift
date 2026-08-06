@@ -1358,13 +1358,20 @@ extension RunnerTests {
     }
   }
 
-  private func executeSnapshotPrepared(command: Command, activeApp: XCUIApplication) throws -> Response {
-    let options = SnapshotOptions(
+  /// Pure command→options projection, extracted so the runner unit bundle can
+  /// prove the decoded wire field actually reaches capture options (#1634 P2).
+  static func snapshotOptions(from command: Command) -> SnapshotOptions {
+    SnapshotOptions(
       interactiveOnly: command.interactiveOnly ?? false,
       depth: command.depth,
       scope: command.scope,
-      raw: command.raw ?? false
+      raw: command.raw ?? false,
+      preferredBackend: command.preferredBackend
     )
+  }
+
+  private func executeSnapshotPrepared(command: Command, activeApp: XCUIApplication) throws -> Response {
+    let options = Self.snapshotOptions(from: command)
     do {
       let payload: DataPayload
       if options.raw {

@@ -3,11 +3,13 @@ import { afterEach, test, vi } from 'vitest';
 import { makeSnapshotState } from '../../__tests__/test-utils/index.ts';
 import { countDiagnosticEventsByPhase, withDiagnosticsScope } from '../../utils/diagnostics.ts';
 import { buildInteractionSurfaceSignature } from '../interaction-outcome-policy.ts';
+import type { CommandFlags } from '../../core/dispatch.ts';
 import {
   capturePostGestureStabilizedResult,
-  formatGestureNoEffectWarning,
-  markPostGestureStabilization,
-} from '../post-gesture-stabilization.ts';
+  markDeferredInteractionOutcome,
+} from '../deferred-interaction-outcome.ts';
+import { formatGestureNoEffectWarning } from '../gesture-no-effect.ts';
+import type { SessionState } from '../types.ts';
 import {
   chromeWithListSnapshot,
   deliverySnapshot,
@@ -24,6 +26,18 @@ import {
 afterEach(() => {
   vi.useRealTimers();
 });
+
+// Stabilization marking is module-private behind the deferred-interaction-outcome
+// interface; this shim keeps each marking test phrased in stabilization terms
+// while driving the same public entry every shipping caller uses.
+function markPostGestureStabilization(
+  session: SessionState,
+  action: string,
+  positionals: string[] = [],
+  flags?: CommandFlags,
+): void {
+  markDeferredInteractionOutcome({ session, command: action, positionals, flags });
+}
 
 test('markPostGestureStabilization marks iOS swipe sessions', () => {
   const session = makeSession();

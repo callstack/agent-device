@@ -653,6 +653,7 @@ async function handleSnapshotCommand(
     appBundleId: snapshotContext.appBundleId,
     signal: snapshotContext.signal,
     interactiveOnly: snapshotContext.snapshotInteractiveOnly,
+    preferredBackend: snapshotContext.snapshotPreferredBackend,
     depth: snapshotContext.snapshotDepth,
     scope: snapshotContext.snapshotScope,
     raw: snapshotContext.snapshotRaw,

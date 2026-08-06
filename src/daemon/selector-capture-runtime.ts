@@ -11,6 +11,7 @@ import { SessionStore } from './session-store.ts';
 import { captureSnapshot } from './handlers/snapshot-capture.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
 import { getActiveAndroidSnapshotFreshness } from './android-snapshot-freshness.ts';
+import { isPostGestureStabilizationPending } from './deferred-interaction-outcome.ts';
 
 const SELECTOR_CAPTURE_CACHE_TTL_MS = 750;
 
@@ -247,7 +248,7 @@ function shouldBypassForPostGestureStabilization(
 ): boolean {
   return (
     request.cache?.bypassForPostGestureStabilization === true &&
-    Boolean(session?.postGestureStabilization)
+    isPostGestureStabilizationPending(session)
   );
 }
 

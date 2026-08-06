@@ -38,6 +38,7 @@ export function contextFromFlags(
     iosXctestEnvDir: flags?.iosXctestEnvDir,
     screenshotCaptureBackend: flags?.maestro?.screenshotCaptureBackend,
     snapshotInteractiveOnly: flags?.snapshotInteractiveOnly,
+    snapshotPreferredBackend: flags?.snapshotPreferredBackend,
     snapshotDepth: flags?.snapshotDepth,
     snapshotScope: flags?.snapshotScope,
     snapshotRaw: flags?.snapshotRaw,

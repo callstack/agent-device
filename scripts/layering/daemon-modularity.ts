@@ -3,12 +3,12 @@ import { targetDagZone, type LayeringViolation, type ResolvedImportEdge } from '
 import { SESSION_STATE_FIELD_OWNERS } from './session-state.ts';
 
 const LARGEST_TYPE_CYCLE_ZONE_CEILINGS: Readonly<Record<string, number>> = {
-  '(root)': 5,
+  '(root)': 3,
   client: 1,
-  commands: 33,
+  commands: 14,
   core: 10,
-  'daemon-server': 20,
-  platforms: 7,
+  'daemon-server': 19,
+  platforms: 2,
 };
 
 export const DAEMON_MODULARITY_BASELINE = {

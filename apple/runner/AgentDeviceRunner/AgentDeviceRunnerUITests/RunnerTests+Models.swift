@@ -137,6 +137,7 @@ struct Command: Codable {
   let outPath: String?
   let fps: Int?
   let interactiveOnly: Bool?
+  let preferredBackend: String?
   let depth: Int?
   let scope: String?
   let raw: Bool?
@@ -395,4 +396,8 @@ struct SnapshotOptions {
   let depth: Int?
   let scope: String?
   let raw: Bool
+  /// Internal daemon ask: capture with this backend first regardless of channel
+  /// health ("private-ax"). Same-backend evidence probes (tap-outcome
+  /// corroboration) must be captured the way their baseline was.
+  var preferredBackend: String? = nil
 }

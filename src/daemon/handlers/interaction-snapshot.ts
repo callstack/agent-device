@@ -14,6 +14,7 @@ export type CaptureSnapshotForSession = (
   contextFromFlags: ContextFromFlags,
   options: {
     interactiveOnly: boolean;
+    preferredBackend?: 'private-ax';
     androidFreshnessMode?: 'ref-refresh';
     includeRects?: boolean;
     signal?: AbortSignal;
@@ -27,6 +28,7 @@ export async function captureSnapshotForSession(
   contextFromFlags: ContextFromFlags,
   options: {
     interactiveOnly: boolean;
+    preferredBackend?: 'private-ax';
     androidFreshnessMode?: 'ref-refresh';
     includeRects?: boolean;
     signal?: AbortSignal;
@@ -35,6 +37,7 @@ export async function captureSnapshotForSession(
   const effectiveFlags = {
     ...(flags ?? {}),
     snapshotInteractiveOnly: options.interactiveOnly,
+    ...(options.preferredBackend ? { snapshotPreferredBackend: options.preferredBackend } : {}),
   };
   const dispatchContext = contextFromFlags(
     effectiveFlags,

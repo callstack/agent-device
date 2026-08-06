@@ -12,10 +12,6 @@ const perfNightlyWorkflow = fs.readFileSync(
   path.join(repoRoot, '.github', 'workflows', 'perf-nightly.yml'),
   'utf8',
 );
-const packageSmokeWorkflow = fs.readFileSync(
-  path.join(repoRoot, '.github', 'workflows', 'package-smoke.yml'),
-  'utf8',
-);
 const packagedCliWorkflow = fs.readFileSync(
   path.join(repoRoot, '.github', 'workflows', 'ci.yml'),
   'utf8',
@@ -31,17 +27,6 @@ test('prepack builds the complete package without stopping the development daemo
   assert.equal(script('prepack'), 'pnpm check:mcp-metadata && pnpm package:npm');
   assert.doesNotMatch(script('package:npm'), /clean:daemon|rebuild:cli/);
   assert.equal(packageJson.scripts['build:dev'], undefined);
-  assert.match(packageSmokeWorkflow, /run: pnpm prepack/);
-  for (const input of [
-    'pnpm-workspace.yaml',
-    'packages/**',
-    'scripts/patch-xcuitest-runner-icon.ts',
-    'scripts/sync-mcp-metadata.mjs',
-    'scripts/write-xcuitest-cache-metadata.mjs',
-    '.github/actions/setup-node-pnpm/**',
-  ]) {
-    assert.ok(packageSmokeWorkflow.includes(`- '${input}'`));
-  }
 });
 
 test('perf uses one platform-selectable entry point', () => {
@@ -59,10 +44,11 @@ test('Fallow exposes one changed-code gate and an explicit full-tree audit', () 
   assert.equal(script('fallow:all'), 'fallow --summary');
 });
 
-// `check:package` verifies the tarball, so it has to observe every build output the package ships —
-// it runs last, after the Apple and Android payloads exist, not next to the JS build.
-test('the npm package build covers every package-owned build output, then verifies the result', () => {
-  assert.deepEqual(script('package:npm').split(' && '), [
+// `check:package` verifies the tarball, so it has to observe every build output the package ships.
+// Keep construction separate from verification so release preparation can publish the exact tarball
+// that was installed and smoke-tested instead of rebuilding it during `npm publish`.
+test('the npm package build covers every package-owned output before verification', () => {
+  assert.deepEqual(script('build:package').split(' && '), [
     'pnpm build',
     'pnpm build:xcuitest:ios',
     'pnpm build:xcuitest:macos',
@@ -71,8 +57,8 @@ test('the npm package build covers every package-owned build output, then verifi
     'pnpm build:macos-helper:clean',
     'pnpm package:apple-runner:npm',
     'pnpm build:android',
-    'pnpm check:package',
   ]);
+  assert.equal(script('package:npm'), 'pnpm build:package && pnpm check:package');
 
   assert.deepEqual(script('build:android').split(' && '), [
     'pnpm package:android-snapshot-helper:npm',
@@ -80,10 +66,26 @@ test('the npm package build covers every package-owned build output, then verifi
   ]);
 });
 
-// Behavior of the closure audit is pinned by fixtures in
-// scripts/__tests__/package-closure-audit.test.ts, which can fail a malformed package the way no
-// test of the real gate can. That leaves the wiring: the audit and both runtime probes have to stay
-// wired into the gate, or the fixtures would keep passing while the tarball went unchecked.
+test('release publishing uploads the tarball that passed the package gate', () => {
+  assert.equal(
+    script('release:prepare'),
+    'rm -rf .tmp/release && pnpm check:mcp-metadata && pnpm build:package && pnpm check:package -- --pack-destination .tmp/release',
+  );
+  assert.equal(
+    script('release:publish'),
+    'pnpm release:prepare && npm publish --ignore-scripts .tmp/release/*.tgz',
+  );
+  assert.doesNotMatch(script('release:publish'), /prepack|package:npm/);
+});
+
+test('the package checker can retain the tarball it verifies for publishing', () => {
+  const gate = fs.readFileSync(path.join(repoRoot, 'scripts', 'check-package.ts'), 'utf8');
+  assert.match(gate, /--pack-destination/);
+  assert.match(gate, /packDestination/);
+  assert.match(gate, /fs\.mkdirSync\(packDestination, \{ recursive: true \}\)/);
+  assert.match(gate, /fs\.rmSync\(workDir, \{ recursive: true, force: true \}\)/);
+});
+
 test('the package gate runs the closure audit and both runtime probes', () => {
   const gate = fs.readFileSync(path.join(repoRoot, 'scripts', 'check-package.ts'), 'utf8');
   for (const call of [

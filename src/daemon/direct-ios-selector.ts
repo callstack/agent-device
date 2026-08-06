@@ -1,6 +1,7 @@
 import { isIosFamily } from '@agent-device/kernel/device';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';
+import { isPostGestureStabilizationPending } from './deferred-interaction-outcome.ts';
 import type { SessionState } from './types.ts';
 import { readSimpleSelectorTarget } from '@agent-device/selectors';
 import { asAppError } from '@agent-device/kernel/errors';
@@ -16,7 +17,7 @@ export type DirectIosSelectorTarget = ElementSelectorTapOptions & { raw: string 
  * iOS devices resolve through their own interactor-backed runtime instead.
  *
  * The one difference between the two callers is explicit, not baked in: the
- * tap fast path skips itself while `session.postGestureStabilization` is
+ * tap fast path skips itself while a post-gesture stabilization is
  * pending (it hands off to the tree-based runtime path instead), but the
  * double-check must NOT inherit that skip — it exists specifically to cover
  * the window where the bulk AX tree is stale (pending or just-cleared
@@ -32,7 +33,7 @@ export function isLocalIosRunnerSession(
   // iOS devices must resolve through their interactor-backed snapshot runtime
   // instead, which keeps selectors and interaction guarantees on one backend.
   if (isActiveProviderDevice(session.device)) return false;
-  if (options.skipPendingPostGestureStabilization && session.postGestureStabilization) {
+  if (options.skipPendingPostGestureStabilization && isPostGestureStabilizationPending(session)) {
     return false;
   }
   return true;

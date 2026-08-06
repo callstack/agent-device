@@ -91,6 +91,8 @@ export type RunnerCommand = {
   outPath?: string;
   fps?: number;
   interactiveOnly?: boolean;
+  /** Pin the snapshot capture backend (same-backend evidence probes). */
+  preferredBackend?: 'private-ax';
   depth?: number;
   scope?: string;
   raw?: boolean;
