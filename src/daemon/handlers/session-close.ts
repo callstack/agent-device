@@ -406,7 +406,18 @@ async function runCloseTeardownAndRelease(params: {
     failures: cleanupFailures,
   });
   const deviceClaimBlockingError = platformCloseError ?? cleanupAggregate;
-  if (!deviceClaimBlockingError) {
+  if (deviceClaimBlockingError) {
+    if (session.deviceClaim) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'device_claim_close_effects_unconfirmed',
+        data: {
+          deviceKey: session.deviceClaim.deviceKey,
+          session: sessionName,
+        },
+      });
+    }
+  } else {
     await clearAdvisoryDeviceClaim(session.deviceClaim);
   }
   sessionStore.delete(sessionName);

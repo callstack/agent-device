@@ -69,6 +69,9 @@ import { stopAndroidSnapshotHelperSessionForDevice } from '../../../platforms/an
 import { stopIosRunnerSession } from '../../../platforms/apple/core/runner/runner-client.ts';
 import { WEB_DESKTOP_DEVICE } from '../../../__tests__/test-utils/index.ts';
 import { setActiveProviderDeviceRuntimes } from '../../../provider-device-runtime.ts';
+import { acquireAdvisoryDeviceClaim } from '../../device-claims.ts';
+import { inspectDeviceClaims } from '../../device-claim-inspection.ts';
+import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../../utils/diagnostics.ts';
 
 const mockShutdownSimulator = vi.mocked(shutdownSimulator);
 const mockRunCmd = vi.mocked(runCmd);
@@ -1075,6 +1078,161 @@ test('targeted close preserves the platform-close AppError and still runs later 
   // Subsequent independent cleanup still ran, and the session was still deleted.
   expect(mockStopIosRunnerSession).toHaveBeenCalledWith(session.device.id);
   expect(sessionStore.get(sessionName)).toBeUndefined();
+});
+
+// #1478-adjacent (device-claim retention observability): a failed platform close deliberately
+// keeps the advisory device claim (handing an unconfirmed device to the next session would be
+// worse), but the session record is still deleted on the very next line. Before this pair of
+// tests, nothing said so — the claim just quietly named a session `session list` no longer
+// reported. These two tests pin both branches of that decision so a future refactor cannot
+// silently invert either one.
+test('a failed platform close retains the device claim and reports it', async () => {
+  const claimsRoot = mkdtempForTestSync('agent-device-session-close-claim-retained-');
+  const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
+  process.env.AGENT_DEVICE_CLAIMS_DIR = claimsRoot;
+  try {
+    const sessionStore = makeSessionStore();
+    const sessionName = 'targeted-close-claim-retained-session';
+    const device = {
+      platform: 'apple' as const,
+      id: 'sim-udid-close-claim-retained',
+      name: 'iPhone 15',
+      kind: 'simulator' as const,
+      booted: true,
+    };
+    const acquired = await acquireAdvisoryDeviceClaim({
+      device,
+      session: sessionName,
+      workspace: process.cwd(),
+      stateDir: sessionStore.resolveDaemonStateDir(),
+    });
+    if (!acquired.ownership) {
+      throw new Error('expected the test session to acquire a device claim');
+    }
+    const session = {
+      ...makeSession(sessionName, device),
+      // Recording defeats runner retention so this mirrors the platform-close-error test above
+      // rather than exercising a different code path.
+      recording: { outPath: '/tmp/recording.mp4' },
+      deviceClaim: acquired.ownership,
+    } as unknown as SessionState;
+    sessionStore.set(sessionName, session);
+
+    const platformCloseError = new AppError('DEVICE_UNAVAILABLE', 'platform close failed', {
+      reason: 'device_disconnected',
+      hint: 'Reconnect the device and retry close.',
+    });
+    mockDispatchCommand.mockRejectedValueOnce(platformCloseError);
+
+    const diagnosticsLogPath = path.join(claimsRoot, 'diagnostics.ndjson');
+    const thrown = await withDiagnosticsScope(
+      { session: sessionName, command: 'close', logPath: diagnosticsLogPath },
+      async () => {
+        let caught: unknown;
+        try {
+          await handleSessionCommands({
+            req: {
+              token: 't',
+              session: sessionName,
+              command: 'close',
+              positionals: ['com.example.app'],
+              flags: {},
+            },
+            sessionName,
+            logPath: path.join(os.tmpdir(), 'daemon.log'),
+            sessionStore,
+            invoke: noopInvoke,
+          });
+        } catch (error) {
+          caught = error;
+        }
+        flushDiagnosticsToSessionFile({ force: true });
+        return caught;
+      },
+    );
+
+    expect(thrown).toBe(platformCloseError);
+    // The session is still deleted (deliberate, pre-existing behavior) even though the claim
+    // could not be confirmed released.
+    expect(sessionStore.get(sessionName)).toBeUndefined();
+
+    // The claim itself was NOT cleared: it is still live, still naming the deleted session.
+    const claimState = inspectDeviceClaims({ serial: device.id })[0];
+    expect(claimState?.classification).toBe('live');
+    expect(claimState?.claim?.session).toBe(sessionName);
+
+    // A warn diagnostic names the retained claim's device key and owning session so the retention
+    // is observable instead of silent.
+    const rows = fs
+      .readFileSync(diagnosticsLogPath, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    expect(rows).toContainEqual(
+      expect.objectContaining({
+        level: 'warn',
+        phase: 'device_claim_close_effects_unconfirmed',
+        data: { deviceKey: acquired.ownership.deviceKey, session: sessionName },
+      }),
+    );
+  } finally {
+    if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
+    else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
+    fs.rmSync(claimsRoot, { recursive: true, force: true });
+  }
+});
+
+test('a successful close clears the device claim', async () => {
+  const claimsRoot = mkdtempForTestSync('agent-device-session-close-claim-cleared-');
+  const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
+  process.env.AGENT_DEVICE_CLAIMS_DIR = claimsRoot;
+  try {
+    const sessionStore = makeSessionStore();
+    const sessionName = 'targeted-close-claim-cleared-session';
+    const device = {
+      platform: 'android' as const,
+      id: 'emulator-5554',
+      name: 'Pixel',
+      kind: 'emulator' as const,
+      booted: true,
+    };
+    const acquired = await acquireAdvisoryDeviceClaim({
+      device,
+      session: sessionName,
+      workspace: process.cwd(),
+      stateDir: sessionStore.resolveDaemonStateDir(),
+    });
+    if (!acquired.ownership) {
+      throw new Error('expected the test session to acquire a device claim');
+    }
+    const session = {
+      ...makeSession(sessionName, device),
+      deviceClaim: acquired.ownership,
+    };
+    sessionStore.set(sessionName, session);
+
+    const response = await handleSessionCommands({
+      req: {
+        token: 't',
+        session: sessionName,
+        command: 'close',
+        positionals: [],
+        flags: {},
+      },
+      sessionName,
+      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      sessionStore,
+      invoke: noopInvoke,
+    });
+
+    expect(response?.ok).toBe(true);
+    expect(sessionStore.get(sessionName)).toBeUndefined();
+    expect(inspectDeviceClaims({ serial: device.id })).toEqual([]);
+  } finally {
+    if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
+    else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
+    fs.rmSync(claimsRoot, { recursive: true, force: true });
+  }
 });
 
 test('targeted close skips platform dispatch and preserves the error when the required pre-close runner stop fails', async () => {
