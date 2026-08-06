@@ -291,6 +291,32 @@ test('scroll without --settle takes no observation captures and issues no refs',
   expect((sessionStore.get(sessionName) as SessionState).refFrameState).toBe('expired');
 });
 
+test('a settle observation that cannot build a runtime degrades instead of failing the action', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'generic-settle-evicted';
+  // The session the router handed us is no longer in the store — evicted
+  // between dispatch and observation. Building the settle runtime throws
+  // SESSION_NOT_FOUND, and the observation is best-effort: the scroll already
+  // happened, so the response keeps its result and simply carries no settle.
+  const session = makeIosSession(sessionName);
+  setSessionSnapshot(session, buildSnapshotState({ nodes: BEFORE_NODES, backend: 'xctest' }, {}));
+  activateCompleteRefFrame(session);
+  mockCommandDispatch([AFTER_NODES]);
+
+  const response = await dispatchGeneric({
+    sessionName,
+    sessionStore,
+    session,
+    command: 'scroll',
+    positionals: ['down'],
+    flags: { ...SETTLE_FLAGS },
+  });
+
+  const data = expectOkData(response);
+  expect(data.settle).toBeUndefined();
+  expect(captureObservations).toEqual([]);
+});
+
 test('an orphaned --settle-quiet is rejected before the command dispatches', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'generic-settle-orphan';
