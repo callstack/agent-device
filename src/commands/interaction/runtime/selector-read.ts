@@ -16,12 +16,12 @@ import {
   type FindLocator,
 } from '@agent-device/selectors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import type { FindReadResult } from '@agent-device/contracts/interaction';
 import { isSparseSnapshotQualityVerdict } from '../../../snapshot/snapshot-quality.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type {
   ElementTarget,
+  FindReadResult,
   ResolvedTarget,
   SelectorTarget,
 } from '@agent-device/contracts/interaction';
