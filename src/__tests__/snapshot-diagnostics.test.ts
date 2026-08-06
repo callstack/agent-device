@@ -40,6 +40,18 @@ test('a slow cold-start capture alone does not warn', () => {
   expect(summary?.stats).toMatchObject({ count: 6, maxMs: 12_400 });
 });
 
+test('a single warm outlier does not warn (quorum rule)', () => {
+  // One 12s hiccup among fast warm captures: nearest-rank p95 IS that outlier
+  // through n=19, so without a quorum the restart-inviting warning would fire
+  // from one bad sample.
+  const samples = [12_400, 520, 520, 12_400].map((durationMs) => ({
+    durationMs,
+    platform: 'ios' as const,
+  }));
+
+  expect(summarizeSnapshotTimingSamples(samples)?.warning).toBeUndefined();
+});
+
 test('chronically slow warm captures warn without counting the cold start', () => {
   const samples = [12_400, 2_600, 2_700, 2_500, 2_800].map((durationMs) => ({
     durationMs,
@@ -101,5 +113,40 @@ test('merge carries a warning only when a constituent run judged one', () => {
     { stats: { ...stats }, warning: 'Warning: ios snapshots are slow in this run: …' },
   ]);
 
-  expect(merged?.warning).toContain('snapshots are slow in this run');
+  expect(merged?.warning).toContain('slow in 1 of 2 runs');
+  expect(merged?.warning).toContain('worst run p95 2800ms');
+});
+
+test('merged warning speaks about the warned run, never the fast aggregate', () => {
+  // One slow warned run among many fast ones: the aggregate p95 is a fast
+  // number, and quoting it in a slowness warning would be self-contradictory.
+  const fast = {
+    count: 20,
+    p50Ms: 90,
+    p95Ms: 100,
+    maxMs: 100,
+    slowThresholdMs: 1_500,
+    platform: 'ios',
+  } as const;
+  const slow = {
+    count: 2,
+    p50Ms: 2_500,
+    p95Ms: 2_900,
+    maxMs: 2_900,
+    slowThresholdMs: 1_500,
+    platform: 'ios',
+  } as const;
+
+  const merged = mergeSnapshotDiagnostics([
+    { stats: { ...fast } },
+    { stats: { ...fast } },
+    { stats: { ...fast } },
+    { stats: { ...slow }, warning: 'Warning: ios snapshots are slow in this run: …' },
+  ]);
+
+  // Aggregate p95 is fast — it must not appear as the headline number.
+  expect(merged?.stats.p95Ms).toBeLessThan(1_500);
+  expect(merged?.warning).toContain('slow in 1 of 4 runs');
+  expect(merged?.warning).toContain('worst run p95 2900ms');
+  expect(merged?.warning).not.toContain(`p95 ${merged?.stats.p95Ms}ms`);
 });

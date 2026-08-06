@@ -7,6 +7,9 @@ const SLOW_SNAPSHOT_P95_WARNING_MS = 1_500;
 /** Warm captures needed before chronic slowness is distinguishable from noise. */
 const MIN_WARM_SAMPLE_COUNT = 3;
 
+/** Slow warm captures needed before slowness counts as chronic rather than a one-off hiccup. */
+const MIN_SLOW_WARM_SAMPLES = 2;
+
 export type SnapshotTimingSample = {
   durationMs: number;
   backend?: SnapshotBackend;
@@ -60,38 +63,52 @@ export function summarizeSnapshotTimingSamples(
   // The first capture folds one-time startup (runner launch, helper install)
   // into its duration, and nearest-rank p95 over a small sample set is just
   // its max — so the warning judges warm captures only, and only once enough
-  // exist to mean anything. Displayed stats still cover every sample.
+  // exist to mean anything. A single warm outlier is a hiccup, not chronic
+  // slowness: the warning additionally needs a quorum of slow warm captures,
+  // so nearest-rank-equals-max can never fire it alone. Displayed stats still
+  // cover every sample.
   const warm = samples.slice(1);
   const judged = warm.length >= MIN_WARM_SAMPLE_COUNT ? buildSnapshotTimingStats(warm) : undefined;
-  return toSummary(buildSnapshotTimingStats(samples), judged);
+  const slowWarmCount = warm.filter(
+    (sample) => sample.durationMs >= SLOW_SNAPSHOT_P95_WARNING_MS,
+  ).length;
+  const warns =
+    judged !== undefined &&
+    judged.p95Ms >= SLOW_SNAPSHOT_P95_WARNING_MS &&
+    slowWarmCount >= MIN_SLOW_WARM_SAMPLES;
+  return {
+    stats: buildSnapshotTimingStats(samples),
+    ...(warns && judged ? { warning: formatSlowSnapshotWarning(judged) } : {}),
+  };
 }
 
 export function mergeSnapshotDiagnostics(
   summaries: Array<SnapshotDiagnosticsSummary | undefined>,
 ): SnapshotDiagnosticsSummary | undefined {
-  const samples = summaries.flatMap((summary) => samplesFromStats(summary?.stats));
+  const present = summaries.filter(
+    (summary): summary is SnapshotDiagnosticsSummary => summary !== undefined,
+  );
+  const samples = present.flatMap((summary) => samplesFromStats(summary.stats));
   if (samples.length === 0) return undefined;
   const stats = buildSnapshotTimingStats(samples);
   // Reconstructed samples are lossy and order-less (a run's cold start comes
   // back as both its p95 and its max), so only layers holding ordered live
   // samples judge slowness; merge aggregates display stats and carries a
-  // warning only when a constituent run judged one itself.
+  // warning only when a constituent run judged one itself. The message speaks
+  // about the warned runs, never the aggregate — one slow run among many fast
+  // ones would otherwise produce "slow: p95 <fast number>".
+  const warned = present.filter((summary) => summary.warning);
   return {
     stats,
-    ...(summaries.some((summary) => summary?.warning)
-      ? { warning: formatSlowSnapshotWarning(stats) }
-      : {}),
-  };
-}
-
-function toSummary(
-  stats: SnapshotTimingStats,
-  judged: SnapshotTimingStats | undefined,
-): SnapshotDiagnosticsSummary {
-  return {
-    stats,
-    ...(judged && judged.p95Ms >= SLOW_SNAPSHOT_P95_WARNING_MS
-      ? { warning: formatSlowSnapshotWarning(judged) }
+    ...(warned.length > 0
+      ? {
+          warning: formatMergedSlowSnapshotWarning({
+            warnedCount: warned.length,
+            totalCount: present.length,
+            worst: warned.reduce((max, summary) => Math.max(max, summary.stats.p95Ms), 0),
+            platform: stats.platform,
+          }),
+        }
       : {}),
   };
 }
@@ -145,6 +162,16 @@ function backendCounts(samples: SnapshotTimingSample[]): Pick<SnapshotTimingStat
 function formatSlowSnapshotWarning(stats: SnapshotTimingStats): string {
   const platform = stats.platform ? `${stats.platform} ` : '';
   return `Warning: ${platform}snapshots are slow in this run: p95 ${stats.p95Ms}ms over ${stats.count} captures. Possible causes: device load, app or dev server stuck, helper fallback, or stale daemon.`;
+}
+
+function formatMergedSlowSnapshotWarning(params: {
+  warnedCount: number;
+  totalCount: number;
+  worst: number;
+  platform?: PublicPlatform;
+}): string {
+  const platform = params.platform ? `${params.platform} ` : '';
+  return `Warning: ${platform}snapshots were slow in ${params.warnedCount} of ${params.totalCount} runs (worst run p95 ${params.worst}ms). Possible causes: device load, app or dev server stuck, helper fallback, or stale daemon.`;
 }
 
 function readSnapshotTimingStats(value: unknown): SnapshotTimingStats | undefined {
