@@ -1,0 +1,130 @@
+import type { SelectorResolutionOptions } from './public-resolution-types.ts';
+
+/**
+ * The per-caller selector-resolution policy matrix (#1630): every native
+ * consumer of "resolve a selector against the screen" declares its ambiguity
+ * contract here instead of passing `requireUnique`/`disambiguateAmbiguous`
+ * literals at the call site. The engine stays policy-neutral; which row a
+ * caller consumes IS the caller's documented contract, and changing a row is
+ * a reviewable one-line policy change instead of a multi-file literal hunt.
+ *
+ * Ambiguity kinds:
+ * - `disambiguate` — unique match required, but the engine's visible→deepest→
+ *   smallest-area tiebreak may pick a winner from an ambiguous set (acting
+ *   commands, `get text`).
+ * - `fail-closed` — unique match required, ties reject (by design: `is`
+ *   predicates and `get attrs` must never guess).
+ * - `first-match` — any match count accepted, first wins (existence reads and
+ *   the wait loop, where presence is the question).
+ * - `reject-candidates` — multiple matches reject with the candidate list
+ *   unless the caller explicitly narrows (#1625's mutating-find contract).
+ *   Declaration-only: enforced by find's own narrowing logic, not by engine
+ *   knobs, so `selectorResolutionKnobs` rejects it at the type level.
+ *
+ * The structural columns (`occlusion`, `offscreenGuard`, `promotion`, `poll`)
+ * document which pipeline hosts each policy; the pipelines live in the
+ * callers, and resolution-policy-parity.test.ts gate-tests these claims
+ * against the callers' actual imports so the matrix cannot drift into
+ * fiction (the ADR 0011 declared-plus-gate-tested pattern).
+ */
+
+export type KnobBackedSelectorAmbiguity = 'disambiguate' | 'fail-closed' | 'first-match';
+export type SelectorAmbiguityPolicy = KnobBackedSelectorAmbiguity | 'reject-candidates';
+
+export type SelectorResolutionPolicy = {
+  ambiguity: SelectorAmbiguityPolicy;
+  /** Only nodes carrying a rect participate (acting paths need a tap point). */
+  requireRect: boolean;
+  /** Occlusion filtering / covered-target rejection runs in this pipeline. */
+  occlusion: boolean;
+  /** The winner is checked against the viewport (with the iOS rescue probe). */
+  offscreenGuard: boolean;
+  /** Hittable-ancestor promotion may move the dispatch point. */
+  promotion: boolean;
+  /** Single capture (`none`) or the wait loop's poll budget. */
+  poll: 'none' | 'wait-budget';
+};
+
+export const SELECTOR_RESOLUTION_POLICIES = {
+  /** click/press/fill/focus/longPress/drag/scroll targets (resolution.ts). */
+  act: {
+    ambiguity: 'disambiguate',
+    requireRect: true,
+    occlusion: true,
+    offscreenGuard: true,
+    promotion: true,
+    poll: 'none',
+  },
+  /** The post-miss diagnosis probe deciding "no match" vs "matched but covered". */
+  actCoveredDiagnosis: {
+    ambiguity: 'first-match',
+    requireRect: true,
+    occlusion: true,
+    offscreenGuard: false,
+    promotion: false,
+    poll: 'none',
+  },
+  /** `get text` — reads through the same tiebreak acting uses. */
+  readText: {
+    ambiguity: 'disambiguate',
+    requireRect: false,
+    occlusion: false,
+    offscreenGuard: false,
+    promotion: false,
+    poll: 'none',
+  },
+  /** `is` non-exists predicates and `get attrs` — ties reject, never guess. */
+  readUnique: {
+    ambiguity: 'fail-closed',
+    requireRect: false,
+    occlusion: false,
+    offscreenGuard: false,
+    promotion: false,
+    poll: 'none',
+  },
+  /** `exists` and find's read-only actions — presence is the question. */
+  readAny: {
+    ambiguity: 'first-match',
+    requireRect: false,
+    occlusion: false,
+    offscreenGuard: false,
+    promotion: false,
+    poll: 'none',
+  },
+  /** `wait` — first match per poll, under the wait budget. */
+  wait: {
+    ambiguity: 'first-match',
+    requireRect: false,
+    occlusion: false,
+    offscreenGuard: false,
+    promotion: false,
+    poll: 'wait-budget',
+  },
+  /** Mutating `find` (#1625): candidates reject unless explicitly narrowed. */
+  findAct: {
+    ambiguity: 'reject-candidates',
+    requireRect: true,
+    occlusion: true,
+    offscreenGuard: false,
+    promotion: true,
+    poll: 'none',
+  },
+} as const satisfies Record<string, SelectorResolutionPolicy>;
+
+/**
+ * The engine knobs a knob-backed policy row stands for. `reject-candidates`
+ * rows are rejected at the type level — that contract is enforced by the
+ * caller's narrowing logic, not by these knobs.
+ */
+export function selectorResolutionKnobs(
+  policy: SelectorResolutionPolicy & { ambiguity: KnobBackedSelectorAmbiguity },
+): Pick<SelectorResolutionOptions, 'requireRect' | 'requireUnique' | 'disambiguateAmbiguous'> {
+  if (policy.ambiguity === 'first-match') {
+    return { requireRect: policy.requireRect, requireUnique: false };
+  }
+  return {
+    requireRect: policy.requireRect,
+    requireUnique: true,
+    disambiguateAmbiguous: policy.ambiguity === 'disambiguate',
+  };
+}

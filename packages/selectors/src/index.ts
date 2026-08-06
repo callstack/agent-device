@@ -259,3 +259,11 @@ function resolveSelectorChain(
   const result = resolveSelectorChainAst(nodes, parseSelectorChain(expression), options);
   return result ? { ...result, selector: result.selector.raw } : null;
 }
+export {
+  SELECTOR_RESOLUTION_POLICIES,
+  selectorResolutionKnobs,
+} from './internal/resolution-policy.ts';
+export type {
+  KnobBackedSelectorAmbiguity,
+  SelectorResolutionPolicy,
+} from './internal/resolution-policy.ts';

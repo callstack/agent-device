@@ -7,6 +7,7 @@ import {
   parseFindSelectorExpression,
   type FindLocator,
   listSelectorChainMatches,
+  SELECTOR_RESOLUTION_POLICIES,
 } from '@agent-device/selectors';
 import {
   centerOfRect,
@@ -252,16 +253,17 @@ function resolveFindMatch(params: {
   // explicitly opts into positional narrowing. Selectors used to take the
   // first match silently, which was exactly the mis-binding path the error's
   // own recovery advice ("use a selector") pointed agents at.
+  const policy = SELECTOR_RESOLUTION_POLICIES.findAct;
   let matches: SnapshotState['nodes'];
   if (selectorExpression) {
     matches =
       listSelectorChainMatches(searchableNodes, selectorExpression, {
         platform,
-        requireRect: true,
+        requireRect: policy.requireRect,
       })?.matchedNodes ?? [];
   } else {
     matches = findBestMatchesByLocator(searchableNodes, locator, query, {
-      requireRect: true,
+      requireRect: policy.requireRect,
     }).matches;
   }
   matches = preferOnscreenMatches(matches, nodes);

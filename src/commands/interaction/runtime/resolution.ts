@@ -14,6 +14,8 @@ import {
   STALE_REF_HINT,
   type SelectorResolution,
   buildSelectorChainForNode,
+  SELECTOR_RESOLUTION_POLICIES,
+  selectorResolutionKnobs,
 } from '@agent-device/selectors';
 import { resolvePressRecordingTarget } from '../../../core/press-retarget.ts';
 import { requireSnapshotSession } from './selector-read-shared.ts';
@@ -277,9 +279,7 @@ async function resolveSelectorInteractionTarget(
     selectorExpression,
     {
       platform: runtime.backend.platform,
-      requireRect: true,
-      requireUnique: true,
-      disambiguateAmbiguous: true,
+      ...selectorResolutionKnobs(SELECTOR_RESOLUTION_POLICIES.act),
     },
   );
   if ((!resolved || !resolved.node.rect) && params.requireInteractive) {
@@ -289,17 +289,14 @@ async function resolveSelectorInteractionTarget(
       selectorExpression,
       {
         platform: runtime.backend.platform,
-        requireRect: true,
-        requireUnique: true,
-        disambiguateAmbiguous: true,
+        ...selectorResolutionKnobs(SELECTOR_RESOLUTION_POLICIES.act),
       },
     );
   }
   if (!resolved || !resolved.node.rect) {
     const covered = resolveSelectorChain(capture.snapshot.nodes, selectorExpression, {
       platform: runtime.backend.platform,
-      requireRect: true,
-      requireUnique: false,
+      ...selectorResolutionKnobs(SELECTOR_RESOLUTION_POLICIES.actCoveredDiagnosis),
     });
     if (covered?.node && isSnapshotNodeInteractionBlocked(covered.node)) {
       throw buildCoveredInteractionError({

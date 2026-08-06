@@ -14,6 +14,10 @@ import {
   parseFindSelectorExpression,
   type FindAction,
   type FindLocator,
+  SELECTOR_RESOLUTION_POLICIES,
+  selectorResolutionKnobs,
+  type KnobBackedSelectorAmbiguity,
+  type SelectorResolutionPolicy,
 } from '@agent-device/selectors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { isSparseSnapshotQualityVerdict } from '../../../snapshot/snapshot-quality.ts';
@@ -50,6 +54,10 @@ import {
   TINY_STABLE_TREE_HINT,
   TINY_STABLE_TREE_NODE_COUNT,
 } from './stable-capture.ts';
+
+type KnobBackedResolutionPolicy = SelectorResolutionPolicy & {
+  ambiguity: KnobBackedSelectorAmbiguity;
+};
 
 export type { SelectorSnapshotOptions } from './selector-read-shared.ts';
 export type {
@@ -209,7 +217,10 @@ export const getCommand: RuntimeCommand<GetCommandOptions, GetCommandResult> = a
 
   const resolved = await resolveSelectorNode(runtime, options, options.session ?? 'default', {
     selector: options.target.selector,
-    disambiguateAmbiguous: options.property === 'text',
+    policy:
+      options.property === 'text'
+        ? SELECTOR_RESOLUTION_POLICIES.readText
+        : SELECTOR_RESOLUTION_POLICIES.readUnique,
   });
   assertExpectedResolvedTarget(
     resolved.node,
@@ -317,9 +328,7 @@ export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = asyn
 
   const resolved = resolveSelectorChain(capture.snapshot.nodes, selectorExpression, {
     platform: runtime.backend.platform,
-    requireRect: false,
-    requireUnique: true,
-    disambiguateAmbiguous: false,
+    ...selectorResolutionKnobs(SELECTOR_RESOLUTION_POLICIES.readUnique),
   });
   if (!resolved) {
     throw new AppError(
@@ -472,8 +481,7 @@ async function findFirstLocatorMatch(
   if (selectorExpression) {
     const resolved = resolveSelectorChain(capture.snapshot.nodes, selectorExpression, {
       platform: runtime.backend.platform,
-      requireRect: false,
-      requireUnique: false,
+      ...selectorResolutionKnobs(SELECTOR_RESOLUTION_POLICIES.readAny),
     });
     return { capture, match: resolved?.node };
   }
@@ -487,7 +495,7 @@ async function resolveSelectorNode(
   runtime: AgentDeviceRuntime,
   options: GetCommandOptions,
   sessionName: string,
-  params: { selector: string; disambiguateAmbiguous: boolean },
+  params: { selector: string; policy: KnobBackedResolutionPolicy },
 ): Promise<{ capture: CapturedSnapshot; node: SnapshotNode; selector: string; ref: string }> {
   const capture = await captureSelectorSnapshot(
     runtime,
@@ -499,9 +507,7 @@ async function resolveSelectorNode(
   );
   const resolved = resolveSelectorChain(capture.snapshot.nodes, params.selector, {
     platform: runtime.backend.platform,
-    requireRect: false,
-    requireUnique: true,
-    disambiguateAmbiguous: params.disambiguateAmbiguous,
+    ...selectorResolutionKnobs(params.policy),
   });
   if (!resolved) {
     throw new AppError(
