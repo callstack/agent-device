@@ -2314,6 +2314,73 @@ test('connect --force does not treat a re-pointed config path’s token as the p
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
+test('connect --force does not trust an unchanged profile token for a CLI-overridden previous endpoint', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connect-force-cli-override-');
+  const stateDir = path.join(tempRoot, '.state');
+  const remoteConfigPath = path.join(tempRoot, 'remote.json');
+  // The profile has always described endpoint B. The previous connection used
+  // explicit CLI credentials for endpoint A, so the unchanged file hash proves
+  // only which file was loaded — not that its token authenticated endpoint A.
+  fs.writeFileSync(
+    remoteConfigPath,
+    JSON.stringify({
+      daemonBaseUrl: 'https://new.example',
+      daemonAuthToken: 'test-new-not-a-real-token',
+    }),
+  );
+  writeRemoteConnectionState({
+    stateDir,
+    state: {
+      version: 1,
+      session: 'adc-android',
+      remoteConfigPath,
+      remoteConfigHash: hashRemoteConfigFile(remoteConfigPath),
+      tenant: 'acme',
+      runId: 'run-old',
+      leaseId: 'lease-old',
+      leaseBackend: 'android-instance',
+      // Effective previous endpoint A came from --daemon-base-url, overriding
+      // the profile's endpoint B when this state was recorded.
+      daemon: { baseUrl: 'https://old.example' },
+      connectedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  });
+  let releaseRequest: Parameters<AgentDeviceClient['leases']['release']>[0] | undefined;
+
+  const stdout = await captureStdout(async () => {
+    await connectCommand({
+      positionals: [],
+      flags: {
+        json: false,
+        help: false,
+        version: false,
+        force: true,
+        stateDir,
+        remoteConfig: remoteConfigPath,
+        daemonBaseUrl: 'https://new.example',
+        daemonAuthToken: 'test-new-not-a-real-token',
+        tenant: 'acme',
+        runId: 'run-new',
+        session: 'adc-android',
+        platform: 'android',
+      },
+      client: createTestClient({
+        release: async (request) => {
+          releaseRequest = request;
+          return { released: true };
+        },
+      }),
+    });
+  });
+
+  assert.equal(releaseRequest, undefined);
+  assert.match(stdout, /Could not release the previous lease lease-old/);
+  assert.match(stdout, /old\.example/);
+  assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-android' })?.runId, 'run-new');
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
 test('connect --force still releases with a rotated credential when the config keeps the same endpoint', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-force-rotated-token-');
   const stateDir = path.join(tempRoot, '.state');

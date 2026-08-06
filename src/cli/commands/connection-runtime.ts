@@ -573,17 +573,11 @@ function resolvePreviousOwnDaemonAuthToken(
  * Whether the previous connection's config file can still vouch for a token as
  * belonging to the previous connection's endpoint.
  *
- * Two independent ways to establish that, in order:
- *
- * 1. **The file has not changed since connect time.** `remoteConfigHash` is a
- *    hash of the file's bytes taken when the connection was recorded, so an
- *    exact match means this is literally the declaration that stood up the
- *    previous connection. Nothing further to verify.
- * 2. **The file changed, but still declares the same endpoint.** The common
- *    benign case is a rotated credential in an otherwise unchanged profile,
- *    which is still the previous endpoint's own credential and should still
- *    release its lease. Endpoint equality is what separates that from the
- *    re-pointed-file case, so it — not the mere fact of an edit — is the test.
+ * The file must explicitly declare the same endpoint recorded in the previous
+ * connection state. A matching file hash proves only that the file itself did
+ * not change; it does not prove that its endpoint/token were effective when
+ * CLI flags may have overridden them. Endpoint equality is the provenance
+ * boundary and also preserves the benign rotated-credential case.
  *
  * The endpoint comparison runs both sides through
  * `buildRemoteConnectionDaemonState`, the same normalizer that produced the
@@ -599,7 +593,6 @@ function previousConfigStillSpeaksForPreviousEndpoint(
   previous: RemoteConnectionState,
   declaredDaemonBaseUrl: string | undefined,
 ): boolean {
-  if (hashRemoteConfigFile(previous.remoteConfigPath) === previous.remoteConfigHash) return true;
   const declared = buildRemoteConnectionDaemonState({
     daemonBaseUrl: declaredDaemonBaseUrl,
   })?.baseUrl;
