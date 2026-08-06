@@ -62,8 +62,7 @@ export function summarizeSnapshotTimingSamples(
   // its max — so the warning judges warm captures only, and only once enough
   // exist to mean anything. Displayed stats still cover every sample.
   const warm = samples.slice(1);
-  const judged =
-    warm.length >= MIN_WARM_SAMPLE_COUNT ? buildSnapshotTimingStats(warm) : undefined;
+  const judged = warm.length >= MIN_WARM_SAMPLE_COUNT ? buildSnapshotTimingStats(warm) : undefined;
   return toSummary(buildSnapshotTimingStats(samples), judged);
 }
 
