@@ -61,20 +61,13 @@ task touches:
 - Daemon RPC protocol version: integer advertised by daemon/proxy `/health` and checked by remote
   clients before HTTP JSON-RPC; bump only for breaking transport/request/response compatibility
   across the remote daemon boundary.
-- Version-skew invariant: a client and a LOCAL daemon can never disagree on version — daemon reuse
-  requires exact version AND code-signature equality, otherwise the client replaces the daemon
-  (`isReusableDaemonInfo`, `src/daemon/client/daemon-client-lifecycle.ts`), in both directions.
-  Version-skew compat code is therefore justified on exactly four axes, and a comment defending it
-  must name one: (1) the remote daemon boundary (`daemonBaseUrl`), both directions — the protocol
-  version gates breaking changes, but additive optional fields ride the same protocol version and an
-  older remote daemon silently ignores them (the #1617 `--scale` residual gap); (2) separately
-  versioned device binaries — the iOS/macOS XCTest runner and Android helper are built/cached
-  independently of the daemon, so runner/helper skew is real; (3) persisted artifacts — `.ad`
-  scripts, config files, env vars, and session logs outlive every release and must be handled (or
-  explicitly refused with migration guidance) forever; (4) released public API consumers — Node/MCP
-  callers built against shipped input/result shapes. Compat code that only tolerates an older LOCAL
-  daemon or client is dead by construction: delete it, or re-scope its comment to the remote
-  boundary.
+- Version-skew invariant: a client replaces any local daemon whose version or code signature
+  differs (`isReusableDaemonInfo`, both directions), so local client↔daemon skew cannot exist.
+  Version-skew compat code is legitimate on exactly four axes and its comment must name one:
+  the remote daemon boundary (the protocol version gates breaking changes only — older remote
+  daemons silently ignore additive optional fields), separately versioned runner/helper binaries,
+  persisted artifacts (`.ad`/config/env/session logs — handle or refuse with migration guidance,
+  forever), and released API consumers. "Older local daemon" tolerance is dead code.
 
 ### Interaction, refs, and guarantees
 
