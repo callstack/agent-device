@@ -483,6 +483,9 @@ export async function stopReactDevtoolsCleanup(options: {
 export async function releaseRemoteConnectionLease(
   client: AgentDeviceClient,
   state: RemoteConnectionState,
+  // The daemon bearer token is never persisted on `state` (ADR 0007); callers
+  // pass the token already resolved via the flag/env/CLI-session chain.
+  daemonAuthToken?: string,
 ): Promise<{ released: boolean; provider?: CloudProviderSessionResult }> {
   if (!state.leaseId) return { released: false };
   const result = await client.leases.release({
@@ -491,7 +494,7 @@ export async function releaseRemoteConnectionLease(
     leaseId: state.leaseId,
     leaseBackend: state.leaseBackend,
     daemonBaseUrl: state.daemon?.baseUrl,
-    daemonAuthToken: state.daemon?.authToken,
+    daemonAuthToken,
     daemonTransport: state.daemon?.transport,
     daemonServerMode: state.daemon?.serverMode,
     leaseProvider: state.leaseProvider,
@@ -504,10 +507,11 @@ export async function releaseRemoteConnectionLease(
 export async function releasePreviousLease(
   client: AgentDeviceClient,
   previous: RemoteConnectionState,
+  daemonAuthToken?: string,
 ): Promise<void> {
   if (!previous.leaseId) return;
   try {
-    await releaseRemoteConnectionLease(client, previous);
+    await releaseRemoteConnectionLease(client, previous, daemonAuthToken);
   } catch {
     // Reconnect must succeed even if the old lease was already released.
   }

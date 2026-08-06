@@ -48,6 +48,10 @@ function createProviderEnv(fixture: ProviderDaemonFixture): NodeJS.ProcessEnv {
     BROWSERSTACK_USERNAME: 'browser-user',
     BROWSERSTACK_ACCESS_KEY: 'browser-key',
     AGENT_DEVICE_TEST_RPC_LOG_PATH: fixture.rpcLogPath,
+    // Generated connection state never persists the daemon bearer token
+    // (ADR 0007), so commands after `connect` must resolve it from the
+    // environment/CLI chain, same as real usage.
+    AGENT_DEVICE_DAEMON_AUTH_TOKEN: 'test-daemon-token',
     NODE_OPTIONS: [process.env.NODE_OPTIONS, `--import=${fetchFixtureUrl}`]
       .filter(Boolean)
       .join(' '),

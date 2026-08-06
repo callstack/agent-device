@@ -244,7 +244,7 @@ async function cleanupForcedPreviousConnection(
   if (!previous || !flags.force) return;
   await stopMetroCleanup(previous.metro);
   await stopReactDevtoolsCleanup({ stateDir, state: previous });
-  await releasePreviousLease(client, previous);
+  await releasePreviousLease(client, previous, flags.daemonAuthToken);
 }
 
 function readRemoteConfigConnectionMetadata(
@@ -286,7 +286,7 @@ export const disconnectCommand: ClientCommandHandler = async ({ flags, client })
   let released = false;
   if (state.leaseId) {
     try {
-      const release = await releaseRemoteConnectionLease(client, state);
+      const release = await releaseRemoteConnectionLease(client, state, flags.daemonAuthToken);
       released = release.released;
       providerData ??= release.provider;
     } catch {

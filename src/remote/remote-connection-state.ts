@@ -19,7 +19,6 @@ export type RemoteConnectionState = {
   remoteConfigHash: string;
   daemon?: {
     baseUrl?: string;
-    authToken?: string;
     transport?: CliFlags['daemonTransport'];
     serverMode?: CliFlags['daemonServerMode'];
   };
@@ -94,7 +93,6 @@ export function buildRemoteConnectionDaemonState(
 ): RemoteConnectionState['daemon'] {
   return {
     baseUrl: sanitizeDaemonBaseUrl(flags.daemonBaseUrl),
-    authToken: flags.daemonAuthToken,
     transport: flags.daemonTransport,
     serverMode: flags.daemonServerMode,
   };
@@ -154,7 +152,11 @@ export function resolveRemoteConnectionDefaults(options: {
       ...profile,
       remoteConfig: state.remoteConfigPath,
       daemonBaseUrl: state.daemon?.baseUrl ?? profile.daemonBaseUrl,
-      daemonAuthToken: state.daemon?.authToken ?? profile.daemonAuthToken,
+      // Deliberately not sourced from state: the daemon bearer token is never
+      // persisted to the connection-state file (ADR 0007). It is resolved
+      // from the profile here, and from the flag/env/CLI-session chain in
+      // resolveRemoteAuth (src/cli/auth-session.ts) at command dispatch time.
+      daemonAuthToken: profile.daemonAuthToken,
       daemonTransport: state.daemon?.transport ?? profile.daemonTransport,
       daemonServerMode: state.daemon?.serverMode ?? profile.daemonServerMode,
       ...leaseScopeToCommandFlags(leaseScope),

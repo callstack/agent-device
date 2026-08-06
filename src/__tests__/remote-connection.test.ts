@@ -233,7 +233,6 @@ test('connect proxy writes normal remote state with generated non-secret profile
   assert.equal(state.leaseId, undefined);
   assert.deepEqual(state.daemon, {
     baseUrl: 'http://proxy.example.test/agent-device',
-    authToken: 'proxy-secret',
     transport: 'http',
   });
   assert.match(state.remoteConfigPath, /remote-connections\/generated\/proxy-[a-f0-9]{16}\.json$/);
@@ -277,7 +276,6 @@ test('connect daemon-base-url shortcut uses proxy profile for direct proxy URLs'
   assert.match(state.clientId ?? '', /^[a-f0-9]{16}$/);
   assert.deepEqual(state.daemon, {
     baseUrl: 'http://127.0.0.1:4310/agent-device',
-    authToken: 'proxy-secret',
     transport: 'http',
   });
   assert.equal(state.leaseId, undefined);
@@ -2269,7 +2267,6 @@ test('disconnect releases proxy lease with provider client and device metadata',
       leaseId: 'abc123abc123abc1',
       daemon: {
         baseUrl: 'http://proxy.example.test/agent-device',
-        authToken: 'proxy-secret',
       },
       leaseBackend: 'ios-instance',
       leaseProvider: 'proxy',
@@ -2290,6 +2287,10 @@ test('disconnect releases proxy lease with provider client and device metadata',
         version: false,
         stateDir,
         shutdown: true,
+        // Not persisted on connection state (ADR 0007): the caller supplies
+        // it per-command via flag/env/CLI-session, mirroring how the CLI
+        // dispatcher resolves it before invoking this handler.
+        daemonAuthToken: 'test-not-a-real-token',
       },
       client: createTestClient({
         release: async (request) => {
@@ -2306,7 +2307,7 @@ test('disconnect releases proxy lease with provider client and device metadata',
   assert.equal(releaseRequest?.leaseId, 'abc123abc123abc1');
   assert.equal(releaseRequest?.leaseBackend, 'ios-instance');
   assert.equal(releaseRequest?.daemonBaseUrl, 'http://proxy.example.test/agent-device');
-  assert.equal(releaseRequest?.daemonAuthToken, 'proxy-secret');
+  assert.equal(releaseRequest?.daemonAuthToken, 'test-not-a-real-token');
   assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-proxy' }), null);
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
