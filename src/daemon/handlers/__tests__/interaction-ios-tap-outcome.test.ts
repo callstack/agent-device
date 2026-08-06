@@ -366,8 +366,8 @@ test('corroborates a tap when the request carries no flags and the baseline used
   });
 
   // Deliberately built without a `flags` key at all (not `flags: {}`) — this
-  // mirrors the real production paths (batch steps with no flags, JSON-RPC
-  // requests that omit the key) that hide the bug this test pins.
+  // mirrors the raw daemon/JSON-RPC production boundary, which can omit the
+  // key entirely. CLI and batch paths always materialize a flags object.
   const response = await handleInteractionCommands({
     req: {
       token: 'test',
