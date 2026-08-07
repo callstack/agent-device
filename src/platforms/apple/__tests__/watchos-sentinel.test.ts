@@ -30,9 +30,10 @@ test('createAppleInteractor rejects a watchOS device as UNSUPPORTED_PLATFORM', (
 });
 
 test('a non-watchOS appleOs does not trigger the watchOS sentinel', () => {
-  // A tvOS device must not throw the watchOS-specific rejection. (It may still
-  // fail later on the empty runner context, so we only assert it is not the
-  // watchOS sentinel error.)
+  // A tvOS device must pass the watchOS admission guard. Interactor creation
+  // succeeds on an empty runner context, and pinning that success keeps this
+  // oracle unconditional — the previous shape only asserted inside a catch
+  // block that never fired, so no assertion executed on the observed path.
   const tvOsDevice: DeviceInfo = {
     platform: 'apple',
     id: 'tv-1',
@@ -42,9 +43,5 @@ test('a non-watchOS appleOs does not trigger the watchOS sentinel', () => {
     appleOs: 'tvos',
     booted: true,
   };
-  try {
-    createAppleInteractor(tvOsDevice, {} as RunnerContext);
-  } catch (error) {
-    expect((error as AppError).message ?? '').not.toMatch(/watchOS/i);
-  }
+  expect(createAppleInteractor(tvOsDevice, {} as RunnerContext)).toBeTruthy();
 });
