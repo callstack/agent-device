@@ -1,12 +1,15 @@
 // Fails if any agent-device-test-run-* directory under TEST_RUN_TMP_ROOT is
-// abandoned — its owning process has exited without running its
-// globalTeardown (crash, OOM, timeout kill). Directories owned by a still-
-// running process are left alone: a concurrent `vitest run` in another
-// worktree keeps its own directory present until its own teardown, which is
-// not a leak. See check-tmpdir-leaks-model.ts for the liveness check.
+// abandoned — its owning process has exited without running its cleanup
+// (crash, OOM, timeout kill). Directories owned by a still-running process
+// are left alone: a concurrent `vitest run` (or node --test lane, wrapped by
+// scripts/node-test-tmpdir.ts) in another worktree keeps its own directory
+// present until its own teardown, which is not a leak. See
+// check-tmpdir-leaks-model.ts for the liveness check.
 //
-// Only covers vitest runs. node --test lanes (test:smoke,
-// test:integration:node, ...) still use the real os.tmpdir() unredirected.
+// Covers both redirection mechanisms sharing this root/prefix: Vitest's
+// globalSetup/globalTeardown (scripts/vitest-tmpdir-global-setup.ts) and the
+// node --test wrapper (scripts/node-test-tmpdir.ts, #1595) that every
+// `node --test` package.json script now runs through.
 
 import path from 'node:path';
 import { findLeakedRunDirectories } from './check-tmpdir-leaks-model.ts';
