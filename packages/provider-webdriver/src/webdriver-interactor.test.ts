@@ -125,17 +125,24 @@ test('fill refuses a keyboard-up tap when the driver cannot report the focused f
   assert.equal(world.transcript.includes('keys'), false);
 });
 
-test('fill settles blind only when the driver implements neither route', async () => {
+// The last path that typed without evidence. It reported ordinary success, and
+// nothing renders `textEntryReadiness`, so it read to a caller exactly like a
+// fill that worked — the #1658 false success this change exists to remove.
+test('fill refuses when the driver implements neither focus route', async () => {
   const world = createTextEntryWorld();
   world.activeRoute = 'unimplemented';
   world.keyboardRoute = 'unimplemented';
 
-  const result = await runFill(world);
+  await assert.rejects(runFill(world), (error: AppError) => {
+    assert.equal(error.code, 'COMMAND_FAILED');
+    assert.match(error.message, /reports neither the focused element nor keyboard state/);
+    // A capability gap, not a missed tap: the caller's next move differs.
+    assert.equal(error.details?.reason, 'text_entry_focus_unobservable');
+    assert.match(String(error.details?.hint), /press <target> followed by type <text>/);
+    return true;
+  });
 
-  // Routes the driver does not have are not failures — they just leave nothing
-  // to wait for. This is the only path that types without evidence.
-  assert.equal(result?.textEntryReadiness, 'settled-unknown');
-  assert.deepEqual(world.transcript, ['keyboard', 'active', 'tap', 'active', 'keys']);
+  assert.equal(world.transcript.includes('keys'), false);
 });
 
 // The #1658 report is "fill answered Filled N chars while the field kept its

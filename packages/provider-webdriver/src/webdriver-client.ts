@@ -202,11 +202,16 @@ export class WebDriverClient {
   async activeElement(
     timeoutMs?: number,
   ): Promise<WebDriverActiveElement | 'none' | 'unsupported'> {
-    const overrides = { retryAttempts: 0, ...(timeoutMs === undefined ? {} : { timeoutMs }) };
+    // `timeoutMs` bounds this OPERATION, not each request in it. Two sequential
+    // round trips each handed the full budget would together take twice it — a
+    // probe given the 1.5s left of a 2s readiness deadline could run 3s and
+    // overrun the deadline it was derived from. One deadline, and the second
+    // request gets only what the first left.
+    const deadline = timeoutMs === undefined ? undefined : Date.now() + timeoutMs;
     let elementId: string | undefined;
     try {
       elementId = readW3CElementId(
-        await this.sessionRequest('GET', '/element/active', undefined, overrides),
+        await this.sessionRequest('GET', '/element/active', undefined, requestBudget(deadline)),
       );
     } catch (error) {
       if (isUnimplementedWebDriverRoute(error)) return 'unsupported';
@@ -219,7 +224,7 @@ export class WebDriverClient {
         'GET',
         `/element/${encodeURIComponent(elementId)}/rect`,
         undefined,
-        overrides,
+        requestBudget(deadline),
       );
       return { id: elementId, rect: readWindowRect(value) };
     } catch (error) {
@@ -449,6 +454,17 @@ function readW3CElementId(value: unknown): string | undefined {
   const record = value as Record<string, unknown>;
   const id = record[W3C_ELEMENT_KEY] ?? record.ELEMENT;
   return typeof id === 'string' && id.length > 0 ? id : undefined;
+}
+
+/**
+ * One request's share of a multi-request operation's budget: whatever is left
+ * of it. Floored at zero rather than omitted, so an already-spent budget aborts
+ * the request immediately instead of silently falling back to the client
+ * default and outliving the deadline entirely.
+ */
+function requestBudget(deadline: number | undefined): WebDriverRequestOverrides {
+  if (deadline === undefined) return { retryAttempts: 0 };
+  return { retryAttempts: 0, timeoutMs: Math.max(0, deadline - Date.now()) };
 }
 
 /** Nothing is focused right now — an expected state, not a driver defect. */

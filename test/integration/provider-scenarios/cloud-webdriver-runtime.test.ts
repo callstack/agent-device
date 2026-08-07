@@ -411,6 +411,10 @@ function assertWebDriverCalls(calls: readonly CloudWebDriverHttpCall[], leaseId:
   }
 }
 
+const W3C_ELEMENT_KEY = 'element-6066-11e4-a52e-4f735466cecf';
+/** Spans the viewport, so whatever coordinate a scenario fills lands inside it. */
+const FOCUSED_FIELD_RECT = { x: 0, y: 0, width: 1080, height: 1920 };
+
 class FakeWebDriverServer extends CloudWebDriverTestServer {
   artifactFailuresRemaining = 0;
   sessionDeleteFailuresRemaining = 0;
@@ -428,6 +432,9 @@ class FakeWebDriverServer extends CloudWebDriverTestServer {
   protected respond(call: CloudWebDriverHttpCall) {
     // Routes are a table rather than a switch: every added endpoint would otherwise widen one
     // function's branch count, and this fake grows an endpoint per provider feature.
+    if (call.method === 'GET' && /\/element\/[^/]+\/rect$/.test(call.path)) {
+      return cloudWebDriverTestJson({ value: FOCUSED_FIELD_RECT });
+    }
     const route = this.routes[`${call.method} ${call.path}`];
     return route ? route() : cloudWebDriverTestJson({ value: null });
   }
@@ -448,6 +455,15 @@ class FakeWebDriverServer extends CloudWebDriverTestServer {
           { value: { message: 'The requested resource could not be found.' } },
           500,
         ),
+      // This fake stands in for a conformant driver, so it answers the focus
+      // probes `fill` witnesses with. Text-entry semantics themselves live in
+      // cloud-webdriver-ios-text-entry.test.ts, which models focus properly;
+      // here the field is simply always focused so the facade wiring is what
+      // the scenario exercises.
+      'GET /wd/hub/session/wd-1/element/active': () =>
+        cloudWebDriverTestJson({ value: { [W3C_ELEMENT_KEY]: 'focused-field' } }),
+      'GET /wd/hub/session/wd-1/appium/device/is_keyboard_shown': () =>
+        cloudWebDriverTestJson({ value: true }),
       'POST /wd/hub/session/wd-1/rotation': () => this.rotationResponse(),
       'POST /wd/hub/session/wd-1/orientation': () => cloudWebDriverTestJson({ value: null }),
       'DELETE /wd/hub/session/wd-1': () => this.deleteSessionResponse(),

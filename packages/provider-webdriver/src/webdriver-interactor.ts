@@ -38,8 +38,6 @@ const TEXT_ENTRY_READINESS_POLL_MS = 100;
  * WebDriver client's much longer default request timeout.
  */
 const TEXT_ENTRY_PROBE_TIMEOUT_MS = 1_500;
-/** The blind wait when the driver reports no keyboard state at all — see `awaitTextEntryReadiness`. */
-const TEXT_ENTRY_BLIND_SETTLE_MS = 350;
 
 /** Global-timer based, so text-entry readiness can be exercised on a fake clock. */
 function sleep(ms: number): Promise<void> {
@@ -60,6 +58,25 @@ function textEntryFocusNotObservedError(x: number, y: number, detail: string): A
     y,
     hint: 'The tap most likely missed the field. Re-check the target with snapshot -i and fill the element it reports, rather than retrying the same coordinates.',
   });
+}
+
+/**
+ * The driver reports neither which element holds focus nor whether the keyboard
+ * is up, so no wait could establish that the tap landed on a text input. A
+ * distinct reason from a tap that missed: nothing about the target is wrong,
+ * the grid simply cannot answer, and the caller's next move is different.
+ */
+function textEntryFocusUnobservableError(x: number, y: number): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    `fill tapped (${x}, ${y}) but this driver reports neither the focused element nor keyboard state, so the text was not sent`,
+    {
+      reason: 'text_entry_focus_unobservable',
+      x,
+      y,
+      hint: 'This provider cannot confirm a field took focus. Use press <target> followed by type <text> to enter it anyway, accepting that nothing witnesses which field receives the keys.',
+    },
+  );
 }
 
 function rectContains(rect: WebDriverWindowRect, x: number, y: number): boolean {
@@ -366,12 +383,13 @@ class WebDriverInteractor implements Interactor {
     // No active-element route. Fall back to keyboard evidence, which can still
     // witness focus arriving when the keyboard was down before our tap.
     if (keyboardBeforeTap === 'unsupported') {
-      // The driver implements neither route, so no wait can learn anything.
-      // Keep a blind path cheap: settle briefly, then type. This is the ONE
-      // case that types without evidence, and it takes two positively
-      // classified unsupported answers to reach — never a probe that failed.
-      await sleep(TEXT_ENTRY_BLIND_SETTLE_MS);
-      return 'settled-unknown';
+      // Neither route: nothing this fill can wait for would mean anything. It
+      // used to settle briefly and type, reporting ordinary success — but
+      // nothing renders `textEntryReadiness`, so that read to a caller exactly
+      // like a fill that worked, which is the #1658 false success this whole
+      // change exists to remove. Refusing is the only honest answer, and it
+      // leaves `press` + `type` as the deliberate way to enter text unwitnessed.
+      throw textEntryFocusUnobservableError(x, y);
     }
     if (keyboardBeforeTap) {
       // Keyboard already up and no way to ask which field owns it: every signal

@@ -166,6 +166,45 @@ test('activeElement propagates a dead session, which shares the 404', async () =
   });
 });
 
+// `timeoutMs` bounds the OPERATION, not each request in it. Given the full
+// budget twice, these two sequential round trips would together take double it
+// — a probe handed the 1.5s left of a 2s readiness deadline would run 3s and
+// overrun the deadline it came from. Real time is unavoidable here: the defect
+// IS elapsed transport time across two calls.
+test('activeElement bounds its two sequential requests by one shared budget', async () => {
+  const firstCallMs = 80;
+  const budgetMs = 200;
+  let rectRequestBudgetMs: number | undefined;
+  const client = await connectedClient(async (input, init) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (url.includes('/rect')) {
+      // Never answers; only its own abort ends it, so how long it was allowed
+      // to run is exactly the budget it was handed.
+      const startedAt = Date.now();
+      return await new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          rectRequestBudgetMs = Date.now() - startedAt;
+          reject(init.signal?.reason as Error);
+        });
+      });
+    }
+    await new Promise((resolve) => setTimeout(resolve, firstCallMs));
+    return new Response(JSON.stringify({ value: { [W3C_ELEMENT_KEY]: 'el-1' } }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  });
+
+  await assert.rejects(client.activeElement(budgetMs));
+
+  assert.ok(rectRequestBudgetMs !== undefined, 'the rect request should have been made');
+  // It must get what the first call left (~120ms), never a fresh 200ms.
+  assert.ok(
+    rectRequestBudgetMs < budgetMs - firstCallMs / 2,
+    `rect request was allowed ${rectRequestBudgetMs}ms of a shared ${budgetMs}ms budget already ${firstCallMs}ms spent`,
+  );
+});
+
 const W3C_ELEMENT_KEY = 'element-6066-11e4-a52e-4f735466cecf';
 
 /** Dispatches by URL suffix, since `activeElement` makes two round trips. */
