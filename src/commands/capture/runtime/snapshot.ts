@@ -151,6 +151,7 @@ async function captureRuntimeSnapshot(
       depth: options.depth,
       scope: options.scope,
       raw: options.raw,
+      customActions: options.customActions,
     },
   );
   const snapshot = ensureSnapshotPresentationKey(

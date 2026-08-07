@@ -28,6 +28,7 @@ export type CommandExecutionOptions = Partial<ScreenshotRequestFlags> & {
   depth?: number;
   scope?: string;
   raw?: boolean;
+  customActions?: boolean;
   forceFull?: boolean;
   count?: number;
   fps?: number;

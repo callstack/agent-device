@@ -20,6 +20,7 @@ const SNAPSHOT_QUALITY_REASON_CODES = new Set<NonNullable<SnapshotQualityVerdict
   'no-nodes',
   'capture-failed',
   'deferred',
+  'requested-backend',
 ]);
 
 export function readSnapshotQualityVerdict(value: unknown): SnapshotQualityVerdict | undefined {
@@ -95,7 +96,7 @@ function stateWarning(verdict: SnapshotQualityVerdict): string[] {
     // warning is suppressed here. When the capture that ARMED the penalty was internal
     // (selector resolution, settle observation, system-modal probe) and never rendered it,
     // the daemon's session latch re-renders the warning once at the response seam.
-    if (verdict.reasonCode === 'deferred') return [];
+    if (verdict.reasonCode === 'deferred' || verdict.reasonCode === 'requested-backend') return [];
     return [recoveredSnapshotQualityWarning(verdict.backend)];
   }
   if (verdict.state === 'sparse') {

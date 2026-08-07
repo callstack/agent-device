@@ -199,6 +199,7 @@ const SANITIZED_FLAG_KEYS = [
   'snapshotDepth',
   'snapshotScope',
   'snapshotRaw',
+  'snapshotCustomActions',
   ...SCREENSHOT_ACTION_FLAG_KEYS,
   'relaunch',
   'saveScript',

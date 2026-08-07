@@ -22,6 +22,8 @@ export type CaptureSnapshotOptions = AgentDeviceRequestOverrides &
     depth?: number;
     scope?: string;
     raw?: boolean;
+    /** List accessibility custom actions on merged elements (iOS simulator). */
+    customActions?: boolean;
     forceFull?: boolean;
     timeoutMs?: number;
     /**

@@ -657,6 +657,7 @@ async function handleSnapshotCommand(
     depth: snapshotContext.snapshotDepth,
     scope: snapshotContext.snapshotScope,
     raw: snapshotContext.snapshotRaw,
+    customActions: snapshotContext.snapshotCustomActions,
     includeRects: snapshotContext.snapshotIncludeRects,
     includeHiddenContentHints: snapshotContext.snapshotIncludeHiddenContentHints,
     surface: snapshotContext.surface,

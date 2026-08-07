@@ -93,6 +93,12 @@ export type RunnerCommand = {
   interactiveOnly?: boolean;
   /** Pin the snapshot capture backend (same-backend evidence probes). */
   preferredBackend?: 'private-ax';
+  /**
+   * Read accessibility custom actions for merged leaves. Opt-in: each element
+   * costs its own AX round trip, and the runner pins the private-AX backend
+   * because no other backend can carry them.
+   */
+  customActions?: boolean;
   depth?: number;
   scope?: string;
   raw?: boolean;

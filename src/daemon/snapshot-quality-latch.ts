@@ -45,6 +45,9 @@ export function resolveRecoveredWarningLatch(params: {
   if (!verdict) return { latch };
   if (verdict.state === 'healthy') return { latch: undefined };
   if (verdict.state !== 'recovered') return { latch };
+  // A request-pinned backend never degraded anything, so it neither warns nor
+  // touches the penalty latch.
+  if (verdict.reasonCode === 'requested-backend') return { latch };
   if (verdict.reasonCode !== 'deferred') {
     return { latch: { appBundleId } };
   }

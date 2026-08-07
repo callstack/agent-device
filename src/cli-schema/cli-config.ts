@@ -66,6 +66,7 @@ const PROJECT_CONFIG_FLAG_KEYS = new Set<FlagKey>([
   'snapshotDepth',
   'snapshotScope',
   'snapshotRaw',
+  'snapshotCustomActions',
   'snapshotForceFull',
   'screenshotPixelDensity',
   'screenshotFullscreen',

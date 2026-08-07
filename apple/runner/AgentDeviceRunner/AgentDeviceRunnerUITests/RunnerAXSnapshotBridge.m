@@ -14,6 +14,10 @@ NSString *const RunnerAXSnapshotDeepExtensionNodesAddedKey = @"nodesAdded";
 NSString *const RunnerAXSnapshotDeepExtensionPendingKey = @"pendingFrontiers";
 NSString *const RunnerAXSnapshotDeepExtensionMissedKey = @"missedFrontiers";
 
+/// The AX server's name for UIAccessibilityCustomActions (React Native's
+/// `accessibilityActions` prop lands here too).
+static NSString *const RunnerAXCustomActionsAttribute = @"XC_kAXXCAttributeCustomActions";
+
 typedef id (*RunnerAXObjectMsgSend)(id, SEL);
 typedef NSInteger (*RunnerAXIntegerMsgSend)(id, SEL);
 typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
@@ -33,10 +37,11 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
                                                     maxDepth:(NSInteger)maxDepth
                                                     maxNodes:(NSInteger)maxNodes
                                       deepExtensionCallLimit:(NSInteger)deepExtensionCallLimit
+                                           customActionLimit:(NSInteger)customActionLimit
                                                     deadline:(nullable NSDate *)deadline
 {
   @try {
-    id axClient = [self objectFrom:XCUIDevice.sharedDevice selectorName:@"accessibilityInterface"];
+    id axClient = [self accessibilityClient];
     if (nil == axClient) {
       return [self failure:@"XCUIDevice accessibilityInterface is unavailable"];
     }
@@ -64,13 +69,16 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
     // zero extension bookkeeping.
     NSMutableArray<RunnerAXSnapshotFrontier *> *candidates =
         deepExtensionCallLimit > 0 ? [NSMutableArray array] : nil;
+    NSMutableArray<RunnerAXSnapshotFrontier *> *merged =
+        customActionLimit > 0 ? [NSMutableArray array] : nil;
     NSMutableDictionary *rootNode = [self dictionaryForSnapshot:root
                                                           depth:0
                                                        maxDepth:maxDepth
                                                        maxNodes:maxNodes
                                                       nodeCount:&nodeCount
                                                       truncated:&truncated
-                                                      frontiers:candidates];
+                                                      frontiers:candidates
+                                                    mergedLeaves:merged];
     if (nil == rootNode) {
       return [self failure:@"AX snapshot root could not be serialized"];
     }
@@ -85,7 +93,12 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
                                                       nodeCount:&nodeCount
                                                       truncated:&truncated
                                                    callsAllowed:deepExtensionCallLimit
+                                                   mergedLeaves:merged
                                                        deadline:deadline];
+    [self annotateCustomActionsOnMergedLeaves:merged
+                                     axClient:axClient
+                                        limit:customActionLimit
+                                     deadline:deadline];
 
     NSMutableDictionary *response = [NSMutableDictionary dictionaryWithDictionary:@{
       RunnerAXSnapshotOkKey: @YES,
@@ -115,6 +128,7 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
                                          nodeCount:(NSInteger *)nodeCount
                                          truncated:(BOOL *)truncated
                                       callsAllowed:(NSInteger)callsAllowed
+                                      mergedLeaves:(nullable NSMutableArray<RunnerAXSnapshotFrontier *> *)mergedLeaves
                                           deadline:(nullable NSDate *)deadline
 {
   if (callsAllowed <= 0 || frontiers.count == 0) {
@@ -167,7 +181,8 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
                                                           maxNodes:maxNodes
                                                          nodeCount:nodeCount
                                                          truncated:truncated
-                                                         frontiers:subCandidates];
+                                                         frontiers:subCandidates
+                                                      mergedLeaves:mergedLeaves];
       if (nil != childNode) {
         [children addObject:childNode];
       }
@@ -306,6 +321,88 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
   return attributes;
 }
 
+/// Reads custom actions for the merged leaves in traversal order until the
+/// limit or the capture deadline is spent. Each read is its own AX round trip
+/// (~100ms on an idle simulator), so this is strictly opt-in and strictly
+/// bounded; a leaf left unvisited simply carries no `actions` key.
++ (void)annotateCustomActionsOnMergedLeaves:(nullable NSArray<RunnerAXSnapshotFrontier *> *)leaves
+                                   axClient:(id)axClient
+                                      limit:(NSInteger)limit
+                                   deadline:(nullable NSDate *)deadline
+{
+  if (limit <= 0 || leaves.count == 0) {
+    return;
+  }
+  NSInteger reads = 0;
+  NSInteger annotated = 0;
+  for (RunnerAXSnapshotFrontier *leaf in leaves) {
+    if (reads >= limit || (nil != deadline && deadline.timeIntervalSinceNow <= 0)) {
+      break;
+    }
+    // Deep extension may have filled this leaf in since serialization; a node
+    // with real children is not a merged element and needs no action read.
+    if ([leaf.node[@"children"] isKindOfClass:NSArray.class]
+        && [(NSArray *)leaf.node[@"children"] count] > 0) {
+      continue;
+    }
+    id element = [self accessibilityElementForSnapshot:leaf.snapshot];
+    if (nil == element) {
+      continue;
+    }
+    reads += 1;
+    NSArray<NSString *> *names = [self customActionNamesForElement:element axClient:axClient];
+    if (names.count > 0) {
+      leaf.node[@"actions"] = names;
+      annotated += 1;
+    }
+  }
+  NSLog(@"AGENT_DEVICE_RUNNER_PRIVATE_AX_CUSTOM_ACTIONS reads=%ld annotated=%ld candidates=%ld",
+        (long)reads, (long)annotated, (long)leaves.count);
+}
+
++ (nullable NSArray<NSString *> *)customActionNamesForElement:(id)element axClient:(id)axClient
+{
+  if (nil == element || nil == axClient) {
+    return nil;
+  }
+  SEL selector = NSSelectorFromString(@"attributesForElement:attributes:error:");
+  if (![axClient respondsToSelector:selector]) {
+    return nil;
+  }
+  typedef id (*RunnerAXAttributesMsgSend)(id, SEL, id, id, NSError **);
+  RunnerAXAttributesMsgSend send = (RunnerAXAttributesMsgSend)objc_msgSend;
+  NSError *error = nil;
+  id values = nil;
+  @try {
+    values = send(axClient, selector, element, @[ RunnerAXCustomActionsAttribute ], &error);
+  } @catch (NSException *exception) {
+    return nil;
+  }
+  if (![values isKindOfClass:NSDictionary.class]) {
+    return nil;
+  }
+  id actions = ((NSDictionary *)values)[RunnerAXCustomActionsAttribute];
+  if (![actions isKindOfClass:NSArray.class]) {
+    return nil;
+  }
+  NSMutableArray<NSString *> *names = [NSMutableArray array];
+  for (id action in (NSArray *)actions) {
+    if (![action isKindOfClass:NSDictionary.class]) {
+      continue;
+    }
+    id name = ((NSDictionary *)action)[@"CustomActionName"];
+    if ([name isKindOfClass:NSString.class] && [(NSString *)name length] > 0) {
+      [names addObject:name];
+    }
+  }
+  return names.count > 0 ? names.copy : nil;
+}
+
++ (nullable id)accessibilityClient
+{
+  return [self objectFrom:XCUIDevice.sharedDevice selectorName:@"accessibilityInterface"];
+}
+
 + (nullable id)accessibilityElementForSnapshot:(id)snapshot
 {
   id element = nil;
@@ -384,6 +481,7 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
                                               nodeCount:(NSInteger *)nodeCount
                                               truncated:(BOOL *)truncated
                                               frontiers:(NSMutableArray<RunnerAXSnapshotFrontier *> *)frontiers
+                                           mergedLeaves:(NSMutableArray<RunnerAXSnapshotFrontier *> *)mergedLeaves
 {
   if (nil == snapshot || *nodeCount >= maxNodes) {
     *truncated = YES;
@@ -410,7 +508,8 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
                                                           maxNodes:maxNodes
                                                          nodeCount:nodeCount
                                                          truncated:truncated
-                                                         frontiers:frontiers];
+                                                         frontiers:frontiers
+                                                      mergedLeaves:mergedLeaves];
       if (nil != childNode) {
         [children addObject:childNode];
       }
@@ -419,6 +518,18 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
         break;
       }
     }
+  }
+  if (children.count == 0 && nil != mergedLeaves
+      && [result[@"label"] isKindOfClass:NSString.class]
+      && [(NSString *)result[@"label"] length] > 0) {
+    // A labelled childless node is the shape a merged card takes: the container
+    // is marked accessible, so its real controls never appear as children. Only
+    // these are worth an action read — unlabelled leaves are decoration.
+    RunnerAXSnapshotFrontier *candidate = [[RunnerAXSnapshotFrontier alloc] init];
+    candidate.snapshot = snapshot;
+    candidate.node = result;
+    candidate.depth = depth;
+    [mergedLeaves addObject:candidate];
   }
   if (children.count == 0 && nil != frontiers && depth >= maxDepth - 1) {
     // Childless node at the cap boundary: either a real leaf or a branch whose

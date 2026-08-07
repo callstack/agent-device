@@ -1,0 +1,56 @@
+import assert from 'node:assert/strict';
+import { test } from 'vitest';
+import { formatSnapshotLine } from '../../snapshot/snapshot-lines.ts';
+
+const mergedCard = {
+  ref: 'e72',
+  index: 0,
+  depth: 0,
+  type: 'Link',
+  label: 'feedItem-by-whiskers.test',
+  enabled: true,
+};
+
+test('formatSnapshotLine names the custom actions a merged element hides', () => {
+  const line = formatSnapshotLine(
+    { ...mergedCard, actions: ['Reply', 'Repost', 'Open post options menu'] },
+    0,
+    false,
+    undefined,
+    { summarizeTextSurfaces: true },
+  );
+
+  assert.equal(
+    line,
+    '@e72 [link] "feedItem-by-whiskers.test" actions: ["Reply", "Repost", "Open post options menu"]',
+  );
+});
+
+test('formatSnapshotLine keeps actions after bracketed metadata', () => {
+  const line = formatSnapshotLine(
+    { ...mergedCard, enabled: false, actions: ['Reply'] },
+    0,
+    false,
+    undefined,
+    { summarizeTextSurfaces: true },
+  );
+
+  assert.equal(line, '@e72 [link] "feedItem-by-whiskers.test" [disabled] actions: ["Reply"]');
+});
+
+test('formatSnapshotLine omits the actions list when there is nothing to name', () => {
+  for (const actions of [undefined, [], ['', '   ']]) {
+    const line = formatSnapshotLine({ ...mergedCard, actions }, 0, false, undefined, {
+      summarizeTextSurfaces: true,
+    });
+    assert.equal(line, '@e72 [link] "feedItem-by-whiskers.test"');
+  }
+});
+
+test('formatSnapshotLine still names actions on a hidden group, which has no label part', () => {
+  const line = formatSnapshotLine({ ...mergedCard, actions: ['Reply'] }, 1, true, undefined, {
+    summarizeTextSurfaces: true,
+  });
+
+  assert.equal(line, '  @e72 [link] actions: ["Reply"]');
+});

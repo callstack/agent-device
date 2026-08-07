@@ -73,6 +73,7 @@ export function createAppleInteractor(
                 appBundleId: options?.appBundleId,
                 interactiveOnly: options?.interactiveOnly,
                 preferredBackend: options?.preferredBackend,
+                customActions: options?.customActions,
                 depth: options?.depth,
                 scope: options?.scope,
                 raw: options?.raw,

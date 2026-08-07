@@ -62,6 +62,7 @@ export type SnapshotCommandOptions = CommandContext & {
   depth?: number;
   scope?: string;
   raw?: boolean;
+  customActions?: boolean;
   forceFull?: boolean;
 };
 

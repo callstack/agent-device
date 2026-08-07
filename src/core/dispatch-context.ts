@@ -36,6 +36,7 @@ export type DispatchContext = ScreenshotDispatchFlags & {
   snapshotDepth?: number;
   snapshotScope?: string;
   snapshotRaw?: boolean;
+  snapshotCustomActions?: boolean;
   snapshotIncludeRects?: boolean;
   snapshotIncludeHiddenContentHints?: boolean;
   skipIosSimulatorBootCheck?: boolean;

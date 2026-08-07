@@ -27,9 +27,15 @@ Examples:
   "interactiveOnly": true,
   "depth": 2,
   "scope": "app",
-  "raw": false
+  "raw": false,
+  "customActions": false
 }
 ```
+
+`customActions` asks the capture to name each merged element's
+`UIAccessibilityCustomAction`s in a node's `actions` array. It pins the
+private-AX backend (no other backend can read them) and costs one accessibility
+round trip per merged element, so it is opt-in.
 
 ```json
 { "command": "recordStart", "outPath": "/tmp/demo.mp4", "fps": 30 }

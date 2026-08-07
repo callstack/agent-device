@@ -31,6 +31,7 @@ describe('capture command interface', () => {
           snapshotDepth: 3,
           snapshotScope: 'Login',
           snapshotRaw: true,
+          snapshotCustomActions: true,
           snapshotForceFull: true,
           timeoutMs: 10_000,
         }),
@@ -40,6 +41,7 @@ describe('capture command interface', () => {
       depth: 3,
       scope: 'Login',
       raw: true,
+      customActions: true,
       forceFull: true,
       timeoutMs: 10_000,
     });

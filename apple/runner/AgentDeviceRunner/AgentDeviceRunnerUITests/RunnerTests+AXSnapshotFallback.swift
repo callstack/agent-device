@@ -9,6 +9,12 @@ extension RunnerTests {
   /// the capture-plan deadline, which is also enforced per call.
   private static let privateAXDeepExtensionCallLimit = 8
 
+  /// Upper bound on per-element custom-action reads per capture. Each is its own
+  /// AX round trip (~100ms on an idle simulator), so this caps the opt-in cost
+  /// at roughly a second on top of the capture; the capture-plan deadline stops
+  /// it earlier under load. A screenful of merged cards is well under this.
+  private static let privateAXCustomActionLimit = 12
+
   /// A capture is depth-limited unless its frontier extension resolved every
   /// capped node: frontiers left pending (budget/deadline) or missed (element
   /// vanished, re-rooted request failed) mean subtrees are still absent, and
@@ -116,6 +122,7 @@ extension RunnerTests {
           maxDepth: depth,
           maxNodes: Self.privateAXSnapshotMaxNodes,
           deepExtensionCallLimit: exactDepthRequested ? 0 : Self.privateAXDeepExtensionCallLimit,
+          customActionLimit: options.customActions ? Self.privateAXCustomActionLimit : 0,
           deadline: deadline
         )
         if response["ok"] as? Bool == true {
@@ -274,7 +281,8 @@ extension RunnerTests {
           depth: depth,
           parentIndex: parentIndex,
           hiddenContentAbove: nil,
-          hiddenContentBelow: nil
+          hiddenContentBelow: nil,
+          actions: rawNode["actions"] as? [String]
         )
       )
     } else {
@@ -396,6 +404,7 @@ extension RunnerTests {
       nodeCount: &nodeCount,
       truncated: &truncated,
       callsAllowed: 8,
+      mergedLeaves: nil,
       deadline: nil
     )
 
@@ -483,6 +492,92 @@ extension RunnerTests {
 
     abandonedTreeCaptureCount = 1
     XCTAssertFalse(shouldReadPrivateAXViewportViaXCTest())
+  }
+
+  /// The wire field must reach both capture options AND the backend pin: custom
+  /// actions are only readable through the private AX client, so a capture that
+  /// asked for them but planned the XCTest tree backend would return a payload
+  /// that structurally cannot carry them.
+  func testCustomActionsRequestPinsPrivateAXBackend() throws {
+    let asked = try JSONDecoder().decode(
+      Command.self, from: Data(#"{"command":"snapshot","customActions":true}"#.utf8))
+    let options = Self.snapshotOptions(from: asked)
+    XCTAssertTrue(options.customActions)
+    XCTAssertEqual(options.preferredBackend, SnapshotBackendKind.privateAX.rawValue)
+    XCTAssertTrue(
+      Self.snapshotXCTestChannelTreatedAsPenalized(
+        penalized: false, preferredBackend: options.preferredBackend))
+
+    // An explicit pin is never overwritten by the implied one.
+    let pinned = try JSONDecoder().decode(
+      Command.self,
+      from: Data(#"{"command":"snapshot","customActions":true,"preferredBackend":"tree"}"#.utf8))
+    XCTAssertEqual(Self.snapshotOptions(from: pinned).preferredBackend, "tree")
+
+    // And the default capture neither asks nor pins.
+    let bare = try JSONDecoder().decode(Command.self, from: Data(#"{"command":"snapshot"}"#.utf8))
+    XCTAssertFalse(Self.snapshotOptions(from: bare).customActions)
+    XCTAssertNil(Self.snapshotOptions(from: bare).preferredBackend)
+  }
+
+  /// A request-pinned backend degraded nothing, so its verdict must not claim
+  /// slow accessibility work — that reason drives a user-facing warning.
+  func testRequestPinnedBackendReportsItsOwnReason() {
+    let requested = Self.xcTestChannelStateFirstFailure(
+      .deferredToIndependentBackend, requestPinnedBackend: true)
+    XCTAssertEqual(requested?.code, "requested-backend")
+    XCTAssertFalse(requested?.reason.contains("slow accessibility work") ?? true)
+
+    // The circuit breaker's own deferral keeps its established code and wording.
+    let breaker = Self.xcTestChannelStateFirstFailure(.deferredToIndependentBackend)
+    XCTAssertEqual(breaker?.code, "deferred")
+
+    // The bounded probe and the healthy plan are untouched by the new flag.
+    XCTAssertEqual(
+      Self.xcTestChannelStateFirstFailure(.boundedXCTestProbe, requestPinnedBackend: true)?.code,
+      "budget")
+    XCTAssertNil(Self.xcTestChannelStateFirstFailure(.normal, requestPinnedBackend: true))
+  }
+
+  /// Action names annotated by the bridge must survive into the emitted node —
+  /// the whole point of the capture is that the merged card names its hidden
+  /// affordances.
+  func testPrivateAXNodesCarryAnnotatedCustomActions() {
+    let tree: [String: Any] = [
+      "type": Int(XCUIElement.ElementType.application.rawValue),
+      "label": "Blue Sky",
+      "frame": ["x": 0, "y": 0, "width": 390, "height": 844],
+      "children": [
+        [
+          "type": Int(XCUIElement.ElementType.link.rawValue),
+          "label": "feedItem-by-whiskers.test",
+          "frame": ["x": 0, "y": 100, "width": 390, "height": 200],
+          "actions": ["Reply", "Repost", "Open post options menu"],
+          "children": [],
+        ],
+        [
+          "type": Int(XCUIElement.ElementType.button.rawValue),
+          "label": "Compose",
+          "frame": ["x": 300, "y": 700, "width": 60, "height": 60],
+          "children": [],
+        ],
+      ],
+    ]
+    var nodes: [SnapshotNode] = []
+    appendPrivateAXNode(
+      tree,
+      to: &nodes,
+      options: SnapshotOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
+      viewport: CGRect(x: 0, y: 0, width: 390, height: 844),
+      depth: 0,
+      parentIndex: nil,
+      insideMatchedScope: false
+    )
+
+    let card = nodes.first { $0.label == "feedItem-by-whiskers.test" }
+    XCTAssertEqual(card?.actions, ["Reply", "Repost", "Open post options menu"])
+    // A node the bridge did not annotate stays absent, not empty.
+    XCTAssertNil(nodes.first { $0.label == "Compose" }?.actions)
   }
 
   func testPrivateAXScopeSelectsSubtreeNotMatchingLabels() {

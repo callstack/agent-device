@@ -48,6 +48,7 @@ export async function dispatchSnapshotViaRuntime(params: {
         depth: req.flags?.snapshotDepth,
         scope: snapshotScope,
         raw: req.flags?.snapshotRaw,
+        customActions: req.flags?.snapshotCustomActions,
         forceFull: req.flags?.snapshotForceFull,
       });
       // #1076 versioned refs: the snapshot response is a ref-issuing response,

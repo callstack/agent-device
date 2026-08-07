@@ -200,6 +200,13 @@ export const WORKFLOW_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageDescription: 'Snapshot: raw node output',
   },
   {
+    key: 'snapshotCustomActions',
+    names: ['--actions'],
+    type: 'boolean',
+    usageLabel: '--actions',
+    usageDescription: 'Snapshot: list accessibility custom actions on merged elements (iOS sim)',
+  },
+  {
     key: 'snapshotForceFull',
     names: ['--force-full'],
     type: 'boolean',

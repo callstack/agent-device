@@ -138,6 +138,7 @@ struct Command: Codable {
   let fps: Int?
   let interactiveOnly: Bool?
   let preferredBackend: String?
+  let customActions: Bool?
   let depth: Int?
   let scope: String?
   let raw: Bool?
@@ -389,6 +390,9 @@ struct SnapshotNode: Codable {
   let parentIndex: Int?
   let hiddenContentAbove: Bool?
   let hiddenContentBelow: Bool?
+  /// Names of the element's UIAccessibilityCustomActions, present only when the
+  /// capture asked for them and the element carries some.
+  var actions: [String]? = nil
 }
 
 struct SnapshotOptions {
@@ -400,4 +404,7 @@ struct SnapshotOptions {
   /// health ("private-ax"). Same-backend evidence probes (tap-outcome
   /// corroboration) must be captured the way their baseline was.
   var preferredBackend: String? = nil
+  /// Read UIAccessibilityCustomActions for merged leaves. Opt-in: each element
+  /// costs its own AX round trip (see RunnerAXSnapshotBridge).
+  var customActions: Bool = false
 }

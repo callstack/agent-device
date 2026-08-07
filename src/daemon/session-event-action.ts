@@ -318,6 +318,7 @@ const SAFE_ACTION_FLAG_SPECS: Record<string, SafeFlagSpec> = {
       { source: 'snapshotInteractiveOnly', output: 'interactiveOnly' },
       { source: 'snapshotDiff', output: 'diff' },
       { source: 'snapshotRaw', output: 'raw' },
+      { source: 'snapshotCustomActions', output: 'actions' },
       { source: 'snapshotForceFull', output: 'forceFull' },
     ],
     numbers: [{ source: 'snapshotDepth', output: 'depth' }],

@@ -29,11 +29,38 @@ FOUNDATION_EXPORT NSString *const RunnerAXSnapshotDeepExtensionMissedKey;
 /// not). The response gains a `deepExtension` {calls, nodesAdded,
 /// pendingFrontiers, missedFrontiers} dictionary when any frontier existed and
 /// the call limit allowed extension. Pass 0 to disable extension entirely.
+///
+/// `customActionLimit` bounds the per-element custom-action reads described on
+/// `customActionNamesForElement:axClient:`; pass 0 to skip them entirely.
 + (NSDictionary<NSString *, id> *)snapshotTreeForApplication:(XCUIApplication *)application
                                                     maxDepth:(NSInteger)maxDepth
                                                     maxNodes:(NSInteger)maxNodes
                                       deepExtensionCallLimit:(NSInteger)deepExtensionCallLimit
+                                           customActionLimit:(NSInteger)customActionLimit
                                                     deadline:(nullable NSDate *)deadline;
+
+/// Names of the element's UIAccessibilityCustomActions, or nil when it has
+/// none.
+///
+/// One element per call on purpose. The bulk snapshot request cannot carry this
+/// attribute: adding it makes testmanagerd's reply decoder reject the nested
+/// arrays a custom action serializes into ("value for key 'NS.objects' was of
+/// unexpected class 'NSArray'"), drop the reply, and time the request out after
+/// ~65s instead of the usual ~110ms. Per-element reads use a different XPC
+/// message and answer normally.
+///
+/// Reading is all we can do: the actions are not invocable from the runner.
+/// XCUIElement exposes no custom-action API; XCAXClient_iOS's
+/// performAction:onElement:value: answers kAXErrorCannotComplete for every AX
+/// action number; setAttribute: on the custom-actions attribute reports success
+/// and does nothing; parameterizedAttribute: answers kAXErrorNoValue; and the
+/// raw AXUIElement C API cannot be aimed at app elements because
+/// XCAccessibilityElement is token-based and answers nil for AXUIElement.
++ (nullable NSArray<NSString *> *)customActionNamesForElement:(id)element axClient:(id)axClient;
+
+/// The shared AX client (`XCUIDevice.accessibilityInterface`), or nil when the
+/// private interface is unavailable.
++ (nullable id)accessibilityClient;
 
 + (NSInteger)processIdentifierForApplication:(XCUIApplication *)application;
 
@@ -49,6 +76,7 @@ FOUNDATION_EXPORT NSString *const RunnerAXSnapshotDeepExtensionMissedKey;
                                          nodeCount:(NSInteger *)nodeCount
                                          truncated:(BOOL *)truncated
                                       callsAllowed:(NSInteger)callsAllowed
+                                      mergedLeaves:(nullable NSMutableArray<RunnerAXSnapshotFrontier *> *)mergedLeaves
                                           deadline:(nullable NSDate *)deadline;
 
 @end

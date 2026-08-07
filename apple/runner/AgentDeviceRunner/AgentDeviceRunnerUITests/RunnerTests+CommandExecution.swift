@@ -1362,12 +1362,18 @@ extension RunnerTests {
   /// Pure command→options projection, extracted so the runner unit bundle can
   /// prove the decoded wire field actually reaches capture options (#1634 P2).
   static func snapshotOptions(from command: Command) -> SnapshotOptions {
-    SnapshotOptions(
+    let customActions = command.customActions ?? false
+    return SnapshotOptions(
       interactiveOnly: command.interactiveOnly ?? false,
       depth: command.depth,
       scope: command.scope,
       raw: command.raw ?? false,
+      // Custom actions are only readable through the private AX client, so
+      // asking for them pins that backend rather than silently returning a
+      // capture that structurally cannot carry them. An explicit pin wins.
       preferredBackend: command.preferredBackend
+        ?? (customActions ? SnapshotBackendKind.privateAX.rawValue : nil),
+      customActions: customActions
     )
   }
 

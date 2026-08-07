@@ -77,6 +77,7 @@ export type CliFlags = CloudProviderProfileFields &
     snapshotDepth?: number;
     snapshotScope?: string;
     snapshotRaw?: boolean;
+    snapshotCustomActions?: boolean;
     snapshotForceFull?: boolean;
     artifact?: string;
     dsym?: string;

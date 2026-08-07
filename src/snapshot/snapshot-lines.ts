@@ -105,10 +105,25 @@ export function formatSnapshotLine(
   }
   const metadataText = metadata.map((entry) => ` [${entry}]`).join('');
   const textPart = label ? ` "${label}"` : '';
+  const actionsText = formatCustomActions(node);
   if (hiddenGroup) {
-    return `${indent}${ref} [${type}]${metadataText}`.trimEnd();
+    return `${indent}${ref} [${type}]${metadataText}${actionsText}`.trimEnd();
   }
-  return `${indent}${ref} [${type}]${textPart}${metadataText}`.trimEnd();
+  return `${indent}${ref} [${type}]${textPart}${metadataText}${actionsText}`.trimEnd();
+}
+
+/**
+ * Accessibility custom actions render as a named list rather than bracketed
+ * metadata: they are the element's hidden affordances, and an agent reading the
+ * line needs the exact names it would have to match. Names only — activation
+ * points and identifiers are not actionable through any API we have.
+ */
+function formatCustomActions(node: SnapshotNode): string {
+  const actions = node.actions?.filter((action) => action.trim().length > 0);
+  if (!actions || actions.length === 0) {
+    return '';
+  }
+  return ` actions: [${actions.map((action) => `"${action}"`).join(', ')}]`;
 }
 
 export function displayLabel(node: SnapshotNode, type: string): string {

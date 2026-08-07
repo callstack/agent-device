@@ -68,11 +68,16 @@ test('runtime snapshot forwards interactive capture options', async () => {
 
   assert.equal(observedOptions?.interactiveOnly, true);
   assert.deepEqual(observedOptions, {
+    customActions: undefined,
     depth: undefined,
     interactiveOnly: true,
     raw: undefined,
     scope: undefined,
   });
+
+  await device.capture.snapshot({ session: 'default', interactiveOnly: true, customActions: true });
+
+  assert.equal(observedOptions?.customActions, true);
 });
 
 test('runtime diff snapshot initializes and then compares against session baseline', async () => {

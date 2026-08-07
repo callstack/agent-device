@@ -149,13 +149,25 @@ extension RunnerTests {
   /// degraded on this capture, and the daemon keys warning suppression and the settle budget
   /// reset off exactly that distinction. The bounded probe keeps 'budget': its short XCTest
   /// slice genuinely constrains what this capture could read.
+  ///
+  /// `requestPinnedBackend` separates the two ways the plan can arrive at the same
+  /// deferred shape. A capture that ASKED for a private-AX-only reading (custom
+  /// actions) degraded nothing, so reporting slow accessibility work would name a
+  /// cause that does not exist.
   static func xcTestChannelStateFirstFailure(
-    _ state: SnapshotXCTestChannelPlanState
+    _ state: SnapshotXCTestChannelPlanState,
+    requestPinnedBackend: Bool = false
   ) -> (reason: String, code: String)? {
     switch state {
     case .normal:
       return nil
     case .deferredToIndependentBackend:
+      if requestPinnedBackend {
+        return (
+          "the private AX backend was selected because this capture asked for accessibility custom actions",
+          "requested-backend"
+        )
+      }
       return (
         "XCTest-backed snapshot tiers were deferred after recent slow accessibility work on this screen",
         "deferred"
@@ -237,9 +249,11 @@ extension RunnerTests {
     // penalized route: privateAX-first plan, 'deferred' verdict — the backend was pre-selected
     // deliberately, so no degradation warning should render for it.
     var xCTestChannelPenalized = false
+    var xCTestChannelPenalizedByBreaker = false
 #if os(iOS)
+    xCTestChannelPenalizedByBreaker = isSnapshotXCTestChannelPenalized(bundleId: currentBundleId)
     xCTestChannelPenalized = Self.snapshotXCTestChannelTreatedAsPenalized(
-      penalized: isSnapshotXCTestChannelPenalized(bundleId: currentBundleId),
+      penalized: xCTestChannelPenalizedByBreaker,
       preferredBackend: options.preferredBackend
     )
 #endif
@@ -249,7 +263,12 @@ extension RunnerTests {
       availableBackends: Set(SnapshotBackendKind.allCases.filter(\.isAvailableOnCurrentPlatform))
     )
     let effectivePlan = effective.plan
-    firstFailure = Self.xcTestChannelStateFirstFailure(effective.xCTestChannelState)
+    // Only a customActions-implied pin is request-pinned; the daemon's
+    // same-backend evidence probe pins for its own reasons and keeps 'deferred'.
+    firstFailure = Self.xcTestChannelStateFirstFailure(
+      effective.xCTestChannelState,
+      requestPinnedBackend: options.customActions && !xCTestChannelPenalizedByBreaker
+    )
     switch effective.xCTestChannelState {
     case .normal:
       break
