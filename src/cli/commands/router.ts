@@ -1,28 +1,24 @@
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { AgentDeviceClient } from '../../agent-device-client.ts';
 import { isClientBackedCliCommandName, type ClientBackedCliCommandName } from './client-backed.ts';
-import { connectCommand, connectionCommand, disconnectCommand } from './connection.ts';
-import { authCommand } from './auth.ts';
-import { daemonCommand } from './daemon.ts';
-import { deviceCommand } from './device.ts';
-import { proxyCommand } from './proxy.ts';
-import { replayCommand } from './replay.ts';
-import { screenshotCommand, diffCommand } from './screenshot.ts';
 import type { ClientCommandHandlerMap, ClientCommandParams } from './router-types.ts';
 
 export type { ClientCommandParams } from './router-types.ts';
 
-const dedicatedCliCommandHandlers = {
-  connect: connectCommand,
-  disconnect: disconnectCommand,
-  connection: connectionCommand,
-  auth: authCommand,
-  daemon: daemonCommand,
-  device: deviceCommand,
-  proxy: proxyCommand,
-  replay: replayCommand,
-  screenshot: screenshotCommand,
-  diff: diffCommand,
+// Some dedicated handlers pull in sizeable dependency subtrees (e.g.
+// replay.ts -> @agent-device/maestro), so they're loaded lazily, on demand,
+// the same way runGenericClientBackedCommand lazy-loads generic.ts below.
+const dedicatedCliCommandHandlerLoaders = {
+  connect: async () => (await import('./connection.ts')).connectCommand,
+  disconnect: async () => (await import('./connection.ts')).disconnectCommand,
+  connection: async () => (await import('./connection.ts')).connectionCommand,
+  auth: async () => (await import('./auth.ts')).authCommand,
+  daemon: async () => (await import('./daemon.ts')).daemonCommand,
+  device: async () => (await import('./device.ts')).deviceCommand,
+  proxy: async () => (await import('./proxy.ts')).proxyCommand,
+  replay: async () => (await import('./replay.ts')).replayCommand,
+  screenshot: async () => (await import('./screenshot.ts')).screenshotCommand,
+  diff: async () => (await import('./screenshot.ts')).diffCommand,
 } satisfies ClientCommandHandlerMap;
 
 export async function tryRunClientBackedCommand(params: {
@@ -34,9 +30,12 @@ export async function tryRunClientBackedCommand(params: {
   replayTestReporterRuntime?: ClientCommandParams['replayTestReporterRuntime'];
 }): Promise<boolean> {
   const flags = { ...params.flags };
-  const dedicatedHandler =
-    dedicatedCliCommandHandlers[params.command as keyof typeof dedicatedCliCommandHandlers];
-  if (dedicatedHandler) {
+  const loadDedicatedHandler =
+    dedicatedCliCommandHandlerLoaders[
+      params.command as keyof typeof dedicatedCliCommandHandlerLoaders
+    ];
+  if (loadDedicatedHandler) {
+    const dedicatedHandler = await loadDedicatedHandler();
     const handled = await dedicatedHandler({ ...params, flags });
     if (handled) return true;
   }

@@ -16,4 +16,6 @@ export type ClientCommandParams = {
  * intentionally produced no output and declined so the router can try the generic route.
  */
 export type ClientCommandHandler = (params: ClientCommandParams) => Promise<boolean>;
-export type ClientCommandHandlerMap = Partial<Record<CliCommandName, ClientCommandHandler>>;
+export type ClientCommandHandlerMap = Partial<
+  Record<CliCommandName, () => Promise<ClientCommandHandler>>
+>;
