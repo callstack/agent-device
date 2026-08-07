@@ -30,7 +30,7 @@ export {
 
 export { makeSessionStore } from './store-factory.ts';
 
-export { withFakeAdb, type FakeAdbResponse, type FakeAdbScript } from './fake-adb.ts';
+export { withFakeAdb, type FakeAdbResponse } from './fake-adb.ts';
 
 export { assertRejectsAppError } from './app-error.ts';
 
