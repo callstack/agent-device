@@ -1734,17 +1734,13 @@ test('deferred materialization stops the new Metro companion if state persistenc
     },
   });
 
-  const originalWriteFileSync = fs.writeFileSync.bind(fs);
+  const originalRenameSync = fs.renameSync.bind(fs);
   const writeFailure = new Error('state write failed');
-  vi.spyOn(fs, 'writeFileSync').mockImplementation((file, data, options) => {
-    if (String(file).endsWith(path.join('remote-connections', 'adc-android.json'))) {
+  vi.spyOn(fs, 'renameSync').mockImplementation((oldPath, newPath) => {
+    if (String(newPath).endsWith(path.join('remote-connections', 'adc-android.json'))) {
       throw writeFailure;
     }
-    return originalWriteFileSync(
-      file as Parameters<typeof fs.writeFileSync>[0],
-      data as Parameters<typeof fs.writeFileSync>[1],
-      options as Parameters<typeof fs.writeFileSync>[2],
-    );
+    return originalRenameSync(oldPath, newPath);
   });
 
   await assert.rejects(

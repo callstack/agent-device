@@ -16,7 +16,7 @@ test('unscoped connect contexts never adopt the ambient connection', () => {
   const first = resolveConnectContext({ stateDir, flags, remoteConfigPath });
   const second = resolveConnectContext({ stateDir, flags, remoteConfigPath });
 
-  assert.match(first.session, /^adc-[a-f0-9]+$/);
+  assert.match(first.session, /^adc-[a-f0-9]{32}$/);
   assert.notEqual(second.session, first.session);
   assert.equal(first.previous, null);
   assert.equal(second.previous, null);

@@ -23,7 +23,7 @@ export function resolveConnectContext(options: {
   // The active-session pointer is host-global convenience state, not caller identity. Reusing it
   // here lets an unrelated process adopt and overwrite another process's provider connection.
   // Unscoped connects therefore mint a new identity; deliberate reconnects name their session.
-  const session = flags.session ?? createRemoteSessionName(stateDir);
+  const session = flags.session ?? createRemoteSessionName();
   const previous = flags.session ? readRemoteConnectionState({ stateDir, session }) : null;
   return {
     session,
@@ -33,12 +33,6 @@ export function resolveConnectContext(options: {
   };
 }
 
-function createRemoteSessionName(stateDir: string): string {
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const candidate = `adc-${crypto.randomBytes(3).toString('hex')}`;
-    if (!readRemoteConnectionState({ stateDir, session: candidate })) {
-      return candidate;
-    }
-  }
-  return `adc-${Date.now().toString(36)}-${crypto.randomBytes(2).toString('hex')}`;
+function createRemoteSessionName(): string {
+  return `adc-${crypto.randomBytes(16).toString('hex')}`;
 }
