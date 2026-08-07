@@ -124,7 +124,13 @@ export async function resolveSessionAppBundleIdForTarget(
   ) => Promise<string | undefined>,
 ): Promise<string | undefined> {
   if (isIosFamily(device) && isActiveProviderDevice(device)) {
-    return currentAppBundleId ?? providerIosBundleIdFromOpenTarget(openTarget);
+    // An explicit bundle-id target wins over the session's current app, exactly
+    // as the local path does: resolveIosApp returns a dotted target unchanged
+    // and never consults currentAppBundleId. Preferring the stored id instead
+    // would leave `open com.a` then `open com.b` reporting com.a. Everything
+    // this cannot name — deep links, display names, no target — still falls
+    // back to the known id, which is what the local deep-link branches do too.
+    return providerIosBundleIdFromOpenTarget(openTarget) ?? currentAppBundleId;
   }
   return (
     (await resolveIosBundleIdForOpen(device, openTarget, currentAppBundleId)) ??
