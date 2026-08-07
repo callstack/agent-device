@@ -350,6 +350,17 @@ function summarizeProviderScenarioFlagExclusions() {
       owner: 'iOS platform and screenshot-diff runtime tests',
       keys: ['screenshotNormalizeStatusBar', 'screenshotPixelDensity'],
     },
+    {
+      // Reading accessibility custom actions has no provider-scenario surface:
+      // the values come from the private AX client inside the runner process,
+      // and the fake runner derives its behavior from fixture tables that
+      // cannot fabricate them. Covered instead by the runner's XCTest unit
+      // bundle (option→backend-pin projection, node carry, coverage counting
+      // and disclosure) plus TS presentation and quality-verdict tests.
+      name: 'Apple simulator private-AX capture options',
+      owner: 'runner XCTest unit, snapshot-lines, and snapshot-quality tests',
+      keys: ['snapshotCustomActions'],
+    },
   ];
 }
 
