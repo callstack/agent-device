@@ -138,7 +138,7 @@ if is_truthy "${AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS:-}"; then
   SWIFT_FLAGS="$SWIFT_FLAGS -D AGENT_DEVICE_RUNNER_UNIT_TESTS"
 fi
 
-xcodebuild build-for-testing \
+node --experimental-strip-types scripts/swift-toolchain-tmpdir.ts xcodebuild build-for-testing \
   -project "$PROJECT_PATH" \
   -scheme "$SCHEME" \
   -destination "$DESTINATION" \
