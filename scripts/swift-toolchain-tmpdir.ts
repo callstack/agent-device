@@ -31,12 +31,23 @@ const { child, wait } = runCmdBackground(command, args, {
   allowFailure: true,
 });
 
+const FORCE_KILL_DELAY_MS = 5_000;
+let forwardedSignal: 'SIGINT' | 'SIGTERM' | undefined;
+let forceKillTimer: ReturnType<typeof setTimeout> | undefined;
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
+    if (forwardedSignal) return;
+    forwardedSignal = signal;
     child.kill(signal);
-    process.exit(signal === 'SIGINT' ? 130 : 143);
+    // Keep the owned TMPDIR alive while Swift/Xcode handles the signal and
+    // flushes its descendants. A stuck child is force-killed after a bounded
+    // grace period, after which `wait` resolves and normal exit cleanup runs.
+    forceKillTimer = setTimeout(() => child.kill('SIGKILL'), FORCE_KILL_DELAY_MS);
+    forceKillTimer.unref();
   });
 }
 
 const result = await wait;
-process.exitCode = result.exitCode;
+if (forceKillTimer) clearTimeout(forceKillTimer);
+process.exitCode =
+  forwardedSignal === 'SIGINT' ? 130 : forwardedSignal === 'SIGTERM' ? 143 : result.exitCode;

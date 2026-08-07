@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { runCmd } from '../src/utils/exec.ts';
+import { runCmd, runCmdBackground } from '../src/utils/exec.ts';
 
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const WRAPPER = path.join(REPOSITORY_ROOT, 'scripts', 'swift-toolchain-tmpdir.ts');
@@ -59,6 +59,57 @@ test('the Swift toolchain wrapper cleans up and forwards a failure', async () =>
   assert.equal(result.resultExitCode, 17);
 });
 
+test('the Swift toolchain wrapper keeps TMPDIR until a signaled child exits', async () => {
+  const evidenceRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'swift-toolchain-tmpdir-signal-test-'),
+  );
+  const readyPath = path.join(evidenceRoot, 'ready.json');
+  const shutdownPath = path.join(evidenceRoot, 'shutdown.json');
+  let childTmpDir: string | undefined;
+
+  try {
+    const probe = `
+const fs = require('node:fs');
+fs.writeFileSync(${JSON.stringify(readyPath)}, JSON.stringify({ tmpdir: process.env.TMPDIR }));
+process.on('SIGTERM', () => {
+  setTimeout(() => {
+    fs.writeFileSync(
+      ${JSON.stringify(shutdownPath)},
+      JSON.stringify({ tmpdirExisted: fs.existsSync(process.env.TMPDIR) }),
+    );
+    process.exit(0);
+  }, 200);
+});
+setInterval(() => {}, 1_000);
+`;
+    const background = runCmdBackground(
+      process.execPath,
+      ['--experimental-strip-types', WRAPPER, process.execPath, '-e', probe],
+      {
+        cwd: REPOSITORY_ROOT,
+        allowFailure: true,
+      },
+    );
+
+    await waitForFile(readyPath);
+    childTmpDir = (JSON.parse(fs.readFileSync(readyPath, 'utf8')) as { tmpdir: string }).tmpdir;
+    background.child.kill('SIGTERM');
+
+    const result = await background.wait;
+    assert.equal(result.exitCode, 143);
+    assert.equal(
+      (JSON.parse(fs.readFileSync(shutdownPath, 'utf8')) as { tmpdirExisted: boolean })
+        .tmpdirExisted,
+      true,
+      'the child must retain TMPDIR until its delayed shutdown completes',
+    );
+    assert.equal(fs.existsSync(childTmpDir), false, `wrapper left behind: ${childTmpDir}`);
+  } finally {
+    if (childTmpDir) fs.rmSync(childTmpDir, { recursive: true, force: true });
+    fs.rmSync(evidenceRoot, { recursive: true, force: true });
+  }
+});
+
 test('Apple build lanes route toolchain commands through the cleanup wrapper', () => {
   const manifest = JSON.parse(
     fs.readFileSync(path.join(REPOSITORY_ROOT, 'package.json'), 'utf8'),
@@ -76,3 +127,11 @@ test('Apple build lanes route toolchain commands through the cleanup wrapper', (
   );
   assert.match(xcodeBuildScript, /swift-toolchain-tmpdir\.ts xcodebuild build-for-testing/);
 });
+
+async function waitForFile(filePath: string): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (fs.existsSync(filePath)) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`Timed out waiting for ${filePath}`);
+}
