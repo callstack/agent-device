@@ -1,18 +1,18 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { ref, selector } from '../../../src/commands/interaction/runtime/selector-read-utils.ts';
-import { drawerWithVisibleTwinSnapshot } from './fixtures.ts';
+import { equivalentWrapperChainSnapshot } from './fixtures.ts';
 import { createContractDevice } from './runtime-harness.ts';
 
 // ADR 0012 mutation contract, daemon half: diagnosticRef tokens are not refs.
 // The MCP half (never ref-issued/pinned) lives in src/mcp/__tests__/command-tools.test.ts.
 
 test('resolution mutation contract: a diagnosticRef is not a resolvable @ref target', async () => {
-  const device = createContractDevice(drawerWithVisibleTwinSnapshot(), {
+  const device = createContractDevice(equivalentWrapperChainSnapshot(), {
     tap: async () => ({ ok: true }),
   });
 
-  const result = await device.interactions.click(selector('label=Profile'), {
+  const result = await device.interactions.click(selector('label=Chat'), {
     session: 'default',
   });
 
@@ -41,11 +41,11 @@ test('resolution mutation contract: a diagnosticRef is not a resolvable @ref tar
 });
 
 test('resolution mutation contract: the winner diagnosticRef is also not a resolvable @ref target', async () => {
-  const device = createContractDevice(drawerWithVisibleTwinSnapshot(), {
+  const device = createContractDevice(equivalentWrapperChainSnapshot(), {
     tap: async () => ({ ok: true }),
   });
 
-  const result = await device.interactions.click(selector('label=Profile'), {
+  const result = await device.interactions.click(selector('label=Chat'), {
     session: 'default',
   });
 

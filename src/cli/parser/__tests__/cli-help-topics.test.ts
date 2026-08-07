@@ -268,7 +268,8 @@ test('usageForCommand resolves workflow help topic', async () => {
   );
   assert.match(help, /TV\/D-pad focus: help tv/);
   assert.match(help, /not bare role keys \(button="Search"\)/);
-  assert.match(help, /"Selector did not resolve uniquely"/);
+  assert.match(help, /Matches in distinct subtrees fail with AMBIGUOUS_MATCH/);
+  assert.match(help, /geometry never chooses a winner/);
   assert.match(help, /iOS AX flags are unreliable on deep RN trees/);
   assert.match(help, /targetHittable: false plus a hint -- verify or re-target, not a failure/);
   assert.match(

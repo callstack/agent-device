@@ -28,8 +28,9 @@
  */
 
 export const INTERACTION_GUARANTEES = [
-  // Ambiguous matches resolve visible-first, then deepest, then smallest;
-  // remaining ties fail with "did not resolve uniquely".
+  // Mutating selectors collapse duplicate wrappers only when every match is
+  // one ancestry chain resolving to the same actionable node. Distinct
+  // subtrees fail with bounded, actionable candidates; geometry never wins.
   'disambiguation',
   // Targets covered by another visible element are refused.
   'occlusion',
@@ -189,17 +190,17 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       ...RUNTIME_TREE_SHARED_GUARANTEES,
       disambiguation: {
         kind: 'runtime',
-        via: 'packages/selectors/src/internal/resolve.ts#resolveSelectorChain',
+        via: 'src/commands/interaction/runtime/selector-action-resolution.ts#resolveActionSelector',
       },
       errorTaxonomy: {
         kind: 'runtime',
-        via: 'packages/selectors/src/internal/resolve.ts#formatSelectorFailure',
+        via: 'src/commands/interaction/runtime/selector-action-resolution.ts#resolveActionSelector',
       },
-      // Full pre-action diagnostic shape; same via as `disambiguation` — the
-      // disclosure reports what the heuristic did, never changes it.
+      // Full pre-action diagnostic shape; equivalent wrapper chains disclose
+      // their structural collapse, while distinct subtrees never succeed.
       resolutionDisclosure: {
         kind: 'runtime',
-        via: 'packages/selectors/src/internal/resolve.ts#resolveSelectorChain',
+        via: 'src/commands/interaction/runtime/selector-action-resolution.ts#resolveActionSelector',
       },
     },
   },
@@ -235,7 +236,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
     guarantees: {
       disambiguation: {
         kind: 'runtime',
-        via: 'packages/selectors/src/internal/resolve.ts#resolveSelectorChain',
+        via: 'src/commands/interaction/runtime/selector-action-resolution.ts#resolveActionSelector',
       },
       occlusion: {
         kind: 'runtime',
@@ -283,10 +284,9 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
     commands: ['press'],
     guarantees: {
       disambiguation: {
-        kind: 'waived',
-        reason:
-          'gap: success-path parity — XCTest unique-hittable matching can succeed on a candidate the runtime rules (visible-first/deepest-smallest) would refuse or rank differently; delegation-on-error cannot catch this. Stays a gap until parity tables or contract scenarios prove the success path.',
-        trackingIssue: GAPS_UMBRELLA_ISSUE,
+        kind: 'delegated',
+        to: 'runtime-selector',
+        via: 'RunnerSelectorMatchPolicy.swift#classifyDirectSelectorCandidates rejects multiple raw exact matches before hittability; AMBIGUOUS_MATCH then falls back to runtime structural-equivalence classification for non-maestro dispatches',
       },
       occlusion: {
         kind: 'delegated',
@@ -449,7 +449,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       disambiguation: {
         kind: 'waived',
         reason:
-          'Intentional: Maestro replay matches by unique-or-ambiguous scan (findElement), a deliberate divergence from runtime ranking (visible-first/deepest/smallest) to preserve Maestro semantics.',
+          'Intentional: Maestro replay matches by its expected-point/non-hittable compatibility scan (findElement), a deliberate divergence from runtime structural-equivalence-or-reject semantics.',
       },
       occlusion: {
         kind: 'waived',

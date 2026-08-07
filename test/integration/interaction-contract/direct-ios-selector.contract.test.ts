@@ -11,6 +11,7 @@ import {
   RUNNER_CLOSED_DRAWER_NODES,
   RUNNER_CONTINUE_NODES,
   RUNNER_COVERED_NODES,
+  RUNNER_EQUIVALENT_WRAPPER_NODES,
   RUNNER_NON_HITTABLE_NODES,
 } from './fixtures.ts';
 import {
@@ -91,6 +92,29 @@ test(scenario('resolutionDisclosure'), async () => {
     // match count or candidates.
     assert.deepEqual(data.resolution, { source: 'direct-ios', kind: 'not-observed' });
   });
+});
+
+test(scenario('disambiguation'), async () => {
+  await withIosContractDaemon(
+    [
+      runnerTapErrorEntry(new AppError('AMBIGUOUS_MATCH', 'selector matched multiple elements')),
+      runnerSnapshotEntry(RUNNER_EQUIVALENT_WRAPPER_NODES),
+      runnerTapEntry({ x: 70, y: 765 }),
+    ],
+    async (daemon, transcript) => {
+      const click = await daemon.callCommand('click', ['label=Chat']);
+      const data = assertRpcOk(click);
+
+      assert.equal(transcript.calls[0]?.command, 'ios.runner.tap');
+      assert.equal(transcript.calls[1]?.command, 'ios.runner.snapshot');
+      const fallbackTap = transcript.calls[2]?.request as Record<string, unknown> | undefined;
+      assert.equal(fallbackTap?.selectorKey, undefined);
+      assert.equal(fallbackTap?.x, 70);
+      const resolution = data.resolution as Record<string, unknown> | undefined;
+      assert.equal(resolution?.kind, 'disambiguated');
+      assert.equal(resolution?.tiebreak, 'structural-equivalence');
+    },
+  );
 });
 
 test('default simple-selector fill resolves through the runtime before typing', async () => {

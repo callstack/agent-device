@@ -34,7 +34,11 @@ export type ResolvedTarget =
     };
 
 /** The decisive criterion separating a resolveSelectorChain winner from its strongest runner-up (ADR 0012). */
-export type DisambiguationTiebreak = 'visible' | 'deepest' | 'smallest-area';
+export type DisambiguationTiebreak =
+  | 'visible'
+  | 'deepest'
+  | 'smallest-area'
+  | 'structural-equivalence';
 
 /**
  * A disambiguation winner or losing alternative. `diagnosticRef` is an opaque,

@@ -331,11 +331,13 @@ test('same-identity duplicates: the structural guard refuses pre-action when dis
 });
 
 test('same-identity duplicates: the guard passes when dispatch resolves the SAME structural member', async () => {
-  // Remove A's `covered` flag so dispatch also resolves the deeper member A
-  // (document order 1) that verification denoted — structural match, action proceeds.
+  // Remove A's `covered` flag and make the sibling selector-distinct so
+  // dispatch uniquely resolves member A (document order 1) that verification
+  // denoted — structural match, action proceeds.
   const snapshot = sameIdentityDuplicatesSnapshot();
   const nodeA = snapshot.nodes[1]!;
   delete nodeA.interactionBlocked;
+  snapshot.nodes[2]!.label = 'Cancel';
   const taps: unknown[] = [];
   const device = createInteractionDevice(snapshot, {
     tap: async (_context, point) => {
@@ -349,7 +351,7 @@ test('same-identity duplicates: the guard passes when dispatch resolves the SAME
     expectedResolvedTarget: guardFor(nodeA, snapshot.nodes),
   });
   assert.equal(result.kind, 'selector');
-  // Dispatch's deepest-first disambiguation also picks A (document order 1).
+  // Dispatch uniquely resolves A (document order 1).
   assert.equal('node' in result ? result.node?.index : undefined, 1);
   assert.equal(taps.length, 1);
 });

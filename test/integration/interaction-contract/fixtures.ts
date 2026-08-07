@@ -62,6 +62,47 @@ export function drawerWithVisibleTwinSnapshot(): SnapshotState {
   ]);
 }
 
+// React Native wrapper chain: cell/button/text expose the same label, but all
+// three structurally identify the one actionable button.
+export function equivalentWrapperChainSnapshot(): SnapshotState {
+  return makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 400, height: 800 },
+      hittable: true,
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Cell',
+      label: 'Chat',
+      rect: { x: 20, y: 740, width: 100, height: 50 },
+      hittable: false,
+    },
+    {
+      index: 2,
+      depth: 2,
+      parentIndex: 1,
+      type: 'Button',
+      label: 'Chat',
+      rect: { x: 20, y: 740, width: 100, height: 50 },
+      hittable: true,
+    },
+    {
+      index: 3,
+      depth: 3,
+      parentIndex: 2,
+      type: 'StaticText',
+      label: 'Chat',
+      rect: { x: 20, y: 740, width: 100, height: 50 },
+      hittable: false,
+    },
+  ]);
+}
+
 // Bluesky regression: the closed drawer's overlay container pokes a fraction
 // of a pixel into the viewport (float rounding), but every tap point is far
 // off-screen. Edge overlap must not count as on-screen.
@@ -79,7 +120,6 @@ export function edgeGrazingDrawerSnapshot(): SnapshotState {
       depth: 1,
       parentIndex: 0,
       type: 'Other',
-      label: 'Explore',
       rect: { x: -321.6, y: 0, width: 321.67, height: 874 },
       hittable: false,
     },
@@ -196,22 +236,6 @@ export function settledWelcomeSnapshot(): SnapshotState {
   ]);
 }
 
-// Seven identically labeled, on-screen "Item" rows at increasing depth: the
-// deepest (last) row wins disambiguation, leaving 6 losing candidates so the
-// ADR 0012 decision 2 five-alternative cap actually has something to cap.
-export function manyMatchingItemRowsSnapshot(): SnapshotState {
-  return makeSnapshotState(
-    Array.from({ length: 7 }, (_, i) => ({
-      index: i,
-      depth: i + 1,
-      type: 'Button',
-      label: 'Item',
-      rect: { x: 0, y: i * 40, width: 100, height: 40 },
-      hittable: true,
-    })),
-  );
-}
-
 // Viewport-only tree for coordinate scenarios.
 export function viewportOnlySnapshot(): SnapshotState {
   return makeSnapshotState([
@@ -260,8 +284,17 @@ export function dragEndpointsSnapshot(): SnapshotState {
       depth: 2,
       parentIndex: 0,
       type: 'View',
-      label: 'Drop',
+      label: 'Other drop',
       rect: { x: -200, y: 500, width: 120, height: 80 },
+      hittable: false,
+    },
+    {
+      index: 4,
+      depth: 2,
+      parentIndex: 2,
+      type: 'StaticText',
+      label: 'Drop',
+      rect: { x: 240, y: 500, width: 120, height: 80 },
       hittable: false,
     },
   ]);
@@ -271,6 +304,34 @@ export function dragEndpointsSnapshot(): SnapshotState {
  * Runner-side node payloads (the shape `ios.runner.snapshot` returns) for the
  * provider-transcript scenarios.
  */
+
+export const RUNNER_EQUIVALENT_WRAPPER_NODES = [
+  { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
+  {
+    index: 1,
+    parentIndex: 0,
+    type: 'Cell',
+    label: 'Chat',
+    rect: { x: 20, y: 740, width: 100, height: 50 },
+    hittable: false,
+  },
+  {
+    index: 2,
+    parentIndex: 1,
+    type: 'Button',
+    label: 'Chat',
+    rect: { x: 20, y: 740, width: 100, height: 50 },
+    hittable: true,
+  },
+  {
+    index: 3,
+    parentIndex: 2,
+    type: 'StaticText',
+    label: 'Chat',
+    rect: { x: 20, y: 740, width: 100, height: 50 },
+    hittable: false,
+  },
+];
 
 export const RUNNER_CONTINUE_NODES = [
   {

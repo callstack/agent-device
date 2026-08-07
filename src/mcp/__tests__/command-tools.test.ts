@@ -842,6 +842,40 @@ test('MCP tool error is a ref-issuing result: isError, structuredContent, and pi
   assert.deepEqual(runCalls[1]?.input, { target: { kind: 'ref', ref: '@e5~s12' } });
 });
 
+test('ambiguous interaction errors pin their candidate refs for the next mutation', async () => {
+  const runCalls: Array<{ name: string; input: unknown }> = [];
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async (_client, name, input) => {
+      runCalls.push({ name, input });
+      if (runCalls.length === 1) {
+        throw new AppError('AMBIGUOUS_MATCH', 'Selector matched 2 elements', {
+          matches: 2,
+          candidates: ['@e2 [button] "Team Standup"', '@e5 [cell] "Team Standup"'],
+          refsGeneration: 42,
+        });
+      }
+      return {};
+    },
+  });
+
+  const result = await executor.execute('press', {
+    session: 'demo',
+    target: { kind: 'selector', selector: 'label="Team Standup"' },
+  });
+  assert.equal(result.isError, true);
+  assert.match(result.content[0]?.text ?? '', /@e5~s42 \[cell\] "Team Standup"/);
+
+  await executor.execute('press', {
+    session: 'demo',
+    target: { kind: 'ref', ref: '@e5' },
+  });
+  assert.deepEqual(runCalls[1]?.input, {
+    session: 'demo',
+    target: { kind: 'ref', ref: '@e5~s42' },
+  });
+});
+
 // --- #1262: a `caution` divergence's dual-path must reach a structured caller,
 // not only text. `resume.alternateFrom` rides the MCP structuredContent
 // projection (parity with a text caller, who reads the second `--from`

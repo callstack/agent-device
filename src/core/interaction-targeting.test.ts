@@ -7,7 +7,38 @@ import {
   PROPERTY_RUNS,
   scrollingContainerTypeArb,
 } from '../__tests__/test-utils/index.ts';
-import { resolveActionableTouchResolution } from './interaction-targeting.ts';
+import {
+  classifyActionableTouchCandidates,
+  resolveActionableTouchResolution,
+} from './interaction-targeting.ts';
+import {
+  ELEMENT14_DISTINCT_SUBTREE_NODES,
+  EQUIVALENT_WRAPPER_CHAIN_NODES,
+} from './interaction-targeting.fixtures.ts';
+
+test('collapses one same-label wrapper chain to its shared actionable node', () => {
+  const snapshot = makeSnapshotState(EQUIVALENT_WRAPPER_CHAIN_NODES);
+
+  const result = classifyActionableTouchCandidates(snapshot.nodes, snapshot.nodes);
+
+  assert.equal(result.kind, 'equivalent');
+  if (result.kind === 'equivalent') assert.equal(result.node.index, 1);
+});
+
+test('rejects same-label candidates in distinct subtrees even when geometry ranks one winner', () => {
+  const snapshot = makeSnapshotState(ELEMENT14_DISTINCT_SUBTREE_NODES);
+  const matches = snapshot.nodes.slice(1);
+
+  const result = classifyActionableTouchCandidates(snapshot.nodes, matches);
+
+  assert.equal(result.kind, 'ambiguous');
+  if (result.kind === 'ambiguous') {
+    assert.deepEqual(
+      result.candidates.map((node) => node.index),
+      [1, 2, 3, 4],
+    );
+  }
+});
 
 test('promotes static text inside a hittable row to the row', () => {
   const snapshot = makeSnapshotState([

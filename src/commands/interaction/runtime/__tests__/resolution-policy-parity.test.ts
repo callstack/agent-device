@@ -105,7 +105,7 @@ test('no match resolves to none under every policy', () => {
 });
 
 test('disambiguating rows pick the tiebreak winner and disclose the match count', () => {
-  for (const name of ['act', 'readText'] as const) {
+  for (const name of ['readText'] as const) {
     const outcome = outcomeFor(name, TIEBREAKABLE_TREE);
     assert.equal(outcome.kind, 'resolved', name);
     if (outcome.kind === 'resolved') {
@@ -138,13 +138,15 @@ test('first-match rows take the head of an ambiguous tree', () => {
 });
 
 test('reject-candidates surfaces every candidate for the caller to narrow or refuse', () => {
-  const outcome = outcomeFor('findAct', AMBIGUOUS_TREE);
-  assert.equal(outcome.kind, 'ambiguous');
-  if (outcome.kind === 'ambiguous') {
-    assert.deepEqual(
-      outcome.matchedNodes.map((n) => n.index),
-      [0, 1],
-    );
+  for (const name of ['act', 'findAct'] as const) {
+    const outcome = outcomeFor(name, AMBIGUOUS_TREE);
+    assert.equal(outcome.kind, 'ambiguous', name);
+    if (outcome.kind === 'ambiguous') {
+      assert.deepEqual(
+        outcome.matchedNodes.map((n) => n.index),
+        [0, 1],
+      );
+    }
   }
 });
 
@@ -189,7 +191,7 @@ test('policy rows declare only the fields this matrix actually enforces', () => 
 });
 
 test('the documented per-caller contracts are the ones declared', () => {
-  assert.equal(SELECTOR_RESOLUTION_POLICIES.act.ambiguity, 'disambiguate');
+  assert.equal(SELECTOR_RESOLUTION_POLICIES.act.ambiguity, 'reject-candidates');
   assert.equal(SELECTOR_RESOLUTION_POLICIES.readText.ambiguity, 'disambiguate');
   assert.equal(SELECTOR_RESOLUTION_POLICIES.readUnique.ambiguity, 'fail-closed');
   assert.equal(SELECTOR_RESOLUTION_POLICIES.readAny.ambiguity, 'first-match');

@@ -10,16 +10,15 @@ import type { SelectorResolutionOptions } from './public-resolution-types.ts';
  *
  * Ambiguity kinds:
  * - `disambiguate` — unique match required, but the engine's visible→deepest→
- *   smallest-area tiebreak may pick a winner from an ambiguous set (acting
- *   commands, `get text`).
+ *   smallest-area tiebreak may pick a winner from an ambiguous set (`get text`).
  * - `fail-closed` — unique match required, ties reject (by design: `is`
  *   predicates and `get attrs` must never guess).
  * - `first-match` — any match count accepted, first wins (existence reads and
  *   the wait loop, where presence is the question).
- * - `reject-candidates` — multiple matches reject with the candidate list
- *   unless the caller explicitly narrows (#1625's mutating-find contract).
- *   Declaration-only: enforced by find's own narrowing logic, not by engine
- *   knobs, so `selectorResolutionKnobs` rejects it at the type level.
+ * - `reject-candidates` — multiple matches stay visible to the caller, which
+ *   either proves structural equivalence (acting targets) or rejects with a
+ *   candidate list (#1625's mutating-find contract). It is not reducible to
+ *   engine knobs, so `selectorResolutionKnobs` rejects it at the type level.
  *
  * Scope, deliberately narrow: this matrix declares the **ambiguity contract
  * and the rect requirement**, and nothing else. Both are consumed by
@@ -45,9 +44,9 @@ export type SelectorResolutionPolicy = {
 };
 
 export const SELECTOR_RESOLUTION_POLICIES = {
-  /** click/press/fill/focus/longPress/drag/scroll targets (resolution.ts). */
+  /** Runtime interaction targets; the caller may collapse one equivalent wrapper chain. */
   act: {
-    ambiguity: 'disambiguate',
+    ambiguity: 'reject-candidates',
     requireRect: true,
   },
   /** The post-miss diagnosis probe deciding "no match" vs "matched but covered". */
@@ -84,8 +83,8 @@ export const SELECTOR_RESOLUTION_POLICIES = {
 
 /**
  * The engine knobs a knob-backed policy row stands for. `reject-candidates`
- * rows are rejected at the type level — that contract is enforced by the
- * caller's narrowing logic, not by these knobs.
+ * rows are rejected at the type level — that contract is enforced by caller
+ * classification, not by these knobs.
  */
 export function selectorResolutionKnobs(
   policy: SelectorResolutionPolicy & { ambiguity: KnobBackedSelectorAmbiguity },

@@ -117,10 +117,11 @@ test('help workflow documents the selector disambiguation policy (#1037)', async
   const result = await runCliCapture(['help', 'workflow']);
   assert.equal(result.code, 0);
   assert.equal(result.calls.length, 0);
-  assert.match(result.stdout, /do not fail by default/);
-  assert.match(result.stdout, /deepest node first/);
-  assert.match(result.stdout, /then smallest on-screen area/);
-  assert.match(result.stdout, /Selector did not resolve uniquely/);
+  assert.match(result.stdout, /collapse duplicate accessibility wrappers only when/);
+  assert.match(result.stdout, /one ancestor-descendant chain/);
+  assert.match(result.stdout, /Matches in distinct subtrees fail with AMBIGUOUS_MATCH/);
+  assert.match(result.stdout, /geometry never chooses a winner/);
+  assert.match(result.stdout, /Retry one printed candidate ref/);
   assert.match(result.stdout, /targetHittable: false/);
 });
 

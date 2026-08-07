@@ -38,6 +38,66 @@ type ActionableTouchResolution = {
   reason: ActionableTouchResolutionReason;
 };
 
+type ActionableTouchCandidateClassification =
+  | { kind: 'equivalent'; node: SnapshotNode }
+  | { kind: 'ambiguous'; candidates: SnapshotNode[] };
+
+/**
+ * Mutating selector matches may collapse only when their tree structure proves
+ * that they describe one action: every candidate is on one ancestor/descendant
+ * chain and every candidate resolves to the same actionable node. Geometry may
+ * help resolve a wrapper to its control, but never chooses between branches.
+ */
+export function classifyActionableTouchCandidates(
+  nodes: SnapshotNode[],
+  candidates: SnapshotNode[],
+): ActionableTouchCandidateClassification {
+  const first = candidates[0];
+  if (!first) return { kind: 'ambiguous', candidates };
+  const byIndex = new Map(nodes.map((node) => [node.index, node]));
+  if (!candidatesFormSingleAncestryChain(candidates, byIndex)) {
+    return { kind: 'ambiguous', candidates };
+  }
+  const actionable = resolveActionableTouchResolution(nodes, first).node;
+  for (const candidate of candidates.slice(1)) {
+    if (resolveActionableTouchResolution(nodes, candidate).node.index !== actionable.index) {
+      return { kind: 'ambiguous', candidates };
+    }
+  }
+  return { kind: 'equivalent', node: actionable };
+}
+
+function candidatesFormSingleAncestryChain(
+  candidates: SnapshotNode[],
+  byIndex: ReadonlyMap<number, SnapshotNode>,
+): boolean {
+  for (let i = 0; i < candidates.length; i += 1) {
+    for (let j = i + 1; j < candidates.length; j += 1) {
+      const left = candidates[i]!;
+      const right = candidates[j]!;
+      if (!isAncestorOf(left, right, byIndex) && !isAncestorOf(right, left, byIndex)) return false;
+    }
+  }
+  return true;
+}
+
+function isAncestorOf(
+  candidateAncestor: SnapshotNode,
+  candidateDescendant: SnapshotNode,
+  byIndex: ReadonlyMap<number, SnapshotNode>,
+): boolean {
+  let current = candidateDescendant;
+  const visited = new Set<number>();
+  while (current.parentIndex !== undefined && !visited.has(current.index)) {
+    visited.add(current.index);
+    if (current.parentIndex === candidateAncestor.index) return true;
+    const parent = byIndex.get(current.parentIndex);
+    if (!parent) return false;
+    current = parent;
+  }
+  return false;
+}
+
 export function resolveActionableTouchNode(
   nodes: SnapshotNode[],
   node: SnapshotNode,

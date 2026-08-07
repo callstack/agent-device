@@ -3,9 +3,9 @@
 ## Status
 
 Accepted (2026-07-10). Implemented on `main`, including the amendments folded into the decisions
-below (#1264, #1269, #1271 stage 2, #1280, #1349, #1385); only decision 5's replay benchmark
-extension remains deferred. The per-step landing record (PRs #1193-#1349) and the pre-acceptance
-migration plan live in this file's git history.
+below (#1264, #1269, #1271 stage 2, #1280, #1349, #1385, and the 2026-08-07 mutating-ambiguity
+amendment); only decision 5's replay benchmark extension remains deferred. The per-step landing
+record (PRs #1193-#1349) and the pre-acceptance migration plan live in this file's git history.
 
 ## Rules at a glance
 
@@ -18,8 +18,9 @@ Normative summary, one entry per decision. The binding contracts, amendments, an
 2. **Every element resolution discloses how it resolved.** Additive `resolution` response field:
    `runtime`/`unique` or `runtime`/`disambiguated` (`matchCount`, `tiebreak`, up to 5 alternatives),
    `ref`/`exact` or `ref`/`label-fallback`, `direct-ios`/`not-observed`; coordinate dispatches and
-   executed maestro-fallbacks carry none. Disclosed alternatives are pre-action diagnostics, never
-   issued refs. Enforced as ADR 0011's `resolutionDisclosure` guarantee row
+   executed maestro-fallbacks carry none. Successful structural-collapse alternatives are pre-action
+   diagnostics; distinct-subtree rejection candidates issue a partial ref frame for immediate retry.
+   Enforced as ADR 0011's `resolutionDisclosure` guarantee row
    (`packages/contracts/src/interaction-guarantees.ts`).
 3. **Recording writes `target-v1` identity evidence; replay verifies it before acting.** One
    versioned JSON comment per element-targeting action carries identity (unique id, else
@@ -77,21 +78,19 @@ is strictly more valuable than the same proposal applied blind.
 ### 2. Disclose daemon-tree disambiguation and identify fast-path responses
 
 The daemon-tree selector path (`runtime-selector`) adds an additive `resolution` response field. A unique
-tree resolution is `{ source: "runtime", phase: "pre-action", kind: "unique" }`; a heuristic resolution
-is `{ source: "runtime", phase: "pre-action", kind: "disambiguated", matchCount, winnerDiagnostic,
-tiebreak, alternatives }`. `tiebreak` is one of `visible`, `deepest`, or `smallest-area`; `alternatives`
-contains at most **5** losing `diagnosticRef` entries. The selected diagnostic is not included in
-`alternatives`. `winnerDiagnostic` and each alternative are `{ diagnosticRef, role?, label? }`, where
-`diagnosticRef` is an opaque non-`@` diagnostic token; every optional string is capped at **256 UTF-8
-bytes** with a truncation marker. This discloses the existing heuristic without changing
-`resolveSelectorChain` or its winner.
+tree resolution is `{ source: "runtime", phase: "pre-action", kind: "unique" }`. Multiple matches succeed
+only when they form one ancestor–descendant wrapper chain resolving to the same actionable node; that
+structural collapse is `{ source: "runtime", phase: "pre-action", kind: "disambiguated", matchCount,
+winnerDiagnostic, tiebreak: "structural-equivalence", alternatives }`. Distinct subtrees fail before
+mutation with `AMBIGUOUS_MATCH` and at most five snapshot candidate lines. Geometry never chooses among
+distinct mutating targets.
 
-These are **pre-action diagnostics**, not issued refs. The selector-resolution snapshot can be invalid
-after a mutating press/fill, so neither `winnerDiagnostic` nor `alternatives` carries `refsGeneration`, is
-MCP-pinned, or may be reused as an `@ref` target. A caller that wants to act on an alternative must take a
-fresh `snapshot`/`find`. A post-action `--settle` diff remains a separate, actionable issuer and may carry
-fresh pinned refs. In contrast, a target-binding divergence sends no action; its fresh report snapshot is
-an actionable issuer as defined in decision 4.
+Successful structural-collapse diagnostics remain **pre-action diagnostics**, not issued refs: after the
+mutation, neither `winnerDiagnostic` nor `alternatives` may be reused as an `@ref` target. An ambiguity
+rejection performs no mutation, so its bounded candidate lines instead issue a partial ref frame and
+`refsGeneration`; CLI prints pinned candidates and MCP remembers their generation for an immediate retry.
+A post-action `--settle` diff remains a separate actionable issuer. A target-binding divergence likewise
+sends no action and issues its fresh report snapshot as defined in decision 4.
 
 The ref paths disclose ref provenance. A lookup that resolves the `@ref` itself is
 `{ source: "ref", phase: "pre-action", kind: "exact" }`. When the runtime-ref path recovers a stale or
@@ -104,12 +103,12 @@ label-based recovery a backend might perform with it is not observable daemon-si
 the daemon's own resolution and no more specific claim is possible on this path.
 
 The accepted direct-iOS selector fast path has no daemon tree and the XCTest response cannot truthfully
-provide a match count, candidate refs, or a runtime tiebreak. It remains enabled for ordinary simple
-`press`/`fill`, but its canonical response instead carries
+provide a match count, candidate refs, or a runtime tiebreak. It remains enabled for an ordinary simple
+`press`, but its canonical unique-match response carries
 `resolution: { source: "direct-ios", kind: "not-observed" }`. It must never fabricate a unique-match or
-identity claim. `--verify` and `--settle` continue to disable this fast path and therefore produce a
-runtime resolution. Recording likewise disables it for any action for which target-binding evidence is
-required by decision 3.
+identity claim. XCTest counts raw exact matches before applying hittability; multiple matches return
+`AMBIGUOUS_MATCH` and delegate to the runtime structural rule for non-Maestro dispatches. `--verify`,
+`--settle`, fill, and recording paths continue to use runtime resolution directly.
 
 ADR 0011's matrix must add a `resolutionDisclosure` guarantee with all six honest cells: `runtime-selector`
 enforces the complete pre-action diagnostic shape; `runtime-ref` enforces the ref-provenance shapes
@@ -121,14 +120,12 @@ fallback is coordinate execution. Membership in the maestro cell is decided by t
 the permission flag: a press that was allowed to fall back but hit its element normally is the direct-iOS
 path and discloses `not-observed`; only a response whose runner actually executed the coordinate fallback
 is the inapplicable maestro cell. The four enforced cells use the shared response builder. Its existing
-direct-path `disambiguation` and `responseIdentity` waivers remain, and the exact waived-cell test must
-continue to list them. Layer-3 coverage must claim every enforced/delegated cell: runtime
-ambiguity/tiebreak/cap plus non-actionable diagnostics after mutation, exact-ref provenance for runtime
-and native refs, the runtime-ref `label-fallback` recovery case, and a direct-iOS no-snapshot
-`not-observed` case. No selection-parity table is claimed or
-added for the direct path: such a table would falsely imply XCTest selection has runtime parity. A future
-runner-side diagnostic design must replace the two waivers, add a Swift/TypeScript parity fixture, and add
-the corresponding provider contract cases in the same change.
+direct path delegates `disambiguation` to `runtime-selector` after its raw-match count, while its
+`responseIdentity` limitation remains explicit. Layer-3 coverage must claim every enforced/delegated
+cell: runtime unique resolution, structural wrapper collapse, distinct-subtree rejection with candidates,
+exact-ref provenance for runtime and native refs, the runtime-ref `label-fallback` recovery case, and a
+direct-iOS no-snapshot `not-observed` case. No cross-language selection-parity table is claimed: XCTest
+only detects raw ambiguity, while the daemon tree owns structural equivalence and candidate publication.
 
 ### 3. Versioned `.ad` target-binding evidence
 
@@ -1096,21 +1093,17 @@ The tombstone itself expires after its bounded window, after which the key is fu
   suggestions but never rewrites the script. A nightly run that once patched a selector now stays red.
   This is accepted because the audit found the mechanism rarely useful and a silent patch is a
   target-binding risk: selector agreement is not proof of the same target.
-- **Disclosure adds bounded diagnostic bytes, not reusable targets.** Runtime ambiguity responses carry at
-  most five pre-action alternatives; direct iOS responses pay only the explicit `not-observed` provenance
-  marker. A fresh capture is the cost of acting on a diagnostic alternative.
+- **Successful structural-collapse disclosure adds bounded diagnostic bytes, not reusable targets.** Its
+  pre-action alternatives describe wrappers consumed by the mutation. A distinct-subtree rejection is
+  different: no mutation occurred, so its at-most-five candidate refs are immediately reusable through
+  the issued partial frame. Direct iOS unique responses pay only the explicit `not-observed` marker.
 - **Recorded identity evidence is an additive `.ad` format change.** It adds one reserved JSON comment
   before each supported recorded target action; scripts without the comment remain valid. A duplicate that
   survives structural evidence is intentionally a pre-action unverifiable divergence, not a best guess.
-- **The disambiguation heuristic itself (visible → deepest → smallest-area) is unchanged.** The
-  rejected alternative was hard-reject: fail any non-unique match instead of picking one. That would
-  break benign, common cases the heuristic exists for — react-navigation's Maestro suite alone has 185
-  `tapOn`s on short/duplicated labels (`'Albums'` x9, `'Go back'` x16, per #1040) that resolve correctly
-  only because deepest/smallest-area picks the leaf button over its ancestor row/tab. Disclosure was
-  chosen over rejection because the cost is asymmetric: most ambiguous matches are benign
-  (tab+header+row sharing a label) and disclosure is nearly free for those, while rejection would fail
-  all of them to catch the rare "Prevent Remove"-style case decision 3 is built to catch structurally
-  instead.
+- **The original geometric mutation heuristic was superseded after element-14 realized its documented
+  mis-binding risk.** Blanket hard-reject remains inappropriate because React Native commonly exposes
+  a row/button/text wrapper chain under one label. Structural equivalence preserves that benign case,
+  while distinct subtrees reject instead of letting visibility, depth, or area choose a semantic target.
 - **Decision 6's residual risk is old risk, not new.** The agent can press the wrong visible ref — live
   interactive commands have no target-binding verification anywhere in this codebase today (see (c) in
   Context) — but that is ordinary agent-driven-interaction risk, not a new class this decision
@@ -1189,7 +1182,9 @@ deterministic replay of the same flow costs O(divergences) — the 38/38 sweep i
 zero divergences. The entire economic case for replay is collapsing the per-step model-turn cost toward
 zero on the happy path and paying only where reality diverged from the recording.
 
-**Audit evidence** (2026-07-10) on where that divergence cost actually goes:
+**Audit evidence** (2026-07-10) on where that divergence cost actually goes follows as historical
+evidence. Its identified geometric-mis-binding risk was realized by element-14 and superseded by the
+2026-08-07 structural-equivalence-or-reject amendment above:
 
 - **(a) Heal is narrow and mostly unable to act.** Per the mechanism above, heal only recovers
   same-selector drift. Most real replay failures are renames or removals heal's candidate-recycling

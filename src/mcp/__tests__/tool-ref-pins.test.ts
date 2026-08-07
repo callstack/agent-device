@@ -81,6 +81,30 @@ test('ref-pin store pins every listed ref from a find list response', () => {
   assert.deepEqual(second, { session: 'demo', target: { kind: 'ref', ref: '@e9~s500014' } });
 });
 
+test('ref-pin store pins ambiguous mutation candidates issued by an error', () => {
+  const pins = makeStore();
+
+  pins.mergeErrorDetails(
+    {
+      matches: 2,
+      candidates: ['@e2 [button] "Team Standup"', '@e5 [cell] "Team Standup"'],
+      refsGeneration: 500014,
+    },
+    undefined,
+    'demo',
+  );
+
+  const pinned = pins.pinInput(
+    'press',
+    { session: 'demo', target: { kind: 'ref', ref: '@e5' } },
+    undefined,
+  );
+  assert.deepEqual(pinned, {
+    session: 'demo',
+    target: { kind: 'ref', ref: '@e5~s500014' },
+  });
+});
+
 test('ref-pin store pins wait refs and get targets from the per-ref map', () => {
   const pins = makeStore();
 
@@ -497,7 +521,7 @@ function replayDivergenceDetails(): Record<string, unknown> {
 test('ref-pin store merges divergence screen refs and pins them for later inputs', () => {
   const pins = makeStore();
 
-  pins.mergeDivergenceScreen(replayDivergenceDetails(), undefined, 'demo');
+  pins.mergeErrorDetails(replayDivergenceDetails(), undefined, 'demo');
 
   const pinned = pins.pinInput(
     'press',
@@ -516,7 +540,7 @@ test('ref-pin store leaves existing pins untouched for an error without a diverg
     undefined,
     'demo',
   );
-  pins.mergeDivergenceScreen({ code: 'INVALID_ARGS', message: 'bad selector' }, undefined, 'demo');
+  pins.mergeErrorDetails({ code: 'INVALID_ARGS', message: 'bad selector' }, undefined, 'demo');
 
   const pinned = pins.pinInput(
     'press',

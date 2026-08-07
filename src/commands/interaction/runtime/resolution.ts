@@ -54,6 +54,7 @@ import {
   REPLAY_TARGET_GUARD_MISMATCH_REASON,
   type ReplayTargetGuardDenotation,
 } from '@agent-device/contracts/replay';
+import { resolveActionSelector } from './selector-action-resolution.ts';
 
 export type { InteractionTarget, ResolvedInteractionTarget };
 
@@ -324,23 +325,17 @@ async function resolveSelectorInteractionTarget(
 ): Promise<ResolvedInteractionTarget> {
   const selectorExpression = target.selector;
   let capture = await captureInteractionSnapshot(runtime, options, params.requireInteractive);
-  let resolved = resolveSelectorChain(
+  let resolved = resolveActionSelector(
     interactableSelectorNodes(capture.snapshot.nodes),
     selectorExpression,
-    {
-      platform: runtime.backend.platform,
-      ...selectorResolutionKnobs(SELECTOR_RESOLUTION_POLICIES.act),
-    },
+    runtime.backend.platform,
   );
   if ((!resolved || !resolved.node.rect) && params.requireInteractive) {
     capture = await captureInteractionSnapshot(runtime, options, false);
-    resolved = resolveSelectorChain(
+    resolved = resolveActionSelector(
       interactableSelectorNodes(capture.snapshot.nodes),
       selectorExpression,
-      {
-        platform: runtime.backend.platform,
-        ...selectorResolutionKnobs(SELECTOR_RESOLUTION_POLICIES.act),
-      },
+      runtime.backend.platform,
     );
   }
   if (!resolved || !resolved.node.rect) {

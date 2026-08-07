@@ -5,22 +5,24 @@
  * surface, never only in `--json`/`--debug` (#1597).
  *
  * Two different domains disclose candidates, so each owns its own details key:
- * element matches from the find handler (`candidates`, pre-rendered snapshot
- * lines) and booted simulators from the Apple device resolvers (`devices`).
+ * element matches from find and interaction ambiguity errors (`candidates`,
+ * pre-rendered snapshot lines) and booted simulators from the Apple device
+ * resolvers (`devices`).
  * They shared one key until this module existed, which left the renderer
  * disambiguating two incompatible shapes by heuristic; a third producer now
  * declares which domain it is instead of colliding.
  */
 
 /**
- * `AMBIGUOUS_MATCH` from `buildAmbiguousMatchError`
- * (src/daemon/handlers/find.ts). `candidates` are pre-rendered snapshot lines
- * capped by the producer; `matches` is the true total, so a capped list can
- * render its `+N more` marker.
+ * Element `AMBIGUOUS_MATCH` details from find or interaction resolution.
+ * `candidates` are pre-rendered snapshot lines capped by the producer;
+ * `matches` is the true total, so a capped list can render its `+N more`
+ * marker. Mutating interaction errors also carry the partial frame generation.
  */
 export type ElementMatchCandidateDetails = {
   candidates: string[];
   matches: number;
+  refsGeneration?: number;
 };
 
 /**
@@ -40,12 +42,28 @@ function formatElementMatchLines(details: Record<string, unknown> | undefined): 
   const candidates = readStringArray(details?.candidates);
   if (candidates.length === 0) return [];
   const total = typeof details?.matches === 'number' ? details.matches : candidates.length;
+  const generation =
+    typeof details?.refsGeneration === 'number' ? details.refsGeneration : undefined;
   const remaining = total - candidates.length;
   return [
     'Candidates:',
-    ...candidates.map((candidate) => `  ${candidate}`),
+    ...candidates.map((candidate) => `  ${pinCandidateLine(candidate, generation)}`),
     ...(remaining > 0 ? [`  +${remaining} more`] : []),
   ];
+}
+
+export function readElementMatchCandidateRefs(
+  details: Record<string, unknown> | undefined,
+): string[] {
+  return readStringArray(details?.candidates).flatMap((candidate) => {
+    const match = /^@(e\d+)(?:~s\d+)?(?:\s|$)/.exec(candidate);
+    return match?.[1] ? [match[1]] : [];
+  });
+}
+
+function pinCandidateLine(candidate: string, generation: number | undefined): string {
+  if (generation === undefined) return candidate;
+  return candidate.replace(/^@(e\d+)(?=\s|$)/, `@$1~s${generation}`);
 }
 
 function formatDeviceLines(details: Record<string, unknown> | undefined): string[] {

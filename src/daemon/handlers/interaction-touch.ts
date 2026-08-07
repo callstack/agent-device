@@ -73,6 +73,7 @@ import {
 } from './interaction-touch-targets.ts';
 import { corroborateIosTapFailure, interactionTargetExtra } from './interaction-ios-tap-outcome.ts';
 import { errorResponse, noActiveSessionError, requireCommandSupported } from './response.ts';
+import { publishInteractionAmbiguityCandidates } from './interaction-ambiguity-publication.ts';
 
 export async function handleTouchInteractionCommands(
   params: InteractionHandlerParams & {
@@ -845,10 +846,11 @@ async function dispatchRuntimeInteraction<
       androidFreshnessBaseline: options.androidFreshnessBaseline,
     });
   } catch (error) {
-    const appError = asAppError(error);
+    const appError = publishInteractionAmbiguityCandidates(session, asAppError(error));
     if (isAndroidEscapeError(appError)) throw appError;
+    if (appError.code === 'AMBIGUOUS_MATCH') return appErrorResponse(appError);
     const corroboratedResponse = await buildRuntimeIosCorroboratedResponse({
-      error,
+      error: appError,
       handlerParams: params,
       session,
       target: options.iosTapCorroboration?.target,
@@ -857,7 +859,7 @@ async function dispatchRuntimeInteraction<
       androidFreshnessBaseline: options.androidFreshnessBaseline,
     });
     if (corroboratedResponse) return corroboratedResponse;
-    return appErrorResponse(error);
+    return appErrorResponse(appError);
   }
 }
 

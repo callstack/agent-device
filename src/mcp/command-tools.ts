@@ -126,7 +126,7 @@ function buildErrorToolResult(
   session: unknown,
 ): ToolResult {
   const normalized = normalizeToolError(error);
-  refPins.mergeDivergenceScreen(normalized.details, stateDir, session);
+  refPins.mergeErrorDetails(normalized.details, stateDir, session);
   return {
     isError: true,
     structuredContent: normalized,

@@ -166,7 +166,7 @@ const resolutionDisclosureSchema: JsonSchema = {
         matchCount: numberSchema('Total matches resolveSelectorChain found before disambiguation.'),
         winnerDiagnostic: resolutionDiagnosticEntrySchema,
         tiebreak: enumSchema(
-          ['visible', 'deepest', 'smallest-area'],
+          ['visible', 'deepest', 'smallest-area', 'structural-equivalence'],
           'The comparison that decided the winner.',
         ),
         alternatives: {

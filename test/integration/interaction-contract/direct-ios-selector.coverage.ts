@@ -1,6 +1,8 @@
 import { definePathCoverage } from './coverage-manifest.ts';
 
 export const DIRECT_IOS_SELECTOR_COVERAGE = definePathCoverage('direct-ios-selector', {
+  disambiguation:
+    'direct-ios-selector disambiguation: multiple raw runner matches delegate to runtime structural-equivalence collapse',
   errorTaxonomy:
     'direct-ios-selector errorTaxonomy: runner ELEMENT_NOT_FOUND falls back to runtime no-match diagnostics and hint',
   nonHittable:

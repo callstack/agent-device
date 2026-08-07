@@ -37,6 +37,17 @@ test('formatErrorCandidateLines marks how many matches the cap omitted', () => {
   assert.equal(lines.at(-1), '  +2 more');
 });
 
+test('formatErrorCandidateLines pins partial-frame candidates for direct CLI reuse', () => {
+  assert.deepEqual(
+    formatErrorCandidateLines({
+      matches: 2,
+      candidates: ['@e2 [button] "Team Standup"', '@e5 [cell] "Team Standup"'],
+      refsGeneration: 42,
+    }),
+    ['Candidates:', '  @e2~s42 [button] "Team Standup"', '  @e5~s42 [cell] "Team Standup"'],
+  );
+});
+
 test('formatErrorCandidateLines returns nothing when details carry no candidate list', () => {
   assert.deepEqual(formatErrorCandidateLines(undefined), []);
   assert.deepEqual(formatErrorCandidateLines({ matches: 3 }), []);

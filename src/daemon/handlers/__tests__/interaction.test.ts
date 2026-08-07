@@ -738,7 +738,7 @@ test('click simple iOS id selector falls back to snapshot resolution on runner e
   }
 });
 
-test('click simple iOS id selector falls back to runtime disambiguation on ambiguous runner match', async () => {
+test('click simple iOS id selector rejects distinct runtime candidates after ambiguous runner match', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-direct-selector-ambiguous';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
@@ -755,8 +755,8 @@ test('click simple iOS id selector falls back to runtime disambiguation on ambig
             type: 'Window',
             rect: { x: 0, y: 0, width: 390, height: 844 },
           },
-          // Off-screen drawer twin: runtime disambiguation prefers the
-          // visible candidate instead of failing like the runner did.
+          // Geometry must not choose the visible twin across distinct
+          // subtrees after the direct runner delegates ambiguity.
           {
             index: 1,
             parentIndex: 0,
@@ -798,10 +798,18 @@ test('click simple iOS id selector falls back to runtime disambiguation on ambig
     contextFromFlags,
   });
 
-  expect(response?.ok).toBe(true);
+  expect(response?.ok).toBe(false);
   const pressCalls = mockDispatch.mock.calls.filter((call) => call[1] === 'press');
-  expect(pressCalls.length).toBe(2);
-  expect(pressCalls[1]?.[2]).toEqual(['80', '100']);
+  expect(pressCalls.length).toBe(1);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('AMBIGUOUS_MATCH');
+    expect(response.error.details?.matches).toBe(2);
+    expect(response.error.details?.candidates).toEqual([
+      '@e2 [button] "submit"',
+      '@e3 [button] "submit"',
+    ]);
+    expect(typeof response.error.details?.refsGeneration).toBe('number');
+  }
 });
 
 test.each([

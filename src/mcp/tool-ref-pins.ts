@@ -7,6 +7,7 @@ import {
   commandSupportsSettleObservation,
 } from '../core/command-descriptor/registry.ts';
 import { asOptionalRecord } from '../utils/parsing.ts';
+import { readElementMatchCandidateRefs } from '../utils/error-candidates.ts';
 
 export type ToolRefPinStore = {
   pinInput(
@@ -20,7 +21,7 @@ export type ToolRefPinStore = {
     stateDir: string | undefined,
     session: unknown,
   ): void;
-  mergeDivergenceScreen(
+  mergeErrorDetails(
     details: Record<string, unknown> | undefined,
     stateDir: string | undefined,
     session: unknown,
@@ -34,9 +35,27 @@ export function createToolRefPinStore(): ToolRefPinStore {
       pinPlainRefArguments(name, input, getScopePins(refPinsByScope, stateDir, input.session)),
     mergeCommandResult: (name, result, stateDir, session) =>
       mergeCommandResult(refPinsByScope, name, result, stateDir, session),
-    mergeDivergenceScreen: (details, stateDir, session) =>
-      mergeDivergenceScreenRefPins(refPinsByScope, makeScopeKey(stateDir, session), details),
+    mergeErrorDetails: (details, stateDir, session) => {
+      const scopeKey = makeScopeKey(stateDir, session);
+      mergeErrorCandidateRefPins(refPinsByScope, scopeKey, details);
+      mergeDivergenceScreenRefPins(refPinsByScope, scopeKey, details);
+    },
   };
+}
+
+function mergeErrorCandidateRefPins(
+  refPinsByScope: Map<string, Map<string, number>>,
+  scopeKey: string,
+  details: Record<string, unknown> | undefined,
+): void {
+  const refsGeneration = details?.refsGeneration;
+  if (typeof refsGeneration !== 'number') return;
+  mergeIntoScopedPins(
+    refPinsByScope,
+    scopeKey,
+    readElementMatchCandidateRefs(details),
+    refsGeneration,
+  );
 }
 
 /**

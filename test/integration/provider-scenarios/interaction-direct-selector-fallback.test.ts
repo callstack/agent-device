@@ -37,8 +37,9 @@ const APPLICATION_NODE = {
   rect: { x: 0, y: 0, width: 400, height: 800 },
 };
 
-// Drawer twin: same label off-screen and on-screen — runtime disambiguation
-// prefers the visible candidate where the runner raised AMBIGUOUS_MATCH.
+// Drawer twin: same label off-screen and on-screen. These are distinct
+// subtrees, so runtime fallback must preserve ambiguity instead of choosing by
+// visibility.
 const AMBIGUOUS_NODES = [
   APPLICATION_NODE,
   {
@@ -159,7 +160,7 @@ test('Provider-backed direct iOS selector wait strips selectorChain from the pub
   });
 });
 
-test('Provider-backed integration runner AMBIGUOUS_MATCH falls back to runtime disambiguation', async () => {
+test('Provider-backed integration runner AMBIGUOUS_MATCH falls back to runtime rejection', async () => {
   const transcript = createProviderTranscript([
     // Direct selector tap attempt fails with the runner's semantic shape.
     {
@@ -168,31 +169,20 @@ test('Provider-backed integration runner AMBIGUOUS_MATCH falls back to runtime d
       platform: 'apple',
       error: new AppError('AMBIGUOUS_MATCH', 'Selector matched multiple elements'),
     },
-    // Fallback: tree capture, disambiguation picks the visible twin, taps it.
+    // Fallback: tree capture proves the matches are distinct subtrees.
     snapshotEntry(AMBIGUOUS_NODES),
-    {
-      command: 'ios.runner.tap',
-      deviceId: DEVICE_ID,
-      platform: 'apple',
-      result: { x: 200, y: 322 },
-    },
   ]);
 
   await withDirectSelectorScenario(transcript, async (daemon) => {
     const click = await daemon.callCommand('click', ['label="Continue"']);
-    const data = assertRpcOk(click);
-    assert.equal(data.x, 200);
-    assert.equal(data.y, 322);
-    assert.ok(
-      Array.isArray(data.selectorChain) && data.selectorChain.includes('label="Continue"'),
-      `selectorChain must include the resolved selector, got ${JSON.stringify(data.selectorChain)}`,
-    );
+    const details = assertRpcError(click, 'AMBIGUOUS_MATCH', /2 distinct actionable elements/);
+    const ambiguity = details.details as Record<string, unknown>;
+    assert.equal(ambiguity.matches, 2);
+    assert.equal(ambiguity.refsGeneration !== undefined, true);
+    assert.equal(Array.isArray(ambiguity.candidates), true);
 
     const tapCalls = transcript.calls.filter((call) => call.command === 'ios.runner.tap');
-    assert.equal(tapCalls.length, 2);
-    const fallbackTap = tapCalls[1]?.request as Record<string, unknown>;
-    assert.equal(fallbackTap.x, 200);
-    assert.equal(fallbackTap.y, 322);
+    assert.equal(tapCalls.length, 1);
   });
 });
 

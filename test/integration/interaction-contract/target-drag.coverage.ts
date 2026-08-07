@@ -1,7 +1,7 @@
 import { definePathCoverage } from './coverage-manifest.ts';
 
 const DUAL_ENDPOINT_SUCCESS =
-  'target-drag dual endpoints: both targets resolve, disclose identity, and dispatch one gesture';
+  'target-drag dual endpoints: an equivalent destination wrapper chain resolves, discloses identity, and dispatches one gesture';
 
 export const TARGET_DRAG_COVERAGE = definePathCoverage('target-drag', {
   disambiguation: DUAL_ENDPOINT_SUCCESS,
