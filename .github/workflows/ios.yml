@@ -115,7 +115,14 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledFalseOnMidWindowMismatch \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledFalseOnFailedCapture \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledOnlyLooksAtTheTrailingWindow \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledRejectsDegenerateRequirement
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledRejectsDegenerateRequirement \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCustomActionsRequestPinsPrivateAXBackend \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXNodesCarryAnnotatedCustomActions \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRequestPinnedBackendReportsItsOwnReason \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCustomActionCoverageParsesOnlyCompletePairs \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPartialCustomActionPassIsDisclosedAndCompleteOneIsNot \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testActionNamesAreCappedPerElementAndReported \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testHungCustomActionReadIsContainedAndRecovers
 
       - name: Preflight iOS runner through public CLI
         run: |
