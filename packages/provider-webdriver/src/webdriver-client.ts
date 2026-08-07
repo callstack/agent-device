@@ -65,6 +65,12 @@ type WebDriverResponse = {
 
 type WebDriverRequestOverrides = {
   retryAttempts?: number;
+  /**
+   * Per-request transport bound, for callers whose own budget is far shorter
+   * than the client's default. Without it a caller waiting 2s on a poll can be
+   * held for the full default timeout by one hung request.
+   */
+  timeoutMs?: number;
 };
 
 export class WebDriverClient {
@@ -143,22 +149,29 @@ export class WebDriverClient {
   }
 
   /**
-   * Whether the software keyboard is up. Polled between a text field tap and
-   * the keys it should receive, so it must stay a single cheap round trip: no
-   * retries, and a driver that does not implement the route reports through the
-   * thrown error rather than a guessed boolean (callers decide what an
-   * unanswerable keyboard state means for them).
+   * Whether the software keyboard is up, or `unsupported` when this driver has
+   * no such route. Polled between a text field tap and the keys it should
+   * receive, so it stays one cheap round trip — no retries, and `timeoutMs`
+   * lets the caller bound it by its own budget rather than the client default.
+   *
+   * The unsupported/failed split matters: a caller that treats every error as
+   * "this driver cannot answer" would silently degrade a dead session, an auth
+   * rejection, or a grid outage into a blind text entry. Only a route the
+   * driver does not implement — or one that answers with a non-boolean — is
+   * reported as unsupported; everything else throws.
    */
-  async isKeyboardShown(): Promise<boolean> {
-    const value = await this.sessionRequest('GET', '/appium/device/is_keyboard_shown', undefined, {
-      retryAttempts: 0,
-    });
-    if (typeof value !== 'boolean') {
-      throw new AppError('COMMAND_FAILED', 'WebDriver keyboard-shown response was not a boolean', {
-        valueType: typeof value,
+  async isKeyboardShown(timeoutMs?: number): Promise<boolean | 'unsupported'> {
+    let value: unknown;
+    try {
+      value = await this.sessionRequest('GET', '/appium/device/is_keyboard_shown', undefined, {
+        retryAttempts: 0,
+        ...(timeoutMs === undefined ? {} : { timeoutMs }),
       });
+    } catch (error) {
+      if (isUnimplementedWebDriverRoute(error)) return 'unsupported';
+      throw error;
     }
-    return value;
+    return typeof value === 'boolean' ? value : 'unsupported';
   }
 
   async back(): Promise<void> {
@@ -228,9 +241,10 @@ export class WebDriverClient {
   ): Promise<unknown> {
     let lastError: unknown;
     const retryAttempts = overrides?.retryAttempts ?? this.requestPolicy.retryAttempts;
+    const timeoutMs = overrides?.timeoutMs ?? this.requestPolicy.timeoutMs;
     for (let attempt = 0; attempt <= retryAttempts; attempt += 1) {
       try {
-        return await this.requestValueOnce(method, path, body);
+        return await this.requestValueOnce(method, path, body, timeoutMs);
       } catch (error) {
         lastError = error;
         if (!isRetriableWebDriverError(error) || attempt >= retryAttempts) {
@@ -242,7 +256,12 @@ export class WebDriverClient {
     throw lastError;
   }
 
-  private async requestValueOnce(method: string, path: string, body?: unknown): Promise<unknown> {
+  private async requestValueOnce(
+    method: string,
+    path: string,
+    body: unknown,
+    timeoutMs: number,
+  ): Promise<unknown> {
     const response = await fetch(new URL(trimLeadingSlash(path), this.endpoint), {
       method,
       headers: {
@@ -251,7 +270,7 @@ export class WebDriverClient {
         ...this.headers,
       },
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(this.requestPolicy.timeoutMs),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     const text = await response.text();
     const payload = text ? parseJsonResponse(text) : {};
@@ -346,6 +365,34 @@ function webdriverError(status: number, payload: unknown): AppError {
       ? (value as { message: string }).message
       : `WebDriver request failed with HTTP ${status}.`;
   return new AppError('COMMAND_FAILED', message, { status, response: payload });
+}
+
+/**
+ * A route this driver does not implement, as opposed to one that failed.
+ *
+ * Classified from the W3C error code, NOT from the HTTP status: `unknown
+ * command` and `invalid session id` are both 404, so a status test would read a
+ * dead session as a missing feature — exactly the confusion that turns a broken
+ * session into a blind text entry. Only 405/501 are unambiguous enough to stand
+ * on their own. A 5xx, an auth rejection, or a timeout is a real failure.
+ */
+const UNIMPLEMENTED_WEBDRIVER_STATUSES = new Set([405, 501]);
+const UNIMPLEMENTED_WEBDRIVER_ERRORS = new Set(['unknown command', 'unknown method']);
+
+function isUnimplementedWebDriverRoute(error: unknown): boolean {
+  if (!(error instanceof AppError)) return false;
+  const status = error.details?.status;
+  if (typeof status === 'number' && UNIMPLEMENTED_WEBDRIVER_STATUSES.has(status)) return true;
+  return UNIMPLEMENTED_WEBDRIVER_ERRORS.has(readWebDriverErrorCode(error).toLowerCase());
+}
+
+function readWebDriverErrorCode(error: AppError): string {
+  const response = error.details?.response;
+  const value =
+    response && typeof response === 'object' ? (response as { value?: unknown }).value : undefined;
+  const code =
+    value && typeof value === 'object' ? (value as { error?: unknown }).error : undefined;
+  return typeof code === 'string' ? code : '';
 }
 
 function isRetriableWebDriverError(error: unknown): boolean {

@@ -110,10 +110,13 @@ export type TypeTextBackendResult = {
  * - `settled-keyboard-up`: the keyboard was ALREADY up (back-to-back fills into
  *   one form), so its visibility says nothing about the NEW field. Entry waited
  *   the full readiness budget, the same answer the Apple runner gives here.
- * - `settled-unknown`: the driver reports no keyboard state at all, so nothing
- *   could be waited for. Entry followed a short blind settle.
- * - `not-observed`: the keyboard was down before the tap and never came up. The
- *   keys were still sent, but nothing corroborates that a field received them.
+ * - `settled-unknown`: the driver implements no keyboard route at all, so
+ *   nothing could be waited for. Entry followed a short blind settle.
+ *
+ * Every value describes a fill that DID send its keys. The fourth outcome — a
+ * tap that raised no keyboard at all — is deliberately absent: reporting it
+ * here would recreate #1658's silent success, so the interactor throws
+ * (`text_entry_focus_not_observed`) without typing instead.
  *
  * Closed set: the cloud interactor is its only producer and the boundary that
  * narrows it (readFillBackendResult, src/core/dispatch-interactions.ts) drops a
@@ -123,7 +126,6 @@ export const CLOUD_TEXT_ENTRY_READINESS = [
   'keyboard-shown',
   'settled-keyboard-up',
   'settled-unknown',
-  'not-observed',
 ] as const;
 
 export type CloudTextEntryReadiness = (typeof CLOUD_TEXT_ENTRY_READINESS)[number];

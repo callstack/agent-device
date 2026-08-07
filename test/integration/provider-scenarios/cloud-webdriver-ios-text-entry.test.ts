@@ -67,11 +67,15 @@ test('cloud iOS snapshot captures through the provider session after open', asyn
  * first responder asynchronously, so the keys arrived with nothing focused and
  * the command still answered "Filled N chars" — which is why tapping and
  * filling as two separate commands was the only reliable route.
+ *
+ * The device model, not just the request order, is what makes this a
+ * regression test: the fake drops keys that arrive while the keyboard is down,
+ * exactly as an unfocused field does, so the assertion below is the field's own
+ * value.
  */
-test('cloud iOS fill sends keys only after the field raises the keyboard', async () => {
+test('cloud iOS fill lands text in the field it tapped', async () => {
   await withProviderScenarioResource(createCloudIosWorld, async ({ daemon, server }) => {
     const lease = await openCloudIosSession(daemon);
-    server.keyboardShownReadings = [false, true];
 
     const response = await daemon.callCommand(
       'fill',
@@ -83,7 +87,48 @@ test('cloud iOS fill sends keys only after the field raises the keyboard', async
     const data = assertRpcOk<{ text?: string; textEntryReadiness?: string }>(response);
     assert.equal(data.text, 'user@example.com');
     assert.equal(data.textEntryReadiness, 'keyboard-shown');
+    // The keys reached the focused field, not the void.
+    assert.equal(server.fieldValue, 'user@example.com');
     assert.deepEqual(textEntryTranscript(server), ['keyboard', 'tap', 'keyboard', 'keys']);
+
+    // And the device agrees: the field reports the typed value back.
+    const snapshot = await daemon.callCommand(
+      'snapshot',
+      [],
+      { ...leaseFlags(lease.leaseId), snapshotInteractiveOnly: true },
+      { meta: leaseMeta(lease.leaseId) },
+    );
+    const nodes = assertRpcOk<{ nodes?: Array<{ identifier?: string; value?: string }> }>(
+      snapshot,
+    ).nodes;
+    assert.equal(nodes?.find((node) => node.identifier === 'email')?.value, 'user@example.com');
+  });
+}, 15_000);
+
+/**
+ * #1658 again, from the other side: when the tap raises no keyboard at all,
+ * nothing focused a field and `sendKeys` would go nowhere. Answering that with
+ * "Filled N chars" is the original bug, so the fill refuses — and sends no keys,
+ * leaving the field untouched rather than half-written.
+ */
+test('cloud iOS fill refuses, without typing, when the tap raises no keyboard', async () => {
+  await withProviderScenarioResource(createCloudIosWorld, async ({ daemon, server }) => {
+    const lease = await openCloudIosSession(daemon);
+    server.keyboardPollsUntilShown = Number.POSITIVE_INFINITY;
+
+    const response = await daemon.callCommand(
+      'fill',
+      ['editable=true', 'user@example.com'],
+      leaseFlags(lease.leaseId),
+      { meta: leaseMeta(lease.leaseId) },
+    );
+
+    const error = response.json.error;
+    assert.ok(error, 'expected fill to refuse');
+    assert.match(error.message ?? '', /no keyboard appeared, so the text was not sent/);
+    assert.equal(error.data?.details?.reason, 'text_entry_focus_not_observed');
+    assert.equal(server.fieldValue, '');
+    assert.equal(textEntryTranscript(server).includes('keys'), false);
   });
 }, 15_000);
 
@@ -142,9 +187,20 @@ async function openCloudIosSession(daemon: ProviderScenarioHarness): Promise<Dev
   return lease;
 }
 
+/**
+ * A device model, not just a request recorder: the field takes focus a beat
+ * after the tap (as a WebView input does), the keyboard follows focus, and
+ * `POST /keys` — which the real driver routes to whatever holds first responder
+ * — writes the field only while it is focused, and silently succeeds otherwise.
+ * That last part is the #1658 bug reproduced faithfully: keys sent too early
+ * are accepted by the grid and dropped by the device.
+ */
 class FakeIosWebDriverServer extends CloudWebDriverTestServer {
-  /** Successive `is_keyboard_shown` answers; the last one is what the keyboard stays at. */
-  keyboardShownReadings: boolean[] = [false];
+  /** How many keyboard probes after the tap before focus lands. Infinity = the tap missed. */
+  keyboardPollsUntilShown = 1;
+  fieldValue = '';
+
+  private pollsRemaining = Number.POSITIVE_INFINITY;
 
   static async start(): Promise<StartedCloudWebDriverTestServer<FakeIosWebDriverServer>> {
     return await startCloudWebDriverTestServer(new FakeIosWebDriverServer());
@@ -161,28 +217,50 @@ class FakeIosWebDriverServer extends CloudWebDriverTestServer {
         cloudWebDriverTestJson({
           value: { sessionId: 'wd-1', capabilities: { platformName: 'iOS' } },
         }),
-      'GET /wd/hub/session/wd-1/source': () =>
-        cloudWebDriverTestJson({ value: fakeIosWebDriverSource() }),
+      'GET /wd/hub/session/wd-1/source': () => cloudWebDriverTestJson({ value: this.source() }),
       'GET /wd/hub/session/wd-1/window/rect': () =>
         cloudWebDriverTestJson({ value: { x: 0, y: 0, width: 390, height: 844 } }),
+      'POST /wd/hub/session/wd-1/actions': () => this.tap(),
+      'POST /wd/hub/session/wd-1/keys': () => this.sendKeys(),
       'GET /wd/hub/session/wd-1/appium/device/is_keyboard_shown': () =>
-        cloudWebDriverTestJson({ value: this.nextKeyboardShown() }),
+        cloudWebDriverTestJson({ value: this.keyboardShown() }),
     };
   }
 
-  private nextKeyboardShown(): boolean {
-    return this.keyboardShownReadings.length > 1
-      ? this.keyboardShownReadings.shift()!
-      : this.keyboardShownReadings[0]!;
+  private tap(): CloudWebDriverTestResponse {
+    this.pollsRemaining = this.keyboardPollsUntilShown;
+    return cloudWebDriverTestJson({ value: null });
   }
-}
 
-function fakeIosWebDriverSource(): string {
-  return (
-    '<XCUIElementTypeApplication name="Demo" x="0" y="0" width="390" height="844" visible="true">' +
-    '<XCUIElementTypeTextField name="email" label="Email" value="" x="20" y="300" width="350" height="44" visible="true" enabled="true" />' +
-    '</XCUIElementTypeApplication>'
-  );
+  /** Focus is not instant: it lands only after the configured number of probes. */
+  private keyboardShown(): boolean {
+    if (this.pollsRemaining <= 0) return true;
+    this.pollsRemaining -= 1;
+    return this.pollsRemaining <= 0;
+  }
+
+  private sendKeys(): CloudWebDriverTestResponse {
+    // Unfocused keys are accepted by the grid and land nowhere — the bug's shape.
+    if (this.pollsRemaining <= 0) {
+      const text = this.lastSentKeys();
+      if (text !== undefined) this.fieldValue = text;
+    }
+    return cloudWebDriverTestJson({ value: null });
+  }
+
+  private lastSentKeys(): string | undefined {
+    const body = this.calls.at(-1)?.body as { value?: unknown } | undefined;
+    return Array.isArray(body?.value) ? body.value.join('') : undefined;
+  }
+
+  private source(): string {
+    return (
+      '<XCUIElementTypeApplication name="Demo" x="0" y="0" width="390" height="844" visible="true">' +
+      `<XCUIElementTypeTextField name="email" label="Email" value="${this.fieldValue}" ` +
+      'x="20" y="300" width="350" height="44" visible="true" enabled="true" />' +
+      '</XCUIElementTypeApplication>'
+    );
+  }
 }
 
 function leaseFlags(leaseId?: string): DaemonRequest['flags'] {

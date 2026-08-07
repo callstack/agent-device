@@ -26,18 +26,44 @@ import { parseWebDriverSource } from './webdriver-source.ts';
 import { setWebDriverOrientation } from './webdriver-orientation.ts';
 
 /**
- * How long a tapped field gets to take text entry focus before `fill` types
- * anyway. Mirrors the Apple runner's `TextEntryTiming.readinessTimeout`
+ * How long a tapped field gets to take text entry focus before `fill` gives up.
+ * Mirrors the Apple runner's `TextEntryTiming.readinessTimeout`
  * (RunnerTests+TextEntry.swift), which owns this discipline locally.
  */
 const TEXT_ENTRY_READINESS_TIMEOUT_MS = 2_000;
 const TEXT_ENTRY_READINESS_POLL_MS = 100;
+/**
+ * One keyboard probe's own transport bound. Well under the readiness budget it
+ * serves, so a single hung probe cannot stretch that budget out toward the
+ * WebDriver client's much longer default request timeout.
+ */
+const TEXT_ENTRY_PROBE_TIMEOUT_MS = 1_500;
 /** The blind wait when the driver reports no keyboard state at all — see `awaitTextEntryReadiness`. */
 const TEXT_ENTRY_BLIND_SETTLE_MS = 350;
 
 /** Global-timer based, so text-entry readiness can be exercised on a fake clock. */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * The tap raised no keyboard within the readiness budget, so nothing focused a
+ * text input and `sendKeys` would go to whatever else holds first responder —
+ * or nowhere. #1658 is precisely the report of that being answered with
+ * "Filled N chars", so this fails instead of typing: the caller gets a refusal
+ * it must handle, and the field is left untouched rather than half-written.
+ */
+function textEntryFocusNotObservedError(x: number, y: number): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    `fill tapped (${x}, ${y}) but no keyboard appeared, so the text was not sent`,
+    {
+      reason: 'text_entry_focus_not_observed',
+      x,
+      y,
+      hint: 'The tap most likely missed the field. Re-check the target with snapshot -i and fill the element it reports, rather than retrying the same coordinates.',
+    },
+  );
 }
 
 export type WebDriverInteractorOptions = {
@@ -165,10 +191,12 @@ class WebDriverInteractor implements Interactor {
     this.requireSupport('fill');
     // #1658: read the keyboard BEFORE the tap. Only a hidden -> shown
     // transition proves that OUR tap moved focus; a keyboard that was already
-    // up says nothing about which field owns first responder now.
-    const keyboardBeforeTap = await this.tryReadKeyboardShown();
+    // up says nothing about which field owns first responder now. A probe
+    // failure throws here, before the tap, so a broken session fails a fill
+    // that has not touched the device rather than typing into the dark.
+    const keyboardBeforeTap = await this.readKeyboardShown();
     await this.tap(x, y);
-    const textEntryReadiness = await this.awaitTextEntryReadiness(keyboardBeforeTap);
+    const textEntryReadiness = await this.awaitTextEntryReadiness(keyboardBeforeTap, x, y);
     await this.type(text);
     return { backend: 'webdriver', x, y, text, textEntryReadiness };
   }
@@ -288,11 +316,15 @@ class WebDriverInteractor implements Interactor {
    * only the round trip between them gave the field time to focus.
    */
   private async awaitTextEntryReadiness(
-    keyboardBeforeTap: boolean | undefined,
+    keyboardBeforeTap: boolean | 'unsupported',
+    x: number,
+    y: number,
   ): Promise<CloudTextEntryReadiness> {
-    // The driver answers nothing about the keyboard, so no wait can learn
-    // anything. Keep a blind path cheap: settle briefly, then type.
-    if (keyboardBeforeTap === undefined) {
+    // The driver implements no keyboard route, so no wait can learn anything.
+    // Keep a blind path cheap: settle briefly, then type. This is the ONE case
+    // that types without evidence, and it takes a positively classified
+    // unsupported answer to reach — never a probe that merely failed.
+    if (keyboardBeforeTap === 'unsupported') {
       await sleep(TEXT_ENTRY_BLIND_SETTLE_MS);
       return 'settled-unknown';
     }
@@ -310,19 +342,14 @@ class WebDriverInteractor implements Interactor {
     const deadline = Date.now() + TEXT_ENTRY_READINESS_TIMEOUT_MS;
     while (Date.now() < deadline) {
       await sleep(TEXT_ENTRY_READINESS_POLL_MS);
-      if ((await this.tryReadKeyboardShown()) === true) return 'keyboard-shown';
+      if ((await this.readKeyboardShown()) === true) return 'keyboard-shown';
     }
-    // The tap opened no keyboard. Still send the keys — a text view without a
-    // software keyboard (hardware keyboard attached, or a non-editable target
-    // the caller means to type at) is a real case, and refusing would turn a
-    // recoverable miss into a hard failure — but say so, so the caller is not
-    // told "filled" by a fill that had no witness.
-    return 'not-observed';
+    throw textEntryFocusNotObservedError(x, y);
   }
 
-  /** Keyboard state is evidence, never a precondition: a driver that cannot answer must not fail the fill. */
-  private async tryReadKeyboardShown(): Promise<boolean | undefined> {
-    return await this.client.isKeyboardShown().catch(() => undefined);
+  /** Bounded by the readiness budget it serves, not the client's default request timeout. */
+  private async readKeyboardShown(): Promise<boolean | 'unsupported'> {
+    return await this.client.isKeyboardShown(TEXT_ENTRY_PROBE_TIMEOUT_MS);
   }
 
   private async pointerGesture(name: string, actions: W3CPointerAction[]): Promise<void> {

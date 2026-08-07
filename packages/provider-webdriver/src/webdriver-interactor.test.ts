@@ -40,25 +40,58 @@ test('fill settles when the keyboard was already up before the tap', async () =>
   assert.deepEqual(world.transcript, ['keyboard', 'tap', 'keys']);
 });
 
-test('fill settles when the driver cannot report keyboard state', async () => {
+test('fill settles when the driver implements no keyboard route', async () => {
   const world = createTextEntryWorld();
-  world.keyboardSupported = false;
+  world.keyboardRoute = 'unimplemented';
 
   const result = await runFill(world);
 
-  // Evidence, never a precondition: an unanswerable keyboard must not fail the fill.
+  // A route the driver does not have is not a failure — it just leaves nothing to wait for.
   assert.equal(result?.textEntryReadiness, 'settled-unknown');
   assert.deepEqual(world.transcript, ['keyboard', 'tap', 'keys']);
 });
 
-test('fill still types when no keyboard ever appears, and says so', async () => {
+// The #1658 report is "fill answered Filled N chars while the field kept its
+// placeholder". Reporting a readiness value nobody renders would preserve that,
+// so a tap that raises no keyboard refuses instead — and sends no keys, leaving
+// the field untouched rather than half-written.
+test('fill refuses without typing when no keyboard ever appears', async () => {
   const world = createTextEntryWorld();
   world.keyboardShown = [false];
 
-  const result = await runFill(world);
+  await assert.rejects(runFill(world), (error: AppError) => {
+    assert.equal(error.code, 'COMMAND_FAILED');
+    assert.match(error.message, /no keyboard appeared, so the text was not sent/);
+    assert.equal(error.details?.reason, 'text_entry_focus_not_observed');
+    return true;
+  });
 
-  assert.equal(result?.textEntryReadiness, 'not-observed');
-  assert.equal(world.transcript.at(-1), 'keys');
+  assert.equal(world.transcript.includes('keys'), false);
+});
+
+// A probe that FAILED is not a driver without the feature. Swallowing a dead
+// session or a grid outage as "unsupported" would degrade it into a blind type.
+test('fill propagates a failing keyboard probe instead of typing blind', async () => {
+  const world = createTextEntryWorld();
+  world.keyboardRoute = 'failing';
+
+  await assert.rejects(runFill(world), (error: AppError) => {
+    assert.match(error.message, /invalid session id/);
+    return true;
+  });
+
+  // It threw on the pre-tap probe, so the device was never touched at all.
+  assert.deepEqual(world.transcript, ['keyboard']);
+});
+
+test('fill bounds each keyboard probe well under its readiness budget', async () => {
+  const world = createTextEntryWorld();
+  world.keyboardShown = [false, true];
+
+  await runFill(world);
+
+  // Left at the client default, one hung probe could hold a 2s wait for 30s.
+  assert.deepEqual(world.probeTimeouts, [1_500, 1_500]);
 });
 
 /**
@@ -75,9 +108,16 @@ async function runFill(world: ReturnType<typeof createTextEntryWorld>) {
       backend: 'xctest',
       capabilities: createCloudWebDriverCapabilities({ provider: 'test', platform: 'ios' }),
     });
-    const pending = interactor.fill(12, 24, 'user@example.com');
+    // Settled-shaped from the start: a rejection that lands while the clock is
+    // being advanced would otherwise be unhandled until the await below.
+    const pending = interactor.fill(12, 24, 'user@example.com').then(
+      (value) => ({ rejected: false, value }) as const,
+      (error: unknown) => ({ rejected: true, error }) as const,
+    );
     await vi.advanceTimersByTimeAsync(5_000);
-    return await pending;
+    const settled = await pending;
+    if (settled.rejected) throw settled.error;
+    return settled.value;
   } finally {
     vi.useRealTimers();
   }
@@ -90,8 +130,10 @@ async function runFill(world: ReturnType<typeof createTextEntryWorld>) {
 function createTextEntryWorld() {
   const world = {
     transcript: [] as string[],
+    probeTimeouts: [] as Array<number | undefined>,
     keyboardShown: [] as boolean[],
-    keyboardSupported: true,
+    /** How the driver answers the keyboard route: normally, not at all, or with a real failure. */
+    keyboardRoute: 'ok' as 'ok' | 'unimplemented' | 'failing',
     client: undefined as unknown as WebDriverClient,
   };
   world.client = {
@@ -102,10 +144,15 @@ function createTextEntryWorld() {
     sendKeys: async () => {
       world.transcript.push('keys');
     },
-    isKeyboardShown: async () => {
+    isKeyboardShown: async (timeoutMs?: number) => {
       world.transcript.push('keyboard');
-      if (!world.keyboardSupported) {
-        throw new AppError('COMMAND_FAILED', 'Unknown command: is_keyboard_shown');
+      world.probeTimeouts.push(timeoutMs);
+      // The real client classifies the wire error; this stands in for its verdict.
+      if (world.keyboardRoute === 'unimplemented') return 'unsupported' as const;
+      if (world.keyboardRoute === 'failing') {
+        // A dead session: 404, same status as an unimplemented route, which is
+        // why the client classifies on the W3C error code instead.
+        throw new AppError('COMMAND_FAILED', 'invalid session id', { status: 404 });
       }
       // The last programmed reading is what the keyboard stays at.
       return world.keyboardShown.length > 1
