@@ -54,6 +54,7 @@ import {
   validatePreResolvedOpenRequest,
   validateResolvedOpenRequest,
 } from './session-open-prepare.ts';
+import { resolveForegroundOpenRequest } from './session-open-foreground.ts';
 import { errorResponse } from './response.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 import { buildSessionRecoveryHint } from '../session-recovery-hints.ts';
@@ -652,9 +653,16 @@ export async function handleOpenCommand(params: {
   logPath: string;
   sessionStore: SessionStore;
 }): Promise<DaemonResponse> {
-  const { req, sessionName, logPath, sessionStore } = params;
+  const { sessionName, logPath, sessionStore } = params;
 
   const session = sessionStore.get(sessionName);
+  const foregroundResolution = await resolveForegroundOpenRequest({
+    req: params.req,
+    hasExistingSession: Boolean(session),
+  });
+  if (foregroundResolution.type === 'response') return foregroundResolution.response;
+  const req = foregroundResolution.type === 'resolved' ? foregroundResolution.req : params.req;
+
   if (session) {
     if (req.flags?.saveScript) {
       return errorResponse(

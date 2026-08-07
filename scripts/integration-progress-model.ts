@@ -341,6 +341,11 @@ function summarizeProviderScenarioFlagExclusions() {
       keys: ['headless', 'testIme'],
     },
     {
+      name: 'open foreground auto-resolution (RFC prototype)',
+      owner: 'daemon session-open-foreground handler unit tests',
+      keys: ['foreground'],
+    },
+    {
       name: 'Apple simulator screenshot rendering options',
       owner: 'iOS platform and screenshot-diff runtime tests',
       keys: ['screenshotNormalizeStatusBar', 'screenshotPixelDensity'],

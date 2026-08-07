@@ -274,6 +274,14 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageDescription: 'open: terminate app process before launching it',
   },
   {
+    key: 'foreground',
+    names: ['--foreground'],
+    type: 'boolean',
+    usageLabel: '--foreground',
+    usageDescription:
+      "[RFC] open: resolve app + return an initial snapshot from the sole booted iOS simulator's sole running app",
+  },
+  {
     key: 'restart',
     names: ['--restart'],
     type: 'boolean',

@@ -50,6 +50,9 @@ const openCommandMetadata = defineFieldCommandMetadata(
       'Launch arguments forwarded verbatim to the platform launch command.',
     ),
     relaunch: booleanField('Force relaunch.'),
+    foreground: booleanField(
+      "[RFC prototype] On a fresh session with no app argument, resolve the target from the sole booted iOS simulator's sole running app and include an initial interactive snapshot in the response. Fails with AMBIGUOUS_MATCH when the environment is not unambiguous (0 or 2+ booted simulators, or no confidently-detectable running app) — never guesses.",
+    ),
     saveScript: jsonSchemaField<boolean | string>({
       oneOf: [booleanSchema(), stringSchema()],
     }),
@@ -130,6 +133,7 @@ const openCliSchema = {
     'force',
     'noRecord',
     'relaunch',
+    'foreground',
     'surface',
     ...METRO_RELOAD_FLAGS,
     'launchUrl',
@@ -155,6 +159,7 @@ const openCliReader: CliReader = (positionals, flags) => ({
   launchConsole: flags.launchConsole,
   launchArgs: flags.launchArgs,
   relaunch: flags.relaunch,
+  foreground: flags.foreground,
   saveScript: flags.saveScript,
   force: flags.force,
   deviceHub: flags.deviceHub,

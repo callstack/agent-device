@@ -45,6 +45,13 @@ export type AppOpenOptions = AgentDeviceRequestOverrides &
     launchConsole?: string;
     launchArgs?: string[];
     relaunch?: boolean;
+    /**
+     * RFC prototype (branch claude/observe-foreground): resolve the app target from the
+     * sole booted iOS simulator's sole running app instead of an explicit app
+     * argument, and return an initial interactive snapshot alongside the open result.
+     * Fails closed (AMBIGUOUS_MATCH) unless the environment is unambiguous.
+     */
+    foreground?: boolean;
     saveScript?: boolean | string;
     /** #1258: overwrite an existing --save-script target instead of refusing. Alias: --overwrite. */
     force?: boolean;
@@ -67,6 +74,16 @@ export type AppOpenResult = {
   startup?: StartupPerfSample;
   runtime?: SessionRuntimeHints;
   device?: AgentDeviceSessionDevice;
+  /**
+   * RFC prototype (open --foreground, branch claude/observe-foreground): the initial
+   * interactive snapshot captured immediately after open, composed from the same
+   * snapshot-runtime dispatch `agent-device snapshot -i` uses. Present only when
+   * `--foreground` triggered the auto-resolve path. Left loosely typed for this
+   * prototype rather than reusing `CaptureSnapshotResult` end to end (see PR
+   * follow-ups) since the daemon-side composition does not attach client-only
+   * fields like `identifiers`.
+   */
+  snapshot?: Record<string, unknown>;
   identifiers: AgentDeviceIdentifiers;
 };
 

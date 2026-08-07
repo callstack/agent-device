@@ -164,6 +164,7 @@ export function serializeOpenResult(result: AppOpenResult): Record<string, unkno
       ...(result.startup ? { startup: result.startup } : {}),
       ...(result.runtime ? { runtime: result.runtime } : {}),
       ...(result.device ? serializeSessionDevice(result.device) : {}),
+      ...(result.snapshot ? { snapshot: result.snapshot } : {}),
     },
     target ? `Opened: ${target}` : 'Opened',
   );

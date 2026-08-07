@@ -21,6 +21,7 @@ import { errorResponse, requireCommandSupported } from './response.ts';
 import { recordSessionAction } from './handler-utils.ts';
 import { handleRuntimeCommand } from './session-runtime-command.ts';
 import { handleOpenCommand } from './session-open.ts';
+import { composeOpenWithInitialSnapshot } from './session-open-foreground.ts';
 import {
   resolveAndroidPackageForOpen,
   resolveSessionAppBundleIdForTarget,
@@ -450,7 +451,13 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
   push: handlePushCommand,
   'trigger-app-event': handleTriggerAppEventCommand,
   open: async ({ req, sessionName, logPath, sessionStore }) =>
-    await handleOpenCommand({ req, sessionName, logPath, sessionStore }),
+    await composeOpenWithInitialSnapshot({
+      req,
+      sessionName,
+      logPath,
+      sessionStore,
+      openResponse: await handleOpenCommand({ req, sessionName, logPath, sessionStore }),
+    }),
   replay: handleSessionReplayCommandGroup,
   test: handleSessionReplayCommandGroup,
   batch: async ({ req, sessionName, invoke }) => await runBatchCommands(req, sessionName, invoke),

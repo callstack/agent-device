@@ -7,7 +7,7 @@ vi.mock('../platforms/apple/core/devices.ts', () => ({ listBootedIosSimulators }
 vi.mock('../platforms/apple/core/app-resolution.ts', () => ({ detectSoleRunningIosSimulatorApp }));
 
 import { IOS_DEVICE, IOS_SIMULATOR } from '../__tests__/test-utils/index.ts';
-import { buildIosOpenCommandHint } from './ios-app-session-hint.ts';
+import { buildIosOpenCommandHint, resolveSoleForegroundIosApp } from './ios-app-session-hint.ts';
 
 beforeEach(() => {
   listBootedIosSimulators.mockReset();
@@ -121,4 +121,54 @@ test('a physical iOS device never probes for a hint', async () => {
 
   expect(hint).toBeUndefined();
   expect(listBootedIosSimulators).not.toHaveBeenCalled();
+});
+
+test('resolveSoleForegroundIosApp resolves the device and app when unambiguous', async () => {
+  const soleBootedDevice = { ...IOS_SIMULATOR, id: 'booted-1', name: 'iPhone 16' };
+  const app = { bundleId: 'xyz.blueskyweb.app', name: 'Bluesky' };
+  listBootedIosSimulators.mockResolvedValue([soleBootedDevice]);
+  detectSoleRunningIosSimulatorApp.mockResolvedValue(app);
+
+  const resolved = await resolveSoleForegroundIosApp({ simulatorSetPath: '/custom/set' });
+
+  expect(resolved).toEqual({ device: soleBootedDevice, app });
+  expect(listBootedIosSimulators).toHaveBeenCalledWith({ simulatorSetPath: '/custom/set' });
+  expect(detectSoleRunningIosSimulatorApp).toHaveBeenCalledWith(soleBootedDevice);
+});
+
+test('resolveSoleForegroundIosApp returns undefined for zero booted simulators', async () => {
+  listBootedIosSimulators.mockResolvedValue([]);
+
+  expect(await resolveSoleForegroundIosApp()).toBeUndefined();
+  expect(detectSoleRunningIosSimulatorApp).not.toHaveBeenCalled();
+});
+
+test('resolveSoleForegroundIosApp returns undefined for more than one booted simulator', async () => {
+  listBootedIosSimulators.mockResolvedValue([
+    { ...IOS_SIMULATOR, id: 'booted-1' },
+    { ...IOS_SIMULATOR, id: 'booted-2' },
+  ]);
+
+  expect(await resolveSoleForegroundIosApp()).toBeUndefined();
+  expect(detectSoleRunningIosSimulatorApp).not.toHaveBeenCalled();
+});
+
+test('resolveSoleForegroundIosApp returns undefined when the running-app probe is inconclusive', async () => {
+  listBootedIosSimulators.mockResolvedValue([{ ...IOS_SIMULATOR, id: 'booted-1' }]);
+  detectSoleRunningIosSimulatorApp.mockResolvedValue(undefined);
+
+  expect(await resolveSoleForegroundIosApp()).toBeUndefined();
+});
+
+test('resolveSoleForegroundIosApp catches a rejecting probe instead of propagating it', async () => {
+  // The catch-all lives in the resolver, so both consumers (the hint and
+  // open --foreground) inherit the never-propagate contract from one place.
+  listBootedIosSimulators.mockRejectedValue(new Error('simctl timed out'));
+
+  await expect(resolveSoleForegroundIosApp()).resolves.toBeUndefined();
+
+  listBootedIosSimulators.mockResolvedValue([{ ...IOS_SIMULATOR, id: 'booted-1' }]);
+  detectSoleRunningIosSimulatorApp.mockRejectedValue(new Error('launchctl timed out'));
+
+  await expect(resolveSoleForegroundIosApp()).resolves.toBeUndefined();
 });
