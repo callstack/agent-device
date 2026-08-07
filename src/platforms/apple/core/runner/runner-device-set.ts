@@ -132,8 +132,7 @@ function reconcileXcodebuildSimulatorSetRedirect(paths: {
   const { xctestDeviceSetPath, backupPath } = paths;
   const existingBackups = [backupPath, ...findLegacyXcodebuildSimulatorSetBackups(backupPath)];
   const activeBackupPath = existingBackups.find((candidate) => fs.existsSync(candidate));
-  const xctestExists = fs.existsSync(xctestDeviceSetPath);
-  const xctestIsSymlink = xctestExists && fs.lstatSync(xctestDeviceSetPath).isSymbolicLink();
+  const xctestIsSymlink = isSymlink(xctestDeviceSetPath);
 
   if (activeBackupPath) {
     if (xctestIsSymlink) {
@@ -210,21 +209,21 @@ function installXcodebuildSimulatorSetSymlink(paths: {
     fs.symlinkSync(requestedSetPath, tmpSymlinkPath, 'dir');
     fs.renameSync(tmpSymlinkPath, xctestDeviceSetPath);
   } catch (error) {
-    if (fs.existsSync(tmpSymlinkPath)) {
-      unlinkIfSymlink(tmpSymlinkPath);
-    }
+    unlinkIfSymlink(tmpSymlinkPath);
     throw error;
   }
 }
 
+// lstat instead of existsSync: existsSync follows symlinks, so a dangling
+// symlink (target deleted) would read as absent and never get cleaned up.
+function isSymlink(targetPath: string): boolean {
+  return fs.lstatSync(targetPath, { throwIfNoEntry: false })?.isSymbolicLink() ?? false;
+}
+
 function unlinkIfSymlink(targetPath: string): void {
-  if (!fs.existsSync(targetPath)) {
-    return;
+  if (isSymlink(targetPath)) {
+    fs.unlinkSync(targetPath);
   }
-  if (!fs.lstatSync(targetPath).isSymbolicLink()) {
-    return;
-  }
-  fs.unlinkSync(targetPath);
 }
 
 function sameResolvedPath(left: string, right: string): boolean {

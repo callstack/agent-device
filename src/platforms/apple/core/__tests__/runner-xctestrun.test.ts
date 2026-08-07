@@ -528,6 +528,35 @@ test('acquireXcodebuildSimulatorSetRedirect restores stale redirected XCTestDevi
   });
 });
 
+test('acquireXcodebuildSimulatorSetRedirect restores the backup when XCTestDevices is a dangling symlink', async () => {
+  let handle: Awaited<ReturnType<typeof acquireXcodebuildSimulatorSetRedirect>> | null = null;
+  await withTempDir('runner-xctestrun-redirect-', async (root) => {
+    const paths = makeRedirectPaths(root);
+    fs.mkdirSync(paths.requestedSetPath, { recursive: true });
+    fs.mkdirSync(path.dirname(paths.xctestDeviceSetPath), { recursive: true });
+    fs.mkdirSync(paths.backupPath, { recursive: true });
+    fs.writeFileSync(path.join(paths.backupPath, 'original.txt'), 'restored', 'utf8');
+    // Stale redirect whose target set was deleted by its caller.
+    fs.symlinkSync(path.join(root, 'deleted-requested'), paths.xctestDeviceSetPath, 'dir');
+
+    handle = await acquireRedirect(paths, { backupPath: paths.backupPath });
+
+    assert.notEqual(handle, null);
+    assertRedirectTargetsRequestedSet(paths);
+
+    await handle?.release();
+    handle = null;
+
+    assert.equal(fs.existsSync(paths.backupPath), false);
+    assert.equal(
+      fs.readFileSync(path.join(paths.xctestDeviceSetPath, 'original.txt'), 'utf8'),
+      'restored',
+    );
+  }).finally(async () => {
+    await handle?.release();
+  });
+});
+
 test('acquireXcodebuildSimulatorSetRedirect clears stale lock directories from dead owners', async () => {
   let handle: Awaited<ReturnType<typeof acquireXcodebuildSimulatorSetRedirect>> | null = null;
   await withTempDir('runner-xctestrun-redirect-', async (root) => {
