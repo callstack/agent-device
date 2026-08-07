@@ -15,6 +15,10 @@ const WAIVED_TOPICS: Record<string, string> = {
   'physical-device': 'Needs device-specific setup guidance; no portable planning task defined yet.',
   'react-devtools':
     'Profiling-window guidance; add cases when render-diagnosis planning regresses.',
+  scripting:
+    'Script-authoring/heal-repair guidance split out of workflow for size; add a case when repair-planning regressions show up.',
+  gestures:
+    'Multi-touch shapes split out of workflow for size; add a case when gesture-planning regressions show up.',
 };
 
 const FIRST_SCREEN_DOC = '--help:first30';

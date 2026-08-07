@@ -64,87 +64,80 @@ test('help react-devtools prints agent workflow topic and skips daemon dispatch'
   const result = await runCliCapture(['help', 'react-devtools']);
   assert.equal(result.code, 0);
   assert.equal(result.calls.length, 0);
-  assert.match(result.stdout, /agent-device help react-devtools/);
+  assert.match(result.stdout, /^agent-device \S+ — react-devtools/);
   assert.match(result.stdout, /React Native performance\/profiling/);
   assert.match(result.stdout, /agent-device react-devtools status/);
 });
 
-test('help workflow prints agent workflow topic and skips daemon dispatch', async () => {
+test('help workflow prints the compact workflow card with a version header and skips daemon dispatch', async () => {
   const result = await runCliCapture(['help', 'workflow']);
   assert.equal(result.code, 0);
   assert.equal(result.calls.length, 0);
-  assert.match(result.stdout, /agent-device help workflow/);
-  assert.match(result.stdout, /Core loop:/);
-  assert.match(result.stdout, /Do not use CSS selectors/);
-  assert.match(result.stdout, /Native \.ad interpolation is late-bound after planning/);
+  assert.match(result.stdout, /^agent-device \S+ — workflow/);
+  assert.ok(
+    Buffer.byteLength(result.stdout, 'utf8') < 9000,
+    `help workflow should stay close to the compact-card size target, was ${Buffer.byteLength(result.stdout, 'utf8')} bytes`,
+  );
+  assert.match(result.stdout, /open -> snapshot -i -> settle -> verify -> close loop/);
+  assert.match(result.stdout, /no CSS selectors/);
+  assert.match(result.stdout, /help scripting/);
+  assert.match(result.stdout, /help gestures/);
+});
+
+test('help workflow encourages chaining confident steps and requires the end state to be on screen', async () => {
+  const result = await runCliCapture(['help', 'workflow']);
+  assert.equal(result.code, 0);
+  assert.equal(result.calls.length, 0);
+  assert.match(result.stdout, /Chain confident consecutive steps with &&/);
+  assert.match(result.stdout, /Fall back to one command at a time when a step is uncertain/);
   assert.match(
     result.stdout,
-    /Maestro environment substitution occurs during compatibility parsing/,
+    /confirm the requested end state is actually visible on the current screen, scrolling it into view if needed/,
   );
+  assert.match(result.stdout, /get text alone, or stopping one screen early, is not enough/);
 });
 
 test('help workflow preserves known device workaround guidance', async () => {
   const result = await runCliCapture(['help', 'workflow']);
   assert.equal(result.code, 0);
   assert.equal(result.calls.length, 0);
-  assert.match(result.stdout, /disabled\/hittable:false/);
-  assert.match(result.stdout, /snapshot -i --json/);
+  assert.match(result.stdout, /snapshot -i/);
   assert.match(result.stdout, /@Label_Name/);
   assert.match(result.stdout, /press @e12/);
-  assert.match(result.stdout, /Snapshot legend:/);
-  assert.match(result.stdout, /preview="Leave at side\.\.\." truncated/);
-  assert.match(result.stdout, /wait text/);
-  assert.match(result.stdout, /Never use args/);
-  assert.match(result.stdout, /Never use args, step/);
-  assert.match(result.stdout, /scroll bottom\/top/);
+  assert.match(result.stdout, /Legend:/);
   assert.match(result.stdout, /--delay-ms/);
-  assert.match(result.stdout, /Discovery is not enough when the task asks to open\/start/);
-  assert.match(result.stdout, /If the task says install, use install/);
-  assert.match(result.stdout, /do not inspect project files to find one/);
-  assert.match(result.stdout, /do not split clear\/restart/);
-  assert.match(result.stdout, /do not write network log headers/);
-  assert.match(result.stdout, /iOS Allow Paste prompt cannot be exercised under XCUITest/);
-  assert.match(result.stdout, /agent-device clipboard write "some text"/);
-  assert.match(result.stdout, /provider-native text injection when available/);
-  assert.match(result.stdout, /Do not switch to raw adb, clipboard, or paste as an agent fallback/);
-  assert.match(result.stdout, /exact key that includes the agent-device package and Xcode version/);
-  assert.match(result.stdout, /Avoid broad restore-key fallbacks/);
+  assert.match(result.stdout, /Never open artifact paths or invent package ids/);
+  assert.match(
+    result.stdout,
+    /iOS paste-prompt limits and Android IME\/handwriting capture quirks/,
+  );
 });
 
 test('help workflow documents the selector disambiguation policy (#1037)', async () => {
   const result = await runCliCapture(['help', 'workflow']);
   assert.equal(result.code, 0);
   assert.equal(result.calls.length, 0);
-  assert.match(result.stdout, /does not fail by default/);
+  assert.match(result.stdout, /do not fail by default/);
   assert.match(result.stdout, /deepest node first/);
   assert.match(result.stdout, /then smallest on-screen area/);
   assert.match(result.stdout, /Selector did not resolve uniquely/);
-  assert.match(
-    result.stdout,
-    /replay's suggestion re-resolution.*applies the same depth-then-area policy/,
-  );
   assert.match(result.stdout, /targetHittable: false/);
 });
 
-test('help workflow documents selector and hittability guarantees (#1051)', async () => {
+test('help workflow documents open/close/relaunch runner guarantees as lifecycle facts (#1051)', async () => {
   const result = await runCliCapture(['help', 'workflow']);
   assert.equal(result.code, 0);
   assert.equal(result.calls.length, 0);
-  assert.match(result.stdout, /Guarantees:/);
-  assert.match(
-    result.stdout,
-    /auto-disambiguates deepest node first, then smallest on-screen area/,
-  );
-  assert.match(result.stdout, /Selector did not resolve uniquely/);
-  assert.match(result.stdout, /non-hittable resolution is allowed by design/);
-  assert.match(result.stdout, /targetHittable: false plus a hint/);
+  assert.match(result.stdout, /Lifecycle facts \(trust these instead of probing\)/);
+  assert.match(result.stdout, /idempotent-foreground/);
+  assert.match(result.stdout, /already owned by another agent-device daemon/);
+  assert.match(result.stdout, /Env vars: help physical-device/);
 });
 
-test('help workflow documents open/close/relaunch runner guarantees (#1051)', async () => {
-  const result = await runCliCapture(['help', 'workflow']);
+test('help physical-device documents the runner/daemon lifecycle detail moved out of workflow (#1051)', async () => {
+  const result = await runCliCapture(['help', 'physical-device']);
   assert.equal(result.code, 0);
   assert.equal(result.calls.length, 0);
-  assert.match(result.stdout, /idempotent-foreground for an already-running app/);
   assert.match(
     result.stdout,
     /one simctl launch --terminate-running-process call instead of a separate terminate-then-launch/,
@@ -155,13 +148,6 @@ test('help workflow documents open/close/relaunch runner guarantees (#1051)', as
   );
   assert.match(result.stdout, /the session held a device lease/);
   assert.match(result.stdout, /AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS/);
-  assert.match(result.stdout, /default 5 minutes/);
-});
-
-test('help workflow documents daemon idle reap and stale lease takeover guarantees', async () => {
-  const result = await runCliCapture(['help', 'workflow']);
-  assert.equal(result.code, 0);
-  assert.equal(result.calls.length, 0);
   assert.match(
     result.stdout,
     /self-exits after an idle window \(default 5 minutes, matching the runner idle-stop default\)/,
@@ -174,24 +160,29 @@ test('help workflow documents daemon idle reap and stale lease takeover guarante
   assert.match(result.stdout, /genuinely live owner whose state dir still exists still rejects/);
 });
 
-test('help workflow documents ref lifetime, snapshot diff, and wait guarantees (#1051)', async () => {
+test('help workflow documents ref lifetime and snapshot diff guarantees (#1051)', async () => {
   const result = await runCliCapture(['help', 'workflow']);
   assert.equal(result.code, 0);
   assert.equal(result.calls.length, 0);
-  assert.match(
-    result.stdout,
-    /open and open --relaunch clear the session's stored snapshot outright/,
-  );
-  assert.match(
-    result.stdout,
-    /diff snapshot compares the current capture against the session's last stored snapshot/,
-  );
-  assert.match(
-    result.stdout,
-    /initializes the baseline and reports zero additions\/removals instead of failing/,
-  );
-  assert.match(result.stdout, /polls on a fixed interval \(300ms\)/);
-  assert.match(result.stdout, /Timing out raises a command failure/);
+  assert.match(result.stdout, /open\/--relaunch clears the stored snapshot outright/);
+  assert.match(result.stdout, /initializes the baseline \(zero changes\) instead of failing/);
+});
+
+test('help scripting documents replay divergence/resume and wait polling guarantees (#1051)', async () => {
+  const result = await runCliCapture(['help', 'scripting']);
+  assert.equal(result.code, 0);
+  assert.equal(result.calls.length, 0);
+  assert.match(result.stdout, /REPLAY_DIVERGENCE with a bounded report/);
+  assert.match(result.stdout, /replay --from <n> --plan-digest <sha256>/);
+  assert.match(result.stdout, /resume never re-executes skipped steps/);
+});
+
+test('help gestures prints the multi-touch topic and skips daemon dispatch', async () => {
+  const result = await runCliCapture(['help', 'gestures']);
+  assert.equal(result.code, 0);
+  assert.equal(result.calls.length, 0);
+  assert.match(result.stdout, /^agent-device \S+ — gestures/);
+  assert.match(result.stdout, /agent-device gesture transform 200 420 80 -40 2 35 700/);
 });
 
 test('help unknown command prints error plus global usage and skips daemon dispatch', async () => {

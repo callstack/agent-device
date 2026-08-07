@@ -5,17 +5,7 @@ description: Automates Apple-platform apps (iOS, tvOS, macOS), Android devices, 
 
 # agent-device
 
-Router only. Private setup before using this skill:
-
-```bash
-agent-device --version
-```
-
-If that fails but the user may have installed `agent-device` globally, check the user's configured login/interactive shell and environment before using `npx`. Resolve the command the same way the user would from a normal terminal session, then run the absolute binary path if found. This may require inspecting shell startup behavior or package-manager/global bin locations; do not assume the Codex process `PATH` is the user's `PATH`.
-
-Require `agent-device >= 0.20.0`; older CLIs lack the current help topics and Vega OS routing. If older, stop and tell the user to upgrade the trusted install or approve an exact-version npm command. Do not run `npm install -g agent-device@latest` or `npx -y agent-device@latest` autonomously, and do not include version/upgrade commands in final plans.
-
-Before your first agent-device command or plan, read the smallest version-matched CLI guide that fits the task:
+Router only. Before your first agent-device command or plan, read the smallest version-matched CLI guide that fits the task — this single read also replaces a separate `agent-device --version` check:
 
 ```bash
 agent-device help manual-qa   # scripted/manual QA, acceptance checks, checklist execution
@@ -24,10 +14,16 @@ agent-device help dogfood     # exploratory app dogfooding and evidence collecti
 agent-device help workflow    # fallback reference for general app driving or mixed tasks
 ```
 
+That topic's first line is `agent-device <version> — <topic>` (for example `agent-device 0.21.0 — workflow`). Read the version from it instead of running `agent-device --version` separately. If the first line instead reads `agent-device help <topic>` with no version — or the command fails, or the topic is unrecognized — the installed CLI predates this header and its current help topics/Vega OS routing. Stop and tell the user to upgrade the trusted install or approve an exact-version npm command. Do not run `npm install -g agent-device@latest` or `npx -y agent-device@latest` autonomously, and do not include version/upgrade commands in final plans.
+
+If `agent-device` fails outright but the user may have installed it globally, check the user's configured login/interactive shell and environment before using `npx`. Resolve the command the same way the user would from a normal terminal session, then run the absolute binary path if found. This may require inspecting shell startup behavior or package-manager/global bin locations; do not assume the Codex process `PATH` is the user's `PATH`.
+
 Read additional topics only when relevant:
 
 ```bash
 agent-device help debugging
+agent-device help scripting      # save-script, secret-safe fills, batch JSON, replay repair
+agent-device help gestures       # multi-touch gesture shapes and platform quirks
 agent-device help react-native
 agent-device help react-devtools
 agent-device help cdp

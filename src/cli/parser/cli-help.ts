@@ -15,6 +15,7 @@ import {
   type FlagKey,
 } from '../../cli-schema/command-schema.ts';
 import { buildCommandUsage } from '../../cli-schema/usage.ts';
+import { readVersion } from '../../utils/version.ts';
 
 const AGENT_WORKFLOWS = [
   {
@@ -145,12 +146,12 @@ const EXAMPLE_LINES = [
 ] as const;
 
 const WAIT_FAILURE_CONTRACT = `Wait failure contract:
-  Read wait failures from error.details.reason in --json output; do not infer the verdict from the message.
-  wait_target_absent means at least one readable capture saw no matching target. It includes readableCaptures and waitedMs, and may include currentSurface details.
-  wait_capture_stalled means no readable capture established an observation before the deadline. It is retriable; retry or use screenshot to inspect the surface.
-  wait_deadline_exceeded means a later capture consumed the remaining budget after an earlier readable capture; it includes captureTruncated and readableCaptures.
-  wait_landmark_identity_mismatch means a replay destination guard found the selector but not the recorded target identity.
-  wait_stable_timeout means wait stable did not observe a stable UI; it is not an element-absence verdict.
+  Read the verdict from error.details.reason in --json, not the message text.
+  wait_target_absent: a readable capture ran and found no match.
+  wait_capture_stalled: no readable capture finished before the deadline -- retriable.
+  wait_deadline_exceeded: a later capture used the remaining budget after an earlier readable one.
+  wait_landmark_identity_mismatch: a replay destination guard found the selector but not the recorded identity.
+  wait_stable_timeout: wait stable never saw a stable UI -- not an absence verdict.
 `;
 
 const HELP_TOPICS = {
@@ -213,252 +214,143 @@ Focused compatibility request: ${MAESTRO_COMPATIBILITY_ISSUE_URL}`,
     summary: 'Normal agent-device bootstrap, exploration, and validation loop',
     body: `agent-device help workflow
 
-Version-matched operating guide for normal agent-device work.
-
-Core loop:
-  Start with the top-level Agent Starting Point for the default settle-first loop. This topic is the full reference for command shapes, refs, selectors, waits, recovery, and platform limits.
-  If you intentionally skip --settle or use a command that does not support it, verify a mutation with diff snapshot (or diff snapshot -i) instead of a full snapshot: it diffs the rendered snapshot lines against the previous one in this session and prints only what changed.
-  Once the task's requested end state or an explicit success confirmation is visible, stop; do not tap transient follow-up controls or navigate away only to re-verify.
+Command shapes, refs, selectors, waits, recovery, and platform limits for the default open -> snapshot -i -> settle -> verify -> close loop.
 
 Command shape:
-  Plans should use agent-device commands, not raw platform tools, pseudo commands, package-manager aliases, or helper prose.
-  If the user asks for a command plan, final output should be command lines only: no intro sentence, numbered list, Markdown fence, shell pipe, grep/head/tail helper, or explanatory bullets.
-  While exploring, do not pipe or redirect agent-device output through jq/grep/head/tail or 2>/dev/null; raw output carries refs, warnings, hints, and diagnostics needed for the next step.
-  Put subcommand first, then positionals, then flags:
-    agent-device open com.example.app --session checkout --platform android --relaunch
-    agent-device record start ./checkout.mp4 --session checkout
-  Snapshot refs look like @e12. After snapshot -i, use the exact @eN ref from that output.
-  If the exact ref is not known yet, first output snapshot -i, then use a concrete example shape like press @e12 in the next command; do not write @<ref>, @ref, @Label_Name, or @eN placeholders.
-  Close means agent-device close. App-owned back means back; system back means back --system.
-  type never accepts --settle: run agent-device type "text", then diff snapshot if verification is needed.
-  Taps are press or click; tap is an alias for press. On Android TV, tvOS, and Vega OS, read help tv and use tv-remote press up|down|left|right|select to move D-pad/remote focus before activating controls; use tv-remote longpress <button> for a held remote button. Gestures use swipe, longpress, or gesture <pan|fling|swipe|pinch|rotate|transform|drag>. Use gesture swipe left|right for reliable in-page horizontal swipes, and gesture swipe right-edge for left-edge navigation/back gestures. gesture pan is one finger by default; add --pointer-count 2 for a parallel two-finger pan. gesture drag resolves source and destination selectors or refs, then keeps one pointer down through source hold, movement, and optional destination hold. Android swipe and multi-touch gestures use provider-native touch injection when available, then the bundled touch helper. iOS simulator multi-touch uses private XCTest synthesis for a continuous two-pointer path; otherwise it reports UNSUPPORTED_OPERATION.
+  Command lines only -- no prose, numbering, fences, pipes, or grep/head/tail/jq on agent-device output; raw output carries the refs/hints the next step needs. Subcommand first, then positionals, then flags: agent-device open com.example.app --session checkout --platform android --relaunch
+  Chain confident consecutive steps with &&: press 'label="Search"' --settle && fill 'label="Search"' "query" --settle. Fall back to one command at a time when a step is uncertain (ambiguous match, network-backed result, unseen screen).
+  Refs look like @e12; use the exact ref from the latest snapshot -i, never a placeholder (@ref, @eN, @Label_Name). Pin with ~s<n> (press @e12~s4); iOS rejects a stale pinned ref -- refresh with snapshot -i or use a selector.
+  close = agent-device close. App back is back; system back is back --system. Taps are press/click. type never takes --settle: run type, then diff snapshot to verify. Known flow: batch ./steps.json (help scripting).
+  Gestures: scroll/swipe for lists/flicks; gesture pan|fling|pinch|rotate|transform|drag for multi-touch. Shapes and platform quirks: help gestures.
 
 Bootstrap:
   agent-device devices --platform ios
-  agent-device capabilities --platform android
-  agent-device apps --platform android
   agent-device open MyApp --platform ios --device "iPhone 17 Pro"
-  agent-device open <discovered-app-id> --session checkout --platform android
-  agent-device install com.example.app ./dist/app.apk --platform android
-  agent-device reinstall com.example.app ./build/MyApp.app --platform ios
-  agent-device install-from-source --github-actions-artifact org/repo:app-debug --platform android
-  agent-device open com.example.app --platform android --relaunch
-  agent-device prepare ios-runner --platform ios --timeout 240000
-  If app id is unknown, plan devices, apps, then open <discovered-app-id>. Use capabilities only when a dynamic integration needs the command names supported by the selected target; normal app-driving loops do not need it. Discovery is not enough when the task asks to open/start the app.
-  Install arguments are app/package id then artifact path. If the task says install, use install; use reinstall only when explicitly requested. Fresh runtime state is open --relaunch after install.
-  In Apple CI, run prepare ios-runner after boot/install and before replay/test. prepare ios-runner builds/reuses the XCTest runner, health-checks it with a lightweight command, and retries one stuck/non-connecting runner launch before the first snapshot pays that setup cost. It is not a recovery step for "runner already owned by another agent-device daemon"; stop the owning daemon on the Mac with simulator access instead. If the replay/test step starts a separate daemon, stop the prepare daemon before replay/test so the prepared runner does not keep a live lease owned by that daemon.
-  CI may cache ~/.agent-device/apple-runner/derived with an exact key that includes the agent-device package and Xcode version. Avoid broad restore-key fallbacks; prepare ios-runner already recovers bad restored runner artifacts and one retryable non-connecting runner launch. Runner build/start output is written to the session's runner.log; daemon.log is for daemon lifecycle/startup issues.
-  Do not open artifact paths or invent package ids. If apps lookup misses the target and no URL/artifact is provided, ask or stop.
+  Install arguments are app/package id then artifact path: agent-device install com.example.app ./dist/app.apk --platform android, then open <id> --relaunch for fresh state. Use reinstall only when explicitly requested.
+  Unknown app id: devices, then apps, then open <discovered-app-id>. Never open artifact paths or invent package ids; ask if lookup misses the target.
+  Apple CI: prepare ios-runner after boot/install, before replay/test (help prepare). Remote/cloud: connect -> open -> commands -> close -> disconnect (help remote). Reusable scripts, secret-safe fills, replay repair: help scripting.
+
+Snapshots and refs:
+  snapshot reads visible state; snapshot -i gets current interactive refs only -- the fast path before an interaction. Default text is agent-facing and token-efficient; --raw/--json only for the full provider tree.
+  Legend: @e12 [button] label="Add to cart" enabled hittable -> press @e12. [off-screen below] -> scroll down (a hint, not a ref).
+  Refs stay valid until you press/click/fill/type/scroll/back/wait-for-async-UI, or otherwise change app state; open/--relaunch clears the stored snapshot outright.
+  Prefer --settle and continue from its settled diff when it shows the next target; refresh with snapshot -i only when you did not settle, settle reported not settled, or its output lacks what you need. A known selector/label after a mutation is often enough, since interaction commands refresh state internally.
+  Truncated preview: snapshot -s @ref, not get text. Missing target in a list: scroll down/up (not bottom/top unless the task wants the edge), then snapshot -i. TV/D-pad focus: help tv.
+
+Selectors:
+  id="field-email", label="Allow", role=button label="Search" -- not bare role keys (button="Search"); no CSS selectors/--selector/--text/raw x-y when refs/selectors exist.
+  Multiple matches do not fail by default: resolves deepest node first, then smallest on-screen area; only an exact tie on both fails ("Selector did not resolve uniquely"). Add id="..." or more specific text to force a different match.
+  hittable: false on a resolved element does not block dispatch (iOS AX flags are unreliable on deep RN trees); press/fill/click return targetHittable: false plus a hint -- verify or re-target, not a failure.
+
+Text entry:
+  fill replaces; type appends to an already-focused field: fill 'id="field-email"' "qa@example.com"; type "Handle with care" --delay-ms 80
+  Empty replacement is not a clear-field command (do not plan fill <target> ""); use a visible clear/reset control, or report the gap.
+  Plain fill/type first; if an iOS debounced/search-as-you-type field drops characters, retry with --delay-ms before clipboard paste.
+  The keyboard usually does not block interactions -- press the next target directly. keyboard dismiss taps its own dismiss key when one exists, else UNSUPPORTED_OPERATION. Android: try dismiss before back. iOS: when both fail, do not tap a static text/heading hoping it is safe; prefer type "\\n" to submit.
+  iOS paste-prompt limits and Android IME/handwriting capture quirks: help debugging.
+
+Session ordering:
+  Stateful commands (open/press/fill/type/scroll/back/alert/replay/batch/close) run serially within one session. Parallelize only read-only commands, or separate sessions/devices.
+
+Read-only and waits:
+${WAIT_FAILURE_CONTRACT}
+  snapshot/get/is/find answer read-only questions; snapshot -i only when refs are needed. --settle confirms local UI quieted; for results that arrive later (network/debounce), follow with wait text "Expected result" or wait <selector> instead of polling.
+  wait stable [quietMs] [timeoutMs] (defaults 500/10000) is the fallback for open/relaunch/navigation, or an intentionally-unsettled mutation -- not after a --settle whose diff already shows the change. Ambiguous find: add --first or --last.
+
+Navigation:
+  Pick a coordinate gesture point near the target's center, away from edges/tab bars/nav bars/the home indicator (they trigger system navigation instead); macOS context menus are secondary clicks (help macos). Action sheets/menus/camera screens are normal UI: snapshot -i, press by label/ref, handle permission sheets via UI/alert. If back is ambiguous, prefer a nav/back ref, tab-bar ref, or deep link over repeating it.
+
+Validation and evidence:
+  Nearby mutation diff: diff snapshot -i; with no prior snapshot it initializes the baseline (zero changes) instead of failing.
+  Named expectations need the exact text/selector via wait/is/get/find -- a bare screenshot/snapshot is not verification. Before declaring a task done, confirm the requested end state is actually visible on the current screen, scrolling it into view if needed; get text alone, or stopping one screen early, is not enough.
+  When an action only reveals or reaches a target, verify the exact target named, not just the action. Prefer testIDs/ids/selectors over visible text. Icon/tappable proof: screenshot --overlay-refs; if snapshot is sparse/AX-unavailable, use plain screenshot and coordinates, then retry snapshot -i on another screen.
+  Perf/memory/log/network/trace/crash: help debugging. Recording, save-script, batch, replay repair: help scripting.
+
+React Native: help react-native for Metro/Re.Pack reload, DevTools, RN overlays. JS-only change: metro reload, find "Home"; open --relaunch for native reset.
+
+Lifecycle facts (trust these instead of probing): open without --relaunch is idempotent-foreground; --relaunch restarts it. close keeps a healthy iOS runner warm by default; runners and daemons both self-idle after 5 minutes, and a stale lease reclaims automatically -- a live owner still rejects with "already owned by another agent-device daemon". Env vars: help physical-device.
+
+Escalate:
+  help manual-qa scripted manual QA
+  help dogfood exploratory QA report
+  help validate engineering self-validation
+  help debugging logs, network, alerts, traces, text-entry
+  help scripting recording, save-script, batch, replay repair
+  help gestures multi-touch gesture shapes/quirks
+  help tv Android TV, tvOS, Vega VVD remote
+  help react-devtools RN perf/profiling, hooks, renders
+  help react-native RN hazards, Metro/Re.Pack, routing
+  help remote remote/cloud config, lease, tunnels
+  help macos desktop, frontmost-app, menu bar
+  help web minimal browser loop
+  help ios-system-ui SpringBoard, widget, system-UI`,
+  },
+  scripting: {
+    summary: 'Reusable scripts, secret-safe fills, batch JSON, and replay repair',
+    body: `agent-device help scripting
+
+Use this for reusable .ad script authoring (save-script), scripted destination guards, secret-safe fills, batch multi-step JSON, replay divergence/repair, and evidence recording.
 
 Reusable open-to-destination scripts:
-  Arm recording on the first open, perform the full journey, verify the ready destination with a selective selector-targeted wait, then publish without closing:
+  Arm recording on the first open, perform the full journey, verify the destination with a selector-targeted wait, then publish without closing:
     agent-device open com.example.app --relaunch --save-script=screen-x.ad
     agent-device press 'id="continue"' --settle
     agent-device wait 'role="heading" label="Screen X"'
     agent-device session save-script
-  session save-script [path] [--force] publishes the sole recorded open through the destination guard, omits close, and leaves the session active. The guard is a selector wait on a labeled or id-bearing landmark: its recorded identity is captured while armed, and replay verifies that identity after the wait's selector resolves, so a reshuffled screen with the same label elsewhere fails closed instead of false-passing. A duration wait, wait stable, wait @ref, or a selector wait on an unlabeled element is not a destination guard. A second successful open aborts publication; start a fresh session to author again.
-  Unparameterized fill/type inputs are literal .ad script content. For a sensitive fill, arm recording first, keep the live value in an environment variable, and name its replay placeholder explicitly:
+  session save-script [path] [--force] publishes the sole recorded open through the destination guard, omits close, and leaves the session active. The guard is a selector wait on a labeled/id-bearing landmark: its identity is captured while armed and re-verified after the wait resolves at replay time, so a reshuffled screen with the same label elsewhere fails closed instead of false-passing. A duration wait, wait stable, wait @ref, or a selector wait on an unlabeled element is not a destination guard. A second successful open aborts publication; start a fresh session to author again.
+  Unparameterized fill/type inputs are literal .ad script content. For a sensitive fill, arm recording first, keep the live value in an env var, and name its replay placeholder explicitly:
     export AD_VAR_PASSWORD='<secret>'
     agent-device fill 'id="password"' "$AD_VAR_PASSWORD" --record-as PASSWORD
-  The live app receives the value, while recording state and the published script contain only \${PASSWORD}. Reuse the same name for repeated values and choose distinct names for distinct inputs. --record-as accepts uppercase replay variable names, is fill-only, requires an armed recording, and cannot be combined with --no-record.
-  Publish with session save-script, then replay with AD_VAR_PASSWORD still set or pass --env PASSWORD=<value>. A missing value fails before that fill runs. Do not record passwords, tokens, or other secrets without --record-as; their literal text will be written to the .ad target.
+  The live app receives the value; recording state and the published script contain only \${PASSWORD}. Reuse the same name for repeated values; --record-as is fill-only, requires an armed recording, and is mutually exclusive with --no-record. Replay with AD_VAR_PASSWORD still set, or pass --env PASSWORD=<value>. Do not record passwords/tokens without --record-as; their literal text is written to the .ad target.
 
-Snapshots and refs:
-  snapshot reads visible state. snapshot -i gets current interactive refs only; it is the fast path when the next step is an interaction.
-  Default snapshot text is an agent-facing, token-efficient view for planning and targeting actions; use --raw or --json only when you need the full provider tree.
-  Snapshot legend:
-    @e12 [button] label="Add to cart" id="add-cart" enabled hittable -> press @e12 or press 'id="add-cart"'.
-    @e13 [textinput] label="Notes" preview="Leave at side..." truncated -> snapshot -s @e13 before reading.
-    @e14 [cell] label="Profiles" focused -> tvOS focus is currently on this row.
-    [off-screen below] 4 items: "Privacy", "About" -> scroll down, then snapshot -i; those are hints, not refs.
-  For press/fill/click/longpress, prefer --settle and continue from its settled diff when it exposes the next target or evidence. Refresh with snapshot -i only when you did not settle, settle printed not settled, or the settle output lacks what you need.
-  Anti-pattern: snapshot -i followed by snapshot -i | grep ..., or adding 2>/dev/null | jq ... before reading the raw command output.
-  Refs from the first snapshot remain valid until you press, click, fill, type, scroll, go back, wait for async UI, or otherwise change app state.
-  Pinned refs (@e12~s4, generation from refsGeneration or settle.refsGeneration) identify their source tree. On iOS, stale refs are rejected for press/fill/click/longpress before dispatch; refresh with snapshot -i or use a stable selector. Read-only commands report a staleness warning, and other platforms retain their existing warning behavior.
-  After a mutation, prefer a known selector/label directly (for example press 'label="Send"') because interaction commands refresh interactive state internally. A settled diff with no added refs (for example a modal dismiss) also lists an "unchanged interactive" tail of still-present refs, so check that before falling back. If you need to discover a new control not shown by settle or its tail, use snapshot -i, or snapshot -i -s "Composer" when a stable container label/id can scope the refresh.
-  If typing/fill opened the keyboard or changed layout and the next target has no stable selector, run snapshot -i, use the fresh ref, then verify with wait/find or diff snapshot -i.
-  For a targeted query, use find/get/is. If you truly need the full tree again, pass --force-full.
-  Off-screen summaries are scroll hints; use scroll, not swipe, then snapshot -i.
-  Missing target in a long list: use a short manual scroll + snapshot loop with a max attempt count. If a named target is summarized as off-screen below/above, use scroll down/up, then snapshot -i; do not use scroll bottom/top because the target may appear before the absolute list edge. Use scroll bottom/top only when the task explicitly asks for the list edge. Edge scrolls verify hidden content with snapshots and stop when no matching hidden content remains.
-  Truncated text/input previews: do not use get text first; expand with snapshot -s @ref (for example snapshot -s @e7), then read the scoped output.
-  Rare iOS accessibility gaps: if a row ref is shown disabled/hittable:false and press @ref reports success but no UI change, or a horizontal tab/filter bar is collapsed into one composite/seekbar with no child refs, run agent-device snapshot -i --json to read rects, compute the target center, press x y, then diff snapshot -i. Coordinates are fallback-only; document why you used them.
-  TV focus gaps: read help tv. If a fresh snapshot exposes focused nodes, verify with is focused <selector>; use wait focused=true only on apps where repeated snapshots preserve focus metadata. If the app exposes only a surface view or focus metadata is transient, use screenshot/snapshot diff as visual truth and tv-remote press directions/select; do not switch to raw adb keyevent in command plans.
+Replay divergence and repair:
+  A failing replay/test step returns REPLAY_DIVERGENCE with a bounded report (screen digest, ranked selector suggestions, resume). Fix app state, then resume with replay --from <n> --plan-digest <sha256> (both from the report's resume field) to continue without re-running earlier steps; resume never re-executes skipped steps, so app state there is the caller's responsibility. --from is replay-only; test rejects it. The digest binds the script, includes, effective --platform/--target, and per-action runtime/identity; native .ad interpolation is late-bound so changing only its values keeps the digest, while Maestro environment substitution can change it.
+  Native .ad session takeover: replay <file>.ad --keep-session suppresses exactly an authored terminal close and returns the surviving session for continued commands. --update/-u is a no-op (ADR 0012); every divergence already carries the same ranked suggestions.
+  Agent-supervised repair: arm replay <file>.ad --save-script[=<out>] before step 1 (armed once; --from continuations do not need it again). Every divergence carries a repairHint: record-and-heal means press the correct control via a blessed @ref from the divergence's screen.refs, recorded, then replay --from <n+1> --plan-digest <sha256>; state-repair means the script is correct but app state is not -- fix state with --no-record actions, then replay --from <n> to re-run the unchanged step; caution means a blind re-press may repeat the mistake; manual means no safe automated repair could be proven. Read-only inspection you run to locate the repair target (snapshot -i, get attrs, find, is) is excluded from the healed script by default; pass --record on a read step you want kept. End the repair with close --save-script[=<out>] (default <stem>.healed.ad); review its diff before promoting it over the original. Running close --save-script before a required resume aborts the repair with no script written.
 
-Selectors:
-  Use selectors as positional targets: id="field-email" or label="Allow".
-  Selector terms are key=value filters such as id="submit", label="Search", text="Search", or role=button label="Search". Do not write role names as keys, such as button="Search"; use role=button label="Search" or the @ref from the latest snapshot/settle diff.
-  Do not use CSS selectors, pseudo refs, --selector, --text, or raw x/y when refs/selectors exist.
-    agent-device fill 'id="catalog-search"' "tart" --delay-ms 80
-    agent-device press 'id="submit-order"'
-    agent-device is visible 'label="Online"'
-    agent-device get text 'id="quantity-value"'
-  Ambiguous selector disambiguation: a selector on an interactive command (press/click/fill/focus/longpress/scroll/swipe/pinch) that matches multiple elements does not fail by default. It auto-resolves deepest node first (largest depth in the tree), then smallest on-screen area; only an exact tie on both depth and area fails with "Selector did not resolve uniquely". replay's suggestion re-resolution (in a divergence report) applies the same depth-then-area policy for touch/fill/get-text, so recorded flows and live commands pick the same candidate. This exists because short/reused labels (tab + header + button with the same text, or a duplicated list-row label) are common in real apps; add id="..." or a longer/more specific text to force a different match instead of assuming ambiguous selectors always fail.
-  Selector match can still land on a non-interactive node (for example an off-screen map annotation that exact-matches text= while the real control has a longer label). Success responses for press/fill/click/ref targets carry targetHittable: false and a hint when the resolved element reports hittable: false, since the tap may have had no visible effect; treat that as a signal to verify with a snapshot or re-target by @ref/longer text, not as a command failure.
-
-Text entry:
-  fill replaces; type appends to focused field.
-    agent-device fill @e5 "qa@example.com"
-    agent-device fill 'id="field-email"' "qa@example.com"
-    agent-device press 'id="product-note"'
-    agent-device type "Handle with care" --delay-ms 80
-  Empty replacement is not a supported clear-field command: do not plan fill <target> "" or fill <target> ''. Prefer a visible clear/reset control; if the app exposes none, report the tool gap instead of inventing a clear command.
-  Debounced field with no result selector: agent-device wait 1000. Keyboard read-only: keyboard status/get. The on-screen keyboard usually does not block agent-device interactions; press the next target directly instead of dismissing. If that press fails or reports no visible effect, scroll the target into view or use keyboard enter when submission is wanted.
-  Only dismiss the keyboard when hiding it is the actual goal. To hide the keyboard, use keyboard dismiss. It taps the keyboard's own dismiss/hide key when one is exposed (common on iPad, rare on iPhone) and verifies the keyboard closed. When no dismiss key exists it reports UNSUPPORTED_OPERATION rather than tapping elsewhere — no tap outside the keyboard can be proven side-effect-free. Then prefer submitting (type "\n" on single-line fields) or pressing a known on-screen control that does not mutate state.
-  On iOS, if it still returns UNSUPPORTED_OPERATION, both mechanisms were exhausted: do not assume a static text or heading is safe to press, because it can belong to a tappable parent. Use an app-provided dismiss control only when its action is explicitly intended; otherwise report that keyboard dismissal is unavailable.
-  On Android, keyboard dismiss first avoids navigation. If it returns UNSUPPORTED_OPERATION because the current IME needs back navigation, use back only when normal back behavior is acceptable; otherwise report that keyboard dismissal is unavailable.
-  Use plain fill/type first for ordinary login and form fields. If an iOS debounced or search-as-you-type field actually drops characters, or must receive incremental updates, retry with --delay-ms before trying clipboard paste; --delay-ms intentionally paces character entry.
-  iOS Allow Paste prompt cannot be exercised under XCUITest. To test paste-driven app behavior, prefill first with agent-device clipboard write "some text"; test the system prompt manually.
-  Android Gboard handwriting/stylus UI can capture text in an IME-owned input instead of the app field. If fill reports that input was captured by the keyboard/IME, use the diagnostic targetInput/actualInput details, inspect keyboard status/get if needed, and switch or disable handwriting outside the command plan before retrying. Do not keep retrying fill/type against the same field while the IME owns focus.
-  Android text entry is owned by agent-device: provider-native text injection when available, else the bundled test IME helper (emulators activate it automatically; real devices need open --test-ime), else chunk-safe ASCII shell input. Do not switch to raw adb, clipboard, or paste as an agent fallback. If non-ASCII text still fails, report the tool/device gap.
-
-Session ordering:
-  Stateful commands within one session must run serially. Do not run open/press/fill/type/scroll/back/alert/replay/batch/close commands in parallel against the same session.
-  It is fine to parallelize independent read-only collection or commands that use different sessions/devices.
-
-Read-only and waits:
-${WAIT_FAILURE_CONTRACT}
-  Read-only visible/state question: use snapshot/get/is/find.
-  agent-device snapshot
-  agent-device get text 'id="product-title"'
-  agent-device get attrs @e4
-  agent-device is visible 'label="Online"'
-  agent-device wait text "Refreshing metrics..." 3000
-  agent-device wait 'label="Ready"' 3000
-  agent-device wait stable
-  agent-device wait stable 500 10000
-  For network-backed search/typeahead, --settle confirms the local UI quieted after fill/press; use wait text "Expected result" or wait <result selector> for server-loaded content that can arrive later.
-  agent-device find "Increment" press --json
-  For async/list text presence, prefer wait text over is visible when no interaction is needed.
-  wait stable [quietMs] [timeoutMs] (defaults 500/10000) is a fallback for open/relaunch/navigation, unsupported mutating commands, or a mutation where you intentionally did not use --settle. Do not insert wait stable after press/fill/click/longpress --settle when the settled diff already shows what changed. wait stable polls the interactive-only tree and resolves once two or more consecutive captures are unchanged for quietMs, or fails with the standard wait-timeout shape plus capture stats (captures, nodeCount).
-  Use snapshot -i only when refs are needed for an action or targeted query.
-  Ambiguous find: add --first or --last. If info is not visible/exposed, report that gap instead of typing/searching/navigating to reveal it.
-
-Navigation and gestures:
-  Use scroll for lists; swipe for quick coordinate gestures/carousels; gesture pan for deliberate timed drags; gesture fling for fast directional throws.
-  For fast macOS desktop list traversal, prefer fixed pixel wheel steps and batch them when no snapshot is needed between passes:
-    agent-device scroll down --pixels 200 --duration-ms 50 --platform macos
-    agent-device batch --steps '[{"command":"scroll","input":{"direction":"down","pixels":200,"durationMs":50}},{"command":"scroll","input":{"direction":"down","pixels":200,"durationMs":50}}]' --platform macos
-  For raw coordinate gestures, run snapshot -i first and choose a point near the center of the intended app-owned target. Avoid screen edges, tab bars, navigation bars, and home indicators because those areas can trigger system or app navigation instead of the gesture under test.
-  If app-owned back is ambiguous or has just misrouted, prefer a visible nav/back button ref, tab-bar ref, or deep link over repeated back/system back.
-  App-owned action sheets, menus, and camera/scan screens are normal UI. After opening one, run snapshot -i or wait for the option, press by label/ref, handle visible permission sheets through UI or platform-supported native alerts, then wait for a concrete result before returning to chat/form state.
-  Keep count/pause/pattern on one swipe; flags are --count, --pause-ms, --pattern ping-pong. Count is capped at 200, pause at 10000ms, and the combined swipe/pause schedule at 60000ms.
-  For repeated iOS gesture smoke checks, use press <x> <y> --count <n> --jitter-px <n> for tap series and swipe <x1> <y1> <x2> <y2> --count <n> for drag series.
-  longpress accepts coordinates, @refs, or selectors. Prefer @ref/selector from snapshot -i; use coordinates only as a fallback when accessibility refs miss the exact target. Duration and gesture scale/center are positional:
-    agent-device longpress 300 500 800
-    agent-device longpress @e12 800
-    agent-device swipe 320 500 40 500 --count 8 --pause-ms 30 --pattern ping-pong
-    agent-device gesture pan 200 420 0 -80 500
-    agent-device gesture pan 200 420 80 -40 700 --pointer-count 2
-    agent-device gesture fling right 200 420 180
-    agent-device gesture pinch 0.5 200 400
-    agent-device gesture rotate 35 200 420
-    agent-device gesture transform 200 420 80 -40 2 35 700
-  iOS simulator transform uses private XCTest synthesis for a continuous two-finger pan/scale/rotation path; verify app metrics instead of assuming requested values map exactly to recognizer output.
-  Android transform injects a geometric two-finger path; app recognizers may report non-exact pan/scale/rotation. For Android combined transforms, verify semantic app state or coarse per-component effects instead of exact numeric deltas unless the app explicitly exposes stable metrics.
-    agent-device gesture transform 200 420 80 -40 2 35 700 --platform android
-    agent-device wait text "pan changed yes" 3000 --platform android
-    agent-device wait text "pinch changed yes" 3000 --platform android
-    agent-device wait text "rotate changed yes" 3000 --platform android
-  If Android needs exact app-state values, prefer isolated gesture pan --pointer-count 2, gesture pinch, or gesture rotate commands over one combined transform.
-  Gesture planning prefers the active-app frame. A backend without a gesture viewport resolver falls back to the visible snapshot union, which can be less accurate near edges.
-  tvOS coordinate pan and fling preserve only the dominant direction as a remote swipe; authored endpoints and duration are not preserved.
-  macOS context menus are secondary clicks, not long presses:
-    agent-device click @e66 --button secondary --platform macos
-    agent-device snapshot -i --platform macos
-
-Validation and evidence:
-  Nearby mutation diff: agent-device diff snapshot -i.
-  Expected text/selector verification must include the exact text or selector via wait, is, get, or find; bare screenshots/snapshots are insufficient for named expectations.
-  When an action is only a means to reveal or reach an expected target, do not stop at the action itself. Follow it with exact target verification using the id, selector, or text named by the task.
-  Prefer provided testIDs/ids/selectors for verification; use visible text when no durable selector is provided.
-  If task says snapshot, use snapshot. If it asks visual evidence, use screenshot.
-  Icon/tappable visual proof: screenshot --overlay-refs. Flag is --overlay-refs.
-  If snapshot returns a sparse/AX-unavailable state, refs are not reliable. Use plain screenshot, not screenshot --overlay-refs, navigate with coordinates if needed, then retry snapshot -i after reaching another screen; the AX failure may be screen-specific.
-    agent-device screenshot
-    agent-device press 124 817
-    agent-device snapshot -i
-  Startup/CPU/memory/frame first pass: perf metrics --json (bare perf and metrics are aliases). Focused frame/jank health: perf frames --json. Memory-only sample: perf memory sample --json returns compact JSON with bounded top offenders. Heap/memgraph artifact escalation: perf memory snapshot --out heap.artifact; use --kind android-hprof on Android or --kind memgraph on supported Apple simulator/macOS app sessions. Android native profiling: perf cpu profile start|stop|report --kind simpleperf --out <path>; Android native traces: perf trace start|stop --kind perfetto --out <path>. Artifact collectors return compact state/path/size metadata only; raw heap/profile/trace files stay on disk. Treat native perf output as the agent evidence: for example, a Perfetto stop can return state=stopped, outPath=/tmp/app.perfetto-trace, sizeBytes=5392410, and method=adb-shell-perfetto while the 5.3 MB raw trace stays in the artifact. This is better than raw dumps for agents because it is stable, bounded, and keeps large artifacts out of context. heapprofd is deferred until Perfetto plumbing is available. Replay divergence and resume: a failing replay/test step returns REPLAY_DIVERGENCE with a bounded report (screen digest, ranked selector suggestions, resume). Repair app state, then resume with replay --from <n> --plan-digest <sha256> (both from the report's resume field) to continue from the failed step without re-running earlier ones; resume never re-executes skipped steps, so app state is the caller's responsibility, and it is rejected with INVALID_ARGS when the plan digest is stale, --from is out of range, or the skipped range/target touches runtime control flow. The plan digest binds the script, its includes, the effective --platform/--target, and per-action runtime/identity. Native .ad interpolation is late-bound after planning, so changing only its values keeps the digest; Maestro environment substitution occurs during compatibility parsing and can change action inputs, includes, or control expansion, so it can change the digest. --from is replay-only; test rejects it. Native .ad session takeover: replay <file>.ad --keep-session suppresses exactly an authored terminal close and returns the surviving session for continued commands; interior closes still run, close-less scripts are unchanged, and test/Maestro reject the option. --update/-u no longer rewrites the script (ADR 0012) — it is a no-op kept for compatibility; every divergence already carries the same ranked suggestions. Agent-supervised repair (heal-by-doing): arm replay <file>.ad --save-script[=<out>] before step 1 (armed once; --from continuations do not need it again). Every divergence carries a repairHint: record-and-heal means press the correct control via a blessed @ref from the divergence's screen.refs, recorded (no --no-record), then continue with replay --from <n+1> --plan-digest <sha256>; state-repair means the script is correct but app state is not, so fix state with --no-record actions, then replay --from <n> --plan-digest <sha256> to re-run the unchanged step; caution means something already matches the recorded selector, so a blind re-press may repeat the mistake; manual means no safe automated repair could be proven. (If close --save-script is run before a required resume, the repair is aborted and no script is written). While armed, read-only inspection YOU run to locate the repair target (snapshot -i, get attrs, find, is) is excluded from the healed script by default — no --no-record needed; the script's own authored get/is/find steps are unaffected and stay in the heal. If the step you are repairing is itself a read, pass --record on that one command so it lands in the heal (--record is accepted only on snapshot/get/is and a read-only find; it is mutually exclusive with --no-record). Ending the repair with close --save-script[=<out>] writes only the steps recorded since the arming replay as <out>, defaulting to the <file> sibling <stem>.healed.ad — review its diff before promoting it over the original.
-  Recording: record start/stop. The default scope is app and expects an active session created by open <app>; this keeps app proof videos tied to the intended app session. Use record start --scope device/system to explicitly request whole-screen capture where the selected backend supports it, such as recordings that intentionally span multiple apps, home screen, settings, or app transitions. Use --quality medium|high to choose output quality across Android and Apple targets. By default, stop burns touch overlays into the video; use record start --hide-touches for the fastest raw recording. Android record start publishes a durable device manifest. Android adb screenrecord has a 180s platform limit, so longer Android recordings are returned as multiple MP4 chunks while the daemon stays alive; after daemon restart, record stop recovers only manifest-owned chunks and warns when gesture overlays are unavailable. For gesture-heavy iOS simulator proof videos, prefer --hide-touches because overlay timing depends on a stable runner session while gestures are executing. Tracing: trace start ./trace.log, trace stop ./trace.log. Paths are positional.
-  Stable known flow: batch ./steps.json, not workflow batch.
-  Inline batch JSON example:
-    agent-device batch --steps '[{"command":"open","input":{"app":"settings"}},{"command":"wait","input":{"kind":"duration","durationMs":100}}]'
-  Batch step keys are command, input, and optional runtime. Put command arguments inside input using the same fields as the MCP/Node command. CLI still accepts legacy positionals/flags steps with a deprecation warning until the next major version.
-  Never use args, step positionals, or flags for new batch JSON; put command inputs under input.
-  Android animations: settings animations off/on, not animations disable/restore.
-  Debug logs: logs clear --restart, logs mark, reproduce, then logs path; do not split clear/restart into separate stop/start commands.
-  Network headers: network dump --include headers; do not write network log headers.
-  Remote lifecycle: cloud, remote-config, direct proxy, and limrun use the same flow: connect, open, commands, close, disconnect.
-  Remote config profile: agent-device connect --remote-config ./remote-config.json; then run normal commands and disconnect.
-  Direct proxy to a Mac you control: cloud/Linux clients can use local/proxy iOS devices through the proxied Mac. Run agent-device connect proxy --daemon-base-url <proxy-agent-device-url> first. Device leases are automatic on open and expire after five minutes of inactivity.
-  Web: agent-device uses a managed, pinned agent-browser backend as an implementation detail. Use --platform web when a browser step belongs inside an agent-device session, replay, batch, MCP, or typed-client flow; use agent-browser directly for standalone web automation. Run agent-device web setup before first use, then agent-device web doctor for backend health checks. Web automation requires Node 24+. For audio probe start, the first timing positional is duration in seconds and the second is bucket size in milliseconds. On web, audio probe samples HTML media elements, and URL-backed media may be routed through the probe AudioContext while observed. On macOS hosts, audio probe samples host system audio through ScreenCaptureKit for macOS sessions, iOS simulators, and Android emulators; Screen Recording permission is required.
-    agent-device web setup
-    agent-device web doctor
-    agent-device open https://example.com --platform web
-    agent-device snapshot -i --platform web
-    agent-device get text @e2 --platform web
-    agent-device is visible 'label="Welcome"' --platform web
-    agent-device find text "Welcome" exists --platform web
-    agent-device click @e12 --platform web
-    agent-device fill @e13 "qa@example.com" --platform web
-    agent-device wait text "Welcome" 3000 --platform web
-    agent-device record start ./artifacts/web-flow.webm --platform web
-    agent-device network dump 25 --include headers --platform web
-    agent-device audio probe start 10 1000 --platform web
-    agent-device screenshot ./artifacts/web-home.png --platform web
-    agent-device screenshot ./artifacts/web-full.png --platform web --fullscreen
-    agent-device viewport 1280 900 --platform web
-    agent-device record stop --platform web
-    agent-device close --platform web
-  Minimal web support is for browser sessions with open, snapshot, find, get, is, click/press, fill/type, wait, network dump, audio probe, screenshot, record start/stop with WebM output, close, and replay over those commands. Use agent-browser directly for browser-specific features that agent-device does not surface, such as tab/devtools management, advanced page scripting, network routing/HAR, or raw browser debugging.
-  macOS menu bar: open ... --platform macos --surface menubar; snapshot -i --platform macos --surface menubar.
-  Host audio: audio probe start 10 1000 --platform macos|ios|android samples host system audio through ScreenCaptureKit for macOS sessions, iOS simulators, and Android emulators on macOS hosts; grant Screen Recording permission first.
-  Maestro full-suite validation on explicit connected devices uses one test command with a comma-separated --device list and --shard-all. Use --shard-split only when splitting suite entries across devices:
+Batch:
+  agent-device batch --steps '[{"command":"open","input":{"app":"settings"}},{"command":"wait","input":{"kind":"duration","durationMs":100}}]'
+  Step keys are command, input, and optional runtime; put command arguments inside input using the same fields as the MCP/Node command. Legacy positionals/flags steps still work with a deprecation warning. Never use args, step positionals, or flags in new batch JSON.
+  Maestro full-suite validation on connected devices uses one test command with a comma-separated --device list and --shard-all (--shard-split only to split suite entries across devices):
     agent-device test ./e2e/maestro --maestro --device udid1,emulator-5554 --shard-all 2
 
-React Native dev loop:
-  JS-only change with Metro or Re.Pack connected:
-    agent-device metro reload
-    agent-device find "Home"
-  Do not use agent-device reload. Use open --relaunch for native startup reset.
-  React Native apps: use help react-native for Metro/Re.Pack Fast Refresh, DevTools routing, and RN-specific blockers; use react-native dismiss-overlay for LogBox/RedBox overlays.
-  Android RN/Expo/Re.Pack dev server: direct Android URL opens to localhost/127.0.0.1/[::1] with a port auto-configure host reachability. Manual adb reverse tcp:<port> tcp:<port> is only needed for app/package launches or unsupported flows where the app cannot reach the local dev server.
-  Expo Go is a host shell. Use a provided project URL instead of inventing a bundle id; if no URL is provided but a target/app name is provided, open that target and do not inspect project files to find one. On iOS, prefer host + URL when the host shell is known because direct URL open can report success while leaving the runner/shell focused; verify with snapshot -i after opening:
-    agent-device open "Expo Go" exp://127.0.0.1:8081 --platform ios
-    agent-device snapshot -i --platform ios
-  If recovery follows a runner/shell splash screen, use snapshot -i --platform ios; do not substitute plain snapshot or snapshot --diff.
-  There is no open-url command; use open with the URL target or host + URL form.
-  Direct iOS URL open remains valid when no host shell is known, but verify that the app UI loaded:
-    agent-device open exp://127.0.0.1:8081 --platform ios
-  Android uses the URL target directly; do not write open <app> <url> there:
-    agent-device open exp://127.0.0.1:8081 --platform android
-  Android URL/deep-link opens infer the foreground package after launch when possible, so logs/perf can remain package-bound. If perf still says no package is associated, open the host package/app id first, then open the URL in the same session.
-  If apps lookup misses the project but shows Expo Go/dev-client and a project URL is available, open the URL/host shell; if no URL is available, ask instead of inventing an app id.
-  Expo Dev Client/development builds: open the installed dev-client app id/name; if a dev-client URL is provided, open that URL next. For Expo setup use metro prepare --kind expo.
-  Re.Pack/Rspack apps: use metro prepare --kind repack, or rely on auto-detection when @callstack/repack is in the selected package.json. The command name remains metro for compatibility, but prepare/reload use the shared React Native dev-server /status, /reload, and bundle URL protocol. prepare runs react-native rspack-start when rspack.config.* exists, and react-native webpack-start when webpack.config.* exists.
-  Module Federation super-apps: treat the native host and each JS-only remote as separate dev-server endpoints. Prepare or reload the host/root with its port, and pass a remote's --bundle-url or --metro-port when you need to target that remote's Re.Pack server.
+Recording:
+  record start/stop. Default scope is app (needs an active open session); use --scope device/system for whole-screen capture spanning multiple apps/home/settings. --quality medium|high on Android and Apple targets. stop burns touch overlays into the video by default; --hide-touches skips that for the fastest raw recording, and is recommended for gesture-heavy iOS simulator proof videos since overlay timing depends on a stable runner session. Android adb screenrecord has a 180s limit, so long Android recordings return as multiple MP4 chunks while the daemon stays alive; after a daemon restart, record stop recovers only manifest-owned chunks.
+  Tracing: trace start ./trace.log, trace stop ./trace.log (path is positional, not --path).`,
+  },
+  gestures: {
+    summary: 'Full multi-touch gesture shapes and platform quirks',
+    body: `agent-device help gestures
 
-Guarantees:
-  Statements of fact for agents to reason from without probing them via trial commands. Each is backed by source in the agent-device repo; behavior changes land with an updated statement here.
-  Selector ambiguity: a selector on an interactive command that matches multiple elements does not fail by default. Resolution auto-disambiguates deepest node first, then smallest on-screen area; only an exact tie on both fails with "Selector did not resolve uniquely (...)". replay's suggestion re-resolution applies the same depth-then-area policy, so recorded and live commands pick the same candidate.
-  Hittability: iOS AX hittable:false on a resolved node does not block resolution or fail the command; non-hittable resolution is allowed by design because iOS AX hittable flags are unreliable on deep React Native trees. press/fill/click success responses carry targetHittable: false plus a hint when the resolved ref or selector target reports hittable: false, so treat that as a signal to verify with a snapshot or re-target, not as a failure.
-  Open: on iOS, open <app> without --relaunch dispatches a plain simctl launch, which is idempotent-foreground for an already-running app (it brings the process forward; it does not restart it). open --relaunch restarts the app; on iOS simulators (not real devices or macOS) this collapses to one simctl launch --terminate-running-process call instead of a separate terminate-then-launch, so relaunch is a single step there.
-  Close and runner retention: close keeps a healthy iOS simulator XCTest runner warm by default so the next open on that device skips the runner build, unless --shutdown was requested, the session was recording, the session held a device lease, or the device used a scoped (non-default) simulator set — any of those tear the runner down on close. A retained runner auto-stops after an idle window (default 5 minutes) to release the device's runner lease for other daemons; set AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS to override the window, or 0 to disable idle stop and retain until daemon exit.
-  Daemon lifetime and stale lease takeover: each AGENT_DEVICE_STATE_DIR runs its own daemon. It self-exits after an idle window (default 5 minutes, matching the runner idle-stop default) once it has no open sessions, no in-flight requests, and no active recording; an open session always blocks this even if quiet for minutes between commands. Set AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS to override the window, or 0 to disable idle reap and run until killed. A stale iOS runner lease — its owner process dead, or its AGENT_DEVICE_STATE_DIR deleted — is reclaimed automatically instead of failing with "is already owned by another agent-device daemon"; a genuinely live owner whose state dir still exists still rejects with that error.
-  Ref lifetime: refs from a snapshot/snapshot -i are only valid until the next state-changing command. open and open --relaunch clear the session's stored snapshot outright, so every ref from before an open/relaunch is invalid; press/fill/click/scroll/back and similar mutations invalidate refs from prior turns even though the session snapshot itself is refreshed internally by those commands.
-  Snapshot diff: diff snapshot compares the current capture against the session's last stored snapshot (from any prior snapshot, snapshot -i, or diff snapshot call), not a fixed baseline from session start. If no prior snapshot exists yet, diff snapshot initializes the baseline and reports zero additions/removals instead of failing.
-  Wait: wait text|selector|@ref polls on a fixed interval (300ms) up to a timeout (10s default, override with the trailing timeoutMs positional) by re-capturing state each poll; it does not push/subscribe. Timing out raises a command failure rather than returning a not-found result.
+Full command shapes and platform quirks for touch/pointer gestures beyond scroll/swipe. Read this when a task needs multi-touch, a repeated gesture series, or exact per-platform verification.
 
-Escalate:
-  help manual-qa       scripted manual QA and acceptance checks
-  help dogfood         exploratory QA report workflow
-  help validate        engineering self-validation loops
-  help debugging       logs, network, alerts, traces, flaky runtime failures
-  help tv              Android TV, tvOS, and Vega VVD focus-first remote navigation
-  help react-devtools  React Native performance, profiling, props/state/hooks, slow renders, rerenders
-  help react-native   React Native app automation hazards, overlays, Metro/Re.Pack, and routing
-  help remote          remote/cloud config, tenant, lease, local service tunnels
-  help macos           desktop, frontmost-app, menu bar surfaces
-  help ios-system-ui   iOS SpringBoard, widget add/edit/remove, system-UI surfaces`,
+Shapes:
+  agent-device longpress 300 500 800
+  agent-device longpress @e12 800
+  agent-device swipe 320 500 40 500 --count 8 --pause-ms 30 --pattern ping-pong
+  agent-device gesture pan 200 420 0 -80 500
+  agent-device gesture pan 200 420 80 -40 700 --pointer-count 2
+  agent-device gesture fling right 200 420 180
+  agent-device gesture pinch 0.5 200 400
+  agent-device gesture rotate 35 200 420
+  agent-device gesture transform 200 420 80 -40 2 35 700
+  longpress accepts coordinates, @refs, or selectors; prefer @ref/selector, coordinates only as a fallback. Duration and gesture scale/center are positional. gesture pan is one finger by default; add --pointer-count 2 for a parallel two-finger pan. Keep count/pause/pattern on one swipe: --count (cap 200), --pause-ms (cap 10000ms), --pattern ping-pong; the combined swipe/pause schedule is capped at 60000ms.
+  For repeated iOS smoke checks: press <x> <y> --count <n> --jitter-px <n> for tap series, swipe <x1> <y1> <x2> <y2> --count <n> for drag series.
+
+Platform quirks:
+  iOS simulator transform/pinch/rotate use private XCTest synthesis for a continuous two-finger pan/scale/rotation path; verify app metrics instead of assuming requested values map exactly to recognizer output.
+  Android transform injects a geometric two-finger path; app recognizers may report non-exact pan/scale/rotation -- verify semantic app state or coarse per-component effects instead of exact numeric deltas unless the app exposes stable metrics. If Android needs exact values, prefer isolated gesture pan --pointer-count 2, gesture pinch, or gesture rotate over one combined transform:
+    agent-device gesture transform 200 420 80 -40 2 35 700 --platform android
+    agent-device wait text "pan changed yes" 3000 --platform android
+  tvOS coordinate pan and fling preserve only the dominant direction as a remote swipe; authored endpoints and duration are not preserved.
+  Gesture planning prefers the active-app frame; a backend without a gesture viewport resolver falls back to the visible snapshot union, which can be less accurate near edges.
+  Rare iOS accessibility gap: a row shown disabled/hittable:false where press reports success but no UI change, or a collapsed composite control with no child refs -- run snapshot -i --json, compute the target center from rects, press x y, then diff snapshot -i. Coordinates are fallback-only; document why you used them.
+
+macOS:
+  Context menus are secondary clicks, not long presses: agent-device click @e66 --button secondary --platform macos, then snapshot -i.
+  For fast desktop list traversal, prefer fixed pixel wheel steps and batch them when no snapshot is needed between passes:
+    agent-device scroll down --pixels 200 --duration-ms 50 --platform macos
+    agent-device batch --steps '[{"command":"scroll","input":{"direction":"down","pixels":200,"durationMs":50}},{"command":"scroll","input":{"direction":"down","pixels":200,"durationMs":50}}]' --platform macos`,
   },
   tv: {
     summary: 'Android TV, tvOS, and Vega VVD focus-first remote navigation',
@@ -628,6 +520,10 @@ Stabilizers:
     agent-device snapshot
     agent-device settings animations on
   Re-enable settings you changed before finishing.
+
+Text-entry quirks:
+  iOS Allow Paste cannot be exercised under XCUITest; prefill with clipboard write "some text" instead and test the system prompt manually.
+  Android Gboard handwriting/stylus UI can capture text in an IME-owned input instead of the app field. If fill reports that input was captured by the keyboard/IME, use the diagnostic targetInput/actualInput details, inspect keyboard status/get if needed, and switch or disable handwriting outside the command plan before retrying. Do not keep retrying fill/type against the same field while the IME owns focus.
 
 React Native internals:
   If the question is about React Native performance, profiling, props, state, hooks, render causes, slow components, or rerenders, use help react-devtools instead of inferring from screenshots or logs.`,
@@ -863,6 +759,12 @@ iOS physical-device prerequisites:
 Android physical-device prerequisites:
   Enable USB debugging and confirm the device appears in agent-device devices --platform android.
   Android does not need the iOS runner signing setup. For React Native/Expo Metro reachability, read help react-native.
+
+Runner and daemon lifecycle (applies to simulators too):
+  open without --relaunch is idempotent-foreground for an already-running app (it brings the process forward; it does not restart it). open --relaunch restarts the app; on iOS simulators this collapses to one simctl launch --terminate-running-process call instead of a separate terminate-then-launch.
+  close keeps a healthy iOS simulator XCTest runner warm by default so the next open on that device skips the runner build, unless --shutdown was requested, the session was recording, the session held a device lease, or the device used a scoped (non-default) simulator set. A retained runner auto-stops after an idle window (default 5 minutes); set AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS to override, or 0 to disable idle stop and retain until daemon exit.
+  Each AGENT_DEVICE_STATE_DIR runs its own daemon. It self-exits after an idle window (default 5 minutes, matching the runner idle-stop default) once it has no open sessions, no in-flight requests, and no active recording; set AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS to override, or 0 to disable idle reap.
+  A stale iOS runner lease — its owner process dead, or its AGENT_DEVICE_STATE_DIR deleted — is reclaimed automatically instead of failing with "is already owned by another agent-device daemon"; a genuinely live owner whose state dir still exists still rejects with that error.
 
 For iOS SpringBoard, widget, or other system-UI surfaces, read agent-device help ios-system-ui.`,
   },
@@ -1165,6 +1067,7 @@ Required freshness gate before device verification:
   Before local Android verification, run pnpm build:android before pnpm clean:daemon so the bundled helpers match current source.
   For an Apple runner change, run pnpm build:xcuitest and avoid inherited retained runners from older source. Do not build the Apple runner for TypeScript-only changes.
   Use open --relaunch when startup state matters. Use a purpose-specific --session for multi-step validation.
+  CI may cache ~/.agent-device/apple-runner/derived with an exact key that includes the agent-device package and Xcode version. Avoid broad restore-key fallbacks; prepare ios-runner already recovers bad restored runner artifacts and one retryable non-connecting runner launch.
 
 Loop:
   1. Build or prepare the changed surface with the repo command that owns it.
@@ -1374,12 +1277,21 @@ export function helpTopicIds(): string[] {
 function buildHelpTopicUsageText(topicName: string): string | null {
   const topic = HELP_TOPICS[topicName as keyof typeof HELP_TOPICS];
   if (!topic) return null;
-  return `${topic.body}
+  return `${withVersionHeader(topicName, topic.body)}
 
 Related:
-  agent-device help                  command list and global flags
-  agent-device help <command>        command-specific flags
-  agent-device help manual-qa        routine QA loop with concrete command shapes
-  agent-device help workflow         full app automation reference
+  agent-device help <command>   command-specific flags
+  agent-device help manual-qa   routine QA loop
+  agent-device help workflow    full automation reference
 `;
+}
+
+// Every topic body's first line is authored as `agent-device help <topicId>`. Swapping in the
+// installed version here (instead of hand-editing 17 topic strings) gives the skill router a
+// single, reliable header to read the CLI version from without a separate --version call: a
+// missing/old header on `help workflow` means an old CLI that predates this format.
+function withVersionHeader(topicId: string, body: string): string {
+  const legacyHeader = `agent-device help ${topicId}`;
+  if (!body.startsWith(legacyHeader)) return body;
+  return `agent-device ${readVersion()} — ${topicId}${body.slice(legacyHeader.length)}`;
 }

@@ -234,127 +234,149 @@ test('usageForCommand resolves Maestro compatibility help topic', async () => {
 test('usageForCommand resolves workflow help topic', async () => {
   const help = await usageForCommand('workflow');
   if (help === null) throw new Error('Expected workflow help text');
-  assert.match(help, /agent-device help workflow/);
-  assert.match(help, /type never accepts --settle/);
-  assert.match(help, /explicit success confirmation is visible, stop/);
-  assert.match(help, /Use selectors as positional targets/);
-  assert.match(help, /Do not use CSS selectors/);
-  assert.match(help, /Snapshot legend:/);
-  assert.match(help, /@e12 \[button\] label="Add to cart"/);
-  assert.match(help, /Truncated text\/input previews: do not use get text first/);
-  assert.match(help, /snapshot -s @e7/);
-  assert.match(help, /Use plain fill\/type first for ordinary login and form fields/);
-  assert.match(help, /--delay-ms intentionally paces character entry/);
-  assert.match(help, /agent-device fill 'id="password"' "\$AD_VAR_PASSWORD" --record-as PASSWORD/);
-  assert.match(help, /published script contain only \$\{PASSWORD\}/);
-  assert.match(help, /Do not record passwords, tokens, or other secrets without --record-as/);
-  assert.match(help, /Read-only visible\/state question: use snapshot\/get\/is\/find/);
-  assert.match(help, /wait_target_absent means at least one readable capture/);
-  assert.match(help, /wait_capture_stalled means no readable capture/);
-  assert.match(help, /wait_deadline_exceeded means a later capture/);
-  assert.match(help, /wait_landmark_identity_mismatch means a replay destination guard/);
-  assert.match(help, /wait_stable_timeout means wait stable/);
-  assert.match(help, /Use snapshot -i only when refs are needed/);
-  assert.match(help, /install-from-source --github-actions-artifact org\/repo:app-debug/);
-  assert.match(help, /Discovery is not enough when the task asks to open\/start/);
-  assert.match(help, /If the task says install, use install/);
-  assert.match(help, /Do not open artifact paths or invent package ids/);
-  assert.match(help, /agent-device get attrs @e4/);
+  assert.match(help, /^agent-device \S+ — workflow/);
+  assert.ok(
+    Buffer.byteLength(help, 'utf8') < 9000,
+    `workflow help topic should stay close to the compact-card size target, was ${Buffer.byteLength(help, 'utf8')} bytes`,
+  );
+  assert.match(help, /open -> snapshot -i -> settle -> verify -> close loop/);
+  assert.match(help, /type never takes --settle/);
+  assert.match(
+    help,
+    /Chain confident consecutive steps with &&: press 'label="Search"' --settle && fill 'label="Search"' "query" --settle/,
+  );
+  assert.match(help, /Fall back to one command at a time when a step is uncertain/);
+  assert.match(help, /never a placeholder \(@ref, @eN, @Label_Name\)/);
+  assert.match(
+    help,
+    /iOS rejects a stale pinned ref -- refresh with snapshot -i or use a selector/,
+  );
+  assert.match(help, /Known flow: batch \.\/steps\.json \(help scripting\)/);
+  assert.match(help, /Shapes and platform quirks: help gestures/);
+  assert.match(help, /Never open artifact paths or invent package ids/);
+  assert.match(
+    help,
+    /Apple CI: prepare ios-runner after boot\/install, before replay\/test \(help prepare\)/,
+  );
+  assert.match(help, /Reusable scripts, secret-safe fills, replay repair: help scripting/);
+  assert.match(help, /snapshot -i gets current interactive refs only/);
+  assert.match(help, /Legend: @e12 \[button\] label="Add to cart"/);
+  assert.match(help, /open\/--relaunch clears the stored snapshot outright/);
+  assert.match(
+    help,
+    /A known selector\/label after a mutation is often enough, since interaction commands refresh state internally/,
+  );
+  assert.match(help, /TV\/D-pad focus: help tv/);
+  assert.match(help, /not bare role keys \(button="Search"\)/);
+  assert.match(help, /"Selector did not resolve uniquely"/);
+  assert.match(help, /iOS AX flags are unreliable on deep RN trees/);
+  assert.match(help, /targetHittable: false plus a hint -- verify or re-target, not a failure/);
+  assert.match(
+    help,
+    /Empty replacement is not a clear-field command \(do not plan fill <target> ""\)/,
+  );
+  assert.match(help, /retry with --delay-ms before clipboard paste/);
+  assert.match(
+    help,
+    /keyboard dismiss taps its own dismiss key when one exists, else UNSUPPORTED_OPERATION/,
+  );
+  assert.match(help, /prefer type "\\n" to submit/);
+  assert.match(
+    help,
+    /iOS paste-prompt limits and Android IME\/handwriting capture quirks: help debugging/,
+  );
+  assert.match(help, /run serially within one session/);
+  assert.match(help, /Wait failure contract:/);
+  assert.match(help, /wait_target_absent: a readable capture ran and found no match/);
+  assert.match(help, /wait_capture_stalled: no readable capture finished before the deadline/);
+  assert.match(help, /wait_deadline_exceeded: a later capture used the remaining budget/);
+  assert.match(help, /wait_landmark_identity_mismatch: a replay destination guard/);
+  assert.match(help, /wait_stable_timeout: wait stable never saw a stable UI/);
   assert.match(help, /Ambiguous find: add --first or --last/);
-  assert.match(help, /report that gap instead of typing\/searching\/navigating/);
-  assert.match(help, /App-owned action sheets, menus, and camera\/scan screens are normal UI/);
-  assert.match(help, /wait for a concrete result before returning to chat\/form state/);
-  assert.match(help, /choose a point near the center of the intended app-owned target/);
-  assert.match(help, /Avoid screen edges, tab bars, navigation bars, and home indicators/);
-  assert.match(help, /Android transform injects a geometric two-finger path/);
-  assert.match(help, /verify semantic app state or coarse per-component effects/);
-  assert.match(help, /instead of exact numeric deltas/);
-  assert.match(help, /prefer isolated gesture pan --pointer-count 2, gesture pinch/);
-  assert.match(help, /gesture pan is one finger by default/);
-  assert.match(help, /--pointer-count 2 for a parallel two-finger pan/);
-  assert.match(help, /falls back to the visible snapshot union/);
-  assert.match(help, /tvOS coordinate pan and fling preserve only the dominant direction/);
-  assert.match(help, /longpress accepts coordinates, @refs, or selectors/);
-  assert.match(help, /use help react-native for Metro\/Re\.Pack Fast Refresh/);
-  assert.match(help, /iOS Allow Paste prompt cannot be exercised under XCUITest/);
-  assert.match(help, /Empty replacement is not a supported clear-field command/);
-  assert.match(help, /do not plan fill <target> ""/);
-  assert.match(help, /To hide the keyboard, use keyboard dismiss/);
-  assert.match(help, /reports UNSUPPORTED_OPERATION rather than tapping elsewhere/);
-  assert.match(help, /no tap outside the keyboard can be proven side-effect-free/);
+  assert.match(help, /macOS context menus are secondary clicks \(help macos\)/);
+  assert.match(help, /Nearby mutation diff: diff snapshot -i/);
+  assert.match(help, /initializes the baseline \(zero changes\) instead of failing/);
   assert.match(
     help,
-    /On iOS, if it still returns UNSUPPORTED_OPERATION, both mechanisms were exhausted/,
+    /confirm the requested end state is actually visible on the current screen, scrolling it into view if needed/,
   );
-  assert.match(help, /On Android, keyboard dismiss first avoids navigation/);
-  assert.match(help, /use back only when normal back behavior is acceptable/);
-  assert.match(help, /UNSUPPORTED_OPERATION/);
-  assert.match(help, /Stateful commands within one session must run serially/);
-  assert.match(
-    help,
-    /Do not run open\/press\/fill\/type\/scroll\/back\/alert\/replay\/batch\/close commands in parallel/,
-  );
-  assert.match(help, /agent-device clipboard write "some text"/);
-  assert.match(help, /For gesture-heavy iOS simulator proof videos, prefer --hide-touches/);
-  assert.match(help, /only a means to reveal or reach an expected target/);
-  assert.match(help, /using the id, selector, or text named by the task/);
-  assert.match(
-    help,
-    /iOS simulator transform uses private XCTest synthesis for a continuous two-finger pan\/scale\/rotation path/,
-  );
-  assert.match(help, /Android Gboard handwriting\/stylus UI can capture text/);
-  assert.match(help, /targetInput\/actualInput details/);
-  assert.match(help, /Do not keep retrying fill\/type against the same field/);
-  assert.match(help, /provider-native text injection when available/);
-  assert.match(help, /Do not switch to raw adb, clipboard, or paste as an agent fallback/);
-  assert.match(help, /if no URL is provided but a target\/app name is provided, open that target/);
-  assert.match(help, /localhost\/127\.0\.0\.1\/\[::1\] with a port auto-configure/);
-  assert.match(help, /Manual adb reverse tcp:<port> tcp:<port> is only needed/);
-  assert.match(help, /do not stop at the action itself/);
-  assert.match(help, /do not split clear\/restart/);
-  assert.match(help, /do not write network log headers/);
-  assert.match(help, /Web: agent-device uses a managed, pinned agent-browser backend/);
-  assert.match(
-    help,
-    /Use --platform web when a browser step belongs inside an agent-device session/,
-  );
-  assert.match(help, /use agent-browser directly for standalone web automation/);
-  assert.match(help, /agent-device web setup/);
-  assert.match(help, /agent-device web doctor/);
-  assert.match(help, /agent-device open https:\/\/example\.com --platform web/);
-  assert.match(help, /agent-device get text @e2 --platform web/);
-  assert.match(help, /agent-device is visible 'label="Welcome"' --platform web/);
-  assert.match(help, /agent-device find text "Welcome" exists --platform web/);
-  assert.match(help, /agent-device close --platform web/);
-  assert.match(help, /Use agent-browser directly for browser-specific features/);
-  assert.match(help, /agent-device open exp:\/\/127\.0\.0\.1:8081 --platform ios/);
-  assert.match(help, /agent-device open "Expo Go" exp:\/\/127\.0\.0\.1:8081 --platform ios/);
-  assert.match(help, /There is no open-url command/);
-  assert.match(help, /direct URL open can report success while leaving the runner\/shell focused/);
-  assert.match(help, /verify with snapshot -i after opening/);
-  assert.match(help, /snapshot returns a sparse\/AX-unavailable state/);
-  assert.match(help, /Use plain screenshot, not screenshot --overlay-refs/);
-  assert.match(help, /retry snapshot -i after reaching another screen/);
-  assert.match(help, /test \.\/e2e\/maestro --maestro --device udid1,emulator-5554 --shard-all 2/);
-  assert.match(help, /agent-device open exp:\/\/127\.0\.0\.1:8081 --platform android/);
-  assert.match(help, /apps lookup misses the project but shows Expo Go\/dev-client/);
-  assert.match(help, /metro prepare --kind expo/);
-  assert.match(help, /agent-device prepare ios-runner --platform ios --timeout 240000/);
-  assert.match(help, /prepare ios-runner builds\/reuses the XCTest runner/);
-  assert.match(
-    help,
-    /not a recovery step for "runner already owned by another agent-device daemon"/,
-  );
-  assert.match(help, /prepared runner does not keep a live lease/);
+  assert.match(help, /get text alone, or stopping one screen early, is not enough/);
+  assert.match(help, /Perf\/memory\/log\/network\/trace\/crash: help debugging/);
+  assert.match(help, /Recording, save-script, batch, replay repair: help scripting/);
+  assert.match(help, /help react-native for Metro\/Re\.Pack reload/);
+  assert.match(help, /Lifecycle facts \(trust these instead of probing\)/);
+  assert.match(help, /open without --relaunch is idempotent-foreground/);
+  assert.match(help, /already owned by another agent-device daemon/);
+  assert.match(help, /Env vars: help physical-device/);
+  assert.match(help, /Escalate:/);
+  assert.match(help, /help scripting recording, save-script, batch, replay repair/);
+  assert.match(help, /help gestures multi-touch gesture shapes\/quirks/);
   assert.match(help, /help react-devtools/);
   assert.match(help, /help react-native/);
   assert.doesNotMatch(help, /agent-device react-devtools profile/);
+  // Deep content moved out of the compact card, not deleted: it now lives in the
+  // owning sub-topic (see the corresponding topic tests below).
+  assert.doesNotMatch(help, /prepare ios-runner builds\/reuses the XCTest runner/);
+  assert.doesNotMatch(
+    help,
+    /agent-device fill 'id="password"' "\$AD_VAR_PASSWORD" --record-as PASSWORD/,
+  );
+  assert.doesNotMatch(help, /REPLAY_DIVERGENCE/);
+  assert.doesNotMatch(help, /gesture transform 200 420 80 -40 2 35 700/);
+});
+
+test('usageForCommand resolves scripting help topic', async () => {
+  const help = await usageForCommand('scripting');
+  if (help === null) throw new Error('Expected scripting help text');
+  assert.match(help, /^agent-device \S+ — scripting/);
+  assert.match(help, /agent-device open com\.example\.app --relaunch --save-script=screen-x\.ad/);
+  assert.match(help, /agent-device session save-script/);
+  assert.match(help, /publishes the sole recorded open through the destination guard/);
+  assert.match(help, /A second successful open aborts publication/);
+  assert.match(help, /export AD_VAR_PASSWORD='<secret>'/);
+  assert.match(help, /agent-device fill 'id="password"' "\$AD_VAR_PASSWORD" --record-as PASSWORD/);
+  assert.match(help, /published script contain only \$\{PASSWORD\}/);
+  assert.match(help, /Do not record passwords\/tokens without --record-as/);
+  assert.match(help, /REPLAY_DIVERGENCE with a bounded report/);
+  assert.match(help, /replay --from <n> --plan-digest <sha256>/);
+  assert.match(help, /resume never re-executes skipped steps/);
+  assert.match(help, /replay <file>\.ad --keep-session/);
+  assert.match(help, /--update\/-u is a no-op \(ADR 0012\)/);
+  assert.match(help, /record-and-heal means press the correct control via a blessed @ref/);
+  assert.match(help, /state-repair means the script is correct but app state is not/);
+  assert.match(help, /close --save-script\[=<out>\] \(default <stem>\.healed\.ad\)/);
+  assert.match(help, /agent-device batch --steps '\[\{"command":"open"/);
+  assert.match(help, /Never use args, step positionals, or flags in new batch JSON/);
+  assert.match(help, /test \.\/e2e\/maestro --maestro --device udid1,emulator-5554 --shard-all 2/);
+  assert.match(help, /Android adb screenrecord has a 180s limit/);
+  assert.match(help, /--hide-touches skips that for the fastest raw recording/);
+  assert.match(help, /trace start \.\/trace\.log, trace stop \.\/trace\.log/);
+});
+
+test('usageForCommand resolves gestures help topic', async () => {
+  const help = await usageForCommand('gestures');
+  if (help === null) throw new Error('Expected gestures help text');
+  assert.match(help, /^agent-device \S+ — gestures/);
+  assert.match(help, /agent-device gesture pan 200 420 80 -40 700 --pointer-count 2/);
+  assert.match(help, /agent-device gesture transform 200 420 80 -40 2 35 700/);
+  assert.match(help, /press <x> <y> --count <n> --jitter-px <n> for tap series/);
+  assert.match(
+    help,
+    /iOS simulator transform\/pinch\/rotate use private XCTest synthesis for a continuous two-finger/,
+  );
+  assert.match(help, /Android transform injects a geometric two-finger path/);
+  assert.match(help, /verify semantic app state or coarse per-component effects/);
+  assert.match(help, /tvOS coordinate pan and fling preserve only the dominant direction/);
+  assert.match(help, /falls back to the visible snapshot union/);
+  assert.match(help, /Rare iOS accessibility gap/);
+  assert.match(help, /agent-device click @e66 --button secondary --platform macos/);
+  assert.match(help, /fixed pixel wheel steps/);
 });
 
 test('usageForCommand resolves tv help topic', async () => {
   const help = await usageForCommand('tv');
   if (help === null) throw new Error('Expected tv help text');
-  assert.match(help, /agent-device help tv/);
+  assert.match(help, /^agent-device \S+ — tv/);
   assert.match(help, /agent-device tv-remote press down/);
   assert.match(help, /agent-device screenshot \.\/tv-focus\.png --overlay-refs/);
   assert.match(help, /tv-remote longpress select/);
@@ -374,7 +396,7 @@ test('usageForCommand resolves tv help topic', async () => {
 test('usageForCommand resolves web help topic', async () => {
   const help = await usageForCommand('web');
   if (help === null) throw new Error('Expected web help text');
-  assert.match(help, /agent-device help web/);
+  assert.match(help, /^agent-device \S+ — web/);
   assert.match(help, /agent-device uses a managed, pinned agent-browser backend/);
   assert.match(help, /agent-device owns command\/session\/replay integration/);
   assert.match(help, /agent-browser owns browser launch, page control, screenshots/);
@@ -412,7 +434,7 @@ test('usageForCommand resolves web help topic', async () => {
 test('usageForCommand resolves debugging help topic', async () => {
   const help = await usageForCommand('debugging');
   if (help === null) throw new Error('Expected debugging help text');
-  assert.match(help, /agent-device help debugging/);
+  assert.match(help, /^agent-device \S+ — debugging/);
   assert.match(help, /Use logs when you need the lead-up timeline/);
   assert.match(help, /relaunches the session app through devicectl process launch --console/);
   assert.match(help, /Use debug symbols when you have crash\.ips\/crash\.log/);
@@ -448,6 +470,11 @@ test('usageForCommand resolves debugging help topic', async () => {
   assert.match(help, /Treat native perf output as the agent evidence/);
   assert.match(help, /sizeBytes=5392410/);
   assert.match(help, /5\.3 MB raw trace stays in the artifact/);
+  assert.match(help, /iOS Allow Paste cannot be exercised under XCUITest/);
+  assert.match(help, /prefill with clipboard write "some text"/);
+  assert.match(help, /Android Gboard handwriting\/stylus UI can capture text/);
+  assert.match(help, /targetInput\/actualInput details/);
+  assert.match(help, /Do not keep retrying fill\/type against the same field/);
 });
 
 test('usageForCommand resolves remote help topic', async () => {
@@ -507,7 +534,7 @@ test('usageForCommand resolves remote help topic', async () => {
 test('usageForCommand resolves physical-device help topic', async () => {
   const help = await usageForCommand('physical-device');
   if (help === null) throw new Error('Expected physical-device help text');
-  assert.match(help, /agent-device help physical-device/);
+  assert.match(help, /^agent-device \S+ — physical-device/);
   assert.match(help, /Start with Automatic Signing and only these env vars/);
   assert.match(help, /AGENT_DEVICE_IOS_TEAM_ID=ABCDE12345/);
   assert.match(help, /AGENT_DEVICE_IOS_BUNDLE_ID=com\.yourname\.agentdevice\.runner/);
@@ -518,12 +545,24 @@ test('usageForCommand resolves physical-device help topic', async () => {
     help,
     /app inventory, install\/reinstall, logs, performance sampling, recording, deep links, and launch arguments/,
   );
+  assert.match(help, /idempotent-foreground for an already-running app/);
+  assert.match(
+    help,
+    /one simctl launch --terminate-running-process call instead of a separate terminate-then-launch/,
+  );
+  assert.match(help, /AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS/);
+  assert.match(help, /AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS/);
+  assert.match(
+    help,
+    /a stale iOS runner lease — its owner process dead, or its AGENT_DEVICE_STATE_DIR deleted — is reclaimed automatically/i,
+  );
+  assert.match(help, /genuinely live owner whose state dir still exists still rejects/);
 });
 
 test('usageForCommand resolves ios-system-ui help topic', async () => {
   const help = await usageForCommand('ios-system-ui');
   if (help === null) throw new Error('Expected ios-system-ui help text');
-  assert.match(help, /agent-device help ios-system-ui/);
+  assert.match(help, /^agent-device \S+ — ios-system-ui/);
   assert.match(help, /agent-device open com\.apple\.springboard --platform ios/);
   assert.match(help, /longpress <x> <y> on an empty area of the home screen/);
   assert.match(help, /discover them from the current snapshot/);
@@ -538,7 +577,7 @@ test('usageForCommand resolves ios-system-ui help topic', async () => {
 test('usageForCommand resolves manual QA help topic', async () => {
   const help = await usageForCommand('manual-qa');
   if (help === null) throw new Error('Expected manual QA help text');
-  assert.match(help, /agent-device help manual-qa/);
+  assert.match(help, /^agent-device \S+ — manual-qa/);
   assert.match(help, /Execute the script/);
   assert.match(help, /Run snapshot -i to get current refs/);
   assert.match(help, /press\/fill\/click\/longpress <ref-or-selector> --settle/);
@@ -546,14 +585,14 @@ test('usageForCommand resolves manual QA help topic', async () => {
   assert.match(help, /use fill <target> <text> --settle to replace/);
   assert.match(help, /use type only to append to an already-focused field/);
   assert.match(help, /Do not use placeholders such as @ref/);
-  assert.match(help, /wait_target_absent means at least one readable capture/);
-  assert.match(help, /wait_capture_stalled means no readable capture/);
+  assert.match(help, /wait_target_absent: a readable capture ran and found no match/);
+  assert.match(help, /wait_capture_stalled: no readable capture finished before the deadline/);
 });
 
 test('usageForCommand resolves validate help topic', async () => {
   const help = await usageForCommand('validate');
   if (help === null) throw new Error('Expected validate help text');
-  assert.match(help, /agent-device help validate/);
+  assert.match(help, /^agent-device \S+ — validate/);
   assert.match(help, /validating a code change/);
   assert.match(help, /Required freshness gate before device verification/);
   assert.match(help, /For a TypeScript runtime or CLI output change, start with pnpm build/);
@@ -563,6 +602,8 @@ test('usageForCommand resolves validate help topic', async () => {
   assert.match(help, /Do not build the Apple runner for TypeScript-only changes/);
   assert.match(help, /Use the settled diff as evidence/);
   assert.match(help, /Close sessions and release leases/);
+  assert.match(help, /exact key that includes the agent-device package and Xcode version/);
+  assert.match(help, /Avoid broad restore-key fallbacks/);
 });
 
 test('usageForCommand resolves macos help topic', async () => {
@@ -576,7 +617,7 @@ test('usageForCommand resolves macos help topic', async () => {
 test('usageForCommand resolves dogfood help topic', async () => {
   const help = await usageForCommand('dogfood');
   if (help === null) throw new Error('Expected dogfood help text');
-  assert.match(help, /agent-device help dogfood/);
+  assert.match(help, /^agent-device \S+ — dogfood/);
   assert.match(help, /Find user-visible issues from runtime behavior/);
   assert.match(help, /Severity: critical blocks a core flow\/data\/crashes/);
   assert.match(help, /Interactive\/behavioral issues need step screenshots/);
@@ -648,7 +689,7 @@ test('usageForCommand resolves cdp help topic', async () => {
 test('usageForCommand resolves react-native help topic', async () => {
   const help = await usageForCommand('react-native');
   if (help === null) throw new Error('Expected react-native help text');
-  assert.match(help, /agent-device help react-native/);
+  assert.match(help, /^agent-device \S+ — react-native/);
   assert.match(help, /React Native-specific automation hazards/);
   assert.match(help, /Choose the next help topic/);
   assert.match(help, /help workflow/);
