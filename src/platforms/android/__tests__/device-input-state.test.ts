@@ -9,8 +9,11 @@ import {
   getAndroidKeyboardStatusWithAdb,
 } from '../device-input-state.ts';
 import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../../utils/diagnostics.ts';
-import { withScriptedAdb } from '../../../__tests__/test-utils/mocked-binaries.ts';
+import { withFakeAdb } from '../../../__tests__/test-utils/index.ts';
 import { mkdtempForTest } from '../../../__tests__/test-utils/tmp-dir.ts';
+
+// The fake adb provider installs through the production withAndroidAdbProvider
+// scope, so `calls` records device-scoped args without a leading `-s <serial>`.
 
 test('getAndroidKeyboardStatusWithAdb exposes active input method package', async () => {
   const adb: AndroidAdbExecutor = async (args) => {
@@ -59,23 +62,14 @@ test('getAndroidKeyboardStatusWithAdb classifies tolerated adb failures with act
 });
 
 test('getAndroidKeyboardState reads visibility and input type', async () => {
-  await withScriptedAdb(
-    'agent-device-android-keyboard-state-',
-    [
-      '#!/bin/sh',
-      'if [ "$1" = "-s" ]; then',
-      '  shift',
-      '  shift',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "dumpsys" ] && [ "$3" = "input_method" ]; then',
-      '  echo "mInputShown=true mIsInputViewShown=true"',
-      '  echo "inputType=0x21 imeOptions=0x12000000 privateImeOptions=null"',
-      '  exit 0',
-      'fi',
-      'echo "unexpected args: $@" >&2',
-      'exit 1',
-      '',
-    ].join('\n'),
+  await withFakeAdb(
+    (args) =>
+      args.join(' ') === 'shell dumpsys input_method'
+        ? [
+            'mInputShown=true mIsInputViewShown=true',
+            'inputType=0x21 imeOptions=0x12000000 privateImeOptions=null',
+          ].join('\n')
+        : { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 },
     async ({ device }) => {
       const state = await getAndroidKeyboardState(device);
       assert.equal(state.visible, true);
@@ -86,24 +80,15 @@ test('getAndroidKeyboardState reads visibility and input type', async () => {
 });
 
 test('getAndroidKeyboardState reports active IME ownership from dumpsys', async () => {
-  await withScriptedAdb(
-    'agent-device-android-keyboard-ime-owner-',
-    [
-      '#!/bin/sh',
-      'if [ "$1" = "-s" ]; then',
-      '  shift',
-      '  shift',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "dumpsys" ] && [ "$3" = "input_method" ]; then',
-      '  echo "mInputShown=true mIsInputViewShown=true"',
-      '  echo "mCurMethodId=com.samsung.android.honeyboard/.service.HoneyBoardService"',
-      '  echo "mCurAttribute=EditorInfo{packageName=com.samsung.android.honeyboard inputType=0x1 resourceId=com.samsung.android.honeyboard:id/handwriting}"',
-      '  exit 0',
-      'fi',
-      'echo "unexpected args: $@" >&2',
-      'exit 1',
-      '',
-    ].join('\n'),
+  await withFakeAdb(
+    (args) =>
+      args.join(' ') === 'shell dumpsys input_method'
+        ? [
+            'mInputShown=true mIsInputViewShown=true',
+            'mCurMethodId=com.samsung.android.honeyboard/.service.HoneyBoardService',
+            'mCurAttribute=EditorInfo{packageName=com.samsung.android.honeyboard inputType=0x1 resourceId=com.samsung.android.honeyboard:id/handwriting}',
+          ].join('\n')
+        : { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 },
     async ({ device }) => {
       const state = await getAndroidKeyboardState(device);
       assert.equal(state.visible, true);
@@ -117,23 +102,14 @@ test('getAndroidKeyboardState reports active IME ownership from dumpsys', async 
 });
 
 test('getAndroidKeyboardState diagnoses fallback IME ownership classification', async () => {
-  await withScriptedAdb(
-    'agent-device-android-keyboard-ime-fallback-',
-    [
-      '#!/bin/sh',
-      'if [ "$1" = "-s" ]; then',
-      '  shift',
-      '  shift',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "dumpsys" ] && [ "$3" = "input_method" ]; then',
-      '  echo "mInputShown=true mIsInputViewShown=true"',
-      '  echo "mCurAttribute=EditorInfo{packageName=com.google.android.inputmethod.latin inputType=0x1 resourceId=com.google.android.inputmethod.latin:id/handwriting}"',
-      '  exit 0',
-      'fi',
-      'echo "unexpected args: $@" >&2',
-      'exit 1',
-      '',
-    ].join('\n'),
+  await withFakeAdb(
+    (args) =>
+      args.join(' ') === 'shell dumpsys input_method'
+        ? [
+            'mInputShown=true mIsInputViewShown=true',
+            'mCurAttribute=EditorInfo{packageName=com.google.android.inputmethod.latin inputType=0x1 resourceId=com.google.android.inputmethod.latin:id/handwriting}',
+          ].join('\n')
+        : { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 },
     async ({ device }) => {
       const homeDir = await mkdtempForTest('agent-device-diagnostics-home-');
       const previousHome = process.env.HOME;
@@ -159,23 +135,14 @@ test('getAndroidKeyboardState diagnoses fallback IME ownership classification', 
 });
 
 test('getAndroidKeyboardState does not treat inputmethod substring as IME ownership', async () => {
-  await withScriptedAdb(
-    'agent-device-android-keyboard-inputmethod-substring-',
-    [
-      '#!/bin/sh',
-      'if [ "$1" = "-s" ]; then',
-      '  shift',
-      '  shift',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "dumpsys" ] && [ "$3" = "input_method" ]; then',
-      '  echo "mInputShown=true mIsInputViewShown=true"',
-      '  echo "mCurAttribute=EditorInfo{packageName=com.example.inputmethodnotes inputType=0x1 resourceId=com.example.inputmethodnotes:id/editor}"',
-      '  exit 0',
-      'fi',
-      'echo "unexpected args: $@" >&2',
-      'exit 1',
-      '',
-    ].join('\n'),
+  await withFakeAdb(
+    (args) =>
+      args.join(' ') === 'shell dumpsys input_method'
+        ? [
+            'mInputShown=true mIsInputViewShown=true',
+            'mCurAttribute=EditorInfo{packageName=com.example.inputmethodnotes inputType=0x1 resourceId=com.example.inputmethodnotes:id/editor}',
+          ].join('\n')
+        : { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 },
     async ({ device }) => {
       const state = await getAndroidKeyboardState(device);
       assert.equal(state.focusedPackage, 'com.example.inputmethodnotes');
@@ -185,23 +152,11 @@ test('getAndroidKeyboardState does not treat inputmethod substring as IME owners
 });
 
 test('getAndroidKeyboardState falls back to mImeWindowVis flag', async () => {
-  await withScriptedAdb(
-    'agent-device-android-keyboard-window-vis-',
-    [
-      '#!/bin/sh',
-      'if [ "$1" = "-s" ]; then',
-      '  shift',
-      '  shift',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "dumpsys" ] && [ "$3" = "input_method" ]; then',
-      '  echo "mImeWindowVis=0x1"',
-      '  echo "inputType=0x2"',
-      '  exit 0',
-      'fi',
-      'echo "unexpected args: $@" >&2',
-      'exit 1',
-      '',
-    ].join('\n'),
+  await withFakeAdb(
+    (args) =>
+      args.join(' ') === 'shell dumpsys input_method'
+        ? ['mImeWindowVis=0x1', 'inputType=0x2'].join('\n')
+        : { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 },
     async ({ device }) => {
       const state = await getAndroidKeyboardState(device);
       assert.equal(state.visible, true);
@@ -212,25 +167,16 @@ test('getAndroidKeyboardState falls back to mImeWindowVis flag', async () => {
 });
 
 test('getAndroidKeyboardState uses latest visibility value when dumpsys contains duplicates', async () => {
-  await withScriptedAdb(
-    'agent-device-android-keyboard-duplicate-visibility-',
-    [
-      '#!/bin/sh',
-      'if [ "$1" = "-s" ]; then',
-      '  shift',
-      '  shift',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "dumpsys" ] && [ "$3" = "input_method" ]; then',
-      '  echo "mInputShown=true"',
-      '  echo "mInputShown=false"',
-      '  echo "mIsInputViewShown=false"',
-      '  echo "inputType=0x21"',
-      '  exit 0',
-      'fi',
-      'echo "unexpected args: $@" >&2',
-      'exit 1',
-      '',
-    ].join('\n'),
+  await withFakeAdb(
+    (args) =>
+      args.join(' ') === 'shell dumpsys input_method'
+        ? [
+            'mInputShown=true',
+            'mInputShown=false',
+            'mIsInputViewShown=false',
+            'inputType=0x21',
+          ].join('\n')
+        : { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 },
     async ({ device }) => {
       const state = await getAndroidKeyboardState(device);
       assert.equal(state.visible, false);
@@ -241,25 +187,16 @@ test('getAndroidKeyboardState uses latest visibility value when dumpsys contains
 });
 
 test('getAndroidKeyboardState treats stale input view as hidden when the IME window is hidden', async () => {
-  await withScriptedAdb(
-    'agent-device-android-keyboard-stale-input-view-',
-    [
-      '#!/bin/sh',
-      'if [ "$1" = "-s" ]; then',
-      '  shift',
-      '  shift',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "dumpsys" ] && [ "$3" = "input_method" ]; then',
-      '  echo "mInputShown=false"',
-      '  echo "mDecorViewVisible=false mWindowVisible=false mInShowWindow=false"',
-      '  echo "mIsInputViewShown=true"',
-      '  echo "inputType=0x21"',
-      '  exit 0',
-      'fi',
-      'echo "unexpected args: $@" >&2',
-      'exit 1',
-      '',
-    ].join('\n'),
+  await withFakeAdb(
+    (args) =>
+      args.join(' ') === 'shell dumpsys input_method'
+        ? [
+            'mInputShown=false',
+            'mDecorViewVisible=false mWindowVisible=false mInShowWindow=false',
+            'mIsInputViewShown=true',
+            'inputType=0x21',
+          ].join('\n')
+        : { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 },
     async ({ device }) => {
       const state = await getAndroidKeyboardState(device);
       assert.equal(state.visible, false);
@@ -270,108 +207,73 @@ test('getAndroidKeyboardState treats stale input view as hidden when the IME win
 });
 
 test('dismissAndroidKeyboard skips keyevent when keyboard is already hidden', async () => {
-  await withScriptedAdb(
-    'agent-device-android-keyboard-dismiss-hidden-',
-    [
-      '#!/bin/sh',
-      'printf "__CMD__\\n" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-      'printf "%s\\n" "$@" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-      'if [ "$1" = "-s" ]; then',
-      '  shift',
-      '  shift',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "dumpsys" ] && [ "$3" = "input_method" ]; then',
-      '  echo "mInputShown=false mIsInputViewShown=false"',
-      '  exit 0',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "input" ] && [ "$3" = "keyevent" ] && [ "$4" = "111" ]; then',
-      '  echo "unexpected keyevent" >&2',
-      '  exit 1',
-      'fi',
-      'echo "unexpected args: $@" >&2',
-      'exit 1',
-      '',
-    ].join('\n'),
-    async ({ argsLogPath, device }) => {
+  await withFakeAdb(
+    (args) => {
+      const flat = args.join(' ');
+      if (flat === 'shell dumpsys input_method') {
+        return 'mInputShown=false mIsInputViewShown=false';
+      }
+      if (flat === 'shell input keyevent 111') {
+        return { stderr: 'unexpected keyevent', exitCode: 1 };
+      }
+      return { stderr: `unexpected args: ${flat}`, exitCode: 1 };
+    },
+    async ({ calls, device }) => {
       const result = await dismissAndroidKeyboard(device);
       assert.equal(result.attempts, 0);
       assert.equal(result.wasVisible, false);
       assert.equal(result.dismissed, false);
       assert.equal(result.visible, false);
 
-      const logged = await fs.readFile(argsLogPath, 'utf8');
-      assert.doesNotMatch(logged, /shell\ninput\nkeyevent\n111/);
+      const keyevents = calls.filter((args) => args.join(' ') === 'shell input keyevent 111');
+      assert.deepEqual(keyevents, []);
     },
   );
 });
 
 test('dismissAndroidKeyboard sends escape keyevent and confirms hidden state', async () => {
-  await withScriptedAdb(
-    'agent-device-android-keyboard-dismiss-visible-',
-    [
-      '#!/bin/sh',
-      'STATE_FILE="$(dirname "$AGENT_DEVICE_TEST_ARGS_FILE")/keyboard_hidden.txt"',
-      'printf "__CMD__\\n" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-      'printf "%s\\n" "$@" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-      'if [ "$1" = "-s" ]; then',
-      '  shift',
-      '  shift',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "dumpsys" ] && [ "$3" = "input_method" ]; then',
-      '  if [ -f "$STATE_FILE" ]; then',
-      '    echo "mInputShown=false mIsInputViewShown=false"',
-      '    exit 0',
-      '  fi',
-      '  echo "mInputShown=true mIsInputViewShown=true"',
-      '  echo "inputType=0x2"',
-      '  exit 0',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "input" ] && [ "$3" = "keyevent" ] && [ "$4" = "111" ]; then',
-      '  touch "$STATE_FILE"',
-      '  exit 0',
-      'fi',
-      'echo "unexpected args: $@" >&2',
-      'exit 1',
-      '',
-    ].join('\n'),
-    async ({ argsLogPath, device }) => {
+  let keyboardHidden = false;
+  await withFakeAdb(
+    (args) => {
+      const flat = args.join(' ');
+      if (flat === 'shell dumpsys input_method') {
+        // Terminal state immediately after the keyevent: the re-poll observes
+        // the dismissed keyboard on its first check.
+        return keyboardHidden
+          ? 'mInputShown=false mIsInputViewShown=false'
+          : ['mInputShown=true mIsInputViewShown=true', 'inputType=0x2'].join('\n');
+      }
+      if (flat === 'shell input keyevent 111') {
+        keyboardHidden = true;
+        return '';
+      }
+      return { stderr: `unexpected args: ${flat}`, exitCode: 1 };
+    },
+    async ({ calls, device }) => {
       const result = await dismissAndroidKeyboard(device);
       assert.equal(result.attempts, 1);
       assert.equal(result.wasVisible, true);
       assert.equal(result.dismissed, true);
       assert.equal(result.visible, false);
 
-      const logged = await fs.readFile(argsLogPath, 'utf8');
-      assert.match(logged, /shell\ndumpsys\ninput_method/);
-      assert.match(logged, /shell\ninput\nkeyevent\n111/);
+      const flat = calls.map((args) => args.join(' '));
+      assert.ok(flat.includes('shell dumpsys input_method'), flat.join('; '));
+      assert.ok(flat.includes('shell input keyevent 111'), flat.join('; '));
     },
   );
 });
 
 test('dismissAndroidKeyboard fails explicitly when non-navigation dismiss does not hide the keyboard', async () => {
-  await withScriptedAdb(
-    'agent-device-android-keyboard-dismiss-unsupported-',
-    [
-      '#!/bin/sh',
-      'printf "__CMD__\\n" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-      'printf "%s\\n" "$@" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-      'if [ "$1" = "-s" ]; then',
-      '  shift',
-      '  shift',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "dumpsys" ] && [ "$3" = "input_method" ]; then',
-      '  echo "mInputShown=true mIsInputViewShown=true"',
-      '  echo "inputType=0x1"',
-      '  exit 0',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "input" ] && [ "$3" = "keyevent" ] && [ "$4" = "111" ]; then',
-      '  exit 0',
-      'fi',
-      'echo "unexpected args: $@" >&2',
-      'exit 1',
-      '',
-    ].join('\n'),
-    async ({ argsLogPath, device }) => {
+  await withFakeAdb(
+    (args) => {
+      const flat = args.join(' ');
+      if (flat === 'shell dumpsys input_method') {
+        return ['mInputShown=true mIsInputViewShown=true', 'inputType=0x1'].join('\n');
+      }
+      if (flat === 'shell input keyevent 111') return '';
+      return { stderr: `unexpected args: ${flat}`, exitCode: 1 };
+    },
+    async ({ calls, device }) => {
       await assert.rejects(
         dismissAndroidKeyboard(device),
         (error: unknown) =>
@@ -380,9 +282,13 @@ test('dismissAndroidKeyboard fails explicitly when non-navigation dismiss does n
           /without back navigation/i.test(error.message),
       );
 
-      const logged = await fs.readFile(argsLogPath, 'utf8');
-      assert.match(logged, /shell\ninput\nkeyevent\n111/);
-      assert.doesNotMatch(logged, /shell\ninput\nkeyevent\n4/);
+      const flat = calls.map((args) => args.join(' '));
+      assert.ok(flat.includes('shell input keyevent 111'), flat.join('; '));
+      assert.equal(
+        flat.some((call) => call === 'shell input keyevent 4'),
+        false,
+        flat.join('; '),
+      );
     },
   );
 });
