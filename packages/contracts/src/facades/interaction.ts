@@ -90,6 +90,7 @@ export type {
   LongPressCommandResponseData,
   LongPressCommandResult,
   PointTarget,
+  PreresolvedInteractionTarget,
   PressCommandResponseData,
   PressCommandResult,
   RecordingTargetOverride,

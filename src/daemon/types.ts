@@ -2,6 +2,7 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import type {
   GestureExecutionProfile,
   GestureReferenceFrame,
+  PreresolvedInteractionTarget,
   ScrollDirection,
 } from '@agent-device/contracts/interaction';
 import type { LogBackend } from '@agent-device/contracts/observability';
@@ -114,6 +115,21 @@ type DaemonRequestInternal = {
    * side-effect seam and expires the frame).
    */
   findResolvedTarget?: boolean;
+  /**
+   * #1654: the node that same mutating `find` resolved, carried alongside the
+   * ref so the leaf adopts it instead of resolving `@eN` a second time.
+   *
+   * `findResolvedTarget` above says "this ref is find's own"; this says "and
+   * here is what it resolved to". They stay separate fields because the first
+   * governs ref-frame admission and staleness (a policy question) while this
+   * one governs resolution (a lookup question), and the focus/type actions set
+   * neither — they dispatch coordinates directly.
+   *
+   * Set only by the in-process `invoke` hop. Like every `internal` field it is
+   * daemon-only (`toDaemonRequest` never copies it off the wire), which is what
+   * makes carrying live node references here sound.
+   */
+  findPreresolvedTarget?: PreresolvedInteractionTarget;
   /**
    * #1271 stage 2 (ADR 0012 decision 6 amendment): PROVENANCE — set by the
    * replay runtime (`invokeResolvedReplayAction`,

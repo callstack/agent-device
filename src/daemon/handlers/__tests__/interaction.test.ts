@@ -3737,6 +3737,138 @@ test("ADR 0014 blocker-2: a mutating find's internal fill from an expired frame 
   }
 });
 
+// #1654: the tree a mutating `find` matched against, deliberately NOT the tree
+// stored on the session. `@e2` names the "Continue" button in both trees, but
+// at a distinctive point here and at (60, 40) in the session frame tree — so
+// the tap coordinates say which tree the leaf actually resolved against.
+function makeFindPreresolvedTree() {
+  const nodes = attachRefs([
+    { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'XCUIElementTypeButton',
+      label: 'Continue',
+      rect: { x: 300, y: 500, width: 20, height: 20 },
+      enabled: true,
+      hittable: true,
+    },
+  ] as never);
+  return { nodes, node: nodes[1] as NonNullable<(typeof nodes)[number]> };
+}
+
+async function runFindInternalClick(
+  sessionStore: SessionStore,
+  sessionName: string,
+  internal: Record<string, unknown>,
+) {
+  return await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'click',
+      positionals: ['@e2'],
+      flags: { noRecord: true },
+      internal,
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+  });
+}
+
+function readPressPoint(): string[] | undefined {
+  const call = mockDispatch.mock.calls.find((entry) => entry[1] === 'press');
+  return call?.[2] as string[] | undefined;
+}
+
+test('#1654: a mutating find click acts on the node find resolved, not a re-resolved @ref', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'find-preresolved-click';
+  sessionStore.set(sessionName, makeStaleRefSession(sessionName));
+  mockDispatch.mockResolvedValue({});
+  const preresolved = makeFindPreresolvedTree();
+
+  const response = await runFindInternalClick(sessionStore, sessionName, {
+    findResolvedTarget: true,
+    findPreresolvedTarget: { node: preresolved.node, nodes: preresolved.nodes },
+  });
+
+  expect(response?.ok).toBe(true);
+  // find's node — (300,500,20,20) → (310, 510). A second resolution would read
+  // @e2 out of the SESSION frame tree instead and tap (60, 40).
+  expect(readPressPoint()).toEqual(['310', '510']);
+});
+
+test('#1654 control: without the pre-resolved node the same click still resolves @ref from the session tree', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'find-preresolved-control';
+  sessionStore.set(sessionName, makeStaleRefSession(sessionName));
+  mockDispatch.mockResolvedValue({});
+
+  const response = await runFindInternalClick(sessionStore, sessionName, {
+    findResolvedTarget: true,
+  });
+
+  // The ordinary ref path is untouched: @e1 is "Continue" at (10,20,100,40).
+  expect(response?.ok).toBe(true);
+  expect(readPressPoint()).toEqual(['60', '40']);
+});
+
+test('#1654: the leaf performs no ref lookup at all — a session that could not resolve @e2 still acts', async () => {
+  // The decisive shape: this session has NO stored snapshot, so any second
+  // resolution necessarily fails ("Ref @e2 not found or has no bounds"). The
+  // action succeeding proves the lookup did not run, rather than merely
+  // agreeing with it. It is also the real-world win — find captured this node
+  // a moment ago, so refusing it as unresolvable was never right.
+  const sessionStore = makeSessionStore();
+  const sessionName = 'find-preresolved-no-session-tree';
+  const session = makeSession(sessionName);
+  session.snapshot = undefined;
+  sessionStore.set(sessionName, session);
+  mockDispatch.mockResolvedValue({});
+  const preresolved = makeFindPreresolvedTree();
+
+  const withoutPreresolution = await runFindInternalClick(sessionStore, sessionName, {
+    findResolvedTarget: true,
+  });
+  expect(withoutPreresolution?.ok).toBe(false);
+
+  const response = await runFindInternalClick(sessionStore, sessionName, {
+    findResolvedTarget: true,
+    findPreresolvedTarget: { node: preresolved.node, nodes: preresolved.nodes },
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(readPressPoint()).toEqual(['310', '510']);
+});
+
+test('#1654: the shared guards still run on the pre-resolved node', async () => {
+  // The pre-resolution replaces the lookup, not the guarantees: an occluded
+  // node is still refused, at the same ADR 0011 `runtime-ref` occlusion cell.
+  const sessionStore = makeSessionStore();
+  const sessionName = 'find-preresolved-occluded';
+  sessionStore.set(sessionName, makeStaleRefSession(sessionName));
+  mockDispatch.mockResolvedValue({});
+  const preresolved = makeFindPreresolvedTree();
+  const blocked = {
+    ...preresolved.node,
+    interactionBlocked: { by: 'overlay', reason: 'covered' as const },
+  };
+
+  const response = await runFindInternalClick(sessionStore, sessionName, {
+    findResolvedTarget: true,
+    findPreresolvedTarget: { node: blocked, nodes: [preresolved.nodes[0], blocked] },
+  });
+
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('COMMAND_FAILED');
+    expect(response.error.message).toContain('covered by another visible element');
+  }
+  expect(readPressPoint()).toBeUndefined();
+});
+
 test('get text with a pinned stale ref gets the precise warning', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'pinned-get-text';

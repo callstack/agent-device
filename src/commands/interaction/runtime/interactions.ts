@@ -1,6 +1,7 @@
 import type {
   ClickButton,
   FillCommandResult,
+  PreresolvedInteractionTarget,
   PressCommandResult,
   RepeatedInput,
   ResolvedTarget,
@@ -49,6 +50,8 @@ export type PressCommandOptions = CommandContext &
     button?: ClickButton;
     /** ADR 0012 step 4: replay-only post-resolution guard; see resolution.ts. */
     expectedResolvedTarget?: ExpectedResolvedTarget;
+    /** #1654: a mutating `find`'s already-resolved node; see resolution.ts. */
+    preresolvedTarget?: PreresolvedInteractionTarget;
   } & PostActionObservationOptions;
 
 export type ClickCommandOptions = PressCommandOptions;
@@ -63,6 +66,8 @@ export type FillCommandOptions = CommandContext & {
   allowNonHittableCoordinateFallback?: boolean;
   /** ADR 0012 step 4: replay-only post-resolution guard; see resolution.ts. */
   expectedResolvedTarget?: ExpectedResolvedTarget;
+  /** #1654: a mutating `find`'s already-resolved node; see resolution.ts. */
+  preresolvedTarget?: PreresolvedInteractionTarget;
 } & PostActionObservationOptions;
 
 export type TypeTextCommandOptions = CommandContext & {
@@ -103,6 +108,7 @@ export const fillCommand: RuntimeCommand<FillCommandOptions, FillCommandResult> 
     promoteToHittableAncestor: false,
     captureEvidenceBaseline: observation.needsPreActionBaseline,
     expectedResolvedTarget: options.expectedResolvedTarget,
+    preresolvedTarget: options.preresolvedTarget,
   });
   if (!runtime.backend.fill) {
     throw new AppError('UNSUPPORTED_OPERATION', 'fill is not supported by this backend');
@@ -192,6 +198,7 @@ async function tapCommand(
     promoteToHittableAncestor: true,
     captureEvidenceBaseline: observation.needsPreActionBaseline,
     expectedResolvedTarget: options.expectedResolvedTarget,
+    preresolvedTarget: options.preresolvedTarget,
   });
   if (!runtime.backend.tap) {
     throw new AppError('UNSUPPORTED_OPERATION', 'tap is not supported by this backend');
@@ -246,6 +253,13 @@ async function maybeTapRefTarget(
   // ADR 0012 step 4: a guarded replay action needs the runtime resolution
   // path so the post-resolution identity guard actually runs.
   if (options.expectedResolvedTarget) return null;
+  // #1654 scope note: `preresolvedTarget` deliberately does NOT divert this
+  // path. It is the separate ADR 0011 `native-ref` dispatch path, wired only
+  // to the web provider's clickRef/fillRef (no mobile backend implements
+  // tapTarget/fillTarget), where the ref IS the provider's own element handle.
+  // Forcing a coordinate tap there to save a resolution would trade a working
+  // provider-native dispatch for a worse one. The double-hop #1654 removes is
+  // the runtime tree path below.
   // ADR 0011 native-ref preflight: the shared occlusion/offscreen guards run
   // against the stored session snapshot node before the backend call (a
   // backend fast path can silently "succeed", so errors must be raised here).

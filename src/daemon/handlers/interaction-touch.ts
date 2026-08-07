@@ -4,6 +4,7 @@ import type {
   GestureReferenceFrame,
   InteractionTarget,
   LongPressCommandResult,
+  PreresolvedInteractionTarget,
   PressCommandResult,
   ResolvedInteractionTarget,
 } from '@agent-device/contracts/interaction';
@@ -222,6 +223,7 @@ async function dispatchTargetedTouchViaRuntime(
         flags: req.flags,
         durationMs,
         expectedResolvedTarget: replayTargetGuard,
+        preresolvedTarget: req.internal?.findPreresolvedTarget,
       }),
     afterRun: async (result) => {
       if (session.lease?.leaseProvider) return undefined;
@@ -268,6 +270,8 @@ async function runTargetedTouchInteraction(params: {
   flags: CommandFlags | undefined;
   durationMs?: number;
   expectedResolvedTarget?: ReplayTargetGuardDenotation;
+  /** #1654: a mutating `find`'s already-resolved node; see daemon/types.ts. */
+  preresolvedTarget?: PreresolvedInteractionTarget;
 }): Promise<TargetedTouchResult> {
   const { runtime, command, target, sessionName, requestId, flags, expectedResolvedTarget } =
     params;
@@ -294,6 +298,10 @@ async function runTargetedTouchInteraction(params: {
     verify: flags?.verify,
     settle,
     expectedResolvedTarget,
+    // Only click/press take it: `find` dispatches click and fill, never
+    // longpress, so declaring it on the longPress options above would be an
+    // unconsumed claim (#1649 review).
+    preresolvedTarget: params.preresolvedTarget,
   };
   return command === 'click'
     ? await runtime.interactions.click(target, options)
@@ -674,6 +682,7 @@ async function dispatchFillViaRuntime(
         verify: req.flags?.verify,
         settle: readSettleRequest(req.flags),
         expectedResolvedTarget: replayTargetGuard,
+        preresolvedTarget: req.internal?.findPreresolvedTarget,
       }),
     buildPayloads: (result) =>
       buildFillResponsePayloads({

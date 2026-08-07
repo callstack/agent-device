@@ -204,7 +204,8 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
     },
   },
   'runtime-ref': {
-    description: 'Session snapshot ref lookup, guarded coordinate tap.',
+    description:
+      'Session snapshot ref lookup, guarded coordinate tap. #1654: when the caller already resolved the node (a mutating `find`), the lookup is replaced by that node and every guarantee below is enforced against it — the guards are unchanged, only the lookup is skipped.',
     commands: ['press', 'click', 'fill', 'longpress'],
     guarantees: {
       ...RUNTIME_TREE_SHARED_GUARANTEES,
@@ -219,6 +220,13 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       // ADR 0012 decision 2: tryResolveRefNode produces both outcomes — exact
       // for a resolved @ref, label-fallback for trailing-label recovery.
+      //
+      // #1654 second producer on this path: adoptPreresolvedRefTarget reports
+      // `exact` for a pre-resolved target. Truthful rather than borrowed — the
+      // producer mints the ref off the node it hands over, so the ref does name
+      // that node exactly. It cannot report label-fallback, which is correct:
+      // label recovery is a property of LOOKING a stale ref up, and a
+      // pre-resolved target never performs that lookup.
       resolutionDisclosure: {
         kind: 'runtime',
         via: 'src/commands/interaction/runtime/resolution.ts#tryResolveRefNode',

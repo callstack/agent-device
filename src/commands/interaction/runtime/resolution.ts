@@ -36,6 +36,7 @@ import { truncateUtf8 } from '../../../utils/truncate-utf8.ts';
 import type {
   InteractionTarget,
   PointTarget,
+  PreresolvedInteractionTarget,
   RecordingTargetOverride,
   ResolutionDiagnosticEntry,
   ResolutionDisclosure,
@@ -147,6 +148,12 @@ type ResolveInteractionTargetParams = {
   expectedResolvedTarget?: ExpectedResolvedTarget;
   /** Identifies one endpoint when a multi-target replay guard refuses. */
   replayTargetRole?: 'source' | 'destination';
+  /**
+   * #1654: the caller already resolved this `@ref` against its own capture, so
+   * the ref branch adopts that node instead of looking the ref up again. Ref
+   * targets only — a selector target has nothing pre-resolved to adopt.
+   */
+  preresolvedTarget?: PreresolvedInteractionTarget;
 };
 
 export async function resolveInteractionTarget(
@@ -225,17 +232,53 @@ async function tryCaptureEvidenceBaseline(
   }
 }
 
+/** The node a ref target acts on, plus the tree the shared guards read it against. */
+type RefResolution = { nodes: SnapshotState['nodes']; resolved: ResolvedRefNode };
+
+/**
+ * #1654: adopt the node the caller already resolved instead of resolving the
+ * same `@ref` a second time. This replaces the LOOKUP only — every guard below
+ * still runs, against the caller's tree, at the symbols the ADR 0011
+ * `runtime-ref` cells name.
+ *
+ * `exact` is the truthful disclosure here rather than a borrowed default: the
+ * producer mints `@eN` off the very node it hands over, so the ref does name
+ * that node exactly — the same provenance `tryResolveRefNode` reports when a
+ * ref resolves without label recovery.
+ */
+function adoptPreresolvedRefTarget(
+  target: Extract<InteractionTarget, { kind: 'ref' }>,
+  preresolved: PreresolvedInteractionTarget,
+): RefResolution {
+  const ref = normalizeRef(target.ref);
+  if (!ref) throw new AppError('INVALID_ARGS', `Invalid ref: ${target.ref}`);
+  return {
+    nodes: preresolved.nodes,
+    resolved: { ref, node: preresolved.node, resolution: EXACT_REF_RESOLUTION },
+  };
+}
+
+async function readRefResolution(
+  runtime: AgentDeviceRuntime,
+  options: CommandContext,
+  target: Extract<InteractionTarget, { kind: 'ref' }>,
+): Promise<RefResolution> {
+  const capture = await resolveSnapshotForRef(runtime, options, target);
+  return { nodes: capture.snapshot.nodes, resolved: capture.resolved };
+}
+
 async function resolveRefInteractionTarget(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
   target: Extract<InteractionTarget, { kind: 'ref' }>,
   params: ResolveInteractionTargetParams,
 ): Promise<ResolvedInteractionTarget> {
-  const capture = await resolveSnapshotForRef(runtime, options, target);
-  const resolved = capture.resolved;
-  assertReplayTargetResolution(resolved.node, capture.snapshot.nodes, params);
+  const { nodes, resolved } = params.preresolvedTarget
+    ? adoptPreresolvedRefTarget(target, params.preresolvedTarget)
+    : await readRefResolution(runtime, options, target);
+  assertReplayTargetResolution(resolved.node, nodes, params);
   const node = params.promoteToHittableAncestor
-    ? resolveActionableNodeOrThrow(capture.snapshot.nodes, resolved.node, {
+    ? resolveActionableNodeOrThrow(nodes, resolved.node, {
         action: params.action,
         label: `Ref ${target.ref}`,
       })
@@ -246,7 +289,7 @@ async function resolveRefInteractionTarget(
     runtime,
     options,
     node,
-    capture.snapshot.nodes,
+    nodes,
     target.ref,
     params.action,
   );
@@ -258,7 +301,7 @@ async function resolveRefInteractionTarget(
     ...describeResolvedInteractionNode(
       runtime,
       visibleNode,
-      capture.snapshot.nodes,
+      nodes,
       params.action,
       resolved.resolution,
     ),
