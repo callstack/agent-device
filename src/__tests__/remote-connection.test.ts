@@ -439,7 +439,71 @@ test('connect reports deferred Metro runtime preparation when remote config has 
   assert.match(stdout, /Run a device command when ready/);
   assert.match(stdout, /Metro runtime is not prepared yet/);
   assert.match(stdout, /metro prepare --remote-config/);
-  assert.equal(readActiveConnectionState({ stateDir })?.runtime, undefined);
+  const connected = readActiveConnectionState({ stateDir });
+  assert.equal(connected?.runtime, undefined);
+
+  // The deferred-runtime notice is a runnable command like any next step: an
+  // unscoped `metro prepare` would resolve against whichever connection is
+  // host-global active, which on a shared host is another process's.
+  const session = connected?.session ?? '';
+  assert.ok(session);
+  assert.match(stdout, new RegExp(`metro prepare --remote-config \\S+ --session ${session}\\b`));
+  assert.equal(
+    readRemoteConnectionState({ stateDir, session })?.remoteConfigPath,
+    remoteConfigPath,
+    'the emitted --session resolves back to the connection that printed the notice',
+  );
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('connection status re-emits the deferred Metro command scoped to the named session', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connection-status-metro-');
+  const stateDir = path.join(tempRoot, '.state');
+  const remoteConfigPath = path.join(tempRoot, 'remote.json');
+  fs.writeFileSync(
+    remoteConfigPath,
+    JSON.stringify({
+      daemonBaseUrl: 'https://daemon.example.test',
+      metroPublicBaseUrl: 'https://sandbox.example.test',
+    }),
+  );
+
+  await connectCommand({
+    positionals: [],
+    flags: {
+      json: true,
+      help: false,
+      version: false,
+      stateDir,
+      remoteConfig: remoteConfigPath,
+      daemonBaseUrl: 'https://daemon.example.test',
+      tenant: 'acme',
+      runId: 'run-123',
+      platform: 'android',
+      session: 'adc-status-metro',
+    },
+    client: createTestClient(),
+  });
+
+  const stdout = await captureStdout(async () => {
+    await connectionCommand({
+      positionals: ['status'],
+      flags: {
+        json: true,
+        help: false,
+        version: false,
+        stateDir,
+        session: 'adc-status-metro',
+      },
+      client: createTestClient(),
+    });
+  });
+
+  const payload = JSON.parse(stdout) as { data: { runtimePreparation?: { nextStep?: string } } };
+  assert.equal(
+    payload.data.runtimePreparation?.nextStep,
+    `agent-device metro prepare --remote-config ${remoteConfigPath} --session adc-status-metro`,
+  );
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 

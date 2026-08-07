@@ -32,6 +32,7 @@ import {
   stopReactDevtoolsCleanup,
 } from './connection-runtime.ts';
 import { writeCommandOutput } from './shared.ts';
+import { shellQuoteIfNeeded } from '../../utils/shell-quote.ts';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { ClientCommandHandler } from './router-types.ts';
@@ -40,6 +41,7 @@ import {
   buildLeasePreparationNotice,
   presentConnectReadiness,
   renderConnectSuccess,
+  scopeCommand,
   serializeConnectionState,
   type PreviousLeaseReleaseNotice,
   type RuntimePreparationNotice,
@@ -454,18 +456,21 @@ function buildRuntimePreparationNotice(
   if (!hasDeferredMetroConfig(flags) && !remoteConfigHasMetroSettings(state.remoteConfigPath)) {
     return undefined;
   }
-  return buildDeferredRuntimeNotice(state.remoteConfigPath);
+  return buildDeferredRuntimeNotice(state);
 }
 
 function buildRuntimePreparationNoticeFromState(
   state: RemoteConnectionState,
 ): RuntimePreparationNotice | undefined {
   if (state.runtime || !remoteConfigHasMetroSettings(state.remoteConfigPath)) return undefined;
-  return buildDeferredRuntimeNotice(state.remoteConfigPath);
+  return buildDeferredRuntimeNotice(state);
 }
 
-function buildDeferredRuntimeNotice(remoteConfigPath: string): RuntimePreparationNotice {
-  const nextStep = `agent-device metro prepare --remote-config ${remoteConfigPath}`;
+function buildDeferredRuntimeNotice(state: RemoteConnectionState): RuntimePreparationNotice {
+  const nextStep = scopeCommand(
+    state,
+    `agent-device metro prepare --remote-config ${shellQuoteIfNeeded(state.remoteConfigPath)}`,
+  );
   return {
     status: 'deferred',
     nextStep,

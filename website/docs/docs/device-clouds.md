@@ -351,6 +351,8 @@ agent-device artifacts <session-arn> --provider aws-device-farm --json
 
 BrowserStack can return session video, Appium logs, device logs, dashboard URL, and public URL. AWS Device Farm can return remote-access video and log artifacts after the provider finalizes them.
 
+Add `--session <name>` when a host runs more than one connection. Without it, `artifacts` resolves through the ambient active connection and can return another concurrent job's provider video and logs. `connect` prints the artifacts command already carrying its own session.
+
 ## Troubleshooting
 
 - If BrowserStack connect fails, its error distinguishes rejected credentials, an unavailable device/OS pair, a missing `bs://` upload, and a missing local artifact.

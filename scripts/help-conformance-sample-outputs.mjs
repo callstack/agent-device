@@ -145,5 +145,5 @@ No live device session has been created. The first device command shown below wi
 Next:
   agent-device open <package-id> --relaunch --session adc-browserstack
 Use the installed package or bundle identifier in open, not the app artifact name.
-After close, run agent-device artifacts --json for provider video and logs.`,
+After close, run agent-device artifacts --json --session adc-browserstack for provider video and logs.`,
 };

@@ -239,7 +239,7 @@ function buildUnscopedConnectWorkflow(
       ? installThenOpenWorkflow(state)
       : [...missingAttachedAppRecovery(verification), ...openWorkflow(state).nextSteps],
     ...(supportsProviderArtifacts(verification)
-      ? { notes: providerArtifactNotes(!appMissing) }
+      ? { notes: providerArtifactNotes(state, !appMissing) }
       : {}),
   };
 }
@@ -265,12 +265,15 @@ function missingAttachedAppRecovery(verification?: ConnectVerification): string[
   ];
 }
 
-function providerArtifactNotes(includeAppIdNote: boolean): string[] {
+function providerArtifactNotes(state: RemoteConnectionState, includeAppIdNote: boolean): string[] {
   return [
     ...(includeAppIdNote
       ? ['Use the installed package or bundle identifier in open, not the app artifact name.']
       : []),
-    'After close, run agent-device artifacts --json for provider video and logs.',
+    // Notes carry runnable commands too, so they need the same session scoping as
+    // nextSteps: an unscoped artifacts call adopts the host-global active connection
+    // and can hand back another concurrent job's provider video and logs.
+    `After close, run ${scopeCommand(state, 'agent-device artifacts --json')} for provider video and logs.`,
   ];
 }
 
@@ -304,8 +307,20 @@ function defaultDirectProviderLifecycle(): string[] {
 }
 
 function scopeNextSteps(state: RemoteConnectionState, commands: readonly string[]): string[] {
-  const session = shellQuoteIfNeeded(state.session);
-  return commands.map((command) => `${command} --session ${session}`);
+  return commands.map((command) => scopeCommand(state, command));
+}
+
+/**
+ * The single place a suggested command is bound to the connection it came from.
+ * Every command-bearing output — nextSteps, notes, deferred-runtime notices —
+ * goes through here so no emitted instruction can resolve against whichever
+ * connection happens to be host-global active when the operator runs it.
+ */
+export function scopeCommand(
+  state: Pick<RemoteConnectionState, 'session'>,
+  command: string,
+): string {
+  return `${command} --session ${shellQuoteIfNeeded(state.session)}`;
 }
 
 function appIdPlaceholder(platform: RemoteConnectionState['platform']): string {

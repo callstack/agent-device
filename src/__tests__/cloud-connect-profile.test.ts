@@ -8,6 +8,7 @@ import { runCliCapture } from './cli-capture.ts';
 import {
   hashRemoteConfigFile,
   readActiveConnectionState,
+  readRemoteConnectionState,
   type RemoteConnectionState,
 } from '../remote/remote-connection-state.ts';
 import type { AgentDeviceClient } from '../agent-device-client.ts';
@@ -580,7 +581,7 @@ test('connect JSON exposes verification, device, app, live-session, and next-ste
   ]);
   assert.deepEqual(output.leasePreparation.nextSteps, output.nextSteps);
   assert.deepEqual(output.notes, [
-    'After close, run agent-device artifacts --json for provider video and logs.',
+    `After close, run agent-device artifacts --json --session ${output.session} for provider video and logs.`,
   ]);
 });
 
@@ -615,9 +616,90 @@ test('connect JSON preserves BrowserStack workflow notes from human output', asy
   ]);
   assert.deepEqual(output.notes, [
     'Use the installed package or bundle identifier in open, not the app artifact name.',
-    'After close, run agent-device artifacts --json for provider video and logs.',
+    `After close, run agent-device artifacts --json --session ${output.session} for provider video and logs.`,
   ]);
 });
+
+test('every command BrowserStack connect emits resolves back to the connection that emitted it', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connect-scoped-commands-');
+  const stateDir = path.join(tempRoot, '.state');
+  const browserstackArgs = [
+    'connect',
+    'browserstack',
+    '--platform',
+    'android',
+    '--device',
+    'Google Pixel 8',
+    '--provider-os-version',
+    '14.0',
+    '--provider-app',
+    'bs://app-id',
+    '--state-dir',
+    stateDir,
+  ];
+  const captureOptions = {
+    env: { BROWSERSTACK_USERNAME: 'browser-user', BROWSERSTACK_ACCESS_KEY: 'browser-key' },
+  };
+
+  try {
+    const json = await runCliCapture([...browserstackArgs, '--json'], captureOptions);
+    const human = await runCliCapture(browserstackArgs, captureOptions);
+
+    assert.equal(json.code, null);
+    assert.equal(human.code, null);
+    const output = (JSON.parse(json.stdout) as { data: Record<string, any> }).data;
+    const session: string = output.session;
+
+    // Every emitted command — nextSteps AND the prose notes — must name a
+    // session, so following one cannot adopt whichever connection happens to
+    // be host-global active in a concurrent run.
+    for (const line of [...output.nextSteps, ...output.notes]) {
+      assertCommandsAreSessionScoped(line, session);
+    }
+    assert.deepEqual([...readEmittedSessions([...output.nextSteps, ...output.notes])], [session]);
+
+    // The human run is a second unscoped connect, so it mints its own identity;
+    // its commands must name THAT one, not the JSON run's.
+    const humanSessions = [...readEmittedSessions([human.stdout])];
+    assert.equal(humanSessions.length, 1, human.stdout);
+    const humanSession = humanSessions[0] ?? '';
+    assert.notEqual(humanSession, session);
+    assertCommandsAreSessionScoped(human.stdout, humanSession);
+
+    // The scope is not decoration: resolving each emitted --session lands on
+    // the connection state that connect wrote.
+    for (const emittedSession of [session, humanSession]) {
+      const state = readRemoteConnectionState({ stateDir, session: emittedSession });
+      assert.equal(state?.session, emittedSession);
+      assert.equal(state?.leaseProvider, 'browserstack');
+      assert.equal(state?.tenant, 'browserstack');
+    }
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+/**
+ * A command-bearing string must carry one `--session <name>` per `agent-device`
+ * invocation it suggests. Counting rather than matching means an added command
+ * cannot silently ship unscoped alongside a scoped sibling.
+ */
+function assertCommandsAreSessionScoped(text: string, session: string): void {
+  const commands = text.match(/agent-device\s+[a-z]/g)?.length ?? 0;
+  const scopes = text.split(`--session ${session}`).length - 1;
+  assert.equal(scopes, commands, `unscoped suggested command in: ${text}`);
+}
+
+function readEmittedSessions(texts: readonly string[]): Set<string> {
+  const sessions = new Set<string>();
+  for (const text of texts) {
+    for (const match of text.matchAll(/--session\s+(\S+)/g)) {
+      const value = match[1];
+      if (value) sessions.add(value);
+    }
+  }
+  return sessions;
+}
 
 test('connect does not activate provider state when verification fails', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-verify-fail-');
