@@ -86,6 +86,24 @@ function unexpectedArgs(args: string[]): FakeAppleToolResponse {
   return { stderr: `unexpected xcrun args: ${args.join(' ')}`, exitCode: 1 };
 }
 
+function isSimctlMainScreenScale(args: string[]): boolean {
+  return args[0] === 'simctl' && args[1] === 'getenv' && args[3] === 'SIMULATOR_MAINSCREEN_SCALE';
+}
+
+function isSimctlScreenshot(args: string[]): boolean {
+  return (
+    args[0] === 'simctl' && args[1] === 'io' && args[2] === 'sim-1' && args[3] === 'screenshot'
+  );
+}
+
+function isDevicectlDevice(args: string[], ...subcommand: string[]): boolean {
+  return (
+    args[0] === 'devicectl' &&
+    args[1] === 'device' &&
+    subcommand.every((word, index) => args[2 + index] === word)
+  );
+}
+
 /**
  * `unzip` is spawned through `runCmd` directly (install-artifact.ts /
  * install-source.ts), bypassing the Apple tool provider scope, so IPA
@@ -192,19 +210,8 @@ test('screenshotIos retries simulator capture timeouts and eventually succeeds',
   await withFakeAppleTool(
     (args) => {
       if (isSimctlListDevices(args)) return BOOTED_SIM_LIST_JSON;
-      if (
-        args[0] === 'simctl' &&
-        args[1] === 'getenv' &&
-        args[3] === 'SIMULATOR_MAINSCREEN_SCALE'
-      ) {
-        return '3\n';
-      }
-      if (
-        args[0] === 'simctl' &&
-        args[1] === 'io' &&
-        args[2] === 'sim-1' &&
-        args[3] === 'screenshot'
-      ) {
+      if (isSimctlMainScreenScale(args)) return '3\n';
+      if (isSimctlScreenshot(args)) {
         screenshotAttempts += 1;
         if (screenshotAttempts < 3) {
           return {
@@ -252,19 +259,8 @@ test('screenshotIos keeps requested simulator pixel density', async () => {
   await withFakeAppleTool(
     (args) => {
       if (isSimctlListDevices(args)) return BOOTED_SIM_LIST_JSON;
-      if (
-        args[0] === 'simctl' &&
-        args[1] === 'getenv' &&
-        args[3] === 'SIMULATOR_MAINSCREEN_SCALE'
-      ) {
-        return '3\n';
-      }
-      if (
-        args[0] === 'simctl' &&
-        args[1] === 'io' &&
-        args[2] === 'sim-1' &&
-        args[3] === 'screenshot'
-      ) {
+      if (isSimctlMainScreenScale(args)) return '3\n';
+      if (isSimctlScreenshot(args)) {
         writeFileSync(args[4] ?? '', sourcePng);
         return '';
       }
@@ -585,12 +581,7 @@ test('reinstallIosApp on iOS physical device uses devicectl uninstall + install'
 
   await withFakeAppleTool(
     (args) => {
-      if (
-        args[0] === 'devicectl' &&
-        args[1] === 'device' &&
-        args[2] === 'info' &&
-        args[3] === 'apps'
-      ) {
+      if (isDevicectlDevice(args, 'info', 'apps')) {
         const jsonOut = args[args.indexOf('--json-output') + 1];
         writeFileSync(
           jsonOut ?? '',
@@ -624,12 +615,7 @@ test('reinstallIosApp on iOS physical device proceeds when uninstall reports app
 
   await withFakeAppleTool(
     (args) => {
-      if (
-        args[0] === 'devicectl' &&
-        args[1] === 'device' &&
-        args[2] === 'info' &&
-        args[3] === 'apps'
-      ) {
+      if (isDevicectlDevice(args, 'info', 'apps')) {
         const jsonOut = args[args.indexOf('--json-output') + 1];
         writeFileSync(
           jsonOut ?? '',
@@ -637,10 +623,10 @@ test('reinstallIosApp on iOS physical device proceeds when uninstall reports app
         );
         return '';
       }
-      if (args[0] === 'devicectl' && args[1] === 'device' && args[2] === 'uninstall') {
+      if (isDevicectlDevice(args, 'uninstall')) {
         return { stderr: 'app not installed', exitCode: 1 };
       }
-      if (args[0] === 'devicectl' && args[1] === 'device' && args[2] === 'install') return '';
+      if (isDevicectlDevice(args, 'install')) return '';
       if (args[0] === 'plutil') return '';
       return unexpectedArgs(args);
     },
@@ -915,12 +901,7 @@ test('resolveIosApp resolves app display name on iOS physical devices', async ()
 
   await withFakeAppleTool(
     (args) => {
-      if (
-        args[0] === 'devicectl' &&
-        args[1] === 'device' &&
-        args[2] === 'info' &&
-        args[3] === 'apps'
-      ) {
+      if (isDevicectlDevice(args, 'info', 'apps')) {
         const jsonOut = args[args.indexOf('--json-output') + 1];
         writeFileSync(
           jsonOut ?? '',

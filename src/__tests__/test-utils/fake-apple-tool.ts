@@ -108,11 +108,7 @@ export async function withFakeAppleTool<T>(
     ...options.provider,
     whichCommand: options.provider?.whichCommand ?? (async () => true),
     runCommand: async (cmd, args, execOptions) =>
-      await respond(
-        cmd === 'xcrun' ? [...args] : [cmd, ...args],
-        cmd,
-        execOptions?.allowFailure,
-      ),
+      await respond(cmd === 'xcrun' ? [...args] : [cmd, ...args], cmd, execOptions?.allowFailure),
     simctl: {
       run: async (args, execOptions) =>
         await respond(['simctl', ...args], 'xcrun', execOptions?.allowFailure),
