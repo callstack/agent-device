@@ -2,6 +2,7 @@
 
 #import <CoreGraphics/CoreGraphics.h>
 #import <objc/message.h>
+#import <stdatomic.h>
 
 static NSString *const RunnerAXSnapshotOkKey = @"ok";
 static NSString *const RunnerAXSnapshotErrorKey = @"error";
@@ -18,6 +19,7 @@ NSString *const RunnerAXSnapshotCustomActionsKey = @"customActions";
 NSString *const RunnerAXSnapshotCustomActionsReadKey = @"read";
 NSString *const RunnerAXSnapshotCustomActionsCandidatesKey = @"candidates";
 NSString *const RunnerAXSnapshotCustomActionsTruncatedKey = @"truncated";
+NSString *const RunnerAXSnapshotCustomActionsBlockedKey = @"blocked";
 
 /// The AX server's name for UIAccessibilityCustomActions (React Native's
 /// `accessibilityActions` prop lands here too).
@@ -28,6 +30,38 @@ static NSString *const RunnerAXCustomActionsAttribute = @"XC_kAXXCAttributeCusto
 /// capture's budget and starve every remaining candidate, turning a bounded
 /// enrichment into a capture-length stall.
 static const NSTimeInterval RunnerAXCustomActionReadTimeout = 1.0;
+
+/// The AX call is a synchronous XPC round trip that cannot be cancelled once
+/// issued, so the deadline above only frees the CALLER — the call itself keeps
+/// running. Containment therefore has two parts, and both are needed:
+///
+///  1. every read runs on this one serial queue, so a wedged call can never be
+///     joined by a second concurrent user of the shared XCAXClient;
+///  2. a single-flight guard (below) refuses to dispatch while an abandoned
+///     read is still outstanding, so repeated captures cannot pile up work
+///     behind it.
+///
+/// Reads resume by themselves once the hung call returns (or the runner
+/// restarts); nothing has to be reset by hand.
+static dispatch_queue_t RunnerAXCustomActionReadQueue(void)
+{
+  static dispatch_queue_t queue;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    queue = dispatch_queue_create("com.callstack.agentdevice.runner.ax-custom-actions",
+                                  DISPATCH_QUEUE_SERIAL);
+  });
+  return queue;
+}
+
+/// Reads dispatched but not yet returned. Non-zero after a read blew its
+/// deadline, which is exactly the condition the single-flight guard refuses on.
+static atomic_int RunnerAXCustomActionReadsInFlight = 0;
+
+/// Total dispatches. The invariant the containment fix exists to protect is
+/// "a blocked capture adds no work", which is only observable as this counter
+/// staying put, so it is recorded rather than inferred.
+static atomic_long RunnerAXCustomActionReadDispatches = 0;
 
 /// Output caps. The element budget bounds how many elements we read; these
 /// bound what any ONE element can put in the response, so a pathological app
@@ -397,8 +431,17 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
   NSInteger reads = 0;
   NSInteger annotated = 0;
   NSInteger truncatedElements = 0;
+  BOOL blocked = NO;
   for (RunnerAXSnapshotFrontier *leaf in [onScreen arrayByAddingObjectsFromArray:offScreen]) {
     if (attempts >= limit || (nil != deadline && deadline.timeIntervalSinceNow <= 0)) {
+      break;
+    }
+    // An abandoned read from an earlier capture is still outstanding. Stop the
+    // pass here rather than spending a deadline per element on reads that will
+    // all be refused, and record why so the response does not present the
+    // unread elements as "has no actions".
+    if ([self customActionReadsInFlight] > 0) {
+      blocked = YES;
       break;
     }
     id element = [self accessibilityElementForSnapshot:leaf.snapshot];
@@ -429,13 +472,14 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
   }
   NSLog(
     @"AGENT_DEVICE_RUNNER_PRIVATE_AX_CUSTOM_ACTIONS reads=%ld attempts=%ld annotated=%ld "
-     "candidates=%ld onScreen=%ld truncated=%ld",
+     "candidates=%ld onScreen=%ld truncated=%ld blocked=%d dispatches=%ld",
     (long)reads, (long)attempts, (long)annotated, (long)candidates, (long)onScreen.count,
-    (long)truncatedElements);
+    (long)truncatedElements, (int)blocked, (long)[self customActionReadDispatchCount]);
   return @{
     RunnerAXSnapshotCustomActionsReadKey: @(reads),
     RunnerAXSnapshotCustomActionsCandidatesKey: @(candidates),
     RunnerAXSnapshotCustomActionsTruncatedKey: @(truncatedElements),
+    RunnerAXSnapshotCustomActionsBlockedKey: @(blocked),
   };
 }
 
@@ -470,12 +514,21 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
   if (![axClient respondsToSelector:selector]) {
     return nil;
   }
+  // Single flight. An abandoned read still owns the serial queue, so
+  // dispatching here would only queue work behind it — and repeating the
+  // capture would keep queueing more. Refuse without dispatching instead.
+  if (atomic_load(&RunnerAXCustomActionReadsInFlight) > 0) {
+    NSLog(@"AGENT_DEVICE_RUNNER_PRIVATE_AX_CUSTOM_ACTIONS_READ_BLOCKED");
+    return nil;
+  }
   // The AX call is a synchronous XPC round trip with no timeout of its own, so
   // it runs off-thread behind a bounded wait. On timeout the result box is
   // never read, so a late-returning wedged call cannot race this thread.
+  atomic_fetch_add(&RunnerAXCustomActionReadsInFlight, 1);
+  atomic_fetch_add(&RunnerAXCustomActionReadDispatches, 1);
   NSMutableArray *box = [NSMutableArray array];
   dispatch_semaphore_t finished = dispatch_semaphore_create(0);
-  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+  dispatch_async(RunnerAXCustomActionReadQueue(), ^{
     typedef id (*RunnerAXAttributesMsgSend)(id, SEL, id, id, NSError **);
     RunnerAXAttributesMsgSend send = (RunnerAXAttributesMsgSend)objc_msgSend;
     NSError *error = nil;
@@ -488,6 +541,9 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
     if (nil != result) {
       [box addObject:result];
     }
+    // Clear in-flight BEFORE signalling, so a waiter that wakes on this signal
+    // never observes its own completed read as still outstanding.
+    atomic_fetch_sub(&RunnerAXCustomActionReadsInFlight, 1);
     dispatch_semaphore_signal(finished);
   });
   long waited = dispatch_semaphore_wait(
@@ -554,6 +610,16 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
     [capped addObject:name];
   }
   return capped.copy;
+}
+
++ (NSInteger)customActionReadsInFlight
+{
+  return atomic_load(&RunnerAXCustomActionReadsInFlight);
+}
+
++ (NSInteger)customActionReadDispatchCount
+{
+  return (NSInteger)atomic_load(&RunnerAXCustomActionReadDispatches);
 }
 
 + (nullable id)accessibilityClient

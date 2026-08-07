@@ -61,7 +61,9 @@ extension RunnerTests {
     // than voiding the whole coverage.
     let truncated =
       (coverage[RunnerAXSnapshotCustomActionsTruncatedKey] as? NSNumber)?.intValue ?? 0
-    return SnapshotCustomActionCoverage(read: read, candidates: candidates, truncated: truncated)
+    let blocked = (coverage[RunnerAXSnapshotCustomActionsBlockedKey] as? NSNumber)?.boolValue ?? false
+    return SnapshotCustomActionCoverage(
+      read: read, candidates: candidates, truncated: truncated, blocked: blocked)
   }
 
   func rememberPrivateAXAcceptedDepth(bundleId: String?, processIdentifier: Int?, depth: Int) {
@@ -576,6 +578,86 @@ extension RunnerTests {
       Self.privateAXCustomActionCoverage([RunnerAXSnapshotCustomActionsReadKey: 12]))
   }
 
+  /// The AX call cannot be cancelled once issued, so the read deadline frees
+  /// only the caller — the call keeps running. Without containment, repeating
+  /// `snapshot --actions` against a wedged element would stack orphaned reads,
+  /// all sharing one XCAXClient. This pins the containment: one serial queue and
+  /// a single-flight refusal that adds no work while a read is outstanding.
+  func testHungCustomActionReadIsContainedAndRecovers() {
+    let hung = HungAXClientForTesting()
+    let element = NSObject()
+    let dispatchesBefore = RunnerAXSnapshotBridge.customActionReadDispatchCount()
+    defer { hung.release() }
+
+    // 1. First read wedges. The caller is freed by the deadline, but the call is
+    //    still out there, so it stays counted in flight.
+    var completed = ObjCBool(true)
+    let firstStarted = Date()
+    let first = RunnerAXSnapshotBridge.customActionNames(
+      forElement: element, axClient: hung, completed: &completed)
+    XCTAssertNil(first)
+    XCTAssertFalse(completed.boolValue)
+    XCTAssertGreaterThanOrEqual(-firstStarted.timeIntervalSinceNow, 0.9)
+    XCTAssertEqual(RunnerAXSnapshotBridge.customActionReadsInFlight(), 1)
+    XCTAssertEqual(
+      RunnerAXSnapshotBridge.customActionReadDispatchCount(), dispatchesBefore + 1)
+
+    // 2. Repeats do NOT accumulate: no new dispatch, still exactly one in
+    //    flight, and they return immediately instead of paying the deadline.
+    for _ in 0..<5 {
+      let started = Date()
+      XCTAssertNil(
+        RunnerAXSnapshotBridge.customActionNames(
+          forElement: element, axClient: hung, completed: &completed))
+      XCTAssertFalse(completed.boolValue)
+      XCTAssertLessThan(-started.timeIntervalSinceNow, 0.2)
+    }
+    XCTAssertEqual(RunnerAXSnapshotBridge.customActionReadsInFlight(), 1)
+    XCTAssertEqual(
+      RunnerAXSnapshotBridge.customActionReadDispatchCount(), dispatchesBefore + 1)
+
+    // 3. A capture in that state discloses the skip rather than presenting the
+    //    unread elements as action-free — and spends no read budget doing it.
+    let leaf = RunnerAXSnapshotFrontier()
+    leaf.snapshot = FrontierSnapshotWithElementForTesting()
+    leaf.node = NSMutableDictionary(dictionary: ["label": "feedItem", "children": []])
+    let coverage = RunnerAXSnapshotBridge.annotateCustomActions(
+      onMergedLeaves: [leaf], axClient: hung, limit: 12, rootFrame: .zero, deadline: nil)
+    XCTAssertEqual(coverage[RunnerAXSnapshotCustomActionsBlockedKey] as? Bool, true)
+    XCTAssertEqual(coverage[RunnerAXSnapshotCustomActionsReadKey] as? Int, 0)
+    XCTAssertEqual(coverage[RunnerAXSnapshotCustomActionsCandidatesKey] as? Int, 1)
+    XCTAssertEqual(
+      RunnerAXSnapshotBridge.customActionReadDispatchCount(), dispatchesBefore + 1)
+
+    // And the rendered verdict names the hang, not the scroll remedy.
+    let blockedWarnings = Self.customActionCoverageWarnings(
+      Self.privateAXCustomActionCoverage(coverage)!)
+    XCTAssertEqual(blockedWarnings.count, 1)
+    XCTAssertTrue(blockedWarnings[0].contains("still hung"))
+    XCTAssertFalse(blockedWarnings[0].contains("Scroll"))
+
+    // 4. Recovery: once the wedged call returns, reads resume by themselves.
+    hung.release()
+    let recovered = expectation(description: "in-flight drains")
+    DispatchQueue.global().async {
+      while RunnerAXSnapshotBridge.customActionReadsInFlight() > 0 {
+        usleep(20_000)
+      }
+      recovered.fulfill()
+    }
+    wait(for: [recovered], timeout: 5)
+
+    completed = ObjCBool(false)
+    XCTAssertNil(
+      RunnerAXSnapshotBridge.customActionNames(
+        forElement: element, axClient: hung, completed: &completed))
+    // Completed (the fake answers nil actions), which is the point: the pass is
+    // live again rather than latched off.
+    XCTAssertTrue(completed.boolValue)
+    XCTAssertEqual(
+      RunnerAXSnapshotBridge.customActionReadDispatchCount(), dispatchesBefore + 2)
+  }
+
   /// The element budget bounds how many elements we read; these caps bound what
   /// any ONE element can put in the response. Clipping must be reported, since
   /// a clipped list looks exactly like a complete one.
@@ -613,7 +695,7 @@ extension RunnerTests {
     let partial = SnapshotQuality(
       state: "recovered", backend: "private-ax", reason: nil, reasonCode: "requested-backend",
       effectiveDepth: nil, collapsedLeafIndexes: nil,
-      customActions: SnapshotCustomActionCoverage(read: 12, candidates: 19, truncated: 0))
+      customActions: SnapshotCustomActionCoverage(read: 12, candidates: 19, truncated: 0, blocked: false))
     let message = Self.legacyQualityMessage(partial)
     XCTAssertTrue(message?.contains("12 of 19 merged elements") == true)
     XCTAssertTrue(message?.contains("remaining 7") == true)
@@ -623,7 +705,7 @@ extension RunnerTests {
     let complete = SnapshotQuality(
       state: "healthy", backend: "private-ax", reason: nil, reasonCode: nil,
       effectiveDepth: nil, collapsedLeafIndexes: nil,
-      customActions: SnapshotCustomActionCoverage(read: 19, candidates: 19, truncated: 0))
+      customActions: SnapshotCustomActionCoverage(read: 19, candidates: 19, truncated: 0, blocked: false))
     XCTAssertNil(Self.legacyQualityMessage(complete))
 
     // A healthy capture with an incomplete pass still discloses — the guard must
@@ -631,7 +713,7 @@ extension RunnerTests {
     let healthyButCapped = SnapshotQuality(
       state: "healthy", backend: "private-ax", reason: nil, reasonCode: nil,
       effectiveDepth: nil, collapsedLeafIndexes: nil,
-      customActions: SnapshotCustomActionCoverage(read: 12, candidates: 19, truncated: 0))
+      customActions: SnapshotCustomActionCoverage(read: 12, candidates: 19, truncated: 0, blocked: false))
     XCTAssertTrue(
       Self.legacyQualityMessage(healthyButCapped)?.contains("12 of 19") == true)
   }
@@ -789,6 +871,37 @@ extension RunnerTests {
       ["Blue Sky", "Callstack", "Welcome back", "Email", "Password", "Sign in", "Forgot password?"]
     )
     XCTAssertFalse(labels.contains("Admin settings"))
+  }
+}
+
+/// Stands in for an AX client whose `attributesForElement:` never returns —
+/// the wedged-server case the containment exists for. `release()` lets the
+/// hung call finish so recovery is observable.
+private final class HungAXClientForTesting: NSObject {
+  private let gate = DispatchSemaphore(value: 0)
+  private let releasedOnce = NSLock()
+  private var released = false
+
+  @objc(attributesForElement:attributes:error:)
+  func attributes(forElement element: Any, attributes: Any, error: NSErrorPointer) -> Any? {
+    releasedOnce.lock()
+    let alreadyReleased = released
+    releasedOnce.unlock()
+    // Once the wedge clears, the server answers normally again — that is what
+    // makes the recovery leg a recovery rather than a second hang.
+    if alreadyReleased {
+      return nil
+    }
+    gate.wait()
+    return nil
+  }
+
+  func release() {
+    releasedOnce.lock()
+    defer { releasedOnce.unlock() }
+    guard !released else { return }
+    released = true
+    gate.signal()
   }
 }
 

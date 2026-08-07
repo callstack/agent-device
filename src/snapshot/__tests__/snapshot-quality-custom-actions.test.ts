@@ -10,7 +10,7 @@ const pinned = {
 
 test('a capped custom-action pass discloses what it did not read', () => {
   const warnings = renderSnapshotQualityWarnings(
-    { ...pinned, customActions: { read: 12, candidates: 19, truncated: 0 } },
+    { ...pinned, customActions: { read: 12, candidates: 19, truncated: 0, blocked: false } },
     [],
   );
 
@@ -26,7 +26,7 @@ test('a capped custom-action pass discloses what it did not read', () => {
 test('a complete custom-action pass says nothing', () => {
   assert.deepEqual(
     renderSnapshotQualityWarnings(
-      { ...pinned, customActions: { read: 19, candidates: 19, truncated: 0 } },
+      { ...pinned, customActions: { read: 19, candidates: 19, truncated: 0, blocked: false } },
       [],
     ),
     [],
@@ -34,10 +34,56 @@ test('a complete custom-action pass says nothing', () => {
   // No merged elements at all is also complete.
   assert.deepEqual(
     renderSnapshotQualityWarnings(
-      { ...pinned, customActions: { read: 0, candidates: 0, truncated: 0 } },
+      { ...pinned, customActions: { read: 0, candidates: 0, truncated: 0, blocked: false } },
       [],
     ),
     [],
+  );
+});
+
+test('a pass blocked by a hung read says so, and does not offer the scroll remedy', () => {
+  const warnings = renderSnapshotQualityWarnings(
+    { ...pinned, customActions: { read: 0, candidates: 18, truncated: 0, blocked: true } },
+    [],
+  );
+
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0] ?? '', /still hung/);
+  assert.match(warnings[0] ?? '', /skipped the read pass/);
+  // Scrolling cannot clear a hung read; borrowing the budget-stop remedy here
+  // would send the reader in circles.
+  assert.doesNotMatch(warnings[0] ?? '', /Scroll them into view/);
+  assert.doesNotMatch(warnings[0] ?? '', /0 of 18/);
+});
+
+test('blocked wins over the partial line rather than emitting both', () => {
+  // Both conditions are true when a hang stops the pass early, but the partial
+  // line's remedy is wrong here, so exactly one line is emitted.
+  const warnings = renderSnapshotQualityWarnings(
+    { ...pinned, customActions: { read: 3, candidates: 18, truncated: 0, blocked: true } },
+    [],
+  );
+
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0] ?? '', /still hung/);
+});
+
+test('the blocked flag survives verdict parsing and defaults to false', () => {
+  assert.equal(
+    readSnapshotQualityVerdict({
+      state: 'recovered',
+      backend: 'private-ax',
+      customActions: { read: 0, candidates: 5, truncated: 0, blocked: true },
+    })?.customActions?.blocked,
+    true,
+  );
+  assert.equal(
+    readSnapshotQualityVerdict({
+      state: 'recovered',
+      backend: 'private-ax',
+      customActions: { read: 1, candidates: 5 },
+    })?.customActions?.blocked,
+    false,
   );
 });
 
@@ -50,9 +96,9 @@ test('the coverage pair survives verdict parsing, and half a pair does not', () 
     readSnapshotQualityVerdict({
       state: 'recovered',
       backend: 'private-ax',
-      customActions: { read: 12, candidates: 19, truncated: 0 },
+      customActions: { read: 12, candidates: 19, truncated: 0, blocked: false },
     })?.customActions,
-    { read: 12, candidates: 19, truncated: 0 },
+    { read: 12, candidates: 19, truncated: 0, blocked: false },
   );
 
   // A ratio needs both sides; a partial object is dropped rather than half-read.
@@ -72,13 +118,13 @@ test('the coverage pair survives verdict parsing, and half a pair does not', () 
       backend: 'private-ax',
       customActions: { read: 12, candidates: 19 },
     })?.customActions,
-    { read: 12, candidates: 19, truncated: 0 },
+    { read: 12, candidates: 19, truncated: 0, blocked: false },
   );
 });
 
 test('a clipped action list is disclosed even when every candidate was read', () => {
   const warnings = renderSnapshotQualityWarnings(
-    { ...pinned, customActions: { read: 19, candidates: 19, truncated: 2 } },
+    { ...pinned, customActions: { read: 19, candidates: 19, truncated: 2, blocked: false } },
     [],
   );
 
@@ -88,7 +134,7 @@ test('a clipped action list is disclosed even when every candidate was read', ()
 
 test('an incomplete pass that also clipped reports both, one line each', () => {
   const warnings = renderSnapshotQualityWarnings(
-    { ...pinned, customActions: { read: 12, candidates: 19, truncated: 3 } },
+    { ...pinned, customActions: { read: 12, candidates: 19, truncated: 3, blocked: false } },
     [],
   );
 
@@ -103,7 +149,7 @@ test('the coverage line is independent of degradation state', () => {
     {
       state: 'healthy',
       backend: 'private-ax',
-      customActions: { read: 3, candidates: 8, truncated: 0 },
+      customActions: { read: 3, candidates: 8, truncated: 0, blocked: false },
     },
     [],
   );

@@ -41,7 +41,7 @@ export type SnapshotQualityVerdict = {
    * unread element is indistinguishable from one with no actions, so a partial
    * pass has to be disclosed rather than left to look complete.
    */
-  customActions?: { read: number; candidates: number; truncated: number };
+  customActions?: { read: number; candidates: number; truncated: number; blocked: boolean };
 };
 
 export type Rect = {

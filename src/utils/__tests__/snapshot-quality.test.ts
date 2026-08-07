@@ -14,7 +14,7 @@ test('readSnapshotQualityVerdict accepts a well-formed verdict', () => {
     reasonCode: 'budget',
     effectiveDepth: 56,
     collapsedLeafIndexes: [3],
-    customActions: { read: 12, candidates: 19, truncated: 1 },
+    customActions: { read: 12, candidates: 19, truncated: 1, blocked: false },
   });
   assert.deepEqual(verdict, {
     state: 'recovered',
@@ -23,7 +23,7 @@ test('readSnapshotQualityVerdict accepts a well-formed verdict', () => {
     reasonCode: 'budget',
     effectiveDepth: 56,
     collapsedLeafIndexes: [3],
-    customActions: { read: 12, candidates: 19, truncated: 1 },
+    customActions: { read: 12, candidates: 19, truncated: 1, blocked: false },
   });
 });
 

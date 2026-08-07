@@ -79,6 +79,7 @@ function readCustomActionCoverage(
     read: raw.read,
     candidates: raw.candidates,
     truncated: typeof raw.truncated === 'number' ? raw.truncated : 0,
+    blocked: raw.blocked === true,
   };
 }
 
@@ -115,7 +116,14 @@ function customActionCoverageWarning(verdict: SnapshotQualityVerdict): string[] 
   const coverage = verdict.customActions;
   if (!coverage) return [];
   const lines: string[] = [];
-  if (coverage.read < coverage.candidates) {
+  if (coverage.blocked) {
+    // Not a budget stop, so it must not borrow the budget stop's remedy:
+    // scrolling cannot clear a hung read, and telling the reader to try would
+    // send them in circles.
+    lines.push(
+      'Custom actions were not read: an earlier accessibility read is still hung, so this capture skipped the read pass instead of queueing behind it. No element’s actions list is authoritative here. Reads resume once that call returns.',
+    );
+  } else if (coverage.read < coverage.candidates) {
     lines.push(
       `Custom actions were read for ${coverage.read} of ${coverage.candidates} merged elements, on-screen ones first; the remaining ${coverage.candidates - coverage.read} were not read, so an absent actions list on those is not evidence that they have none. Scroll them into view and re-run to read them.`,
     );

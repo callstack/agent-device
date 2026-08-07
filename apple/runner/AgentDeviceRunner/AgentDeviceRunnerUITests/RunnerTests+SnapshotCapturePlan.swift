@@ -36,6 +36,9 @@ struct SnapshotCustomActionCoverage: Codable {
   /// clipped list looks complete, so it is disclosed on the same principle as
   /// an unread element.
   let truncated: Int
+  /// The pass stopped early because an earlier read is still hung. Distinct from
+  /// a budget stop: the remedy is waiting, not scrolling.
+  let blocked: Bool
 }
 
 enum SnapshotBackendKind: String, CaseIterable {
@@ -590,7 +593,14 @@ extension RunnerTests {
   /// so both have to name themselves.
   static func customActionCoverageWarnings(_ coverage: SnapshotCustomActionCoverage) -> [String] {
     var lines: [String] = []
-    if coverage.read < coverage.candidates {
+    if coverage.blocked {
+      // Scrolling is the remedy for a budget stop, not for this one — saying it
+      // here would send the reader off doing something that cannot help.
+      lines.append(
+        "Custom actions were not read: an earlier accessibility read is still hung, so this "
+          + "capture skipped the read pass instead of queueing behind it. No element's actions "
+          + "list is authoritative here. Reads resume once that call returns.")
+    } else if coverage.read < coverage.candidates {
       lines.append(
         "Custom actions were read for \(coverage.read) of \(coverage.candidates) merged elements, "
           + "on-screen ones first; the remaining \(coverage.candidates - coverage.read) were not read, "

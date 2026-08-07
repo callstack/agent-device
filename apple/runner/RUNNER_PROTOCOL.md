@@ -37,16 +37,22 @@ Examples:
 private-AX backend (no other backend can read them) and costs one accessibility
 round trip per merged element, so it is opt-in.
 
-The pass is bounded on three axes, and every bound is disclosed through
-`snapshotQuality.customActions` `{read, candidates, truncated}` rather than
-silently applied:
+The pass is bounded on four axes, and every bound is disclosed through
+`snapshotQuality.customActions` `{read, candidates, truncated, blocked}` rather
+than silently applied:
 
 - at most 12 elements per capture, on-screen first, stopping at the capture
   deadline — `read < candidates` means the rest were not read;
 - 1s per element read, so one wedged element cannot consume the capture budget
   (a timed-out element counts as unread, never as "read, has no actions");
 - at most 8 action names per element, each at most 80 characters —
-  `truncated` counts elements whose list was clipped.
+  `truncated` counts elements whose list was clipped;
+- one read in flight at a time. The AX call cannot be cancelled once issued, so
+  the deadline frees only the caller; the call itself keeps running. All reads
+  therefore share one serial queue, and while an abandoned read is still
+  outstanding the pass is skipped outright (`blocked`) instead of queueing
+  behind it — repeating the capture adds no work. Reads resume on their own
+  once the hung call returns.
 
 ```json
 { "command": "recordStart", "outPath": "/tmp/demo.mp4", "fps": 30 }

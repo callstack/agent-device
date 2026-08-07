@@ -1,4 +1,5 @@
 #import <Foundation/Foundation.h>
+#import <CoreGraphics/CoreGraphics.h>
 #import <XCTest/XCTest.h>
 
 NS_ASSUME_NONNULL_BEGIN
@@ -18,6 +19,7 @@ FOUNDATION_EXPORT NSString *const RunnerAXSnapshotCustomActionsKey;
 FOUNDATION_EXPORT NSString *const RunnerAXSnapshotCustomActionsReadKey;
 FOUNDATION_EXPORT NSString *const RunnerAXSnapshotCustomActionsCandidatesKey;
 FOUNDATION_EXPORT NSString *const RunnerAXSnapshotCustomActionsTruncatedKey;
+FOUNDATION_EXPORT NSString *const RunnerAXSnapshotCustomActionsBlockedKey;
 
 /// A depth-capped childless node awaiting an element-rooted follow-up request.
 /// Public so the runner unit bundle can drive the extension's miss paths with
@@ -73,6 +75,27 @@ FOUNDATION_EXPORT NSString *const RunnerAXSnapshotCustomActionsTruncatedKey;
 /// rather than silently presented as a complete list.
 + (NSArray<NSString *> *)cappedActionNames:(NSArray<NSString *> *)names
                                  truncated:(BOOL *)truncated;
+
+/// The bounded read pass over merged leaves, exposed for the runner unit
+/// bundle: the containment contract (a hung read blocks the pass and is
+/// disclosed, and adds no further dispatches) is only executable from here.
+/// Returns {read, candidates, truncated, blocked}.
++ (NSDictionary<NSString *, NSNumber *> *)
+    annotateCustomActionsOnMergedLeaves:(nullable NSArray<RunnerAXSnapshotFrontier *> *)leaves
+                               axClient:(id)axClient
+                                  limit:(NSInteger)limit
+                              rootFrame:(CGRect)rootFrame
+                               deadline:(nullable NSDate *)deadline;
+
+/// Reads dispatched but not yet returned. The AX call cannot be cancelled, so a
+/// read that blew its deadline stays counted here until it finally returns —
+/// which is precisely the state in which further reads must be refused rather
+/// than queued behind it. Consumed by the read pass to disclose the skip.
++ (NSInteger)customActionReadsInFlight;
+
+/// Total reads ever dispatched. The containment invariant is "a blocked capture
+/// adds no work", which is only observable as this counter standing still.
++ (NSInteger)customActionReadDispatchCount;
 
 /// The shared AX client (`XCUIDevice.accessibilityInterface`), or nil when the
 /// private interface is unavailable.
