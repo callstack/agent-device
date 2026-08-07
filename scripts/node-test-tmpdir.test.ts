@@ -11,6 +11,25 @@ import { TEST_RUN_TMP_PREFIX, TEST_RUN_TMP_ROOT } from './vitest-tmpdir-global-s
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const WRAPPER = path.join(REPOSITORY_ROOT, 'scripts', 'node-test-tmpdir.ts');
 
+// package.json scripts that may legitimately invoke `node --test` without
+// routing through the wrapper below. Empty on purpose: every current
+// node --test lane is wrapped (#1595). Add a script name here only alongside
+// a comment explaining why that lane can't be wrapped — the ratchet test
+// below fails closed on anything else, so a 14th `node --test` script added
+// later without the wrapper fails CI instead of silently leaking again.
+const NODE_TEST_WRAPPER_BYPASS_ALLOWLIST = new Set<string>([]);
+
+// Dumb string matching on purpose (no shell parsing, per the scripts map's
+// own style: '&&'-chained commands, nothing fancier). True when a `node ...`
+// segment enables the built-in test runner via a word-bounded `--test` flag
+// and hasn't already been routed through the wrapper.
+function isUnwrappedNodeTestSegment(segment: string): boolean {
+  const trimmed = segment.trim();
+  if (!/^node(\s|$)/.test(trimmed)) return false;
+  if (trimmed.includes('node-test-tmpdir.ts')) return false;
+  return /(^|\s)--test(\s|$)/.test(trimmed);
+}
+
 // Date.now() alone collides when this file's top-level tests happen to start
 // within the same millisecond (observed in practice), which overwrites one
 // probe's source with another's; the random suffix makes each probe path
@@ -106,4 +125,31 @@ test('deliberately failing probe', () => {
     fs.rmSync(probePath, { force: true });
     fs.rmSync(evidenceRoot, { recursive: true, force: true });
   }
+});
+
+// The 13 lanes wrapped in package.json when this fix landed were a one-time
+// hand sweep; nothing stopped a 14th `node --test` script from being added
+// later without the wrapper, silently reopening #1595 for that one lane.
+// This turns the sweep into an invariant instead.
+test('every node --test package.json script routes through scripts/node-test-tmpdir.ts', () => {
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(REPOSITORY_ROOT, 'package.json'), 'utf8'),
+  ) as {
+    scripts?: Record<string, string>;
+  };
+  const scripts = manifest.scripts ?? {};
+
+  const unwrapped = Object.entries(scripts)
+    .filter(([name]) => !NODE_TEST_WRAPPER_BYPASS_ALLOWLIST.has(name))
+    .filter(([, command]) => command.split('&&').some(isUnwrappedNodeTestSegment))
+    .map(([name]) => name);
+
+  assert.deepEqual(
+    unwrapped,
+    [],
+    `these package.json scripts invoke \`node --test\` directly instead of through ` +
+      `scripts/node-test-tmpdir.ts, so a crash/timeout kill during their run leaks a scratch ` +
+      `directory again: ${unwrapped.join(', ')}. Route them through the wrapper, or add to ` +
+      `NODE_TEST_WRAPPER_BYPASS_ALLOWLIST above with a reason if one must legitimately bypass it.`,
+  );
 });
