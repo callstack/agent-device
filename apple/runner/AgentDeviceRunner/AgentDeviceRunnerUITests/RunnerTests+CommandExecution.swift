@@ -393,10 +393,7 @@ extension RunnerTests {
     XCTAssertTrue(typeResponse.ok, String(describing: typeResponse.error))
     XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
     XCTAssertEqual(typeResponse.data?.textEntryRoute, "synthesized-first-responder")
-    XCTAssertEqual(
-      textFieldValue(of: textField, settlingAt: "hardware-keyboard"),
-      "hardware-keyboard"
-    )
+    XCTAssertEqual(String(describing: textField.value ?? ""), "hardware-keyboard")
 
     let secondFailureCountBefore = currentXCTestFailureCount()
     let secondTypeCommand = try runnerCommandFixture(
@@ -407,10 +404,7 @@ extension RunnerTests {
     XCTAssertFalse(secondTypeResponse.ok)
     XCTAssertEqual(secondTypeResponse.error?.code, "TEXT_INPUT_NOT_FOCUSED")
     XCTAssertFalse(didRecordXCTestFailure(since: secondFailureCountBefore))
-    XCTAssertEqual(
-      textFieldValue(of: textField, settlingAt: "hardware-keyboard"),
-      "hardware-keyboard"
-    )
+    XCTAssertEqual(String(describing: textField.value ?? ""), "hardware-keyboard")
   }
 
   func testBareDelayedTypeFailsWhenTappedInputDisappearsMidCommand() throws {
@@ -443,24 +437,6 @@ extension RunnerTests {
     XCTAssertFalse(typeResponse.ok)
     XCTAssertEqual(typeResponse.error?.code, "TEXT_INPUT_NOT_FOCUSED")
     XCTAssertFalse(textField.exists)
-  }
-
-  // The simulator commits synthesized keystrokes after the type command returns, so a one-shot
-  // read of `value` can land mid-word ("h", "hardware-ke") on a loaded machine. Poll until the
-  // field holds the expected text, then hand the caller the last value read so a real mismatch
-  // still fails with what the field actually held.
-  private func textFieldValue(
-    of element: XCUIElement,
-    settlingAt expected: String,
-    timeout: TimeInterval = 10
-  ) -> String {
-    let deadline = Date().addingTimeInterval(timeout)
-    var observed = String(describing: element.value ?? "")
-    while observed != expected, Date() < deadline {
-      sleepFor(0.05)
-      observed = String(describing: element.value ?? "")
-    }
-    return observed
   }
 #endif
 
