@@ -129,7 +129,8 @@ extension RunnerTests {
     selectorKey: String,
     selectorValue: String,
     allowNonHittableFallback: Bool = false,
-    expectedPoint: CGPoint? = nil
+    expectedPoint: CGPoint? = nil,
+    rawMatchPolicy: DirectSelectorRawMatchPolicy = .rejectDistinctMatches
   ) -> SelectorElementMatch {
     let value = selectorValue.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !value.isEmpty else {
@@ -161,7 +162,8 @@ extension RunnerTests {
     switch classifyDirectSelectorCandidates(
       facts,
       allowNonHittableFallback: allowNonHittableFallback,
-      filtersByExpectedPoint: expectedPoint != nil
+      filtersByExpectedPoint: expectedPoint != nil,
+      rawMatchPolicy: rawMatchPolicy
     ) {
     case .noMatch:
       return SelectorElementMatch(element: nil, isAmbiguous: false, usedNonHittableFallback: false)
@@ -205,7 +207,17 @@ extension RunnerTests {
   }
 
   func queryElement(app: XCUIApplication, selectorKey: String, selectorValue: String) -> Response {
-    let match = findElement(app: app, selectorKey: selectorKey, selectorValue: selectorValue)
+    // querySelector is a read — it backs get/is/wait and the offscreen-refusal
+    // double-check, none of which mutate. The fail-closed raw-match rule exists
+    // to stop a mutation acting on an unseen duplicate; applying it here would
+    // instead turn a decorative non-hittable duplicate into an AMBIGUOUS_MATCH
+    // for readers that previously resolved the hittable element.
+    let match = findElement(
+      app: app,
+      selectorKey: selectorKey,
+      selectorValue: selectorValue,
+      rawMatchPolicy: .preferHittableMatch
+    )
     if match.isAmbiguous {
       return Response(ok: false, error: ErrorPayload(code: "AMBIGUOUS_MATCH", message: "selector matched multiple elements"))
     }

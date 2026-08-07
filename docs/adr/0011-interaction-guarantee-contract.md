@@ -251,9 +251,13 @@ The replacement contract is structural. Multiple matches collapse only when
 all matches form one ancestor–descendant chain and every member resolves to the
 same actionable node. Otherwise the mutation fails with `AMBIGUOUS_MATCH`, a
 bounded list of snapshot candidate lines, and a partial ref frame generation so
-the caller can retry one listed candidate immediately. The direct XCTest path
-counts all raw exact matches before hittability can select a winner and delegates
-multiple matches to the runtime classifier; Maestro's explicit expected-point /
+the caller can retry one listed candidate immediately. On the direct XCTest path
+this applies to mutating dispatches only: they count all raw exact matches before
+hittability can select a winner and delegate multiple matches to the runtime
+classifier. Reads (`querySelector`, and so `get`/`is`/`wait`) keep the prior rule
+— prefer the single hittable match, ambiguous only when hittable matches compete
+— because a read has no side effect to guard and failing it closed would turn a
+decorative duplicate into an error. Maestro's explicit expected-point /
 non-hittable compatibility path remains intentionally separate.
 
 ### Synthesized iOS gesture policy
