@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { BackendSnapshotOptions } from '../../../backend.ts';
 import { ref, selector } from './selector-read-utils.ts';
-import { throwIfOffscreenInteractionTarget, tryResolveRefNode } from './resolution.ts';
+import {
+  buildRefResolution,
+  throwIfOffscreenInteractionTarget,
+  tryResolveRefNode,
+} from './resolution.ts';
 import { resolveSelectorChain } from '@agent-device/selectors';
 import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
 import type { Point } from '@agent-device/kernel/snapshot';
@@ -514,6 +518,21 @@ test('tryResolveRefNode discloses exact for a resolved ref and label-fallback fo
   });
 
   assert.equal(tryResolveRefNode(nodes, '@e9', { fallbackLabel: '' }), null);
+});
+
+test('buildRefResolution is the shared exact and label-fallback disclosure constructor', () => {
+  const node = selectorSnapshot().nodes[0]!;
+
+  assert.deepEqual(buildRefResolution('e1', node, 'exact').resolution, {
+    source: 'ref',
+    phase: 'pre-action',
+    kind: 'exact',
+  });
+  assert.deepEqual(buildRefResolution('e1', node, 'label-fallback').resolution, {
+    source: 'ref',
+    phase: 'pre-action',
+    kind: 'label-fallback',
+  });
 });
 
 // #1542: throwIfOffscreenInteractionTarget is exported for ADR 0011 registry

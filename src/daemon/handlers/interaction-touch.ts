@@ -149,7 +149,7 @@ async function dispatchTargetedTouchViaRuntime(
   // locator-minted ref (`internal.findResolvedTarget`), so it carries no
   // user-facing staleness — the caller never consumed a `@ref` (ADR 0014).
   const staleRefsWarning =
-    parsedTarget.target.kind === 'ref' && req.internal?.findResolvedTarget !== true
+    parsedTarget.target.kind === 'ref' && req.internal?.findResolvedTarget === undefined
       ? resolveRefStalenessWarning({
           session,
           ref: parsedTarget.target.ref,
@@ -195,7 +195,7 @@ async function dispatchTargetedTouchViaRuntime(
   return await dispatchRuntimeInteraction(params, {
     androidFreshnessBaseline,
     refContext:
-      parsedTarget.target.kind === 'ref' && req.internal?.findResolvedTarget !== true
+      parsedTarget.target.kind === 'ref' && req.internal?.findResolvedTarget === undefined
         ? {
             ref: parsedTarget.target.ref,
             mintedGeneration: parsedTarget.refGeneration,
@@ -223,7 +223,7 @@ async function dispatchTargetedTouchViaRuntime(
         flags: req.flags,
         durationMs,
         expectedResolvedTarget: replayTargetGuard,
-        preresolvedTarget: req.internal?.findPreresolvedTarget,
+        preresolvedTarget: req.internal?.findResolvedTarget,
       }),
     afterRun: async (result) => {
       if (session.lease?.leaseProvider) return undefined;
@@ -666,7 +666,7 @@ async function dispatchFillViaRuntime(
 
   return await dispatchRuntimeInteraction(params, {
     refContext:
-      parsedTarget.target.kind === 'ref' && req.internal?.findResolvedTarget !== true
+      parsedTarget.target.kind === 'ref' && req.internal?.findResolvedTarget === undefined
         ? {
             ref: parsedTarget.target.ref,
             mintedGeneration: parsedTarget.refGeneration,
@@ -682,7 +682,7 @@ async function dispatchFillViaRuntime(
         verify: req.flags?.verify,
         settle: readSettleRequest(req.flags),
         expectedResolvedTarget: replayTargetGuard,
-        preresolvedTarget: req.internal?.findPreresolvedTarget,
+        preresolvedTarget: req.internal?.findResolvedTarget,
       }),
     buildPayloads: (result) =>
       buildFillResponsePayloads({
@@ -712,7 +712,7 @@ async function prepareFillRefTarget(
   // A mutating `find`'s internal dispatch supplies a locator-minted ref, so the
   // public response must not claim the caller consumed a stale `@ref` (ADR 0014).
   const staleRefsWarning =
-    params.req.internal?.findResolvedTarget === true
+    params.req.internal?.findResolvedTarget !== undefined
       ? undefined
       : resolveRefStalenessWarning({
           session,

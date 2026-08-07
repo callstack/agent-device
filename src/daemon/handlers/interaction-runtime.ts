@@ -43,10 +43,10 @@ export function createInteractionRuntime(params: InteractionRuntimeParams) {
       getSession: () => session,
       recordOptions: {
         includeSnapshot: true,
-        // ADR 0014: a mutating find's internal dispatch already re-resolved its
-        // target by locator against the fresh capture, so it resolves against the
-        // observation, not the authorized frame tree.
-        omitRefFrameSnapshot: params.req.internal?.findResolvedTarget === true,
+        // ADR 0014: a mutating find's target came from the fresh operational
+        // observation, not the authorized frame tree. Resolution adopts the
+        // carried target; other runtime consumers still see that observation.
+        omitRefFrameSnapshot: params.req.internal?.findResolvedTarget !== undefined,
       },
       setRecord: (record) => {
         if (!record.snapshot) return;

@@ -1105,10 +1105,9 @@ function freshFindTree() {
 }
 
 /**
- * A tree in which the SAME ref body names a different element. Modelled on the
- * real window this closes: `refreshAndroidRefSnapshotIfFreshnessActive` can
- * re-capture between find's match and the leaf's resolution, so `session.snapshot`
- * advances underneath the `@ref` find just minted.
+ * A defensive tree in which the same ref body names a different element. No
+ * reachable production path is currently known to advance `session.snapshot`
+ * in this interval; forcing it here pins the one-resolution contract itself.
  */
 function divergedSessionTree() {
   return {
@@ -1191,7 +1190,8 @@ test('#1654 production route: find click carries its resolved node into the real
 
   expect(response?.ok).toBe(true);
   // The producer attaches the channel — fails if handleFindClick stops doing so.
-  expect(invokeCalls[0]?.internal?.findPreresolvedTarget?.node?.label).toBe('Save');
+  expect(invokeCalls[0]?.internal?.findResolvedTarget?.node?.label).toBe('Save');
+  expect(invokeCalls[0]?.internal?.findResolvedTarget?.ref).toBe('@e2');
   expect(dispatchedPoint('press')).toEqual(['310', '510']);
 });
 
@@ -1203,14 +1203,15 @@ test('#1654 production route: find fill carries its resolved node into the real 
 
   expect(response?.ok).toBe(true);
   // Fill has its own producer and its own forwarding hop; assert it separately.
-  expect(invokeCalls[0]?.internal?.findPreresolvedTarget?.node?.label).toBe('Save');
+  expect(invokeCalls[0]?.internal?.findResolvedTarget?.node?.label).toBe('Save');
+  expect(invokeCalls[0]?.internal?.findResolvedTarget?.ref).toBe('@e2');
   expect(dispatchedPoint('fill')).toEqual(['310', '510', 'hello']);
 });
 
-test('#1654 production route: a tree that advances mid-dispatch cannot retarget find click', async () => {
-  // The regression this closes. With the session tree advanced between find's
-  // match and the leaf's resolution, a second lookup of `@e2` finds "Delete" at
-  // (60, 720). Acting on find's node means (310, 510) regardless.
+test('#1654 defensive invariant: a tree that advances mid-dispatch cannot retarget find click', async () => {
+  // This deliberately forces an otherwise-unreached state: a second lookup of
+  // `@e2` would find "Delete" at (60, 720), while the resolved handoff must keep
+  // find's selected "Save" node at (310, 510).
   const { response } = await runFindThroughLeaf({
     positionals: ['text', 'Save', 'click'],
     divergeBeforeDispatch: true,
@@ -1220,7 +1221,7 @@ test('#1654 production route: a tree that advances mid-dispatch cannot retarget 
   expect(dispatchedPoint('press')).toEqual(['310', '510']);
 });
 
-test('#1654 production route: a tree that advances mid-dispatch cannot retarget find fill', async () => {
+test('#1654 defensive invariant: a tree that advances mid-dispatch cannot retarget find fill', async () => {
   const { response } = await runFindThroughLeaf({
     positionals: ['text', 'Save', 'fill', 'hello'],
     divergeBeforeDispatch: true,

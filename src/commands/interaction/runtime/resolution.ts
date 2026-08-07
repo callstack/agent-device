@@ -241,10 +241,9 @@ type RefResolution = { nodes: SnapshotState['nodes']; resolved: ResolvedRefNode 
  * still runs, against the caller's tree, at the symbols the ADR 0011
  * `runtime-ref` cells name.
  *
- * `exact` is the truthful disclosure here rather than a borrowed default: the
- * producer mints `@eN` off the very node it hands over, so the ref does name
- * that node exactly — the same provenance `tryResolveRefNode` reports when a
- * ref resolves without label recovery.
+ * `exact` is truthful only when all three pieces of carried provenance agree:
+ * the positional ref, the payload ref, and the node's own ref. Fail closed if
+ * future internal plumbing lets them drift.
  */
 function adoptPreresolvedRefTarget(
   target: Extract<InteractionTarget, { kind: 'ref' }>,
@@ -252,9 +251,17 @@ function adoptPreresolvedRefTarget(
 ): RefResolution {
   const ref = normalizeRef(target.ref);
   if (!ref) throw new AppError('INVALID_ARGS', `Invalid ref: ${target.ref}`);
+  const carriedRef = normalizeRef(preresolved.ref);
+  const nodeRef = preresolved.node.ref ? normalizeRef(preresolved.node.ref) : null;
+  if (carriedRef !== ref || nodeRef !== ref || !preresolved.nodes.includes(preresolved.node)) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Internal find target provenance does not match the interaction ref',
+    );
+  }
   return {
     nodes: preresolved.nodes,
-    resolved: { ref, node: preresolved.node, resolution: EXACT_REF_RESOLUTION },
+    resolved: buildRefResolution(ref, preresolved.node, 'exact'),
   };
 }
 
@@ -420,6 +427,19 @@ const LABEL_FALLBACK_REF_RESOLUTION: ResolutionDisclosure = {
   phase: 'pre-action',
   kind: 'label-fallback',
 };
+
+/** Shared construction site for every runtime-ref resolution disclosure. */
+export function buildRefResolution(
+  ref: string,
+  node: SnapshotNode,
+  kind: 'exact' | 'label-fallback',
+): ResolvedRefNode {
+  return {
+    ref,
+    node,
+    resolution: kind === 'exact' ? EXACT_REF_RESOLUTION : LABEL_FALLBACK_REF_RESOLUTION,
+  };
+}
 
 const UNIQUE_RUNTIME_RESOLUTION: ResolutionDisclosure = {
   source: 'runtime',
@@ -733,12 +753,12 @@ export function tryResolveRefNode(
   if (!ref) throw new AppError('INVALID_ARGS', `Invalid ref: ${refInput}`);
   const refNode = findNodeByRef(nodes, ref);
   if (isUsableResolvedNode(refNode)) {
-    return { ref, node: refNode, resolution: EXACT_REF_RESOLUTION };
+    return buildRefResolution(ref, refNode, 'exact');
   }
   const fallbackNode =
     options.fallbackLabel.length > 0 ? findNodeByLabel(nodes, options.fallbackLabel) : null;
   if (isUsableResolvedNode(fallbackNode)) {
-    return { ref, node: fallbackNode, resolution: LABEL_FALLBACK_REF_RESOLUTION };
+    return buildRefResolution(ref, fallbackNode, 'label-fallback');
   }
   return null;
 }

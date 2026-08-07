@@ -3718,6 +3718,8 @@ test("ADR 0014 blocker-2: a mutating find's internal fill from an expired frame 
 
   // The mutating find's internal dispatch (the exact request find.ts hands the
   // leaf) bypasses admission AND attaches no stale-ref warning.
+  const findNodes = session.snapshot.nodes;
+  const findNode = findNodes[0]!;
   const internal = await handleInteractionCommands({
     req: {
       token: 't',
@@ -3725,7 +3727,9 @@ test("ADR 0014 blocker-2: a mutating find's internal fill from an expired frame 
       command: 'fill',
       positionals: ['@e1', 'hello'],
       flags: {},
-      internal: { findResolvedTarget: true },
+      internal: {
+        findResolvedTarget: { ref: '@e1', node: findNode, nodes: findNodes },
+      },
     },
     sessionName,
     sessionStore,
@@ -3755,6 +3759,10 @@ function makeFindPreresolvedTree() {
     },
   ] as never);
   return { nodes, node: nodes[1] as NonNullable<(typeof nodes)[number]> };
+}
+
+function findResolvedTarget(preresolved: ReturnType<typeof makeFindPreresolvedTree>, ref = '@e2') {
+  return { ref, node: preresolved.node, nodes: preresolved.nodes };
 }
 
 async function runFindInternalClick(
@@ -3790,8 +3798,7 @@ test('#1654: a mutating find click acts on the node find resolved, not a re-reso
   const preresolved = makeFindPreresolvedTree();
 
   const response = await runFindInternalClick(sessionStore, sessionName, {
-    findResolvedTarget: true,
-    findPreresolvedTarget: { node: preresolved.node, nodes: preresolved.nodes },
+    findResolvedTarget: findResolvedTarget(preresolved),
   });
 
   expect(response?.ok).toBe(true);
@@ -3800,15 +3807,13 @@ test('#1654: a mutating find click acts on the node find resolved, not a re-reso
   expect(readPressPoint()).toEqual(['310', '510']);
 });
 
-test('#1654 control: without the pre-resolved node the same click still resolves @ref from the session tree', async () => {
+test('#1654 control: without the resolved-target payload the same click still resolves @ref from the session tree', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'find-preresolved-control';
   sessionStore.set(sessionName, makeStaleRefSession(sessionName));
   mockDispatch.mockResolvedValue({});
 
-  const response = await runFindInternalClick(sessionStore, sessionName, {
-    findResolvedTarget: true,
-  });
+  const response = await runFindInternalClick(sessionStore, sessionName, {});
 
   // The ordinary ref path is untouched: @e1 is "Continue" at (10,20,100,40).
   expect(response?.ok).toBe(true);
@@ -3816,11 +3821,10 @@ test('#1654 control: without the pre-resolved node the same click still resolves
 });
 
 test('#1654: the leaf performs no ref lookup at all — a session that could not resolve @e2 still acts', async () => {
-  // The decisive shape: this session has NO stored snapshot, so any second
-  // resolution necessarily fails ("Ref @e2 not found or has no bounds"). The
-  // action succeeding proves the lookup did not run, rather than merely
-  // agreeing with it. It is also the real-world win — find captured this node
-  // a moment ago, so refusing it as unresolvable was never right.
+  // Defensive proof of the structural contract: this synthetic session has no
+  // stored snapshot, so any second resolution necessarily fails ("Ref @e2 not
+  // found or has no bounds"). Production find normally stores its capture;
+  // this test proves lookup absence without claiming that missing state occurs.
   const sessionStore = makeSessionStore();
   const sessionName = 'find-preresolved-no-session-tree';
   const session = makeSession(sessionName);
@@ -3829,14 +3833,11 @@ test('#1654: the leaf performs no ref lookup at all — a session that could not
   mockDispatch.mockResolvedValue({});
   const preresolved = makeFindPreresolvedTree();
 
-  const withoutPreresolution = await runFindInternalClick(sessionStore, sessionName, {
-    findResolvedTarget: true,
-  });
+  const withoutPreresolution = await runFindInternalClick(sessionStore, sessionName, {});
   expect(withoutPreresolution?.ok).toBe(false);
 
   const response = await runFindInternalClick(sessionStore, sessionName, {
-    findResolvedTarget: true,
-    findPreresolvedTarget: { node: preresolved.node, nodes: preresolved.nodes },
+    findResolvedTarget: findResolvedTarget(preresolved),
   });
 
   expect(response?.ok).toBe(true);
@@ -3857,14 +3858,32 @@ test('#1654: the shared guards still run on the pre-resolved node', async () => 
   };
 
   const response = await runFindInternalClick(sessionStore, sessionName, {
-    findResolvedTarget: true,
-    findPreresolvedTarget: { node: blocked, nodes: [preresolved.nodes[0], blocked] },
+    findResolvedTarget: { ref: '@e2', node: blocked, nodes: [preresolved.nodes[0]!, blocked] },
   });
 
   expect(response?.ok).toBe(false);
   if (response && !response.ok) {
     expect(response.error.code).toBe('COMMAND_FAILED');
     expect(response.error.message).toContain('covered by another visible element');
+  }
+  expect(readPressPoint()).toBeUndefined();
+});
+
+test('#1654: the resolved-target payload fails closed when its ref provenance disagrees', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'find-preresolved-mismatched-ref';
+  sessionStore.set(sessionName, makeStaleRefSession(sessionName));
+  mockDispatch.mockResolvedValue({});
+  const preresolved = makeFindPreresolvedTree();
+
+  const response = await runFindInternalClick(sessionStore, sessionName, {
+    findResolvedTarget: findResolvedTarget(preresolved, '@e9'),
+  });
+
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('COMMAND_FAILED');
+    expect(response.error.message).toContain('provenance does not match');
   }
   expect(readPressPoint()).toBeUndefined();
 });

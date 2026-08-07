@@ -218,18 +218,13 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'runtime',
         via: 'packages/selectors/src/internal/resolve.ts#STALE_REF_HINT',
       },
-      // ADR 0012 decision 2: tryResolveRefNode produces both outcomes — exact
-      // for a resolved @ref, label-fallback for trailing-label recovery.
-      //
-      // #1654 second producer on this path: adoptPreresolvedRefTarget reports
-      // `exact` for a pre-resolved target. Truthful rather than borrowed — the
-      // producer mints the ref off the node it hands over, so the ref does name
-      // that node exactly. It cannot report label-fallback, which is correct:
-      // label recovery is a property of LOOKING a stale ref up, and a
-      // pre-resolved target never performs that lookup.
+      // ADR 0012 decision 2: the shared builder produces both outcomes — exact
+      // for an ordinary or pre-resolved @ref, label-fallback only for trailing-
+      // label recovery. The pre-resolved path validates carried ref/node/tree
+      // provenance before it can claim exact.
       resolutionDisclosure: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/resolution.ts#tryResolveRefNode',
+        via: 'src/commands/interaction/runtime/resolution.ts#buildRefResolution',
       },
     },
   },

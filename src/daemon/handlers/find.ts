@@ -425,14 +425,13 @@ function rectsMatch(
  *
  * `match.resolvedNode` is the end of find's own pipeline — locator match under
  * the `findAct` policy, then `resolveInteractiveMatchNode` promotion — and
- * `match.ref` is minted off it. Re-entering by bare `@ref` made the leaf look
- * that ref up again in the SESSION frame tree, a different tree from the fresh
- * capture find matched against: it could hand the action a different node, or
- * refuse a ref find had observed a moment earlier. The leaf's guards
+ * `match.ref` is minted off it. Re-entering by bare `@ref` made the leaf repeat
+ * that lookup. The handoff keeps ref, node, and source tree as one value so
+ * admission policy and lookup cannot drift independently. The leaf's guards
  * (occlusion, promotion, off-screen) still run on this node.
  */
 function preresolvedTarget(match: ResolvedMatch): PreresolvedInteractionTarget {
-  return { node: match.resolvedNode, nodes: match.nodes };
+  return { ref: match.ref, node: match.resolvedNode, nodes: match.nodes };
 }
 
 async function handleFindClick(ctx: FindContext, match: ResolvedMatch): Promise<DaemonResponse> {
@@ -444,7 +443,7 @@ async function handleFindClick(ctx: FindContext, match: ResolvedMatch): Promise<
     command: 'click',
     positionals: [match.ref],
     flags: match.actionFlags,
-    internal: { findResolvedTarget: true, findPreresolvedTarget: preresolvedTarget(match) },
+    internal: { findResolvedTarget: preresolvedTarget(match) },
   });
   if (!response.ok) return response;
   const matchCoords = match.resolvedNode.rect
@@ -487,7 +486,7 @@ async function handleFindFill(
     command: 'fill',
     positionals: [match.ref, value],
     flags: match.actionFlags,
-    internal: { findResolvedTarget: true, findPreresolvedTarget: preresolvedTarget(match) },
+    internal: { findResolvedTarget: preresolvedTarget(match) },
   });
   if (!response.ok) return response;
   recordSessionAction(

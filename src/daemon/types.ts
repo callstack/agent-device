@@ -108,28 +108,14 @@ type DaemonRequestInternal = {
    */
   replayLandmarkGuard?: TargetAnnotationV1;
   /**
-   * ADR 0014: set when a mutating `find` re-enters the interaction leaf with the
-   * ref it just resolved by locator against a fresh capture. That ref is find's
-   * own diagnostic identity, not a client-supplied ref subject to frame
-   * lifetime, so the leaf skips ref-frame admission (it still crosses the
-   * side-effect seam and expires the frame).
+   * ADR 0014 / #1654: the complete ref/node/tree target a mutating `find`
+   * resolved against its fresh capture. Its presence both marks the ref as
+   * find-owned (so admission/staleness policy is skipped) and supplies the node
+   * adopted by the interaction leaf. One payload keeps those decisions from
+   * becoming independently representable. The leaf still crosses the
+   * side-effect seam and expires the frame.
    */
-  findResolvedTarget?: boolean;
-  /**
-   * #1654: the node that same mutating `find` resolved, carried alongside the
-   * ref so the leaf adopts it instead of resolving `@eN` a second time.
-   *
-   * `findResolvedTarget` above says "this ref is find's own"; this says "and
-   * here is what it resolved to". They stay separate fields because the first
-   * governs ref-frame admission and staleness (a policy question) while this
-   * one governs resolution (a lookup question), and the focus/type actions set
-   * neither — they dispatch coordinates directly.
-   *
-   * Set only by the in-process `invoke` hop. Like every `internal` field it is
-   * daemon-only (`toDaemonRequest` never copies it off the wire), which is what
-   * makes carrying live node references here sound.
-   */
-  findPreresolvedTarget?: PreresolvedInteractionTarget;
+  findResolvedTarget?: PreresolvedInteractionTarget;
   /**
    * #1271 stage 2 (ADR 0012 decision 6 amendment): PROVENANCE — set by the
    * replay runtime (`invokeResolvedReplayAction`,

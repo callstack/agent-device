@@ -94,9 +94,10 @@ export type RecordingTargetOverride = {
  * The sole producer is a mutating `find` (`src/daemon/handlers/find.ts`): it
  * captures, matches by locator, promotes to a hittable ancestor, and mints
  * `@eN` off the node it chose — then re-enters the interaction leaf. Without
- * this channel the leaf looked `@eN` up again in the session frame tree, so a
- * tree that had since advanced could hand the action a DIFFERENT node than the
- * one find matched, or refuse a ref find had just observed.
+ * this channel the leaf repeated an in-memory `@eN` lookup after find had
+ * already selected the node. No reachable production path is currently known
+ * to advance the tree in that interval; this type removes the duplicate lookup
+ * structurally and keeps the selected ref/node/tree provenance together.
  *
  * What this does NOT skip: the shared guards. Occlusion, hittable-ancestor
  * promotion, and the off-screen check still run, on this node, at the same
@@ -109,6 +110,8 @@ export type RecordingTargetOverride = {
  * response.
  */
 export type PreresolvedInteractionTarget = {
+  /** The ref minted for `node`; the consumer validates it against the positional target. */
+  ref: string;
   /** The node the caller resolved, after the caller's own promotion. */
   node: SnapshotNode;
   /** The tree `node` came from — the guards read its siblings for occlusion/viewport. */
