@@ -54,11 +54,25 @@ export function readSnapshotQualityVerdict(value: unknown): SnapshotQualityVerdi
       )
         ? (raw.reasonCode as SnapshotQualityVerdict['reasonCode'])
         : undefined,
+    customActions: readCustomActionCoverage(raw.customActions),
     effectiveDepth: typeof raw.effectiveDepth === 'number' ? raw.effectiveDepth : undefined,
     collapsedLeafIndexes: Array.isArray(raw.collapsedLeafIndexes)
       ? raw.collapsedLeafIndexes.filter((entry): entry is number => typeof entry === 'number')
       : undefined,
   };
+}
+
+/**
+ * A partial verdict is dropped rather than half-read: the whole point of the
+ * pair is the ratio, and a coverage object missing one side cannot express one.
+ */
+function readCustomActionCoverage(
+  value: unknown,
+): SnapshotQualityVerdict['customActions'] | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const raw = value as Record<string, unknown>;
+  if (typeof raw.read !== 'number' || typeof raw.candidates !== 'number') return undefined;
+  return { read: raw.read, candidates: raw.candidates };
 }
 
 export function isSparseSnapshotQualityVerdict(
@@ -74,8 +88,27 @@ export function renderSnapshotQualityWarnings(
 ): string[] {
   return [
     ...stateWarning(verdict),
+    ...customActionCoverageWarning(verdict),
     ...depthWarning(verdict),
     ...collapsedLeafWarnings(verdict, nodes),
+  ];
+}
+
+/**
+ * Disclosed at response level, once, and only when the pass was incomplete: a
+ * merged element the bounded pass never reached renders exactly like one with
+ * no custom actions, so staying silent would teach the reader that the rest of
+ * the list has no affordances — the mis-inference `--actions` exists to stop.
+ *
+ * The remedy is scrolling, not `--scope`: the runner reads on-screen elements
+ * first, and scope is applied after the read pass, so it cannot redirect the
+ * budget.
+ */
+function customActionCoverageWarning(verdict: SnapshotQualityVerdict): string[] {
+  const coverage = verdict.customActions;
+  if (!coverage || coverage.read >= coverage.candidates) return [];
+  return [
+    `Custom actions were read for ${coverage.read} of ${coverage.candidates} merged elements, on-screen ones first; the remaining ${coverage.candidates - coverage.read} were not read, so an absent actions list on those is not evidence that they have none. Scroll them into view and re-run to read them.`,
   ];
 }
 

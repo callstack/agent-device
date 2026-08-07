@@ -35,6 +35,13 @@ export type SnapshotQualityVerdict = {
     | 'requested-backend';
   effectiveDepth?: number;
   collapsedLeafIndexes?: number[];
+  /**
+   * Coverage of an opt-in custom-action pass (`snapshot --actions`): how many
+   * merged elements were eligible and how many the bounded pass reached. An
+   * unread element is indistinguishable from one with no actions, so a partial
+   * pass has to be disclosed rather than left to look complete.
+   */
+  customActions?: { read: number; candidates: number };
 };
 
 export type Rect = {

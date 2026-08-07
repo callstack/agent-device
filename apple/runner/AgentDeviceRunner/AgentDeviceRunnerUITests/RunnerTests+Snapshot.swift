@@ -498,7 +498,8 @@ extension RunnerTests {
         reason: failure.message,
         reasonCode: "ax-rejected",
         effectiveDepth: nil,
-        collapsedLeafIndexes: nil
+        collapsedLeafIndexes: nil,
+        customActions: nil
       ),
       runnerFatal: true,
       runnerFatalReason: Self.axSnapshotUnavailableReason

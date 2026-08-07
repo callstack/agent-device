@@ -26,7 +26,7 @@ const snapshotCommandMetadata = defineFieldCommandMetadata(
     scope: stringField(),
     raw: booleanField(),
     customActions: booleanField(
-      'List accessibility custom actions (iOS UIAccessibilityCustomAction, React Native accessibilityActions) on elements that merge their children away. iOS simulator only; costs one accessibility round trip per merged element.',
+      'Name the affordances an element merged away (iOS UIAccessibilityCustomAction, React Native accessibilityActions) — a card whose reply/options controls are not separate elements still lists them here. The names are for PLANNING, not invocation: there is no API to trigger them, so reach the affordance through the element detail screen, through the same control exposed as a labeled element elsewhere, or by coordinates from its rect. iOS simulator only; costs one accessibility round trip per merged element.',
     ),
     forceFull: booleanField(),
     timeoutMs: integerField('Maximum wall-clock time for the snapshot command.'),

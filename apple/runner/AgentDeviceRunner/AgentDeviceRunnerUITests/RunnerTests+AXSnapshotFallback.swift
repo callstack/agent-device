@@ -48,6 +48,17 @@ extension RunnerTests {
     return depths.filter { $0 <= remembered }
   }
 
+  /// The bridge omits the key entirely when the capture did not ask for custom
+  /// actions, which is the difference between "nothing to disclose" and "read
+  /// none of them" — so a missing key must stay nil, never (0, 0).
+  static func privateAXCustomActionCoverage(_ raw: Any?) -> SnapshotCustomActionCoverage? {
+    guard let coverage = raw as? [String: Any],
+      let read = (coverage[RunnerAXSnapshotCustomActionsReadKey] as? NSNumber)?.intValue,
+      let candidates = (coverage[RunnerAXSnapshotCustomActionsCandidatesKey] as? NSNumber)?.intValue
+    else { return nil }
+    return SnapshotCustomActionCoverage(read: read, candidates: candidates)
+  }
+
   func rememberPrivateAXAcceptedDepth(bundleId: String?, processIdentifier: Int?, depth: Int) {
     // No PID means no way to notice a relaunch later; record nothing rather than risk serving
     // a stale shallow rung to a fresh process.
@@ -191,7 +202,10 @@ extension RunnerTests {
       )
       return SnapshotBackendCapture(
         payload: DataPayload(nodes: nodes, truncated: (response["truncated"] as? Bool) == true),
-        effectiveDepth: depthLimited ? effectiveDepth : nil
+        effectiveDepth: depthLimited ? effectiveDepth : nil,
+        customActions: Self.privateAXCustomActionCoverage(
+          response[RunnerAXSnapshotCustomActionsKey]
+        )
       )
     #else
       return nil
@@ -537,6 +551,52 @@ extension RunnerTests {
       Self.xcTestChannelStateFirstFailure(.boundedXCTestProbe, requestPinnedBackend: true)?.code,
       "budget")
     XCTAssertNil(Self.xcTestChannelStateFirstFailure(.normal, requestPinnedBackend: true))
+  }
+
+  /// The disclosure only exists if the counts survive the bridge boundary, and
+  /// "did not ask" must stay distinguishable from "read none".
+  func testCustomActionCoverageParsesOnlyCompletePairs() {
+    let coverage = Self.privateAXCustomActionCoverage([
+      RunnerAXSnapshotCustomActionsReadKey: 12,
+      RunnerAXSnapshotCustomActionsCandidatesKey: 19,
+    ])
+    XCTAssertEqual(coverage?.read, 12)
+    XCTAssertEqual(coverage?.candidates, 19)
+
+    // Absent key = the capture never asked; it must not read as (0, 0), which
+    // would warn "0 of 0" on every default capture.
+    XCTAssertNil(Self.privateAXCustomActionCoverage(nil))
+    // A half-present pair cannot express a ratio, so it is dropped whole.
+    XCTAssertNil(
+      Self.privateAXCustomActionCoverage([RunnerAXSnapshotCustomActionsReadKey: 12]))
+  }
+
+  /// A capped pass must say so; a complete one must stay silent.
+  func testPartialCustomActionPassIsDisclosedAndCompleteOneIsNot() {
+    let partial = SnapshotQuality(
+      state: "recovered", backend: "private-ax", reason: nil, reasonCode: "requested-backend",
+      effectiveDepth: nil, collapsedLeafIndexes: nil,
+      customActions: SnapshotCustomActionCoverage(read: 12, candidates: 19))
+    let message = Self.legacyQualityMessage(partial)
+    XCTAssertTrue(message?.contains("12 of 19 merged elements") == true)
+    XCTAssertTrue(message?.contains("remaining 7") == true)
+    XCTAssertTrue(message?.contains("Scroll them into view") == true)
+
+    // Every candidate read: nothing to disclose, and a healthy capture stays silent.
+    let complete = SnapshotQuality(
+      state: "healthy", backend: "private-ax", reason: nil, reasonCode: nil,
+      effectiveDepth: nil, collapsedLeafIndexes: nil,
+      customActions: SnapshotCustomActionCoverage(read: 19, candidates: 19))
+    XCTAssertNil(Self.legacyQualityMessage(complete))
+
+    // A healthy capture with an incomplete pass still discloses — the guard must
+    // not key the disclosure off degradation state.
+    let healthyButCapped = SnapshotQuality(
+      state: "healthy", backend: "private-ax", reason: nil, reasonCode: nil,
+      effectiveDepth: nil, collapsedLeafIndexes: nil,
+      customActions: SnapshotCustomActionCoverage(read: 12, candidates: 19))
+    XCTAssertTrue(
+      Self.legacyQualityMessage(healthyButCapped)?.contains("12 of 19") == true)
   }
 
   /// Action names annotated by the bridge must survive into the emitted node —

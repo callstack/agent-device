@@ -22,6 +22,16 @@ struct SnapshotQuality: Codable {
   let effectiveDepth: Int?
   /// Leaves that merge many labels — a container marked accessible hides its descendants.
   let collapsedLeafIndexes: [Int]?
+  /// Coverage of the bounded custom-action pass, when the capture asked for one.
+  let customActions: SnapshotCustomActionCoverage?
+}
+
+/// How much of the merged-element set the custom-action pass actually read. An
+/// unread element renders exactly like one with no actions, so a partial pass
+/// has to say so — otherwise absence reads as proof of absence.
+struct SnapshotCustomActionCoverage: Codable {
+  let read: Int
+  let candidates: Int
 }
 
 enum SnapshotBackendKind: String, CaseIterable {
@@ -78,6 +88,8 @@ struct SnapshotBackendCapture {
   let payload: DataPayload
   /// Set by the private AX backend when the ladder accepted a shallower depth than requested.
   let effectiveDepth: Int?
+  /// Set by the private AX backend when the capture asked for custom actions.
+  var customActions: SnapshotCustomActionCoverage? = nil
 }
 
 extension RunnerTests {
@@ -555,7 +567,8 @@ extension RunnerTests {
       reason: reason?.reason,
       reasonCode: reason?.code,
       effectiveDepth: capture.effectiveDepth,
-      collapsedLeafIndexes: Self.collapsedLeafIndexes(payload.nodes ?? [])
+      collapsedLeafIndexes: Self.collapsedLeafIndexes(payload.nodes ?? []),
+      customActions: capture.customActions
     )
     return DataPayload(
       // Legacy human text for older daemons that read message instead of snapshotQuality.
@@ -568,8 +581,19 @@ extension RunnerTests {
     )
   }
 
+  /// One line, response level. An unread merged element is byte-identical to
+  /// one with no actions, so a partial pass must name its own incompleteness.
+  static func customActionCoverageWarning(_ coverage: SnapshotCustomActionCoverage) -> String {
+    "Custom actions were read for \(coverage.read) of \(coverage.candidates) merged elements, "
+      + "on-screen ones first; the remaining \(coverage.candidates - coverage.read) were not read, "
+      + "so an absent actions list on those is not evidence that they have none. "
+      + "Scroll them into view and re-run to read them."
+  }
+
   static func legacyQualityMessage(_ quality: SnapshotQuality) -> String? {
-    guard quality.state != "healthy" || quality.collapsedLeafIndexes != nil else { return nil }
+    let partialCustomActions = quality.customActions.map { $0.read < $0.candidates } ?? false
+    guard quality.state != "healthy" || quality.collapsedLeafIndexes != nil || partialCustomActions
+    else { return nil }
     var parts: [String] = []
     if quality.state == "recovered" {
       let meaning = quality.reasonCode == "budget" || quality.reasonCode == "deferred"
@@ -587,6 +611,9 @@ extension RunnerTests {
           + (quality.reason.map { " (\($0))" } ?? "")
           + ". Use screenshot as visual truth and coordinate taps."
       )
+    }
+    if let coverage = quality.customActions, coverage.read < coverage.candidates {
+      parts.append(Self.customActionCoverageWarning(coverage))
     }
     if let depth = quality.effectiveDepth {
       // No --depth remedy here: an explicit --depth capture disables the
@@ -670,7 +697,8 @@ extension RunnerTests {
       reason: "snapshot returned only structural application/window nodes",
       reasonCode: "sparse-tree",
       effectiveDepth: nil,
-      collapsedLeafIndexes: nil
+      collapsedLeafIndexes: nil,
+      customActions: nil
     )
     let message = Self.legacyQualityMessage(recovered)
     XCTAssertTrue(message?.contains("queries snapshot backend") == true)
@@ -680,7 +708,7 @@ extension RunnerTests {
       Self.legacyQualityMessage(
         SnapshotQuality(
           state: "healthy", backend: "tree", reason: nil, reasonCode: nil, effectiveDepth: nil,
-          collapsedLeafIndexes: nil)
+          collapsedLeafIndexes: nil, customActions: nil)
       )
     )
   }

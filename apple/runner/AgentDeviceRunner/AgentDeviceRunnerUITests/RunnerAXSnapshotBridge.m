@@ -14,6 +14,10 @@ NSString *const RunnerAXSnapshotDeepExtensionNodesAddedKey = @"nodesAdded";
 NSString *const RunnerAXSnapshotDeepExtensionPendingKey = @"pendingFrontiers";
 NSString *const RunnerAXSnapshotDeepExtensionMissedKey = @"missedFrontiers";
 
+NSString *const RunnerAXSnapshotCustomActionsKey = @"customActions";
+NSString *const RunnerAXSnapshotCustomActionsReadKey = @"read";
+NSString *const RunnerAXSnapshotCustomActionsCandidatesKey = @"candidates";
+
 /// The AX server's name for UIAccessibilityCustomActions (React Native's
 /// `accessibilityActions` prop lands here too).
 static NSString *const RunnerAXCustomActionsAttribute = @"XC_kAXXCAttributeCustomActions";
@@ -95,10 +99,18 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
                                                    callsAllowed:deepExtensionCallLimit
                                                    mergedLeaves:merged
                                                        deadline:deadline];
-    [self annotateCustomActionsOnMergedLeaves:merged
-                                     axClient:axClient
-                                        limit:customActionLimit
-                                     deadline:deadline];
+    CGRect rootFrame = CGRectZero;
+    NSDictionary *rootFrameValue = rootNode[@"frame"];
+    if ([rootFrameValue isKindOfClass:NSDictionary.class]) {
+      rootFrame = CGRectMake(
+        [rootFrameValue[@"x"] doubleValue], [rootFrameValue[@"y"] doubleValue],
+        [rootFrameValue[@"width"] doubleValue], [rootFrameValue[@"height"] doubleValue]);
+    }
+    NSDictionary *customActions = [self annotateCustomActionsOnMergedLeaves:merged
+                                                                   axClient:axClient
+                                                                      limit:customActionLimit
+                                                                  rootFrame:rootFrame
+                                                                   deadline:deadline];
 
     NSMutableDictionary *response = [NSMutableDictionary dictionaryWithDictionary:@{
       RunnerAXSnapshotOkKey: @YES,
@@ -107,6 +119,9 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
     }];
     if (nil != deepExtension) {
       response[RunnerAXSnapshotDeepExtensionKey] = deepExtension;
+    }
+    if (customActions.count > 0) {
+      response[RunnerAXSnapshotCustomActionsKey] = customActions;
     }
     return response.copy;
   } @catch (NSException *exception) {
@@ -324,26 +339,52 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
 /// Reads custom actions for the merged leaves in traversal order until the
 /// limit or the capture deadline is spent. Each read is its own AX round trip
 /// (~100ms on an idle simulator), so this is strictly opt-in and strictly
-/// bounded; a leaf left unvisited simply carries no `actions` key.
-+ (void)annotateCustomActionsOnMergedLeaves:(nullable NSArray<RunnerAXSnapshotFrontier *> *)leaves
-                                   axClient:(id)axClient
-                                      limit:(NSInteger)limit
-                                   deadline:(nullable NSDate *)deadline
+/// bounded.
+///
+/// Returns {read, candidates} so the response can DISCLOSE an incomplete pass.
+/// An unread element is byte-identical to one that genuinely has no actions, so
+/// silence here would teach a reader that later cards have no affordances —
+/// exactly the mis-inference this capture exists to prevent.
+///
+/// `candidates` counts only elements still eligible at read time: a leaf that
+/// deep extension filled in since serialization is not a merged element, so
+/// counting it would inflate the denominator with nodes that never needed a
+/// read. A leaf whose live element vanished stays counted and unread, because
+/// that one really is an element we failed to answer for.
+///
+/// On-screen candidates are read first. The budget is smaller than a long
+/// feed's card count, so the order decides which elements an agent can act on
+/// at all — and it also makes the disclosure's remedy true: scrolling changes
+/// the on-screen set, so a re-run reads elements the previous pass could not.
+/// Note that `--scope` deliberately is NOT the ordering key: scope is applied
+/// when the Swift walk builds nodes, long after this pass, so it cannot narrow
+/// the read budget without duplicating the scope predicate here.
++ (NSDictionary<NSString *, NSNumber *> *)
+    annotateCustomActionsOnMergedLeaves:(nullable NSArray<RunnerAXSnapshotFrontier *> *)leaves
+                               axClient:(id)axClient
+                                  limit:(NSInteger)limit
+                              rootFrame:(CGRect)rootFrame
+                               deadline:(nullable NSDate *)deadline
 {
   if (limit <= 0 || leaves.count == 0) {
-    return;
+    return @{};
   }
-  NSInteger reads = 0;
-  NSInteger annotated = 0;
+  NSMutableArray<RunnerAXSnapshotFrontier *> *onScreen = [NSMutableArray array];
+  NSMutableArray<RunnerAXSnapshotFrontier *> *offScreen = [NSMutableArray array];
   for (RunnerAXSnapshotFrontier *leaf in leaves) {
-    if (reads >= limit || (nil != deadline && deadline.timeIntervalSinceNow <= 0)) {
-      break;
-    }
-    // Deep extension may have filled this leaf in since serialization; a node
-    // with real children is not a merged element and needs no action read.
     if ([leaf.node[@"children"] isKindOfClass:NSArray.class]
         && [(NSArray *)leaf.node[@"children"] count] > 0) {
       continue;
+    }
+    [([self isFrameOnScreen:leaf.node[@"frame"] rootFrame:rootFrame] ? onScreen : offScreen)
+        addObject:leaf];
+  }
+  NSInteger candidates = onScreen.count + offScreen.count;
+  NSInteger reads = 0;
+  NSInteger annotated = 0;
+  for (RunnerAXSnapshotFrontier *leaf in [onScreen arrayByAddingObjectsFromArray:offScreen]) {
+    if (reads >= limit || (nil != deadline && deadline.timeIntervalSinceNow <= 0)) {
+      break;
     }
     id element = [self accessibilityElementForSnapshot:leaf.snapshot];
     if (nil == element) {
@@ -356,8 +397,30 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
       annotated += 1;
     }
   }
-  NSLog(@"AGENT_DEVICE_RUNNER_PRIVATE_AX_CUSTOM_ACTIONS reads=%ld annotated=%ld candidates=%ld",
-        (long)reads, (long)annotated, (long)leaves.count);
+  NSLog(
+    @"AGENT_DEVICE_RUNNER_PRIVATE_AX_CUSTOM_ACTIONS reads=%ld annotated=%ld candidates=%ld onScreen=%ld",
+    (long)reads, (long)annotated, (long)candidates, (long)onScreen.count);
+  return @{
+    RunnerAXSnapshotCustomActionsReadKey: @(reads),
+    RunnerAXSnapshotCustomActionsCandidatesKey: @(candidates),
+  };
+}
+
+/// An empty root frame means the capture has no viewport to judge against, so
+/// every candidate counts as on-screen and the order stays document order.
++ (BOOL)isFrameOnScreen:(id)frameValue rootFrame:(CGRect)rootFrame
+{
+  if (CGRectIsEmpty(rootFrame)) {
+    return YES;
+  }
+  if (![frameValue isKindOfClass:NSDictionary.class]) {
+    return NO;
+  }
+  NSDictionary *frame = (NSDictionary *)frameValue;
+  CGRect rect = CGRectMake(
+    [frame[@"x"] doubleValue], [frame[@"y"] doubleValue],
+    [frame[@"width"] doubleValue], [frame[@"height"] doubleValue]);
+  return !CGRectIsEmpty(rect) && CGRectIntersectsRect(rect, rootFrame);
 }
 
 + (nullable NSArray<NSString *> *)customActionNamesForElement:(id)element axClient:(id)axClient

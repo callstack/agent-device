@@ -11,6 +11,13 @@ FOUNDATION_EXPORT NSString *const RunnerAXSnapshotDeepExtensionNodesAddedKey;
 FOUNDATION_EXPORT NSString *const RunnerAXSnapshotDeepExtensionPendingKey;
 FOUNDATION_EXPORT NSString *const RunnerAXSnapshotDeepExtensionMissedKey;
 
+/// Keys of the `customActions` dictionary in the snapshot response: how many
+/// merged elements were eligible for an action read, and how many the bounded
+/// pass actually reached. Present only when the capture asked for actions.
+FOUNDATION_EXPORT NSString *const RunnerAXSnapshotCustomActionsKey;
+FOUNDATION_EXPORT NSString *const RunnerAXSnapshotCustomActionsReadKey;
+FOUNDATION_EXPORT NSString *const RunnerAXSnapshotCustomActionsCandidatesKey;
+
 /// A depth-capped childless node awaiting an element-rooted follow-up request.
 /// Public so the runner unit bundle can drive the extension's miss paths with
 /// fabricated snapshots — the executed contract that missed frontiers are

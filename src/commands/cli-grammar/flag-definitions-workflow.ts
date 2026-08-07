@@ -204,7 +204,8 @@ export const WORKFLOW_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     names: ['--actions'],
     type: 'boolean',
     usageLabel: '--actions',
-    usageDescription: 'Snapshot: list accessibility custom actions on merged elements (iOS sim)',
+    usageDescription:
+      'Snapshot: name the affordances merged inside an element (iOS sim); not directly invokable — reach them via the detail screen, labeled children, or coordinates',
   },
   {
     key: 'snapshotForceFull',
