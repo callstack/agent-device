@@ -31,7 +31,14 @@ function snapshotNodeToComparableLine(node: SnapshotNode, depthOverride?: number
   const selectedPart = node.selected === true ? 'selected' : 'unselected';
   const hittablePart = node.hittable === true ? 'hittable' : 'not-hittable';
   const depthPart = String(depthOverride ?? node.depth ?? 0);
-  return [depthPart, role, textPart, enabledPart, selectedPart, hittablePart].join('|');
+  // The rendered line carries the actions list, so the comparable key has to as
+  // well: otherwise an action-only change diffs as 'unchanged' while its text
+  // silently differs from the baseline's. JSON-encoded because the names are
+  // app-authored and may contain the field separator.
+  const actionsPart = node.actions ? JSON.stringify(node.actions) : '';
+  return [depthPart, role, textPart, enabledPart, selectedPart, hittablePart, actionsPart].join(
+    '|',
+  );
 }
 
 export function buildSnapshotDiff(

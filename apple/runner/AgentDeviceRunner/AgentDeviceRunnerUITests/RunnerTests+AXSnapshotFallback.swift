@@ -56,7 +56,12 @@ extension RunnerTests {
       let read = (coverage[RunnerAXSnapshotCustomActionsReadKey] as? NSNumber)?.intValue,
       let candidates = (coverage[RunnerAXSnapshotCustomActionsCandidatesKey] as? NSNumber)?.intValue
     else { return nil }
-    return SnapshotCustomActionCoverage(read: read, candidates: candidates)
+    // read/candidates are the ratio and must both be present; the truncation
+    // count is additive, so an older bridge that omits it reads as zero rather
+    // than voiding the whole coverage.
+    let truncated =
+      (coverage[RunnerAXSnapshotCustomActionsTruncatedKey] as? NSNumber)?.intValue ?? 0
+    return SnapshotCustomActionCoverage(read: read, candidates: candidates, truncated: truncated)
   }
 
   func rememberPrivateAXAcceptedDepth(bundleId: String?, processIdentifier: Int?, depth: Int) {
@@ -571,12 +576,44 @@ extension RunnerTests {
       Self.privateAXCustomActionCoverage([RunnerAXSnapshotCustomActionsReadKey: 12]))
   }
 
+  /// The element budget bounds how many elements we read; these caps bound what
+  /// any ONE element can put in the response. Clipping must be reported, since
+  /// a clipped list looks exactly like a complete one.
+  func testActionNamesAreCappedPerElementAndReported() {
+    var truncated = ObjCBool(true)
+
+    // Under both caps: untouched, nothing to report.
+    let small = ["Reply", "Repost"]
+    XCTAssertEqual(
+      RunnerAXSnapshotBridge.cappedActionNames(small, truncated: &truncated), small)
+    XCTAssertFalse(truncated.boolValue)
+
+    // More actions than the per-element cap: clipped to the first 8, reported.
+    let many = (1...20).map { "Action \($0)" }
+    let cappedMany = RunnerAXSnapshotBridge.cappedActionNames(many, truncated: &truncated)
+    XCTAssertEqual(cappedMany.count, 8)
+    XCTAssertEqual(cappedMany.first, "Action 1")
+    XCTAssertTrue(truncated.boolValue)
+
+    // A single very long name is shortened, reported, and stays one string.
+    let long = String(repeating: "a", count: 500)
+    let cappedLong = RunnerAXSnapshotBridge.cappedActionNames([long], truncated: &truncated)
+    XCTAssertEqual(cappedLong.count, 1)
+    XCTAssertTrue(truncated.boolValue)
+    XCTAssertLessThan(cappedLong[0].count, long.count)
+    XCTAssertTrue(cappedLong[0].hasSuffix("…"))
+
+    // Empty input is not "truncated".
+    XCTAssertEqual(RunnerAXSnapshotBridge.cappedActionNames([], truncated: &truncated), [])
+    XCTAssertFalse(truncated.boolValue)
+  }
+
   /// A capped pass must say so; a complete one must stay silent.
   func testPartialCustomActionPassIsDisclosedAndCompleteOneIsNot() {
     let partial = SnapshotQuality(
       state: "recovered", backend: "private-ax", reason: nil, reasonCode: "requested-backend",
       effectiveDepth: nil, collapsedLeafIndexes: nil,
-      customActions: SnapshotCustomActionCoverage(read: 12, candidates: 19))
+      customActions: SnapshotCustomActionCoverage(read: 12, candidates: 19, truncated: 0))
     let message = Self.legacyQualityMessage(partial)
     XCTAssertTrue(message?.contains("12 of 19 merged elements") == true)
     XCTAssertTrue(message?.contains("remaining 7") == true)
@@ -586,7 +623,7 @@ extension RunnerTests {
     let complete = SnapshotQuality(
       state: "healthy", backend: "private-ax", reason: nil, reasonCode: nil,
       effectiveDepth: nil, collapsedLeafIndexes: nil,
-      customActions: SnapshotCustomActionCoverage(read: 19, candidates: 19))
+      customActions: SnapshotCustomActionCoverage(read: 19, candidates: 19, truncated: 0))
     XCTAssertNil(Self.legacyQualityMessage(complete))
 
     // A healthy capture with an incomplete pass still discloses — the guard must
@@ -594,7 +631,7 @@ extension RunnerTests {
     let healthyButCapped = SnapshotQuality(
       state: "healthy", backend: "private-ax", reason: nil, reasonCode: nil,
       effectiveDepth: nil, collapsedLeafIndexes: nil,
-      customActions: SnapshotCustomActionCoverage(read: 12, candidates: 19))
+      customActions: SnapshotCustomActionCoverage(read: 12, candidates: 19, truncated: 0))
     XCTAssertTrue(
       Self.legacyQualityMessage(healthyButCapped)?.contains("12 of 19") == true)
   }

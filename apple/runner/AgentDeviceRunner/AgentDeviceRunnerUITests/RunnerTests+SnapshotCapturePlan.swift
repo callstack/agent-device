@@ -32,6 +32,10 @@ struct SnapshotQuality: Codable {
 struct SnapshotCustomActionCoverage: Codable {
   let read: Int
   let candidates: Int
+  /// Elements whose action list was clipped by the per-element output caps. A
+  /// clipped list looks complete, so it is disclosed on the same principle as
+  /// an unread element.
+  let truncated: Int
 }
 
 enum SnapshotBackendKind: String, CaseIterable {
@@ -581,18 +585,31 @@ extension RunnerTests {
     )
   }
 
-  /// One line, response level. An unread merged element is byte-identical to
-  /// one with no actions, so a partial pass must name its own incompleteness.
-  static func customActionCoverageWarning(_ coverage: SnapshotCustomActionCoverage) -> String {
-    "Custom actions were read for \(coverage.read) of \(coverage.candidates) merged elements, "
-      + "on-screen ones first; the remaining \(coverage.candidates - coverage.read) were not read, "
-      + "so an absent actions list on those is not evidence that they have none. "
-      + "Scroll them into view and re-run to read them."
+  /// Response level, one line per incompleteness. An unread merged element is
+  /// byte-identical to one with no actions, and a clipped list looks complete,
+  /// so both have to name themselves.
+  static func customActionCoverageWarnings(_ coverage: SnapshotCustomActionCoverage) -> [String] {
+    var lines: [String] = []
+    if coverage.read < coverage.candidates {
+      lines.append(
+        "Custom actions were read for \(coverage.read) of \(coverage.candidates) merged elements, "
+          + "on-screen ones first; the remaining \(coverage.candidates - coverage.read) were not read, "
+          + "so an absent actions list on those is not evidence that they have none. "
+          + "Scroll them into view and re-run to read them.")
+    }
+    if coverage.truncated > 0 {
+      lines.append(
+        "\(coverage.truncated) element(s) published more custom actions than are shown; those "
+          + "lists are clipped to the first 8 names, and long names are shortened.")
+    }
+    return lines
   }
 
   static func legacyQualityMessage(_ quality: SnapshotQuality) -> String? {
-    let partialCustomActions = quality.customActions.map { $0.read < $0.candidates } ?? false
-    guard quality.state != "healthy" || quality.collapsedLeafIndexes != nil || partialCustomActions
+    let customActionWarnings =
+      quality.customActions.map { Self.customActionCoverageWarnings($0) } ?? []
+    guard quality.state != "healthy" || quality.collapsedLeafIndexes != nil
+      || !customActionWarnings.isEmpty
     else { return nil }
     var parts: [String] = []
     if quality.state == "recovered" {
@@ -612,9 +629,7 @@ extension RunnerTests {
           + ". Use screenshot as visual truth and coordinate taps."
       )
     }
-    if let coverage = quality.customActions, coverage.read < coverage.candidates {
-      parts.append(Self.customActionCoverageWarning(coverage))
-    }
+    parts.append(contentsOf: customActionWarnings)
     if let depth = quality.effectiveDepth {
       // No --depth remedy here: an explicit --depth capture disables the
       // frontier extension, so following it would return strictly less than

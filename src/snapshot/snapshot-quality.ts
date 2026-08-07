@@ -72,7 +72,14 @@ function readCustomActionCoverage(
   if (!value || typeof value !== 'object') return undefined;
   const raw = value as Record<string, unknown>;
   if (typeof raw.read !== 'number' || typeof raw.candidates !== 'number') return undefined;
-  return { read: raw.read, candidates: raw.candidates };
+  // read/candidates are the ratio and must both be present; the truncation
+  // count is additive, so an older runner that omits it reads as zero rather
+  // than voiding the whole coverage.
+  return {
+    read: raw.read,
+    candidates: raw.candidates,
+    truncated: typeof raw.truncated === 'number' ? raw.truncated : 0,
+  };
 }
 
 export function isSparseSnapshotQualityVerdict(
@@ -106,10 +113,21 @@ export function renderSnapshotQualityWarnings(
  */
 function customActionCoverageWarning(verdict: SnapshotQualityVerdict): string[] {
   const coverage = verdict.customActions;
-  if (!coverage || coverage.read >= coverage.candidates) return [];
-  return [
-    `Custom actions were read for ${coverage.read} of ${coverage.candidates} merged elements, on-screen ones first; the remaining ${coverage.candidates - coverage.read} were not read, so an absent actions list on those is not evidence that they have none. Scroll them into view and re-run to read them.`,
-  ];
+  if (!coverage) return [];
+  const lines: string[] = [];
+  if (coverage.read < coverage.candidates) {
+    lines.push(
+      `Custom actions were read for ${coverage.read} of ${coverage.candidates} merged elements, on-screen ones first; the remaining ${coverage.candidates - coverage.read} were not read, so an absent actions list on those is not evidence that they have none. Scroll them into view and re-run to read them.`,
+    );
+  }
+  if (coverage.truncated > 0) {
+    // A clipped list looks complete, which is the same failure mode as an
+    // unread element, so it gets its own line rather than a silent cap.
+    lines.push(
+      `${coverage.truncated} element(s) published more custom actions than are shown; those lists are clipped to the first 8 names, and long names are shortened.`,
+    );
+  }
+  return lines;
 }
 
 /**

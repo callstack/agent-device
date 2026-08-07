@@ -17,6 +17,7 @@ FOUNDATION_EXPORT NSString *const RunnerAXSnapshotDeepExtensionMissedKey;
 FOUNDATION_EXPORT NSString *const RunnerAXSnapshotCustomActionsKey;
 FOUNDATION_EXPORT NSString *const RunnerAXSnapshotCustomActionsReadKey;
 FOUNDATION_EXPORT NSString *const RunnerAXSnapshotCustomActionsCandidatesKey;
+FOUNDATION_EXPORT NSString *const RunnerAXSnapshotCustomActionsTruncatedKey;
 
 /// A depth-capped childless node awaiting an element-rooted follow-up request.
 /// Public so the runner unit bundle can drive the extension's miss paths with
@@ -63,7 +64,15 @@ FOUNDATION_EXPORT NSString *const RunnerAXSnapshotCustomActionsCandidatesKey;
 /// and does nothing; parameterizedAttribute: answers kAXErrorNoValue; and the
 /// raw AXUIElement C API cannot be aimed at app elements because
 /// XCAccessibilityElement is token-based and answers nil for AXUIElement.
-+ (nullable NSArray<NSString *> *)customActionNamesForElement:(id)element axClient:(id)axClient;
++ (nullable NSArray<NSString *> *)customActionNamesForElement:(id)element
+                                                    axClient:(id)axClient
+                                                   completed:(BOOL *)completed;
+
+/// Bounds one element's contribution to the response (max actions, max name
+/// length). Reports whether anything was clipped so truncation is disclosed
+/// rather than silently presented as a complete list.
++ (NSArray<NSString *> *)cappedActionNames:(NSArray<NSString *> *)names
+                                 truncated:(BOOL *)truncated;
 
 /// The shared AX client (`XCUIDevice.accessibilityInterface`), or nil when the
 /// private interface is unavailable.

@@ -149,6 +149,8 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     registerParameterizedFillDiagnosticValue(req);
     const invalidRecordingFlags = recordingFlagsResponse(req);
     if (invalidRecordingFlags) return invalidRecordingFlags;
+    const invalidCustomActionFlags = customActionFlagsResponse(req);
+    if (invalidCustomActionFlags) return invalidCustomActionFlags;
     // #1478: raw `flags.saveScript` on a non-owner command never reaches
     // admission, device work, or a handler that could arm publication.
     const unsupportedSaveScript = unsupportedSaveScriptFlagResponse(req);
@@ -332,6 +334,25 @@ function recordingFlagsResponse(req: DaemonRequest): DaemonResponse | undefined 
   if (req.flags?.record && req.flags?.noRecord) return mutuallyExclusiveRecordFlagsResponse();
   if (req.flags?.recordAs !== undefined && req.command !== 'fill') {
     return errorResponse('INVALID_ARGS', '--record-as is supported only by fill.');
+  }
+  return undefined;
+}
+
+/**
+ * `--actions` reads custom actions through the private-AX snapshot path, which
+ * a raw capture deliberately does not take (ADR 0004: raw preserves the tree
+ * backend's own errors). Asking for both is a contradiction, and answering it
+ * with a capture that structurally cannot carry actions would be a requested
+ * capability silently no-opped. Rejected at the request seam so CLI, Node
+ * client, and MCP all get the same answer before any device work.
+ */
+function customActionFlagsResponse(req: DaemonRequest): DaemonResponse | undefined {
+  if (req.flags?.snapshotCustomActions !== true) return undefined;
+  if (req.flags?.snapshotRaw === true) {
+    return errorResponse(
+      'INVALID_ARGS',
+      '--actions and --raw are mutually exclusive: custom actions are only readable through the private-AX snapshot path, which a raw capture does not use.',
+    );
   }
   return undefined;
 }

@@ -123,7 +123,24 @@ function formatCustomActions(node: SnapshotNode): string {
   if (!actions || actions.length === 0) {
     return '';
   }
-  return ` actions: [${actions.map((action) => `"${action}"`).join(', ')}]`;
+  // App-authored strings on a one-line-per-node surface: quotes and backslashes
+  // get the same escaping as text previews, and control characters collapse to
+  // spaces so a name containing a newline cannot split one node across lines.
+  return ` actions: [${actions
+    .map((action) => `"${escapePreviewText(collapseControlCharacters(action))}"`)
+    .join(', ')}]`;
+}
+
+function collapseControlCharacters(value: string): string {
+  return (
+    value
+      // Whitespace folds the way text previews already fold it (newlines, tabs).
+      .replace(/\s+/g, ' ')
+      // Remaining C0/C1 controls are zero-width but can still corrupt a terminal.
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\u0000-\u001f\u007f-\u009f]/g, '')
+      .trim()
+  );
 }
 
 export function displayLabel(node: SnapshotNode, type: string): string {

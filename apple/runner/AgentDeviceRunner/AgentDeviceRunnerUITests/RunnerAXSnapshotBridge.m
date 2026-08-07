@@ -17,10 +17,23 @@ NSString *const RunnerAXSnapshotDeepExtensionMissedKey = @"missedFrontiers";
 NSString *const RunnerAXSnapshotCustomActionsKey = @"customActions";
 NSString *const RunnerAXSnapshotCustomActionsReadKey = @"read";
 NSString *const RunnerAXSnapshotCustomActionsCandidatesKey = @"candidates";
+NSString *const RunnerAXSnapshotCustomActionsTruncatedKey = @"truncated";
 
 /// The AX server's name for UIAccessibilityCustomActions (React Native's
 /// `accessibilityActions` prop lands here too).
 static NSString *const RunnerAXCustomActionsAttribute = @"XC_kAXXCAttributeCustomActions";
+
+/// A single read costs ~100ms against a responsive app. This bound exists for
+/// the unresponsive case: without it one wedged element would swallow the whole
+/// capture's budget and starve every remaining candidate, turning a bounded
+/// enrichment into a capture-length stall.
+static const NSTimeInterval RunnerAXCustomActionReadTimeout = 1.0;
+
+/// Output caps. The element budget bounds how many elements we read; these
+/// bound what any ONE element can put in the response, so a pathological app
+/// cannot spend the whole snapshot on one node's action list.
+static const NSUInteger RunnerAXCustomActionsMaxPerElement = 8;
+static const NSUInteger RunnerAXCustomActionNameMaxLength = 80;
 
 typedef id (*RunnerAXObjectMsgSend)(id, SEL);
 typedef NSInteger (*RunnerAXIntegerMsgSend)(id, SEL);
@@ -380,29 +393,49 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
         addObject:leaf];
   }
   NSInteger candidates = onScreen.count + offScreen.count;
+  NSInteger attempts = 0;
   NSInteger reads = 0;
   NSInteger annotated = 0;
+  NSInteger truncatedElements = 0;
   for (RunnerAXSnapshotFrontier *leaf in [onScreen arrayByAddingObjectsFromArray:offScreen]) {
-    if (reads >= limit || (nil != deadline && deadline.timeIntervalSinceNow <= 0)) {
+    if (attempts >= limit || (nil != deadline && deadline.timeIntervalSinceNow <= 0)) {
       break;
     }
     id element = [self accessibilityElementForSnapshot:leaf.snapshot];
     if (nil == element) {
       continue;
     }
+    // The attempt is what the budget buys; only a completed read counts as
+    // read, so a timed-out element stays in the undisclosed remainder instead
+    // of being reported as "read, and it has no actions".
+    attempts += 1;
+    BOOL completed = NO;
+    NSArray<NSString *> *names = [self customActionNamesForElement:element
+                                                          axClient:axClient
+                                                         completed:&completed];
+    if (!completed) {
+      continue;
+    }
     reads += 1;
-    NSArray<NSString *> *names = [self customActionNamesForElement:element axClient:axClient];
-    if (names.count > 0) {
-      leaf.node[@"actions"] = names;
+    BOOL truncated = NO;
+    NSArray<NSString *> *capped = [self cappedActionNames:names ?: @[] truncated:&truncated];
+    if (truncated) {
+      truncatedElements += 1;
+    }
+    if (capped.count > 0) {
+      leaf.node[@"actions"] = capped;
       annotated += 1;
     }
   }
   NSLog(
-    @"AGENT_DEVICE_RUNNER_PRIVATE_AX_CUSTOM_ACTIONS reads=%ld annotated=%ld candidates=%ld onScreen=%ld",
-    (long)reads, (long)annotated, (long)candidates, (long)onScreen.count);
+    @"AGENT_DEVICE_RUNNER_PRIVATE_AX_CUSTOM_ACTIONS reads=%ld attempts=%ld annotated=%ld "
+     "candidates=%ld onScreen=%ld truncated=%ld",
+    (long)reads, (long)attempts, (long)annotated, (long)candidates, (long)onScreen.count,
+    (long)truncatedElements);
   return @{
     RunnerAXSnapshotCustomActionsReadKey: @(reads),
     RunnerAXSnapshotCustomActionsCandidatesKey: @(candidates),
+    RunnerAXSnapshotCustomActionsTruncatedKey: @(truncatedElements),
   };
 }
 
@@ -423,8 +456,13 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
   return !CGRectIsEmpty(rect) && CGRectIntersectsRect(rect, rootFrame);
 }
 
-+ (nullable NSArray<NSString *> *)customActionNamesForElement:(id)element axClient:(id)axClient
++ (nullable NSArray<NSString *> *)customActionNamesForElement:(id)element
+                                                    axClient:(id)axClient
+                                                   completed:(BOOL *)completed
 {
+  if (NULL != completed) {
+    *completed = NO;
+  }
   if (nil == element || nil == axClient) {
     return nil;
   }
@@ -432,15 +470,37 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
   if (![axClient respondsToSelector:selector]) {
     return nil;
   }
-  typedef id (*RunnerAXAttributesMsgSend)(id, SEL, id, id, NSError **);
-  RunnerAXAttributesMsgSend send = (RunnerAXAttributesMsgSend)objc_msgSend;
-  NSError *error = nil;
-  id values = nil;
-  @try {
-    values = send(axClient, selector, element, @[ RunnerAXCustomActionsAttribute ], &error);
-  } @catch (NSException *exception) {
+  // The AX call is a synchronous XPC round trip with no timeout of its own, so
+  // it runs off-thread behind a bounded wait. On timeout the result box is
+  // never read, so a late-returning wedged call cannot race this thread.
+  NSMutableArray *box = [NSMutableArray array];
+  dispatch_semaphore_t finished = dispatch_semaphore_create(0);
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+    typedef id (*RunnerAXAttributesMsgSend)(id, SEL, id, id, NSError **);
+    RunnerAXAttributesMsgSend send = (RunnerAXAttributesMsgSend)objc_msgSend;
+    NSError *error = nil;
+    id result = nil;
+    @try {
+      result = send(axClient, selector, element, @[ RunnerAXCustomActionsAttribute ], &error);
+    } @catch (NSException *exception) {
+      result = nil;
+    }
+    if (nil != result) {
+      [box addObject:result];
+    }
+    dispatch_semaphore_signal(finished);
+  });
+  long waited = dispatch_semaphore_wait(
+    finished,
+    dispatch_time(DISPATCH_TIME_NOW, (int64_t)(RunnerAXCustomActionReadTimeout * NSEC_PER_SEC)));
+  if (waited != 0) {
+    NSLog(@"AGENT_DEVICE_RUNNER_PRIVATE_AX_CUSTOM_ACTIONS_READ_TIMEOUT");
     return nil;
   }
+  if (NULL != completed) {
+    *completed = YES;
+  }
+  id values = box.firstObject;
   if (![values isKindOfClass:NSDictionary.class]) {
     return nil;
   }
@@ -459,6 +519,41 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
     }
   }
   return names.count > 0 ? names.copy : nil;
+}
+
+/// Bounds what one element can contribute to the response. The names come from
+/// the app, so their count and length are the app's choice, not ours — a list
+/// long enough to dominate a snapshot is a plausible accident (generated rows)
+/// as well as a hostile case. Truncation is reported, never silent: a clipped
+/// list is exactly as misleading as an unread element if it looks complete.
++ (NSArray<NSString *> *)cappedActionNames:(NSArray<NSString *> *)names
+                                 truncated:(BOOL *)truncated
+{
+  if (NULL != truncated) {
+    *truncated = NO;
+  }
+  NSMutableArray<NSString *> *capped = [NSMutableArray array];
+  for (NSString *name in names) {
+    if (capped.count >= RunnerAXCustomActionsMaxPerElement) {
+      if (NULL != truncated) {
+        *truncated = YES;
+      }
+      break;
+    }
+    if (name.length > RunnerAXCustomActionNameMaxLength) {
+      // Clip on composed character boundaries so a truncated name stays a
+      // valid string rather than a split grapheme.
+      NSRange clip = [name rangeOfComposedCharacterSequencesForRange:
+                             NSMakeRange(0, RunnerAXCustomActionNameMaxLength)];
+      [capped addObject:[[name substringWithRange:clip] stringByAppendingString:@"…"]];
+      if (NULL != truncated) {
+        *truncated = YES;
+      }
+      continue;
+    }
+    [capped addObject:name];
+  }
+  return capped.copy;
 }
 
 + (nullable id)accessibilityClient

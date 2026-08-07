@@ -41,7 +41,7 @@ export type SnapshotQualityVerdict = {
    * unread element is indistinguishable from one with no actions, so a partial
    * pass has to be disclosed rather than left to look complete.
    */
-  customActions?: { read: number; candidates: number };
+  customActions?: { read: number; candidates: number; truncated: number };
 };
 
 export type Rect = {
@@ -253,6 +253,10 @@ export function buildSnapshotPresentationKey(flags: SnapshotOptions | undefined)
     depth: typeof flags?.depth === 'number' ? flags.depth : null,
     scope: flags?.scope?.trim() || null,
     raw: flags?.raw === true,
+    // A capture that asked for custom actions is not the same presentation as
+    // one that did not: without this, 'snapshot' then 'snapshot --actions' on a
+    // still screen reports 'unchanged' and never delivers what was asked for.
+    customActions: flags?.customActions === true,
   });
 }
 
@@ -265,6 +269,7 @@ export function snapshotPresentationOptionsFromFlags(
     interactiveOnly: flags.snapshotInteractiveOnly,
     raw: flags.snapshotRaw,
     scope: flags.snapshotScope,
+    customActions: flags.snapshotCustomActions,
   };
 }
 

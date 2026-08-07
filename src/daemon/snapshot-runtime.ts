@@ -4,7 +4,7 @@ import {
   type SnapshotDiffSummary,
 } from '@agent-device/contracts/capture';
 import { stripAndroidSystemChromeProvenance } from '@agent-device/contracts/platform';
-import { isIosFamily, publicPlatformString } from '@agent-device/kernel/device';
+import { isIosFamily, publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { AgentDeviceBackend, BackendSnapshotResult } from '../backend.ts';
 import type { CommandSessionRecord } from '../runtime.ts';
@@ -19,6 +19,7 @@ import {
   resolveSessionDevice,
   withSessionlessRunnerCleanup,
 } from './handlers/snapshot-session.ts';
+import { isIosSimulator } from './device-targets.ts';
 import { activateCompleteRefFrame } from './ref-frame.ts';
 import {
   applyRecoveredWarningLatch,
@@ -147,6 +148,11 @@ async function dispatchSnapshotRuntimeCommand(
   if (unsupported) return unsupported;
   const resolvedScope = resolveSnapshotScope(req.flags?.snapshotScope, session);
   if (!resolvedScope.ok) return resolvedScope;
+  // Pure flags+device, so it answers before the session precondition: otherwise
+  // --actions on an iOS physical device costs a round trip ("run open first")
+  // before reporting that the flag is unserviceable there at all.
+  const customActionsGuard = requireCustomActionsSupported(req, device);
+  if (customActionsGuard) return customActionsGuard;
   const iosAppSessionGuard = await requireIosAppSessionForSnapshot(params.command, session, device);
   if (iosAppSessionGuard) return iosAppSessionGuard;
 
@@ -197,6 +203,29 @@ async function dispatchSnapshotRuntimeCommand(
       }),
     };
   });
+}
+
+/**
+ * Custom actions come from the private-AX snapshot backend, which only exists
+ * on the iOS simulator. Every other target would accept the flag, take a normal
+ * capture, and return nodes with no `actions` — indistinguishable from "this
+ * screen has no custom actions". Refuse instead, naming the resolved target so
+ * the caller knows which half of the request was impossible.
+ */
+function requireCustomActionsSupported(
+  req: DaemonRequest,
+  device: DeviceInfo,
+): DaemonResponse | null {
+  if (req.flags?.snapshotCustomActions !== true || isIosSimulator(device)) {
+    return null;
+  }
+  return errorResponse(
+    'UNSUPPORTED_OPERATION',
+    `--actions requires an iOS simulator: custom actions are read through the private accessibility snapshot backend, which ${device.platform}/${device.kind} targets do not have.`,
+    {
+      hint: 'Re-run without --actions, or target an iOS simulator.',
+    },
+  );
 }
 
 /**
