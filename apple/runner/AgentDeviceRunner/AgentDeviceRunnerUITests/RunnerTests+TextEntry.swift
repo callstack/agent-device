@@ -40,6 +40,8 @@ extension RunnerTests {
     static let pollInterval: TimeInterval = 0.02
     static let warmupValueTimeout: TimeInterval = 0.4
     static let verificationStabilityWindow: TimeInterval = 0.2
+    static let synthesizedCommitTimeout: TimeInterval = 3.0
+    static let synthesizedCommitQuietWindow: TimeInterval = 0.6
   }
 
   struct TextEntryResult {

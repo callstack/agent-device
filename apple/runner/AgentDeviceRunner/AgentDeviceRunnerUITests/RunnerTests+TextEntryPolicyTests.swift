@@ -61,6 +61,56 @@ extension RunnerTests {
     }
   }
 
+  func testSynthesizedTextCommitProgressWalksExpectedPrefixOnly() {
+    let expected = "hardware-keyboard"
+    XCTAssertEqual(
+      Self.synthesizedTextCommitProgress(observedText: "hardware-keyboard", expectedText: expected),
+      .committed
+    )
+    XCTAssertEqual(
+      Self.synthesizedTextCommitProgress(observedText: "", expectedText: expected),
+      .pending
+    )
+    XCTAssertEqual(
+      Self.synthesizedTextCommitProgress(observedText: "hardware-keyboa", expectedText: expected),
+      .pending
+    )
+    // Transformed input (formatter, mid-text caret, autocomplete) must stop the wait.
+    XCTAssertEqual(
+      Self.synthesizedTextCommitProgress(observedText: "hardwarX", expectedText: expected),
+      .diverged
+    )
+    XCTAssertEqual(
+      Self.synthesizedTextCommitProgress(observedText: "hardware-keyboards", expectedText: expected),
+      .diverged
+    )
+    XCTAssertEqual(
+      Self.synthesizedTextCommitProgress(observedText: nil, expectedText: expected),
+      .diverged
+    )
+  }
+
+  func testSynthesizedTextCommitRepairTailOnlyForStrictPrefixWithoutSubmitKeys() {
+    XCTAssertEqual(
+      Self.synthesizedTextCommitRepairTail(observedText: "hardware-keyboa", expectedText: "hardware-keyboard"),
+      "rd"
+    )
+    XCTAssertEqual(
+      Self.synthesizedTextCommitRepairTail(observedText: "", expectedText: "abc"),
+      "abc"
+    )
+    XCTAssertNil(
+      Self.synthesizedTextCommitRepairTail(observedText: "hardware-keyboard", expectedText: "hardware-keyboard")
+    )
+    XCTAssertNil(
+      Self.synthesizedTextCommitRepairTail(observedText: "hardwarX", expectedText: "hardware-keyboard")
+    )
+    // Never re-synthesize a tail that would submit.
+    XCTAssertNil(
+      Self.synthesizedTextCommitRepairTail(observedText: "ab", expectedText: "abc\n")
+    )
+  }
+
 #if os(iOS)
   func testSynthesizedTextEntryFallsBackOnlyWhenPrivateSynthesisIsUnavailable() {
     XCTAssertEqual(

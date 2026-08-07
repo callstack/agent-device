@@ -111,8 +111,23 @@ extension RunnerTests {
       {
         textEntryRoute = "synthesized-first-responder"
         NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=synthesized-first-responder")
+        let textBefore = editableTextValue(for: currentTarget, treatingPlaceholderAsEmpty: true)
         switch synthesizer.enterText(app: app, text: value, replacingExistingText: false) {
         case .continueTyping:
+          // No refresh point: like the tap-witness target itself, the commit wait must observe
+          // only the element the tap selected, never rediscover a different field.
+          awaitSynthesizedFirstResponderCommit(
+            app: app,
+            target: TextEntryTarget(
+              element: currentTarget,
+              refreshPoint: nil,
+              prefersFocusedElement: false,
+              fromTapWitness: true
+            ),
+            textBefore: textBefore,
+            typedText: value,
+            synthesizer: synthesizer
+          )
           return (currentTarget, true, nil)
         case .fallback:
           return (nil, false, .synthesisUnavailable)
