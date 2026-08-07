@@ -32,6 +32,8 @@ export { makeSessionStore } from './store-factory.ts';
 
 export { withFakeAdb, type FakeAdbResponse } from './fake-adb.ts';
 
+export { withFakeAppleTool, type FakeAppleToolResponse } from './fake-apple-tool.ts';
+
 export { assertRejectsAppError } from './app-error.ts';
 
 export {
