@@ -44,8 +44,31 @@ function applyCommandPolicy(parsed, agentResultState, allowedExternalCommands) {
 // full agent-device invocation, rather than the whole line failing as one
 // shell-projection violation. A `&&` inside a quoted selector value (for
 // example label="A && B") is not a chain boundary and must not split.
+//
+// A real shell rejects `&&` with an empty operand on either side (leading
+// `&& foo`, trailing `foo &&`, or doubled `foo && && bar`): each is a syntax
+// error, not two commands. The splitter below produces an empty segment for
+// exactly those shapes, so parseChainSegment turns an empty (post-trim)
+// segment into a validation issue instead of silently dropping it — a plan
+// with one of these shapes must not be blessed by validPlanCommands when it
+// would fail at execution.
 function parseCommandLine(command) {
-  return splitOnUnquotedAnd(command).map((segment) => parsePlanCommand(segment));
+  return splitOnUnquotedAnd(command).map((segment) => parseChainSegment(segment));
+}
+
+function parseChainSegment(segment) {
+  if (segment.trim().length > 0) return parsePlanCommand(segment.trim());
+  return {
+    command: segment,
+    tokens: [],
+    issues: [
+      {
+        kind: 'empty-chain-operand',
+        error:
+          'A && chain must have a non-empty command on both sides (no leading, trailing, or doubled &&).',
+      },
+    ],
+  };
 }
 
 function splitOnUnquotedAnd(command) {
@@ -54,7 +77,7 @@ function splitOnUnquotedAnd(command) {
     index = consumeSplitCharacter(command, index, state);
   }
   state.segments.push(state.current);
-  return state.segments.map((segment) => segment.trim()).filter((segment) => segment.length > 0);
+  return state.segments;
 }
 
 function consumeSplitCharacter(command, index, state) {

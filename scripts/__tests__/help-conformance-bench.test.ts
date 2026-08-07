@@ -421,6 +421,38 @@ test('plan validator keeps single-command results identical when no chain is pre
   assert.equal(single.command, 'agent-device snapshot -i');
 });
 
+// A real shell rejects && with an empty operand on either side. A validator
+// that silently dropped the empty segment (instead of failing it) would
+// bless a plan that fails at execution — exactly the gap review found.
+test('plan validator rejects a leading && as an empty chain operand', async () => {
+  const [empty, closeSegment] = await validatePlanCommands(['&& agent-device close']);
+  assert.equal(empty.issues[0]?.kind, 'empty-chain-operand');
+  assert.equal(closeSegment.issues.length, 0);
+});
+
+test('plan validator rejects a trailing && as an empty chain operand', async () => {
+  const [pressSegment, empty] = await validatePlanCommands(['agent-device press @e1 --settle &&']);
+  assert.equal(pressSegment.issues.length, 0);
+  assert.equal(empty.issues[0]?.kind, 'empty-chain-operand');
+});
+
+test('plan validator rejects a doubled && as an empty chain operand', async () => {
+  const [openSegment, empty, closeSegment] = await validatePlanCommands([
+    'agent-device open foo && && agent-device close',
+  ]);
+  assert.equal(openSegment.issues.length, 0);
+  assert.equal(empty.issues[0]?.kind, 'empty-chain-operand');
+  assert.equal(closeSegment.issues.length, 0);
+});
+
+test('plan validator still allows a quoted && to pass through a single segment unsplit', async () => {
+  const [single] = await validatePlanCommands([
+    'agent-device fill \'label="A && B"\' "value" --settle',
+  ]);
+  assert.equal(single.issues.length, 0);
+  assert.deepEqual(single.tokens, ['agent-device', 'fill', 'label="A && B"', 'value', '--settle']);
+});
+
 test('case matchers score parsed tokens so shell quoting does not change results', async () => {
   const commands = [
     'agent-device open "com.example.shop"',
