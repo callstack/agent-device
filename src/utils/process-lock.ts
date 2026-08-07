@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { isProcessAlive, readProcessStartTime } from './host-process.ts';
+import { classifyOwnerLiveness } from './owner-identity.ts';
 import { sleep } from './timeouts.ts';
 
 const DEFAULT_LOCK_TIMEOUT_MS = 30_000;
@@ -117,20 +117,14 @@ function readProcessLockDiagnostics(
           ownerPid: owner.pid,
           ownerStartTime: owner.startTime,
           ownerAgeMs: Math.max(0, Math.round(nowMs - owner.acquiredAtMs)),
+          ownerLiveness: classifyOwnerLiveness({ owner, acquiredAtMs: owner.acquiredAtMs }),
         }
       : {}),
   };
 }
 
 function isLiveProcessLockOwner(owner: ProcessLockOwner): boolean {
-  if (!Number.isInteger(owner.pid) || owner.pid <= 0) {
-    return false;
-  }
-  if (!isProcessAlive(owner.pid)) {
-    return false;
-  }
-  if (owner.startTime) {
-    return readProcessStartTime(owner.pid) === owner.startTime;
-  }
-  return true;
+  return (
+    classifyOwnerLiveness({ owner, acquiredAtMs: owner.acquiredAtMs }) !== 'owner-process-dead'
+  );
 }

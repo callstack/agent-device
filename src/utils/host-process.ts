@@ -55,7 +55,32 @@ export function readProcessCommand(pid: number): string | null {
   return readProcessField(pid, 'command=');
 }
 
-function readProcessField(pid: number, field: 'lstart=' | 'command='): string | null {
+// A zombie passes kill(pid, 0) and still reports its original lstart, so both
+// isProcessAlive and the start-time identity check read it as live; only the
+// process state exposes that it already terminated.
+export function isProcessZombie(pid: number): boolean {
+  return readProcessField(pid, 'state=')?.startsWith('Z') ?? false;
+}
+
+export function readProcessStartedAtMs(pid: number, nowMs: number = Date.now()): number | null {
+  const elapsedMs = parseEtimeMs(readProcessField(pid, 'etime='));
+  return elapsedMs === null ? null : nowMs - elapsedMs;
+}
+
+function parseEtimeMs(value: string | null): number | null {
+  if (!value) return null;
+  const match = /^(?:(\d+)-)?(?:(\d+):)?(\d{1,2}):(\d{2})$/.exec(value);
+  if (!match) return null;
+  const [, days = '0', hours = '0', minutes, seconds] = match;
+  return (
+    (Number(days) * 86_400 + Number(hours) * 3_600 + Number(minutes) * 60 + Number(seconds)) * 1_000
+  );
+}
+
+function readProcessField(
+  pid: number,
+  field: 'lstart=' | 'command=' | 'state=' | 'etime=',
+): string | null {
   if (!Number.isInteger(pid) || pid <= 0) return null;
   try {
     const result = runCmdSync('ps', ['-p', String(pid), '-o', field], {
