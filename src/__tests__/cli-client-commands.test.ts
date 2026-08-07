@@ -740,6 +740,22 @@ test('replay path falls through to the generic client command route', async () =
   assert.doesNotMatch(result.stderr, /Unknown command: replay/);
 });
 
+test('replay --timeout reaches the daemon request envelope through the public CLI', async () => {
+  const missingPath = '/tmp/does-not-exist.ad';
+  const result = await runCliCapture(['replay', missingPath, '--timeout', '1000'], async () => ({
+    ok: false,
+    error: {
+      code: 'UNKNOWN',
+      message: `ENOENT: no such file or directory, open '${missingPath}'`,
+    },
+  }));
+
+  assert.equal(result.code, 1);
+  assert.equal(result.calls.length, 1);
+  assert.equal(result.calls[0]?.command, 'replay');
+  assert.equal(result.calls[0]?.flags?.timeoutMs, 1000);
+});
+
 test('replay rejects extra plain replay paths before daemon dispatch', async () => {
   const client = createStubClient({
     installFromSource: async () => {
