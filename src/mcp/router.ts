@@ -1,17 +1,29 @@
 import { listCommandTools, commandToolExecutor, type ToolResult } from './command-tools.ts';
-import { readVersion } from '../utils/version.ts';
 import type { JsonRpcId, JsonRpcRequestEnvelope } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import { formatToolErrorText, normalizeToolError } from './tool-error.ts';
+import {
+  cacheFields,
+  finalizeResult,
+  negotiateLegacyProtocolVersion,
+  resolveProtocolEra,
+  serverInfo,
+  SUPPORTED_PROTOCOL_VERSIONS,
+  STATIC_RESULT_CACHE_TTL_MS,
+  UNSUPPORTED_PROTOCOL_VERSION_CODE,
+  UnsupportedProtocolVersionError,
+  type ProtocolEra,
+} from './protocol-era.ts';
 
-const MCP_SERVER_NAME = 'agent-device';
-const SUPPORTED_PROTOCOL_VERSION = '2025-11-25';
+const SERVER_INSTRUCTIONS =
+  'agent-device drives iOS, Android, tvOS, Android TV, macOS, Linux, and web targets. ' +
+  'Each tool mirrors the CLI command of the same name; tool descriptions carry the per-command contract.';
 
 export type JsonRpcMessage = JsonRpcRequestEnvelope;
 
 type JsonRpcResponse =
   | { jsonrpc: '2.0'; id: JsonRpcId; result: unknown }
-  | { jsonrpc: '2.0'; id: JsonRpcId; error: { code: number; message: string } };
+  | { jsonrpc: '2.0'; id: JsonRpcId; error: { code: number; message: string; data?: unknown } };
 
 export async function handleMcpMessage(message: JsonRpcMessage): Promise<JsonRpcResponse | null> {
   if (message.jsonrpc !== '2.0' || typeof message.method !== 'string') {
@@ -21,8 +33,18 @@ export async function handleMcpMessage(message: JsonRpcMessage): Promise<JsonRpc
   if (message.id === undefined) return null;
 
   try {
-    return successResponse(message.id, await handleRequest(message.method, message.params));
+    const era = resolveProtocolEra(message.method, message.params);
+    const result = await handleRequest(message.method, message.params, era);
+    return successResponse(message.id, finalizeResult(result, era));
   } catch (error) {
+    if (error instanceof UnsupportedProtocolVersionError) {
+      return errorResponse(
+        message.id,
+        UNSUPPORTED_PROTOCOL_VERSION_CODE,
+        error.message,
+        error.data,
+      );
+    }
     if (error instanceof JsonRpcMethodNotFoundError) {
       return errorResponse(message.id, -32601, error.message);
     }
@@ -34,23 +56,34 @@ export async function handleMcpMessage(message: JsonRpcMessage): Promise<JsonRpc
   }
 }
 
-async function handleRequest(method: string, params: unknown): Promise<unknown> {
+async function handleRequest(method: string, params: unknown, era: ProtocolEra): Promise<unknown> {
   switch (method) {
+    // Modern capability discovery. Servers MUST implement it, and dual-era clients use it
+    // as the stdio probe that tells a 2026-07-28 server from a handshake-only one.
+    case 'server/discover':
+      return {
+        supportedVersions: SUPPORTED_PROTOCOL_VERSIONS,
+        capabilities: { tools: {} },
+        instructions: SERVER_INSTRUCTIONS,
+        // A `DiscoverResult` is always a `CacheableResult`: these are required fields
+        // here, not the era-dependent hints `tools/list` adds.
+        ttlMs: STATIC_RESULT_CACHE_TTL_MS,
+        cacheScope: 'public',
+      };
+    // Legacy handshake. Retained so clients on 2025-11-25 and earlier keep connecting.
     case 'initialize':
       return {
-        protocolVersion: supportedProtocolVersion(params),
+        protocolVersion: negotiateLegacyProtocolVersion(params),
         capabilities: {
           tools: {},
         },
-        serverInfo: {
-          name: MCP_SERVER_NAME,
-          version: readVersion(),
-        },
+        serverInfo: serverInfo(),
       };
+    // Removed in 2026-07-28; still served because legacy clients use it as a keepalive.
     case 'ping':
       return {};
     case 'tools/list':
-      return { tools: listCommandTools() };
+      return { tools: listCommandTools(), ...cacheFields(era, STATIC_RESULT_CACHE_TTL_MS) };
     case 'tools/call':
       return await callTool(params);
     default:
@@ -71,10 +104,6 @@ async function callTool(params: unknown): Promise<ToolResult> {
   }
 }
 
-function supportedProtocolVersion(_params: unknown): string {
-  return SUPPORTED_PROTOCOL_VERSION;
-}
-
 function textToolResult(text: string, isError = false): ToolResult {
   return {
     isError,
@@ -86,8 +115,13 @@ function successResponse(id: JsonRpcId, result: unknown): JsonRpcResponse {
   return { jsonrpc: '2.0', id, result };
 }
 
-function errorResponse(id: JsonRpcId, code: number, message: string): JsonRpcResponse {
-  return { jsonrpc: '2.0', id, error: { code, message } };
+function errorResponse(
+  id: JsonRpcId,
+  code: number,
+  message: string,
+  data?: unknown,
+): JsonRpcResponse {
+  return { jsonrpc: '2.0', id, error: { code, message, ...(data ? { data } : {}) } };
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
