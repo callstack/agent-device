@@ -1,6 +1,4 @@
 import fs from 'node:fs';
-import http from 'node:http';
-import https from 'node:https';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
@@ -349,7 +347,13 @@ type DownloadRemoteArtifactParams = {
 
 export async function downloadRemoteArtifact(params: DownloadRemoteArtifactParams): Promise<void> {
   const artifactUrl = new URL(buildDaemonArtifactUrl(params.baseUrl, params.artifactId));
-  const transport = artifactUrl.protocol === 'https:' ? https : http;
+  // Loaded on demand: `prepareRemoteRequestArtifacts` runs on every CLI
+  // request, but only a remote daemon ever downloads an artifact, and
+  // importing `node:http` for a value costs ~9ms of undici init.
+  const transport =
+    artifactUrl.protocol === 'https:'
+      ? (await import('node:https')).default
+      : (await import('node:http')).default;
   await fs.promises.mkdir(path.dirname(params.destinationPath), { recursive: true });
   await new Promise<void>((resolve, reject) => {
     let settled = false;

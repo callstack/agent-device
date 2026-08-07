@@ -1,7 +1,5 @@
 import type { RequestProgressSink } from '@agent-device/contracts/progress';
 import net from 'node:net';
-import http from 'node:http';
-import https from 'node:https';
 import { AppError } from '@agent-device/kernel/errors';
 import { readNodeHttpResponseBody } from '../../utils/node-http.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
@@ -20,6 +18,22 @@ import { DAEMON_RPC_PROTOCOL_VERSION } from '../http-health.ts';
 import { readVersion } from '../../utils/version.ts';
 
 type ResolvedDaemonTransport = 'socket' | 'http';
+type NodeHttpRequester = Pick<typeof import('node:http'), 'request'>;
+
+/**
+ * `node:http` eagerly initializes undici, which costs ~9ms of startup in a
+ * fresh process. The default local transport is a plain `node:net` socket and
+ * never issues an HTTP request, so both HTTP modules are loaded on demand —
+ * only the HTTP transport, remote daemons, and HTTP health checks pay for them.
+ */
+async function loadHttpRequester(protocol: string): Promise<NodeHttpRequester> {
+  // `.default` (not the namespace) so this stays the very same module object a
+  // static `import http from 'node:http'` yields — its `request` property is
+  // mutable, which the transport's tests rely on to stub outbound requests.
+  return protocol === 'https:'
+    ? (await import('node:https')).default
+    : (await import('node:http')).default;
+}
 type SendRequestOptions = {
   onProgress?: RequestProgressSink;
 };
@@ -102,19 +116,19 @@ export async function readRemoteDaemonHealth(info: DaemonInfo): Promise<RemoteDa
   return health;
 }
 
-function readDaemonHttpHealth(info: DaemonInfo): Promise<RemoteDaemonHealth> {
+async function readDaemonHttpHealth(info: DaemonInfo): Promise<RemoteDaemonHealth> {
   const endpoint = info.baseUrl
     ? buildDaemonHttpUrl(info.baseUrl, 'health')
     : info.httpPort
       ? `http://127.0.0.1:${info.httpPort}/health`
       : null;
-  if (!endpoint) return Promise.resolve({ reachable: false });
+  if (!endpoint) return { reachable: false };
   const url = new URL(endpoint);
-  const transport = url.protocol === 'https:' ? https : http;
+  const transport = await loadHttpRequester(url.protocol);
   const timeoutMs = info.baseUrl
     ? REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS
     : LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS;
-  return new Promise((resolve) => {
+  return await new Promise((resolve) => {
     const headers = info.baseUrl ? buildDaemonHttpAuthHeaders(info.token) : {};
     const req = transport.request(
       {
@@ -380,9 +394,9 @@ async function sendHttpRequest(
   if (info.baseUrl) {
     Object.assign(headers, buildDaemonHttpAuthHeaders(info.token));
   }
+  const transport = await loadHttpRequester(rpcUrl.protocol);
 
   return await new Promise((resolve, reject) => {
-    const transport = rpcUrl.protocol === 'https:' ? https : http;
     const request = transport.request(
       {
         protocol: rpcUrl.protocol,

@@ -1,5 +1,7 @@
 import type { RequestProgressEvent, RequestProgressSink } from '@agent-device/contracts/progress';
-import http from 'node:http';
+// Type-only: importing `node:http` for a value eagerly initializes undici
+// (~9ms in a fresh process), which the default socket transport never needs.
+import type http from 'node:http';
 import type { Socket } from 'node:net';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';

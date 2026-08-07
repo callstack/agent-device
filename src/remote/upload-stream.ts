@@ -1,6 +1,5 @@
 import fs from 'node:fs';
-import http, { type IncomingHttpHeaders } from 'node:http';
-import https from 'node:https';
+import type { IncomingHttpHeaders } from 'node:http';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
@@ -65,7 +64,13 @@ async function streamFileToHttpRequestAttempt(options: {
   startOffset: number;
   progress?: UploadStreamProgressOptions;
 }): Promise<UploadStreamResponse> {
-  const transport = options.url.protocol === 'https:' ? https : http;
+  // Loaded on demand: this module sits in the CLI's eager import closure via
+  // the remote-artifact upload client, but only a remote daemon ever uploads.
+  // Importing `node:http` for a value costs ~9ms of undici init per process.
+  const transport =
+    options.url.protocol === 'https:'
+      ? (await import('node:https')).default
+      : (await import('node:http')).default;
   const payloadSize = fs.statSync(options.payloadPath).size;
   const headers = buildUploadRequestHeaders(options.headers, options.startOffset, payloadSize);
   emitUploadAttemptStarted(options.progress, options.startOffset, payloadSize);
