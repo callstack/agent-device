@@ -138,7 +138,10 @@ test('workflow help keeps common copyable command forms', async () => {
   if (help === null) throw new Error('Expected workflow help text');
   assert.match(help, /metro reload/);
   assert.match(help, /screenshot --overlay-refs/);
-  assert.match(help, /snapshot -s @ref/);
+  // Concrete ref shape, not the @ref placeholder the same card forbids using
+  // as a target (#1663 review).
+  assert.match(help, /snapshot -s @e12 \(the current concrete ref\)/);
+  assert.doesNotMatch(help, /snapshot -s @ref\b/);
   // Moved out of the compact card (not deleted) into their owning sub-topics:
   // network dump/settings animations -> help debugging; connect --remote-config
   // -> help remote; clipboard write -> help debugging (text-entry quirks).

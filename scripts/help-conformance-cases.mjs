@@ -315,6 +315,86 @@ export const CASES = [
       { id: 'noOpenArtifactPath', pattern: /(?:^|\n)agent-device\s+open\s+[^\n]*\.apk\b/i },
     ],
   },
+  {
+    // Review of the compact workflow card's && guidance found the plan
+    // validator failed a plan that followed it (unquoted && classified as
+    // shell-projection). Both target elements are already named/unambiguous
+    // here, which is exactly the "confident consecutive steps" case the card
+    // describes, so usesConfidentChaining is a real (not just possible)
+    // expectation, and validPlanCommands proves the fixed validator accepts
+    // the chained shape end to end.
+    id: 'chains-confident-consecutive-settle-steps',
+    docs: ['--help:first30', 'workflow'],
+    task: 'The Search tab is visible, labeled "Search", and known to reveal a search field also labeled "Search" with no other candidate on screen. Plan commands to press the Search tab and fill that field with "react native", settling after each step, then close. Plan commands only.',
+    expectations: [
+      'validPlanCommands',
+      'fullPrefix',
+      'usesSettleOnMutations',
+      'usesConfidentChaining',
+    ],
+    matchers: [
+      {
+        id: 'pressesSearchTab',
+        pattern: /\bagent-device\s+press\b[^\n]*label="?search"?[^\n]*--settle\b/i,
+      },
+      {
+        id: 'fillsSearchField',
+        pattern:
+          /\bagent-device\s+fill\b[^\n]*label="?search"?[^\n]*(?:"react native"|'react native')[^\n]*--settle\b/i,
+      },
+    ],
+  },
+  {
+    // help scripting owns --record-as secret-safe fills and save-script
+    // authoring now that this content left the mandatory workflow card;
+    // this proves an agent can actually plan the loop from the topic alone.
+    id: 'scripting-secret-safe-recorded-login',
+    docs: ['--help:first30', 'scripting'],
+    task: 'Author a reusable login script for the installed app com.example.app that never records the literal password. The AD_VAR_PASSWORD environment variable is already set in your shell, so do not plan a shell export line. Arm recording on open with --save-script=login.ad, fill the password field (id="password") from AD_VAR_PASSWORD using --record-as, verify the login succeeded, then publish the script without closing the session. Plan agent-device commands only.',
+    expectations: ['validPlanCommands', 'fullPrefix'],
+    matchers: [
+      {
+        id: 'armsSaveScriptOnOpen',
+        pattern: /\bagent-device\s+open\s+com\.example\.app\b[^\n]*--save-script[=\s]*login\.ad/i,
+      },
+      {
+        id: 'recordsSecretSafeFill',
+        pattern:
+          /\bagent-device\s+fill\s+(?:'|")?id="?password"?(?:'|")?\s+"?\$AD_VAR_PASSWORD"?[^\n]*--record-as\s+PASSWORD\b/i,
+      },
+      {
+        id: 'verifiesLoginSucceeded',
+        pattern: /\b(?:wait|is|get|find)\b/i,
+      },
+      { id: 'publishesWithoutClosing', pattern: /\bagent-device\s+session\s+save-script\b/i },
+    ],
+    forbidden: [
+      { id: 'noBareClose', pattern: /(?:^|\n)agent-device\s+close\b/i },
+      { id: 'noNoRecordOnSecretFill', pattern: /--no-record/i },
+    ],
+  },
+  {
+    // help gestures owns multi-touch shapes now that this content left the
+    // mandatory workflow card. The exact verification text ("pan changed
+    // yes") only appears in the gestures topic's own example, so a correct
+    // plan proves the model actually read it rather than guessing a shape.
+    id: 'gestures-android-transform-then-verify',
+    docs: ['--help:first30', 'gestures'],
+    task: 'On the already-open Android app, plan a combined pan/scale/rotate transform gesture centered at (200, 420) with dx=80, dy=-40, scale=2, rotate=35 degrees over 700ms, then verify the app-reported pan change using the exact confirmation text shown in the gesture reference. Plan commands only.',
+    expectations: ['validPlanCommands', 'fullPrefix'],
+    matchers: [
+      {
+        id: 'runsAndroidTransform',
+        pattern:
+          /\bagent-device\s+gesture\s+transform\s+200\s+420\s+80\s+-40\s+2\s+35\s+700\b[^\n]*--platform\s+android\b/i,
+      },
+      {
+        id: 'verifiesSemanticPanChange',
+        pattern: /\bagent-device\s+wait\s+text\s+"pan changed yes"[^\n]*--platform\s+android\b/i,
+      },
+    ],
+    forbidden: [{ id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET }],
+  },
   // Next-command quiz cases: captured output (pinned to the real renderer by
   // scripts/__tests__/help-conformance-sample-outputs.test.ts) plus a task,
   // scored by regex instead of the named expectation scorers above.

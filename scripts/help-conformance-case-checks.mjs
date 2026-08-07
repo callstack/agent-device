@@ -10,6 +10,12 @@ const EXPECTATION_SCORERS = {
     ),
   usesSnapshotI: ({ commands }) => commands.some((command) => /\bsnapshot\b.*\s-i\b/.test(command)),
   usesSettleOnMutations: ({ commands }) => allMutationsUseSettle(commands),
+  // help workflow teaches chaining confident consecutive steps with an
+  // unquoted &&. This reads the raw (pre-split) command lines, not `joined`
+  // (canonicalPlan flattens a chain into separate lines once the plan
+  // validator splits and validates each segment), so it is the only place
+  // that can tell whether the model actually chained.
+  usesConfidentChaining: ({ commands }) => commands.some((command) => /&&/.test(command)),
   noWaitStable: ({ joined }) => !joined.includes('wait stable'),
   verifiesNamedExpectation: ({ joined }) => /\b(wait|is|get|find)\b/.test(joined),
   usesDogfoodEvidence: ({ joined }) =>

@@ -379,6 +379,48 @@ test('plan validator rejects shell projection and non-permitted executables', as
   assert.ok(placeholder.issues.some(({ kind }) => kind === 'shell-projection'));
 });
 
+// The compact workflow card teaches chaining confident consecutive steps
+// with an unquoted `&&`. This is the validator side of that contract: split
+// on `&&` and validate each chained segment as its own agent-device command,
+// instead of failing the whole line as one shell-projection violation.
+test('plan validator splits an unquoted && chain into independently valid segments', async () => {
+  const [press, fill] = await validatePlanCommands([
+    'agent-device press \'label="Search"\' --settle && agent-device fill \'label="Search"\' "query" --settle',
+  ]);
+  assert.equal(press.issues.length, 0);
+  assert.deepEqual(press.tokens, ['agent-device', 'press', 'label="Search"', '--settle']);
+  assert.equal(fill.issues.length, 0);
+  assert.deepEqual(fill.tokens, ['agent-device', 'fill', 'label="Search"', 'query', '--settle']);
+});
+
+test('plan validator fails only the offending segment of a chained plan', async () => {
+  const [goodFirst, badSecond] = await validatePlanCommands([
+    'agent-device snapshot -i && agent-device press @<search-ref> --settle',
+  ]);
+  assert.equal(goodFirst.issues.length, 0);
+  assert.ok(badSecond.issues.some(({ kind }) => kind === 'pseudo-ref'));
+});
+
+test('plan validator does not split && inside a quoted selector value', async () => {
+  const [single] = await validatePlanCommands([
+    'agent-device fill \'label="A && B"\' "value" --settle',
+  ]);
+  assert.equal(single.issues.length, 0);
+  assert.deepEqual(single.tokens, ['agent-device', 'fill', 'label="A && B"', 'value', '--settle']);
+});
+
+test('plan validator still rejects an unquoted lone & as a shell operator', async () => {
+  const [lone] = await validatePlanCommands(['agent-device open foo & agent-device close']);
+  assert.equal(lone.issues[0]?.kind, 'shell-projection');
+});
+
+test('plan validator keeps single-command results identical when no chain is present', async () => {
+  const [single] = await validatePlanCommands(['agent-device snapshot -i']);
+  assert.equal(single.issues.length, 0);
+  assert.deepEqual(single.tokens, ['agent-device', 'snapshot', '-i']);
+  assert.equal(single.command, 'agent-device snapshot -i');
+});
+
 test('case matchers score parsed tokens so shell quoting does not change results', async () => {
   const commands = [
     'agent-device open "com.example.shop"',

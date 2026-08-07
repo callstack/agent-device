@@ -235,7 +235,7 @@ Snapshots and refs:
   Legend: @e12 [button] label="Add to cart" enabled hittable -> press @e12. [off-screen below] -> scroll down (a hint, not a ref).
   Refs stay valid until you press/click/fill/type/scroll/back/wait-for-async-UI, or otherwise change app state; open/--relaunch clears the stored snapshot outright.
   Prefer --settle and continue from its settled diff when it shows the next target; refresh with snapshot -i only when you did not settle, settle reported not settled, or its output lacks what you need. A known selector/label after a mutation is often enough, since interaction commands refresh state internally.
-  Truncated preview: snapshot -s @ref, not get text. Missing target in a list: scroll down/up (not bottom/top unless the task wants the edge), then snapshot -i. TV/D-pad focus: help tv.
+  Truncated preview: snapshot -s @e12 (the current concrete ref), not get text. Missing target in a list: scroll down/up (not bottom/top unless the task wants the edge), then snapshot -i. TV/D-pad focus: help tv.
 
 Selectors:
   id="field-email", label="Allow", role=button label="Search" -- not bare role keys (button="Search"); no CSS selectors/--selector/--text/raw x-y when refs/selectors exist.
