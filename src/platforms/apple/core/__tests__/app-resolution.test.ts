@@ -5,7 +5,10 @@ const { mockRunSimctl } = vi.hoisted(() => ({ mockRunSimctl: vi.fn() }));
 
 vi.mock('../apps-simctl.ts', () => ({ runSimctl: mockRunSimctl }));
 
-import { findIosSimulatorInstalledApp } from '../app-resolution.ts';
+import {
+  detectSoleRunningIosSimulatorApp,
+  findIosSimulatorInstalledApp,
+} from '../app-resolution.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 const bootedSimulator: DeviceInfo = {
@@ -44,6 +47,71 @@ test('findIosSimulatorInstalledApp verifies exact bundle ids and app-name aliase
 test('findIosSimulatorInstalledApp does not probe a stopped simulator', async () => {
   assert.equal(
     await findIosSimulatorInstalledApp({ ...bootedSimulator, booted: false }, 'com.example.demo'),
+    undefined,
+  );
+  assert.equal(mockRunSimctl.mock.calls.length, 0);
+});
+
+function mockLaunchctlAndListapps(runningBundleIds: string[]): void {
+  mockRunSimctl.mockImplementation(async (_device: DeviceInfo, args: string[]) => {
+    if (args[0] === 'spawn') {
+      const lines = runningBundleIds.map(
+        (bundleId, index) => `${1000 + index}\t0\tUIKitApplication:${bundleId}[abcd][rb-legacy]`,
+      );
+      // Non-UIKitApplication launchd jobs (system daemons) are mixed in on a
+      // real device and must be ignored, not just absent.
+      return {
+        exitCode: 0,
+        stdout: `PID\tStatus\tLabel\n-\t0\tcom.apple.cfprefsd\n${lines.join('\n')}`,
+      };
+    }
+    return {
+      stdout: JSON.stringify({
+        'com.example.demo': { CFBundleDisplayName: 'Demo' },
+        'com.apple.Preferences': { CFBundleDisplayName: 'Settings' },
+      }),
+    };
+  });
+}
+
+test('detectSoleRunningIosSimulatorApp cross-references launchctl against installed apps', async () => {
+  // com.apple.family is a launchd job that shows up as UIKitApplication but
+  // is not a real installed app (not in `simctl listapps`) — it must be
+  // filtered out, leaving Preferences as the sole confident candidate.
+  mockLaunchctlAndListapps(['com.apple.Preferences', 'com.apple.family']);
+
+  assert.deepEqual(await detectSoleRunningIosSimulatorApp(bootedSimulator), {
+    bundleId: 'com.apple.Preferences',
+    name: 'Settings',
+  });
+});
+
+test('detectSoleRunningIosSimulatorApp refuses to guess between two running apps', async () => {
+  mockLaunchctlAndListapps(['com.apple.Preferences', 'com.example.demo']);
+
+  assert.equal(await detectSoleRunningIosSimulatorApp(bootedSimulator), undefined);
+});
+
+test('detectSoleRunningIosSimulatorApp returns undefined when nothing is running', async () => {
+  mockLaunchctlAndListapps([]);
+
+  assert.equal(await detectSoleRunningIosSimulatorApp(bootedSimulator), undefined);
+});
+
+test('detectSoleRunningIosSimulatorApp treats a failed probe as inconclusive', async () => {
+  mockRunSimctl.mockImplementation(async (_device: DeviceInfo, args: string[]) => {
+    if (args[0] === 'spawn') return { exitCode: 1, stdout: '' };
+    return {
+      stdout: JSON.stringify({ 'com.apple.Preferences': { CFBundleDisplayName: 'Settings' } }),
+    };
+  });
+
+  assert.equal(await detectSoleRunningIosSimulatorApp(bootedSimulator), undefined);
+});
+
+test('detectSoleRunningIosSimulatorApp does not probe a stopped simulator', async () => {
+  assert.equal(
+    await detectSoleRunningIosSimulatorApp({ ...bootedSimulator, booted: false }),
     undefined,
   );
   assert.equal(mockRunSimctl.mock.calls.length, 0);

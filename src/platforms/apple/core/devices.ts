@@ -202,6 +202,46 @@ export async function findBootableIosSimulator(
   return simulators.find((simulator) => !targetFilter || simulator.target === targetFilter) ?? null;
 }
 
+// Bounded so an error-path probe (e.g. enriching a SESSION_NOT_FOUND hint)
+// never turns into a long wait — `simctl list` normally answers in well under
+// a second (see the memo comment in simulator.ts).
+const IOS_BOOTED_SIMULATOR_PROBE_TIMEOUT_MS = 3_000;
+
+/**
+ * Lists every currently booted iOS simulator via a single `simctl list`
+ * call. Unlike `findBootableIosSimulator`, this returns all booted matches
+ * instead of the first sorted candidate — callers that need to detect
+ * ambiguity (more than one booted device) read this directly rather than
+ * inferring it from device resolution, which silently picks one.
+ *
+ * Returns `[]` on any discovery failure (tool missing, timeout, bad JSON) so
+ * callers on an error path can treat "unknown" the same as "ambiguous" and
+ * fall back safely.
+ */
+export async function listBootedIosSimulators(
+  options: IosDeviceDiscoveryOptions = {},
+): Promise<DeviceInfo[]> {
+  const simulatorSetPath = resolveIosSimulatorDeviceSetPath(options.simulatorSetPath);
+
+  let simResult;
+  try {
+    simResult = await runXcrun(buildSimctlArgs(['list', 'devices', '-j'], { simulatorSetPath }), {
+      timeoutMs: IOS_BOOTED_SIMULATOR_PROBE_TIMEOUT_MS,
+    });
+  } catch {
+    return [];
+  }
+
+  try {
+    const payload = JSON.parse(simResult.stdout as string) as SimctlListDevicesPayload;
+    return parseSimctlAppleDevices(payload, simulatorSetPath).filter(
+      (device) => device.kind === 'simulator' && device.booted === true,
+    );
+  } catch {
+    return [];
+  }
+}
+
 function parseSimctlAppleDevices(
   payload: SimctlListDevicesPayload,
   simulatorSetPath: string | undefined,

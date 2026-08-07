@@ -41,17 +41,27 @@ vi.mock('../../../platforms/apple/core/apps.ts', async (importOriginal) => {
   };
 });
 
+// The real implementation shells out to simctl to probe for a hint-worthy
+// unambiguous environment; that live-probe logic is covered by
+// ios-app-session-hint.test.ts. Stubbed here so this suite stays hermetic and
+// fast — defaults to "no enrichment", matching the current-behavior fallback.
+vi.mock('../../ios-app-session-hint.ts', () => ({
+  buildIosOpenCommandHint: vi.fn(async () => undefined),
+}));
+
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import {
   runAppleRunnerCommand,
   stopIosRunnerSession,
 } from '../../../platforms/apple/core/runner/runner-client.ts';
 import { closeIosApp } from '../../../platforms/apple/core/apps.ts';
+import { buildIosOpenCommandHint } from '../../ios-app-session-hint.ts';
 
 const mockDispatch = vi.mocked(dispatchCommand);
 const mockRunnerCommand = vi.mocked(runAppleRunnerCommand);
 const mockStopIosRunnerSession = vi.mocked(stopIosRunnerSession);
 const mockCloseIosApp = vi.mocked(closeIosApp);
+const mockBuildIosOpenCommandHint = vi.mocked(buildIosOpenCommandHint);
 
 function makeSessionStore(): SessionStore {
   const root = mkdtempForTestSync('agent-device-snapshot-handler-');
@@ -103,6 +113,8 @@ beforeEach(() => {
   mockStopIosRunnerSession.mockResolvedValue();
   mockCloseIosApp.mockReset();
   mockCloseIosApp.mockResolvedValue();
+  mockBuildIosOpenCommandHint.mockReset();
+  mockBuildIosOpenCommandHint.mockResolvedValue(undefined);
 });
 
 function writeSolidPng(filePath: string, width = 390, height = 844): void {
@@ -362,8 +374,43 @@ test('snapshot on iOS rejects sessions without a tracked app', async () => {
   if (response?.ok === false) {
     expect(response.error.code).toBe('SESSION_NOT_FOUND');
     expect(response.error.message).toMatch(/iOS snapshot requires an active app session/i);
+    expect(response.error.details?.reason).toBe('ios_app_session_required');
+    expect(response.error.details?.hint).toBeUndefined();
   }
   expect(mockDispatch).not.toHaveBeenCalled();
+});
+
+test('snapshot on iOS without a tracked app carries the detected open command as its hint', async () => {
+  mockBuildIosOpenCommandHint.mockResolvedValue(
+    'One booted device found ("My iPhone Simulator", udid sim-1) with xyz.blueskyweb.app in ' +
+      'the foreground. Run: agent-device open xyz.blueskyweb.app --platform ios',
+  );
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-sim-no-app-hinted';
+  sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
+
+  const response = await handleSnapshotCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'snapshot',
+      positionals: [],
+      flags: {},
+    },
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(false);
+  if (response?.ok === false) {
+    expect(response.error.code).toBe('SESSION_NOT_FOUND');
+    expect(response.error.details?.hint).toBe(
+      'One booted device found ("My iPhone Simulator", udid sim-1) with xyz.blueskyweb.app in ' +
+        'the foreground. Run: agent-device open xyz.blueskyweb.app --platform ios',
+    );
+  }
+  expect(mockBuildIosOpenCommandHint).toHaveBeenCalledWith(iosSimulatorDevice);
 });
 
 test('snapshot on iOS runs when the session tracks an app', async () => {

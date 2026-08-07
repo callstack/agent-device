@@ -11,6 +11,7 @@ import type { CommandSessionRecord } from '../runtime.ts';
 import { createAgentDevice } from '../runtime.ts';
 import { maybeBuildAndroidSnapshotTimeoutFailure } from './android-snapshot-timeout-evidence.ts';
 import { errorResponse, requireCommandSupported } from './handlers/response.ts';
+import { buildIosOpenCommandHint } from './ios-app-session-hint.ts';
 import { captureSnapshot, resolveSnapshotScope } from './handlers/snapshot-capture.ts';
 import {
   buildSnapshotSession,
@@ -144,7 +145,7 @@ async function dispatchSnapshotRuntimeCommand(
   if (unsupported) return unsupported;
   const resolvedScope = resolveSnapshotScope(req.flags?.snapshotScope, session);
   if (!resolvedScope.ok) return resolvedScope;
-  const iosAppSessionGuard = requireIosAppSessionForSnapshot(params.command, session, device);
+  const iosAppSessionGuard = await requireIosAppSessionForSnapshot(params.command, session, device);
   if (iosAppSessionGuard) return iosAppSessionGuard;
 
   return await withSessionlessRunnerCleanup(session, device, async () => {
@@ -196,17 +197,25 @@ async function dispatchSnapshotRuntimeCommand(
   });
 }
 
-function requireIosAppSessionForSnapshot(
+async function requireIosAppSessionForSnapshot(
   command: 'snapshot' | 'diff',
   session: SessionState | undefined,
   device: SessionState['device'],
-): DaemonResponse | null {
+): Promise<DaemonResponse | null> {
   if (!isIosFamily(device) || session?.appBundleId) {
     return null;
   }
+  // An unambiguous environment (one booted simulator, one foreground app)
+  // gets the exact `open` command instead of the generic "run open first"
+  // nudge — cheap, error-path only, never guesses.
+  const openCommandHint = await buildIosOpenCommandHint(device);
   return errorResponse(
     'SESSION_NOT_FOUND',
     `iOS ${command} requires an active app session on the target device. Run open first (for example: open --session ${session?.name ?? 'sim'} --platform ios --device "<name>" <app>).`,
+    {
+      reason: 'ios_app_session_required',
+      ...(openCommandHint ? { hint: openCommandHint } : {}),
+    },
   );
 }
 

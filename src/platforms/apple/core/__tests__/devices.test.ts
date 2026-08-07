@@ -7,6 +7,7 @@ import {
   isAppleTvProductType,
   isSupportedAppleDevicectlDevice,
   listAppleDevices,
+  listBootedIosSimulators,
   parseXctracePhysicalAppleDevices,
   resolveAppleTargetFromDevicectlDevice,
 } from '../devices.ts';
@@ -706,6 +707,51 @@ test('listAppleDevices keeps physical discovery when explicit udid is not a simu
     toolCalls.some(([, args]) => args.includes('xctrace')),
     true,
   );
+});
+
+test('listBootedIosSimulators returns only booted simulators, not shutdown ones or the host Mac', async () => {
+  mockRunCommand = async (_cmd, args) => {
+    if (args.join(' ') === 'simctl list devices -j') {
+      return {
+        stdout: JSON.stringify({
+          devices: {
+            'com.apple.CoreSimulator.SimRuntime.iOS-18-0': [
+              { name: 'iPhone 16', udid: 'sim-booted', state: 'Booted', isAvailable: true },
+              { name: 'iPhone 15', udid: 'sim-shutdown', state: 'Shutdown', isAvailable: true },
+            ],
+          },
+        }),
+        stderr: '',
+        exitCode: 0,
+      };
+    }
+    throw new Error(`unexpected xcrun args: ${args.join(' ')}`);
+  };
+
+  const booted = await withMockedAppleTools(async () => await listBootedIosSimulators());
+
+  assert.deepEqual(
+    booted.map((device) => device.id),
+    ['sim-booted'],
+  );
+});
+
+test('listBootedIosSimulators returns an empty list instead of throwing on tool failure', async () => {
+  mockRunCommand = async () => {
+    throw new Error('xcrun not found');
+  };
+
+  const booted = await withMockedAppleTools(async () => await listBootedIosSimulators());
+
+  assert.deepEqual(booted, []);
+});
+
+test('listBootedIosSimulators returns an empty list on malformed simctl JSON', async () => {
+  mockRunCommand = async () => ({ stdout: 'not json', stderr: '', exitCode: 0 });
+
+  const booted = await withMockedAppleTools(async () => await listBootedIosSimulators());
+
+  assert.deepEqual(booted, []);
 });
 
 async function withMockedAppleTools<T>(fn: () => Promise<T>): Promise<T> {
