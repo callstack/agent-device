@@ -25,8 +25,8 @@ test('an unambiguous environment gets the exact runnable open command', async ()
   const hint = await buildIosOpenCommandHint(IOS_SIMULATOR);
 
   expect(hint).toBe(
-    'One booted device found ("iPhone 16", udid booted-1) with xyz.blueskyweb.app in the ' +
-      'foreground. Run: agent-device open xyz.blueskyweb.app --platform ios',
+    'One booted device found ("iPhone 16", udid booted-1) with xyz.blueskyweb.app running. ' +
+      'Run: agent-device open xyz.blueskyweb.app --platform ios',
   );
   expect(detectSoleRunningIosSimulatorApp).toHaveBeenCalledWith(soleBootedDevice);
 });
@@ -52,7 +52,7 @@ test('no booted simulator returns no hint', async () => {
   expect(detectSoleRunningIosSimulatorApp).not.toHaveBeenCalled();
 });
 
-test('a failed or inconclusive foreground-app probe returns no hint', async () => {
+test('a failed or inconclusive running-app probe returns no hint', async () => {
   listBootedIosSimulators.mockResolvedValue([{ ...IOS_SIMULATOR, id: 'booted-1' }]);
   detectSoleRunningIosSimulatorApp.mockResolvedValue(undefined);
 

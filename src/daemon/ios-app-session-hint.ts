@@ -25,6 +25,6 @@ export async function buildIosOpenCommandHint(device: DeviceInfo): Promise<strin
 
   return (
     `One booted device found ("${soleBootedDevice.name}", udid ${soleBootedDevice.id}) with ` +
-    `${app.bundleId} in the foreground. Run: agent-device open ${app.bundleId} --platform ios`
+    `${app.bundleId} running. Run: agent-device open ${app.bundleId} --platform ios`
   );
 }
