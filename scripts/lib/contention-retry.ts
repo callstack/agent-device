@@ -55,42 +55,7 @@ const REVIEW_BY = '2026-10-31';
 export const CONTENTION_RETRY_FILES: readonly ContentionRetryEntry[] = [
   {
     file: 'src/platforms/android/__tests__/app-lifecycle-install.test.ts',
-    reason: 'Stubs adb on PATH and spawns it per case, waiting real install retry/poll time.',
-    trackingIssue: SUBPROCESS_STUB_ISSUE,
-    reviewBy: REVIEW_BY,
-    serializedStub: true,
-  },
-  {
-    file: 'src/platforms/android/__tests__/app-lifecycle-open.test.ts',
-    reason: 'Stubs adb on PATH and spawns it, waiting real activity-launch poll time.',
-    trackingIssue: SUBPROCESS_STUB_ISSUE,
-    reviewBy: REVIEW_BY,
-    serializedStub: true,
-  },
-  {
-    file: 'src/platforms/android/__tests__/device-input-state.test.ts',
-    reason: 'Stubs adb on PATH and spawns it, waiting real input-state poll time.',
-    trackingIssue: SUBPROCESS_STUB_ISSUE,
-    reviewBy: REVIEW_BY,
-    serializedStub: true,
-  },
-  {
-    file: 'src/platforms/android/__tests__/input-actions.test.ts',
-    reason: 'Stubs adb on PATH and spawns it once per input action, waiting real retry time.',
-    trackingIssue: SUBPROCESS_STUB_ISSUE,
-    reviewBy: REVIEW_BY,
-    serializedStub: true,
-  },
-  {
-    file: 'src/platforms/android/__tests__/notifications.test.ts',
-    reason: 'Stubs adb on PATH and spawns it, waiting real shade-settle poll time.',
-    trackingIssue: SUBPROCESS_STUB_ISSUE,
-    reviewBy: REVIEW_BY,
-    serializedStub: true,
-  },
-  {
-    file: 'src/platforms/android/__tests__/settings.test.ts',
-    reason: 'Stubs adb on PATH and spawns it, waiting real settings-apply poll time.',
+    reason: 'Stubs bundletool on PATH (adb is in-process) and spawns zip/unzip for .aab packaging paths.',
     trackingIssue: SUBPROCESS_STUB_ISSUE,
     reviewBy: REVIEW_BY,
     serializedStub: true,
