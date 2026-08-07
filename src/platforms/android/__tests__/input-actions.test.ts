@@ -1,6 +1,5 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { promises as fs } from 'node:fs';
 import {
   fillAndroid,
   longPressAndroid,
@@ -9,16 +8,20 @@ import {
   typeAndroid,
 } from '../input-actions.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { withScriptedAdb } from '../../../__tests__/test-utils/mocked-binaries.ts';
 import {
   ANDROID_EMULATOR,
   ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+  androidSnapshotHelperOutput,
+  withFakeAdb,
 } from '../../../__tests__/test-utils/index.ts';
 import {
-  createDeviceAdbExecutor,
+  resolveAndroidAdbExecutor,
   withAndroidAdbProvider,
   type AndroidTouchInjector,
 } from '../adb-executor.ts';
+
+// The fake adb provider installs through the production withAndroidAdbProvider
+// scope, so `calls` records device-scoped args without a leading `-s <serial>`.
 
 test('scrollAndroid plans explicit pixel travel through semantic touch injection', async () => {
   const touchCalls: Parameters<AndroidTouchInjector>[0][] = [];
@@ -27,21 +30,33 @@ test('scrollAndroid plans explicit pixel travel through semantic touch injection
       exec: async () => {
         throw new Error('adb must not run');
       },
-      gestureViewport: async () => ({ x: 10, y: 20, width: 1080, height: 1920 }),
+      gestureViewport: async () => ({
+        x: 10,
+        y: 20,
+        width: 1080,
+        height: 1920,
+      }),
       touch: async (request) => {
         touchCalls.push(request);
         return { injected: true };
       },
     },
     { serial: ANDROID_EMULATOR.id },
-    async () => await scrollAndroid(ANDROID_EMULATOR, 'down', { pixels: 240, durationMs: 120 }),
+    async () =>
+      await scrollAndroid(ANDROID_EMULATOR, 'down', {
+        pixels: 240,
+        durationMs: 120,
+      }),
   );
 
   assert.equal(touchCalls.length, 1);
   const touch = touchCalls[0]!;
   assert.equal(touch.intent, 'pan');
   assert.deepEqual(touch.pointers[0]?.samples[0]?.point, { x: 550, y: 1100 });
-  assert.deepEqual(touch.pointers[0]?.samples.at(-1)?.point, { x: 550, y: 860 });
+  assert.deepEqual(touch.pointers[0]?.samples.at(-1)?.point, {
+    x: 550,
+    y: 860,
+  });
   assert.equal(result.pixels, 240);
   assert.equal(result.durationMs, 120);
   assert.equal(result.referenceWidth, 1090);
@@ -123,229 +138,172 @@ test('longPressAndroid sends a stationary semantic touch plan', async () => {
 });
 
 test('setAndroidOrientation locks auto-rotate and sets user rotation', async () => {
-  await withScriptedAdb(
-    'agent-device-android-rotate-landscape-left-',
-    '#!/bin/sh\nprintf "%s\\n" "$@" >> "$AGENT_DEVICE_TEST_ARGS_FILE"\nexit 0\n',
-    async ({ argsLogPath, device }) => {
+  await withFakeAdb(
+    () => undefined,
+    async ({ calls, device }) => {
       await setAndroidOrientation(device, 'landscape-left');
-      const lines = (await fs.readFile(argsLogPath, 'utf8')).trim().split('\n').filter(Boolean);
-      const logged = lines.join(' ');
-      assert.match(logged, /shell settings put system accelerometer_rotation 0/);
-      assert.match(logged, /shell settings put system user_rotation 1/);
+      assert.deepEqual(calls, [
+        ['shell', 'settings', 'put', 'system', 'accelerometer_rotation', '0'],
+        ['shell', 'settings', 'put', 'system', 'user_rotation', '1'],
+      ]);
     },
   );
 });
 
 test('typeAndroid chunks ASCII input text for shell fallback', async () => {
-  await withScriptedAdb(
-    'agent-device-android-type-ascii-chunked-',
-    [
-      '#!/bin/sh',
-      'printf "__CMD__\\n" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-      'printf "%s\\n" "$@" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-      'exit 0',
-      '',
-    ].join('\n'),
-    async ({ argsLogPath, device }) => {
+  await withFakeAdb(
+    () => undefined,
+    async ({ calls, device }) => {
       await typeAndroid(device, 'filed the expense');
-      const logged = await fs.readFile(argsLogPath, 'utf8');
-      assert.match(logged, /shell\ninput\ntext\nfiled%sth/);
-      assert.match(logged, /shell\ninput\ntext\ne%sexpens/);
-      assert.match(logged, /shell\ninput\ntext\ne/);
-      const shellInputTextCount = (logged.match(/shell\ninput\ntext\n/g) ?? []).length;
-      assert.equal(shellInputTextCount, 3);
+      assert.deepEqual(shellInputTextCalls(calls), [
+        ['shell', 'input', 'text', 'filed%sth'],
+        ['shell', 'input', 'text', 'e%sexpens'],
+        ['shell', 'input', 'text', 'e'],
+      ]);
     },
   );
 });
 
 test('typeAndroid passes shell-sensitive ascii text to adb input text', async () => {
-  await withScriptedAdb(
-    'agent-device-android-type-ascii-special-',
-    '#!/bin/sh\nprintf "__CMD__\\n" >> "$AGENT_DEVICE_TEST_ARGS_FILE"\nprintf "%s\\n" "$@" >> "$AGENT_DEVICE_TEST_ARGS_FILE"\nexit 0\n',
-    async ({ argsLogPath, device }) => {
+  await withFakeAdb(
+    () => undefined,
+    async ({ calls, device }) => {
       await typeAndroid(device, 'curtis.layne+test+73kmc@uber.com');
-      const logged = await fs.readFile(argsLogPath, 'utf8');
-      assert.match(logged, /shell\ninput\ntext\ncurtis\.l/);
-      assert.match(logged, /shell\ninput\ntext\nayne\+tes/);
-      assert.match(logged, /shell\ninput\ntext\nt\+73kmc@/);
-      assert.match(logged, /shell\ninput\ntext\nuber\.com/);
+      assert.deepEqual(shellInputTextCalls(calls), [
+        ['shell', 'input', 'text', 'curtis.l'],
+        ['shell', 'input', 'text', 'ayne+tes'],
+        ['shell', 'input', 'text', 't+73kmc@'],
+        ['shell', 'input', 'text', 'uber.com'],
+      ]);
     },
   );
 });
 
 test('typeAndroid preserves percent signs while encoding spaces', async () => {
-  await withScriptedAdb(
-    'agent-device-android-type-ascii-percent-',
-    '#!/bin/sh\nprintf "__CMD__\\n" >> "$AGENT_DEVICE_TEST_ARGS_FILE"\nprintf "%s\\n" "$@" >> "$AGENT_DEVICE_TEST_ARGS_FILE"\nexit 0\n',
-    async ({ argsLogPath, device }) => {
+  await withFakeAdb(
+    () => undefined,
+    async ({ calls, device }) => {
       await typeAndroid(device, '50% complete');
-      const logged = await fs.readFile(argsLogPath, 'utf8');
-      assert.match(logged, /shell\ninput\ntext\n50%%scomp/);
-      assert.match(logged, /shell\ninput\ntext\nlete/);
+      assert.deepEqual(shellInputTextCalls(calls), [
+        ['shell', 'input', 'text', '50%%scomp'],
+        ['shell', 'input', 'text', 'lete'],
+      ]);
     },
   );
 });
 
 test('typeAndroid sends one character at a time when delay is requested', async () => {
-  await withScriptedAdb(
-    'agent-device-android-type-delayed-',
-    [
-      '#!/bin/sh',
-      'printf "__CMD__\\n" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-      'printf "%s\\n" "$@" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-      'exit 0',
-      '',
-    ].join('\n'),
-    async ({ argsLogPath, device }) => {
+  await withFakeAdb(
+    () => undefined,
+    async ({ calls, device }) => {
       await typeAndroid(device, 'hey', 1);
-      const logged = await fs.readFile(argsLogPath, 'utf8');
-      const shellInputTextCount = (logged.match(/shell\ninput\ntext\n/g) ?? []).length;
-      assert.equal(shellInputTextCount, 3);
-      assert.match(logged, /shell\ninput\ntext\nh/);
-      assert.match(logged, /shell\ninput\ntext\ne/);
-      assert.match(logged, /shell\ninput\ntext\ny/);
+      assert.deepEqual(shellInputTextCalls(calls), [
+        ['shell', 'input', 'text', 'h'],
+        ['shell', 'input', 'text', 'e'],
+        ['shell', 'input', 'text', 'y'],
+      ]);
     },
   );
 });
 
 test('fillAndroid uses chunk-safe shell input and retries when verification still fails', async () => {
-  await withScriptedAdb(
-    'agent-device-android-fill-fallback-',
-    [
-      '#!/bin/sh',
-      'STATE_FILE="$(dirname "$AGENT_DEVICE_TEST_ARGS_FILE")/fill_state.txt"',
-      'INPUT_COUNT_FILE="$(dirname "$AGENT_DEVICE_TEST_ARGS_FILE")/input_count.txt"',
-      'printf "__CMD__\\n" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-      'printf "%s\\n" "$@" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-      'if [ "$1" = "-s" ]; then',
-      '  shift',
-      '  shift',
-      'fi',
-      ...androidSnapshotHelperStateFileScript(),
-      'if [ "$1" = "shell" ] && [ "$2" = "input" ] && [ "$3" = "tap" ]; then',
-      '  exit 0',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "input" ] && [ "$3" = "keyevent" ] && [ "$4" = "KEYCODE_MOVE_END" ]; then',
-      '  exit 0',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "input" ] && [ "$3" = "keyevent" ] && [ "$4" = "KEYCODE_DEL" ]; then',
-      '  : > "$STATE_FILE"',
-      '  exit 0',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "input" ] && [ "$3" = "text" ]; then',
-      '  count="$(cat "$INPUT_COUNT_FILE" 2>/dev/null || echo 0)"',
-      '  count=$((count + 1))',
-      '  printf "%s" "$count" > "$INPUT_COUNT_FILE"',
-      '  if [ "$count" -eq 1 ]; then',
-      '    printf "curti" > "$STATE_FILE"',
-      '  else',
-      '    printf "%s" "$4" >> "$STATE_FILE"',
-      '  fi',
-      '  exit 0',
-      'fi',
-      'echo "unexpected args: $@" >&2',
-      'exit 1',
-      '',
-    ].join('\n'),
-    async ({ argsLogPath, device }) => {
+  // First `input text` writes a wrong partial value, so attempt 1 fails
+  // verification and production retries with the smaller chunk size.
+  let state = '';
+  let inputTextCount = 0;
+  await withFakeAdb(
+    (args) => {
+      const helperResponse = snapshotHelperResponse(args, () => state);
+      if (helperResponse !== undefined) return helperResponse;
+      if (isShellInput(args, 'tap')) return undefined;
+      if (isShellKeyevent(args, 'KEYCODE_MOVE_END')) return undefined;
+      if (isShellKeyevent(args, 'KEYCODE_DEL')) {
+        state = '';
+        return undefined;
+      }
+      if (isShellInput(args, 'text')) {
+        inputTextCount += 1;
+        state = inputTextCount === 1 ? 'curti' : state + (args[3] ?? '');
+        return undefined;
+      }
+      return { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 };
+    },
+    async ({ calls, device }) => {
       await withScriptedSnapshotHelper(device, async () => {
         await fillAndroid(device, 10, 10, 'curtis.layne+test+73kmc@uber.com');
       });
-      const logged = await fs.readFile(argsLogPath, 'utf8');
-      assert.doesNotMatch(logged, /shell\ncmd\nclipboard\nset\ntext/);
-      assert.doesNotMatch(logged, /shell\ninput\nkeyevent\nKEYCODE_PASTE/);
-      const shellInputTextCount = (logged.match(/shell\ninput\ntext\n/g) ?? []).length;
-      assert.ok(shellInputTextCount > 1);
+      assert.equal(
+        calls.some((args) => args.join(' ').startsWith('shell cmd clipboard set text')),
+        false,
+      );
+      assert.equal(
+        calls.some((args) => args.includes('KEYCODE_PASTE')),
+        false,
+      );
+      assert.ok(shellInputTextCalls(calls).length > 1);
     },
   );
 }, 15_000);
 
 test('fillAndroid keeps delayed typing in typed-input mode', async () => {
-  await withScriptedAdb(
-    'agent-device-android-fill-delayed-',
-    [
-      '#!/bin/sh',
-      'STATE_FILE="$(dirname "$AGENT_DEVICE_TEST_ARGS_FILE")/fill_state.txt"',
-      'printf "__CMD__\\n" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-      'printf "%s\\n" "$@" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-      'if [ "$1" = "-s" ]; then',
-      '  shift',
-      '  shift',
-      'fi',
-      ...androidSnapshotHelperStateFileScript(),
-      'if [ "$1" = "shell" ] && [ "$2" = "input" ] && [ "$3" = "tap" ]; then',
-      '  exit 0',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "input" ] && [ "$3" = "keyevent" ] && [ "$4" = "KEYCODE_MOVE_END" ]; then',
-      '  exit 0',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "input" ] && [ "$3" = "keyevent" ] && [ "$4" = "KEYCODE_DEL" ]; then',
-      '  : > "$STATE_FILE"',
-      '  exit 0',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "input" ] && [ "$3" = "text" ]; then',
-      '  printf "%s" "$4" >> "$STATE_FILE"',
-      '  exit 0',
-      'fi',
-      'echo "unexpected args: $@" >&2',
-      'exit 1',
-      '',
-    ].join('\n'),
-    async ({ argsLogPath, device }) => {
+  let state = '';
+  await withFakeAdb(
+    (args) => {
+      const helperResponse = snapshotHelperResponse(args, () => state);
+      if (helperResponse !== undefined) return helperResponse;
+      if (isShellInput(args, 'tap')) return undefined;
+      if (isShellKeyevent(args, 'KEYCODE_MOVE_END')) return undefined;
+      if (isShellKeyevent(args, 'KEYCODE_DEL')) {
+        state = '';
+        return undefined;
+      }
+      if (isShellInput(args, 'text')) {
+        state += args[3] ?? '';
+        return undefined;
+      }
+      return { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 };
+    },
+    async ({ calls, device }) => {
       await withScriptedSnapshotHelper(device, async () => {
         await fillAndroid(device, 10, 10, 'go', 1);
       });
-      const logged = await fs.readFile(argsLogPath, 'utf8');
-      const shellInputTextCount = (logged.match(/shell\ninput\ntext\n/g) ?? []).length;
-      assert.equal(shellInputTextCount, 2);
-      assert.doesNotMatch(logged, /shell\ncmd\nclipboard\nset\ntext/);
-      assert.doesNotMatch(logged, /shell\ninput\nkeyevent\nKEYCODE_PASTE/);
+      assert.equal(shellInputTextCalls(calls).length, 2);
+      assert.equal(
+        calls.some((args) => args.join(' ').startsWith('shell cmd clipboard set text')),
+        false,
+      );
+      assert.equal(
+        calls.some((args) => args.includes('KEYCODE_PASTE')),
+        false,
+      );
     },
   );
 }, 15_000);
 
 test('fillAndroid tolerates delayed React Native text verification', async () => {
-  await withScriptedAdb(
-    'agent-device-android-fill-delayed-verify-',
-    [
-      '#!/bin/sh',
-      'STATE_FILE="$(dirname "$AGENT_DEVICE_TEST_ARGS_FILE")/fill_state.txt"',
-      'DUMP_COUNT_FILE="$(dirname "$AGENT_DEVICE_TEST_ARGS_FILE")/dump_count.txt"',
-      'printf "__CMD__\\n" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-      'printf "%s\\n" "$@" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-      'if [ "$1" = "-s" ]; then',
-      '  shift',
-      '  shift',
-      'fi',
-      ...androidSnapshotHelperStateFileScript([
-        'count="$(cat "$DUMP_COUNT_FILE" 2>/dev/null || echo 0)"',
-        'count=$((count + 1))',
-        'printf "%s" "$count" > "$DUMP_COUNT_FILE"',
-        'if [ "$count" -eq 1 ]; then',
-        '  text="sent the updat"',
-        'else',
-        '  text="$(cat "$STATE_FILE" 2>/dev/null)"',
-        'fi',
-      ]),
-      'if [ "$1" = "shell" ] && [ "$2" = "input" ] && [ "$3" = "tap" ]; then',
-      '  exit 0',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "input" ] && [ "$3" = "keyevent" ] && [ "$4" = "KEYCODE_MOVE_END" ]; then',
-      '  exit 0',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "input" ] && [ "$3" = "keyevent" ] && [ "$4" = "KEYCODE_DEL" ]; then',
-      '  : > "$STATE_FILE"',
-      '  exit 0',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "input" ] && [ "$3" = "text" ]; then',
-      '  text="$(printf "%s" "$4" | sed "s/%s/ /g")"',
-      '  printf "%s" "$text" >> "$STATE_FILE"',
-      '  exit 0',
-      'fi',
-      'echo "unexpected args: $@" >&2',
-      'exit 1',
-      '',
-    ].join('\n'),
+  // The first hierarchy dump reports a stale truncated value (React Native
+  // committing late); the later stability dumps report the real text.
+  let state = '';
+  let dumpCount = 0;
+  await withFakeAdb(
+    (args) => {
+      const helperResponse = snapshotHelperResponse(args, () => {
+        dumpCount += 1;
+        return dumpCount === 1 ? 'sent the updat' : state;
+      });
+      if (helperResponse !== undefined) return helperResponse;
+      if (isShellInput(args, 'tap')) return undefined;
+      if (isShellKeyevent(args, 'KEYCODE_MOVE_END')) return undefined;
+      if (isShellKeyevent(args, 'KEYCODE_DEL')) {
+        state = '';
+        return undefined;
+      }
+      if (isShellInput(args, 'text')) {
+        state += (args[3] ?? '').replace(/%s/g, ' ');
+        return undefined;
+      }
+      return { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 };
+    },
     async ({ device }) => {
       await withScriptedSnapshotHelper(device, async () => {
         await fillAndroid(device, 10, 10, 'sent the update');
@@ -355,27 +313,19 @@ test('fillAndroid tolerates delayed React Native text verification', async () =>
 }, 10_000);
 
 test('typeAndroid reports clear error when unicode input is unsupported', async () => {
-  await withScriptedAdb(
-    'agent-device-android-type-unicode-unsupported-',
-    [
-      '#!/bin/sh',
-      'if [ "$1" = "-s" ]; then',
-      '  shift',
-      '  shift',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "cmd" ] && [ "$3" = "clipboard" ] && [ "$4" = "set" ] && [ "$5" = "text" ]; then',
-      '  echo "No shell command implementation."',
-      '  exit 0',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "input" ] && [ "$3" = "text" ]; then',
-      '  echo "Exception occurred while executing \'text\':" >&2',
-      '  echo "java.lang.NullPointerException" >&2',
-      '  exit 255',
-      'fi',
-      'echo "unexpected args: $@" >&2',
-      'exit 1',
-      '',
-    ].join('\n'),
+  await withFakeAdb(
+    (args) => {
+      if (args.join(' ').startsWith('shell cmd clipboard set text')) {
+        return 'No shell command implementation.';
+      }
+      if (isShellInput(args, 'text')) {
+        return {
+          stderr: "Exception occurred while executing 'text':\njava.lang.NullPointerException\n",
+          exitCode: 255,
+        };
+      }
+      return { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 };
+    },
     async ({ device }) => {
       await assert.rejects(
         () => typeAndroid(device, '很'),
@@ -390,41 +340,53 @@ test('typeAndroid reports clear error when unicode input is unsupported', async 
   );
 });
 
-function androidSnapshotHelperStateFileScript(
-  resolveText: readonly string[] = ['text="$(cat "$STATE_FILE" 2>/dev/null)"'],
-): string[] {
-  return [
-    'if [ "$1" = "shell" ] && [ "$2" = "cmd" ] && [ "$3" = "package" ] && [ "$4" = "list" ] && [ "$5" = "packages" ] && [ "$6" = "--show-versioncode" ] && [ "$7" = "com.callstack.agentdevice.snapshothelper" ]; then',
-    '  printf "package:com.callstack.agentdevice.snapshothelper versionCode:999999\\n"',
-    '  exit 0',
-    'fi',
-    'if [ "$1" = "shell" ] && [ "$2" = "am" ] && [ "$3" = "instrument" ]; then',
-    ...resolveText.map((line) => `  ${line}`),
-    '  xml="$(printf "<?xml version=\\"1.0\\" encoding=\\"UTF-8\\"?><hierarchy><node class=\\"android.widget.EditText\\" text=\\"%s\\" focused=\\"true\\" bounds=\\"[0,0][200,100]\\"/></hierarchy>" "$text")"',
-    '  payload="$(printf "%s" "$xml" | base64 | tr -d "\\n")"',
-    '  printf "INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1\\n"',
-    '  printf "INSTRUMENTATION_STATUS: helperApiVersion=1\\n"',
-    '  printf "INSTRUMENTATION_STATUS: outputFormat=uiautomator-xml\\n"',
-    '  printf "INSTRUMENTATION_STATUS: chunkIndex=0\\n"',
-    '  printf "INSTRUMENTATION_STATUS: chunkCount=1\\n"',
-    '  printf "INSTRUMENTATION_STATUS: payloadBase64=%s\\n" "$payload"',
-    '  printf "INSTRUMENTATION_STATUS_CODE: 1\\n"',
-    '  printf "INSTRUMENTATION_RESULT: agentDeviceProtocol=android-snapshot-helper-v1\\n"',
-    '  printf "INSTRUMENTATION_RESULT: helperApiVersion=1\\n"',
-    '  printf "INSTRUMENTATION_RESULT: ok=true\\n"',
-    '  printf "INSTRUMENTATION_CODE: 0\\n"',
-    '  exit 0',
-    'fi',
-  ];
+function shellInputTextCalls(calls: string[][]): string[][] {
+  return calls.filter((args) => isShellInput(args, 'text'));
+}
+
+function isShellInput(args: string[], subcommand: 'tap' | 'text'): boolean {
+  return args[0] === 'shell' && args[1] === 'input' && args[2] === subcommand;
+}
+
+function isShellKeyevent(args: string[], keycode: string): boolean {
+  return (
+    args[0] === 'shell' && args[1] === 'input' && args[2] === 'keyevent' && args[3] === keycode
+  );
+}
+
+const SNAPSHOT_HELPER_PACKAGE = ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT.manifest.packageName;
+
+/**
+ * Answers the snapshot-helper version probe and `am instrument` capture with a
+ * one-EditText hierarchy holding `resolveText()`, mirroring the PATH-stub
+ * helper script this file used before provider injection. Returns undefined for
+ * every other invocation so the caller's script keeps handling input actions.
+ */
+function snapshotHelperResponse(args: string[], resolveText: () => string): string | undefined {
+  if (
+    args[0] === 'shell' &&
+    args.includes('--show-versioncode') &&
+    args.includes(SNAPSHOT_HELPER_PACKAGE)
+  ) {
+    return `package:${SNAPSHOT_HELPER_PACKAGE} versionCode:999999`;
+  }
+  if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'instrument') {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?><hierarchy><node class="android.widget.EditText" text="${resolveText()}" focused="true" bounds="[0,0][200,100]"/></hierarchy>`;
+    return androidSnapshotHelperOutput(xml);
+  }
+  return undefined;
 }
 
 async function withScriptedSnapshotHelper(
   device: typeof ANDROID_EMULATOR,
   run: () => Promise<void>,
 ): Promise<void> {
+  // Re-scopes the already-installed fake exec with the snapshot-helper fixture
+  // artifact so fill verification resolves the scripted helper instead of
+  // looking for a built helper APK on disk.
   await withAndroidAdbProvider(
     {
-      exec: createDeviceAdbExecutor(device),
+      exec: resolveAndroidAdbExecutor(device),
       snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
     },
     { serial: device.id },
