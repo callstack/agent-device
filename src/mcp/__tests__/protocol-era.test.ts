@@ -3,7 +3,9 @@ import { test } from 'vitest';
 import {
   cacheFields,
   finalizeResult,
+  LEGACY_PROTOCOL_VERSIONS,
   MODERN_PROTOCOL_VERSION,
+  MODERN_PROTOCOL_VERSIONS,
   negotiateLegacyProtocolVersion,
   PREFERRED_LEGACY_PROTOCOL_VERSION,
   resolveProtocolEra,
@@ -36,14 +38,54 @@ test('initialize falls back to the newest legacy revision for versions we do not
   assert.equal(negotiateLegacyProtocolVersion(undefined), PREFERRED_LEGACY_PROTOCOL_VERSION);
 });
 
-test('a declared protocol version selects the modern era, its absence stays legacy', () => {
+test('initialize never agrees to a modern revision, which has no handshake to establish', () => {
+  for (const version of MODERN_PROTOCOL_VERSIONS) {
+    assert.equal(
+      negotiateLegacyProtocolVersion({ protocolVersion: version }),
+      PREFERRED_LEGACY_PROTOCOL_VERSION,
+    );
+  }
+});
+
+test('the declared revision picks the era, so 2025 stays on the legacy wire contract', () => {
   assert.equal(resolveProtocolEra('tools/list', modernMeta()), 'modern');
+  for (const version of LEGACY_PROTOCOL_VERSIONS) {
+    assert.equal(resolveProtocolEra('tools/list', modernMeta(version)), 'legacy');
+  }
   assert.equal(resolveProtocolEra('tools/list', {}), 'legacy');
   assert.equal(resolveProtocolEra('tools/list', undefined), 'legacy');
 });
 
-test('server/discover is modern even without _meta, so the probe reports the real era', () => {
-  assert.equal(resolveProtocolEra('server/discover', undefined), 'modern');
+test('server/discover requires modern request metadata rather than being promoted', () => {
+  assert.equal(resolveProtocolEra('server/discover', modernMeta()), 'modern');
+  // No declared revision: malformed, not an invitation to guess the era.
+  assert.throws(() => resolveProtocolEra('server/discover', undefined), /protocolVersion/);
+  assert.throws(() => resolveProtocolEra('server/discover', { _meta: {} }), /protocolVersion/);
+  // The RPC does not exist in any legacy revision.
+  assert.throws(
+    () => resolveProtocolEra('server/discover', modernMeta(PREFERRED_LEGACY_PROTOCOL_VERSION)),
+    UnsupportedProtocolVersionError,
+  );
+});
+
+test('a declared revision without client capabilities is malformed', () => {
+  assert.throws(
+    () =>
+      resolveProtocolEra('tools/call', {
+        _meta: { 'io.modelcontextprotocol/protocolVersion': MODERN_PROTOCOL_VERSION },
+      }),
+    /clientCapabilities/,
+  );
+  assert.throws(
+    () =>
+      resolveProtocolEra('tools/call', {
+        _meta: {
+          'io.modelcontextprotocol/protocolVersion': MODERN_PROTOCOL_VERSION,
+          'io.modelcontextprotocol/clientCapabilities': 'not-an-object',
+        },
+      }),
+    /clientCapabilities/,
+  );
 });
 
 test('an unimplemented declared revision is rejected with the supported list', () => {

@@ -1,3 +1,4 @@
+import { AppError } from '@agent-device/kernel/errors';
 import { readVersion } from '../utils/version.ts';
 
 /**
@@ -10,40 +11,47 @@ import { readVersion } from '../utils/version.ts';
  *   and client capabilities in `_meta`, there is no handshake, and results are tagged
  *   with `resultType`.
  *
- * A request is modern exactly when it declares a protocol version in `_meta`. Legacy
- * responses stay byte-identical to what earlier releases sent, so upgrading a client is
- * the only thing that changes wire shape.
+ * Era membership follows the *declared revision*, not merely the presence of `_meta`: a
+ * revision is served on its own wire contract, so a request declaring `2025-11-25` gets
+ * the legacy result shape even though it used modern framing to say so. Legacy responses
+ * stay byte-identical to what earlier releases sent.
  */
 export type ProtocolEra = 'legacy' | 'modern';
 
-/** Newest revision we implement. Requests declaring it are served statelessly. */
+/** Newest stateless revision, and the one `server/discover` answers for. */
 export const MODERN_PROTOCOL_VERSION = '2026-07-28';
 
-/**
- * Answer for legacy clients whose requested revision we do not implement. The
- * `initialize` contract is "echo the requested version, or name one you do support".
- */
-export const PREFERRED_LEGACY_PROTOCOL_VERSION = '2025-11-25';
+/** Revisions served statelessly, newest first. */
+export const MODERN_PROTOCOL_VERSIONS: readonly string[] = [MODERN_PROTOCOL_VERSION];
 
 /**
- * Revisions we implement, newest first — the list a client may choose from.
+ * Revisions served through the `initialize` handshake, newest first.
  *
- * Scoped to what this server actually provides rather than every published revision:
- * a tools-only server's surface (`tools/list`, `tools/call`, `outputSchema`,
- * `structuredContent`) is identical across `2026-07-28`, `2025-11-25`, and `2025-06-18`.
- * Revisions before `2025-06-18` predate `outputSchema`/`structuredContent`, which every
- * typed tool here returns, so they are not claimed.
+ * Scoped to what this server actually provides rather than every published revision: a
+ * tools-only server's surface (`tools/list`, `tools/call`, `outputSchema`,
+ * `structuredContent`) is identical across these and `2026-07-28`. Revisions before
+ * `2025-06-18` predate `outputSchema`/`structuredContent`, which every typed tool here
+ * returns, so they are not claimed.
  */
+export const LEGACY_PROTOCOL_VERSIONS: readonly string[] = ['2025-11-25', '2025-06-18'];
+
+/** Answer for a handshake whose requested revision we do not serve on the legacy wire. */
+export const PREFERRED_LEGACY_PROTOCOL_VERSION = '2025-11-25';
+
+/** Every revision we implement, newest first — the list a client may choose from. */
 export const SUPPORTED_PROTOCOL_VERSIONS: readonly string[] = [
-  MODERN_PROTOCOL_VERSION,
-  PREFERRED_LEGACY_PROTOCOL_VERSION,
-  '2025-06-18',
+  ...MODERN_PROTOCOL_VERSIONS,
+  ...LEGACY_PROTOCOL_VERSIONS,
 ];
 
 /** JSON-RPC error code for a declared revision this server does not implement. */
 export const UNSUPPORTED_PROTOCOL_VERSION_CODE = -32022;
 
+/** Modern-only RPC: it does not exist in any legacy revision. */
+const DISCOVER_METHOD = 'server/discover';
+
 const PROTOCOL_VERSION_META_KEY = 'io.modelcontextprotocol/protocolVersion';
+const CLIENT_CAPABILITIES_META_KEY = 'io.modelcontextprotocol/clientCapabilities';
 const SERVER_INFO_META_KEY = 'io.modelcontextprotocol/serverInfo';
 
 const MCP_SERVER_NAME = 'agent-device';
@@ -80,29 +88,56 @@ export class UnsupportedProtocolVersionError extends Error {
 }
 
 /**
- * Classifies one request and rejects revisions we do not implement.
+ * Classifies one request, rejecting revisions we do not implement and modern framing that
+ * omits its required metadata.
  *
- * `server/discover` is a modern-only probe, so it stays modern even when a client omits
- * `_meta`: a legacy client has no reason to call it, and answering a `DiscoverResult`
- * without `resultType` would misreport this server's era.
+ * A declared revision picks the era, so `2025-*` declared through modern `_meta` is still
+ * answered on the legacy wire contract. `server/discover` exists only in the modern era,
+ * so it requires a modern revision rather than being promoted by default — leniency there
+ * would answer a `DiscoverResult` that its own schema forbids.
  */
 export function resolveProtocolEra(method: string, params: unknown): ProtocolEra {
-  const declared = declaredProtocolVersion(params);
-  if (declared !== undefined && !SUPPORTED_PROTOCOL_VERSIONS.includes(declared)) {
+  const meta = asRecord(asRecord(params)._meta);
+  const declared = stringField(meta, PROTOCOL_VERSION_META_KEY);
+
+  if (declared === undefined) {
+    if (method === DISCOVER_METHOD) {
+      throw new AppError(
+        'INVALID_ARGS',
+        `Expected _meta["${PROTOCOL_VERSION_META_KEY}"] on ${DISCOVER_METHOD}.`,
+      );
+    }
+    return 'legacy';
+  }
+
+  if (!SUPPORTED_PROTOCOL_VERSIONS.includes(declared)) {
     throw new UnsupportedProtocolVersionError(declared);
   }
-  if (declared !== undefined) return 'modern';
-  return method === 'server/discover' ? 'modern' : 'legacy';
+  // Both keys are required on a modern request; a half-declared `_meta` is malformed
+  // rather than a shape to keep working.
+  if (!isRecord(meta[CLIENT_CAPABILITIES_META_KEY])) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `Expected _meta["${CLIENT_CAPABILITIES_META_KEY}"] to be an object.`,
+    );
+  }
+  if (!MODERN_PROTOCOL_VERSIONS.includes(declared)) {
+    if (method === DISCOVER_METHOD) throw new UnsupportedProtocolVersionError(declared);
+    return 'legacy';
+  }
+  return 'modern';
 }
 
 /**
- * Legacy `initialize` version negotiation: echo the client's revision when we implement
- * it, otherwise name the newest legacy revision we do. Answering with an unrequested
- * version tells a pinned client to disconnect, so the echo is the interoperable branch.
+ * Legacy `initialize` version negotiation: echo the client's revision when we serve it on
+ * this wire, otherwise name the newest legacy revision we do. Answering with an
+ * unrequested version tells a pinned client to disconnect, so the echo is the
+ * interoperable branch. Modern revisions are not echoed — they have no handshake, so
+ * agreeing to one here would promise a contract this reply cannot establish.
  */
 export function negotiateLegacyProtocolVersion(params: unknown): string {
   const requested = stringField(asRecord(params), 'protocolVersion');
-  if (requested !== undefined && SUPPORTED_PROTOCOL_VERSIONS.includes(requested)) {
+  if (requested !== undefined && LEGACY_PROTOCOL_VERSIONS.includes(requested)) {
     return requested;
   }
   return PREFERRED_LEGACY_PROTOCOL_VERSION;
@@ -133,14 +168,12 @@ export function cacheFields(era: ProtocolEra, ttlMs: number): CacheableResultFie
   return era === 'modern' ? { ttlMs, cacheScope: 'public' } : undefined;
 }
 
-function declaredProtocolVersion(params: unknown): string | undefined {
-  const meta = asRecord(asRecord(params)._meta);
-  return stringField(meta, PROTOCOL_VERSION_META_KEY);
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-  return value as Record<string, unknown>;
+  return isRecord(value) ? value : {};
 }
 
 function stringField(record: Record<string, unknown>, key: string): string | undefined {

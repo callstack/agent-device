@@ -118,6 +118,73 @@ test('modern tools/list carries the cacheable-result envelope, legacy stays unch
   assert.deepEqual(Object.keys(legacy.result as object), ['tools']);
 });
 
+test('a request declaring a 2025 revision is answered on the legacy wire contract', async () => {
+  for (const version of ['2025-11-25', '2025-06-18']) {
+    const response = await handleMcpMessage({
+      jsonrpc: '2.0',
+      id: `declared-${version}`,
+      method: 'tools/list',
+      params: { _meta: { ...MODERN_META, 'io.modelcontextprotocol/protocolVersion': version } },
+    });
+
+    assert.ok(response && 'result' in response);
+    // Declaring a revision through modern framing does not opt it into the 2026 result
+    // shape: `resultType`, `serverInfo`, and the cache hints are all 2026-only fields.
+    assert.deepEqual(Object.keys(response.result as object), ['tools']);
+  }
+});
+
+test('initialize does not agree to a modern revision, which has no handshake', async () => {
+  const response = await handleMcpMessage({
+    jsonrpc: '2.0',
+    id: 'initialize-modern',
+    method: 'initialize',
+    params: {
+      protocolVersion: '2026-07-28',
+      capabilities: {},
+      clientInfo: { name: 'c', version: '1' },
+    },
+  });
+
+  assert.ok(response && 'result' in response);
+  assert.equal((response.result as { protocolVersion: string }).protocolVersion, '2025-11-25');
+});
+
+test('server/discover rejects requests missing the modern metadata it requires', async () => {
+  const noMeta = await handleMcpMessage({
+    jsonrpc: '2.0',
+    id: 'discover-no-meta',
+    method: 'server/discover',
+  });
+  assert.ok(noMeta && 'error' in noMeta);
+  assert.equal(noMeta.error.code, -32602);
+  assert.match(noMeta.error.message, /protocolVersion/);
+
+  const legacyVersion = await handleMcpMessage({
+    jsonrpc: '2.0',
+    id: 'discover-legacy',
+    method: 'server/discover',
+    params: {
+      _meta: { ...MODERN_META, 'io.modelcontextprotocol/protocolVersion': '2025-11-25' },
+    },
+  });
+  assert.ok(legacyVersion && 'error' in legacyVersion);
+  assert.equal(legacyVersion.error.code, -32022);
+});
+
+test('a declared revision without client capabilities is rejected as invalid params', async () => {
+  const response = await handleMcpMessage({
+    jsonrpc: '2.0',
+    id: 'no-capabilities',
+    method: 'tools/list',
+    params: { _meta: { 'io.modelcontextprotocol/protocolVersion': '2026-07-28' } },
+  });
+
+  assert.ok(response && 'error' in response);
+  assert.equal(response.error.code, -32602);
+  assert.match(response.error.message, /clientCapabilities/);
+});
+
 test('a protocol version this server does not implement is rejected with the supported list', async () => {
   const response = await handleMcpMessage({
     jsonrpc: '2.0',
