@@ -127,6 +127,61 @@ test('deliberately failing probe', () => {
   }
 });
 
+test('the wrapper keeps AGENT_DEVICE_SWIFT_CACHE_DIR outside the disposable TMPDIR', async () => {
+  // Mirrors vitest-tmpdir-global-setup.ts's own carve-out (and its test's
+  // technique below): the Swift compiler cache must survive across runs, so
+  // it must resolve outside whichever directory this invocation's TMPDIR
+  // redirect will remove afterward. Passing '' forces the "unset" branch
+  // regardless of what this test process itself inherited.
+  const evidenceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'node-test-tmpdir-swift-cache-'));
+  const evidencePath = path.join(evidenceRoot, 'swift-cache-dir.txt');
+  const probeName = `node-test-tmpdir-probe-swift-cache-${process.pid}-${crypto.randomUUID()}.test.ts`;
+  const probePath = path.join(REPOSITORY_ROOT, 'scripts', probeName);
+  fs.writeFileSync(
+    probePath,
+    `import fs from 'node:fs';
+import { test } from 'node:test';
+
+test('probe records its inherited AGENT_DEVICE_SWIFT_CACHE_DIR', () => {
+  fs.writeFileSync(${JSON.stringify(evidencePath)}, process.env.AGENT_DEVICE_SWIFT_CACHE_DIR ?? '');
+});
+`,
+  );
+
+  // Computed the same way the wrapper computes it: from THIS process's
+  // os.tmpdir(), before the child's TMPDIR gets redirected. If this file is
+  // itself already running nested inside another wrapper's redirect (e.g.
+  // as part of check:tmpdir-leaks:test), that's the correct anchor too — the
+  // cache chains to whichever temp scope was current right before this
+  // specific invocation, exactly like vitest's setup() would if nested the
+  // same way.
+  const expectedCacheDir = path.join(os.tmpdir(), 'agent-device-swift-cache');
+
+  try {
+    const result = await runCmd(
+      process.execPath,
+      ['--experimental-strip-types', WRAPPER, '--experimental-strip-types', '--test', probePath],
+      {
+        cwd: REPOSITORY_ROOT,
+        timeoutMs: 30_000,
+        env: { ...process.env, AGENT_DEVICE_SWIFT_CACHE_DIR: '' },
+      },
+    );
+    assert.equal(result.exitCode, 0, `probe run failed:\n${result.stdout}\n${result.stderr}`);
+
+    const cacheDir = fs.readFileSync(evidencePath, 'utf8');
+    assert.equal(
+      cacheDir,
+      expectedCacheDir,
+      'the wrapper must set AGENT_DEVICE_SWIFT_CACHE_DIR from the pre-redirect os.tmpdir(), ' +
+        'not leave it to default inside the disposable TMPDIR it is about to remove',
+    );
+  } finally {
+    fs.rmSync(probePath, { force: true });
+    fs.rmSync(evidenceRoot, { recursive: true, force: true });
+  }
+});
+
 // The 13 lanes wrapped in package.json when this fix landed were a one-time
 // hand sweep; nothing stopped a 14th `node --test` script from being added
 // later without the wrapper, silently reopening #1595 for that one lane.

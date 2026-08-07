@@ -402,7 +402,7 @@ macOS focus.
 Run the static contract and documented live skip locally:
 
 ```bash
-node --test test/integration/smoke-ios-simulator-coverage.test.ts
+node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-ios-simulator-coverage.test.ts
 ```
 
 Run a live tier after booting a simulator and obtaining a current Release `.app`:
@@ -416,7 +416,7 @@ AGENT_DEVICE_IOS_UDID=<simulator-udid> \
 AGENT_DEVICE_FIXTURE_APP_PATH=<fixture.app> \
 AGENT_DEVICE_FIXTURE_APP_ID=com.callstack.agentdevicelab \
 AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE='agent-device-test-app:///automation?event={event}&payload={payload}' \
-node --test test/integration/smoke-ios-simulator-coverage.test.ts test/integration/smoke-ios-simulator.test.ts
+node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-ios-simulator-coverage.test.ts test/integration/smoke-ios-simulator.test.ts
 ```
 
 Use `AGENT_DEVICE_IOS_E2E_TIER=full` for the nightly subset. Step history, coverage reports,

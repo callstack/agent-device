@@ -24,6 +24,7 @@
 // residual case check-tmpdir-leaks-model.ts already tolerates via its
 // pid-liveness check, since it shares this directory's root and prefix.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { runCmdBackground } from '../src/utils/exec.ts';
 import { TEST_RUN_TMP_PREFIX, TEST_RUN_TMP_ROOT } from './vitest-tmpdir-global-setup.ts';
@@ -39,6 +40,20 @@ const testRunTmpDir = fs.mkdtempSync(
   path.join(TEST_RUN_TMP_ROOT, `${TEST_RUN_TMP_PREFIX}${process.pid}-`),
 );
 
+const childEnv = { ...process.env, TMPDIR: testRunTmpDir };
+
+// Mirrors vitest-tmpdir-global-setup.ts's own carve-out: the Swift compiler
+// cache is intentionally durable across runs (rebuilding it recompiles
+// AVFoundation helpers and can push integration scenarios past their
+// budgets), so it must NOT follow TMPDIR into the disposable run directory
+// that gets removed after every invocation. Read os.tmpdir() before the
+// TMPDIR override above takes effect in the child, so this resolves the same
+// real per-user temp root vitest's globalSetup uses — the two lanes share
+// one cache instead of each discarding and recompiling their own.
+if (!childEnv.AGENT_DEVICE_SWIFT_CACHE_DIR?.trim()) {
+  childEnv.AGENT_DEVICE_SWIFT_CACHE_DIR = path.join(os.tmpdir(), 'agent-device-swift-cache');
+}
+
 // This wrapper is itself a node:test file's own subprocess whenever
 // node --test runs it directly (NODE_TEST_CONTEXT/NODE_TEST_WORKER_ID: set by
 // node's test runner on every test-file child), and node --test treats
@@ -47,7 +62,6 @@ const testRunTmpDir = fs.mkdtempSync(
 // (verified: node --test would otherwise silently exit 0 without running the
 // forwarded test file, a false pass). Since this wrapper's whole point is to
 // spawn a fresh `node --test`, clear them so the child always actually runs.
-const childEnv = { ...process.env, TMPDIR: testRunTmpDir };
 delete childEnv.NODE_TEST_CONTEXT;
 delete childEnv.NODE_TEST_WORKER_ID;
 

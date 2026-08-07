@@ -52,7 +52,7 @@ jobs:
         run: echo "Android fixture APK source=${{ steps.fixture-app.outputs.source }}"
 
       - name: Run Android emulator catalog coverage contract
-        run: node --test test/integration/smoke-android-emulator-coverage.test.ts
+        run: node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-android-emulator-coverage.test.ts
 
       - name: Run Android smoke checks
         uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
@@ -68,7 +68,7 @@ jobs:
             test -n "$ANDROID_SERIAL"
             pnpm build
             pnpm clean:daemon
-            AGENT_DEVICE_ANDROID_E2E=1 AGENT_DEVICE_ANDROID_E2E_TIER=smoke AGENT_DEVICE_ANDROID_SERIAL="$ANDROID_SERIAL" AGENT_DEVICE_FIXTURE_APP_PATH="${{ steps.fixture-app.outputs.apk-path }}" AGENT_DEVICE_FIXTURE_APP_ID="${{ steps.fixture-app.outputs.app-id }}" node --test test/integration/smoke-android-emulator.test.ts
+            AGENT_DEVICE_ANDROID_E2E=1 AGENT_DEVICE_ANDROID_E2E_TIER=smoke AGENT_DEVICE_ANDROID_SERIAL="$ANDROID_SERIAL" AGENT_DEVICE_FIXTURE_APP_PATH="${{ steps.fixture-app.outputs.apk-path }}" AGENT_DEVICE_FIXTURE_APP_ID="${{ steps.fixture-app.outputs.app-id }}" node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-android-emulator.test.ts
             node --experimental-strip-types src/bin.ts test test/integration/replays/android/01-settings.ad --retries 2 --report-junit test/artifacts/replays-android-smoke.junit.xml
 
       - name: Upload Android artifacts

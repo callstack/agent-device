@@ -147,7 +147,7 @@ jobs:
           AGENT_DEVICE_IOS_UDID: ${{ steps.ios-simulator.outputs.simulator-udid }}
         run: |
           pnpm build
-          node --test test/integration/smoke-ios-simulator-coverage.test.ts test/integration/smoke-ios-simulator.test.ts
+          node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-ios-simulator-coverage.test.ts test/integration/smoke-ios-simulator.test.ts
 
       - name: Assert simulator automation preserved host focus
         if: ${{ always() }}
