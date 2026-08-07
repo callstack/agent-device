@@ -11,7 +11,7 @@ import {
   assertRejectsAppError,
   ANDROID_EMULATOR,
   ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
-  androidSnapshotHelperOutput,
+  androidSnapshotHelperScriptResponse,
   withFakeAdb,
 } from '../../../__tests__/test-utils/index.ts';
 import { withAndroidAdbProvider, type AndroidTouchInjector } from '../adb-executor.ts';
@@ -348,8 +348,6 @@ function isShellKeyevent(args: string[], keycode: string): boolean {
   );
 }
 
-const SNAPSHOT_HELPER_PACKAGE = ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT.manifest.packageName;
-
 /**
  * Answers the snapshot-helper version probe and `am instrument` capture with a
  * one-EditText hierarchy holding `resolveText()`, mirroring the PATH-stub
@@ -357,16 +355,9 @@ const SNAPSHOT_HELPER_PACKAGE = ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT.manifes
  * every other invocation so the caller's script keeps handling input actions.
  */
 function snapshotHelperResponse(args: string[], resolveText: () => string): string | undefined {
-  if (
-    args[0] === 'shell' &&
-    args.includes('--show-versioncode') &&
-    args.includes(SNAPSHOT_HELPER_PACKAGE)
-  ) {
-    return `package:${SNAPSHOT_HELPER_PACKAGE} versionCode:999999`;
-  }
-  if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'instrument') {
-    const xml = `<?xml version="1.0" encoding="UTF-8"?><hierarchy><node class="android.widget.EditText" text="${resolveText()}" focused="true" bounds="[0,0][200,100]"/></hierarchy>`;
-    return androidSnapshotHelperOutput(xml);
-  }
-  return undefined;
+  return androidSnapshotHelperScriptResponse(
+    args,
+    () =>
+      `<?xml version="1.0" encoding="UTF-8"?><hierarchy><node class="android.widget.EditText" text="${resolveText()}" focused="true" bounds="[0,0][200,100]"/></hierarchy>`,
+  );
 }

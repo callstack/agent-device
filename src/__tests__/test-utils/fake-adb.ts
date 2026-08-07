@@ -20,10 +20,22 @@ export type FakeAdbResponse = string | Partial<AndroidAdbExecutorResult> | Error
 export type FakeAdbScript = (args: string[]) => FakeAdbResponse | undefined;
 
 /**
+ * Extra provider capabilities for {@link withFakeAdb}. The conditional
+ * distributes over the AndroidAdbProvider union so the touch capability
+ * pairing survives: `touch` without `gestureViewport` stays a compile error
+ * here instead of a TypeError inside production gesture planning.
+ */
+export type FakeAdbProviderExtras = AndroidAdbProvider extends infer P
+  ? P extends AndroidAdbProvider
+    ? Omit<P, 'exec'>
+    : never
+  : never;
+
+/**
  * Runs `run` with a scripted in-process adb provider installed through the
  * production {@link withAndroidAdbProvider} scope — the same seam the daemon
  * installs per request and the provider-scenario lane exercises. Prefer this
- * over `withMockedAdb`/`withScriptedAdb` (PATH-stub subprocesses): no PATH
+ * over PATH-stub subprocess helpers (`withMockedAdb`): no PATH
  * mutation, no spawns, no real subprocess waits, so converted files can leave
  * the serialized `subprocess-stub` project and its contention-retry waiver.
  *
@@ -43,7 +55,7 @@ export async function withFakeAdb<T>(
      * merged into the installed fake. `exec` always stays the scripted one so
      * `calls` keeps recording.
      */
-    provider?: Omit<AndroidAdbProvider, 'exec'>;
+    provider?: FakeAdbProviderExtras;
   } = {},
 ): Promise<T> {
   // Fresh copy per call: tests may tailor the device without leaking
@@ -67,7 +79,10 @@ export async function withFakeAdb<T>(
     // sail through call sites that rely on the throw — a different production
     // path than the PATH-stub `exit 1` these fakes replaced.
     if (result.exitCode !== 0 && !execOptions?.allowFailure) {
-      throw androidAdbResultError(`adb ${args.join(' ')} exited with code ${result.exitCode}`, result);
+      throw androidAdbResultError(
+        `adb ${args.join(' ')} exited with code ${result.exitCode}`,
+        result,
+      );
     }
     return result;
   };

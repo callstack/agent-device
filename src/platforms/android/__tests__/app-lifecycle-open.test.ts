@@ -642,14 +642,10 @@ test('openAndroidApp normalizes missing package launch failures into APP_NOT_INS
   await withFakeAdb(
     (args) => {
       if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'start') {
-        // The launch call site does not pass allowFailure, and on that path the
-        // executor contract surfaces a nonzero exit as a thrown COMMAND_FAILED
-        // carrying stdout/stderr details — model that shape directly.
-        return new AppError('COMMAND_FAILED', 'adb shell am start failed', {
-          stdout: '',
-          stderr: 'Error: Activity class does not exist.',
-          exitCode: 1,
-        });
+        // The launch call site does not pass allowFailure, so withFakeAdb
+        // itself surfaces this nonzero exit as the production-shaped thrown
+        // COMMAND_FAILED (androidAdbResultError) — no hand-modeled error.
+        return { stderr: 'Error: Activity class does not exist.', exitCode: 1 };
       }
       if (args[0] === 'shell' && args[1] === 'pm' && args[2] === 'path') {
         // Probed with allowFailure: a returned nonzero result is the real shape.

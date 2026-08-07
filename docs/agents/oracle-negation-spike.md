@@ -108,4 +108,4 @@ Follow-ups this spike motivates, in value order:
 3. Classify survivors *before* believing them: peel `assert.rejects`
    validators, in-file-fake breakage, and helper-oracle files first — in this
    run, 149 of 150 survivors were exactly those three classes.
-4. `git restore src packages test` — the codemod must never reach a commit.
+4. `git restore src packages test scripts` — the codemod globs stop at src/packages/test today, but restore wider than you codemodded; the negated imports must never reach a commit.

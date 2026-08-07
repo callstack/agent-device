@@ -73,3 +73,24 @@ export function androidSnapshotHelperOutput(xml: string): string {
 function isAndroidSnapshotHelperVersionProbe(args: readonly string[]): boolean {
   return args.includes('--show-versioncode') && args.includes(SNAPSHOT_HELPER_PACKAGE);
 }
+
+/**
+ * Script-shaped variant of {@link createAndroidSnapshotHelperExecutor} for
+ * `withFakeAdb` scripts: answers the helper version probe and capture
+ * invocations, and returns `undefined` for everything else so the caller's
+ * script keeps handling ordinary adb args. Keeping probe detection and the
+ * versionCode reply here means a helper-protocol change has one source of
+ * truth.
+ */
+export function androidSnapshotHelperScriptResponse(
+  args: readonly string[],
+  captureXml: () => string,
+): string | undefined {
+  if (isAndroidSnapshotHelperVersionProbe(args)) {
+    return `package:${SNAPSHOT_HELPER_PACKAGE} versionCode:999999`;
+  }
+  if (isAndroidSnapshotHelperCapture(args)) {
+    return androidSnapshotHelperOutput(captureXml());
+  }
+  return undefined;
+}
