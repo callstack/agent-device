@@ -6,6 +6,7 @@ const dispatchSnapshotViaRuntime = vi.hoisted(() => vi.fn());
 vi.mock('../../ios-app-session-hint.ts', () => ({ resolveSoleForegroundIosApp }));
 vi.mock('../../snapshot-runtime.ts', () => ({ dispatchSnapshotViaRuntime }));
 
+import { AppError } from '@agent-device/kernel/errors';
 import { IOS_SIMULATOR } from '../../../__tests__/test-utils/index.ts';
 import type { DaemonRequest, DaemonResponse } from '../../types.ts';
 import {
@@ -304,6 +305,39 @@ test('a snapshot-capture failure never masks the successful open', async () => {
     expect(result.data?.warnings).toEqual([
       'pre-existing warning',
       'The session is open, but the initial interactive snapshot failed (COMMAND_FAILED: capture failed). Run: agent-device snapshot -i',
+    ]);
+  }
+});
+
+test('a THROWN snapshot-capture failure never masks the successful open either', async () => {
+  // The runtime dispatch rethrows ordinary capture/runner exceptions; an
+  // escaped rejection would fail the whole open after the session was created
+  // and wedge the retry on the existing session — same contract as a returned
+  // { ok: false }: ok response, disclosed failure, usable session.
+  dispatchSnapshotViaRuntime.mockRejectedValue(
+    new AppError('COMMAND_FAILED', 'runner crashed mid-capture', {
+      diagnosticId: 'diag-thrown-1',
+    }),
+  );
+
+  const result = await composeOpenWithInitialSnapshot({
+    req: baseRequest({ flags: { foreground: true } }),
+    sessionName: 'default',
+    logPath: '/tmp/daemon.log',
+    sessionStore: {} as never,
+    openResponse: { ok: true, data: { session: 'default' } },
+  });
+
+  expect(result.ok).toBe(true);
+  if (result.ok) {
+    expect(result.data?.session).toBe('default');
+    expect(result.data?.snapshot).toBeUndefined();
+    const error = result.data?.initialSnapshotError as Record<string, unknown>;
+    expect(error?.code).toBe('COMMAND_FAILED');
+    expect(error?.message).toBe('runner crashed mid-capture');
+    expect(error?.diagnosticId).toBe('diag-thrown-1');
+    expect(result.data?.warnings).toEqual([
+      'The session is open, but the initial interactive snapshot failed (COMMAND_FAILED: runner crashed mid-capture). Run: agent-device snapshot -i',
     ]);
   }
 });
