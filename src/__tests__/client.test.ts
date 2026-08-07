@@ -260,6 +260,71 @@ test('apps.open resolves session device identifiers from open response', async (
   ]);
 });
 
+test('apps.open preserves the full initialSnapshotError shape through client normalization', async () => {
+  // open --foreground: open succeeded, composed snapshot did not. The public
+  // client result must carry the FULL daemon error — dropping the boundary
+  // normalization (or truncating to code+message) must fail here.
+  const initialSnapshotError = {
+    code: 'COMMAND_FAILED',
+    message: 'capture failed',
+    hint: 'Run: agent-device snapshot -i',
+    details: { reason: 'runner_capture_failed' },
+    diagnosticId: 'ms-diag-1234',
+    logPath: '/tmp/agent-device/sessions/qa/requests/snap.ndjson',
+    retriable: true,
+  };
+  const setup = createTransport(async (req) => {
+    if (req.command === 'open') {
+      return {
+        ok: true,
+        data: {
+          session: 'qa',
+          appName: 'Settings',
+          appBundleId: 'com.apple.Preferences',
+          platform: 'ios',
+          target: 'mobile',
+          device: 'iPhone 16',
+          id: 'SIM-001',
+          kind: 'simulator',
+          device_udid: 'SIM-001',
+          warnings: ['The session is open, but the initial interactive snapshot failed.'],
+          initialSnapshotError,
+        },
+      };
+    }
+    throw new Error(`Unexpected command: ${req.command}`);
+  });
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const result = await client.apps.open({ app: 'Settings', platform: 'ios', foreground: true });
+
+  assert.deepEqual(result.initialSnapshotError, initialSnapshotError);
+  assert.equal(result.snapshot, undefined);
+});
+
+test('apps.open drops a malformed initialSnapshotError instead of projecting garbage', async () => {
+  const setup = createTransport(async () => ({
+    ok: true,
+    data: {
+      session: 'qa',
+      appName: 'Settings',
+      appBundleId: 'com.apple.Preferences',
+      platform: 'ios',
+      target: 'mobile',
+      device: 'iPhone 16',
+      id: 'SIM-001',
+      kind: 'simulator',
+      device_udid: 'SIM-001',
+      initialSnapshotError: { code: 'COMMAND_FAILED' },
+    },
+  }));
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const result = await client.apps.open({ app: 'Settings', platform: 'ios' });
+
+  assert.equal(result.initialSnapshotError, undefined);
+});
+
 test('apps.open forwards explicit runtime hints through the daemon request', async () => {
   const setup = createTransport(async () => ({
     ok: true,

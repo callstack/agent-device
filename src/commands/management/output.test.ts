@@ -76,22 +76,23 @@ describe('openCliOutput', () => {
       }),
     );
 
-    expect(openOutput).toBeDefined();
-    expect(snapshotOutput?.text).toBeTruthy();
+    if (!openOutput?.text || !snapshotOutput?.text) {
+      throw new Error('production formatter route returned no text output');
+    }
     // The tree lines are exactly what `snapshot -i` would print, appended
     // after the open confirmation lines.
-    expect(openOutput?.text).toBe(
+    expect(openOutput.text).toBe(
       [
         'Opened: com.apple.Preferences',
         'Session state: /tmp/agent-device/sessions/cwd_123_default',
-        snapshotOutput?.text,
+        snapshotOutput.text,
       ].join('\n'),
     );
-    expect(openOutput?.text).toContain('Sign In');
-    expect(openOutput?.text).toContain('Email');
+    expect(openOutput.text).toContain('Sign In');
+    expect(openOutput.text).toContain('Email');
     // --json carries the same presented snapshot payload snapshot -i emits.
-    const openJsonSnapshot = (openOutput?.data as { snapshot?: unknown } | undefined)?.snapshot;
-    expect(openJsonSnapshot).toEqual(snapshotOutput?.jsonData ?? snapshotOutput?.data);
+    const openJsonSnapshot = (openOutput.data as { snapshot?: unknown }).snapshot;
+    expect(openJsonSnapshot).toEqual(snapshotOutput.jsonData ?? snapshotOutput.data);
   });
 
   test('renders the initialSnapshotError warning without a tree when the composed capture failed', () => {

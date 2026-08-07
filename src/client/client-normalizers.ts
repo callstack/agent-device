@@ -16,7 +16,7 @@ import {
   isSerialAddressablePlatform,
   type AppleOS,
 } from '@agent-device/kernel/device';
-import { AppError, type DaemonError, type NormalizedError } from '@agent-device/kernel/errors';
+import { AppError, type DaemonError } from '@agent-device/kernel/errors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { leaseScopeFromOptions, leaseScopeToRequestMeta } from '../core/lease-scope.ts';
 import type { DaemonRequest, SessionRuntimeHints } from '../daemon/types.ts';
@@ -253,7 +253,7 @@ export function normalizeTargetShutdownResult(value: unknown): TargetShutdownRes
   ) {
     return undefined;
   }
-  const error = normalizeTargetShutdownError(value.error);
+  const error = normalizeDaemonError(value.error);
   return {
     success: value.success,
     exitCode: value.exitCode,
@@ -264,36 +264,43 @@ export function normalizeTargetShutdownResult(value: unknown): TargetShutdownRes
 }
 
 /**
- * open --foreground: the composed initial-snapshot failure rides the open
- * response as a FULL daemon error (hint/details/diagnosticId/logPath — plus
- * the additive retriable/supportedOn signals), never a code+message
- * truncation, so recovery guidance survives to Node/CLI JSON callers.
+ * The one normalizer for daemon errors riding inside otherwise-ok results
+ * (target-shutdown reports, the open --foreground initial-snapshot failure).
+ * Preserves the FULL shape — hint/details/diagnosticId/logPath plus the
+ * additive retriable/supportedOn signals — never a code+message truncation,
+ * so recovery guidance survives to Node/CLI JSON callers.
  */
-export function normalizeInitialSnapshotError(value: unknown): DaemonError | undefined {
+const DAEMON_ERROR_STRING_FIELDS = ['hint', 'diagnosticId', 'logPath', 'supportedOn'] as const;
+
+function normalizeDaemonError(value: unknown): DaemonError | undefined {
   if (!isRecord(value)) return undefined;
   if (typeof value.code !== 'string' || typeof value.message !== 'string') return undefined;
-  return {
-    code: value.code,
-    message: value.message,
-    ...(typeof value.hint === 'string' ? { hint: value.hint } : {}),
-    ...(typeof value.diagnosticId === 'string' ? { diagnosticId: value.diagnosticId } : {}),
-    ...(typeof value.logPath === 'string' ? { logPath: value.logPath } : {}),
-    ...(isRecord(value.details) ? { details: value.details } : {}),
-    ...(typeof value.retriable === 'boolean' ? { retriable: value.retriable } : {}),
-    ...(typeof value.supportedOn === 'string' ? { supportedOn: value.supportedOn } : {}),
-  };
+  const error: DaemonError = { code: value.code, message: value.message };
+  for (const field of DAEMON_ERROR_STRING_FIELDS) {
+    const candidate = value[field];
+    if (typeof candidate === 'string') error[field] = candidate;
+  }
+  if (isRecord(value.details)) error.details = value.details;
+  if (typeof value.retriable === 'boolean') error.retriable = value.retriable;
+  return error;
 }
 
-function normalizeTargetShutdownError(value: unknown): NormalizedError | undefined {
-  if (!isRecord(value)) return undefined;
-  if (typeof value.code !== 'string' || typeof value.message !== 'string') return undefined;
+/**
+ * open --foreground composition extras on an ok open response: the initial
+ * snapshot when the foreground-attach capture succeeded, or the FULL capture
+ * error (never a code+message truncation) when open succeeded and the
+ * composed snapshot did not — the session is open and usable either way.
+ */
+export function normalizeOpenForegroundComposition(data: Record<string, unknown>): {
+  snapshot?: Record<string, unknown>;
+  initialSnapshotError?: DaemonError;
+} {
+  const initialSnapshotError = normalizeDaemonError(data.initialSnapshotError);
   return {
-    code: value.code,
-    message: value.message,
-    ...(typeof value.hint === 'string' ? { hint: value.hint } : {}),
-    ...(typeof value.diagnosticId === 'string' ? { diagnosticId: value.diagnosticId } : {}),
-    ...(typeof value.logPath === 'string' ? { logPath: value.logPath } : {}),
-    ...(isRecord(value.details) ? { details: value.details } : {}),
+    ...(data.snapshot && typeof data.snapshot === 'object'
+      ? { snapshot: data.snapshot as Record<string, unknown> }
+      : {}),
+    ...(initialSnapshotError ? { initialSnapshotError } : {}),
   };
 }
 
