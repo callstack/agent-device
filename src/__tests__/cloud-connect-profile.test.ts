@@ -575,8 +575,8 @@ test('connect JSON exposes verification, device, app, live-session, and next-ste
   assert.equal(output.app.status, 'missing');
   assert.equal(output.liveSession.status, 'not-created');
   assert.deepEqual(output.nextSteps, [
-    'agent-device connect aws-device-farm --platform ios --aws-project-arn project-arn --aws-device-arn device-arn --aws-app-arn <arn> --force',
-    'agent-device open <bundle-id> --relaunch',
+    `agent-device connect aws-device-farm --platform ios --aws-project-arn project-arn --aws-device-arn device-arn --aws-app-arn <arn> --force --session ${output.session}`,
+    `agent-device open <bundle-id> --relaunch --session ${output.session}`,
   ]);
   assert.deepEqual(output.leasePreparation.nextSteps, output.nextSteps);
   assert.deepEqual(output.notes, [
@@ -610,6 +610,9 @@ test('connect JSON preserves BrowserStack workflow notes from human output', asy
 
   assert.equal(result.code, null);
   const output = (JSON.parse(result.stdout) as { data: Record<string, any> }).data;
+  assert.deepEqual(output.nextSteps, [
+    `agent-device open <package-id> --relaunch --session ${output.session}`,
+  ]);
   assert.deepEqual(output.notes, [
     'Use the installed package or bundle identifier in open, not the app artifact name.',
     'After close, run agent-device artifacts --json for provider video and logs.',

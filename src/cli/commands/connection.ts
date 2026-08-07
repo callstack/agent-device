@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import type {
   CloudArtifact,
   CloudProviderSessionResult,
@@ -6,8 +5,6 @@ import type {
 import { resolveDaemonPaths } from '../../daemon/config.ts';
 import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
 import {
-  buildRemoteConnectionDaemonState,
-  hashRemoteConfigFile,
   readActiveConnectionState,
   readRemoteConnectionState,
   removeRemoteConnectionState,
@@ -38,6 +35,7 @@ import { writeCommandOutput } from './shared.ts';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { ClientCommandHandler } from './router-types.ts';
+import { resolveConnectContext, type ConnectContext } from './connection-context.ts';
 import {
   buildLeasePreparationNotice,
   presentConnectReadiness,
@@ -134,33 +132,6 @@ function readRequiredConnectScope(
     );
   }
   return { tenant: flags.tenant, runId: flags.runId };
-}
-
-type ConnectContext = {
-  session: string;
-  remoteConfigHash: string;
-  daemon: RemoteConnectionState['daemon'];
-  previous: RemoteConnectionState | null;
-};
-
-function resolveConnectContext(options: {
-  stateDir: string;
-  flags: CliFlags;
-  remoteConfigPath: string;
-}): ConnectContext {
-  const { stateDir, flags, remoteConfigPath } = options;
-  const activeState = flags.session ? null : readActiveConnectionState({ stateDir });
-  const session = flags.session ?? activeState?.session ?? createRemoteSessionName(stateDir);
-  const previous =
-    activeState?.session === session
-      ? activeState
-      : readRemoteConnectionState({ stateDir, session });
-  return {
-    session,
-    previous,
-    remoteConfigHash: hashRemoteConfigFile(remoteConfigPath),
-    daemon: buildDaemonState(flags),
-  };
 }
 
 function assertCompatibleConnectionOrForce(
@@ -346,16 +317,6 @@ export const connectionCommand: ClientCommandHandler = async ({ positionals, fla
   return true;
 };
 
-function createRemoteSessionName(stateDir: string): string {
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const candidate = `adc-${crypto.randomBytes(3).toString('hex')}`;
-    if (!readRemoteConnectionState({ stateDir, session: candidate })) {
-      return candidate;
-    }
-  }
-  return `adc-${Date.now().toString(36)}-${crypto.randomBytes(2).toString('hex')}`;
-}
-
 function renderDisconnectOutput(
   session: string,
   providerData: CloudProviderSessionResult | undefined,
@@ -483,10 +444,6 @@ function isSameDaemonState(
   return (['baseUrl', 'transport', 'serverMode'] as const).every(
     (key) => (a?.[key] ?? undefined) === (b?.[key] ?? undefined),
   );
-}
-
-function buildDaemonState(flags: CliFlags): RemoteConnectionState['daemon'] {
-  return buildRemoteConnectionDaemonState(flags);
 }
 
 function buildRuntimePreparationNotice(

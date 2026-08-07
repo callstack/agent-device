@@ -210,7 +210,9 @@ export AWS_DEVICE_FARM_APP_ARN=...
 
 `AGENT_DEVICE_AWS_DEVICE_FARM_PROJECT_ARN`, `AGENT_DEVICE_AWS_DEVICE_FARM_DEVICE_ARN`, and `AGENT_DEVICE_AWS_DEVICE_FARM_APP_ARN` are accepted as agent-device-specific aliases.
 
-`connect` runs read-only `get-project`, `get-device`, and, when supplied, `get-upload` calls. It rejects a device or app for the wrong platform and an app upload that is not ready. If no app ARN is supplied, the output says so explicitly. AWS Device Farm does not support installing an app after the remote access session is allocated; reconnect with `--aws-app-arn <arn> --force` before `open` when the app is required.
+`connect` runs read-only `get-project`, `get-device`, and, when supplied, `get-upload` calls. It rejects a device or app for the wrong platform and an app upload that is not ready. If no app ARN is supplied, the output says so explicitly. AWS Device Farm does not support installing an app after the remote access session is allocated; use the printed reconnect command, including its `--session <name> --force`, before `open` when the app is required.
+
+Every unscoped `connect` creates a fresh remote session. The printed next steps carry its generated `--session`; keep that flag on every command when multiple processes or CI jobs share a host. The ambient active connection is only safe as a convenience for one sequential workflow. Replacing a connection also requires naming it explicitly: use `connect ... --session <name> --force`. An unscoped `--force` creates a new connection and leaves existing sessions untouched.
 
 Full flow:
 

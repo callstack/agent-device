@@ -1,6 +1,7 @@
 import { fingerprint, type RemoteConnectionState } from '../../remote/remote-connection-state.ts';
 import type { ConnectVerification } from '../connection/connect-provider-adapters.ts';
 import { connectionProviderLeaseKind } from '../connection/provider-policy.ts';
+import { shellQuoteIfNeeded } from '../../utils/shell-quote.ts';
 
 export type ConnectReadiness = ConnectVerification & {
   preparationMessage: string;
@@ -54,10 +55,13 @@ export function buildLeasePreparationNotice(
   return {
     status: 'deferred',
     nextSteps: [
-      'agent-device install-from-source <artifact-url> --platform ios|android',
-      'agent-device open <app-id> --relaunch',
-      'agent-device snapshot -i',
-      'agent-device devices',
+      withConnectionSession(
+        'agent-device install-from-source <artifact-url> --platform ios|android',
+        state,
+      ),
+      withConnectionSession('agent-device open <app-id> --relaunch', state),
+      withConnectionSession('agent-device snapshot -i', state),
+      withConnectionSession('agent-device devices', state),
     ],
     message:
       'No live device session has been created. Run a device command when ready to allocate or refresh the lease.' +
@@ -216,19 +220,22 @@ function buildConnectWorkflow(
   if (leaseKind === 'proxy') {
     return {
       nextSteps: [
-        'agent-device devices',
-        `agent-device open ${appIdPlaceholder(state.platform)} --relaunch`,
+        withConnectionSession('agent-device devices', state),
+        withConnectionSession(
+          `agent-device open ${appIdPlaceholder(state.platform)} --relaunch`,
+          state,
+        ),
       ],
     };
   }
   if (!verification && leaseKind === 'direct-device-provider') {
-    return { nextSteps: defaultDirectProviderLifecycle() };
+    return { nextSteps: defaultDirectProviderLifecycle(state) };
   }
   const appMissing = verification?.app?.status === 'missing';
   return {
     nextSteps: requiresInstall(verification)
       ? installThenOpenWorkflow(state)
-      : [...missingAttachedAppRecovery(verification), ...openWorkflow(state).nextSteps],
+      : [...missingAttachedAppRecovery(state, verification), ...openWorkflow(state).nextSteps],
     ...(supportsProviderArtifacts(verification)
       ? { notes: providerArtifactNotes(!appMissing) }
       : {}),
@@ -243,7 +250,10 @@ function supportsProviderArtifacts(verification?: ConnectVerification): boolean 
   return verification?.provider === 'browserstack' || verification?.provider === 'aws-device-farm';
 }
 
-function missingAttachedAppRecovery(verification?: ConnectVerification): string[] {
+function missingAttachedAppRecovery(
+  state: RemoteConnectionState,
+  verification?: ConnectVerification,
+): string[] {
   if (
     verification?.app?.status !== 'missing' ||
     !verification.project?.reference ||
@@ -252,7 +262,10 @@ function missingAttachedAppRecovery(verification?: ConnectVerification): string[
     return [];
   }
   return [
-    `agent-device connect aws-device-farm --platform ${verification.device.platform} --aws-project-arn ${verification.project.reference} --aws-device-arn ${verification.device.reference} --aws-app-arn <arn> --force`,
+    withConnectionSession(
+      `agent-device connect aws-device-farm --platform ${verification.device.platform} --aws-project-arn ${verification.project.reference} --aws-device-arn ${verification.device.reference} --aws-app-arn <arn> --force`,
+      state,
+    ),
   ];
 }
 
@@ -267,15 +280,20 @@ function providerArtifactNotes(includeAppIdNote: boolean): string[] {
 
 function openWorkflow(state: RemoteConnectionState): Pick<ConnectReadiness, 'nextSteps'> {
   return {
-    nextSteps: [`agent-device open ${appIdPlaceholder(state.platform)} --relaunch`],
+    nextSteps: [
+      withConnectionSession(
+        `agent-device open ${appIdPlaceholder(state.platform)} --relaunch`,
+        state,
+      ),
+    ],
   };
 }
 
 function installThenOpenWorkflow(state: RemoteConnectionState): string[] {
   const appId = appIdPlaceholder(state.platform);
   return [
-    `agent-device install ${appId} <app-path-or-url>`,
-    `agent-device open ${appId} --relaunch`,
+    withConnectionSession(`agent-device install ${appId} <app-path-or-url>`, state),
+    withConnectionSession(`agent-device open ${appId} --relaunch`, state),
   ];
 }
 
@@ -285,13 +303,17 @@ function connectionVerificationStatus(
   return 'status' in verification ? verification.status : 'verified';
 }
 
-function defaultDirectProviderLifecycle(): string[] {
+function defaultDirectProviderLifecycle(state: RemoteConnectionState): string[] {
   return [
-    'agent-device open <package-or-bundle-id> --relaunch',
-    'agent-device snapshot -i',
-    'agent-device close',
-    'agent-device artifacts --json',
+    withConnectionSession('agent-device open <package-or-bundle-id> --relaunch', state),
+    withConnectionSession('agent-device snapshot -i', state),
+    withConnectionSession('agent-device close', state),
+    withConnectionSession('agent-device artifacts --json', state),
   ];
+}
+
+function withConnectionSession(command: string, state: RemoteConnectionState): string {
+  return `${command} --session ${shellQuoteIfNeeded(state.session)}`;
 }
 
 function appIdPlaceholder(platform: RemoteConnectionState['platform']): string {

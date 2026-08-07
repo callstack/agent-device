@@ -625,6 +625,10 @@ Use the output already shown to determine whether the feed-search UI is present,
         id: 'opensKnownPackage',
         pattern: /(?:^|\n)agent-device\s+open\s+com\.example\.demo\b[^\n]*--relaunch\b/i,
       },
+      {
+        id: 'keepsConnectedSession',
+        pattern: /(?:^|\n)agent-device\s+open\b[^\n]*--session\s+adc-browserstack\b/i,
+      },
     ],
     forbidden: [
       {

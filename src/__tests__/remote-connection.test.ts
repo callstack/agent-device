@@ -443,7 +443,7 @@ test('connect reports deferred Metro runtime preparation when remote config has 
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
-test('connect without a session reuses the active generated connection', async () => {
+test('connect without a session creates a fresh connection without replacing the active one', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-idempotent-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
@@ -485,8 +485,12 @@ test('connect without a session reuses the active generated connection', async (
     .readdirSync(path.join(stateDir, 'remote-connections'))
     .filter((entry) => entry.endsWith('.json') && entry !== '.active-session.json');
 
-  assert.equal(secondState?.session, firstState?.session);
-  assert.equal(storedSessions.length, 1);
+  assert.notEqual(secondState?.session, firstState?.session);
+  assert.equal(storedSessions.length, 2);
+  assert.equal(
+    readRemoteConnectionState({ stateDir, session: firstState?.session ?? '' })?.remoteConfigPath,
+    remoteConfigPath,
+  );
 
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
@@ -1958,7 +1962,7 @@ test('connect --force stops replaced Metro companion after state is updated', as
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
-test('connect --force without a session replaces the active generated connection', async () => {
+test('connect --force without a session does not replace the active generated connection', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-force-active-');
   const stateDir = path.join(tempRoot, '.state');
   const oldRemoteConfigPath = path.join(tempRoot, 'old-remote.json');
@@ -2027,17 +2031,16 @@ test('connect --force without a session replaces the active generated connection
     .readdirSync(path.join(stateDir, 'remote-connections'))
     .filter((entry) => entry.endsWith('.json') && entry !== '.active-session.json');
 
-  assert.equal(activeState?.session, 'adc-7f3a2c');
+  assert.notEqual(activeState?.session, 'adc-7f3a2c');
   assert.equal(activeState?.runId, 'run-new');
   assert.equal(activeState?.remoteConfigPath, newRemoteConfigPath);
-  assert.equal(releaseRequest?.leaseId, 'lease-old');
-  assert.equal(releaseRequest?.daemonAuthToken, 'test-old-not-a-real-token');
-  assert.deepEqual(vi.mocked(stopMetroCompanion).mock.calls[0]?.[0], {
-    projectRoot: '/tmp/old-project',
-    profileKey: oldRemoteConfigPath,
-    consumerKey: 'adc-7f3a2c',
-  });
-  assert.equal(storedSessions.length, 1);
+  assert.equal(releaseRequest, undefined);
+  assert.equal(vi.mocked(stopMetroCompanion).mock.calls.length, 0);
+  assert.equal(storedSessions.length, 2);
+  assert.equal(
+    readRemoteConnectionState({ stateDir, session: 'adc-7f3a2c' })?.remoteConfigPath,
+    oldRemoteConfigPath,
+  );
 
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });

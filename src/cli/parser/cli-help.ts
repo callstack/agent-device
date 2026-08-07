@@ -817,7 +817,7 @@ After direct-provider connect:
   Read the printed Device, App, Next, and workflow-note lines. They are also available as verification/device/app/liveSession/nextSteps/notes in --json output.
   BrowserStack and AWS Device Farm create the hosted session on open. open needs the installed package or bundle identifier, not the app artifact name or ARN.
   A new Limrun instance has no user app. Run install <package-or-bundle-id> <app-path-or-url> first; install allocates the instance, then open launches the installed id.
-  AWS Device Farm cannot install after allocation. If connect reports no attached app, reconnect with --aws-app-arn <arn> --force before open.
+  AWS Device Farm cannot install after allocation. If connect reports no attached app, run its printed reconnect command, which includes --session <name> --force, before open.
   Do not run devices or apps as a pre-open catalog probe for direct providers; those commands can allocate the deferred provider session and only inspect that live device.
 
 Device cloud interfaces:
@@ -892,6 +892,8 @@ Rules:
   Use Limrun, BrowserStack, and AWS Device Farm through local provider profiles; they do not accept a remote agent-device daemon URL.
   Device cloud credentials must be available before the command starts. Limrun uses LIMRUN_API_KEY. BrowserStack uses BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY. AWS Device Farm uses the AWS CLI credential chain, including CI-provided AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN, AWS profiles, or web identity role variables.
   Direct-provider connect performs read-only provider calls and saves active connection state only after verification succeeds. It never creates a device, instance, App Automate session, or AWS remote access session.
+  connect without --session always creates a fresh remote session and prints that session in its next-step commands. Concurrent callers must pass the returned --session on every command; the ambient active connection is only a single-workflow convenience.
+  To replace an existing connection, pass its returned session explicitly with --session <name> --force. --force without --session creates another fresh session and does not release or overwrite an unrelated active connection.
   Prefer short-lived AWS role credentials in CI. Generated connection profiles store app/device selectors and ARNs, not Limrun API keys, BrowserStack access keys, or AWS credentials.
   Limrun Android supports direct ADB port reverse for local Metro. Limrun iOS requires a public Metro/React DevTools URL because it cannot reach local host ports directly.
   After closing a device cloud session, run agent-device artifacts --json to retrieve provider video/log/dashboard URLs when the provider has made them available.

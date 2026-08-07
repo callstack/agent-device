@@ -143,7 +143,7 @@ Device: Google Pixel 8 (android 14.0) — verified
 App: sample.apk — verified
 No live device session has been created. The first device command shown below will allocate one.
 Next:
-  agent-device open <package-id> --relaunch
+  agent-device open <package-id> --relaunch --session adc-browserstack
 Use the installed package or bundle identifier in open, not the app artifact name.
 After close, run agent-device artifacts --json for provider video and logs.`,
 };
