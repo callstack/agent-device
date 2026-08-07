@@ -147,6 +147,17 @@ describe('replay command interface', () => {
     expect(testRequest.options).not.toHaveProperty('reportJunit');
   });
 
+  test('projects replay --timeout into the daemon request envelope', () => {
+    const input = replayCliReader(['./probe-hang.ad'], flags({ timeoutMs: 1_000 }));
+
+    expect(input).toMatchObject({ path: './probe-hang.ad', timeoutMs: 1_000 });
+    expect(replayDaemonWriter(input)).toMatchObject({
+      command: 'replay',
+      positionals: ['./probe-hang.ad'],
+      options: { timeoutMs: 1_000 },
+    });
+  });
+
   test('folds replay and test Metro hints into the runtime request envelope', async () => {
     const runCalls: unknown[] = [];
     const testCalls: unknown[] = [];

@@ -154,6 +154,7 @@ export const replayCliReader: CliReader = (positionals, flags) => ({
   resumeFrom: flags.replayFrom,
   resumePlanDigest: flags.replayPlanDigest,
   keepSession: flags.replayKeepSession,
+  timeoutMs: flags.timeoutMs,
   saveScript: flags.saveScript,
   force: flags.force,
 });
