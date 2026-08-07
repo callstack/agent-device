@@ -110,6 +110,87 @@ setInterval(() => {}, 1_000);
   }
 });
 
+test(
+  'the Swift toolchain wrapper keeps TMPDIR until signaled descendants exit',
+  { skip: process.platform === 'win32' },
+  async () => {
+    const evidenceRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'swift-toolchain-tmpdir-descendant-test-'),
+    );
+    const readyPath = path.join(evidenceRoot, 'ready.json');
+    const shutdownPath = path.join(evidenceRoot, 'shutdown.json');
+    let childTmpDir: string | undefined;
+    let descendantPid: number | undefined;
+
+    try {
+      const descendantProbe = `
+const fs = require('node:fs');
+fs.writeFileSync(
+  ${JSON.stringify(readyPath)},
+  JSON.stringify({ pid: process.pid, tmpdir: process.env.TMPDIR }),
+);
+process.on('SIGTERM', () => {
+  setTimeout(() => {
+    fs.writeFileSync(
+      ${JSON.stringify(shutdownPath)},
+      JSON.stringify({ tmpdirExisted: fs.existsSync(process.env.TMPDIR) }),
+    );
+    process.exit(0);
+  }, 200);
+});
+setInterval(() => {}, 1_000);
+`;
+      const directChildProbe = `
+const { spawn } = require('node:child_process');
+process.on('SIGTERM', () => process.exit(0));
+const descendant = spawn(process.execPath, ['-e', ${JSON.stringify(descendantProbe)}], {
+  env: process.env,
+  stdio: 'ignore',
+});
+descendant.unref();
+setInterval(() => {}, 1_000);
+`;
+      const background = runCmdBackground(
+        process.execPath,
+        ['--experimental-strip-types', WRAPPER, process.execPath, '-e', directChildProbe],
+        {
+          cwd: REPOSITORY_ROOT,
+          allowFailure: true,
+        },
+      );
+
+      await waitForFile(readyPath);
+      const ready = JSON.parse(fs.readFileSync(readyPath, 'utf8')) as {
+        pid: number;
+        tmpdir: string;
+      };
+      descendantPid = ready.pid;
+      childTmpDir = ready.tmpdir;
+      background.child.kill('SIGTERM');
+
+      const result = await background.wait;
+      assert.equal(result.exitCode, 143);
+      if (!fs.existsSync(shutdownPath)) process.kill(descendantPid, 'SIGTERM');
+      await waitForFile(shutdownPath);
+      assert.equal(
+        (JSON.parse(fs.readFileSync(shutdownPath, 'utf8')) as { tmpdirExisted: boolean })
+          .tmpdirExisted,
+        true,
+        'a delayed descendant must retain TMPDIR until its shutdown completes',
+      );
+      assert.equal(fs.existsSync(childTmpDir), false, `wrapper left behind: ${childTmpDir}`);
+    } finally {
+      if (descendantPid) {
+        try {
+          process.kill(descendantPid, 'SIGKILL');
+        } catch {}
+      }
+      if (childTmpDir) fs.rmSync(childTmpDir, { recursive: true, force: true });
+      fs.rmSync(evidenceRoot, { recursive: true, force: true });
+    }
+  },
+);
+
 test('Apple build lanes route toolchain commands through the cleanup wrapper', () => {
   const manifest = JSON.parse(
     fs.readFileSync(path.join(REPOSITORY_ROOT, 'package.json'), 'utf8'),
