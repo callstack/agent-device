@@ -14,8 +14,14 @@ import {
 import { withAndroidAdbProvider } from '../adb-executor.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { withScriptedAdb } from '../../../__tests__/test-utils/mocked-binaries.ts';
+import { withFakeAdb } from '../../../__tests__/test-utils/index.ts';
 import { mkdtempForTest } from '../../../__tests__/test-utils/tmp-dir.ts';
+
+// The fake adb provider installs through the production withAndroidAdbProvider
+// scope, so `calls` records device-scoped args without a leading `-s <serial>`.
+// The fake exposes only `exec`, so installs take the legacy exec-shaped
+// fallback and appear as `install ...` calls. bundletool is not adb: the .aab
+// tests still shape it via PATH because production shells out to it directly.
 
 test('parseAndroidLaunchComponent extracts final resolved component', () => {
   const stdout = [
@@ -45,13 +51,15 @@ test('inferAndroidAppName derives readable names from package ids', () => {
 test('installAndroidApp installs .apk via adb install -r', async () => {
   const apkPath = path.join(os.tmpdir(), `agent-device-test-${Date.now()}.apk`);
   await fs.writeFile(apkPath, 'placeholder', 'utf8');
-  await withScriptedAdb(
-    'agent-device-android-install-apk-',
-    '#!/bin/sh\nprintf "%s\\n" "$@" >> "$AGENT_DEVICE_TEST_ARGS_FILE"\nexit 0\n',
-    async ({ argsLogPath, device }) => {
+  await withFakeAdb(
+    () => undefined,
+    async ({ calls, device }) => {
       await installAndroidApp(device, apkPath);
-      const logged = (await fs.readFile(argsLogPath, 'utf8')).trim().split('\n').join(' ');
-      assert.match(logged, /install -r .*agent-device-test-.*\.apk/);
+      const flat = calls.map((args) => args.join(' '));
+      assert.ok(
+        flat.some((call) => /^install -r .*agent-device-test-.*\.apk$/.test(call)),
+        flat.join('; '),
+      );
     },
   );
   await fs.rm(apkPath, { force: true });
@@ -92,9 +100,6 @@ test('installAndroidInstallablePath uses provider install capability when availa
 
 test('installAndroidApp resolves packageName and launchTarget from nested archive artifacts', async () => {
   const tmpDir = await mkdtempForTest('agent-device-android-install-archive-');
-  const adbPath = path.join(tmpDir, 'adb');
-  const argsLogPath = path.join(tmpDir, 'args.log');
-  const installMarkerPath = path.join(tmpDir, 'installed.marker');
   const archivePath = path.join(tmpDir, 'Sample.zip');
   const manifestDir = path.join(tmpDir, 'manifest');
   const nestedDir = path.join(tmpDir, 'nested');
@@ -110,74 +115,57 @@ test('installAndroidApp resolves packageName and launchTarget from nested archiv
   });
   execFileSync('zip', ['-qr', archivePath, 'nested'], { cwd: tmpDir });
 
-  await fs.writeFile(
-    adbPath,
-    [
-      '#!/bin/sh',
-      'printf "adb %s\\n" "$*" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-      'if [ "$1" = "shell" ] && [ "$2" = "pm" ] && [ "$3" = "list" ] && [ "$4" = "packages" ]; then',
-      `  if [ -f "${installMarkerPath}" ]; then`,
-      '    echo "package:com.example.archive"',
-      '  fi',
-      '  exit 0',
-      'fi',
-      'if [ "$1" = "install" ] && [ "$2" = "-r" ]; then',
-      `  : > "${installMarkerPath}"`,
-      '  exit 0',
-      'fi',
-      'exit 0',
-      '',
-    ].join('\n'),
-    'utf8',
-  );
-  await fs.chmod(adbPath, 0o755);
-  const previousPath = process.env.PATH;
-  const previousArgsFile = process.env.AGENT_DEVICE_TEST_ARGS_FILE;
-  process.env.PATH = `${tmpDir}${path.delimiter}${previousPath ?? ''}`;
-  process.env.AGENT_DEVICE_TEST_ARGS_FILE = argsLogPath;
-
-  const device: DeviceInfo = {
-    platform: 'android',
-    id: 'emulator-5554',
-    name: 'Pixel',
-    kind: 'emulator',
-    booted: true,
-  };
-
   try {
-    const result = await installAndroidApp(device, archivePath);
-    const logged = await fs.readFile(argsLogPath, 'utf8');
-    assert.equal(result.archivePath, archivePath);
-    assert.equal(result.packageName, 'com.example.archive');
-    assert.equal(result.appName, 'Archive');
-    assert.equal(result.launchTarget, 'com.example.archive');
-    assert.equal(result.installablePath.endsWith('/nested/Sample.apk'), true);
-    assert.match(logged, /adb -s emulator-5554 install -r .*nested\/Sample\.apk/);
-    assert.doesNotMatch(logged, /adb -s emulator-5554 shell pm list packages/);
+    // The package name must come from the extracted manifest, so `pm list
+    // packages` only answers if the install already happened — and the
+    // assertions below prove it is never consulted at all.
+    let installed = false;
+    await withFakeAdb(
+      (args) => {
+        if (
+          args[0] === 'shell' &&
+          args[1] === 'pm' &&
+          args[2] === 'list' &&
+          args[3] === 'packages'
+        ) {
+          return installed ? 'package:com.example.archive' : '';
+        }
+        if (args[0] === 'install' && args[1] === '-r') {
+          installed = true;
+          return undefined;
+        }
+        return undefined;
+      },
+      async ({ calls, device }) => {
+        const result = await installAndroidApp(device, archivePath);
+        const flat = calls.map((args) => args.join(' '));
+        assert.equal(result.archivePath, archivePath);
+        assert.equal(result.packageName, 'com.example.archive');
+        assert.equal(result.appName, 'Archive');
+        assert.equal(result.launchTarget, 'com.example.archive');
+        assert.equal(result.installablePath.endsWith('/nested/Sample.apk'), true);
+        assert.ok(
+          flat.some((call) => /^install -r .*nested\/Sample\.apk$/.test(call)),
+          flat.join('; '),
+        );
+        assert.equal(
+          flat.some((call) => call.startsWith('shell pm list packages')),
+          false,
+          flat.join('; '),
+        );
+      },
+    );
   } finally {
-    process.env.PATH = previousPath;
-    if (previousArgsFile === undefined) {
-      delete process.env.AGENT_DEVICE_TEST_ARGS_FILE;
-    } else {
-      process.env.AGENT_DEVICE_TEST_ARGS_FILE = previousArgsFile;
-    }
     await fs.rm(tmpDir, { recursive: true, force: true });
   }
 });
 
 test('installAndroidApp installs .aab via bundletool build-apks + install-apks', async () => {
   const tmpDir = await mkdtempForTest('agent-device-android-install-aab-');
-  const adbPath = path.join(tmpDir, 'adb');
   const bundletoolPath = path.join(tmpDir, 'bundletool');
   const argsLogPath = path.join(tmpDir, 'args.log');
   const aabPath = path.join(tmpDir, 'Sample.aab');
   await fs.writeFile(aabPath, 'placeholder', 'utf8');
-  await fs.writeFile(
-    adbPath,
-    '#!/bin/sh\nprintf "adb %s\\n" "$*" >> "$AGENT_DEVICE_TEST_ARGS_FILE"\nexit 0\n',
-    'utf8',
-  );
-  await fs.chmod(adbPath, 0o755);
   await fs.writeFile(
     bundletoolPath,
     [
@@ -215,20 +203,22 @@ test('installAndroidApp installs .aab via bundletool build-apks + install-apks',
   process.env.AGENT_DEVICE_TEST_ARGS_FILE = argsLogPath;
   delete process.env.AGENT_DEVICE_BUNDLETOOL_JAR;
 
-  const device: DeviceInfo = {
-    platform: 'android',
-    id: 'emulator-5554',
-    name: 'Pixel',
-    kind: 'emulator',
-    booted: true,
-  };
-
   try {
-    await installAndroidApp(device, aabPath);
-    const logged = await fs.readFile(argsLogPath, 'utf8');
-    assert.match(logged, /bundletool build-apks .*--bundle .*Sample\.aab .*--mode universal/);
-    assert.match(logged, /bundletool install-apks .*--device-id emulator-5554/);
-    assert.doesNotMatch(logged, /adb .* install -r/);
+    await withFakeAdb(
+      () => undefined,
+      async ({ calls, device }) => {
+        await installAndroidApp(device, aabPath);
+        const logged = await fs.readFile(argsLogPath, 'utf8');
+        assert.match(logged, /bundletool build-apks .*--bundle .*Sample\.aab .*--mode universal/);
+        assert.match(logged, /bundletool install-apks .*--device-id emulator-5554/);
+        const flat = calls.map((args) => args.join(' '));
+        assert.equal(
+          flat.some((call) => call.startsWith('install ')),
+          false,
+          flat.join('; '),
+        );
+      },
+    );
   } finally {
     process.env.PATH = previousPath;
     if (previousArgsFile === undefined) {
@@ -247,33 +237,29 @@ test('installAndroidApp installs .aab via bundletool build-apks + install-apks',
 
 test('installAndroidApp .aab reports missing bundletool tooling', async () => {
   const tmpDir = await mkdtempForTest('agent-device-android-install-aab-missing-tool-');
-  const adbPath = path.join(tmpDir, 'adb');
   const aabPath = path.join(tmpDir, 'Sample.aab');
   await fs.writeFile(aabPath, 'placeholder', 'utf8');
-  await fs.writeFile(adbPath, '#!/bin/sh\nexit 0\n', 'utf8');
-  await fs.chmod(adbPath, 0o755);
 
   const previousPath = process.env.PATH;
   const previousBundletoolJar = process.env.AGENT_DEVICE_BUNDLETOOL_JAR;
+  // Narrow PATH to the (binary-free) temp dir so bundletool is deterministically
+  // absent even on hosts that have it installed; adb stays in-process.
   process.env.PATH = tmpDir;
   delete process.env.AGENT_DEVICE_BUNDLETOOL_JAR;
 
-  const device: DeviceInfo = {
-    platform: 'android',
-    id: 'emulator-5554',
-    name: 'Pixel',
-    kind: 'emulator',
-    booted: true,
-  };
-
   try {
-    await assert.rejects(
-      () => installAndroidApp(device, aabPath),
-      (error: unknown) => {
-        assert.equal(error instanceof AppError, true);
-        assert.equal((error as AppError).code, 'TOOL_MISSING');
-        assert.match((error as AppError).message, /bundletool/i);
-        return true;
+    await withFakeAdb(
+      () => undefined,
+      async ({ device }) => {
+        await assert.rejects(
+          () => installAndroidApp(device, aabPath),
+          (error: unknown) => {
+            assert.equal(error instanceof AppError, true);
+            assert.equal((error as AppError).code, 'TOOL_MISSING');
+            assert.match((error as AppError).message, /bundletool/i);
+            return true;
+          },
+        );
       },
     );
   } finally {
@@ -289,27 +275,22 @@ test('installAndroidApp .aab reports missing bundletool tooling', async () => {
 
 test('installAndroidApp .aab rejects relative AGENT_DEVICE_BUNDLETOOL_JAR overrides', async () => {
   const tmpDir = await mkdtempForTest('agent-device-android-install-aab-relative-jar-');
-  const adbPath = path.join(tmpDir, 'adb');
   const aabPath = path.join(tmpDir, 'Sample.aab');
   await fs.writeFile(aabPath, 'placeholder', 'utf8');
-  await fs.writeFile(adbPath, '#!/bin/sh\nexit 0\n', 'utf8');
-  await fs.chmod(adbPath, 0o755);
 
   const previousPath = process.env.PATH;
   const previousBundletoolJar = process.env.AGENT_DEVICE_BUNDLETOOL_JAR;
+  // Narrow PATH so the relative-jar override is what resolution actually hits.
   process.env.PATH = tmpDir;
   process.env.AGENT_DEVICE_BUNDLETOOL_JAR = './bundletool-all.jar';
 
-  const device: DeviceInfo = {
-    platform: 'android',
-    id: 'emulator-5554',
-    name: 'Pixel',
-    kind: 'emulator',
-    booted: true,
-  };
-
   try {
-    await assert.rejects(() => installAndroidApp(device, aabPath), { code: 'INVALID_ARGS' });
+    await withFakeAdb(
+      () => undefined,
+      async ({ device }) => {
+        await assert.rejects(() => installAndroidApp(device, aabPath), { code: 'INVALID_ARGS' });
+      },
+    );
   } finally {
     process.env.PATH = previousPath;
     if (previousBundletoolJar === undefined) {
@@ -322,18 +303,11 @@ test('installAndroidApp .aab rejects relative AGENT_DEVICE_BUNDLETOOL_JAR overri
 });
 
 test('resolveAndroidApp does not treat file paths as package names', async () => {
-  await withScriptedAdb(
-    'agent-device-android-resolve-path-',
-    [
-      '#!/bin/sh',
-      'if [ "$1" = "-s" ]; then shift; shift; fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "pm" ] && [ "$3" = "list" ]; then',
-      '  echo "package:com.example.demo"',
-      '  exit 0',
-      'fi',
-      'exit 0',
-      '',
-    ].join('\n'),
+  await withFakeAdb(
+    (args) =>
+      args[0] === 'shell' && args[1] === 'pm' && args[2] === 'list'
+        ? 'package:com.example.demo'
+        : undefined,
     async ({ device }) => {
       await assert.rejects(
         resolveAndroidApp(device, '/path/to/app-debug.apk'),
@@ -348,20 +322,14 @@ test('resolveAndroidApp does not treat file paths as package names', async () =>
 });
 
 test('resolveAndroidApp caches display-name package matches but bypasses exact package ids', async () => {
-  await withScriptedAdb(
-    'agent-device-android-resolve-cache-',
-    [
-      '#!/bin/sh',
-      'printf "%s\\n" "$*" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-      'if [ "$1" = "-s" ]; then shift; shift; fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "pm" ] && [ "$3" = "list" ] && [ "$4" = "packages" ]; then',
-      '  echo "package:com.example.cachemaps"',
-      '  exit 0',
-      'fi',
-      'exit 1',
-      '',
-    ].join('\n'),
-    async ({ argsLogPath, device }) => {
+  await withFakeAdb(
+    (args) => {
+      if (args[0] === 'shell' && args[1] === 'pm' && args[2] === 'list' && args[3] === 'packages') {
+        return 'package:com.example.cachemaps';
+      }
+      return { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 };
+    },
+    async ({ calls, device }) => {
       const first = await resolveAndroidApp(device, 'cachemaps');
       const second = await resolveAndroidApp(device, 'cachemaps');
       const exact = await resolveAndroidApp(device, 'com.example.cachemaps');
@@ -370,57 +338,48 @@ test('resolveAndroidApp caches display-name package matches but bypasses exact p
       assert.deepEqual(second, first);
       assert.deepEqual(exact, { type: 'package', value: 'com.example.cachemaps' });
 
-      const logged = await fs.readFile(argsLogPath, 'utf8');
-      assert.equal((logged.match(/pm list packages/g) ?? []).length, 1);
+      const listCalls = calls.filter((args) => args.join(' ') === 'shell pm list packages');
+      assert.equal(listCalls.length, 1);
     },
   );
 });
 
 test('installAndroidInstallablePath invalidates cached display-name package matches', async () => {
-  await withScriptedAdb(
-    'agent-device-android-install-cache-',
-    [
-      '#!/bin/sh',
-      'printf "%s\\n" "$*" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-      'if [ "$1" = "-s" ]; then shift; shift; fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "pm" ] && [ "$3" = "list" ] && [ "$4" = "packages" ]; then',
-      '  if [ -f "$AGENT_DEVICE_TEST_INSTALL_MARKER" ]; then',
-      '    echo "package:com.example.installedcachemaps"',
-      '  else',
-      '    echo "package:com.example.cachemaps"',
-      '  fi',
-      '  exit 0',
-      'fi',
-      'if [ "$1" = "install" ] && [ "$2" = "-r" ]; then',
-      '  : > "$AGENT_DEVICE_TEST_INSTALL_MARKER"',
-      '  exit 0',
-      'fi',
-      'exit 1',
-      '',
-    ].join('\n'),
-    async ({ device }) => {
-      const tmpDir = await mkdtempForTest('agent-device-android-cache-apk-');
-      const apkPath = path.join(tmpDir, 'App.apk');
-      const previousMarker = process.env.AGENT_DEVICE_TEST_INSTALL_MARKER;
-      process.env.AGENT_DEVICE_TEST_INSTALL_MARKER = path.join(tmpDir, 'installed.marker');
-      try {
-        await fs.writeFile(apkPath, '', 'utf8');
+  const tmpDir = await mkdtempForTest('agent-device-android-cache-apk-');
+  const apkPath = path.join(tmpDir, 'App.apk');
+  try {
+    await fs.writeFile(apkPath, '', 'utf8');
+    let installed = false;
+    await withFakeAdb(
+      (args) => {
+        if (
+          args[0] === 'shell' &&
+          args[1] === 'pm' &&
+          args[2] === 'list' &&
+          args[3] === 'packages'
+        ) {
+          return installed
+            ? 'package:com.example.installedcachemaps'
+            : 'package:com.example.cachemaps';
+        }
+        if (args[0] === 'install' && args[1] === '-r') {
+          installed = true;
+          return undefined;
+        }
+        return { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 };
+      },
+      async ({ device }) => {
         const before = await resolveAndroidApp(device, 'cachemaps');
         await installAndroidInstallablePath(device, apkPath);
         const after = await resolveAndroidApp(device, 'cachemaps');
 
         assert.deepEqual(before, { type: 'package', value: 'com.example.cachemaps' });
         assert.deepEqual(after, { type: 'package', value: 'com.example.installedcachemaps' });
-      } finally {
-        if (previousMarker === undefined) {
-          delete process.env.AGENT_DEVICE_TEST_INSTALL_MARKER;
-        } else {
-          process.env.AGENT_DEVICE_TEST_INSTALL_MARKER = previousMarker;
-        }
-        await fs.rm(tmpDir, { recursive: true, force: true });
-      }
-    },
-  );
+      },
+    );
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
 });
 
 test('parseAndroidLaunchComponent handles multi-entry resolve output', () => {
