@@ -35,6 +35,12 @@ export type WebDriverWindowRect = {
   height: number;
 };
 
+export type WebDriverActiveElement = {
+  /** Opaque W3C element reference; only ever compared for equality. */
+  id: string;
+  rect: WebDriverWindowRect;
+};
+
 export type W3CPointerAction =
   | {
       type: 'pointerMove';
@@ -172,6 +178,58 @@ export class WebDriverClient {
       throw error;
     }
     return typeof value === 'boolean' ? value : 'unsupported';
+  }
+
+  /**
+   * Which element holds text-entry focus and where it sits, `none` when nothing
+   * does, or `unsupported` when this driver has no active-element route.
+   *
+   * Keyboard visibility can only witness that *a* field took focus; it says
+   * nothing about *which*, which is why a second fill into an already-open form
+   * could send its keys to the field the first one focused (#1658). The focused
+   * element's identity answers that. Its rect comes along because identity
+   * alone cannot distinguish a deliberate re-fill of the already-focused field
+   * from a tap that moved nothing.
+   *
+   * `no such element` is a real, expected answer here (a form with nothing
+   * focused yet), so it maps to `none` and leaves the caller polling. A route
+   * that answers 200 with something that is not an element reference is not
+   * implementing this at all — the spec reports "nothing focused" as that
+   * error, never as an empty value — so it degrades to `unsupported` alongside
+   * a genuinely unimplemented route, the same way a non-boolean keyboard answer
+   * does. Reading it as `none` would fail every fill on such a grid.
+   */
+  async activeElement(
+    timeoutMs?: number,
+  ): Promise<WebDriverActiveElement | 'none' | 'unsupported'> {
+    const overrides = { retryAttempts: 0, ...(timeoutMs === undefined ? {} : { timeoutMs }) };
+    let elementId: string | undefined;
+    try {
+      elementId = readW3CElementId(
+        await this.sessionRequest('GET', '/element/active', undefined, overrides),
+      );
+    } catch (error) {
+      if (isUnimplementedWebDriverRoute(error)) return 'unsupported';
+      if (isNoSuchElementError(error)) return 'none';
+      throw error;
+    }
+    if (elementId === undefined) return 'unsupported';
+    try {
+      const value = await this.sessionRequest(
+        'GET',
+        `/element/${encodeURIComponent(elementId)}/rect`,
+        undefined,
+        overrides,
+      );
+      return { id: elementId, rect: readWindowRect(value) };
+    } catch (error) {
+      if (isUnimplementedWebDriverRoute(error)) return 'unsupported';
+      // The focused element went away between the two calls — a stale answer,
+      // not a broken driver. Report it as "nothing focused" so the caller polls
+      // again rather than failing on a race it can simply retry out of.
+      if (isNoSuchElementError(error)) return 'none';
+      throw error;
+    }
   }
 
   async back(): Promise<void> {
@@ -378,6 +436,26 @@ function webdriverError(status: number, payload: unknown): AppError {
  */
 const UNIMPLEMENTED_WEBDRIVER_STATUSES = new Set([405, 501]);
 const UNIMPLEMENTED_WEBDRIVER_ERRORS = new Set(['unknown command', 'unknown method']);
+
+/**
+ * The W3C element identifier, whose key is the spec's fixed UUID rather than a
+ * readable name. Appium also echoes the legacy `ELEMENT` key; accept either so
+ * the caller works across grid versions.
+ */
+const W3C_ELEMENT_KEY = 'element-6066-11e4-a52e-4f735466cecf';
+
+function readW3CElementId(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const record = value as Record<string, unknown>;
+  const id = record[W3C_ELEMENT_KEY] ?? record.ELEMENT;
+  return typeof id === 'string' && id.length > 0 ? id : undefined;
+}
+
+/** Nothing is focused right now — an expected state, not a driver defect. */
+function isNoSuchElementError(error: unknown): boolean {
+  if (!(error instanceof AppError)) return false;
+  return readWebDriverErrorCode(error).toLowerCase() === 'no such element';
+}
 
 function isUnimplementedWebDriverRoute(error: unknown): boolean {
   if (!(error instanceof AppError)) return false;

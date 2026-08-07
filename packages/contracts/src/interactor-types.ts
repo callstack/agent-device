@@ -102,29 +102,35 @@ export type TypeTextBackendResult = {
  * What a cloud-WebDriver `fill` could establish about its target taking text
  * entry focus before it sent the keys (#1658). The local Apple runner owns this
  * discipline in Swift and reports it as a `textEntryRoute`; the cloud path has
- * no runner, only the driver's keyboard-visibility signal, so it names what it
- * observed instead of which channel it typed through:
+ * no runner, only what the driver will tell it, so it names what it observed
+ * instead of which channel it typed through. Listed strongest evidence first:
  *
- * - `keyboard-shown`: the software keyboard went from hidden to shown after our
- *   tap — positive evidence the tap moved focus to a text input.
- * - `settled-keyboard-up`: the keyboard was ALREADY up (back-to-back fills into
- *   one form), so its visibility says nothing about the NEW field. Entry waited
- *   the full readiness budget, the same answer the Apple runner gives here.
- * - `settled-unknown`: the driver implements no keyboard route at all, so
- *   nothing could be waited for. Entry followed a short blind settle.
+ * - `focused-element`: the element holding text-entry focus after the tap
+ *   contains the tapped point — positive evidence that THIS field, not merely
+ *   some field, took focus.
+ * - `keyboard-shown`: no active-element route, but the software keyboard went
+ *   from hidden to shown after our tap. Witnesses that focus arrived somewhere,
+ *   which only means our field when the keyboard was down beforehand.
+ * - `settled-unknown`: the driver implements neither an active-element nor a
+ *   keyboard route, so nothing could be waited for. Entry followed a short
+ *   blind settle. This is the only value that describes a fill with no evidence
+ *   behind it, and it takes two positively classified unsupported answers to
+ *   reach.
  *
- * Every value describes a fill that DID send its keys. The fourth outcome — a
- * tap that raised no keyboard at all — is deliberately absent: reporting it
- * here would recreate #1658's silent success, so the interactor throws
- * (`text_entry_focus_not_observed`) without typing instead.
+ * Every value describes a fill that DID send its keys. Outcomes where focus
+ * could not be witnessed are deliberately absent: reporting one here would
+ * recreate #1658's silent success, so the interactor throws
+ * (`text_entry_focus_not_observed`) without typing instead. That covers a tap
+ * that focused nothing, and a keyboard already up on a driver that cannot say
+ * which field owns it — the case where keys would land in the PREVIOUS field.
  *
  * Closed set: the cloud interactor is its only producer and the boundary that
  * narrows it (readFillBackendResult, src/core/dispatch-interactions.ts) drops a
  * value it cannot name.
  */
 export const CLOUD_TEXT_ENTRY_READINESS = [
+  'focused-element',
   'keyboard-shown',
-  'settled-keyboard-up',
   'settled-unknown',
 ] as const;
 

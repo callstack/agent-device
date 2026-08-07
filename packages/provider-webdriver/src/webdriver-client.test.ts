@@ -74,7 +74,119 @@ test('is_keyboard_shown honors a caller timeout shorter than the client default'
   });
 });
 
-/** A client with a live session id, so `isKeyboardShown` reaches the session route. */
+// The focused element is the only signal that can say WHICH field took focus,
+// so `fill` fails closed when it is unavailable. Each wire shape it
+// distinguishes is pinned here.
+test('activeElement returns the focused element id and rect', async () => {
+  const client = await connectedClient(
+    webDriverRoutes({
+      '/element/active': { body: { value: { [W3C_ELEMENT_KEY]: 'el-1' } } },
+      '/rect': { body: { value: { x: 20, y: 300, width: 350, height: 44 } } },
+    }),
+  );
+
+  assert.deepEqual(await client.activeElement(), {
+    id: 'el-1',
+    rect: { x: 20, y: 300, width: 350, height: 44 },
+  });
+});
+
+// A form with nothing focused yet is an expected state, not a broken driver —
+// the caller must keep polling rather than give up.
+test('activeElement reports nothing focused as none', async () => {
+  const client = await connectedClient(
+    webDriverRoutes({
+      '/element/active': {
+        status: 404,
+        body: { value: { error: 'no such element', message: 'nothing focused' } },
+      },
+    }),
+  );
+
+  assert.equal(await client.activeElement(), 'none');
+});
+
+// Focus moved between the two round trips. A race the caller can simply retry
+// out of, not a failure worth ending the fill on.
+test('activeElement reports an element that vanished before its rect as none', async () => {
+  const client = await connectedClient(
+    webDriverRoutes({
+      '/element/active': { body: { value: { [W3C_ELEMENT_KEY]: 'el-1' } } },
+      '/rect': {
+        status: 404,
+        body: { value: { error: 'no such element', message: 'stale element' } },
+      },
+    }),
+  );
+
+  assert.equal(await client.activeElement(), 'none');
+});
+
+// A grid that answers 200/null is not implementing the route: the spec reports
+// "nothing focused" as a `no such element` error. Reading null as "nothing
+// focused" would fail every fill on such a grid instead of falling back.
+test('activeElement reports a non-element answer as unsupported', async () => {
+  const client = await connectedClient(
+    webDriverRoutes({ '/element/active': { body: { value: null } } }),
+  );
+
+  assert.equal(await client.activeElement(), 'unsupported');
+});
+
+test('activeElement reports an unimplemented route as unsupported', async () => {
+  const client = await connectedClient(
+    webDriverRoutes({
+      '/element/active': {
+        status: 404,
+        body: { value: { error: 'unknown command', message: 'Unknown command' } },
+      },
+    }),
+  );
+
+  assert.equal(await client.activeElement(), 'unsupported');
+});
+
+// Same discipline as the keyboard route: a dead session shares the 404 and must
+// never be mistaken for a driver that simply lacks the feature.
+test('activeElement propagates a dead session, which shares the 404', async () => {
+  const client = await connectedClient(
+    webDriverRoutes({
+      '/element/active': {
+        status: 404,
+        body: {
+          value: { error: 'invalid session id', message: 'A session is either terminated' },
+        },
+      },
+    }),
+  );
+
+  await assert.rejects(client.activeElement(), (error: AppError) => {
+    assert.match(error.message, /terminated/);
+    return true;
+  });
+});
+
+const W3C_ELEMENT_KEY = 'element-6066-11e4-a52e-4f735466cecf';
+
+/** Dispatches by URL suffix, since `activeElement` makes two round trips. */
+function webDriverRoutes(
+  routes: Record<string, { status?: number; body: unknown }>,
+): typeof globalThis.fetch {
+  const keys = Object.keys(routes).sort((a, b) => b.length - a.length);
+  return async (input) => {
+    const url = String(input instanceof Request ? input.url : input);
+    const key = keys.find((candidate) => url.includes(candidate));
+    const route = key
+      ? routes[key]!
+      : { status: 500, body: { value: { message: `unrouted ${url}` } } };
+    return new Response(JSON.stringify(route.body), {
+      status: route.status ?? 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+}
+
+/** A client with a live session id, so the probes reach the session routes. */
 async function connectedClient(respond: typeof globalThis.fetch): Promise<WebDriverClient> {
   globalThis.fetch = webDriverResponse(200, {
     value: { sessionId: 'wd-1', capabilities: {} },
