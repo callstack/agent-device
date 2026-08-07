@@ -1,7 +1,10 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
+  androidAdbResultError,
   withAndroidAdbProvider,
+  type AndroidAdbExecutorOptions,
   type AndroidAdbExecutorResult,
+  type AndroidAdbProvider,
 } from '../../platforms/android/adb-executor.ts';
 import { ANDROID_EMULATOR } from './device-fixtures.ts';
 
@@ -33,21 +36,43 @@ export type FakeAdbScript = (args: string[]) => FakeAdbResponse | undefined;
 export async function withFakeAdb<T>(
   script: FakeAdbScript,
   run: (ctx: { calls: string[][]; device: DeviceInfo }) => Promise<T>,
-  options: { device?: DeviceInfo } = {},
+  options: {
+    device?: DeviceInfo;
+    /**
+     * Extra provider capabilities (snapshotHelperArtifact, text, spawn, ...)
+     * merged into the installed fake. `exec` always stays the scripted one so
+     * `calls` keeps recording.
+     */
+    provider?: Omit<AndroidAdbProvider, 'exec'>;
+  } = {},
 ): Promise<T> {
   // Fresh copy per call: tests may tailor the device without leaking
   // mutations into the shared fixture.
   const device: DeviceInfo = { ...(options.device ?? ANDROID_EMULATOR) };
   const calls: string[][] = [];
-  const exec = async (args: string[]): Promise<AndroidAdbExecutorResult> => {
+  const exec = async (
+    args: string[],
+    execOptions?: AndroidAdbExecutorOptions,
+  ): Promise<AndroidAdbExecutorResult> => {
     calls.push([...args]);
     const response = script(args);
     if (response instanceof Error) throw response;
-    if (typeof response === 'string') return { stdout: response, stderr: '', exitCode: 0 };
-    return { stdout: '', stderr: '', exitCode: 0, ...response };
+    const result: AndroidAdbExecutorResult =
+      typeof response === 'string'
+        ? { stdout: response, stderr: '', exitCode: 0 }
+        : { stdout: '', stderr: '', exitCode: 0, ...response };
+    // Mirror the local executor's contract: nonzero exit throws unless the
+    // call site opted into allowFailure. Provider-scoped exec skips exec.ts's
+    // throw-on-close-failure, so without this a scripted {exitCode: 1} would
+    // sail through call sites that rely on the throw — a different production
+    // path than the PATH-stub `exit 1` these fakes replaced.
+    if (result.exitCode !== 0 && !execOptions?.allowFailure) {
+      throw androidAdbResultError(`adb ${args.join(' ')} exited with code ${result.exitCode}`, result);
+    }
+    return result;
   };
   return await withAndroidAdbProvider(
-    { exec },
+    { ...options.provider, exec } as AndroidAdbProvider,
     { serial: device.id },
     async () => await run({ calls, device }),
   );

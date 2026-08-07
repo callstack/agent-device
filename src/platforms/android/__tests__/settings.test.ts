@@ -1,9 +1,11 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { setAndroidSetting } from '../settings.ts';
-import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
-import { withFakeAdb } from '../../../__tests__/test-utils/index.ts';
+import {
+  ANDROID_EMULATOR,
+  assertRejectsAppError,
+  withFakeAdb,
+} from '../../../__tests__/test-utils/index.ts';
 
 // The fake adb provider installs through the production withAndroidAdbProvider
 // scope, so `calls` records device-scoped args without a leading `-s <serial>`.
@@ -35,18 +37,10 @@ test('setAndroidSetting appearance toggle rejects unknown current mode output', 
   await withFakeAdb(
     (args) => (args.join(' ') === 'shell cmd uimode night' ? 'mode unavailable' : undefined),
     async ({ device }) => {
-      await assert.rejects(
-        () => setAndroidSetting(device, 'appearance', 'toggle'),
-        (error: unknown) => {
-          assert.equal(error instanceof AppError, true);
-          assert.equal((error as AppError).code, 'COMMAND_FAILED');
-          assert.match(
-            (error as AppError).message,
-            /Unable to determine current Android appearance/,
-          );
-          return true;
-        },
-      );
+      await assertRejectsAppError(() => setAndroidSetting(device, 'appearance', 'toggle'), {
+        code: 'COMMAND_FAILED',
+        message: /Unable to determine current Android appearance/,
+      });
     },
   );
 });
@@ -90,37 +84,20 @@ test('setAndroidSetting fingerprint retries emulator command when shell cmd fing
 });
 
 test('setAndroidSetting fingerprint rejects unsupported action', async () => {
-  const device: DeviceInfo = {
-    platform: 'android',
-    id: 'emulator-5554',
-    name: 'Pixel',
-    kind: 'emulator',
-    booted: true,
-  };
-  await assert.rejects(
-    () => setAndroidSetting(device, 'fingerprint', 'enroll'),
-    (error: unknown) => {
-      assert.equal(error instanceof AppError, true);
-      assert.equal((error as AppError).code, 'INVALID_ARGS');
-      assert.match((error as AppError).message, /Invalid fingerprint state/);
-      return true;
-    },
-  );
+  await assertRejectsAppError(() => setAndroidSetting(ANDROID_EMULATOR, 'fingerprint', 'enroll'), {
+    code: 'INVALID_ARGS',
+    message: /Invalid fingerprint state/,
+  });
 });
 
 test('setAndroidSetting fingerprint returns COMMAND_FAILED for transport/runtime failures', async () => {
   await withFakeAdb(
     () => ({ stderr: 'error: device offline', exitCode: 1 }),
     async ({ device }) => {
-      await assert.rejects(
-        () => setAndroidSetting(device, 'fingerprint', 'match'),
-        (error: unknown) => {
-          assert.equal(error instanceof AppError, true);
-          assert.equal((error as AppError).code, 'COMMAND_FAILED');
-          assert.match((error as AppError).message, /Failed to simulate Android fingerprint/);
-          return true;
-        },
-      );
+      await assertRejectsAppError(() => setAndroidSetting(device, 'fingerprint', 'match'), {
+        code: 'COMMAND_FAILED',
+        message: /Failed to simulate Android fingerprint/,
+      });
     },
   );
 });
@@ -254,47 +231,23 @@ test('setAndroidSetting permission reset photos clears flags for the resolved pe
 });
 
 test('setAndroidSetting permission rejects mode argument', async () => {
-  const device: DeviceInfo = {
-    platform: 'android',
-    id: 'emulator-5554',
-    name: 'Pixel',
-    kind: 'emulator',
-    booted: true,
-  };
-  await assert.rejects(
+  await assertRejectsAppError(
     () =>
-      setAndroidSetting(device, 'permission', 'grant', 'com.example.app', {
+      setAndroidSetting(ANDROID_EMULATOR, 'permission', 'grant', 'com.example.app', {
         permissionTarget: 'camera',
         permissionMode: 'limited',
       }),
-    (error: unknown) => {
-      assert.equal(error instanceof AppError, true);
-      assert.equal((error as AppError).code, 'INVALID_ARGS');
-      assert.match((error as AppError).message, /mode is only supported for photos/i);
-      return true;
-    },
+    { code: 'INVALID_ARGS', message: /mode is only supported for photos/i },
   );
 });
 
 test('setAndroidSetting permission rejects iOS-only targets with Android-specific guidance', async () => {
-  const device: DeviceInfo = {
-    platform: 'android',
-    id: 'emulator-5554',
-    name: 'Pixel',
-    kind: 'emulator',
-    booted: true,
-  };
-  await assert.rejects(
+  await assertRejectsAppError(
     () =>
-      setAndroidSetting(device, 'permission', 'grant', 'com.example.app', {
+      setAndroidSetting(ANDROID_EMULATOR, 'permission', 'grant', 'com.example.app', {
         permissionTarget: 'calendar',
       }),
-    (error: unknown) => {
-      assert.equal(error instanceof AppError, true);
-      assert.equal((error as AppError).code, 'INVALID_ARGS');
-      assert.match((error as AppError).message, /Unsupported permission target on Android/i);
-      return true;
-    },
+    { code: 'INVALID_ARGS', message: /Unsupported permission target on Android/i },
   );
 });
 

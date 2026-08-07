@@ -9,7 +9,7 @@ import {
   getAndroidKeyboardStatusWithAdb,
 } from '../device-input-state.ts';
 import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../../utils/diagnostics.ts';
-import { withFakeAdb } from '../../../__tests__/test-utils/index.ts';
+import { assertRejectsAppError, withFakeAdb } from '../../../__tests__/test-utils/index.ts';
 import { mkdtempForTest } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 // The fake adb provider installs through the production withAndroidAdbProvider
@@ -274,13 +274,10 @@ test('dismissAndroidKeyboard fails explicitly when non-navigation dismiss does n
       return { stderr: `unexpected args: ${flat}`, exitCode: 1 };
     },
     async ({ calls, device }) => {
-      await assert.rejects(
-        dismissAndroidKeyboard(device),
-        (error: unknown) =>
-          error instanceof AppError &&
-          error.code === 'UNSUPPORTED_OPERATION' &&
-          /without back navigation/i.test(error.message),
-      );
+      await assertRejectsAppError(() => dismissAndroidKeyboard(device), {
+        code: 'UNSUPPORTED_OPERATION',
+        message: /without back navigation/i,
+      });
 
       const flat = calls.map((args) => args.join(' '));
       assert.ok(flat.includes('shell input keyevent 111'), flat.join('; '));

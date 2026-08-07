@@ -13,8 +13,7 @@ import {
 } from '../app-lifecycle.ts';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
-import { withFakeAdb } from '../../../__tests__/test-utils/index.ts';
+import { assertRejectsAppError, withFakeAdb } from '../../../__tests__/test-utils/index.ts';
 import { mkdtempForTest } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 // The fake adb provider installs through the production withAndroidAdbProvider
@@ -251,15 +250,10 @@ test('installAndroidApp .aab reports missing bundletool tooling', async () => {
     await withFakeAdb(
       () => undefined,
       async ({ device }) => {
-        await assert.rejects(
-          () => installAndroidApp(device, aabPath),
-          (error: unknown) => {
-            assert.equal(error instanceof AppError, true);
-            assert.equal((error as AppError).code, 'TOOL_MISSING');
-            assert.match((error as AppError).message, /bundletool/i);
-            return true;
-          },
-        );
+        await assertRejectsAppError(() => installAndroidApp(device, aabPath), {
+          code: 'TOOL_MISSING',
+          message: /bundletool/i,
+        });
       },
     );
   } finally {
@@ -309,14 +303,9 @@ test('resolveAndroidApp does not treat file paths as package names', async () =>
         ? 'package:com.example.demo'
         : undefined,
     async ({ device }) => {
-      await assert.rejects(
-        resolveAndroidApp(device, '/path/to/app-debug.apk'),
-        (error: unknown) => {
-          assert.ok(error instanceof AppError);
-          assert.equal(error.code, 'APP_NOT_INSTALLED');
-          return true;
-        },
-      );
+      await assertRejectsAppError(() => resolveAndroidApp(device, '/path/to/app-debug.apk'), {
+        code: 'APP_NOT_INSTALLED',
+      });
     },
   );
 });

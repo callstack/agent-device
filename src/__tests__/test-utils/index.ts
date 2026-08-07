@@ -31,6 +31,8 @@ export { makeSessionStore } from './store-factory.ts';
 
 export { withFakeAdb, type FakeAdbResponse, type FakeAdbScript } from './fake-adb.ts';
 
+export { assertRejectsAppError } from './app-error.ts';
+
 export {
   COMPACT_VIEWPORTS,
   distinctRectPairArb,

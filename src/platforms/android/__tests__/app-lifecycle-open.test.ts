@@ -1,11 +1,15 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { promises as fs } from 'node:fs';
 import { closeAndroidApp, openAndroidApp } from '../app-lifecycle.ts';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { withScriptedAdb } from '../../../__tests__/test-utils/mocked-binaries.ts';
+import {
+  assertRejectsAppError,
+  ANDROID_EMULATOR,
+  withFakeAdb,
+  type FakeAdbResponse,
+} from '../../../__tests__/test-utils/index.ts';
 
 test('openAndroidApp rejects activity override for deep link URLs', async () => {
   const device: DeviceInfo = {
@@ -16,13 +20,9 @@ test('openAndroidApp rejects activity override for deep link URLs', async () => 
     booted: true,
   };
 
-  await assert.rejects(
+  await assertRejectsAppError(
     () => openAndroidApp(device, '  https://example.com/path  ', '.MainActivity'),
-    (error: unknown) => {
-      assert.equal(error instanceof AppError, true);
-      assert.equal((error as AppError).code, 'INVALID_ARGS');
-      return true;
-    },
+    { code: 'INVALID_ARGS' },
   );
 });
 
@@ -439,163 +439,224 @@ test('openAndroidApp reports localhost reverse failures with port context', asyn
 });
 
 test('openAndroidApp binds deep link URLs to the requested package', async () => {
-  await withScriptedAdb(
-    'agent-device-android-open-deep-link-package-',
-    [
-      '#!/bin/sh',
-      'printf "__CMD__\\n" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-      'printf "%s\\n" "$@" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-      'if [ "$1" = "-s" ]; then',
-      '  shift',
-      '  shift',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "pm" ] && [ "$3" = "list" ]; then',
-      '  echo "package:com.example.app"',
-      '  exit 0',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "am" ] && [ "$3" = "start" ]; then',
-      '  echo "Status: ok"',
-      '  exit 0',
-      'fi',
-      'exit 0',
-      '',
-    ].join('\n'),
-    async ({ argsLogPath, device }) => {
-      await openAndroidApp(device, 'com.example.app', { url: 'example://bottom-tabs' });
-      const logged = await fs.readFile(argsLogPath, 'utf8');
-      assert.match(logged, /shell\nam\nstart\n-W\n-a\nandroid\.intent\.action\.VIEW/);
-      assert.match(logged, /-d\nexample:\/\/bottom-tabs/);
-      assert.match(logged, /-p\ncom\.example\.app/);
-    },
-  );
+  await withFakeAdb(androidOpenFakeAdb, async ({ calls, device }) => {
+    await openAndroidApp(device, 'com.example.app', { url: 'example://bottom-tabs' });
+    assert.deepEqual(calls, [
+      [
+        'shell',
+        'am',
+        'start',
+        '-W',
+        '-a',
+        'android.intent.action.VIEW',
+        '-d',
+        'example://bottom-tabs',
+        '-p',
+        'com.example.app',
+      ],
+    ]);
+  });
 });
 
 test('openAndroidApp default launch uses -p package flag', async () => {
-  await withScriptedAdb(
-    'agent-device-android-open-default-',
-    androidOpenAdbScript(),
-    async ({ argsLogPath, device }) => {
-      await openAndroidApp(device, 'com.example.app');
-      const logged = await fs.readFile(argsLogPath, 'utf8');
-      assert.match(logged, /shell\nam\nstart\n-W\n-a\nandroid\.intent\.action\.MAIN/);
-      assert.match(logged, /-p\ncom\.example\.app/);
-    },
-  );
+  await withFakeAdb(androidOpenFakeAdb, async ({ calls, device }) => {
+    await openAndroidApp(device, 'com.example.app');
+    assert.deepEqual(calls, [
+      [
+        'shell',
+        'am',
+        'start',
+        '-W',
+        '-a',
+        'android.intent.action.MAIN',
+        '-c',
+        'android.intent.category.DEFAULT',
+        '-c',
+        'android.intent.category.LAUNCHER',
+        '-p',
+        'com.example.app',
+      ],
+    ]);
+  });
 });
 
 test('openAndroidApp appends launchArgs to am start when launching by package', async () => {
-  await withScriptedAdb(
-    'agent-device-android-open-launch-args-',
-    androidOpenAdbScript(),
-    async ({ argsLogPath, device }) => {
-      await openAndroidApp(device, 'com.example.app', {
-        launchArgs: ['--es', 'screen', 'home', '--ez', 'fresh', 'true'],
-      });
-      const logged = await fs.readFile(argsLogPath, 'utf8');
-      assert.match(logged, /-p\ncom\.example\.app\n--es\nscreen\nhome\n--ez\nfresh\ntrue/);
-    },
-  );
+  await withFakeAdb(androidOpenFakeAdb, async ({ calls, device }) => {
+    await openAndroidApp(device, 'com.example.app', {
+      launchArgs: ['--es', 'screen', 'home', '--ez', 'fresh', 'true'],
+    });
+    assert.deepEqual(calls, [
+      [
+        'shell',
+        'am',
+        'start',
+        '-W',
+        '-a',
+        'android.intent.action.MAIN',
+        '-c',
+        'android.intent.category.DEFAULT',
+        '-c',
+        'android.intent.category.LAUNCHER',
+        '-p',
+        'com.example.app',
+        '--es',
+        'screen',
+        'home',
+        '--ez',
+        'fresh',
+        'true',
+      ],
+    ]);
+  });
 });
 
 test('openAndroidApp appends launchArgs to am start when activity override is set', async () => {
-  await withScriptedAdb(
-    'agent-device-android-open-launch-args-activity-',
-    androidOpenAdbScript(),
-    async ({ argsLogPath, device }) => {
-      await openAndroidApp(device, 'com.example.app', {
-        activity: '.MainActivity',
-        launchArgs: ['--es', 'mode', 'debug'],
-      });
-      const logged = await fs.readFile(argsLogPath, 'utf8');
-      assert.match(logged, /-n\ncom\.example\.app\/\.MainActivity\n--es\nmode\ndebug/);
-    },
-  );
+  await withFakeAdb(androidOpenFakeAdb, async ({ calls, device }) => {
+    await openAndroidApp(device, 'com.example.app', {
+      activity: '.MainActivity',
+      launchArgs: ['--es', 'mode', 'debug'],
+    });
+    assert.deepEqual(calls, [
+      [
+        'shell',
+        'am',
+        'start',
+        '-W',
+        '-a',
+        'android.intent.action.MAIN',
+        '-c',
+        'android.intent.category.DEFAULT',
+        '-c',
+        'android.intent.category.LAUNCHER',
+        '-n',
+        'com.example.app/.MainActivity',
+        '--es',
+        'mode',
+        'debug',
+      ],
+    ]);
+  });
 });
 
 test('openAndroidApp appends launchArgs to am start for deep link URL opens', async () => {
-  await withScriptedAdb(
-    'agent-device-android-open-launch-args-url-',
-    androidOpenAdbScript(),
-    async ({ argsLogPath, device }) => {
-      await openAndroidApp(device, 'myapp://item/42', {
-        launchArgs: ['--es', 'ref', 'campaign'],
-      });
-      const logged = await fs.readFile(argsLogPath, 'utf8');
-      assert.match(logged, /-d\nmyapp:\/\/item\/42\n--es\nref\ncampaign/);
-    },
-  );
+  await withFakeAdb(androidOpenFakeAdb, async ({ calls, device }) => {
+    await openAndroidApp(device, 'myapp://item/42', {
+      launchArgs: ['--es', 'ref', 'campaign'],
+    });
+    assert.deepEqual(calls, [
+      [
+        'shell',
+        'am',
+        'start',
+        '-W',
+        '-a',
+        'android.intent.action.VIEW',
+        '-d',
+        'myapp://item/42',
+        '--es',
+        'ref',
+        'campaign',
+      ],
+    ]);
+  });
 });
 
 test('openAndroidApp quotes deep link URL shell characters', async () => {
-  await withScriptedAdb(
-    'agent-device-android-open-deep-link-shell-characters-',
-    androidOpenAdbScript(),
-    async ({ argsLogPath, device }) => {
-      await openAndroidApp(device, 'myapp://item/42?event=cold.start&source=smoke');
-      const logged = await fs.readFile(argsLogPath, 'utf8');
-      assert.match(logged, /-d\n'myapp:\/\/item\/42\?event=cold\.start&source=smoke'/);
-    },
-  );
+  await withFakeAdb(androidOpenFakeAdb, async ({ calls, device }) => {
+    await openAndroidApp(device, 'myapp://item/42?event=cold.start&source=smoke');
+    assert.deepEqual(calls, [
+      [
+        'shell',
+        'am',
+        'start',
+        '-W',
+        '-a',
+        'android.intent.action.VIEW',
+        '-d',
+        "'myapp://item/42?event=cold.start&source=smoke'",
+      ],
+    ]);
+  });
 });
 
 test('openAndroidApp appends launchArgs to am start for app-bound URL opens', async () => {
-  await withScriptedAdb(
-    'agent-device-android-open-launch-args-app-bound-url-',
-    androidOpenAdbScript(),
-    async ({ argsLogPath, device }) => {
-      await openAndroidApp(device, 'com.example.app', {
-        url: 'https://example.com/promo',
-        launchArgs: ['--es', 'ref', 'campaign'],
-      });
-      const logged = await fs.readFile(argsLogPath, 'utf8');
-      assert.match(
-        logged,
-        /-d\nhttps:\/\/example\.com\/promo\n-p\ncom\.example\.app\n--es\nref\ncampaign/,
-      );
-    },
-  );
+  await withFakeAdb(androidOpenFakeAdb, async ({ calls, device }) => {
+    await openAndroidApp(device, 'com.example.app', {
+      url: 'https://example.com/promo',
+      launchArgs: ['--es', 'ref', 'campaign'],
+    });
+    assert.deepEqual(calls, [
+      [
+        'shell',
+        'am',
+        'start',
+        '-W',
+        '-a',
+        'android.intent.action.VIEW',
+        '-d',
+        'https://example.com/promo',
+        '-p',
+        'com.example.app',
+        '--es',
+        'ref',
+        'campaign',
+      ],
+    ]);
+  });
 });
 
 test('openAndroidApp shell-quotes launchArgs containing JSON or shell metacharacters', async () => {
-  await withScriptedAdb(
-    'agent-device-android-open-launch-args-quoting-',
-    androidOpenAdbScript(),
-    async ({ argsLogPath, device }) => {
-      // Value contains characters the device shell would otherwise re-interpret:
-      // `#` (comment), `;` (statement separator), `&` (background), `*` (glob),
-      // ` ` (word separator), `\` (escape).
-      const jsonPayload = '{"a":"x #y;z&w","b":"path/*"}';
-      await openAndroidApp(device, 'com.example.app', {
-        launchArgs: ['--es', 'EXTRA_CONFIG', jsonPayload],
-      });
-      const logged = await fs.readFile(argsLogPath, 'utf8');
-      // `--es` and the safe extra key pass through unquoted; the JSON value
-      // is single-quoted so `adb shell` re-tokenisation preserves it.
-      assert.match(logged, /--es\nEXTRA_CONFIG\n'\{"a":"x #y;z&w","b":"path\/\*"\}'/);
-    },
-  );
+  await withFakeAdb(androidOpenFakeAdb, async ({ calls, device }) => {
+    // Value contains characters the device shell would otherwise re-interpret:
+    // `#` (comment), `;` (statement separator), `&` (background), `*` (glob),
+    // ` ` (word separator), `\` (escape).
+    const jsonPayload = '{"a":"x #y;z&w","b":"path/*"}';
+    await openAndroidApp(device, 'com.example.app', {
+      launchArgs: ['--es', 'EXTRA_CONFIG', jsonPayload],
+    });
+    // `--es` and the safe extra key pass through unquoted; the JSON value
+    // is single-quoted so `adb shell` re-tokenisation preserves it.
+    assert.deepEqual(calls, [
+      [
+        'shell',
+        'am',
+        'start',
+        '-W',
+        '-a',
+        'android.intent.action.MAIN',
+        '-c',
+        'android.intent.category.DEFAULT',
+        '-c',
+        'android.intent.category.LAUNCHER',
+        '-p',
+        'com.example.app',
+        '--es',
+        'EXTRA_CONFIG',
+        `'${jsonPayload}'`,
+      ],
+    ]);
+  });
 });
 
 test('openAndroidApp normalizes missing package launch failures into APP_NOT_INSTALLED', async () => {
-  await withScriptedAdb(
-    'agent-device-android-open-missing-package-',
-    [
-      '#!/bin/sh',
-      'if [ "$1" = "-s" ]; then',
-      '  shift',
-      '  shift',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "am" ] && [ "$3" = "start" ]; then',
-      '  echo "Error: Activity class does not exist." >&2',
-      '  exit 1',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "pm" ] && [ "$3" = "path" ]; then',
-      '  echo "Error: unknown package: com.example.missing" >&2',
-      '  exit 1',
-      'fi',
-      'exit 0',
-      '',
-    ].join('\n'),
+  await withFakeAdb(
+    (args) => {
+      if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'start') {
+        // The launch call site does not pass allowFailure, and on that path the
+        // executor contract surfaces a nonzero exit as a thrown COMMAND_FAILED
+        // carrying stdout/stderr details — model that shape directly.
+        return new AppError('COMMAND_FAILED', 'adb shell am start failed', {
+          stdout: '',
+          stderr: 'Error: Activity class does not exist.',
+          exitCode: 1,
+        });
+      }
+      if (args[0] === 'shell' && args[1] === 'pm' && args[2] === 'path') {
+        // Probed with allowFailure: a returned nonzero result is the real shape.
+        return { stderr: 'Error: unknown package: com.example.missing', exitCode: 1 };
+      }
+      return undefined;
+    },
     async ({ device }) => {
       await assert.rejects(
         openAndroidApp(device, 'com.example.missing', '.MainActivity'),
@@ -611,103 +672,112 @@ test('openAndroidApp normalizes missing package launch failures into APP_NOT_INS
 });
 
 test('openAndroidApp uses LEANBACK category for Android TV targets', async () => {
-  await withScriptedAdb(
-    'agent-device-android-open-tv-',
-    [
-      '#!/bin/sh',
-      'printf "__CMD__\\n" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-      'printf "%s\\n" "$@" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-      'if [ "$1" = "-s" ]; then',
-      '  shift',
-      '  shift',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "pm" ] && [ "$3" = "list" ]; then',
-      '  echo "package:com.example.tvapp"',
-      '  exit 0',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "am" ] && [ "$3" = "start" ]; then',
-      '  echo "Status: ok"',
-      '  exit 0',
-      'fi',
-      'exit 0',
-      '',
-    ].join('\n'),
-    async ({ argsLogPath, device }) => {
-      await openAndroidApp({ ...device, target: 'tv' }, 'com.example.tvapp');
-      const logged = await fs.readFile(argsLogPath, 'utf8');
-      assert.match(logged, /-c\nandroid\.intent\.category\.LEANBACK_LAUNCHER/);
-      assert.match(logged, /-p\ncom\.example\.tvapp/);
+  await withFakeAdb(
+    androidOpenFakeAdb,
+    async ({ calls, device }) => {
+      await openAndroidApp(device, 'com.example.tvapp');
+      assert.deepEqual(calls, [
+        [
+          'shell',
+          'am',
+          'start',
+          '-W',
+          '-a',
+          'android.intent.action.MAIN',
+          '-c',
+          'android.intent.category.DEFAULT',
+          '-c',
+          'android.intent.category.LEANBACK_LAUNCHER',
+          '-p',
+          'com.example.tvapp',
+        ],
+      ]);
     },
+    { device: { ...ANDROID_EMULATOR, target: 'tv' } },
   );
 });
 
 test('openAndroidApp fallback resolve-activity includes MAIN/LAUNCHER flags', async () => {
-  await withScriptedAdb(
-    'agent-device-android-open-fallback-',
-    [
-      '#!/bin/sh',
-      'printf "__CMD__\\n" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-      'printf "%s\\n" "$@" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-      'if [ "$1" = "-s" ]; then',
-      '  shift',
-      '  shift',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "pm" ] && [ "$3" = "list" ]; then',
-      '  echo "package:com.microsoft.office.outlook"',
-      '  exit 0',
-      'fi',
-      '# First am start (with -p) outputs error but exits 0 (real Android behavior)',
-      'if [ "$1" = "shell" ] && [ "$2" = "am" ] && [ "$3" = "start" ]; then',
-      '  for arg in "$@"; do',
-      '    if [ "$arg" = "-p" ]; then',
-      '      echo "Starting: Intent { act=android.intent.action.MAIN cat=[android.intent.category.DEFAULT,android.intent.category.LAUNCHER] pkg=com.microsoft.office.outlook }"',
-      '      echo "Error: Activity not started, unable to resolve Intent { act=android.intent.action.MAIN cat=[android.intent.category.DEFAULT,android.intent.category.LAUNCHER] flg=0x10000000 pkg=com.microsoft.office.outlook }"',
-      '      exit 0',
-      '    fi',
-      '  done',
-      '  echo "Status: ok"',
-      '  exit 0',
-      'fi',
-      '# resolve-activity returns correct launcher component',
-      'if [ "$1" = "shell" ] && [ "$2" = "cmd" ] && [ "$3" = "package" ] && [ "$4" = "resolve-activity" ]; then',
-      '  echo "priority=0 preferredOrder=0 match=0x108000 specificIndex=-1 isDefault=true"',
-      '  echo "com.microsoft.office.outlook/com.microsoft.office.outlook.ui.miit.MiitLauncherActivity"',
-      '  exit 0',
-      'fi',
-      'exit 0',
-      '',
-    ].join('\n'),
-    async ({ argsLogPath, device }) => {
+  await withFakeAdb(
+    (args) => {
+      if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'start') {
+        // First am start (with -p) outputs error but exits 0 (real Android behavior)
+        if (args.includes('-p')) {
+          return [
+            'Starting: Intent { act=android.intent.action.MAIN cat=[android.intent.category.DEFAULT,android.intent.category.LAUNCHER] pkg=com.microsoft.office.outlook }',
+            'Error: Activity not started, unable to resolve Intent { act=android.intent.action.MAIN cat=[android.intent.category.DEFAULT,android.intent.category.LAUNCHER] flg=0x10000000 pkg=com.microsoft.office.outlook }',
+          ].join('\n');
+        }
+        return 'Status: ok';
+      }
+      // resolve-activity returns correct launcher component
+      if (
+        args[0] === 'shell' &&
+        args[1] === 'cmd' &&
+        args[2] === 'package' &&
+        args[3] === 'resolve-activity'
+      ) {
+        return [
+          'priority=0 preferredOrder=0 match=0x108000 specificIndex=-1 isDefault=true',
+          'com.microsoft.office.outlook/com.microsoft.office.outlook.ui.miit.MiitLauncherActivity',
+        ].join('\n');
+      }
+      return undefined;
+    },
+    async ({ calls, device }) => {
       await openAndroidApp(device, 'com.microsoft.office.outlook');
-      const logged = await fs.readFile(argsLogPath, 'utf8');
-      // Verify resolve-activity was called with MAIN/LAUNCHER flags
-      assert.match(
-        logged,
-        /resolve-activity\n--brief\n-a\nandroid\.intent\.action\.MAIN\n-c\nandroid\.intent\.category\.LAUNCHER\ncom\.microsoft\.office\.outlook/,
-      );
-      // Verify fallback launch used the resolved component
-      assert.match(
-        logged,
-        /-n\ncom\.microsoft\.office\.outlook\/com\.microsoft\.office\.outlook\.ui\.miit\.MiitLauncherActivity/,
-      );
+      assert.deepEqual(calls, [
+        [
+          'shell',
+          'am',
+          'start',
+          '-W',
+          '-a',
+          'android.intent.action.MAIN',
+          '-c',
+          'android.intent.category.DEFAULT',
+          '-c',
+          'android.intent.category.LAUNCHER',
+          '-p',
+          'com.microsoft.office.outlook',
+        ],
+        // resolve-activity was called with MAIN/LAUNCHER flags
+        [
+          'shell',
+          'cmd',
+          'package',
+          'resolve-activity',
+          '--brief',
+          '-a',
+          'android.intent.action.MAIN',
+          '-c',
+          'android.intent.category.LAUNCHER',
+          'com.microsoft.office.outlook',
+        ],
+        // Fallback launch used the resolved component
+        [
+          'shell',
+          'am',
+          'start',
+          '-W',
+          '-a',
+          'android.intent.action.MAIN',
+          '-c',
+          'android.intent.category.DEFAULT',
+          '-c',
+          'android.intent.category.LAUNCHER',
+          '-n',
+          'com.microsoft.office.outlook/com.microsoft.office.outlook.ui.miit.MiitLauncherActivity',
+        ],
+      ]);
     },
   );
 });
 
-function androidOpenAdbScript(): string {
-  return [
-    '#!/bin/sh',
-    'printf "__CMD__\\n" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-    'printf "%s\\n" "$@" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-    'if [ "$1" = "-s" ]; then',
-    '  shift',
-    '  shift',
-    'fi',
-    'if [ "$1" = "shell" ] && [ "$2" = "am" ] && [ "$3" = "start" ]; then',
-    '  echo "Status: ok"',
-    '  exit 0',
-    'fi',
-    'exit 0',
-    '',
-  ].join('\n');
+// In-process replacement for the old PATH-stub default adb script: any
+// `am start` succeeds with the "Status: ok" marker (so the primary launch
+// never falls back to resolve-activity), everything else is empty success.
+function androidOpenFakeAdb(args: string[]): FakeAdbResponse | undefined {
+  if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'start') return 'Status: ok';
+  return undefined;
 }

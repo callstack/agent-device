@@ -7,18 +7,14 @@ import {
   setAndroidOrientation,
   typeAndroid,
 } from '../input-actions.ts';
-import { AppError } from '@agent-device/kernel/errors';
 import {
+  assertRejectsAppError,
   ANDROID_EMULATOR,
   ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
   androidSnapshotHelperOutput,
   withFakeAdb,
 } from '../../../__tests__/test-utils/index.ts';
-import {
-  resolveAndroidAdbExecutor,
-  withAndroidAdbProvider,
-  type AndroidTouchInjector,
-} from '../adb-executor.ts';
+import { withAndroidAdbProvider, type AndroidTouchInjector } from '../adb-executor.ts';
 
 // The fake adb provider installs through the production withAndroidAdbProvider
 // scope, so `calls` records device-scoped args without a leading `-s <serial>`.
@@ -229,9 +225,7 @@ test('fillAndroid uses chunk-safe shell input and retries when verification stil
       return { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 };
     },
     async ({ calls, device }) => {
-      await withScriptedSnapshotHelper(device, async () => {
-        await fillAndroid(device, 10, 10, 'curtis.layne+test+73kmc@uber.com');
-      });
+      await fillAndroid(device, 10, 10, 'curtis.layne+test+73kmc@uber.com');
       assert.equal(
         calls.some((args) => args.join(' ').startsWith('shell cmd clipboard set text')),
         false,
@@ -241,6 +235,9 @@ test('fillAndroid uses chunk-safe shell input and retries when verification stil
         false,
       );
       assert.ok(shellInputTextCalls(calls).length > 1);
+    },
+    {
+      provider: { snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT },
     },
   );
 }, 15_000);
@@ -264,9 +261,7 @@ test('fillAndroid keeps delayed typing in typed-input mode', async () => {
       return { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 };
     },
     async ({ calls, device }) => {
-      await withScriptedSnapshotHelper(device, async () => {
-        await fillAndroid(device, 10, 10, 'go', 1);
-      });
+      await fillAndroid(device, 10, 10, 'go', 1);
       assert.equal(shellInputTextCalls(calls).length, 2);
       assert.equal(
         calls.some((args) => args.join(' ').startsWith('shell cmd clipboard set text')),
@@ -276,6 +271,9 @@ test('fillAndroid keeps delayed typing in typed-input mode', async () => {
         calls.some((args) => args.includes('KEYCODE_PASTE')),
         false,
       );
+    },
+    {
+      provider: { snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT },
     },
   );
 }, 15_000);
@@ -305,9 +303,10 @@ test('fillAndroid tolerates delayed React Native text verification', async () =>
       return { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 };
     },
     async ({ device }) => {
-      await withScriptedSnapshotHelper(device, async () => {
-        await fillAndroid(device, 10, 10, 'sent the update');
-      });
+      await fillAndroid(device, 10, 10, 'sent the update');
+    },
+    {
+      provider: { snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT },
     },
   );
 }, 10_000);
@@ -327,15 +326,10 @@ test('typeAndroid reports clear error when unicode input is unsupported', async 
       return { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 };
     },
     async ({ device }) => {
-      await assert.rejects(
-        () => typeAndroid(device, '很'),
-        (error: unknown) => {
-          assert.equal(error instanceof AppError, true);
-          assert.equal((error as AppError).code, 'COMMAND_FAILED');
-          assert.match((error as AppError).message, /provider-native text injection/i);
-          return true;
-        },
-      );
+      await assertRejectsAppError(() => typeAndroid(device, '很'), {
+        code: 'COMMAND_FAILED',
+        message: /provider-native text injection/i,
+      });
     },
   );
 });
@@ -375,21 +369,4 @@ function snapshotHelperResponse(args: string[], resolveText: () => string): stri
     return androidSnapshotHelperOutput(xml);
   }
   return undefined;
-}
-
-async function withScriptedSnapshotHelper(
-  device: typeof ANDROID_EMULATOR,
-  run: () => Promise<void>,
-): Promise<void> {
-  // Re-scopes the already-installed fake exec with the snapshot-helper fixture
-  // artifact so fill verification resolves the scripted helper instead of
-  // looking for a built helper APK on disk.
-  await withAndroidAdbProvider(
-    {
-      exec: resolveAndroidAdbExecutor(device),
-      snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
-    },
-    { serial: device.id },
-    run,
-  );
 }
