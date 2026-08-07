@@ -12,7 +12,7 @@ vi.mock('../host-process.ts', async (importOriginal) => {
 });
 
 import { acquireProcessLock, type ProcessLockOwner } from '../process-lock.ts';
-import { readProcessStartedAtMs, readProcessStartTime } from '../host-process.ts';
+import { readProcessStartTime } from '../host-process.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 let tmpDir: string;
@@ -84,34 +84,35 @@ test('acquireProcessLock reclaims locks owned by zombie processes', async () => 
   }
 });
 
-test('acquireProcessLock reclaims a null-start-time lock whose pid started after acquisition', async () => {
-  const ownStartedAtMs = readProcessStartedAtMs(process.pid);
-  if (ownStartedAtMs === null) {
-    // ps lost to CPU contention; the classification itself is covered by
-    // owner-identity-liveness.test.ts.
-    return;
-  }
-  const lockDirPath = path.join(tmpDir, 'recycled.lock');
+test('acquireProcessLock never steals a null-start-time lock from an alive pid', async () => {
+  const lockDirPath = path.join(tmpDir, 'null-start.lock');
   fs.mkdirSync(lockDirPath);
-  // Recorded before this process started, with no start-time identity: the
-  // pid provably belongs to a later process, so the lock is reclaimable.
+  // An acquiredAtMs far older than this process simulates what a wall-clock
+  // step makes a live null-start owner look like; age is not proof of death,
+  // so the waiter must time out instead of reclaiming the held lock.
   fs.writeFileSync(
     path.join(lockDirPath, 'owner.json'),
     JSON.stringify({
       pid: process.pid,
       startTime: null,
-      acquiredAtMs: ownStartedAtMs - 10 * 60_000,
+      acquiredAtMs: Date.now() - 365 * 24 * 60 * 60_000,
     }),
   );
 
-  const release = await acquireProcessLock({
-    lockDirPath,
-    owner: currentProcessOwner(),
-    timeoutMs: 3_000,
-    pollMs: 1,
-  });
-  await release();
-  assert.equal(fs.existsSync(lockDirPath), false);
+  await assert.rejects(
+    () =>
+      acquireProcessLock({
+        lockDirPath,
+        owner: currentProcessOwner(),
+        timeoutMs: 50,
+        pollMs: 1,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.ownerLiveness, 'live');
+      return true;
+    },
+  );
 });
 
 test('acquireProcessLock reports live lock owner details on timeout', async () => {

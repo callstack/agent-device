@@ -117,14 +117,12 @@ function readProcessLockDiagnostics(
           ownerPid: owner.pid,
           ownerStartTime: owner.startTime,
           ownerAgeMs: Math.max(0, Math.round(nowMs - owner.acquiredAtMs)),
-          ownerLiveness: classifyOwnerLiveness({ owner, acquiredAtMs: owner.acquiredAtMs }),
+          ownerLiveness: classifyOwnerLiveness({ owner }),
         }
       : {}),
   };
 }
 
 function isLiveProcessLockOwner(owner: ProcessLockOwner): boolean {
-  return (
-    classifyOwnerLiveness({ owner, acquiredAtMs: owner.acquiredAtMs }) !== 'owner-process-dead'
-  );
+  return classifyOwnerLiveness({ owner }) !== 'owner-process-dead';
 }
