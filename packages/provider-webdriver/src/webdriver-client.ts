@@ -142,6 +142,25 @@ export class WebDriverClient {
     });
   }
 
+  /**
+   * Whether the software keyboard is up. Polled between a text field tap and
+   * the keys it should receive, so it must stay a single cheap round trip: no
+   * retries, and a driver that does not implement the route reports through the
+   * thrown error rather than a guessed boolean (callers decide what an
+   * unanswerable keyboard state means for them).
+   */
+  async isKeyboardShown(): Promise<boolean> {
+    const value = await this.sessionRequest('GET', '/appium/device/is_keyboard_shown', undefined, {
+      retryAttempts: 0,
+    });
+    if (typeof value !== 'boolean') {
+      throw new AppError('COMMAND_FAILED', 'WebDriver keyboard-shown response was not a boolean', {
+        valueType: typeof value,
+      });
+    }
+    return value;
+  }
+
   async back(): Promise<void> {
     await this.sessionRequest('POST', '/back');
   }

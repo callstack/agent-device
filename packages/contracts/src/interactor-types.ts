@@ -98,6 +98,45 @@ export type TypeTextBackendResult = {
   textEntryRoute?: TextEntryRoute;
 };
 
+/**
+ * What a cloud-WebDriver `fill` could establish about its target taking text
+ * entry focus before it sent the keys (#1658). The local Apple runner owns this
+ * discipline in Swift and reports it as a `textEntryRoute`; the cloud path has
+ * no runner, only the driver's keyboard-visibility signal, so it names what it
+ * observed instead of which channel it typed through:
+ *
+ * - `keyboard-shown`: the software keyboard went from hidden to shown after our
+ *   tap — positive evidence the tap moved focus to a text input.
+ * - `settled-keyboard-up`: the keyboard was ALREADY up (back-to-back fills into
+ *   one form), so its visibility says nothing about the NEW field. Entry waited
+ *   the full readiness budget, the same answer the Apple runner gives here.
+ * - `settled-unknown`: the driver reports no keyboard state at all, so nothing
+ *   could be waited for. Entry followed a short blind settle.
+ * - `not-observed`: the keyboard was down before the tap and never came up. The
+ *   keys were still sent, but nothing corroborates that a field received them.
+ *
+ * Closed set: the cloud interactor is its only producer and the boundary that
+ * narrows it (readFillBackendResult, src/core/dispatch-interactions.ts) drops a
+ * value it cannot name.
+ */
+export const CLOUD_TEXT_ENTRY_READINESS = [
+  'keyboard-shown',
+  'settled-keyboard-up',
+  'settled-unknown',
+  'not-observed',
+] as const;
+
+export type CloudTextEntryReadiness = (typeof CLOUD_TEXT_ENTRY_READINESS)[number];
+
+/**
+ * What `Interactor.fill` reports back about the entry it performed. Only the
+ * cloud-WebDriver interactor populates `textEntryReadiness`; the Apple runner
+ * carries its own equivalent in Swift and every other platform fills blind.
+ */
+export type FillBackendResult = {
+  textEntryReadiness?: CloudTextEntryReadiness;
+};
+
 export type SnapshotOptions = BaseSnapshotOptions & {
   appBundleId?: string;
   signal?: AbortSignal;

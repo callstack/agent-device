@@ -55,3 +55,39 @@ test('provider iOS keeps the known bundle id without local app resolution', asyn
   expect(bundleId).toBe('com.example.installed');
   expect(resolveAndroidPackageForOpen).not.toHaveBeenCalled();
 });
+
+// #1658: a first open on a cloud device has no known bundle id, and no local
+// tooling can look one up. Dropping the target left the session with no app
+// identity at all, so every appBundleId-gated command refused a live session.
+test('provider iOS adopts a bundle-id open target when none is known', async () => {
+  mockIsActiveProviderDevice.mockReturnValue(true);
+  const resolveAndroidPackageForOpen = vi.fn(async () => 'com.example.android');
+
+  const bundleId = await resolveSessionAppBundleIdForTarget(
+    IOS_SIMULATOR,
+    'com.example.demo',
+    undefined,
+    resolveAndroidPackageForOpen,
+  );
+
+  expect(bundleId).toBe('com.example.demo');
+  expect(resolveAndroidPackageForOpen).not.toHaveBeenCalled();
+});
+
+test.each([
+  ['an app display name', 'Demo App'],
+  ['a deep link', 'myapp://login'],
+  ['a web URL', 'https://example.com'],
+  ['no target', undefined],
+])('provider iOS adopts nothing from %s', async (_label, openTarget) => {
+  mockIsActiveProviderDevice.mockReturnValue(true);
+
+  await expect(
+    resolveSessionAppBundleIdForTarget(
+      IOS_SIMULATOR,
+      openTarget,
+      undefined,
+      vi.fn(async () => undefined),
+    ),
+  ).resolves.toBeUndefined();
+});

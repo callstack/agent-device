@@ -1,6 +1,7 @@
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import type {
   BackMode,
+  CloudTextEntryReadiness,
   GesturePlan,
   Interactor,
   ScreenshotOptions,
@@ -23,6 +24,21 @@ import { touchPointer } from './webdriver-gestures.ts';
 import { scrollFrameFromWebDriverSource } from './webdriver-scroll-frame.ts';
 import { parseWebDriverSource } from './webdriver-source.ts';
 import { setWebDriverOrientation } from './webdriver-orientation.ts';
+
+/**
+ * How long a tapped field gets to take text entry focus before `fill` types
+ * anyway. Mirrors the Apple runner's `TextEntryTiming.readinessTimeout`
+ * (RunnerTests+TextEntry.swift), which owns this discipline locally.
+ */
+const TEXT_ENTRY_READINESS_TIMEOUT_MS = 2_000;
+const TEXT_ENTRY_READINESS_POLL_MS = 100;
+/** The blind wait when the driver reports no keyboard state at all — see `awaitTextEntryReadiness`. */
+const TEXT_ENTRY_BLIND_SETTLE_MS = 350;
+
+/** Global-timer based, so text-entry readiness can be exercised on a fake clock. */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export type WebDriverInteractorOptions = {
   client: WebDriverClient;
@@ -147,9 +163,14 @@ class WebDriverInteractor implements Interactor {
     _delayMs?: number,
   ): Promise<Record<string, unknown>> {
     this.requireSupport('fill');
+    // #1658: read the keyboard BEFORE the tap. Only a hidden -> shown
+    // transition proves that OUR tap moved focus; a keyboard that was already
+    // up says nothing about which field owns first responder now.
+    const keyboardBeforeTap = await this.tryReadKeyboardShown();
     await this.tap(x, y);
+    const textEntryReadiness = await this.awaitTextEntryReadiness(keyboardBeforeTap);
     await this.type(text);
-    return { backend: 'webdriver', x, y, text };
+    return { backend: 'webdriver', x, y, text, textEntryReadiness };
   }
 
   async scroll(
@@ -254,6 +275,54 @@ class WebDriverInteractor implements Interactor {
     _options?: SettingOptions,
   ): Promise<Record<string, unknown> | void> {
     this.unsupported('settings');
+  }
+
+  /**
+   * The cloud twin of the local Apple runner's focus -> readiness -> type
+   * pipeline (RunnerTests+TextEntry.swift). A WebView input does not take first
+   * responder synchronously with the tap: the page has to process the touch and
+   * raise the keyboard. `fill` used to send its keys in the very next request,
+   * so on a slow web login form they landed with nothing focused — reported as
+   * "Filled N chars" while the field kept its placeholder. That is also why
+   * tapping and filling as two separate commands was the reliable workaround:
+   * only the round trip between them gave the field time to focus.
+   */
+  private async awaitTextEntryReadiness(
+    keyboardBeforeTap: boolean | undefined,
+  ): Promise<CloudTextEntryReadiness> {
+    // The driver answers nothing about the keyboard, so no wait can learn
+    // anything. Keep a blind path cheap: settle briefly, then type.
+    if (keyboardBeforeTap === undefined) {
+      await sleep(TEXT_ENTRY_BLIND_SETTLE_MS);
+      return 'settled-unknown';
+    }
+    // The keyboard was ALREADY up — back-to-back fills into one form, the shape
+    // that failed most often in #1658. Its visibility cannot witness focus
+    // moving to the NEW field, so polling it would resolve instantly on
+    // evidence about the PREVIOUS one. The Apple runner spends its whole
+    // readiness budget on exactly this case rather than race the app with a
+    // short settle; the cloud path has even more reason to, because its keys go
+    // to whatever holds first responder rather than to a scoped element.
+    if (keyboardBeforeTap) {
+      await sleep(TEXT_ENTRY_READINESS_TIMEOUT_MS);
+      return 'settled-keyboard-up';
+    }
+    const deadline = Date.now() + TEXT_ENTRY_READINESS_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      await sleep(TEXT_ENTRY_READINESS_POLL_MS);
+      if ((await this.tryReadKeyboardShown()) === true) return 'keyboard-shown';
+    }
+    // The tap opened no keyboard. Still send the keys — a text view without a
+    // software keyboard (hardware keyboard attached, or a non-editable target
+    // the caller means to type at) is a real case, and refusing would turn a
+    // recoverable miss into a hard failure — but say so, so the caller is not
+    // told "filled" by a fill that had no witness.
+    return 'not-observed';
+  }
+
+  /** Keyboard state is evidence, never a precondition: a driver that cannot answer must not fail the fill. */
+  private async tryReadKeyboardShown(): Promise<boolean | undefined> {
+    return await this.client.isKeyboardShown().catch(() => undefined);
   }
 
   private async pointerGesture(name: string, actions: W3CPointerAction[]): Promise<void> {

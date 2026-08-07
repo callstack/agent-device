@@ -106,10 +106,16 @@ export type {
   SettleParams,
   SettleTailEntry,
 } from '../interaction.ts';
-export { MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE, TEXT_ENTRY_ROUTES } from '../interactor-types.ts';
+export {
+  CLOUD_TEXT_ENTRY_READINESS,
+  MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE,
+  TEXT_ENTRY_ROUTES,
+} from '../interactor-types.ts';
 export type {
+  CloudTextEntryReadiness,
   ElementSelectorKey,
   ElementSelectorTapOptions,
+  FillBackendResult,
   Interactor,
   RunnerCallOptions,
   RunnerContext,

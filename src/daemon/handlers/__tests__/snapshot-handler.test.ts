@@ -1,4 +1,4 @@
-import { test, expect, vi, beforeEach } from 'vitest';
+import { test, expect, vi, afterEach, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { PNG } from '../../../utils/png.ts';
@@ -6,6 +6,8 @@ import { handleSnapshotCommands } from '../snapshot.ts';
 import { withSessionlessRunnerCleanup } from '../snapshot-session.ts';
 import { captureSnapshot } from '../snapshot-capture.ts';
 import { SessionStore } from '../../session-store.ts';
+import { setActiveProviderDeviceRuntimes } from '../../../provider-device-runtime.ts';
+import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { DaemonResponse, SessionState } from '../../types.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { buildSnapshotSignatures } from '../../android-snapshot-freshness.ts';
@@ -103,6 +105,30 @@ const androidDevice: SessionState['device'] = {
   target: 'mobile',
   booted: true,
 };
+
+const providerIosDevice: SessionState['device'] = {
+  platform: 'apple',
+  id: 'browserstack:ios:lease-a',
+  name: 'iPhone 16',
+  kind: 'device',
+  target: 'mobile',
+  booted: true,
+};
+
+function makeProviderRuntimeOwning(device: SessionState['device']): ProviderDeviceRuntime {
+  return {
+    provider: 'browserstack',
+    leaseLifecycle: {},
+    deviceInventoryProvider: async () => [device],
+    ownsDevice: (candidate) => candidate.id === device.id,
+    getInteractor: () => undefined,
+    shutdown: async () => undefined,
+  };
+}
+
+afterEach(() => {
+  setActiveProviderDeviceRuntimes([]);
+});
 
 beforeEach(() => {
   mockDispatch.mockReset();
@@ -411,6 +437,68 @@ test('snapshot on iOS without a tracked app carries the detected open command as
     );
   }
   expect(mockBuildIosOpenCommandHint).toHaveBeenCalledWith(iosSimulatorDevice);
+});
+
+// #1658: the app-session requirement is the local XCUITest runner's, not the
+// capture's. A cloud device reads its page source through the provider's own
+// driver session, and its open path cannot resolve a bundle id locally, so the
+// guard refused every capture on a live, healthy session.
+test('snapshot on provider-backed iOS runs without a tracked app', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-cloud-no-app';
+  sessionStore.set(sessionName, makeSession(sessionName, providerIosDevice));
+  setActiveProviderDeviceRuntimes([makeProviderRuntimeOwning(providerIosDevice)]);
+  mockDispatch.mockResolvedValue({
+    nodes: [{ index: 0, depth: 0, type: 'XCUIElementTypeButton', label: 'Sign in' }],
+    truncated: false,
+    backend: 'xctest',
+  });
+
+  const response = await handleSnapshotCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'snapshot',
+      positionals: [],
+      flags: {},
+    },
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(mockDispatch).toHaveBeenCalled();
+  // The bypass has to happen before the hint probe (#1662), which shells out to
+  // simctl and can only ever see local simulators — for a hosted device it is a
+  // guaranteed-useless spawn on what is now a success path.
+  expect(mockBuildIosOpenCommandHint).not.toHaveBeenCalled();
+});
+
+test('diff on local iOS still requires a tracked app', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-sim-no-app-diff';
+  sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
+
+  const response = await handleSnapshotCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'diff',
+      positionals: ['snapshot'],
+      flags: {},
+    },
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(false);
+  if (response?.ok === false) {
+    expect(response.error.code).toBe('SESSION_NOT_FOUND');
+    expect(response.error.message).toMatch(/iOS diff requires an active app session/i);
+  }
+  expect(mockDispatch).not.toHaveBeenCalled();
 });
 
 test('snapshot on iOS runs when the session tracks an app', async () => {

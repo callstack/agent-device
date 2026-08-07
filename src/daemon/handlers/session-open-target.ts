@@ -97,6 +97,23 @@ function shouldPreserveAndroidPackageContext(
   return device.platform === 'android' && Boolean(openTarget && isDeepLinkTarget(openTarget));
 }
 
+/**
+ * #1658: a provider-backed iOS device has no local simctl/devicectl to resolve
+ * an app NAME against, which is why the open path skips resolution there
+ * entirely. Skipping it wholesale also dropped the case where the caller
+ * already spelled the bundle id — `open com.example.app` against a cloud device
+ * left the session with no app identity at all, so every appBundleId-gated
+ * command (snapshot/diff first among them) refused a device that was perfectly
+ * healthy. A dotted, non-deep-link target IS the bundle id under the same
+ * convention the local resolver applies (resolveIosApp returns a dotted target
+ * unchanged), so adopt it without any device round trip.
+ */
+function providerIosBundleIdFromOpenTarget(openTarget: string | undefined): string | undefined {
+  const trimmed = openTarget?.trim();
+  if (!trimmed || isDeepLinkTarget(trimmed) || !trimmed.includes('.')) return undefined;
+  return trimmed;
+}
+
 export async function resolveSessionAppBundleIdForTarget(
   device: DeviceInfo,
   openTarget: string | undefined,
@@ -107,7 +124,7 @@ export async function resolveSessionAppBundleIdForTarget(
   ) => Promise<string | undefined>,
 ): Promise<string | undefined> {
   if (isIosFamily(device) && isActiveProviderDevice(device)) {
-    return currentAppBundleId;
+    return currentAppBundleId ?? providerIosBundleIdFromOpenTarget(openTarget);
   }
   return (
     (await resolveIosBundleIdForOpen(device, openTarget, currentAppBundleId)) ??

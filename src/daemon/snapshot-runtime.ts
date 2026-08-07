@@ -9,6 +9,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { AgentDeviceBackend, BackendSnapshotResult } from '../backend.ts';
 import type { CommandSessionRecord } from '../runtime.ts';
 import { createAgentDevice } from '../runtime.ts';
+import { isActiveProviderDevice } from '../provider-device-runtime.ts';
 import { maybeBuildAndroidSnapshotTimeoutFailure } from './android-snapshot-timeout-evidence.ts';
 import { errorResponse, requireCommandSupported } from './handlers/response.ts';
 import { buildIosOpenCommandHint } from './ios-app-session-hint.ts';
@@ -197,12 +198,25 @@ async function dispatchSnapshotRuntimeCommand(
   });
 }
 
+/**
+ * The guard exists for the LOCAL Apple path: an iOS capture rides the XCUITest
+ * runner, which must attach to a target app, so a session with no app is a
+ * capture that cannot succeed. A provider-backed (cloud) device captures
+ * through the provider's own driver session instead — the page source needs no
+ * app identity, which is why every other command on that path works without
+ * one. Refusing there turned a healthy live session into an instant
+ * SESSION_NOT_FOUND with no device round trip at all (#1658).
+ *
+ * The provider check belongs in this early return rather than in the hint
+ * below: buildIosOpenCommandHint probes simctl, which can only ever see local
+ * simulators, so running it for a hosted device is a guaranteed-useless spawn.
+ */
 async function requireIosAppSessionForSnapshot(
   command: 'snapshot' | 'diff',
   session: SessionState | undefined,
   device: SessionState['device'],
 ): Promise<DaemonResponse | null> {
-  if (!isIosFamily(device) || session?.appBundleId) {
+  if (!isIosFamily(device) || session?.appBundleId || isActiveProviderDevice(device)) {
     return null;
   }
   // An unambiguous environment (one booted simulator, one foreground app)
