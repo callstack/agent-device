@@ -125,8 +125,7 @@ extension RunnerTests {
               fromTapWitness: true
             ),
             textBefore: textBefore,
-            typedText: value,
-            synthesizer: synthesizer
+            typedText: value
           )
           return (currentTarget, true, nil)
         case .fallback:

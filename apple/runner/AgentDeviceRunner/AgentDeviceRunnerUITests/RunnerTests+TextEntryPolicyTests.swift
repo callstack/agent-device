@@ -90,27 +90,6 @@ extension RunnerTests {
     )
   }
 
-  func testSynthesizedTextCommitRepairTailOnlyForStrictPrefixWithoutSubmitKeys() {
-    XCTAssertEqual(
-      Self.synthesizedTextCommitRepairTail(observedText: "hardware-keyboa", expectedText: "hardware-keyboard"),
-      "rd"
-    )
-    XCTAssertEqual(
-      Self.synthesizedTextCommitRepairTail(observedText: "", expectedText: "abc"),
-      "abc"
-    )
-    XCTAssertNil(
-      Self.synthesizedTextCommitRepairTail(observedText: "hardware-keyboard", expectedText: "hardware-keyboard")
-    )
-    XCTAssertNil(
-      Self.synthesizedTextCommitRepairTail(observedText: "hardwarX", expectedText: "hardware-keyboard")
-    )
-    // Never re-synthesize a tail that would submit.
-    XCTAssertNil(
-      Self.synthesizedTextCommitRepairTail(observedText: "ab", expectedText: "abc\n")
-    )
-  }
-
 #if os(iOS)
   func testSynthesizedTextEntryFallsBackOnlyWhenPrivateSynthesisIsUnavailable() {
     XCTAssertEqual(

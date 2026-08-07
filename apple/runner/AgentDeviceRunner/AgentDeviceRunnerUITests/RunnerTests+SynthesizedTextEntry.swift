@@ -168,7 +168,9 @@ extension RunnerTests {
   // The private synthesize call returns once the event record is posted, not once the target
   // app has committed the characters, so intermediate reads walk prefix-by-prefix toward the
   // expected value. Anything off that prefix path means the app transformed the input
-  // (formatter, mid-text caret, autocomplete) and the runner must not second-guess it.
+  // (formatter, mid-text caret, autocomplete) and the runner must not second-guess it. An
+  // unreadable value — secure field, or the element stopped resolving — ends the wait the
+  // same way.
   static func synthesizedTextCommitProgress(
     observedText: String?,
     expectedText: String
@@ -182,80 +184,35 @@ extension RunnerTests {
     return expectedText.hasPrefix(observedText) ? .pending : .diverged
   }
 
-  static func synthesizedTextCommitRepairTail(
-    observedText: String,
-    expectedText: String
-  ) -> String? {
-    guard expectedText.hasPrefix(observedText), observedText.count < expectedText.count else {
-      return nil
-    }
-    let tail = String(expectedText.dropFirst(observedText.count))
-    guard !tail.contains("\n"), !tail.contains("\r") else {
-      return nil
-    }
-    return tail
-  }
-
   /// Blocks until the synthesized bare-type text is observable in the target field, so `type`
-  /// cannot report ok while trailing characters are still uncommitted (or dropped) on a slow
-  /// simulator. Exits fast when the app transforms the input; re-synthesizes the missing tail
-  /// once if commit progress stalls as a strict prefix of the expected value.
+  /// cannot report ok while trailing characters are still uncommitted on a slow simulator.
+  ///
+  /// Observation only. A stalled prefix cannot be told apart from a suffix still queued in the
+  /// event stream, so re-synthesizing the difference risks committing it twice after the command
+  /// already reported success. Text carrying a submit key is skipped outright: the app may clear
+  /// or rewrite the field on submit, so `textBefore + typedText` is not the value to wait for.
   func awaitSynthesizedFirstResponderCommit(
     app: XCUIApplication,
     target: TextEntryTarget,
     textBefore: String?,
-    typedText: String,
-    synthesizer: any TextEntrySynthesizing
+    typedText: String
   ) {
     guard let textBefore, !typedText.contains("\n"), !typedText.contains("\r") else {
       return
     }
     let expectedText = textBefore + typedText
-    var repaired = false
-    var lastObservedText: String?
-    var lastChangeAt = Date()
     let deadline = Date().addingTimeInterval(TextEntryTiming.synthesizedCommitTimeout)
     while Date() < deadline {
-      guard let observedText = editableTextValue(
+      let observedText = editableTextValue(
         for: resolveTextEntryElement(app: app, target: target),
         treatingPlaceholderAsEmpty: true
-      ) else {
-        return
-      }
+      )
       switch Self.synthesizedTextCommitProgress(observedText: observedText, expectedText: expectedText) {
       case .committed, .diverged:
         return
       case .pending:
-        break
+        sleepFor(TextEntryTiming.pollInterval)
       }
-      if lastObservedText != observedText {
-        lastObservedText = observedText
-        lastChangeAt = Date()
-      } else if Date().timeIntervalSince(lastChangeAt) >= TextEntryTiming.synthesizedCommitQuietWindow {
-        guard !repaired,
-          let tail = Self.synthesizedTextCommitRepairTail(
-            observedText: observedText,
-            expectedText: expectedText
-          )
-        else {
-          return
-        }
-        NSLog(
-          "AGENT_DEVICE_RUNNER_REPAIR_TEXT_ENTRY route=synthesized-first-responder expectedLength=%d observedLength=%d",
-          expectedText.count,
-          observedText.count
-        )
-        guard case .continueTyping = synthesizer.enterText(
-          app: app,
-          text: tail,
-          replacingExistingText: false
-        ) else {
-          return
-        }
-        repaired = true
-        lastChangeAt = Date()
-      }
-      sleepFor(TextEntryTiming.pollInterval)
     }
   }
 
