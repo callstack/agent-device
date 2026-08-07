@@ -124,19 +124,28 @@ export async function detectSoleRunningIosSimulatorApp(
     return undefined;
   }
 
-  const [runningBundleIds, installedApps] = await Promise.all([
-    listRunningIosSimulatorBundleIds(device),
-    listSimulatorApps(device),
-  ]);
-  if (runningBundleIds.length === 0) return undefined;
+  // Both probes are bounded, but a timeout still REJECTS (exec.ts's
+  // `allowFailure` only suppresses non-zero exit codes, not a timeout or a
+  // spawn failure) — this is an error-path enrichment, so any throw here
+  // must fall back to "inconclusive", never propagate and replace the
+  // caller's deterministic error with a probe failure.
+  try {
+    const [runningBundleIds, installedApps] = await Promise.all([
+      listRunningIosSimulatorBundleIds(device),
+      listSimulatorApps(device, { timeoutMs: IOS_FOREGROUND_APP_PROBE_TIMEOUT_MS }),
+    ]);
+    if (runningBundleIds.length === 0) return undefined;
 
-  const installedById = new Map(installedApps.map((app) => [app.bundleId, app] as const));
-  const candidates = new Map<string, IosAppInfo>();
-  for (const bundleId of runningBundleIds) {
-    const app = installedById.get(bundleId);
-    if (app) candidates.set(app.bundleId, app);
+    const installedById = new Map(installedApps.map((app) => [app.bundleId, app] as const));
+    const candidates = new Map<string, IosAppInfo>();
+    for (const bundleId of runningBundleIds) {
+      const app = installedById.get(bundleId);
+      if (app) candidates.set(app.bundleId, app);
+    }
+    return candidates.size === 1 ? [...candidates.values()][0] : undefined;
+  } catch {
+    return undefined;
   }
-  return candidates.size === 1 ? [...candidates.values()][0] : undefined;
 }
 
 async function listRunningIosSimulatorBundleIds(device: DeviceInfo): Promise<string[]> {
@@ -202,16 +211,30 @@ export async function listIosApps(device: DeviceInfo, filter: AppsFilter): Promi
   return await resolveIosPhysicalDeviceControl(device).listApps(device, filter);
 }
 
-async function listSimulatorApps(device: DeviceInfo): Promise<IosAppInfo[]> {
-  const apps = await listSimulatorAppMetadata(device);
+type SimulatorAppListOptions = {
+  /** Unset (default) preserves prior unbounded behavior for normal command flow. */
+  timeoutMs?: number;
+};
+
+async function listSimulatorApps(
+  device: DeviceInfo,
+  options?: SimulatorAppListOptions,
+): Promise<IosAppInfo[]> {
+  const apps = await listSimulatorAppMetadata(device, options);
   return apps.map((app) => ({
     bundleId: app.bundleId,
     name: app.name,
   }));
 }
 
-async function listSimulatorAppMetadata(device: DeviceInfo): Promise<SimulatorAppMetadata[]> {
-  const result = await runSimctl(device, ['listapps', device.id], { allowFailure: true });
+async function listSimulatorAppMetadata(
+  device: DeviceInfo,
+  options?: SimulatorAppListOptions,
+): Promise<SimulatorAppMetadata[]> {
+  const result = await runSimctl(device, ['listapps', device.id], {
+    allowFailure: true,
+    timeoutMs: options?.timeoutMs,
+  });
   const stdout = result.stdout as string;
   const trimmed = stdout.trim();
   if (!trimmed) return [];
@@ -248,6 +271,7 @@ async function listSimulatorAppMetadata(device: DeviceInfo): Promise<SimulatorAp
       const converted = await runAppleToolCommand('plutil', ['-convert', 'json', '-o', '-', '-'], {
         allowFailure: true,
         stdin: trimmed,
+        timeoutMs: options?.timeoutMs,
       });
       if (converted.exitCode === 0 && converted.stdout.trim().startsWith('{')) {
         parsed = JSON.parse(converted.stdout) as Record<

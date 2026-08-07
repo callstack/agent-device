@@ -109,6 +109,42 @@ test('detectSoleRunningIosSimulatorApp treats a failed probe as inconclusive', a
   assert.equal(await detectSoleRunningIosSimulatorApp(bootedSimulator), undefined);
 });
 
+test('detectSoleRunningIosSimulatorApp catches a rejecting launchctl probe (timeout/spawn failure)', async () => {
+  mockRunSimctl.mockImplementation(async (_device: DeviceInfo, args: string[]) => {
+    if (args[0] === 'spawn') throw new Error('xcrun timed out after 3000ms');
+    return {
+      stdout: JSON.stringify({ 'com.apple.Preferences': { CFBundleDisplayName: 'Settings' } }),
+    };
+  });
+
+  assert.equal(await detectSoleRunningIosSimulatorApp(bootedSimulator), undefined);
+});
+
+test('detectSoleRunningIosSimulatorApp catches a rejecting listapps probe (timeout/spawn failure)', async () => {
+  mockRunSimctl.mockImplementation(async (_device: DeviceInfo, args: string[]) => {
+    if (args[0] === 'spawn') {
+      return {
+        exitCode: 0,
+        stdout:
+          'PID\tStatus\tLabel\n1000\t0\tUIKitApplication:com.apple.Preferences[abcd][rb-legacy]',
+      };
+    }
+    throw new Error('xcrun timed out after 3000ms');
+  });
+
+  assert.equal(await detectSoleRunningIosSimulatorApp(bootedSimulator), undefined);
+});
+
+test('detectSoleRunningIosSimulatorApp bounds the listapps probe with a timeout', async () => {
+  mockLaunchctlAndListapps(['com.apple.Preferences']);
+
+  await detectSoleRunningIosSimulatorApp(bootedSimulator);
+
+  const listappsCall = mockRunSimctl.mock.calls.find(([, args]) => args[0] === 'listapps');
+  assert.equal(typeof listappsCall?.[2]?.timeoutMs, 'number');
+  assert.ok((listappsCall?.[2]?.timeoutMs ?? 0) > 0);
+});
+
 test('detectSoleRunningIosSimulatorApp does not probe a stopped simulator', async () => {
   assert.equal(
     await detectSoleRunningIosSimulatorApp({ ...bootedSimulator, booted: false }),

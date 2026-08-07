@@ -383,7 +383,7 @@ test('snapshot on iOS rejects sessions without a tracked app', async () => {
 test('snapshot on iOS without a tracked app carries the detected open command as its hint', async () => {
   mockBuildIosOpenCommandHint.mockResolvedValue(
     'One booted device found ("My iPhone Simulator", udid sim-1) with xyz.blueskyweb.app ' +
-      'running. Run: agent-device open xyz.blueskyweb.app --platform ios',
+      'running. Run: agent-device open xyz.blueskyweb.app --platform ios --udid sim-1',
   );
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim-no-app-hinted';
@@ -407,7 +407,7 @@ test('snapshot on iOS without a tracked app carries the detected open command as
     expect(response.error.code).toBe('SESSION_NOT_FOUND');
     expect(response.error.details?.hint).toBe(
       'One booted device found ("My iPhone Simulator", udid sim-1) with xyz.blueskyweb.app ' +
-        'running. Run: agent-device open xyz.blueskyweb.app --platform ios',
+        'running. Run: agent-device open xyz.blueskyweb.app --platform ios --udid sim-1',
     );
   }
   expect(mockBuildIosOpenCommandHint).toHaveBeenCalledWith(iosSimulatorDevice);
