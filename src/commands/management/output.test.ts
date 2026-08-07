@@ -45,6 +45,85 @@ describe('openCliOutput', () => {
     expect(output.data).toMatchObject({ warnings: [warning] });
     expect(output.text).toBe(`Opened: authoring\nWarning: ${warning}`);
   });
+
+  // #1671 P1: the composed open --foreground snapshot must render on default
+  // stdout through the PRODUCTION formatter route (the family-registry entry
+  // the CLI resolves, not a helper mock), printing the same interactive tree
+  // lines `snapshot -i` prints after the open confirmation.
+  test('production formatter route renders the composed --foreground snapshot tree on default output', async () => {
+    const { formatCliOutput } = await import('../cli-output.ts');
+    const { attachRefs } = await import('@agent-device/kernel/snapshot');
+    const nodes = attachRefs([
+      { index: 0, type: 'Button', label: 'Sign In', depth: 0, hittable: true },
+      { index: 1, type: 'TextField', label: 'Email', depth: 0, hittable: true },
+    ]);
+    const openResult: AppOpenResult = {
+      session: 'default',
+      sessionStateDir: '/tmp/agent-device/sessions/cwd_123_default',
+      appBundleId: 'com.apple.Preferences',
+      snapshot: { nodes, truncated: false, backend: 'xctest', refsGeneration: 1 },
+      identifiers: { session: 'default' },
+    };
+
+    const openOutput = withNoColor(() =>
+      formatCliOutput({ name: 'open', input: {}, result: openResult }),
+    );
+    const snapshotOutput = withNoColor(() =>
+      formatCliOutput({
+        name: 'snapshot',
+        input: { interactiveOnly: true },
+        result: { nodes, truncated: false, backend: 'xctest', refsGeneration: 1 },
+      }),
+    );
+
+    expect(openOutput).toBeDefined();
+    expect(snapshotOutput?.text).toBeTruthy();
+    // The tree lines are exactly what `snapshot -i` would print, appended
+    // after the open confirmation lines.
+    expect(openOutput?.text).toBe(
+      [
+        'Opened: com.apple.Preferences',
+        'Session state: /tmp/agent-device/sessions/cwd_123_default',
+        snapshotOutput?.text,
+      ].join('\n'),
+    );
+    expect(openOutput?.text).toContain('Sign In');
+    expect(openOutput?.text).toContain('Email');
+    // --json carries the same presented snapshot payload snapshot -i emits.
+    const openJsonSnapshot = (openOutput?.data as { snapshot?: unknown } | undefined)?.snapshot;
+    expect(openJsonSnapshot).toEqual(snapshotOutput?.jsonData ?? snapshotOutput?.data);
+  });
+
+  test('renders the initialSnapshotError warning without a tree when the composed capture failed', () => {
+    const warning =
+      'The session is open, but the initial interactive snapshot failed (COMMAND_FAILED: capture failed). Run: agent-device snapshot -i';
+    const output = openCliOutput({
+      session: 'default',
+      warnings: [warning],
+      initialSnapshotError: {
+        code: 'COMMAND_FAILED',
+        message: 'capture failed',
+        hint: 'Retry with --debug and inspect diagnostics log for details.',
+        diagnosticId: 'diag-1',
+        logPath: '/tmp/req.ndjson',
+        details: { reason: 'runner_unavailable' },
+      },
+      identifiers: { session: 'default' },
+    });
+
+    expect(output.text).toBe(`Opened: default\nWarning: ${warning}`);
+    // The FULL error shape survives into public JSON output.
+    expect(output.data).toMatchObject({
+      initialSnapshotError: {
+        code: 'COMMAND_FAILED',
+        message: 'capture failed',
+        hint: 'Retry with --debug and inspect diagnostics log for details.',
+        diagnosticId: 'diag-1',
+        logPath: '/tmp/req.ndjson',
+        details: { reason: 'runner_unavailable' },
+      },
+    });
+  });
 });
 
 describe('artifactsCliOutput', () => {

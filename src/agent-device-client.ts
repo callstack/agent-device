@@ -42,6 +42,7 @@ import {
   buildMeta,
   normalizeDeployResult,
   normalizeDevice,
+  normalizeInitialSnapshotError,
   normalizeInstallFromSourceResult,
   normalizeMaterializationReleaseResult,
   normalizeOpenDevice,
@@ -266,6 +267,7 @@ export function createAgentDeviceClient(
         const warnings = Array.isArray(data.warnings)
           ? data.warnings.filter((warning): warning is string => typeof warning === 'string')
           : [];
+        const initialSnapshotError = normalizeInitialSnapshotError(data.initialSnapshotError);
         return {
           session,
           ...(warnings.length > 0 ? { warnings } : {}),
@@ -284,6 +286,10 @@ export function createAgentDeviceClient(
           ...(data.snapshot && typeof data.snapshot === 'object'
             ? { snapshot: data.snapshot as Record<string, unknown> }
             : {}),
+          // open --foreground: full-shape capture failure (hint/details/
+          // diagnosticId/logPath preserved) when open succeeded but the
+          // composed snapshot did not; the session is open and usable.
+          ...(initialSnapshotError ? { initialSnapshotError } : {}),
           identifiers: {
             session,
             deviceId: device?.id,

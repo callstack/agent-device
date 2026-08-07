@@ -29,6 +29,7 @@ import {
   serializeSessionListEntry,
 } from '../../utils/result-serialization.ts';
 import { readCommandMessage } from '../../utils/success-text.ts';
+import { snapshotCliOutput } from '../capture/output.ts';
 import type { CliOutput } from '../command-contract.ts';
 import {
   messageCliOutput,
@@ -101,7 +102,28 @@ export function openCliOutput(result: AppOpenResult): CliOutput {
   for (const warning of result.warnings ?? []) {
     lines.push(`Warning: ${warning}`);
   }
-  return { data, text: lines.join('\n') || null };
+  // open --foreground: the composed initial snapshot renders through the SAME
+  // path `snapshot -i` uses (label dedupe + interactive tree text), after the
+  // open confirmation — the one-call promise holds on default stdout, not just
+  // --json. The composed capture is interactive-only by construction.
+  const snapshotOutput = buildOpenInitialSnapshotOutput(result.snapshot);
+  if (snapshotOutput) {
+    data.snapshot = snapshotOutput.jsonData ?? snapshotOutput.data;
+    if (snapshotOutput.text) lines.push(snapshotOutput.text);
+  }
+  return {
+    data,
+    ...(snapshotOutput?.stderr ? { stderr: snapshotOutput.stderr } : {}),
+    text: lines.join('\n') || null,
+  };
+}
+
+function buildOpenInitialSnapshotOutput(snapshot: AppOpenResult['snapshot']): CliOutput | null {
+  if (!snapshot || !Array.isArray(snapshot.nodes)) return null;
+  return snapshotCliOutput({
+    result: snapshot as unknown as Parameters<typeof snapshotCliOutput>[0]['result'],
+    interactiveOnly: true,
+  });
 }
 
 function closeCliOutput(result: AppCloseResult | SessionCloseResult): CliOutput {

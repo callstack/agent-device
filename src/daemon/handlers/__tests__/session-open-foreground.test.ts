@@ -268,7 +268,14 @@ test('a snapshot-capture failure never masks the successful open', async () => {
   // and tell the caller the session is usable.
   const snapshotFailure: DaemonResponse = {
     ok: false,
-    error: { code: 'COMMAND_FAILED', message: 'capture failed' },
+    error: {
+      code: 'COMMAND_FAILED',
+      message: 'capture failed',
+      hint: 'Retry with --debug and inspect diagnostics log for details.',
+      diagnosticId: 'diag-1',
+      logPath: '/tmp/requests/req-1.ndjson',
+      details: { reason: 'runner_unavailable' },
+    },
   };
   dispatchSnapshotViaRuntime.mockResolvedValue(snapshotFailure);
 
@@ -284,9 +291,15 @@ test('a snapshot-capture failure never masks the successful open', async () => {
   if (result.ok) {
     expect(result.data?.session).toBe('default');
     expect(result.data?.snapshot).toBeUndefined();
+    // The FULL error shape survives — hint/details/diagnosticId/logPath, not
+    // a code+message truncation.
     expect(result.data?.initialSnapshotError).toEqual({
       code: 'COMMAND_FAILED',
       message: 'capture failed',
+      hint: 'Retry with --debug and inspect diagnostics log for details.',
+      diagnosticId: 'diag-1',
+      logPath: '/tmp/requests/req-1.ndjson',
+      details: { reason: 'runner_unavailable' },
     });
     expect(result.data?.warnings).toEqual([
       'pre-existing warning',

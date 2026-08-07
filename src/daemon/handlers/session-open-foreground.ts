@@ -153,10 +153,10 @@ export async function composeOpenWithInitialSnapshot(params: {
           ...readStringWarnings(openResponse.data),
           `The session is open, but the initial interactive snapshot failed (${snapshotResponse.error.code}: ${snapshotResponse.error.message}). Run: agent-device snapshot -i`,
         ],
-        initialSnapshotError: {
-          code: snapshotResponse.error.code,
-          message: snapshotResponse.error.message,
-        },
+        // The FULL error shape (hint/details/diagnosticId/logPath), not a
+        // code+message truncation — recovery guidance must survive to the
+        // public Node/CLI JSON surfaces.
+        initialSnapshotError: snapshotResponse.error,
       },
     };
   }

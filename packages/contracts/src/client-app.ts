@@ -5,6 +5,7 @@ import type { JsonObject } from './json.ts';
 import type { SessionSurface } from './session-surface.ts';
 import type { TargetShutdownResult } from './target-shutdown-contract.ts';
 import type { DaemonInstallSource, SessionRuntimeHints } from '@agent-device/kernel/contracts';
+import type { DaemonError } from '@agent-device/kernel/errors';
 import type { PublicPlatform } from '@agent-device/kernel/device';
 import type {
   AgentDeviceIdentifiers,
@@ -84,6 +85,14 @@ export type AppOpenResult = {
    * fields like `identifiers`.
    */
   snapshot?: Record<string, unknown>;
+  /**
+   * open --foreground: present when the session opened successfully but the
+   * composed initial snapshot capture failed. Carries the FULL daemon error
+   * shape (code, message, hint, details, diagnosticId, logPath) so recovery
+   * guidance survives to the caller; the session itself is open and usable —
+   * a `warnings` entry says so and points at `snapshot -i`.
+   */
+  initialSnapshotError?: DaemonError;
   identifiers: AgentDeviceIdentifiers;
 };
 

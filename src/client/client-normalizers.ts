@@ -16,7 +16,7 @@ import {
   isSerialAddressablePlatform,
   type AppleOS,
 } from '@agent-device/kernel/device';
-import { AppError, type NormalizedError } from '@agent-device/kernel/errors';
+import { AppError, type DaemonError, type NormalizedError } from '@agent-device/kernel/errors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { leaseScopeFromOptions, leaseScopeToRequestMeta } from '../core/lease-scope.ts';
 import type { DaemonRequest, SessionRuntimeHints } from '../daemon/types.ts';
@@ -260,6 +260,27 @@ export function normalizeTargetShutdownResult(value: unknown): TargetShutdownRes
     stdout: value.stdout,
     stderr: value.stderr,
     ...(error ? { error } : {}),
+  };
+}
+
+/**
+ * open --foreground: the composed initial-snapshot failure rides the open
+ * response as a FULL daemon error (hint/details/diagnosticId/logPath — plus
+ * the additive retriable/supportedOn signals), never a code+message
+ * truncation, so recovery guidance survives to Node/CLI JSON callers.
+ */
+export function normalizeInitialSnapshotError(value: unknown): DaemonError | undefined {
+  if (!isRecord(value)) return undefined;
+  if (typeof value.code !== 'string' || typeof value.message !== 'string') return undefined;
+  return {
+    code: value.code,
+    message: value.message,
+    ...(typeof value.hint === 'string' ? { hint: value.hint } : {}),
+    ...(typeof value.diagnosticId === 'string' ? { diagnosticId: value.diagnosticId } : {}),
+    ...(typeof value.logPath === 'string' ? { logPath: value.logPath } : {}),
+    ...(isRecord(value.details) ? { details: value.details } : {}),
+    ...(typeof value.retriable === 'boolean' ? { retriable: value.retriable } : {}),
+    ...(typeof value.supportedOn === 'string' ? { supportedOn: value.supportedOn } : {}),
   };
 }
 
