@@ -105,6 +105,26 @@ int main(int argc, const char *argv[]) {
       [textField.heightAnchor constraintEqualToConstant:44],
     ]];
   }
+
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-selector-read-regression"]) {
+    NSString *const duplicateIdentifier = @"agent-device-selector-read-duplicate";
+
+    UIButton *visibleButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    visibleButton.accessibilityIdentifier = duplicateIdentifier;
+    [visibleButton setTitle:@"Readable target" forState:UIControlStateNormal];
+    visibleButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:visibleButton];
+
+    UILabel *offscreenLabel = [[UILabel alloc] initWithFrame:CGRectMake(-200, -200, 100, 40)];
+    offscreenLabel.accessibilityIdentifier = duplicateIdentifier;
+    offscreenLabel.text = @"Decorative duplicate";
+    [self.view addSubview:offscreenLabel];
+
+    [NSLayoutConstraint activateConstraints:@[
+      [visibleButton.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+      [visibleButton.topAnchor constraintEqualToAnchor:label.bottomAnchor constant:24],
+    ]];
+  }
 #endif
 }
 

@@ -1653,7 +1653,7 @@ extension RunnerTests {
     return .context(ActiveCommandContext(app: activeApp))
   }
 
-  private func executeOnMainPrepared(
+  func executeOnMainPrepared(
     command: Command,
     activeApp: XCUIApplication,
     alertDeadline: Date? = nil

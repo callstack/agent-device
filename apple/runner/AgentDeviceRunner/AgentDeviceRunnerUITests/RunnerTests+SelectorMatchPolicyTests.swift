@@ -81,5 +81,42 @@ extension RunnerTests {
       .selected(index: 1, usedNonHittableFallback: true)
     )
   }
+
+#if os(iOS)
+  func testQuerySelectorPrefersHittableMatchOverNonHittableDuplicate() throws {
+    let duplicateIdentifier = "agent-device-selector-read-duplicate"
+    app.launchArguments = ["--agent-device-selector-read-regression"]
+    app.launch()
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
+
+    let matches = app.descendants(matching: .any)
+      .matching(identifier: duplicateIdentifier)
+      .allElementsBoundByIndex
+      .filter(\.exists)
+    XCTAssertEqual(matches.count, 2, "fixture must expose two raw identifier matches")
+    XCTAssertEqual(matches.filter(\.isHittable).count, 1, "fixture must expose exactly one hittable match")
+
+    let command = try JSONDecoder().decode(
+      Command.self,
+      from: Data(
+        #"{"command":"querySelector","commandId":"query-selector-duplicate","selectorKey":"id","selectorValue":"agent-device-selector-read-duplicate"}"#.utf8
+      )
+    )
+    let response = try executeOnMainPrepared(command: command, activeApp: app)
+
+    guard response.ok else {
+      XCTFail(String(describing: response.error))
+      return
+    }
+    XCTAssertEqual(response.data?.found, true)
+    XCTAssertEqual(response.data?.nodes?.count, 1)
+    XCTAssertEqual(response.data?.nodes?.first?.identifier, duplicateIdentifier)
+    XCTAssertEqual(response.data?.nodes?.first?.hittable, true)
+  }
+#endif
 #endif
 }
