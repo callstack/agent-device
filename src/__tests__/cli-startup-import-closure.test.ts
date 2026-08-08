@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import { parseSync } from 'oxc-parser';
 
 /**
  * Every CLI invocation eagerly evaluates the static import closure of
@@ -11,34 +12,49 @@ import path from 'node:path';
  * socket). The HTTP daemon transport, remote-artifact upload and download all
  * load these modules on demand instead.
  *
- * Type-only imports are free and stay allowed; this only rejects value imports.
+ * Classification comes from oxc-parser's ES module record rather than a regex,
+ * because the forms that matter are exactly the ones a regex tuned to
+ * `import ... from` misses: a bare side-effect `import 'node:http'` binds
+ * nothing yet still evaluates the module, so it reintroduces the whole cost
+ * while looking like nothing at all. Type-only imports are erased at build and
+ * stay allowed; dynamic `import()` is the fix and is deliberately not followed.
  */
 
 const srcRoot = path.resolve(import.meta.dirname, '..');
-// `from './x.ts'` / `from "./x.ts"`, excluding `import type ... from`.
-const STATIC_IMPORT =
-  /(?:^|\n)\s*(?:import|export)\s+(?!type\s)([^;]*?)\s*from\s*['"]([^'"]+)['"]/g;
+const LAZY_HTTP_MODULES = new Set(['node:http', 'node:https']);
 
-function collectStaticImports(source: string): { clause: string; specifier: string }[] {
-  const found: { clause: string; specifier: string }[] = [];
-  STATIC_IMPORT.lastIndex = 0;
-  let match: RegExpExecArray | null = null;
-  while ((match = STATIC_IMPORT.exec(source)) !== null) {
-    found.push({ clause: match[1] ?? '', specifier: match[2] ?? '' });
+/**
+ * Specifiers whose module this file causes to be EVALUATED at load time.
+ * Excludes type-only imports/re-exports (erased) and dynamic imports (lazy).
+ */
+function evaluatedModuleRefs(fileName: string, source: string): string[] {
+  const { module } = parseSync(fileName, source);
+  const refs: string[] = [];
+  for (const staticImport of module.staticImports) {
+    // No entries at all is a side-effect import (`import 'x'`), which always
+    // evaluates. Otherwise it evaluates unless every binding is type-only.
+    const evaluates =
+      staticImport.entries.length === 0 || staticImport.entries.some((entry) => !entry.isType);
+    if (evaluates) refs.push(staticImport.moduleRequest.value);
   }
-  return found;
+  for (const staticExport of module.staticExports) {
+    for (const entry of staticExport.entries) {
+      if (entry.moduleRequest && !entry.isType) refs.push(entry.moduleRequest.value);
+    }
+  }
+  return refs;
 }
 
 function resolveRelative(fromFile: string, specifier: string): string | null {
   const candidate = path.resolve(path.dirname(fromFile), specifier);
   if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return candidate;
   for (const suffix of ['.ts', '.tsx', '/index.ts']) {
-    const withSuffix = `${candidate}${suffix}`;
-    if (fs.existsSync(withSuffix)) return withSuffix;
+    if (fs.existsSync(`${candidate}${suffix}`)) return `${candidate}${suffix}`;
   }
   return null;
 }
 
+/** Every repo file evaluated as a consequence of importing `src/cli.ts`. */
 function eagerClosureOfCli(): string[] {
   const queue = [path.join(srcRoot, 'cli.ts')];
   const visited = new Set<string>();
@@ -46,7 +62,7 @@ function eagerClosureOfCli(): string[] {
     const current = queue.pop();
     if (!current || visited.has(current)) continue;
     visited.add(current);
-    for (const { specifier } of collectStaticImports(fs.readFileSync(current, 'utf8'))) {
+    for (const specifier of evaluatedModuleRefs(current, fs.readFileSync(current, 'utf8'))) {
       if (!specifier.startsWith('.')) continue;
       const resolved = resolveRelative(current, specifier);
       if (resolved) queue.push(resolved);
@@ -55,26 +71,52 @@ function eagerClosureOfCli(): string[] {
   return [...visited];
 }
 
-test('the CLI startup import closure never value-imports node:http or node:https', () => {
+test.for([
+  { form: 'side-effect import', code: `import 'node:http';`, evaluates: true },
+  { form: 'default value import', code: `import http from 'node:http';`, evaluates: true },
+  { form: 'namespace import', code: `import * as http from 'node:http';`, evaluates: true },
+  { form: 'named value import', code: `import { request } from 'node:http';`, evaluates: true },
+  { form: 'value re-export', code: `export { request } from 'node:http';`, evaluates: true },
+  { form: 'star re-export', code: `export * from 'node:http';`, evaluates: true },
+  {
+    form: 'mixed value + type import',
+    code: `import http, { type IncomingMessage } from 'node:http';`,
+    evaluates: true,
+  },
+  {
+    form: 'type-only default import',
+    code: `import type http from 'node:http';`,
+    evaluates: false,
+  },
+  {
+    form: 'type-only named import',
+    code: `import { type IncomingMessage } from 'node:http';`,
+    evaluates: false,
+  },
+  {
+    form: 'type-only re-export',
+    code: `export type { IncomingMessage } from 'node:http';`,
+    evaluates: false,
+  },
+  { form: 'dynamic import', code: `const m = await import('node:http');`, evaluates: false },
+])('$form is classified as evaluates=$evaluates', ({ code, evaluates }) => {
+  expect(evaluatedModuleRefs('fixture.ts', code)).toEqual(evaluates ? ['node:http'] : []);
+});
+
+test('the CLI startup import closure never evaluates node:http or node:https', () => {
   const offenders: string[] = [];
   for (const file of eagerClosureOfCli()) {
-    for (const { clause, specifier } of collectStaticImports(fs.readFileSync(file, 'utf8'))) {
-      if (specifier !== 'node:http' && specifier !== 'node:https') continue;
-      // `import type http from` is caught by the regex's negative lookahead;
-      // `import { type IncomingMessage } from` is a value import of nothing.
-      const importsOnlyTypes = clause
-        .replace(/^\{|\}$/g, '')
-        .split(',')
-        .every((binding) => binding.trim() === '' || binding.trim().startsWith('type '));
-      if (importsOnlyTypes) continue;
-      offenders.push(`${path.relative(srcRoot, file)} -> ${specifier}`);
+    for (const specifier of evaluatedModuleRefs(file, fs.readFileSync(file, 'utf8'))) {
+      if (LAZY_HTTP_MODULES.has(specifier)) {
+        offenders.push(`${path.relative(srcRoot, file)} -> ${specifier}`);
+      }
     }
   }
 
   expect(
     offenders,
-    'Load node:http / node:https on demand instead: a value import here costs every warm CLI ' +
-      'command ~79ms of undici + system-CA initialization.',
+    'Load node:http / node:https on demand instead: evaluating either one here costs every warm ' +
+      'CLI command ~79ms of undici + system-CA initialization.',
   ).toEqual([]);
 });
 
