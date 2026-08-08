@@ -651,7 +651,12 @@ Use the output already shown to determine whether the feed-search UI is present,
     matchers: [
       {
         id: 'startsWithForegroundOpen',
-        pattern: /^agent-device\s+open\s+--foreground\b/i,
+        // Flag order is not semantically meaningful (`open --platform ios
+        // --foreground` is exactly as correct as `open --foreground
+        // --platform ios`); this only checks that --foreground is on the
+        // first command and there is no app positional before it. The
+        // no-positional guarantee comes from the forbidden checks below.
+        pattern: /^agent-device\s+open\b[^\n]*--foreground\b/i,
       },
       {
         id: 'pressesContinueAfterAttach',
