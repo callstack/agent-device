@@ -186,6 +186,7 @@ const HINT_REF: Record<string, (device: DeviceInfo) => string | undefined> = {
 const CAPABILITY_BUCKET_BY_PLATFORM: Record<Platform, keyof CommandCapability> = {
   apple: 'apple',
   android: 'android',
+  harmonyos: 'harmonyos',
   vega: 'vega',
   linux: 'linux',
   web: 'web',

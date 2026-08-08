@@ -65,6 +65,7 @@ test('every plugin capability bucket matches the platform -> bucket table', () =
   const expectedBuckets: Record<Platform, string> = {
     apple: 'apple',
     android: 'android',
+    harmonyos: 'harmonyos',
     vega: 'vega',
     linux: 'linux',
     web: 'web',

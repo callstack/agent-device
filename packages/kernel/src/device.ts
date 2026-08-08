@@ -12,11 +12,19 @@ const APPLE_OS_VALUES = ['ios', 'ipados', 'tvos', 'watchos', 'visionos', 'macos'
 export type AppleOS = (typeof APPLE_OS_VALUES)[number];
 // Internal device platforms. Apple OSes collapse to a single `apple` platform; the
 // `appleOs` field on DeviceInfo is the sole OS discriminant.
-export const PLATFORMS = ['apple', 'android', 'vega', 'linux', 'web'] as const;
+export const PLATFORMS = ['apple', 'android', 'harmonyos', 'vega', 'linux', 'web'] as const;
 export type Platform = (typeof PLATFORMS)[number];
 // The PUBLIC leaf platform strings the daemon emits and clients parse (approach b:
 // output never changes). Equals the pre-collapse `Platform` set.
-export const PUBLIC_PLATFORMS = ['ios', 'macos', 'android', 'vega', 'linux', 'web'] as const;
+export const PUBLIC_PLATFORMS = [
+  'ios',
+  'macos',
+  'android',
+  'harmonyos',
+  'vega',
+  'linux',
+  'web',
+] as const;
 export type PublicPlatform = (typeof PUBLIC_PLATFORMS)[number];
 // Accepted `--platform` selectors: the internal platforms plus the legacy Apple leaf
 // aliases `ios`/`macos`, which still resolve to `apple` devices (read-path back-compat).
@@ -90,7 +98,11 @@ export function isMobilePlatform(device: Pick<DeviceInfo, 'platform' | 'appleOs'
   // Phone/tablet device family: Android plus every Apple OS except the macOS desktop
   // host. Preserves the pre-collapse `platform === 'ios' || platform === 'android'`
   // set exactly (the old `ios` platform covered iOS/iPadOS/tvOS/visionOS).
-  return device.platform === 'android' || (isApplePlatform(device.platform) && !isMacOs(device));
+  return (
+    device.platform === 'android' ||
+    device.platform === 'harmonyos' ||
+    (isApplePlatform(device.platform) && !isMacOs(device))
+  );
 }
 
 /**
@@ -341,8 +353,8 @@ function matchesExplicitDeviceSelector(device: DeviceInfo, selector: DeviceSelec
 
 export function isSerialAddressablePlatform(
   platform: Platform | PublicPlatform,
-): platform is 'android' | 'vega' {
-  return platform === 'android' || platform === 'vega';
+): platform is 'android' | 'harmonyos' | 'vega' {
+  return platform === 'android' || platform === 'harmonyos' || platform === 'vega';
 }
 
 function serialDeviceNotFoundMessage(selector: DeviceSelector): string {
@@ -352,7 +364,10 @@ function serialDeviceNotFoundMessage(selector: DeviceSelector): string {
   if (selector.platform === 'vega') {
     return `No Vega VVD with serial ${selector.serial}`;
   }
-  return `No Android device or Vega VVD with serial ${selector.serial}`;
+  if (selector.platform === 'harmonyos') {
+    return `No HarmonyOS device with serial ${selector.serial}`;
+  }
+  return `No Android, HarmonyOS device, or Vega VVD with serial ${selector.serial}`;
 }
 
 function throwNoDevicesFound(selector: DeviceSelector, context: DeviceSelectionContext): never {

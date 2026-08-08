@@ -159,7 +159,7 @@ function buildClientDevicePlatformFields(
   platform: AgentDeviceDevice['platform'],
   id: string,
   options: { simulatorSetPath?: string | null; serial?: string } = {},
-): Pick<AgentDeviceSessionDevice, 'ios' | 'android' | 'vega'> {
+): Pick<AgentDeviceSessionDevice, 'ios' | 'android' | 'harmonyos' | 'vega'> {
   if (platform === 'ios') {
     return {
       ios: {
@@ -172,7 +172,9 @@ function buildClientDevicePlatformFields(
   }
   if (!isSerialAddressablePlatform(platform)) return {};
   const serial = options.serial ?? id;
-  return platform === 'android' ? { android: { serial } } : { vega: { serial } };
+  if (platform === 'android') return { android: { serial } };
+  if (platform === 'harmonyos') return { harmonyos: { serial } };
+  return { vega: { serial } };
 }
 
 export function normalizeRuntimeHints(value: unknown): SessionRuntimeHints | undefined {

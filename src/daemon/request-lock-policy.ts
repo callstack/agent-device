@@ -192,6 +192,7 @@ function targetSelectorsConflict(
 ): boolean {
   switch (lockPlatform) {
     case 'android':
+    case 'harmonyos':
     case 'ios':
       return target === 'desktop';
     case 'vega':
@@ -226,6 +227,7 @@ function freshSessionSelectorKeysForPlatform(
 ): SessionSelectorConflictKey[] {
   switch (lockPlatform) {
     case 'android':
+    case 'harmonyos':
       return ['udid', 'iosSimulatorDeviceSet'];
     case 'vega':
       return ['udid', 'iosSimulatorDeviceSet', 'androidDeviceAllowlist'];

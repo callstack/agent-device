@@ -19,6 +19,7 @@ import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { resolveSessionRunnerLogPath, SessionStore } from '../session-store.ts';
 import { listAndroidApps } from '../../platforms/android/app-lifecycle.ts';
 import { listIosApps } from '../../platforms/apple/core/apps.ts';
+import { listHarmonyApps } from '../../platforms/harmonyos/app-lifecycle.ts';
 import { requireSessionOrExplicitSelector, resolveCommandDevice } from './session-device-utils.ts';
 import { errorResponse, requireCommandSupported } from './response.ts';
 import { resolveImplicitSessionScope, sessionMatchesScope } from '../session-routing.ts';
@@ -135,42 +136,50 @@ export async function handleSessionInventoryCommands(params: {
   }
 
   if (req.command === 'apps') {
-    const resolution = await resolveInventoryCommandDevice({
-      req,
-      sessionName,
-      sessionStore,
-      ensureReady: true,
-    });
-    if ('response' in resolution) return resolution.response;
-    const { device } = resolution;
-    const unsupported = requireCommandSupported('apps', device);
-    if (unsupported) return unsupported;
-
-    const appsFilter = assertResolvedAppsFilter(req.flags?.appsFilter);
-    if (isApplePlatform(device.platform)) {
-      const apps = await listIosApps(device, appsFilter);
-      return {
-        ok: true,
-        data: {
-          apps: apps.map((app) =>
-            app.name && app.name !== app.bundleId ? `${app.name} (${app.bundleId})` : app.bundleId,
-          ),
-        },
-      };
-    }
-
-    const apps = await listAndroidApps(device, appsFilter);
-    return {
-      ok: true,
-      data: {
-        apps: apps.map((app) =>
-          app.name && app.name !== app.package ? `${app.name} (${app.package})` : app.package,
-        ),
-      },
-    };
+    return await handleAppsInventory({ req, sessionName, sessionStore });
   }
 
   return null;
+}
+
+async function handleAppsInventory(params: {
+  req: DaemonRequest;
+  sessionName: string;
+  sessionStore: SessionStore;
+}): Promise<DaemonResponse> {
+  const { req, sessionName, sessionStore } = params;
+  const resolution = await resolveInventoryCommandDevice({
+    req,
+    sessionName,
+    sessionStore,
+    ensureReady: true,
+  });
+  if ('response' in resolution) return resolution.response;
+  const { device } = resolution;
+  const unsupported = requireCommandSupported('apps', device);
+  if (unsupported) return unsupported;
+  const appsFilter = assertResolvedAppsFilter(req.flags?.appsFilter);
+  if (isApplePlatform(device.platform)) {
+    const apps = await listIosApps(device, appsFilter);
+    return appsInventoryResponse(apps.map((app) => ({ id: app.bundleId, name: app.name })));
+  }
+  if (device.platform === 'harmonyos') {
+    const apps = await listHarmonyApps(device, appsFilter);
+    return appsInventoryResponse(apps.map((app) => ({ id: app.package, name: app.name })));
+  }
+  const apps = await listAndroidApps(device, appsFilter);
+  return appsInventoryResponse(apps.map((app) => ({ id: app.package, name: app.name })));
+}
+
+function appsInventoryResponse(apps: Array<{ id: string; name: string }>): DaemonResponse {
+  return {
+    ok: true,
+    data: {
+      apps: apps.map((app) =>
+        app.name && app.name !== app.id ? `${app.name} (${app.id})` : app.id,
+      ),
+    },
+  };
 }
 
 async function resolveInventoryCommandDevice(params: {

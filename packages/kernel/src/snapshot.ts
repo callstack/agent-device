@@ -136,12 +136,19 @@ export type SnapshotNode = RawSnapshotNode & {
   inheritsIdentifier?: true;
 };
 
-export type SnapshotBackend = 'xctest' | 'android' | 'macos-helper' | 'linux-atspi' | 'web';
+export type SnapshotBackend =
+  | 'xctest'
+  | 'android'
+  | 'harmonyos-arkui'
+  | 'macos-helper'
+  | 'linux-atspi'
+  | 'web';
 
 export function isSnapshotBackend(value: unknown): value is SnapshotBackend {
   return (
     value === 'xctest' ||
     value === 'android' ||
+    value === 'harmonyos-arkui' ||
     value === 'macos-helper' ||
     value === 'linux-atspi' ||
     value === 'web'
@@ -149,7 +156,12 @@ export function isSnapshotBackend(value: unknown): value is SnapshotBackend {
 }
 
 export function usesMobileSnapshotPresentation(backend: SnapshotBackend | undefined): boolean {
-  return backend === undefined || backend === 'xctest' || backend === 'android';
+  return (
+    backend === undefined ||
+    backend === 'xctest' ||
+    backend === 'android' ||
+    backend === 'harmonyos-arkui'
+  );
 }
 
 export type SnapshotState = {

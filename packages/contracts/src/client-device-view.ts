@@ -27,6 +27,9 @@ export type AgentDeviceDevice = {
   android?: {
     serial: string;
   };
+  harmonyos?: {
+    serial: string;
+  };
   vega?: {
     serial: string;
   };
@@ -53,6 +56,9 @@ export type AgentDeviceSessionDevice = {
     simulatorSetPath?: string | null;
   };
   android?: {
+    serial: string;
+  };
+  harmonyos?: {
     serial: string;
   };
   vega?: {

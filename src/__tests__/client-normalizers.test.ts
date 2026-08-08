@@ -18,7 +18,10 @@ test('normalizeOpenDevice accepts exactly the canonical leaf platforms', () => {
     assert.equal(result.platform, platform);
   }
   // Lock the membership so the derived check cannot silently widen/narrow.
-  assert.deepEqual([...PUBLIC_PLATFORMS], ['ios', 'macos', 'android', 'vega', 'linux', 'web']);
+  assert.deepEqual(
+    [...PUBLIC_PLATFORMS],
+    ['ios', 'macos', 'android', 'harmonyos', 'vega', 'linux', 'web'],
+  );
 });
 
 test('normalizeOpenDevice rejects the apple selector and unknown platforms', () => {

@@ -8,6 +8,7 @@ import {
 
 export const LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS = [
   'android',
+  'harmonyos',
   'apple',
   'vega',
   'linux',
@@ -27,7 +28,7 @@ export type DeviceInventoryRequest = {
   androidSerialAllowlist?: string[];
 };
 
-export type DeviceInventoryGroup = 'android' | 'apple' | 'vega' | 'linux' | 'web';
+export type DeviceInventoryGroup = 'android' | 'harmonyos' | 'apple' | 'vega' | 'linux' | 'web';
 export type DeviceInventoryGroupCounts = Record<
   DeviceInventoryGroup,
   { available: number; booted: number }
@@ -65,6 +66,7 @@ export function shouldUseHostMacFastPath(selector: {
 function emptyDeviceInventoryGroupCounts(): DeviceInventoryGroupCounts {
   return {
     android: { available: 0, booted: 0 },
+    harmonyos: { available: 0, booted: 0 },
     apple: { available: 0, booted: 0 },
     vega: { available: 0, booted: 0 },
     linux: { available: 0, booted: 0 },

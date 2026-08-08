@@ -225,7 +225,7 @@ function deviceInventorySummaryBreakdown(
   if (selector.platform || selector.target) return undefined;
   const groups = countDeviceInventoryByGroup(devices);
   const labels = deviceInventoryGroupLabels();
-  return (['android', 'apple', 'vega', 'linux', 'web'] as const)
+  return (['android', 'harmonyos', 'apple', 'vega', 'linux', 'web'] as const)
     .flatMap((group) => {
       const entry = groups[group];
       return entry.available > 0
@@ -238,6 +238,7 @@ function deviceInventorySummaryBreakdown(
 function deviceInventoryGroupLabels(): Record<DeviceInventoryGroup, string> {
   return {
     android: 'Android',
+    harmonyos: 'HarmonyOS',
     apple: 'Apple',
     vega: 'Vega',
     linux: 'Linux',
@@ -249,6 +250,7 @@ function platformLabel(platform: PlatformSelector): string {
   if (platform === 'ios') return 'iOS';
   if (platform === 'macos') return 'macOS';
   if (platform === 'android') return 'Android';
+  if (platform === 'harmonyos') return 'HarmonyOS';
   if (platform === 'vega') return 'Vega';
   if (platform === 'linux') return 'Linux';
   if (platform === 'web') return 'web';

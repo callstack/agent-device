@@ -30,6 +30,11 @@ export async function listLocalDeviceInventory(
     });
   }
 
+  if (request.platform === 'harmonyos') {
+    const { listHarmonyDevices } = await import('../platforms/harmonyos/devices.ts');
+    return await listHarmonyDevices({ serial: request.serial });
+  }
+
   if (request.platform === 'vega') {
     const { listVegaDevices } = await import('../platforms/vega/devices.ts');
     return await listVegaDevices();

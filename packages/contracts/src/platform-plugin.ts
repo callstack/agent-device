@@ -6,7 +6,7 @@ import type { PlatformGatedProviderResolverKey } from './platform-providers.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { DeviceInventoryRequest } from './device-inventory.ts';
 
-type CapabilityBucket = 'apple' | 'android' | 'vega' | 'linux' | 'web';
+type CapabilityBucket = 'apple' | 'android' | 'harmonyos' | 'vega' | 'linux' | 'web';
 
 /**
  * The platform-plugin contract (ADR-0009).

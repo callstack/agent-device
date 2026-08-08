@@ -62,6 +62,20 @@ const androidPlugin = {
   },
 } as const satisfies PlatformPlugin;
 
+const harmonyosPlugin = {
+  id: 'harmonyos',
+  platforms: ['harmonyos'],
+  capability: { bucket: 'harmonyos' },
+  createInteractor: async (device: DeviceInfo, runner: RunnerContext) => {
+    const { createHarmonyInteractor } = await import('./harmonyos.ts');
+    return createHarmonyInteractor(device, runner);
+  },
+  discoverDevices: async (request: DeviceInventoryRequest) => {
+    const { listHarmonyDevices } = await import('../../platforms/harmonyos/devices.ts');
+    return await listHarmonyDevices({ serial: request.serial });
+  },
+} as const satisfies PlatformPlugin;
+
 const linuxPlugin = {
   id: 'linux',
   platforms: ['linux'],
@@ -106,6 +120,7 @@ const webPlugin = {
 export const BUILTIN_PLATFORM_PLUGINS = [
   applePlugin,
   androidPlugin,
+  harmonyosPlugin,
   vegaPlugin,
   linuxPlugin,
   webPlugin,
