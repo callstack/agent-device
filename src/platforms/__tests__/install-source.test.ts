@@ -1,20 +1,19 @@
 import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import dns from 'node:dns/promises';
 import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { withCommandExecutorOverride } from '../../utils/exec.ts';
+import { Readable } from 'node:stream';
+import { runCmdSync, withCommandExecutorOverride } from '../../utils/exec.ts';
 import {
   ARCHIVE_EXTENSIONS,
-  isBlockedIpAddress,
-  isBlockedSourceHostname,
   isTrustedInstallSourceUrl,
   materializeInstallablePath,
   validateDownloadSourceUrl,
 } from '../install-source.ts';
+import { isBlockedIpAddress, isBlockedSourceHostname } from '../install-source-network.ts';
 import * as androidManifest from '../android/manifest.ts';
 import { prepareAndroidInstallArtifact } from '../android/install-artifact.ts';
 import { prepareIosInstallArtifact } from '../apple/core/install-artifact.ts';
@@ -24,6 +23,7 @@ import {
 } from '../apple/core/tool-provider.ts';
 import { ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE } from './install-source.coverage.ts';
 import { mkdtempForTest } from '../../__tests__/test-utils/tmp-dir.ts';
+import * as networkTransport from '../install-source-network-transport.ts';
 
 test('validateDownloadSourceUrl rejects localhost and private literal addresses by default', async () => {
   await assert.rejects(
@@ -53,7 +53,25 @@ test('install-source helpers expose the SSRF and archive surface', () => {
   assert.equal(isBlockedSourceHostname('localhost'), true);
   assert.equal(isBlockedSourceHostname('example.com'), false);
   assert.equal(isBlockedIpAddress('127.0.0.1'), true);
-  assert.equal(isBlockedIpAddress('203.0.113.10'), false);
+  assert.equal(isBlockedIpAddress('0.0.0.0'), true);
+  assert.equal(isBlockedIpAddress('100.64.0.1'), true);
+  assert.equal(isBlockedIpAddress('203.0.113.10'), true);
+  assert.equal(isBlockedIpAddress('::ffff:127.0.0.1'), true);
+  assert.equal(isBlockedIpAddress('93.184.216.34'), false);
+});
+
+test('validateDownloadSourceUrl fails closed when DNS returns no public address', async () => {
+  const lookupMock = vi
+    .spyOn(dns, 'lookup')
+    .mockResolvedValue([] as unknown as Awaited<ReturnType<typeof dns.lookup>>);
+  try {
+    await assert.rejects(
+      async () => await validateDownloadSourceUrl(new URL('https://example.com/app.apk')),
+      /could not be resolved|public address/i,
+    );
+  } finally {
+    lookupMock.mockRestore();
+  }
 });
 
 test('isTrustedInstallSourceUrl recognizes supported artifact services', () => {
@@ -121,7 +139,7 @@ test.sequential('materializeInstallablePath extracts zip archives without ditto'
     await fs.symlink(unzipPath, path.join(binDir, 'unzip'));
     await fs.mkdir(payloadDir);
     await fs.writeFile(apkPath, 'placeholder apk', 'utf8');
-    execFileSync('zip', ['-qr', archivePath, 'payload'], { cwd: tempRoot });
+    runCmdSync('zip', ['-qr', archivePath, 'payload'], { cwd: tempRoot });
 
     process.env.PATH = binDir;
     const result = await materializeInstallablePath({
@@ -152,7 +170,7 @@ test('materializeInstallablePath extracts tar.gz archives', async () => {
   try {
     await fs.mkdir(payloadDir);
     await fs.writeFile(apkPath, 'placeholder apk', 'utf8');
-    execFileSync('tar', ['-czf', archivePath, '-C', payloadDir, 'Sample.apk']);
+    runCmdSync('tar', ['-czf', archivePath, '-C', payloadDir, 'Sample.apk']);
 
     const result = await materializeInstallablePath({
       source: { kind: 'path', path: archivePath },
@@ -193,7 +211,7 @@ test(ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE.testName, async () => {
       '<manifest package="io.example.directurl" xmlns:android="http://schemas.android.com/apk/res/android" />',
       'utf8',
     );
-    execFileSync('zip', ['-q', apkPath, 'AndroidManifest.xml'], { cwd: tempRoot });
+    runCmdSync('zip', ['-q', apkPath, 'AndroidManifest.xml'], { cwd: tempRoot });
     const apkBytes = await fs.readFile(apkPath);
 
     await withMockedInstallSourceFetch(
@@ -240,7 +258,7 @@ test('prepareAndroidInstallArtifact accepts direct AAB URL sources', async () =>
       'utf8',
     );
     await fs.writeFile(path.join(tempRoot, 'BundleConfig.pb'), 'bundle-config', 'utf8');
-    execFileSync('zip', ['-qr', aabPath, 'BundleConfig.pb', 'base'], { cwd: tempRoot });
+    runCmdSync('zip', ['-qr', aabPath, 'BundleConfig.pb', 'base'], { cwd: tempRoot });
     const aabBytes = await fs.readFile(aabPath);
 
     await withMockedInstallSourceFetch(
@@ -479,7 +497,7 @@ test('prepareAndroidInstallArtifact rejects trusted artifact archives with multi
   const archivePath = path.join(tempRoot, 'artifact.zip');
   await fs.writeFile(path.join(tempRoot, 'one.apk'), 'one', 'utf8');
   await fs.writeFile(path.join(tempRoot, 'two.apk'), 'two', 'utf8');
-  execFileSync('zip', ['-q', archivePath, 'one.apk', 'two.apk'], { cwd: tempRoot });
+  runCmdSync('zip', ['-q', archivePath, 'one.apk', 'two.apk'], { cwd: tempRoot });
 
   await withMockedInstallSourceFetch(await fs.readFile(archivePath), async () => {
     await assert.rejects(
@@ -498,7 +516,7 @@ test('prepareAndroidInstallArtifact rejects untrusted URL archives instead of ex
   const tempRoot = await mkdtempForTest('agent-device-untrusted-archive-');
   const archivePath = path.join(tempRoot, 'artifact.zip');
   await fs.writeFile(path.join(tempRoot, 'app.apk'), 'apk', 'utf8');
-  execFileSync('zip', ['-q', archivePath, 'app.apk'], { cwd: tempRoot });
+  runCmdSync('zip', ['-q', archivePath, 'app.apk'], { cwd: tempRoot });
   const archiveBytes = await fs.readFile(archivePath);
 
   try {
@@ -543,6 +561,8 @@ type ArchiveExtractionFixture = {
   populate: (outputPath: string) => Promise<void>;
 };
 
+let generatedArchiveFixture: Buffer | undefined;
+
 async function withArchiveFixture(
   fixture: {
     extractions: ArchiveExtractionFixture[];
@@ -550,9 +570,13 @@ async function withArchiveFixture(
   },
   run: () => Promise<void>,
 ): Promise<void> {
-  let extractionIndex = 0;
-  await withCommandExecutorOverride((command, args) => {
-    if (command === 'unzip' && args[0] === '-p') {
+  const tempRoot = await mkdtempForTest('agent-device-archive-fixture-');
+  const outerArchive = path.join(tempRoot, 'artifact.zip');
+  try {
+    await buildArchiveFixture(fixture.extractions, 0, outerArchive, tempRoot);
+    generatedArchiveFixture = await fs.readFile(outerArchive);
+    await withCommandExecutorOverride((command, args) => {
+      if (command !== 'unzip' || args[0] !== '-p') return undefined;
       const contents = fixture.zipEntries?.[String(args[2])];
       return Promise.resolve({
         exitCode: contents === undefined ? 1 : 0,
@@ -560,17 +584,50 @@ async function withArchiveFixture(
         stderr: '',
         stdoutBuffer: contents === undefined ? Buffer.alloc(0) : Buffer.from(contents),
       });
-    }
-    if (command !== 'unzip' && command !== 'tar') return undefined;
+    }, run);
+  } finally {
+    generatedArchiveFixture = undefined;
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+}
 
-    const extraction = fixture.extractions[extractionIndex];
-    assert.ok(extraction, `Unexpected extra ${command} extraction`);
-    assert.equal(command, extraction.command);
-    extractionIndex += 1;
-    const outputPath = String(args[3]);
-    return extraction.populate(outputPath).then(() => ({ exitCode: 0, stdout: '', stderr: '' }));
-  }, run);
-  assert.equal(extractionIndex, fixture.extractions.length);
+async function buildArchiveFixture(
+  extractions: ArchiveExtractionFixture[],
+  index: number,
+  archivePath: string,
+  tempRoot: string,
+): Promise<void> {
+  const extraction = extractions[index];
+  assert.ok(extraction, `Missing archive fixture at index ${index}`);
+  const payload = path.join(tempRoot, `payload-${index}`);
+  await fs.mkdir(payload);
+  await extraction.populate(payload);
+  if (index + 1 < extractions.length) {
+    const nested = await findNestedArchive(payload);
+    assert.ok(nested, `Archive fixture ${index} did not create its nested archive placeholder`);
+    await buildArchiveFixture(extractions, index + 1, nested, tempRoot);
+  }
+  await fs.rm(archivePath, { force: true });
+  if (extraction.command === 'unzip') {
+    runCmdSync('zip', ['-qr', archivePath, '.'], { cwd: payload });
+  } else {
+    const compression =
+      archivePath.endsWith('.gz') || archivePath.endsWith('.tgz') ? '-czf' : '-cf';
+    runCmdSync('tar', [compression, archivePath, '-C', payload, '.']);
+  }
+}
+
+async function findNestedArchive(root: string): Promise<string | undefined> {
+  for (const entry of await fs.readdir(root, { withFileTypes: true })) {
+    const candidate = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      const nested = await findNestedArchive(candidate);
+      if (nested) return nested;
+    } else if (/\.(?:ipa|zip|tar|tar\.gz|tgz)$/i.test(entry.name)) {
+      return candidate;
+    }
+  }
+  return undefined;
 }
 
 async function withIosBundleInfo(
@@ -594,27 +651,29 @@ async function withMockedInstallSourceFetch(
   run: () => Promise<void>,
   options?: { filename?: string; contentType?: string },
 ): Promise<void> {
+  const responseBytes = generatedArchiveFixture ?? bytes;
   const lookupMock = vi
     .spyOn(dns, 'lookup')
     .mockImplementation(
       async () =>
-        [{ address: '203.0.113.10', family: 4 }] as unknown as Awaited<
+        [{ address: '93.184.216.34', family: 4 }] as unknown as Awaited<
           ReturnType<typeof dns.lookup>
         >,
     );
-  const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-    new Response(new Uint8Array(bytes), {
-      status: 200,
-      headers: {
-        'content-disposition': `attachment; filename="${options?.filename ?? 'artifact.zip'}"`,
-        'content-type': options?.contentType ?? 'application/zip',
-      },
-    }),
-  );
+  const requestMock = vi.spyOn(networkTransport, 'requestApprovedUrl').mockResolvedValue({
+    statusCode: 200,
+    statusText: 'OK',
+    headers: {
+      'content-disposition': `attachment; filename="${options?.filename ?? 'artifact.zip'}"`,
+      'content-type': options?.contentType ?? 'application/zip',
+    },
+    body: Readable.from(responseBytes),
+    close: async () => {},
+  });
   try {
     await run();
   } finally {
-    fetchMock.mockRestore();
+    requestMock.mockRestore();
     lookupMock.mockRestore();
   }
 }

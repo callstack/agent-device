@@ -2,11 +2,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { once } from 'node:events';
-import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
+import { MAX_ARTIFACT_COMPRESSED_BYTES } from '../utils/artifact-limits.ts';
+import { createByteLimitStream } from '../utils/byte-limit-stream.ts';
 
-const MAX_ARTIFACT_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
 const TEMP_PREFIX = 'agent-device-artifact-';
 const REQUEST_IDLE_TIMEOUT_MS = 60_000;
 
@@ -26,12 +26,18 @@ export function createArtifactTempDir(requestId?: string): string {
 
 export function validateArtifactContentLength(rawLength: string | number | undefined): void {
   if (rawLength === undefined) return;
-  const parsed = Number(rawLength);
-  // Ignore malformed content-length values; the streaming byte cap still enforces the hard limit.
-  if (Number.isFinite(parsed) && parsed > MAX_ARTIFACT_BYTES) {
+  const raw = String(rawLength);
+  if (!/^\d+$/.test(raw)) {
+    throw new AppError('INVALID_ARGS', 'Invalid content-length header');
+  }
+  const parsed = Number(raw);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new AppError('INVALID_ARGS', 'Invalid content-length header');
+  }
+  if (parsed > MAX_ARTIFACT_COMPRESSED_BYTES) {
     throw new AppError(
       'INVALID_ARGS',
-      `Upload exceeds maximum size of ${MAX_ARTIFACT_BYTES} bytes`,
+      `Upload exceeds maximum size of ${MAX_ARTIFACT_COMPRESSED_BYTES} bytes`,
     );
   }
 }
@@ -42,7 +48,6 @@ export function streamReadableToFile(
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     let settled = false;
-    let bytesWritten = 0;
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
     const output = fs.createWriteStream(destPath);
 
@@ -74,23 +79,15 @@ export function streamReadableToFile(
       }, REQUEST_IDLE_TIMEOUT_MS);
     };
 
-    const byteLimit = new Transform({
-      transform(chunk: Buffer | string, encoding, callback) {
-        armTimeout();
-        const size = Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(chunk, encoding);
-        bytesWritten += size;
-        if (bytesWritten > MAX_ARTIFACT_BYTES) {
-          callback(
-            new AppError(
-              'INVALID_ARGS',
-              `Upload exceeds maximum size of ${MAX_ARTIFACT_BYTES} bytes`,
-            ),
-          );
-          return;
-        }
-        callback(null, chunk);
-      },
+    const byteLimit = createByteLimitStream({
+      maxBytes: MAX_ARTIFACT_COMPRESSED_BYTES,
+      createLimitError: () =>
+        new AppError(
+          'INVALID_ARGS',
+          `Upload exceeds maximum size of ${MAX_ARTIFACT_COMPRESSED_BYTES} bytes`,
+        ),
     });
+    byteLimit.on('data', armTimeout);
 
     source.on('aborted', () => {
       settle(new AppError('COMMAND_FAILED', 'Artifact transfer was interrupted'));

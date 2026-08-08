@@ -45,6 +45,7 @@ import { IOS_DEVICE_INSTALL_TIMEOUT_MS, IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } fro
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '../../../../utils/exec.ts';
+import { createZipFixture } from './install-artifact.fixtures.ts';
 import { retryWithPolicy } from '../../../../utils/retry.ts';
 import { PNG } from '../../../../utils/png.ts';
 import {
@@ -102,29 +103,6 @@ function isDevicectlDevice(args: string[], ...subcommand: string[]): boolean {
     args[1] === 'device' &&
     subcommand.every((word, index) => args[2 + index] === word)
   );
-}
-
-/**
- * `unzip` is spawned through `runCmd` directly (install-artifact.ts /
- * install-source.ts), bypassing the Apple tool provider scope, so IPA
- * extraction still needs a PATH stub even under the fake provider.
- */
-async function withStubbedUnzip(
-  unzipScript: string,
-  run: (tmpDir: string) => Promise<void>,
-): Promise<void> {
-  const tmpDir = await mkdtempForTest('agent-device-ios-unzip-stub-');
-  const unzipPath = path.join(tmpDir, 'unzip');
-  await fs.writeFile(unzipPath, unzipScript, 'utf8');
-  await fs.chmod(unzipPath, 0o755);
-
-  const previousPath = process.env.PATH;
-  process.env.PATH = `${tmpDir}${path.delimiter}${previousPath ?? ''}`;
-  try {
-    await run(tmpDir);
-  } finally {
-    process.env.PATH = previousPath;
-  }
 }
 
 test('resolveMacOsHelperPackageRootFrom finds helper package from source and dist-like paths', async () => {
@@ -668,94 +646,67 @@ test('installIosInstallablePath on iOS physical device uses extended devicectl i
 });
 
 test('installIosApp on iOS physical device accepts .ipa and installs extracted .app payload', async () => {
-  await withStubbedUnzip(
-    '#!/bin/sh\nmkdir -p "$4/Payload/Sample.app"\nexit 0\n',
-    async (tmpDir) => {
-      const ipaPath = path.join(tmpDir, 'Sample.ipa');
-      await fs.writeFile(ipaPath, 'placeholder', 'utf8');
+  const tmpDir = await mkdtempForTest('agent-device-ios-install-ipa-test-');
+  const ipaPath = path.join(tmpDir, 'Sample.ipa');
+  await createZipFixture(ipaPath, ['Payload/Sample.app']);
 
-      await withFakeAppleTool(
-        (args) => {
-          if (args[0] === 'devicectl' || args[0] === 'plutil') return '';
-          return unexpectedArgs(args);
-        },
-        async ({ calls }) => {
-          await installIosApp(IOS_TEST_DEVICE, ipaPath);
-          const installCall = calls.find(
-            (args) => args[0] === 'devicectl' && args[2] === 'install',
-          );
-          assert.ok(installCall);
-          assert.deepEqual(installCall.slice(0, 6), [
-            'devicectl',
-            'device',
-            'install',
-            'app',
-            '--device',
-            'ios-device-1',
-          ]);
-          const installedPath = installCall[6];
-          assert.equal(typeof installedPath, 'string');
-          assert.equal(installedPath?.endsWith('/Payload/Sample.app'), true);
-          assert.notEqual(installedPath, ipaPath);
-        },
-      );
+  await withFakeAppleTool(
+    (args) => {
+      if (args[0] === 'devicectl' || args[0] === 'plutil') return '';
+      return unexpectedArgs(args);
+    },
+    async ({ calls }) => {
+      await installIosApp(IOS_TEST_DEVICE, ipaPath);
+      const installCall = calls.find((args) => args[0] === 'devicectl' && args[2] === 'install');
+      assert.ok(installCall);
+      assert.deepEqual(installCall.slice(0, 6), [
+        'devicectl',
+        'device',
+        'install',
+        'app',
+        '--device',
+        'ios-device-1',
+      ]);
+      const installedPath = installCall[6];
+      assert.equal(typeof installedPath, 'string');
+      assert.equal(installedPath?.endsWith('/Payload/Sample.app'), true);
+      assert.notEqual(installedPath, ipaPath);
     },
   );
 });
 
 test('installIosApp returns bundleId and launchTarget for nested archive sources', async () => {
-  const unzipScript = [
-    '#!/bin/sh',
-    'src="$2"',
-    'out="$4"',
-    'case "$src" in',
-    '  *.zip)',
-    '    mkdir -p "$out/Build"',
-    '    printf "ipa" > "$out/Build/Sample.ipa"',
-    '    exit 0',
-    '    ;;',
-    '  *.ipa)',
-    '    mkdir -p "$out/Payload/Sample.app"',
-    '    exit 0',
-    '    ;;',
-    'esac',
-    'exit 1',
-    '',
-  ].join('\n');
+  const tmpDir = await mkdtempForTest('agent-device-ios-install-archive-test-');
+  const archivePath = path.join(tmpDir, 'Sample.zip');
+  const ipaPath = path.join(tmpDir, 'Sample.ipa');
+  await createZipFixture(ipaPath, ['Payload/Sample.app']);
+  await createZipFixture(archivePath, [], [{ source: ipaPath, target: 'Build/Sample.ipa' }]);
 
-  await withStubbedUnzip(unzipScript, async (tmpDir) => {
-    const archivePath = path.join(tmpDir, 'Sample.zip');
-    await fs.writeFile(archivePath, 'placeholder', 'utf8');
-
-    await withFakeAppleTool(
-      (args) => {
-        if (args[0] === 'plutil' && args[1] === '-convert') {
-          return JSON.stringify({
-            CFBundleIdentifier: 'com.example.archive',
-            CFBundleDisplayName: 'Archive App',
-            CFBundleName: 'Archive App',
-          });
-        }
-        if (args[0] === 'devicectl') return '';
-        return unexpectedArgs(args);
-      },
-      async ({ calls }) => {
-        const result = await installIosApp(IOS_TEST_DEVICE, archivePath);
-        assert.equal(result.archivePath, archivePath);
-        assert.equal(result.bundleId, 'com.example.archive');
-        assert.equal(result.appName, 'Archive App');
-        assert.equal(result.launchTarget, 'com.example.archive');
-        assert.equal(result.installablePath.endsWith('/Payload/Sample.app'), true);
-        const installCall = calls.find((args) => args[0] === 'devicectl' && args[2] === 'install');
-        assert.ok(installCall);
-        assert.equal(installCall[6]?.endsWith('/Payload/Sample.app'), true);
-      },
-    );
-  });
+  await withFakeAppleTool(
+    (args) => {
+      if (args[0] === 'plutil' && args[1] === '-convert') {
+        return JSON.stringify({
+          CFBundleIdentifier: 'com.example.archive',
+          CFBundleDisplayName: 'Archive App',
+          CFBundleName: 'Archive App',
+        });
+      }
+      if (args[0] === 'devicectl') return '';
+      return unexpectedArgs(args);
+    },
+    async ({ calls }) => {
+      const result = await installIosApp(IOS_TEST_DEVICE, archivePath);
+      assert.equal(result.archivePath, archivePath);
+      assert.equal(result.bundleId, 'com.example.archive');
+      assert.equal(result.appName, 'Archive App');
+      assert.equal(result.launchTarget, 'com.example.archive');
+      assert.equal(result.installablePath.endsWith('/Payload/Sample.app'), true);
+      const installCall = calls.find((args) => args[0] === 'devicectl' && args[2] === 'install');
+      assert.ok(installCall);
+      assert.equal(installCall[6]?.endsWith('/Payload/Sample.app'), true);
+    },
+  );
 });
-
-const MULTI_APP_UNZIP_SCRIPT =
-  '#!/bin/sh\nmkdir -p "$4/Payload/Sample.app"\nmkdir -p "$4/Payload/Companion.app"\nexit 0\n';
 
 function multiAppPlutilScript(args: string[]): FakeAppleToolResponse {
   if (args[0] === 'plutil' && args[1] === '-convert') {
@@ -774,56 +725,53 @@ function multiAppPlutilScript(args: string[]): FakeAppleToolResponse {
 }
 
 test('installIosApp on iOS physical device resolves multi-app .ipa using bundle identifier hint', async () => {
-  await withStubbedUnzip(MULTI_APP_UNZIP_SCRIPT, async (tmpDir) => {
-    const ipaPath = path.join(tmpDir, 'Sample.ipa');
-    await fs.writeFile(ipaPath, 'placeholder', 'utf8');
+  const tmpDir = await mkdtempForTest('agent-device-ios-install-ipa-multi-test-');
+  const ipaPath = path.join(tmpDir, 'Sample.ipa');
+  await createZipFixture(ipaPath, ['Payload/Sample.app', 'Payload/Companion.app']);
 
-    await withFakeAppleTool(multiAppPlutilScript, async ({ calls }) => {
-      await installIosApp(IOS_TEST_DEVICE, ipaPath, { appIdentifierHint: 'com.example.sample' });
-      const installCall = calls.find((args) => args[0] === 'devicectl' && args[2] === 'install');
-      assert.ok(installCall);
-      const installedPath = installCall[6];
-      assert.equal(typeof installedPath, 'string');
-      assert.equal(installedPath?.endsWith('/Payload/Sample.app'), true);
-    });
+  await withFakeAppleTool(multiAppPlutilScript, async ({ calls }) => {
+    await installIosApp(IOS_TEST_DEVICE, ipaPath, { appIdentifierHint: 'com.example.sample' });
+    const installCall = calls.find((args) => args[0] === 'devicectl' && args[2] === 'install');
+    assert.ok(installCall);
+    const installedPath = installCall[6];
+    assert.equal(typeof installedPath, 'string');
+    assert.equal(installedPath?.endsWith('/Payload/Sample.app'), true);
   });
 });
 
 test('installIosApp rejects multi-app .ipa when no hint is provided', async () => {
-  await withStubbedUnzip(MULTI_APP_UNZIP_SCRIPT, async (tmpDir) => {
-    const ipaPath = path.join(tmpDir, 'Sample.ipa');
-    await fs.writeFile(ipaPath, 'placeholder', 'utf8');
+  const tmpDir = await mkdtempForTest('agent-device-ios-install-ipa-multi-missing-hint-test-');
+  const ipaPath = path.join(tmpDir, 'Sample.ipa');
+  await createZipFixture(ipaPath, ['Payload/Sample.app', 'Payload/Companion.app']);
 
-    await withFakeAppleTool(multiAppPlutilScript, async () => {
-      await assert.rejects(
-        () => installIosApp(IOS_TEST_DEVICE, ipaPath),
-        (error: unknown) => {
-          assert.equal(error instanceof AppError, true);
-          assert.equal((error as AppError).code, 'INVALID_ARGS');
-          assert.match((error as AppError).message, /found 2 \.app bundles/i);
-          assert.match((error as AppError).message, /pass an app identifier|bundle name/i);
-          return true;
-        },
-      );
-    });
+  await withFakeAppleTool(multiAppPlutilScript, async () => {
+    await assert.rejects(
+      () => installIosApp(IOS_TEST_DEVICE, ipaPath),
+      (error: unknown) => {
+        assert.equal(error instanceof AppError, true);
+        assert.equal((error as AppError).code, 'INVALID_ARGS');
+        assert.match((error as AppError).message, /found 2 \.app bundles/i);
+        assert.match((error as AppError).message, /pass an app identifier|bundle name/i);
+        return true;
+      },
+    );
   });
 });
 
 test('installIosApp rejects invalid .ipa payloads without embedded .app', async () => {
-  await withStubbedUnzip('#!/bin/sh\nmkdir -p "$4/NoPayload"\nexit 0\n', async (tmpDir) => {
-    const ipaPath = path.join(tmpDir, 'Broken.ipa');
-    await fs.writeFile(ipaPath, 'placeholder', 'utf8');
+  const tmpDir = await mkdtempForTest('agent-device-ios-install-ipa-invalid-test-');
+  const ipaPath = path.join(tmpDir, 'Broken.ipa');
+  await createZipFixture(ipaPath, ['NoPayload']);
 
-    await withFakeAppleTool(
-      () => '',
-      async () => {
-        await assertRejectsAppError(() => installIosApp(IOS_TEST_DEVICE, ipaPath), {
-          code: 'INVALID_ARGS',
-          message: /invalid ipa/i,
-        });
-      },
-    );
-  });
+  await withFakeAppleTool(
+    () => '',
+    async () => {
+      await assertRejectsAppError(() => installIosApp(IOS_TEST_DEVICE, ipaPath), {
+        code: 'INVALID_ARGS',
+        message: /invalid ipa/i,
+      });
+    },
+  );
 });
 
 test('openIosApp with app and URL on iOS device launches app bundle with payload URL', async () => {

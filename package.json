@@ -245,18 +245,22 @@
   ],
   "dependencies": {
     "@limrun/api": "^0.24.5",
-    "yaml": "^2.9.0"
+    "ipaddr.js": "^2.5.0",
+    "tar-stream": "^3.2.0",
+    "undici": "7.29.0",
+    "yaml": "^2.9.0",
+    "yauzl": "^3.4.0"
   },
   "devDependencies": {
     "@agent-device/ad-replay": "workspace:*",
     "@agent-device/ad-script": "workspace:*",
     "@agent-device/contracts": "workspace:*",
     "@agent-device/kernel": "workspace:*",
-    "@agent-device/selectors": "workspace:*",
     "@agent-device/maestro": "workspace:*",
     "@agent-device/provider-limrun": "workspace:*",
     "@agent-device/provider-webdriver": "workspace:*",
     "@agent-device/replay-test": "workspace:*",
+    "@agent-device/selectors": "workspace:*",
     "@agent-device/xml": "workspace:*",
     "@arethetypeswrong/cli": "^0.18.5",
     "@chenglou/freerange": "^0.0.1",
@@ -264,6 +268,8 @@
     "@stryker-mutator/vitest-runner": "9.6.1",
     "@types/node": "^22.19.21",
     "@types/pngjs": "^6.0.5",
+    "@types/tar-stream": "^3.1.4",
+    "@types/yauzl": "^2.10.3",
     "@vitest/coverage-v8": "4.1.8",
     "fallow": "^2.95.0",
     "fast-check": "^4.9.0",

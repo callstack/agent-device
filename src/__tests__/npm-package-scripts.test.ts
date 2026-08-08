@@ -16,6 +16,10 @@ const packagedCliWorkflow = fs.readFileSync(
   path.join(repoRoot, '.github', 'workflows', 'ci.yml'),
   'utf8',
 );
+const mcpRegistryWorkflow = fs.readFileSync(
+  path.join(repoRoot, '.github', 'workflows', 'publish-mcp-registry.yml'),
+  'utf8',
+);
 
 function script(name: string): string {
   const value = packageJson.scripts[name];
@@ -109,4 +113,40 @@ test('publishing cannot skip the package gate', () => {
     packagedCliWorkflow,
     /run: node --experimental-strip-types scripts\/check-package\.ts/,
   );
+});
+
+test('MCP registry publishing verifies an immutable publisher before OIDC login', () => {
+  assert.match(mcpRegistryWorkflow, /MCP_PUBLISHER_VERSION: v1\.8\.1/);
+  assert.match(mcpRegistryWorkflow, /MCP_PUBLISHER_ASSET: mcp-publisher_linux_amd64\.tar\.gz/);
+  assert.match(
+    mcpRegistryWorkflow,
+    /MCP_PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc/,
+  );
+  assert.doesNotMatch(mcpRegistryWorkflow, /releases\/latest/);
+  assert.doesNotMatch(mcpRegistryWorkflow, /curl[^\n]*\|[^\n]*tar/);
+
+  const downloadIndex = mcpRegistryWorkflow.indexOf(
+    '/releases/download/${MCP_PUBLISHER_VERSION}/${MCP_PUBLISHER_ASSET}',
+  );
+  const verificationIndex = mcpRegistryWorkflow.indexOf('sha256sum --check --strict');
+  const extractionIndex = mcpRegistryWorkflow.indexOf('tar -xzf');
+  const smokeCheckIndex = mcpRegistryWorkflow.indexOf('./mcp-publisher --version');
+  const loginIndex = mcpRegistryWorkflow.indexOf('./mcp-publisher login github-oidc');
+  const publishIndex = mcpRegistryWorkflow.indexOf('./mcp-publisher publish server.json');
+
+  for (const [label, index] of [
+    ['versioned download', downloadIndex],
+    ['checksum verification', verificationIndex],
+    ['archive extraction', extractionIndex],
+    ['version smoke check', smokeCheckIndex],
+    ['OIDC login', loginIndex],
+    ['registry publish', publishIndex],
+  ] as const) {
+    assert.notEqual(index, -1, `workflow must contain ${label}`);
+  }
+  assert.ok(downloadIndex < verificationIndex, 'download must precede checksum verification');
+  assert.ok(verificationIndex < extractionIndex, 'verification must precede extraction');
+  assert.ok(extractionIndex < smokeCheckIndex, 'installation must precede the version smoke check');
+  assert.ok(smokeCheckIndex < loginIndex, 'version smoke check must precede OIDC login');
+  assert.ok(loginIndex < publishIndex, 'OIDC login must precede publish');
 });

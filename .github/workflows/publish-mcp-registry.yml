@@ -24,6 +24,10 @@ jobs:
     name: Publish MCP Registry
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      MCP_PUBLISHER_VERSION: v1.8.1
+      MCP_PUBLISHER_ASSET: mcp-publisher_linux_amd64.tar.gz
+      MCP_PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -64,7 +68,14 @@ jobs:
       - name: Install mcp-publisher
         run: |
           set -euo pipefail
-          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+          PUBLISHER_ARCHIVE="$RUNNER_TEMP/$MCP_PUBLISHER_ASSET"
+          curl --fail --show-error --location --retry 3 \
+            --output "$PUBLISHER_ARCHIVE" \
+            "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/${MCP_PUBLISHER_ASSET}"
+          printf '%s  %s\n' "$MCP_PUBLISHER_SHA256" "$PUBLISHER_ARCHIVE" | sha256sum --check --strict
+          tar -xzf "$PUBLISHER_ARCHIVE" -C "$RUNNER_TEMP" mcp-publisher
+          install -m 0755 "$RUNNER_TEMP/mcp-publisher" ./mcp-publisher
+          ./mcp-publisher --version
         shell: bash
 
       - name: Authenticate to MCP Registry

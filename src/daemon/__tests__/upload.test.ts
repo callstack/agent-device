@@ -5,7 +5,7 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import type { IncomingMessage } from 'node:http';
 import { receiveUpload } from '../upload.ts';
-import { streamReadableToFile } from '../artifact-download.ts';
+import { streamReadableToFile, validateArtifactContentLength } from '../artifact-download.ts';
 import { runCmdSync } from '../../utils/exec.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
@@ -21,6 +21,13 @@ test('receiveUpload rejects uploads that exceed the configured content-length li
   });
 
   await assert.rejects(async () => await receiveUpload(req), /Upload exceeds maximum size/i);
+});
+
+test('artifact content-length accepts decimal integers only', () => {
+  for (const value of ['+1', '1e3', '0x10', '1.5', '-1']) {
+    assert.throws(() => validateArtifactContentLength(value), value);
+  }
+  assert.doesNotThrow(() => validateArtifactContentLength('0'));
 });
 
 test('receiveUpload rejects app bundle archives containing symlinks', async () => {

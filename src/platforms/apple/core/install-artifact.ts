@@ -3,7 +3,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { readInfoPlistString } from './plist.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { runCmd } from '../../../utils/exec.ts';
+import { extractArchiveSafely } from '../../../utils/archive-extraction.ts';
+import { ArchiveBudget } from '../../../utils/archive-safety.ts';
+import {
+  installArtifactArchiveBudget,
+  installArtifactArchiveDepth,
+  noteInstallArtifactArchiveDepth,
+  withInstallArtifactArchiveScope,
+} from '../../install-artifact-archive-context.ts';
 import {
   isTrustedInstallSourceUrl,
   materializeInstallablePath,
@@ -31,6 +38,15 @@ export type PreparedIosInstallArtifact = {
 };
 
 export async function prepareIosInstallArtifact(
+  source: MaterializeInstallSource,
+  options?: InstallIosArtifactOptions,
+): Promise<PreparedIosInstallArtifact> {
+  return await withInstallArtifactArchiveScope(
+    async () => await prepareIosInstallArtifactInScope(source, options),
+  );
+}
+
+async function prepareIosInstallArtifactInScope(
   source: MaterializeInstallSource,
   options?: InstallIosArtifactOptions,
 ): Promise<PreparedIosInstallArtifact> {
@@ -109,8 +125,18 @@ async function resolveIosInstallablePath(
     await fs.rm(tempDir, { recursive: true, force: true });
   };
   try {
-    await runCmd('unzip', ['-q', appPath, '-d', tempDir]);
-    const payloadDir = path.join(tempDir, 'Payload');
+    const outputRoot = path.join(tempDir, 'extracted');
+    const depth = installArtifactArchiveDepth() + 1;
+    const budget = installArtifactArchiveBudget() as ArchiveBudget;
+    await extractArchiveSafely({
+      archivePath: appPath,
+      outputRoot,
+      type: 'zip',
+      budget,
+      depth,
+    });
+    noteInstallArtifactArchiveDepth(depth);
+    const payloadDir = path.join(outputRoot, 'Payload');
     const payloadEntries = await fs.readdir(payloadDir, { withFileTypes: true }).catch(() => {
       throw new AppError('INVALID_ARGS', 'Invalid IPA: missing Payload directory');
     });

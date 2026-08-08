@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { runCmd } from '../utils/exec.ts';
+import { extractArchiveSafely } from '../utils/archive-extraction.ts';
+import type { ArchiveManifestEntry } from '../utils/archive-safety.ts';
 
 export async function extractTarInstallableArtifact(params: {
   archivePath: string;
@@ -9,10 +10,19 @@ export async function extractTarInstallableArtifact(params: {
   platform: 'ios' | 'android';
   expectedRootName?: string;
 }): Promise<string> {
-  const rootName = await resolveTarArchiveRootName(params);
-  await runCmd('tar', ['xf', params.archivePath, '-C', params.tempDir]);
-  const installablePath = path.join(params.tempDir, rootName);
+  const outputRoot = path.join(params.tempDir, 'extracted');
+  let rootName = '';
+  await extractArchiveSafely({
+    archivePath: params.archivePath,
+    outputRoot,
+    type: 'tar',
+    validateManifest: (manifest) => {
+      rootName = resolveArchiveRootName(manifest, params.platform, params.expectedRootName);
+    },
+  });
+  const installablePath = path.join(outputRoot, rootName);
   if (!fs.existsSync(installablePath)) {
+    fs.rmSync(outputRoot, { recursive: true, force: true });
     throw new AppError(
       'INVALID_ARGS',
       `Expected extracted bundle "${rootName}" not found in archive`,
@@ -21,70 +31,41 @@ export async function extractTarInstallableArtifact(params: {
   return installablePath;
 }
 
-async function resolveTarArchiveRootName(params: {
-  archivePath: string;
-  platform: 'ios' | 'android';
-  expectedRootName?: string;
-}): Promise<string> {
-  const entriesResult = await runCmd('tar', ['-tf', params.archivePath], { allowFailure: true });
-  if (entriesResult.exitCode !== 0) {
-    throw new AppError('INVALID_ARGS', 'Artifact is not a valid tar archive', {
-      archivePath: params.archivePath,
-      stdout: entriesResult.stdout,
-      stderr: entriesResult.stderr,
-      exitCode: entriesResult.exitCode,
-    });
-  }
-
-  const entries = entriesResult.stdout
-    .split(/\r?\n/)
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-  if (entries.length === 0) {
+function resolveArchiveRootName(
+  manifest: readonly ArchiveManifestEntry[],
+  platform: 'ios' | 'android',
+  expectedRootName?: string,
+): string {
+  if (manifest.length === 0) {
     throw new AppError('INVALID_ARGS', 'Uploaded app bundle archive is empty');
   }
-
-  const normalizedEntries = entries.map(normalizeArchiveEntry);
-  const rootName =
-    params.expectedRootName ?? resolveArchiveRootName(normalizedEntries, params.platform);
-  const hasExpectedRoot = normalizedEntries.some(
-    (entry) => entry === rootName || entry.startsWith(`${rootName}/`),
+  const roots = new Set(
+    manifest
+      .map((entry) => entry.name.split('/')[0])
+      .filter((entry): entry is string => Boolean(entry)),
   );
-  if (!hasExpectedRoot) {
+  const rootName = expectedRootName ?? inferArchiveRootName([...roots], platform);
+  if (!roots.has(rootName)) {
     throw new AppError(
       'INVALID_ARGS',
       `Uploaded archive must contain a top-level "${rootName}" bundle`,
     );
   }
-
-  for (const entry of normalizedEntries) {
-    validateArchiveEntryPath(entry, rootName);
-  }
-
-  const verboseResult = await runCmd('tar', ['-tvf', params.archivePath]);
-  for (const line of verboseResult.stdout.split(/\r?\n/).filter(Boolean)) {
-    if (line[0] === 'l' || line[0] === 'h') {
+  for (const entry of manifest) {
+    if (entry.name !== rootName && !entry.name.startsWith(`${rootName}/`)) {
       throw new AppError(
         'INVALID_ARGS',
-        'Uploaded app bundle archive cannot contain symlinks or hard links',
+        `Archive entry must stay inside top-level "${rootName}" bundle: ${entry.name}`,
       );
     }
   }
-
   return rootName;
 }
 
-function resolveArchiveRootName(entries: string[], platform: 'ios' | 'android'): string {
-  const roots = new Set<string>();
-  for (const entry of entries) {
-    const [root] = entry.split('/');
-    if (root) roots.add(root);
-  }
-  const rootEntries = [...roots];
+function inferArchiveRootName(roots: string[], platform: 'ios' | 'android'): string {
   if (platform === 'ios') {
-    const appRoots = rootEntries.filter((entry) => entry.toLowerCase().endsWith('.app'));
-    const appRoot = appRoots[0];
-    if (appRoot !== undefined && appRoots.length === 1) return appRoot;
+    const appRoots = roots.filter((entry) => entry.toLowerCase().endsWith('.app'));
+    if (appRoots.length === 1) return appRoots[0]!;
     if (appRoots.length === 0) {
       throw new AppError(
         'INVALID_ARGS',
@@ -96,33 +77,9 @@ function resolveArchiveRootName(entries: string[], platform: 'ios' | 'android'):
       `iOS app bundle archives must contain exactly one top-level .app directory, found: ${appRoots.join(', ')}`,
     );
   }
-  const rootEntry = rootEntries[0];
-  if (rootEntry !== undefined && rootEntries.length === 1) return rootEntry;
+  if (roots.length === 1) return roots[0]!;
   throw new AppError(
     'INVALID_ARGS',
-    `Archive must contain a single top-level bundle, found: ${rootEntries.join(', ')}`,
+    `Archive must contain a single top-level bundle, found: ${roots.join(', ')}`,
   );
-}
-
-function normalizeArchiveEntry(entry: string): string {
-  if (entry.includes('\0')) {
-    throw new AppError('INVALID_ARGS', `Invalid archive entry: ${entry}`);
-  }
-  if (path.posix.isAbsolute(entry)) {
-    throw new AppError('INVALID_ARGS', `Archive entry must be relative: ${entry}`);
-  }
-  const normalized = path.posix.normalize(entry).replace(/^(\.\/)+/, '');
-  if (!normalized || normalized === '.' || normalized.startsWith('../')) {
-    throw new AppError('INVALID_ARGS', `Archive entry escapes bundle root: ${entry}`);
-  }
-  return normalized;
-}
-
-function validateArchiveEntryPath(entry: string, rootName: string): void {
-  if (entry !== rootName && !entry.startsWith(`${rootName}/`)) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Archive entry must stay inside top-level "${rootName}" bundle: ${entry}`,
-    );
-  }
 }

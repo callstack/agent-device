@@ -2,7 +2,6 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage } from 'node:http';
-import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
 import { extractTarInstallableArtifact } from './artifact-archive.ts';
 import { requireTenantOwnedEntry, type TenantOwnedResourceKind } from './tenant-owned-entry.ts';
@@ -11,18 +10,15 @@ import {
   sanitizeArtifactFilename,
   validateArtifactContentLength,
 } from './artifact-download.ts';
+import { computeUploadHash, receiveResumableTransfer } from './resumable-upload-transfer.ts';
 
 const RESUMABLE_UPLOAD_CLEANUP_TIMEOUT_MS = 5 * 60 * 1000;
-
 const RESUMABLE_UPLOAD_RESOURCE: TenantOwnedResourceKind = {
   label: 'Upload',
   expiredHint: `Resumable uploads expire ${RESUMABLE_UPLOAD_CLEANUP_TIMEOUT_MS / 60_000} minutes after the last received chunk. Start the upload again from the beginning.`,
 };
-const RESUMABLE_UPLOAD_HASH_ALGORITHM = 'sha256';
 const RESUMABLE_UPLOADS_BY_ID = new Map<string, ResumableUploadEntry>();
 const RESUMABLE_UPLOADS_BY_KEY = new Map<string, string>();
-
-type UploadArtifactType = 'file' | 'app-bundle';
 
 export type BeginResumableUploadOptions = {
   baseUrl: string;
@@ -31,7 +27,7 @@ export type BeginResumableUploadOptions = {
   sha256: string;
   fileName: string;
   sizeBytes: number;
-  artifactType: UploadArtifactType;
+  artifactType: 'file' | 'app-bundle';
   platform?: string;
   contentType?: string;
   tenantId?: string;
@@ -45,19 +41,21 @@ type ResumableUploadEntry = {
   fileName: string;
   sizeBytes: number;
   sha256: string;
-  artifactType: UploadArtifactType;
+  artifactType: 'file' | 'app-bundle';
   platform?: string;
   tenantId?: string;
-  timer: ReturnType<typeof setTimeout>;
+  timer?: ReturnType<typeof setTimeout>;
+  generation: number;
+  tail: Promise<void>;
+  activeReceive?: IncomingMessage;
+  closed: boolean;
+  finalized: boolean;
 };
 
 export function beginResumableUpload(options: BeginResumableUploadOptions): {
   uploadId: string;
   cacheHit: false;
-  upload: {
-    url: string;
-    headers: Record<string, string>;
-  };
+  upload: { url: string; headers: Record<string, string> };
 } {
   validateResumableUploadOptions(options);
   const key = buildResumableUploadKey(options);
@@ -65,12 +63,14 @@ export function beginResumableUpload(options: BeginResumableUploadOptions): {
   const existing = existingId ? RESUMABLE_UPLOADS_BY_ID.get(existingId) : undefined;
   const entry = existing ?? createResumableUploadEntry(options, key);
   refreshResumableUploadTimer(entry);
-
   return {
     uploadId: entry.id,
     cacheHit: false,
     upload: {
-      url: new URL(`upload/direct/${entry.id}`, ensureTrailingSlash(options.baseUrl)).toString(),
+      url: new URL(
+        `upload/direct/${entry.id}`,
+        options.baseUrl.endsWith('/') ? options.baseUrl : `${options.baseUrl}/`,
+      ).toString(),
       headers: {
         ...options.tokenHeaders,
         'content-type': options.contentType || 'application/octet-stream',
@@ -85,21 +85,15 @@ export async function receiveResumableUploadChunk(params: {
   tenantId?: string;
 }): Promise<{ complete: boolean; offset: number }> {
   const entry = requireResumableUpload(params.uploadId, params.tenantId);
-  const currentOffset = currentResumableUploadOffset(entry);
-  const contentRange = parseContentRange(params.req.headers['content-range'], entry.sizeBytes);
-  if (contentRange && contentRange.start !== currentOffset) {
-    return { complete: false, offset: currentOffset };
-  }
-  if (!contentRange && currentOffset > 0) {
-    return { complete: false, offset: currentOffset };
-  }
-
-  validateArtifactContentLength(params.req.headers['content-length']);
-  await pipeline(params.req, fs.createWriteStream(entry.payloadPath, { flags: 'a' }));
-  refreshResumableUploadTimer(entry);
-
-  const offset = currentResumableUploadOffset(entry);
-  return { complete: offset >= entry.sizeBytes, offset };
+  return await runExclusive(entry, 'receive', params.req, async () => {
+    const result = await receiveResumableTransfer({
+      entry,
+      req: params.req,
+      invalidate: async () => await terminateEntry(entry),
+    });
+    if (!entry.closed) refreshResumableUploadTimer(entry);
+    return result;
+  });
 }
 
 export async function finalizeResumableUpload(
@@ -107,42 +101,174 @@ export async function finalizeResumableUpload(
   tenantId?: string,
 ): Promise<{ artifactPath: string; tempDir: string }> {
   const entry = requireResumableUpload(uploadId, tenantId);
-  const offset = currentResumableUploadOffset(entry);
-  if (offset !== entry.sizeBytes) {
-    throw new AppError('INVALID_ARGS', 'Upload is incomplete', {
-      uploadId,
-      offset,
-      sizeBytes: entry.sizeBytes,
-    });
-  }
-  const actualHash = await computeFileHash(entry.payloadPath);
-  if (actualHash !== entry.sha256) {
-    cleanupResumableUpload(entry.id);
-    throw new AppError('INVALID_ARGS', 'Upload hash mismatch', {
-      uploadId,
-      expectedSha256: entry.sha256,
-      actualSha256: actualHash,
-    });
-  }
+  return await runExclusive(entry, 'finalize', undefined, async () => {
+    const offset = fs.statSync(entry.payloadPath).size;
+    if (offset !== entry.sizeBytes) {
+      throw new AppError('INVALID_ARGS', 'Upload is incomplete', {
+        uploadId,
+        offset,
+        sizeBytes: entry.sizeBytes,
+      });
+    }
+    try {
+      const actualHash = await computeUploadHash(entry.payloadPath);
+      if (actualHash !== entry.sha256) {
+        throw new AppError('INVALID_ARGS', 'Upload hash mismatch', {
+          uploadId,
+          expectedSha256: entry.sha256,
+          actualSha256: actualHash,
+        });
+      }
+      const artifactPath = await materializeFinalArtifact(entry);
+      markFinalized(entry);
+      return { artifactPath, tempDir: entry.tempDir };
+    } catch (error) {
+      throw await cleanupTerminalFinalizeFailure(entry, error);
+    }
+  });
+}
 
-  RESUMABLE_UPLOADS_BY_ID.delete(entry.id);
-  RESUMABLE_UPLOADS_BY_KEY.delete(entry.key);
-  clearTimeout(entry.timer);
+function createResumableUploadEntry(
+  options: BeginResumableUploadOptions,
+  key: string,
+): ResumableUploadEntry {
+  const id = crypto.randomUUID();
+  const tempDir = createArtifactTempDir('upload');
+  const payloadPath = path.join(tempDir, 'payload');
+  fs.writeFileSync(payloadPath, '');
+  const entry: ResumableUploadEntry = {
+    id,
+    key,
+    tempDir,
+    payloadPath,
+    fileName: sanitizeArtifactFilename(options.fileName),
+    sizeBytes: options.sizeBytes,
+    sha256: options.sha256.toLowerCase(),
+    artifactType: options.artifactType,
+    platform: options.platform,
+    tenantId: options.tenantId,
+    generation: 0,
+    tail: Promise.resolve(),
+    closed: false,
+    finalized: false,
+  };
+  RESUMABLE_UPLOADS_BY_ID.set(id, entry);
+  RESUMABLE_UPLOADS_BY_KEY.set(key, id);
+  return entry;
+}
 
+function refreshResumableUploadTimer(entry: ResumableUploadEntry): void {
+  if (entry.timer) clearTimeout(entry.timer);
+  entry.generation += 1;
+  const generation = entry.generation;
+  entry.timer = setTimeout(
+    () => expireEntry(entry, generation),
+    RESUMABLE_UPLOAD_CLEANUP_TIMEOUT_MS,
+  );
+  entry.timer.unref();
+}
+
+function expireEntry(entry: ResumableUploadEntry, generation: number): void {
+  if (entry.generation !== generation || entry.closed) return;
+  closeEntry(entry);
+  const activeReceive = entry.activeReceive;
+  activeReceive?.once('error', () => {});
+  activeReceive?.destroy(
+    new AppError('COMMAND_FAILED', 'Upload expired while receiving data', {
+      reason: 'RESOURCE_EXPIRED',
+    }),
+  );
+  const cleanup = entry.tail.then(async () => {
+    if (!entry.finalized) await fs.promises.rm(entry.tempDir, { recursive: true, force: true });
+  });
+  entry.tail = cleanup.catch(() => {});
+}
+
+async function runExclusive<T>(
+  entry: ResumableUploadEntry,
+  kind: 'receive' | 'finalize',
+  req: IncomingMessage | undefined,
+  action: () => Promise<T>,
+): Promise<T> {
+  const operation = entry.tail
+    .catch(() => {})
+    .then(async () => {
+      if (entry.closed) requireResumableUpload(entry.id, entry.tenantId);
+      if (kind === 'receive') entry.activeReceive = req;
+      try {
+        return await action();
+      } finally {
+        if (kind === 'receive') entry.activeReceive = undefined;
+      }
+    });
+  entry.tail = operation.then(
+    () => {},
+    () => {},
+  );
+  return await operation;
+}
+
+async function materializeFinalArtifact(entry: ResumableUploadEntry): Promise<string> {
   if (entry.artifactType === 'file') {
     const artifactPath = path.join(entry.tempDir, entry.fileName);
-    fs.renameSync(entry.payloadPath, artifactPath);
-    return { artifactPath, tempDir: entry.tempDir };
+    await fs.promises.rename(entry.payloadPath, artifactPath);
+    return artifactPath;
   }
-
   const artifactPath = await extractTarInstallableArtifact({
     archivePath: entry.payloadPath,
     tempDir: entry.tempDir,
     platform: entry.platform === 'android' ? 'android' : 'ios',
     expectedRootName: entry.fileName,
   });
-  fs.rmSync(entry.payloadPath, { force: true });
-  return { artifactPath, tempDir: entry.tempDir };
+  await fs.promises.rm(entry.payloadPath, { force: true });
+  return artifactPath;
+}
+
+function markFinalized(entry: ResumableUploadEntry): void {
+  entry.finalized = true;
+  closeEntry(entry);
+}
+
+async function cleanupTerminalFinalizeFailure(
+  entry: ResumableUploadEntry,
+  originalError: unknown,
+): Promise<unknown> {
+  closeEntry(entry);
+  try {
+    await fs.promises.rm(entry.tempDir, { recursive: true, force: true });
+    return originalError;
+  } catch (cleanupError) {
+    return new AppError(
+      'COMMAND_FAILED',
+      'Upload finalize cleanup failed',
+      { reason: 'UPLOAD_FINALIZE_CLEANUP_FAILED', originalError: String(originalError) },
+      cleanupError,
+    );
+  }
+}
+
+async function terminateEntry(entry: ResumableUploadEntry): Promise<void> {
+  closeEntry(entry);
+  await fs.promises.rm(entry.tempDir, { recursive: true, force: true }).catch(() => {});
+}
+
+function closeEntry(entry: ResumableUploadEntry): void {
+  entry.closed = true;
+  if (entry.timer) clearTimeout(entry.timer);
+  RESUMABLE_UPLOADS_BY_ID.delete(entry.id);
+  RESUMABLE_UPLOADS_BY_KEY.delete(entry.key);
+}
+
+function requireResumableUpload(
+  uploadId: string,
+  tenantId: string | undefined,
+): ResumableUploadEntry {
+  return requireTenantOwnedEntry(
+    RESUMABLE_UPLOADS_BY_ID,
+    uploadId,
+    tenantId,
+    RESUMABLE_UPLOAD_RESOURCE,
+  );
 }
 
 function validateResumableUploadOptions(options: BeginResumableUploadOptions): void {
@@ -159,103 +285,6 @@ function validateResumableUploadOptions(options: BeginResumableUploadOptions): v
   }
 }
 
-function createResumableUploadEntry(
-  options: BeginResumableUploadOptions,
-  key: string,
-): ResumableUploadEntry {
-  const id = crypto.randomUUID();
-  const tempDir = createArtifactTempDir('upload');
-  const entry: ResumableUploadEntry = {
-    id,
-    key,
-    tempDir,
-    payloadPath: path.join(tempDir, 'payload'),
-    fileName: sanitizeArtifactFilename(options.fileName),
-    sizeBytes: options.sizeBytes,
-    sha256: options.sha256.toLowerCase(),
-    artifactType: options.artifactType,
-    platform: options.platform,
-    tenantId: options.tenantId,
-    timer: setTimeout(() => cleanupResumableUpload(id), RESUMABLE_UPLOAD_CLEANUP_TIMEOUT_MS),
-  };
-  entry.timer.unref();
-  RESUMABLE_UPLOADS_BY_ID.set(id, entry);
-  RESUMABLE_UPLOADS_BY_KEY.set(key, id);
-  return entry;
-}
-
-function refreshResumableUploadTimer(entry: ResumableUploadEntry): void {
-  clearTimeout(entry.timer);
-  entry.timer = setTimeout(
-    () => cleanupResumableUpload(entry.id),
-    RESUMABLE_UPLOAD_CLEANUP_TIMEOUT_MS,
-  );
-  entry.timer.unref();
-}
-
-function cleanupResumableUpload(uploadId: string): void {
-  const entry = RESUMABLE_UPLOADS_BY_ID.get(uploadId);
-  if (!entry) return;
-  clearTimeout(entry.timer);
-  RESUMABLE_UPLOADS_BY_ID.delete(uploadId);
-  RESUMABLE_UPLOADS_BY_KEY.delete(entry.key);
-  fs.rmSync(entry.tempDir, { recursive: true, force: true });
-}
-
-function requireResumableUpload(
-  uploadId: string,
-  tenantId: string | undefined,
-): ResumableUploadEntry {
-  return requireTenantOwnedEntry(
-    RESUMABLE_UPLOADS_BY_ID,
-    uploadId,
-    tenantId,
-    RESUMABLE_UPLOAD_RESOURCE,
-  );
-}
-
-function currentResumableUploadOffset(entry: ResumableUploadEntry): number {
-  if (!fs.existsSync(entry.payloadPath)) return 0;
-  return Math.min(fs.statSync(entry.payloadPath).size, entry.sizeBytes);
-}
-
-function parseContentRange(
-  value: string | string[] | undefined,
-  sizeBytes: number,
-): { start: number; end: number } | undefined {
-  const raw = Array.isArray(value) ? value[0] : value;
-  if (!raw) return undefined;
-  const range = readContentRange(raw);
-  if (!range || !isValidContentRange(range, sizeBytes)) {
-    throw new AppError('INVALID_ARGS', 'Invalid content-range header');
-  }
-  return { start: range.start, end: range.end };
-}
-
-function readContentRange(raw: string): { start: number; end: number; size: number } | null {
-  const match = raw.match(/^bytes (\d+)-(\d+)\/(\d+)$/);
-  if (!match) return null;
-  return {
-    start: Number(match[1]),
-    end: Number(match[2]),
-    size: Number(match[3]),
-  };
-}
-
-function isValidContentRange(
-  range: { start: number; end: number; size: number },
-  sizeBytes: number,
-): boolean {
-  return (
-    Number.isSafeInteger(range.start) &&
-    Number.isSafeInteger(range.end) &&
-    Number.isSafeInteger(range.size) &&
-    range.start >= 0 &&
-    range.end >= range.start &&
-    range.size === sizeBytes
-  );
-}
-
 function buildResumableUploadKey(options: BeginResumableUploadOptions): string {
   return [
     options.tenantId ?? '',
@@ -266,19 +295,4 @@ function buildResumableUploadKey(options: BeginResumableUploadOptions): string {
     options.artifactType,
     options.platform ?? '',
   ].join('\0');
-}
-
-function ensureTrailingSlash(value: string): string {
-  return value.endsWith('/') ? value : `${value}/`;
-}
-
-async function computeFileHash(filePath: string): Promise<string> {
-  const hash = crypto.createHash(RESUMABLE_UPLOAD_HASH_ALGORITHM);
-  await pipeline(fs.createReadStream(filePath), async function* (source) {
-    for await (const chunk of source) {
-      hash.update(chunk);
-      yield chunk;
-    }
-  });
-  return hash.digest('hex');
 }

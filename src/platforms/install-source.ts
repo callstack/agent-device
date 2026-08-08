@@ -1,13 +1,16 @@
-import dns from 'node:dns/promises';
-import net from 'node:net';
-import { createWriteStream, promises as fs } from 'node:fs';
+import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { Readable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
-import { runCmd } from '../utils/exec.ts';
 import { expandUserHomePath } from '../utils/path-resolution.ts';
+import { ArchiveBudget } from '../utils/archive-safety.ts';
+import { resolveInstallableCandidate } from './install-source-archive.ts';
+import {
+  installArtifactArchiveBudget,
+  noteInstallArtifactArchiveDepth,
+} from './install-artifact-archive-context.ts';
+import { approveDownloadSourceUrl } from './install-source-network.ts';
+import { downloadInstallSource } from './install-source-download.ts';
 
 export type MaterializeInstallSource =
   | {
@@ -25,7 +28,7 @@ type MaterializeLocalSourceResult = {
   cleanup: () => Promise<void>;
 };
 
-type MaterializeInstallableOptions = {
+export type MaterializeInstallableOptions = {
   source: MaterializeInstallSource;
   isInstallablePath: (
     candidatePath: string,
@@ -49,7 +52,6 @@ const INTERNAL_ARCHIVE_EXTENSIONS = ['.zip', '.tar', '.tar.gz', '.tgz'] as const
  * @public Archive extensions accepted by install-source resolution.
  */
 export const ARCHIVE_EXTENSIONS = Object.freeze([...INTERNAL_ARCHIVE_EXTENSIONS] as const);
-const MAX_INSTALL_SOURCE_SEARCH_DEPTH = 5;
 const DEFAULT_SOURCE_DOWNLOAD_TIMEOUT_MS = 120_000;
 
 export async function materializeInstallablePath(
@@ -70,6 +72,9 @@ export async function materializeInstallablePath(
       registerCleanup: (cleanup) => {
         cleanupTasks.push(cleanup);
       },
+      budget: (installArtifactArchiveBudget() as ArchiveBudget | undefined) ?? new ArchiveBudget(),
+      archiveDepth: 0,
+      onArchiveAccepted: noteInstallArtifactArchiveDepth,
     });
     return {
       archivePath: resolved.archivePath,
@@ -114,20 +119,12 @@ async function materializeLocalSource(
   }
 }
 
-// fallow-ignore-next-line complexity
 async function downloadToTempFile(
   tempDir: string,
   url: string,
   headers?: Record<string, string>,
   options?: { signal?: AbortSignal; downloadTimeoutMs?: number },
 ): Promise<string> {
-  let parsedUrl: URL;
-  try {
-    parsedUrl = new URL(url);
-  } catch {
-    throw new AppError('INVALID_ARGS', `Invalid source URL: ${url}`);
-  }
-  await validateDownloadSourceUrl(parsedUrl);
   const requestSignal = options?.signal;
   if (requestSignal?.aborted) {
     throw new AppError('COMMAND_FAILED', 'request canceled', { reason: 'request_canceled' });
@@ -136,82 +133,39 @@ async function downloadToTempFile(
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   const signal = requestSignal ? AbortSignal.any([requestSignal, timeoutSignal]) : timeoutSignal;
   try {
-    const response = await fetch(parsedUrl, {
-      headers,
-      redirect: 'follow',
-      signal,
-    });
-    if (!response.ok) {
-      throw new AppError(
-        'COMMAND_FAILED',
-        `Failed to download app source: ${response.status} ${response.statusText}`,
-        {
-          status: response.status,
-          statusText: response.statusText,
-          url: parsedUrl.toString(),
-        },
-      );
-    }
-    const downloadName = resolveDownloadFileName(response, parsedUrl);
-    const destinationPath = path.join(tempDir, downloadName);
-    const body = response.body;
-    if (!body) {
-      throw new AppError('COMMAND_FAILED', 'Download response body was empty', {
-        url: parsedUrl.toString(),
-      });
-    }
-    await pipeline(
-      Readable.fromWeb(body as Parameters<typeof Readable.fromWeb>[0]),
-      createWriteStream(destinationPath),
-    );
-    return destinationPath;
+    return await downloadInstallSource({ tempDir, url, headers, signal });
   } catch (error) {
-    if (requestSignal?.aborted) {
-      throw new AppError(
-        'COMMAND_FAILED',
-        'request canceled',
-        { reason: 'request_canceled' },
-        error,
-      );
-    }
-    if (timeoutSignal.aborted) {
-      throw new AppError(
-        'COMMAND_FAILED',
-        `App source download timed out after ${timeoutMs}ms`,
-        {
-          timeoutMs,
-          url: parsedUrl.toString(),
-        },
-        error,
-      );
-    }
-    throw error;
+    throw classifyDownloadError(error, requestSignal, timeoutSignal, timeoutMs);
   }
 }
 
-export async function validateDownloadSourceUrl(parsedUrl: URL): Promise<void> {
-  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-    throw new AppError('INVALID_ARGS', `Unsupported source URL protocol: ${parsedUrl.protocol}`);
-  }
-  const hostname = parsedUrl.hostname.toLowerCase();
-  if (isBlockedSourceHostname(hostname)) {
-    throw new AppError('INVALID_ARGS', `Source URL host is not allowed: ${parsedUrl.hostname}`, {
-      hint: 'Use a public artifact URL.',
-    });
-  }
-
-  const resolved = await dns
-    .lookup(parsedUrl.hostname, { all: true, verbatim: true })
-    .catch(() => []);
-  if (resolved.some((entry) => isBlockedIpAddress(entry.address))) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Source URL host resolved to a private or loopback address: ${parsedUrl.hostname}`,
-      {
-        hint: 'Use a public artifact URL.',
-      },
+function classifyDownloadError(
+  error: unknown,
+  requestSignal: AbortSignal | undefined,
+  timeoutSignal: AbortSignal,
+  timeoutMs: number,
+): unknown {
+  if (requestSignal?.aborted) {
+    return new AppError(
+      'COMMAND_FAILED',
+      'request canceled',
+      { reason: 'request_canceled' },
+      error,
     );
   }
+  if (timeoutSignal.aborted) {
+    return new AppError(
+      'COMMAND_FAILED',
+      `App source download timed out after ${timeoutMs}ms`,
+      { timeoutMs },
+      error,
+    );
+  }
+  return error;
+}
+
+export async function validateDownloadSourceUrl(parsedUrl: URL): Promise<void> {
+  await approveDownloadSourceUrl(parsedUrl);
 }
 
 export function isTrustedInstallSourceUrl(sourceUrl: string | URL): boolean {
@@ -240,207 +194,6 @@ function isTrustedEasArtifactUrl(hostname: string, pathname: string): boolean {
     return false;
   }
   return /^\/(?:artifacts\/eas\/|accounts\/[^/]+\/projects\/[^/]+\/builds\/)/i.test(pathname);
-}
-
-function resolveDownloadFileName(response: Response, parsedUrl: URL): string {
-  const contentDisposition = response.headers.get('content-disposition');
-  const filenameMatch = contentDisposition?.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
-  const headerName = filenameMatch?.[1]?.trim();
-  if (headerName) return path.basename(headerName);
-  const urlName = path.basename(parsedUrl.pathname);
-  if (urlName) return urlName;
-  return 'downloaded-artifact.bin';
-}
-
-export function isBlockedSourceHostname(hostname: string): boolean {
-  if (!hostname) return true;
-  if (hostname === 'localhost' || hostname.endsWith('.localhost')) return true;
-  return isBlockedIpAddress(hostname);
-}
-
-export function isBlockedIpAddress(address: string): boolean {
-  const family = net.isIP(address);
-  if (family === 4) return isBlockedIpv4(address);
-  if (family === 6) return isBlockedIpv6(address);
-  return false;
-}
-
-// fallow-ignore-next-line complexity
-function isBlockedIpv4(address: string): boolean {
-  const octets = address.split('.').map((part) => Number.parseInt(part, 10));
-  if (octets.length !== 4 || octets.some((part) => Number.isNaN(part) || part < 0 || part > 255)) {
-    return false;
-  }
-  const a = octets[0];
-  const b = octets[1];
-  if (a === undefined || b === undefined) return false;
-  if (a === 10 || a === 127) return true;
-  if (a === 169 && b === 254) return true;
-  if (a === 172 && b >= 16 && b <= 31) return true;
-  if (a === 192 && b === 168) return true;
-  return false;
-}
-
-function isBlockedIpv6(address: string): boolean {
-  const normalized = address.toLowerCase();
-  if (normalized === '::1') return true;
-  if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true;
-  if (normalized.startsWith('fe80:')) return true;
-  return false;
-}
-
-// fallow-ignore-next-line complexity
-async function resolveInstallableCandidate(
-  candidatePath: string,
-  params: {
-    archivePath: string | undefined;
-    isInstallablePath: MaterializeInstallableOptions['isInstallablePath'];
-    installableLabel: string;
-    allowArchiveExtraction: boolean;
-    registerCleanup: (cleanup: () => Promise<void>) => void;
-  },
-): Promise<{ archivePath?: string; installablePath: string }> {
-  const stat = await fs.stat(candidatePath).catch(() => null);
-  if (!stat) {
-    throw new AppError('INVALID_ARGS', `App source not found: ${candidatePath}`);
-  }
-
-  if (params.isInstallablePath(candidatePath, stat)) {
-    return {
-      archivePath: params.archivePath,
-      installablePath: candidatePath,
-    };
-  }
-
-  if (stat.isFile() && isArchivePath(candidatePath)) {
-    if (!params.allowArchiveExtraction) {
-      throw new AppError(
-        'INVALID_ARGS',
-        `URL sources must point directly to a ${params.installableLabel}; archive extraction is not allowed`,
-        { path: candidatePath },
-      );
-    }
-    const extracted = await extractArchive(candidatePath);
-    params.registerCleanup(extracted.cleanup);
-    return await resolveInstallableCandidate(extracted.outputPath, {
-      ...params,
-      archivePath: params.archivePath ?? candidatePath,
-    });
-  }
-
-  if (stat.isDirectory()) {
-    const installables = await collectMatchingPaths(candidatePath, params.isInstallablePath);
-    const installable = installables[0];
-    if (installable !== undefined && installables.length === 1) {
-      return {
-        archivePath: params.archivePath,
-        installablePath: installable,
-      };
-    }
-    if (installables.length > 1) {
-      throw new AppError(
-        'INVALID_ARGS',
-        `Found multiple ${params.installableLabel} candidates under ${candidatePath}`,
-        { matches: installables },
-      );
-    }
-
-    const archives = await collectMatchingPaths(
-      candidatePath,
-      (entryPath, entryStat) => entryStat.isFile() && isArchivePath(entryPath),
-    );
-    const archive = archives[0];
-    if (archive !== undefined && archives.length === 1) {
-      if (!params.allowArchiveExtraction) {
-        throw new AppError(
-          'INVALID_ARGS',
-          `URL sources must point directly to a ${params.installableLabel}; nested archives are not allowed`,
-          { path: archive },
-        );
-      }
-      const extracted = await extractArchive(archive);
-      params.registerCleanup(extracted.cleanup);
-      return await resolveInstallableCandidate(extracted.outputPath, {
-        ...params,
-        archivePath: params.archivePath ?? archive,
-      });
-    }
-    if (archives.length > 1) {
-      throw new AppError(
-        'INVALID_ARGS',
-        `Found multiple nested archives under ${candidatePath}; expected one ${params.installableLabel} source`,
-        { matches: archives },
-      );
-    }
-  }
-
-  throw new AppError(
-    'INVALID_ARGS',
-    `Expected ${params.installableLabel} source, but got ${candidatePath}`,
-  );
-}
-
-async function collectMatchingPaths(
-  rootPath: string,
-  matcher: (candidatePath: string, stat: { isFile(): boolean; isDirectory(): boolean }) => boolean,
-): Promise<string[]> {
-  const matches: string[] = [];
-  const queue: Array<{ path: string; depth: number }> = [{ path: rootPath, depth: 0 }];
-
-  while (queue.length > 0) {
-    const current = queue.shift();
-    if (!current) continue;
-    const entries = await fs.readdir(current.path, { withFileTypes: true });
-    entries.sort((left, right) => left.name.localeCompare(right.name));
-    for (const entry of entries) {
-      const entryPath = path.join(current.path, entry.name);
-      if (matcher(entryPath, entry)) {
-        matches.push(entryPath);
-        continue;
-      }
-      if (entry.isDirectory() && current.depth < MAX_INSTALL_SOURCE_SEARCH_DEPTH) {
-        queue.push({ path: entryPath, depth: current.depth + 1 });
-      }
-    }
-  }
-
-  return matches;
-}
-
-async function extractArchive(
-  archivePath: string,
-): Promise<{ outputPath: string; cleanup: () => Promise<void> }> {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-archive-'));
-  try {
-    if (archivePath.toLowerCase().endsWith('.zip')) {
-      await extractZipArchive(archivePath, tempDir);
-    } else if (
-      archivePath.toLowerCase().endsWith('.tar.gz') ||
-      archivePath.toLowerCase().endsWith('.tgz')
-    ) {
-      await runCmd('tar', ['-xzf', archivePath, '-C', tempDir]);
-    } else {
-      await runCmd('tar', ['-xf', archivePath, '-C', tempDir]);
-    }
-    return {
-      outputPath: tempDir,
-      cleanup: async () => {
-        await fs.rm(tempDir, { recursive: true, force: true });
-      },
-    };
-  } catch (error) {
-    await fs.rm(tempDir, { recursive: true, force: true });
-    throw error;
-  }
-}
-
-async function extractZipArchive(archivePath: string, outputPath: string): Promise<void> {
-  await runCmd('unzip', ['-q', archivePath, '-d', outputPath]);
-}
-
-function isArchivePath(candidatePath: string): boolean {
-  const lower = candidatePath.toLowerCase();
-  return INTERNAL_ARCHIVE_EXTENSIONS.some((extension) => lower.endsWith(extension));
 }
 
 async function runCleanupTasks(tasks: Array<() => Promise<void>>): Promise<void> {
