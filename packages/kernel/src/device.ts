@@ -256,40 +256,62 @@ export async function resolveDevice(
 ): Promise<DeviceInfo> {
   let candidates = devices.filter((device) => matchesDeviceSelector(device, selector));
 
-  if (selector.udid) {
-    const match = candidates.find(
-      (device) => device.id === selector.udid && isApplePlatform(device.platform),
-    );
-    if (!match)
-      throw new AppError('DEVICE_NOT_FOUND', `No Apple device with UDID ${selector.udid}`);
-    return match;
-  }
-
-  if (selector.serial) {
-    const match = candidates.find(
-      (device) => device.id === selector.serial && isSerialAddressablePlatform(device.platform),
-    );
-    if (!match) {
-      throw new AppError('DEVICE_NOT_FOUND', serialDeviceNotFoundMessage(selector));
-    }
-    return match;
-  }
+  const explicitlySelected = resolveExplicitDevice(candidates, selector);
+  if (explicitlySelected) return explicitlySelected;
 
   if (context.allowStoppedAndroidAvdPlaceholders !== true) {
     candidates = candidates.filter((device) => !isStoppedAndroidAvdPlaceholder(device));
   }
 
-  if (selector.deviceName) {
-    const normalizedName = normalizeDeviceName(selector.deviceName);
-    const match = candidates.find((device) => normalizeDeviceName(device.name) === normalizedName);
-    if (!match) throw new AppError('DEVICE_NOT_FOUND', `No device named ${selector.deviceName}`);
-    return match;
-  }
+  const namedDevice = resolveDeviceByName(candidates, selector.deviceName);
+  if (namedDevice) return namedDevice;
 
   if (isAppleDeviceCandidateSet(candidates)) {
     candidates = sortAppleDevicesForSelection(candidates);
   }
 
+  return selectDefaultDevice(candidates, selector, context);
+}
+
+function resolveExplicitDevice(
+  candidates: DeviceInfo[],
+  selector: DeviceSelector,
+): DeviceInfo | undefined {
+  if (selector.udid) return resolveAppleDeviceByUdid(candidates, selector.udid);
+  if (selector.serial) return resolveDeviceBySerial(candidates, selector);
+  return undefined;
+}
+
+function resolveAppleDeviceByUdid(candidates: DeviceInfo[], udid: string): DeviceInfo {
+  const match = candidates.find((device) => device.id === udid && isApplePlatform(device.platform));
+  if (!match) throw new AppError('DEVICE_NOT_FOUND', `No Apple device with UDID ${udid}`);
+  return match;
+}
+
+function resolveDeviceBySerial(candidates: DeviceInfo[], selector: DeviceSelector): DeviceInfo {
+  const match = candidates.find(
+    (device) => device.id === selector.serial && isSerialAddressablePlatform(device.platform),
+  );
+  if (!match) throw new AppError('DEVICE_NOT_FOUND', serialDeviceNotFoundMessage(selector));
+  return match;
+}
+
+function resolveDeviceByName(
+  candidates: DeviceInfo[],
+  deviceName: string | undefined,
+): DeviceInfo | undefined {
+  if (!deviceName) return undefined;
+  const normalizedName = normalizeDeviceName(deviceName);
+  const match = candidates.find((device) => normalizeDeviceName(device.name) === normalizedName);
+  if (!match) throw new AppError('DEVICE_NOT_FOUND', `No device named ${deviceName}`);
+  return match;
+}
+
+function selectDefaultDevice(
+  candidates: DeviceInfo[],
+  selector: DeviceSelector,
+  context: DeviceSelectionContext,
+): DeviceInfo {
   const onlyCandidate = candidates[0];
   if (onlyCandidate !== undefined && candidates.length === 1) return onlyCandidate;
 
@@ -297,18 +319,20 @@ export async function resolveDevice(
     throwNoDevicesFound(selector, context);
   }
 
-  const virtual = candidates.filter((device) => device.kind !== 'device');
-  const selectable = virtual.length > 0 ? virtual : candidates;
-  const booted = selectable.filter((device) => device.booted);
-  const onlyBooted = booted[0];
-  if (onlyBooted && booted.length === 1 && !isAppleDeviceCandidateSet(selectable)) {
-    return onlyBooted;
-  }
-  const selected = isAppleDeviceCandidateSet(selectable)
-    ? selectable[0]
-    : (booted[0] ?? selectable[0]);
+  const selected = selectPreferredDevice(candidates);
   if (!selected) throwNoDevicesFound(selector, context);
   return selected;
+}
+
+function selectPreferredDevice(candidates: DeviceInfo[]): DeviceInfo | undefined {
+  const virtual = candidates.filter((device) => device.kind !== 'device');
+  const selectable = virtual.length > 0 ? virtual : candidates;
+  if (isAppleDeviceCandidateSet(selectable)) return selectable[0];
+
+  const booted = selectable.filter((device) => device.booted);
+  const onlyBooted = booted[0];
+  if (onlyBooted && booted.length === 1) return onlyBooted;
+  return booted[0] ?? selectable[0];
 }
 
 function isStoppedAndroidAvdPlaceholder(device: DeviceInfo): boolean {

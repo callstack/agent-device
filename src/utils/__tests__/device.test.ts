@@ -49,7 +49,7 @@ test('isPlatform accepts exactly the canonical PLATFORMS tuple', () => {
   assert.equal(isPlatform(undefined), false);
 });
 
-test('resolveDevice accepts serial selection for Android and Vega only', async () => {
+test('resolveDevice accepts serial selection for Android, HarmonyOS, and Vega', async () => {
   const android: DeviceInfo = {
     platform: 'android',
     id: 'shared-serial',
@@ -63,6 +63,13 @@ test('resolveDevice accepts serial selection for Android and Vega only', async (
     name: 'Vega Virtual Device',
     kind: 'emulator',
     target: 'tv',
+  };
+  const harmonyos: DeviceInfo = {
+    platform: 'harmonyos',
+    id: 'harmony-serial',
+    name: 'HarmonyOS device',
+    kind: 'device',
+    target: 'mobile',
   };
   const linux: DeviceInfo = {
     platform: 'linux',
@@ -82,13 +89,22 @@ test('resolveDevice accepts serial selection for Android and Vega only', async (
       .platform,
     'vega',
   );
+  assert.equal(
+    (
+      await resolveDevice([android, harmonyos, vega, linux], {
+        platform: 'harmonyos',
+        serial: 'harmony-serial',
+      })
+    ).platform,
+    'harmonyos',
+  );
 
   const unsupported = await resolveDevice([linux], { serial: 'shared-serial' }).catch(
     (error) => error,
   );
   assert.ok(unsupported instanceof AppError);
   assert.equal(unsupported.code, 'DEVICE_NOT_FOUND');
-  assert.match(unsupported.message, /Android device or Vega VVD/);
+  assert.match(unsupported.message, /Android, HarmonyOS device, or Vega VVD/);
 
   const missingAndroid = await resolveDevice([], {
     platform: 'android',
@@ -96,6 +112,13 @@ test('resolveDevice accepts serial selection for Android and Vega only', async (
   }).catch((error) => error);
   assert.ok(missingAndroid instanceof AppError);
   assert.equal(missingAndroid.message, 'No Android device with serial missing');
+
+  const missingHarmony = await resolveDevice([], {
+    platform: 'harmonyos',
+    serial: 'missing',
+  }).catch((error) => error);
+  assert.ok(missingHarmony instanceof AppError);
+  assert.equal(missingHarmony.message, 'No HarmonyOS device with serial missing');
 });
 
 test('resolveApplePlatformName resolves tv and desktop targets', () => {

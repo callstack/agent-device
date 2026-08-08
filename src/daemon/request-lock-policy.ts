@@ -225,10 +225,10 @@ function freshSessionSelectorKeysForPlatform(
   lockPlatform: NormalizedLockPlatform,
   flags: CommandFlags,
 ): SessionSelectorConflictKey[] {
+  if (isAndroidLikeLockPlatform(lockPlatform)) {
+    return ['udid', 'iosSimulatorDeviceSet'];
+  }
   switch (lockPlatform) {
-    case 'android':
-    case 'harmonyos':
-      return ['udid', 'iosSimulatorDeviceSet'];
     case 'vega':
       return ['udid', 'iosSimulatorDeviceSet', 'androidDeviceAllowlist'];
     case 'ios':
@@ -244,6 +244,12 @@ function freshSessionSelectorKeysForPlatform(
     default:
       return assertNever(lockPlatform);
   }
+}
+
+function isAndroidLikeLockPlatform(
+  platform: NormalizedLockPlatform,
+): platform is 'android' | 'harmonyos' {
+  return platform === 'android' || platform === 'harmonyos';
 }
 
 function isAppleDesktopSelector(flags: CommandFlags): boolean {
