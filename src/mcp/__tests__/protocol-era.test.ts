@@ -113,6 +113,16 @@ test('a supplied clientInfo must be an Implementation, but omitting it is fine',
   const valid = { name: 'c', version: '1' };
   assert.equal(resolveProtocolEra('tools/list', modernMeta()), 'modern');
   assert.equal(resolveProtocolEra('tools/list', withClientInfo(valid)), 'modern');
+  // Required means present and a string, not non-empty: the schema sets no minimum
+  // length on `name`/`version`, nor on `Icon.src`.
+  assert.equal(
+    resolveProtocolEra('tools/list', withClientInfo({ name: '', version: '' })),
+    'modern',
+  );
+  assert.equal(
+    resolveProtocolEra('tools/list', withClientInfo({ ...valid, icons: [{ src: '' }] })),
+    'modern',
+  );
   // Every recognized optional field, plus an unknown extension key, stays acceptable.
   assert.equal(
     resolveProtocolEra(

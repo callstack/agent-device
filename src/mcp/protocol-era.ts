@@ -202,11 +202,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * Whether a value is a valid `Implementation`: `name` and `version` are required, and
  * every other recognized field is type-checked when present. Unrecognized keys pass —
  * `_meta` payloads carry extension fields, and rejecting those would reject the future.
+ *
+ * Required means *present and a string*, not non-empty: the schema declares plain
+ * `string` with no minimum length, so `{name: "", version: ""}` is a conforming
+ * `Implementation` and refusing it would reject a client the spec allows.
  */
 function isImplementation(value: unknown): boolean {
   if (!isRecord(value)) return false;
-  if (stringField(value, 'name') === undefined) return false;
-  if (stringField(value, 'version') === undefined) return false;
+  if (!isString(value.name) || !isString(value.version)) return false;
   return (
     isOptional(value.title, isString) &&
     isOptional(value.description, isString) &&
@@ -215,10 +218,15 @@ function isImplementation(value: unknown): boolean {
   );
 }
 
-/** An `Icon` requires `src`; the rest are optional but typed when supplied. */
+/**
+ * An `Icon` requires `src`; the rest are optional but typed when supplied. `src` is
+ * checked as a string for the same reason as `name`/`version` — its `format: uri`
+ * annotation is not something this server enforces, so rejecting `""` while accepting
+ * any other non-URI string would be arbitrary.
+ */
 function isIcon(value: unknown): boolean {
   if (!isRecord(value)) return false;
-  if (stringField(value, 'src') === undefined) return false;
+  if (!isString(value.src)) return false;
   return (
     isOptional(value.mimeType, isString) &&
     isOptional(value.sizes, isStringArray) &&

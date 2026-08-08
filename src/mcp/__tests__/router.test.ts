@@ -249,6 +249,21 @@ test('a supplied clientInfo must be a valid Implementation', async () => {
   });
   assert.ok(omitted && 'result' in omitted);
 
+  // `name` and `version` are required `string` with no minimum length, so an empty
+  // string is a conforming Implementation and must not be rejected.
+  const emptyStrings = await handleMcpMessage({
+    jsonrpc: '2.0',
+    id: 'empty-client-info',
+    method: 'tools/list',
+    params: {
+      _meta: {
+        ...MODERN_META,
+        'io.modelcontextprotocol/clientInfo': { name: '', version: '' },
+      },
+    },
+  });
+  assert.ok(emptyStrings && 'result' in emptyStrings);
+
   // A fully populated clientInfo, plus an extension key, must still be served:
   // validation must not harden into rejecting what the spec allows.
   const rich = await handleMcpMessage({
