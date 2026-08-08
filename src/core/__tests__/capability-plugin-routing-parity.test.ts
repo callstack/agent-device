@@ -192,6 +192,43 @@ const CAPABILITY_BUCKET_BY_PLATFORM: Record<Platform, keyof CommandCapability> =
   web: 'web',
 };
 const VEGA_VVD_ONLY_COMMANDS_REF = new Set(['open', 'close', 'back', 'home', 'tv-remote']);
+const HARMONYOS_SUPPORTED_COMMANDS_REF = new Set([
+  'open',
+  'perf',
+  'close',
+  'back',
+  'apps',
+  'appstate',
+  'app-switcher',
+  'click',
+  'fill',
+  'find',
+  'focus',
+  'get',
+  'home',
+  'gesture',
+  'install',
+  'keyboard',
+  'is',
+  'longpress',
+  'logs',
+  'press',
+  'reinstall',
+  'screenshot',
+  'scroll',
+  'settings',
+  'snapshot',
+  'swipe',
+  'type',
+  'wait',
+]);
+const HARMONYOS_EMULATOR: DeviceInfo = {
+  platform: 'harmonyos',
+  id: 'harmony-emulator',
+  name: 'HarmonyOS emulator',
+  kind: 'emulator',
+  booted: true,
+};
 
 // Independent reference for `isCommandSupportedOnDevice` over NON-WEB platforms,
 // reproducing the BEFORE pipeline exactly: hardcoded bucket selection (b.1 oracle)
@@ -199,6 +236,7 @@ const VEGA_VVD_ONLY_COMMANDS_REF = new Set(['open', 'close', 'back', 'home', 'tv
 // platform the augmented matrix equals BASE (the web augmentation only adds a
 // `web` key), so BASE is the faithful capability source here.
 function isSupportedReference(command: string, device: DeviceInfo): boolean {
+  if (device.platform === 'harmonyos') return isHarmonySupportedReference(command, device);
   const capability: CommandCapability | undefined = BASE_COMMAND_CAPABILITY_MATRIX[command];
   if (!capability) return true;
   const byPlatform = capability[CAPABILITY_BUCKET_BY_PLATFORM[device.platform]];
@@ -210,6 +248,13 @@ function isSupportedReference(command: string, device: DeviceInfo): boolean {
   if (supports && !supports(device)) return false;
   const kind = (device.kind ?? 'unknown') as keyof NonNullable<CommandCapability['apple']>;
   return byPlatform[kind] === true;
+}
+
+function isHarmonySupportedReference(command: string, device: DeviceInfo): boolean {
+  return (
+    HARMONYOS_SUPPORTED_COMMANDS_REF.has(command) &&
+    (device.kind === 'emulator' || device.kind === 'device')
+  );
 }
 
 test('(b.1) plugin-bucket selection matches the platform -> bucket table', () => {
@@ -237,6 +282,43 @@ test('(b.1) isCommandSupportedOnDevice is unchanged across the command x device 
       );
     }
   }
+});
+
+test('HarmonyOS advertises only the current HDC-backed command subset', () => {
+  const availableCommands = listCapabilityCommands()
+    .filter((command) => isCommandSupportedOnDevice(command, HARMONYOS_EMULATOR))
+    .sort();
+
+  assert.deepEqual(availableCommands, [
+    'app-switcher',
+    'apps',
+    'appstate',
+    'back',
+    'click',
+    'close',
+    'fill',
+    'find',
+    'focus',
+    'gesture',
+    'get',
+    'home',
+    'install',
+    'is',
+    'keyboard',
+    'logs',
+    'longpress',
+    'open',
+    'perf',
+    'press',
+    'reinstall',
+    'screenshot',
+    'scroll',
+    'settings',
+    'snapshot',
+    'swipe',
+    'type',
+    'wait',
+  ]);
 });
 
 test('(b.2) unsupportedHint closures are verbatim across the full device matrix', () => {

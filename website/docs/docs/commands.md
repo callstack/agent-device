@@ -182,6 +182,14 @@ agent-device capabilities --session checkout --json
 - `capabilities` reports the command names supported by the selected session device or an explicit `--platform`/`--device`/`--udid`/`--serial` target.
 - In JSON output, `capabilities` returns `{ device, availableCommands }`. Use `availableCommands` for dynamic integrations instead of maintaining a separate platform support table.
 
+### HarmonyOS command boundary
+
+HarmonyOS support uses HDC and ArkUI `uitest`. On current API 24 devices it supports lifecycle and HAP deployment, ArkUI snapshot/screenshot and selector reads, one-pointer touch and text actions, keyboard `enter`/`dismiss`, app logs, foreground app state, process CPU/RSS samples, and `settings clear-app-state`. Run `agent-device capabilities --platform harmonyos` for the authoritative command list for a selected device.
+
+- `gesture pan|fling|swipe` and `swipe` use HDC's single-pointer input primitives. Multi-touch gestures and target-authored `gesture drag` return `UNSUPPORTED_OPERATION` rather than approximating the interaction.
+- Orientation control, clipboard, alert automation, network/audio capture, push and app-event delivery, React Native helpers, trace capture, and recording are not advertised for HarmonyOS. The public API 24 HDC surface has no usable `screenrecord`, `pasteboard`, notification, or `aa send` command on the supported emulator and physical device.
+- `settings` intentionally supports only `clear-app-state`; other system settings are not changed through undocumented parameter writes. `perf` provides process CPU/RSS only: frame health and memory-snapshot artifacts remain unavailable.
+
 ## Diagnostics
 
 ```bash
