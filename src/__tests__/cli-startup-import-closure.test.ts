@@ -79,7 +79,7 @@ function resolveWorkspace(specifier: string, packageDirs: Map<string, string>): 
   const manifest = JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8')) as {
     exports?: Record<string, { default?: string; types?: string } | string>;
   };
-  const target = manifest.exports?.[`.${match?.[2] ?? ''}` as string];
+  const target = manifest.exports?.[`.${match?.[2] ?? ''}`];
   const relativeTarget = typeof target === 'string' ? target : (target?.default ?? target?.types);
   if (!relativeTarget) return null;
   const resolved = path.resolve(packageDir, relativeTarget);
