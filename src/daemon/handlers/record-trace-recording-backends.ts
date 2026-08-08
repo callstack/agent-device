@@ -15,6 +15,7 @@ import { IOS_RUNNER_CONTAINER_BUNDLE_IDS } from '../../platforms/apple/core/runn
 import { isWholeScreenRecordingScope } from '@agent-device/contracts/recording';
 import { errorResponse } from './response.ts';
 import { startAndroidRecording, stopAndroidRecording } from './record-trace-android.ts';
+import { startHarmonyRecording, stopHarmonyRecording } from './record-trace-harmony.ts';
 import { recoverMissingAndroidRecording } from './record-trace-android-recovery.ts';
 import {
   normalizeAppBundleId,
@@ -105,6 +106,8 @@ export function stopActiveRecording(context: RecordingStopContext): Promise<Daem
   switch (recording.platform) {
     case 'android':
       return androidRecordingBackend.stop({ ...context, recording });
+    case 'harmonyos':
+      return harmonyRecordingBackend.stop({ ...context, recording });
     case 'ios':
       return iosSimulatorRecordingBackend.stop({ ...context, recording });
     case 'ios-device-runner':
@@ -297,6 +300,16 @@ const androidRecordingBackend: RecordingBackend<'android'> = {
     }),
 };
 
+const harmonyRecordingBackend: RecordingBackend<'harmonyos'> = {
+  recordingBackend: 'HarmonyOS ScreenRecorder',
+  validateStart: (req) => validateHarmonyRecordingFlags(req),
+  resolveOutputPath: resolveNativeRecordingOutputPath,
+  start: async ({ device, recordingBase }) =>
+    await startHarmonyRecording({ device, recordingBase }),
+  stop: async ({ deps, device, recording }) =>
+    await stopHarmonyRecording({ deps, device, recording }),
+};
+
 const unsupportedRecordingBackend: RecordingBackend = {
   recordingBackend: 'unsupported',
   resolveOutputPath: resolveNativeRecordingOutputPath,
@@ -313,11 +326,33 @@ const unsupportedRecordingBackend: RecordingBackend = {
 const RECORDING_BACKENDS_BY_TAG: Record<RecordingBackendTag, RecordingStartBackend> = {
   web: webRecordingBackend,
   android: androidRecordingBackend,
+  harmonyos: harmonyRecordingBackend,
   macos: macOsRecordingBackend,
   'ios-device': iosDeviceRecordingBackend,
   'ios-simulator': iosSimulatorRecordingBackend,
   unsupported: unsupportedRecordingBackend,
 };
+
+function validateHarmonyRecordingFlags(req: DaemonRequest): DaemonResponse | null {
+  const scope = req.flags?.recordingScope ?? 'app';
+  if (!isWholeScreenRecordingScope(scope)) {
+    return errorResponse(
+      'INVALID_ARGS',
+      'HarmonyOS recording captures the whole physical-device screen; use --scope device or --scope system',
+    );
+  }
+  const unsupportedFlags = [
+    req.flags?.fps !== undefined ? '--fps' : undefined,
+    req.flags?.quality !== undefined ? '--quality' : undefined,
+    req.flags?.hideTouches !== undefined ? '--hide-touches' : undefined,
+  ].filter((flag): flag is string => flag !== undefined);
+  return unsupportedFlags.length > 0
+    ? errorResponse(
+        'INVALID_ARGS',
+        `HarmonyOS recordings do not support ${unsupportedFlags.join(', ')}`,
+      )
+    : null;
+}
 
 const WEB_UNSUPPORTED_RECORDING_FLAGS = [
   ['fps', '--fps'],

@@ -503,6 +503,11 @@ export type SessionState = {
         stopping?: boolean;
       })
     | (SessionRecordingBase & {
+        platform: 'harmonyos';
+        fileName: string;
+        remotePath: string;
+      })
+    | (SessionRecordingBase & {
         platform: 'ios-device-runner';
         remotePath: string;
         runnerStartedAtUptimeMs?: number;

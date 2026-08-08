@@ -61,6 +61,7 @@ export type TraceCommandResult =
 export type RecordingBackendTag =
   | 'web'
   | 'android'
+  | 'harmonyos'
   | 'macos'
   | 'ios-device'
   | 'ios-simulator'

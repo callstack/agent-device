@@ -36,6 +36,7 @@ export type CommandCapability = {
 
 const WEB_DEVICE: KindMatrix = { device: true };
 const HARMONYOS_ALL: KindMatrix = { emulator: true, device: true };
+const HARMONYOS_PHYSICAL_DEVICE: KindMatrix = { device: true };
 const HARMONYOS_SUPPORTED_COMMANDS = new Set<string>([
   'open',
   'perf',
@@ -109,7 +110,9 @@ function addHarmonyAndWebCommandCapabilities(
   for (const [command, capability] of Object.entries(matrix)) {
     withHarmony[command] = HARMONYOS_SUPPORTED_COMMANDS.has(command)
       ? { ...capability, harmonyos: HARMONYOS_ALL }
-      : capability;
+      : command === 'record'
+        ? { ...capability, harmonyos: HARMONYOS_PHYSICAL_DEVICE }
+        : capability;
   }
   return addWebCommandCapabilities(withHarmony);
 }

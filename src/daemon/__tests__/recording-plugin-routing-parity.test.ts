@@ -41,6 +41,7 @@ registerBuiltinPlatformPlugins();
 function recordingBackendTagByHand(device: DeviceInfo): RecordingBackendTag {
   if (device.platform === 'web') return 'web';
   if (device.platform === 'android') return 'android';
+  if (device.platform === 'harmonyos' && device.kind === 'device') return 'harmonyos';
   if (isMacOs(device)) return 'macos';
   if (isIosFamily(device) && device.kind === 'device') return 'ios-device';
   if (isIosFamily(device)) return 'ios-simulator';
@@ -132,6 +133,7 @@ test('only families with a recording backend carry the recording facet', () => {
   assert.equal(getPlugin('apple'), getPlugin('apple'));
   assert.ok(getPlugin('apple').recording, 'apple plugin exposes recording');
   assert.ok(getPlugin('android').recording, 'android plugin exposes recording');
+  assert.ok(getPlugin('harmonyos').recording, 'HarmonyOS plugin exposes physical-device recording');
   assert.ok(getPlugin('web').recording, 'web plugin exposes recording');
   // linux historically fell through to the unsupported backend; it gets NO facet, and
   // the daemon lookup preserves that fallthrough (asserted below).
