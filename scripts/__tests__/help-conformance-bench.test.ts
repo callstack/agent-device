@@ -496,6 +496,35 @@ test('case matchers score parsed tokens so shell quoting does not change results
   });
 });
 
+test('foreground attach scoring rejects an explicit app positional after flags', async () => {
+  const validCommand = 'agent-device open --foreground --platform ios';
+  const explicitTargetCommand = 'agent-device open --foreground --platform ios com.example.app';
+  const [validAttach, explicitTarget] = await validatePlanCommands([
+    validCommand,
+    explicitTargetCommand,
+  ]);
+
+  assert.deepEqual(explicitTarget.agentCommand, {
+    command: 'open',
+    positionals: ['com.example.app'],
+  });
+  assert.equal(
+    scoreExpectations({ expectations: ['noExplicitForegroundTarget'] }, [validCommand], '', [
+      validAttach,
+    ]).noExplicitForegroundTarget,
+    true,
+  );
+  assert.equal(
+    scoreExpectations(
+      { expectations: ['noExplicitForegroundTarget'] },
+      [explicitTargetCommand],
+      '',
+      [explicitTarget],
+    ).noExplicitForegroundTarget,
+    false,
+  );
+});
+
 test('plan validator applies narrow grammar to permitted external commands', async () => {
   const results = await validatePlanCommands(
     [

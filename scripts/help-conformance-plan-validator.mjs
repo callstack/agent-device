@@ -30,12 +30,16 @@ function applyCommandPolicy(parsed, agentResultState, allowedExternalCommands) {
   }
   const result = agentResultState.results[agentResultState.index++];
   return result?.valid
-    ? parsed
+    ? attachAgentCommand(parsed, result.agentCommand)
     : withIssue(
         parsed,
         result?.kind ?? 'agent-device-grammar',
         result?.error ?? 'Command validation returned no result.',
       );
+}
+
+function attachAgentCommand(parsed, agentCommand) {
+  return agentCommand ? { ...parsed, agentCommand } : parsed;
 }
 
 // The compact workflow card teaches chaining confident consecutive steps with

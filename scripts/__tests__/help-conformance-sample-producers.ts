@@ -4,6 +4,7 @@ import {
   APP_NOT_INSTALLED_SAMPLE,
   BROWSERSTACK_CONNECT_SAMPLE,
   DEVICE_IN_USE_SAMPLE,
+  FOREGROUND_SNAPSHOT_FAILURE_SAMPLE,
   MERGED_CARD_ACTIONS_SAMPLE,
   NOT_SETTLED_SAMPLE,
   OFFSCREEN_TARGET_SNAPSHOT_SAMPLE,
@@ -14,6 +15,8 @@ import {
   STALE_REF_SAMPLE,
 } from '../help-conformance-sample-outputs.mjs';
 import { interactionCliOutputFormatters } from '../../src/commands/interaction/output.ts';
+import { snapshotCliOutput } from '../../src/commands/capture/output.ts';
+import { openCliOutput } from '../../src/commands/management/output.ts';
 import { NEVER_SETTLED_HINT } from '../../src/commands/interaction/runtime/settle.ts';
 import { buildAmbiguousMatchError } from '../../src/daemon/handlers/find.ts';
 import { refMutationAdmissionResponse } from '../../src/daemon/handlers/interaction-ref-policy.ts';
@@ -269,6 +272,26 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
     },
   },
   {
+    name: 'FOREGROUND_SNAPSHOT_FAILURE_SAMPLE',
+    producer: 'the open success renderer with a failed composed snapshot',
+    sample: FOREGROUND_SNAPSHOT_FAILURE_SAMPLE,
+    render: () => {
+      const warning =
+        'The session is open, but the initial interactive snapshot failed (COMMAND_FAILED: capture failed). Run: agent-device snapshot -i';
+      return (
+        openCliOutput({
+          session: 'default',
+          warnings: [warning],
+          initialSnapshotError: {
+            code: 'COMMAND_FAILED',
+            message: 'capture failed',
+          },
+          identifiers: { session: 'default' },
+        }).text ?? ''
+      );
+    },
+  },
+  {
     name: 'MERGED_CARD_ACTIONS_SAMPLE',
     producer: "the snapshot renderer with --actions naming a merged element's custom actions",
     sample: MERGED_CARD_ACTIONS_SAMPLE,
@@ -280,6 +303,7 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
         {
           index: 0,
           ref: 'e1',
+          depth: 0,
           type: 'Application',
           label: 'Bluesky',
           rect: { x: 0, y: 0, width: 390, height: 844 },
@@ -288,6 +312,7 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
           index: 1,
           ref: 'e2',
           parentIndex: 0,
+          depth: 1,
           type: 'Window',
           rect: { x: 0, y: 0, width: 390, height: 844 },
         },
@@ -295,6 +320,7 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
           index: 2,
           ref: 'e3',
           parentIndex: 1,
+          depth: 2,
           type: 'CollectionView',
           interactive: true,
           rect: { x: 0, y: 60, width: 390, height: 700 },
@@ -303,6 +329,7 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
           index: 3,
           ref: 'e72',
           parentIndex: 2,
+          depth: 3,
           type: 'Link',
           label: 'feedItem-by-whiskers.test',
           interactive: true,
@@ -310,9 +337,11 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
           actions: ['Reply', 'Repost', 'Open post options menu'],
         },
       ];
-      return formatSnapshotText(
-        { nodes, backend: 'xctest', truncated: false },
-        { interactiveOnly: true },
+      return (
+        snapshotCliOutput({
+          result: { nodes, backend: 'xctest', truncated: false },
+          interactiveOnly: true,
+        }).text ?? ''
       ).trimEnd();
     },
   },

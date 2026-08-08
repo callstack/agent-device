@@ -141,11 +141,11 @@ test('help workflow advertises open --foreground and snapshot -i --actions', asy
   assert.equal(result.calls.length, 0);
   assert.match(
     result.stdout,
-    /No session, one booted iOS simulator, one running app: open --foreground attaches and returns the initial snapshot in one call; fails closed \(AMBIGUOUS_MATCH\) otherwise; rejects an explicit app\/--udid\/--device/,
+    /One iOS sim, app running, no session: open --foreground: attach \+ snapshot\. Capture fails; stays open: snapshot -i\. App\/device\/ambiguity fail/,
   );
   assert.match(
     result.stdout,
-    /snapshot -i --actions names custom-action affordances hidden inside a merged element \(iOS sim only\); not directly invokable -- reach via its detail screen, labeled children elsewhere, or coordinates/,
+    /iOS sim: snapshot -i --actions shows merged actions; use detail\/coords, not names/,
   );
 });
 

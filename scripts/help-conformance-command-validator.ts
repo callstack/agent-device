@@ -5,7 +5,13 @@ import { isCommandName } from '../src/commands/command-metadata.ts';
 
 type ValidationKind = 'agent-device-grammar' | 'pseudo-ref';
 
+type ParsedAgentCommand = {
+  command: string;
+  positionals: string[];
+};
+
 type ValidationResult = { valid: true } | { valid: false; kind: ValidationKind; error: string };
+type PlanValidationResult = ValidationResult & { agentCommand?: ParsedAgentCommand };
 
 const TARGET_POSITION_BY_COMMAND = new Map<string, number>([
   ['click', 0],
@@ -71,10 +77,23 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
 }
 
-function validateInput(value: unknown): ValidationResult | ValidationResult[] {
-  if (Array.isArray(value) && value.every(isStringArray))
-    return value.map(validateAgentDeviceCommand);
-  return validateAgentDeviceCommand(value);
+function validateInput(value: unknown): PlanValidationResult | PlanValidationResult[] {
+  if (Array.isArray(value) && value.every(isStringArray)) return value.map(validatePlanCommand);
+  return validatePlanCommand(value);
+}
+
+function validatePlanCommand(value: unknown): PlanValidationResult {
+  const validation = validateAgentDeviceCommand(value);
+  if (!validation.valid || !isStringArray(value)) return validation;
+  const parsed = parseArgs(value, { strictFlags: true });
+  if (!parsed.command) return validation;
+  return {
+    ...validation,
+    agentCommand: {
+      command: parsed.command,
+      positionals: [...parsed.positionals],
+    },
+  };
 }
 
 function runCli(): void {

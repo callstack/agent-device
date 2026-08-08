@@ -226,7 +226,7 @@ Command shape:
 Bootstrap:
   agent-device devices --platform ios
   agent-device open MyApp --platform ios --device "iPhone 17 Pro"
-  No session, one booted iOS simulator, one running app: open --foreground attaches and returns the initial snapshot in one call; fails closed (AMBIGUOUS_MATCH) otherwise; rejects an explicit app/--udid/--device.
+  One iOS sim, app running, no session: open --foreground: attach + snapshot. Capture fails; stays open: snapshot -i. App/device/ambiguity fail.
   Install arguments are app/package id then artifact path: agent-device install com.example.app ./dist/app.apk --platform android, then open <id> --relaunch for fresh state. Use reinstall only when explicitly requested.
   Unknown app id: devices, then apps, then open <discovered-app-id>. Never open artifact paths or invent package ids; ask if lookup misses the target.
   Apple CI: prepare ios-runner after boot/install, before replay/test (help prepare). Remote/cloud: connect -> open -> commands -> close -> disconnect (help remote). Reusable scripts, secret-safe fills, replay repair: help scripting.
@@ -265,7 +265,7 @@ Validation and evidence:
   Nearby mutation diff: diff snapshot -i; with no prior snapshot it initializes the baseline (zero changes) instead of failing.
   Named expectations need the exact text/selector via wait/is/get/find -- a bare screenshot/snapshot is not verification. Before declaring a task done, confirm the requested end state is actually visible on the current screen, scrolling it into view if needed; get text alone, or stopping one screen early, is not enough.
   When an action only reveals or reaches a target, verify the exact target named, not just the action. Prefer testIDs/ids/selectors over visible text. Icon/tappable proof: screenshot --overlay-refs; if snapshot is sparse/AX-unavailable, use plain screenshot and coordinates, then retry snapshot -i on another screen.
-  snapshot -i --actions names custom-action affordances hidden inside a merged element (iOS sim only); not directly invokable -- reach via its detail screen, labeled children elsewhere, or coordinates.
+  iOS sim: snapshot -i --actions shows merged actions; use detail/coords, not names.
   Perf/memory/log/network/trace/crash: help debugging. Recording, save-script, batch, replay repair: help scripting.
 
 React Native: help react-native for Metro/Re.Pack reload, DevTools, RN overlays. JS-only change: metro reload, find "Home"; open --relaunch for native reset.
