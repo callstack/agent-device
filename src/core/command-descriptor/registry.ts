@@ -490,6 +490,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     catalog: { group: 'public', key: 'appState' },
     recordsSessionAction: false,
     daemon: { route: 'session', refFrameEffect: 'preserve', sessionKind: 'state' },
+    capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_NONE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
   },
