@@ -251,6 +251,7 @@ function isSupportedReference(command: string, device: DeviceInfo): boolean {
 }
 
 function isHarmonySupportedReference(command: string, device: DeviceInfo): boolean {
+  if (command === 'record') return device.kind === 'device';
   return (
     HARMONYOS_SUPPORTED_COMMANDS_REF.has(command) &&
     (device.kind === 'emulator' || device.kind === 'device')
