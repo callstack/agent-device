@@ -54,8 +54,41 @@ function resolveRelative(fromFile: string, specifier: string): string | null {
   return null;
 }
 
+/** `@agent-device/<pkg>` -> that package's directory, keyed by its declared name. */
+function readWorkspacePackageDirs(): Map<string, string> {
+  const packagesRoot = path.resolve(srcRoot, '..', 'packages');
+  const dirs = new Map<string, string>();
+  for (const entry of fs.readdirSync(packagesRoot)) {
+    const manifestPath = path.join(packagesRoot, entry, 'package.json');
+    if (!fs.existsSync(manifestPath)) continue;
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as { name?: string };
+    if (manifest.name) dirs.set(manifest.name, path.join(packagesRoot, entry));
+  }
+  return dirs;
+}
+
+/**
+ * Workspace subpath imports are followed too: a package the CLI evaluates can
+ * pull `node:http` in just as effectively as a file under src/, and stopping the
+ * walk at the package boundary would be the same blind spot in a new place.
+ */
+function resolveWorkspace(specifier: string, packageDirs: Map<string, string>): string | null {
+  const match = /^(@agent-device\/[^/]+)(\/.*)?$/.exec(specifier);
+  const packageDir = match?.[1] ? packageDirs.get(match[1]) : undefined;
+  if (!packageDir) return null;
+  const manifest = JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8')) as {
+    exports?: Record<string, { default?: string; types?: string } | string>;
+  };
+  const target = manifest.exports?.[`.${match?.[2] ?? ''}` as string];
+  const relativeTarget = typeof target === 'string' ? target : (target?.default ?? target?.types);
+  if (!relativeTarget) return null;
+  const resolved = path.resolve(packageDir, relativeTarget);
+  return fs.existsSync(resolved) ? resolved : null;
+}
+
 /** Every repo file evaluated as a consequence of importing `src/cli.ts`. */
 function eagerClosureOfCli(): string[] {
+  const packageDirs = readWorkspacePackageDirs();
   const queue = [path.join(srcRoot, 'cli.ts')];
   const visited = new Set<string>();
   while (queue.length > 0) {
@@ -63,8 +96,9 @@ function eagerClosureOfCli(): string[] {
     if (!current || visited.has(current)) continue;
     visited.add(current);
     for (const specifier of evaluatedModuleRefs(current, fs.readFileSync(current, 'utf8'))) {
-      if (!specifier.startsWith('.')) continue;
-      const resolved = resolveRelative(current, specifier);
+      const resolved = specifier.startsWith('.')
+        ? resolveRelative(current, specifier)
+        : resolveWorkspace(specifier, packageDirs);
       if (resolved) queue.push(resolved);
     }
   }
@@ -120,7 +154,13 @@ test('the CLI startup import closure never evaluates node:http or node:https', (
   ).toEqual([]);
 });
 
-test('the CLI startup import closure is reachable and non-trivial', () => {
-  // Guards the test above from silently passing because the walk found nothing.
-  expect(eagerClosureOfCli().length).toBeGreaterThan(50);
+test('the CLI startup import closure is reachable and crosses the package boundary', () => {
+  // Guards the test above from silently passing because the walk found nothing:
+  // a resolver that returns null for everything would leave both the src side
+  // and the workspace side of the closure empty while the guard stayed green.
+  const closure = eagerClosureOfCli();
+  expect(closure.length).toBeGreaterThan(50);
+  expect(
+    closure.filter((file) => file.includes(`${path.sep}packages${path.sep}`)).length,
+  ).toBeGreaterThan(0);
 });
