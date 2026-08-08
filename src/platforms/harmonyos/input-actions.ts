@@ -1,9 +1,14 @@
 import type { DeviceRotation } from '@agent-device/contracts/device';
-import { buildScrollGesturePlan, type ScrollDirection } from '@agent-device/contracts/interaction';
+import {
+  buildScrollGesturePlan,
+  type GesturePlan,
+  type ScrollDirection,
+} from '@agent-device/contracts/interaction';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { sleep } from '../../utils/timeouts.ts';
 import { runHarmonyHdc } from './hdc.ts';
+import { readHarmonyGestureViewport } from './snapshot.ts';
 
 export async function pressHarmony(device: DeviceInfo, x: number, y: number): Promise<void> {
   await runHarmonyHdc(device, ['shell', 'uitest', 'uiInput', 'click', String(x), String(y)]);
@@ -56,15 +61,13 @@ export async function scrollHarmony(
   direction: ScrollDirection,
   options?: { amount?: number; pixels?: number; durationMs?: number },
 ): Promise<Record<string, unknown>> {
-  // API 24 exposes no stable display-size command. The tested 1080×2340
-  // viewport is conservative for both the supplied emulator and Mate 60; this
-  // is replaced by runtime viewport extraction before broad device support.
+  const viewport = await readHarmonyGestureViewport(device);
   const plan = buildScrollGesturePlan({
     direction,
     amount: options?.amount,
     pixels: options?.pixels,
-    referenceWidth: 1080,
-    referenceHeight: 2340,
+    referenceWidth: viewport.width,
+    referenceHeight: viewport.height,
   });
   await runHarmonyHdc(device, [
     'shell',
@@ -78,6 +81,43 @@ export async function scrollHarmony(
     String(options?.durationMs ?? 300),
   ]);
   return plan;
+}
+
+/** Lowers HDC's public one-pointer primitives from a shared semantic plan. */
+export async function performHarmonyGesture(
+  device: DeviceInfo,
+  plan: GesturePlan,
+): Promise<Record<string, unknown>> {
+  if (plan.topology !== 'single') {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      'HarmonyOS HDC does not support multi-touch gestures',
+    );
+  }
+  const samples = plan.pointers[0].samples;
+  const start = samples[0];
+  const end = samples.at(-1);
+  if (!start || !end) {
+    throw new AppError('COMMAND_FAILED', 'HarmonyOS gesture plan has no pointer endpoints');
+  }
+  const distance = Math.hypot(end.point.x - start.point.x, end.point.y - start.point.y);
+  const velocity = Math.max(
+    200,
+    Math.min(40_000, Math.round((distance / plan.durationMs) * 1_000)),
+  );
+  const command = plan.intent === 'fling' ? 'fling' : 'swipe';
+  await runHarmonyHdc(device, [
+    'shell',
+    'uitest',
+    'uiInput',
+    command,
+    String(Math.round(start.point.x)),
+    String(Math.round(start.point.y)),
+    String(Math.round(end.point.x)),
+    String(Math.round(end.point.y)),
+    String(velocity),
+  ]);
+  return { backend: 'harmonyos-hdc-uiinput', command, velocity, viewport: plan.viewport };
 }
 
 export async function backHarmony(device: DeviceInfo): Promise<void> {

@@ -42,6 +42,19 @@ export async function snapshotHarmony(
   }
 }
 
+/** Returns the current ArkUI application viewport for coordinate gestures. */
+export async function readHarmonyGestureViewport(device: DeviceInfo): Promise<Rect> {
+  const snapshot = await snapshotHarmony(device);
+  const viewport = snapshot.nodes.find((node) => node.type === 'Application' && node.rect)?.rect;
+  if (!viewport || viewport.width <= 0 || viewport.height <= 0) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'HarmonyOS snapshot did not expose an application viewport',
+    );
+  }
+  return viewport;
+}
+
 export function parseHarmonyLayout(raw: string): ArkUiLayoutNode {
   try {
     const parsed: unknown = JSON.parse(raw);

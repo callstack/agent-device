@@ -10,13 +10,14 @@ import {
   fillHarmony,
   homeHarmony,
   longPressHarmony,
+  performHarmonyGesture,
   pressHarmony,
   scrollHarmony,
   setHarmonyOrientation,
   typeHarmony,
 } from '../../platforms/harmonyos/input-actions.ts';
 import { screenshotHarmony } from '../../platforms/harmonyos/screenshot.ts';
-import { snapshotHarmony } from '../../platforms/harmonyos/snapshot.ts';
+import { readHarmonyGestureViewport, snapshotHarmony } from '../../platforms/harmonyos/snapshot.ts';
 
 export function createHarmonyInteractor(device: DeviceInfo, _runner?: RunnerContext): Interactor {
   const unsupported = (name: string) => async (): Promise<never> => {
@@ -33,6 +34,8 @@ export function createHarmonyInteractor(device: DeviceInfo, _runner?: RunnerCont
     type: (text, delayMs) => typeHarmony(device, text, delayMs),
     fill: (x, y, text, delayMs) => fillHarmony(device, x, y, text, delayMs),
     scroll: (direction, options) => scrollHarmony(device, direction, options),
+    performGesture: (plan) => performHarmonyGesture(device, plan),
+    gestureViewport: () => readHarmonyGestureViewport(device),
     screenshot: (outPath) => screenshotHarmony(device, outPath),
     snapshot: async (options) => {
       const result = await withDiagnosticTimer(

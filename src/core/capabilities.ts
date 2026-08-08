@@ -48,6 +48,7 @@ const HARMONYOS_SUPPORTED_COMMANDS = new Set<string>([
   'focus',
   'get',
   'home',
+  'gesture',
   'install',
   'is',
   'longpress',
@@ -56,6 +57,7 @@ const HARMONYOS_SUPPORTED_COMMANDS = new Set<string>([
   'screenshot',
   'scroll',
   'snapshot',
+  'swipe',
   'type',
   'wait',
 ]);
@@ -213,18 +215,23 @@ function requireTargetAuthoredDragSupported(
   input: Extract<GestureCommandInput, { intent: 'drag' }>,
   device: DeviceInfo,
 ): void {
+  if (supportsTargetAuthoredDrag(device)) return;
+  throw unsupportedGesture(
+    input,
+    gesturePlatformMessage(input, device),
+    'Target-authored drag requires an adapter that preserves source hold, timed movement, and destination hold; it is supported on Android touch devices and iOS/iPadOS.',
+  );
+}
+
+function supportsTargetAuthoredDrag(device: DeviceInfo): boolean {
   const supportedAndroidTouchDevice = device.platform === 'android' && device.target !== 'tv';
   const supportedAppleTouchDevice =
     device.platform === 'apple' &&
     (device.appleOs === 'ios' ||
       device.appleOs === 'ipados' ||
       (device.appleOs === undefined && device.target !== 'desktop' && device.target !== 'tv'));
-  if (supportedAndroidTouchDevice || supportedAppleTouchDevice) return;
-  throw unsupportedGesture(
-    input,
-    gesturePlatformMessage(input, device),
-    'Target-authored drag requires an adapter that preserves source hold, timed movement, and destination hold; it is supported on Android touch devices and iOS/iPadOS.',
-  );
+  const supportedHarmonyTouchDevice = device.platform === 'harmonyos' && device.target !== 'tv';
+  return supportedAndroidTouchDevice || supportedAppleTouchDevice || supportedHarmonyTouchDevice;
 }
 
 function isMultiTouchGesture(input: GestureSemanticInput): boolean {
