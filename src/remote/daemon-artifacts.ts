@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
+import { loadNodeHttpRequester } from '../utils/node-http.ts';
 import type { DaemonArtifact, DaemonRequest, DaemonResponse } from '../daemon/types.ts';
 import {
   buildDaemonHttpAuthHeaders,
@@ -347,13 +348,9 @@ type DownloadRemoteArtifactParams = {
 
 export async function downloadRemoteArtifact(params: DownloadRemoteArtifactParams): Promise<void> {
   const artifactUrl = new URL(buildDaemonArtifactUrl(params.baseUrl, params.artifactId));
-  // Loaded on demand: `prepareRemoteRequestArtifacts` runs on every CLI
-  // request, but only a remote daemon ever downloads an artifact, and
-  // importing `node:http` for a value costs ~9ms of undici init.
-  const transport =
-    artifactUrl.protocol === 'https:'
-      ? (await import('node:https')).default
-      : (await import('node:http')).default;
+  // `prepareRemoteRequestArtifacts` runs on every CLI request, but only a
+  // remote daemon ever downloads an artifact, so the HTTP stack loads here.
+  const transport = await loadNodeHttpRequester(artifactUrl.protocol);
   await fs.promises.mkdir(path.dirname(params.destinationPath), { recursive: true });
   await new Promise<void>((resolve, reject) => {
     let settled = false;

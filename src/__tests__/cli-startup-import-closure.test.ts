@@ -12,23 +12,36 @@ import { parseSync } from 'oxc-parser';
  * socket). The HTTP daemon transport, remote-artifact upload and download all
  * load these modules on demand instead.
  *
- * Classification comes from oxc-parser's ES module record rather than a regex,
- * because the forms that matter are exactly the ones a regex tuned to
- * `import ... from` misses: a bare side-effect `import 'node:http'` binds
- * nothing yet still evaluates the module, so it reintroduces the whole cost
- * while looking like nothing at all. Type-only imports are erased at build and
- * stay allowed; dynamic `import()` is the fix and is deliberately not followed.
+ * "On demand" is a claim about SCOPE, not about syntax, which is why this reads
+ * the AST rather than matching import forms. Two shapes evaluate the module
+ * during module evaluation while looking lazy or looking like nothing at all:
+ * a bare side-effect `import 'node:http'` (binds no names, still evaluates),
+ * and a dynamic `import('node:http')` sitting at module top level rather than
+ * inside a function -- including `.then(...)` and an immediately-invoked
+ * top-level function. A dynamic import is lazy only when its nearest enclosing
+ * function scope is not the module itself. Type-only imports and re-exports are
+ * erased at build and stay allowed.
+ *
+ * Known limitation: a top-level function that is invoked indirectly at load
+ * time (stored, then called by another top-level statement) reads as lazy here.
+ * Direct top-level invocation -- `(() => { ... })()` -- is detected.
  */
 
 const srcRoot = path.resolve(import.meta.dirname, '..');
 const LAZY_HTTP_MODULES = new Set(['node:http', 'node:https']);
+const FUNCTION_NODES = new Set([
+  'FunctionDeclaration',
+  'FunctionExpression',
+  'ArrowFunctionExpression',
+]);
+const WORKSPACE_SPECIFIER = /^(@agent-device\/[^/]+)(\/.*)?$/;
 
-/**
- * Specifiers whose module this file causes to be EVALUATED at load time.
- * Excludes type-only imports/re-exports (erased) and dynamic imports (lazy).
- */
-function evaluatedModuleRefs(fileName: string, source: string): string[] {
-  const { module } = parseSync(fileName, source);
+type AstNode = { type?: string; [key: string]: unknown };
+
+type ParsedModuleRecord = ReturnType<typeof parseSync>['module'];
+
+/** Static specifiers this file causes to be EVALUATED (not type-only). */
+function staticEvaluatedRefs(module: ParsedModuleRecord): string[] {
   const refs: string[] = [];
   for (const staticImport of module.staticImports) {
     // No entries at all is a side-effect import (`import 'x'`), which always
@@ -43,6 +56,63 @@ function evaluatedModuleRefs(fileName: string, source: string): string[] {
     }
   }
   return refs;
+}
+
+function unwrapParentheses(node: unknown): AstNode | null {
+  let current = node as AstNode | null;
+  while (current?.type === 'ParenthesizedExpression')
+    current = current.expression as AstNode | null;
+  return current;
+}
+
+/** The body of a function invoked right where it is defined, if this is that call. */
+function immediatelyInvokedBody(node: AstNode): unknown {
+  if (node.type !== 'CallExpression') return null;
+  const callee = unwrapParentheses(node.callee);
+  return callee && FUNCTION_NODES.has(String(callee.type)) ? callee.body : null;
+}
+
+function dynamicImportSpecifier(node: AstNode): string | null {
+  if (node.type !== 'ImportExpression') return null;
+  const source = node.source as { type?: string; value?: unknown } | undefined;
+  return source?.type === 'Literal' && typeof source.value === 'string' ? source.value : null;
+}
+
+function recordDynamicImport(record: AstNode, eager: boolean, found: string[]): void {
+  if (!eager) return;
+  const specifier = dynamicImportSpecifier(record);
+  if (specifier !== null) found.push(specifier);
+}
+
+/** Descends into a node's children, dropping `eager` on the way into a function body. */
+function visitChildren(record: AstNode, eager: boolean, found: string[]): void {
+  const childEager = eager && !FUNCTION_NODES.has(String(record.type));
+  for (const [key, value] of Object.entries(record)) {
+    if (key !== 'type') collectEagerDynamicImports(value, childEager, found);
+  }
+}
+
+/** Walks the AST, collecting only `import()` calls reached without entering a function. */
+function collectEagerDynamicImports(node: unknown, eager: boolean, found: string[]): void {
+  if (Array.isArray(node)) {
+    for (const child of node) collectEagerDynamicImports(child, eager, found);
+    return;
+  }
+  if (!node || typeof node !== 'object') return;
+  const record = node as AstNode;
+  recordDynamicImport(record, eager, found);
+  // An immediately-invoked function runs now, so its body inherits `eager`.
+  const invokedBody = immediatelyInvokedBody(record);
+  if (invokedBody) collectEagerDynamicImports(invokedBody, eager, found);
+  visitChildren(record, eager, found);
+}
+
+/** Every specifier this file evaluates at load time, static or dynamic. */
+function eagerlyEvaluatedModules(fileName: string, source: string): string[] {
+  const parsed = parseSync(fileName, source);
+  const dynamic: string[] = [];
+  collectEagerDynamicImports(parsed.program, true, dynamic);
+  return [...new Set([...staticEvaluatedRefs(parsed.module), ...dynamic])];
 }
 
 function resolveRelative(fromFile: string, specifier: string): string | null {
@@ -67,22 +137,30 @@ function readWorkspacePackageDirs(): Map<string, string> {
   return dirs;
 }
 
+type ExportTarget = { default?: string; types?: string } | string;
+
+function readExportTarget(packageDir: string, subpath: string): string | undefined {
+  const manifest = JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8')) as {
+    exports?: Record<string, ExportTarget>;
+  };
+  const target = manifest.exports?.[subpath];
+  if (typeof target === 'string') return target;
+  return target?.default ?? target?.types;
+}
+
 /**
  * Workspace subpath imports are followed too: a package the CLI evaluates can
  * pull `node:http` in just as effectively as a file under src/, and stopping the
  * walk at the package boundary would be the same blind spot in a new place.
  */
 function resolveWorkspace(specifier: string, packageDirs: Map<string, string>): string | null {
-  const match = /^(@agent-device\/[^/]+)(\/.*)?$/.exec(specifier);
-  const packageDir = match?.[1] ? packageDirs.get(match[1]) : undefined;
+  const match = WORKSPACE_SPECIFIER.exec(specifier);
+  const packageName = match?.[1];
+  const packageDir = packageName ? packageDirs.get(packageName) : undefined;
   if (!packageDir) return null;
-  const manifest = JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8')) as {
-    exports?: Record<string, { default?: string; types?: string } | string>;
-  };
-  const target = manifest.exports?.[`.${match?.[2] ?? ''}`];
-  const relativeTarget = typeof target === 'string' ? target : (target?.default ?? target?.types);
-  if (!relativeTarget) return null;
-  const resolved = path.resolve(packageDir, relativeTarget);
+  const target = readExportTarget(packageDir, `.${match?.[2] ?? ''}`);
+  if (!target) return null;
+  const resolved = path.resolve(packageDir, target);
   return fs.existsSync(resolved) ? resolved : null;
 }
 
@@ -95,7 +173,7 @@ function eagerClosureOfCli(): string[] {
     const current = queue.pop();
     if (!current || visited.has(current)) continue;
     visited.add(current);
-    for (const specifier of evaluatedModuleRefs(current, fs.readFileSync(current, 'utf8'))) {
+    for (const specifier of eagerlyEvaluatedModules(current, fs.readFileSync(current, 'utf8'))) {
       const resolved = specifier.startsWith('.')
         ? resolveRelative(current, specifier)
         : resolveWorkspace(specifier, packageDirs);
@@ -106,41 +184,68 @@ function eagerClosureOfCli(): string[] {
 }
 
 test.for([
-  { form: 'side-effect import', code: `import 'node:http';`, evaluates: true },
-  { form: 'default value import', code: `import http from 'node:http';`, evaluates: true },
-  { form: 'namespace import', code: `import * as http from 'node:http';`, evaluates: true },
-  { form: 'named value import', code: `import { request } from 'node:http';`, evaluates: true },
-  { form: 'value re-export', code: `export { request } from 'node:http';`, evaluates: true },
-  { form: 'star re-export', code: `export * from 'node:http';`, evaluates: true },
+  // --- static forms ---
+  { form: 'side-effect import', code: `import 'node:http';`, eager: true },
+  { form: 'default value import', code: `import http from 'node:http';`, eager: true },
+  { form: 'namespace import', code: `import * as http from 'node:http';`, eager: true },
+  { form: 'named value import', code: `import { request } from 'node:http';`, eager: true },
+  { form: 'value re-export', code: `export { request } from 'node:http';`, eager: true },
+  { form: 'star re-export', code: `export * from 'node:http';`, eager: true },
   {
     form: 'mixed value + type import',
     code: `import http, { type IncomingMessage } from 'node:http';`,
-    evaluates: true,
+    eager: true,
   },
-  {
-    form: 'type-only default import',
-    code: `import type http from 'node:http';`,
-    evaluates: false,
-  },
+  { form: 'type-only default import', code: `import type http from 'node:http';`, eager: false },
   {
     form: 'type-only named import',
     code: `import { type IncomingMessage } from 'node:http';`,
-    evaluates: false,
+    eager: false,
   },
   {
     form: 'type-only re-export',
     code: `export type { IncomingMessage } from 'node:http';`,
-    evaluates: false,
+    eager: false,
   },
-  { form: 'dynamic import', code: `const m = await import('node:http');`, evaluates: false },
-])('$form is classified as evaluates=$evaluates', ({ code, evaluates }) => {
-  expect(evaluatedModuleRefs('fixture.ts', code)).toEqual(evaluates ? ['node:http'] : []);
+  // --- dynamic import: scope decides, not syntax ---
+  { form: 'top-level await import', code: `const m = await import('node:http');`, eager: true },
+  { form: 'top-level import().then', code: `import('node:http').then((m) => m);`, eager: true },
+  {
+    form: 'top-level immediately-invoked arrow',
+    code: `(async () => { await import('node:http'); })();`,
+    eager: true,
+  },
+  {
+    form: 'function-declaration-local import',
+    code: `async function load() { return await import('node:http'); }`,
+    eager: false,
+  },
+  {
+    form: 'arrow-local import',
+    code: `const load = async () => await import('node:http');`,
+    eager: false,
+  },
+  {
+    form: 'method-local import',
+    code: `class K { async load() { await import('node:http'); } }`,
+    eager: false,
+  },
+  {
+    form: 'ternary inside a function (the shipped lazy-load shape)',
+    code: `async function load(s: boolean) {
+      return s ? (await import('node:https')).default : (await import('node:http')).default;
+    }`,
+    eager: false,
+  },
+])('$form is eager=$eager', ({ code, eager }) => {
+  const refs = eagerlyEvaluatedModules('fixture.ts', code);
+  expect(refs.includes('node:http') || refs.includes('node:https')).toBe(eager);
 });
 
 test('the CLI startup import closure never evaluates node:http or node:https', () => {
   const offenders: string[] = [];
   for (const file of eagerClosureOfCli()) {
-    for (const specifier of evaluatedModuleRefs(file, fs.readFileSync(file, 'utf8'))) {
+    for (const specifier of eagerlyEvaluatedModules(file, fs.readFileSync(file, 'utf8'))) {
       if (LAZY_HTTP_MODULES.has(specifier)) {
         offenders.push(`${path.relative(srcRoot, file)} -> ${specifier}`);
       }
@@ -156,7 +261,7 @@ test('the CLI startup import closure never evaluates node:http or node:https', (
 
 test('the CLI startup import closure is reachable and crosses the package boundary', () => {
   // Guards the test above from silently passing because the walk found nothing:
-  // a resolver that returns null for everything would leave both the src side
+  // a resolver that returned null for everything would leave both the src side
   // and the workspace side of the closure empty while the guard stayed green.
   const closure = eagerClosureOfCli();
   expect(closure.length).toBeGreaterThan(50);

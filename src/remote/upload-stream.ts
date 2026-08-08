@@ -3,7 +3,7 @@ import type { IncomingHttpHeaders } from 'node:http';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
-import { readNodeHttpResponseBody } from '../utils/node-http.ts';
+import { loadNodeHttpRequester, readNodeHttpResponseBody } from '../utils/node-http.ts';
 import {
   createUploadProgressTransform,
   type UploadProgressSink,
@@ -64,13 +64,10 @@ async function streamFileToHttpRequestAttempt(options: {
   startOffset: number;
   progress?: UploadStreamProgressOptions;
 }): Promise<UploadStreamResponse> {
-  // Loaded on demand: this module sits in the CLI's eager import closure via
-  // the remote-artifact upload client, but only a remote daemon ever uploads.
-  // Importing `node:http` for a value costs ~9ms of undici init per process.
-  const transport =
-    options.url.protocol === 'https:'
-      ? (await import('node:https')).default
-      : (await import('node:http')).default;
+  // This module sits in the CLI's eager import closure via the remote-artifact
+  // upload client, but only a remote daemon ever uploads, so the HTTP stack
+  // loads here rather than at import time.
+  const transport = await loadNodeHttpRequester(options.url.protocol);
   const payloadSize = fs.statSync(options.payloadPath).size;
   const headers = buildUploadRequestHeaders(options.headers, options.startOffset, payloadSize);
   emitUploadAttemptStarted(options.progress, options.startOffset, payloadSize);
