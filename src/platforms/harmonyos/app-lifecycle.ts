@@ -36,6 +36,12 @@ export interface HarmonyLaunchTarget {
 }
 
 interface HarmonyBundleDump {
+  applicationInfo?: {
+    isSystemApp?: boolean;
+  };
+  appInfo?: {
+    isSystemApp?: boolean;
+  };
   hapModuleInfos?: Array<{
     mainElementName?: string;
     moduleName?: string;
@@ -66,28 +72,66 @@ export async function resolveHarmonyArchiveBundleName(
 
 /** Extracts the launchable page ability from `bm dump -n <bundle>`. */
 export function parseHarmonyLaunchTarget(rawOutput: string): HarmonyLaunchTarget | undefined {
-  const jsonStart = rawOutput.indexOf('{');
-  if (jsonStart === -1) return undefined;
-  let dump: HarmonyBundleDump;
-  try {
-    dump = JSON.parse(rawOutput.slice(jsonStart)) as HarmonyBundleDump;
-  } catch {
-    return undefined;
-  }
+  const dump = parseHarmonyBundleDump(rawOutput);
+  if (!dump) return undefined;
   const module = dump.hapModuleInfos?.find((item) => item.mainElementName);
   if (!module?.mainElementName) return undefined;
   return { ability: module.mainElementName, module: module.moduleName };
 }
 
+/** Reads Bundle Manager's structured system-app classification for one bundle. */
+export function parseHarmonyIsSystemApp(rawOutput: string): boolean | undefined {
+  const dump = parseHarmonyBundleDump(rawOutput);
+  const isSystemApp = dump?.applicationInfo?.isSystemApp ?? dump?.appInfo?.isSystemApp;
+  return typeof isSystemApp === 'boolean' ? isSystemApp : undefined;
+}
+
+function parseHarmonyBundleDump(rawOutput: string): HarmonyBundleDump | undefined {
+  const jsonStart = rawOutput.indexOf('{');
+  if (jsonStart === -1) return undefined;
+  try {
+    return JSON.parse(rawOutput.slice(jsonStart)) as HarmonyBundleDump;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function listHarmonyApps(
   device: DeviceInfo,
-  _filter: 'all' | 'user-installed',
+  filter: 'all' | 'user-installed',
 ): Promise<Array<{ package: string; name: string }>> {
   const result = await runHarmonyHdc(device, ['shell', 'bm', 'dump', '-a'], { timeoutMs: 15_000 });
-  return parseHarmonyBundleList(result.stdout).map((pkg) => ({
+  const packages = parseHarmonyBundleList(result.stdout);
+  const userInstalledPackages =
+    filter === 'all' ? packages : await listHarmonyUserInstalledPackages(device, packages);
+  return userInstalledPackages.map((pkg) => ({
     package: pkg,
     name: pkg.split('.').at(-1) ?? pkg,
   }));
+}
+
+async function listHarmonyUserInstalledPackages(
+  device: DeviceInfo,
+  packages: string[],
+): Promise<string[]> {
+  const userInstalled: string[] = [];
+  for (const bundleName of packages) {
+    const result = await runHarmonyHdc(device, ['shell', 'bm', 'dump', '-n', bundleName], {
+      timeoutMs: 15_000,
+    });
+    const isSystemApp = parseHarmonyIsSystemApp(result.stdout);
+    if (isSystemApp === undefined) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        `Could not determine whether ${bundleName} is a system application`,
+        {
+          hint: 'Use apps --all to list all bundles when Bundle Manager does not expose applicationInfo.isSystemApp.',
+        },
+      );
+    }
+    if (!isSystemApp) userInstalled.push(bundleName);
+  }
+  return userInstalled;
 }
 
 export async function getHarmonyAppState(device: DeviceInfo): Promise<HarmonyForegroundApp> {

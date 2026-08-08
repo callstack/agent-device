@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { AppError } from '@agent-device/kernel/errors';
 import { beforeEach, test, vi } from 'vitest';
 
 vi.mock('../../../utils/exec.ts', async (importOriginal) => {
@@ -13,6 +14,7 @@ import {
   getHarmonyAppState,
   installHarmonyApp,
   listHarmonyApps,
+  parseHarmonyIsSystemApp,
   openHarmonyApp,
   parseHarmonyBundleList,
   parseHarmonyForegroundApp,
@@ -59,6 +61,15 @@ test('parseHarmonyLaunchTarget reads the main ability and module from bm dump ou
     { ability: 'EntryAbility', module: 'entry' },
   );
   assert.equal(parseHarmonyLaunchTarget('bundle not found'), undefined);
+});
+
+test('parseHarmonyIsSystemApp reads Bundle Manager application metadata', () => {
+  assert.equal(
+    parseHarmonyIsSystemApp(JSON.stringify({ applicationInfo: { isSystemApp: true } })),
+    true,
+  );
+  assert.equal(parseHarmonyIsSystemApp(JSON.stringify({ appInfo: { isSystemApp: false } })), false);
+  assert.equal(parseHarmonyIsSystemApp('bundle metadata unavailable'), undefined);
 });
 
 test('parseHarmonyForegroundApp reads the foreground ability from the mission list', () => {
@@ -136,6 +147,78 @@ test('HarmonyOS lifecycle commands use HDC bundle and ability primitives', async
       ],
       ['-t', 'harmony-1', 'shell', 'aa', 'force-stop', 'com.example.application'],
     ],
+  );
+});
+
+test('HarmonyOS app listing filters user-installed bundles through Bundle Manager metadata', async () => {
+  mockRunCmd
+    .mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: 'com.example.application\ncom.ohos.settings\n',
+      stderr: '',
+    })
+    .mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: JSON.stringify({ applicationInfo: { isSystemApp: false } }),
+      stderr: '',
+    })
+    .mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: JSON.stringify({ applicationInfo: { isSystemApp: true } }),
+      stderr: '',
+    });
+
+  assert.deepEqual(await listHarmonyApps(DEVICE, 'user-installed'), [
+    { package: 'com.example.application', name: 'application' },
+  ]);
+  assert.deepEqual(
+    mockRunCmd.mock.calls.map(([, args]) => args),
+    [
+      ['-t', 'harmony-1', 'shell', 'bm', 'dump', '-a'],
+      ['-t', 'harmony-1', 'shell', 'bm', 'dump', '-n', 'com.example.application'],
+      ['-t', 'harmony-1', 'shell', 'bm', 'dump', '-n', 'com.ohos.settings'],
+    ],
+  );
+});
+
+test('HarmonyOS app listing preserves the complete inventory for the all filter', async () => {
+  mockRunCmd.mockResolvedValueOnce({
+    exitCode: 0,
+    stdout: 'com.example.application\ncom.ohos.settings\n',
+    stderr: '',
+  });
+
+  assert.deepEqual(await listHarmonyApps(DEVICE, 'all'), [
+    { package: 'com.example.application', name: 'application' },
+    { package: 'com.ohos.settings', name: 'settings' },
+  ]);
+  assert.deepEqual(
+    mockRunCmd.mock.calls.map(([, args]) => args),
+    [['-t', 'harmony-1', 'shell', 'bm', 'dump', '-a']],
+  );
+});
+
+test('HarmonyOS user-installed app listing rejects bundles without a system-app classification', async () => {
+  mockRunCmd
+    .mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: 'com.example.application\n',
+      stderr: '',
+    })
+    .mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: JSON.stringify({ applicationInfo: {} }),
+      stderr: '',
+    });
+
+  await assert.rejects(
+    () => listHarmonyApps(DEVICE, 'user-installed'),
+    (error: unknown) => {
+      assert(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.match(error.details?.hint ?? '', /use apps --all to list all bundles/i);
+      return true;
+    },
   );
 });
 
