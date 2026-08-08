@@ -92,8 +92,8 @@ vi.mock('../session-deploy.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../session-deploy.ts')>();
   return {
     ...actual,
-    defaultInstallOps: { ios: vi.fn(), android: vi.fn() },
-    defaultReinstallOps: { ios: vi.fn(), android: vi.fn() },
+    defaultInstallOps: { ios: vi.fn(), android: vi.fn(), harmonyos: vi.fn() },
+    defaultReinstallOps: { ios: vi.fn(), android: vi.fn(), harmonyos: vi.fn() },
   };
 });
 

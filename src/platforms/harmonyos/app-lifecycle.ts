@@ -1,5 +1,7 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { runCmd } from '../../utils/exec.ts';
+import { sleep } from '../../utils/timeouts.ts';
 import { runHarmonyHdc } from './hdc.ts';
 
 export function parseHarmonyBundleList(rawOutput: string): string[] {
@@ -19,6 +21,28 @@ interface HarmonyBundleDump {
     mainElementName?: string;
     moduleName?: string;
   }>;
+}
+
+interface HarmonyArchiveModule {
+  app?: { bundleName?: string };
+}
+
+/** Reads the bundle identity embedded in a signed HAP archive. */
+export async function resolveHarmonyArchiveBundleName(
+  archivePath: string,
+): Promise<string | undefined> {
+  const result = await runCmd('unzip', ['-p', archivePath, 'module.json'], {
+    allowFailure: true,
+    timeoutMs: 15_000,
+  });
+  if (result.exitCode !== 0 || result.stdout.trim().length === 0) return undefined;
+  try {
+    const manifest = JSON.parse(result.stdout) as HarmonyArchiveModule;
+    const bundleName = manifest.app?.bundleName?.trim();
+    return bundleName || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Extracts the launchable page ability from `bm dump -n <bundle>`. */
@@ -82,4 +106,26 @@ export async function openHarmonyApp(
 
 export async function closeHarmonyApp(device: DeviceInfo, bundleId: string): Promise<void> {
   await runHarmonyHdc(device, ['shell', 'aa', 'force-stop', bundleId]);
+}
+
+export async function installHarmonyApp(
+  device: DeviceInfo,
+  archivePath: string,
+  options: { bundleIdHint?: string; relaunch?: boolean } = {},
+): Promise<{ package: string; launchTarget: string }> {
+  const bundleName = (await resolveHarmonyArchiveBundleName(archivePath)) ?? options.bundleIdHint;
+  if (!bundleName) {
+    throw new AppError('INVALID_ARGS', 'Could not determine the bundle name from the HAP archive', {
+      hint: 'Pass the HarmonyOS bundle name before the HAP path, or provide a valid HAP containing module.json.',
+    });
+  }
+  await runHarmonyHdc(device, ['install', '-r', archivePath], { timeoutMs: 180_000 });
+  if (options.relaunch) {
+    // HDC returns after transfer, while physical devices can still be replacing
+    // the running bundle. Starting immediately is acknowledged but may not put
+    // the new ability in front; API 24 devices reliably settle within one second.
+    await sleep(1_000);
+    await openHarmonyApp(device, bundleName);
+  }
+  return { package: bundleName, launchTarget: bundleName };
 }

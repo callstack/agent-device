@@ -14,6 +14,7 @@ import { expireRefFrame } from '../ref-frame.ts';
 export type ReinstallOps = {
   ios: (device: DeviceInfo, app: string, appPath: string) => Promise<{ bundleId: string }>;
   android: (device: DeviceInfo, app: string, appPath: string) => Promise<{ package: string }>;
+  harmonyos: (device: DeviceInfo, app: string, appPath: string) => Promise<{ package: string }>;
 };
 
 export type AppDeployOps = {
@@ -23,6 +24,11 @@ export type AppDeployOps = {
     appPath: string,
   ) => Promise<{ bundleId?: string; appName?: string; launchTarget?: string }>;
   android: (
+    device: DeviceInfo,
+    app: string,
+    appPath: string,
+  ) => Promise<{ package?: string; appName?: string; launchTarget?: string }>;
+  harmonyos: (
     device: DeviceInfo,
     app: string,
     appPath: string,
@@ -51,7 +57,17 @@ type AndroidDeployCommandResult = DeployCommandResultBase & {
   packageName?: string;
 };
 
-type DeployCommandResult = IosDeployCommandResult | AndroidDeployCommandResult;
+type HarmonyDeployCommandResult = DeployCommandResultBase & {
+  platform: 'harmonyos';
+  appId?: string;
+  package?: string;
+  packageName?: string;
+};
+
+type DeployCommandResult =
+  | IosDeployCommandResult
+  | AndroidDeployCommandResult
+  | HarmonyDeployCommandResult;
 
 export const defaultReinstallOps: ReinstallOps = {
   ios: async (device, app, appPath) => {
@@ -77,6 +93,10 @@ export const defaultReinstallOps: ReinstallOps = {
 
     const { reinstallAndroidApp } = await import('../../platforms/android/app-lifecycle.ts');
     return await reinstallAndroidApp(device, app, appPath);
+  },
+  harmonyos: async (device, app, appPath) => {
+    const { installHarmonyApp } = await import('../../platforms/harmonyos/app-lifecycle.ts');
+    return await installHarmonyApp(device, appPath, { bundleIdHint: app, relaunch: true });
   },
 };
 
@@ -121,6 +141,10 @@ export const defaultInstallOps: InstallOps = {
       launchTarget: result.launchTarget,
     };
   },
+  harmonyos: async (device, app, appPath) => {
+    const { installHarmonyApp } = await import('../../platforms/harmonyos/app-lifecycle.ts');
+    return await installHarmonyApp(device, appPath, { bundleIdHint: app });
+  },
 };
 
 export async function handleAppDeployCommand(params: {
@@ -161,7 +185,9 @@ export async function handleAppDeployCommand(params: {
 
     const result = isIosFamily(device)
       ? buildIosDeployResult(app, appPath, await deployOps.ios(device, app, appPath))
-      : buildAndroidDeployResult(app, appPath, await deployOps.android(device, app, appPath));
+      : device.platform === 'harmonyos'
+        ? buildHarmonyDeployResult(app, appPath, await deployOps.harmonyos(device, app, appPath))
+        : buildAndroidDeployResult(app, appPath, await deployOps.android(device, app, appPath));
 
     const data = withSuccessText(result, buildDeployMessage(result));
     recordSessionAction(sessionStore, session, req, command, data);
@@ -208,6 +234,23 @@ function buildAndroidDeployResult(
     ...(pkg ? { appId: pkg, package: pkg, packageName: pkg } : {}),
     appName: androidResult.appName,
     launchTarget: androidResult.launchTarget,
+  };
+}
+
+function buildHarmonyDeployResult(
+  app: string,
+  appPath: string,
+  harmonyResult: Awaited<ReturnType<AppDeployOps['harmonyos']>>,
+): HarmonyDeployCommandResult {
+  const pkg = harmonyResult.package;
+  const resultApp = app || pkg || harmonyResult.launchTarget || appPath;
+  return {
+    app: resultApp,
+    appPath,
+    platform: 'harmonyos',
+    ...(pkg ? { appId: pkg, package: pkg, packageName: pkg } : {}),
+    appName: harmonyResult.appName,
+    launchTarget: harmonyResult.launchTarget,
   };
 }
 
