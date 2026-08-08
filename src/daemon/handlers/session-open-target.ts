@@ -108,7 +108,7 @@ function shouldPreserveAndroidPackageContext(
  * convention the local resolver applies (resolveIosApp returns a dotted target
  * unchanged), so adopt it without any device round trip.
  */
-function providerIosBundleIdFromOpenTarget(openTarget: string | undefined): string | undefined {
+function bundleIdFromOpenTarget(openTarget: string | undefined): string | undefined {
   const trimmed = openTarget?.trim();
   if (!trimmed || isDeepLinkTarget(trimmed) || !trimmed.includes('.')) return undefined;
   return trimmed;
@@ -130,7 +130,10 @@ export async function resolveSessionAppBundleIdForTarget(
     // would leave `open com.a` then `open com.b` reporting com.a. Everything
     // this cannot name — deep links, display names, no target — still falls
     // back to the known id, which is what the local deep-link branches do too.
-    return providerIosBundleIdFromOpenTarget(openTarget) ?? currentAppBundleId;
+    return bundleIdFromOpenTarget(openTarget) ?? currentAppBundleId;
+  }
+  if (device.platform === 'harmonyos') {
+    return bundleIdFromOpenTarget(openTarget) ?? currentAppBundleId;
   }
   return (
     (await resolveIosBundleIdForOpen(device, openTarget, currentAppBundleId)) ??

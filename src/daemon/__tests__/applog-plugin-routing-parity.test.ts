@@ -39,6 +39,7 @@ function resolveLogBackendByHand(device: DeviceInfo): LogBackend {
   if (isIosFamily(device)) {
     return device.kind === 'device' ? 'ios-device' : 'ios-simulator';
   }
+  if (device.platform === 'harmonyos') return 'harmonyos';
   return 'android';
 }
 
@@ -90,10 +91,11 @@ test('resolveLogBackend routed through the plugin is byte-identical to the forme
 });
 
 test('only families with an app-log backend carry the appLog facet', () => {
-  // Apple owns ios + macos (SAME plugin instance); Android carries its own.
+  // Apple owns ios + macos (SAME plugin instance); Android and HarmonyOS carry theirs.
   assert.equal(getPlugin('apple'), getPlugin('apple'));
   assert.ok(getPlugin('apple').appLog, 'apple plugin exposes appLog');
   assert.ok(getPlugin('android').appLog, 'android plugin exposes appLog');
+  assert.ok(getPlugin('harmonyos').appLog, 'harmonyos plugin exposes appLog');
   // linux/web historically fell through to the `'android'` default; they get NO
   // facet, and the daemon lookup preserves that fallthrough (asserted below).
   assert.equal(getPlugin('linux').appLog, undefined, 'linux plugin has no appLog');
@@ -102,7 +104,7 @@ test('only families with an app-log backend carry the appLog facet', () => {
 
 test('each populated appLog facet resolves the backend its family owns', () => {
   for (const device of SAMPLE_DEVICES.filter(
-    (d) => isIosFamily(d) || isMacOs(d) || d.platform === 'android',
+    (d) => isIosFamily(d) || isMacOs(d) || d.platform === 'android' || d.platform === 'harmonyos',
   )) {
     assert.equal(
       getPlugin(device.platform).appLog?.resolveBackend(device),

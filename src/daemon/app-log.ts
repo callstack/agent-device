@@ -20,6 +20,7 @@ import {
 } from './app-log-ios.ts';
 import { APP_LOG_PID_FILENAME, type AppLogResult, type AppLogState } from './app-log-process.ts';
 import { waitForChildExit } from './app-log-stream.ts';
+import { startHarmonyAppLog } from './app-log-harmonyos.ts';
 import {
   mergeNetworkDumps,
   readRecentNetworkTraffic,
@@ -363,6 +364,9 @@ async function startLocalAppLog({
   if (device.platform === 'android') {
     assertAndroidPackageArgSafe(appBundleId);
     return await startAndroidAppLog(device.id, appBundleId, stream, redactionPatterns, pidPath);
+  }
+  if (device.platform === 'harmonyos') {
+    return await startHarmonyAppLog(device.id, appBundleId, stream, redactionPatterns, pidPath);
   }
   if (isMacOs(device)) {
     return await startMacOsAppLog(appBundleId, stream, redactionPatterns, pidPath);

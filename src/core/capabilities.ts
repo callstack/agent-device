@@ -53,6 +53,7 @@ const HARMONYOS_SUPPORTED_COMMANDS = new Set<string>([
   'keyboard',
   'is',
   'longpress',
+  'logs',
   'press',
   'reinstall',
   'screenshot',

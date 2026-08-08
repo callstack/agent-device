@@ -24,6 +24,13 @@ const androidDevice: DeviceInfo = {
   kind: 'emulator',
   booted: true,
 };
+const harmonyDevice: DeviceInfo = {
+  platform: 'harmonyos',
+  id: '127.0.0.1:5555',
+  name: 'HarmonyOS Emulator',
+  kind: 'emulator',
+  booted: true,
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -40,6 +47,34 @@ test('inferAndroidPackageAfterOpen reads foreground package for Android URL open
     inferAndroidPackageAfterOpen(androidDevice, 'exp://127.0.0.1:8082', undefined),
   ).resolves.toBe('host.exp.exponent');
 });
+
+test('HarmonyOS adopts an explicit bundle-id target for app-scoped commands', async () => {
+  const resolveAndroidPackageForOpen = vi.fn(async () => undefined);
+
+  await expect(
+    resolveSessionAppBundleIdForTarget(
+      harmonyDevice,
+      'com.example.application',
+      undefined,
+      resolveAndroidPackageForOpen,
+    ),
+  ).resolves.toBe('com.example.application');
+  expect(resolveAndroidPackageForOpen).not.toHaveBeenCalled();
+});
+
+test.each(['myapp://login', 'https://example.com', 'Demo App'])(
+  'HarmonyOS retains the existing app across non-bundle targets: %s',
+  async (openTarget) => {
+    await expect(
+      resolveSessionAppBundleIdForTarget(
+        harmonyDevice,
+        openTarget,
+        'com.example.application',
+        vi.fn(async () => undefined),
+      ),
+    ).resolves.toBe('com.example.application');
+  },
+);
 
 // Opening a bundle id switches the session's app, so the target wins over what
 // the session tracked before — the same precedence the local path has, where

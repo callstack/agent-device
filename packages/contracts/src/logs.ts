@@ -6,4 +6,4 @@ export type LogAction = (typeof LOG_ACTION_VALUES)[number];
  * daemon because `core/platform-plugin/plugin.ts` types its `appLog` facet with it: the
  * plugin names the backend, the daemon owns the backend objects.
  */
-export type LogBackend = 'ios-simulator' | 'ios-device' | 'android' | 'macos';
+export type LogBackend = 'ios-simulator' | 'ios-device' | 'android' | 'harmonyos' | 'macos';
