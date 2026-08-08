@@ -134,7 +134,7 @@ export function resolveProtocolEra(method: string, params: unknown): ProtocolEra
   if (clientInfo !== undefined && !isImplementation(clientInfo)) {
     throw new AppError(
       'INVALID_ARGS',
-      `Expected _meta["${CLIENT_INFO_META_KEY}"] to carry string name and version.`,
+      `Expected _meta["${CLIENT_INFO_META_KEY}"] to be a valid Implementation.`,
     );
   }
   if (!MODERN_PROTOCOL_VERSIONS.includes(declared)) {
@@ -198,12 +198,44 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+/**
+ * Whether a value is a valid `Implementation`: `name` and `version` are required, and
+ * every other recognized field is type-checked when present. Unrecognized keys pass —
+ * `_meta` payloads carry extension fields, and rejecting those would reject the future.
+ */
 function isImplementation(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (stringField(value, 'name') === undefined) return false;
+  if (stringField(value, 'version') === undefined) return false;
   return (
-    isRecord(value) &&
-    stringField(value, 'name') !== undefined &&
-    stringField(value, 'version') !== undefined
+    isOptional(value.title, isString) &&
+    isOptional(value.description, isString) &&
+    isOptional(value.websiteUrl, isString) &&
+    isOptional(value.icons, (icons) => Array.isArray(icons) && icons.every(isIcon))
   );
+}
+
+/** An `Icon` requires `src`; the rest are optional but typed when supplied. */
+function isIcon(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (stringField(value, 'src') === undefined) return false;
+  return (
+    isOptional(value.mimeType, isString) &&
+    isOptional(value.sizes, isStringArray) &&
+    isOptional(value.theme, (theme) => theme === 'light' || theme === 'dark')
+  );
+}
+
+function isOptional(value: unknown, check: (value: unknown) => boolean): boolean {
+  return value === undefined || check(value);
+}
+
+function isString(value: unknown): boolean {
+  return typeof value === 'string';
+}
+
+function isStringArray(value: unknown): boolean {
+  return Array.isArray(value) && value.every(isString);
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

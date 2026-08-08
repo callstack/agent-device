@@ -203,7 +203,23 @@ test('modern-framed calls to the methods 2026-07-28 removed are unknown methods'
 });
 
 test('a supplied clientInfo must be a valid Implementation', async () => {
-  for (const clientInfo of [42, { name: 'c' }, { version: '1' }, { name: 1, version: 2 }]) {
+  const valid = { name: 'c', version: '1' };
+  for (const clientInfo of [
+    42,
+    { name: 'c' },
+    { version: '1' },
+    { name: 1, version: 2 },
+    // Recognized optional fields are typed, so a wrong scalar is malformed too.
+    { ...valid, websiteUrl: 42 },
+    { ...valid, title: 42 },
+    { ...valid, description: 42 },
+    // Icons: wrong container, entry missing `src`, and a bad typed member.
+    { ...valid, icons: 42 },
+    { ...valid, icons: [{}] },
+    { ...valid, icons: [{ src: 42 }] },
+    { ...valid, icons: [{ src: 'https://e.dev/i.png', theme: 'blue' }] },
+    { ...valid, icons: [{ src: 'https://e.dev/i.png', sizes: [48] }] },
+  ]) {
     const response = await handleMcpMessage({
       jsonrpc: '2.0',
       id: 'bad-client-info',
@@ -232,6 +248,36 @@ test('a supplied clientInfo must be a valid Implementation', async () => {
     },
   });
   assert.ok(omitted && 'result' in omitted);
+
+  // A fully populated clientInfo, plus an extension key, must still be served:
+  // validation must not harden into rejecting what the spec allows.
+  const rich = await handleMcpMessage({
+    jsonrpc: '2.0',
+    id: 'rich-client-info',
+    method: 'tools/list',
+    params: {
+      _meta: {
+        ...MODERN_META,
+        'io.modelcontextprotocol/clientInfo': {
+          name: 'c',
+          version: '1',
+          title: 'Client',
+          description: 'A client',
+          websiteUrl: 'https://example.dev',
+          icons: [
+            {
+              src: 'https://example.dev/i.png',
+              mimeType: 'image/png',
+              sizes: ['48x48'],
+              theme: 'dark',
+            },
+          ],
+          'com.example/extension': { anything: true },
+        },
+      },
+    },
+  });
+  assert.ok(rich && 'result' in rich);
 });
 
 test('a protocol version this server does not implement is rejected with the supported list', async () => {

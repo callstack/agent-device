@@ -110,13 +110,54 @@ test('a supplied clientInfo must be an Implementation, but omitting it is fine',
     },
   });
 
+  const valid = { name: 'c', version: '1' };
   assert.equal(resolveProtocolEra('tools/list', modernMeta()), 'modern');
+  assert.equal(resolveProtocolEra('tools/list', withClientInfo(valid)), 'modern');
+  // Every recognized optional field, plus an unknown extension key, stays acceptable.
   assert.equal(
-    resolveProtocolEra('tools/list', withClientInfo({ name: 'c', version: '1' })),
+    resolveProtocolEra(
+      'tools/list',
+      withClientInfo({
+        ...valid,
+        title: 'Client',
+        description: 'A client',
+        websiteUrl: 'https://example.dev',
+        icons: [
+          {
+            src: 'https://example.dev/i.png',
+            mimeType: 'image/png',
+            sizes: ['48x48'],
+            theme: 'light',
+          },
+        ],
+        'com.example/extension': 1,
+      }),
+    ),
     'modern',
   );
-  for (const bad of [42, 'client', [], { name: 'c' }, { version: '1' }]) {
-    assert.throws(() => resolveProtocolEra('tools/list', withClientInfo(bad)), /clientInfo/);
+
+  for (const bad of [
+    42,
+    'client',
+    [],
+    { name: 'c' },
+    { version: '1' },
+    { ...valid, title: 42 },
+    { ...valid, description: 42 },
+    { ...valid, websiteUrl: 42 },
+    { ...valid, icons: 42 },
+    { ...valid, icons: [{}] },
+    { ...valid, icons: [{ src: 42 }] },
+    { ...valid, icons: [{ src: 'https://e.dev/i.png', mimeType: 42 }] },
+    { ...valid, icons: [{ src: 'https://e.dev/i.png', sizes: [48] }] },
+    { ...valid, icons: [{ src: 'https://e.dev/i.png', sizes: 'any' }] },
+    { ...valid, icons: [{ src: 'https://e.dev/i.png', theme: 'blue' }] },
+  ]) {
+    assert.throws(
+      () => resolveProtocolEra('tools/list', withClientInfo(bad)),
+      /clientInfo/,
+      `expected rejection for ${JSON.stringify(bad)}`,
+    );
   }
 });
 
