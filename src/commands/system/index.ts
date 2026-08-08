@@ -51,7 +51,7 @@ const TV_REMOTE_COMMAND_NAME = 'tv-remote';
 const TV_REMOTE_LONGPRESS_PRESET_MS = 500;
 
 const CLIPBOARD_ACTION_VALUES = ['read', 'write'] as const;
-const KEYBOARD_METADATA_ACTION_VALUES = ['status', 'dismiss'] as const;
+const KEYBOARD_METADATA_ACTION_VALUES = ['status', 'dismiss', 'enter', 'return'] as const;
 
 const appStateCommandDescription = 'Show foreground app/activity';
 const backCommandDescription =

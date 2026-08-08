@@ -425,10 +425,36 @@ async function handleKeyboardCommand(
   if (device.platform === 'android') {
     return await handleAndroidKeyboardCommand(device, action);
   }
+  if (device.platform === 'harmonyos') {
+    return await handleHarmonyKeyboardCommand(device, action);
+  }
   if (isIosFamily(device)) {
     return await handleIosKeyboardCommand(device, action, context, runnerCtx);
   }
-  throw new AppError('UNSUPPORTED_OPERATION', 'keyboard is supported only on Android and iOS');
+  throw new AppError(
+    'UNSUPPORTED_OPERATION',
+    'keyboard is supported only on Android, HarmonyOS, and iOS',
+  );
+}
+
+async function handleHarmonyKeyboardCommand(
+  device: DeviceInfo,
+  action: KeyboardAction,
+): Promise<Record<string, unknown>> {
+  if (action !== 'dismiss' && action !== 'enter' && action !== 'return') {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      'keyboard status/get is not available through the public HarmonyOS HDC API; use keyboard dismiss or enter',
+    );
+  }
+  const { pressHarmonyKeyboardKey } = await import('../platforms/harmonyos/input-actions.ts');
+  const key = action === 'dismiss' ? 'Back' : 'Enter';
+  await pressHarmonyKeyboardKey(device, key);
+  return {
+    platform: 'harmonyos',
+    action: action === 'dismiss' ? 'dismiss' : 'enter',
+    ...successText(action === 'dismiss' ? 'Keyboard dismissed' : 'Keyboard enter pressed'),
+  };
 }
 
 async function handleAndroidKeyboardCommand(

@@ -50,6 +50,7 @@ const HARMONYOS_SUPPORTED_COMMANDS = new Set<string>([
   'home',
   'gesture',
   'install',
+  'keyboard',
   'is',
   'longpress',
   'press',

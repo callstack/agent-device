@@ -132,6 +132,13 @@ export async function appSwitcherHarmony(device: DeviceInfo): Promise<void> {
   await runHarmonyHdc(device, ['shell', 'uitest', 'uiInput', 'keyEvent', 'Recent']);
 }
 
+export async function pressHarmonyKeyboardKey(
+  device: DeviceInfo,
+  key: 'Enter' | 'Back',
+): Promise<void> {
+  await runHarmonyHdc(device, ['shell', 'uitest', 'uiInput', 'keyEvent', key]);
+}
+
 export async function setHarmonyOrientation(
   _device: DeviceInfo,
   _orientation: DeviceRotation,
