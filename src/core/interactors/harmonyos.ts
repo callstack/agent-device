@@ -17,6 +17,7 @@ import {
   typeHarmony,
 } from '../../platforms/harmonyos/input-actions.ts';
 import { screenshotHarmony } from '../../platforms/harmonyos/screenshot.ts';
+import { setHarmonySetting } from '../../platforms/harmonyos/settings.ts';
 import { readHarmonyGestureViewport, snapshotHarmony } from '../../platforms/harmonyos/snapshot.ts';
 
 export function createHarmonyInteractor(device: DeviceInfo, _runner?: RunnerContext): Interactor {
@@ -52,6 +53,6 @@ export function createHarmonyInteractor(device: DeviceInfo, _runner?: RunnerCont
     tvRemote: unsupported('tv-remote'),
     readClipboard: unsupported('clipboard'),
     writeClipboard: unsupported('clipboard'),
-    setSetting: unsupported('settings'),
+    setSetting: (setting, state, appId) => setHarmonySetting(device, setting, state, appId),
   };
 }

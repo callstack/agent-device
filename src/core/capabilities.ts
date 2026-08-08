@@ -60,6 +60,7 @@ const HARMONYOS_SUPPORTED_COMMANDS = new Set<string>([
   'reinstall',
   'screenshot',
   'scroll',
+  'settings',
   'snapshot',
   'swipe',
   'type',
