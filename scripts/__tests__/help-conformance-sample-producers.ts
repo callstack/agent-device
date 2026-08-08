@@ -4,6 +4,7 @@ import {
   APP_NOT_INSTALLED_SAMPLE,
   BROWSERSTACK_CONNECT_SAMPLE,
   DEVICE_IN_USE_SAMPLE,
+  MERGED_CARD_ACTIONS_SAMPLE,
   NOT_SETTLED_SAMPLE,
   OFFSCREEN_TARGET_SNAPSHOT_SAMPLE,
   PRIVATE_AX_RECOVERY_SAMPLE,
@@ -260,6 +261,54 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
         row(9, 'e10', 'Notifications', 1030),
         row(10, 'e11', 'Wallpaper', 1160),
         row(11, 'e12', 'Developer', 1290),
+      ];
+      return formatSnapshotText(
+        { nodes, backend: 'xctest', truncated: false },
+        { interactiveOnly: true },
+      ).trimEnd();
+    },
+  },
+  {
+    name: 'MERGED_CARD_ACTIONS_SAMPLE',
+    producer: "the snapshot renderer with --actions naming a merged element's custom actions",
+    sample: MERGED_CARD_ACTIONS_SAMPLE,
+    render: () => {
+      // A Bluesky-style feed item merged into one Link node: its Reply/Repost/
+      // menu controls are AX custom actions, not child nodes, so they only
+      // surface when --actions is passed through to the renderer.
+      const nodes = [
+        {
+          index: 0,
+          ref: 'e1',
+          type: 'Application',
+          label: 'Bluesky',
+          rect: { x: 0, y: 0, width: 390, height: 844 },
+        },
+        {
+          index: 1,
+          ref: 'e2',
+          parentIndex: 0,
+          type: 'Window',
+          rect: { x: 0, y: 0, width: 390, height: 844 },
+        },
+        {
+          index: 2,
+          ref: 'e3',
+          parentIndex: 1,
+          type: 'CollectionView',
+          interactive: true,
+          rect: { x: 0, y: 60, width: 390, height: 700 },
+        },
+        {
+          index: 3,
+          ref: 'e72',
+          parentIndex: 2,
+          type: 'Link',
+          label: 'feedItem-by-whiskers.test',
+          interactive: true,
+          rect: { x: 0, y: 60, width: 390, height: 140 },
+          actions: ['Reply', 'Repost', 'Open post options menu'],
+        },
       ];
       return formatSnapshotText(
         { nodes, backend: 'xctest', truncated: false },

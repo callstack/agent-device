@@ -135,6 +135,20 @@ test('help workflow documents open/close/relaunch runner guarantees as lifecycle
   assert.match(result.stdout, /Env vars: help physical-device/);
 });
 
+test('help workflow advertises open --foreground and snapshot -i --actions', async () => {
+  const result = await runCliCapture(['help', 'workflow']);
+  assert.equal(result.code, 0);
+  assert.equal(result.calls.length, 0);
+  assert.match(
+    result.stdout,
+    /No session, one booted iOS simulator, one running app: open --foreground attaches and returns the initial snapshot in one call; fails closed \(AMBIGUOUS_MATCH\) otherwise; rejects an explicit app\/--udid\/--device/,
+  );
+  assert.match(
+    result.stdout,
+    /snapshot -i --actions names custom-action affordances hidden inside a merged element \(iOS sim only\); not directly invokable -- reach via its detail screen, labeled children elsewhere, or coordinates/,
+  );
+});
+
 test('help physical-device documents the runner/daemon lifecycle detail moved out of workflow (#1051)', async () => {
   const result = await runCliCapture(['help', 'physical-device']);
   assert.equal(result.code, 0);
