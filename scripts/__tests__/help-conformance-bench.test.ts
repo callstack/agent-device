@@ -496,33 +496,21 @@ test('case matchers score parsed tokens so shell quoting does not change results
   });
 });
 
-test('foreground attach scoring rejects an explicit app positional after flags', async () => {
-  const validCommand = 'agent-device open --foreground --platform ios';
+test('foreground attach grammar accepts both auto-discovery and an explicit known app', async () => {
+  const autoDiscoveryCommand = 'agent-device open --foreground --platform ios';
   const explicitTargetCommand = 'agent-device open --foreground --platform ios com.example.app';
-  const [validAttach, explicitTarget] = await validatePlanCommands([
-    validCommand,
+  const [autoDiscovery, explicitTarget] = await validatePlanCommands([
+    autoDiscoveryCommand,
     explicitTargetCommand,
   ]);
 
+  assert.deepEqual(autoDiscovery.agentCommand, { command: 'open', positionals: [] });
   assert.deepEqual(explicitTarget.agentCommand, {
     command: 'open',
     positionals: ['com.example.app'],
   });
-  assert.equal(
-    scoreExpectations({ expectations: ['noExplicitForegroundTarget'] }, [validCommand], '', [
-      validAttach,
-    ]).noExplicitForegroundTarget,
-    true,
-  );
-  assert.equal(
-    scoreExpectations(
-      { expectations: ['noExplicitForegroundTarget'] },
-      [explicitTargetCommand],
-      '',
-      [explicitTarget],
-    ).noExplicitForegroundTarget,
-    false,
-  );
+  assert.deepEqual(autoDiscovery.issues, []);
+  assert.deepEqual(explicitTarget.issues, []);
 });
 
 test('plan validator applies narrow grammar to permitted external commands', async () => {

@@ -11,17 +11,22 @@ export type ForegroundOpenResolution =
   | { type: 'response'; response: DaemonResponse };
 
 /**
- * RFC prototype (branch claude/observe-foreground): `open --foreground` collapses the
+ * `open --foreground` collapses the
  * `snapshot -i` (fails) -> read hint -> `open <bundleId>` -> `snapshot -i` dance into one
  * call for the common case (one booted iOS simulator, one running app).
  *
- * When `--foreground` is set with no explicit app argument on a fresh session, this
- * auto-resolves the target via `resolveSoleForegroundIosApp` — the exact same
- * ambiguity-detection probe that enriches the SESSION_NOT_FOUND hint — and rewrites the
- * request's positionals/flags so the rest of `handleOpenCommand`'s existing new-session
- * flow (device resolution, surface validation, session creation) runs completely
- * unmodified against the resolved device + bundle id. Only iOS simulators are handled;
- * see the PR body for scoped-out platforms.
+ * When `--foreground` is set with an explicit app, normal open resolution remains the
+ * source of truth for app and device selection; this module only composes the initial
+ * snapshot after open succeeds. That makes the deterministic, configured-target form
+ * (`open <app> --foreground`) the cheap path for harnesses and other callers that already
+ * know the foreground bundle.
+ *
+ * Without an app argument, this auto-resolves the target via
+ * `resolveSoleForegroundIosApp` — the exact same ambiguity-detection probe that enriches
+ * the SESSION_NOT_FOUND hint — and rewrites the request's positionals/flags so the rest
+ * of `handleOpenCommand`'s existing new-session flow runs unmodified against the resolved
+ * device + bundle id. Only iOS simulators are handled; see the PR body for scoped-out
+ * platforms.
  *
  * Fails closed with AMBIGUOUS_MATCH — never guesses — when the environment is not
  * unambiguous: zero or multiple booted simulators, zero or multiple running apps, or a
@@ -45,15 +50,7 @@ export async function resolveForegroundOpenRequest(params: {
       ),
     };
   }
-  if (req.positionals?.[0]) {
-    return {
-      type: 'response',
-      response: errorResponse(
-        'INVALID_ARGS',
-        'open --foreground cannot be combined with an explicit app argument.',
-      ),
-    };
-  }
+  if (req.positionals?.[0]) return { type: 'resolved', req };
   // #1670 P1: the resolved-device rewrite below pins --udid/--platform, so an
   // explicit selector must fail fast instead of being silently overwritten
   // (open --foreground --udid B with sim A sole-booted must NOT open A).

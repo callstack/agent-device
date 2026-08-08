@@ -5,7 +5,21 @@ description: Automates Apple-platform apps (iOS, tvOS, macOS), Android devices, 
 
 # agent-device
 
-Router only. Before your first agent-device command or plan, read the smallest version-matched CLI guide that fits the task — this single read also replaces a separate `agent-device --version` check:
+For an ordinary app-driving task, start directly. Do not run `--help`, `--version`, `appstate`, or `snapshot` first:
+
+```bash
+# The prompt says this app is already foreground and names its app/bundle id:
+agent-device open <app> --foreground
+
+# Otherwise:
+agent-device open <app>
+```
+
+`open <app> --foreground` keeps normal configured target selection and returns the initial interactive snapshot in the same call. Continue from its current refs. Prefer a concrete `@eN` ref from the current snapshot over a broad mutation selector. When a response prints a pinned ref such as `@e12~s42` — including an ambiguity candidate or settled diff — copy the whole pinned ref exactly; a bare ref from a partial result is intentionally rejected.
+
+Default loop: `open -> act with a current ref or specific selector -> verify -> close`. Use `--settle` on planned `press`, `click`, `fill`, `longpress`, `scroll`, or `back`; continue from the settled diff when it already proves the next state. If a mutation returns `AMBIGUOUS_MATCH`, retry one listed pinned candidate rather than adding `--first` or guessing by coordinates.
+
+Read the smallest version-matched CLI guide only when the task is specialized, you are planning rather than operating, or a command/hint does not answer the question. This single read also replaces a separate `agent-device --version` check:
 
 ```bash
 agent-device help manual-qa   # scripted/manual QA, acceptance checks, checklist execution
@@ -34,8 +48,6 @@ agent-device help tv
 agent-device help ios-system-ui  # iOS SpringBoard, widgets, and system-UI surfaces
 ```
 
-Default loop: `open -> snapshot/-i -> get/is/find or press/fill/scroll/wait -> verify -> close`. When target-specific help says capture or selectors are unsupported, use its control-only loop and the device display as visual truth.
-
-Use this skill only to route into version-matched CLI help. Let the selected help topic provide exact command shapes, platform limits, and current workflow guidance; use `help workflow` as the full reference when a task-specific topic is too narrow.
+When target-specific help says capture or selectors are unsupported, use its control-only loop and the device display as visual truth. Let help own advanced command shapes and platform limits; use `help workflow` as the fallback reference when the compact loop is insufficient.
 
 For precise location workflows, read the installed `settings` help before planning so coordinate support and platform limits come from the active CLI version.

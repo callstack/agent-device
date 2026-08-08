@@ -388,11 +388,44 @@ test('corroborates a tap when the request carries no flags and the baseline used
   expect(sessionStore.get(sessionName)?.actions).toHaveLength(1);
 });
 
+test('a changed capture after ordinary agent turn latency still corroborates the tap', async () => {
+  const sessionName = 'ios-agent-turn-latency-corroboration';
+  const sessionStore = makeSessionStore();
+  const baseline = snapshot(profileNodes);
+  baseline.createdAt = Date.now() - 6_000;
+  sessionStore.set(
+    sessionName,
+    makeIosSession(sessionName, {
+      appBundleId: 'com.example.app',
+      snapshot: baseline,
+    }),
+  );
+  mockDispatch.mockImplementation(async (_device, command) => {
+    if (command === 'press') {
+      throw new AppError(
+        'XCTEST_RECORDED_FAILURE',
+        'XCTest recorded a failure while executing tap; the action may not have been performed.',
+      );
+    }
+    if (command === 'snapshot') return snapshotPayload(imageViewerNodes);
+    return {};
+  });
+
+  const response = await runClick(sessionStore, sessionName);
+
+  expect(response?.ok).toBe(true);
+  if (response?.ok) {
+    expect(response.data?.warning).toMatch(/post-action accessibility capture changed/);
+  }
+  expect(mockDispatch.mock.calls.filter((call) => call[1] === 'snapshot')).toHaveLength(1);
+  expect(sessionStore.get(sessionName)?.actions).toHaveLength(1);
+});
+
 test('a changed capture against a stale baseline keeps the tap failure', async () => {
   const sessionName = 'ios-stale-baseline-tap-corroboration';
   const sessionStore = makeSessionStore();
   const baseline = snapshot(profileNodes);
-  baseline.createdAt = Date.now() - 5_001;
+  baseline.createdAt = Date.now() - 15_001;
   sessionStore.set(
     sessionName,
     makeIosSession(sessionName, {

@@ -88,7 +88,7 @@ test('usage includes agent workflows, config, environment, and examples footers'
   );
   assert.match(usageText, /Agent Starting Point:/);
   assert.match(usageText, /Write full command lines starting with agent-device/);
-  assert.match(usageText, /Default app loop: agent-device open <app>/);
+  assert.match(usageText, /Default app loop: agent-device open <app> --foreground/);
   assert.match(
     usageText,
     /Use --settle only on planned press, click, fill, longpress, scroll, or back commands; never add it to open, snapshot, or close/,
@@ -255,7 +255,7 @@ test('usageForCommand resolves workflow help topic', async () => {
   assert.match(help, /Shapes and platform quirks: help gestures/);
   assert.match(
     help,
-    /One iOS sim, app running, no session: open --foreground: attach \+ snapshot\. Capture fails; stays open: snapshot -i\. App\/device\/ambiguity fail/,
+    /Known app: open <app> --foreground -> snapshot\. Bare form needs one running app on one iOS sim; capture failure keeps session open/,
   );
   assert.match(help, /Never open artifact paths or invent package ids/);
   assert.match(

@@ -118,10 +118,9 @@ export type CliFlags = CloudProviderProfileFields &
     shutdown?: boolean;
     relaunch?: boolean;
     /**
-     * RFC prototype (open --foreground, branch claude/observe-foreground): resolve the
-     * app target from the sole booted iOS simulator's sole running app instead of
-     * requiring an explicit app argument. Fails closed (AMBIGUOUS_MATCH) unless the
-     * environment is unambiguous.
+     * Include the initial interactive snapshot in a fresh open response. With
+     * no app argument, iOS can discover the sole running app on the sole booted
+     * simulator and fails closed when that environment is ambiguous.
      */
     foreground?: boolean;
     surface?: SessionSurface;

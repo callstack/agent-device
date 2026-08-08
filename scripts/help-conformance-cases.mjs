@@ -647,36 +647,22 @@ Use the output already shown to determine whether the feed-search UI is present,
   {
     id: 'foreground-attach-single-sim',
     docs: ['--help:first30', 'workflow'],
-    task: 'You are starting fresh with no active session. The environment guarantees exactly one booted iOS simulator with exactly one app running on it -- the app you want to keep testing. Plan the command to attach to it and get its initial interactive snapshot in a single call (this only resolves unambiguously because of that guarantee, and it rejects an explicit app or device selector), then press the visible Continue control and close the session.',
-    expectations: [
-      'validPlanCommands',
-      'fullPrefix',
-      'usesSettleOnMutations',
-      'opensAndCloses',
-      'noExplicitForegroundTarget',
-    ],
+    task: 'You are starting fresh with no active session. The configured iOS target already has com.example.demo in the foreground. Plan the command that keeps this deterministic app/device selection and gets its initial interactive snapshot in a single call, then press the visible Continue control and close the session.',
+    expectations: ['validPlanCommands', 'fullPrefix', 'usesSettleOnMutations', 'opensAndCloses'],
     matchers: [
       {
         id: 'startsWithForegroundOpen',
-        // Flag order is not semantically meaningful (`open --platform ios
-        // --foreground` is exactly as correct as `open --foreground
-        // --platform ios`); this only checks that --foreground is on the
-        // first command and there is no app positional before it. The
-        // no-positional guarantee comes from the forbidden checks below.
-        pattern: /^agent-device\s+open\b[^\n]*--foreground\b/i,
+        // Flag order is not semantically meaningful; require the known app
+        // and --foreground on the first command, in either order.
+        pattern:
+          /^agent-device\s+open\b(?=[^\n]*\bcom\.example\.demo\b)(?=[^\n]*--foreground\b)[^\n]*$/i,
       },
       {
         id: 'pressesContinueAfterAttach',
         pattern: /agent-device\s+press\s+[^\n]*continue[^\n]*--settle\b/i,
       },
     ],
-    forbidden: [
-      {
-        id: 'noDeviceSelectorWithForeground',
-        pattern: /--foreground\b[^\n]*--(?:udid|device)\b|--(?:udid|device)\b[^\n]*--foreground\b/i,
-      },
-      { id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET },
-    ],
+    forbidden: [{ id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET }],
   },
   {
     id: 'merged-card-actions-not-directly-invokable',

@@ -16,13 +16,6 @@ const EXPECTATION_SCORERS = {
   // validator splits and validates each segment), so it is the only place
   // that can tell whether the model actually chained.
   usesConfidentChaining: ({ commands }) => commands.some((command) => /&&/.test(command)),
-  noExplicitForegroundTarget: ({ commandValidation }) =>
-    commandValidation
-      .filter(
-        ({ tokens, agentCommand }) =>
-          agentCommand?.command === 'open' && tokens.includes('--foreground'),
-      )
-      .every(({ agentCommand }) => agentCommand.positionals.length === 0),
   noWaitStable: ({ joined }) => !joined.includes('wait stable'),
   verifiesNamedExpectation: ({ joined }) => /\b(wait|is|get|find)\b/.test(joined),
   usesDogfoodEvidence: ({ joined }) =>

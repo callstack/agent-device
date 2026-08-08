@@ -58,19 +58,22 @@ test('rejects --foreground against an existing session', async () => {
   expect(resolveSoleForegroundIosApp).not.toHaveBeenCalled();
 });
 
-test('rejects --foreground combined with an explicit app argument', async () => {
+test('keeps an explicit app and its target constraints for foreground snapshot composition', async () => {
+  const req = baseRequest({
+    flags: {
+      foreground: true,
+      platform: 'ios',
+      udid: 'configured-udid',
+      iosSimulatorDeviceSet: '/custom/set',
+    },
+    positionals: ['com.example.demo'],
+  });
   const resolution = await resolveForegroundOpenRequest({
-    req: baseRequest({ flags: { foreground: true }, positionals: ['com.example.demo'] }),
+    req,
     hasExistingSession: false,
   });
 
-  expect(resolution.type).toBe('response');
-  if (resolution.type === 'response') {
-    expect(resolution.response.ok).toBe(false);
-    if (!resolution.response.ok) {
-      expect(resolution.response.error.code).toBe('INVALID_ARGS');
-    }
-  }
+  expect(resolution).toEqual({ type: 'resolved', req });
   expect(resolveSoleForegroundIosApp).not.toHaveBeenCalled();
 });
 

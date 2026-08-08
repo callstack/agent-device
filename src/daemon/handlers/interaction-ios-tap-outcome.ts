@@ -13,7 +13,10 @@ import type { ContextFromFlags } from './interaction-common.ts';
 import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
 
 const XCTEST_RECORDED_FAILURE = 'XCTEST_RECORDED_FAILURE';
-const IOS_TAP_CORROBORATION_BASELINE_MAX_AGE_MS = 5_000;
+// A model commonly needs 5-10s to choose a target after receiving a snapshot.
+// Keep the window bounded, but long enough for that ordinary decision turn;
+// the same-backend/same-presentation checks below still fail closed.
+const IOS_TAP_CORROBORATION_BASELINE_MAX_AGE_MS = 15_000;
 
 const IOS_TAP_CORROBORATION_WARNING =
   'XCTest reported the tap as failed, but a same-scope post-action accessibility capture changed; treating the tap as landed. Observe the current screen before issuing another tap.';

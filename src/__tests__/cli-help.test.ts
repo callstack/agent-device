@@ -141,7 +141,7 @@ test('help workflow advertises open --foreground and snapshot -i --actions', asy
   assert.equal(result.calls.length, 0);
   assert.match(
     result.stdout,
-    /One iOS sim, app running, no session: open --foreground: attach \+ snapshot\. Capture fails; stays open: snapshot -i\. App\/device\/ambiguity fail/,
+    /Known app: open <app> --foreground -> snapshot\. Bare form needs one running app on one iOS sim; capture failure keeps session open/,
   );
   assert.match(
     result.stdout,

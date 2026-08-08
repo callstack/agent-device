@@ -279,7 +279,7 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--foreground',
     usageDescription:
-      "[RFC] open: resolve app + return an initial snapshot from the sole booted iOS simulator's sole running app",
+      'open: keep normal app/device selection and return an initial snapshot; without an app, resolve the sole running app on the sole booted iOS simulator',
   },
   {
     key: 'restart',

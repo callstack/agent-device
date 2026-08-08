@@ -79,7 +79,7 @@ const AGENT_START_LINES = [
   // loop explicit plus a closed target grammar made GPT-mini reliable and moved
   // Haiku from 0/2 baseline to 4/4; generic structured-hint recovery passed 8/8
   // uncoached output cases versus 7/8 with the longer special-case prose.
-  'Default app loop: agent-device open <app> -> agent-device snapshot -i -> mutate a current target with --settle -> continue from that settled diff -> agent-device close.',
+  'Default app loop: agent-device open <app> --foreground -> mutate a current target from its initial snapshot with --settle -> continue from that settled diff -> agent-device close.',
   'Use --settle only on planned press, click, fill, longpress, scroll, or back commands; never add it to open, snapshot, or close. type never accepts --settle: run agent-device type "text", then diff snapshot if verification is needed. Once the task\'s requested end state or an explicit success confirmation is visible, stop; do not tap transient follow-up controls or navigate away only to re-verify.',
   'Follow structured command hints before choosing a recovery action.',
   'Targets are concrete refs or selectors: @e12, label="Query", role=button label="Submit".',
@@ -226,7 +226,7 @@ Command shape:
 Bootstrap:
   agent-device devices --platform ios
   agent-device open MyApp --platform ios --device "iPhone 17 Pro"
-  One iOS sim, app running, no session: open --foreground: attach + snapshot. Capture fails; stays open: snapshot -i. App/device/ambiguity fail.
+  Known app: open <app> --foreground -> snapshot. Bare form needs one running app on one iOS sim; capture failure keeps session open.
   Install arguments are app/package id then artifact path: agent-device install com.example.app ./dist/app.apk --platform android, then open <id> --relaunch for fresh state. Use reinstall only when explicitly requested.
   Unknown app id: devices, then apps, then open <discovered-app-id>. Never open artifact paths or invent package ids; ask if lookup misses the target.
   Apple CI: prepare ios-runner after boot/install, before replay/test (help prepare). Remote/cloud: connect -> open -> commands -> close -> disconnect (help remote). Reusable scripts, secret-safe fills, replay repair: help scripting.
