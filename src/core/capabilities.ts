@@ -224,14 +224,12 @@ function requireTargetAuthoredDragSupported(
 }
 
 function supportsTargetAuthoredDrag(device: DeviceInfo): boolean {
-  const supportedAndroidTouchDevice = device.platform === 'android' && device.target !== 'tv';
-  const supportedAppleTouchDevice =
-    device.platform === 'apple' &&
-    (device.appleOs === 'ios' ||
-      device.appleOs === 'ipados' ||
-      (device.appleOs === undefined && device.target !== 'desktop' && device.target !== 'tv'));
-  const supportedHarmonyTouchDevice = device.platform === 'harmonyos' && device.target !== 'tv';
-  return supportedAndroidTouchDevice || supportedAppleTouchDevice || supportedHarmonyTouchDevice;
+  if (device.platform === 'android' || device.platform === 'harmonyos') {
+    return device.target !== 'tv';
+  }
+  if (device.platform !== 'apple') return false;
+  if (device.appleOs === undefined) return device.target !== 'desktop' && device.target !== 'tv';
+  return device.appleOs === 'ios' || device.appleOs === 'ipados';
 }
 
 function isMultiTouchGesture(input: GestureSemanticInput): boolean {

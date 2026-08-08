@@ -30,116 +30,149 @@ export async function handleSessionInventoryCommands(params: {
   sessionStore: SessionStore;
 }): Promise<DaemonResponse | null> {
   const { req, sessionName, sessionStore } = params;
+  switch (req.command) {
+    case 'session_list':
+      return sessionListInventoryResponse(req, sessionStore);
+    case 'devices':
+      return await devicesInventoryResponse(req);
+    case 'capabilities':
+      return await capabilitiesInventoryResponse({ req, sessionName, sessionStore });
+    case 'apps':
+      return await handleAppsInventory({ req, sessionName, sessionStore });
+    default:
+      return null;
+  }
+}
 
-  if (req.command === 'session_list') {
-    const scope = resolveImplicitSessionScope(req);
+function sessionListInventoryResponse(
+  req: DaemonRequest,
+  sessionStore: SessionStore,
+): DaemonResponse {
+  const scope = resolveImplicitSessionScope(req);
+  return {
+    ok: true,
+    data: {
+      sessions: sessionStore
+        .toArray()
+        .filter((session) => sessionMatchesScope(session, scope))
+        .map((session) => publicSessionInfo(session, sessionStore)),
+    },
+  };
+}
+
+function publicSessionInfo(
+  session: ReturnType<SessionStore['toArray']>[number],
+  sessionStore: SessionStore,
+) {
+  const sessionStateDir = sessionStore.resolveSessionDir(session.name);
+  return {
+    name: session.name,
+    sessionStateDir,
+    runnerLogPath: resolveSessionRunnerLogPath(sessionStateDir),
+    platform: publicPlatformString(session.device),
+    ...(isApplePlatform(session.device.platform) && session.device.appleOs
+      ? { appleOs: session.device.appleOs }
+      : {}),
+    target: session.device.target ?? 'mobile',
+    surface: session.surface ?? 'app',
+    device: session.device.name,
+    id: session.device.id,
+    device_id: session.device.id,
+    createdAt: session.createdAt,
+    ...(isApplePlatform(session.device.platform) &&
+      !isMacOs(session.device) && {
+        device_udid: session.device.id,
+        ios_simulator_device_set: session.device.simulatorSetPath ?? null,
+      }),
+  };
+}
+
+async function devicesInventoryResponse(req: DaemonRequest): Promise<DaemonResponse> {
+  try {
     return {
       ok: true,
-      data: {
-        sessions: sessionStore
-          .toArray()
-          .filter((session) => sessionMatchesScope(session, scope))
-          .map((session) => {
-            const sessionStateDir = sessionStore.resolveSessionDir(session.name);
-            return {
-              name: session.name,
-              sessionStateDir,
-              runnerLogPath: resolveSessionRunnerLogPath(sessionStateDir),
-              // approach (b): emit the PUBLIC leaf platform (ios/macos), not `apple`.
-              platform: publicPlatformString(session.device),
-              // Additive Apple-OS discriminant; Apple devices only. Gate on the
-              // platform (not just field presence) so a non-Apple record carrying a
-              // stray appleOs value never surfaces it.
-              ...(isApplePlatform(session.device.platform) && session.device.appleOs
-                ? { appleOs: session.device.appleOs }
-                : {}),
-              target: session.device.target ?? 'mobile',
-              surface: session.surface ?? 'app',
-              device: session.device.name,
-              id: session.device.id,
-              device_id: session.device.id,
-              createdAt: session.createdAt,
-              ...(isApplePlatform(session.device.platform) &&
-                !isMacOs(session.device) && {
-                  device_udid: session.device.id,
-                  ios_simulator_device_set: session.device.simulatorSetPath ?? null,
-                }),
-            };
-          }),
-      },
+      data: { devices: (await resolveInventoryDevices(req)).map(publicDeviceInfo) },
     };
+  } catch (err) {
+    const appErr = asAppError(err);
+    return errorResponse(appErr.code, appErr.message, appErr.details);
   }
+}
 
-  if (req.command === 'devices') {
-    try {
-      const androidSerialAllowlist = resolveAndroidSerialAllowlist(
-        req.flags?.androidDeviceAllowlist,
-      );
-      const requestedPlatform = req.flags?.platform;
-      const iosSimulatorSetPath = resolveAppleSimulatorSetPathForSelector({
-        simulatorSetPath: resolveIosSimulatorDeviceSetPath(req.flags?.iosSimulatorDeviceSet),
-        platform: requestedPlatform,
-        target: req.flags?.target,
-      });
+async function resolveInventoryDevices(req: DaemonRequest): Promise<DeviceInfo[]> {
+  const requestedPlatform = req.flags?.platform;
+  const devices = await listDeviceInventory(inventoryDeviceQuery(req, requestedPlatform));
+  return filterInventoryDevices(devices, req.flags?.platform, req.flags?.target);
+}
 
-      const devices = await listDeviceInventory({
-        platform: requestedPlatform,
-        target: req.flags?.target,
-        deviceName: req.flags?.device,
-        udid: req.flags?.udid,
-        serial: req.flags?.serial,
-        iosSimulatorSetPath,
-        androidSerialAllowlist: androidSerialAllowlist
-          ? Array.from(androidSerialAllowlist).sort()
-          : undefined,
-      });
+function inventoryDeviceQuery(req: DaemonRequest, platform: PlatformSelector | undefined) {
+  const flags = req.flags;
+  return {
+    platform,
+    target: flags?.target,
+    deviceName: flags?.device,
+    udid: flags?.udid,
+    serial: flags?.serial,
+    iosSimulatorSetPath: inventoryIosSimulatorSetPath(
+      flags?.iosSimulatorDeviceSet,
+      platform,
+      flags?.target,
+    ),
+    androidSerialAllowlist: inventoryAndroidSerialAllowlist(flags?.androidDeviceAllowlist),
+  };
+}
 
-      const platformFiltered = requestedPlatform
-        ? devices.filter((device) => matchesRequestedPlatform(device, requestedPlatform))
-        : devices;
-      const filtered = req.flags?.target
-        ? platformFiltered.filter((device) => (device.target ?? 'mobile') === req.flags?.target)
-        : platformFiltered;
-      // Surface the `appleOs` discriminant additively so consumers can distinguish
-      // iPhone/iPad/tvOS/visionOS/macOS instead of only the leaf `ios`/`macos`. It is
-      // emitted ONLY for Apple devices (non-Apple platforms carry no `appleOs`), and
-      // `platform` stays the PUBLIC leaf via `publicPlatformString` (approach b). The
-      // internal-only `simulatorSetPath` is still stripped. `appleOs` values never equal
-      // the internal `apple` token, so this does not affect the apple-leak guard.
-      const publicDevices = filtered.map(publicDeviceInfo);
-      return { ok: true, data: { devices: publicDevices } };
-    } catch (err) {
-      const appErr = asAppError(err);
-      return errorResponse(appErr.code, appErr.message, appErr.details);
-    }
-  }
+function inventoryIosSimulatorSetPath(
+  configuredPath: string | undefined,
+  platform: PlatformSelector | undefined,
+  target: DeviceInfo['target'],
+) {
+  return resolveAppleSimulatorSetPathForSelector({
+    simulatorSetPath: resolveIosSimulatorDeviceSetPath(configuredPath),
+    platform,
+    target,
+  });
+}
 
-  if (req.command === 'capabilities') {
-    const resolution = await resolveInventoryCommandDevice({
-      req,
-      sessionName,
-      sessionStore,
-      ensureReady: false,
-      allowStoppedAndroidAvdPlaceholders: true,
-    });
-    if ('response' in resolution) return resolution.response;
-    const { device } = resolution;
-    return {
-      ok: true,
-      data: {
-        device: publicDeviceInfo(device),
-        availableCommands: listCapabilityCommands().filter((command) =>
-          isCommandSupportedOnDevice(command, device),
-        ),
-      },
-    };
-  }
+function inventoryAndroidSerialAllowlist(configuredAllowlist: string | undefined) {
+  const allowlist = resolveAndroidSerialAllowlist(configuredAllowlist);
+  return allowlist ? Array.from(allowlist).sort() : undefined;
+}
 
-  if (req.command === 'apps') {
-    return await handleAppsInventory({ req, sessionName, sessionStore });
-  }
+function filterInventoryDevices(
+  devices: DeviceInfo[],
+  platform: PlatformSelector | undefined,
+  target: DeviceInfo['target'],
+): DeviceInfo[] {
+  const platformFiltered = platform
+    ? devices.filter((device) => matchesRequestedPlatform(device, platform))
+    : devices;
+  return target
+    ? platformFiltered.filter((device) => (device.target ?? 'mobile') === target)
+    : platformFiltered;
+}
 
-  return null;
+async function capabilitiesInventoryResponse(params: {
+  req: DaemonRequest;
+  sessionName: string;
+  sessionStore: SessionStore;
+}): Promise<DaemonResponse> {
+  const resolution = await resolveInventoryCommandDevice({
+    ...params,
+    ensureReady: false,
+    allowStoppedAndroidAvdPlaceholders: true,
+  });
+  if ('response' in resolution) return resolution.response;
+  const { device } = resolution;
+  return {
+    ok: true,
+    data: {
+      device: publicDeviceInfo(device),
+      availableCommands: listCapabilityCommands().filter((command) =>
+        isCommandSupportedOnDevice(command, device),
+      ),
+    },
+  };
 }
 
 async function handleAppsInventory(params: {
