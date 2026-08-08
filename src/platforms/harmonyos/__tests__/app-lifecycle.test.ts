@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
-import { beforeEach, test, vi } from 'vitest';
+import { afterEach, beforeEach, test, vi } from 'vitest';
 
 vi.mock('../../../utils/exec.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/exec.ts')>();
@@ -37,8 +37,13 @@ const DEVICE = {
 };
 
 beforeEach(() => {
+  vi.useRealTimers();
   mockRunCmd.mockReset();
   mockSleep.mockReset();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 test('parseHarmonyBundleList reads package lines from bm dump output', () => {
@@ -233,7 +238,7 @@ test('HarmonyOS user-installed app listing bounds metadata work and cancels queu
       >;
     }
     metadataCalls++;
-    if (args.at(-1) === 'com.example.app1') {
+    if (args.at(-1) === 'com.example.app4') {
       return {
         exitCode: 0,
         stdout: JSON.stringify({ applicationInfo: {} }),
@@ -252,12 +257,57 @@ test('HarmonyOS user-installed app listing bounds metadata work and cancels queu
 
   await assert.rejects(
     () => listHarmonyApps(DEVICE, 'user-installed'),
-    /could not determine whether com\.example\.app1 is a system application/i,
+    (error: unknown) => {
+      assert(error instanceof AppError);
+      assert.match(
+        error.message,
+        /could not determine whether com\.example\.app4 is a system application/i,
+      );
+      assert.match(error.details?.hint ?? '', /use apps --all/i);
+      return true;
+    },
   );
 
   assert.equal(metadataCalls, 4);
   assert.equal(abortedSignals.length, 3);
   assert(abortedSignals.every((signal) => signal.aborted));
+});
+
+test('HarmonyOS user-installed app listing aborts all metadata reads at its aggregate deadline', async () => {
+  vi.useFakeTimers();
+  const packages = Array.from({ length: 6 }, (_, index) => `com.example.app${index + 1}`);
+  let metadataCalls = 0;
+  const metadataSignals: AbortSignal[] = [];
+  mockRunCmd.mockImplementation(async (_command, args, options) => {
+    if (args.at(-1) === '-a') {
+      return { exitCode: 0, stdout: `${packages.join('\n')}\n`, stderr: '' } as Awaited<
+        ReturnType<typeof runCmd>
+      >;
+    }
+    metadataCalls++;
+    const signal = options?.signal;
+    assert(signal);
+    metadataSignals.push(signal);
+    return await new Promise<Awaited<ReturnType<typeof runCmd>>>((_, reject) => {
+      signal.addEventListener('abort', () => reject(new Error('metadata request aborted')), {
+        once: true,
+      });
+    });
+  });
+
+  const listing = listHarmonyApps(DEVICE, 'user-installed');
+  const listingError = listing.catch((error: unknown) => error);
+  await vi.advanceTimersByTimeAsync(0);
+  assert.equal(metadataCalls, 4);
+
+  await vi.advanceTimersByTimeAsync(60_000);
+  const error = await listingError;
+  assert(error instanceof AppError);
+  assert.match(error.message, /timed out while classifying HarmonyOS application inventory/i);
+  assert.match(error.details?.hint ?? '', /use apps --all/i);
+  assert.equal(metadataCalls, 4);
+  assert.equal(metadataSignals.length, 4);
+  assert(metadataSignals.every((signal) => signal.aborted));
 });
 
 test('HarmonyOS launch resolves module metadata and reports missing launch data', async () => {

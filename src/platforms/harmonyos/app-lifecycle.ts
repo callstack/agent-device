@@ -162,6 +162,7 @@ async function listHarmonyUserInstalledPackages(
   const workerFailure = new AbortController();
   const signal = combineHarmonySignals(parentSignal, workerFailure.signal);
   let nextPackageIndex = 0;
+  let firstInitiatingFailure: unknown;
   const workerCount = Math.min(HARMONY_APP_METADATA_CONCURRENCY, packages.length);
 
   const workers = Array.from({ length: workerCount }, async () => {
@@ -189,12 +190,16 @@ async function listHarmonyUserInstalledPackages(
         classifications[packageIndex] = isSystemApp;
       }
     } catch (error) {
+      if (!signal?.aborted && firstInitiatingFailure === undefined) {
+        firstInitiatingFailure = error;
+      }
       workerFailure.abort();
       throw error;
     }
   });
 
   const workerResults = await Promise.allSettled(workers);
+  if (firstInitiatingFailure !== undefined) throw firstInitiatingFailure;
   const failure = workerResults.find(
     (result): result is PromiseRejectedResult => result.status === 'rejected',
   );
