@@ -225,7 +225,7 @@ function requireTargetAuthoredDragSupported(
 }
 
 function supportsTargetAuthoredDrag(device: DeviceInfo): boolean {
-  if (device.platform === 'android' || device.platform === 'harmonyos') {
+  if (device.platform === 'android') {
     return device.target !== 'tv';
   }
   if (device.platform !== 'apple') return false;
