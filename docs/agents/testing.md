@@ -13,6 +13,19 @@ Use three validation tiers:
 Coverage, provider integration, history-backed compatibility, specialized toolchains, and live
 device/browser lanes remain separate. GitHub CI stays authoritative.
 
+## HarmonyOS hardware policy
+
+GitHub-hosted CI has no DevEco Studio image, HDC installation, HarmonyOS emulator, or physical
+device. HarmonyOS unit, provider, and coverage tests must mock `runHarmonyHdc` (or the lower-level
+`runCmd`) and assert the typed HDC request, normalized response, capability gate, and failure
+contract. They must never discover a host target or execute an `hdc` binary in CI.
+
+Real HarmonyOS validation is a local hardware-evidence tier: run it only after the normal
+deterministic gates, against a deliberately selected emulator or device, following
+`docs/agents/device-verification.md`. Capture the command result and artifact/state evidence, then
+close the session. Do not add a HarmonyOS CI job until it has an explicitly provisioned, isolated
+device or emulator owner; a workflow that merely assumes a developer's HDC setup is not a CI gate.
+
 The mapping it encodes, for when you need to run a gate directly or reason about coverage:
 
 | Change | Gate |
