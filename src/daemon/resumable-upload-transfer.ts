@@ -15,14 +15,16 @@ export async function receiveResumableTransfer(params: {
   entry: ResumableTransferEntry;
   req: IncomingMessage;
   invalidate: (error: unknown) => Promise<void>;
-}): Promise<{ complete: boolean; offset: number }> {
+}): Promise<{ complete: boolean; offset: number; appended: boolean }> {
   const oldSize = await currentOffset(params.entry);
   const range = parseUploadContentRange(
     params.req.headers['content-range'],
     params.entry.sizeBytes,
   );
-  if (range && range.start !== oldSize) return { complete: false, offset: oldSize };
-  if (!range && oldSize > 0) return { complete: false, offset: oldSize };
+  if (range && range.start !== oldSize) {
+    return { complete: false, offset: oldSize, appended: false };
+  }
+  if (!range && oldSize > 0) return { complete: false, offset: oldSize, appended: false };
   const remaining = params.entry.sizeBytes - oldSize;
   const bodyLimit = range?.span ?? remaining;
   const contentLength = parseUploadContentLength(params.req.headers['content-length']);
@@ -55,7 +57,7 @@ export async function receiveResumableTransfer(params: {
     throw error;
   }
   const offset = await currentOffset(params.entry);
-  return { complete: offset === params.entry.sizeBytes, offset };
+  return { complete: offset === params.entry.sizeBytes, offset, appended: offset > oldSize };
 }
 
 export async function computeUploadHash(filePath: string): Promise<string> {

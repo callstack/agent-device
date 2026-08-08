@@ -99,6 +99,53 @@ test('expiry aborts an active receive and invalidates the ticket after rollback'
   }
 });
 
+test('an ignored out-of-order chunk does not extend upload expiry', async () => {
+  vi.useFakeTimers();
+  try {
+    const bytes = Buffer.from('AB');
+    const uploadId = beginUpload(bytes).uploadId;
+    await vi.advanceTimersByTimeAsync(4 * 60 * 1000);
+
+    assert.deepEqual(
+      await receiveResumableUploadChunk({
+        uploadId,
+        req: request(Buffer.from('B'), { 'content-range': 'bytes 1-1/2' }),
+      }),
+      { complete: false, offset: 0 },
+    );
+
+    await vi.advanceTimersByTimeAsync(60 * 1000);
+    await assert.rejects(finalizeResumableUpload(uploadId), /not found or expired/i);
+  } finally {
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+    vi.useRealTimers();
+  }
+});
+
+test('an ignored un-ranged retry does not extend upload expiry', async () => {
+  vi.useFakeTimers();
+  try {
+    const bytes = Buffer.from('ABC');
+    const uploadId = beginUpload(bytes).uploadId;
+    await receiveResumableUploadChunk({
+      uploadId,
+      req: request(Buffer.from('A'), { 'content-range': 'bytes 0-0/3' }),
+    });
+    await vi.advanceTimersByTimeAsync(4 * 60 * 1000);
+
+    assert.deepEqual(
+      await receiveResumableUploadChunk({ uploadId, req: request(Buffer.from('A')) }),
+      { complete: false, offset: 1 },
+    );
+
+    await vi.advanceTimersByTimeAsync(60 * 1000);
+    await assert.rejects(finalizeResumableUpload(uploadId), /not found or expired/i);
+  } finally {
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+    vi.useRealTimers();
+  }
+});
+
 function beginUpload(bytes: Buffer): ReturnType<typeof beginResumableUpload> {
   return beginResumableUpload({
     baseUrl: 'http://127.0.0.1:1234',

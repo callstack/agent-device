@@ -21,12 +21,30 @@ type ZipOptions = {
 };
 
 export async function extractZipArchive(options: ZipOptions): Promise<void> {
-  const inspected = await readZipEntries(options.archivePath);
-  const manifest = inspected.map(toManifestEntry);
-  await options.validateManifest?.(manifest);
   const budget = options.budget ?? new ArchiveBudget();
-  const reservation = reserveArchiveManifest(budget, options.depth ?? 1, manifest);
-  const entries = await readZipEntries(options.archivePath);
+  const depth = options.depth ?? 1;
+  const manifest: ArchiveManifestEntry[] = [];
+  let declaredBytes = 0;
+  await readZipEntries(options.archivePath, (entry) => {
+    budget.preflightArchive({
+      depth,
+      entryCount: manifest.length + 1,
+      declaredBytes,
+    });
+    const manifestEntry = toManifestEntry(entry);
+    declaredBytes += manifestEntry.size;
+    budget.preflightArchive({
+      depth,
+      entryCount: manifest.length + 1,
+      declaredBytes,
+    });
+    manifest.push(manifestEntry);
+  });
+  await options.validateManifest?.(manifest);
+  const reservation = reserveArchiveManifest(budget, depth, manifest);
+  const entries = await readZipEntries(options.archivePath, (_entry, index) => {
+    if (index >= manifest.length) mismatch();
+  });
   if (entries.length !== manifest.length) mismatch();
   const zipFile = await openZip(options.archivePath);
   try {
@@ -61,16 +79,39 @@ export async function extractZipArchive(options: ZipOptions): Promise<void> {
   }
 }
 
-async function readZipEntries(archivePath: string): Promise<yauzl.Entry[]> {
+async function readZipEntries(
+  archivePath: string,
+  inspect?: (entry: yauzl.Entry, index: number) => void,
+): Promise<yauzl.Entry[]> {
   const zipFile = await openZip(archivePath);
   return await new Promise<yauzl.Entry[]>((resolve, reject) => {
     const entries: yauzl.Entry[] = [];
-    zipFile.on('entry', (entry: yauzl.Entry) => {
-      entries.push(entry);
-      zipFile.readEntry();
-    });
-    zipFile.once('end', () => resolve(entries));
-    zipFile.once('error', reject);
+    const cleanup = (): void => {
+      zipFile.off('entry', onEntry);
+      zipFile.off('end', onEnd);
+      zipFile.off('error', onError);
+    };
+    const onEntry = (entry: yauzl.Entry): void => {
+      try {
+        inspect?.(entry, entries.length);
+        entries.push(entry);
+        zipFile.readEntry();
+      } catch (error) {
+        cleanup();
+        reject(error);
+      }
+    };
+    const onEnd = (): void => {
+      cleanup();
+      resolve(entries);
+    };
+    const onError = (error: Error): void => {
+      cleanup();
+      reject(error);
+    };
+    zipFile.on('entry', onEntry);
+    zipFile.once('end', onEnd);
+    zipFile.once('error', onError);
     zipFile.readEntry();
   }).finally(() => zipFile.close());
 }

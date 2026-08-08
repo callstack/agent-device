@@ -86,12 +86,12 @@ export async function receiveResumableUploadChunk(params: {
 }): Promise<{ complete: boolean; offset: number }> {
   const entry = requireResumableUpload(params.uploadId, params.tenantId);
   return await runExclusive(entry, 'receive', params.req, async () => {
-    const result = await receiveResumableTransfer({
+    const { appended, ...result } = await receiveResumableTransfer({
       entry,
       req: params.req,
       invalidate: async () => await terminateEntry(entry),
     });
-    if (!entry.closed) refreshResumableUploadTimer(entry);
+    if (appended && !entry.closed) refreshResumableUploadTimer(entry);
     return result;
   });
 }

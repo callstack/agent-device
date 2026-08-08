@@ -23,10 +23,11 @@ type TarOptions = {
 };
 
 export async function extractTarArchive(options: TarOptions): Promise<void> {
-  const manifest = await inspectTar(options);
-  await options.validateManifest?.(manifest);
   const budget = options.budget ?? new ArchiveBudget();
-  const reservation = reserveArchiveManifest(budget, options.depth ?? 1, manifest);
+  const depth = options.depth ?? 1;
+  const manifest = await inspectTar(options, budget, depth);
+  await options.validateManifest?.(manifest);
+  const reservation = reserveArchiveManifest(budget, depth, manifest);
   const extractor = tar.extract();
   const extraction = streamTar(options.archivePath, options.gzip, extractor);
   try {
@@ -58,8 +59,13 @@ export async function extractTarArchive(options: TarOptions): Promise<void> {
   reservation.finish();
 }
 
-async function inspectTar(options: TarOptions): Promise<ArchiveManifestEntry[]> {
+async function inspectTar(
+  options: TarOptions,
+  budget: ArchiveBudget,
+  depth: number,
+): Promise<ArchiveManifestEntry[]> {
   const manifest: ArchiveManifestEntry[] = [];
+  let declaredBytes = 0;
   const extractor = tar.extract();
   const inspection = streamTar(options.archivePath, options.gzip, extractor);
   try {
@@ -69,6 +75,12 @@ async function inspectTar(options: TarOptions): Promise<ArchiveManifestEntry[]> 
         await drainTarEntry(entry);
         continue;
       }
+      declaredBytes += manifestEntry.size;
+      budget.preflightArchive({
+        depth,
+        entryCount: manifest.length + 1,
+        declaredBytes,
+      });
       manifest.push(manifestEntry);
       await drainTarEntry(entry);
     }
