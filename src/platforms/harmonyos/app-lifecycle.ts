@@ -52,6 +52,13 @@ interface HarmonyArchiveModule {
   app?: { bundleName?: string };
 }
 
+const HARMONY_APP_INVENTORY_TIMEOUT_MS = 60_000;
+const HARMONY_APP_METADATA_CONCURRENCY = 4;
+
+interface HarmonyAppListOptions {
+  signal?: AbortSignal;
+}
+
 /** Reads the bundle identity embedded in a signed HAP archive. */
 export async function resolveHarmonyArchiveBundleName(
   archivePath: string,
@@ -99,12 +106,48 @@ function parseHarmonyBundleDump(rawOutput: string): HarmonyBundleDump | undefine
 export async function listHarmonyApps(
   device: DeviceInfo,
   filter: 'all' | 'user-installed',
+  options: HarmonyAppListOptions = {},
 ): Promise<Array<{ package: string; name: string }>> {
-  const result = await runHarmonyHdc(device, ['shell', 'bm', 'dump', '-a'], { timeoutMs: 15_000 });
-  const packages = parseHarmonyBundleList(result.stdout);
-  const userInstalledPackages =
-    filter === 'all' ? packages : await listHarmonyUserInstalledPackages(device, packages);
-  return userInstalledPackages.map((pkg) => ({
+  if (filter === 'all') {
+    const result = await runHarmonyHdc(device, ['shell', 'bm', 'dump', '-a'], {
+      timeoutMs: 15_000,
+      signal: options.signal,
+    });
+    return harmonyAppEntries(parseHarmonyBundleList(result.stdout));
+  }
+
+  const deadlineController = new AbortController();
+  const deadlineTimer = setTimeout(
+    () => deadlineController.abort(),
+    HARMONY_APP_INVENTORY_TIMEOUT_MS,
+  );
+  const signal = combineHarmonySignals(options.signal, deadlineController.signal);
+  try {
+    const result = await runHarmonyHdc(device, ['shell', 'bm', 'dump', '-a'], {
+      timeoutMs: 15_000,
+      signal,
+    });
+    const packages = parseHarmonyBundleList(result.stdout);
+    const userInstalledPackages = await listHarmonyUserInstalledPackages(device, packages, signal);
+    return harmonyAppEntries(userInstalledPackages);
+  } catch (error) {
+    if (deadlineController.signal.aborted) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        'Timed out while classifying HarmonyOS application inventory',
+        {
+          hint: 'Use apps --all to list bundles without per-bundle classification, then retry after the device is responsive.',
+        },
+      );
+    }
+    throw error;
+  } finally {
+    clearTimeout(deadlineTimer);
+  }
+}
+
+function harmonyAppEntries(packages: string[]): Array<{ package: string; name: string }> {
+  return packages.map((pkg) => ({
     package: pkg,
     name: pkg.split('.').at(-1) ?? pkg,
   }));
@@ -113,25 +156,58 @@ export async function listHarmonyApps(
 async function listHarmonyUserInstalledPackages(
   device: DeviceInfo,
   packages: string[],
+  parentSignal: AbortSignal | undefined,
 ): Promise<string[]> {
-  const userInstalled: string[] = [];
-  for (const bundleName of packages) {
-    const result = await runHarmonyHdc(device, ['shell', 'bm', 'dump', '-n', bundleName], {
-      timeoutMs: 15_000,
-    });
-    const isSystemApp = parseHarmonyIsSystemApp(result.stdout);
-    if (isSystemApp === undefined) {
-      throw new AppError(
-        'COMMAND_FAILED',
-        `Could not determine whether ${bundleName} is a system application`,
-        {
-          hint: 'Use apps --all to list all bundles when Bundle Manager does not expose applicationInfo.isSystemApp.',
-        },
-      );
+  const classifications = new Array<boolean>(packages.length);
+  const workerFailure = new AbortController();
+  const signal = combineHarmonySignals(parentSignal, workerFailure.signal);
+  let nextPackageIndex = 0;
+  const workerCount = Math.min(HARMONY_APP_METADATA_CONCURRENCY, packages.length);
+
+  const workers = Array.from({ length: workerCount }, async () => {
+    try {
+      while (true) {
+        signal?.throwIfAborted();
+        const packageIndex = nextPackageIndex++;
+        if (packageIndex >= packages.length) return;
+        const bundleName = packages[packageIndex];
+        if (!bundleName) return;
+        const result = await runHarmonyHdc(device, ['shell', 'bm', 'dump', '-n', bundleName], {
+          timeoutMs: 15_000,
+          signal,
+        });
+        const isSystemApp = parseHarmonyIsSystemApp(result.stdout);
+        if (isSystemApp === undefined) {
+          throw new AppError(
+            'COMMAND_FAILED',
+            `Could not determine whether ${bundleName} is a system application`,
+            {
+              hint: 'Use apps --all to list all bundles when Bundle Manager does not expose applicationInfo.isSystemApp.',
+            },
+          );
+        }
+        classifications[packageIndex] = isSystemApp;
+      }
+    } catch (error) {
+      workerFailure.abort();
+      throw error;
     }
-    if (!isSystemApp) userInstalled.push(bundleName);
-  }
-  return userInstalled;
+  });
+
+  const workerResults = await Promise.allSettled(workers);
+  const failure = workerResults.find(
+    (result): result is PromiseRejectedResult => result.status === 'rejected',
+  );
+  if (failure) throw failure.reason;
+  return packages.filter((_, index) => !classifications[index]);
+}
+
+function combineHarmonySignals(
+  ...signals: Array<AbortSignal | undefined>
+): AbortSignal | undefined {
+  const definedSignals = signals.filter((signal): signal is AbortSignal => Boolean(signal));
+  if (definedSignals.length === 0) return undefined;
+  return definedSignals.length === 1 ? definedSignals[0] : AbortSignal.any(definedSignals);
 }
 
 export async function getHarmonyAppState(device: DeviceInfo): Promise<HarmonyForegroundApp> {

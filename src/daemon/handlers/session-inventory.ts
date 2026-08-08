@@ -20,6 +20,7 @@ import { resolveSessionRunnerLogPath, SessionStore } from '../session-store.ts';
 import { listAndroidApps } from '../../platforms/android/app-lifecycle.ts';
 import { listIosApps } from '../../platforms/apple/core/apps.ts';
 import { listHarmonyApps } from '../../platforms/harmonyos/app-lifecycle.ts';
+import { getRequestSignal } from '../../request/cancel.ts';
 import { requireSessionOrExplicitSelector, resolveCommandDevice } from './session-device-utils.ts';
 import { errorResponse, requireCommandSupported } from './response.ts';
 import { resolveImplicitSessionScope, sessionMatchesScope } from '../session-routing.ts';
@@ -197,7 +198,9 @@ async function handleAppsInventory(params: {
     return appsInventoryResponse(apps.map((app) => ({ id: app.bundleId, name: app.name })));
   }
   if (device.platform === 'harmonyos') {
-    const apps = await listHarmonyApps(device, appsFilter);
+    const apps = await listHarmonyApps(device, appsFilter, {
+      signal: getRequestSignal(req.meta?.requestId),
+    });
     return appsInventoryResponse(apps.map((app) => ({ id: app.package, name: app.name })));
   }
   const apps = await listAndroidApps(device, appsFilter);
