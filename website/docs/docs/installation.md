@@ -68,6 +68,7 @@ One-off `npx` usage is fine for humans and scripts that intentionally fetch from
 - Node.js 22+
 - Xcode for iOS simulator/device automation (`simctl` + `devicectl`)
 - Android SDK / ADB for Android
+- HarmonyOS Command Line Tools for HarmonyOS (`hdc` available through `HDC_SDK_PATH`, `DEVECO_SDK_HOME`, or `HARMONYOS_COMMAND_LINE_TOOLS`)
 - Amazon Vega Developer Tools and an SDK-matched Vega Virtual Device for Vega OS TV
 - On macOS desktop targets, Swift 5.9+ / Xcode command-line tools are used to build the local `agent-device-macos-helper` on first use from source checkouts
 

@@ -186,7 +186,7 @@ agent-device perf trace stop --kind perfetto --out app.perfetto-trace
 - Android native profiling uses `perf cpu profile ... --kind simpleperf`; Android native trace capture uses `perf trace ... --kind perfetto`. These commands require an active Android app session and return artifact paths/summaries instead of dumping profile or trace contents.
 - Use the compact native perf result as agent evidence. For example, a successful Perfetto stop may return `state: "stopped"`, `outPath: "/tmp/app.perfetto-trace"`, `sizeBytes: 5392410`, and `method: "adb-shell-perfetto"` while the 5.3 MB raw trace remains on disk as the artifact.
 - Startup is measured around the `open` command; it is not first-frame instrumentation.
-- CPU, memory, and Android frame-health availability depend on platform and whether the active session is bound to an app/package.
+- CPU, memory, and Android frame-health availability depend on platform and whether the active session is bound to an app/package. HarmonyOS reports process CPU and RSS through HDC; frame sampling and memory-snapshot artifacts remain unavailable on the public HDC surface.
 - On Android and supported Apple targets, use `metrics.fps.droppedFramePercent` for the health check and `metrics.fps.worstWindows` to line up jank clusters with logs, network activity, or recent actions.
 
 ## Where to go deeper

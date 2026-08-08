@@ -5,7 +5,7 @@ description: Learn what agent-device is, where it fits in agentic mobile, TV, de
 
 # Introduction
 
-`agent-device` is an agent-native CLI for app verification and QA from coding agents. Across iOS, Android, tvOS, Android TV, Amazon Vega OS TV apps in the Vega Virtual Device, macOS, Linux desktop targets, and a minimal managed web browser surface, it provides the interactions and target-dependent structured UI, evidence, performance, and replay capabilities each backend supports.
+`agent-device` is an agent-native CLI for app verification and QA from coding agents. Across iOS, Android, HarmonyOS, tvOS, Android TV, Amazon Vega OS TV apps in the Vega Virtual Device, macOS, Linux desktop targets, and a minimal managed web browser surface, it provides the interactions and target-dependent structured UI, evidence, performance, and replay capabilities each backend supports.
 
 Use it when an agent needs to inspect and operate a real app, not just reason about source code or screenshots.
 

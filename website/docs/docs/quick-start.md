@@ -10,10 +10,10 @@ Every device automation follows this pattern:
 
 ```bash
 # 1. Discover the installed app identifier when needed
-agent-device apps --platform ios # or android
+agent-device apps --platform ios # or android or harmonyos
 
 # 2. Navigate
-agent-device open SampleApp --platform ios # or android
+agent-device open SampleApp --platform ios # or android or harmonyos
 
 # 3. Snapshot to get element refs
 agent-device snapshot -i
@@ -73,6 +73,7 @@ agent-device close
 `install`/`reinstall` binary format support:
 - Android: `.apk` and `.aab`
 - iOS: `.app` and `.ipa`
+- HarmonyOS: `.hap`
 - `.aab` requires `bundletool` in `PATH`, or `AGENT_DEVICE_BUNDLETOOL_JAR=<absolute-path-to-bundletool-all.jar>` with `java` in `PATH`.
 - `.aab` installs use bundletool `build-apks --mode universal`.
 - `.ipa` installs extract `Payload/*.app`; if multiple app bundles exist, `<app>` selects the target by bundle id or bundle name.

@@ -15,7 +15,7 @@
 
 Let your coding agent verify its changes in the running app.
 
-`agent-device` lets coding agents inspect, control, and verify apps on iOS, Android, tvOS, Android TV, Amazon Vega OS TV through the Vega Virtual Device (VVD), web, macOS, and Linux. Agents can read token-efficient accessibility snapshots where supported, find elements by ref or selector, run device actions, and save evidence for review. Initial Vega OS support is VVD-only and covers discovery, app lifecycle, and complete TV-remote control; physical Fire TV, capture, and selector backends remain unsupported.
+`agent-device` lets coding agents inspect, control, and verify apps on iOS, Android, HarmonyOS, tvOS, Android TV, Amazon Vega OS TV through the Vega Virtual Device (VVD), web, macOS, and Linux. Agents can read token-efficient accessibility snapshots where supported, find elements by ref or selector, run device actions, and save evidence for review. HarmonyOS support uses HDC and ArkUI `uitest` on connected devices and DevEco emulators; use `capabilities --platform harmonyos` to inspect its evidence-backed command subset. Initial Vega OS support is VVD-only and covers discovery, app lifecycle, and complete TV-remote control; physical Fire TV, capture, and selector backends remain unsupported.
 
 Your coding agent or QA tool reads each result and chooses the next command. `agent-device` runs the command and saves evidence when asked.
 
@@ -109,7 +109,7 @@ See [Commands](https://oss.callstack.com/agent-device/docs/commands) for the com
 
 ## How it works
 
-`agent-device` keeps device state in sessions. It sends commands to XCTest on iOS and tvOS, ADB and the snapshot helper on Android, Vega CLI/VDA on the Vega Virtual Device, a local helper on macOS, and AT-SPI on Linux.
+`agent-device` keeps device state in sessions. It sends commands to XCTest on iOS and tvOS, ADB and the snapshot helper on Android, HDC and ArkUI `uitest` on HarmonyOS, Vega CLI/VDA on the Vega Virtual Device, a local helper on macOS, and AT-SPI on Linux.
 
 Node.js apps can use the typed client or public subpaths. `agent-device/android-adb` provides the Android ADB provider interface, helpers for logcat, the clipboard, the keyboard, and apps, and port reverse management.
 
@@ -117,7 +117,7 @@ Node.js apps can use the typed client or public subpaths. `agent-device/android-
 
 ### What is agent-device?
 
-`agent-device` is a command-line tool that lets coding agents inspect, control, and verify apps and save evidence for review. It supports iOS, Android, TV, web, macOS, and Linux.
+`agent-device` is a command-line tool that lets coding agents inspect, control, and verify apps and save evidence for review. It supports iOS, Android, HarmonyOS, TV, web, macOS, and Linux.
 
 ### Does it work with React Native, Expo, Flutter, and native apps?
 
