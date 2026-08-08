@@ -40,15 +40,22 @@ registerBuiltinPlatformPlugins();
 
 // --- INDEPENDENT verbatim copy of the former `supportsPlatformPerfMetrics` branch ---
 function supportsPlatformPerfMetricsByHand(device: DeviceInfo): boolean {
-  return device.platform === 'android' || isIosFamily(device) || isMacOs(device);
+  return (
+    device.platform === 'android' ||
+    device.platform === 'harmonyos' ||
+    isIosFamily(device) ||
+    isMacOs(device)
+  );
 }
 
 // --- INDEPENDENT verbatim copy of the former `buildPerfResponseData` sampling branch ---
 // The old body dispatched `session.device.platform === 'android'` -> the Android sampler,
 // else -> the Apple sampler, and was reached ONLY after the support gate above admitted
 // the platform. So the sampler selection is defined only for supported devices.
-function perfMetricsSamplerTagByHand(device: DeviceInfo): 'apple' | 'android' {
-  return device.platform === 'android' ? 'android' : 'apple';
+function perfMetricsSamplerTagByHand(device: DeviceInfo): PerfMetricsSamplerTag {
+  if (device.platform === 'android') return 'android';
+  if (device.platform === 'harmonyos') return 'harmonyos';
+  return 'apple';
 }
 
 // --- the exhaustive synthetic device matrix (every platform x kind x target) ---
@@ -99,10 +106,11 @@ test('perf.supportsMetrics facet is byte-identical to the former hand predicate'
 });
 
 test('only families with perf metrics carry the perf facet', () => {
-  // Apple owns ios + macos (SAME plugin instance); Android carries its own.
+  // Apple owns ios + macos (SAME plugin instance); Android and HarmonyOS carry theirs.
   assert.equal(getPlugin('apple'), getPlugin('apple'));
   assert.ok(getPlugin('apple').perf, 'apple plugin exposes perf');
   assert.ok(getPlugin('android').perf, 'android plugin exposes perf');
+  assert.ok(getPlugin('harmonyos').perf, 'harmonyos plugin exposes perf');
   // linux/web historically returned `false`; they get NO facet, and the daemon
   // lookup preserves that fallthrough (asserted below).
   assert.equal(getPlugin('linux').perf, undefined, 'linux plugin has no perf');

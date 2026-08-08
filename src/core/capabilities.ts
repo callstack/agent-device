@@ -38,6 +38,7 @@ const WEB_DEVICE: KindMatrix = { device: true };
 const HARMONYOS_ALL: KindMatrix = { emulator: true, device: true };
 const HARMONYOS_SUPPORTED_COMMANDS = new Set<string>([
   'open',
+  'perf',
   'close',
   'back',
   'apps',

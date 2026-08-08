@@ -48,6 +48,6 @@ export const isPerfMemoryKind = PERF_MEMORY_KINDS.is;
  * {@link PlatformPlugin.perf} facet returns this tag (type-only in the plugin, exactly
  * like {@link RecordingBackendTag} for recording), so core/platforms never carry the
  * daemon-owned sampling composition. Only families that expose perf metrics carry the tag
- * (Apple + Android); it is consulted solely after the support gate admits the platform.
+ * (Apple, Android, and HarmonyOS); it is consulted solely after the support gate admits the platform.
  */
-export type PerfMetricsSamplerTag = 'apple' | 'android';
+export type PerfMetricsSamplerTag = 'apple' | 'android' | 'harmonyos';

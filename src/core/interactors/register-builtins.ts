@@ -67,6 +67,7 @@ const harmonyosPlugin = {
   platforms: ['harmonyos'],
   capability: { bucket: 'harmonyos' },
   appLog: { resolveBackend: () => 'harmonyos' },
+  perf: { supportsMetrics: () => true, metricsSamplerTag: () => 'harmonyos' },
   createInteractor: async (device: DeviceInfo, runner: RunnerContext) => {
     const { createHarmonyInteractor } = await import('./harmonyos.ts');
     return createHarmonyInteractor(device, runner);

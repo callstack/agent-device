@@ -30,6 +30,14 @@ import {
   sampleAppleFramePerf,
   sampleApplePerfMetrics,
 } from '../../platforms/apple/core/perf.ts';
+import {
+  HARMONYOS_CPU_SAMPLE_DESCRIPTION,
+  HARMONYOS_CPU_SAMPLE_METHOD,
+  HARMONYOS_MEMORY_SAMPLE_DESCRIPTION,
+  HARMONYOS_MEMORY_SAMPLE_METHOD,
+  sampleHarmonyCpuPerf,
+  sampleHarmonyMemoryPerf,
+} from '../../platforms/harmonyos/perf.ts';
 import type { PerfKind, PerfMetricsSamplerTag } from '@agent-device/contracts/observability';
 import { SessionStore } from '../session-store.ts';
 import {
@@ -318,6 +326,7 @@ async function applyFramePerfMetric(
   appBundleId: string,
   options: BuildPerfResponseOptions,
 ): Promise<void> {
+  if (session.device.platform === 'harmonyos') return;
   const result =
     session.device.platform === 'android'
       ? await settleMetric(
@@ -340,6 +349,9 @@ function supportsPlatformPerfMetrics(session: SessionState): boolean {
 function buildMissingAppPerfReason(session: SessionState): string {
   if (session.device.platform === 'android') {
     return 'No Android app package is associated with this session. Run open <app> first.';
+  }
+  if (session.device.platform === 'harmonyos') {
+    return 'No HarmonyOS app bundle is associated with this session. Run open <app> first.';
   }
   return 'No Apple app bundle ID is associated with this session. Run open <app> first.';
 }
@@ -368,6 +380,21 @@ function buildPlatformSamplingMetadata(session: SessionState): Record<string, un
       },
     };
   }
+  if (session.device.platform === 'harmonyos') {
+    return {
+      memory: {
+        method: HARMONYOS_MEMORY_SAMPLE_METHOD,
+        description: HARMONYOS_MEMORY_SAMPLE_DESCRIPTION,
+        unit: 'kB',
+      },
+      cpu: {
+        method: HARMONYOS_CPU_SAMPLE_METHOD,
+        description: HARMONYOS_CPU_SAMPLE_DESCRIPTION,
+        unit: 'percent',
+      },
+      fps: buildDefaultUnavailableFrameMetric(),
+    };
+  }
   return buildAppleSamplingMetadata(session.device);
 }
 
@@ -380,6 +407,14 @@ function buildMemorySamplingMetadata(session: SessionState): Record<string, unkn
       topConsumerLimit: 5,
     };
   }
+  if (session.device.platform === 'harmonyos') {
+    return {
+      method: HARMONYOS_MEMORY_SAMPLE_METHOD,
+      description: HARMONYOS_MEMORY_SAMPLE_DESCRIPTION,
+      unit: 'kB',
+      topConsumerLimit: 1,
+    };
+  }
   return buildAppleSamplingMetadata(session.device).memory as Record<string, unknown>;
 }
 
@@ -389,6 +424,13 @@ function buildMemorySnapshotSamplingMetadata(session: SessionState): Record<stri
       method: ANDROID_HPROF_SNAPSHOT_METHOD,
       description: ANDROID_HPROF_SNAPSHOT_DESCRIPTION,
       defaultKind: 'android-hprof',
+      artifactOnly: true,
+    };
+  }
+  if (session.device.platform === 'harmonyos') {
+    return {
+      method: 'unsupported',
+      description: 'HarmonyOS memory snapshot capture is not available through HDC.',
       artifactOnly: true,
     };
   }
@@ -412,6 +454,7 @@ function buildFrameSamplingMetadata(session: SessionState): Record<string, unkno
       relatedActionsLimit: RELATED_PERF_ACTION_LIMIT,
     };
   }
+  if (session.device.platform === 'harmonyos') return buildDefaultUnavailableFrameMetric();
   return buildAppleFrameSamplingMetadata(session.device);
 }
 
@@ -453,6 +496,24 @@ async function sampleApplePerfResultsForSession(
   };
 }
 
+async function sampleHarmonyPerfResults(
+  session: SessionState,
+  appBundleId: string,
+): Promise<SampledPerfMetrics> {
+  const unsupportedFrames = Promise.reject(
+    new AppError(
+      'UNSUPPORTED_OPERATION',
+      'HarmonyOS frame sampling is not available through the current HDC toolchain.',
+    ),
+  );
+  const [memory, cpu, fps] = await Promise.allSettled([
+    sampleHarmonyMemoryPerf(session.device, appBundleId),
+    sampleHarmonyCpuPerf(session.device, appBundleId),
+    unsupportedFrames,
+  ]);
+  return { memory, cpu, fps };
+}
+
 // Maps the neutral {@link PerfMetricsSamplerTag} the plugin facet returns back to the
 // daemon-owned `perf metrics` sampler. Exhaustive over the tag union (a compile error if
 // a tag is added without a sampler), so `resolvePerfMetricsSampler` is a pure data lookup
@@ -462,6 +523,7 @@ async function sampleApplePerfResultsForSession(
 const PERF_METRICS_SAMPLERS_BY_TAG: Record<PerfMetricsSamplerTag, PerfMetricsSampler> = {
   android: sampleAndroidPerfResults,
   apple: sampleApplePerfResultsForSession,
+  harmonyos: sampleHarmonyPerfResults,
 };
 
 async function buildMemorySampleMetric(
@@ -479,7 +541,9 @@ async function buildMemorySampleMetric(
             adb: options.androidAdb,
           }),
         )
-      : await settleMetric(sampleAppleMemoryPerf(session));
+      : session.device.platform === 'harmonyos'
+        ? await settleMetric(sampleHarmonyMemoryPerf(session.device, session.appBundleId))
+        : await settleMetric(sampleAppleMemoryPerf(session));
   return buildMetricResult(result);
 }
 
@@ -508,6 +572,9 @@ async function buildMemorySnapshotArtifact(
     return await captureAndroidHeapSnapshot(session.device, session.appBundleId, outPath, {
       adb: options.androidAdb,
     });
+  }
+  if (session.device.platform === 'harmonyos') {
+    return unsupportedMemorySnapshotArtifact(session, kind);
   }
   if (kind !== 'memgraph') return unsupportedMemorySnapshotArtifact(session, kind);
   return await captureAppleMemorySnapshot(session.device, session.appBundleId, outPath);
