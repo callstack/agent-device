@@ -8,6 +8,7 @@ vi.mock('../../../utils/exec.ts', async (importOriginal) => {
 
 import {
   parseHarmonyBundleList,
+  parseHarmonyForegroundApp,
   parseHarmonyLaunchTarget,
   resolveHarmonyArchiveBundleName,
 } from '../app-lifecycle.ts';
@@ -39,6 +40,22 @@ test('parseHarmonyLaunchTarget reads the main ability and module from bm dump ou
     { ability: 'EntryAbility', module: 'entry' },
   );
   assert.equal(parseHarmonyLaunchTarget('bundle not found'), undefined);
+});
+
+test('parseHarmonyForegroundApp reads the foreground ability from the mission list', () => {
+  assert.deepEqual(
+    parseHarmonyForegroundApp(`
+      Mission ID #57  mission name #[#com.huawei.hmos.settings:phone_settings:com.huawei.hmos.settings.MainAbility]
+        state #BACKGROUND
+      Mission ID #76  mission name #[#com.example.application:entry:EntryAbility]
+        state #FOREGROUND
+    `),
+    { package: 'com.example.application', activity: 'EntryAbility' },
+  );
+});
+
+test('parseHarmonyForegroundApp rejects a mission list without a foreground ability', () => {
+  assert.equal(parseHarmonyForegroundApp('Mission ID #57 state #BACKGROUND'), undefined);
 });
 
 test('resolveHarmonyArchiveBundleName reads module metadata through unzip', async () => {

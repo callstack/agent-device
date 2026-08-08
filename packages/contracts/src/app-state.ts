@@ -6,7 +6,7 @@ import type { SessionSurface } from './session-surface.ts';
  * A discriminated union on `platform`:
  *  - Apple (`ios` / `macos`) session state, with iOS-only device locators that
  *    the previous hand-written mirror omitted; and
- *  - Android foreground `package` / `activity`.
+ *  - Android and HarmonyOS foreground `package` / `activity`.
  *
  * The handler returns one of these fixed objects (errors take the `ok: false`
  * path), so each branch is closed.
@@ -24,7 +24,7 @@ export type AppStateCommandResult =
       ios_simulator_device_set?: string | null;
     }
   | {
-      platform: 'android';
+      platform: 'android' | 'harmonyos';
       package: string;
       activity: string;
     };

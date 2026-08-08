@@ -129,6 +129,19 @@ async function handleAppStateCommand(params: {
     return errorResponse('UNSUPPORTED_OPERATION', 'appstate is not supported on web.');
   }
 
+  if (device.platform === 'harmonyos') {
+    const { getHarmonyAppState } = await import('../../platforms/harmonyos/app-lifecycle.ts');
+    const state = await getHarmonyAppState(device);
+    return {
+      ok: true,
+      data: {
+        platform: 'harmonyos',
+        package: state.package,
+        activity: state.activity,
+      },
+    };
+  }
+
   const { getAndroidAppState } = await import('../../platforms/android/app-lifecycle.ts');
   const state = await getAndroidAppState(device);
   return {
