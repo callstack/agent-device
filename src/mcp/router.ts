@@ -5,6 +5,8 @@ import { formatToolErrorText, normalizeToolError } from './tool-error.ts';
 import {
   cacheFields,
   finalizeResult,
+  isMethodRemovedInEra,
+  MODERN_PROTOCOL_VERSION,
   negotiateLegacyProtocolVersion,
   resolveProtocolEra,
   serverInfo,
@@ -57,6 +59,11 @@ export async function handleMcpMessage(message: JsonRpcMessage): Promise<JsonRpc
 }
 
 async function handleRequest(method: string, params: unknown, era: ProtocolEra): Promise<unknown> {
+  if (isMethodRemovedInEra(method, era)) {
+    throw new JsonRpcMethodNotFoundError(
+      `${method} was removed in MCP ${MODERN_PROTOCOL_VERSION}.`,
+    );
+  }
   switch (method) {
     // Modern capability discovery. Servers MUST implement it, and dual-era clients use it
     // as the stdio probe that tells a 2026-07-28 server from a handshake-only one.
@@ -70,7 +77,8 @@ async function handleRequest(method: string, params: unknown, era: ProtocolEra):
         ttlMs: STATIC_RESULT_CACHE_TTL_MS,
         cacheScope: 'public',
       };
-    // Legacy handshake. Retained so clients on 2025-11-25 and earlier keep connecting.
+    // Legacy handshake, gated above to legacy-framed requests. Retained so clients on
+    // 2025-11-25 and earlier keep connecting.
     case 'initialize':
       return {
         protocolVersion: negotiateLegacyProtocolVersion(params),
@@ -79,7 +87,7 @@ async function handleRequest(method: string, params: unknown, era: ProtocolEra):
         },
         serverInfo: serverInfo(),
       };
-    // Removed in 2026-07-28; still served because legacy clients use it as a keepalive.
+    // Removed in 2026-07-28; still the keepalive legacy clients rely on.
     case 'ping':
       return {};
     case 'tools/list':

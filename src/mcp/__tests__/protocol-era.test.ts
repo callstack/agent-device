@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import {
   cacheFields,
   finalizeResult,
+  isMethodRemovedInEra,
   LEGACY_PROTOCOL_VERSIONS,
   MODERN_PROTOCOL_VERSION,
   MODERN_PROTOCOL_VERSIONS,
@@ -98,6 +99,33 @@ test('an unimplemented declared revision is rejected with the supported list', (
       return true;
     },
   );
+});
+
+test('a supplied clientInfo must be an Implementation, but omitting it is fine', () => {
+  const withClientInfo = (clientInfo: unknown) => ({
+    _meta: {
+      'io.modelcontextprotocol/protocolVersion': MODERN_PROTOCOL_VERSION,
+      'io.modelcontextprotocol/clientCapabilities': {},
+      'io.modelcontextprotocol/clientInfo': clientInfo,
+    },
+  });
+
+  assert.equal(resolveProtocolEra('tools/list', modernMeta()), 'modern');
+  assert.equal(
+    resolveProtocolEra('tools/list', withClientInfo({ name: 'c', version: '1' })),
+    'modern',
+  );
+  for (const bad of [42, 'client', [], { name: 'c' }, { version: '1' }]) {
+    assert.throws(() => resolveProtocolEra('tools/list', withClientInfo(bad)), /clientInfo/);
+  }
+});
+
+test('the modern era removes initialize and ping, the legacy era keeps them', () => {
+  for (const method of ['initialize', 'ping']) {
+    assert.equal(isMethodRemovedInEra(method, 'modern'), true);
+    assert.equal(isMethodRemovedInEra(method, 'legacy'), false);
+  }
+  assert.equal(isMethodRemovedInEra('tools/call', 'modern'), false);
 });
 
 test('modern results carry resultType and serverInfo; legacy results are untouched', () => {

@@ -50,8 +50,15 @@ export const UNSUPPORTED_PROTOCOL_VERSION_CODE = -32022;
 /** Modern-only RPC: it does not exist in any legacy revision. */
 const DISCOVER_METHOD = 'server/discover';
 
+/**
+ * Methods `2026-07-28` removed. They stay available to legacy-framed requests, which
+ * still need the handshake and the keepalive, and are unknown methods in the modern era.
+ */
+const LEGACY_ONLY_METHODS: ReadonlySet<string> = new Set(['initialize', 'ping']);
+
 const PROTOCOL_VERSION_META_KEY = 'io.modelcontextprotocol/protocolVersion';
 const CLIENT_CAPABILITIES_META_KEY = 'io.modelcontextprotocol/clientCapabilities';
+const CLIENT_INFO_META_KEY = 'io.modelcontextprotocol/clientInfo';
 const SERVER_INFO_META_KEY = 'io.modelcontextprotocol/serverInfo';
 
 const MCP_SERVER_NAME = 'agent-device';
@@ -121,6 +128,15 @@ export function resolveProtocolEra(method: string, params: unknown): ProtocolEra
       `Expected _meta["${CLIENT_CAPABILITIES_META_KEY}"] to be an object.`,
     );
   }
+  // Client identity is optional, but a supplied one still has to be an `Implementation`:
+  // omitting it is a choice, misdeclaring it is a malformed request.
+  const clientInfo = meta[CLIENT_INFO_META_KEY];
+  if (clientInfo !== undefined && !isImplementation(clientInfo)) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `Expected _meta["${CLIENT_INFO_META_KEY}"] to carry string name and version.`,
+    );
+  }
   if (!MODERN_PROTOCOL_VERSIONS.includes(declared)) {
     if (method === DISCOVER_METHOD) throw new UnsupportedProtocolVersionError(declared);
     return 'legacy';
@@ -141,6 +157,16 @@ export function negotiateLegacyProtocolVersion(params: unknown): string {
     return requested;
   }
   return PREFERRED_LEGACY_PROTOCOL_VERSION;
+}
+
+/**
+ * Whether the resolved era removed this method. A modern-framed request reaching
+ * `initialize` or `ping` is calling a method its own revision deleted, so it gets the
+ * unknown-method error rather than a `resultType: "complete"` envelope wrapped around a
+ * legacy handshake reply.
+ */
+export function isMethodRemovedInEra(method: string, era: ProtocolEra): boolean {
+  return era === 'modern' && LEGACY_ONLY_METHODS.has(method);
 }
 
 export function serverInfo(): { name: string; version: string } {
@@ -170,6 +196,14 @@ export function cacheFields(era: ProtocolEra, ttlMs: number): CacheableResultFie
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isImplementation(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    stringField(value, 'name') !== undefined &&
+    stringField(value, 'version') !== undefined
+  );
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

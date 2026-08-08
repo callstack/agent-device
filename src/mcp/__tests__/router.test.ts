@@ -185,6 +185,55 @@ test('a declared revision without client capabilities is rejected as invalid par
   assert.match(response.error.message, /clientCapabilities/);
 });
 
+test('modern-framed calls to the methods 2026-07-28 removed are unknown methods', async () => {
+  for (const method of ['initialize', 'ping']) {
+    const modern = await handleMcpMessage({
+      jsonrpc: '2.0',
+      id: `modern-${method}`,
+      method,
+      params: { _meta: MODERN_META },
+    });
+    assert.ok(modern && 'error' in modern);
+    assert.equal(modern.error.code, -32601);
+
+    // The same method stays available to a legacy-framed caller.
+    const legacy = await handleMcpMessage({ jsonrpc: '2.0', id: `legacy-${method}`, method });
+    assert.ok(legacy && 'result' in legacy);
+  }
+});
+
+test('a supplied clientInfo must be a valid Implementation', async () => {
+  for (const clientInfo of [42, { name: 'c' }, { version: '1' }, { name: 1, version: 2 }]) {
+    const response = await handleMcpMessage({
+      jsonrpc: '2.0',
+      id: 'bad-client-info',
+      method: 'tools/list',
+      params: { _meta: { ...MODERN_META, 'io.modelcontextprotocol/clientInfo': clientInfo } },
+    });
+
+    assert.ok(
+      response && 'error' in response,
+      `expected rejection for ${JSON.stringify(clientInfo)}`,
+    );
+    assert.equal(response.error.code, -32602);
+    assert.match(response.error.message, /clientInfo/);
+  }
+
+  // Absent clientInfo is legitimate: the field is optional in 2026-07-28.
+  const omitted = await handleMcpMessage({
+    jsonrpc: '2.0',
+    id: 'no-client-info',
+    method: 'tools/list',
+    params: {
+      _meta: {
+        'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+        'io.modelcontextprotocol/clientCapabilities': {},
+      },
+    },
+  });
+  assert.ok(omitted && 'result' in omitted);
+});
+
 test('a protocol version this server does not implement is rejected with the supported list', async () => {
   const response = await handleMcpMessage({
     jsonrpc: '2.0',
