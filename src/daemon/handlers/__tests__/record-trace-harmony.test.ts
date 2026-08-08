@@ -55,6 +55,35 @@ function request(action: 'start' | 'stop', outPath?: string): DaemonRequest {
   };
 }
 
+function assertHdcCommand(calls: unknown[][], tokens: string[], message: string): void {
+  assert.ok(
+    calls.some((args) => tokens.every((token) => args.includes(token))),
+    message,
+  );
+}
+
+type RecordingResponseData = {
+  recording?: string;
+  recordingBackend?: string;
+  outPath?: string;
+};
+
+function requireRecordingResponse(
+  response: Awaited<ReturnType<typeof handleRecordTraceCommands>>,
+): RecordingResponseData {
+  if (!response) {
+    assert.fail('Expected a recording response');
+  }
+  if (!response.ok) {
+    assert.fail(response.error.message);
+  }
+  return response.data as RecordingResponseData;
+}
+
+function recordingPlatform(store: SessionStore, sessionName: string): string | undefined {
+  return store.get(sessionName)?.recording?.platform;
+}
+
 beforeEach(() => {
   mockRunCmd.mockReset();
   mockIsPlayableVideo.mockReset();
@@ -107,37 +136,37 @@ test('physical HarmonyOS recording starts, retrieves a playable MP4, and cleans 
     sessionName: session.name,
     sessionStore: store,
   });
-  assert.equal(started?.ok, true);
-  assert.equal(started?.data?.recording, 'started');
-  assert.equal(started?.data?.recordingBackend, 'HarmonyOS ScreenRecorder');
-  assert.equal(store.get(session.name)?.recording?.platform, 'harmonyos');
+  const startedData = requireRecordingResponse(started);
+  assert.equal(startedData.recording, 'started');
+  assert.equal(startedData.recordingBackend, 'HarmonyOS ScreenRecorder');
+  assert.equal(recordingPlatform(store, session.name), 'harmonyos');
 
   const stopped = await handleRecordTraceCommands({
     req: request('stop'),
     sessionName: session.name,
     sessionStore: store,
   });
-  assert.equal(stopped?.ok, true);
-  assert.equal(stopped?.data?.recording, 'stopped');
-  assert.equal(stopped?.data?.outPath, outPath);
+  const stoppedData = requireRecordingResponse(stopped);
+  assert.equal(stoppedData.recording, 'stopped');
+  assert.equal(stoppedData.outPath, outPath);
   assert.equal(store.get(session.name)?.recording, undefined);
-  assert.equal(mockIsPlayableVideo.mock.calls[0]?.[0], outPath);
+  assert.equal(mockIsPlayableVideo.mock.calls[0]![0], outPath);
 
   const hdcCalls = mockRunCmd.mock.calls.map(([, args]) => args);
-  assert.ok(
-    hdcCalls.some((args) => args.includes('CustomizedFileName')),
+  assertHdcCommand(
+    hdcCalls,
+    ['CustomizedFileName'],
     'start passes the unique media-library filename to ScreenRecorder',
   );
-  assert.ok(
-    hdcCalls.some((args) => args.includes('mediatool') && args.includes('recv')),
+  assertHdcCommand(
+    hdcCalls,
+    ['mediatool', 'recv'],
     'stop exports media-library content to the temporary device path',
   );
-  assert.ok(
-    hdcCalls.some((args) => args.includes('file') && args.includes('recv')),
-    'stop retrieves the MP4 through HDC file transfer',
-  );
-  assert.ok(
-    hdcCalls.some((args) => args.includes('mediatool') && args.includes('delete')),
+  assertHdcCommand(hdcCalls, ['file', 'recv'], 'stop retrieves the MP4 through HDC file transfer');
+  assertHdcCommand(
+    hdcCalls,
+    ['mediatool', 'delete'],
     'successful retrieval deletes the media-library entry',
   );
 });

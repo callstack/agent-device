@@ -341,17 +341,22 @@ function validateHarmonyRecordingFlags(req: DaemonRequest): DaemonResponse | nul
       'HarmonyOS recording captures the whole physical-device screen; use --scope device or --scope system',
     );
   }
-  const unsupportedFlags = [
-    req.flags?.fps !== undefined ? '--fps' : undefined,
-    req.flags?.quality !== undefined ? '--quality' : undefined,
-    req.flags?.hideTouches !== undefined ? '--hide-touches' : undefined,
-  ].filter((flag): flag is string => flag !== undefined);
+  const unsupportedFlags = harmonyUnsupportedRecordingFlags(req);
   return unsupportedFlags.length > 0
     ? errorResponse(
         'INVALID_ARGS',
         `HarmonyOS recordings do not support ${unsupportedFlags.join(', ')}`,
       )
     : null;
+}
+
+function harmonyUnsupportedRecordingFlags(req: DaemonRequest): string[] {
+  const flags = req.flags;
+  const unsupported: string[] = [];
+  if (flags?.fps !== undefined) unsupported.push('--fps');
+  if (flags?.quality !== undefined) unsupported.push('--quality');
+  if (flags?.hideTouches !== undefined) unsupported.push('--hide-touches');
+  return unsupported;
 }
 
 const WEB_UNSUPPORTED_RECORDING_FLAGS = [
