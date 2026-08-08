@@ -1,9 +1,38 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { beforeEach, test, vi } from 'vitest';
 import type { VegaToolProvider } from '../../../platforms/vega/tool-provider.ts';
 import { withVegaToolProvider } from '../../../platforms/vega/tool-provider.ts';
 import { appendToolchainChecks } from '../session-doctor-toolchain.ts';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
+
+vi.mock('../../../utils/exec.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../utils/exec.ts')>();
+  return { ...actual, runCmd: vi.fn() };
+});
+
+import { runCmd } from '../../../utils/exec.ts';
+
+const mockRunCmd = vi.mocked(runCmd);
+
+beforeEach(() => {
+  mockRunCmd.mockReset();
+});
+
+test('HarmonyOS doctor reports the HDC version', async () => {
+  mockRunCmd.mockResolvedValue({ exitCode: 0, stdout: 'HDC 3.2.0d\n', stderr: '' } as never);
+  const checks: DoctorCheck[] = [];
+  await appendToolchainChecks(checks, 'harmonyos');
+
+  assert.deepEqual(checks, [
+    {
+      id: 'toolchain',
+      status: 'pass',
+      summary: 'HarmonyOS toolchain: HDC 3.2.0d.',
+      evidence: { hdcVersion: 'HDC 3.2.0d' },
+    },
+  ]);
+  assert.deepEqual(mockRunCmd.mock.calls[0]?.slice(0, 2), ['hdc', ['-v']]);
+});
 
 test('Vega doctor reports CLI version and connected-device readiness through semantic provider', async () => {
   const provider = makeVegaProvider('VirtualDevice : tv - aarch64 - VegaOS\n');

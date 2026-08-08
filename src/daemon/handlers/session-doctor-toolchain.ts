@@ -29,9 +29,33 @@ export async function appendToolchainChecks(
     appendDoctorCheck(checks, await vegaToolchainCheck());
     return;
   }
+  if (platform === 'harmonyos') {
+    appendDoctorCheck(checks, await harmonyToolchainCheck());
+    return;
+  }
   if (platform === 'ios' || platform === 'macos' || platform === 'apple') {
     appendDoctorCheck(checks, await appleToolchainCheck());
   }
+}
+
+async function harmonyToolchainCheck(): Promise<DoctorCheck> {
+  const versionLine = await commandFirstLine('hdc', ['-v']);
+  if (!versionLine) {
+    return {
+      id: 'toolchain',
+      status: 'info',
+      summary: 'HarmonyOS toolchain: hdc not found or version check failed.',
+      hint: 'Install HarmonyOS Command Line Tools, then add sdk/default/openharmony/toolchains to PATH or set HDC_SDK_PATH.',
+      command: 'hdc -v',
+      evidence: { hdcVersion: null },
+    };
+  }
+  return {
+    id: 'toolchain',
+    status: 'pass',
+    summary: `HarmonyOS toolchain: ${versionLine}.`,
+    evidence: { hdcVersion: versionLine },
+  };
 }
 
 async function vegaToolchainCheck(): Promise<DoctorCheck> {

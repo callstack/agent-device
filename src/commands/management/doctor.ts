@@ -27,7 +27,7 @@ const doctorCommandDefinition = defineExecutableCommand(doctorCommandMetadata, (
 
 const doctorCliSchema = {
   usageOverride:
-    'doctor [--platform ios|android|vega|macos|linux|web|apple] [--app <id-or-name>] [--remote]',
+    'doctor [--platform ios|android|harmonyos|vega|macos|linux|web|apple] [--app <id-or-name>] [--remote]',
   allowedFlags: ['targetApp', 'remote'],
 } as const satisfies CommandSchemaOverride;
 
