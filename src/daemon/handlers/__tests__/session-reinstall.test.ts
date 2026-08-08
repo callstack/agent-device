@@ -30,6 +30,7 @@ const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
 const mockDefaultInstallOpsAndroid = vi.mocked(defaultInstallOps.android);
 const mockDefaultReinstallOpsIos = vi.mocked(defaultReinstallOps.ios);
 const mockDefaultReinstallOpsAndroid = vi.mocked(defaultReinstallOps.android);
+const mockDefaultReinstallOpsHarmony = vi.mocked(defaultReinstallOps.harmonyos);
 
 beforeEach(() => {
   mockResolveTargetDevice.mockReset();
@@ -38,6 +39,7 @@ beforeEach(() => {
   mockDefaultInstallOpsAndroid.mockReset();
   mockDefaultReinstallOpsIos.mockReset();
   mockDefaultReinstallOpsAndroid.mockReset();
+  mockDefaultReinstallOpsHarmony.mockReset();
 });
 
 function makeStore(): SessionStore {
@@ -270,4 +272,41 @@ test('reinstall resolves uploaded artifacts by id and cleans temp files after co
   if (!response) return;
   expect(response.ok).toBe(true);
   expect(fs.existsSync(tempRoot)).toBe(false);
+});
+
+test('HarmonyOS reinstall binds the resolved bundle to the active session', async () => {
+  const sessionStore = makeStore();
+  const session = makeSession('default', {
+    platform: 'harmonyos',
+    id: '127.0.0.1:5555',
+    name: 'emulator',
+    kind: 'emulator',
+    booted: true,
+  });
+  sessionStore.set('default', session);
+  mockResolveTargetDevice.mockResolvedValue(session.device);
+  const tempRoot = mkdtempForTestSync('agent-device-harmony-reinstall-');
+  const appPath = path.join(tempRoot, 'Sample.hap');
+  fs.writeFileSync(appPath, 'placeholder');
+  mockDefaultReinstallOpsHarmony.mockResolvedValue({ package: 'com.example.application' });
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: 'default',
+      command: 'reinstall',
+      positionals: ['com.example.application', appPath],
+      flags: {},
+    },
+    sessionName: 'default',
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+    invoke,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(sessionStore.get('default')).toMatchObject({
+    appBundleId: 'com.example.application',
+    appName: 'com.example.application',
+  });
 });

@@ -190,13 +190,29 @@ export async function handleAppDeployCommand(params: {
         : buildAndroidDeployResult(app, appPath, await deployOps.android(device, app, appPath));
 
     const data = withSuccessText(result, buildDeployMessage(result));
-    recordSessionAction(sessionStore, session, req, command, data);
+    const sessionForRecord = updateHarmonyDeploySession(session, result);
+    if (sessionForRecord && sessionForRecord !== session) {
+      sessionStore.set(sessionName, sessionForRecord);
+    }
+    recordSessionAction(sessionStore, sessionForRecord, req, command, data);
     return { ok: true, data };
   } finally {
     if (uploadedArtifactId) {
       cleanupUploadedArtifact(uploadedArtifactId);
     }
   }
+}
+
+function updateHarmonyDeploySession(
+  session: ReturnType<SessionStore['get']>,
+  result: DeployCommandResult,
+): ReturnType<SessionStore['get']> {
+  if (!session || result.platform !== 'harmonyos' || !result.appId) return session;
+  return {
+    ...session,
+    appBundleId: result.appId,
+    appName: result.appName ?? result.app,
+  };
 }
 
 function buildDeployMessage(result: DeployCommandResult): string {
