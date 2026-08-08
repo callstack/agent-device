@@ -11,6 +11,7 @@ test('--platform enumValues are derived from the canonical PLATFORM_SELECTORS tu
   assert.deepEqual(platformFlag.enumValues, [
     'apple',
     'android',
+    'harmonyos',
     'vega',
     'linux',
     'web',

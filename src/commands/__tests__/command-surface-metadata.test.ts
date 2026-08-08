@@ -137,6 +137,7 @@ test('common command input accepts web platform selector', () => {
   assert.deepEqual(platformSchema?.enum, [
     'apple',
     'android',
+    'harmonyos',
     'vega',
     'linux',
     'web',

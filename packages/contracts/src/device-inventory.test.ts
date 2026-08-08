@@ -6,9 +6,10 @@ import {
   LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS,
 } from './device-inventory.ts';
 
-test('local inventory includes Vega before the fallback Linux desktop', () => {
+test('local inventory includes HarmonyOS and Vega before the fallback Linux desktop', () => {
   assert.deepEqual(LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS, [
     'android',
+    'harmonyos',
     'apple',
     'vega',
     'linux',

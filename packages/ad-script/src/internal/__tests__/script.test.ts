@@ -345,6 +345,7 @@ test('REPLAY_METADATA_PLATFORMS is exactly the non-web leaf platforms', () => {
   assert.deepEqual([...REPLAY_METADATA_PLATFORMS].sort(), [
     'android',
     'apple',
+    'harmonyos',
     'ios',
     'linux',
     'macos',
@@ -353,7 +354,7 @@ test('REPLAY_METADATA_PLATFORMS is exactly the non-web leaf platforms', () => {
 });
 
 test('readReplayScriptMetadata accepts every concrete leaf platform', () => {
-  for (const platform of ['ios', 'android', 'vega', 'macos', 'linux'] as const) {
+  for (const platform of ['ios', 'android', 'harmonyos', 'vega', 'macos', 'linux'] as const) {
     const metadata = readReplayScriptMetadata(`context platform=${platform}\nopen "Demo"\n`);
 
     assert.equal(metadata.platform, platform);

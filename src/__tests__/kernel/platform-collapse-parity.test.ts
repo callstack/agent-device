@@ -99,8 +99,9 @@ test('deviceFieldsFromPublicPlatform is the inverse projection of publicPlatform
   });
   assert.deepEqual(deviceFieldsFromPublicPlatform('ios'), { platform: 'apple' });
   assert.deepEqual(deviceFieldsFromPublicPlatform('android'), { platform: 'android' });
+  assert.deepEqual(deviceFieldsFromPublicPlatform('harmonyos'), { platform: 'harmonyos' });
   assert.deepEqual(deviceFieldsFromPublicPlatform('vega'), { platform: 'vega' });
-  for (const leaf of ['ios', 'macos', 'android', 'vega', 'linux', 'web'] as const) {
+  for (const leaf of ['ios', 'macos', 'android', 'harmonyos', 'vega', 'linux', 'web'] as const) {
     assert.equal(publicPlatformString(deviceFieldsFromPublicPlatform(leaf)), leaf);
   }
 });
