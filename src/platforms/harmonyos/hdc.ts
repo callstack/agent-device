@@ -9,13 +9,18 @@ export type HarmonyHdcOptions = Pick<
   'allowFailure' | 'timeoutMs' | 'binaryStdout' | 'signal'
 >;
 
+export const DEFAULT_HARMONY_HDC_TIMEOUT_MS = 15_000;
+
 /** Runs an HDC command scoped to exactly one discovered HarmonyOS target. */
 export async function runHarmonyHdc(
   device: Pick<DeviceInfo, 'id'>,
   args: string[],
   options?: HarmonyHdcOptions,
 ): Promise<ExecResult> {
-  return await runCmd('hdc', ['-t', device.id, ...args], options);
+  return await runCmd('hdc', ['-t', device.id, ...args], {
+    timeoutMs: DEFAULT_HARMONY_HDC_TIMEOUT_MS,
+    ...options,
+  });
 }
 
 export async function ensureHdcAvailable(): Promise<void> {
