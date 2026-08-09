@@ -518,6 +518,11 @@ boundaries, and the early adoption checkpoint keep that coexistence shippable an
 - **Use session events or a future event journal as the durable-resource store:** rejected. It would
   make correctness depend on observability; current events are projections, and proposed ADR 0018
   explicitly preserves the same no-state-from-events rule.
+- **A separate process-local resource ledger beside `SessionState` for live handles:** rejected. The
+  session store is in-memory, so live `SessionState` already is the process-local home; a parallel
+  ledger keyed by the same session/resource identity would duplicate the ownership its R7 transition
+  owner already governs. The live/persisted boundary, not a second live store, is the protection:
+  only the descriptor and neutral metadata enter the persisted recovery record.
 - **Rely only on performance thresholds for lazy loading:** rejected. Thresholds catch regressions
   late and can pass while unrelated implementation graphs load; the import/evaluation shape is also
   contract-tested.
