@@ -18,6 +18,7 @@ import {
   createLocalLinuxToolProvider,
   withLinuxToolProvider,
 } from '../../platforms/linux/tool-provider.ts';
+import { unavailableBindDevice } from './test-device-runtime-gateway.ts';
 
 function makeRequest(command: string, positionals: string[] = []): DaemonRequest {
   return {
@@ -40,6 +41,8 @@ function makeChainParams(req: DaemonRequest) {
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
     invoke: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
+    bindDevice: unavailableBindDevice,
+    throwIfCanceled: () => {},
     contextFromFlags: () => ({ logPath: '/tmp/agent-device-request-chain.log' }),
   };
 }

@@ -2,8 +2,54 @@ import { test, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { mockRunCmd, makeSessionStore, makeSession, noopInvoke } from './session-test-harness.ts';
+import {
+  mockRunCmd,
+  makeSessionStore,
+  makeSession,
+  makeTestAppLogResource,
+  noopInvoke,
+} from './session-test-harness.ts';
 import { handleSessionCommands } from '../session.ts';
+
+function androidAppLog(
+  sessionName: string,
+  state: 'active' | 'failed',
+  outputPath = '/tmp/app.log',
+) {
+  return makeTestAppLogResource(
+    {
+      name: sessionName,
+      device: {
+        platform: 'android',
+        id: 'emulator-5554',
+        name: 'Pixel',
+        kind: 'emulator',
+      },
+    },
+    { backend: 'android', state, outputPath },
+  );
+}
+
+function iosSimulatorAppLog(sessionName: string, outputPath: string) {
+  return makeTestAppLogResource(
+    {
+      name: sessionName,
+      device: {
+        platform: 'apple',
+        appleOs: 'ios',
+        id: 'sim-1',
+        name: 'iPhone 17 Pro',
+        kind: 'simulator',
+      },
+    },
+    {
+      backend: 'ios-simulator',
+      state: 'active',
+      outputPath,
+      startedAt: 1_712_040_000_000,
+    },
+  );
+}
 
 test('network requires an active session', async () => {
   const sessionStore = makeSessionStore();
@@ -39,15 +85,7 @@ test('network dump adds a targeted note when the session app log stream is inact
       booted: true,
     }),
     appBundleId: 'com.example.app',
-    appLog: {
-      platform: 'android',
-      backend: 'android',
-      outPath: '/tmp/app.log',
-      startedAt: Date.now(),
-      getState: () => 'failed',
-      stop: async () => {},
-      wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-    },
+    appLog: androidAppLog(sessionName, 'failed'),
   });
 
   const response = await handleSessionCommands({
@@ -86,15 +124,7 @@ test('network dump recovers Android entries from adb logcat when the session str
       booted: true,
     }),
     appBundleId: 'com.example.app',
-    appLog: {
-      platform: 'android',
-      backend: 'android',
-      outPath: '/tmp/app.log',
-      startedAt: Date.now(),
-      getState: () => 'failed',
-      stop: async () => {},
-      wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-    },
+    appLog: androidAppLog(sessionName, 'failed'),
   });
 
   mockRunCmd.mockImplementation(async (_cmd, args) => {
@@ -162,15 +192,7 @@ test('network dump merges Android recovery entries ahead of stale session log tr
       booted: true,
     }),
     appBundleId: 'com.example.app',
-    appLog: {
-      platform: 'android',
-      backend: 'android',
-      outPath: appLogPath,
-      startedAt: Date.now(),
-      getState: () => 'failed',
-      stop: async () => {},
-      wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-    },
+    appLog: androidAppLog(sessionName, 'failed', appLogPath),
   });
 
   mockRunCmd.mockImplementation(async (_cmd, args) => {
@@ -224,15 +246,7 @@ test('network dump recovers Android entries from previous package pid in bounded
       booted: true,
     }),
     appBundleId: 'com.example.app',
-    appLog: {
-      platform: 'android',
-      backend: 'android',
-      outPath: '/tmp/app.log',
-      startedAt: Date.now(),
-      getState: () => 'failed',
-      stop: async () => {},
-      wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-    },
+    appLog: androidAppLog(sessionName, 'failed'),
   });
 
   mockRunCmd.mockImplementation(async (_cmd, args) => {
@@ -306,15 +320,7 @@ test('network dump recovers Android entries when an active stream is still bound
       booted: true,
     }),
     appBundleId: 'com.example.app',
-    appLog: {
-      platform: 'android',
-      backend: 'android',
-      outPath: appLogPath,
-      startedAt: Date.now(),
-      getState: () => 'active',
-      stop: async () => {},
-      wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-    },
+    appLog: androidAppLog(sessionName, 'active', appLogPath),
   });
 
   mockRunCmd.mockImplementation(async (_cmd, args) => {
@@ -380,15 +386,7 @@ test('network dump recovers iOS simulator entries from simctl log show when the 
       booted: true,
     }),
     appBundleId: 'com.agentdevice.tester',
-    appLog: {
-      platform: 'apple',
-      backend: 'ios-simulator',
-      outPath: appLogPath,
-      startedAt: 1_712_040_000_000,
-      getState: () => 'active',
-      stop: async () => {},
-      wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-    },
+    appLog: iosSimulatorAppLog(sessionName, appLogPath),
   });
 
   mockRunCmd.mockImplementation(async (_cmd, args) => {
@@ -457,15 +455,7 @@ test('network dump explains when iOS simulator recovery found app logs but no HT
       booted: true,
     }),
     appBundleId: 'com.agentdevice.tester',
-    appLog: {
-      platform: 'apple',
-      backend: 'ios-simulator',
-      outPath: appLogPath,
-      startedAt: 1_712_040_000_000,
-      getState: () => 'active',
-      stop: async () => {},
-      wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-    },
+    appLog: iosSimulatorAppLog(sessionName, appLogPath),
   });
 
   mockRunCmd.mockImplementation(async (_cmd, args) => {

@@ -20,7 +20,6 @@ import {
   type AndroidAdbProviderResolver,
   type AppleRunnerProviderResolver,
   type AppleToolProviderResolver,
-  type AppLogProviderResolver,
   type LinuxToolProviderResolver,
   type RequestPlatformProviderScope,
   type RecordingProviderResolver,
@@ -43,17 +42,21 @@ import {
 } from './request-handler-chain.ts';
 import {
   createRequestExecutionScope,
+  finalizeRequestExecutionScope,
   type LockedRequestScope,
   prepareLockedRequestScope,
   type RequestExecutionScope,
 } from './request-execution-scope.ts';
-import { buildRequestFinishedEvent, shouldRecordEventForRequest } from './session-event-log.ts';
 import { unsupportedSaveScriptFlagResponse } from './request-save-script-policy.ts';
 import { canRunReplayScopedAction } from './daemon-command-registry.ts';
 import { createAgentBrowserWebProvider } from '../platforms/web/agent-browser-provider.ts';
 import { openWebSessionNames } from './web-session-names.ts';
 import { inferFillText } from './action-utils.ts';
 import { createPlatformRequestScope } from './platform-request-scope.ts';
+import type {
+  AppLogRuntimeOperations,
+  DeviceRuntimeGateway,
+} from '@agent-device/contracts/platform';
 
 // ---------------------------------------------------------------------------
 // Request handler API
@@ -71,9 +74,9 @@ export type RequestRouterDeps = {
   linuxToolProvider?: LinuxToolProviderResolver;
   vegaToolProvider?: VegaToolProviderResolver;
   webProvider?: WebProviderResolver;
-  appLogProvider?: AppLogProviderResolver;
   recordingProvider?: RecordingProviderResolver;
   deviceInventoryGateways: ComposedDeviceInventoryGateways;
+  deviceRuntimeGateway: DeviceRuntimeGateway<AppLogRuntimeOperations>;
   providerRuntimeIds?: readonly string[];
   providerRuntimeRequiredIds?: readonly string[];
   leaseLifecycleProvider?: LeaseLifecycleProvider;
@@ -98,9 +101,9 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     linuxToolProvider,
     vegaToolProvider,
     webProvider,
-    appLogProvider,
     recordingProvider,
     deviceInventoryGateways,
+    deviceRuntimeGateway,
     providerRuntimeIds,
     providerRuntimeRequiredIds,
     leaseLifecycleProvider,
@@ -157,11 +160,13 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     if (unsupportedSaveScript) return unsupportedSaveScript;
 
     let scope: RequestExecutionScope | undefined;
+    let response: DaemonResponse;
+    const platformRequestScope = createPlatformRequestScope(req);
     try {
-      return await withDeviceInventoryContext(
+      response = await withDeviceInventoryContext(
         {
           ...deviceInventoryGateways,
-          requestScope: createPlatformRequestScope(req),
+          requestScope: platformRequestScope,
         },
         async () =>
           await withResolveTargetDeviceCacheScope(async () => {
@@ -169,15 +174,16 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
               req,
               sessionStore,
               leaseRegistry,
+              deviceRuntimeGateway,
+              platformRequestScope,
             });
             return await executeRequestScope(scope);
           }),
       );
     } catch (error) {
-      const response = finalizeThrownRequestError(error);
-      recordThrownRequestEvent(sessionStore, scope, response);
-      return response;
+      response = finalizeThrownRequestError(error);
     }
+    return await finalizeRequestBindingCleanup(scope, response);
   }
 
   async function executeRequestScope(
@@ -221,7 +227,6 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
                   (shouldUseDefaultWebProvider(lockedScope)
                     ? createDefaultWebProvider(stateDir, sessionStore)
                     : undefined),
-                appLogProvider,
                 recordingProvider,
               },
             },
@@ -253,9 +258,11 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         ? createReplayScopedActionInvoker(lockedScope, providerScope)
         : undefined,
       androidAdbExecutor: providerScope.androidAdbExecutor,
+      bindDevice: lockedScope.bindDevice,
+      throwIfCanceled: lockedScope.throwIfCanceled,
       contextFromFlags: lockedScope.handlerContextFromFlags,
     });
-    if (handlerResponse) return lockedScope.finalize(handlerResponse);
+    if (handlerResponse) return handlerResponse;
 
     return await dispatchGenericForLockedScope({
       lockedScope,
@@ -276,26 +283,29 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       registerParameterizedFillDiagnosticValue(req);
 
       let childScope: RequestExecutionScope | undefined;
+      let response: DaemonResponse;
       try {
         const scopedReq = bindReplayDeviceExecutionLock(req, parentScope);
         childScope = await createRequestExecutionScope({
           req: scopedReq,
           sessionStore,
           leaseRegistry,
+          deviceRuntimeGateway,
+          platformRequestScope: createPlatformRequestScope(scopedReq),
         });
         // The outer replay keeps its stable session lock plus the device lock
         // from the first device binding through response projection and ref
         // finalization. A same-session replay action reuses that admitted scope
         // instead of reacquiring the non-reentrant locks. Nested changes remain
         // visible to capture lineage through snapshot/frame/runtime/store state.
-        return childScope.sessionName === parentScope.sessionName
-          ? await executeRequestScope(childScope, providerScope)
-          : await executeRequestScope(childScope);
+        response =
+          childScope.sessionName === parentScope.sessionName
+            ? await executeRequestScope(childScope, providerScope)
+            : await executeRequestScope(childScope);
       } catch (error) {
-        const response = finalizeThrownRequestError(error);
-        recordThrownRequestEvent(sessionStore, childScope, response);
-        return response;
+        response = finalizeThrownRequestError(error);
       }
+      return await finalizeRequestBindingCleanup(childScope, response);
     };
   }
 
@@ -384,7 +394,7 @@ async function dispatchGenericForLockedScope(params: {
   const { lockedScope, logPath, sessionStore } = params;
   const session = sessionStore.get(lockedScope.sessionName);
   if (!session) {
-    return lockedScope.finalize(noActiveSessionError());
+    return noActiveSessionError();
   }
 
   const { dispatchGenericCommand } = await loadGenericRequestHandlerModule();
@@ -396,7 +406,7 @@ async function dispatchGenericForLockedScope(params: {
     sessionStore,
     contextFromFlags: lockedScope.contextFromFlags,
   });
-  return lockedScope.finalize(dispatchResponse);
+  return dispatchResponse;
 }
 
 function bindReplayDeviceExecutionLock(
@@ -441,20 +451,30 @@ function finalizeThrownRequestError(error: unknown): DaemonResponse {
   return { ok: false, error: normalizedError };
 }
 
-function recordThrownRequestEvent(
-  sessionStore: SessionStore,
+async function finalizeRequestBindingCleanup(
   scope: RequestExecutionScope | undefined,
   response: DaemonResponse,
-): void {
-  if (!scope || !shouldRecordEventForRequest(scope.req)) return;
-  sessionStore.recordEvent(
-    scope.sessionName,
-    buildRequestFinishedEvent({
-      req: scope.req,
-      response,
-      durationMs: Math.max(0, Date.now() - scope.startedAtMs),
-    }),
-  );
+): Promise<DaemonResponse> {
+  if (!scope) return response;
+  let finalResponse = response;
+  try {
+    await scope[Symbol.asyncDispose]();
+  } catch (cleanupError) {
+    if (response.ok) {
+      finalResponse = finalizeThrownRequestError(cleanupError);
+    } else {
+      emitDiagnostic({
+        level: 'error',
+        phase: 'request_binding_cleanup_failed',
+        data: {
+          primaryCode: response.error.code,
+          cleanupError: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+        },
+      });
+      flushDiagnosticsToSessionFile({ force: true });
+    }
+  }
+  return finalizeRequestExecutionScope(scope, finalResponse);
 }
 
 /**

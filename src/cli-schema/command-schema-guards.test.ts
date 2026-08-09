@@ -58,14 +58,16 @@ test('cli.ts command dispatch checks are recognized by parser-level unknown-comm
 
 test('schema capability mappings match capability source-of-truth', () => {
   const cliCommands = new Set<string>(listCliCommandNames());
-  const capabilityCheckedCommands = commandDescriptors
+  const capabilityCatalogCommands = commandDescriptors
     .filter(
       (descriptor) =>
-        'capability' in descriptor && descriptor.capability && cliCommands.has(descriptor.name),
+        (('capability' in descriptor && descriptor.capability !== undefined) ||
+          descriptor.platformExecution.kind === 'device-runtime') &&
+        cliCommands.has(descriptor.name),
     )
     .map((descriptor) => descriptor.name)
     .sort();
-  assert.deepEqual(capabilityCheckedCommands, listCapabilityCommands());
+  assert.deepEqual(capabilityCatalogCommands, listCapabilityCommands());
 });
 
 function collectCliDispatchCommandLiterals(): Set<string> {

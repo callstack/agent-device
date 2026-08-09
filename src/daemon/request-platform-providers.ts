@@ -12,7 +12,6 @@ import type { LinuxToolProvider } from '../platforms/linux/tool-provider.ts';
 import type { VegaToolProvider } from '../platforms/vega/tool-provider.ts';
 import { withWebProvider, type WebProvider } from '../platforms/web/provider.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { AppLogProvider } from './app-log.ts';
 import { hasExplicitDeviceSelector } from './device-selector-intent.ts';
 import { withRecordingProvider, type RecordingProvider } from './recording-provider.ts';
 import type { DaemonRequest, SessionState } from './types.ts';
@@ -43,8 +42,6 @@ export type VegaToolProviderResolver = PlatformProviderResolver<VegaToolProvider
 
 export type WebProviderResolver = PlatformProviderResolver<WebProvider | undefined>;
 
-export type AppLogProviderResolver = PlatformProviderResolver<AppLogProvider | undefined>;
-
 export type RecordingProviderResolver = PlatformProviderResolver<RecordingProvider | undefined>;
 
 export type PlatformProviderResolvers = {
@@ -54,7 +51,6 @@ export type PlatformProviderResolvers = {
   linuxToolProvider?: LinuxToolProviderResolver;
   vegaToolProvider?: VegaToolProviderResolver;
   webProvider?: WebProviderResolver;
-  appLogProvider?: AppLogProviderResolver;
   recordingProvider?: RecordingProviderResolver;
 };
 
@@ -122,9 +118,6 @@ type ResolvedRequestPlatformProviders = {
   };
   web?: {
     provider?: WebProvider;
-  };
-  appLog?: {
-    provider?: AppLogProvider;
   };
   recording?: {
     provider?: RecordingProvider;
@@ -257,19 +250,6 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
     async appendWrapper(scopedProviders, wrappers) {
       if (!scopedProviders.web?.provider) return;
       appendRequestProviderWrapper(wrappers, scopedProviders.web, withWebProvider);
-    },
-  },
-  {
-    resolverKey: 'appLogProvider',
-    resolve(providers, context) {
-      const appLogProvider = providers.appLogProvider;
-      if (!appLogProvider) return {};
-      return { appLog: { provider: appLogProvider(context) } };
-    },
-    async appendWrapper(scopedProviders, wrappers) {
-      if (!scopedProviders.appLog?.provider) return;
-      const { withAppLogProvider } = await import('./app-log-request-scope.ts');
-      appendRequestProviderWrapper(wrappers, scopedProviders.appLog, withAppLogProvider);
     },
   },
   {

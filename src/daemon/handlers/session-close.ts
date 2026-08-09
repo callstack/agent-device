@@ -131,7 +131,7 @@ async function stopBestEffortSessionResources(
 ): Promise<void> {
   // Recording overlay finalization needs the Apple runner.
   await attemptCleanup('recording', () => stopSessionRecordingForTeardown(session));
-  await attemptCleanup('app_log', () => stopSessionAppLog(session));
+  await attemptCleanup('app_log', () => stopSessionAppLog(session, sessionStore));
   await attemptCleanup('audio_probe', async () => {
     await stopSessionAudioProbe(session, 'session-close');
   });

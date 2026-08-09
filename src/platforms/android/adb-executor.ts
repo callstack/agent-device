@@ -373,6 +373,26 @@ export function resolveAndroidAdbProvider(
     : createLocalAndroidAdbProvider(device);
 }
 
+/**
+ * Returns only the request-scoped provider background transport for this device.
+ * Unlike {@link resolveAndroidAdbProvider}, this never falls back to host adb: callers
+ * use absence to keep provider-backed long-lived processes fail-closed.
+ */
+export type ScopedAndroidAdbBackgroundTransport =
+  | Readonly<{ mode: 'local' }>
+  | Readonly<{ mode: 'transport-composed'; spawn?: AndroidAdbSpawner }>;
+
+export function resolveScopedAndroidAdbBackgroundTransport(
+  device: DeviceInfo,
+): ScopedAndroidAdbBackgroundTransport {
+  const scoped = androidAdbProviderScope.getStore();
+  if (scoped?.serial !== device.id) return { mode: 'local' };
+  return {
+    mode: 'transport-composed',
+    ...(scoped.provider.spawn ? { spawn: scoped.provider.spawn } : {}),
+  };
+}
+
 export function resolveAndroidTextInjector(device: DeviceInfo): AndroidTextInjector | undefined {
   const scoped = androidAdbProviderScope.getStore();
   return scoped?.serial === device.id ? scoped.provider.text : undefined;

@@ -1,6 +1,6 @@
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { expect, test } from 'vitest';
-import { createRequestHandler } from '../request-router.ts';
+import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { SessionStore } from '../session-store.ts';
 import { AppError } from '@agent-device/kernel/errors';

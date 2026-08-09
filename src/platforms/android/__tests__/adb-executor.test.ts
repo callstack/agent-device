@@ -28,6 +28,7 @@ import {
   pullAndroidAdbFile,
   resolveAndroidAdbExecutor,
   resolveAndroidAdbProvider,
+  resolveScopedAndroidAdbBackgroundTransport,
   withAndroidAdbProvider,
   type AndroidAdbProvider,
 } from '../adb-executor.ts';
@@ -119,6 +120,46 @@ test('scoped provider only resolves for the matching device serial', async () =>
       ['-s', 'other-device', 'shell', 'echo', 'provider-fallback'],
       ['-s', 'other-device', 'shell', 'echo', 'executor-fallback'],
     ],
+  );
+});
+
+test('scoped background transport resolves only an explicitly supplied matching spawner', async () => {
+  const device = {
+    platform: 'android',
+    id: 'emulator-5554',
+    name: 'Pixel Emulator',
+    kind: 'emulator',
+    booted: true,
+  } as const;
+  const spawn = vi.fn<NonNullable<AndroidAdbProvider['spawn']>>();
+
+  await withAndroidAdbProvider(
+    {
+      exec: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+      spawn,
+    },
+    { serial: device.id },
+    async () => {
+      assert.deepEqual(resolveScopedAndroidAdbBackgroundTransport(device), {
+        mode: 'transport-composed',
+        spawn,
+      });
+      assert.deepEqual(
+        resolveScopedAndroidAdbBackgroundTransport({ ...device, id: 'other-device' }),
+        {
+          mode: 'local',
+        },
+      );
+    },
+  );
+
+  await withAndroidAdbProvider(
+    async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+    { serial: device.id },
+    async () =>
+      assert.deepEqual(resolveScopedAndroidAdbBackgroundTransport(device), {
+        mode: 'transport-composed',
+      }),
   );
 });
 

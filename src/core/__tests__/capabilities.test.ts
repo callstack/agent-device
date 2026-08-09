@@ -253,11 +253,12 @@ test('viewport resizing is admitted only on web, where a backend exists', () => 
 });
 
 test('capabilities reject CoreDevice-only commands for XCTest-backed devices', () => {
+  // Runtime-backed logs admission is proven from exact device facts in
+  // session-capabilities.test.ts, never through this legacy matrix projection.
   const coreDeviceOnlyCommands = [
     'apps',
     'install',
     'install-from-source',
-    'logs',
     'perf',
     'record',
     'reinstall',
@@ -405,7 +406,6 @@ test('Linux supports desktop interaction commands and blocks mobile/unsupported 
       'install',
       'install-from-source',
       'keyboard',
-      'logs',
       'network',
       'perf',
       'push',
@@ -457,7 +457,6 @@ test('web supports only the initial browser interaction slice', () => {
       'install',
       'install-from-source',
       'keyboard',
-      'logs',
       'longpress',
       'perf',
       'push',

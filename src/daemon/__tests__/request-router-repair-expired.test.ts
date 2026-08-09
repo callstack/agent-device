@@ -15,7 +15,7 @@ import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
-import { createRequestHandler } from '../request-router.ts';
+import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import type { DaemonRequest, SessionState } from '../types.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { LeaseRegistry } from '../lease-registry.ts';

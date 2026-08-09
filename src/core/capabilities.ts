@@ -56,7 +56,6 @@ const HARMONYOS_SUPPORTED_COMMANDS = new Set<string>([
   'keyboard',
   'is',
   'longpress',
-  'logs',
   'press',
   'reinstall',
   'screenshot',
@@ -168,7 +167,14 @@ export function unsupportedHintForDevice(command: string, device: DeviceInfo): s
 }
 
 export function listCapabilityCommands(): string[] {
-  return Object.keys(COMMAND_CAPABILITY_MATRIX).sort();
+  return commandDescriptors
+    .filter(
+      (descriptor) =>
+        ('capability' in descriptor && descriptor.capability !== undefined) ||
+        descriptor.platformExecution.kind === 'device-runtime',
+    )
+    .map((descriptor) => descriptor.name)
+    .sort();
 }
 
 /**

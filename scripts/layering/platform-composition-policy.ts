@@ -58,6 +58,8 @@ function isAllowedCompositionImport(specifier: string): boolean {
   return (
     /^@agent-device\/contracts(?:\/|$)/.test(specifier) ||
     /^@agent-device\/platform-[^/]+$/.test(specifier) ||
+    specifier === './platform-runtime-app-log.ts' ||
+    specifier === './platform-runtime-app-log-host.ts' ||
     specifier === './platform-runtime-device-inventory.ts' ||
     specifier === './platform-runtime-host.ts' ||
     specifier.startsWith('./platform-runtime-host/')

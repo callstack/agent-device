@@ -23,7 +23,7 @@ import {
   dispatchGestureViewport,
 } from '../../core/dispatch.ts';
 import { getRunnerSessionSnapshot } from '../../platforms/apple/core/runner/runner-client.ts';
-import { createRequestHandler } from '../request-router.ts';
+import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import type { SessionState } from '../types.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';

@@ -34,10 +34,123 @@ export {
 } from '../audio-probe-support.ts';
 export type { PlatformPlugin } from '../platform-plugin.ts';
 export { assertCommandPlatformExecution } from '../command-platform-execution.ts';
+export type { CommandPlatformExecution } from '../command-platform-execution.ts';
+export { AsyncCleanupStack, PendingTransferGuard } from '../async-lifecycle.ts';
+export {
+  localRuntimeOwner,
+  narrowDeviceBinding,
+  providerRuntimeOwner,
+  runtimeOwnerKey,
+  runtimeUse,
+  sameRuntimeOwner,
+} from '../platform-runtime.ts';
 export type {
-  CommandPlatformExecution,
+  BoundDeviceRuntime,
+  DeviceBinding,
+  DeviceBindingIntent,
+  DeviceBindingRequest,
+  DeviceRuntimeGateway,
+  DeviceRuntimeOwner,
+  ResourceOwnershipFence,
+  RuntimeDeviceShape,
+  RuntimeFacts,
+  RuntimeOperationFact,
+  RuntimeOperationKey,
+  RuntimeOperationUnavailability,
+  RuntimeOwnerRef,
+  RuntimePlatformModule,
+  RuntimeProviderMode,
+  RuntimeUse,
   RuntimeUseDeclaration,
-} from '../command-platform-execution.ts';
+} from '../platform-runtime.ts';
+export {
+  createDurableResourceEnvelope,
+  decodeDurableResourceEnvelope,
+  encodeDurableDescriptor,
+} from '../durable-resource-envelope.ts';
+export type {
+  DurableDescriptorBodyDecodeOutcome,
+  DurableDescriptorCodec,
+  DurableEnvelopeDecodeOutcome,
+  DurableResourceDeviceIdentity,
+  DurableResourceEnvelope,
+  DurableResourceLifecycleState,
+  EncodedDurableDescriptor,
+} from '../durable-resource-envelope.ts';
+export { isConfirmedCleanup } from '../durable-resource.ts';
+export type {
+  CleanupOutcome,
+  CleanupPendingReason,
+  DurableResourceFacet,
+  FinishOutcome,
+  LiveResourceHandle,
+  ReattachOutcome,
+  ResourceUnreattachableReason,
+} from '../durable-resource.ts';
+export {
+  APP_LOG_RESOURCE_KIND,
+  createAppLogRecoveryOperations,
+  createAppLogStartResult,
+  decodeAppLogProcessMarker,
+} from '../app-log-runtime.ts';
+export {
+  cleanupManagedAppLogProcess,
+  reattachCleanupOnlyAppLogProcess,
+} from '../app-log-process-recovery.ts';
+export { createAppLogLiveHandleFromFinish } from '../app-log-live-handle.ts';
+export {
+  createPidScopedAppLogProcess,
+  resolveFirstNumericAppLogPid,
+} from '../app-log-pid-process.ts';
+export type { PidScopedAppLogProcessOptions } from '../app-log-pid-process.ts';
+export { appLogCommandSucceeded, bestEffortAppLogCheck } from '../app-log-probe.ts';
+export {
+  appLogSessionArtifactsMatch,
+  assertAppLogSessionArtifacts,
+} from '../app-log-session-artifacts.ts';
+export type { AppLogArtifactPaths } from '../app-log-session-artifacts.ts';
+export {
+  createUnavailableAppLogBinding,
+  createUnavailableAppLogRuntimeOwner,
+} from '../app-log-unavailable-runtime.ts';
+export type {
+  AppLogBackgroundProcess,
+  AppLogBackgroundProcessRequest,
+  AppLogCleanupInput,
+  AppLogCompletion,
+  AppLogDescriptorCodec,
+  AppLogDoctorInput,
+  AppLogDoctorResult,
+  AppLogFailure,
+  AppLogInspection,
+  AppLogLiveHandle,
+  AppLogLiveHandleImplementation,
+  AppLogLiveSnapshot,
+  AppLogLiveState,
+  AppLogOutputSink,
+  AppLogProcessMarker,
+  AppLogProcessMarkerReadOutcome,
+  AppLogProcessOwnership,
+  AppLogProcessStart,
+  AppLogProcessTransport,
+  AppLogRecoveryContext,
+  AppLogReattachInput,
+  AppLogRuntimeHost,
+  AppLogRuntimeOperations,
+  AppLogRuntimeOwner,
+  AppLogRuntimePlatformModule,
+  AppLogRuntimeProviderModule,
+  AppLogSessionArtifacts,
+  AppLogStartInput,
+  AppLogStartResult,
+} from '../app-log-runtime.ts';
+export type { CleanupOnlyAppLogProcessReattachOutcome } from '../app-log-process-recovery.ts';
+export {
+  appLogAdmissionUse,
+  appLogRuntimePlanUses,
+  resolveLogsRuntimePlan,
+} from '../logs-runtime-plan.ts';
+export type { LogsRuntimePlan, LogsRuntimePlanInput } from '../logs-runtime-plan.ts';
 export type { PlatformGatedProviderResolverKey } from '../platform-providers.ts';
 export type { RunnerLogicalLeaseContext } from '../runner-lease-context.ts';
 export type {

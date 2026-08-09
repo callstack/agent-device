@@ -6,7 +6,7 @@ import {
   updateDiagnosticsScope,
 } from '../utils/diagnostics.ts';
 import { applyCommandDefaults } from '../cli-schema/command-schema.ts';
-import { normalizeError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { DaemonCommandContext } from './context.ts';
 import { contextFromFlags as contextFromFlagsWithLog } from './context.ts';
 import { assertSessionSelectorMatches } from './session-selector.ts';
@@ -40,12 +40,22 @@ import {
 } from './session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { teardownSessionResources } from './session-teardown.ts';
+import type {
+  AppLogRuntimeOperations,
+  DeviceRuntimeGateway,
+  PlatformRequestScope,
+} from '@agent-device/contracts/platform';
+import { createRequestRuntimeBindings, type BindDeviceRuntime } from './request-runtime-binding.ts';
 
 // Production daemon wiring owns one LeaseRegistry per process; scoping locks by registry keeps
 // test and embedded routers isolated without changing process-level serialization there.
 const leaseRegistryExecutionLocks = new WeakMap<LeaseRegistry, Map<string, Promise<unknown>>>();
+const requestScopeFinalizers = new WeakMap<
+  RequestExecutionScope,
+  (response: DaemonResponse) => DaemonResponse
+>();
 
-export type RequestExecutionScope = {
+export type RequestExecutionScope = AsyncDisposable & {
   req: DaemonRequest;
   command: string;
   sessionName: string;
@@ -55,6 +65,7 @@ export type RequestExecutionScope = {
   runAdmitted<T>(task: () => Promise<T>): Promise<T>;
   runLocked<T>(task: () => Promise<T>): Promise<T>;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
+  bindDevice: BindDeviceRuntime;
   throwIfCanceled(): void;
 };
 
@@ -64,7 +75,8 @@ export type LockedRequestScope = {
   logPath: string;
   existingSession: SessionState | undefined;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
-  finalize(response: DaemonResponse): DaemonResponse;
+  bindDevice: BindDeviceRuntime;
+  throwIfCanceled(): void;
   contextFromFlags(
     flags: CommandFlags | undefined,
     appBundleId?: string,
@@ -85,6 +97,8 @@ export async function createRequestExecutionScope(params: {
   req: DaemonRequest;
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
+  deviceRuntimeGateway?: DeviceRuntimeGateway<AppLogRuntimeOperations>;
+  platformRequestScope?: PlatformRequestScope;
 }): Promise<RequestExecutionScope> {
   const { sessionStore, leaseRegistry } = params;
   let scopedReq = applyRequestCommandDefaults(scopeRequestSession(params.req));
@@ -135,6 +149,13 @@ export async function createRequestExecutionScope(params: {
       locks: executionLocks,
       initialKeys: executionLockKeys,
     });
+    const runtimeBindings =
+      params.deviceRuntimeGateway && params.platformRequestScope
+        ? createRequestRuntimeBindings({
+            gateway: params.deviceRuntimeGateway,
+            scope: params.platformRequestScope,
+          })
+        : undefined;
 
     const scope: RequestExecutionScope = {
       req: scopedReq,
@@ -145,6 +166,15 @@ export async function createRequestExecutionScope(params: {
       startedAtMs,
       retainDeviceExecutionLock: async (deviceId) =>
         await requestExecutionLocks.retainDevice(deviceId),
+      bindDevice:
+        runtimeBindings?.bindDevice ??
+        (async () => {
+          throw new AppError(
+            'COMMAND_FAILED',
+            'Device runtime gateway is not configured for this request scope',
+            { reason: 'runtime-gateway-missing' },
+          );
+        }),
       throwIfCanceled: () => throwIfRequestCanceled(scopedReq.meta?.requestId),
       runAdmitted: async (task) => {
         throwIfRequestCanceled(scopedReq.meta?.requestId);
@@ -152,7 +182,13 @@ export async function createRequestExecutionScope(params: {
           sessionName,
           sessionStore,
           leaseRegistry,
-          teardownSession: teardownSessionResources,
+          teardownSession: async (session, expiredSessionName) =>
+            await teardownSessionResources(
+              session,
+              expiredSessionName,
+              sessionStore.resolveDaemonStateDir(),
+              sessionStore,
+            ),
         });
         scopedReq = admitRequestLeaseForLockedScope({
           req: scopedReq,
@@ -167,7 +203,21 @@ export async function createRequestExecutionScope(params: {
         throwIfRequestCanceled(scopedReq.meta?.requestId);
         return await requestExecutionLocks.run(async () => await scope.runAdmitted(task));
       },
+      [Symbol.asyncDispose]: async () => await runtimeBindings?.[Symbol.asyncDispose](),
     };
+    requestScopeFinalizers.set(scope, (response) => {
+      if (shouldRecordRequestEvents) {
+        sessionStore.recordEvent(
+          sessionName,
+          buildRequestFinishedEvent({
+            req: scopedReq,
+            response,
+            durationMs: Math.max(0, Date.now() - startedAtMs),
+          }),
+        );
+      }
+      return response;
+    });
     return scope;
   } catch (error) {
     if (shouldRecordRequestEvents) {
@@ -241,6 +291,7 @@ export function prepareLockedRequestScope(params: {
     }
     return finalized;
   };
+  requestScopeFinalizers.set(scope, finalize);
 
   if (
     existingSession?.recording?.invalidatedReason &&
@@ -248,13 +299,13 @@ export function prepareLockedRequestScope(params: {
   ) {
     return {
       type: 'response',
-      response: finalize({
+      response: {
         ok: false,
         error: {
           code: 'COMMAND_FAILED',
           message: existingSession.recording.invalidatedReason,
         },
-      }),
+      },
     };
   }
 
@@ -281,7 +332,8 @@ export function prepareLockedRequestScope(params: {
       logPath,
       existingSession,
       retainDeviceExecutionLock: scope.retainDeviceExecutionLock,
-      finalize,
+      bindDevice: scope.bindDevice,
+      throwIfCanceled: scope.throwIfCanceled,
       contextFromFlags,
       handlerContextFromFlags: (flags, appBundleId, traceLogPath) =>
         ({
@@ -291,6 +343,16 @@ export function prepareLockedRequestScope(params: {
         }) satisfies DaemonCommandContext,
     },
   };
+}
+
+/** Final response/event construction runs only after request bindings dispose. */
+export function finalizeRequestExecutionScope(
+  scope: RequestExecutionScope,
+  response: DaemonResponse,
+): DaemonResponse {
+  const finalize = requestScopeFinalizers.get(scope);
+  requestScopeFinalizers.delete(scope);
+  return finalize ? finalize(response) : response;
 }
 
 function contextFromRequestFlags(

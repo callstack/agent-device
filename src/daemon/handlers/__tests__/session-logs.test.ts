@@ -1,425 +1,377 @@
-import { test, expect } from 'vitest';
-import * as os from 'node:os';
-import * as path from 'node:path';
+import { beforeEach, expect, test, vi } from 'vitest';
+import {
+  createAppLogStartResult,
+  createDurableResourceEnvelope,
+  localRuntimeOwner,
+  narrowDeviceBinding,
+  type AppLogRuntimeOperations,
+  type CleanupOutcome,
+  type DeviceBinding,
+} from '@agent-device/contracts/platform';
+import { createTestAppLogLiveHandle } from '../../../__tests__/test-utils/app-log-live-handle.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { handleSessionCommands } from '../session.ts';
 import {
-  IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED,
-  IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_NOTE,
-} from '../../app-log-ios.ts';
+  resolveAppLogResourcePath,
+  readAppLogResourceRecord,
+} from '../../app-log-resource-store.ts';
+import type { BindDeviceRuntime } from '../../request-runtime-binding.ts';
+import type { SessionStore } from '../../session-store.ts';
 import {
-  mockStartAppLog,
-  mockRunAppLogDoctor,
-  makeSessionStore,
   makeSession,
+  makeSessionStore,
+  makeTestAppLogResource,
   noopInvoke,
 } from './session-test-harness.ts';
-import { handleSessionCommands } from '../session.ts';
+
+const DEVICE: DeviceInfo = {
+  platform: 'apple',
+  appleOs: 'ios',
+  id: 'sim-1',
+  name: 'iPhone',
+  kind: 'simulator',
+  booted: true,
+};
+
+type RuntimeHarness = ReturnType<typeof createRuntimeHarness>;
+
+let runtime: RuntimeHarness;
+
+beforeEach(() => {
+  runtime = createRuntimeHarness();
+});
 
 test('logs requires an active session', async () => {
-  const sessionStore = makeSessionStore();
-  const response = await handleSessionCommands({
-    req: {
-      token: 't',
-      session: 'default',
-      command: 'logs',
-      positionals: ['path'],
-      flags: {},
-    },
-    sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
-    sessionStore,
-    invoke: noopInvoke,
-  });
-  expect(response).toBeTruthy();
+  const response = await runLogs(makeSessionStore(), 'missing', ['path']);
   expect(response?.ok).toBe(false);
-  if (response && !response.ok) {
-    expect(response.error.code).toBe('SESSION_NOT_FOUND');
-  }
+  if (response?.ok === false) expect(response.error.code).toBe('SESSION_NOT_FOUND');
+  expect(runtime.bind).not.toHaveBeenCalled();
 });
 
-test('logs rejects invalid action', async () => {
-  const sessionStore = makeSessionStore();
-  sessionStore.set(
-    'default',
-    makeSession('default', {
-      platform: 'apple',
-      id: 'sim-1',
-      name: 'iPhone',
-      kind: 'simulator',
-      booted: true,
-    }),
-  );
-  const response = await handleSessionCommands({
-    req: {
-      token: 't',
-      session: 'default',
-      command: 'logs',
-      positionals: ['invalid'],
-      flags: {},
-    },
-    sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
-    sessionStore,
-    invoke: noopInvoke,
-  });
-  expect(response).toBeTruthy();
+test('logs rejects an invalid plan before binding a runtime', async () => {
+  const { sessionStore, sessionName } = openSession();
+  const response = await runLogs(sessionStore, sessionName, ['invalid'], {}, runtime.bindDevice);
   expect(response?.ok).toBe(false);
-  if (response && !response.ok) {
-    expect(response.error.code).toBe('INVALID_ARGS');
-    expect(response.error.message).toMatch(/path, start, stop, doctor, mark, or clear/);
-  }
+  if (response?.ok === false) expect(response.error.code).toBe('INVALID_ARGS');
+  expect(runtime.boundUses()).toEqual([{ required: [], preferred: ['appLogInspect'] }]);
 });
 
-test('logs start requires app session (appBundleId)', async () => {
-  const sessionStore = makeSessionStore();
-  sessionStore.set(
-    'default',
-    makeSession('default', {
-      platform: 'apple',
-      id: 'sim-1',
-      name: 'iPhone',
-      kind: 'simulator',
-      booted: true,
-    }),
-  );
-  const response = await handleSessionCommands({
-    req: {
-      token: 't',
-      session: 'default',
-      command: 'logs',
-      positionals: ['start'],
-      flags: {},
+test('logs preserves whole-command unsupported precedence before parsing the action', async () => {
+  runtime = createRuntimeHarness({ inspectAvailable: false });
+  const { sessionStore, sessionName } = openSession();
+  const response = await runLogs(sessionStore, sessionName, ['invalid'], {}, runtime.bindDevice);
+  expect(response).toMatchObject({
+    ok: false,
+    error: {
+      code: 'UNSUPPORTED_OPERATION',
+      message: 'logs is not supported on this device',
+      hint: 'Use a runtime with app-log support.',
     },
-    sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
-    sessionStore,
-    invoke: noopInvoke,
   });
-  expect(response).toBeTruthy();
-  expect(response?.ok).toBe(false);
-  if (response && !response.ok) {
-    expect(response.error.code).toBe('INVALID_ARGS');
-    expect(response.error.message).toMatch(/app session|open first/i);
-  }
+  expect(runtime.boundUses()).toEqual([{ required: [], preferred: ['appLogInspect'] }]);
 });
 
-test('logs stop requires active app log stream', async () => {
-  const sessionStore = makeSessionStore();
-  sessionStore.set(
-    'default',
-    makeSession('default', {
-      platform: 'apple',
-      id: 'sim-1',
-      name: 'iPhone',
-      kind: 'simulator',
-      booted: true,
-    }),
-  );
-  const response = await handleSessionCommands({
-    req: {
-      token: 't',
-      session: 'default',
-      command: 'logs',
-      positionals: ['stop'],
-      flags: {},
-    },
-    sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
-    sessionStore,
-    invoke: noopInvoke,
+test('logs path binds only inspect and preserves public status projection', async () => {
+  const { sessionStore, sessionName } = openSession();
+  const response = await runLogs(sessionStore, sessionName, ['path'], {}, runtime.bindDevice);
+  expect(response).toMatchObject({
+    ok: true,
+    data: { active: false, state: 'inactive', backend: 'ios-simulator' },
   });
-  expect(response).toBeTruthy();
-  expect(response?.ok).toBe(false);
-  if (response && !response.ok) {
-    expect(response.error.code).toBe('INVALID_ARGS');
-    expect(response.error.message).toMatch(/no app log stream/i);
-  }
+  expect(runtime.boundUses()).toEqual([
+    { required: [], preferred: ['appLogInspect'] },
+    { required: ['appLogInspect'], preferred: [] },
+  ]);
+  expect(runtime.inspect).toHaveBeenCalledOnce();
 });
 
-test('logs clear requires stream to be stopped first', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'default';
+test('logs doctor binds only doctor and merges live-state notes', async () => {
+  const { sessionStore, sessionName } = openSession();
+  const session = sessionStore.get(sessionName)!;
   sessionStore.set(sessionName, {
-    ...makeSession(sessionName, {
-      platform: 'android',
-      id: 'emulator-5554',
-      name: 'Pixel',
-      kind: 'emulator',
-      booted: true,
+    ...session,
+    appLog: makeTestAppLogResource(session, {
+      backend: 'ios-simulator',
+      state: 'ended',
     }),
-    appBundleId: 'com.example.app',
-    appLog: {
-      platform: 'android',
-      backend: 'android',
-      outPath: '/tmp/app.log',
-      startedAt: Date.now(),
-      getState: () => 'active',
-      stop: async () => {},
-      wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
+  });
+  const response = await runLogs(sessionStore, sessionName, ['doctor'], {}, runtime.bindDevice);
+  expect(response).toMatchObject({
+    ok: true,
+    data: {
+      backend: 'ios-simulator',
+      state: 'ended',
+      checks: { simulatorLogStream: true },
     },
   });
-
-  const response = await handleSessionCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'logs',
-      positionals: ['clear'],
-      flags: {},
-    },
-    sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
-    sessionStore,
-    invoke: noopInvoke,
-  });
-
-  expect(response).toBeTruthy();
-  expect(response?.ok).toBe(false);
-  if (response && !response.ok) {
-    expect(response.error.code).toBe('INVALID_ARGS');
-    expect(response.error.message).toMatch(/logs stop/i);
-  }
+  expect(runtime.boundUses()).toEqual([
+    { required: [], preferred: ['appLogInspect'] },
+    { required: ['appLogInspect', 'appLogDoctor'], preferred: [] },
+  ]);
 });
 
-test('logs --restart is only supported with logs clear', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'default';
-  sessionStore.set(sessionName, {
-    ...makeSession(sessionName, {
-      platform: 'apple',
-      id: 'sim-1',
-      name: 'iPhone Simulator',
-      kind: 'simulator',
-      booted: true,
-    }),
-    appBundleId: 'com.example.app',
+test.each([
+  { action: ['mark', 'checkpoint'], expected: { marked: true } },
+  { action: ['clear'], expected: { cleared: true } },
+] as const)(
+  'logs $action gates support and binds its exact inspect use',
+  async ({ action, expected }) => {
+    const { sessionStore, sessionName } = openSession();
+    const response = await runLogs(sessionStore, sessionName, [...action], {}, runtime.bindDevice);
+    expect(response).toMatchObject({ ok: true, data: expected });
+    expect(runtime.boundUses()).toEqual([
+      { required: [], preferred: ['appLogInspect'] },
+      { required: ['appLogInspect'], preferred: [] },
+    ]);
+  },
+);
+
+test('logs stop uses the adopted handle after the required support bind', async () => {
+  const { sessionStore, sessionName } = openSession();
+  await expectStarted(await runLogs(sessionStore, sessionName, ['start'], {}, runtime.bindDevice));
+  runtime.resetUses();
+  const response = await runLogs(sessionStore, sessionName, ['stop'], {}, runtime.bindDevice);
+  expect(response).toMatchObject({ ok: true, data: { stopped: true } });
+  expect(runtime.boundUses()).toEqual([
+    { required: [], preferred: ['appLogInspect'] },
+    { required: ['appLogInspect'], preferred: [] },
+  ]);
+  expect(runtime.finish).toHaveBeenCalledOnce();
+  expect(sessionStore.get(sessionName)?.appLog).toBeUndefined();
+  expect(readRecord(sessionStore, sessionName)).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'completed' },
   });
-  const response = await handleSessionCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'logs',
-      positionals: ['path'],
-      flags: { restart: true },
-    },
-    sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
-    sessionStore,
-    invoke: noopInvoke,
-  });
-  expect(response).toBeTruthy();
-  expect(response?.ok).toBe(false);
-  if (response && !response.ok) {
-    expect(response.error.code).toBe('INVALID_ARGS');
-    expect(response.error.message).toMatch(/only supported with logs clear/i);
-  }
 });
 
-test('logs clear --restart requires app session bundle id', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'default';
-  sessionStore.set(
+test('logs start persists the durable envelope before adopting the live handle', async () => {
+  const { sessionStore, sessionName } = openSession();
+  await expectStarted(await runLogs(sessionStore, sessionName, ['start'], {}, runtime.bindDevice));
+  expect(sessionStore.get(sessionName)?.appLog).toBeDefined();
+  expect(readRecord(sessionStore, sessionName)).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'active', sessionId: sessionName },
+  });
+  expect(runtime.boundUses()).toEqual([
+    { required: [], preferred: ['appLogInspect'] },
+    { required: ['appLogInspect', 'appLogStart'], preferred: [] },
+  ]);
+});
+
+test('logs clear --restart finishes generation one before adopting generation two', async () => {
+  const { sessionStore, sessionName } = openSession();
+  await expectStarted(await runLogs(sessionStore, sessionName, ['start'], {}, runtime.bindDevice));
+  const response = await runLogs(
+    sessionStore,
     sessionName,
-    makeSession(sessionName, {
-      platform: 'apple',
-      id: 'sim-1',
-      name: 'iPhone Simulator',
-      kind: 'simulator',
-      booted: true,
-    }),
+    ['clear'],
+    { restart: true },
+    runtime.bindDevice,
   );
-  const response = await handleSessionCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'logs',
-      positionals: ['clear'],
-      flags: { restart: true },
-    },
-    sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
-    sessionStore,
-    invoke: noopInvoke,
+  expect(response).toMatchObject({ ok: true, data: { cleared: true, restarted: true } });
+  expect(readRecord(sessionStore, sessionName)).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'active', fence: { generation: 2 } },
   });
-  expect(response).toBeTruthy();
-  expect(response?.ok).toBe(false);
-  if (response && !response.ok) {
-    expect(response.error.code).toBe('INVALID_ARGS');
-    expect(response.error.message).toMatch(/app session|open <app>/i);
-  }
 });
 
-function makeIosDeviceLogSession(): {
-  sessionStore: ReturnType<typeof makeSessionStore>;
-  sessionName: string;
-} {
+test('cancellation after native start persists recovery truth and cleans the pending handle', async () => {
+  const { sessionStore, sessionName } = openSession();
+  const response = await runLogs(
+    sessionStore,
+    sessionName,
+    ['start'],
+    {},
+    runtime.bindDevice,
+    () => {
+      throw new AppError('CANCELED', 'request canceled');
+    },
+  );
+  expect(response?.ok).toBe(false);
+  expect(runtime.forceCleanup).toHaveBeenCalledOnce();
+  expect(sessionStore.get(sessionName)?.appLog).toBeUndefined();
+  expect(readRecord(sessionStore, sessionName)).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'completed' },
+  });
+});
+
+test('rejected pending cleanup retains cleanup-pending record and blocks replacement', async () => {
+  runtime.forceCleanup.mockResolvedValue({
+    status: 'cleanup-pending',
+    reason: 'cleanup-unconfirmed',
+  });
+  const { sessionStore, sessionName } = openSession();
+  const canceled = await runLogs(
+    sessionStore,
+    sessionName,
+    ['start'],
+    {},
+    runtime.bindDevice,
+    () => {
+      throw new AppError('CANCELED', 'request canceled');
+    },
+  );
+  expect(canceled?.ok).toBe(false);
+  expect(readRecord(sessionStore, sessionName)).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'cleanup-pending' },
+  });
+  runtime.bind.mockClear();
+  const replacement = await runLogs(sessionStore, sessionName, ['start'], {}, runtime.bindDevice);
+  expect(replacement?.ok).toBe(false);
+  if (replacement?.ok === false) {
+    expect(replacement.error.details?.reason).toBe('cleanup-unconfirmed');
+  }
+  expect(runtime.start).not.toHaveBeenCalledTimes(2);
+});
+
+test('post-transfer SessionStore failure disposes the transferred handle and preserves primary error', async () => {
+  const { sessionStore, sessionName } = openSession();
+  const primary = new Error('store adoption failed');
+  vi.spyOn(sessionStore, 'set').mockImplementationOnce(() => {
+    throw primary;
+  });
+  const response = await runLogs(sessionStore, sessionName, ['start'], {}, runtime.bindDevice);
+  expect(response?.ok).toBe(false);
+  if (response?.ok === false) expect(response.error.message).toBe(primary.message);
+  expect(runtime.forceCleanup).toHaveBeenCalledOnce();
+});
+
+function openSession() {
   const sessionStore = makeSessionStore();
-  const sessionName = 'ios-device-console-logs';
+  const sessionName = 'logs-session';
   sessionStore.set(sessionName, {
-    ...makeSession(sessionName, {
-      platform: 'apple',
-      appleOs: 'ios',
-      id: '00008150-0000AAAA',
-      name: 'iPhone',
-      kind: 'device',
-    }),
+    ...makeSession(sessionName, DEVICE),
     appBundleId: 'com.example.app',
   });
   return { sessionStore, sessionName };
 }
 
-function mockIosDeviceLogBackend(): void {
-  mockStartAppLog.mockResolvedValue({
-    backend: 'ios-device',
-    startedAt: 1_712_040_000_000,
-    getState: () => 'active',
-    stop: async () => {},
-    wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-  });
-  mockRunAppLogDoctor.mockResolvedValue({
-    checks: { devicectlAvailable: true, devicectlConsoleCapture: true },
-    notes: [],
-  });
-}
-
-function mockUnsupportedIosDeviceLogBackend(): void {
-  mockStartAppLog.mockRejectedValue(
-    new AppError('UNSUPPORTED_OPERATION', IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED.message, {
-      backend: 'ios-device',
-      hint: IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED.hint,
-    }),
-  );
-  mockRunAppLogDoctor.mockResolvedValue({
-    checks: { devicectlAvailable: true, devicectlConsoleCapture: false },
-    notes: [IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_NOTE],
-  });
-}
-
-async function runLogsCommandForSession(
-  sessionStore: ReturnType<typeof makeSessionStore>,
+async function runLogs(
+  sessionStore: SessionStore,
   sessionName: string,
-  action: 'clear' | 'path' | 'doctor',
+  positionals: string[],
   flags: Record<string, unknown> = {},
+  bindDevice?: BindDeviceRuntime,
+  throwIfCanceled?: () => void,
 ) {
   return await handleSessionCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'logs',
-      positionals: [action],
-      flags,
-    },
+    req: { token: 't', session: sessionName, command: 'logs', positionals, flags },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: '/tmp/daemon.log',
     sessionStore,
     invoke: noopInvoke,
+    bindDevice,
+    throwIfCanceled,
   });
 }
 
-function expectActiveIosDeviceLogsPath(
-  response: Awaited<ReturnType<typeof handleSessionCommands>>,
-) {
-  expect(response?.ok).toBe(true);
-  if (!response || !response.ok) return;
-  expect(response.data?.active).toBe(true);
-  expect(response.data?.state).toBe('active');
-  expect(response.data?.backend).toBe('ios-device');
-  expect(response.data?.failureCode).toBeUndefined();
-  expect(response.data?.failureMessage).toBeUndefined();
-  expect(response.data?.startedAt).toBe('2024-04-02T06:40:00.000Z');
+async function expectStarted(response: Awaited<ReturnType<typeof runLogs>>) {
+  expect(response).toMatchObject({ ok: true, data: { started: true } });
 }
 
-function expectEndedIosDeviceLogsPath(response: Awaited<ReturnType<typeof handleSessionCommands>>) {
-  expect(response?.ok).toBe(true);
-  if (!response || !response.ok) return;
-  expect(response.data?.active).toBe(false);
-  expect(response.data?.state).toBe('ended');
-  expect(response.data?.backend).toBe('ios-device');
-  expect(response.data?.notes).toContain(
-    'The app log stream process ended. Run logs clear --restart before the next capture window.',
+function readRecord(sessionStore: SessionStore, sessionName: string) {
+  return readAppLogResourceRecord(
+    resolveAppLogResourcePath(sessionStore.resolveSessionDir(sessionName)),
   );
 }
 
-function expectActiveIosDeviceLogsDoctor(
-  response: Awaited<ReturnType<typeof handleSessionCommands>>,
-) {
-  expect(response?.ok).toBe(true);
-  if (!response || !response.ok) return;
-  expect(response.data?.active).toBe(true);
-  expect(response.data?.state).toBe('active');
-  expect(response.data?.backend).toBe('ios-device');
-  expect(response.data?.checks).toEqual({
-    devicectlAvailable: true,
-    devicectlConsoleCapture: true,
-  });
-  expect(response.data?.notes).toEqual([]);
-}
-
-function expectUnsupportedIosDeviceLogsDoctor(
-  response: Awaited<ReturnType<typeof handleSessionCommands>>,
-) {
-  expect(response?.ok).toBe(true);
-  if (!response || !response.ok) return;
-  expect(response.data?.active).toBe(false);
-  expect(response.data?.state).toBe('failed');
-  expect(response.data?.backend).toBe('ios-device');
-  expect(response.data?.failureCode).toBe('UNSUPPORTED_OPERATION');
-  expect(response.data?.notes).toEqual([IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_NOTE]);
-}
-
-test('logs clear --restart starts active iOS physical-device console capture', async () => {
-  const { sessionStore, sessionName } = makeIosDeviceLogSession();
-  mockIosDeviceLogBackend();
-
-  const restartResponse = await runLogsCommandForSession(sessionStore, sessionName, 'clear', {
-    restart: true,
-  });
-  expect(restartResponse?.ok).toBe(true);
-  if (restartResponse && restartResponse.ok) {
-    expect(restartResponse.data?.restarted).toBe(true);
-  }
-  expect(mockStartAppLog).toHaveBeenCalledWith(
-    expect.objectContaining({ platform: 'apple', id: '00008150-0000AAAA' }),
-    'com.example.app',
-    expect.stringContaining('app.log'),
-    expect.stringContaining('app-log.pid'),
-  );
-
-  expectActiveIosDeviceLogsPath(await runLogsCommandForSession(sessionStore, sessionName, 'path'));
-  expectActiveIosDeviceLogsDoctor(
-    await runLogsCommandForSession(sessionStore, sessionName, 'doctor'),
-  );
-});
-
-test('logs path reports cleanly ended iOS physical-device console capture as inactive', async () => {
-  const { sessionStore, sessionName } = makeIosDeviceLogSession();
-  const session = sessionStore.get(sessionName);
-  if (!session) throw new Error('Expected test session');
-  sessionStore.set(sessionName, {
-    ...session,
-    appLog: {
-      platform: 'apple',
-      backend: 'ios-device',
-      outPath: '/tmp/app.log',
-      startedAt: 1_712_040_000_000,
-      getState: () => 'ended',
-      stop: async () => {},
-      wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
+function createRuntimeHarness(options: { inspectAvailable?: boolean } = {}) {
+  const owner = localRuntimeOwner('apple');
+  const inspect = vi.fn(async () => ({ backend: 'ios-simulator' as const }));
+  const doctor = vi.fn(async () => ({
+    backend: 'ios-simulator' as const,
+    checks: { simulatorLogStream: true },
+    notes: [] as string[],
+  }));
+  const finish = vi.fn(async () => ({
+    status: 'completed' as const,
+    result: {
+      backend: 'ios-simulator' as const,
+      outputPath: '/tmp/app.log',
+      completedAt: Date.now(),
     },
+  }));
+  const forceCleanup = vi.fn<() => Promise<CleanupOutcome>>(async () => ({
+    status: 'cleaned',
+  }));
+  const start = vi.fn<AppLogRuntimeOperations['appLogStart']>(async (input) => {
+    const handle = createTestAppLogLiveHandle({
+      inspect: () => ({
+        backend: 'ios-simulator',
+        state: 'active',
+        startedAt: 1_712_040_000_000,
+      }),
+      finish,
+      forceCleanup,
+    });
+    const envelope = createDurableResourceEnvelope({
+      resourceKind: 'app-log',
+      sessionId: input.sessionId,
+      device: { id: DEVICE.id, family: DEVICE.platform, appleOs: 'ios', kind: DEVICE.kind },
+      owner,
+      fence: input.fence,
+      lifecycle: 'starting',
+      descriptor: { version: 1, body: { outputPath: input.outputPath } },
+    });
+    return createAppLogStartResult(handle, envelope);
   });
-
-  expectEndedIosDeviceLogsPath(await runLogsCommandForSession(sessionStore, sessionName, 'path'));
-});
-
-test('logs doctor deduplicates unsupported iOS physical-device console capture notes', async () => {
-  const { sessionStore, sessionName } = makeIosDeviceLogSession();
-  mockUnsupportedIosDeviceLogBackend();
-
-  const restartResponse = await runLogsCommandForSession(sessionStore, sessionName, 'clear', {
-    restart: true,
-  });
-  expect(restartResponse?.ok).toBe(false);
-  expectUnsupportedIosDeviceLogsDoctor(
-    await runLogsCommandForSession(sessionStore, sessionName, 'doctor'),
+  const operations: AppLogRuntimeOperations = {
+    appLogInspect: inspect,
+    appLogDoctor: doctor,
+    appLogStart: start,
+    appLogReattach: async () => ({ status: 'missing' }),
+    appLogCleanup: async () => ({ status: 'cleaned' }),
+  };
+  const uses: Array<{ required: readonly string[]; preferred: readonly string[] }> = [];
+  const bind = vi.fn(
+    async (device: DeviceInfo): Promise<DeviceBinding<AppLogRuntimeOperations>> => ({
+      device,
+      owner,
+      facts: {
+        device: {
+          family: device.platform,
+          appleOs: 'ios',
+          kind: device.kind,
+          providerMode: 'local',
+        },
+        operations: {
+          appLogInspect:
+            options.inspectAvailable === false
+              ? {
+                  available: false,
+                  reason: 'owner-capability-missing',
+                  hint: 'Use a runtime with app-log support.',
+                }
+              : { available: true },
+          appLogDoctor: { available: true },
+          appLogStart: { available: true },
+          appLogReattach: { available: true },
+          appLogCleanup: { available: true },
+        },
+      },
+      operations,
+      [Symbol.asyncDispose]: async () => {},
+    }),
   );
-});
+  const bindDevice: BindDeviceRuntime = async (device, use) => {
+    uses.push(use);
+    return narrowDeviceBinding(await bind(device), use);
+  };
+  return {
+    bind,
+    bindDevice,
+    boundUses: () =>
+      uses.map((use) => ({ required: [...use.required], preferred: [...use.preferred] })),
+    resetUses: () => {
+      uses.length = 0;
+    },
+    inspect,
+    doctor,
+    start,
+    finish,
+    forceCleanup,
+  };
+}

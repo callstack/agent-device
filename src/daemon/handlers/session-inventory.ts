@@ -24,11 +24,14 @@ import { getRequestSignal } from '../../request/cancel.ts';
 import { requireSessionOrExplicitSelector, resolveCommandDevice } from './session-device-utils.ts';
 import { errorResponse, requireCommandSupported } from './response.ts';
 import { resolveImplicitSessionScope, sessionMatchesScope } from '../session-routing.ts';
+import { appLogAdmissionUse } from '@agent-device/contracts/platform';
+import type { BindDeviceRuntime } from '../request-runtime-binding.ts';
 
 export async function handleSessionInventoryCommands(params: {
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
+  bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse | null> {
   const { req, sessionName, sessionStore } = params;
   switch (req.command) {
@@ -37,7 +40,12 @@ export async function handleSessionInventoryCommands(params: {
     case 'devices':
       return await devicesInventoryResponse(req);
     case 'capabilities':
-      return await capabilitiesInventoryResponse({ req, sessionName, sessionStore });
+      return await capabilitiesInventoryResponse({
+        req,
+        sessionName,
+        sessionStore,
+        bindDevice: params.bindDevice,
+      });
     case 'apps':
       return await handleAppsInventory({ req, sessionName, sessionStore });
     default:
@@ -157,6 +165,7 @@ async function capabilitiesInventoryResponse(params: {
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
+  bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
   const resolution = await resolveInventoryCommandDevice({
     ...params,
@@ -165,12 +174,15 @@ async function capabilitiesInventoryResponse(params: {
   });
   if ('response' in resolution) return resolution.response;
   const { device } = resolution;
+  const logsAvailable = params.bindDevice
+    ? (await params.bindDevice(device, appLogAdmissionUse)).facts.appLogInspect.available
+    : false;
   return {
     ok: true,
     data: {
       device: publicDeviceInfo(device),
       availableCommands: listCapabilityCommands().filter((command) =>
-        isCommandSupportedOnDevice(command, device),
+        command === 'logs' ? logsAvailable : isCommandSupportedOnDevice(command, device),
       ),
     },
   };

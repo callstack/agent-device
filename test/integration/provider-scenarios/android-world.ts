@@ -13,7 +13,7 @@ import {
   ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
   androidSnapshotHelperOutput,
 } from '../../../src/__tests__/test-utils/index.ts';
-import { runCmd } from '../../../src/utils/exec.ts';
+import { runCmd, runCmdBackground } from '../../../src/utils/exec.ts';
 import { validPng } from './assertions.ts';
 import { PROVIDER_SCENARIO_ANDROID } from './fixtures.ts';
 import {
@@ -73,6 +73,7 @@ export async function createAndroidSettingsWorld(options?: {
   );
   const apkPath = path.join(tempRoot, 'Demo.apk');
   const aabPath = path.join(tempRoot, 'Demo.aab');
+  const logcatProcessPath = createScriptedLogcatExecutable(tempRoot);
   const previousAppEventTemplate = process.env.AGENT_DEVICE_ANDROID_APP_EVENT_URL_TEMPLATE;
   process.env.AGENT_DEVICE_ANDROID_APP_EVENT_URL_TEMPLATE =
     'demo://agent-device/event?name={event}&payload={payload}&platform={platform}';
@@ -115,33 +116,9 @@ export async function createAndroidSettingsWorld(options?: {
       bundleInstallCalls.push({ bundlePath, mode: bundleOptions.mode });
     },
     spawn: (args) => {
-      const child = makeMockAdbProcess();
+      if (!args.includes('logcat')) return makeMockAdbProcess(args);
+      const child = makeScriptedLogcatProcess(logcatProcessPath, args);
       spawnedLogcat.push(child);
-      queueMicrotask(() => {
-        if (args.includes('logcat')) {
-          child.stdout?.push(`I/AgentDevice(4242): ${args.join(' ')}\n`);
-          child.stdout?.push(
-            [
-              '04-01 10:00:15.000 D/Network(4242):',
-              JSON.stringify({
-                method: 'POST',
-                url: 'https://api.example.com/v1/login',
-                status: 401,
-                headers: { 'x-id': 'abc' },
-                requestBody: { email: 'test@example.com' },
-                responseBody: { error: 'bad_credentials' },
-              }),
-              '\n',
-            ].join(' '),
-          );
-          return;
-        }
-        child.stdout?.push(`I/AgentDevice(4242): ${args.join(' ')}\n`);
-        child.stdout?.push(null);
-        child.stderr?.push(null);
-        child.emit('exit', 0, null);
-        child.emit('close', 0, null);
-      });
       return child;
     },
   };
@@ -153,6 +130,7 @@ export async function createAndroidSettingsWorld(options?: {
     };
   }
   const daemon = await createProviderScenarioHarness({
+    platformAppLogRuntime: true,
     androidAdbProvider: () => adbProvider,
     deviceInventoryProvider: async (request) => {
       inventoryRequests.push({ ...request });
@@ -186,6 +164,9 @@ export async function createAndroidSettingsWorld(options?: {
       closed = true;
       restoreEnv('AGENT_DEVICE_ANDROID_APP_EVENT_URL_TEMPLATE', previousAppEventTemplate);
       hostAdbGuard.restore();
+      for (const child of spawnedLogcat) {
+        if (!child.killed && typeof child.exitCode !== 'number') child.kill('SIGKILL');
+      }
       fs.rmSync(tempRoot, { recursive: true, force: true });
       await daemon.close();
     },
@@ -414,7 +395,7 @@ function androidMetricsAdbResult(key: string): AndroidAdbResult | undefined {
     return {
       stdout: [
         'Uptime: 10000',
-        'Stats since: 9000000000',
+        'Stats since: 5000000000',
         'Total frames rendered: 4',
         'Janky frames: 1 (25.00%)',
       ].join('\n'),
@@ -568,7 +549,16 @@ function escapeXml(value: string): string {
     .replaceAll('>', '&gt;');
 }
 
-function makeMockAdbProcess(): EventEmitter & AndroidAdbProcess {
+function makeScriptedLogcatProcess(executable: string, args: string[]): AndroidAdbProcess {
+  const background = runCmdBackground(executable, args, {
+    allowFailure: true,
+    captureOutput: false,
+  });
+  void background.wait.catch(() => undefined);
+  return background.child;
+}
+
+function makeMockAdbProcess(args: string[]): EventEmitter & AndroidAdbProcess {
   const child = new EventEmitter() as EventEmitter & AndroidAdbProcess;
   child.stdin = null;
   child.stdout = new PassThrough();
@@ -582,7 +572,40 @@ function makeMockAdbProcess(): EventEmitter & AndroidAdbProcess {
     queueMicrotask(() => child.emit('close', 0, null));
     return true;
   };
+  queueMicrotask(() => {
+    child.stdout?.push(`I/AgentDevice(4242): ${args.join(' ')}\n`);
+    child.stdout?.push(null);
+    child.stderr?.push(null);
+    child.emit('exit', 0, null);
+    child.emit('close', 0, null);
+  });
   return child;
+}
+
+function createScriptedLogcatExecutable(tempRoot: string): string {
+  const executable = path.join(tempRoot, 'provider-logcat');
+  const networkEntry = JSON.stringify({
+    method: 'POST',
+    url: 'https://api.example.com/v1/login',
+    status: 401,
+    headers: { 'x-id': 'abc' },
+    requestBody: { email: 'test@example.com' },
+    responseBody: { error: 'bad_credentials' },
+  });
+  fs.writeFileSync(
+    executable,
+    [
+      '#!/bin/sh',
+      'printf "I/AgentDevice(4242): provider logcat\\n"',
+      `printf '%s\\n' '04-01 10:00:15.000 D/Network(4242): ${networkEntry}'`,
+      'trap \'test -n "$child" && kill "$child" 2>/dev/null; exit 0\' INT TERM',
+      'while :; do sleep 10 & child=$!; wait "$child"; done',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+  fs.chmodSync(executable, 0o755);
+  return executable;
 }
 
 export async function waitForFileContent(filePath: string, expected: string): Promise<void> {

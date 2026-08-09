@@ -1,4 +1,5 @@
 import type {
+  AppLogRuntimePlatformModule,
   InventoryPlatformModule,
   PlatformModuleMetadata,
 } from '@agent-device/contracts/platform';
@@ -9,6 +10,14 @@ const metadata = Object.freeze({
 } satisfies PlatformModuleMetadata);
 
 export type { AndroidInventoryConfig } from './inventory-config.ts';
+
+export const runtimeModule = Object.freeze({
+  ...metadata,
+  loadRuntime: async (host) => {
+    const { createAndroidAppLogRuntime } = await import('./logs/runtime.ts');
+    return createAndroidAppLogRuntime(host);
+  },
+} satisfies AppLogRuntimePlatformModule);
 
 export function createAndroidInventoryModule(
   config: AndroidInventoryConfig,

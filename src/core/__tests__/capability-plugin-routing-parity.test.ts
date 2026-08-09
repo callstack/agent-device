@@ -136,7 +136,6 @@ const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
   install: supportsAppInstallation,
   reinstall: supportsAppInstallation,
   'install-from-source': supportsAppInstallation,
-  logs: supportsCoreDevicePhysicalOperation,
   perf: supportsCoreDevicePhysicalOperation,
   record: supportsCoreDevicePhysicalOperation,
   push: isNotMacOs,
@@ -165,7 +164,6 @@ const HINT_REF: Record<string, (device: DeviceInfo) => string | undefined> = {
   install: coreDeviceOnlyPhysicalOperationHint,
   reinstall: coreDeviceOnlyPhysicalOperationHint,
   'install-from-source': coreDeviceOnlyPhysicalOperationHint,
-  logs: coreDeviceOnlyPhysicalOperationHint,
   perf: coreDeviceOnlyPhysicalOperationHint,
   record: coreDeviceOnlyPhysicalOperationHint,
   'tv-remote': (device) => {
@@ -211,7 +209,6 @@ const HARMONYOS_SUPPORTED_COMMANDS_REF = new Set([
   'keyboard',
   'is',
   'longpress',
-  'logs',
   'press',
   'reinstall',
   'screenshot',
@@ -269,7 +266,7 @@ test('(b.1) plugin-bucket selection matches the platform -> bucket table', () =>
 });
 
 test('(b.1) isCommandSupportedOnDevice is unchanged across the command x device matrix', () => {
-  const commands = listCapabilityCommands();
+  const commands = Object.keys(BASE_COMMAND_CAPABILITY_MATRIX);
   for (const command of commands) {
     for (const device of SAMPLE_DEVICES) {
       // BASE lacks the `web` augmentation, so the descriptor-fold reference is only
@@ -286,7 +283,7 @@ test('(b.1) isCommandSupportedOnDevice is unchanged across the command x device 
 });
 
 test('HarmonyOS advertises only the current HDC-backed command subset', () => {
-  const availableCommands = listCapabilityCommands()
+  const availableCommands = Object.keys(BASE_COMMAND_CAPABILITY_MATRIX)
     .filter((command) => isCommandSupportedOnDevice(command, HARMONYOS_EMULATOR))
     .sort();
 
@@ -306,7 +303,6 @@ test('HarmonyOS advertises only the current HDC-backed command subset', () => {
     'install',
     'is',
     'keyboard',
-    'logs',
     'longpress',
     'open',
     'perf',
@@ -323,7 +319,7 @@ test('HarmonyOS advertises only the current HDC-backed command subset', () => {
 });
 
 test('(b.2) unsupportedHint closures are verbatim across the full device matrix', () => {
-  const commands = listCapabilityCommands();
+  const commands = Object.keys(BASE_COMMAND_CAPABILITY_MATRIX);
   for (const command of commands) {
     const reference = HINT_REF[command];
     for (const device of SAMPLE_DEVICES) {
@@ -340,6 +336,11 @@ test('(b.2) unsupportedHint closures are verbatim across the full device matrix'
       );
     }
   }
+});
+
+test('the capability catalog includes runtime-backed commands without restoring legacy admission', () => {
+  assert.ok(listCapabilityCommands().includes('logs'));
+  assert.equal(BASE_COMMAND_CAPABILITY_MATRIX['logs'], undefined);
 });
 
 test('(b.2) the Apple plugin carries exactly the relocated supports/hint closures', () => {

@@ -117,11 +117,6 @@
         "count": 1
       }
     },
-    "src/daemon/app-log.ts": {
-      "complexity_high": {
-        "count": 1
-      }
-    },
     "src/daemon/client/daemon-client-lifecycle.ts": {
       "complexity_high": {
         "count": 1
@@ -596,7 +591,6 @@
     "src/utils/rect-center.ts:high impact",
     "src/platforms/apple/core/app-launch.ts:complexity",
     "src/utils/parsing.ts:high impact",
-    "src/daemon/app-log-process.ts:high impact",
     "src/daemon/daemon-command-registry.ts:high impact",
     "src/replay/script.ts:complexity",
     "src/daemon/handlers/session-doctor-output.ts:high impact",

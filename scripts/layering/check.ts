@@ -93,6 +93,12 @@ import {
   readTrackedPlatformPackageDeclarations,
 } from './platform-package-repository.ts';
 import { policyLead, policyViolation, ZONE_POLICIES } from './zone-policy.ts';
+import {
+  logsLegacyRouteViolations,
+  logsRuntimeNarrowingViolations,
+  logsSessionStateOwnershipViolations,
+  sourceExecutedUsingDeclarationViolations,
+} from './logs-runtime-cutover-policy.ts';
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
@@ -168,6 +174,24 @@ function checkCycles(edges: readonly ResolvedImportEdge[]): LayeringViolation[] 
     line: 1,
     message: `production value-import cycle: ${cycle.join(' -> ')}`,
   }));
+}
+
+function checkLogsRuntimeCutover(sources: ReadonlyMap<string, string>): LayeringViolation[] {
+  const production = [...sources].map(([file, source]) => ({ path: file, source }));
+  return [
+    ...logsLegacyRouteViolations(production),
+    ...logsRuntimeNarrowingViolations(production),
+    ...logsSessionStateOwnershipViolations(production),
+    ...sourceExecutedUsingDeclarationViolations(production),
+  ].map((violation) => {
+    const separator = violation.indexOf(': ');
+    return {
+      rule: 'R14 logs-runtime-cutover',
+      file: separator < 0 ? '(logs runtime)' : violation.slice(0, separator),
+      line: 1,
+      message: separator < 0 ? violation : violation.slice(separator + 2),
+    };
+  });
 }
 
 function checkBackEdges(edges: readonly ResolvedImportEdge[]): LayeringViolation[] {
@@ -582,6 +606,7 @@ export function main(): number {
   const violations = [
     ...checkLayeringRules(edges),
     ...checkCycles(edges),
+    ...checkLogsRuntimeCutover(sources),
     ...checkBackEdges(edges),
     ...checkTypeInversions(edges),
     ...checkSessionStateOwnership(sources),

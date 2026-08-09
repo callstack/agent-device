@@ -9,6 +9,7 @@ import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
 import type { LeaseRegistry } from './lease-registry.ts';
 import type { SessionStore } from './session-store.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from './types.ts';
+import type { BindDeviceRuntime } from './request-runtime-binding.ts';
 
 type RequestHandlerChainParams = {
   req: DaemonRequest;
@@ -23,6 +24,8 @@ type RequestHandlerChainParams = {
   invoke: DaemonInvokeFn;
   invokeReplayAction?: DaemonInvokeFn;
   androidAdbExecutor?: AndroidAdbExecutor;
+  bindDevice: BindDeviceRuntime;
+  throwIfCanceled(): void;
   contextFromFlags: (
     flags: CommandFlags | undefined,
     appBundleId?: string,
@@ -117,6 +120,8 @@ async function runSessionHandler(
       invoke: params.invoke,
       invokeReplayAction: params.invokeReplayAction,
       androidAdbExecutor: params.androidAdbExecutor,
+      bindDevice: params.bindDevice,
+      throwIfCanceled: params.throwIfCanceled,
     }),
   );
 }

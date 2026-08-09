@@ -1,5 +1,4 @@
 import type { DeviceInfo, Platform, PlatformSelector } from '@agent-device/kernel/device';
-import type { LogBackend } from './logs.ts';
 import type { RecordingBackendTag } from './recording.ts';
 import type { PerfMetricsSamplerTag } from './perf.ts';
 import type { PlatformGatedProviderResolverKey } from './platform-providers.ts';
@@ -25,8 +24,6 @@ type CapabilityBucket = 'apple' | 'android' | 'harmonyos' | 'vega' | 'linux' | '
  * populated by wrapping the existing daemon branch AND pinned by a table-equivalence
  * parity test before a real call-site routes through it. A facet's type stays
  * PLATFORM-NEUTRAL and daemon-owned (never the iOS-simulator-shaped provider seam):
- * {@link PlatformPlugin.appLog} carries the neutral {@link LogBackend} resolver
- * (wraps `resolveLogBackend`, pinned by the daemon app-log routing parity test);
  * {@link PlatformPlugin.perf} carries the neutral perf-metrics support predicate
  * (wraps `supportsPlatformPerfMetrics`) plus the neutral {@link PerfMetricsSamplerTag}
  * resolver (wraps the per-platform metrics-sampling branch formerly open-coded in
@@ -74,17 +71,6 @@ export type PlatformPlugin = {
     >;
   };
   /**
-   * The daemon app-log facet (issue #974). `resolveBackend` wraps the platform
-   * branch of `src/daemon/app-log.ts`'s `resolveLogBackend`, returning the neutral
-   * {@link LogBackend} tag for `device`. Present only on families that have an
-   * app-log backend (Apple + Android); left `undefined` for linux/web, where the
-   * hand branch historically fell through to the `'android'` default — the daemon
-   * lookup preserves that fallthrough, and the parity test pins the equivalence.
-   */
-  readonly appLog?: {
-    resolveBackend(device: DeviceInfo): LogBackend;
-  };
-  /**
    * The daemon perf facet (issue #974). `supportsMetrics` wraps the platform
    * predicate `supportsPlatformPerfMetrics` in
    * `src/daemon/handlers/session-perf.ts`, reporting whether `device`'s platform
@@ -114,7 +100,7 @@ export type PlatformPlugin = {
    * per-platform branch of `resolveRecordingBackendForDevice`
    * (src/daemon/handlers/record-trace-recording-backends.ts), returning the neutral
    * {@link RecordingBackendTag} for `device` (a DATA-ONLY string, type-only in the
-   * plugin — exactly like {@link appLog}'s {@link LogBackend}). The daemon maps the tag
+   * plugin). The daemon maps the tag
    * back to its own {@link RecordingBackend} instance, so core/platforms never construct
    * the daemon-owned backend objects. Present on families with a recording backend
    * (Apple + Android + web); left `undefined` for linux, where the hand branch fell
@@ -132,9 +118,9 @@ export type PlatformPlugin = {
    * src/daemon/request-platform-providers.ts. The daemon still OWNS the resolver
    * functions, their wrapper composition, and the request-scope concurrency isolation;
    * this facet supplies only the per-family gate (a plain string list, the keys
-   * type-only in the plugin). The ungated resolvers (`appLogProvider` /
-   * `recordingProvider`, which apply on every platform) are intentionally NOT part of
-   * the facet and stay ungated in the daemon. Every family carries this facet (each
+   * type-only in the plugin). The ungated `recordingProvider`, which applies on every
+   * platform, is intentionally NOT part of the facet and stays ungated in the daemon.
+   * Every family carries this facet (each
    * owns at least one platform-specific resolver); a device on an unregistered platform
    * resolves to no gated resolvers, matching the former hand gate. Pinned by the
    * providers routing parity test.

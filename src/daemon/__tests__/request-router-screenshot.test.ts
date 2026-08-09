@@ -19,7 +19,7 @@ vi.mock('../../platforms/android/app-lifecycle.ts', async (importOriginal) => {
 });
 
 import { dispatchCommand } from '../../core/dispatch.ts';
-import { createRequestHandler } from '../request-router.ts';
+import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { dispatchScreenshotViaRuntime } from '../screenshot-runtime.ts';
 import type { DaemonRequest, SessionState } from '../types.ts';
 import { LeaseRegistry } from '../lease-registry.ts';

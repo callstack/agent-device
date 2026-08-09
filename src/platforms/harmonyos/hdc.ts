@@ -1,8 +1,7 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { runCmd, whichCmd, type ExecOptions, type ExecResult } from '../../utils/exec.ts';
+import { runCmd, type ExecOptions, type ExecResult } from '../../utils/exec.ts';
 
 export type HarmonyHdcOptions = Pick<
   ExecOptions,
@@ -20,14 +19,6 @@ export async function runHarmonyHdc(
   return await runCmd('hdc', ['-t', device.id, ...args], {
     timeoutMs: DEFAULT_HARMONY_HDC_TIMEOUT_MS,
     ...options,
-  });
-}
-
-export async function ensureHdcAvailable(): Promise<void> {
-  await ensureHarmonyToolchainPathConfigured();
-  if (await whichCmd('hdc')) return;
-  throw new AppError('TOOL_MISSING', 'hdc not found in PATH', {
-    hint: 'Install HarmonyOS Command Line Tools, then add its sdk/default/openharmony/toolchains directory to PATH.',
   });
 }
 
@@ -59,18 +50,4 @@ export async function ensureHarmonyToolchainPathConfigured(
   if (executableRoots.length === 0) return;
   const currentEntries = (env.PATH ?? '').split(path.delimiter).filter(Boolean);
   env.PATH = [...new Set([...executableRoots, ...currentEntries])].join(path.delimiter);
-}
-
-export function harmonyDeviceForTarget(
-  target: string,
-  options: { name: string; emulator: boolean },
-): DeviceInfo {
-  return {
-    platform: 'harmonyos',
-    id: target,
-    name: options.name,
-    kind: options.emulator ? 'emulator' : 'device',
-    target: 'mobile',
-    booted: true,
-  };
 }

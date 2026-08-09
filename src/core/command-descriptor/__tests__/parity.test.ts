@@ -41,8 +41,9 @@ const DAEMON_FUNCTION_TRAITS = [
 // device mutation could be classified, so it is no longer unrouted.)
 const UNROUTED_PUBLIC_COMMANDS = new Set<string>([PUBLIC_COMMANDS.installFromSource]);
 
-// Public commands that intentionally carry no capability entry — pure control-plane
-// or always-admitted commands, so the capability matrix has never covered them.
+// Public commands that intentionally carry no legacy capability entry. Most are
+// pure control-plane or always-admitted commands; logs is admitted from exact
+// runtime facts and therefore belongs to the capability catalog without a matrix row.
 const NO_CAPABILITY_PUBLIC_COMMANDS = new Set<string>([
   PUBLIC_COMMANDS.appState,
   PUBLIC_COMMANDS.artifacts,
@@ -51,6 +52,7 @@ const NO_CAPABILITY_PUBLIC_COMMANDS = new Set<string>([
   PUBLIC_COMMANDS.devices,
   PUBLIC_COMMANDS.doctor,
   PUBLIC_COMMANDS.events,
+  PUBLIC_COMMANDS.logs,
   PUBLIC_COMMANDS.prepare,
   PUBLIC_COMMANDS.replay,
   PUBLIC_COMMANDS.test,

@@ -34,7 +34,7 @@ import { IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
-import { createRequestHandler } from '../request-router.ts';
+import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
 
 const mockDispatch = vi.mocked(dispatchCommand);

@@ -12,7 +12,11 @@ import {
 } from './timeout-policy.ts';
 import { resolvePostActionObservationSupport } from './post-action-observation.ts';
 import type { PostActionObservationSupport } from './post-action-observation.ts';
-import { assertCommandPlatformExecution, inventoryUse } from '@agent-device/contracts/platform';
+import {
+  appLogRuntimePlanUses,
+  assertCommandPlatformExecution,
+  inventoryUse,
+} from '@agent-device/contracts/platform';
 import type {
   CommandCatalogGroup,
   CommandDescriptor,
@@ -514,7 +518,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     catalog: { group: 'public' },
     recordsSessionAction: false,
     daemon: { route: 'session', refFrameEffect: 'preserve', sessionKind: 'observability' },
-    capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_NONE },
+    platformExecution: { kind: 'device-runtime', uses: appLogRuntimePlanUses },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
   },

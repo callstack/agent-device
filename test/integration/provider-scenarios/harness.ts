@@ -23,6 +23,8 @@ import {
   createTestDeviceInventoryGateways,
   createTestDeviceInventoryGatewaysFromProvider,
 } from '../../../src/__tests__/test-utils/device-inventory-gateways.ts';
+import { createPlatformAppLogRuntimeGateway } from '../../../src/platform-runtime.ts';
+import { unavailableDeviceRuntimeGateway } from '../../../src/daemon/__tests__/test-device-runtime-gateway.ts';
 
 const PROVIDER_SCENARIO_TOKEN = 'provider-scenario-token';
 const PROVIDER_SCENARIO_TEMP_REMOVE_OPTIONS = {
@@ -61,13 +63,30 @@ export async function createProviderScenarioHarness(
     (
       | { deviceInventoryProvider: DeviceInventoryProvider; deviceInventorySource?: never }
       | { deviceInventorySource: ProviderDeviceInventorySource; deviceInventoryProvider?: never }
-    ),
+    ) & { platformAppLogRuntime?: boolean },
 ): Promise<ProviderScenarioHarness> {
   const sessionDir = fs.mkdtempSync(
     path.join(os.tmpdir(), 'agent-device-provider-scenario-session-'),
   );
   const sessionStore = new SessionStore(sessionDir);
-  const { deviceInventoryProvider, deviceInventorySource, ...routerDeps } = deps;
+  const {
+    deviceInventoryProvider,
+    deviceInventorySource,
+    deviceRuntimeGateway: configuredDeviceRuntimeGateway,
+    platformAppLogRuntime,
+    ...routerDeps
+  } = deps;
+  const deviceRuntimeGateway =
+    configuredDeviceRuntimeGateway ??
+    (platformAppLogRuntime
+      ? createPlatformAppLogRuntimeGateway({
+          sessionsDir: sessionDir,
+          resolveSessionArtifacts: (sessionId) => ({
+            outputPath: sessionStore.resolveAppLogPath(sessionId),
+            pidPath: sessionStore.resolveAppLogPidPath(sessionId),
+          }),
+        })
+      : unavailableDeviceRuntimeGateway);
   const requestHandler = createRequestHandler({
     logPath: path.join(os.tmpdir(), 'agent-device-provider-scenario-daemon.log'),
     token: PROVIDER_SCENARIO_TOKEN,
@@ -76,6 +95,7 @@ export async function createProviderScenarioHarness(
     deviceInventoryGateways: deviceInventorySource
       ? createTestDeviceInventoryGateways({ provider: deviceInventorySource })
       : createTestDeviceInventoryGatewaysFromProvider(deviceInventoryProvider),
+    deviceRuntimeGateway,
     trackDownloadableArtifact,
     ...routerDeps,
   });
@@ -107,6 +127,7 @@ export async function createProviderScenarioHarness(
     session: (name = 'default') => sessionStore.get(name),
     setSession: (name, session) => sessionStore.set(name, session),
     close: async () => {
+      await deviceRuntimeGateway.shutdown();
       removeProviderScenarioTempDir(sessionDir);
     },
   };

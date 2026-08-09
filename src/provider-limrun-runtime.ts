@@ -17,11 +17,21 @@ import {
 } from '@agent-device/provider-limrun';
 import { createLimrunRuntimeDependencies } from './sdk/limrun-runtime-dependencies.ts';
 import type { LimrunDeviceSession } from './sdk/limrun-runtime-types.ts';
+import type {
+  AppLogRuntimeHost,
+  AppLogRuntimeOperations,
+  AppLogRuntimeProviderModule,
+  DeviceRuntimeOwner,
+} from '@agent-device/contracts/platform';
 
 export class LimrunRuntime implements ProviderDeviceRuntime {
   private readonly implementation: LimrunRuntimeImplementation;
   // Called through ProviderDeviceRuntime composition and the public Limrun SDK.
   readonly provider = LIMRUN_PROVIDER;
+
+  get owner(): AppLogRuntimeProviderModule['owner'] {
+    return this.implementation.owner;
+  }
 
   constructor(options: LimrunRuntimeOptions) {
     this.implementation = createLimrunRuntime(options, createLimrunRuntimeDependencies());
@@ -51,6 +61,10 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
 
   getDeviceSession(device: DeviceInfo): LimrunDeviceSession | undefined {
     return this.implementation.getDeviceSession(device) as LimrunDeviceSession | undefined;
+  }
+
+  async loadRuntime(host: AppLogRuntimeHost): Promise<DeviceRuntimeOwner<AppLogRuntimeOperations>> {
+    return await this.implementation.loadRuntime(host);
   }
 
   async installApp(

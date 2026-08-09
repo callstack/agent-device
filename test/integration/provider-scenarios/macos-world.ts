@@ -47,6 +47,7 @@ export async function createMacOsDesktopWorld(
     },
   });
   const daemon = await createProviderScenarioHarness({
+    platformAppLogRuntime: true,
     appleRunnerProvider: options.appleRunnerProvider
       ? () => options.appleRunnerProvider
       : undefined,

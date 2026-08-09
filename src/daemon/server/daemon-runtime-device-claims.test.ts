@@ -3,7 +3,14 @@ import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock('../session-teardown.ts', () => ({ teardownSessionResources: vi.fn() }));
+vi.mock('../session-teardown.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../session-teardown.ts')>();
+  return {
+    ...actual,
+    stopSessionAppLog: vi.fn(async () => {}),
+    teardownSessionResources: vi.fn(),
+  };
+});
 
 import { SessionStore } from '../session-store.ts';
 import { teardownSessionResources } from '../session-teardown.ts';
