@@ -41,6 +41,12 @@ export async function resolveForegroundOpenRequest(params: {
   const { req, hasExistingSession } = params;
   if (req.flags?.foreground !== true) return { type: 'not-requested' };
 
+  // With an explicit app, foreground means "open through the normal target
+  // path, then compose the initial snapshot". That remains valid for an
+  // existing session: normal open owns switching/relaunching the app and the
+  // composition below observes the resulting session state.
+  if (req.positionals?.[0]) return { type: 'resolved', req };
+
   if (hasExistingSession) {
     return {
       type: 'response',
@@ -50,7 +56,6 @@ export async function resolveForegroundOpenRequest(params: {
       ),
     };
   }
-  if (req.positionals?.[0]) return { type: 'resolved', req };
   // #1670 P1: the resolved-device rewrite below pins --udid/--platform, so an
   // explicit selector must fail fast instead of being silently overwritten
   // (open --foreground --udid B with sim A sole-booted must NOT open A).

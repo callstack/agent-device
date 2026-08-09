@@ -5,14 +5,10 @@ description: Automates Apple-platform apps (iOS, tvOS, macOS), Android devices, 
 
 # agent-device
 
-For an ordinary app-driving task, start directly. Do not run `--help`, `--version`, `appstate`, or `snapshot` first:
+For an ordinary app-driving task with a known app or bundle id, start directly. Do not run `--help`, `--version`, `appstate`, or `snapshot` first:
 
 ```bash
-# The prompt says this app is already foreground and names its app/bundle id:
 agent-device open <app> --foreground
-
-# Otherwise:
-agent-device open <app>
 ```
 
 `open <app> --foreground` keeps normal configured target selection and returns the initial interactive snapshot in the same call. Continue from its current refs. Prefer a concrete `@eN` ref from the current snapshot over a broad mutation selector. When a response prints a pinned ref such as `@e12~s42` — including an ambiguity candidate or settled diff — copy the whole pinned ref exactly; a bare ref from a partial result is intentionally rejected.

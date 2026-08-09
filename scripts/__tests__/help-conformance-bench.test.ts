@@ -14,6 +14,14 @@ import { summarizeResults } from '../help-conformance-summary.mjs';
 
 const execFileAsync = promisify(execFile);
 const SCRIPT = join(import.meta.dirname, '..', 'help-conformance-bench.mjs');
+const AGENT_DEVICE_SKILL = join(
+  import.meta.dirname,
+  '..',
+  '..',
+  'skills',
+  'agent-device',
+  'SKILL.md',
+);
 
 // These tests spawn the real script in --dry-run mode with every required doc
 // overridden, so no LLM call and no built CLI is needed: the raw-first-screen
@@ -511,6 +519,22 @@ test('foreground attach grammar accepts both auto-discovery and an explicit know
   });
   assert.deepEqual(autoDiscovery.issues, []);
   assert.deepEqual(explicitTarget.issues, []);
+});
+
+test('compact skill starts a known-app task with foreground open and an initial snapshot', async () => {
+  const skill = await readFile(AGENT_DEVICE_SKILL, 'utf8');
+  const startIndex = skill.indexOf('For an ordinary app-driving task');
+  const endIndex = skill.indexOf('Default loop:');
+  assert.notEqual(startIndex, -1);
+  assert.ok(endIndex > startIndex);
+  const ordinaryStart = skill.slice(startIndex, endIndex);
+  const openingCommands = ordinaryStart
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('agent-device open <app>'));
+
+  assert.deepEqual(openingCommands, ['agent-device open <app> --foreground']);
+  assert.match(ordinaryStart, /returns the initial interactive snapshot in the same call/);
 });
 
 test('plan validator applies narrow grammar to permitted external commands', async () => {

@@ -58,7 +58,7 @@ test('rejects --foreground against an existing session', async () => {
   expect(resolveSoleForegroundIosApp).not.toHaveBeenCalled();
 });
 
-test('keeps an explicit app and its target constraints for foreground snapshot composition', async () => {
+test('keeps an explicit app and its target constraints for foreground composition on an existing session', async () => {
   const req = baseRequest({
     flags: {
       foreground: true,
@@ -70,7 +70,7 @@ test('keeps an explicit app and its target constraints for foreground snapshot c
   });
   const resolution = await resolveForegroundOpenRequest({
     req,
-    hasExistingSession: false,
+    hasExistingSession: true,
   });
 
   expect(resolution).toEqual({ type: 'resolved', req });

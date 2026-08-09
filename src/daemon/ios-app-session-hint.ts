@@ -22,8 +22,8 @@ export type ResolvedForegroundIosApp = {
  * as inconclusive, never propagated — callers sit on error/decision paths
  * where a probe failure must not replace their deterministic outcome.
  *
- * `buildIosOpenCommandHint` (error-hint enrichment) and the `open --foreground`
- * convenience (RFC, #observe-foreground) both compose this single probe
+ * `buildIosOpenCommandHint` (error-hint enrichment) and the bare
+ * `open --foreground` auto-discovery form both compose this single probe
  * instead of re-deriving the ambiguity rules.
  */
 export async function resolveSoleForegroundIosApp(
