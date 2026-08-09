@@ -105,7 +105,6 @@ async function writeResponse(
     throw new AppError('COMMAND_FAILED', 'App source response used unsupported content encoding');
   }
   validateContentLength(readHeader(response.headers, 'content-length'));
-  if (!response.body) throw new AppError('COMMAND_FAILED', 'Download response body was empty');
   const destinationPath = path.join(tempDir, resolveDownloadFileName(response, url));
   const byteLimit = createByteLimitStream({
     maxBytes: MAX_ARTIFACT_COMPRESSED_BYTES,

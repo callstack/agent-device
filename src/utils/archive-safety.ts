@@ -6,11 +6,9 @@ import {
   MAX_ARCHIVE_NESTING_DEPTH,
 } from './artifact-limits.ts';
 
-export type ArchiveEntryKind = 'directory' | 'file';
-
 export type ArchiveManifestEntry = {
   name: string;
-  kind: ArchiveEntryKind;
+  kind: 'directory' | 'file';
   size: number;
   mode: number;
 };
@@ -42,14 +40,6 @@ export class ArchiveBudget {
     return this.#entries;
   }
 
-  get remainingBytes(): number {
-    return this.maxBytes - this.#bytes;
-  }
-
-  get remainingEntries(): number {
-    return this.maxEntries - this.#entries;
-  }
-
   preflightArchive(input: {
     depth: number;
     entryCount: number;
@@ -61,10 +51,10 @@ export class ArchiveBudget {
     if (depth < 1 || depth > this.maxDepth) {
       throw archiveError('ARCHIVE_NESTING_LIMIT', 'Archive nesting depth exceeds the limit');
     }
-    if (entryCount > this.remainingEntries) {
+    if (entryCount > this.maxEntries - this.#entries) {
       throw archiveError('ARCHIVE_ENTRY_LIMIT', 'Archive contains too many entries');
     }
-    if (declaredBytes > this.remainingBytes) {
+    if (declaredBytes > this.maxBytes - this.#bytes) {
       throw archiveError('ARCHIVE_EXPANDED_BYTES_LIMIT', 'Archive expands beyond the byte limit');
     }
     return new ArchiveReservation(
@@ -77,14 +67,14 @@ export class ArchiveBudget {
 
   #chargeBytes(bytes: number): void {
     const acceptedBytes = validateLimit(bytes, 'bytes');
-    if (acceptedBytes > this.remainingBytes) {
+    if (acceptedBytes > this.maxBytes - this.#bytes) {
       throw archiveError('ARCHIVE_EXPANDED_BYTES_LIMIT', 'Archive expands beyond the byte limit');
     }
     this.#bytes += acceptedBytes;
   }
 
   #commitEntry(): void {
-    if (this.remainingEntries < 1) {
+    if (this.#entries >= this.maxEntries) {
       throw archiveError('ARCHIVE_ENTRY_LIMIT', 'Archive contains too many entries');
     }
     this.#entries += 1;

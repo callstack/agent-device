@@ -113,7 +113,7 @@ function readTarKind(type: tar.Headers['type']): 'directory' | 'file' {
 
 function safeMode(mode: number | undefined, kind: 'directory' | 'file'): number {
   const fallback = kind === 'directory' ? 0o755 : 0o644;
-  return (mode ?? fallback) & (kind === 'directory' ? 0o777 : 0o777);
+  return (mode ?? fallback) & 0o777;
 }
 
 function manifestEntryFromTarHeader(header: tar.Headers): ArchiveManifestEntry | undefined {

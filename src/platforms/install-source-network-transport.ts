@@ -3,7 +3,6 @@ import { Agent, ProxyAgent, request, type Dispatcher } from 'undici';
 
 export type InstallSourceNetworkResponse = {
   statusCode: number;
-  statusText: string;
   headers: Record<string, string | string[] | undefined>;
   body: NodeJS.ReadableStream;
   close: () => Promise<void>;
@@ -18,7 +17,7 @@ export async function requestApprovedUrl(params: {
 }): Promise<InstallSourceNetworkResponse> {
   const proxy = resolveProxyForUrl(params.url);
   const dispatcher = proxy
-    ? proxyDispatcher(proxy, params.url, params.approvedAddress, params.family)
+    ? proxyDispatcher(proxy, params.url)
     : directDispatcher(params.approvedAddress, params.family);
   const dispatchUrl = proxy
     ? approvedAddressUrl(params.url, params.approvedAddress, params.family)
@@ -34,7 +33,6 @@ export async function requestApprovedUrl(params: {
     const response = await request(dispatchUrl, requestOptions);
     return {
       statusCode: response.statusCode,
-      statusText: String(response.statusCode),
       headers: response.headers,
       body: response.body,
       close: async () => await closeDispatcher(dispatcher),
@@ -79,12 +77,7 @@ function directDispatcher(address: string, family: 4 | 6): Agent {
   });
 }
 
-function proxyDispatcher(
-  proxyUrl: string,
-  destination: URL,
-  _address: string,
-  _family: 4 | 6,
-): ProxyAgent {
+function proxyDispatcher(proxyUrl: string, destination: URL): ProxyAgent {
   const literalDestination = net.isIP(stripBrackets(destination.hostname)) !== 0;
   return new ProxyAgent({
     uri: proxyUrl,

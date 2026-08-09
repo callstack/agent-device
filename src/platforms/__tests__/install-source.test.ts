@@ -662,7 +662,6 @@ async function withMockedInstallSourceFetch(
     );
   const requestMock = vi.spyOn(networkTransport, 'requestApprovedUrl').mockResolvedValue({
     statusCode: 200,
-    statusText: 'OK',
     headers: {
       'content-disposition': `attachment; filename="${options?.filename ?? 'artifact.zip'}"`,
       'content-type': options?.contentType ?? 'application/zip',

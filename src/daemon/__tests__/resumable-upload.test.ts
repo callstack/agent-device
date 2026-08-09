@@ -146,8 +146,34 @@ test('an ignored un-ranged retry does not extend upload expiry', async () => {
   }
 });
 
+test('idempotent preflight does not extend upload expiry', async () => {
+  vi.useFakeTimers();
+  try {
+    const bytes = Buffer.from('AB');
+    const options = uploadOptions(bytes);
+    const uploadId = beginResumableUpload(options).uploadId;
+    await receiveResumableUploadChunk({
+      uploadId,
+      req: request(Buffer.from('A'), { 'content-range': 'bytes 0-0/2' }),
+    });
+    await vi.advanceTimersByTimeAsync(4 * 60 * 1000);
+
+    assert.equal(beginResumableUpload(options).uploadId, uploadId);
+
+    await vi.advanceTimersByTimeAsync(60 * 1000);
+    await assert.rejects(finalizeResumableUpload(uploadId), /not found or expired/i);
+  } finally {
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+    vi.useRealTimers();
+  }
+});
+
 function beginUpload(bytes: Buffer): ReturnType<typeof beginResumableUpload> {
-  return beginResumableUpload({
+  return beginResumableUpload(uploadOptions(bytes));
+}
+
+function uploadOptions(bytes: Buffer): Parameters<typeof beginResumableUpload>[0] {
+  return {
     baseUrl: 'http://127.0.0.1:1234',
     tokenHeaders: {},
     uploadAttemptId: crypto.randomUUID(),
@@ -155,7 +181,7 @@ function beginUpload(bytes: Buffer): ReturnType<typeof beginResumableUpload> {
     fileName: 'artifact.bin',
     sizeBytes: bytes.length,
     artifactType: 'file',
-  });
+  };
 }
 
 function request(body: Buffer, headers: Record<string, string> = {}): IncomingMessage {

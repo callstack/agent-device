@@ -130,7 +130,6 @@ function response(
 ): networkTransport.InstallSourceNetworkResponse {
   return {
     statusCode,
-    statusText: String(statusCode),
     headers,
     body: Readable.from(body),
     close: async () => {},

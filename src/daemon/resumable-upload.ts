@@ -62,7 +62,6 @@ export function beginResumableUpload(options: BeginResumableUploadOptions): {
   const existingId = RESUMABLE_UPLOADS_BY_KEY.get(key);
   const existing = existingId ? RESUMABLE_UPLOADS_BY_ID.get(existingId) : undefined;
   const entry = existing ?? createResumableUploadEntry(options, key);
-  refreshResumableUploadTimer(entry);
   return {
     uploadId: entry.id,
     cacheHit: false,
@@ -154,6 +153,7 @@ function createResumableUploadEntry(
   };
   RESUMABLE_UPLOADS_BY_ID.set(id, entry);
   RESUMABLE_UPLOADS_BY_KEY.set(key, id);
+  refreshResumableUploadTimer(entry);
   return entry;
 }
 

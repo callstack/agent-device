@@ -7,7 +7,6 @@ export async function approveDownloadSourceUrl(
   parsedUrl: URL,
   signal?: AbortSignal,
 ): Promise<{
-  hostname: string;
   address: string;
   family: 4 | 6;
 }> {
@@ -21,7 +20,7 @@ export async function approveDownloadSourceUrl(
   const hostname = canonicalHostname(parsedUrl.hostname);
   if (isBlockedSourceHostname(hostname)) blockedHost(parsedUrl.hostname);
   const literalFamily = net.isIP(hostname);
-  if (literalFamily) return { hostname, address: hostname, family: literalFamily as 4 | 6 };
+  if (literalFamily) return { address: hostname, family: literalFamily as 4 | 6 };
 
   let resolved: Array<{ address: string; family: number }>;
   try {
@@ -42,7 +41,7 @@ export async function approveDownloadSourceUrl(
   }
   if (resolved.some((entry) => isBlockedIpAddress(entry.address))) blockedHost(hostname);
   const selected = resolved[0]!;
-  return { hostname, address: selected.address, family: selected.family as 4 | 6 };
+  return { address: selected.address, family: selected.family as 4 | 6 };
 }
 
 async function lookupWithSignal(
