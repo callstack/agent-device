@@ -1,11 +1,8 @@
 import assert from 'node:assert/strict';
-import { beforeEach, test, vi } from 'vitest';
+import { test } from 'vitest';
 import { PUBLIC_COMMANDS } from '../../../command-catalog.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { listVegaDevices } from '../devices.ts';
 import { vegaPlugin } from '../plugin.ts';
-
-vi.mock('../devices.ts', () => ({ listVegaDevices: vi.fn() }));
 
 const VEGA_VVD = {
   platform: 'vega',
@@ -27,12 +24,6 @@ const VEGA_NON_TV: DeviceInfo = {
   id: 'vega-non-tv',
   target: 'mobile',
 };
-
-const mockListVegaDevices = vi.mocked(listVegaDevices);
-
-beforeEach(() => {
-  mockListVegaDevices.mockReset();
-});
 
 test('Vega plugin owns the Vega platform and tv-remote capability bucket', () => {
   assert.deepEqual(vegaPlugin.platforms, ['vega']);
@@ -69,17 +60,6 @@ test('Vega plugin owns the Vega platform and tv-remote capability bucket', () =>
     assert.equal(supports(VEGA_PHYSICAL_TV), true);
     assert.equal(supports(VEGA_NON_TV), false);
   }
-});
-
-test('Vega plugin delegates discovery to the Vega inventory', async () => {
-  const devices = [VEGA_VVD];
-  mockListVegaDevices.mockResolvedValue(devices);
-
-  const discovered = await vegaPlugin.discoverDevices({ platform: 'vega', target: 'tv' });
-
-  assert.equal(discovered, devices);
-  assert.equal(mockListVegaDevices.mock.calls.length, 1);
-  assert.deepEqual(mockListVegaDevices.mock.calls[0], []);
 });
 
 test('Vega plugin creates the Vega interactor lazily', async () => {

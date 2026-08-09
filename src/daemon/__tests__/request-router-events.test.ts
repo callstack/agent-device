@@ -1,3 +1,4 @@
+import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { test, expect } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -22,6 +23,7 @@ test('events reads the daemon-owned session timeline without appending poll nois
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -65,6 +67,7 @@ test('events accepts a blank limit placeholder for cursor-only reads', async () 
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -103,6 +106,7 @@ test('events returns structured errors for invalid limit and cursor', async () =
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -149,6 +153,7 @@ test('events flushes pending event writes before reading', async () => {
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -177,6 +182,7 @@ test('request timeline records thrown request failures after scope creation', as
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -215,6 +221,7 @@ test('request timeline records setup failures after start is appended', async ()
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 

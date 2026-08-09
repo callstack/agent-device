@@ -184,6 +184,12 @@ test('runChecks combines related tests with lightweight changed-line coverage', 
   assert.equal(related.length, 1);
   assert.ok(related[0]?.includes('--coverage'));
   assert.ok(related[0]?.includes('--coverage.reporter=lcov'));
+  assert.ok(related[0]?.includes('--maxWorkers=4'));
+  assert.ok(
+    executed.findIndex((command) => command.includes('test:integration:node')) <
+      executed.findIndex((command) => command.includes('related')),
+    'process-lifecycle integration must run before high-parallelism affected coverage',
+  );
   assert.equal(
     executed.some((command) => command.includes('test:coverage')),
     false,

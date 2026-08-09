@@ -8,7 +8,7 @@ import type { AppsFilter } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import { createAppResolutionCache, type AppResolutionCacheScope } from '../app-resolution-cache.ts';
-import { waitForAndroidBoot } from './devices.ts';
+import { waitForAndroidBoot } from './emulator-lifecycle.ts';
 import { runAndroidAdb } from './adb.ts';
 import {
   androidAdbResultError,

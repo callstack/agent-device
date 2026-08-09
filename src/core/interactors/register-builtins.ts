@@ -5,9 +5,7 @@ import { applePlugin } from '../../platforms/apple/plugin.ts';
 import { vegaPlugin } from '../../platforms/vega/plugin.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { isAudioProbeSupportedDevice } from '@agent-device/contracts/platform';
-import { WEB_DESKTOP_DEVICE, type DeviceInventoryRequest } from '@agent-device/contracts/device';
 import type { Platform, DeviceInfo } from '@agent-device/kernel/device';
-import { resolveAndroidDiscoverySerialAllowlist } from '../platform-inventory.ts';
 
 // The builtin-plugin wiring lives at the interactor seam (src/core/interactors/) —
 // the one place R3 (see scripts/layering/check.ts) permits a STATIC value import of
@@ -16,10 +14,7 @@ import { resolveAndroidDiscoverySerialAllowlist } from '../platform-inventory.ts
 // stay in `core/` (src/core/platform-plugin/plugin.ts) where non-interactor core code
 // like `core/capabilities.ts` may import them. The Apple plugin instance and its
 // capability closures now live under `platforms/apple/`; the android/linux/web wiring
-// stays here. Each plugin WRAPS today's existing factories (src/core/interactors/*) and
-// the inventory if-chain (src/core/platform-inventory.ts) as LAZY methods: the dynamic
-// `import()`s and per-platform list calls are byte-for-byte the same as the
-// hand-authored `getInteractor` switch arms and `listLocalDeviceInventory` branches.
+// stays here. Each plugin WRAPS today's existing interactor factories lazily.
 // `as const satisfies PlatformPlugin` preserves each plugin's literal `platforms` tuple
 // so the totality assertion below is a real compile-time check.
 
@@ -54,12 +49,6 @@ const androidPlugin = {
     const { createAndroidInteractor } = await import('./android.ts');
     return createAndroidInteractor(device, undefined, runner);
   },
-  discoverDevices: async (request: DeviceInventoryRequest) => {
-    const { listAndroidDevices } = await import('../../platforms/android/devices.ts');
-    return await listAndroidDevices({
-      serialAllowlist: resolveAndroidDiscoverySerialAllowlist(request),
-    });
-  },
 } as const satisfies PlatformPlugin;
 
 const harmonyosPlugin = {
@@ -77,10 +66,6 @@ const harmonyosPlugin = {
     const { createHarmonyInteractor } = await import('./harmonyos.ts');
     return createHarmonyInteractor(device, runner);
   },
-  discoverDevices: async (request: DeviceInventoryRequest) => {
-    const { listHarmonyDevices } = await import('../../platforms/harmonyos/devices.ts');
-    return await listHarmonyDevices({ serial: request.serial });
-  },
 } as const satisfies PlatformPlugin;
 
 const linuxPlugin = {
@@ -95,10 +80,6 @@ const linuxPlugin = {
   createInteractor: async () => {
     const { createLinuxInteractor } = await import('./linux.ts');
     return createLinuxInteractor();
-  },
-  discoverDevices: async () => {
-    const { listLinuxDevices } = await import('../../platforms/linux/devices.ts');
-    return await listLinuxDevices();
   },
 } as const satisfies PlatformPlugin;
 
@@ -116,8 +97,6 @@ const webPlugin = {
     const { createWebInteractor } = await import('./web.ts');
     return createWebInteractor();
   },
-  // Mirrors the `request.platform === 'web'` branch (the single static device).
-  discoverDevices: async () => [WEB_DESKTOP_DEVICE],
 } as const satisfies PlatformPlugin;
 
 /**

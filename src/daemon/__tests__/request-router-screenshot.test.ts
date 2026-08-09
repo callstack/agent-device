@@ -1,3 +1,4 @@
+import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -94,6 +95,7 @@ test('screenshot resolves relative positional path against request cwd', async (
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -187,6 +189,7 @@ test('router serializes concurrent commands for the same device across sessions'
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -243,6 +246,7 @@ test('screenshot forwards macOS session surface to dispatch', async () => {
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -271,6 +275,7 @@ test('click forwards macOS menubar session surface to dispatch', async () => {
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -311,6 +316,7 @@ test('screenshot keeps absolute positional path unchanged', async () => {
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -347,6 +353,7 @@ test('screenshot runtime supplies default output path when none is requested', a
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -384,6 +391,7 @@ test('iOS simulator screenshot response includes output dimensions and logical d
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -426,6 +434,7 @@ test('non-iOS screenshot response tolerates malformed PNG metadata', async () =>
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -463,6 +472,7 @@ test('iOS simulator screenshot omits logical density metadata after --scale down
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -501,6 +511,7 @@ test('screenshot rejects the removed max-size field from older remote clients', 
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -542,6 +553,7 @@ test('screenshot resolves --out flag path against request cwd', async () => {
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -592,6 +604,7 @@ test('screenshot --overlay-refs captures a fresh snapshot when the session has n
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -683,6 +696,7 @@ test('screenshot --overlay-refs uses interactive iOS presentation for row-like o
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -758,6 +772,7 @@ test('screenshot --overlay-refs uses a fresh snapshot instead of stale session s
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -824,6 +839,7 @@ test('screenshot --pixel-density keeps overlay refs aligned to scaled iOS simula
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -865,6 +881,7 @@ test('screenshot --pixel-density is rejected outside iOS-family simulators', asy
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 

@@ -226,7 +226,7 @@ async function createCloudWebDriverWorld() {
   const providers = createProviderDeviceRuntimeRequestProviders(runtimes);
   const daemon = await createProviderScenarioHarness({
     ...providers,
-    deviceInventoryProvider: providers.deviceInventoryProvider!,
+    deviceInventorySource: providers.deviceInventorySource!,
   });
   return {
     daemon,

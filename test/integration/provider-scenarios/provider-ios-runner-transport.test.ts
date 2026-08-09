@@ -185,7 +185,7 @@ async function createRunnerTransportWorld(options: { requestScope: boolean }) {
   const providers = createProviderDeviceRuntimeRequestProviders([runtime]);
   const daemon = await createProviderScenarioHarness({
     ...providers,
-    deviceInventoryProvider: providers.deviceInventoryProvider!,
+    deviceInventorySource: providers.deviceInventorySource!,
   });
   return {
     daemon,

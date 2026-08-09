@@ -4,6 +4,7 @@ import type { PlatformSelector } from '@agent-device/kernel/device';
 import { runCmd } from '../../utils/exec.ts';
 import { appendDoctorCheck } from './session-doctor-output.ts';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
+import { listLocalDeviceInventory } from '../../core/device-inventory-context.ts';
 
 const TOOLCHAIN_TIMEOUT_MS = 3_000;
 type AndroidLicenseState = 'accepted' | 'missing' | 'unknown';
@@ -59,7 +60,6 @@ async function harmonyToolchainCheck(): Promise<DoctorCheck> {
 }
 
 async function vegaToolchainCheck(): Promise<DoctorCheck> {
-  const { parseVegaDeviceList } = await import('../../platforms/vega/devices.ts');
   const { resolveVegaToolProvider } = await import('../../platforms/vega/tool-provider.ts');
   const provider = resolveVegaToolProvider();
   if (!(await provider.isAvailable())) {
@@ -76,13 +76,15 @@ async function vegaToolchainCheck(): Promise<DoctorCheck> {
     allowFailure: true,
     timeoutMs: TOOLCHAIN_TIMEOUT_MS,
   });
-  const inventory = await provider.listDevices({
-    allowFailure: true,
-    timeoutMs: TOOLCHAIN_TIMEOUT_MS,
-  });
+  const inventory = await readLocalVegaInventory();
   const versionLine = firstOutputLine(version.stdout);
-  const hasRunningVvd =
-    inventory.exitCode === 0 && parseVegaDeviceList(inventory.stdout).length > 0;
+  const hasRunningVvd = inventory.some(
+    (device) =>
+      device.platform === 'vega' &&
+      device.kind === 'emulator' &&
+      device.target === 'tv' &&
+      device.booted === true,
+  );
 
   return {
     id: 'toolchain',
@@ -93,9 +95,17 @@ async function vegaToolchainCheck(): Promise<DoctorCheck> {
     hint: hasRunningVvd ? undefined : 'Start the Vega Virtual Device and retry doctor.',
     evidence: {
       vegaVersion: versionLine ?? null,
-      deviceList: inventory.stdout.trim() || null,
+      deviceList: inventory.map((device) => device.id).join(', ') || null,
     },
   };
+}
+
+async function readLocalVegaInventory() {
+  try {
+    return await listLocalDeviceInventory({ platform: 'vega', target: 'tv' });
+  } catch {
+    return [];
+  }
 }
 
 async function androidToolchainCheck(): Promise<DoctorCheck> {

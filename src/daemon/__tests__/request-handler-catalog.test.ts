@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { withTargetDeviceResolutionScope } from '../../core/dispatch-resolve.ts';
+import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { getDaemonCommandRoute, type DaemonCommandRoute } from '../daemon-command-registry.ts';

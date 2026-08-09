@@ -1,3 +1,4 @@
+import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { expect, test } from 'vitest';
 import { createRequestHandler } from '../request-router.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
@@ -32,6 +33,7 @@ function makeHandler(sessionStore: SessionStore, androidAdbProvider: () => Andro
     token: 'token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     androidAdbProvider,
     trackDownloadableArtifact: () => 'artifact-id',
   });

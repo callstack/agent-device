@@ -389,7 +389,7 @@ function normalizeSettingsValue(raw: string): string {
   return trimmed;
 }
 
-// Serials only, no per-device name/booted/target lookups (unlike listAndroidDevices()).
+// Serials only, with no full-inventory name, boot-state, or target probes.
 export async function listAndroidAdbSerialsQuick(): Promise<string[]> {
   try {
     const result = await runCmd('adb', ['devices'], { timeoutMs: 5_000 });

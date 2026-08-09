@@ -9,6 +9,11 @@ app-log disposal contract without changing `close`'s legacy platform-execution o
 command's platform adapter must change, this Status must name its complete unit before substrate work
 begins. Broader migration requires this Status to record **continue**.
 
+During the `devices` unit, doctor discovery, replay-test sharding, Apple simulator hints, and Android
+emulator lifecycle keep their existing command execution owners while consuming the same injected,
+neutral inventory capability. That coexistence moves discovery mechanics once; it does not migrate
+those descriptors or authorize a second local/provider chooser.
+
 ## Rules at a glance
 
 - Daemon device-execution code depends on platform-neutral contracts. Concrete device mechanics

@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
-import { listLinuxDevices } from '../../../src/platforms/linux/devices.ts';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform';
+import { inventoryModule as linuxInventoryModule } from '@agent-device/platform-linux';
+import { createDeviceInventoryHost } from '../../../src/platform-runtime-host.ts';
 import { createLocalLinuxToolProvider } from '../../../src/platforms/linux/tool-provider.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { validPng } from './assertions.ts';
@@ -28,13 +30,13 @@ export async function createLinuxDesktopWorld(): Promise<LinuxDesktopWorld> {
   const previousPlatform = process.platform;
 
   Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
-  assert.deepEqual(await listLinuxDevices(), []);
+  assert.deepEqual(await discoverLocalLinuxInventory(), []);
   Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
   process.env.XDG_SESSION_TYPE = 'x11';
   delete process.env.WAYLAND_DISPLAY;
   delete process.env.AGENT_DEVICE_HTTP_AUTH_HOOK;
 
-  const localLinuxDevices = await listLinuxDevices();
+  const localLinuxDevices = await discoverLocalLinuxInventory();
   const toolCalls: Array<[string, string[]]> = [];
   const desktopCalls: Array<[string, string]> = [];
   const semanticCalls: FlatToolCall[] = [];
@@ -148,6 +150,17 @@ export async function createLinuxDesktopWorld(): Promise<LinuxDesktopWorld> {
       restoreEnv('AGENT_DEVICE_HTTP_AUTH_HOOK', previousAuthHook);
     },
   };
+}
+
+const inventoryScope: PlatformRequestScope = Object.freeze({
+  signal: new AbortController().signal,
+  diagnostics: Object.freeze({ emit: () => {} }),
+  progress: Object.freeze({ report: () => {} }),
+});
+
+async function discoverLocalLinuxInventory(): Promise<DeviceInfo[]> {
+  const source = await linuxInventoryModule.loadInventory(createDeviceInventoryHost());
+  return [...(await source.discover({ platform: 'linux' }, inventoryScope))];
 }
 
 function linuxCalculatorSnapshotNodes(): Array<{

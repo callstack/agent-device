@@ -11,7 +11,9 @@ import { SessionStore } from '../session-store.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
 import { shutdownDeviceTarget } from '../target-shutdown.ts';
 import { createAppleRunnerCachePrewarmOnColdBoot } from '../apple-runner-options.ts';
+import { listLocalDeviceInventory } from '../../core/device-inventory-context.ts';
 import { prewarmAppleRunnerCache } from '../../platforms/apple/core/runner/runner-client.ts';
+import { resolveAndroidSerialAllowlist } from '../../utils/device-isolation.ts';
 import {
   hasExplicitSessionFlag,
   requireSessionOrExplicitSelector,
@@ -25,9 +27,14 @@ async function ensureAndroidEmulatorBoot(params: {
   avdName: string;
   serial?: string;
   headless?: boolean;
+  androidSerialAllowlist?: readonly string[];
 }): Promise<DeviceInfo> {
-  const { ensureAndroidEmulatorBooted } = await import('../../platforms/android/devices.ts');
-  return await ensureAndroidEmulatorBooted(params);
+  const { ensureAndroidEmulatorBooted } =
+    await import('../../platforms/android/emulator-lifecycle.ts');
+  return await ensureAndroidEmulatorBooted(params, {
+    discoverLocal: listLocalDeviceInventory,
+    androidSerialAllowlist: params.androidSerialAllowlist,
+  });
 }
 
 const IOS_APPSTATE_SESSION_REQUIRED_MESSAGE =
@@ -170,6 +177,12 @@ export async function handleSessionStateCommands(params: {
 
     const normalizedPlatform = flags.platform ?? session?.device.platform;
     const targetsAndroid = normalizedPlatform === 'android';
+    const resolvedAndroidSerialAllowlist = resolveAndroidSerialAllowlist(
+      flags.androidDeviceAllowlist,
+    );
+    const androidSerialAllowlist = resolvedAndroidSerialAllowlist
+      ? [...resolvedAndroidSerialAllowlist].sort()
+      : undefined;
     const wantsAndroidHeadless = flags.headless === true;
     if (wantsAndroidHeadless && !targetsAndroid) {
       return errorResponse(
@@ -217,6 +230,7 @@ export async function handleSessionStateCommands(params: {
         avdName: fallbackAvdName,
         serial: flags.serial,
         headless: wantsAndroidHeadless,
+        androidSerialAllowlist,
       });
       launchedAndroidEmulator = true;
     }
@@ -251,6 +265,7 @@ export async function handleSessionStateCommands(params: {
           avdName,
           serial: flags.serial,
           headless: true,
+          androidSerialAllowlist,
         });
       }
       await ensureDeviceReady(device);
@@ -263,6 +278,7 @@ export async function handleSessionStateCommands(params: {
         avdName: device.name,
         serial: flags.serial,
         headless: false,
+        androidSerialAllowlist,
       });
       await ensureDeviceReady(device);
     } else {

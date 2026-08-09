@@ -3,10 +3,6 @@ import type { PlatformPlugin } from '@agent-device/contracts/platform';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { isAudioProbeSupportedDevice } from '@agent-device/contracts/platform';
 import {
-  shouldUseHostMacFastPath,
-  type DeviceInventoryRequest,
-} from '@agent-device/contracts/device';
-import {
   isMacOs,
   isTvOsDevice,
   resolveDeviceAppleOs,
@@ -141,11 +137,8 @@ function coreDeviceOnlyPhysicalOperationHint(device: DeviceInfo): string | undef
   return 'This command requires a CoreDevice-backed physical iOS device. The selected XCTest backend supports open, close, interactions, snapshots, and screenshots.';
 }
 
-// The Apple plugin WRAPS today's existing factories (its `createInteractor` in
-// `./interactor.ts`) and the inventory if-chain (src/core/platform-inventory.ts) as
-// LAZY methods. No leaf code is rewritten: the dynamic `import()`s and the per-platform
-// list calls are byte-for-byte the same as the hand-authored `getInteractor` switch arm
-// and `listLocalDeviceInventory` branch. `as const satisfies PlatformPlugin` preserves
+// The Apple plugin wraps today's existing interactor factory lazily.
+// `as const satisfies PlatformPlugin` preserves
 // the plugin's literal `platforms` tuple so the registry totality assertion (in
 // `core/interactors/register-builtins.ts`) is a real compile-time check.
 
@@ -184,18 +177,5 @@ export const applePlugin = {
   createInteractor: async (device: DeviceInfo, runner: RunnerContext) => {
     const { createAppleInteractor } = await import('./interactor.ts');
     return createAppleInteractor(device, runner);
-  },
-  // Reproduces the macOS host fast-path + Apple-simulator branch of the
-  // inventory if-chain, reusing the SAME predicate (no divergent copy).
-  discoverDevices: async (request: DeviceInventoryRequest) => {
-    if (shouldUseHostMacFastPath(request)) {
-      const { listMacosDevices } = await import('./os/macos/devices.ts');
-      return await listMacosDevices();
-    }
-    const { listAppleDevices } = await import('./core/devices.ts');
-    return await listAppleDevices({
-      simulatorSetPath: request.iosSimulatorSetPath,
-      udid: request.udid,
-    });
   },
 } as const satisfies PlatformPlugin;

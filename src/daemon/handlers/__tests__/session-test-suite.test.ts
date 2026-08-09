@@ -31,7 +31,7 @@ import {
   markRequestCanceled,
   registerRequestAbort,
 } from '../../../request/cancel.ts';
-import { withDeviceInventoryProvider } from '../../../core/dispatch-resolve.ts';
+import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeAndroidSession } from '../../../__tests__/test-utils/index.ts';
 

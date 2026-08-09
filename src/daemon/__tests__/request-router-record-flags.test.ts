@@ -1,3 +1,4 @@
+import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 /**
  * #1271 stage 2 (ADR 0012 amendment): `--record` and `--no-record` express
  * opposite recording intents for the same action, so both together is
@@ -18,6 +19,7 @@ function createHandler() {
     token: 'test-token',
     sessionStore: makeSessionStore('agent-device-router-record-flags-'),
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 }

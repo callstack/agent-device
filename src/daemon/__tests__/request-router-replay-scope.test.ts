@@ -1,3 +1,4 @@
+import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -62,6 +63,7 @@ test('replay runs active-session actions inside the parent request provider scop
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     appleRunnerProvider,
     trackDownloadableArtifact: () => 'artifact-id',
   });
@@ -92,6 +94,7 @@ test('replay routes session-changing actions through the full request path', asy
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     appleRunnerProvider,
     trackDownloadableArtifact: () => 'artifact-id',
   });
@@ -120,6 +123,7 @@ test('session list includes a cwd-scoped session opened by replay', async () => 
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     appleRunnerProvider: () => undefined,
     trackDownloadableArtifact: () => 'artifact-id',
   });
@@ -181,6 +185,7 @@ test('fresh replay retains a dynamically selected device through finalization', 
     token: 'test-token',
     sessionStore,
     leaseRegistry,
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     appleRunnerProvider: () => undefined,
     trackDownloadableArtifact: () => 'artifact-id',
   });

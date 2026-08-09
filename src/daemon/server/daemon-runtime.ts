@@ -6,6 +6,7 @@ import { resolveDaemonPaths, resolveDaemonServerMode } from '../config.ts';
 import { createDaemonHttpServer } from './http-server.ts';
 import { trackDownloadableArtifact } from '../artifact-tracking.ts';
 import { createProviderDeviceRuntimeRequestProviders } from '../../provider-device-runtime.ts';
+import { createPlatformDeviceInventoryGateways } from '../../platform-runtime.ts';
 import {
   createDefaultProviderDeviceRuntimes,
   DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS,
@@ -182,6 +183,9 @@ export async function startDaemonRuntime(
     },
   });
   const cloudArtifactProvider = providerRuntimeProviders.cloudArtifactProvider;
+  const deviceInventoryGateways = createPlatformDeviceInventoryGateways(
+    providerRuntimeProviders.deviceInventorySource,
+  );
 
   const dispatchRequest = createRequestHandler({
     logPath,
@@ -191,7 +195,7 @@ export async function startDaemonRuntime(
     leaseRegistry,
     leaseLifecycleProvider: providerRuntimeProviders.leaseLifecycleProvider,
     cloudArtifactProvider,
-    deviceInventoryProvider: providerRuntimeProviders.deviceInventoryProvider,
+    deviceInventoryGateways,
     appleRunnerProvider: providerRuntimeProviders.appleRunnerProvider,
     providerRuntimeIds: providerRuntimeProviders.providerRuntimeIds,
     providerRuntimeRequiredIds: providerRuntimeProviders.providerRuntimeRequiredIds,

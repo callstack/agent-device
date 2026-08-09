@@ -411,6 +411,13 @@ axis and stages a deeper platform-runtime seam, one abandonment-safe command cut
   that earned ADR 0019's staged platform-runtime migration. Its substrate plus complete
   `devices`/`logs`/`network` checkpoint must validate the seam before any further command migration.
   These are ratchets, not permission to scaffold façades before a real seam has two adapters.
+- Platform package boundary (R13). ADR 0019 has exactly six private
+  `@agent-device/platform-*` package façades and one root composition file,
+  `src/platform-runtime.ts`. R13 pins that total registration, forbids contracts-to-platform,
+  sibling-platform, root/daemon, and raw-process edges in every import form (including tests), and
+  keeps package façades metadata-eager but inventory/runtime mechanics lazy. Composition cannot probe tools, prepare
+  assets, or construct helpers. Each rule has a planted-red structural case; R11 still owns the
+  general workspace exports/dependency boundary.
 - Zero-dep CI jobs (R8). Some jobs run scripts straight from a checkout with `install-deps: false`,
   so they have no `node_modules`. Nothing local can feel that constraint — every dev machine has
   `node_modules` sitting right there — so a script grows a package import, passes locally, and fails

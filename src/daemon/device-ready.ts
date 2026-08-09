@@ -45,7 +45,7 @@ export async function ensureDeviceReady(
     }
   }
   if (device.platform === 'android') {
-    const { waitForAndroidBoot } = await import('../platforms/android/devices.ts');
+    const { waitForAndroidBoot } = await import('../platforms/android/emulator-lifecycle.ts');
     await waitForAndroidBoot(device.id);
     markDeviceReady(cacheKey);
   }

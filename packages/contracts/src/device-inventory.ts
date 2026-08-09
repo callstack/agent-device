@@ -1,7 +1,9 @@
 import {
   isIosFamily,
   isMacOs,
+  matchesPlatformSelector,
   type DeviceInfo,
+  type DeviceKind,
   type DeviceTarget,
   type PlatformSelector,
 } from '@agent-device/kernel/device';
@@ -26,6 +28,9 @@ export type DeviceInventoryRequest = {
   clientId?: string;
   iosSimulatorSetPath?: string;
   androidSerialAllowlist?: string[];
+  /** Internal local-inventory projection filters; not public command grammar. */
+  kind?: DeviceKind;
+  booted?: boolean;
 };
 
 export type DeviceInventoryGroup = 'android' | 'harmonyos' | 'apple' | 'vega' | 'linux' | 'web';
@@ -53,13 +58,16 @@ export function countDeviceInventoryByGroup(devices: DeviceInfo[]): DeviceInvent
   return counts;
 }
 
-export function shouldUseHostMacFastPath(selector: {
-  platform?: PlatformSelector;
-  target?: DeviceTarget;
-}): boolean {
-  return (
-    selector.platform === 'macos' ||
-    (selector.platform === 'apple' && selector.target === 'desktop')
+export function filterDeviceInventoryProjection(
+  devices: readonly DeviceInfo[],
+  request: Pick<DeviceInventoryRequest, 'platform' | 'target' | 'kind' | 'booted'>,
+): DeviceInfo[] {
+  return devices.filter(
+    (device) =>
+      matchesPlatformSelector(device, request.platform) &&
+      (request.target === undefined || (device.target ?? 'mobile') === request.target) &&
+      (request.kind === undefined || device.kind === request.kind) &&
+      (request.booted === undefined || device.booted === request.booted),
   );
 }
 

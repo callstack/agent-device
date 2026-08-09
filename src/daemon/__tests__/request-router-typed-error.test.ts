@@ -1,3 +1,4 @@
+import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -61,6 +62,7 @@ function makeHandler(sessionStore = makeSessionStore('agent-device-router-typed-
       token: 'test-token',
       sessionStore,
       leaseRegistry: new LeaseRegistry(),
+      deviceInventoryGateways: createTestDeviceInventoryGateways(),
       trackDownloadableArtifact: () => 'artifact-id',
     }),
   };

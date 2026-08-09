@@ -1,5 +1,5 @@
 import type {
-  DeviceInventoryProvider,
+  ProviderDeviceInventorySource,
   DeviceLease,
   LeaseLifecycleContext,
   LeaseLifecycleProvider,
@@ -37,7 +37,7 @@ export type ProviderDeviceRuntimeRequestProviders = {
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   recoverExpiredLease?: ProviderExpiredLeaseRecovery;
   cloudArtifactProvider?: CloudArtifactProvider;
-  deviceInventoryProvider?: DeviceInventoryProvider;
+  deviceInventorySource?: ProviderDeviceInventorySource;
   appleRunnerProvider?: AppleRunnerProviderResolver;
   providerDeviceRuntimeScope?: <T>(task: () => Promise<T>) => Promise<T>;
 };
@@ -129,6 +129,7 @@ export function createProviderDeviceRuntimeRequestProviders(
   runtimes: ProviderDeviceRuntime[],
   options: { providerRuntimeRequiredIds?: readonly string[] } = {},
 ): ProviderDeviceRuntimeRequestProviders {
+  assertUniqueProviderRuntimeIds(runtimes);
   const providerRuntimeIds = runtimes.map((runtime) => runtime.provider);
   return {
     providerRuntimeIds,
@@ -142,7 +143,7 @@ export function createProviderDeviceRuntimeRequestProviders(
       .map((runtime) => runtime.provider),
     recoverExpiredLease: composeExpiredLeaseRecovery(runtimes),
     cloudArtifactProvider: composeCloudArtifactProvider(runtimes),
-    deviceInventoryProvider: composeDeviceInventoryProvider(runtimes),
+    deviceInventorySource: composeDeviceInventorySource(runtimes),
     appleRunnerProvider: composeAppleRunnerProviderResolver(runtimes),
     providerDeviceRuntimeScope: async (task) =>
       await withProviderDeviceRuntimeScope(runtimes, task),
@@ -217,18 +218,34 @@ function composeCloudArtifactProvider(
   };
 }
 
-function composeDeviceInventoryProvider(
+function composeDeviceInventorySource(
   runtimes: ProviderDeviceRuntime[],
-): DeviceInventoryProvider | undefined {
+): ProviderDeviceInventorySource | undefined {
   if (runtimes.length === 0) return undefined;
-  return async (request) => {
-    for (const runtime of runtimes) {
-      if (!runtimeMatchesProvider(runtime, request.leaseProvider)) continue;
-      const devices = await runtime.deviceInventoryProvider(request);
-      if (devices) return devices;
-    }
-    return null;
+  return {
+    discover: async (request, signal) => {
+      signal.throwIfAborted();
+      for (const runtime of runtimes) {
+        if (!runtimeMatchesProvider(runtime, request.leaseProvider)) continue;
+        const devices = await runtime.deviceInventoryProvider(request, signal);
+        signal.throwIfAborted();
+        if (devices !== null && devices !== undefined) {
+          return { kind: 'inventory', devices };
+        }
+      }
+      return { kind: 'declined' };
+    },
   };
+}
+
+function assertUniqueProviderRuntimeIds(runtimes: readonly ProviderDeviceRuntime[]): void {
+  const seen = new Set<string>();
+  for (const runtime of runtimes) {
+    if (seen.has(runtime.provider)) {
+      throw new TypeError(`Duplicate provider device runtime: ${runtime.provider}`);
+    }
+    seen.add(runtime.provider);
+  }
 }
 
 async function firstCloudArtifactsResult(

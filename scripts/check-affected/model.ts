@@ -53,11 +53,13 @@ export const ALL_CHECKS: readonly CheckId[] = [
   'mcp-metadata',
   'build',
   'package',
+  // Real daemon/process integration owns host-global lifecycle state and must
+  // run before the high-parallelism coverage workload heats the host.
+  'integration-node',
   'vitest-related',
   'unit',
   'coverage',
   'provider-integration',
-  'integration-node',
   'integration-progress',
   'swift-runner',
   'android-helpers',
@@ -255,6 +257,32 @@ const workspacePackageOwnership: OwnershipRule = ({ file, isTs }) => {
   return selections;
 };
 
+const platformPackageScenarioOwnership: OwnershipRule = ({ file, isTs }) => {
+  if (!isTs || !/^packages\/platform-[^/]+\/src\//.test(file)) {
+    return [];
+  }
+  return [
+    reason(
+      'unit',
+      file,
+      'platform-package-contract',
+      'platform packages must satisfy the shared runtime contract scenarios',
+    ),
+    reason(
+      'provider-integration',
+      file,
+      'platform-package-provider',
+      'platform packages participate in provider-first ownership scenarios',
+    ),
+    reason(
+      'coverage',
+      file,
+      'platform-package-coverage',
+      'platform package changes require affected contract coverage evidence',
+    ),
+  ];
+};
+
 const nodeIntegrationOwnership: OwnershipRule = ({ file }) =>
   isNodeIntegrationPath(file)
     ? [reason('integration-node', file, 'node-integration', 'node --test integration smoke')]
@@ -360,6 +388,7 @@ const OWNERSHIP_RULES: readonly OwnershipRule[] = [
   srcProdGate,
   vitestRelatedOwnership,
   workspacePackageOwnership,
+  platformPackageScenarioOwnership,
   nodeIntegrationOwnership,
   testAppOwnership,
   replayCompatOwnership,

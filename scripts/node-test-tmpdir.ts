@@ -40,7 +40,15 @@ const testRunTmpDir = fs.mkdtempSync(
   path.join(TEST_RUN_TMP_ROOT, `${TEST_RUN_TMP_PREFIX}${process.pid}-`),
 );
 
-const childEnv = { ...process.env, TMPDIR: testRunTmpDir };
+const childEnv = {
+  ...process.env,
+  TMPDIR: testRunTmpDir,
+  // Match Vitest's hermetic-env setup: integration daemons must exercise the
+  // real advisory-claim mechanism without scanning, locking, or pruning the
+  // host user's live device claims. The wrapper already owns cleanup of this
+  // run directory, so claim files cannot leak after the child exits.
+  AGENT_DEVICE_CLAIMS_DIR: path.join(testRunTmpDir, 'device-claims'),
+};
 
 // Mirrors vitest-tmpdir-global-setup.ts's own carve-out: the Swift compiler
 // cache is intentionally durable across runs (rebuilding it recompiles

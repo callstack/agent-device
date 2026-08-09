@@ -12,6 +12,7 @@ import {
 } from './timeout-policy.ts';
 import { resolvePostActionObservationSupport } from './post-action-observation.ts';
 import type { PostActionObservationSupport } from './post-action-observation.ts';
+import { assertCommandPlatformExecution, inventoryUse } from '@agent-device/contracts/platform';
 import type {
   CommandCatalogGroup,
   CommandDescriptor,
@@ -22,9 +23,10 @@ import type {
 } from './types.ts';
 
 type RawCommandDescriptorShape<T> = T extends CommandDescriptor
-  ? Omit<T, 'mcpExposed'> & {
+  ? Omit<T, 'mcpExposed' | 'platformExecution'> & {
       mcpExposed?: boolean;
       ownerFiles?: readonly [string, ...string[]];
+      platformExecution?: T['platformExecution'];
     }
   : never;
 type RawCommandDescriptor = RawCommandDescriptorShape<CommandDescriptor>;
@@ -407,6 +409,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: { kind: 'inventory', use: inventoryUse },
   },
   {
     name: 'capabilities',
@@ -1358,10 +1361,16 @@ const CLI_COMMAND_NAMES = new Set<string>(
  * union below a precise set of command-name literals rather than `string`.
  */
 export const commandDescriptors = RAW_COMMAND_DESCRIPTORS.map((descriptor) => {
+  const platformExecution =
+    'platformExecution' in descriptor
+      ? descriptor.platformExecution
+      : ({ kind: 'legacy' } as const);
+  assertCommandPlatformExecution(platformExecution);
   if (!ownerFilesEnabled) {
     return {
       ...descriptor,
       mcpExposed: resolveMcpExposure(descriptor),
+      platformExecution,
     };
   }
 
@@ -1369,6 +1378,7 @@ export const commandDescriptors = RAW_COMMAND_DESCRIPTORS.map((descriptor) => {
   return {
     ...runtimeDescriptor,
     mcpExposed: resolveMcpExposure(descriptor),
+    platformExecution,
   };
 }) satisfies readonly CommandDescriptor[];
 

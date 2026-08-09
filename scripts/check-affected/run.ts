@@ -238,6 +238,12 @@ function resolveAffectedCoverageCommands(
       'related',
       '--run',
       '--passWithNoTests',
+      // `related` spans every configured Vitest project for broad diffs. The
+      // machine-derived default can start enough projects concurrently to
+      // starve otherwise-green subprocess/provider tests past their exact
+      // timeout budgets. Bound this aggregate feedback lane without changing
+      // the suites' own timeout or serialization contracts.
+      '--maxWorkers=4',
       '--coverage',
       '--coverage.reporter=lcov',
       '--coverage.thresholds.statements=0',

@@ -6,8 +6,6 @@ import { retainMaterializedPaths } from '../../materialized-path-registry.ts';
 import {
   mockClearRuntimeHints,
   mockCleanupRetainedMaterializedPaths,
-  mockListAndroidDevices,
-  mockListAppleDevices,
   makeSessionStore,
   makeSession,
   noopInvoke,
@@ -15,10 +13,12 @@ import {
 import type { DaemonRequest } from '../../types.ts';
 import { handleSessionCommands } from '../session.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { withTestDeviceInventory } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 
 test('devices filters Apple-family platform selectors', async () => {
   const sessionStore = makeSessionStore();
-  mockListAndroidDevices.mockResolvedValue([
+  const inventory: DeviceInfo[] = [
     {
       platform: 'android' as const,
       id: 'emulator-5554',
@@ -27,8 +27,6 @@ test('devices filters Apple-family platform selectors', async () => {
       target: 'mobile' as const,
       booted: true,
     },
-  ]);
-  mockListAppleDevices.mockResolvedValue([
     {
       platform: 'apple' as const,
       id: 'sim-1',
@@ -46,21 +44,25 @@ test('devices filters Apple-family platform selectors', async () => {
       target: 'desktop' as const,
       booted: true,
     },
-  ]);
+  ];
   const runDevices = async (flags: DaemonRequest['flags']) =>
-    handleSessionCommands({
-      req: {
-        token: 't',
-        session: 'default',
-        command: 'devices',
-        positionals: [],
-        flags,
-      },
-      sessionName: 'default',
-      logPath: path.join(os.tmpdir(), 'daemon.log'),
-      sessionStore,
-      invoke: noopInvoke,
-    });
+    await withTestDeviceInventory(
+      { local: async () => inventory },
+      async () =>
+        await handleSessionCommands({
+          req: {
+            token: 't',
+            session: 'default',
+            command: 'devices',
+            positionals: [],
+            flags,
+          },
+          sessionName: 'default',
+          logPath: path.join(os.tmpdir(), 'daemon.log'),
+          sessionStore,
+          invoke: noopInvoke,
+        }),
+    );
 
   const macosResponse = await runDevices({ platform: 'macos' });
   expect(macosResponse?.ok).toBeTruthy();
@@ -86,8 +88,7 @@ test('devices filters Apple-family platform selectors', async () => {
 
 test('devices surfaces appleOs additively while keeping platform the public leaf', async () => {
   const sessionStore = makeSessionStore();
-  mockListAndroidDevices.mockResolvedValue([]);
-  mockListAppleDevices.mockResolvedValue([
+  const inventory = [
     {
       platform: 'apple' as const,
       id: 'sim-1',
@@ -98,21 +99,25 @@ test('devices surfaces appleOs additively while keeping platform the public leaf
       booted: true,
       simulatorSetPath: '/tmp/agent-device-sim-set',
     },
-  ]);
+  ];
 
-  const response = await handleSessionCommands({
-    req: {
-      token: 't',
-      session: 'default',
-      command: 'devices',
-      positionals: [],
-      flags: { platform: 'ios' },
-    },
-    sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
-    sessionStore,
-    invoke: noopInvoke,
-  });
+  const response = await withTestDeviceInventory(
+    { local: async () => inventory },
+    async () =>
+      await handleSessionCommands({
+        req: {
+          token: 't',
+          session: 'default',
+          command: 'devices',
+          positionals: [],
+          flags: { platform: 'ios' },
+        },
+        sessionName: 'default',
+        logPath: path.join(os.tmpdir(), 'daemon.log'),
+        sessionStore,
+        invoke: noopInvoke,
+      }),
+  );
 
   expect(response?.ok).toBeTruthy();
   if (response?.ok) {

@@ -4,6 +4,8 @@ import type { VegaToolProvider } from '../../../platforms/vega/tool-provider.ts'
 import { withVegaToolProvider } from '../../../platforms/vega/tool-provider.ts';
 import { appendToolchainChecks } from '../session-doctor-toolchain.ts';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
+import { withTestDeviceInventory } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 
 vi.mock('../../../utils/exec.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/exec.ts')>();
@@ -35,12 +37,16 @@ test('HarmonyOS doctor reports the HDC version', async () => {
 });
 
 test('Vega doctor reports CLI version and connected-device readiness through semantic provider', async () => {
-  const provider = makeVegaProvider('VirtualDevice : tv - aarch64 - VegaOS\n');
-  const checks = await withVegaToolProvider(provider, async () => {
-    const result: DoctorCheck[] = [];
-    await appendToolchainChecks(result, 'vega');
-    return result;
-  });
+  const provider = makeVegaProvider();
+  const checks = await withTestDeviceInventory(
+    { local: async () => [VEGA_VVD] },
+    async () =>
+      await withVegaToolProvider(provider, async () => {
+        const result: DoctorCheck[] = [];
+        await appendToolchainChecks(result, 'vega');
+        return result;
+      }),
+  );
 
   assert.deepEqual(checks, [
     {
@@ -50,29 +56,99 @@ test('Vega doctor reports CLI version and connected-device readiness through sem
       hint: undefined,
       evidence: {
         vegaVersion: 'Vega CLI 1.3.2',
-        deviceList: 'VirtualDevice : tv - aarch64 - VegaOS',
+        deviceList: 'VirtualDevice',
       },
     },
   ]);
 });
 
 test('Vega doctor does not report an unvalidated physical TV as supported readiness', async () => {
-  const provider = makeVegaProvider('G071R20720350DT6 : A1ZZ32RVTQ796E\n');
+  const provider = makeVegaProvider();
+  const checks = await withTestDeviceInventory(
+    {
+      local: async () => [
+        {
+          ...VEGA_VVD,
+          id: 'G071R20720350DT6',
+          name: 'Physical Vega TV',
+          kind: 'device',
+        },
+      ],
+    },
+    async () =>
+      await withVegaToolProvider(provider, async () => {
+        const result: DoctorCheck[] = [];
+        await appendToolchainChecks(result, 'vega');
+        return result;
+      }),
+  );
+
+  assert.equal(checks[0]?.summary, 'Vega toolchain: Vega CLI 1.3.2; no running VVD.');
+  assert.equal(checks[0]?.hint, 'Start the Vega Virtual Device and retry doctor.');
+});
+
+test('Vega doctor preserves the missing-tool diagnostic without probing inventory', async () => {
+  const provider: VegaToolProvider = {
+    ...makeVegaProvider(),
+    isAvailable: async () => false,
+  };
   const checks = await withVegaToolProvider(provider, async () => {
     const result: DoctorCheck[] = [];
     await appendToolchainChecks(result, 'vega');
     return result;
   });
 
-  assert.equal(checks[0]?.summary, 'Vega toolchain: Vega CLI 1.3.2; no running VVD.');
-  assert.equal(checks[0]?.hint, 'Start the Vega Virtual Device and retry doctor.');
+  assert.deepEqual(checks, [
+    {
+      id: 'toolchain',
+      status: 'info',
+      summary: 'Vega toolchain: Vega CLI not found.',
+      hint: 'Install Vega Developer Tools or ensure ~/vega/bin/vega is executable.',
+      command: 'vega --version',
+    },
+  ]);
 });
 
-function makeVegaProvider(deviceList: string): VegaToolProvider {
+test('Vega doctor keeps version failures diagnostic when neutral inventory fails', async () => {
+  const provider: VegaToolProvider = {
+    ...makeVegaProvider(),
+    version: async () => ({ exitCode: 1, stdout: '', stderr: 'version failed' }),
+  };
+  const checks = await withTestDeviceInventory(
+    { local: async () => Promise.reject(new Error('inventory failed')) },
+    async () =>
+      await withVegaToolProvider(provider, async () => {
+        const result: DoctorCheck[] = [];
+        await appendToolchainChecks(result, 'vega');
+        return result;
+      }),
+  );
+
+  assert.deepEqual(checks, [
+    {
+      id: 'toolchain',
+      status: 'info',
+      summary: 'Vega toolchain: CLI found but version check failed.',
+      hint: 'Start the Vega Virtual Device and retry doctor.',
+      evidence: { vegaVersion: null, deviceList: null },
+    },
+  ]);
+});
+
+const VEGA_VVD: DeviceInfo = {
+  platform: 'vega',
+  id: 'VirtualDevice',
+  name: 'Vega Virtual Device (VirtualDevice)',
+  kind: 'emulator',
+  target: 'tv',
+  booted: true,
+};
+
+function makeVegaProvider(): VegaToolProvider {
   return {
     isAvailable: async () => true,
     version: async () => ({ exitCode: 0, stdout: 'Vega CLI 1.3.2\n', stderr: '' }),
-    listDevices: async () => ({ exitCode: 0, stdout: deviceList, stderr: '' }),
+    listDevices: unexpected,
     checkConnected: unexpected,
     launchApp: unexpected,
     terminateApp: unexpected,

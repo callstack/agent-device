@@ -10,7 +10,7 @@ export {
   LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS,
   WEB_DESKTOP_DEVICE,
   countDeviceInventoryByGroup,
-  shouldUseHostMacFastPath,
+  filterDeviceInventoryProjection,
 } from '../device-inventory.ts';
 export type {
   DeviceInventoryGroup,
@@ -22,6 +22,8 @@ export type {
   DeviceLease,
   LeaseLifecycleContext,
   LeaseLifecycleProvider,
+  ProviderDeviceInventoryOutcome,
+  ProviderDeviceInventorySource,
 } from '../device-provider.ts';
 export {
   DEVICE_ROTATIONS,

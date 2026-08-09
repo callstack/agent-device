@@ -422,6 +422,7 @@ test('the real tree parses, declares, and passes R11', () => {
   assert.deepEqual(
     listSourceFiles()
       .filter((file) => !file.startsWith('packages/selectors/'))
+      .filter((file) => fs.existsSync(path.join(repoRoot, file)))
       .filter((file) =>
         fs.readFileSync(path.join(repoRoot, file), 'utf8').includes('@agent-device/selectors/ast'),
       ),

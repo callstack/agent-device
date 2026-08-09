@@ -4,6 +4,7 @@ import type { DaemonCommandDescriptor } from '../../daemon/daemon-command-regist
 // descriptors read `command`, `positionals` and `flags` and never touch `internal`.
 import type { DispatchedCommand } from '@agent-device/contracts/command';
 import type { PostActionObservationSupport } from './post-action-observation.ts';
+import type { CommandPlatformExecution } from '@agent-device/contracts/platform';
 
 export type ResponseDataFieldTransform = {
   defaultValue?: unknown;
@@ -162,6 +163,8 @@ type CommandDescriptorBase = {
   responseDataTransform?: CommandResponseDataTransform;
   catalog: CommandCatalogFacet;
   dispatch?: CommandDispatchFacet;
+  /** Internal-only ADR 0019 cutover discriminant; public projections must ignore it. */
+  platformExecution: CommandPlatformExecution;
   /** ADR 0012 / #1349: present iff this command's recorded steps can carry `target-v1` evidence. */
   targetIdentityVerification?: TargetIdentityVerification;
   /**

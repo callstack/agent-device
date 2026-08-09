@@ -1,8 +1,5 @@
 import type { CliFlags } from '@agent-device/contracts/command';
-import type {
-  DeviceInventoryProvider,
-  DeviceInventoryRequest,
-} from '@agent-device/contracts/device';
+import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import {
   isApplePlatform,
   isIosFamily,
@@ -21,7 +18,12 @@ import {
 } from '../utils/device-isolation.ts';
 import { withDiagnosticTimer } from '../utils/diagnostics.ts';
 import type { DeviceCandidateDetails } from '../utils/error-candidates.ts';
-import { listLocalDeviceInventory } from './platform-inventory.ts';
+import {
+  listLocalDeviceInventory,
+  readDeviceInventory,
+  shouldPropagateDeviceInventoryProbeError,
+} from './device-inventory-context.ts';
+export { listDeviceInventory } from './device-inventory-context.ts';
 export type ResolveDeviceFlags = Pick<
   CliFlags,
   | 'platform'
@@ -39,7 +41,6 @@ export type ResolveDeviceFlags = Pick<
 };
 
 const resolveTargetDeviceCacheScope = new AsyncLocalStorage<Map<string, DeviceInfo>>();
-const deviceInventoryProviderScope = new AsyncLocalStorage<DeviceInventoryProvider>();
 
 export type { DeviceInventoryRequest };
 
@@ -81,11 +82,17 @@ async function resolveAppleDevice(
     context.allowLocalSimulatorFallback !== false &&
     shouldUseAppleSimulatorFallback(selector, selected)
   ) {
-    const { findBootableIosSimulator } = await import('../platforms/apple/core/devices.ts');
-    const simulator = await findBootableIosSimulator({
-      simulatorSetPath: context.simulatorSetPath,
-      target: selector.target,
-    });
+    let simulator: DeviceInfo | undefined;
+    try {
+      [simulator] = await listLocalDeviceInventory({
+        platform: selector.platform ?? 'ios',
+        target: selector.target,
+        iosSimulatorSetPath: context.simulatorSetPath,
+        kind: 'simulator',
+      });
+    } catch (error) {
+      if (shouldPropagateDeviceInventoryProbeError(error)) throw error;
+    }
     if (simulator) return simulator;
   }
 
@@ -217,31 +224,16 @@ export async function resolveTargetDevice(
         diagnosticData.cacheHit = true;
         return cached;
       }
-      const injectedDevices = await readInjectedDeviceInventory(inventoryRequest);
-      if (injectedDevices) {
-        if (shouldUseAppleResolution(selector)) {
-          return cacheResolvedTargetDevice(
-            cacheKey,
-            await resolveAppleDevice(injectedDevices, selector as AppleDeviceSelector, {
-              simulatorSetPath: iosSimulatorSetPath,
-              allowLocalSimulatorFallback: inventoryRequest.leaseProvider === undefined,
-              appleSimulatorAppTarget: options.appleSimulatorAppTarget,
-            }),
-          );
-        }
-        return cacheResolvedTargetDevice(
-          cacheKey,
-          await resolveDevice(injectedDevices, selector, selectionContext),
-        );
-      }
-
-      const devices = await listLocalDeviceInventory(inventoryRequest);
+      const inventory = await readDeviceInventory(inventoryRequest);
+      const devices = [...inventory.devices];
 
       if (shouldUseAppleResolution(selector)) {
         return cacheResolvedTargetDevice(
           cacheKey,
           await resolveAppleDevice(devices, selector as AppleDeviceSelector, {
             simulatorSetPath: iosSimulatorSetPath,
+            allowLocalSimulatorFallback:
+              inventory.source === 'local' || inventoryRequest.leaseProvider === undefined,
             appleSimulatorAppTarget: options.appleSimulatorAppTarget,
           }),
         );
@@ -292,38 +284,6 @@ export function buildDeviceInventoryRequestFromFlags(
 export async function withResolveTargetDeviceCacheScope<T>(task: () => Promise<T>): Promise<T> {
   if (resolveTargetDeviceCacheScope.getStore()) return await task();
   return await resolveTargetDeviceCacheScope.run(new Map(), task);
-}
-
-export async function withDeviceInventoryProvider<T>(
-  provider: DeviceInventoryProvider | undefined,
-  task: () => Promise<T>,
-): Promise<T> {
-  if (!provider) return await task();
-  return await deviceInventoryProviderScope.run(provider, task);
-}
-
-export async function withTargetDeviceResolutionScope<T>(
-  provider: DeviceInventoryProvider | undefined,
-  task: () => Promise<T>,
-): Promise<T> {
-  return await withDeviceInventoryProvider(
-    provider,
-    async () => await withResolveTargetDeviceCacheScope(task),
-  );
-}
-
-export async function listDeviceInventory(request: DeviceInventoryRequest): Promise<DeviceInfo[]> {
-  return (await readInjectedDeviceInventory(request)) ?? (await listLocalDeviceInventory(request));
-}
-
-async function readInjectedDeviceInventory(
-  request: DeviceInventoryRequest,
-): Promise<DeviceInfo[] | null> {
-  const provider = deviceInventoryProviderScope.getStore();
-  if (!provider) return null;
-  const devices = await provider(request);
-  if (devices === undefined || devices === null) return null;
-  return devices.map((device) => ({ ...device }));
 }
 
 function isAppleResolutionSelector(selector: {

@@ -25,7 +25,7 @@ import type { SessionStore } from '../../../../src/daemon/session-store.ts';
 import { resolveRequestExecutionLockKeys } from '../../../../src/daemon/request-binding.ts';
 import { shouldLockSessionExecution } from '../../../../src/daemon/daemon-command-registry.ts';
 import { PUBLIC_COMMANDS } from '../../../../src/command-catalog.ts';
-import { withDeviceInventoryProvider } from '../../../../src/core/dispatch-resolve.ts';
+import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '../../../../src/__tests__/test-utils/device-inventory-gateways.ts';
 
 import type { LockKey } from './deterministic-scheduler.ts';
 

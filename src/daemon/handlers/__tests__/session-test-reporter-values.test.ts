@@ -31,7 +31,7 @@ import { handleSessionCommands } from '../session.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../types.ts';
 import { withRequestProgressSink } from '../../../request/progress.ts';
-import { withDeviceInventoryProvider } from '../../../core/dispatch-resolve.ts';
+import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   getReplayTestReporterExitCode,

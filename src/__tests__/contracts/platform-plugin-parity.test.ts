@@ -99,7 +99,6 @@ test('each registered platform resolves to a plugin that owns it', () => {
       `${platform} plugin lists ${platform} in its platforms`,
     );
     assert.equal(typeof plugin.createInteractor, 'function');
-    assert.equal(typeof plugin.discoverDevices, 'function');
   }
 });
 

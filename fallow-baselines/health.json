@@ -374,11 +374,6 @@
         "count": 1
       }
     },
-    "src/platforms/apple/core/devices.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
     "src/platforms/apple/core/perf.ts": {
       "complexity_high": {
         "count": 1

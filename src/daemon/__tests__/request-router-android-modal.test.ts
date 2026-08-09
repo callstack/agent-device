@@ -1,3 +1,4 @@
+import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { test, expect, vi } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
@@ -121,6 +122,7 @@ test('generic Android gesture commands dismiss blocking system dialogs during re
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -159,6 +161,7 @@ test('generic Android gesture commands continue when recording dialog inspection
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -202,6 +205,7 @@ test('generic Android gesture commands skip local dialog recovery for provider d
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     providerDeviceRuntimeScope: providers.providerDeviceRuntimeScope,
     trackDownloadableArtifact: () => 'artifact-id',
   });

@@ -1,64 +1,26 @@
 import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 
-const {
-  mockFindBootableIosSimulator,
-  mockFindIosSimulatorInstalledApp,
-  mockListAppleDevices,
-  mockListAndroidDevices,
-} = vi.hoisted(() => ({
-  mockFindBootableIosSimulator: vi.fn(),
+const { mockFindIosSimulatorInstalledApp, mockListAppleDevices } = vi.hoisted(() => ({
   mockFindIosSimulatorInstalledApp: vi.fn(),
   mockListAppleDevices: vi.fn(),
-  mockListAndroidDevices: vi.fn(),
 }));
-
-// Keep these as full mocks: the real device listers invoke host subprocesses,
-// which would turn this resolver unit suite into environment-dependent integration coverage.
-vi.mock('../../platforms/apple/core/devices.ts', () => {
-  return {
-    findBootableIosSimulator: mockFindBootableIosSimulator,
-    listAppleDevices: mockListAppleDevices,
-  };
-});
-
-vi.mock('../../platforms/android/devices.ts', () => {
-  return {
-    listAndroidDevices: mockListAndroidDevices,
-  };
-});
 
 vi.mock('../../platforms/apple/core/apps.ts', () => {
   return {
     findIosSimulatorInstalledApp: mockFindIosSimulatorInstalledApp,
   };
 });
-vi.mock('../../platforms/apple/os/macos/devices.ts', () => ({
-  listMacosDevices: vi.fn(async () => [
-    {
-      platform: 'apple',
-      id: 'host-macos-local',
-      name: 'Test Mac',
-      kind: 'device',
-      target: 'desktop',
-      appleOs: 'macos',
-      booted: true,
-    },
-  ]),
-}));
-vi.mock('../../platforms/vega/devices.ts', () => ({
-  listVegaDevices: vi.fn(async () => []),
-}));
-vi.mock('../../platforms/linux/devices.ts', () => ({
-  listLinuxDevices: vi.fn(async () => []),
-}));
-
 import {
-  resolveTargetDevice,
-  withDeviceInventoryProvider,
+  resolveTargetDevice as resolveTargetDeviceInContext,
   withResolveTargetDeviceCacheScope,
 } from '../dispatch-resolve.ts';
+import {
+  withTestDeviceInventory,
+  withTestDeviceInventoryProvider as withDeviceInventoryProvider,
+} from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
 
 const physical: DeviceInfo = {
@@ -115,44 +77,76 @@ const androidEmulator: DeviceInfo = {
   booted: true,
 };
 
+const macDesktop: DeviceInfo = {
+  platform: 'apple',
+  id: 'host-macos-local',
+  name: 'Test Mac',
+  kind: 'device',
+  target: 'desktop',
+  appleOs: 'macos',
+  booted: true,
+};
+
+async function resolveTargetDevice(
+  ...args: Parameters<typeof resolveTargetDeviceInContext>
+): ReturnType<typeof resolveTargetDeviceInContext> {
+  return await withTestDeviceInventory(
+    {
+      local: async (request) =>
+        request.platform === 'macos' ||
+        (request.platform === 'apple' && request.target === 'desktop')
+          ? [macDesktop]
+          : await mockListAppleDevices(request),
+    },
+    async () => await resolveTargetDeviceInContext(...args),
+  );
+}
+
 beforeEach(() => {
-  mockFindBootableIosSimulator.mockReset();
-  mockFindBootableIosSimulator.mockResolvedValue(null);
   mockFindIosSimulatorInstalledApp.mockReset();
   mockFindIosSimulatorInstalledApp.mockResolvedValue(undefined);
   mockListAppleDevices.mockReset();
-  mockListAndroidDevices.mockReset();
 });
 
 test('resolveTargetDevice narrows local Android discovery to an explicit serial', async () => {
-  mockListAndroidDevices.mockResolvedValue([androidEmulator]);
+  let requestedInventory: DeviceInventoryRequest | undefined;
 
-  const result = await resolveTargetDevice({
-    platform: 'android',
-    serial: androidEmulator.id,
-  });
+  const result = await withDeviceInventoryProvider(
+    async (request) => {
+      requestedInventory = request;
+      return [androidEmulator];
+    },
+    async () =>
+      await resolveTargetDeviceInContext({
+        platform: 'android',
+        serial: androidEmulator.id,
+      }),
+  );
 
   assert.equal(result.id, androidEmulator.id);
-  assert.deepEqual(Array.from(mockListAndroidDevices.mock.calls[0]?.[0]?.serialAllowlist ?? []), [
-    androidEmulator.id,
-  ]);
+  assert.equal(requestedInventory!.serial, androidEmulator.id);
+  assert.equal(requestedInventory!.androidSerialAllowlist, undefined);
 });
 
 test('resolveTargetDevice does not discover an explicit Android serial outside its allowlist', async () => {
-  mockListAndroidDevices.mockResolvedValue([]);
+  let requestedInventory: DeviceInventoryRequest | undefined;
 
   await expectDeviceNotFound(() =>
-    resolveTargetDevice({
-      platform: 'android',
-      serial: androidEmulator.id,
-      androidDeviceAllowlist: 'emulator-5556',
-    }),
+    withDeviceInventoryProvider(
+      async (request) => {
+        requestedInventory = request;
+        return [];
+      },
+      async () =>
+        await resolveTargetDeviceInContext({
+          platform: 'android',
+          serial: androidEmulator.id,
+          androidDeviceAllowlist: 'emulator-5556',
+        }),
+    ),
   );
 
-  assert.deepEqual(
-    Array.from(mockListAndroidDevices.mock.calls[0]?.[0]?.serialAllowlist ?? []),
-    [],
-  );
+  assert.deepEqual(requestedInventory!.androidSerialAllowlist, ['emulator-5556']);
 });
 
 test('resolveTargetDevice reuses request-scoped device resolution cache for identical selectors', async () => {
@@ -206,7 +200,8 @@ test('resolveTargetDevice leaves platform-less static app selection to normal cr
       assert.equal(request.platform, undefined);
       return [androidEmulator, bootedSimulator, secondBootedSimulator];
     },
-    async () => await resolveTargetDevice({}, { appleSimulatorAppTarget: 'com.example.demo' }),
+    async () =>
+      await resolveTargetDeviceInContext({}, { appleSimulatorAppTarget: 'com.example.demo' }),
   );
 
   assert.equal(result.id, androidEmulator.id);
@@ -313,7 +308,7 @@ test('resolveTargetDevice uses injected device inventory without local discovery
       assert.equal(request.deviceName, 'Remote iPhone');
       return [{ ...bootedSimulator, id: 'remote-ios-1', name: 'Remote iPhone' }];
     },
-    async () => await resolveTargetDevice({ platform: 'ios', device: 'Remote iPhone' }),
+    async () => await resolveTargetDeviceInContext({ platform: 'ios', device: 'Remote iPhone' }),
   );
 
   assert.equal(result.id, 'remote-ios-1');
@@ -323,7 +318,7 @@ test('resolveTargetDevice uses injected device inventory without local discovery
 test('resolveTargetDevice preserves physical-device backend evidence from injected inventory', async () => {
   const result = await withDeviceInventoryProvider(
     async () => [{ ...physical, iosPhysicalDeviceBackend: 'xctest' }],
-    async () => await resolveTargetDevice({ platform: 'ios', udid: physical.id }),
+    async () => await resolveTargetDeviceInContext({ platform: 'ios', udid: physical.id }),
   );
 
   assert.equal(result.iosPhysicalDeviceBackend, 'xctest');
@@ -331,14 +326,17 @@ test('resolveTargetDevice preserves physical-device backend evidence from inject
 });
 
 test('resolveTargetDevice preserves Apple simulator preference with injected inventory', async () => {
-  mockFindBootableIosSimulator.mockResolvedValue(simulator);
-
-  const result = await withDeviceInventoryProvider(
-    async (request) => {
-      assert.equal(request.platform, 'ios');
-      return [physical];
+  const result = await withTestDeviceInventory(
+    {
+      provider: {
+        discover: async (request) => {
+          assert.equal(request.platform, 'ios');
+          return { kind: 'inventory', devices: [physical] };
+        },
+      },
+      local: async () => [simulator],
     },
-    async () => await resolveTargetDevice({ platform: 'ios' }),
+    async () => await resolveTargetDeviceInContext({ platform: 'ios' }),
   );
 
   assert.equal(result.id, 'sim-1');
@@ -346,11 +344,65 @@ test('resolveTargetDevice preserves Apple simulator preference with injected inv
   assert.equal(mockListAppleDevices.mock.calls.length, 0);
 });
 
+test('resolveTargetDevice propagates cancellation from the local Apple simulator probe', async () => {
+  const canceled = new AppError('COMMAND_FAILED', 'request canceled', {
+    reason: 'request_canceled',
+  });
+
+  await assert.rejects(
+    withTestDeviceInventory(
+      {
+        provider: { discover: async () => ({ kind: 'inventory', devices: [physical] }) },
+        local: async () => {
+          throw canceled;
+        },
+      },
+      async () => await resolveTargetDeviceInContext({ platform: 'ios' }),
+    ),
+    (error) => error === canceled,
+  );
+});
+
+test('resolveTargetDevice propagates missing inventory wiring from the local Apple simulator probe', async () => {
+  const unavailable = new AppError(
+    'COMMAND_FAILED',
+    'Device inventory gateway is unavailable outside request execution',
+    { reason: 'device_inventory_context_unavailable' },
+  );
+
+  await assert.rejects(
+    withTestDeviceInventory(
+      {
+        provider: { discover: async () => ({ kind: 'inventory', devices: [physical] }) },
+        local: async () => {
+          throw unavailable;
+        },
+      },
+      async () => await resolveTargetDeviceInContext({ platform: 'ios' }),
+    ),
+    (error) => error === unavailable,
+  );
+});
+
+test('resolveTargetDevice keeps genuine local Apple simulator probe failures best-effort', async () => {
+  const result = await withTestDeviceInventory(
+    {
+      provider: { discover: async () => ({ kind: 'inventory', devices: [physical] }) },
+      local: async () => {
+        throw new Error('simctl timed out');
+      },
+    },
+    async () => await resolveTargetDeviceInContext({ platform: 'ios' }),
+  );
+
+  assert.equal(result.id, physical.id);
+});
+
 test('resolveTargetDevice treats empty injected inventory as authoritative', async () => {
   await expectDeviceNotFound(() =>
     withDeviceInventoryProvider(
       async () => [],
-      async () => await resolveTargetDevice({ platform: 'ios' }),
+      async () => await resolveTargetDeviceInContext({ platform: 'ios' }),
     ),
   );
 
@@ -364,12 +416,15 @@ test('resolveTargetDevice resolves web through generic inventory without Apple f
       assert.equal(request.deviceName, 'Agent Browser Chrome');
       return [webDesktop];
     },
-    async () => await resolveTargetDevice({ platform: 'web', device: 'Agent Browser Chrome' }),
+    async () =>
+      await resolveTargetDeviceInContext({
+        platform: 'web',
+        device: 'Agent Browser Chrome',
+      }),
   );
 
   assert.equal(result.platform, 'web');
   assert.equal(result.id, 'agent-browser-chrome');
-  assert.equal(mockFindBootableIosSimulator.mock.calls.length, 0);
   assert.equal(mockListAppleDevices.mock.calls.length, 0);
 });
 

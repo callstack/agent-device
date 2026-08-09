@@ -1,3 +1,4 @@
+import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 /**
  * #1478 (P4-pre): raw-wire counterfactuals for the `flags.saveScript` seam.
  *
@@ -65,6 +66,7 @@ function setup(): Harness {
     token: TOKEN,
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
   return { root, sessionStore, session, handleRequest };

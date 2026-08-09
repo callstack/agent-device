@@ -58,17 +58,13 @@ vi.mock('../../materialized-path-registry.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../materialized-path-registry.ts')>();
   return { ...actual, cleanupRetainedMaterializedPathsForSession: vi.fn(async () => {}) };
 });
-vi.mock('../../../platforms/android/devices.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../platforms/android/devices.ts')>();
+vi.mock('../../../platforms/android/emulator-lifecycle.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../platforms/android/emulator-lifecycle.ts')>();
   return {
     ...actual,
-    listAndroidDevices: vi.fn(async () => []),
     ensureAndroidEmulatorBooted: vi.fn(),
   };
-});
-vi.mock('../../../platforms/apple/core/devices.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../platforms/apple/core/devices.ts')>();
-  return { ...actual, listAppleDevices: vi.fn(async () => []) };
 });
 vi.mock('../../../platforms/apple/core/apps.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../platforms/apple/core/apps.ts')>();
@@ -117,11 +113,7 @@ import { settleIosSimulator } from '../session-device-utils.ts';
 import { resolveAndroidPackageForOpen } from '../session-open-target.ts';
 import { runCmd } from '../../../utils/exec.ts';
 import { shutdownSimulator } from '../../../platforms/apple/core/simulator.ts';
-import {
-  listAndroidDevices,
-  ensureAndroidEmulatorBooted,
-} from '../../../platforms/android/devices.ts';
-import { listAppleDevices } from '../../../platforms/apple/core/devices.ts';
+import { ensureAndroidEmulatorBooted } from '../../../platforms/android/emulator-lifecycle.ts';
 import {
   resolveIosApp,
   resolveIosSimulatorDeepLinkBundleId,
@@ -148,8 +140,6 @@ export const mockCleanupRetainedMaterializedPaths = vi.mocked(
 );
 export const mockRunCmd = vi.mocked(runCmd);
 export const mockShutdownSimulator = vi.mocked(shutdownSimulator);
-export const mockListAndroidDevices = vi.mocked(listAndroidDevices);
-export const mockListAppleDevices = vi.mocked(listAppleDevices);
 export const mockResolveIosApp = vi.mocked(resolveIosApp);
 export const mockResolveIosSimulatorDeepLinkBundleId = vi.mocked(
   resolveIosSimulatorDeepLinkBundleId,
@@ -199,10 +189,6 @@ beforeEach(() => {
   mockRunCmd.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
   mockShutdownSimulator.mockReset();
   mockShutdownSimulator.mockResolvedValue({ success: true, exitCode: 0, stdout: '', stderr: '' });
-  mockListAndroidDevices.mockReset();
-  mockListAndroidDevices.mockResolvedValue([]);
-  mockListAppleDevices.mockReset();
-  mockListAppleDevices.mockResolvedValue([]);
   mockResolveIosApp.mockReset();
   mockResolveIosApp.mockImplementation(async (device, app) => {
     const normalizedApp = app.toLowerCase();

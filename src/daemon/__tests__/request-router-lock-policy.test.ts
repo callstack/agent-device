@@ -1,3 +1,7 @@
+import {
+  createTestDeviceInventoryGateways,
+  createTestDeviceInventoryGatewaysFromProvider,
+} from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
@@ -103,6 +107,7 @@ test('direct daemon requests cannot bypass reject lock policy for existing sessi
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -138,7 +143,9 @@ test('fresh named sessions with matching explicit serial bind and serialize on t
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
-    deviceInventoryProvider: async () => [makeAndroidSession('inventory').device],
+    deviceInventoryGateways: createTestDeviceInventoryGatewaysFromProvider(async () => [
+      makeAndroidSession('inventory').device,
+    ]),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -213,7 +220,10 @@ test('fresh named sessions with the same name serialize first binding before rej
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
-    deviceInventoryProvider: async () => [firstDevice, secondDevice],
+    deviceInventoryGateways: createTestDeviceInventoryGatewaysFromProvider(async () => [
+      firstDevice,
+      secondDevice,
+    ]),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -282,7 +292,9 @@ test('fresh named sessions with only lock platform default serialize on the sele
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
-    deviceInventoryProvider: async () => [makeAndroidSession('inventory').device],
+    deviceInventoryGateways: createTestDeviceInventoryGatewaysFromProvider(async () => [
+      makeAndroidSession('inventory').device,
+    ]),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -387,7 +399,9 @@ test('fresh named sessions reject incompatible selector combinations before bind
       token: 'test-token',
       sessionStore,
       leaseRegistry: new LeaseRegistry(),
-      deviceInventoryProvider: async () => [makeIosSession('inventory').device],
+      deviceInventoryGateways: createTestDeviceInventoryGatewaysFromProvider(async () => [
+        makeIosSession('inventory').device,
+      ]),
       trackDownloadableArtifact: () => 'artifact-id',
     });
 
@@ -423,6 +437,7 @@ test('batch steps cannot bypass reject lock policy on nested direct requests', a
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -471,6 +486,7 @@ test('direct daemon requests apply strip lock policy for existing sessions befor
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -517,6 +533,7 @@ test('batch preserves tenant-scoped session names across nested requests', async
     token: 'test-token',
     sessionStore,
     leaseRegistry,
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 

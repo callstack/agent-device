@@ -1,0 +1,16 @@
+{
+  "name": "@agent-device/platform-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Web-family platform runtime metadata and implementations for agent-device.",
+  "dependencies": {
+    "@agent-device/contracts": "workspace:*"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  }
+}

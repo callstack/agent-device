@@ -204,7 +204,7 @@ async function createCloudIosWorld() {
   const providers = createProviderDeviceRuntimeRequestProviders(runtimes);
   const daemon = await createProviderScenarioHarness({
     ...providers,
-    deviceInventoryProvider: providers.deviceInventoryProvider!,
+    deviceInventorySource: providers.deviceInventorySource!,
   });
   return {
     daemon,

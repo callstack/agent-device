@@ -4,7 +4,6 @@ import type { RecordingBackendTag } from './recording.ts';
 import type { PerfMetricsSamplerTag } from './perf.ts';
 import type { PlatformGatedProviderResolverKey } from './platform-providers.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
-import type { DeviceInventoryRequest } from './device-inventory.ts';
 
 type CapabilityBucket = 'apple' | 'android' | 'harmonyos' | 'vega' | 'linux' | 'web';
 
@@ -19,7 +18,7 @@ type CapabilityBucket = 'apple' | 'android' | 'harmonyos' | 'vega' | 'linux' | '
  * synthesis, adb/idb), which stays exactly where it is.
  *
  * Imports are TYPE-ONLY; the concrete leaf code is reached through LAZY dynamic
- * `import()` inside `createInteractor` / `discoverDevices`, preserving the
+ * `import()` inside `createInteractor`, preserving the
  * CLI cold-start laziness that today's `getInteractor` switch relies on.
  *
  * Daemon-owned columns (step b.3, issue #974): each is declared ONLY once it is
@@ -52,8 +51,6 @@ export type PlatformPlugin = {
   readonly familySelector?: PlatformSelector;
   /** Lazily builds the {@link Interactor} for `device` — wraps today's `getInteractor` switch arm. */
   createInteractor(device: DeviceInfo, runner: RunnerContext): Promise<Interactor>;
-  /** Lazily discovers devices for this family — wraps today's inventory if-chain branch. */
-  discoverDevices(request: DeviceInventoryRequest): Promise<DeviceInfo[]>;
   /**
    * The capability facet. `bucket` is the {@link CapabilityBucket} this family
    * reads from a `CommandCapability`.

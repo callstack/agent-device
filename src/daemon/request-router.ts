@@ -1,8 +1,6 @@
-import { withTargetDeviceResolutionScope } from '../core/dispatch-resolve.ts';
-import type {
-  DeviceInventoryProvider,
-  LeaseLifecycleProvider,
-} from '@agent-device/contracts/device';
+import { withResolveTargetDeviceCacheScope } from '../core/dispatch-resolve.ts';
+import { withDeviceInventoryContext } from '../core/device-inventory-context.ts';
+import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
 import {
   AppError,
   normalizeError,
@@ -54,6 +52,8 @@ import { canRunReplayScopedAction } from './daemon-command-registry.ts';
 import { createAgentBrowserWebProvider } from '../platforms/web/agent-browser-provider.ts';
 import { openWebSessionNames } from './web-session-names.ts';
 import { inferFillText } from './action-utils.ts';
+import type { ComposedDeviceInventoryGateways } from '../platform-runtime-device-inventory.ts';
+import { createPlatformRequestScope } from './platform-request-scope.ts';
 
 // ---------------------------------------------------------------------------
 // Request handler API
@@ -73,7 +73,7 @@ export type RequestRouterDeps = {
   webProvider?: WebProviderResolver;
   appLogProvider?: AppLogProviderResolver;
   recordingProvider?: RecordingProviderResolver;
-  deviceInventoryProvider?: DeviceInventoryProvider;
+  deviceInventoryGateways: ComposedDeviceInventoryGateways;
   providerRuntimeIds?: readonly string[];
   providerRuntimeRequiredIds?: readonly string[];
   leaseLifecycleProvider?: LeaseLifecycleProvider;
@@ -100,7 +100,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     webProvider,
     appLogProvider,
     recordingProvider,
-    deviceInventoryProvider,
+    deviceInventoryGateways,
     providerRuntimeIds,
     providerRuntimeRequiredIds,
     leaseLifecycleProvider,
@@ -158,14 +158,21 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
 
     let scope: RequestExecutionScope | undefined;
     try {
-      return await withTargetDeviceResolutionScope(deviceInventoryProvider, async () => {
-        scope = await createRequestExecutionScope({
-          req,
-          sessionStore,
-          leaseRegistry,
-        });
-        return await executeRequestScope(scope);
-      });
+      return await withDeviceInventoryContext(
+        {
+          ...deviceInventoryGateways,
+          requestScope: createPlatformRequestScope(req),
+        },
+        async () =>
+          await withResolveTargetDeviceCacheScope(async () => {
+            scope = await createRequestExecutionScope({
+              req,
+              sessionStore,
+              leaseRegistry,
+            });
+            return await executeRequestScope(scope);
+          }),
+      );
     } catch (error) {
       const response = finalizeThrownRequestError(error);
       recordThrownRequestEvent(sessionStore, scope, response);

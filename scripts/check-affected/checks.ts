@@ -89,6 +89,13 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
     localRunnable: true,
   },
   {
+    id: 'integration-node',
+    label: 'Node integration smoke',
+    kind: { type: 'script', script: 'test:integration:node' },
+    ciJobs: ['Integration Tests'],
+    localRunnable: true,
+  },
+  {
     id: 'vitest-related',
     label: 'Tests related by Vitest module graph',
     kind: { type: 'vitest-related' },
@@ -114,13 +121,6 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
     label: 'Provider-backed integration suite',
     kind: { type: 'script', script: 'test:integration:provider' },
     ciJobs: ['Integration Tests', 'Coverage'],
-    localRunnable: true,
-  },
-  {
-    id: 'integration-node',
-    label: 'Node integration smoke',
-    kind: { type: 'script', script: 'test:integration:node' },
-    ciJobs: ['Integration Tests'],
     localRunnable: true,
   },
   {

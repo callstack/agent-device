@@ -51,6 +51,24 @@ importers:
       '@agent-device/maestro':
         specifier: workspace:*
         version: link:packages/maestro
+      '@agent-device/platform-android':
+        specifier: workspace:*
+        version: link:packages/platform-android
+      '@agent-device/platform-apple':
+        specifier: workspace:*
+        version: link:packages/platform-apple
+      '@agent-device/platform-harmonyos':
+        specifier: workspace:*
+        version: link:packages/platform-harmonyos
+      '@agent-device/platform-linux':
+        specifier: workspace:*
+        version: link:packages/platform-linux
+      '@agent-device/platform-vega':
+        specifier: workspace:*
+        version: link:packages/platform-vega
+      '@agent-device/platform-web':
+        specifier: workspace:*
+        version: link:packages/platform-web
       '@agent-device/provider-limrun':
         specifier: workspace:*
         version: link:packages/provider-limrun
@@ -170,6 +188,57 @@ importers:
       yaml:
         specifier: ^2.9.0
         version: 2.9.0
+
+  packages/platform-android:
+    dependencies:
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+
+  packages/platform-apple:
+    dependencies:
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+
+  packages/platform-harmonyos:
+    dependencies:
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+
+  packages/platform-linux:
+    dependencies:
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+
+  packages/platform-vega:
+    dependencies:
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+
+  packages/platform-web:
+    dependencies:
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/provider-limrun:
     dependencies:

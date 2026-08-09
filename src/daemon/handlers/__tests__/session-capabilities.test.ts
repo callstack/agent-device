@@ -3,7 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { PUBLIC_COMMANDS } from '../../../command-catalog.ts';
 import { makeAndroidSession, makeSessionStore } from '../../../__tests__/test-utils/index.ts';
-import { withTargetDeviceResolutionScope } from '../../../core/dispatch-resolve.ts';
+import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { handleSessionCommands } from '../session.ts';
 

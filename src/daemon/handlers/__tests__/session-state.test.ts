@@ -2,6 +2,7 @@ import { test, expect } from 'vitest';
 
 import { handleSessionStateCommands } from '../session-state.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
+import { withTestDeviceInventory } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
 
 test('boot rejects --headless outside Android directly', async () => {
   const response = await handleSessionStateCommands({
@@ -48,18 +49,33 @@ test('appstate returns missing-session error for explicit session flag', async (
 });
 
 test('appstate rejects web before Android app-state backend dispatch', async () => {
-  const response = await handleSessionStateCommands({
-    req: {
-      token: 't',
-      session: 'default',
-      command: 'appstate',
-      positionals: [],
-      flags: { platform: 'web' },
+  const response = await withTestDeviceInventory(
+    {
+      local: async () => [
+        {
+          platform: 'web',
+          id: 'agent-browser-chrome',
+          name: 'Agent Browser Chrome',
+          kind: 'device',
+          target: 'desktop',
+          booted: true,
+        },
+      ],
     },
-    sessionName: 'default',
-    logPath: '/tmp/daemon.log',
-    sessionStore: makeSessionStore('agent-device-session-state-'),
-  });
+    async () =>
+      await handleSessionStateCommands({
+        req: {
+          token: 't',
+          session: 'default',
+          command: 'appstate',
+          positionals: [],
+          flags: { platform: 'web' },
+        },
+        sessionName: 'default',
+        logPath: '/tmp/daemon.log',
+        sessionStore: makeSessionStore('agent-device-session-state-'),
+      }),
+  );
 
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(false);

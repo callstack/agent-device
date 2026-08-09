@@ -8,7 +8,7 @@ import {
   makeIosSession,
   makeSession,
 } from '../../__tests__/test-utils/index.ts';
-import { withTargetDeviceResolutionScope } from '../../core/dispatch-resolve.ts';
+import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import {
   createLocalAppleToolProvider,
   runXcrun,

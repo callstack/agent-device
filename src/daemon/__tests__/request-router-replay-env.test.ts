@@ -1,3 +1,4 @@
+import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
@@ -16,6 +17,7 @@ function createHarness() {
       token: 'test-token',
       sessionStore: makeSessionStore('agent-device-router-replay-env-store-'),
       leaseRegistry: new LeaseRegistry(),
+      deviceInventoryGateways: createTestDeviceInventoryGateways(),
       trackDownloadableArtifact: () => 'artifact-id',
     }),
   };

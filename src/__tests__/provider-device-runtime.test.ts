@@ -31,14 +31,46 @@ test('provider device runtime registry delegates lifecycle, inventory, interacto
   assert.deepEqual(requestProviders.recoverableProviderIds, ['hit']);
   assert.deepEqual(world.recoveredLeases, [world.lease]);
   assert.deepEqual(
-    await requestProviders.deviceInventoryProvider?.({
-      platform: 'ios',
-      leaseId: world.lease.leaseId,
-      leaseProvider: 'hit',
-    }),
-    [world.device],
+    await requestProviders.deviceInventorySource?.discover(
+      {
+        platform: 'ios',
+        leaseId: world.lease.leaseId,
+        leaseProvider: 'hit',
+      },
+      new AbortController().signal,
+    ),
+    { kind: 'inventory', devices: [world.device] },
   );
   await assertProviderRuntimeDelegates(world);
+});
+
+test('provider device runtime registry rejects duplicate provider owners', () => {
+  const first = makeMissingRuntime();
+  const second = makeMissingRuntime();
+  assert.throws(
+    () => createProviderDeviceRuntimeRequestProviders([first, second]),
+    /Duplicate provider device runtime: miss/,
+  );
+});
+
+test('provider inventory composition forwards cancellation into the legacy provider callback', async () => {
+  let observedSignal: AbortSignal | undefined;
+  const runtime: ProviderDeviceRuntime = {
+    ...makeMissingRuntime(),
+    deviceInventoryProvider: async (_request, signal) => {
+      observedSignal = signal;
+      return await new Promise((_resolve, reject) => {
+        signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+      });
+    },
+  };
+  const source = createProviderDeviceRuntimeRequestProviders([runtime]).deviceInventorySource;
+  const controller = new AbortController();
+  const pending = source?.discover({ leaseProvider: 'miss' }, controller.signal);
+  controller.abort(new Error('provider request cancelled'));
+
+  await assert.rejects(() => pending!, /provider request cancelled/);
+  assert.equal(observedSignal, controller.signal);
 });
 
 function makeProviderRuntimeWorld() {

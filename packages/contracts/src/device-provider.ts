@@ -44,4 +44,17 @@ export type LeaseLifecycleProvider = {
 
 export type DeviceInventoryProvider = (
   request: DeviceInventoryRequest,
+  signal?: AbortSignal,
 ) => Promise<DeviceInfo[] | null | undefined>;
+
+export type ProviderDeviceInventoryOutcome =
+  | Readonly<{ kind: 'declined' }>
+  | Readonly<{ kind: 'inventory'; devices: readonly DeviceInfo[] }>;
+
+/** Closed provider-owned inventory source; an empty inventory is authoritative. */
+export type ProviderDeviceInventorySource = Readonly<{
+  discover(
+    request: Readonly<DeviceInventoryRequest>,
+    signal: AbortSignal,
+  ): Promise<ProviderDeviceInventoryOutcome>;
+}>;

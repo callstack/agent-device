@@ -15,6 +15,14 @@ import { LeaseRegistry } from '../../../src/daemon/lease-registry.ts';
 import { SessionStore } from '../../../src/daemon/session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../../../src/daemon/types.ts';
 import type { ExecResult } from '../../../src/utils/exec.ts';
+import type {
+  DeviceInventoryProvider,
+  ProviderDeviceInventorySource,
+} from '@agent-device/contracts/device';
+import {
+  createTestDeviceInventoryGateways,
+  createTestDeviceInventoryGatewaysFromProvider,
+} from '../../../src/__tests__/test-utils/device-inventory-gateways.ts';
 
 const PROVIDER_SCENARIO_TOKEN = 'provider-scenario-token';
 const PROVIDER_SCENARIO_TEMP_REMOVE_OPTIONS = {
@@ -49,19 +57,27 @@ export type ClosableProviderScenarioResource = {
 };
 
 export async function createProviderScenarioHarness(
-  deps: Partial<RequestRouterDeps> & Pick<RequestRouterDeps, 'deviceInventoryProvider'>,
+  deps: Partial<Omit<RequestRouterDeps, 'deviceInventoryGateways'>> &
+    (
+      | { deviceInventoryProvider: DeviceInventoryProvider; deviceInventorySource?: never }
+      | { deviceInventorySource: ProviderDeviceInventorySource; deviceInventoryProvider?: never }
+    ),
 ): Promise<ProviderScenarioHarness> {
   const sessionDir = fs.mkdtempSync(
     path.join(os.tmpdir(), 'agent-device-provider-scenario-session-'),
   );
   const sessionStore = new SessionStore(sessionDir);
+  const { deviceInventoryProvider, deviceInventorySource, ...routerDeps } = deps;
   const requestHandler = createRequestHandler({
     logPath: path.join(os.tmpdir(), 'agent-device-provider-scenario-daemon.log'),
     token: PROVIDER_SCENARIO_TOKEN,
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: deviceInventorySource
+      ? createTestDeviceInventoryGateways({ provider: deviceInventorySource })
+      : createTestDeviceInventoryGatewaysFromProvider(deviceInventoryProvider),
     trackDownloadableArtifact,
-    ...deps,
+    ...routerDeps,
   });
   const handleRequest: typeof requestHandler = async (request) => {
     const response = await requestHandler(request);

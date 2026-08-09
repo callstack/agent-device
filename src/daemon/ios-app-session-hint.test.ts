@@ -1,9 +1,13 @@
+import { AppError } from '@agent-device/kernel/errors';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 const listBootedIosSimulators = vi.hoisted(() => vi.fn());
 const detectSoleRunningIosSimulatorApp = vi.hoisted(() => vi.fn());
 
-vi.mock('../platforms/apple/core/devices.ts', () => ({ listBootedIosSimulators }));
+vi.mock('../core/device-inventory-context.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../core/device-inventory-context.ts')>()),
+  listLocalDeviceInventory: listBootedIosSimulators,
+}));
 vi.mock('../platforms/apple/core/app-resolution.ts', () => ({ detectSoleRunningIosSimulatorApp }));
 
 import { IOS_DEVICE, IOS_SIMULATOR } from '../__tests__/test-utils/index.ts';
@@ -86,6 +90,34 @@ test('a rejecting foreground-app probe is caught, not propagated', async () => {
   await expect(buildIosOpenCommandHint(IOS_SIMULATOR)).resolves.toBeUndefined();
 });
 
+test('request cancellation from the inventory probe is propagated', async () => {
+  const canceled = new AppError('COMMAND_FAILED', 'request canceled', {
+    reason: 'request_canceled',
+  });
+  listBootedIosSimulators.mockRejectedValue(canceled);
+
+  await expect(buildIosOpenCommandHint(IOS_SIMULATOR)).rejects.toBe(canceled);
+});
+
+test('abort control flow from the foreground-app probe is propagated', async () => {
+  const canceled = new DOMException('This operation was aborted', 'AbortError');
+  listBootedIosSimulators.mockResolvedValue([{ ...IOS_SIMULATOR, id: 'booted-1' }]);
+  detectSoleRunningIosSimulatorApp.mockRejectedValue(canceled);
+
+  await expect(buildIosOpenCommandHint(IOS_SIMULATOR)).rejects.toBe(canceled);
+});
+
+test('missing inventory-context wiring is propagated', async () => {
+  const unavailable = new AppError(
+    'COMMAND_FAILED',
+    'Device inventory gateway is unavailable outside request execution',
+    { reason: 'device_inventory_context_unavailable' },
+  );
+  listBootedIosSimulators.mockRejectedValue(unavailable);
+
+  await expect(buildIosOpenCommandHint(IOS_SIMULATOR)).rejects.toBe(unavailable);
+});
+
 test('more than one booted simulator stays ambiguous and returns no hint', async () => {
   listBootedIosSimulators.mockResolvedValue([
     { ...IOS_SIMULATOR, id: 'booted-1' },
@@ -132,7 +164,12 @@ test('resolveSoleForegroundIosApp resolves the device and app when unambiguous',
   const resolved = await resolveSoleForegroundIosApp({ simulatorSetPath: '/custom/set' });
 
   expect(resolved).toEqual({ device: soleBootedDevice, app });
-  expect(listBootedIosSimulators).toHaveBeenCalledWith({ simulatorSetPath: '/custom/set' });
+  expect(listBootedIosSimulators).toHaveBeenCalledWith({
+    platform: 'ios',
+    iosSimulatorSetPath: '/custom/set',
+    kind: 'simulator',
+    booted: true,
+  });
   expect(detectSoleRunningIosSimulatorApp).toHaveBeenCalledWith(soleBootedDevice);
 });
 

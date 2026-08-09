@@ -1,3 +1,4 @@
+import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 /**
  * `--actions` reads custom actions through the private-AX snapshot path, which
  * a raw capture does not use. Answering the pair with a capture that
@@ -18,6 +19,7 @@ function createHandler() {
     token: 'test-token',
     sessionStore: makeSessionStore('agent-device-router-custom-action-flags-'),
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 }

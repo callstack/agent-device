@@ -18,7 +18,7 @@ import path from 'node:path';
 import { createRequestExecutionScope } from '../../../../src/daemon/request-execution-scope.ts';
 import { LeaseRegistry } from '../../../../src/daemon/lease-registry.ts';
 import { SessionStore } from '../../../../src/daemon/session-store.ts';
-import { withDeviceInventoryProvider } from '../../../../src/core/dispatch-resolve.ts';
+import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '../../../../src/__tests__/test-utils/device-inventory-gateways.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { DaemonRequest } from '../../../../src/daemon/types.ts';
 

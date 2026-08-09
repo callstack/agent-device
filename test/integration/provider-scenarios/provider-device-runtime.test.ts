@@ -301,7 +301,7 @@ async function createFakeProviderWorld(platform: 'android' | 'ios' = 'android') 
   const providerRuntimeProviders = createProviderDeviceRuntimeRequestProviders([runtime]);
   const daemon = await createProviderScenarioHarness({
     ...providerRuntimeProviders,
-    deviceInventoryProvider: providerRuntimeProviders.deviceInventoryProvider!,
+    deviceInventorySource: providerRuntimeProviders.deviceInventorySource!,
   });
   return {
     daemon,

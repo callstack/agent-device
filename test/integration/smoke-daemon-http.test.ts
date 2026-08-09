@@ -6,6 +6,7 @@ import path from 'node:path';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '../../src/daemon/http-health.ts';
 import { skipWhenLoopbackUnavailable } from '../../src/__tests__/test-utils/loopback.ts';
 import { stopProcessForTakeover } from '../../src/daemon/daemon-process.ts';
+import { formatResultDebug } from './cli-json.ts';
 import { runCliJson } from './test-helpers.ts';
 
 type DaemonInfo = {
@@ -23,17 +24,25 @@ test('daemon HTTP transport starts from CLI and accepts a command RPC', async (t
 
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-http-smoke-'));
   try {
-    const cli = runCliJson(
-      ['session', 'list', '--json', '--daemon-transport', 'http', '--state-dir', stateDir],
-      {
+    const args = [
+      'session',
+      'list',
+      '--json',
+      '--daemon-transport',
+      'http',
+      '--state-dir',
+      stateDir,
+    ];
+    const run = () =>
+      runCliJson(args, {
         env: {
           ...process.env,
           AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
         },
-      },
-    );
+      });
+    const cli = run();
 
-    assert.equal(cli.status, 0, `${cli.stderr}\n${cli.stdout}`);
+    assert.equal(cli.status, 0, formatResultDebug('start HTTP daemon', ['session', 'list'], cli));
     assert.equal(cli.json?.success, true, JSON.stringify(cli.json));
 
     const info = readDaemonInfo(stateDir);

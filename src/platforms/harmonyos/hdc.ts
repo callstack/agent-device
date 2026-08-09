@@ -35,7 +35,7 @@ export async function ensureHdcAvailable(): Promise<void> {
  * DevEco's command-line tools do not amend PATH for non-interactive processes.
  * Honor the documented roots so the daemon sees the same HDC binary as a shell.
  */
-async function ensureHarmonyToolchainPathConfigured(
+export async function ensureHarmonyToolchainPathConfigured(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<void> {
   const toolchainRoots = [

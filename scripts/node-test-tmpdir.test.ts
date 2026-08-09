@@ -182,6 +182,48 @@ test('probe records its inherited AGENT_DEVICE_SWIFT_CACHE_DIR', () => {
   }
 });
 
+test('the wrapper isolates advisory device claims inside its disposable run directory', async () => {
+  const evidenceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'node-test-claims-dir-'));
+  const evidencePath = path.join(evidenceRoot, 'claims-dir.txt');
+  const probeName = `node-test-claims-dir-probe-${process.pid}-${crypto.randomUUID()}.test.ts`;
+  const probePath = path.join(REPOSITORY_ROOT, 'scripts', probeName);
+  fs.writeFileSync(
+    probePath,
+    `import fs from 'node:fs';
+import { test } from 'node:test';
+
+test('probe records its inherited AGENT_DEVICE_CLAIMS_DIR', () => {
+  fs.writeFileSync(${JSON.stringify(evidencePath)}, process.env.AGENT_DEVICE_CLAIMS_DIR ?? '');
+});
+`,
+  );
+
+  try {
+    const result = await runCmd(
+      process.execPath,
+      ['--experimental-strip-types', WRAPPER, '--experimental-strip-types', '--test', probePath],
+      {
+        cwd: REPOSITORY_ROOT,
+        timeoutMs: 30_000,
+        env: { ...process.env, AGENT_DEVICE_CLAIMS_DIR: '/host/device-claims' },
+      },
+    );
+    assert.equal(result.exitCode, 0, `probe run failed:\n${result.stdout}\n${result.stderr}`);
+
+    const claimsDir = fs.readFileSync(evidencePath, 'utf8');
+    assert.equal(path.basename(claimsDir), 'device-claims');
+    assert.equal(
+      fs.existsSync(path.dirname(claimsDir)),
+      false,
+      'the claims directory must be removed with the wrapper-owned run directory',
+    );
+    assert.notEqual(claimsDir, '/host/device-claims');
+  } finally {
+    fs.rmSync(probePath, { force: true });
+    fs.rmSync(evidenceRoot, { recursive: true, force: true });
+  }
+});
+
 // The 13 lanes wrapped in package.json when this fix landed were a one-time
 // hand sweep; nothing stopped a 14th `node --test` script from being added
 // later without the wrapper, silently reopening #1595 for that one lane.

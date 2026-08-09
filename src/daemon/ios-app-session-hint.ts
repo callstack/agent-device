@@ -1,7 +1,10 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { detectSoleRunningIosSimulatorApp } from '../platforms/apple/core/app-resolution.ts';
 import type { IosAppInfo } from '../platforms/apple/core/app-info.ts';
-import { listBootedIosSimulators } from '../platforms/apple/core/devices.ts';
+import {
+  listLocalDeviceInventory,
+  shouldPropagateDeviceInventoryProbeError,
+} from '../core/device-inventory-context.ts';
 import { shellQuoteIfNeeded } from '../utils/shell-quote.ts';
 
 export type ResolvedForegroundIosApp = {
@@ -17,10 +20,9 @@ export type ResolvedForegroundIosApp = {
  * than one running app, or a probe failure — returns `undefined`. This must
  * never guess: a wrong-but-confident answer is worse than failing closed.
  *
- * Strictly best-effort: a throw here (a bounded probe still rejects on
- * timeout or a spawn failure — see app-resolution.ts) is caught and treated
- * as inconclusive, never propagated — callers sit on error/decision paths
- * where a probe failure must not replace their deterministic outcome.
+ * Probe failures (including bounded timeout/spawn failures) are best-effort
+ * and treated as inconclusive. Cancellation and missing request-context
+ * wiring are control-flow/composition failures and must propagate.
  *
  * `buildIosOpenCommandHint` (error-hint enrichment) and the bare
  * `open --foreground` auto-discovery form both compose this single probe
@@ -30,7 +32,12 @@ export async function resolveSoleForegroundIosApp(
   options: { simulatorSetPath?: string } = {},
 ): Promise<ResolvedForegroundIosApp | undefined> {
   try {
-    const booted = await listBootedIosSimulators({ simulatorSetPath: options.simulatorSetPath });
+    const booted = await listLocalDeviceInventory({
+      platform: 'ios',
+      iosSimulatorSetPath: options.simulatorSetPath,
+      kind: 'simulator',
+      booted: true,
+    });
     if (booted.length !== 1) return undefined;
     const [soleBootedDevice] = booted;
     if (!soleBootedDevice) return undefined;
@@ -39,7 +46,8 @@ export async function resolveSoleForegroundIosApp(
     if (!app) return undefined;
 
     return { device: soleBootedDevice, app };
-  } catch {
+  } catch (error) {
+    if (shouldPropagateDeviceInventoryProbeError(error)) throw error;
     return undefined;
   }
 }
@@ -48,8 +56,8 @@ export async function resolveSoleForegroundIosApp(
  * Enriches the generic "Run open first" SESSION_NOT_FOUND hint with the exact
  * runnable command, but only when the environment is unambiguous (see
  * `resolveSoleForegroundIosApp`, which also owns the never-guess and
- * never-propagate contract). Ambiguity or a probe failure returns `undefined`
- * so the caller keeps the generic hint.
+ * best-effort probe contract). Ambiguity or a genuine probe failure returns
+ * `undefined` so the caller keeps the generic hint.
  */
 // Wire-level details are redacted before send (packages/kernel/src/redaction.ts),
 // which silently truncates any string field over 400 chars — a truncated

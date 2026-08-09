@@ -140,9 +140,10 @@ hand-maintained path map:
   left to CI by `--run` so a root checkout never installs Expo dependencies
   implicitly.
 - **Always-on gates** (`lint`, `typecheck`, `layering`, `fallow`, `format`) fire
-  for their input categories and are never silently skipped. Platform source
-  also selects the provider-integration and coverage gates required by the
-  Testing Matrix.
+  for their input categories and are never silently skipped. Legacy
+  `src/platforms/` source also selects provider-integration and coverage.
+  `packages/platform-*` source selects the shared runtime-contract unit lane,
+  provider-integration, and coverage so a package move cannot narrow its evidence.
 - **Commands** are resolved from real `package.json` scripts, so a renamed
   script fails loudly instead of dropping a gate.
 - A **small explicit build-ownership layer** covers the paths whose owning build

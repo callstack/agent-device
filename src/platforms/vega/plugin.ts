@@ -1,5 +1,4 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
 import type { PlatformPlugin } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -45,9 +44,5 @@ export const vegaPlugin = {
   ): Promise<Interactor> => {
     const { createVegaInteractor } = await import('./interactor.ts');
     return createVegaInteractor(device, runnerContext);
-  },
-  discoverDevices: async (_request: DeviceInventoryRequest): Promise<DeviceInfo[]> => {
-    const { listVegaDevices } = await import('./devices.ts');
-    return await listVegaDevices();
   },
 } as const satisfies PlatformPlugin;

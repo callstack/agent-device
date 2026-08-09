@@ -1,3 +1,4 @@
+import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 /**
  * Custom actions are read through the private-AX snapshot backend, which only
  * the iOS simulator has. Every other target would accept `--actions`, take an
@@ -27,6 +28,7 @@ function handlerForDevice(device: DeviceInfo) {
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 }

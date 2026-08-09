@@ -31,6 +31,8 @@
 //   - Over BIN.TS'S ALIAS RESOLUTION: it must delegate to the one alias registry instead of
 //     re-declaring a parallel mapping of its own (R12) — the same "delegate to your single
 //     owner" shape as R7's SessionState ownership, applied to bin.ts's `--help` fast path.
+//   - Over PLATFORM PACKAGE COMPOSITION: six private metadata façades register once at the exact
+//     root composition file; implementation evaluation and forbidden cross-boundary edges fail (R13).
 // Only `(root)` is unranked among src/ zones (see `UNRANKED_ZONES` in model.ts):
 // it holds entrypoints and composition roots. Extracted workspace package zones
 // are classified separately and held behind R11 instead of the src folder spine.
@@ -76,13 +78,21 @@ import {
   packageBoundariesSummary,
   workspaceSpecifierTargets,
 } from './package-boundaries.ts';
+import {
+  checkPlatformPackagePolicy,
+  platformPackagePolicySummary,
+} from './platform-package-policy.ts';
+import {
+  listUntrackedProductionTypeScriptFiles,
+  readTrackedPlatformPackageDeclarations,
+} from './platform-package-repository.ts';
 import { policyLead, policyViolation, ZONE_POLICIES } from './zone-policy.ts';
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
 }).trim();
 
-export function listSourceFiles(): string[] {
+export function listTypeScriptFiles(): string[] {
   // `src/**/*.ts` only matches nested files; root-level `src/*.ts` (e.g.
   // src/cli.ts, src/command-catalog.ts) needs its own pathspec or it silently
   // drops out of cycle/back-edge analysis.
@@ -97,7 +107,11 @@ export function listSourceFiles(): string[] {
       encoding: 'utf8',
     },
   );
-  return out.split('\n').filter(Boolean).filter(isProductionSourceFile);
+  return out.split('\n').filter(Boolean);
+}
+
+export function listSourceFiles(): string[] {
+  return listTypeScriptFiles().filter(isProductionSourceFile);
 }
 
 function readSources(files: readonly string[]): Map<string, string> {
@@ -522,7 +536,7 @@ function report(
         `all ${sessionStateFieldCount()} SessionState fields are classified and every write is ` +
         `inside its declared owner (R7); every zero-dep CI job resolves without ` +
         `node_modules (R8); ${typeCycleNote(typeCycle)}; ${daemonModularitySummary()}; ` +
-        `${packageBoundariesSummary(repoRoot)}; and bin.ts imports normalizeCliCommandAlias, ` +
+        `${packageBoundariesSummary(repoRoot)}; ${platformPackagePolicySummary()}; and bin.ts imports normalizeCliCommandAlias, ` +
         `actually passes it into buildCommandUsageText, and holds no local alias literals ` +
         `(R12).\n`,
     );
@@ -553,6 +567,7 @@ function report(
 export function main(): number {
   const sourceFiles = listSourceFiles();
   const sources = readSources(sourceFiles);
+  const allTypeScriptSources = readSources(listTypeScriptFiles());
   const edges = resolveImportEdges(sources, workspaceSpecifierTargets(repoRoot));
   // Computed once and threaded: the rule and the success line must report the same number.
   const typeCycleMembers = largestTypeCycleMembers(edges);
@@ -569,6 +584,11 @@ export function main(): number {
     ...checkPackageBoundaries(
       repoRoot,
       zeroDepClosureFiles(repoZeroDepJobs(), readSourceOrNull, fileExists),
+    ),
+    ...checkPlatformPackagePolicy(
+      allTypeScriptSources,
+      readTrackedPlatformPackageDeclarations(repoRoot),
+      { untrackedProductionFiles: listUntrackedProductionTypeScriptFiles(repoRoot) },
     ),
   ];
   return report(sourceFiles, violations, typeCycle);
