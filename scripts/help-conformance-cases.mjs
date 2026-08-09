@@ -19,6 +19,11 @@ import {
 const RAW_COORDINATE_TARGET =
   /(?:^|\n)(?:agent-device\s+)?(?:click|fill|press)\s+-?\d+(?:\.\d+)?\s+-?\d+(?:\.\d+)?/i;
 
+// Ref pasted without its leading @: byte-for-byte copying is the contract,
+// and a dropped @ silently stops targeting the observed element.
+const BARE_REF_TARGET =
+  /(?:^|\n)(?:agent-device\s+)?(?:press|tap|click|fill|longpress)\s+['"]?e\d+\b/i;
+
 function quiz(sample, question) {
   return `Read this previous agent-device output, then plan the next command:
 
@@ -436,6 +441,7 @@ Use the output already shown to determine whether the feed-search UI is present,
       { id: 'noSnapshot', pattern: /\bsnapshot\b/i },
       { id: 'noWaitStable', pattern: /wait\s+stable/i },
       { id: 'noFill', pattern: /\bfill\b/i },
+      { id: 'noBareRefTarget', pattern: BARE_REF_TARGET },
       { id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET },
     ],
   },
@@ -457,6 +463,31 @@ Use the output already shown to determine whether the feed-search UI is present,
       { id: 'noWaitStable', pattern: /wait\s+stable/i },
       { id: 'noFill', pattern: /\bfill\b/i },
       { id: 'noCallstackLeakage', pattern: /(?:callstack|@e64)/i },
+      { id: 'noBareRefTarget', pattern: BARE_REF_TARGET },
+      { id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET },
+    ],
+  },
+  {
+    // ADR 0014: settled tails pin unchanged interactive refs because the
+    // partial frame admits only refs copied with the response generation.
+    id: 'sample-output-settle-tail-pinned-ref-copied-exactly',
+    docs: ['--help:first30'],
+    task: quiz(
+      SETTLE_TAIL_SAMPLE,
+      'The task is to open the Profile tab. What command should run next?',
+    ),
+    expectations: ['validPlanCommands', 'fullPrefix'],
+    matchers: [
+      {
+        id: 'pressesPinnedTailRefOrExactLabel',
+        pattern:
+          /(?:^|\n)agent-device\s+(?:press|click)\s+(?:@e40~s5\b|'?label="?Profile"?'?)[^\n]*--settle\b/i,
+      },
+    ],
+    forbidden: [
+      { id: 'noUnpinnedRef', pattern: /@e40(?!~s5\b)/i },
+      { id: 'noBareRefTarget', pattern: BARE_REF_TARGET },
+      { id: 'noSnapshot', pattern: /\bsnapshot\b/i },
       { id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET },
     ],
   },
@@ -683,6 +714,8 @@ Use the output already shown to determine whether the feed-search UI is present,
         id: 'noPressingActionNameAsSelector',
         pattern: /(?:^|\n)agent-device\s+(?:press|click|find)\b[^\n]*(?:label|text)="?reply"?/i,
       },
+      { id: 'noSnapshotDetour', pattern: /\bsnapshot\b/i },
+      { id: 'noBareRefTarget', pattern: BARE_REF_TARGET },
       { id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET },
     ],
   },

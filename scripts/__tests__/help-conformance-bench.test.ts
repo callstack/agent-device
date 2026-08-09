@@ -535,6 +535,11 @@ test('compact skill starts a known-app task with foreground open and an initial 
 
   assert.deepEqual(openingCommands, ['agent-device open <app> --foreground']);
   assert.match(ordinaryStart, /returns the initial interactive snapshot in the same call/);
+  assert.match(
+    ordinaryStart,
+    /copy refs? byte-for-byte.*leading `@`.*part of the ref/i,
+    'the always-loaded skill must preserve the @ prefix before topic help is available',
+  );
 });
 
 test('plan validator applies narrow grammar to permitted external commands', async () => {

@@ -11,7 +11,7 @@ For an ordinary app-driving task with a known app or bundle id, start directly. 
 agent-device open <app> --foreground
 ```
 
-`open <app> --foreground` keeps normal configured target selection and returns the initial interactive snapshot in the same call. Continue from its current refs. Prefer a concrete `@eN` ref from the current snapshot over a broad mutation selector. When a response prints a pinned ref such as `@e12~s42` — including an ambiguity candidate or settled diff — copy the whole pinned ref exactly; a bare ref from a partial result is intentionally rejected.
+`open <app> --foreground` keeps normal configured target selection and returns the initial interactive snapshot in the same call. Continue from its current refs. Prefer a concrete `@eN` ref from the current snapshot over a broad mutation selector. Copy refs byte-for-byte as printed: the leading `@` is part of the ref (`press @e72`, never `press e72`). When a response prints a pinned ref such as `@e12~s42` — including an ambiguity candidate or settled diff — copy the whole pinned ref exactly; a bare ref from a partial result is intentionally rejected.
 
 Default loop: `open -> act with a current ref or specific selector -> verify -> close`. Use `--settle` on planned `press`, `click`, `fill`, `longpress`, `scroll`, or `back`; continue from the settled diff when it already proves the next state. If a mutation returns `AMBIGUOUS_MATCH`, retry one listed pinned candidate rather than adding `--first` or guessing by coordinates.
 

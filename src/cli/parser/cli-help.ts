@@ -81,7 +81,7 @@ const AGENT_START_LINES = [
   'Default app loop: agent-device open <app> --foreground -> mutate a current target from its initial snapshot with --settle -> continue from that settled diff -> agent-device close.',
   'Use --settle only on planned press, click, fill, longpress, scroll, or back commands; never add it to open, snapshot, or close. type never accepts --settle: run agent-device type "text", then diff snapshot if verification is needed. Once the task\'s requested end state or an explicit success confirmation is visible, stop; do not tap transient follow-up controls or navigate away only to re-verify.',
   'Follow structured command hints before choosing a recovery action.',
-  'Targets are concrete refs or selectors: @e12, label="Query", role=button label="Submit".',
+  'Refs/selectors: @e12, label="Query". Copy refs exactly, including @ and ~sN pins (@e72, @e12~s4); without @ it is not a ref.',
   'Selector keys are only: id, role, text, label, value, appname, windowtitle, visible, hidden, editable, selected, focused, enabled, hittable. placeholder, index, and key are not selector keys.',
   'A literal @ handle is a label such as label="@account.example", never a bare @ref.',
   'Boundary shapes: agent-device fill \'label="Query"\' "text" --settle; agent-device press \'role=button label="Submit"\' --settle.',
@@ -264,7 +264,7 @@ Validation and evidence:
   Nearby mutation diff: diff snapshot -i; with no prior snapshot it initializes the baseline (zero changes) instead of failing.
   Named expectations need the exact text/selector via wait/is/get/find -- a bare screenshot/snapshot is not verification. Before declaring a task done, confirm the requested end state is actually visible on the current screen, scrolling it into view if needed; get text alone, or stopping one screen early, is not enough.
   When an action only reveals or reaches a target, verify the exact target named, not just the action. Prefer testIDs/ids/selectors over visible text. Icon/tappable proof: screenshot --overlay-refs; if snapshot is sparse/AX-unavailable, use plain screenshot and coordinates, then retry snapshot -i on another screen.
-  iOS sim: snapshot -i --actions shows merged actions; use detail/coords, not names.
+  iOS merged: child ref => press it; else press parent @ref --settle. Names are not selectors.
   Perf/memory/log/network/trace/crash: help debugging. Recording, save-script, batch, replay repair: help scripting.
 
 React Native: help react-native for Metro/Re.Pack reload, DevTools, RN overlays. JS-only change: metro reload, find "Home"; open --relaunch for native reset.

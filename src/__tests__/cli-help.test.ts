@@ -145,7 +145,7 @@ test('help workflow advertises open --foreground and snapshot -i --actions', asy
   );
   assert.match(
     result.stdout,
-    /iOS sim: snapshot -i --actions shows merged actions; use detail\/coords, not names/,
+    /iOS merged: child ref => press it; else press parent @ref --settle\. Names are not selectors/,
   );
 });
 

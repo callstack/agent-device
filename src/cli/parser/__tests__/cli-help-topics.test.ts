@@ -96,7 +96,11 @@ test('usage includes agent workflows, config, environment, and examples footers'
   assert.match(usageText, /type never accepts --settle/);
   assert.match(usageText, /explicit success confirmation is visible, stop/);
   assert.match(usageText, /Follow structured command hints before choosing a recovery action/);
-  assert.match(usageText, /Targets are concrete refs or selectors/);
+  assert.match(usageText, /Refs\/selectors/);
+  assert.match(
+    usageText,
+    /Copy refs exactly, including @ and ~sN pins \(@e72, @e12~s4\); without @ it is not a ref/,
+  );
   assert.ok(
     usageText.includes(`Selector keys are only: ${SELECTOR_KEY_NAMES.join(', ')}.`),
     'The first-screen selector vocabulary must match the parser source of truth.',
@@ -308,7 +312,7 @@ test('usageForCommand resolves workflow help topic', async () => {
   assert.match(help, /get text alone, or stopping one screen early, is not enough/);
   assert.match(
     help,
-    /iOS sim: snapshot -i --actions shows merged actions; use detail\/coords, not names/,
+    /iOS merged: child ref => press it; else press parent @ref --settle\. Names are not selectors/,
   );
   assert.match(help, /Perf\/memory\/log\/network\/trace\/crash: help debugging/);
   assert.match(help, /Recording, save-script, batch, replay repair: help scripting/);
