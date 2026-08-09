@@ -102,6 +102,21 @@
         "type": "custom-link",
         "label": "Device Clouds",
         "link": "/docs/device-clouds"
+      },
+      {
+        "type": "custom-link",
+        "label": "BrowserStack",
+        "link": "/docs/browserstack"
+      },
+      {
+        "type": "custom-link",
+        "label": "AWS Device Farm",
+        "link": "/docs/aws-device-farm"
+      },
+      {
+        "type": "custom-link",
+        "label": "Limrun",
+        "link": "/docs/limrun"
       }
     ]
   },
