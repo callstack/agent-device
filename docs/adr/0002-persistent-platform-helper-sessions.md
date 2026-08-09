@@ -4,6 +4,11 @@
 
 Accepted
 
+> **Amended by [ADR 0019](0019-request-bound-platform-runtime.md).** Persistent protocols,
+> invalidation, and explicitly safe one-shot fallback remain accepted. "Daemon-owned" means the
+> daemon owns helper lifetime policy; platform modules own process-lived helper managers and helper
+> mechanics, and request bindings attach to but never own or stop healthy helper generations.
+
 ## Context
 
 Some platform automation backends are expensive to start but cheap to reuse. iOS already uses a
@@ -29,10 +34,11 @@ startup, cheap repeated commands, and a need for strict invalidation.
 Use persistent platform helper sessions when a backend has high startup cost and a reusable
 automation context.
 
-A helper session is an optimization layer owned by the daemon, not a replacement for command
-correctness. It may keep processes, sockets, runner state, accessibility service flags, or device
-forwards warm. It must still execute each command against fresh platform state unless a separate
-cache contract has explicit invalidation.
+A helper session is an optimization layer governed by daemon-owned lifetime policy, not a
+replacement for command correctness. Platform modules own helper-manager mechanics. A helper may
+keep processes, sockets, runner state, accessibility service flags, or device forwards warm. It must
+still execute each command against fresh platform state unless a separate cache contract has explicit
+invalidation.
 
 The session pattern is:
 
@@ -67,7 +73,7 @@ process ownership into cross-command interference.
 
 For iOS, keep the XCTest runner session as the reference implementation for lifecycle and
 invalidation behavior. Android does not need to copy iOS internals, but it should reuse the same
-daemon-side ideas: per-device session manager, readiness checks, structured protocol errors,
+lifetime-policy ideas: per-device session management, readiness checks, structured protocol errors,
 fallback/invalidation, and request-scoped observability.
 
 For future platforms such as HarmonyOS, prefer designing adapters around this same helper-session
@@ -106,9 +112,9 @@ Persistent sessions should not make direct interactive commands unexpectedly slo
 connect/request timeouts for the persistent path, then fall back to the existing one-shot timeout
 budget.
 
-The daemon remains the owner of session lifecycle. Platform modules may expose helper-session
-operations, but command handlers should not directly manage long-lived helper processes or raw host
-tool state.
+The daemon remains the owner of helper lifetime policy. Platform modules own helper-manager mechanics
+and may expose helper-session operations, but request bindings and command handlers must not directly
+own or stop long-lived helper processes or raw host tool state.
 
 This ADR does not require every backend to implement a persistent session. It defines the preferred
 shape when the backend has the same startup/reuse economics that iOS and Android snapshots now

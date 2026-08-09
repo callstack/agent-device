@@ -12,7 +12,7 @@ task touches:
 - [Recording & replay](#recording--replay)
 - [Maestro compatibility](#maestro-compatibility)
 - [Providers, cloud, and the test harness](#providers-cloud-and-the-test-harness)
-- [Architecture](#architecture-perfect-shape-refactor-completed-2026-07) — the two-registry end state
+- [Architecture](#architecture) — the command-descriptor baseline and staged platform-runtime seam
 - [Selector capture reliability contract](#selector-capture-reliability-contract) — invariants any capture refactor must preserve
 - [Testing principles](#testing-principles)
 
@@ -20,8 +20,38 @@ task touches:
 
 ### Sessions, targets, devices
 
-- Interactor: semantic interface between command dispatch and platform behavior.
-- Platform module: platform-specific implementation behind the Interactor.
+- Interactor (legacy): monolithic semantic interface between dispatch and platform behavior, retained
+  only for commands not yet migrated under ADR 0019. Avoid for new or migrated command behavior.
+- Platform family: one internal ownership axis in the canonical registry (`apple`, `android`,
+  `harmonyos`, `vega`, `linux`, or `web`). Family ownership does not imply uniform support across its
+  leaves, device kinds, or providers.
+- Platform leaf: concrete OS/device shape within a family whose support is classified independently,
+  such as iOS simulator, physical iOS, tvOS, or macOS within Apple.
+- Platform module: private `@agent-device/platform-*` package that owns one family's device mechanics
+  behind a metadata-eager, implementation-lazy façade.
+- Implementation laziness: platform-module property where family metadata is cheap to compose while
+  discovery mechanics, runtime implementations, and helper managers load only when that family is
+  first discovered or bound.
+- Device inventory gateway: platform-neutral composition of canonical local-family and provider
+  inventory sources. It discovers and classifies devices before any selected-device binding exists.
+- Device runtime gateway: platform-neutral seam that reports runtime facts and binds one admitted
+  device to its selected runtime owner.
+- Runtime owner: exactly one local platform module or provider runtime selected to execute device
+  behavior for an ownership-qualified device.
+- Request binding: request-lived attachment of cancellation, diagnostics, progress, and admitted
+  context to a runtime owner. It never owns a helper manager, healthy helper generation, or adopted
+  durable resource.
+- Bound device runtime: behavior-bearing view returned by a request binding after the required
+  operations in a command's runtime use are proven.
+- Runtime facet: capability-cohesive interface on a bound device runtime, with normalized semantic
+  inputs and typed outcomes rather than command names or daemon payloads.
+- Runtime fact: typed claim about behavior available for one exact platform leaf, device/backend, and
+  provider mode.
+- Narrowed bound runtime: compile-time projection exposing required facets non-optionally, explicitly
+  preferred facets optionally, and no undeclared facets; handlers do not cast missing proof into
+  existence.
+- Host capability: narrow authority injected into a platform module for host process execution,
+  diagnostics, progress, or resolved native assets; it carries no daemon request or session policy.
 - Target: selected automation destination, such as mobile, tv, or desktop.
 - Modality: broad supported device family, such as mobile, tv, or desktop.
 - Session: daemon-owned state for a selected target and opened app or surface.
@@ -46,6 +76,10 @@ task touches:
 
 - Command surface: catalog of public command identity, interface exposure, adapter policy, and
   shared command metadata across CLI, Node.js, MCP, and batch entrypoints.
+- Runtime use: platform-neutral declaration on a command descriptor containing operations required
+  for admission and, separately, preferred fast paths whose absence does not reject the command.
+- Inventory use: platform-neutral declaration for an inventory command that composes canonical local
+  family and provider inventory sources without fabricating a selected-device binding.
 - Daemon command registry: daemon-side source of truth for command route ownership and
   request-policy traits, including admission exemptions, session locking, selector validation,
   replay-scoped actions, recording invalidation, Android dialog guards, and request provider device
@@ -202,9 +236,20 @@ task touches:
 - Destination guard: portable selector-targeted `wait` near the end of an open-to-destination script
   that confirms a landmark on the ready destination screen before replay hands the live session to
   its caller.
-- Recording backend: daemon-internal module interface selected per recording target that owns
-  platform recording validation, output path policy, start/stop execution, and record-only cleanup
-  below the daemon recording lifecycle.
+- Screen-recording facet: runtime facet that starts platform screen/video capture and returns a live
+  handle plus its durable descriptor. It is distinct from script recording.
+- Live resource handle: process-local authority to finish or forcibly dispose active app-log,
+  screen-recording, or profiler work through outcome-bearing `finish`/`forceCleanup` operations; its
+  `AsyncDisposable` adapter rejects when cleanup is unconfirmed. A neutral contract handle may live
+  in R7-owned `SessionState`; it is never serialized into persisted recovery state.
+- Durable resource descriptor: bounded, versioned, persistable identity and recovery state from
+  which the same runtime owner can deterministically reattach, recover completion, or report a typed
+  missing/unreattachable outcome.
+- Reattachment: fenced recovery attempt by the descriptor's exact runtime owner, returning a live
+  handle, completed result, missing state, or typed unreattachable reason without restarting the
+  resource or falling through to another owner.
+- Recording backend (legacy): daemon-selected tag-to-implementation interface retained only for
+  screen-recording commands not yet migrated under ADR 0019. Avoid for new behavior.
 
 ### Maestro compatibility
 
@@ -219,14 +264,14 @@ task touches:
 
 ### Providers, cloud, and the test harness
 
-- Provider: request-scoped adapter interface for external device, runner, or host tool execution.
+- Provider: external device/runtime adapter that may own a complete device runtime or contribute a
+  typed transport to a platform module; ownership is resolved and bound per request.
 - Provider-backed integration scenario: device-free integration test that runs the real daemon
   request path and replaces only external device or host tool execution.
-- Cloud WebDriver runtime: package-shaped `ProviderDeviceRuntime` implementation that maps a
-  cloud-owned Appium/WebDriver session into agent-device lease, inventory, install, interactor, and
-  release hooks without adding provider-specific branches to daemon routing. Cloud WebDriver adapters
-  must expose explicit command capabilities because snapshots come from Appium page source rather
-  than agent-device native iOS runner or Android helper backends.
+- Cloud WebDriver runtime: direct provider runtime owner that maps a cloud-owned Appium/WebDriver
+  session into agent-device leases, inventory, runtime facts/facets, durable resources, and release
+  without provider-specific daemon branches. Its exact facts differ from local Apple/Android
+  runtimes because snapshots come from Appium page source.
 - CloudArtifact: provider-hosted session output such as video, Appium logs, device logs, automation
   logs, or provider dashboard links. Cloud artifacts stay under the `cloudArtifacts` response field
   so they do not collide with daemon-managed local/downloadable `artifacts`.
@@ -245,7 +290,7 @@ task touches:
 - HTTP contract test: narrow test that verifies JSON-RPC transport, auth, and response finalization
   over the daemon HTTP boundary.
 
-## Architecture (perfect-shape refactor, completed 2026-07)
+## Architecture
 
 ADR 0011 (interaction guarantee contract) is the interaction-semantics counterpart of ADR 0008's
 registry thesis: the dispatch-path × guarantee matrix is declared once in
@@ -253,9 +298,10 @@ registry thesis: the dispatch-path × guarantee matrix is declared once in
 gate-enforced, and cross-language rules are pinned by golden parity tables. New dispatch paths and
 guarantees are whole-matrix decisions, not local edits.
 
-The perfect-shape refactor is complete and merged. Its end-state:
+The 2026 command/registry refactor is the enforced baseline. ADR 0019 keeps the command-descriptor
+axis and stages a deeper platform-runtime seam, one abandonment-safe command cutover at a time:
 
-- Two derivation registries. One `CommandDescriptor` per command
+- Command and platform axes. One `CommandDescriptor` per command
   (`src/core/command-descriptor/registry.ts`) is the single declaration site from which the
   public/internal/local command catalog, capability matrix, daemon command registry, batch allowlist,
   timeout policy, MCP exposure list, capability-checked CLI command list, post-action observation
@@ -265,13 +311,17 @@ The perfect-shape refactor is complete and merged. Its end-state:
   simple Node client command methods. Closed public Node-client result contracts are narrowed through
   `CommandResultMap`; action/backend-dependent methods remain explicitly broad until their public
   response projections are reconciled. See
-  [Node client result types](docs/node-client-result-types.md). One `PlatformPlugin` per platform
-  family (`src/core/platform-plugin/`) stops core/daemon from branching on platform, with the Apple
-  plugin the first instance. See [ADR 0008](docs/adr/0008-command-descriptor-registry.md).
+  [Node client result types](docs/node-client-result-types.md). The current shallow `PlatformPlugin`
+  registry remains the complete legacy adapter for unmigrated commands. ADR 0019 replaces that axis
+  command by command with an immutable, metadata-eager/implementation-lazy platform-module registry:
+  descriptors declare inventory or device runtime use, runtime owners report exact facts and
+  behavior-bearing facets, and only the root composition module imports concrete packages. See
+  [ADR 0008](docs/adr/0008-command-descriptor-registry.md) and
+  [ADR 0019](docs/adr/0019-request-bound-platform-runtime.md).
 - Typed result spine. Per-command typed results replaced the ad-hoc `Record`-typed returns across the
   daemon/dispatch path; errors gained machine-readable `retriable`/`supportedOn` signals on
   `DaemonError` (#939). Error-system conventions live in [ADR 0010](docs/adr/0010-error-system.md).
-- Apple platform model. Internally `Platform` is `apple` (plus `android`/`vega`/`linux`/`web`) with an
+- Apple platform model. Internally `Platform` is `apple` (plus `android`/`harmonyos`/`vega`/`linux`/`web`) with an
   `appleOs` discriminant (`ios | ipados | tvos | watchos | visionos | macos`); the shared Apple engine
   lives under `src/platforms/apple/core/` with per-OS leaves under `src/platforms/apple/os/<os>/`.
   The public wire stays non-breaking: `PUBLIC_PLATFORMS` (`packages/kernel/src/device.ts`) still emits
@@ -312,8 +362,9 @@ The perfect-shape refactor is complete and merged. Its end-state:
   daemon descriptor, whose route type is `keyof typeof DAEMON_ROUTE_HANDLERS` — derived from what
   the server actually implements. Both are explained at the baseline.
 - SessionState ownership (R7). `SessionStore.get()` returns the live record out of a private Map
-  and `set()` re-puts the same reference, so any `session.<field> = …` in the daemon is a durable
-  write to store-owned state — persistence depends on aliasing, not on an API call. That is
+  and `set()` re-puts the same reference, so any `session.<field> = …` in the daemon is an immediate
+  write to store-owned live state — visibility depends on aliasing, not on an API call, and the map
+  is not rehydrated across daemon restart. That is
   workable while each field has an owner that keeps its invariants, so
   `SESSION_STATE_FIELD_OWNERS` (`scripts/layering/session-state.ts`) records them and the gate
   stops the set from growing quietly: a new field must declare an owner, a foreign write fails
@@ -356,9 +407,10 @@ The perfect-shape refactor is complete and merged. Its end-state:
   ratchets: engines live behind the `packages/{maestro,replay-test,ad-replay,selectors}` façades, engines
   cannot import daemon/platform/provider implementations, and no logical module may deep-import
   another module's `internal/` tree. The P6 platform-modularity phases were measured and deferred
-  at the #1478 checkpoint (2026-08-04): the Apple perf edge no longer participates in any cycle,
-  so the remaining R9 work sits at the command-registration hubs, not the platform seam. These are
-  ratchets, not permission to scaffold façades before a real seam has two adapters.
+  at the #1478 checkpoint (2026-08-04); HarmonyOS then supplied the additional real adapter pressure
+  that earned ADR 0019's staged platform-runtime migration. Its substrate plus complete
+  `devices`/`logs`/`network` checkpoint must validate the seam before any further command migration.
+  These are ratchets, not permission to scaffold façades before a real seam has two adapters.
 - Zero-dep CI jobs (R8). Some jobs run scripts straight from a checkout with `install-deps: false`,
   so they have no `node_modules`. Nothing local can feel that constraint — every dev machine has
   `node_modules` sitting right there — so a script grows a package import, passes locally, and fails
@@ -388,9 +440,11 @@ when landing it, satisfy the gate where one exists.
   cycles are deliberately tolerated by the gate; a report surfacing them as data is proposed in
   #1410 (the analysis half of the graph tooling, kept after the #1409 viewer was rejected) and is
   not landed yet.
-- **Policy × detail boundaries on demonstrated axes of change.** The two registries are the two
-  demonstrated axes: `CommandDescriptor` (what the system does) × `PlatformPlugin` (how a device
-  does it), ADR 0008/0009. Boundary-crossing enforcement is narrower than the principle: the
+- **Policy × detail boundaries on demonstrated axes of change.** The two demonstrated axes are
+  `CommandDescriptor` inventory/runtime use (what the system needs) × inventory sources or
+  runtime-owner facts/facets (how a family or exact device can do it), ADR 0008/0009/0019. The shallow
+  `PlatformPlugin` remains only as the legacy command adapter during staged adoption.
+  Boundary-crossing enforcement is narrower than the principle: the
   apple-platform leak guard (`publicPlatformString`, provider-integration suite) gates one specific
   DTO class — internal `apple` never reaching serialized public output — and the injectable Apple
   runner transport (`runnerProvider`, #1389) is one adopted seam, not a rule covering every
@@ -408,11 +462,12 @@ when landing it, satisfy the gate where one exists.
   its port only when it has two real adapters, normally the daemon adapter and a deterministic
   adapter running the same contract suite. A pure shared kernel instead stays behind its direct
   package façade; the selector engine is the worked example. Calls go down through module façades
-  and back through ports; no inter-module event bus — ADR 0018's journal is an observation channel,
-  never a coordination mechanism. No engine receives `DaemonRequest`, `DaemonError`, `SessionStore`,
-  mutable `SessionState`, provider handles, or concrete platform implementations; the daemon
-  adapter closes each capability over one already-admitted request, so an engine cannot express a
-  session name, acquire a lock, or select a provider scope. Session state keeps three consistency
+  and back through ports; no inter-module event bus — current diagnostics/session events, and the
+  ADR 0018 journal if accepted, are observation channels rather than coordination mechanisms. No
+  engine receives `DaemonRequest`, `DaemonError`, `SessionStore`, mutable `SessionState`, provider
+  handles, or concrete platform implementations; the daemon adapter closes each capability over one
+  already-admitted request, so an engine cannot express a session name, acquire a lock, or select a
+  provider scope. Session state keeps three consistency
   disciplines distinct and never forces them through one generic transaction: immediate pessimistic
   transitions for ref/observation lineage (ADR 0014's mid-request expiry is why end-of-request
   commit/rollback is rejected), staged arm/complete/close-succeeded/commit-or-abort protocols with
@@ -429,7 +484,8 @@ when landing it, satisfy the gate where one exists.
 
 ### Deferred
 
-The refactor is substantively done; these follow-ups are intentionally deferred, not lost:
+The completed command/registry baseline retains these deferred follow-ups. ADR 0019's staged
+platform-runtime migration is an active accepted decision, not part of this list:
 
 - Dynamic Node-client results — interactions, observability, alert, React Native overlay, and
   settings remain broad until their action/backend-specific payloads have accurate public
@@ -494,8 +550,9 @@ Evidence: [ADR 0002](docs/adr/0002-persistent-platform-helper-sessions.md),
 - Provider-backed integration scenarios should exercise the public daemon path whenever practical.
 - Prefer the in-process provider scenario harness for broad scenarios; keep HTTP contract tests narrow
   and transport-specific.
-- Provider seams sit below platform modules so integration tests still cover platform command
-  translation.
+- Transport providers sit below a platform module; direct provider runtimes sit beside local family
+  owners. Both run the same runtime contract scenarios through the public daemon path so provider
+  coverage still exercises the appropriate device-command translation.
 - Provider transcripts are for exact external command contracts.
 - Scenario transcripts are for broad, user-rooted workflows that should replace mocked handler unit
   tests.

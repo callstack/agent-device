@@ -1,0 +1,523 @@
+# ADR 0019: Request-Bound Platform Runtime
+
+## Status
+
+Accepted for staged adoption (2026-08-09). Checkpoint outcome: **pending**. Only the
+platform-module substrate and complete `devices`, `logs`, and `network` command cutovers are
+authorized before the checkpoint. Daemon-owned generic session teardown may invoke the neutral
+app-log disposal contract without changing `close`'s legacy platform-execution owner. If another
+command's platform adapter must change, this Status must name its complete unit before substrate work
+begins. Broader migration requires this Status to record **continue**.
+
+## Rules at a glance
+
+- Daemon device-execution code depends on platform-neutral contracts. Concrete device mechanics
+  live in private `@agent-device/platform-*` packages and are value-imported only by the root
+  composition module.
+- The platform registry is **metadata-eager and implementation-lazy**. Cheap family identity,
+  inventory entrypoints, and static fact declarations may load at composition time; platform
+  mechanics and process-lived helper managers load only when discovery or the first binding for that
+  family needs them.
+- The registry selects one local runtime owner per canonical platform family. Support is claimed and
+  tested for the exact platform leaf, device kind/backend, and provider mode; family ownership never
+  implies uniform leaf support.
+- Command descriptors declare one typed execution shape: inventory use, or platform-neutral required
+  device operations with separately declared preferred fast paths. Runtime owners report
+  device-specific facts and expose behavior-bearing facets; platform and provider implementations
+  never name commands.
+- `RequestExecutionScope.bindDevice(device, use)` resolves provider ownership, validates the facts
+  and concrete facets, and returns a runtime type narrowed to the proven runtime use. Handlers cannot
+  use undeclared facets or repair missing proof with casts or non-null assertions.
+- Provider ownership is first-class and fail-closed. An owning provider may supply transport to a
+  platform runtime or implement facets directly; missing required behavior never falls through to a
+  local owner.
+- Process-lived helper managers, request-lived device bindings, and daemon-session durable resources
+  have distinct lifetimes. Helper instances remain lazy, identity-bound, invalidatable, and
+  idle-stoppable. Disposing a request binding never stops a healthy helper or adopted resource.
+- Durable work has two representations: a process-local live handle and a versioned, persistable
+  descriptor through which the same runtime owner can recover. Live session state may own a neutral
+  facet handle under R7; only the descriptor and neutral metadata enter persisted recovery state.
+  Concrete platform process objects never cross the seam.
+- The migration unit is one command descriptor across its full existing denominator: every inventory
+  source or every supported device-runtime cell. A descriptor has exactly one legacy,
+  inventory-backed, or device-runtime-backed platform-execution shape at every committed state, and a
+  migrated command has no legacy execution fallback.
+- Broader adoption pauses after the first real slices. Evidence records one decision: continue,
+  revise the seam and rerun the checkpoint, or stop with every landed command still coherent.
+
+## Context
+
+ADR 0009 deliberately introduced a shallow `PlatformPlugin`: it wrapped the existing platform
+branches, preserved their lazy imports byte-for-byte, and moved each daemon column only after a
+parity gate proved equivalence. That was the right migration shape. It stopped platform conditionals
+from spreading, but its app-log, recording, performance, and provider facets still return tags or
+predicates that the daemon maps back to concrete implementations.
+
+The canonical registry now has six families: `apple`, `android`, `harmonyos`, `vega`, `linux`, and
+`web`. HarmonyOS supplied the additional real adapter pressure that the earlier platform-package
+checkpoint deliberately deferred. With this many families, a tag-to-implementation map leaves the
+daemon owning every platform variation even when the platform conditional has moved behind a
+plugin.
+
+The replacement must preserve the properties paid for by the existing architecture: daemon-owned
+request policy, provider-first integration scenarios, Apple-family leaf modeling, kept-hot helper
+performance, interaction guarantee honesty, pre-mutation ref-frame expiry, normalized errors,
+package direction, and CLI cold-start laziness.
+
+## Decision
+
+### 1. Platform modules provide behavior through one composition seam
+
+Each canonical family has one private `packages/platform-<family>` workspace package named
+`@agent-device/platform-<family>`. Its façade exposes cheap metadata plus lazy implementations of a
+`DeviceInventorySource` and `DeviceRuntimeGateway`; the implementations behind those entrypoints own
+platform tool invocation, helper protocols, runtime facts, output parsing, recovery mechanics, and
+other native details. A platform package contains only that family's implementations and mechanics,
+never daemon orchestration, command policy, or cross-family defaults.
+
+The root composition module, `src/platform-runtime.ts`, constructs immutable
+inventory/runtime registries and injects a composed inventory gateway plus provider-first runtime
+gateway into daemon request execution. Daemon device-execution modules import runtime contracts only.
+Shared runtime interfaces and neutral data types live in `@agent-device/contracts`. In production,
+only that composition module may import a concrete platform package; reusable types do not leak
+through type-only platform imports. Platform packages may import contracts, kernel/domain packages,
+and explicitly injected host capabilities; they may not import daemon requests or responses, mutable
+session state, command catalogs/grammar, root implementation files, sibling platform packages, or raw
+process primitives outside the shared host-command port. R11 applies these rules to static, type-only,
+dynamic, and re-export edges; package-owned tests may import their own public façade. Contracts may
+depend on kernel vocabulary but never on concrete platform packages or daemon implementation types.
+
+Canonical family, `AppleOS`, public-leaf, and selector identity remain declared in
+`@agent-device/kernel/device`. Platform-module metadata references one canonical family; during
+coexistence the legacy plugin registry derives its family identity from the same declaration rather
+than becoming a second root.
+
+Host command execution, diagnostics, progress, and resolved native assets enter through focused host
+capabilities. A platform package receives only the capabilities its implementation needs. Shared
+logic moves to an honest domain package only after more than one implementation needs it; there is
+no `platform-common`, generic host-utilities package, universal command dispatcher, or generic
+platform-resource union.
+
+#### Implementation-laziness
+
+Static composition must not make every daemon or CLI startup evaluate every platform implementation.
+The registry eagerly loads only metadata-only package façades. A façade keeps heavy leaf imports and
+helper-manager construction behind lazy entrypoints:
+
+- discovery loads mechanics only for a family whose inventory is requested;
+- binding loads mechanics only for the selected runtime owner;
+- process-lived helper managers are created on first use, not while composing the registry; and
+- loading one family does not load an unrelated family's implementation graph.
+
+Composition may capture inert configured paths eagerly. Filesystem/tool probing, asset preparation or
+building, helper construction, and facts requiring a selected-owner probe remain lazy. The structural
+suite must prove that unrelated implementations are not evaluated before selected discovery/binding,
+and the built artifact retains its startup measurement. Passing a startup threshold alone is not a
+substitute for preserving the loading shape; the tracking issue owns the exact probe and planted-red
+procedure.
+
+### 2. Runtime use joins facts and narrows the bound runtime
+
+`CommandDescriptor` remains the command declaration root. Its runtime-use declaration has a typed set
+of required platform-neutral operations and may separately name preferred optimizations. Commands
+whose use depends on normalized input first produce a discriminated execution plan that retains
+literal required/preferred types. Required and preferred operation keys are disjoint, and the
+required-only path is semantically complete; preferred operations may improve execution but are
+never necessary for command correctness.
+
+Inventory commands have a separate `inventoryUse` declaration. `devices` calls the composed
+`DeviceInventoryGateway`, which selects canonical family sources and provider-owned inventory sources
+from the request selectors; it neither invents a synthetic device nor calls `bindDevice`. Its
+coverage denominator is all six local family inventory sources, every provider inventory source, and
+selector/public-device projection parity. Inventory results become ordinary `DeviceInfo` values only
+after their source has classified the canonical family and required leaf identity.
+
+A runtime owner reports exhaustive facts for the exact device shape and returns capability-cohesive
+facets with normalized semantic inputs and typed outcomes. Facet inputs never contain a command name,
+`DaemonRequest`, `DaemonResponse`, `SessionState`, CLI flags, or an opaque command payload. A missing
+facet plus a typed unavailability fact represents unsupported behavior; implementations do not ship
+stubs that throw `unsupported` after binding. Runtime-use keys identify individual semantic
+operations, not whole facet namespaces, so selecting one operation does not expose undeclared sibling
+operations from the same facet.
+
+`RequestExecutionScope.bindDevice(device, use)` is the trust choke point. It:
+
+1. resolves the exact local or provider runtime owner;
+2. checks every required operation and classifies each preferred operation against facts for the
+   platform leaf, device kind/backend, and provider mode;
+3. creates or reuses one request binding for that ownership-qualified device;
+4. verifies that every required operation and every preferred operation advertised as available has
+   a concrete facet implementation; an advertised operation with no implementation is a
+   runtime-contract error; and
+5. returns a selected operation projection: required operations are non-optional, declared preferred
+   operations are optional and present only when available, and undeclared operations are inaccessible.
+
+The cached broad runtime remains private to `RequestExecutionScope`; narrowing does not intersect a
+wide optional aggregate that would still expose undeclared facets. The descriptor and its specialized
+handler share one non-widened declaration, and a widened generic descriptor carries no static proof.
+A compile-time contract test proves the selected projection. A structural
+**runtime-facet-narrowing gate** covers every runtime-migrated handler owner and rejects attempts to
+manufacture required-operation proof with assertions or optional admission. Optional access is
+permitted only for descriptor-declared preferred operations. The tracking issue owns the gate
+implementation and its required planted violation.
+
+Absence or failure of a preferred path may change optimization/path disclosure, not whether the
+semantic command can execute. Failure falls back to the complete required path only through a typed
+reason and an explicit descriptor/ADR 0011 path classification; it is never a generic `catch`
+fallback. Helper/session reuse hidden inside one required operation remains that facet's implementation
+detail and follows ADR 0002 rather than becoming a daemon-visible preferred operation.
+
+Family registration and support coverage are separate gates. The immutable registry owns each of the
+six canonical families exactly once. Before a command cuts over, an independent parity artifact
+freezes its legacy supported/unsupported cells and hints. Runtime-fact scenarios expand canonical
+kernel-owned family/leaf fixtures over device kinds/backends and provider modes; a new runtime may
+not make a difficult legacy-supported cell disappear. Behavior changes require a separate decision.
+
+Apple coverage uses an exhaustive `AppleOS` fixture table and explicitly exercises iOS simulator and
+physical backends where they differ, iPadOS, tvOS focus-only/no-coordinate behavior, macOS desktop,
+visionOS deferred or supported cells, and the watchOS unsupported/discovery-absence sentinel. Every
+fixture matches exactly one family. A loop over six families with one generic `platform: 'apple'`
+device is not leaf coverage.
+
+### 3. Provider ownership is exact and fail-closed
+
+For one device, provider resolution has three outcomes:
+
+1. exactly one provider owns it: bind that provider-owned runtime;
+2. no provider owns it: bind the local family runtime; or
+3. more than one provider owns it: fail with an ownership-contract error.
+
+Only providers that declare device-runtime ownership participate in this arbitration. A narrow tool,
+transport, app-log, or recording provider is an injected dependency of the selected local/provider
+runtime; it does not become a second runtime owner or compete in the owner count.
+
+Provider ownership is authoritative. If the owning provider lacks a required fact or facet, admission
+returns the typed unsupported result; it never tries the local family implementation. A provider may
+implement a complete runtime directly, as Cloud WebDriver can, or contribute a narrow transport used
+inside the owning family module, as an Android transport can. Provider callback stacks threaded
+through daemon handlers are not part of the new seam.
+
+Ordinary binding performs the arbitration above. Every `DeviceBinding` also exposes a unique,
+restart-stable runtime-owner reference identifying the local family owner or the configured provider
+runtime instance, not merely a provider kind. Composition rejects duplicate owner references. Durable
+descriptors embed that reference; exact-owner binding resolves it directly, validates descriptor
+device/fence identity, and never reruns ordinary ownership arbitration or `ownsDevice`. An unavailable
+expected provider is `unreattachable: owner-unavailable`; it never becomes a local bind.
+
+### 4. Bindings attach to process-lived helper managers; they do not own helpers
+
+Platform gateways and their helper managers are process-lived. Individual helper generations remain
+lazy, identity-bound, invalidatable, restartable, and idle-stoppable under ADR 0002. A request binding
+attaches cancellation, diagnostics, progress, and admitted device/session context. Disposing it
+releases only those request attachments and request-local acquisitions.
+
+The underlying `DeviceBinding` implements `AsyncDisposable` and remains private to
+`RequestExecutionScope`; handlers receive only a non-disposable `BoundDeviceRuntime<Use>` projection.
+Each gateway bind owns a private rollback stack and publishes a binding only after every request-local
+acquisition succeeds. Failure after any internal acquisition releases that partial state before the
+bind rejects. On publication, ownership transfers exactly once to a repository-owned, reverse-order
+scope disposal stack; caching another projection never registers or disposes the binding twice.
+
+Request execution invokes that stack from `finally`. Source-executed TypeScript does not use
+`await using` while the supported minimum Node 22 runtime cannot parse that syntax, type stripping
+cannot lower it, and Node 22 has no `AsyncDisposableStack`; the contract keeps a later syntax migration
+mechanical. A binding itself is never adopted beyond the request; only a durable resource handle
+returned by one of its facets may transfer to session ownership.
+
+Persistent helper shutdown happens only through explicit device lifecycle policy, helper-manager
+invalidation, platform idle policy, or platform-module shutdown after daemon-session resources have
+been finalized. After adoption, a durable handle may retain its own helper attachment beyond the
+originating request; that attachment belongs to the handle and is no longer registered for
+request-scope disposal. Adoption detaches every originating request diagnostic/event/progress port.
+Later `finish` or forced disposal executes inside the current request observability scope or an
+explicit daemon session-teardown observability scope; a durable handle never retains an old request
+async context.
+
+A shared lifecycle contract scenario is required for every helper-backed runtime. With idle expiry
+disabled and no invalidation, process exit, identity change, or ownership transfer, it proves that
+disposing request bindings never terminates or restarts the healthy helper and an immediate later
+binding reuses that generation. Module shutdown terminates each still-live, still-owned generation at
+most once. Every durable-resource facet separately proves that its adopted resource survives
+originating-binding disposal. Each platform supplies honest evidence appropriate to its helper rather
+than relying on wall-clock behavior alone. Bind contract scenarios also fail after each successive
+internal acquisition and prove that the unpublished partial binding leaves no request attachment.
+
+Published bindings are disposed on success, failure, cancellation, and early return, in reverse
+acquisition order; unpublished partial binds roll themselves back before rejecting. Disposal runs
+inside the active request diagnostics/event context before `request.finished`, diagnostics flush,
+final response construction, and device/session lock release, so cleanup-only failure cannot follow a
+recorded success. If the operation and cleanup both fail, the operation error remains primary and
+cleanup is structured secondary diagnostic evidence; a cleanup-only failure surfaces normally.
+
+### 5. Durable resources are reattachable by the same owner
+
+App-log streams, screen recordings, and native profiler captures may outlive one request. Starting
+durable work returns:
+
+- a **live resource handle**, which is process-local authority to finish or forcibly dispose the
+  active resource; and
+- a **durable resource descriptor**, which is bounded, JSON-safe, versioned state sufficient for the
+  exact runtime owner to make a deterministic recovery attempt.
+
+Facet-specific handles expose `finish(): Promise<FinishOutcome>` for idempotent normal completion,
+`forceCleanup(): Promise<CleanupOutcome>` for outcome-bearing forced cleanup, and idempotent
+`[Symbol.asyncDispose](): Promise<void>` as the scope-cleanup adapter. The adapter resolves only for
+confirmed cleanup/already-missing outcomes and rejects with a normalized ownership-lost or
+cleanup-pending error otherwise; it does not pretend `Promise<void>` carries a typed result.
+
+Every destructive finish/cleanup operation holds the authoritative ownership lease from fence
+validation through the native side effect and persisted lifecycle transition, or passes a fencing
+token to a native/provider operation that atomically rejects stale owners. A check immediately before
+the side effect is not sufficient. A transport that can provide neither mechanism cannot claim
+transferable reattachment; cleanup-only recovery requires proof that the prior owner is gone, and
+otherwise remains manual recovery.
+
+A facet start internally rolls back if it cannot publish a complete handle/descriptor pair, and the
+start promise is invoked through the request scope's pending-transfer guard. The scope registers the
+guarded handle for forced cleanup before resolving the result to command orchestration, then releases
+that guard only after the authoritative active record and the live `SessionState` handle/descriptor
+adoption both succeed. Cancellation or failure anywhere in that gap disposes the unadopted handle and
+terminalizes the record only after confirmed cleanup; uncertain cleanup leaves the record
+cleanup-pending. Contract scenarios inject cancellation and failure between partial start,
+publication, persistence, live adoption, and transfer.
+
+There is no generic `PlatformResource`. Live `SessionState` may retain a neutral facet-specific
+contract handle beside its descriptor and metadata; the field has one R7 transition owner. Only the
+descriptor and neutral metadata enter the authoritative persisted recovery record. Concrete platform
+classes, provider clients, child handles, timers, transports, and wait promises enter neither store.
+
+Persisted JSON re-enters as `unknown`. Contracts first validate a neutral envelope containing resource
+kind/envelope version, session/device identity, exact owner reference, fence, and lifecycle state.
+Only after exact-owner selection does that facet's total codec decode its descriptor body. Invalid or
+unknown envelopes/bodies remain retained recovery evidence with a typed
+`descriptor-invalid`/`descriptor-version-unsupported` outcome; they are never cast to a descriptor,
+deleted, or offered to another facet.
+
+When no live handle is available, the daemon completes lease/admission and takeover fencing, binds
+the descriptor's exact owner, and calls that facet's typed `reattach`. Reattachment returns a closed
+outcome: `active` with a handle, `completed` with its result, `missing`, or `unreattachable` with a
+typed reason. Unsupported descriptor schema/version returns
+`unreattachable: descriptor-version-unsupported`: the facet does not guess a migration, discard the
+descriptor, fall through to another owner, or start a replacement. Other closed reasons include
+`owner-unavailable`, `transport-not-reattachable`, and `ownership-fence-lost`. A descriptor may
+explicitly declare cleanup-only recovery when its native transport cannot reconstruct equivalent live
+control; that limitation is a runtime fact, not a best-effort guess during takeover.
+
+Reattachment does not rehydrate `SessionState` or change `SESSION_NOT_FOUND` policy. With no admitted
+live session, a reconstructed handle is recovery-scope-owned and may only complete or clean up the
+resource; adopting it for continued session use requires an independently admitted live session.
+
+Every durable facet also exposes a typed, idempotent
+`cleanup(descriptor, fence, scope): Promise<CleanupOutcome>` for descriptor-only forced cleanup.
+Cleanup-only recovery uses this operation instead of pretending to reconstruct a full handle, and its
+closed outcome records cleaned, already missing, or still cleanup-pending state. Finish, dispose, and
+descriptor cleanup all use the same serialized/atomically enforced fence. If the exact owner or
+descriptor schema is unavailable, cleanup cannot be guessed: the authoritative record remains
+cleanup-pending with a manual-recovery reason.
+
+The descriptor must have an authoritative persisted home before command start success is returned.
+Prefer the platform/resource-owned recovery manifest when that resource already owns one. If a
+resource has no honest manifest, introduce a daemon-owned persisted resource record only for that
+demonstrated need, and extract a shared resource index only after multiple resource types earn it.
+Current diagnostics/session events—and any future journal from proposed ADR 0018—are
+observability-only and never a recovery source of truth. They may mirror descriptor lifecycle events,
+but reattachment never scans telemetry to rebuild state.
+
+Every authoritative home exposes a deterministic facet-owned lookup or enumeration path after
+process loss. Its neutral record carries session/device identity, the exact runtime-owner reference,
+descriptor and metadata, an ownership/fence token, and a lifecycle state sufficient to distinguish
+starting, active, completing, completed, and cleanup-pending recovery. A new handle is not exposed
+until the persisted ownership fence is acquired. Every finish/cleanup attempt holds that ownership
+guard through destructive work and the persisted transition, or delegates to an operation that
+atomically enforces the token, so a prior owner cannot later terminate a transferred resource.
+
+Persisting a descriptor does not make external-resource start and descriptor write atomic. A
+platform whose native tool cannot close that crash window retains a platform-owned orphan marker or
+equivalent recovery protocol. Descriptors contain stable reconstruction coordinates, not promises,
+timers, child handles, buffers, credentials, or a dump of live implementation state.
+
+Ownership transfer is explicit. Start persists active recovery evidence before returning command
+success, and the pending guard transfers only after live session adoption. Completion preserves a
+terminal result or stable result coordinates before active recovery evidence is removed. Once
+adopted, request-binding disposal cannot stop the resource. Normal session teardown preserves
+facet-specific ordering; adopted durable handles are not placed in the request binding's generic
+disposable transaction.
+
+### 6. Command cutover is the abandonment-safe migration unit
+
+The command descriptor is the sole migration discriminant, but it does not own a daemon handler
+value. It declares command identity and an internal-only execution mode excluded from public
+projections. The mode selects one neutral declaration shape: legacy platform admission, device
+`runtimeUse`, or `inventoryUse`. ADR 0003's daemon-owned total route table continues to own specialized
+handler implementations and request-policy traits; that route/policy projection remains present and
+unchanged in every mode. A derived coherence gate joins the declarations without importing daemon
+handlers into the descriptor registry.
+
+The descriptor-derived **runtime-command-cutover gate** covers the command's whole platform-execution
+projection: either legacy admission/hints plus its complete legacy platform adapter; device runtime
+use plus fact-derived admission and its complete runtime-backed adapter; or inventory use plus the
+composed inventory gateway. Never more than one and never none. A migrated device unit deletes its old
+capability closures/hints and legacy platform adapter. A migrated inventory unit deletes its old
+inventory branches/adapter. Neither cutover deletes, duplicates, or changes the ADR 0003 daemon route.
+No handler selects old versus new platform behavior by family, provider, failure, environment
+variable, or feature flag.
+
+One device-command migration unit is one command across every runtime cell where it is currently
+supported: all applicable platform leaves, device kinds/backends, transport-composed providers, and
+direct provider runtimes. Unsupported cells are classified through new runtime facts; they do not
+remain on the old adapter. An inventory-command unit covers every local family and provider inventory
+source plus selector/public projection parity. The unit also deletes that command's superseded daemon
+platform branches, backend tags and tag-to-implementation maps, capability closures/hints, legacy
+imports, parity scaffolding, and old platform adapter. The independent pre-cutover parity artifact
+proves available-command and unsupported-hint equivalence before those legacy sources are deleted; a
+deliberate behavior change is a separate decision rather than a migration gap.
+
+Facets organize contracts and implementation locality; a whole facet is not a required PR boundary.
+A repository may indefinitely contain migrated and unmigrated commands, but no command has two
+platform-execution paths and no merged state depends on a later PR for correctness. Rollback is a
+revert of the complete command unit, not a retained execution fallback.
+
+A behavior-neutral package/registry substrate may land before the first command only when it routes
+no production descriptor, is dead-code clean, independently revertible, and preserves lazy loading.
+Otherwise it lands with the `devices` command unit. Shared Apple-runner or Android-helper mechanics
+used by migrated and legacy commands are not duplicated or connected through a package-to-root
+back-import. They either remain physically in place until their last consumer can move, or move
+behind a neutral lower-level capability injected by composition into both the package facet and the
+complete legacy adapter while command execution ownership remains singular.
+
+The substrate and every command unit are reviewed from a clean committed tree with all production
+files present in `HEAD`; a green layering run while new production files are untracked is not
+evidence. Platform packages receive no migration allowlist or root back-import exception.
+`check:affected` must select platform contract, provider, and coverage scenarios for a
+`packages/platform-*` change. Every new structural gate is accepted only after a planted violation
+demonstrates the intended red result.
+
+Any unit touching `SessionState` classifies each changed field once under R7, keeps request bindings,
+concrete platform/provider types, and raw process/transport mechanics out, and gives each mutable
+resource field one transition owner. The permitted live value is the opaque implementation behind a
+neutral facet-specific handle contract. The unit proves partial-start cleanup, transfer, finish,
+forced disposal, and error precedence. Equality-pinned R10 writer/owner counts and external
+`daemon/types.ts` importer membership are lowered in the same unit when they shrink. R9 total-cycle
+and R10 cycle-zone pressure may not grow; shrink reporting follows their existing growth-only policy.
+
+### 7. Adoption checkpoint
+
+No command migration beyond the metadata/package substrate and complete `devices`, `logs`, and
+`network` command cutovers begins until this ADR's Status records **continue**. `network` is included
+because it consumes the app-log resource. Daemon-owned generic session teardown may invoke the
+neutral app-log handle's forced-disposal contract without changing `close`'s legacy platform adapter;
+the `logs` unit proves that path through `close`. If `close`, `open`, or another command instead must
+bind a runtime or select app-log platform behavior, its full unit must be named in Status before the
+substrate lands. `logs` is the deliberate first descriptor/reattachment pilot, not merely a
+request-lifetime handle exercise.
+
+Before the substrate lands, the tracking issue records and reviews the exact commands, thresholds,
+scenario denominator, and scoped counts used below. The same measures are reported from the clean
+committed checkpoint tree.
+
+The checkpoint records exactly one outcome:
+
+- **continue**: every hard evidence item passes and broader command migration may proceed;
+- **revise**: amend the contracts/ADR, rerun the checkpoint, and begin no further command migration; or
+- **stop**: abandon broader migration; already-landed command units remain coherent or are retired by
+  a separate explicit decision.
+
+Any failed hard item requires **revise** or **stop**; recording evidence of the failure is not
+evidence for **continue**.
+
+Evidence must cover:
+
+- one platform-execution path, an unchanged ADR 0003 route/policy projection, and zero old capability
+  closures, tags/maps, or concrete daemon platform imports for each migrated command;
+- package direction and the absence of daemon request/session/command types in platform packages;
+- independent package builds/declarations, metadata-eager/implementation-lazy loading, and reviewed
+  startup/build/package thresholds;
+- typed runtime-use narrowing and a planted-red narrowing-gate violation;
+- six-family runtime ownership, six local inventory sources, provider inventory sources, and
+  independently enumerated leaf/device/provider support parity and scenario counts;
+- provider-first fail-closed behavior plus unique restart-stable exact-owner references;
+- rollback after every partial bind acquisition and published-binding disposal without
+  persistent-helper shutdown;
+- descriptor persistence and exact-owner recovery after loss of a process-local handle, including
+  validated decoding, resumed control for reattachable cells, executable descriptor-only cleanup,
+  and explicit cleanup-only/version-unreattachable behavior;
+- pending-handle cleanup across every start/persist/adopt/transfer gap, durable-handle transfer,
+  serialized or native-atomic fencing, idempotent teardown, and operation/cleanup error precedence;
+- semantic/provider/device parity for `devices`, `logs`, and `network`;
+- unchanged-or-lower R7/R10, type-cycle, and external-daemon-type ratchets; and
+- numeric before/after daemon platform import, branch, and tag counts with a strict net decrease.
+
+The seam is revised or stopped before broader migration if a platform package needs root/daemon or
+sibling-platform imports; a command needs old/new or provider/local execution fallback; runtime
+facets degenerate into tags, command switches, or opaque execution payloads; leaf/provider facts
+require default fallthrough; `SessionState` names/exposes concrete platform/provider types or raw
+mechanics rather than the permitted neutral live handle; a persisted record bypasses the validated
+neutral envelope or facet-owned descriptor codec, or contains raw live mechanics; implementation
+laziness cannot be preserved; R7/R10/type-cycle pressure grows; or the landed slices add more daemon
+platform ownership than they remove.
+
+The tracking issue owns command order, PR/file lists, test-only compatibility fixtures, exact
+benchmark commands and thresholds, raw evidence, and reviewers. Temporary fixtures never authorize
+a production bridge, duplicate route, or recorded package back-import. After the checkpoint, this
+ADR's status records its outcome; it does not retain a migration diary.
+
+## Relationship to prior decisions
+
+- [ADR 0001](0001-provider-first-integration-scenarios.md): provider-first scenario coverage and
+  semantic provider operations remain. The monolithic `Interactor` and request callback-stack
+  topology are superseded as commands migrate.
+- [ADR 0002](0002-persistent-platform-helper-sessions.md): persistent-helper protocols,
+  invalidation, and explicitly safe one-shot fallback remain. Daemon ownership means lifetime
+  policy; platform modules own helper managers/mechanics, and request bindings never own helpers.
+- [ADR 0003](0003-daemon-command-registry.md) and
+  [ADR 0007](0007-remote-device-leases.md): daemon request-policy traits, lease admission, and lock
+  ordering remain daemon-owned. Binding happens only after their admission requirements are met.
+- [ADR 0008](0008-command-descriptor-registry.md): the descriptor registry remains the command root.
+  Device-command capability buckets evolve into typed required/preferred runtime use joined with
+  exact runtime facts; inventory commands declare inventory use.
+- [ADR 0009](0009-apple-platform-consolidation.md): the Apple family and `AppleOS` leaf axis remain.
+  The shallow `PlatformPlugin` shape is superseded as command units migrate; physical shared
+  mechanics move only through the legal injected substrate transition or after their last legacy
+  consumer.
+- [ADR 0010](0010-error-system.md): normalized errors remain; this ADR adds operation/cleanup
+  precedence and typed reattachment outcomes.
+- [ADR 0011](0011-interaction-guarantee-contract.md),
+  [ADR 0013](0013-unified-gesture-plans.md), and
+  [ADR 0014](0014-session-ref-frame-lifetime.md): interaction paths stay distinct, normalized gesture
+  plans cross the seam, and daemon authorization expires immediately before any possibly mutating
+  facet call. Platform implementations may not hide UI mutation inside an observational facet.
+- [ADR 0018](0018-unified-event-journal.md) is proposed, not a dependency of this decision. If
+  accepted, its journal and teardown scopes may implement this ADR's observability contexts, while
+  remaining observation rather than coordination or persisted recovery state.
+
+## Consequences
+
+The daemon keeps policy, command semantics, response construction, session/lease ownership,
+selector/ref authority, interaction guarantees, and artifact orchestration. Platform packages gain
+locality for native mechanics, provider transport composition, persistent helpers, and resource
+recovery. Adding a platform implements existing runtime contracts and facts instead of adding daemon
+tags, maps, callbacks, and branches.
+
+The cost is a staged cross-repository migration with temporarily coexisting legacy,
+inventory-backed, and device-runtime-backed commands. Command-atomic cutover, explicit deletion
+boundaries, and the early adoption checkpoint keep that coexistence shippable and abandonment-safe.
+
+## Alternatives considered
+
+- **Move all platform source into packages first:** rejected. It changes physical ownership before
+  proving the behavior seam, creates large root-import tunnels, and cannot be reviewed or abandoned
+  command by command.
+- **Keep extending `PlatformPlugin` with tags and predicates:** rejected. It relocates selection data
+  but leaves the daemon mapping every platform tag back to behavior.
+- **One replacement `Interactor`, universal dispatcher, or `SystemFacet`:** rejected. Platform leaf
+  support differs by operation, and a wide optional interface recreates unsupported stubs and
+  command-aware platform code.
+- **Provider/local or old/new execution fallback:** rejected. Provider ownership and command cutover
+  must be exact; success-path fallback hides semantic divergence. Explicitly accepted internal helper
+  fallbacks remain governed by ADR 0002.
+- **Use session events or a future event journal as the durable-resource store:** rejected. It would
+  make correctness depend on observability; current events are projections, and proposed ADR 0018
+  explicitly preserves the same no-state-from-events rule.
+- **Rely only on performance thresholds for lazy loading:** rejected. Thresholds catch regressions
+  late and can pass while unrelated implementation graphs load; the import/evaluation shape is also
+  contract-tested.

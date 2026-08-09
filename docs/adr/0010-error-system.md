@@ -3,6 +3,11 @@
 - Status: accepted
 - Date: 2026-07-03
 
+> **Amended by [ADR 0019](0019-request-bound-platform-runtime.md).** Existing normalization and
+> cause-preservation rules remain accepted. When an operation and binding/resource cleanup both
+> fail, the operation remains primary and cleanup is structured secondary diagnostic evidence;
+> cleanup-only failure surfaces normally.
+
 ## Context
 
 The error system is centralized in `src/kernel/errors.ts` (`AppError`, `normalizeError`,

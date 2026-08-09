@@ -4,6 +4,11 @@
 
 Accepted
 
+> **Amended by [ADR 0019](0019-request-bound-platform-runtime.md).** Provider-first scenario
+> coverage and semantic provider operations remain accepted. The monolithic `Interactor` and the
+> request callback-stack topology are superseded one command at a time by request-bound runtime
+> facets and explicit provider ownership.
+
 ## Context
 
 The test suite had many mocked daemon handler and dispatch unit tests. Those tests were expensive to maintain and skipped important behavior across request admission, locking, session state, handler routing, dispatch, Interactor resolution, and platform module command translation.
@@ -12,9 +17,11 @@ Android already had an ADB provider seam. Apple-family and Linux platform module
 
 ## Decision
 
-Keep `Interactor` as the semantic interface between dispatch and platform behavior.
+For commands not yet migrated under ADR 0019, keep `Interactor` as the legacy semantic interface
+between dispatch and platform behavior. New command cutovers use ADR 0019's bound runtime facets.
 
-Add request-scoped provider seams below platform modules:
+For commands still on the legacy adapter, use these request-scoped provider seams below platform
+modules:
 
 - Android ADB provider
 - Apple tool provider with semantic `simctl`, `devicectl`, macOS helper, and macOS host subproviders
