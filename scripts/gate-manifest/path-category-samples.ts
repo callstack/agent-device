@@ -25,6 +25,10 @@ const PATH_CATEGORY_SAMPLES: readonly {
   { label: 'Expo test app', path: 'examples/test-app/App.tsx' },
   { label: 'replay-compat corpus', path: 'test/replay-compat/entry.ad' },
   { label: 'replay-compat fixture', path: 'test/replay-compat/entry.ts' },
+  // A wire-surface file under `packages/` already reaches this rule, but only incidentally —
+  // it is some other category's sample. Naming the ledger directory directly is what puts
+  // `test/wire-compat/**` itself under the path-filter reachability assertion.
+  { label: 'daemon wire ledger', path: 'test/wire-compat/surface.ts' },
   // The public entry surface is only a category when the selector is told which files are
   // published entries, so this sample supplies that input the way `check:affected` does.
   {
