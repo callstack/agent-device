@@ -3,7 +3,7 @@ import {
   findBestMatchesByLocator,
   findSelectorChainMatch,
   formatSelectorFailure,
-  resolveSelectorChain,
+  resolveSelectorChainWithPolicy,
   selectorFailureHint,
   buildSelectorChainForNode,
   checkIsPredicate,
@@ -15,9 +15,6 @@ import {
   type FindAction,
   type FindLocator,
   SELECTOR_RESOLUTION_POLICIES,
-  selectorResolutionKnobs,
-  type KnobBackedSelectorAmbiguity,
-  type SelectorResolutionPolicy,
 } from '@agent-device/selectors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { isSparseSnapshotQualityVerdict } from '../../../snapshot/snapshot-quality.ts';
@@ -54,10 +51,6 @@ import {
   TINY_STABLE_TREE_HINT,
   TINY_STABLE_TREE_NODE_COUNT,
 } from './stable-capture.ts';
-
-type KnobBackedResolutionPolicy = SelectorResolutionPolicy & {
-  ambiguity: KnobBackedSelectorAmbiguity;
-};
 
 export type { SelectorSnapshotOptions } from './selector-read-shared.ts';
 export type {
@@ -326,11 +319,16 @@ export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = asyn
     };
   }
 
-  const resolved = resolveSelectorChain(capture.snapshot.nodes, selectorExpression, {
-    platform: runtime.backend.platform,
-    ...selectorResolutionKnobs(SELECTOR_RESOLUTION_POLICIES.readUnique),
-  });
-  if (!resolved) {
+  // `readUnique` is the fail-closed row: an ambiguous screen reports the same
+  // refusal as no match at all, because `is` must never guess which duplicate
+  // it answered about.
+  const outcome = resolveSelectorChainWithPolicy(
+    capture.snapshot.nodes,
+    selectorExpression,
+    SELECTOR_RESOLUTION_POLICIES.readUnique,
+    { platform: runtime.backend.platform },
+  );
+  if (outcome.kind !== 'resolved') {
     throw new AppError(
       'COMMAND_FAILED',
       formatSelectorFailure(selectorExpression, [], { unique: true }),
@@ -343,6 +341,7 @@ export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = asyn
       },
     );
   }
+  const resolved = outcome.resolution;
   assertExpectedResolvedTarget(
     resolved.node,
     capture.snapshot.nodes,
@@ -479,11 +478,13 @@ async function findFirstLocatorMatch(
     throw sparseSelectorSnapshotError(capture.snapshot.snapshotQuality);
   }
   if (selectorExpression) {
-    const resolved = resolveSelectorChain(capture.snapshot.nodes, selectorExpression, {
-      platform: runtime.backend.platform,
-      ...selectorResolutionKnobs(SELECTOR_RESOLUTION_POLICIES.readAny),
-    });
-    return { capture, match: resolved?.node };
+    const outcome = resolveSelectorChainWithPolicy(
+      capture.snapshot.nodes,
+      selectorExpression,
+      SELECTOR_RESOLUTION_POLICIES.readAny,
+      { platform: runtime.backend.platform },
+    );
+    return { capture, match: outcome.kind === 'resolved' ? outcome.resolution.node : undefined };
   }
   const match = findBestMatchesByLocator(capture.snapshot.nodes, locator, options.query, {
     requireRect: false,
@@ -491,11 +492,19 @@ async function findFirstLocatorMatch(
   return { capture, match };
 }
 
+/**
+ * `get` names the two rows it may consume by type: `readText` disambiguates
+ * through the same tiebreak acting uses, `readUnique` fails closed. A row with
+ * any other ambiguity contract is a compile error here rather than a silent
+ * change to what `get` will bind to.
+ */
+type GetResolutionPolicy = (typeof SELECTOR_RESOLUTION_POLICIES)['readText' | 'readUnique'];
+
 async function resolveSelectorNode(
   runtime: AgentDeviceRuntime,
   options: GetCommandOptions,
   sessionName: string,
-  params: { selector: string; policy: KnobBackedResolutionPolicy },
+  params: { selector: string; policy: GetResolutionPolicy },
 ): Promise<{ capture: CapturedSnapshot; node: SnapshotNode; selector: string; ref: string }> {
   const capture = await captureSelectorSnapshot(
     runtime,
@@ -505,11 +514,13 @@ async function resolveSelectorNode(
       ...deriveSelectorCapturePolicy(),
     },
   );
-  const resolved = resolveSelectorChain(capture.snapshot.nodes, params.selector, {
-    platform: runtime.backend.platform,
-    ...selectorResolutionKnobs(params.policy),
-  });
-  if (!resolved) {
+  const outcome = resolveSelectorChainWithPolicy(
+    capture.snapshot.nodes,
+    params.selector,
+    params.policy,
+    { platform: runtime.backend.platform },
+  );
+  if (outcome.kind !== 'resolved') {
     throw new AppError(
       'COMMAND_FAILED',
       formatSelectorFailure(params.selector, [], { unique: true }),
@@ -520,8 +531,8 @@ async function resolveSelectorNode(
   }
   return {
     capture,
-    node: resolved.node,
-    selector: resolved.selector,
-    ref: `@${resolved.node.ref}`,
+    node: outcome.resolution.node,
+    selector: outcome.resolution.selector,
+    ref: `@${outcome.resolution.node.ref}`,
   };
 }

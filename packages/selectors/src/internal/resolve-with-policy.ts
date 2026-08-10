@@ -6,7 +6,7 @@ import {
   resolveSelectorChain,
   type AstSelectorResolution,
 } from './resolve.ts';
-import type { SelectorResolutionPolicy } from './resolution-policy.ts';
+import { selectorResolutionKnobs, type SelectorResolutionPolicy } from './resolution-policy.ts';
 
 /**
  * The one policy-driven resolution entry every native caller routes through
@@ -57,8 +57,9 @@ export function resolveSelectorChainWithPolicy(
   options: SelectorMatchOptions,
 ): AstPolicyResolutionOutcome {
   const matchOptions = { ...options, requireRect: policy.requireRect };
+  const ambiguity = policy.ambiguity;
 
-  if (policy.ambiguity === 'reject-candidates') {
+  if (ambiguity === 'reject-candidates') {
     const list = listSelectorChainMatches(nodes, chain, matchOptions);
     if (!list || list.matchedNodes.length === 0) return { kind: 'none' };
     if (list.matchedNodes.length > 1) {
@@ -72,16 +73,17 @@ export function resolveSelectorChainWithPolicy(
     return resolvedFromList(list);
   }
 
-  if (policy.ambiguity === 'first-match') {
+  if (ambiguity === 'first-match') {
     const list = listSelectorChainMatches(nodes, chain, matchOptions);
     if (!list || list.matchedNodes.length === 0) return { kind: 'none' };
     return resolvedFromList(list);
   }
 
+  // The uniqueness knobs are named in exactly one place (#1630); the early
+  // returns above leave only the two rows that map onto them.
   const resolution = resolveSelectorChain(nodes, chain, {
-    ...matchOptions,
-    requireUnique: true,
-    disambiguateAmbiguous: policy.ambiguity === 'disambiguate',
+    ...options,
+    ...selectorResolutionKnobs({ ambiguity, requireRect: policy.requireRect }),
   });
   if (resolution) {
     const list = listSelectorChainMatches(nodes, chain, matchOptions);

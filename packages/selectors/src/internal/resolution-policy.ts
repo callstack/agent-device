@@ -22,8 +22,9 @@ import type { SelectorResolutionOptions } from './public-resolution-types.ts';
  *
  * Scope, deliberately narrow: this matrix declares the **ambiguity contract
  * and the rect requirement**, and nothing else. Both are consumed by
- * `resolveSelectorChainWithPolicy` and pinned behaviorally in
- * resolution-policy-parity.test.ts, so a row that stops matching its
+ * `resolveSelectorChainWithPolicy` — the one door native callers have, since
+ * the package façade exports no knob-taking resolver — and pinned behaviorally
+ * in resolution-policy-parity.test.ts, so a row that stops matching its
  * documented semantics fails a test.
  *
  * The surrounding pipeline stages — occlusion, the off-screen guard,
@@ -82,8 +83,11 @@ export const SELECTOR_RESOLUTION_POLICIES = {
 } as const satisfies Record<string, SelectorResolutionPolicy>;
 
 /**
- * The engine knobs a knob-backed policy row stands for. `reject-candidates`
- * rows are rejected at the type level — that contract is enforced by caller
+ * The engine knobs a knob-backed policy row stands for, and the only place in
+ * the repo that names `requireUnique`/`disambiguateAmbiguous` (#1630): the
+ * façade exports no resolver that accepts them, so a caller cannot restate an
+ * ambiguity contract as knobs even by accident. `reject-candidates` rows are
+ * rejected at the type level — that contract is enforced by caller
  * classification, not by these knobs.
  */
 export function selectorResolutionKnobs(

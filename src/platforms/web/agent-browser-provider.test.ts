@@ -20,7 +20,7 @@ import { createAgentBrowserWebProvider } from './agent-browser-provider.ts';
 import type { WebSnapshotResult } from './provider.ts';
 import { withCommandExecutorOverride, type ExecResult } from '../../utils/exec.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { buildSelectorChainForNode, resolveSelectorChain } from '@agent-device/selectors';
+import { buildSelectorChainForNode, resolveRecordedTarget } from '@agent-device/selectors';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { installFakeManagedAgentBrowser } from './__tests__/test-utils.ts';
 
@@ -554,10 +554,12 @@ function assertRoleSelectorResolves(snapshot: WebSnapshotResult): void {
   const nodesWithRefs = attachRefs(snapshot.nodes);
   const selectorChain = buildSelectorChainForNode(nodesWithRefs[2]!, 'web');
   assert.deepEqual(selectorChain, ['role="button" label="Save"', 'label="Save"']);
-  const resolved = resolveSelectorChain(nodesWithRefs, selectorChain[0]!, {
+  const resolved = resolveRecordedTarget(selectorChain[0]!, nodesWithRefs, {
     platform: 'web',
+    requireRect: false,
+    allowDisambiguation: false,
   });
-  assert.equal(resolved?.node.label, 'Save');
+  assert.equal(resolved.kind === 'resolved' ? resolved.winner.label : undefined, 'Save');
 }
 
 function expectedNode(

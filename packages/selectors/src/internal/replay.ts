@@ -6,6 +6,7 @@ import { splitIsSelectorArgs, splitSelectorFromArgs } from './arguments.ts';
 import { buildSelectorChainForNode } from './build.ts';
 import { matchesSelector } from './match.ts';
 import { tryParseSelectorChain } from './parse.ts';
+import { selectorResolutionKnobs } from './resolution-policy.ts';
 import { listSelectorChainMatches, resolveSelectorChain } from './resolve.ts';
 
 /**
@@ -78,6 +79,23 @@ export function readSelectorExpression(
   return { kind: 'expression', expression: split.selectorExpression, rest: split.rest };
 }
 
+/**
+ * A replay policy states its ambiguity contract per request rather than per
+ * caller, so it names an ambiguity KIND from the same vocabulary the static
+ * matrix uses and derives its engine knobs through the same function (#1630) —
+ * `selectorResolutionKnobs` stays the only place `requireUnique` and
+ * `disambiguateAmbiguous` are named.
+ */
+function recordedTargetResolutionOptions(policy: ReplayRecordedTargetPolicy) {
+  return {
+    platform: policy.platform,
+    ...selectorResolutionKnobs({
+      ambiguity: policy.allowDisambiguation ? 'disambiguate' : 'fail-closed',
+      requireRect: policy.requireRect,
+    }),
+  };
+}
+
 /** Resolve a recorded target and return the winning node plus its same-alternative domain. */
 export function resolveRecordedTarget(
   expression: string,
@@ -86,12 +104,7 @@ export function resolveRecordedTarget(
 ): ReplayRecordedTargetResolution {
   const chain = tryParseSelectorChain(expression);
   if (!chain) return { kind: 'unresolved', reason: 'parse-invalid', matchedNodes: [] };
-  const resolved = resolveSelectorChain(nodes, chain, {
-    platform: policy.platform,
-    requireRect: policy.requireRect,
-    requireUnique: true,
-    disambiguateAmbiguous: policy.allowDisambiguation,
-  });
+  const resolved = resolveSelectorChain(nodes, chain, recordedTargetResolutionOptions(policy));
   if (resolved) {
     const matchedNodes = nodes.filter((node) => {
       if (policy.requireRect && !node.rect) return false;
@@ -147,12 +160,7 @@ export function resolveReplaySuggestionCandidate(
 ): ReplaySuggestionCandidateMatch | undefined {
   const chain = tryParseSelectorChain(candidate);
   if (!chain) return undefined;
-  const resolved = resolveSelectorChain(nodes, chain, {
-    platform: policy.platform,
-    requireRect: policy.requireRect,
-    requireUnique: true,
-    disambiguateAmbiguous: policy.allowDisambiguation,
-  });
+  const resolved = resolveSelectorChain(nodes, chain, recordedTargetResolutionOptions(policy));
   if (!resolved) return undefined;
   return { node: resolved.node, basis: classifySuggestionBasis(resolved.selector) };
 }

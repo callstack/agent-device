@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { computeTargetEvidence } from '../../session-target-evidence.ts';
-import { buildSelectorChainForNode, resolveSelectorChain } from '@agent-device/selectors';
+import { buildSelectorChainForNode, resolveRecordedTarget } from '@agent-device/selectors';
 import { resolvePressRecordingTarget } from '../../../core/press-retarget.ts';
 import { classifyReplayTarget } from '../session-replay-target-classification.ts';
 import {
@@ -548,18 +548,20 @@ test('#1269 e2e: a demoted shared-id row rebinds by role+label after the shared-
   // matches all four rows (no unique bind → resolution refuses), while the
   // demoted role+label resolves the correct row uniquely. This is the
   // FDR 1.0 → 0 difference the demotion buys.
-  const idResolved = resolveSelectorChain(replayNodes, 'id="android:id/title"', {
+  const idResolved = resolveRecordedTarget('id="android:id/title"', replayNodes, {
     platform: ANDROID,
     requireRect: true,
-    requireUnique: true,
+    allowDisambiguation: false,
   });
-  assert.equal(idResolved, null); // non-unique: refuses to bind
-  const labelResolved = resolveSelectorChain(
-    replayNodes,
+  // Non-unique, not absent: the reason is what distinguishes "matched four
+  // rows and refused" from "matched nothing".
+  assert.equal(idResolved.kind === 'unresolved' ? idResolved.reason : null, 'ambiguous');
+  const labelResolved = resolveRecordedTarget(
     'role="textview" label="Connected devices"',
-    { platform: ANDROID, requireRect: true, requireUnique: true },
+    replayNodes,
+    { platform: ANDROID, requireRect: true, allowDisambiguation: false },
   );
-  assert.equal(labelResolved?.node.ref, expected.ref);
+  assert.equal(labelResolved.kind === 'resolved' ? labelResolved.winner.ref : null, expected.ref);
 });
 
 // ---------------------------------------------------------------------------
@@ -623,22 +625,22 @@ test('#1280 e2e: a retargeted press on a row container rebinds its labeled desce
   assertVerified(result, { winnerRef: expected.ref, matchCount: 1 });
 
   // Contrast: recording the CONTAINER itself (no retarget) leaves a
-  // role-only identity — every row's wrapper shares it — that a
-  // requireUnique resolve refuses to bind under the same reorder. This is
-  // the FDR the retarget removes.
+  // role-only identity — every row's wrapper shares it — that a fail-closed
+  // replay resolve refuses to bind under the same reorder. This is the FDR
+  // the retarget removes.
   const containerChain = buildSelectorChainForNode(container, ANDROID, {
     action: 'click',
     nodes: recordNodes,
   });
   assert.deepEqual(containerChain, ['role="linearlayout"']);
-  const containerResolved = resolveSelectorChain(replayNodes, containerChain.join(' || '), {
+  const containerResolved = resolveRecordedTarget(containerChain.join(' || '), replayNodes, {
     platform: ANDROID,
     requireRect: true,
-    requireUnique: true,
+    allowDisambiguation: false,
   });
   assert.equal(
-    containerResolved,
-    null,
+    containerResolved.kind === 'unresolved' ? containerResolved.reason : null,
+    'ambiguous',
     'the un-retargeted container selector refuses to bind uniquely',
   );
 });

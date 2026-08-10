@@ -4,15 +4,18 @@ import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   SELECTOR_RESOLUTION_POLICIES,
   resolveSelectorChainWithPolicy,
-  selectorResolutionKnobs,
 } from '@agent-device/selectors';
 
 /**
  * The matrix is exercised through the interface callers actually use
- * (`resolveSelectorChainWithPolicy`) against fixture trees, so each row's
- * ambiguity contract is proven behaviorally rather than asserted about
- * source text. A row that stops matching its documented semantics fails
- * here even though the declaration still reads plausibly.
+ * (`resolveSelectorChainWithPolicy` — since #1630 the façade's only
+ * resolution entry) against fixture trees, so each row's ambiguity contract
+ * is proven behaviorally rather than asserted about source text. A row that
+ * stops matching its documented semantics fails here even though the
+ * declaration still reads plausibly.
+ *
+ * Which row each CALLER consumes is a separate question, pinned end to end in
+ * selector-read-policy.test.ts.
  */
 
 function node(index: number, label: string, overrides: Partial<SnapshotNode> = {}): SnapshotNode {
@@ -156,20 +159,6 @@ test('rect-requiring rows skip rectless nodes; read and wait rows accept them', 
   }
   for (const name of ['readUnique', 'readAny', 'readText', 'wait'] as const) {
     assert.equal(outcomeFor(name, RECTLESS_TREE).kind, 'resolved', name);
-  }
-});
-
-test('knobs stay consistent with the ambiguity each knob-backed row names', () => {
-  for (const [name, policy] of Object.entries(SELECTOR_RESOLUTION_POLICIES)) {
-    if (policy.ambiguity === 'reject-candidates') continue;
-    const knobs = selectorResolutionKnobs(policy);
-    assert.equal(knobs.requireRect, policy.requireRect, name);
-    if (policy.ambiguity === 'first-match') {
-      assert.equal(knobs.requireUnique, false, name);
-    } else {
-      assert.equal(knobs.requireUnique, true, name);
-      assert.equal(knobs.disambiguateAmbiguous, policy.ambiguity === 'disambiguate', name);
-    }
   }
 });
 

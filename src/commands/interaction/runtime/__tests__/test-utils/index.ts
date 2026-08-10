@@ -406,6 +406,42 @@ export function selectorReadSnapshot(): SnapshotState {
   ]);
 }
 
+/**
+ * Two nodes share the label `Save` but differ in depth and area, so the
+ * engine's visible→deepest→smallest-area tiebreak CAN pick a winner. That is
+ * exactly the tree on which the read rows disagree (#1630): `get text`
+ * disambiguates to the inner node, `is` and `get attrs` fail closed on the
+ * same screen, and `find exists` takes the first match.
+ */
+export function ambiguousSelectorReadSnapshot(): SnapshotState {
+  return makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 400, height: 800 },
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Save',
+      rect: { x: 0, y: 0, width: 300, height: 200 },
+      hittable: true,
+    },
+    {
+      index: 2,
+      depth: 2,
+      parentIndex: 1,
+      type: 'Button',
+      label: 'Save',
+      rect: { x: 10, y: 10, width: 80, height: 24 },
+      hittable: true,
+    },
+  ]);
+}
+
 export function createSelectorDevice(
   snapshot: SnapshotState,
   options: {

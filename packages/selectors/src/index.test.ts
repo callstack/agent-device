@@ -7,7 +7,8 @@ import {
   readSelectorExpression,
   resolveRecordedTarget,
   resolveReplaySuggestionCandidate,
-  resolveSelectorChain,
+  resolveSelectorChainWithPolicy,
+  SELECTOR_RESOLUTION_POLICIES,
 } from './index.ts';
 
 const saveNode: SnapshotNode = {
@@ -177,11 +178,12 @@ test('replay suggestion resolution and display values stay string-only at the fa
   assert.equal(readReplaySelectorDisplayValue('label="Save"'), 'Save');
   assert.equal(readReplaySelectorDisplayValue('label="Save" || label="Draft"'), undefined);
 
-  const resolved = resolveSelectorChain([saveNode], 'id="save"', {
-    platform: 'ios',
-    requireRect: true,
-    requireUnique: true,
-  });
-  assert.equal(resolved?.selector, 'id="save"');
-  assert.equal(typeof resolved?.selector, 'string');
+  const resolved = resolveSelectorChainWithPolicy(
+    [saveNode],
+    'id="save"',
+    SELECTOR_RESOLUTION_POLICIES.act,
+    { platform: 'ios' },
+  );
+  assert.equal(resolved.kind, 'resolved');
+  assert.equal(resolved.kind === 'resolved' ? resolved.resolution.selector : null, 'id="save"');
 });
