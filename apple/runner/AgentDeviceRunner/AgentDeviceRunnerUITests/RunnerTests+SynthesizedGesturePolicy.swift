@@ -101,6 +101,10 @@ func synthesizedGesturePolicy(_ kind: SynthesizedGesturePolicyKind) -> Synthesiz
   }
 }
 
+func shouldProbeCoordinateTapTextInput(xCTestChannelPenalized: Bool) -> Bool {
+  !xCTestChannelPenalized
+}
+
 func sequenceHasSynthesizedCoordinateStep(_ steps: [SequenceStep]) -> Bool {
   steps.contains { step in
     step.synthesized == true && step.kind == "tap"
@@ -215,6 +219,11 @@ extension RunnerTests {
         fallbackPolicy: .xctestCoordinateWhenAccessibilityAvailable
       )
     )
+  }
+
+  func testCoordinateTapTextInputProbeSkipsPenalizedXCTestChannel() {
+    XCTAssertTrue(shouldProbeCoordinateTapTextInput(xCTestChannelPenalized: false))
+    XCTAssertFalse(shouldProbeCoordinateTapTextInput(xCTestChannelPenalized: true))
   }
 
 }

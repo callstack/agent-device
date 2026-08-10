@@ -1798,7 +1798,21 @@ extension RunnerTests {
         return Response(ok: false, error: ErrorPayload(code: "ELEMENT_NOT_FOUND", message: "element not found"))
       }
       if let x = command.x, let y = command.y {
-        let textInput = textInputAt(app: activeApp, x: x, y: y)
+        let xCTestChannelPenalized = isSnapshotXCTestChannelPenalized(
+          bundleId: currentBundleId
+        )
+        let textInput: XCUIElement?
+        if shouldProbeCoordinateTapTextInput(
+          xCTestChannelPenalized: xCTestChannelPenalized
+        ) {
+          textInput = textInputAt(app: activeApp, x: x, y: y)
+        } else {
+          textInput = nil
+          NSLog(
+            "AGENT_DEVICE_RUNNER_COORDINATE_TAP_TEXT_INPUT_PROBE_SKIPPED bundle=%@",
+            currentBundleId ?? ""
+          )
+        }
         var fallback: GestureFallback?
         if command.synthesized == true {
           let policyKind = SynthesizedGesturePolicyKind.coordinateTap

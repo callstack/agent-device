@@ -162,7 +162,7 @@ function stateWarning(verdict: SnapshotQualityVerdict): string[] {
     return [
       'No snapshot backend could read this screen' +
         (verdict.reason ? ` (${verdict.reason})` : '') +
-        '. Use screenshot as visual truth and coordinate taps; retry snapshot after navigating.',
+        '. Its refs and selectors are invalid. Use screenshot as visual truth and coordinate taps; retry snapshot after navigating.',
     ];
   }
   return [];

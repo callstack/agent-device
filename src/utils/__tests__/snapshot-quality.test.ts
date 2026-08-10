@@ -98,3 +98,19 @@ test('renderSnapshotQualityWarnings keeps recovered snapshot copy concise', () =
     'Some deeper accessibility nodes were omitted; this tree is capped at depth 56. Re-run with --depth 56 --scope <container> only if you need deeper content.',
   ]);
 });
+
+test('renderSnapshotQualityWarnings rejects semantic targets from a sparse tree', () => {
+  const warnings = renderSnapshotQualityWarnings(
+    {
+      state: 'sparse',
+      backend: 'private-ax',
+      reason: 'snapshot returned no semantic controls or content',
+      reasonCode: 'sparse-tree',
+    },
+    [],
+  );
+
+  assert.deepEqual(warnings, [
+    'No snapshot backend could read this screen (snapshot returned no semantic controls or content). Its refs and selectors are invalid. Use screenshot as visual truth and coordinate taps; retry snapshot after navigating.',
+  ]);
+});

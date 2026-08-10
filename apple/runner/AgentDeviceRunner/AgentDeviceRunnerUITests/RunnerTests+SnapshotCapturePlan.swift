@@ -500,7 +500,7 @@ extension RunnerTests {
       return ("snapshot returned no nodes", "no-nodes")
     }
     if isSparseApplicationWindowTree(nodes) {
-      return ("snapshot returned only structural application/window nodes", "sparse-tree")
+      return ("snapshot returned no semantic controls or content", "sparse-tree")
     }
     if payload.truncated == true && nodes.count <= sparseRecoveryTruncatedNodeThreshold {
       return ("snapshot was cut off by its budget with almost nothing collected", "budget")
@@ -531,17 +531,34 @@ extension RunnerTests {
 
   static func isSparseApplicationWindowTree(_ nodes: [SnapshotNode]) -> Bool {
     guard !nodes.isEmpty else { return false }
+    let rootRects = nodes.compactMap { node in
+      node.type == "Application" || node.type == "Window" ? node.rect : nil
+    }
     return nodes.allSatisfy { node in
       // Application/Window labels are just the app/window name, and full-screen roots
       // compute as hittable; neither says anything about tree health.
       let isRootContainer = node.type == "Application" || node.type == "Window"
-      let hasContent = (!isRootContainer && node.label?.isEmpty == false)
-        || node.identifier?.isEmpty == false
-        || node.value?.isEmpty == false
-      return !hasContent
-        && (isRootContainer || !node.hittable)
-        && Self.structuralOnlyNodeTypes.contains(node.type)
+      guard Self.structuralOnlyNodeTypes.contains(node.type) else { return false }
+      guard !isRootContainer else { return true }
+
+      let isFullScreenContainer = !node.hittable && rootRects.contains { rootRect in
+        rootRect.x == node.rect.x && rootRect.y == node.rect.y
+          && rootRect.width == node.rect.width && rootRect.height == node.rect.height
+      }
+      let hasAddressableIdentifier = node.identifier?.isEmpty == false && !isFullScreenContainer
+      return !Self.isSemanticSnapshotText(node.label)
+        && !Self.isSemanticSnapshotText(node.value)
+        && !hasAddressableIdentifier
     }
+  }
+
+  /// Private AX can stringify an unserializable accessibility label as the JavaScript object
+  /// placeholder. It is transport residue, not UI content, and must not make a shell-only tree
+  /// look healthy.
+  static func isSemanticSnapshotText(_ text: String?) -> Bool {
+    guard let text else { return false }
+    let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    return !normalized.isEmpty && normalized.lowercased() != "[object object]"
   }
 
   /// A leaf whose label joins many short segments is a container marked as an accessibility
@@ -686,6 +703,18 @@ extension RunnerTests {
     let root = planTestNode(index: 0, type: "Application", label: "Example App", hittable: true)
     let window = planTestNode(index: 1, type: "Window", parentIndex: 0)
     let button = planTestNode(index: 1, type: "Button", label: "Ok", hittable: true, parentIndex: 0)
+    let shell = planTestNode(
+      index: 1,
+      type: "Other",
+      identifier: "appShell",
+      parentIndex: 0
+    )
+    let serializationPlaceholder = planTestNode(
+      index: 2,
+      type: "Other",
+      label: "[object Object]",
+      parentIndex: 1
+    )
 
     // Labeled, hittable root over a bare window is still sparse.
     XCTAssertNotNil(Self.sparsePayloadReason(DataPayload(nodes: [root, window], truncated: false)))
@@ -693,6 +722,22 @@ extension RunnerTests {
     XCTAssertNotNil(Self.sparsePayloadReason(DataPayload(nodes: [root, button], truncated: true)))
     // The same tiny tree from a completed sweep is a legitimately minimal screen.
     XCTAssertNil(Self.sparsePayloadReason(DataPayload(nodes: [root, button], truncated: false)))
+    // Container metadata plus a stringified serialization placeholder is not readable UI.
+    XCTAssertNotNil(
+      Self.sparsePayloadReason(
+        DataPayload(nodes: [root, shell, serializationPlaceholder], truncated: false)
+      )
+    )
+    let actionableShell = planTestNode(
+      index: 1,
+      type: "Other",
+      identifier: "checkout",
+      hittable: true,
+      parentIndex: 0
+    )
+    XCTAssertNil(
+      Self.sparsePayloadReason(DataPayload(nodes: [root, actionableShell], truncated: false))
+    )
     // Empty payloads are degraded.
     XCTAssertNotNil(Self.sparsePayloadReason(DataPayload(nodes: [], truncated: false)))
   }

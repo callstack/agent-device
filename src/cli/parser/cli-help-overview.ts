@@ -32,7 +32,8 @@ Targets:
   Copy refs exactly: @e12, @e12~s4. Keep @ and any ~sN pin; refs go stale
     after mutations. A literal @handle is label="@handle", not a bare ref.
   Prefer refs, then id/label/role selectors. Selector keys: ${SELECTOR_KEY_NAMES.join(' ')}.
-  Coordinates are last resort: only after snapshot -i shows no semantic target.
+  Coordinates are last resort: after snapshot -i shows no semantic target, or a
+    sparse/AX-unavailable warning says its refs and selectors are invalid.
     Then screenshot, press <x> <y>, and re-snapshot on the changed screen.
 
 Rules:
