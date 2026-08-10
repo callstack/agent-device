@@ -9,6 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { runCmdSync } from '../../src/utils/exec.ts';
+import { DEFAULT_VITEST_MAX_WORKERS } from '../lib/vitest-concurrency.ts';
 import { selectChecks } from './model.ts';
 import { type CommandExecutor, readChangedFiles, runChecks } from './run.ts';
 
@@ -184,7 +185,7 @@ test('runChecks combines related tests with lightweight changed-line coverage', 
   assert.equal(related.length, 1);
   assert.ok(related[0]?.includes('--coverage'));
   assert.ok(related[0]?.includes('--coverage.reporter=lcov'));
-  assert.ok(related[0]?.includes('--maxWorkers=4'));
+  assert.ok(related[0]?.includes(`--maxWorkers=${DEFAULT_VITEST_MAX_WORKERS}`));
   assert.ok(
     executed.findIndex((command) => command.includes('test:integration:node')) <
       executed.findIndex((command) => command.includes('related')),

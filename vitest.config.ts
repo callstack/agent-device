@@ -4,11 +4,12 @@ import contentionRetryReporter, {
   FAILURE_FILE_ENV,
 } from './scripts/lib/contention-retry-reporter.ts';
 import { SUBPROCESS_STUB_TESTS } from './scripts/lib/contention-retry.ts';
+import { DEFAULT_VITEST_MAX_WORKERS } from './scripts/lib/vitest-concurrency.ts';
 import slowTestGateReporter from './scripts/vitest-slow-test-reporter.ts';
 
 // Tests that stub a real binary (adb/xcrun/npx) by mutating process.env.PATH and
-// then spawn it, so each case waits real subprocess/retry/poll time. Run at the
-// unit suite's default ~7x file parallelism they contend for CPU and their stub
+// then spawn it, so each case waits real subprocess/retry/poll time. Run with
+// broad file parallelism they contend for CPU and their stub
 // spawns get starved past an internal budget, so production takes a generic
 // failure path and returns a different error than the assertion expects — a
 // contention flake whose failing subset shifts between runs (see
@@ -48,6 +49,11 @@ export default defineConfig({
     // --no-isolate = 205s wall vs 48s (module state thrashes across files),
     // threads = no change.
     slowTestThreshold: 500,
+    // Vitest otherwise derives 11 workers from this 12-core host. Three
+    // concurrent Codex worktrees can then request 33 workers and starve the
+    // subprocess/test-server paths behind exact timeout budgets. Two workers
+    // per invocation preserves useful parallelism while leaving host headroom.
+    maxWorkers: DEFAULT_VITEST_MAX_WORKERS,
     reporters: reporters(),
     projects: [
       {
