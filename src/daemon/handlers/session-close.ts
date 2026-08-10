@@ -296,8 +296,8 @@ async function stopOrRetainAppleRunnerAfterClose(
 // #1533 (aborted-mid-recording) is the adjacent already-armed case, resolved separately: this
 // refusal promises "plain close tears down without writing", and an aborted authoring lifecycle
 // now makes that true by construction — the flag ingress no longer re-arms it
-// (`applyRecordedSaveScriptFlags`) and the writer refuses it outright
-// (`isAuthoringAbortedWriteBlocked`).
+// (`applyRecordedSaveScriptFlags`) and the script writer refuses to publish it from every path
+// that reaches it.
 function assertTerminalRecordingCloseAllowed(req: DaemonRequest, session: SessionState): void {
   if (!req.flags?.saveScript) return;
   if (isAuthoringArmedSession(session)) return;

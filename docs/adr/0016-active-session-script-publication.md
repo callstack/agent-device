@@ -108,7 +108,25 @@ fresh session is the only re-arming boundary.
 > without writing. This is distinct from
 > [#1533](https://github.com/callstack/agent-device/issues/1533), which is about an
 > already-ARMED-then-ABORTED session whose flag ingress re-enables `recordSession` and lets a
-> *bare* `close` (no `--save-script` on the close itself) publish; that case is unresolved here.
+> *bare* `close` (no `--save-script` on the close itself) publish; that case is resolved by the
+> amendment below.
+
+> **Amendment (#1533, shipped).** ABORTED terminality above was enforced only by
+> `abortAuthoringOnSecondOpen` clearing `session.recordSession` — inert by ordering, not by
+> construction. When the second `open` carried `--save-script` itself, the recorded action's shared
+> flag ingress re-armed that boolean while the status stayed ABORTED, and a *bare* `close` then
+> published the full session log through a writer that only knew how to refuse repair
+> transactions. The refusal this ADR specifies for `close --save-script` in ABORTED promises the
+> caller that plain `close` "tears down without writing", so the gap also made an existing error
+> message untrue.
+>
+> ABORTED is now terminal by construction on both boundaries: the `--save-script` ingress takes no
+> branch for an ABORTED lifecycle — it neither re-arms recording nor retargets the output path —
+> and the script writer asks one publication-blocked question covering not-recording, an
+> uncommittable or committed repair, and an ABORTED authoring lifecycle alike, so every path that
+> reaches it (bare `close`, teardown, idle-reap, active publication) refuses. ARMED and PUBLISHED
+> lifecycles and every repair transaction are unchanged; no state name, transition, or entry point
+> in the lifecycle above is added or altered.
 
 This lifecycle is distinct from ADR 0012's repair transaction. `session save-script` rejects a session
 with `saveScriptBoundary` set and directs the caller to finish or abort the repair through its existing
