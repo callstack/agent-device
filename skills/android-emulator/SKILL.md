@@ -5,7 +5,7 @@ description: Verify and debug native, React Native, Expo, or Flutter apps on an 
 
 # Android Emulator
 
-Use `agent-device` as the inspect-act-verify layer for Android Emulator work. It wraps platform tooling such as ADB but gives the agent a concise interactive accessibility snapshot and semantic UI references, instead of making it reason over shell output, full trees, or screenshots alone.
+Use `agent-device` to verify a running app on an Android Emulator. Start from the live UI, act on current refs or selectors, and verify the requested result before closing the session.
 
 For a known app or package id, bring the app to the foreground and continue from the returned snapshot:
 
@@ -13,12 +13,16 @@ For a known app or package id, bring the app to the foreground and continue from
 agent-device open <app-or-package-id> --platform android --foreground
 ```
 
-Use a current `@eN` reference or a specific selector for interactions. After every mutation, verify the resulting state with the returned snapshot or a new interactive snapshot. Keep a session's mutations serial, then close the session when verification is complete.
+`open` returns the initial interactive snapshot. Use its current refs or a specific selector. For a planned UI action, add `--settle` and continue from the settled diff when it shows the next state:
 
 ```bash
-agent-device snapshot -i
-agent-device click @eN
-agent-device fill @eN "text"
+agent-device press @eN --settle
+agent-device fill @eN "text" --settle
+```
+
+Refresh with `agent-device snapshot -i` only when the settled diff does not show the next target. `type` does not support `--settle`; verify it with a snapshot or a named `wait`. Keep state-changing commands serial in one session, verify the requested end state with a selector or exact text, then close it:
+
+```bash
 agent-device close
 ```
 
@@ -37,4 +41,4 @@ agent-device help react-devtools  # component tree, props/state/hooks, and rende
 agent-device help scripting       # durable replay and CI workflows
 ```
 
-Use raw `adb shell` only for platform operations that require it. For app verification, prefer the snapshot-driven loop so the agent can ground each action in the actual UI and retain evidence when it fails.
+Use raw `adb shell` only for platform operations that require it. For app verification, use the snapshot-driven loop and preserve diagnostic output when it fails.

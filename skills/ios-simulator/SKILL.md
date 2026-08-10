@@ -5,7 +5,7 @@ description: Verify and debug native, React Native, Expo, or Flutter apps on an 
 
 # iOS Simulator
 
-Use `agent-device` as the inspect-act-verify layer for iOS Simulator work. It provides an interactive accessibility snapshot with current UI references, so do not guess coordinates or infer state from a screenshot alone.
+Use `agent-device` to verify a running app on an iOS Simulator. Start from the live UI, act on current refs or selectors, and verify the requested result before closing the session.
 
 For a known app or bundle id, bring the app to the foreground and continue from the returned snapshot:
 
@@ -13,12 +13,16 @@ For a known app or bundle id, bring the app to the foreground and continue from 
 agent-device open <app-or-bundle-id> --platform ios --foreground
 ```
 
-Use a current `@eN` reference or a specific selector for interactions. After every mutation, verify the resulting state with the returned snapshot or a new interactive snapshot. Keep a session's mutations serial, then close the session when verification is complete.
+`open` returns the initial interactive snapshot. Use its current refs or a specific selector. For a planned UI action, add `--settle` and continue from the settled diff when it shows the next state:
 
 ```bash
-agent-device snapshot -i
-agent-device click @eN
-agent-device fill @eN "text"
+agent-device press @eN --settle
+agent-device fill @eN "text" --settle
+```
+
+Refresh with `agent-device snapshot -i` only when the settled diff does not show the next target. `type` does not support `--settle`; verify it with a snapshot or a named `wait`. Keep state-changing commands serial in one session, verify the requested end state with a selector or exact text, then close it:
+
+```bash
 agent-device close
 ```
 
