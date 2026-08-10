@@ -11,10 +11,12 @@ export type InteractionTouchPointResolution =
   | { kind: 'blocked'; competitorRefs: string[] }
   | { kind: 'invalid' };
 
-const MIN_PARENT_OWNED_CLEARANCE = 12;
+const MIN_COMPETITOR_CLEARANCE = 12;
+const MAX_PARENT_EDGE_CLEARANCE = 12;
 
 type InteractiveDescendantRect = { ref: string; index: number; rect: Rect };
 type RankedPoint = { point: Point; distanceSquared: number; clearance: number };
+type PointClearance = { parentEdge: number; competitor: number };
 
 export function resolveInteractionTouchPoint(
   nodes: readonly SnapshotNode[],
@@ -111,26 +113,32 @@ function findNearestParentOwnedPoint(
   center: Point,
   competitors: readonly InteractiveDescendantRect[],
 ): Point | null {
+  const parentEdgeClearance = resolveParentEdgeClearance(targetRect);
   const xCandidates = candidateAxisCoordinates(
     searchRect.x,
     searchRect.width,
     center.x,
     competitors.flatMap(({ rect }) => [rect.x, rect.x + rect.width]),
+    parentEdgeClearance,
   );
   const yCandidates = candidateAxisCoordinates(
     searchRect.y,
     searchRect.height,
     center.y,
     competitors.flatMap(({ rect }) => [rect.y, rect.y + rect.height]),
+    parentEdgeClearance,
   );
 
   const rankedPoints = xCandidates.flatMap((x) =>
     yCandidates.flatMap((y) => {
+      const point = { x: Math.round(x), y: Math.round(y) };
+      if (!containsPoint(searchRect, point)) return [];
       const ranked = rankParentOwnedPoint(
-        { x: Math.round(x), y: Math.round(y) },
+        point,
         targetRect,
         center,
         competitors,
+        parentEdgeClearance,
       );
       return ranked ? [ranked] : [];
     }),
@@ -138,16 +146,35 @@ function findNearestParentOwnedPoint(
   return rankedPoints.sort(compareRankedPoints)[0]?.point ?? null;
 }
 
+function containsPoint(rect: Rect, point: Point): boolean {
+  return (
+    point.x >= rect.x &&
+    point.x <= rect.x + rect.width &&
+    point.y >= rect.y &&
+    point.y <= rect.y + rect.height
+  );
+}
+
 function rankParentOwnedPoint(
   point: Point,
   targetRect: Rect,
   center: Point,
   competitors: readonly InteractiveDescendantRect[],
+  parentEdgeClearance: number,
 ): RankedPoint | null {
   const clearance = pointClearance(point, targetRect, competitors);
-  if (clearance < MIN_PARENT_OWNED_CLEARANCE) return null;
+  if (
+    clearance.parentEdge < parentEdgeClearance ||
+    clearance.competitor < MIN_COMPETITOR_CLEARANCE
+  ) {
+    return null;
+  }
   const distanceSquared = (point.x - center.x) ** 2 + (point.y - center.y) ** 2;
-  return { point, distanceSquared, clearance };
+  return {
+    point,
+    distanceSquared,
+    clearance: Math.min(clearance.parentEdge, clearance.competitor),
+  };
 }
 
 function compareRankedPoints(left: RankedPoint, right: RankedPoint): number {
@@ -164,15 +191,16 @@ function candidateAxisCoordinates(
   size: number,
   center: number,
   obstacleEdges: readonly number[],
+  parentEdgeClearance: number,
 ): number[] {
-  const min = origin + MIN_PARENT_OWNED_CLEARANCE;
-  const max = origin + size - MIN_PARENT_OWNED_CLEARANCE;
+  const min = origin + parentEdgeClearance;
+  const max = origin + size - parentEdgeClearance;
   if (min > max) return [];
   const boundaries = [...new Set([origin, origin + size, ...obstacleEdges])].sort((a, b) => a - b);
   const candidates = new Set<number>([center, min, max]);
   for (const edge of obstacleEdges) {
-    candidates.add(edge - MIN_PARENT_OWNED_CLEARANCE);
-    candidates.add(edge + MIN_PARENT_OWNED_CLEARANCE);
+    candidates.add(edge - MIN_COMPETITOR_CLEARANCE);
+    candidates.add(edge + MIN_COMPETITOR_CLEARANCE);
   }
   for (let index = 1; index < boundaries.length; index += 1) {
     candidates.add((boundaries[index - 1]! + boundaries[index]!) / 2);
@@ -184,17 +212,23 @@ function pointClearance(
   point: Point,
   targetRect: Rect,
   competitors: readonly InteractiveDescendantRect[],
-): number {
-  let clearance = Math.min(
+): PointClearance {
+  const parentEdge = Math.min(
     point.x - targetRect.x,
     targetRect.x + targetRect.width - point.x,
     point.y - targetRect.y,
     targetRect.y + targetRect.height - point.y,
   );
+  let competitor = Number.POSITIVE_INFINITY;
   for (const { rect } of competitors) {
     const dx = point.x < rect.x ? rect.x - point.x : Math.max(0, point.x - (rect.x + rect.width));
     const dy = point.y < rect.y ? rect.y - point.y : Math.max(0, point.y - (rect.y + rect.height));
-    clearance = Math.min(clearance, Math.max(dx, dy));
+    competitor = Math.min(competitor, Math.max(dx, dy));
   }
-  return clearance;
+  return { parentEdge, competitor };
+}
+
+function resolveParentEdgeClearance(targetRect: Rect): number {
+  const shortAxis = Math.min(targetRect.width, targetRect.height);
+  return Math.max(0, Math.min(MAX_PARENT_EDGE_CLEARANCE, Math.floor(shortAxis / 2) - 1));
 }

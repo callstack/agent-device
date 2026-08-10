@@ -169,8 +169,17 @@ export function coveredButtonSnapshot(): SnapshotState {
 
 // A semantic parent whose entire surface belongs to independently interactive
 // children. Parent-targeted coordinate paths must fail closed and preserve the
-// caller's selector/ref context instead of silently activating either child.
+// caller's selector/ref context instead of silently activating any child.
 export function fullyTiledParentSnapshot(): SnapshotState {
+  const children = Array.from({ length: 10 }, (_, childIndex) => ({
+    index: childIndex + 2,
+    depth: 2,
+    parentIndex: 1,
+    type: 'Button',
+    label: `Action ${childIndex + 1}`,
+    rect: { x: 20, y: 100 + childIndex * 20, width: 360, height: 20 },
+    hittable: true,
+  }));
   return makeSnapshotState([
     {
       index: 0,
@@ -189,24 +198,7 @@ export function fullyTiledParentSnapshot(): SnapshotState {
       rect: { x: 20, y: 100, width: 360, height: 200 },
       hittable: true,
     },
-    {
-      index: 2,
-      depth: 2,
-      parentIndex: 1,
-      type: 'Button',
-      label: 'Top action',
-      rect: { x: 20, y: 100, width: 360, height: 100 },
-      hittable: true,
-    },
-    {
-      index: 3,
-      depth: 2,
-      parentIndex: 1,
-      type: 'Button',
-      label: 'Bottom action',
-      rect: { x: 20, y: 200, width: 360, height: 100 },
-      hittable: true,
-    },
+    ...children,
   ]);
 }
 

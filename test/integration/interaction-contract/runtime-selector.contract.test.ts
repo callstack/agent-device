@@ -146,7 +146,8 @@ test(scenario('parentOwnedTouchPoint'), async () => {
       assert.equal(details?.reason, 'covered_by_interactive_descendants');
       assert.equal(details?.selector, 'label=Card');
       assert.equal(details?.ref, undefined);
-      assert.deepEqual(details?.competitorRefs, ['@e3', '@e4']);
+      assert.deepEqual(details?.competitorRefs, ['@e3', '@e4', '@e5', '@e6', '@e7']);
+      assert.equal(details?.competitorCount, 10);
       assert.match(String(details?.hint), /more specific selector/);
       return true;
     },

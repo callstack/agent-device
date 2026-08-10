@@ -795,6 +795,7 @@ function resolveNodeTouchPoint(
       reason: 'covered_by_interactive_descendants',
       ...failure.blockedTargetDetails,
       competitorRefs: resolution.competitorRefs.slice(0, 5).map((ref) => `@${ref}`),
+      competitorCount: resolution.competitorRefs.length,
       hint: 'Tap the specific interactive child you intend, or use a more specific selector. Every safely tappable region of the parent belongs to one of its child controls.',
     },
   );

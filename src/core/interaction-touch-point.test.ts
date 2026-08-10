@@ -115,6 +115,34 @@ test('keeps the exact center when there are no competing interactive descendants
   });
 });
 
+test('keeps a parent-owned center in a thin row when a child is safely off to the side', () => {
+  const nodes = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Link',
+      label: 'Dense row',
+      rect: { x: 0, y: 0, width: 200, height: 22 },
+      hittable: true,
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'More',
+      rect: { x: 178, y: 0, width: 22, height: 22 },
+      hittable: true,
+    },
+  ]).nodes;
+
+  assert.deepEqual(resolveInteractionTouchPoint(nodes, nodes[0]!), {
+    kind: 'resolved',
+    point: { x: 100, y: 11 },
+    strategy: 'parent-owned',
+  });
+});
+
 test('fails closed when interactive descendants tile the parent', () => {
   const nodes = makeSnapshotState([
     {
@@ -216,6 +244,34 @@ test('keeps a parent-owned point inside the supplied viewport bounds', () => {
 
   assert.equal(resolution.kind, 'resolved');
   if (resolution.kind === 'resolved') assert.ok(resolution.point.x >= 0);
+});
+
+test('keeps rounded parent-owned points inside half-pixel viewport bounds', () => {
+  const nodes = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Link',
+      label: 'Thin clipped row',
+      rect: { x: 37.5, y: 0, width: 2, height: 398 },
+      hittable: true,
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Leading action',
+      rect: { x: 37.5, y: 0, width: 1, height: 1 },
+      hittable: true,
+    },
+  ]).nodes;
+  const bound = { x: 37.5, y: 0, width: 1, height: 80 };
+
+  const resolution = resolveInteractionTouchPoint(nodes, nodes[0]!, { bounds: [bound] });
+
+  assert.equal(resolution.kind, 'resolved');
+  if (resolution.kind === 'resolved') assert.ok(containsPoint(bound, resolution.point));
 });
 
 test('property: resolved parent-owned points stay inside the target and supplied bounds', () => {

@@ -109,13 +109,18 @@ export type InteractionTouchPointScenario = {
 };
 
 const halfPixel = (value: number): number => value / 2;
+const touchPointAxisStepsArb = fc.oneof(
+  fc.integer({ min: 4, max: 46 }),
+  fc.integer({ min: 48, max: 800 }),
+);
 
 const touchPointTargetRectArb = fc
   .record({
     x: fc.integer({ min: -200, max: 200 }),
     y: fc.integer({ min: -200, max: 200 }),
-    width: fc.integer({ min: 48, max: 800 }),
-    height: fc.integer({ min: 48, max: 800 }),
+    // Exercise dense desktop rows as well as standard mobile touch targets.
+    width: touchPointAxisStepsArb,
+    height: touchPointAxisStepsArb,
   })
   .map(({ x, y, width, height }) => ({
     x: halfPixel(x),

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { listCliCommandNames } from '../../../command-catalog.ts';
 import { usage, usageForCommand } from '../args.ts';
 
 test('root help is a bounded first-success decision card', async () => {
@@ -18,6 +19,25 @@ test('root help is a bounded first-success decision card', async () => {
   assert.match(help, /Coordinates are last resort/);
   assert.doesNotMatch(help, /^Commands:/m);
   assert.doesNotMatch(help, /^Global Flags:/m);
+});
+
+test('root help overview names only commands from the derived catalog', async () => {
+  const help = await usage();
+  const commandsSection = help.match(
+    /More commands \(exact shapes: agent-device help <command>\):\n(?<lines>[\s\S]+?)\n\nGuides/,
+  )?.groups?.lines;
+  assert.ok(commandsSection, 'expected a More commands section');
+
+  const catalog = new Set<string>(listCliCommandNames());
+  const overviewCommands = commandsSection.split('\n').flatMap((line) =>
+    line
+      .trim()
+      .split(/\s{2,}/, 1)[0]!
+      .split(/\s+/),
+  );
+  for (const command of overviewCommands) {
+    assert.ok(catalog.has(command), `root help names unknown command: ${command}`);
+  }
 });
 
 test('help commands preserves the complete reference displaced from root help', async () => {
