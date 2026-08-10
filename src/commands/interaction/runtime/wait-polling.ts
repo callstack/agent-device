@@ -87,7 +87,11 @@ export function createWaitPolling(
     }),
     rethrowIfNeverReadable: unreadable.rethrowIfNeverReadable,
     sleepUntilNextPoll: async () =>
-      await sleepWithinWait(runtime, options, Math.min(WAIT_POLL_INTERVAL_MS, remainingMs())),
+      await sleepWithWaitCancellation(
+        runtime,
+        options,
+        Math.min(WAIT_POLL_INTERVAL_MS, remainingMs()),
+      ),
     timeoutMs,
     waitedMs: () => now(runtime) - startedAtMs,
   };
@@ -162,7 +166,7 @@ function now(runtime: WaitPollingRuntime): number {
   return runtime.clock?.now() ?? Date.now();
 }
 
-async function sleepWithinWait(
+export async function sleepWithWaitCancellation(
   runtime: WaitPollingRuntime,
   options: WaitPollingOptions,
   durationMs: number,
