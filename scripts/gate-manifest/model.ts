@@ -117,31 +117,41 @@ function stripShellComments(run: string): string {
 }
 
 /**
+ * Index of the `)` closing the `(` at `open`, or the end of the string. Balanced, so a
+ * substitution containing `)` — as in `$(node -p "require('./package.json').version")` — is
+ * measured whole rather than cut at the first inner paren.
+ */
+function endOfBalancedParen(run: string, open: number): number {
+  let depth = 0;
+  for (let cursor = open; cursor < run.length; cursor++) {
+    if (run[cursor] === '(') depth++;
+    else if (run[cursor] === ')' && --depth === 0) return cursor;
+  }
+  return run.length;
+}
+
+/** Index just past a substitution starting at `index`, or -1 when none starts there. */
+function endOfSubstitution(run: string, index: number): number {
+  if (run[index] === '`') {
+    const close = run.indexOf('`', index + 1);
+    return close === -1 ? run.length : close;
+  }
+  if (run[index] === '$' && run[index + 1] === '(') return endOfBalancedParen(run, index + 1);
+  return -1;
+}
+
+/**
  * Removes `$(…)` command substitutions and backtick spans. Their contents are values, not the
  * command being run — `APP="$(find "${{ github.workspace }}/…")"` is an assignment, and reading
  * the `${{ … }}` inside it as an unresolved command position would report a dynamic-dispatch
- * edge that is not one. Scans for balanced parentheses so a substitution containing `)` (as in
- * `$(node -p "require('./package.json').version")`) is removed whole.
+ * edge that is not one.
  */
 function stripCommandSubstitutions(run: string): string {
   let out = '';
   for (let index = 0; index < run.length; index++) {
-    if (run[index] === '`') {
-      const close = run.indexOf('`', index + 1);
-      index = close === -1 ? run.length : close;
-      continue;
-    }
-    if (run[index] === '$' && run[index + 1] === '(') {
-      let depth = 0;
-      let cursor = index + 1;
-      for (; cursor < run.length; cursor++) {
-        if (run[cursor] === '(') depth++;
-        else if (run[cursor] === ')' && --depth === 0) break;
-      }
-      index = cursor;
-      continue;
-    }
-    out += run[index];
+    const end = endOfSubstitution(run, index);
+    if (end === -1) out += run[index];
+    else index = end;
   }
   return out;
 }
@@ -351,40 +361,37 @@ function addVitestTerminals(tokens: readonly string[], ctx: ResolveContext, sink
  * `test/integration/smoke-*.test.ts`). A declared transparent wrapper drops out and resolution
  * continues with what it forwards.
  */
-function addNodeTerminals(tokens: readonly string[], ctx: ResolveContext, sink: Sink): void {
+/** `-p`/`-e` evaluate inline source; there is no gated work to attribute to a file. */
+const NODE_EVAL_FLAGS = new Set(['-p', '-e', '--eval', '--print']);
+
+/** The script `node` will run, and the arguments after it. Null when there is no script. */
+function nodeEntryPoint(tokens: readonly string[]): { entry: string; rest: string[] } | null {
   const rest = [...tokens];
-  let entry: string | undefined;
   while (rest.length > 0) {
     const candidate = rest.shift()!;
-    if (candidate.startsWith('-')) {
-      // `-p`/`-e` evaluate inline source; there is no gated work to attribute.
-      if (
-        candidate === '-p' ||
-        candidate === '-e' ||
-        candidate === '--eval' ||
-        candidate === '--print'
-      )
-        return;
-      continue;
-    }
-    entry = candidate;
-    break;
+    if (NODE_EVAL_FLAGS.has(candidate)) return null;
+    if (!candidate.startsWith('-')) return { entry: candidate, rest };
   }
-  if (entry === undefined) return;
+  return null;
+}
+
+function addNodeTerminals(tokens: readonly string[], ctx: ResolveContext, sink: Sink): void {
+  const found = nodeEntryPoint(tokens);
+  if (found === null) return;
+  const { entry, rest } = found;
   if (ctx.transparentWrappers.has(entry)) {
     addNodeTerminals(rest, ctx, sink);
     return;
   }
-  if (tokens.includes('--test')) {
-    const paths = positionalArgs(rest).filter((arg) => !arg.startsWith('-'));
-    // The wrapper case already returned; a `--test` run whose entry is a real file means the
-    // entry itself is the first test path.
-    for (const pattern of [entry, ...paths]) {
-      for (const file of ctx.expandTestPaths(pattern)) sink.terminals.add(`node-test:${file}`);
-    }
+  if (!tokens.includes('--test')) {
+    addExecTerminal(entry, rest, ctx, sink);
     return;
   }
-  addExecTerminal(entry, rest, ctx, sink);
+  // The wrapper case already returned; a `--test` run whose entry is a real file means the
+  // entry itself is the first test path.
+  for (const pattern of [entry, ...positionalArgs(rest)]) {
+    for (const file of ctx.expandTestPaths(pattern)) sink.terminals.add(`node-test:${file}`);
+  }
 }
 
 function addExecTerminal(
@@ -401,6 +408,38 @@ function addExecTerminal(
   for (const declared of ctx.declaredTerminals.get(normalized) ?? []) sink.terminals.add(declared);
 }
 
+/** Flags that select a whole workspace rather than one directory. */
+const PNPM_WORKSPACE_FLAGS = new Set(['--workspace-root', '-w', '-r', '--recursive']);
+
+/**
+ * Consumes pnpm's leading flags from `rest`, returning the package directory the invocation was
+ * redirected into, or null when it targets the root package.
+ */
+function takePnpmDirectory(rest: string[]): string | null {
+  let directory: string | null = null;
+  while (rest.length > 0 && rest[0]!.startsWith('-')) {
+    const flag = rest.shift()!;
+    if (!PNPM_DIR_FLAGS.has(flag)) continue;
+    if (PNPM_WORKSPACE_FLAGS.has(flag)) directory = directory ?? '(workspace)';
+    else directory = rest.shift() ?? '(unknown)';
+  }
+  return directory;
+}
+
+/** What a `pnpm …` invocation targets, once its flags and subcommand are read. */
+type PnpmTarget = { kind: 'script'; name: string } | { kind: 'exec' } | { kind: 'none' };
+
+function takePnpmTarget(rest: string[]): PnpmTarget {
+  if (rest.length === 0) return { kind: 'none' };
+  const head = rest.shift()!;
+  if (head === 'exec') return { kind: 'exec' };
+  if (head === 'run') {
+    return rest.length === 0 ? { kind: 'none' } : { kind: 'script', name: rest.shift()! };
+  }
+  if (PNPM_SUBCOMMANDS.has(head) || head.startsWith('-')) return { kind: 'none' };
+  return { kind: 'script', name: head };
+}
+
 function resolvePnpm(
   tokens: readonly string[],
   ctx: ResolveContext,
@@ -408,30 +447,15 @@ function resolvePnpm(
   chain: ReadonlySet<string>,
 ): void {
   const rest = [...tokens];
-  let directory: string | null = null;
-  while (rest.length > 0 && rest[0]!.startsWith('-')) {
-    const flag = rest.shift()!;
-    if (!PNPM_DIR_FLAGS.has(flag)) continue;
-    if (flag === '--workspace-root' || flag === '-w' || flag === '-r' || flag === '--recursive') {
-      directory = directory ?? '(workspace)';
-      continue;
-    }
-    directory = rest.shift() ?? '(unknown)';
-  }
-  if (rest.length === 0) return;
-
-  let name = rest.shift()!;
-  if (name === 'run') {
-    if (rest.length === 0) return;
-    name = rest.shift()!;
-  } else if (name === 'exec') {
+  const directory = takePnpmDirectory(rest);
+  const target = takePnpmTarget(rest);
+  if (target.kind === 'none') return;
+  if (target.kind === 'exec') {
     // Everything after `exec` is a plain command again.
     resolveTokens(rest, ctx, sink, chain);
     return;
-  } else if (PNPM_SUBCOMMANDS.has(name) || name.startsWith('-')) {
-    return;
   }
-
+  const { name } = target;
   if (isDynamic(name)) {
     report(sink, 'dynamic-command', `pnpm script name is an unresolved expression: "${name}"`);
     return;
@@ -470,6 +494,41 @@ function resolveScript(
   }
 }
 
+function resolveShell(
+  rest: readonly string[],
+  ctx: ResolveContext,
+  sink: Sink,
+  _chain: ReadonlySet<string>,
+): void {
+  const entry = rest.find((token) => !token.startsWith('-'));
+  if (entry === undefined) return;
+  if (isDynamic(entry)) {
+    report(sink, 'dynamic-command', `shell script path is an unresolved expression: "${entry}"`);
+    return;
+  }
+  addExecTerminal(entry, rest.slice(rest.indexOf(entry) + 1), ctx, sink);
+}
+
+type CommandHandler = (
+  rest: readonly string[],
+  ctx: ResolveContext,
+  sink: Sink,
+  chain: ReadonlySet<string>,
+) => void;
+
+/** Launchers whose arguments decide what really runs, keyed by the word in command position. */
+const COMMAND_HANDLERS: ReadonlyMap<string, CommandHandler> = new Map<string, CommandHandler>([
+  ['pnpm', (rest, ctx, sink, chain) => resolvePnpm(rest, ctx, sink, chain)],
+  ['npx', (rest, ctx, sink, chain) => resolveTokens(rest, ctx, sink, chain)],
+  ['bunx', (rest, ctx, sink, chain) => resolveTokens(rest, ctx, sink, chain)],
+  ['node', (rest, ctx, sink) => addNodeTerminals(rest, ctx, sink)],
+  ['bun', (rest, ctx, sink) => addNodeTerminals(rest, ctx, sink)],
+  ['sh', resolveShell],
+  ['bash', resolveShell],
+  ['zsh', resolveShell],
+  ['vitest', (rest, ctx, sink) => addVitestTerminals(rest, ctx, sink)],
+]);
+
 function resolveTokens(
   raw: readonly string[],
   ctx: ResolveContext,
@@ -485,30 +544,9 @@ function resolveTokens(
     report(sink, 'dynamic-command', `command position is an unresolved expression: "${command}"`);
     return;
   }
-  if (command === 'pnpm') {
-    resolvePnpm(rest, ctx, sink, chain);
-    return;
-  }
-  if (command === 'npx' || command === 'bunx') {
-    resolveTokens(rest, ctx, sink, chain);
-    return;
-  }
-  if (command === 'node' || command === 'bun') {
-    addNodeTerminals(rest, ctx, sink);
-    return;
-  }
-  if (command === 'sh' || command === 'bash' || command === 'zsh') {
-    const entry = rest.find((token) => !token.startsWith('-'));
-    if (entry === undefined) return;
-    if (isDynamic(entry)) {
-      report(sink, 'dynamic-command', `shell script path is an unresolved expression: "${entry}"`);
-      return;
-    }
-    addExecTerminal(entry, rest.slice(rest.indexOf(entry) + 1), ctx, sink);
-    return;
-  }
-  if (command === 'vitest') {
-    addVitestTerminals(rest, ctx, sink);
+  const handler = COMMAND_HANDLERS.get(command);
+  if (handler) {
+    handler(rest, ctx, sink, chain);
     return;
   }
   if (SCRIPT_FILE.test(command)) {
@@ -612,7 +650,7 @@ export function parseWorkflow(file: string, source: string): WorkflowFile {
  * The status-check names GitHub can show for a job: the bare job name, and the
  * `<workflow> / <job>` form required-context spelling. `CHECK_CATALOG.ciJobs` uses both.
  */
-export function jobCheckNames(workflow: WorkflowFile, job: WorkflowJob): string[] {
+function jobCheckNames(workflow: WorkflowFile, job: WorkflowJob): string[] {
   return job.name === null ? [] : [job.name, `${workflow.name} / ${job.name}`];
 }
 
@@ -657,31 +695,49 @@ function actionInputDefaults(document: Record<string, unknown>): Record<string, 
   return defaults;
 }
 
-/** Walks one step, descending into local composite actions. `depth` bounds action nesting. */
-function resolveStep(step: WorkflowStep, ctx: ResolveContext, sink: Sink, depth: number): void {
-  sink.step = step.name;
-  if (step.run !== undefined) {
-    for (const segment of commandSegments(step.run))
-      resolveTokens(tokenize(segment), ctx, sink, new Set());
-  }
-  if (step.uses === undefined || !step.uses.startsWith('./')) return;
-  if (depth > 4) return;
-  const actionDir = step.uses.replace(/^\.\//, '');
-  const source = ctx.actions.get(actionDir);
+/** How deep a local action may call another before the walk stops descending. */
+const MAX_ACTION_DEPTH = 4;
+
+/**
+ * Walks the steps of the local composite action a step `uses:`, with `${{ inputs.* }}` resolved
+ * against the caller's `with:` block (falling back to the action's declared defaults).
+ */
+function resolveLocalAction(
+  step: WorkflowStep,
+  uses: string,
+  ctx: ResolveContext,
+  sink: Sink,
+  depth: number,
+): void {
+  const source = ctx.actions.get(uses.replace(/^\.\//, ''));
   if (source === undefined) {
-    report(sink, 'missing-action', `local action "${step.uses}" does not exist`);
+    report(sink, 'missing-action', `local action "${uses}" does not exist`);
     return;
   }
   const document = asRecord(parse(source)) ?? {};
   const defaults = actionInputDefaults(document);
   for (const nested of parseSteps(asRecord(document['runs'])?.['steps'])) {
-    const resolved: WorkflowStep =
-      nested.run === undefined
-        ? nested
-        : { ...nested, run: substituteInputs(nested.run, step.with, defaults) };
-    resolveStep({ ...resolved, name: `${step.name} → ${nested.name}` }, ctx, sink, depth + 1);
+    const run =
+      nested.run === undefined ? undefined : substituteInputs(nested.run, step.with, defaults);
+    resolveStep(
+      { ...nested, ...(run === undefined ? {} : { run }), name: `${step.name} → ${nested.name}` },
+      ctx,
+      sink,
+      depth + 1,
+    );
   }
+}
+
+/** Walks one step, descending into local composite actions. `depth` bounds action nesting. */
+function resolveStep(step: WorkflowStep, ctx: ResolveContext, sink: Sink, depth: number): void {
   sink.step = step.name;
+  for (const segment of commandSegments(step.run ?? '')) {
+    resolveTokens(tokenize(segment), ctx, sink, new Set());
+  }
+  if (step.uses?.startsWith('./') && depth <= MAX_ACTION_DEPTH) {
+    resolveLocalAction(step, step.uses, ctx, sink, depth);
+    sink.step = step.name;
+  }
 }
 
 export function buildLanes(workflows: readonly WorkflowFile[], ctx: ResolveContext): Lane[] {
@@ -824,6 +880,15 @@ export type CatalogReachabilityMiss = {
   readonly missing: readonly Terminal[];
 };
 
+/** Lanes indexed by every status-check name they can appear under. */
+function lanesByCheckName(lanes: readonly Lane[]): Map<string, Lane[]> {
+  const byName = new Map<string, Lane[]>();
+  for (const lane of lanes) {
+    for (const name of lane.checkNames) byName.set(name, [...(byName.get(name) ?? []), lane]);
+  }
+  return byName;
+}
+
 /**
  * A catalog entry claims its script is mirrored by its `ciJobs` — plural, and collectively:
  * `unit` names both Coverage (which runs the Vitest projects) and Integration Tests (which runs
@@ -840,10 +905,7 @@ export function unreachableCatalogClaims(
   ctx: ResolveContext,
   waived: ReadonlySet<string>,
 ): CatalogReachabilityMiss[] {
-  const byName = new Map<string, Lane[]>();
-  for (const lane of lanes) {
-    for (const name of lane.checkNames) byName.set(name, [...(byName.get(name) ?? []), lane]);
-  }
+  const byName = lanesByCheckName(lanes);
   const misses: CatalogReachabilityMiss[] = [];
   for (const entry of catalog) {
     if (entry.script === null) continue;
@@ -920,25 +982,20 @@ export function unreachablePathCategories(
   lanes: readonly Lane[],
   waived: ReadonlySet<string>,
 ): PathReachabilityMiss[] {
-  const byName = new Map<string, Lane[]>();
-  for (const lane of lanes) {
-    for (const name of lane.checkNames) byName.set(name, [...(byName.get(name) ?? []), lane]);
-  }
+  const byName = lanesByCheckName(lanes);
   const triggersByFile = new Map(workflows.map((workflow) => [workflow.file, workflow.triggers]));
-  const misses: PathReachabilityMiss[] = [];
+  const firesOnPath = (job: string, file: string): boolean =>
+    (byName.get(job) ?? []).some((lane) => {
+      const triggers = triggersByFile.get(lane.workflow);
+      return triggers !== undefined && triggersOnPath(triggers, file);
+    });
 
+  const misses: PathReachabilityMiss[] = [];
   for (const category of categories) {
     for (const check of category.checks) {
       if (waived.has(`${category.label}@${check}`)) continue;
       const entry = catalog.find((candidate) => candidate.id === check);
-      if (!entry) continue;
-      const reaching = entry.ciJobs.filter((job) =>
-        (byName.get(job) ?? []).some((lane) => {
-          const triggers = triggersByFile.get(lane.workflow);
-          return triggers !== undefined && triggersOnPath(triggers, category.path);
-        }),
-      );
-      if (reaching.length > 0) continue;
+      if (!entry || entry.ciJobs.some((job) => firesOnPath(job, category.path))) continue;
       for (const job of entry.ciJobs) {
         const lane = (byName.get(job) ?? [])[0];
         misses.push({

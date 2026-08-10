@@ -36,6 +36,7 @@ import {
   DOCS_LANE_OWNERS,
   LOCAL_ONLY,
   TRANSPARENT_WRAPPERS,
+  type DocsLaneOwner,
 } from './waivers.ts';
 import { vitestProjectNames } from './vitest-projects.ts';
 
@@ -270,22 +271,47 @@ if (pathMisses.length > 0) {
 }
 
 // 7. Docs paths ci.yml drops must have a declared owner that really fires on them.
-const docsFailures = DOCS_LANE_OWNERS.flatMap((owner) => {
-  const workflow = workflows.find((candidate) => candidate.file === owner.workflow);
-  if (!workflow) return [`${owner.workflow} does not exist (declared owner of "${owner.path}")`];
-  const job = workflow.jobs.find((candidate) => candidate.id === owner.job);
-  if (!job) return [`${owner.workflow} defines no job "${owner.job}"`];
-  if (!triggersOnPath(workflow.triggers, owner.path)) {
-    return [`${owner.workflow} no longer triggers on "${owner.path}"`];
-  }
+/** How many units of work the lane a docs-lane owner names actually resolves to. */
+function declaredOwnerGateCount(owner: DocsLaneOwner): number {
   const lane = lanes.find(
     (candidate) => candidate.workflow === owner.workflow && candidate.job === owner.job,
   );
-  if (!lane || lane.terminals.size === 0) {
-    return [`${owner.workflow}#${owner.job} runs no resolvable gate for "${owner.path}"`];
-  }
-  return [];
-});
+  return lane?.terminals.size ?? 0;
+}
+
+/**
+ * Everything a declared docs-lane owner has to keep being true. Enumerated rather than nested
+ * so the claim "pr-preview.yml's command-docs-gate covers website/**" is checked in the three
+ * independent ways it can quietly stop holding: the job goes away, the trigger stops matching
+ * the path, or the job stops running anything at all.
+ */
+const DOCS_OWNER_CONDITIONS: readonly {
+  broken: (owner: DocsLaneOwner, workflow: WorkflowFile) => boolean;
+  problem: (owner: DocsLaneOwner) => string;
+}[] = [
+  {
+    broken: (owner, workflow) => !workflow.jobs.some((candidate) => candidate.id === owner.job),
+    problem: (owner) => `defines no job "${owner.job}"`,
+  },
+  {
+    broken: (owner, workflow) => !triggersOnPath(workflow.triggers, owner.path),
+    problem: (owner) => `no longer triggers on "${owner.path}"`,
+  },
+  {
+    broken: (owner) => declaredOwnerGateCount(owner) === 0,
+    problem: (owner) => `runs no resolvable gate for "${owner.path}"`,
+  },
+];
+
+function docsOwnerFailure(owner: DocsLaneOwner): string | null {
+  const workflow = workflows.find((candidate) => candidate.file === owner.workflow);
+  if (!workflow) return `${owner.workflow} does not exist (declared owner of "${owner.path}")`;
+  const broken = DOCS_OWNER_CONDITIONS.find((condition) => condition.broken(owner, workflow));
+  return broken ? `${owner.workflow}#${owner.job} ${broken.problem(owner)}` : null;
+}
+const docsFailures = DOCS_LANE_OWNERS.map(docsOwnerFailure).filter(
+  (failure): failure is string => failure !== null,
+);
 if (docsFailures.length > 0) {
   fail(
     `${docsFailures.length} declared docs-lane owner(s) no longer hold`,
