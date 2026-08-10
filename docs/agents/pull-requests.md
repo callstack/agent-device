@@ -58,6 +58,11 @@ asked or when the work is intentionally incomplete.
   backend. Tests that mock away the router, or exercise only a helper, do not prove the shipped path.
 - For each key regression test, identify what deletion or revert would make it fail. If reverting the
   implementation still passes, the test is vacuous.
+- Before accepting another regression test for a recurring class of failure, ask whether the owning
+  interface can make that state or path impossible. Prefer types, a single construction path, or a
+  declaration-site invariant over tests that enumerate the next known example. Keep one small
+  interface-level regression as evidence after the design fix; when design cannot eliminate the
+  class, require the PR to say why.
 - When a custom guard repeatedly needs new exceptions, parser cases, declaration categories, or
   source reconstruction, stop reviewing it as a sequence of patches. Ask whether the compiler,
   schema, registry, or declaration site can own the invariant instead. A second omission caused by

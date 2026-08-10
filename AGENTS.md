@@ -37,6 +37,10 @@ prose in this repo, including this file.
   pre-fix code (revert, run, quote the failing number), a moved test against its gates (planted type
   error, discovered-count delta), a structural gate against a planted violation. Three vacuous
   regression tests shipped in one day before this rule; review caught all three.
+- Regression tests are evidence, not the default repair. First ask whether a type, registry,
+  construction path, or deeper module interface can make the entire invalid state or dispatch path
+  unrepresentable. Prefer that design change, then add the smallest interface-level regression that
+  proves the invariant. If only a test prevents recurrence, explain why the owning design cannot.
 - Typed signals over message sniffing: key on structured details (`details.timeoutMs`, reason codes),
   never on error text. Remaining sniffs are owned debt with in-code rationale — do not copy them.
 - Snapshot output is the token budget. Never add per-node bytes to the tree; response-level metadata

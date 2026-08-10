@@ -26,7 +26,7 @@ process.stderr.write(
   [
     `This PR crosses the custom-tooling review tripwire: ${assessment.reasons.join('; ')}.`,
     `Add a substantive \`${SIMPLICITY_REVIEW_HEADING}\` section to the PR body.`,
-    'Explain the failure being prevented, the authoritative source of truth, the simpler alternative considered, why custom enforcement is necessary, and what would trigger deletion or redesign.',
+    'Explain the failure being prevented, the authoritative source of truth, the design considered to make that error class impossible, why custom enforcement is still necessary, and what would trigger deletion or redesign.',
     'Implementation files counted:',
     files,
     '',
