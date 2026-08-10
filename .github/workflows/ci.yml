@@ -232,6 +232,30 @@ jobs:
       - name: Verify corpus entries against their released blobs
         run: pnpm check:replay-compat
 
+  released-surface-compat:
+    # The daemon RPC wire ledger (#1432) is compared against the ledger as it
+    # stood at the last RELEASED tag, which only a full-history checkout can
+    # read. Same split as the replay-compat corpus above: the shallow unit lane
+    # holds the ledger to its source, this job holds it to the last release.
+    name: Released-Surface Compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Verify the wire-compat rules
+        run: pnpm check:daemon-wire-compat:test
+
+      - name: Compare the daemon RPC wire surface against the last released tag
+        run: pnpm check:daemon-wire-compat
+
   coverage:
     # Runs the full unit + provider-integration suites under coverage with
     # thresholds, so a separate unit-tests job would rerun the same tests.

@@ -167,6 +167,15 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
     ciJobs: ['Replay-Compat Provenance'],
     localRunnable: true,
   },
+  {
+    id: 'daemon-wire-compat',
+    label: 'Daemon RPC wire surface vs. last released tag',
+    kind: { type: 'script', script: 'check:daemon-wire-compat' },
+    // Same shape as replay-compat: the released ledger is only readable from a
+    // full-history checkout, so this cannot live in the shallow unit lane.
+    ciJobs: ['Released-Surface Compatibility'],
+    localRunnable: true,
+  },
 ];
 
 export function getCheckSpec(id: CheckId): CheckSpec {

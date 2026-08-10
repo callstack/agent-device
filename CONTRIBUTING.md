@@ -72,6 +72,18 @@ when a running daemon needs to pick up a new TypeScript build.
 `pnpm package:npm` is a release guard, not a routine development command. Use the specific commands
 above while iterating.
 
+### Released-surface baselines roll forward on publish
+
+Compatibility gates baseline against the last **released tag**, not against `main`, so publishing is
+what advances them — there is no separate baseline-refresh step and no regenerate command. Tagging a
+release makes that commit's `test/wire-compat/ledger.json` the new baseline for
+`pnpm check:daemon-wire-compat`, and its `.ad` corpus tags the new ceiling for
+`pnpm check:replay-compat`. The practical consequence for a normal PR: wire churn *within* an
+unreleased branch is free, and only the net change since the last publish has to carry a
+`DAEMON_RPC_PROTOCOL_VERSION` bump or a `compatibleChanges` acknowledgment. After a release that
+bumped the protocol version, the acknowledgments accumulated against the previous one no longer
+match any current digest and are dropped — git history keeps the audit trail.
+
 ## Validate a change
 
 Use the smallest trustworthy loop while editing:

@@ -138,6 +138,8 @@
     "check:package": "node --experimental-strip-types scripts/check-package.ts",
     "check:command-docs": "vitest run --project unit-core src/__tests__/command-doc-coverage.test.ts",
     "check:replay-compat": "node --experimental-strip-types scripts/check-replay-compat-provenance.ts",
+    "check:daemon-wire-compat": "node --experimental-strip-types scripts/wire-compat/run.ts",
+    "check:daemon-wire-compat:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/wire-compat/model.test.ts",
     "check:tmpdir-leaks": "node --experimental-strip-types scripts/check-tmpdir-leaks.ts",
     "check:tmpdir-leaks:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/check-tmpdir-leaks-model.test.ts scripts/vitest-tmpdir-global-setup.test.ts scripts/node-test-tmpdir.test.ts scripts/swift-toolchain-tmpdir.test.ts",
     "check:freerange": "fr",

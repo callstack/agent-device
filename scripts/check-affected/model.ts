@@ -19,6 +19,8 @@
 // non-.ts fixture whose owning suite cannot be derived). Existing GitHub CI
 // remains authoritative; this only optimizes local/agent feedback.
 
+import { WIRE_SURFACE_FILES } from '../../test/wire-compat/surface.ts';
+
 export type CheckId =
   | 'format'
   | 'lint'
@@ -39,7 +41,8 @@ export type CheckId =
   | 'android-helpers'
   | 'macos-helper'
   | 'web-smoke'
-  | 'replay-compat';
+  | 'replay-compat'
+  | 'daemon-wire-compat';
 
 // The complete local check universe. A fail-open plan selects all of these;
 // keep it in sync with the catalog in checks.ts (asserted by the self-test).
@@ -66,6 +69,7 @@ export const ALL_CHECKS: readonly CheckId[] = [
   'macos-helper',
   'web-smoke',
   'replay-compat',
+  'daemon-wire-compat',
 ];
 
 export type SelectionReason = {
@@ -331,6 +335,34 @@ const replayCompatOwnership: OwnershipRule = ({ file }) => {
   return selections;
 };
 
+// The daemon RPC wire ledger (#1432). The wire SOURCE files are the ones that
+// would otherwise slip: editing `packages/kernel/src/contracts.ts` selects
+// vitest-related, but the wire gate reads that file as TEXT rather than
+// importing it, so it is invisible to the module graph Vitest walks. The file
+// list is read from the manifest instead of restated here, so a declaration
+// added under a new file selects the gate the day it is listed.
+//
+// `ledger.json` needs the rule for the second reason `.ad` corpus data does:
+// a non-.ts file under test/ resolves to `format` alone and would fail open.
+// (`scripts/wire-compat/` needs no branch — all of scripts/ already fails open.)
+const daemonWireCompatOwnership: OwnershipRule = ({ file }) => {
+  if (!file.startsWith('test/wire-compat/') && !WIRE_SURFACE_FILES.includes(file)) return [];
+  return [
+    reason(
+      'daemon-wire-compat',
+      file,
+      'own:daemon-wire-compat',
+      'the wire ledger is compared against the last released tag',
+    ),
+    reason(
+      'unit',
+      file,
+      'own:daemon-wire-compat',
+      'the wire ledger is held to its source by the unit-lane gate',
+    ),
+  ];
+};
+
 const BUILD_OWNERSHIP: ReadonlyArray<{
   check: CheckId;
   rule: string;
@@ -392,6 +424,7 @@ const OWNERSHIP_RULES: readonly OwnershipRule[] = [
   nodeIntegrationOwnership,
   testAppOwnership,
   replayCompatOwnership,
+  daemonWireCompatOwnership,
   buildOwnership,
 ];
 
