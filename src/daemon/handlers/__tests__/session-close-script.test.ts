@@ -124,9 +124,7 @@ test('#1533: bare close on an aborted authoring session writes no script', () =>
     'aborted',
     makeIosSession('aborted', {
       appBundleId: 'com.example.app',
-      // Post-`abortAuthoringOnSecondOpen`, then re-armed by the second open's own
-      // `--save-script` flag ingress.
-      recordSession: true,
+      // Post-`abortAuthoringOnSecondOpen`: terminal, and therefore not recording.
       scriptPublication: authoringPublication('aborted'),
       actions: [{ ts: 1, command: 'click', positionals: ['id="save"'], flags: {} }],
     }),
@@ -150,7 +148,6 @@ test('#1533: an ordinary armed authoring session still publishes on bare close',
     'armed',
     makeIosSession('armed', {
       appBundleId: 'com.example.app',
-      recordSession: true,
       scriptPublication: authoringPublication('armed'),
       actions: [{ ts: 1, command: 'click', positionals: ['id="save"'], flags: {} }],
     }),

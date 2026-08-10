@@ -59,7 +59,10 @@ import { handleCloseCommand } from '../session-close.ts';
 import { SessionStore } from '../../session-store.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
-import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import {
+  makeIosSession,
+  authoringPublication,
+} from '../../../__tests__/test-utils/session-factories.ts';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import {
   baseReplayRequest as baseReq,
@@ -396,8 +399,8 @@ test('non-repair authoring recording is unchanged: a read in a fresh `open --sav
   // An ordinary, non-repair recording session: no repair variant (never
   // armed by a repair `replay --save-script`).
   const session = ctx.sessionStore.get(ctx.sessionName)!;
-  session.recordSession = true;
-  expect(session.scriptPublication).toBeUndefined();
+  session.scriptPublication = authoringPublication('armed');
+  expect(session.scriptPublication.kind).not.toBe('repair');
 
   ctx.sessionStore.recordAction(session, {
     command: 'get',

@@ -6,6 +6,7 @@ import {
   armAuthoring,
   armRepair,
   isAuthoringAborted,
+  isRecordingPublication,
   isScriptPublished,
   markAuthoringPublished,
   resolveScriptTarget,
@@ -41,7 +42,6 @@ export function armAuthoringOnOpen(
   session: SessionState,
   requested: { path?: string; force?: boolean },
 ): void {
-  session.recordSession = true;
   session.scriptPublication = armAuthoring({
     path: requested.path !== undefined ? expandSessionPath(requested.path) : undefined,
     force: requested.force === true,
@@ -53,25 +53,19 @@ export function armAuthoringOnOpen(
  * the journey no longer starts where the script says it does.
  */
 export function abortAuthoringOnSecondOpen(session: SessionState): void {
-  session.recordSession = false;
   session.scriptPublication = abortAuthoring(publicationState(session));
 }
 
 /**
- * Whether a session carrying `--save-script` on THIS request is left recording.
+ * Whether the session captures recording-time evidence (`isRecordingPublication`).
  *
- * Recording is a property of the publication lifecycle, not a flag each surface may set on its
- * own: an ABORTED authoring lifecycle is terminal (#1533), so the flag arms nothing on any
- * surface that handles it — the re-open builder, the close finalizer, and the recorded-action
- * ingress all get the same answer. Every other lifecycle keeps the old meaning: the flag arms
- * recording, and an already-recording session stays recording without it.
+ * The one question every recording-sensitive site asks, answered from the aggregate rather than
+ * from a boolean kept in step with it by hand. No surface can arm recording without moving the
+ * lifecycle that authorizes it, which is what makes #1533's drift unrepresentable rather than
+ * merely guarded against.
  */
-export function recordSessionAfterSaveScriptFlag(
-  session: SessionState,
-  saveScript: boolean,
-): boolean {
-  if (isAuthoringAborted(publicationState(session))) return false;
-  return session.recordSession === true || saveScript;
+export function isSessionRecording(session: SessionState | undefined): boolean {
+  return isRecordingPublication(publicationState(session));
 }
 
 /**
@@ -96,7 +90,6 @@ export function recordSessionAfterSaveScriptFlag(
 export function applyRecordedSaveScriptFlags(session: SessionState, flags: CommandFlags): void {
   if (!flags.saveScript) return;
   if (isAuthoringAborted(publicationState(session))) return;
-  session.recordSession = true;
   const requested = {
     path: typeof flags.saveScript === 'string' ? expandSessionPath(flags.saveScript) : undefined,
     force: flags.force === true,
@@ -139,10 +132,9 @@ export function retargetActivePublication(
   };
 }
 
-/** Active publication succeeded: record the written path and stop recording (ADR 0016). */
+/** Active publication succeeded: PUBLISHED is terminal, which is what stops recording. */
 export function markActivePublicationDone(session: SessionState, writtenPath: string): void {
   session.scriptPublication = markAuthoringPublished(publicationState(session), writtenPath);
-  session.recordSession = false;
 }
 
 /** Ordinary close publication succeeded: the authoring lifecycle reached `published`. */

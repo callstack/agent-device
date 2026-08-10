@@ -8,7 +8,6 @@ import {
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 import type { SessionRuntimeHints, SessionState } from '../types.ts';
-import { recordSessionAfterSaveScriptFlag } from '../session-script-publication-capability.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { successText } from '../../utils/success-text.ts';
 import type { StartupPerfSample } from './session-startup-metrics.ts';
@@ -89,18 +88,9 @@ export function buildNextOpenSession(params: {
   surface: SessionSurface;
   appBundleId?: string;
   appName?: string;
-  saveScript: boolean;
 }): SessionState {
-  const {
-    existingSession,
-    sessionName,
-    sessionScope,
-    device,
-    surface,
-    appBundleId,
-    appName,
-    saveScript,
-  } = params;
+  const { existingSession, sessionName, sessionScope, device, surface, appBundleId, appName } =
+    params;
   if (existingSession) {
     return {
       ...existingSession,
@@ -108,7 +98,6 @@ export function buildNextOpenSession(params: {
       surface,
       appBundleId,
       appName,
-      recordSession: recordSessionAfterSaveScriptFlag(existingSession, saveScript),
       snapshot: undefined,
     };
   }
@@ -120,7 +109,6 @@ export function buildNextOpenSession(params: {
     surface,
     appBundleId,
     appName,
-    recordSession: saveScript,
     actions: [],
   };
 }

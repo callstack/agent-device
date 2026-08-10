@@ -499,7 +499,7 @@ function deriveClientTelemetryPath(
 
 /**
  * #1478 (P4-pre): a record-only session is created by `record` itself and never
- * by `open`, so the only way it could ever have carried `recordSession` was a
+ * by `open`, so the only way it could ever have armed a recording lifecycle was a
  * raw `record --save-script` request — the arming path now rejected at the
  * daemon request seam (`unsupportedSaveScriptFlagResponse`). With that closed,
  * the immediate `writeSessionLog` this used to run at `record stop` could only

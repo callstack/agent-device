@@ -159,7 +159,7 @@ export function isInteractiveObservation(req: DaemonRequest): boolean {
  * `replay --save-script` (decision 6, R1/R6) — an ordinary, non-repair
  * `open --save-script`/`close --save-script` authoring recording never sets
  * it (see the ADR's "Scope" note under decision 6). Gating on this field,
- * rather than on `session.recordSession` alone, is exactly what keeps
+ * rather than on whether the session records at all, is exactly what keeps
  * ordinary authoring recording completely unchanged: a fresh `open
  * --save-script` session records every action, including reads, precisely as
  * it always has.

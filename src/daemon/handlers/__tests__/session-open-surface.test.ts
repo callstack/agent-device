@@ -11,6 +11,7 @@ import {
   makeIosSession,
 } from '../../../__tests__/test-utils/session-factories.ts';
 import { IOS_SIMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
+import { isSessionRecording } from '../../session-script-publication-capability.ts';
 
 test('resolveRequestedOpenSurface rejects surface flag on iOS', () => {
   assert.throws(
@@ -58,53 +59,44 @@ test('buildOpenResult exposes the Vega serial without leaking an internal platfo
   assert.equal(result.target, 'tv');
 });
 
-// --- #1533: `--save-script` arms recording through the publication lifecycle, not around it ---
+// --- #1533: a re-open cannot resurrect a terminal authoring lifecycle ---
 //
-// A re-open is the surface that used to set `recordSession` on its own. An ABORTED authoring
-// lifecycle is terminal, so the flag must arm nothing here either — otherwise the session keeps
-// paying recording-time costs (the direct-selector fast paths stay disabled) for a recording that
-// can never publish, and the writer is the only thing standing between it and a stray script.
+// This surface used to decide recording on its own (`existingSession.recordSession || saveScript`),
+// which is how an ABORTED lifecycle came back to life on a third `open --save-script`. Recording is
+// now derived from the lifecycle, so the only thing left to pin here is that a re-open carries the
+// publication state through untouched — it has no arming decision to get wrong.
 
-function reopen(existingSession: ReturnType<typeof makeIosSession>, saveScript: boolean) {
+function reopen(existingSession: ReturnType<typeof makeIosSession>) {
   return buildNextOpenSession({
     existingSession,
     sessionName: existingSession.name,
     device: IOS_SIMULATOR,
     surface: 'app',
     appBundleId: 'com.example.other',
-    saveScript,
   });
 }
 
-test('#1533: re-opening an aborted authoring session with --save-script does not re-arm recording', () => {
-  const aborted = makeIosSession('s', {
-    recordSession: false,
-    scriptPublication: authoringPublication('aborted'),
-  });
+test('#1533: a re-open leaves an aborted authoring lifecycle aborted, and not recording', () => {
+  const aborted = makeIosSession('s', { scriptPublication: authoringPublication('aborted') });
 
-  assert.equal(reopen(aborted, true).recordSession, false);
+  const next = reopen(aborted);
+
+  assert.deepEqual(next.scriptPublication, authoringPublication('aborted'));
+  assert.equal(isSessionRecording(next), false);
 });
 
-test('#1533: an aborted lifecycle that is already recording is corrected, not carried forward', () => {
-  const drifted = makeIosSession('s', {
-    recordSession: true,
-    scriptPublication: authoringPublication('aborted'),
-  });
+test('a re-open carries an armed authoring lifecycle through unchanged', () => {
+  const armed = makeIosSession('s', { scriptPublication: authoringPublication('armed') });
 
-  assert.equal(reopen(drifted, true).recordSession, false);
+  const next = reopen(armed);
+
+  assert.deepEqual(next.scriptPublication, authoringPublication('armed'));
+  assert.equal(isSessionRecording(next), true);
 });
 
-test('a re-open with --save-script still arms recording for a session with no publication yet', () => {
-  const plain = makeIosSession('s', { recordSession: false });
+test('a re-open of a session that never armed records nothing', () => {
+  const next = reopen(makeIosSession('s'));
 
-  assert.equal(reopen(plain, true).recordSession, true);
-});
-
-test('a re-open without --save-script leaves an armed authoring session recording', () => {
-  const armed = makeIosSession('s', {
-    recordSession: true,
-    scriptPublication: authoringPublication('armed'),
-  });
-
-  assert.equal(reopen(armed, false).recordSession, true);
+  assert.equal(next.scriptPublication, undefined);
+  assert.equal(isSessionRecording(next), false);
 });

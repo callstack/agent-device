@@ -4,6 +4,7 @@ import type { FindReadResult } from '@agent-device/contracts/interaction';
 import { stripAndroidSystemChromeProvenanceFromNode } from '@agent-device/contracts/platform';
 import { SessionStore } from './session-store.ts';
 import { isInteractiveObservation } from './session-action-recorder.ts';
+import { isSessionRecording } from './session-script-publication-capability.ts';
 import {
   computeTargetEvidence,
   type RecordedTargetCapture,
@@ -137,7 +138,7 @@ export function recordIfSession(
   const session = sessionStore.get(sessionName);
   if (!session) return;
   const targetEvidence =
-    session.recordSession && recordedTarget
+    isSessionRecording(session) && recordedTarget
       ? computeTargetEvidence(recordedTarget, { mode: evidenceMode })
       : undefined;
   sessionStore.recordAction(session, {

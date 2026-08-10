@@ -150,11 +150,35 @@ export function isRepairCommittable(state: SessionScriptPublicationState): boole
  * #1533: terminal authoring failure — a second successful `open` ended the journey, so the
  * recording publishes NOTHING, forever. The authoring counterpart of an aborted repair, and
  * terminal in the same sense: the state itself answers the question, so no caller re-derives
- * terminality from `session.recordSession`, which is an evidence-capture flag rather than a
- * publication authorization.
+ * terminality from a separate flag.
  */
 export function isAuthoringAborted(state: SessionScriptPublicationState): boolean {
   return state.kind === 'authoring' && state.status === 'aborted';
+}
+
+/**
+ * Whether the session captures recording-time evidence: portable selector chains and ADR 0012
+ * `target-v1` identity, gathered at action time because they cannot be reconstructed later.
+ *
+ * This is what `SessionState.recordSession` used to store alongside the aggregate. The boolean
+ * was redundant — every writer set both — but nothing made them agree, which is how #1533
+ * happened: a `--save-script` ingress re-armed the flag behind an ABORTED status. Deriving the
+ * answer removes the second source of truth rather than policing it.
+ *
+ * Evidence capture is not free: it disables the direct-selector fast paths for `click` and `get`
+ * (a captured resolution tree is required to compute evidence), so the predicate must stay exact
+ * rather than merely safe.
+ *
+ * - `authoring` records only while ARMED. ABORTED and PUBLISHED are terminal, and the journey is
+ *   over in both.
+ * - `repair` records for its whole lifetime, terminal statuses included. That mirrors the
+ *   previous flag exactly: `armRepairStep` set it, and neither `abortRepair` nor `commitRepair`
+ *   ever cleared it. Whether a committed repair should still capture evidence is a real question,
+ *   but it is a behavior change and does not belong in the derivation.
+ */
+export function isRecordingPublication(state: SessionScriptPublicationState): boolean {
+  if (state.kind === 'authoring') return state.status === 'armed';
+  return state.kind === 'repair';
 }
 
 /** A committed publication is idempotent: a second write no-ops rather than republishing. */

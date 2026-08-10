@@ -74,7 +74,7 @@ function publicationIneligibility(session: SessionState): PublicationIneligibili
   if (isRepairArmedSession(session)) return 'repair';
   const state = session.scriptPublication;
   if (state?.kind === 'authoring' && state.status !== 'armed') return state.status;
-  return isAuthoringArmedSession(session) && session.recordSession ? undefined : 'not-armed';
+  return isAuthoringArmedSession(session) ? undefined : 'not-armed';
 }
 
 const PUBLICATION_INELIGIBILITY_ERRORS: Record<PublicationIneligibility, () => AppError> = {

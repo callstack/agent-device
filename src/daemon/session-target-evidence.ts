@@ -4,7 +4,7 @@
  *
  * `computeTargetEvidence` runs decision 3's "Record-time write" steps 1-5
  * against the tree the resolver already captured; it never captures, and
- * callers gate it on `session.recordSession`. Tree-agnostic spec pieces live
+ * callers gate it on `isSessionRecording`. Tree-agnostic spec pieces live
  * in `@agent-device/ad-script`: local-identity + ancestry-prefix matching
  * (`packages/ad-script/src/internal/target-annotation-identity.ts`) and the
  * classification core (`target-annotation-classification.ts`, relocated

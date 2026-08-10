@@ -413,7 +413,6 @@ async function completeOpenCommand(params: {
     surface,
     appBundleId: sessionAppBundleId,
     appName,
-    saveScript: Boolean(req.flags?.saveScript),
   });
   nextSession.lease = resolveSessionLeaseForRequest({
     req,
@@ -500,7 +499,6 @@ async function prepareOpenDispatchSession(params: {
     surface,
     appBundleId: sessionAppBundleId,
     appName,
-    saveScript: Boolean(req.flags?.saveScript),
   });
   provisionalSession.lease = resolveSessionLeaseForRequest({
     req,

@@ -56,17 +56,13 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
   // `saveScript*`/`scriptRecordingState`/`repair*` fields; its ONLY writers are the two
   // daemon-private projections (`session-replay-transaction.ts`,
   // `session-script-publication-capability.ts`) and the writer's commit transition.
-  // `recordSession` is the broader "record actions" flag and is deliberately set on its own by
-  // paths that record without arming a publication.
+  // It also absorbed `recordSession`, whose separate ownership let handler surfaces arm
+  // recording without moving the lifecycle that authorized it (#1533). Recording is now derived
+  // (`isRecordingPublication`), so there is no second field to keep in step.
   scriptPublication: [
     'src/daemon/session-replay-transaction.ts',
     'src/daemon/session-script-publication-capability.ts',
     'src/daemon/session-script-writer.ts',
-  ],
-  recordSession: [
-    'src/daemon/handlers/session-close-script.ts',
-    'src/daemon/session-replay-transaction.ts',
-    'src/daemon/session-script-publication-capability.ts',
   ],
   // #1478 P4b: moved from `session-replay-resume.ts` into the `ReplayCoordinator`
   // (`session-replay-coordinator.ts`) — the one locked gateway a native replay request uses to

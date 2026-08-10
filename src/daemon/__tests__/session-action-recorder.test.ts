@@ -1,3 +1,4 @@
+import { isSessionRecording } from '../session-script-publication-capability.ts';
 /**
  * #1271 stage 2 (ADR 0012 amendment): `recordActionEntry`'s repair-segment
  * default exclusion — the single daemon-side choke point every recording
@@ -267,8 +268,8 @@ test('whitespace-only fills collapse ambiguous recorder output and keys', () => 
 
 test('#1533: the --save-script ingress does not re-arm an aborted authoring lifecycle', () => {
   const session = makeIosSession('s', {
-    // What `abortAuthoringOnSecondOpen` leaves behind: terminal status, recording off.
-    recordSession: false,
+    // What `abortAuthoringOnSecondOpen` leaves behind: a terminal status, which
+    // is by itself what stops the session recording.
     scriptPublication: authoringPublication('aborted'),
   });
 
@@ -280,13 +281,12 @@ test('#1533: the --save-script ingress does not re-arm an aborted authoring life
     flags: { saveScript: true },
   });
 
-  expect(session.recordSession).toBe(false);
+  expect(isSessionRecording(session)).toBe(false);
   expect(session.scriptPublication).toEqual(authoringPublication('aborted'));
 });
 
 test('#1533: an aborted lifecycle cannot be retargeted by a later --save-script=<path> either', () => {
   const session = makeIosSession('s', {
-    recordSession: false,
     scriptPublication: authoringPublication('aborted', { path: '/tmp/original.ad' }),
   });
 
@@ -296,7 +296,7 @@ test('#1533: an aborted lifecycle cannot be retargeted by a later --save-script=
     flags: { saveScript: '/tmp/hijacked.ad', force: true },
   });
 
-  expect(session.recordSession).toBe(false);
+  expect(isSessionRecording(session)).toBe(false);
   expect(session.scriptPublication).toEqual(
     authoringPublication('aborted', { path: '/tmp/original.ad' }),
   );
@@ -304,7 +304,6 @@ test('#1533: an aborted lifecycle cannot be retargeted by a later --save-script=
 
 test('#1533: an ARMED authoring lifecycle still takes the ingress (retarget + force unchanged)', () => {
   const session = makeIosSession('s', {
-    recordSession: true,
     scriptPublication: authoringPublication('armed'),
   });
 
@@ -314,7 +313,7 @@ test('#1533: an ARMED authoring lifecycle still takes the ingress (retarget + fo
     flags: { saveScript: '/tmp/out.ad', force: true },
   });
 
-  expect(session.recordSession).toBe(true);
+  expect(isSessionRecording(session)).toBe(true);
   expect(session.scriptPublication).toEqual(
     authoringPublication('armed', { path: '/tmp/out.ad', force: true }),
   );

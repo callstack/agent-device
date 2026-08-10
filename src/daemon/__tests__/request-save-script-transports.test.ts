@@ -1,3 +1,4 @@
+import { isSessionRecording } from '../session-script-publication-capability.ts';
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 /**
  * #1478 (P4-pre): raw-wire counterfactuals for the `flags.saveScript` seam.
@@ -193,8 +194,8 @@ for (const [transport, send] of TRANSPORTS) {
     // No handler work: the trace never started and no action was recorded.
     expect(session.trace).toBe(undefined);
     expect(session.actions).toEqual([]);
-    // No arming: neither the recording marker nor the publication target moved.
-    expect(session.recordSession).toBe(undefined);
+    // No arming: no publication lifecycle, so the session records nothing.
+    expect(isSessionRecording(session)).toBe(false);
     expect(session.scriptPublication).toBe(undefined);
     // No artifact: the write a later close/teardown would attempt publishes nothing.
     expect(sessionStore.writeSessionLog(session)).toEqual({ written: false });
@@ -207,7 +208,7 @@ for (const [transport, send] of TRANSPORTS) {
     expect(accepted.ok).toBe(true);
     expect(session.trace?.outPath).toMatch(/\.trace\.log$/);
     expect(session.actions.map((action) => action.command)).toEqual(['trace']);
-    expect(session.recordSession).toBe(undefined);
+    expect(isSessionRecording(session)).toBe(false);
     expect(listAdArtifacts(root)).toEqual([]);
   });
 
@@ -269,7 +270,7 @@ test('a batch step cannot smuggle the flag onto a non-owner command', async (t) 
   if (response.ok) return;
   expect(response.error.message).toMatch(UNSUPPORTED_MESSAGE);
   expect(session.trace).toBe(undefined);
-  expect(session.recordSession).toBe(undefined);
+  expect(isSessionRecording(session)).toBe(false);
   expect(listAdArtifacts(root)).toEqual([]);
 });
 
@@ -285,7 +286,7 @@ test('an owner-armed session still records its target and publishes its script',
     flags: { saveScript: target },
     result: { session: SESSION },
   });
-  expect(session.recordSession).toBe(true);
+  expect(isSessionRecording(session)).toBe(true);
   expect(scriptTargetPath(session.scriptPublication ?? NO_SCRIPT_PUBLICATION)).toBe(target);
 
   const result = sessionStore.writeSessionLog(session);

@@ -17,7 +17,10 @@ import type { DaemonRequest } from '../../types.ts';
 import { WAIT_LANDMARK_MISMATCH_REASON } from '@agent-device/contracts/replay';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
-import { makeAndroidSession } from '../../../__tests__/test-utils/session-factories.ts';
+import {
+  makeAndroidSession,
+  authoringPublication,
+} from '../../../__tests__/test-utils/session-factories.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -77,10 +80,10 @@ function waitReq(overrides: Partial<DaemonRequest> = {}): DaemonRequest {
   } as DaemonRequest;
 }
 
-async function runWait(options: { recordSession?: boolean; req?: DaemonRequest } = {}) {
+async function runWait(options: { recording?: boolean; req?: DaemonRequest } = {}) {
   const sessionStore = makeSessionStore();
   const session = makeAndroidSession('default', {
-    recordSession: options.recordSession ?? false,
+    ...(options.recording ? { scriptPublication: authoringPublication('armed') } : {}),
   });
   sessionStore.set('default', session);
   const response = await dispatchWaitViaRuntime({
@@ -93,7 +96,7 @@ async function runWait(options: { recordSession?: boolean; req?: DaemonRequest }
 }
 
 test('a recorded selector wait attaches landmark-mode target-v1 evidence and strips the resolution payload', async () => {
-  const { response, sessionStore } = await runWait({ recordSession: true });
+  const { response, sessionStore } = await runWait({ recording: true });
 
   expect(response.ok).toBe(true);
   if (response.ok) {
@@ -114,7 +117,7 @@ test('a recorded selector wait attaches landmark-mode target-v1 evidence and str
 });
 
 test('a selector wait without recording never computes target-v1 evidence', async () => {
-  const { response, sessionStore } = await runWait({ recordSession: false });
+  const { response, sessionStore } = await runWait({ recording: false });
 
   expect(response.ok).toBe(true);
   const recordedAction = sessionStore.get('default')?.actions[0];

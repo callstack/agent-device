@@ -8,7 +8,10 @@ import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
 import { handleInteractionCommands } from '../interaction.ts';
 import { handleSnapshotCommands } from '../snapshot.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
-import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import {
+  makeIosSession,
+  authoringPublication,
+} from '../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { SessionScriptWriter } from '../../session-script-writer.ts';
 import { runReplayScriptFile } from '../session-replay-runtime.ts';
@@ -490,7 +493,7 @@ test('runtime-resolved taps use the same corroboration boundary', async () => {
     sessionName,
     makeIosSession(sessionName, {
       appBundleId: 'com.example.app',
-      recordSession: true,
+      scriptPublication: authoringPublication('armed'),
     }),
   );
   let snapshotCount = 0;
@@ -578,7 +581,7 @@ test('corroborated runtime taps retain target evidence through save and replay',
     sessionName,
     makeIosSession(sessionName, {
       appBundleId: 'com.example.app',
-      recordSession: true,
+      scriptPublication: authoringPublication('armed'),
       snapshot: snapshot(profileNodes),
     }),
   );

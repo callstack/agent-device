@@ -1,6 +1,9 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
-import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import {
+  makeIosSession,
+  authoringPublication,
+} from '../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { activateCompleteRefFrame, refFrameState } from '../../ref-frame.ts';
 
@@ -37,7 +40,7 @@ beforeEach(() => {
 function makeDragSession(sessionName: string) {
   const session = makeIosSession(sessionName, {
     appBundleId: 'com.example.drag-fixture',
-    recordSession: true,
+    scriptPublication: authoringPublication('armed'),
   });
   session.snapshot = {
     nodes: attachRefs([

@@ -442,7 +442,6 @@ export type SessionState = {
   };
   /** Session was created by record start and should be released when recording stops. */
   recordOnlySession?: boolean;
-  recordSession?: boolean;
   /**
    * The tagged script-publication aggregate (#1478 P4a): ordinary authoring (ADR 0016), the
    * ADR 0012 decision 6 repair transaction, and the shared output target with its per-target
