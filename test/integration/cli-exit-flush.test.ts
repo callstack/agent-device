@@ -31,7 +31,7 @@ test('the CLI success entrypoint flushes a complete JSON envelope before exit 0'
 });
 
 test('the real source CLI flushes a complete successful snapshot response before exit 0', async () => {
-  const fetchFixtureUrl = pathToFileURL(path.join(SUPPORT_DIR, 'cli-success-fetch.mjs')).href;
+  const fetchFixtureUrl = pathToFileURL(path.join(SUPPORT_DIR, 'exit-after-flush.ts')).href;
   const result = await runCmd(
     process.execPath,
     [
