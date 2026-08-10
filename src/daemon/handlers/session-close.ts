@@ -291,9 +291,13 @@ async function stopOrRetainAppleRunnerAfterClose(
 // fallback chains but no `target-v1` recording-time evidence — degraded replay verification with
 // no signal to the caller. Recording-time evidence can only be captured from action zero
 // (`armAuthoringOnOpen`), so an unarmed session has nothing to retroactively arm; the only
-// correct response is refusal, before any teardown or publication work runs. This intentionally
-// does not resolve #1533 (aborted-mid-recording close --save-script); that is a distinct,
-// already-armed case with its own resolution.
+// correct response is refusal, before any teardown or publication work runs.
+//
+// #1533 (aborted-mid-recording) is the adjacent already-armed case, resolved separately: this
+// refusal promises "plain close tears down without writing", and an aborted authoring lifecycle
+// now makes that true by construction — the flag ingress no longer re-arms it
+// (`applyRecordedSaveScriptFlags`) and the writer refuses it outright
+// (`isAuthoringAbortedWriteBlocked`).
 function assertTerminalRecordingCloseAllowed(req: DaemonRequest, session: SessionState): void {
   if (!req.flags?.saveScript) return;
   if (isAuthoringArmedSession(session)) return;

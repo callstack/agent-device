@@ -5,6 +5,7 @@ import {
   abortAuthoring,
   armAuthoring,
   armRepair,
+  isAuthoringAborted,
   isScriptPublished,
   markAuthoringPublished,
   resolveScriptTarget,
@@ -71,9 +72,16 @@ export function abortAuthoringOnSecondOpen(session: SessionState): void {
  *   as a documented close-time behavior.
  * - `authoring` -> retarget under the #1258 per-target force rule (`resolveScriptTarget`).
  * - `repair` -> retarget the repair target the same way (a replayed step may carry the flag).
+ *
+ * #1533: an ABORTED authoring lifecycle is terminal and takes none of those branches. The flag
+ * ingress used to re-arm `session.recordSession` for it — the second `open --save-script` that
+ * caused the abort carries the flag into its own recorded action — leaving a session the caller
+ * was told was aborted but that a bare `close` still published. Recording-time evidence stops at
+ * the abort; there is nothing left to retarget or re-arm.
  */
 export function applyRecordedSaveScriptFlags(session: SessionState, flags: CommandFlags): void {
   if (!flags.saveScript) return;
+  if (isAuthoringAborted(publicationState(session))) return;
   session.recordSession = true;
   const requested = {
     path: typeof flags.saveScript === 'string' ? expandSessionPath(flags.saveScript) : undefined,
