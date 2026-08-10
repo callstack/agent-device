@@ -47,6 +47,10 @@ export const WIRE_CLOSURE_WAIVERS: Readonly<Record<string, string>> = {
     'Re-export alias of the listed kernel DaemonRequest; the declaration that fixes the shape is packages/kernel/src/contracts.ts#DaemonRequest.',
   'src/daemon/types.ts#DaemonResponse':
     'Re-export alias of the listed kernel DaemonResponse; the shape is fixed by packages/kernel/src/contracts.ts#DaemonResponse.',
+  'src/daemon/types.ts#DaemonArtifact':
+    'Re-export alias of the listed kernel DaemonArtifact; the shape is fixed by packages/kernel/src/contracts.ts#DaemonArtifact.',
+  'src/remote/upload-progress.ts#UploadProgressSink':
+    'A callback for client-local upload progress rendering. Its events never leave the client, unlike the daemon progress stream, whose envelope and events are listed.',
   'packages/contracts/src/request-progress.ts#RequestProgressSink':
     'A callback type (event) => void. The event it receives is RequestProgressEvent, which is listed; the sink itself never crosses the wire.',
 

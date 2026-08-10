@@ -33,11 +33,12 @@ place version skew is designed in was the one place with no gate.
 
 The mutation lane exists because the first two answer "the manifest describes
 today's source", never "the manifest describes the *right* source". A gate can
-list 117 declarations, pass every check, and still miss the seam that breaks a
+list 141 declarations, pass every check, and still miss the seam that breaks a
 skewed peer — which is exactly what review found in the first version of this
 directory. Each case there mutates one real listed declaration the way a real
 break would (method renamed, envelope unframed, auth header dropped, upload
-ticket field renamed, 308 downgraded, artifact route narrowed) and asserts the
+ticket field renamed, 308 downgraded, artifact route narrowed, health-version
+check defeated) and asserts the
 digest moves. Two guards keep them honest: the mutation is applied **inside the
 declaration's own span** so it cannot silently hit a sibling that shares the
 substring, and the unmutated digest must equal the ledger's so the case is
@@ -88,12 +89,20 @@ bullet is only partly digestible the group carries an `uncovered` note saying wh
 reviewer-owned and why — a gate that implies coverage it does not provide is worse than one that
 admits the gap (AGENTS.md, "a registry claim is not a semantic check").
 
-**Both sides of every boundary are listed.** The first version of this directory digested only the
-payload *types* while quoting all four bullets, which review correctly called an overclaim: method
-sets, response serialization, auth projection, upload ticket and 308 framing, artifact framing, and
-the client's own parsers could all break a skewed peer without moving a listed digest. A
-client-only change breaks an older daemon just as surely as the reverse, so producer and consumer
-seams are both here.
+**Both sides of every boundary are listed** — four boundaries, producer and consumer each:
+
+| Boundary | Producer | Consumer |
+| --- | --- | --- |
+| `/rpc` | method sets, request projections, `createRpcError`, envelope serializers | `buildHttpRpcPayload`, lease-method mapping, `parseDaemonHttpResponseBody`, `toDaemonHttpRpcError` |
+| `/health` | `DaemonHealthPayload`, `buildDaemonHealthPayload` | `RemoteDaemonHealth`, `readHealthPayload`, `readRemoteDaemonHealth` |
+| `/upload` | route resolver, preflight/finalize/308 handlers, body parsers | `UploadPreflightResponse`, `parseUploadPreflightResult`, direct/legacy/finalize senders, `PreparedUploadArtifact` |
+| `/artifacts/*` | route resolver, inventory and download framing | `buildDaemonArtifactUrl`, `downloadRemoteArtifact`, materialization |
+
+A client-only change breaks an older daemon just as surely as the reverse — and the `/health`
+consumer is the sharpest case of all, since narrowing `readHealthPayload` or `readRemoteDaemonHealth`
+disables the very refusal ADR 0006 was written to guarantee. Both took two review rounds to get
+right: the first version digested only payload *types*, the second still omitted the auxiliary
+consumers while claiming both sides.
 
 The one remaining gap: `createDaemonHttpServer`, the 200-line dispatcher, and the `/health` and
 `/rpc` path literals inside it. Everything it dispatches *with* is digested individually, so what is

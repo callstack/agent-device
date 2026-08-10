@@ -140,6 +140,79 @@ const MUTATIONS: readonly WireMutation[] = [
     from: "type: 'progress';",
     to: "kind: 'progress';",
   },
+  // Consumer half of the auxiliary boundaries. A client-only narrowing here
+  // rejects a released daemon's response with no server change at all, which is
+  // why claiming "both sides" required these to be listed and proved.
+  {
+    breakClass: 'health consumer: the client stops reading the advertised protocol version',
+    file: 'src/daemon/client/daemon-client-transport.ts',
+    name: 'readHealthPayload',
+    from: "typeof parsed.rpcProtocolVersion === 'number' ? parsed.rpcProtocolVersion : undefined",
+    to: 'undefined',
+  },
+  {
+    breakClass: 'health consumer: the mismatch refusal ADR 0006 built is weakened',
+    file: 'src/daemon/client/daemon-client-transport.ts',
+    name: 'readRemoteDaemonHealth',
+    from: 'health.rpcProtocolVersion !== DAEMON_RPC_PROTOCOL_VERSION',
+    to: 'false',
+  },
+  {
+    breakClass: 'health consumer: the parsed health shape drops a released field',
+    file: 'src/daemon/client/daemon-client-transport.ts',
+    name: 'RemoteDaemonHealth',
+    from: 'rpcProtocolVersion?: number;',
+    to: '',
+  },
+  {
+    breakClass: 'upload consumer: the preflight parser stops accepting a released response',
+    file: 'src/remote/upload-client.ts',
+    name: 'parseUploadPreflightResult',
+    from: "preflight.ok !== true || typeof preflight.uploadId !== 'string'",
+    to: 'preflight.ok !== true',
+  },
+  {
+    breakClass: 'upload consumer: the preflight response shape narrows',
+    file: 'src/remote/upload-client.ts',
+    name: 'UploadPreflightResponse',
+    from: 'cacheHit?: boolean;',
+    to: '',
+  },
+  {
+    breakClass: 'upload consumer: the legacy/finalize response shape narrows',
+    file: 'src/remote/upload-client.ts',
+    name: 'UploadResponse',
+    from: 'uploadId: string;',
+    to: 'id: string;',
+  },
+  {
+    breakClass: 'upload consumer: the finalize request body key is renamed',
+    file: 'src/remote/upload-client.ts',
+    name: 'finalizeDirectUpload',
+    from: 'JSON.stringify({ uploadId: options.uploadId })',
+    to: 'JSON.stringify({ id: options.uploadId })',
+  },
+  {
+    breakClass: 'upload consumer: the preflight ticket fields the daemon parses are renamed',
+    file: 'src/remote/upload-client-artifact.ts',
+    name: 'PreparedUploadArtifact',
+    from: 'sha256: string;',
+    to: 'checksum: string;',
+  },
+  {
+    breakClass: 'artifact consumer: the download request drops its tenant header',
+    file: 'src/remote/daemon-artifacts.ts',
+    name: 'downloadRemoteArtifact',
+    from: '...buildDaemonHttpTenantHeaders(params.requestScope?.tenantId),',
+    to: '',
+  },
+  {
+    breakClass: 'artifact consumer: the artifact URL the client requests moves',
+    file: 'src/remote/daemon-artifacts.ts',
+    name: 'buildDaemonArtifactUrl',
+    from: 'artifacts/',
+    to: 'artifact/',
+  },
 ];
 
 for (const mutation of MUTATIONS) {
@@ -195,6 +268,12 @@ const CLOSURE_PROBES: readonly { reachedFrom: string; omit: string }[] = [
     // Workspace specifier resolved through the package's own exports map.
     reachedFrom: 'DaemonResponse',
     omit: 'packages/kernel/src/errors.ts#DaemonError',
+  },
+  {
+    // The consumer half of the auxiliary upload boundary, added after review:
+    // proves those files are genuinely wired into the walk, not just listed.
+    reachedFrom: 'requestUploadPreflight',
+    omit: 'src/remote/upload-client-artifact.ts#PreparedUploadArtifact',
   },
 ];
 

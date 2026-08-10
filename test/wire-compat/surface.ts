@@ -51,6 +51,9 @@ const ARTIFACT_HTTP = 'src/daemon/downloadable-artifact-http.ts';
 const PROGRESS_PROTOCOL = 'src/daemon/request-progress-protocol.ts';
 const CLIENT_RPC = 'src/daemon/client/daemon-client-rpc.ts';
 const CLIENT_PROGRESS = 'src/daemon/client/daemon-client-progress.ts';
+const CLIENT_TRANSPORT = 'src/daemon/client/daemon-client-transport.ts';
+const UPLOAD_CLIENT = 'src/remote/upload-client.ts';
+const REMOTE_ARTIFACTS = 'src/remote/daemon-artifacts.ts';
 
 function from(file: string, ...names: string[]): WireDeclarationRef[] {
   return names.map((name) => ({ file, name }));
@@ -88,6 +91,16 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'resolveDownloadableArtifactHttpRoute',
         'readArtifactId',
         'readRequestPathname',
+      ),
+      // Consumer side of /health: the client reads this payload and refuses a
+      // mismatched peer from it, so a narrowed reader defeats the very check
+      // ADR 0006 built. `readRemoteDaemonHealth` is where the comparison lives.
+      ...from(
+        CLIENT_TRANSPORT,
+        'RemoteDaemonHealth',
+        'readHealthPayload',
+        'readDaemonHttpHealth',
+        'readRemoteDaemonHealth',
       ),
     ],
     // What is left is `createDaemonHttpServer`, a 200+ line dispatcher whose
@@ -268,6 +281,40 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'ProgressResponseFormat',
         'shouldReadDaemonProgressStream',
         'createInvalidDaemonResponseError',
+      ),
+      // Consumer side of the auxiliary /upload boundary: the shapes the client
+      // expects back from preflight, direct/resumable, legacy and finalize, and
+      // the parser that decides whether a daemon's preflight is usable at all.
+      ...from(
+        UPLOAD_CLIENT,
+        'ARTIFACT_HASH_ALGORITHM',
+        'UploadResponse',
+        'UploadPreflightResponse',
+        'UploadPreflightResult',
+        'parseUploadPreflightResult',
+        'isStringRecord',
+        'requestUploadPreflight',
+        'uploadDirectArtifact',
+        'tryDirectUploadWithResume',
+        'shouldRetryDirectUpload',
+        'finalizeDirectUpload',
+        'uploadLegacyArtifact',
+      ),
+      // The prepared artifact whose fields (sha256, sizeBytes, fileName,
+      // artifactType, contentType) ARE the preflight body the daemon parses.
+      ...from('src/remote/upload-client-artifact.ts', 'PreparedUploadArtifact'),
+      // Consumer side of /artifacts/*: URL construction, the inventory/header/
+      // body materialization the client performs, and the artifact fields it
+      // rewrites on the way through.
+      ...from(
+        REMOTE_ARTIFACTS,
+        'DaemonArtifactEndpoint',
+        'buildDaemonArtifactUrl',
+        'isRemoteDaemon',
+        'DownloadRemoteArtifactParams',
+        'downloadRemoteArtifact',
+        'materializeRemoteArtifacts',
+        'resolveMaterializedArtifactPath',
       ),
     ],
   },
