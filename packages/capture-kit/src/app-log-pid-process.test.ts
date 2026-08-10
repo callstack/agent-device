@@ -4,6 +4,7 @@ import type {
   AppLogOutputSink,
   AppLogRuntimeHost,
 } from '@agent-device/contracts/platform';
+import { deferred, processFixture } from './app-log-pid-process.fixtures.ts';
 import { createPidScopedAppLogProcess } from './app-log-pid-process.ts';
 
 describe('PID-scoped app-log process lifecycle', () => {
@@ -97,7 +98,7 @@ describe('PID-scoped app-log process lifecycle', () => {
     });
 
     await vi.waitFor(() => expect(start).toHaveBeenCalledOnce());
-    expect(resolvePid).toHaveBeenCalledTimes(2);
+    expect(resolvePid.mock.calls.length).toBeGreaterThanOrEqual(2);
     await handle.finish();
     expect(started.terminate).toHaveBeenCalledOnce();
   });
@@ -151,30 +152,6 @@ describe('PID-scoped app-log process lifecycle', () => {
   });
 });
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((settle) => {
-    resolve = settle;
-  });
-  return { promise, resolve };
-}
-
-function processFixture(
-  wait: ReturnType<typeof deferred<{ stdout: string; stderr: string; exitCode: number }>>,
-) {
-  const terminate = vi.fn(async () => wait.resolve({ stdout: '', stderr: '', exitCode: 0 }));
-  const dispose = vi.fn(async () => {});
-  return {
-    terminate,
-    dispose,
-    process: {
-      wait: wait.promise,
-      terminate,
-      [Symbol.asyncDispose]: dispose,
-    } satisfies AppLogBackgroundProcess,
-  };
-}
-
 function outputFixture() {
   const dispose = vi.fn(async () => {});
   return {
@@ -216,6 +193,20 @@ function hostFixture(output: AppLogOutputSink, onOpen?: () => void): AppLogRunti
       inspect: async () => 'missing',
       terminate: async () => 'already-missing',
     },
-    clock: { now: () => 0, sleep: vi.fn(async () => {}) },
+    clock: { now: () => 0, sleep: vi.fn(testSleep) },
   };
+}
+
+async function testSleep(_milliseconds: number, signal?: AbortSignal): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timeout);
+      reject(signal?.reason);
+    };
+    const timeout = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, 1);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
 }

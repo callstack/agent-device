@@ -8,6 +8,7 @@ import type {
   AppLogRuntimeHost,
 } from '@agent-device/contracts/platform';
 import { createAppLogLiveHandleFromFinish } from './app-log-live-handle.ts';
+import { monitorPidScopedProcess } from './app-log-pid-monitor.ts';
 
 export type PidScopedAppLogProcessOptions = Readonly<{
   host: AppLogRuntimeHost;
@@ -65,9 +66,7 @@ export async function createPidScopedAppLogProcess(
     throw error;
   }
   const monitor = monitorPidScopedProcess({
-    options,
-    output,
-    initialProcess: active,
+    initialProcess: active && initialPid ? { pid: initialPid, process: active } : undefined,
     stopped: () => stopped,
     setActive: (process) => {
       active = process;
@@ -75,6 +74,14 @@ export async function createPidScopedAppLogProcess(
     setState: (next) => {
       state = next;
     },
+    resolvePid: async () => await options.resolvePid(),
+    startProcess: async (pid) =>
+      await options.processStart({
+        command: options.command(pid),
+        output,
+        markerPath: options.pidPath,
+      }),
+    sleep: async (milliseconds, signal) => await options.host.clock.sleep(milliseconds, signal),
   }).catch(() => {
     state = 'failed';
   });
@@ -97,101 +104,6 @@ export async function createPidScopedAppLogProcess(
     inspect: () => ({ backend: options.backend, state, startedAt }),
     finish,
   });
-}
-
-type PidScopedProcessMonitor = Readonly<{
-  options: PidScopedAppLogProcessOptions;
-  output: Awaited<ReturnType<AppLogRuntimeHost['outputs']['openAppend']>>;
-  initialProcess: AppLogBackgroundProcess | undefined;
-  stopped(): boolean;
-  setActive(process: AppLogBackgroundProcess | undefined): void;
-  setState(state: AppLogLiveSnapshot['state']): void;
-}>;
-
-type SubsequentProcessStart =
-  | Readonly<{ status: 'stopped' }>
-  | Readonly<{ status: 'waiting' }>
-  | Readonly<{ status: 'started'; process: AppLogBackgroundProcess }>;
-
-async function monitorPidScopedProcess(input: PidScopedProcessMonitor): Promise<void> {
-  let process = input.initialProcess;
-  while (!input.stopped()) {
-    if (process) {
-      await settleActiveProcess(input, process);
-      process = undefined;
-      await pauseBeforeProcessRestart(input);
-      continue;
-    }
-
-    const started = await startAndAdoptSubsequentProcess(input);
-    if (started.status === 'stopped') return;
-    if (started.status === 'waiting') continue;
-    process = started.process;
-  }
-}
-
-async function settleActiveProcess(
-  input: PidScopedProcessMonitor,
-  process: AppLogBackgroundProcess,
-): Promise<void> {
-  input.setActive(process);
-  try {
-    if (input.stopped()) await process.terminate();
-    input.setState('active');
-    await process.wait;
-  } finally {
-    await disposeAdoptedProcess(input, process);
-  }
-}
-
-async function pauseBeforeProcessRestart(input: PidScopedProcessMonitor): Promise<void> {
-  if (input.stopped()) return;
-  input.setState('recovering');
-  await input.options.host.clock.sleep(500);
-}
-
-async function startAndAdoptSubsequentProcess(
-  input: PidScopedProcessMonitor,
-): Promise<SubsequentProcessStart> {
-  const pid = await input.options.resolvePid();
-  if (input.stopped()) return { status: 'stopped' };
-  if (!pid) {
-    input.setState('recovering');
-    await input.options.host.clock.sleep(1_000);
-    return { status: 'waiting' };
-  }
-  const process = await input.options.processStart({
-    command: input.options.command(pid),
-    output: input.output,
-    markerPath: input.options.pidPath,
-  });
-  input.setActive(process);
-  if (!input.stopped()) return { status: 'started', process };
-  await stopAdoptedProcess(input, process);
-  return { status: 'stopped' };
-}
-
-async function stopAdoptedProcess(
-  input: PidScopedProcessMonitor,
-  process: AppLogBackgroundProcess,
-): Promise<void> {
-  try {
-    await process.terminate();
-    await process.wait;
-  } finally {
-    await disposeAdoptedProcess(input, process);
-  }
-}
-
-async function disposeAdoptedProcess(
-  input: PidScopedProcessMonitor,
-  process: AppLogBackgroundProcess,
-): Promise<void> {
-  try {
-    await process[Symbol.asyncDispose]();
-  } finally {
-    input.setActive(undefined);
-  }
 }
 
 async function finishPidScopedProcess(

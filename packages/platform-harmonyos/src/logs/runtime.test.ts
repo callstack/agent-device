@@ -44,11 +44,9 @@ test('starts HarmonyOS hilog with the resolved application pid', async () => {
     outputPath: '/tmp/app.log',
     fence: { token: 'fence', generation: 1 },
   });
-  await vi.waitFor(() => {
-    expect(fixture.backgroundCommands).toEqual([
-      ['hdc', '-t', 'harmony-1', 'shell', 'hilog', '-P', '456'],
-    ]);
-  });
+  expect(fixture.backgroundCommands).toEqual([
+    ['hdc', '-t', 'harmony-1', 'shell', 'hilog', '-P', '456'],
+  ]);
   expect(await started?.pendingHandle.transfer().finish()).toMatchObject({
     status: 'completed',
     result: { backend: 'harmonyos' },
@@ -267,7 +265,7 @@ function hostFixture(
       inspect: async () => 'missing',
       terminate: async () => 'already-missing',
     },
-    clock: { now: () => 10, sleep: async () => {} },
+    clock: { now: () => 10, sleep: waitForMonitorWake },
   };
   return {
     host,
@@ -275,4 +273,11 @@ function hostFixture(
     markerReads: () => markerReads,
     outputOpens: () => outputOpens,
   };
+}
+
+async function waitForMonitorWake(_milliseconds: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return;
+  await new Promise<void>((resolve) => {
+    signal?.addEventListener('abort', () => resolve(), { once: true });
+  });
 }

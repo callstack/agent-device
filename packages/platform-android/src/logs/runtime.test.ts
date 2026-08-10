@@ -5,7 +5,7 @@ import type {
   PlatformRequestScope,
 } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { describe, expect, test, vi } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { androidAppLogDescriptorCodec, createAndroidAppLogEnvelope } from './descriptor.ts';
 import { createAndroidAppLogRuntime } from './runtime.ts';
 
@@ -71,14 +71,12 @@ describe('Android app-log runtime', () => {
       outputPath: '/tmp/app.log',
       pidPath: '/tmp/app-log.pid',
     });
-    await vi.waitFor(() => {
-      expect(fixture.commands).toEqual([
-        ['adb', '-s', 'emulator-5554', 'shell', 'pidof', 'com.example.app'],
-      ]);
-      expect(fixture.backgroundCommands).toEqual([
-        ['adb', '-s', 'emulator-5554', 'logcat', '-v', 'time', '--pid', '123'],
-      ]);
-    });
+    expect(fixture.commands).toEqual([
+      ['adb', '-s', 'emulator-5554', 'shell', 'pidof', 'com.example.app'],
+    ]);
+    expect(fixture.backgroundCommands).toEqual([
+      ['adb', '-s', 'emulator-5554', 'logcat', '-v', 'time', '--pid', '123'],
+    ]);
 
     const handle = started?.pendingHandle.transfer();
     expect(handle?.inspect()).toMatchObject({ backend: 'android', state: 'active' });
@@ -185,7 +183,7 @@ describe('Android app-log runtime', () => {
       outputPath: '/tmp/app.log',
       pidPath: '/tmp/app-log.pid',
     });
-    await vi.waitFor(() => expect(fixture.markerPaths).toEqual(['/tmp/app-log.pid']));
+    expect(fixture.markerPaths).toEqual(['/tmp/app-log.pid']);
     await started?.pendingHandle.transfer().finish();
   });
 
@@ -315,7 +313,7 @@ function hostFixture(
       inspect: async () => 'missing',
       terminate: async () => 'already-missing',
     },
-    clock: { now: () => 100, sleep: async () => {} },
+    clock: { now: () => 100, sleep: waitForMonitorWake },
   };
   return {
     host,
@@ -327,4 +325,11 @@ function hostFixture(
     markerReads: () => markerReads,
     markerPaths,
   };
+}
+
+async function waitForMonitorWake(_milliseconds: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return;
+  await new Promise<void>((resolve) => {
+    signal?.addEventListener('abort', () => resolve(), { once: true });
+  });
 }

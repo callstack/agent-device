@@ -158,7 +158,14 @@ function hostFixture() {
       inspect: async () => 'missing',
       terminate: async () => 'already-missing',
     },
-    clock: { now: () => 10, sleep: async () => {} },
+    clock: { now: () => 10, sleep: waitForMonitorWake },
   };
   return { host, commands };
+}
+
+async function waitForMonitorWake(_milliseconds: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return;
+  await new Promise<void>((resolve) => {
+    signal?.addEventListener('abort', () => resolve(), { once: true });
+  });
 }
