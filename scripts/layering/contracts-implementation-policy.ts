@@ -22,6 +22,12 @@ export function contractsImplementationAuthorityViolations(
   for (const file of sources) {
     if (!isContractsProduction(file.path)) continue;
     const parsed = parseSync(file.path, file.source);
+    const networkTrafficViolation = networkTrafficImplementationViolation(
+      file.path,
+      file.source,
+      parsed.program.body,
+    );
+    if (networkTrafficViolation) violations.push(networkTrafficViolation);
     for (const site of moduleSpecifiers(parsed.module, file.source)) {
       if (!FORBIDDEN_HOST_MODULES.test(site.spec)) continue;
       violations.push(
@@ -46,6 +52,43 @@ export function contractsImplementationAuthorityViolations(
     });
   }
   return violations;
+}
+
+function networkTrafficImplementationViolation(
+  file: string,
+  source: string,
+  body: readonly unknown[],
+): LayeringViolation | undefined {
+  if (!file.startsWith('packages/contracts/src/network-traffic')) return undefined;
+  if (file !== 'packages/contracts/src/network-traffic.ts') {
+    return violation(
+      file,
+      1,
+      'contracts may own only the neutral network-traffic vocabulary; parser modules belong in @agent-device/capture-kit',
+    );
+  }
+  const implementation = body.find((statement) => !isTypeOnlyStatement(statement));
+  if (!implementation || typeof implementation !== 'object') return undefined;
+  return violation(
+    file,
+    lineAt(source, Number((implementation as Record<string, unknown>).start ?? 0)),
+    'contracts network-traffic vocabulary contains runtime implementation; move parser mechanics to @agent-device/capture-kit',
+  );
+}
+
+function isTypeOnlyStatement(value: unknown): boolean {
+  if (value === null || typeof value !== 'object') return false;
+  const statement = value as Record<string, unknown>;
+  if (statement.type === 'ImportDeclaration') return statement.importKind === 'type';
+  if (statement.type === 'TSTypeAliasDeclaration' || statement.type === 'TSInterfaceDeclaration') {
+    return true;
+  }
+  if (statement.type !== 'ExportNamedDeclaration') return false;
+  if (statement.exportKind === 'type') return true;
+  const declaration = statement.declaration as Record<string, unknown> | undefined;
+  return (
+    declaration?.type === 'TSTypeAliasDeclaration' || declaration?.type === 'TSInterfaceDeclaration'
+  );
 }
 
 function moduleSpecifiers(

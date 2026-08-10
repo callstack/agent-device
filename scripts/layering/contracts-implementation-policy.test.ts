@@ -39,3 +39,38 @@ test('contracts policy ignores type vocabulary, prose, tests, and capture-kit me
     [],
   );
 });
+
+test('network traffic vocabulary cannot grow parser implementation inside contracts', () => {
+  assert.deepEqual(
+    messages(
+      [
+        "import type { NetworkEntry } from './network-log.ts';",
+        'export type NetworkDump = Readonly<{ entries: readonly NetworkEntry[] }>;',
+        'export interface NetworkParserOptions { readonly maxEntries: number }',
+      ].join('\n'),
+      'packages/contracts/src/network-traffic.ts',
+    ),
+    [],
+  );
+  assert.match(
+    messages(
+      'export function readRecentNetworkTrafficFromText() { return []; }',
+      'packages/contracts/src/network-traffic.ts',
+    )[0]!,
+    /runtime implementation/,
+  );
+  assert.match(
+    messages(
+      'export const parseNetworkTimestamp = (value: string) => value;',
+      'packages/contracts/src/network-traffic-value.ts',
+    )[0]!,
+    /parser modules belong in @agent-device\/capture-kit/,
+  );
+  assert.deepEqual(
+    messages(
+      'export function readRecentNetworkTrafficFromText() { return []; }',
+      'packages/capture-kit/src/network-traffic.ts',
+    ),
+    [],
+  );
+});
