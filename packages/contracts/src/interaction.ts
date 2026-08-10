@@ -1,6 +1,7 @@
 import type { Point, SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { ResponseCost } from '@agent-device/kernel/contracts';
 import type { ClickButton } from './click-button.ts';
+import type { FillUnconfirmedVerification } from './interactor-types.ts';
 
 export type SelectorTarget = {
   kind: 'selector';
@@ -344,7 +345,16 @@ export type ClickCommandResponseData = PressCommandResponseData;
 type TouchFillExtras = {
   text: string;
   delayMs?: number;
-};
+} & (
+  | {
+      verification?: never;
+      requested?: never;
+      before?: never;
+      after?: never;
+      target?: never;
+    }
+  | FillUnconfirmedVerification
+);
 
 export type FillCommandResponseData =
   | (TouchResponsePoint & TouchFillExtras)

@@ -132,14 +132,34 @@ export const CLOUD_TEXT_ENTRY_READINESS = ['focused-element', 'keyboard-shown'] 
 
 export type CloudTextEntryReadiness = (typeof CLOUD_TEXT_ENTRY_READINESS)[number];
 
-/**
- * What `Interactor.fill` reports back about the entry it performed. Only the
- * cloud-WebDriver interactor populates `textEntryReadiness`; the Apple runner
- * carries its own equivalent in Swift and every other platform fills blind.
- */
-export type FillBackendResult = {
-  textEntryReadiness?: CloudTextEntryReadiness;
+export type FillVerificationTarget = {
+  resourceId: string | null;
+  className: string | null;
+  packageName: string | null;
+  rect: Rect;
 };
+
+export type FillUnconfirmedVerification = {
+  verification: 'unconfirmed';
+  requested: string;
+  before: string | null;
+  after: string | null;
+  target: FillVerificationTarget;
+};
+
+/**
+ * What `Interactor.fill` reports back about the entry it performed. The
+ * cloud-WebDriver interactor populates `textEntryReadiness`; Android may return
+ * target-bound `verification: 'unconfirmed'` evidence when an app-owned field
+ * changed but formatting prevented raw equality. The Apple runner carries its
+ * own readiness equivalent in Swift.
+ */
+export type FillBackendResult =
+  | {
+      textEntryReadiness?: CloudTextEntryReadiness;
+      verification?: never;
+    }
+  | ({ textEntryReadiness?: CloudTextEntryReadiness } & FillUnconfirmedVerification);
 
 export type SnapshotOptions = BaseSnapshotOptions & {
   appBundleId?: string;

@@ -1,6 +1,5 @@
 import {
   assertExclusiveScrollDistanceInputs,
-  CLOUD_TEXT_ENTRY_READINESS,
   getClickButtonValidationError,
   honoredScrollDurationMs,
   MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE,
@@ -8,13 +7,12 @@ import {
   parseScrollDirection,
   resolveClickButton,
   type ClickButton,
-  type CloudTextEntryReadiness,
-  type FillBackendResult,
   type Interactor,
   type RunnerCallOptions,
   type ScrollCommandOptions,
   type ScrollDirection,
 } from '@agent-device/contracts/interaction';
+import { readFillBackendResult } from './fill-backend-result.ts';
 import {
   isIosFamily,
   isMacOs,
@@ -131,23 +129,6 @@ export async function handleFillCommand(
     ...readFillBackendResult(result),
     ...successText(formatTextLengthMessage('Filled', text)),
   };
-}
-
-/**
- * The interactor result is untrusted; this is the one place a `fill` response
- * becomes the typed {@link FillBackendResult}. Only the cloud-WebDriver
- * interactor reports a readiness today, and a value this boundary cannot name
- * is dropped rather than forwarded.
- */
-function readFillBackendResult(result: Record<string, unknown> | void): FillBackendResult {
-  const readiness = result ? result.textEntryReadiness : undefined;
-  return isCloudTextEntryReadiness(readiness) ? { textEntryReadiness: readiness } : {};
-}
-
-function isCloudTextEntryReadiness(value: unknown): value is CloudTextEntryReadiness {
-  return (
-    typeof value === 'string' && (CLOUD_TEXT_ENTRY_READINESS as readonly string[]).includes(value)
-  );
 }
 
 async function handleDirectElementSelectorFill(

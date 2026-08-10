@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { skipWhenLoopbackUnavailable } from '../../src/__tests__/test-utils/loopback.ts';
-import { runCmdSync } from '../../src/utils/exec.ts';
+import { runCmd } from '../../src/utils/exec.ts';
 import { stopProcessForTakeover } from '../../src/daemon/daemon-process.ts';
 import { isProcessAlive } from '../../src/utils/host-process.ts';
 import { runCliJson } from './test-helpers.ts';
@@ -90,8 +90,8 @@ test('daemon replace mid-command returns a structured, parseable error and exits
 // writes a large payload through a real piped subprocess without asserting
 // that the unsafe alternative must truncate under a particular OS, Node
 // version, pipe configuration, or scheduler interleaving.
-test('exitAfterFlush (the #1596 fix) delivers the full write before the process exits', () => {
-  const { exitCode, stderr } = runFixture('exit-after-flush.ts');
+test('exitAfterFlush (the #1596 fix) delivers the full write before the process exits', async () => {
+  const { exitCode, stderr } = await runFixture('exit-after-flush.ts');
   assert.equal(exitCode, 1);
   assert.ok(
     stderr.includes(PAYLOAD_MARKER),
@@ -99,13 +99,24 @@ test('exitAfterFlush (the #1596 fix) delivers the full write before the process 
   );
 });
 
-function runFixture(name: string): { exitCode: number; stderr: string } {
-  const result = runCmdSync(
+test('the CLI success entrypoint flushes a complete JSON envelope before exit 0', async () => {
+  const { exitCode, stdout } = await runFixture('exit-after-flush.ts', ['--success']);
+  assert.equal(exitCode, 0);
+  const envelope = JSON.parse(stdout) as { success?: boolean; data?: { payload?: string } };
+  assert.equal(envelope.success, true);
+  assert.equal(envelope.data?.payload?.endsWith(PAYLOAD_MARKER), true);
+});
+
+async function runFixture(
+  name: string,
+  args: string[] = [],
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  const result = await runCmd(
     process.execPath,
-    ['--experimental-strip-types', path.join(SUPPORT_DIR, name)],
+    ['--experimental-strip-types', path.join(SUPPORT_DIR, name), ...args],
     { allowFailure: true, timeoutMs: FIXTURE_TIMEOUT_MS },
   );
-  return { exitCode: result.exitCode, stderr: result.stderr };
+  return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr };
 }
 
 async function waitForProcessDeath(pid: number): Promise<void> {

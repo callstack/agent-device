@@ -4,6 +4,7 @@ import {
   buildScrollGesturePlan,
   GESTURE_DURATION_MIN_MS,
   toAndroidTvRemoteKeyevent,
+  type FillUnconfirmedVerification,
   type ScrollDirection,
   type TvRemoteButton,
 } from '@agent-device/contracts/interaction';
@@ -18,8 +19,9 @@ import {
 import { runAndroidAdb, sleep } from './adb.ts';
 import { getAndroidKeyboardState, type AndroidKeyboardState } from './device-input-state.ts';
 import {
-  androidFillFailureDetails,
-  androidFillFailureMessage,
+  buildAndroidFillUnconfirmedVerification,
+  completeAndroidFillVerification,
+  readAndroidFillTargetBeforeMutation,
   verifyAndroidFilledText,
   type AndroidFillVerification,
 } from './fill-verification.ts';
@@ -144,19 +146,18 @@ export async function fillAndroid(
   y: number,
   text: string,
   delayMs = 0,
-): Promise<void> {
+): Promise<FillUnconfirmedVerification | void> {
+  const beforeTarget = await readAndroidFillTargetBeforeMutation(device, x, y);
   const providerText = resolveAndroidTextInjector(device);
   if (providerText) {
     await providerText({ action: 'fill', target: { x, y }, text, delayMs });
     emitAndroidTextDiagnostic('fill', 'provider-native', text);
     const verification = await verifyAndroidFilledText(device, x, y, text);
-    if (verification.ok) return;
-    throwAndroidFillFailure(text, verification);
+    return completeAndroidFillVerification(text, beforeTarget, verification);
   }
   if (isAndroidTestImeActive(device)) {
-    const verification = await fillAndroidTestIme(device, x, y, text);
-    if (verification.ok) return;
-    throwAndroidFillFailure(text, verification);
+    const verification = await fillAndroidTestIme(device, x, y, text, beforeTarget);
+    return completeAndroidFillVerification(text, beforeTarget, verification);
   }
   assertAndroidShellTextSupported(text);
 
@@ -205,11 +206,13 @@ export async function fillAndroid(
     lastVerification = verification;
     if (verification.ok) return;
     if (verification.reason === 'ime_capture') {
-      throwAndroidFillFailure(text, verification);
+      return completeAndroidFillVerification(text, beforeTarget, verification);
     }
+    const unconfirmed = buildAndroidFillUnconfirmedVerification(text, beforeTarget, verification);
+    if (unconfirmed) return unconfirmed;
   }
 
-  throwAndroidFillFailure(text, lastVerification);
+  return completeAndroidFillVerification(text, beforeTarget, lastVerification);
 }
 
 async function typeAndroidTestIme(
@@ -241,6 +244,7 @@ async function fillAndroidTestIme(
   x: number,
   y: number,
   text: string,
+  beforeTarget: AndroidFillVerification['targetInput'],
 ): Promise<AndroidFillVerification> {
   const adb = resolveAndroidAdbExecutor(device);
   const artifact = await resolveAndroidImeHelperArtifact();
@@ -254,20 +258,10 @@ async function fillAndroidTestIme(
     const verification = await verifyAndroidFilledText(device, x, y, text);
     lastVerification = verification;
     if (verification.ok) break;
+    if (buildAndroidFillUnconfirmedVerification(text, beforeTarget, verification)) break;
   }
   emitAndroidTextDiagnostic('fill', 'test-ime', text);
   return lastVerification as AndroidFillVerification;
-}
-
-function throwAndroidFillFailure(
-  expected: string,
-  verification: AndroidFillVerification | null,
-): never {
-  throw new AppError(
-    'COMMAND_FAILED',
-    androidFillFailureMessage(verification),
-    androidFillFailureDetails(expected, verification),
-  );
 }
 
 export async function scrollAndroid(

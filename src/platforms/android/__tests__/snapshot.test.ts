@@ -104,6 +104,7 @@ type PersistentSnapshotHelperProviderOptions = {
   spawnArgs: string[][];
   processes: FakeAndroidProcess[];
   sessionResponseMode?: 'ok' | 'malformed';
+  sessionXml?: (sessionIndex: number, snapshotCount: number) => string;
   stalledSessionCleanup?: boolean;
   oneShotAttempts?: string[][];
   oneShotXml?: string;
@@ -116,6 +117,7 @@ function createPersistentSnapshotHelperProvider(
     exec: createPersistentSnapshotExec(options),
     spawn: (args) => {
       options.spawnArgs.push(args);
+      const sessionIndex = options.spawnArgs.length;
       const process = new FakeAndroidProcess();
       options.processes.push(process);
       const port = readSessionPort(args);
@@ -134,7 +136,9 @@ function createPersistentSnapshotHelperProvider(
             return;
           }
           snapshotCount += 1;
-          const body = `<hierarchy><node text="persistent helper snapshot ${snapshotCount}" bounds="[0,0][10,10]" /></hierarchy>`;
+          const body = options.sessionXml
+            ? options.sessionXml(sessionIndex, snapshotCount)
+            : `<hierarchy><node text="persistent helper snapshot ${snapshotCount}" bounds="[0,0][10,10]" /></hierarchy>`;
           socket.end(
             sessionResponse({
               requestId,
@@ -730,6 +734,42 @@ test('snapshotAndroid keeps daemon-session helper alive for reuse until session 
   assert.equal(
     adbCalls.some((args) => args[0] === 'forward' && args[1] === '--remove'),
     true,
+  );
+});
+
+test('snapshotAndroid retires content-invalid daemon helper before the next request', async () => {
+  const adbCalls: string[][] = [];
+  const spawnArgs: string[][] = [];
+  const processes: FakeAndroidProcess[] = [];
+  const provider = createPersistentSnapshotHelperProvider({
+    calls: adbCalls,
+    spawnArgs,
+    processes,
+    sessionXml: (sessionIndex) =>
+      sessionIndex === 1
+        ? androidSystemWindowOnlyXml()
+        : '<hierarchy><node text="fresh helper" bounds="[0,0][10,10]" /></hierarchy>',
+  });
+  const options = {
+    helperAdb: provider,
+    helperArtifact,
+    helperSessionScope: 'daemon-session' as const,
+  };
+
+  await assert.rejects(
+    snapshotAndroid(device, options),
+    /Android snapshot helper returned only non-application windows/,
+  );
+  assert.equal(processes[0]?.exitCode, 0, 'content-invalid helper must be retired before reject');
+
+  const next = await snapshotAndroid(device, options);
+
+  assert.equal(next.nodes[0]?.label, 'fresh helper');
+  assert.equal(next.androidSnapshot.helperSessionReused, false);
+  assert.equal(spawnArgs.length, 2);
+  assert.equal(
+    adbCalls.filter((args) => args[0] === 'forward' && args[1] === '--remove').length,
+    1,
   );
 });
 

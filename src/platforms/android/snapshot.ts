@@ -48,11 +48,14 @@ import {
   type AndroidHelperContentRecoveryDecision,
 } from './snapshot-content-recovery.ts';
 import type { AndroidContentRecoveryReason } from '../../snapshot/snapshot-quality.ts';
+import {
+  resetAndroidSnapshotHelperRuntime,
+  retireAndroidSnapshotHelperAfterContentFailure,
+} from './snapshot-helper-runtime.ts';
 
 const HELPER_INSTALL_TIMEOUT_MS = 30_000;
 const HELPER_CAPTURE_TIMEOUT_MS = 5_000;
 const HELPER_COMMAND_TIMEOUT_MS = 30_000;
-const HELPER_RUNTIME_RESET_DELAY_MS = 150;
 /**
  * A content verdict means the capture mechanism worked but sampled a screen
  * mid-transition, which resolves on its own within a frame or two. Sampling
@@ -61,7 +64,6 @@ const HELPER_RUNTIME_RESET_DELAY_MS = 150;
  */
 const HELPER_CONTENT_CAPTURE_ATTEMPTS = 3;
 const HELPER_CONTENT_RECAPTURE_DELAY_MS = 250;
-const HELPER_RUNTIME_RESET_TIMEOUT_MS = 2_000;
 export type AndroidSnapshotOptions = SnapshotOptions & {
   appBundleId?: string;
   signal?: AbortSignal;
@@ -209,6 +211,7 @@ async function captureAndroidUiHierarchyWithHelper(
           helperDeviceKey,
           artifact,
           adb,
+          signal: options.signal,
         });
       }
       previousContentReason = settled.decision.reason;
@@ -433,6 +436,7 @@ async function rejectAndroidHelperContentUnavailable(params: {
   helperDeviceKey: string;
   artifact: AndroidSnapshotHelperArtifact;
   adb: AndroidAdbExecutor;
+  signal?: AbortSignal;
 }): Promise<{ xml: string; metadata: AndroidSnapshotBackendMetadata }> {
   emitDiagnostic({
     level: 'error',
@@ -444,7 +448,13 @@ async function rejectAndroidHelperContentUnavailable(params: {
       ...params.contentRecovery.diagnostics,
     },
   });
-  await resetAndroidSnapshotHelperRuntime(params.adb, params.artifact.manifest.packageName);
+  await retireAndroidSnapshotHelperAfterContentFailure({
+    adb: params.adb,
+    deviceKey: params.helperDeviceKey,
+    packageName: params.artifact.manifest.packageName,
+    signal: params.signal,
+    cause: params.contentRecovery.failureReason,
+  });
   throw new AppError('COMMAND_FAILED', params.contentRecovery.failureReason, {
     ...params.contentRecovery.diagnostics,
     androidSnapshotHelperFailureReason: params.contentRecovery.reason,
@@ -474,30 +484,6 @@ async function rejectAndroidHelperCaptureFailure(params: {
     versionCode: params.artifact.manifest.versionCode,
   });
   throw androidSnapshotHelperCaptureError(params.error, failureReason);
-}
-
-async function resetAndroidSnapshotHelperRuntime(
-  adb: AndroidAdbExecutor,
-  packageName: string,
-): Promise<void> {
-  try {
-    await adb(['shell', 'am', 'force-stop', packageName], {
-      allowFailure: true,
-      timeoutMs: HELPER_RUNTIME_RESET_TIMEOUT_MS,
-    });
-    await sleep(HELPER_RUNTIME_RESET_DELAY_MS);
-    emitDiagnostic({
-      level: 'debug',
-      phase: 'android_snapshot_helper_runtime_reset',
-      data: { packageName },
-    });
-  } catch (error) {
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'android_snapshot_helper_runtime_reset_failed',
-      data: { packageName, error: normalizeError(error).message },
-    });
-  }
 }
 
 function formatAndroidSnapshotHelperFailureReason(error: unknown): string {

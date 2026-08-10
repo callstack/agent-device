@@ -57,7 +57,7 @@ test('fillAndroid reports when the IME captures input instead of the app field',
     false,
   );
   assert.equal(calls.filter(isTextInput).length, 1);
-  assert.equal(snapshotCount, 1);
+  assert.equal(snapshotCount, 2);
 });
 
 test('fillAndroid detects unknown active IME package during verification', async () => {
@@ -96,7 +96,7 @@ test('fillAndroid detects unknown active IME package during verification', async
   );
 
   assert.equal(calls.filter(isTextInput).length, 1);
-  assert.equal(snapshotCount, 1);
+  assert.equal(snapshotCount, 2);
 });
 
 test('typeAndroid rejects unicode text without provider-native injection', async () => {
@@ -209,6 +209,45 @@ test('fillAndroid delegates target replacement to provider-native text injection
   ]);
 });
 
+test('fillAndroid returns target-bound unconfirmed evidence when an input mask reformats text', async () => {
+  const calls: unknown[] = [];
+  let value = '12 123 4567';
+  await withAndroidAdbProvider(
+    {
+      snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+      exec: createAndroidSnapshotHelperExecutor({
+        exec: async (args) => {
+          throw new Error(`unexpected adb call: ${args.join(' ')}`);
+        },
+        captureXml: () => phoneInputXml(value),
+      }),
+      text: async (request) => {
+        calls.push(request);
+        value = '05 012 3456';
+      },
+    },
+    { serial: ANDROID_EMULATOR.id },
+    async () => {
+      const result = await fillAndroid(ANDROID_EMULATOR, 100, 50, '0501234567');
+
+      assert.deepEqual(result, {
+        verification: 'unconfirmed',
+        requested: '0501234567',
+        before: '12 123 4567',
+        after: '05 012 3456',
+        target: {
+          resourceId: 'com.example:id/phone',
+          className: 'android.widget.EditText',
+          packageName: 'com.example',
+          rect: { x: 0, y: 0, width: 200, height: 100 },
+        },
+      });
+    },
+  );
+
+  assert.equal(calls.length, 1, 'an ambiguous committed fill must not be repeated');
+});
+
 test('fillAndroid waits for settled app text before reporting success', async () => {
   let typed = '';
   let dumpCount = 0;
@@ -232,7 +271,7 @@ test('fillAndroid waits for settled app text before reporting success', async ()
     },
   );
 
-  assert.ok(inputCount > 1);
+  assert.equal(inputCount, 1);
   assert.ok(dumpCount >= 4);
 });
 
@@ -471,6 +510,10 @@ function passwordHierarchy(mask: string): string {
 
 function androidInputXml(options: { text: string }): string {
   return `<?xml version="1.0" encoding="UTF-8"?><hierarchy><node package="com.example" class="android.widget.EditText" text="${options.text}" focused="true" bounds="[0,0][200,100]"/></hierarchy>`;
+}
+
+function phoneInputXml(text: string): string {
+  return `<?xml version="1.0" encoding="UTF-8"?><hierarchy><node package="com.example" class="android.widget.EditText" text="${text}" resource-id="com.example:id/phone" focused="true" bounds="[0,0][200,100]"/></hierarchy>`;
 }
 
 function appPackageWithInputMethodSubstringHierarchy(): string {

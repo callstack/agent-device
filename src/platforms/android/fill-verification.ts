@@ -1,4 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import {
@@ -13,6 +14,10 @@ import { getAndroidKeyboardState } from './device-input-state.ts';
 import { isAndroidInputMethodOwnedNode } from '@agent-device/contracts/platform';
 import { captureAndroidUiHierarchyXml } from './snapshot.ts';
 import { androidUiNodes, type AndroidUiNodeMetadata } from './ui-hierarchy.ts';
+import type {
+  FillUnconfirmedVerification,
+  FillVerificationTarget,
+} from '@agent-device/contracts/interaction';
 
 export type { AndroidFillVerification } from './fill-diagnostics.ts';
 
@@ -80,6 +85,90 @@ export async function readAndroidTextAtPoint(
   y: number,
 ): Promise<string | null> {
   return readAndroidTextAtPointInHierarchy(await captureAndroidUiHierarchyXml(device), x, y);
+}
+
+async function readAndroidFillTargetAtPoint(
+  device: DeviceInfo,
+  x: number,
+  y: number,
+): Promise<AndroidFillVerificationNode | null> {
+  const context = await readAndroidFillVerificationContext(device);
+  return inspectAndroidTextAtPointInHierarchy(
+    await captureAndroidUiHierarchyXml(device),
+    x,
+    y,
+    context,
+  ).targetInput;
+}
+
+export async function readAndroidFillTargetBeforeMutation(
+  device: DeviceInfo,
+  x: number,
+  y: number,
+): Promise<AndroidFillVerification['targetInput']> {
+  try {
+    return await readAndroidFillTargetAtPoint(device, x, y);
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'android_fill_pre_action_target_capture_failed',
+      data: { error: error instanceof Error ? error.message : String(error) },
+    });
+    return null;
+  }
+}
+
+export function completeAndroidFillVerification(
+  expected: string,
+  beforeTarget: AndroidFillVerification['targetInput'],
+  verification: AndroidFillVerification | null,
+): FillUnconfirmedVerification | undefined {
+  if (verification?.ok) return undefined;
+  const unconfirmed = verification
+    ? buildAndroidFillUnconfirmedVerification(expected, beforeTarget, verification)
+    : null;
+  if (unconfirmed) return unconfirmed;
+  throw new AppError(
+    'COMMAND_FAILED',
+    androidFillFailureMessage(verification),
+    androidFillFailureDetails(expected, verification),
+  );
+}
+
+export function buildAndroidFillUnconfirmedVerification(
+  requested: string,
+  beforeTarget: AndroidFillVerification['targetInput'],
+  verification: AndroidFillVerification,
+): FillUnconfirmedVerification | null {
+  const afterTarget = verification.targetInput;
+  const actualInput = verification.actualInput;
+  if (
+    verification.reason === 'ime_capture' ||
+    !beforeTarget ||
+    !afterTarget ||
+    !actualInput ||
+    isSensitiveFillDiagnosticNode(beforeTarget) ||
+    isSensitiveFillDiagnosticNode(afterTarget) ||
+    isSensitiveFillDiagnosticNode(actualInput) ||
+    !sameAndroidFillTarget(beforeTarget, afterTarget) ||
+    !sameAndroidFillTarget(beforeTarget, actualInput) ||
+    beforeTarget.text === verification.actual
+  ) {
+    return null;
+  }
+  const target = toFillVerificationTarget(beforeTarget);
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'android_fill_verification_unconfirmed',
+    data: { target },
+  });
+  return {
+    verification: 'unconfirmed',
+    requested,
+    before: beforeTarget.text,
+    after: verification.actual,
+    target,
+  };
 }
 
 export function verifyAndroidFilledTextInHierarchy(
@@ -338,4 +427,30 @@ function isEditTextClass(className: string): boolean {
 
 function isMaskedAndroidInput(node: AndroidFillVerificationNode): boolean {
   return isSensitiveFillDiagnosticNode(node);
+}
+
+function sameAndroidFillTarget(
+  before: AndroidFillVerificationNode,
+  after: AndroidFillVerificationNode,
+): boolean {
+  if (before.resourceId || after.resourceId) {
+    return before.resourceId === after.resourceId && before.packageName === after.packageName;
+  }
+  return (
+    before.className === after.className &&
+    before.packageName === after.packageName &&
+    before.rect.x === after.rect.x &&
+    before.rect.y === after.rect.y &&
+    before.rect.width === after.rect.width &&
+    before.rect.height === after.rect.height
+  );
+}
+
+function toFillVerificationTarget(node: AndroidFillVerificationNode): FillVerificationTarget {
+  return {
+    resourceId: node.resourceId,
+    className: node.className,
+    packageName: node.packageName,
+    rect: node.rect,
+  };
 }

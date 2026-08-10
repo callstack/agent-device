@@ -117,6 +117,8 @@ export type {
   ElementSelectorKey,
   ElementSelectorTapOptions,
   FillBackendResult,
+  FillUnconfirmedVerification,
+  FillVerificationTarget,
   Interactor,
   RunnerCallOptions,
   RunnerContext,

@@ -112,7 +112,9 @@ function isVersionFlag(arg: string | undefined): boolean {
 }
 
 function runCli(argv: string[]): void {
-  import('./cli.ts').then(({ runCli }) => runCli(argv)).catch(handleStartupError);
+  import('./cli/process-entry.ts')
+    .then(({ runCliProcess }) => runCliProcess(argv))
+    .catch(handleStartupError);
 }
 
 function handleStartupError(error: unknown): void {

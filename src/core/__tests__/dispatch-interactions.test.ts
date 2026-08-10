@@ -118,6 +118,36 @@ test('handleFillCommand forwards validated coordinates and delay', async () => {
   ]);
 });
 
+test('handleFillCommand preserves validated unconfirmed fill evidence', async () => {
+  const interactor: Interactor = {
+    ...makeUnusedInteractor(),
+    fill: async () => ({
+      verification: 'unconfirmed',
+      requested: '0501234567',
+      before: '12 123 4567',
+      after: '05 012 3456',
+      target: {
+        resourceId: 'com.example:id/phone',
+        className: 'android.widget.EditText',
+        packageName: 'com.example',
+        rect: { x: 0, y: 0, width: 200, height: 100 },
+      },
+    }),
+  };
+
+  const result = await handleFillCommand(interactor, ['100', '50', '0501234567'], undefined);
+
+  assert.equal(result.verification, 'unconfirmed');
+  assert.equal(result.before, '12 123 4567');
+  assert.equal(result.after, '05 012 3456');
+  assert.deepEqual(result.target, {
+    resourceId: 'com.example:id/phone',
+    className: 'android.widget.EditText',
+    packageName: 'com.example',
+    rect: { x: 0, y: 0, width: 200, height: 100 },
+  });
+});
+
 // The backend result is a typed TypeTextBackendResult, not a bag: the route is
 // the only passenger, and the runner payload's other keys are dropped at the
 // Apple boundary (readTypeTextBackendResult, src/platforms/apple/interactions.ts,

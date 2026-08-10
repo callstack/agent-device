@@ -287,9 +287,9 @@ function matchesWhenBothDefined<Value>(a: Value | undefined, b: Value | undefine
 export async function stopAndroidSnapshotHelperSession(
   deviceKey: string,
   options: { force?: boolean; signal?: AbortSignal; cause?: unknown } = {},
-): Promise<void> {
+): Promise<boolean> {
   const session = sessions.get(deviceKey);
-  if (!session) return;
+  if (!session) return false;
   sessions.delete(deviceKey);
   const processExit = observeAndroidSnapshotHelperProcessExit(session.process);
   const force = options.force === true || options.signal?.aborted === true;
@@ -338,6 +338,7 @@ export async function stopAndroidSnapshotHelperSession(
       cause: options.cause,
     });
   }
+  return true;
 }
 
 async function requestGracefulSessionExit(
