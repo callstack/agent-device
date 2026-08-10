@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Verify Android Emulator'
+  short_description: 'Inspect and verify Android Emulator apps with agent-device.'
+  default_prompt: 'Use $android-emulator to verify this Android Emulator change with agent-device.'
