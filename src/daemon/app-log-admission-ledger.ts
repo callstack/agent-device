@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import {
   deviceIdentity,
   deviceIdentityKey,
@@ -15,6 +16,7 @@ export type RetainedLegacyAppLogMarker = Readonly<{
 
 export type AppLogAdmissionLedgerOptions = Readonly<{
   now?: () => number;
+  markerExists?: (markerPath: string) => boolean;
   undurableCleanupTtlMs?: number;
   onUndurableCleanupExpired?: (block: Readonly<{ device: DeviceIdentity; reason: string }>) => void;
 }>;
@@ -27,10 +29,30 @@ export type AppLogAdmissionLedger = Readonly<{
   assertStartAllowed(device: DeviceInfo): void;
 }>;
 
+function findRetainedLegacyMarker(
+  retainedMarkers: Map<string, RetainedLegacyAppLogMarker>,
+  identityKey: string,
+  markerExists: (markerPath: string) => boolean,
+): RetainedLegacyAppLogMarker | undefined {
+  let retained: RetainedLegacyAppLogMarker | undefined;
+  for (const [markerPath, marker] of retainedMarkers) {
+    const matchesDevice =
+      marker.device === undefined || deviceIdentityKey(marker.device) === identityKey;
+    if (!matchesDevice) continue;
+    if (!markerExists(markerPath)) {
+      retainedMarkers.delete(markerPath);
+      continue;
+    }
+    retained ??= marker;
+  }
+  return retained;
+}
+
 export function createAppLogAdmissionLedger(
   options: AppLogAdmissionLedgerOptions = {},
 ): AppLogAdmissionLedger {
   const now = options.now ?? Date.now;
+  const markerExists = options.markerExists ?? fs.existsSync;
   const ttlMs = options.undurableCleanupTtlMs ?? DEFAULT_UNDURABLE_CLEANUP_TTL_MS;
   const undurableCleanupBlocks = new Map<
     string,
@@ -54,11 +76,8 @@ export function createAppLogAdmissionLedger(
     },
     assertStartAllowed(device: DeviceInfo): void {
       const identity = deviceIdentity(device);
-      const retained = [...retainedLegacyMarkers.values()].find(
-        (marker) =>
-          marker.device === undefined ||
-          deviceIdentityKey(marker.device) === deviceIdentityKey(identity),
-      );
+      const identityKey = deviceIdentityKey(identity);
+      const retained = findRetainedLegacyMarker(retainedLegacyMarkers, identityKey, markerExists);
       if (retained) {
         throw new AppError(
           'COMMAND_FAILED',
@@ -70,11 +89,10 @@ export function createAppLogAdmissionLedger(
         );
       }
 
-      const key = deviceIdentityKey(identity);
-      const block = undurableCleanupBlocks.get(key);
+      const block = undurableCleanupBlocks.get(identityKey);
       if (!block) return;
       if (now() > block.expiresAt) {
-        undurableCleanupBlocks.delete(key);
+        undurableCleanupBlocks.delete(identityKey);
         options.onUndurableCleanupExpired?.({ device: block.device, reason: block.reason });
         return;
       }

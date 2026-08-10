@@ -43,7 +43,7 @@ test('nonterminal record from an old session blocks replacement on the same devi
 });
 
 test('an undecodable manifest or retained legacy marker blocks all replacement starts', () => {
-  const ledger = createAppLogAdmissionLedger();
+  const ledger = createAppLogAdmissionLedger({ markerExists: () => true });
   const sessionStore = makeSessionStore('app-log-start-preflight-global-');
   const resourcePath = resolveAppLogResourcePath(sessionStore.resolveSessionDir('new-session'));
   const corruptPath = resolveAppLogResourcePath(sessionStore.resolveSessionDir('corrupt-session'));
