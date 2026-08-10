@@ -52,6 +52,7 @@ const consumerDir = path.join(workDir, 'consumer');
 function run(command: string, args: string[], cwd: string): string {
   return execFileSync(command, args, {
     cwd,
+    env: { ...process.env, AGENT_DEVICE_NO_UPDATE_NOTIFIER: '1' },
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
     stdio: ['ignore', 'pipe', 'inherit'],
@@ -148,8 +149,10 @@ if (failures.length > 0) {
  * `devices` and `doctor --remote` are the cheapest commands that load the daemon bundle and the
  * remote-config graph — the lazily imported halves of the CLI that no `--version` or `help` run
  * reaches, and where the 0.20.4 unresolved import actually surfaced. Every command is device-free and
- * offline. `--state-dir` keeps the daemon they start out of the developer's `~/.agent-device`, and
- * `daemon stop` leaves nothing running behind the check.
+ * offline. The subprocess environment disables the detached update notifier so the non-JSON
+ * `daemon stop` probe cannot recreate files while the temporary consumer is being removed.
+ * `--state-dir` keeps the daemon they start out of the developer's `~/.agent-device`, and `daemon
+ * stop` leaves nothing running behind the check.
  */
 function smokeTestBin(installedRoot: string, manifest: PackedManifest): void {
   const binPath = path.join(installedRoot, manifest.bin['agent-device']!);
