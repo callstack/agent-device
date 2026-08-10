@@ -65,27 +65,27 @@ test('is fails closed on the same ambiguous selector (readUnique row)', async ()
   assert.equal((error.details as { reason?: string } | undefined)?.reason, 'selector_not_found');
 });
 
-test('find exists answers from the first match on the same tree (readAny row)', async () => {
+test('find takes the document-order head on the same tree (readAny row)', async () => {
   const device = createSelectorDevice(ambiguousSelectorReadSnapshot());
 
+  // `get_attrs`, not `exists`: WHICH node the row selected has to be
+  // observable, or the assertion cannot separate `readAny` from the
+  // disambiguating row — `found: true` holds either way while the selection
+  // silently moves to the tiebreak winner (#1715 review).
+  const attrs = await device.selectors.find({
+    session: 'default',
+    query: AMBIGUOUS_SELECTOR,
+    action: 'get_attrs',
+  });
+  assert.equal(attrs.kind, 'attrs');
+  assert.equal(attrs.kind === 'attrs' ? attrs.ref : undefined, FIRST_MATCH_REF);
+
+  // The presence contract rides the same resolution, so a row that refuses an
+  // ambiguous screen would fail here rather than answering `found: true`.
   const exists = await device.selectors.find({
     session: 'default',
     query: AMBIGUOUS_SELECTOR,
     action: 'exists',
   });
   assert.deepEqual(exists, { kind: 'found', found: true });
-
-  // `list` renders the same domain the presence check answered from, so the
-  // first-match pick above is the document-order head rather than a tiebreak
-  // winner that happens to coincide with it.
-  const listed = await device.selectors.find({
-    session: 'default',
-    query: AMBIGUOUS_SELECTOR,
-    action: 'list',
-  });
-  assert.equal(listed.kind, 'list');
-  assert.deepEqual(listed.kind === 'list' ? listed.matches.map((match) => match.ref) : [], [
-    FIRST_MATCH_REF,
-    DISAMBIGUATED_REF,
-  ]);
 });
