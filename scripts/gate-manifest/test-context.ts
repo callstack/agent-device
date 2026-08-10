@@ -16,6 +16,7 @@ export function context(overrides: Partial<ResolveContext> = {}): ResolveContext
     expandTestPaths: (pattern) => [pattern],
     transparentWrappers: new Set(),
     declaredTerminals: new Map(),
+    gateRunners: new Set(),
     ...overrides,
   };
 }

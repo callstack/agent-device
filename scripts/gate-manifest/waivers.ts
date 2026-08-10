@@ -78,6 +78,63 @@ export const FORWARDED_SELECTOR_RULES: readonly ForwardedRule[] = [
   },
 ];
 
+/**
+ * An executable that IS a gate — it verifies something and exits non-zero when the verification
+ * fails — but drives its own runner instead of Vitest or `node --test`.
+ *
+ * The suite universe follows what a script RUNS rather than what it is called, which is only as
+ * good as the walk's ability to recognise a gate. It recognises a Vitest project and a
+ * `node --test` file; it cannot recognise one from an `exec:` terminal, because
+ * `scripts/fuzz/run.ts` and `scripts/size-report.mjs` are the same shape and only one of them
+ * can fail a build. So the gates are named here, and everything else stays out. Declared, never
+ * guessed — the same rule TRANSPARENT_WRAPPERS follows.
+ *
+ * This list is the manifest's weakest link and should stay short: unlike a waiver, deleting an
+ * entry makes the gate QUIETER rather than louder, so only check.ts's staleness assertions keep
+ * it honest (the file must exist, and some package script must actually run it). A gate added
+ * tomorrow under a name outside the convention, driving its own runner, is invisible until it
+ * is listed here. The candidates are `exec:` terminals that qualifying lanes run but no suite
+ * claims; #1429 tracks deriving that pressure instead of relying on this comment.
+ */
+export type GateRunner = {
+  readonly file: string;
+  readonly reason: string;
+  readonly issue: string;
+};
+
+export const GATE_RUNNERS: readonly GateRunner[] = [
+  {
+    file: 'scripts/fuzz/run.ts',
+    reason:
+      'The parser fuzz lane (#1414) generates hostile input in worker processes it spawns ' +
+      'itself and asserts one invariant over the results — every rejection a typed AppError ' +
+      'with a non-empty hint, no case hanging — then exits non-zero on a violation ' +
+      '(scripts/fuzz/run.ts:219). No Vitest project and no `node --test` file is involved, so ' +
+      'without this entry `fuzz:parsers` is not in the universe and deleting its nightly job ' +
+      'would not fail this gate.',
+    issue: '#1414',
+  },
+  {
+    file: 'scripts/mutation/run.ts',
+    reason:
+      'The decision-kernel mutation lane (#1415) drives Stryker, which spawns the test runner ' +
+      'itself, and ratchets the surviving-mutant score against the committed baseline — ' +
+      'non-zero once that baseline reports `gating: true` (scripts/mutation/run.ts:553). One ' +
+      'entry governs `mutation:run`, `mutation:baseline`, `mutation:check` and ' +
+      '`mutation:affected`: they are the same executable under different flags.',
+    issue: '#1415',
+  },
+  {
+    file: 'packages/maestro/test/conformance/differential/run.ts',
+    reason:
+      'The differential conformance lane runs each scenario through both engines and fails on ' +
+      'an UNDECLARED divergence (differential/run.ts:267). It shells out to the two engines ' +
+      'rather than running as a test file, so the `node --test` half of the same suite ' +
+      '(`maestro:conformance`) does not cover it.',
+    issue: '#1429',
+  },
+];
+
 export const DECLARED_EDGES: readonly DeclaredEdge[] = [
   {
     file: 'scripts/lib/contention-retry-run.ts',

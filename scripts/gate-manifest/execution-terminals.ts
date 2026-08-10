@@ -63,6 +63,12 @@ export type ResolveContext = {
    * mapped to the terminals they are declared to reach.
    */
   readonly declaredTerminals: ReadonlyMap<string, readonly Terminal[]>;
+  /**
+   * Executables that ARE a gate — they verify something and exit non-zero — while driving their
+   * own runner rather than Vitest or `node --test`. Declared, because "does this executable
+   * verify anything?" is not visible to a static walk. See GATE_RUNNERS in waivers.ts.
+   */
+  readonly gateRunners: ReadonlySet<string>;
 };
 
 export type Sink = {
@@ -74,6 +80,17 @@ export type Sink = {
 
 export function report(sink: Sink, kind: UnresolvedEdge['kind'], detail: string): void {
   sink.unresolved.push({ source: sink.source, step: sink.step, kind, detail });
+}
+
+/**
+ * The file an `exec:` terminal runs, without its positional arguments — null for every other
+ * kind. `exec:src/bin.ts test test/integration/replays/ios` and `exec:src/bin.ts replay …` are
+ * different units of work but the same executable, which is the question a caller asks when it
+ * wants to know WHAT ran rather than with which arguments.
+ */
+export function execTarget(terminal: Terminal): string | null {
+  if (!terminal.startsWith('exec:')) return null;
+  return terminal.slice('exec:'.length).split(' ')[0] ?? null;
 }
 
 /** Which Vitest projects an invocation runs. */

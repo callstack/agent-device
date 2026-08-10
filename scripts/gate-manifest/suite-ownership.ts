@@ -5,6 +5,7 @@
 // single job runs all of it.
 
 import {
+  execTarget,
   report,
   resolveScript,
   type ResolveContext,
@@ -39,18 +40,23 @@ export function suiteUniverse(ctx: ResolveContext): Suite[] {
     // gates in real lanes under other names, and were invisible here. Membership is therefore
     // decided by what a script RUNS, not what it is called, so the universe cannot be dodged —
     // by accident or otherwise — by naming a gate something else.
-    if (!/^(?:test|check):/.test(name) && !runsTestRunner(name, command, ctx)) continue;
+    if (!/^(?:test|check):/.test(name) && !runsGate(name, command, ctx)) continue;
     suites.push(packageScriptSuite(name, command, ctx));
   }
   return suites.sort((left, right) => left.id.localeCompare(right.id));
 }
 
 /**
- * Whether a script reaches a test runner. Probed WITHOUT reporting, because most scripts here are
+ * Whether a script reaches a gate. Probed WITHOUT reporting, because most scripts here are
  * ordinary (`build`, `dev`) and resolve to nothing — reporting during the probe would file every
  * one of them as an unresolved edge.
+ *
+ * Two ways to qualify, because "runs a test runner" is not the same question as "is a gate".
+ * A Vitest or `node --test` terminal proves itself. A gate that drives its OWN runner does not:
+ * `fuzz:parsers` and `mutation:run` are `exec:` terminals indistinguishable from `build`'s by
+ * shape, so the executables behind them are declared (GATE_RUNNERS) rather than guessed at.
  */
-function runsTestRunner(name: string, command: string, ctx: ResolveContext): boolean {
+function runsGate(name: string, command: string, ctx: ResolveContext): boolean {
   const probe: Sink = {
     terminals: new Set(),
     unresolved: [],
@@ -59,8 +65,21 @@ function runsTestRunner(name: string, command: string, ctx: ResolveContext): boo
   };
   resolveScript(name, command, ctx, probe);
   return [...probe.terminals].some(
-    (terminal) => terminal.startsWith('vitest:') || terminal.startsWith('node-test:'),
+    (terminal) =>
+      terminal.startsWith('vitest:') ||
+      terminal.startsWith('node-test:') ||
+      isDeclaredGateRunner(terminal, ctx),
   );
+}
+
+/**
+ * Whether a terminal runs a declared gate executable, matched on the executable rather than the
+ * whole terminal so one declaration governs every script that runs it: `mutation:run`,
+ * `mutation:check` and `mutation:affected` differ only in flags.
+ */
+function isDeclaredGateRunner(terminal: Terminal, ctx: ResolveContext): boolean {
+  const target = execTarget(terminal);
+  return target !== null && ctx.gateRunners.has(target);
 }
 
 export function packageScriptSuite(name: string, command: string, ctx: ResolveContext): Suite {

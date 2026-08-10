@@ -35,6 +35,7 @@ import {
   DECLARED_EDGES,
   DOCS_LANE_OWNERS,
   FORWARDED_SELECTOR_RULES,
+  GATE_RUNNERS,
   LOCAL_ONLY,
   TRANSPARENT_WRAPPERS,
   type DocsLaneOwner,
@@ -97,6 +98,7 @@ function context(overrides: Partial<ResolveContext> = {}): ResolveContext {
     expandTestPaths,
     transparentWrappers: new Set(TRANSPARENT_WRAPPERS.map((entry) => entry.file)),
     declaredTerminals: new Map(DECLARED_EDGES.map((entry) => [entry.file, entry.reaches])),
+    gateRunners: new Set(GATE_RUNNERS.map((entry) => entry.file)),
     ...overrides,
   };
 }
@@ -113,11 +115,16 @@ function resolvedTerminals(candidate: ResolveContext): Set<Terminal> {
   ]);
 }
 
-function sameTerminals(left: ReadonlySet<Terminal>, right: ReadonlySet<Terminal>): boolean {
-  return left.size === right.size && [...left].every((terminal) => right.has(terminal));
+function sameSet(left: ReadonlySet<string>, right: ReadonlySet<string>): boolean {
+  return left.size === right.size && [...left].every((member) => right.has(member));
 }
 
 const baselineTerminals = resolvedTerminals(ctx);
+
+/** The universe under `candidate`, for differencing a declaration against its absence. */
+function suiteIds(candidate: ResolveContext): Set<string> {
+  return new Set(suiteUniverse(candidate).map((suite) => suite.id));
+}
 
 /**
  * How much the gate would report under `candidate`. The two waiver kinds are effective in
@@ -191,6 +198,27 @@ const staleWaivers = [
   ...DECLARED_EDGES.filter((entry) => !trackedSet.has(entry.file)).map(
     (entry) => `DECLARED_EDGES "${entry.file}" does not exist`,
   ),
+  ...GATE_RUNNERS.filter((entry) => !trackedSet.has(entry.file)).map(
+    (entry) => `GATE_RUNNERS "${entry.file}" does not exist`,
+  ),
+  // A gate runner earns its place by putting a suite in the universe that would not be there
+  // without it. Matching nothing means the script that ran it was renamed or deleted — and this
+  // list is the only thing holding those suites in, so an entry that has quietly stopped
+  // applying takes the gate with it.
+  //
+  // Each entry is weighed ALONE against the undeclared universe rather than by removing it from
+  // the list: two entries reached by one script would otherwise each look redundant because of
+  // the other, and both would be reported inert while both were load-bearing.
+  ...GATE_RUNNERS.filter((entry) =>
+    sameSet(
+      suiteIds(context({ gateRunners: new Set() })),
+      suiteIds(context({ gateRunners: new Set([entry.file]) })),
+    ),
+  ).map(
+    (entry) =>
+      `GATE_RUNNERS "${entry.file}" changes nothing — no package script outside the ` +
+      `test:/check: convention runs it, so the declaration is inert`,
+  ),
   ...DECLARED_EDGES.flatMap((entry) =>
     entry.reaches
       .filter((terminal) => terminal.startsWith('vitest:'))
@@ -199,7 +227,7 @@ const staleWaivers = [
   ),
   // Applied-reachability: drop the waiver and the resolved terminal set must move.
   ...TRANSPARENT_WRAPPERS.filter((entry) =>
-    sameTerminals(
+    sameSet(
       baselineTerminals,
       resolvedTerminals(
         context({
@@ -458,6 +486,7 @@ console.log(
     `${
       LOCAL_ONLY.length +
       DECLARED_EDGES.length +
+      GATE_RUNNERS.length +
       TRANSPARENT_WRAPPERS.length +
       FORWARDED_SELECTOR_RULES.length
     } owned waivers.`,

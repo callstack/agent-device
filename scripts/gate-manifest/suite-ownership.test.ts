@@ -111,3 +111,61 @@ test('a gate named outside the test:/check: convention is still in the universe'
   assert.ok(ids.includes('maestro:conformance'), 'a test-running script must be governed');
   assert.ok(!ids.includes('build'), 'an ordinary script must stay out of the universe');
 });
+
+// `fuzz:parsers` verbatim, because reaching a test RUNNER is not the same as being a gate: the
+// case above passes on a `node --test` script and says nothing about this one, which is how the
+// fuzz lane stayed outside the universe while the convention hole was reported closed.
+const FUZZ_SCRIPTS = new Map([
+  ['fuzz:parsers', 'node --experimental-strip-types scripts/fuzz/run.ts'],
+  ['size', 'node scripts/size-report.mjs'],
+]);
+
+test('a gate driving its own runner is in the universe only once it is declared', () => {
+  // Red: the executable is the same shape as `size`'s, so nothing in the walk separates them.
+  const undeclared = suiteUniverse(context({ packageScripts: FUZZ_SCRIPTS, vitestProjects: [] }));
+  assert.deepEqual(
+    undeclared.map((suite) => suite.id),
+    [],
+    'an exec: terminal must not qualify as a gate on shape alone',
+  );
+
+  // Green: declaring the executable admits it, and only it.
+  const declared = suiteUniverse(
+    context({
+      packageScripts: FUZZ_SCRIPTS,
+      vitestProjects: [],
+      gateRunners: new Set(['scripts/fuzz/run.ts']),
+    }),
+  );
+  assert.deepEqual(
+    declared.map((suite) => [suite.id, [...suite.terminals]]),
+    [['fuzz:parsers', ['exec:scripts/fuzz/run.ts']]],
+    'the declared gate is governed; the report script beside it is not',
+  );
+});
+
+test('deleting the scheduled job that runs a declared gate fails the manifest', () => {
+  // The whole point of membership: #1414 runs nightly and nowhere else, so if the universe does
+  // not hold `fuzz:parsers`, deleting nightly-parser-fuzz drops the lane silently.
+  const ctx = context({
+    packageScripts: FUZZ_SCRIPTS,
+    vitestProjects: [],
+    gateRunners: new Set(['scripts/fuzz/run.ts']),
+  });
+  const nightly = 'name: Replay Nightly\non:\n  schedule:\n    - cron: "0 3 * * *"\njobs:\n';
+  const fuzzJob =
+    '  nightly-parser-fuzz:\n    steps:\n' +
+    '      - run: pnpm fuzz:parsers --self-check --artifact-dir .tmp/fuzz/self-check\n';
+  const otherJob = '  nightly-ios:\n    steps:\n      - run: pnpm test:replay:ios\n';
+
+  assert.deepEqual(
+    unownedTerminals(suiteUniverse(ctx), lanesFor({ 'n.yml': nightly + fuzzJob }, ctx), new Set()),
+    [],
+    'the lane owns the gate while the job exists',
+  );
+  assert.deepEqual(
+    unownedTerminals(suiteUniverse(ctx), lanesFor({ 'n.yml': nightly + otherJob }, ctx), new Set()),
+    [{ terminal: 'exec:scripts/fuzz/run.ts', suites: ['fuzz:parsers'] }],
+    'deleting the job must name the gate that stopped running',
+  );
+});
