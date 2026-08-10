@@ -15,11 +15,17 @@ import {
   finalizeOrdinaryCloseScript,
 } from '../session-close-script.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { flushSessionEventLogWrites } from '../../session-event-log.ts';
 
 const roots: string[] = [];
 
-afterEach(() => {
+afterEach(async () => {
   vi.restoreAllMocks();
+  // Every close path here records an action, and `SessionStore.recordAction` QUEUES the event-log
+  // append rather than writing it (`queueEventLogWrite`). Removing the root while one is still
+  // pending lets the write recreate `<root>/sessions/<name>/` mid-walk, and `rmSync` fails
+  // ENOTEMPTY — observed on CI under parallel load, where the queued write lands late enough.
+  await flushSessionEventLogWrites();
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 
