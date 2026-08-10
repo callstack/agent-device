@@ -5,28 +5,28 @@ description: Verify and debug native, React Native, Expo, or Flutter apps on an 
 
 # Android Emulator
 
-Use `agent-device` to verify a running app on an Android Emulator. Start from the live UI, act on current refs or selectors, and verify the requested result before closing the session.
+Use `agent-device` on an Android Emulator to verify a running app. Work from the live UI, act on current refs or selectors, and verify the result before closing the session.
 
-For a known app or package id, bring the app to the foreground and continue from the returned snapshot:
+For an app or package id, open it in the foreground:
 
 ```bash
 agent-device open <app-or-package-id> --platform android --foreground
 ```
 
-`open` returns the initial interactive snapshot. Use its current refs or a specific selector. For a planned UI action, add `--settle` and continue from the settled diff when it shows the next state:
+`open` returns the initial interactive snapshot. Use its current refs or a selector. For a planned action, use `--settle`. If the settled diff shows the next target, continue from it:
 
 ```bash
 agent-device press @eN --settle
 agent-device fill @eN "text" --settle
 ```
 
-Refresh with `agent-device snapshot -i` only when the settled diff does not show the next target. `type` does not support `--settle`; verify it with a snapshot or a named `wait`. Keep state-changing commands serial in one session, verify the requested end state with a selector or exact text, then close it:
+Run `agent-device snapshot -i` only when the settled diff does not show the next target. `type` never takes `--settle`; verify it with a snapshot or named `wait`. Keep state-changing commands serial. Verify the end state with a selector or exact text, then close:
 
 ```bash
 agent-device close
 ```
 
-Before planning a non-routine workflow, read the installed CLI guidance; it is version-matched and is the source of truth:
+For non-routine work, use the version-matched CLI help:
 
 ```bash
 agent-device help validate
@@ -41,4 +41,4 @@ agent-device help react-devtools  # component tree, props/state/hooks, and rende
 agent-device help scripting       # durable replay and CI workflows
 ```
 
-Use raw `adb shell` only for platform operations that require it. For app verification, use the snapshot-driven loop and preserve diagnostic output when it fails.
+Use `adb shell` only for platform operations. Use this workflow to verify the app and keep diagnostic output when it fails.
