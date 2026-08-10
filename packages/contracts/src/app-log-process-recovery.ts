@@ -33,7 +33,10 @@ export async function reattachCleanupOnlyAppLogProcess(
     };
   }
   const ownership = await host.processes.inspect(marker.marker);
-  if (ownership === 'missing') return { status: 'missing' };
+  if (ownership === 'missing') {
+    if (pidPath) await host.processes.clearMarker(pidPath);
+    return { status: 'missing' };
+  }
   if (ownership === 'ownership-lost') {
     return { status: 'unreattachable', reason: 'ownership-fence-lost' };
   }

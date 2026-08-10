@@ -42,6 +42,29 @@ test.each([
   },
 );
 
+test('dead owned marker recovery clears terminal evidence before the next start', async () => {
+  let marker: AppLogProcessMarkerReadOutcome = decoded;
+  const clearMarker = vi.fn(async () => {
+    marker = { status: 'missing' };
+  });
+  const host = {
+    processes: {
+      readMarker: vi.fn(async () => marker),
+      clearMarker,
+      inspect: vi.fn(async () => 'missing' as const),
+      terminate: vi.fn(async () => 'already-missing' as const),
+    },
+  };
+  const startReplacement = vi.fn(async () => {
+    if (marker.status !== 'missing') throw new Error('stale marker still blocks replacement');
+    return 'launched';
+  });
+
+  assert.deepEqual(await reattachCleanupOnlyAppLogProcess(host, '/pid'), { status: 'missing' });
+  assert.equal(await startReplacement(), 'launched');
+  assert.equal(clearMarker.mock.calls.length, 1);
+});
+
 test.each([
   [
     undefined,
