@@ -87,8 +87,18 @@ function isLegacyLogsAdmission(node: Record<string, unknown>): boolean {
   return (
     callee?.type === 'Identifier' &&
     callee.name === 'requireCommandSupported' &&
-    args?.[0]?.type === 'Literal' &&
-    args[0].value === 'logs'
+    isLogsCommandExpression(args?.[0])
+  );
+}
+
+function isLogsCommandExpression(node: Record<string, unknown> | undefined): boolean {
+  if (node?.type === 'Literal') return node.value === 'logs';
+  if (node?.type !== 'MemberExpression') return false;
+  const object = node.object as Record<string, unknown> | undefined;
+  return (
+    object?.type === 'Identifier' &&
+    object.name === 'PUBLIC_COMMANDS' &&
+    memberName(node) === 'logs'
   );
 }
 
@@ -109,13 +119,8 @@ function isLogsDescriptorWithCapability(node: Record<string, unknown>): boolean 
 }
 
 function isAppleLogsCommandMember(node: Record<string, unknown>): boolean {
-  if (node.type !== 'MemberExpression') return false;
-  const object = node.object as Record<string, unknown> | undefined;
-  return (
-    object?.type === 'Identifier' &&
-    object.name === 'PUBLIC_COMMANDS' &&
-    memberName(node) === 'logs'
-  );
+  if (node.type !== 'Property' || node.computed !== true) return false;
+  return isLogsCommandExpression(node.key as Record<string, unknown> | undefined);
 }
 
 function isHarmonyLogsCommandSetDeclaration(node: Record<string, unknown>): boolean {

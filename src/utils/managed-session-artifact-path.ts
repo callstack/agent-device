@@ -23,6 +23,7 @@ export function requireManagedSessionArtifactPath(input: ManagedSessionArtifactP
     if (realParent !== realRoot && !realParent.startsWith(`${realRoot}${path.sep}`)) {
       throw new Error(`${input.label} resolves outside the daemon-owned sessions directory`);
     }
+    return path.join(realParent, input.basename);
   }
   return resolved;
 }

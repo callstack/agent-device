@@ -89,7 +89,10 @@ test('legacy logs scan catches planted capability and dual-admission routes', ()
     },
     {
       path: 'src/daemon/handlers/planted.ts',
-      source: `const unsupported = requireCommandSupported('logs', device);`,
+      source: `
+        const literal = requireCommandSupported('logs', device);
+        const symbolic = requireCommandSupported(PUBLIC_COMMANDS.logs, device);
+      `,
     },
     {
       path: 'src/platforms/apple/plugin.ts',
@@ -103,6 +106,7 @@ test('legacy logs scan catches planted capability and dual-admission routes', ()
 
   assert.deepEqual(summaries(violations), [
     'src/core/command-descriptor/registry.ts: logs descriptor retains legacy capability admission',
+    'src/daemon/handlers/planted.ts: legacy logs capability admission requireCommandSupported',
     'src/daemon/handlers/planted.ts: legacy logs capability admission requireCommandSupported',
     'src/platforms/apple/plugin.ts: Apple plugin retains legacy logs support or hint closure',
     'src/core/capabilities.ts: HarmonyOS static command set retains logs admission',

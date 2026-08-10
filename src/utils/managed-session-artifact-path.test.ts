@@ -23,7 +23,7 @@ test('accepts the named artifact below the sessions root', () => {
       basename: 'app.log',
       label: 'App-log output',
     }),
-  ).toBe(pathname);
+  ).toBe(path.join(fs.realpathSync.native(path.dirname(pathname)), 'app.log'));
 });
 
 test('rejects a symlinked parent that escapes the sessions root', () => {
@@ -42,6 +42,24 @@ test('rejects a symlinked parent that escapes the sessions root', () => {
       label: 'App-log process marker',
     }),
   ).toThrow('App-log process marker resolves outside the daemon-owned sessions directory');
+});
+
+test('returns the verified real parent rather than a symlink alias', () => {
+  const root = temporaryRoot();
+  const sessionsDir = path.join(root, 'sessions');
+  const realSession = path.join(sessionsDir, 'real');
+  const linkedSession = path.join(sessionsDir, 'linked');
+  fs.mkdirSync(realSession, { recursive: true });
+  fs.symlinkSync(realSession, linkedSession);
+
+  expect(
+    requireManagedSessionArtifactPath({
+      sessionsDir,
+      pathname: path.join(linkedSession, 'app-log.pid'),
+      basename: 'app-log.pid',
+      label: 'App-log process marker',
+    }),
+  ).toBe(path.join(fs.realpathSync.native(realSession), 'app-log.pid'));
 });
 
 function temporaryRoot(): string {
