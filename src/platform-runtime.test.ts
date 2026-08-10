@@ -1,5 +1,4 @@
 import { PLATFORMS } from '@agent-device/kernel/device';
-import { inventoryUse } from '@agent-device/contracts/platform';
 import { describe, expect, test, vi } from 'vitest';
 
 const hostAdapter = vi.hoisted(() => ({ evaluations: 0 }));
@@ -77,15 +76,18 @@ describe('platform module metadata composition', () => {
         ],
       }),
     });
-    expect(
-      await providerGateways.providerFirst.discover(inventoryUse, { platform: 'web' }, scope),
-    ).toHaveLength(1);
+    expect(await providerGateways.providerFirst.discover({ platform: 'web' }, scope)).toHaveLength(
+      1,
+    );
     expect(hostAdapter.evaluations).toBe(0);
 
     const localGateways = createPlatformDeviceInventoryGateways();
-    expect(
-      await localGateways.localOnly.discover(inventoryUse, { platform: 'web' }, scope),
-    ).toHaveLength(1);
+    expect(await localGateways.localOnly.discover({ platform: 'web' }, scope)).toHaveLength(1);
+    expect(hostAdapter.evaluations).toBe(0);
+
+    await expect(
+      localGateways.localOnly.discover({ platform: 'android' }, scope),
+    ).rejects.toMatchObject({ code: 'TOOL_MISSING' });
     expect(hostAdapter.evaluations).toBe(1);
   });
 });

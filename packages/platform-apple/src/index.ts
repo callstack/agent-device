@@ -13,4 +13,4 @@ export const inventoryModule = Object.freeze({
     const { createAppleInventorySource } = await import('./inventory.ts');
     return createAppleInventorySource(host);
   },
-} satisfies InventoryPlatformModule);
+} satisfies InventoryPlatformModule<'apple'>);

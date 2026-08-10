@@ -2,18 +2,20 @@ import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import type {
-  DeviceInventoryHost,
+  DeviceInventoryHostFor,
   DeviceInventorySource,
   HostCommandResult,
   PlatformRequestScope,
 } from '@agent-device/contracts/platform';
-import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
-import { filterDeviceInventoryProjection } from '@agent-device/contracts/device';
+import {
+  isAndroidEmulatorSerial,
+  normalizeAndroidDeviceName,
+  type DeviceInventoryRequest,
+} from '@agent-device/contracts/device';
 import { androidDiscoveryCommandError, attachAndroidDiscoveryTimeout } from './adb-failure.ts';
 import type { AndroidInventoryConfig } from './inventory-config.ts';
 import {
   inferAndroidAvdTarget,
-  normalizeAndroidName,
   parseAndroidAvdList,
   parseAndroidDeviceEntries,
   parseAndroidEmulatorAvdNameOutput,
@@ -23,7 +25,6 @@ import {
 } from './inventory-parsers.ts';
 
 const PROBE_TIMEOUT_MS = 10_000;
-const EMULATOR_SERIAL_PREFIX = 'emulator-';
 const TV_FEATURES = [
   'android.software.leanback',
   'android.software.leanback_only',
@@ -31,14 +32,14 @@ const TV_FEATURES = [
 ] as const;
 
 type AndroidInventoryContext = Readonly<{
-  host: DeviceInventoryHost;
+  host: DeviceInventoryHostFor<'android'>;
   adb: string;
   emulator?: string;
   scope: PlatformRequestScope;
 }>;
 
 export function createAndroidInventory(
-  host: DeviceInventoryHost,
+  host: DeviceInventoryHostFor<'android'>,
   config: AndroidInventoryConfig = { sdkRoots: [] },
 ): DeviceInventorySource {
   return {
@@ -47,7 +48,7 @@ export function createAndroidInventory(
 }
 
 async function discoverAndroidDevices(
-  host: DeviceInventoryHost,
+  host: DeviceInventoryHostFor<'android'>,
   config: AndroidInventoryConfig,
   request: Readonly<DeviceInventoryRequest>,
   scope: PlatformRequestScope,
@@ -72,10 +73,7 @@ async function discoverAndroidDevices(
     3,
     async (entry) => await probeRunningDevice(context, entry),
   );
-  return filterDeviceInventoryProjection(
-    [...running, ...(await listStoppedAvds(context, running))],
-    request,
-  );
+  return [...running, ...(await listStoppedAvds(context, running))];
 }
 
 function resolveSerialAllowlist(
@@ -89,7 +87,7 @@ function resolveSerialAllowlist(
 }
 
 async function resolveTool(
-  host: DeviceInventoryHost,
+  host: DeviceInventoryHostFor<'android'>,
   executable: string,
   sdkRoots: readonly string[],
   relativeSegments: readonly string[],
@@ -126,7 +124,7 @@ async function probeRunningDevice(
     platform: 'android',
     id: entry.serial,
     name,
-    kind: isEmulator(entry.serial) ? 'emulator' : 'device',
+    kind: isAndroidEmulatorSerial(entry.serial) ? 'emulator' : 'device',
     target,
     booted,
   };
@@ -137,7 +135,7 @@ async function resolveDeviceName(
   entry: AndroidDeviceEntry,
 ): Promise<string> {
   const model = entry.rawModel.replace(/_/g, ' ').trim();
-  if (!isEmulator(entry.serial)) return model || entry.serial;
+  if (!isAndroidEmulatorSerial(entry.serial)) return model || entry.serial;
   const avdName = await resolveEmulatorAvdName(context, entry.serial);
   return avdName?.replace(/_/g, ' ') || model || entry.serial;
 }
@@ -223,10 +221,10 @@ async function listStoppedAvds(
   const runningNames = new Set(
     running
       .filter((device) => device.kind === 'emulator')
-      .map((device) => normalizeAndroidName(device.name)),
+      .map((device) => normalizeAndroidDeviceName(device.name)),
   );
   return parseAndroidAvdList(result.stdout)
-    .filter((name) => !runningNames.has(normalizeAndroidName(name)))
+    .filter((name) => !runningNames.has(normalizeAndroidDeviceName(name)))
     .map((name) => ({
       platform: 'android',
       id: name,
@@ -267,10 +265,6 @@ async function run(
 
 function commandOutput(result: HostCommandResult): string {
   return `${result.stdout}\n${result.stderr}`;
-}
-
-function isEmulator(serial: string): boolean {
-  return serial.startsWith(EMULATOR_SERIAL_PREFIX);
 }
 
 async function mapWithConcurrency<T, R>(

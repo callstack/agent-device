@@ -52,6 +52,8 @@ export type {
   HostTemporaryTextFile,
   DeviceInventoryFileHost,
   DeviceInventoryHost,
+  DeviceInventoryHostByFamily,
+  DeviceInventoryHostFor,
   DeviceObservationSink,
   NativeAssetResolver,
   PlatformDiagnosticEvent,
@@ -63,6 +65,7 @@ export type {
 } from '../platform-runtime-host.ts';
 export { createPlatformModuleRegistry, inventoryUse } from '../platform-module.ts';
 export type {
+  ComposedDeviceInventoryGateways,
   DeviceInventoryDiscovery,
   DeviceInventoryGateway,
   DeviceInventorySource,

@@ -4,7 +4,6 @@ import type {
 } from '@agent-device/contracts/device';
 import {
   createPlatformModuleRegistry,
-  inventoryUse,
   type DeviceInventoryHost,
   type DeviceInventorySource,
   type InventoryPlatformModule,
@@ -55,9 +54,9 @@ describe('composed device inventory gateway', () => {
         provider,
       });
 
-      expect(
-        await gateways.providerFirst.discover(inventoryUse, { platform: 'android' }, scope),
-      ).toEqual(devices);
+      expect(await gateways.providerFirst.discover({ platform: 'android' }, scope)).toEqual(
+        devices,
+      );
       expect(local.hostLoads()).toBe(0);
       expect(local.sourceLoads()).toEqual([]);
     }
@@ -70,9 +69,9 @@ describe('composed device inventory gateway', () => {
       loadHost: local.loadHost,
       provider: { discover: async () => ({ kind: 'declined' }) },
     });
-    expect(
-      await declined.providerFirst.discover(inventoryUse, { platform: 'android' }, scope),
-    ).toEqual([device('android')]);
+    expect(await declined.providerFirst.discover({ platform: 'android' }, scope)).toEqual([
+      device('android'),
+    ]);
 
     const malformed = createComposedDeviceInventoryGateways({
       registry: local.registry,
@@ -80,7 +79,7 @@ describe('composed device inventory gateway', () => {
       provider: { discover: async () => undefined } as unknown as ProviderDeviceInventorySource,
     });
     await expect(
-      malformed.providerFirst.discover(inventoryUse, { platform: 'android' }, scope),
+      malformed.providerFirst.discover({ platform: 'android' }, scope),
     ).rejects.toMatchObject({ details: { reason: 'provider_inventory_contract_violation' } });
   });
 
@@ -102,15 +101,47 @@ describe('composed device inventory gateway', () => {
       loadHost: local.loadHost,
       provider,
     });
-    const pending = gateways.providerFirst.discover(
-      inventoryUse,
-      { platform: 'android' },
-      requestScope,
-    );
+    const pending = gateways.providerFirst.discover({ platform: 'android' }, requestScope);
     controller.abort(new Error('cancelled'));
 
     await expect(pending).rejects.toThrow('cancelled');
     expect(observed).toHaveBeenCalledWith(controller.signal);
+    expect(local.hostLoads()).toBe(0);
+  });
+
+  test('keeps local projection policy out of the provider request', async () => {
+    const received: unknown[] = [];
+    const provider: ProviderDeviceInventorySource = {
+      discover: async (request) => {
+        received.push(request);
+        return { kind: 'inventory', devices: [] };
+      },
+    };
+    const local = inventoryWorld();
+    const gateways = createComposedDeviceInventoryGateways({
+      registry: local.registry,
+      loadHost: local.loadHost,
+      provider,
+    });
+
+    await gateways.providerFirst.discover(
+      {
+        platform: 'ios',
+        kind: 'simulator',
+        booted: true,
+        iosSimulatorSetPath: '/tmp/isolated-simulators',
+        androidSerialAllowlist: ['emulator-5554'],
+      },
+      scope,
+    );
+
+    expect(received).toEqual([
+      {
+        platform: 'ios',
+        iosSimulatorSetPath: '/tmp/isolated-simulators',
+        androidSerialAllowlist: ['emulator-5554'],
+      },
+    ]);
     expect(local.hostLoads()).toBe(0);
   });
 
@@ -132,7 +163,6 @@ describe('composed device inventory gateway', () => {
     });
 
     const projected = await gateways.providerFirst.discover(
-      inventoryUse,
       { platform: 'ios', target: 'mobile', kind: 'device', booted: true },
       scope,
     );
@@ -158,15 +188,15 @@ describe('composed device inventory gateway', () => {
       },
     });
 
-    await expect(
-      gateways.localOnly.discover(inventoryUse, { platform: 'android' }, scope),
-    ).rejects.toThrow('host load failed');
-    await expect(
-      gateways.localOnly.discover(inventoryUse, { platform: 'android' }, scope),
-    ).rejects.toThrow('source load failed');
-    expect(await gateways.localOnly.discover(inventoryUse, { platform: 'android' }, scope)).toEqual(
-      [device('android')],
+    await expect(gateways.localOnly.discover({ platform: 'android' }, scope)).rejects.toThrow(
+      'host load failed',
     );
+    await expect(gateways.localOnly.discover({ platform: 'android' }, scope)).rejects.toThrow(
+      'source load failed',
+    );
+    expect(await gateways.localOnly.discover({ platform: 'android' }, scope)).toEqual([
+      device('android'),
+    ]);
     expect(hostAttempts).toBe(2);
     expect(androidAttempts).toBe(2);
     expect(local.sourceLoads()).toEqual(['android', 'android']);
@@ -181,7 +211,7 @@ describe('composed device inventory gateway', () => {
       loadHost: local.loadHost,
     });
 
-    const devices = await gateways.localOnly.discover(inventoryUse, {}, scope);
+    const devices = await gateways.localOnly.discover({}, scope);
     expect(devices.map(({ platform }) => platform)).toEqual(['android', 'apple', 'vega', 'linux']);
     expect(local.sourceLoads()).toEqual(['android', 'harmonyos', 'apple', 'vega', 'linux']);
   });
@@ -192,7 +222,7 @@ describe('composed device inventory gateway', () => {
       createComposedDeviceInventoryGateways({
         registry: failing.registry,
         loadHost: failing.loadHost,
-      }).localOnly.discover(inventoryUse, { platform: 'android' }, scope),
+      }).localOnly.discover({ platform: 'android' }, scope),
     ).rejects.toThrow('adb failed');
 
     const lying = inventoryWorld({
@@ -202,7 +232,7 @@ describe('composed device inventory gateway', () => {
       createComposedDeviceInventoryGateways({
         registry: lying.registry,
         loadHost: lying.loadHost,
-      }).localOnly.discover(inventoryUse, { platform: 'android' }, scope),
+      }).localOnly.discover({ platform: 'android' }, scope),
     ).rejects.toMatchObject({
       details: { expectedFamily: 'android', actualFamily: 'linux' },
     });

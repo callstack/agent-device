@@ -7,10 +7,7 @@ import type {
   AppleRunnerCommandExecutor,
   AppleRunnerProvider,
 } from '../platforms/apple/core/runner/runner-provider.ts';
-import type {
-  AppleToolCommandExecutor,
-  AppleToolProvider,
-} from '../platforms/apple/core/tool-provider.ts';
+import type { AppleToolProvider } from '../platforms/apple/core/tool-provider.ts';
 import type { LinuxToolProvider } from '../platforms/linux/tool-provider.ts';
 import type { VegaToolProvider } from '../platforms/vega/tool-provider.ts';
 import { withWebProvider, type WebProvider } from '../platforms/web/provider.ts';
@@ -38,9 +35,7 @@ export type AppleRunnerProviderResolver = PlatformProviderResolver<
   AppleRunnerProvider | AppleRunnerCommandExecutor | undefined
 >;
 
-export type AppleToolProviderResolver = PlatformProviderResolver<
-  AppleToolProvider | AppleToolCommandExecutor | undefined
->;
+export type AppleToolProviderResolver = PlatformProviderResolver<AppleToolProvider | undefined>;
 
 export type LinuxToolProviderResolver = PlatformProviderResolver<LinuxToolProvider | undefined>;
 
@@ -117,7 +112,7 @@ type ResolvedRequestPlatformProviders = {
     requestId?: string;
   };
   appleTool?: {
-    provider?: AppleToolProvider | AppleToolCommandExecutor;
+    provider?: AppleToolProvider;
   };
   linuxTool?: {
     provider?: LinuxToolProvider;

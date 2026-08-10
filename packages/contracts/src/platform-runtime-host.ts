@@ -85,6 +85,18 @@ export type DeviceInventoryHost = Readonly<{
   observations: DeviceObservationSink;
 }>;
 
+/** The exact host authority made visible to each family inventory implementation. */
+export type DeviceInventoryHostByFamily = Readonly<{
+  apple: Pick<DeviceInventoryHost, 'appleTools' | 'files' | 'hostName' | 'hostOs' | 'observations'>;
+  android: Pick<DeviceInventoryHost, 'commands' | 'files' | 'homeDirectory' | 'toolchains'>;
+  harmonyos: Pick<DeviceInventoryHost, 'commands' | 'files' | 'toolchains'>;
+  vega: Pick<DeviceInventoryHost, 'commands' | 'files' | 'homeDirectory'>;
+  linux: Pick<DeviceInventoryHost, 'hostName' | 'hostOs'>;
+  web: never;
+}>;
+
+export type DeviceInventoryHostFor<Family extends Platform> = DeviceInventoryHostByFamily[Family];
+
 export type PlatformDiagnosticEvent = Readonly<{
   level: 'debug' | 'info' | 'warn' | 'error';
   phase: string;

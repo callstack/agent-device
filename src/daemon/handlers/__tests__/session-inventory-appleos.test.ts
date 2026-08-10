@@ -3,13 +3,13 @@ import { test, expect, vi, beforeEach } from 'vitest';
 // The `devices` handler resolves its inventory through listDeviceInventory; mocking it
 // lets us drive the additive `appleOs` projection off the shared device fixtures without
 // touching real local discovery.
-vi.mock('../../../core/dispatch-resolve.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../core/dispatch-resolve.ts')>();
+vi.mock('../../../core/device-inventory-context.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../core/device-inventory-context.ts')>();
   return { ...actual, listDeviceInventory: vi.fn(async () => []) };
 });
 
 import { handleSessionInventoryCommands } from '../session-inventory.ts';
-import { listDeviceInventory } from '../../../core/dispatch-resolve.ts';
+import { listDeviceInventory } from '../../../core/device-inventory-context.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import type { DaemonRequest, DaemonResponse } from '../../types.ts';
 import type { AppleOS, DeviceInfo } from '@agent-device/kernel/device';

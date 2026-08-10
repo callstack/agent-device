@@ -7,7 +7,7 @@
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
-import type { DeviceInventoryRequest } from './device-inventory.ts';
+import type { ProviderDeviceInventoryRequest } from './device-inventory.ts';
 
 export type DeviceLease = {
   leaseId: string;
@@ -43,7 +43,7 @@ export type LeaseLifecycleProvider = {
 };
 
 export type DeviceInventoryProvider = (
-  request: DeviceInventoryRequest,
+  request: ProviderDeviceInventoryRequest,
   signal?: AbortSignal,
 ) => Promise<DeviceInfo[] | null | undefined>;
 
@@ -54,7 +54,7 @@ export type ProviderDeviceInventoryOutcome =
 /** Closed provider-owned inventory source; an empty inventory is authoritative. */
 export type ProviderDeviceInventorySource = Readonly<{
   discover(
-    request: Readonly<DeviceInventoryRequest>,
+    request: Readonly<ProviderDeviceInventoryRequest>,
     signal: AbortSignal,
   ): Promise<ProviderDeviceInventoryOutcome>;
 }>;

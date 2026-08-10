@@ -1,4 +1,7 @@
-import type { DeviceInventoryHost, PlatformRequestScope } from '@agent-device/contracts/platform';
+import type {
+  DeviceInventoryHostFor,
+  PlatformRequestScope,
+} from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   mapDevicectlAppleDevice,
@@ -56,7 +59,7 @@ function parseXctracePhysicalAppleDeviceLine(line: string): DeviceInfo | undefin
 }
 
 export async function listPhysicalAppleDevices(
-  host: DeviceInventoryHost,
+  host: DeviceInventoryHostFor<'apple'>,
   scope: PlatformRequestScope,
 ): Promise<DeviceInfo[]> {
   const [devicectl, xctrace] = await Promise.all([
@@ -67,7 +70,7 @@ export async function listPhysicalAppleDevices(
 }
 
 async function listPhysicalDevicesFromDevicectl(
-  host: DeviceInventoryHost,
+  host: DeviceInventoryHostFor<'apple'>,
   scope: PlatformRequestScope,
 ): Promise<DeviceInfo[]> {
   let temporaryFile;
@@ -104,7 +107,7 @@ async function listPhysicalDevicesFromDevicectl(
 }
 
 async function listPhysicalDevicesFromXctrace(
-  host: DeviceInventoryHost,
+  host: DeviceInventoryHostFor<'apple'>,
   scope: PlatformRequestScope,
 ): Promise<DeviceInfo[]> {
   try {

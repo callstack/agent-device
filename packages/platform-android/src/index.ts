@@ -12,7 +12,7 @@ export type { AndroidInventoryConfig } from './inventory-config.ts';
 
 export function createAndroidInventoryModule(
   config: AndroidInventoryConfig,
-): InventoryPlatformModule {
+): InventoryPlatformModule<'android'> {
   const capturedConfig = Object.freeze({
     sdkRoots: Object.freeze([
       ...new Set(config.sdkRoots.map((root) => root.trim()).filter(Boolean)),

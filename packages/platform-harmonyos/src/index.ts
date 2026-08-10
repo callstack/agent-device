@@ -12,7 +12,7 @@ export type { HarmonyInventoryConfig } from './inventory-config.ts';
 
 export function createHarmonyInventoryModule(
   config: HarmonyInventoryConfig,
-): InventoryPlatformModule {
+): InventoryPlatformModule<'harmonyos'> {
   const capturedConfig = Object.freeze({
     hdcSdkPath: normalizedRoot(config.hdcSdkPath),
     devecoSdkHome: normalizedRoot(config.devecoSdkHome),

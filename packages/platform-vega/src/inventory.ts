@@ -2,7 +2,7 @@ import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type {
-  DeviceInventoryHost,
+  DeviceInventoryHostFor,
   DeviceInventorySource,
   HostCommandResult,
   PlatformRequestScope,
@@ -11,7 +11,7 @@ import type {
 const DISCOVERY_TIMEOUT_MS = 10_000;
 const VVD_SERIAL = 'VirtualDevice';
 
-export function createVegaInventory(host: DeviceInventoryHost): DeviceInventorySource {
+export function createVegaInventory(host: DeviceInventoryHostFor<'vega'>): DeviceInventorySource {
   return {
     discover: async (_request, scope) => await discoverVegaDevices(host, scope),
   };
@@ -32,7 +32,7 @@ export function parseVegaDeviceList(rawOutput: string): DeviceInfo[] {
 }
 
 async function discoverVegaDevices(
-  host: DeviceInventoryHost,
+  host: DeviceInventoryHostFor<'vega'>,
   scope: PlatformRequestScope,
 ): Promise<readonly DeviceInfo[]> {
   const executable = await resolveVegaExecutable(host);
@@ -66,7 +66,9 @@ async function discoverVegaDevices(
   return devices;
 }
 
-async function resolveVegaExecutable(host: DeviceInventoryHost): Promise<string | undefined> {
+async function resolveVegaExecutable(
+  host: DeviceInventoryHostFor<'vega'>,
+): Promise<string | undefined> {
   const resolved = await host.commands.which('vega');
   if (resolved) return resolved;
   const defaultInstall = path.join(host.homeDirectory, 'vega', 'bin', 'vega');

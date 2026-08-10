@@ -1,15 +1,15 @@
 import type { ProviderDeviceInventorySource } from '@agent-device/contracts/device';
-import { createPlatformModuleRegistry } from '@agent-device/contracts/platform';
+import {
+  createPlatformModuleRegistry,
+  type ComposedDeviceInventoryGateways,
+} from '@agent-device/contracts/platform';
 import { inventoryModule as appleInventoryModule } from '@agent-device/platform-apple';
 import { createAndroidInventoryModule } from '@agent-device/platform-android';
 import { createHarmonyInventoryModule } from '@agent-device/platform-harmonyos';
 import { inventoryModule as vegaInventoryModule } from '@agent-device/platform-vega';
 import { inventoryModule as linuxInventoryModule } from '@agent-device/platform-linux';
 import { inventoryModule as webInventoryModule } from '@agent-device/platform-web';
-import {
-  createComposedDeviceInventoryGateways,
-  type ComposedDeviceInventoryGateways,
-} from './platform-runtime-device-inventory.ts';
+import { createComposedDeviceInventoryGateways } from './platform-runtime-device-inventory.ts';
 
 const androidInventoryModule = createAndroidInventoryModule({
   sdkRoots: configuredValues(process.env.ANDROID_SDK_ROOT, process.env.ANDROID_HOME),

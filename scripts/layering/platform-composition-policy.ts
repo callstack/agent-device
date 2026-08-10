@@ -12,12 +12,15 @@ function lineOf(source: string, offset: number): number {
   return source.slice(0, offset).split('\n').length;
 }
 
-function identifierName(node: unknown): string | undefined {
+function memberPropertyName(node: unknown): string | undefined {
   if (node === null || typeof node !== 'object') return undefined;
   const record = node as Record<string, unknown>;
-  if (record['type'] === 'Identifier') return record['name'] as string | undefined;
-  if (record['type'] === 'MemberExpression') return identifierName(record['property']);
-  return undefined;
+  if (record['type'] === 'ChainExpression') return memberPropertyName(record['expression']);
+  if (record['type'] !== 'MemberExpression') return undefined;
+  const property = record['property'] as Record<string, unknown> | undefined;
+  if (property?.['type'] === 'Identifier') return property['name'] as string | undefined;
+  const value = property?.['value'];
+  return typeof value === 'string' ? value : undefined;
 }
 
 function isFunction(node: Record<string, unknown>): boolean {
@@ -28,7 +31,7 @@ function isFunction(node: Record<string, unknown>): boolean {
   );
 }
 
-function eagerMechanicSites(source: string): number[] {
+function eagerImplementationLoaderSites(source: string): number[] {
   const sites: number[] = [];
   const visit = (node: unknown): void => {
     if (node === null || typeof node !== 'object') return;
@@ -38,18 +41,10 @@ function eagerMechanicSites(source: string): number[] {
     }
     const record = node as Record<string, unknown>;
     if (isFunction(record)) return;
-    const type = record['type'];
-    const callee = type === 'CallExpression' || type === 'NewExpression' ? record['callee'] : null;
-    const name = identifierName(callee);
-    const isEagerCall =
-      type === 'CallExpression' &&
-      name !== undefined &&
-      /^(?:existsSync|accessSync|statSync|readFileSync|readdirSync|fetch|probe\w*|prepare\w*|build\w*)$/i.test(
-        name,
-      );
-    const isHelperConstruction =
-      type === 'NewExpression' && name !== undefined && /(?:Helper|Manager|Runner)$/.test(name);
-    if (isEagerCall || isHelperConstruction) {
+    if (
+      record['type'] === 'CallExpression' &&
+      ['loadInventory', 'loadRuntime'].includes(memberPropertyName(record['callee']) ?? '')
+    ) {
       sites.push(lineOf(source, (record['start'] as number | undefined) ?? 0));
       return;
     }
@@ -69,10 +64,7 @@ function isAllowedCompositionImport(specifier: string): boolean {
   );
 }
 
-export function checkPlatformComposition(
-  source: string | undefined,
-  expectedMetadataNames: readonly string[],
-): LayeringViolation[] {
+export function checkPlatformComposition(source: string | undefined): LayeringViolation[] {
   if (source === undefined) {
     return [violation(1, 'the exact platform composition root is missing')];
   }
@@ -93,28 +85,11 @@ export function checkPlatformComposition(
     }
   }
 
-  const call = /createPlatformModuleRegistry\s*\(\s*\[([\s\S]*?)\]\s*\)/.exec(source);
-  const registered = (call?.[1] ?? '')
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-  if (
-    registered.length !== expectedMetadataNames.length ||
-    registered.some((name, index) => name !== expectedMetadataNames[index])
-  ) {
-    violations.push(
-      violation(
-        1,
-        `registration list must be exactly [${expectedMetadataNames.join(', ')}], found [${registered.join(', ')}]`,
-      ),
-    );
-  }
-
-  for (const line of eagerMechanicSites(source)) {
+  for (const line of eagerImplementationLoaderSites(source)) {
     violations.push(
       violation(
         line,
-        'composition may not probe the host, prepare assets, or construct helpers before selected use',
+        'composition may not invoke a platform implementation loader before selected use',
       ),
     );
   }

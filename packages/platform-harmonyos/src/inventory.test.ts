@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type {
-  DeviceInventoryHost,
+  DeviceInventoryHostFor,
   HostCommandRequest,
   PlatformRequestScope,
 } from '@agent-device/contracts/platform';
@@ -16,7 +16,6 @@ const scope: PlatformRequestScope = {
 test('Harmony inventory parses targets, probes through the host port, and applies serial selection', async () => {
   assert.deepEqual(parseHarmonyTargetList('\n127.0.0.1:5555\n[Empty]\n'), ['127.0.0.1:5555']);
   const calls: HostCommandRequest[] = [];
-  const observed: string[] = [];
   const host = createHost(async (request) => {
     calls.push(request);
     const key = request.args.join('\0');
@@ -26,7 +25,7 @@ test('Harmony inventory parses targets, probes through the host port, and applie
     }
     if (key.includes('const.build.characteristics')) return result('tv\n');
     throw new Error(`Unexpected HDC invocation: ${key}`);
-  }, observed);
+  });
 
   const devices = await createHarmonyInventory(host).discover({ serial: 'physical-1' }, scope);
 
@@ -40,7 +39,6 @@ test('Harmony inventory parses targets, probes through the host port, and applie
       booted: true,
     },
   ]);
-  assert.deepEqual(observed, []);
   assert.ok(calls.every((call) => call.executable === 'hdc'));
   assert.ok(calls.every((call) => call.timeoutMs === 10_000));
 });
@@ -51,7 +49,6 @@ test('Harmony inventory resolves captured HDC toolchain roots without mutating h
       assert.equal(request.executable, '/opt/deveco/default/openharmony/toolchains/hdc');
       return result('');
     },
-    [],
     {
       which: async () => undefined,
       isExecutable: async (candidate) =>
@@ -73,7 +70,6 @@ test('Harmony inventory prepares a configured legacy toolchain before discovery'
         assert.equal(request.executable, '/opt/deveco/default/openharmony/toolchains/hdc');
         return result('');
       },
-      [],
       {
         which: async () => undefined,
         isExecutable: async (candidate) =>
@@ -93,7 +89,7 @@ test('Harmony inventory prepares a configured legacy toolchain before discovery'
 });
 
 test('Harmony inventory preserves the legacy curated HDC failure shape', async () => {
-  const host = createHost(async () => result('ignored', 'transport failed', 7), []);
+  const host = createHost(async () => result('ignored', 'transport failed', 7));
 
   await assert.rejects(createHarmonyInventory(host).discover({}, scope), (error: unknown) => {
     if (!(error instanceof Error) || !('details' in error)) return false;
@@ -106,34 +102,19 @@ test('Harmony inventory preserves the legacy curated HDC failure shape', async (
 });
 
 function createHost(
-  run: DeviceInventoryHost['commands']['run'],
-  observed: string[],
+  run: DeviceInventoryHostFor<'harmonyos'>['commands']['run'],
   tools: {
-    which?: DeviceInventoryHost['commands']['which'];
-    isExecutable?: DeviceInventoryHost['files']['isExecutable'];
+    which?: DeviceInventoryHostFor<'harmonyos'>['commands']['which'];
+    isExecutable?: DeviceInventoryHostFor<'harmonyos'>['files']['isExecutable'];
   } = {},
-): DeviceInventoryHost {
+): DeviceInventoryHostFor<'harmonyos'> {
   return {
     commands: { which: tools.which ?? (async () => 'hdc'), run },
-    appleTools: {
-      isXcrunAvailable: async () => false,
-      run: async () => {
-        throw new Error('unused');
-      },
-    },
     toolchains: { prepare: async () => undefined },
     files: {
       isExecutable: tools.isExecutable ?? (async () => false),
       createTemporaryTextFile: async () => {
         throw new Error('unused');
-      },
-    },
-    hostOs: 'darwin',
-    hostName: 'test-host',
-    homeDirectory: '/Users/test',
-    observations: {
-      deviceBooted: async (device) => {
-        observed.push(device.id);
       },
     },
   };

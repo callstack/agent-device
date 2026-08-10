@@ -2,7 +2,7 @@ import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type {
-  DeviceInventoryHost,
+  DeviceInventoryHostFor,
   DeviceInventorySource,
   HostCommandResult,
   PlatformRequestScope,
@@ -13,7 +13,7 @@ import type { HarmonyInventoryConfig } from './inventory-config.ts';
 const PROBE_TIMEOUT_MS = 10_000;
 
 export function createHarmonyInventory(
-  host: DeviceInventoryHost,
+  host: DeviceInventoryHostFor<'harmonyos'>,
   config: HarmonyInventoryConfig = {},
 ): DeviceInventorySource {
   return {
@@ -29,7 +29,7 @@ export function parseHarmonyTargetList(rawOutput: string): string[] {
 }
 
 async function discoverHarmonyDevices(
-  host: DeviceInventoryHost,
+  host: DeviceInventoryHostFor<'harmonyos'>,
   config: HarmonyInventoryConfig,
   request: Readonly<DeviceInventoryRequest>,
   scope: PlatformRequestScope,
@@ -67,7 +67,7 @@ function configuredToolchainRoots(config: HarmonyInventoryConfig): readonly stri
 }
 
 async function resolveHdc(
-  host: DeviceInventoryHost,
+  host: DeviceInventoryHostFor<'harmonyos'>,
   toolchainRoots: readonly string[],
 ): Promise<string | undefined> {
   for (const root of toolchainRoots) {
@@ -78,7 +78,7 @@ async function resolveHdc(
 }
 
 async function probeHarmonyDevice(
-  host: DeviceInventoryHost,
+  host: DeviceInventoryHostFor<'harmonyos'>,
   hdc: string,
   target: string,
   scope: PlatformRequestScope,
@@ -101,7 +101,7 @@ async function probeHarmonyDevice(
 }
 
 async function runHdc(
-  host: DeviceInventoryHost,
+  host: DeviceInventoryHostFor<'harmonyos'>,
   executable: string,
   args: readonly string[],
   scope: PlatformRequestScope,

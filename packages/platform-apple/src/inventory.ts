@@ -1,34 +1,29 @@
-import {
-  filterDeviceInventoryProjection,
-  type DeviceInventoryRequest,
-} from '@agent-device/contracts/device';
+import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import type {
-  DeviceInventoryHost,
+  DeviceInventoryHostFor,
   DeviceInventorySource,
   PlatformRequestScope,
 } from '@agent-device/contracts/platform';
-import {
-  matchesPlatformSelector,
-  sortAppleDevicesForSelection,
-  type DeviceInfo,
-} from '@agent-device/kernel/device';
+import { sortAppleDevicesForSelection, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { listPhysicalAppleDevices } from './physical-inventory.ts';
 import { listAppleSimulators } from './simulator-inventory.ts';
 
-export function createAppleInventorySource(host: DeviceInventoryHost): DeviceInventorySource {
+export function createAppleInventorySource(
+  host: DeviceInventoryHostFor<'apple'>,
+): DeviceInventorySource {
   return Object.freeze({
     discover: async (request, scope) => await discoverAppleDevices(host, request, scope),
   });
 }
 
 async function discoverAppleDevices(
-  host: DeviceInventoryHost,
+  host: DeviceInventoryHostFor<'apple'>,
   request: Readonly<DeviceInventoryRequest>,
   scope: PlatformRequestScope,
 ): Promise<DeviceInfo[]> {
   if (isMacOnlyRequest(request)) {
-    return projectAppleInventory([hostMacDevice(host)], request);
+    return [hostMacDevice(host)];
   }
   if (host.hostOs !== 'darwin') {
     throw new AppError('UNSUPPORTED_PLATFORM', 'Apple tools are only available on macOS');
@@ -38,31 +33,18 @@ async function discoverAppleDevices(
   }
 
   const simulators = await listAppleSimulators(host, request, scope);
-  if (request.kind === 'simulator') return projectAppleInventory(simulators, request);
+  if (request.kind === 'simulator') return simulators;
 
   const withHost = [...simulators, hostMacDevice(host)];
   if (
     request.iosSimulatorSetPath ||
     (request.udid && simulators.some((device) => device.id === request.udid))
   ) {
-    return projectAppleInventory(sortAppleDevicesForSelection(withHost), request);
+    return sortAppleDevicesForSelection(withHost);
   }
 
   const physical = await listPhysicalAppleDevices(host, scope);
-  return projectAppleInventory(
-    sortAppleDevicesForSelection(mergeAppleDevices(withHost, physical)),
-    request,
-  );
-}
-
-function projectAppleInventory(
-  devices: readonly DeviceInfo[],
-  request: Readonly<DeviceInventoryRequest>,
-): DeviceInfo[] {
-  return filterDeviceInventoryProjection(
-    devices.filter((device) => matchesPlatformSelector(device, request.platform)),
-    request,
-  );
+  return sortAppleDevicesForSelection(mergeAppleDevices(withHost, physical));
 }
 
 function isMacOnlyRequest(request: Readonly<DeviceInventoryRequest>): boolean {
@@ -71,7 +53,7 @@ function isMacOnlyRequest(request: Readonly<DeviceInventoryRequest>): boolean {
   );
 }
 
-function hostMacDevice(host: DeviceInventoryHost): DeviceInfo {
+function hostMacDevice(host: DeviceInventoryHostFor<'apple'>): DeviceInfo {
   return {
     platform: 'apple',
     id: 'host-macos-local',

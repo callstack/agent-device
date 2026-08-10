@@ -490,10 +490,12 @@ test('attachAdbFailureHint classifies timeouts over partial stderr and keeps sit
     stderr: '',
     timeoutMs: 5000,
     hint: 'site-specific hint',
+    retriable: false,
   });
   attachAdbFailureHint(withSiteHint);
   assert.equal(withSiteHint.details?.hint, 'site-specific hint');
   assert.equal(withSiteHint.details?.adbFailure, 'timeout');
+  assert.equal(withSiteHint.details?.retriable, false);
 });
 
 test('attachAdbFailureHint preserves existing hints and ignores non-adb errors', () => {

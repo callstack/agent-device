@@ -1,8 +1,8 @@
-import {
-  filterDeviceInventoryProjection,
-  type DeviceInventoryRequest,
-} from '@agent-device/contracts/device';
-import type { DeviceInventoryHost, PlatformRequestScope } from '@agent-device/contracts/platform';
+import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
+import type {
+  DeviceInventoryHostFor,
+  PlatformRequestScope,
+} from '@agent-device/contracts/platform';
 import { sortAppleDevicesForSelection, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -56,7 +56,7 @@ export function parseSimctlAppleDevices(
 }
 
 export async function listAppleSimulators(
-  host: DeviceInventoryHost,
+  host: DeviceInventoryHostFor<'apple'>,
   request: Readonly<DeviceInventoryRequest>,
   scope: PlatformRequestScope,
 ): Promise<DeviceInfo[]> {
@@ -79,5 +79,5 @@ export async function listAppleSimulators(
   for (const device of devices) {
     if (device.booted === true) await host.observations.deviceBooted(device);
   }
-  return filterDeviceInventoryProjection(sortAppleDevicesForSelection(devices), request);
+  return sortAppleDevicesForSelection(devices);
 }

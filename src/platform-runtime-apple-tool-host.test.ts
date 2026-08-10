@@ -1,17 +1,21 @@
 import { expect, test, vi } from 'vitest';
 import {
   createLocalAppleToolProvider,
+  type AppleToolProvider,
   withAppleToolProvider,
 } from './platforms/apple/core/tool-provider.ts';
 import { createAppleToolHost } from './platform-runtime-apple-tool-host.ts';
 
-test('Apple tool host forwards availability and execution to the request-scoped provider', async () => {
+test('Apple tool host uses a full scoped provider when local xcrun is unavailable', async () => {
   const whichCommand = vi.fn(async () => true);
   const run = vi.fn(async () => ({ stdout: 'devices', stderr: '', exitCode: 0 }));
-  const provider = createLocalAppleToolProvider({
+  const provider: AppleToolProvider = {
+    runCommand: async () => {
+      throw new Error('local command fallback is unavailable');
+    },
     whichCommand,
     devicectl: { run },
-  });
+  };
   const host = createAppleToolHost();
   const signal = new AbortController().signal;
 

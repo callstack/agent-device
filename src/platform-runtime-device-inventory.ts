@@ -1,11 +1,14 @@
 import {
   filterDeviceInventoryProjection,
   LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS,
+  projectProviderDeviceInventoryRequest,
   type ProviderDeviceInventorySource,
 } from '@agent-device/contracts/device';
 import {
+  type ComposedDeviceInventoryGateways,
   type DeviceInventoryGateway,
   type DeviceInventoryHost,
+  type DeviceInventoryHostFor,
   type DeviceInventorySource,
   type InventoryPlatformModule,
   type PlatformModuleRegistry,
@@ -20,11 +23,6 @@ import {
 } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 
-export type ComposedDeviceInventoryGateways = Readonly<{
-  providerFirst: ProviderAwareDeviceInventoryGateway;
-  localOnly: DeviceInventoryGateway;
-}>;
-
 export function createComposedDeviceInventoryGateways(
   options: Readonly<{
     registry: PlatformModuleRegistry<InventoryPlatformModule>;
@@ -35,10 +33,12 @@ export function createComposedDeviceInventoryGateways(
   const localOnly = createLocalDeviceInventoryGateway(options.registry, options.loadHost);
   const provider = options.provider;
   const discoverWithSource: ProviderAwareDeviceInventoryGateway['discoverWithSource'] = provider
-    ? async (use, request, scope) => {
+    ? async (request, scope) => {
         scope.signal.throwIfAborted();
-        const { kind: _kind, booted: _booted, ...providerRequest } = request;
-        const provided = await provider.discover({ ...providerRequest }, scope.signal);
+        const provided = await provider.discover(
+          projectProviderDeviceInventoryRequest(request),
+          scope.signal,
+        );
         scope.signal.throwIfAborted();
         assertProviderOutcome(provided);
         if (provided.kind === 'inventory') {
@@ -50,15 +50,14 @@ export function createComposedDeviceInventoryGateways(
             source: 'provider',
           };
         }
-        return { devices: await localOnly.discover(use, request, scope), source: 'local' };
+        return { devices: await localOnly.discover(request, scope), source: 'local' };
       }
-    : async (use, request, scope) => ({
-        devices: await localOnly.discover(use, request, scope),
+    : async (request, scope) => ({
+        devices: await localOnly.discover(request, scope),
         source: 'local',
       });
   const providerFirst: ProviderAwareDeviceInventoryGateway = Object.freeze({
-    discover: async (use, request, scope) =>
-      (await discoverWithSource(use, request, scope)).devices,
+    discover: async (request, scope) => (await discoverWithSource(request, scope)).devices,
     discoverWithSource,
   });
   return Object.freeze({ providerFirst, localOnly });
@@ -82,9 +81,7 @@ function createLocalDeviceInventoryGateway(
   const loadSource = async (family: Platform): Promise<DeviceInventorySource> => {
     const existing = sourceLoads.get(family);
     if (existing) return await existing;
-    const pending = requiredHost().then(
-      async (host) => await registry.get(family).loadInventory(host),
-    );
+    const pending = loadFamilyInventory(registry.get(family), requiredHost);
     sourceLoads.set(family, pending);
     try {
       return await pending;
@@ -95,7 +92,7 @@ function createLocalDeviceInventoryGateway(
   };
 
   return Object.freeze({
-    discover: async (_use, request, scope) => {
+    discover: async (request, scope) => {
       scope.signal.throwIfAborted();
       if (request.platform) {
         return await discoverFamily(
@@ -125,6 +122,65 @@ function createLocalDeviceInventoryGateway(
       return perFamily.flat();
     },
   });
+}
+
+async function loadFamilyInventory(
+  module: InventoryPlatformModule,
+  requiredHost: () => Promise<DeviceInventoryHost>,
+): Promise<DeviceInventorySource> {
+  switch (module.family) {
+    case 'apple':
+      return await module.loadInventory(appleInventoryHost(await requiredHost()));
+    case 'android':
+      return await module.loadInventory(androidInventoryHost(await requiredHost()));
+    case 'harmonyos':
+      return await module.loadInventory(harmonyInventoryHost(await requiredHost()));
+    case 'vega':
+      return await module.loadInventory(vegaInventoryHost(await requiredHost()));
+    case 'linux':
+      return await module.loadInventory(linuxInventoryHost(await requiredHost()));
+    case 'web':
+      return await module.loadInventory();
+  }
+}
+
+function appleInventoryHost(host: DeviceInventoryHost): DeviceInventoryHostFor<'apple'> {
+  return Object.freeze({
+    appleTools: host.appleTools,
+    files: host.files,
+    hostName: host.hostName,
+    hostOs: host.hostOs,
+    observations: host.observations,
+  });
+}
+
+function androidInventoryHost(host: DeviceInventoryHost): DeviceInventoryHostFor<'android'> {
+  return Object.freeze({
+    commands: host.commands,
+    files: host.files,
+    homeDirectory: host.homeDirectory,
+    toolchains: host.toolchains,
+  });
+}
+
+function harmonyInventoryHost(host: DeviceInventoryHost): DeviceInventoryHostFor<'harmonyos'> {
+  return Object.freeze({
+    commands: host.commands,
+    files: host.files,
+    toolchains: host.toolchains,
+  });
+}
+
+function vegaInventoryHost(host: DeviceInventoryHost): DeviceInventoryHostFor<'vega'> {
+  return Object.freeze({
+    commands: host.commands,
+    files: host.files,
+    homeDirectory: host.homeDirectory,
+  });
+}
+
+function linuxInventoryHost(host: DeviceInventoryHost): DeviceInventoryHostFor<'linux'> {
+  return Object.freeze({ hostName: host.hostName, hostOs: host.hostOs });
 }
 
 async function discoverFamily(

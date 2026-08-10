@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import type {
-  DeviceInventoryHost,
+  DeviceInventoryHostFor,
   HostCommandRequest,
   PlatformRequestScope,
 } from '@agent-device/contracts/platform';
@@ -14,9 +14,8 @@ const scope: PlatformRequestScope = {
   progress: { report: () => undefined },
 };
 
-test('Android inventory invokes bounded host commands, filters serials, and observes booted devices', async () => {
+test('Android inventory invokes bounded host commands and filters serials', async () => {
   const calls: HostCommandRequest[] = [];
-  const observed: string[] = [];
   const host = createHost(async (request) => {
     calls.push(request);
     const key = request.args.join('\0');
@@ -32,7 +31,7 @@ test('Android inventory invokes bounded host commands, filters serials, and obse
     if (key.includes('has-feature')) return result('false\n');
     if (key.includes('pm\0list\0features')) return result('');
     throw new Error(`Unexpected command: ${request.executable} ${request.args.join(' ')}`);
-  }, observed);
+  });
 
   const devices = await createAndroidInventory(host).discover(
     { androidSerialAllowlist: ['emulator-5554'] },
@@ -46,13 +45,12 @@ test('Android inventory invokes bounded host commands, filters serials, and obse
       ['Living_Room_TV', 'Living_Room_TV', false],
     ],
   );
-  assert.deepEqual(observed, []);
   assert.ok(calls.every((call) => call.timeoutMs === 10_000));
   assert.ok(calls.every((call) => call.allowFailure === true));
 });
 
 test('Android inventory fails closed when adb is unavailable', async () => {
-  const host = createHost(async () => result(''), [], { adb: undefined });
+  const host = createHost(async () => result(''), { adb: undefined });
   await assert.rejects(
     createAndroidInventory(host).discover({}, scope),
     (error: unknown) => error instanceof AppError && error.code === 'TOOL_MISSING',
@@ -66,7 +64,6 @@ test('Android inventory honors captured SDK roots and classifies adb transport f
       calls.push(request);
       return result('', 'error: device offline', 1);
     },
-    [],
     { adb: undefined, emulator: undefined },
     async (candidate) => candidate === '/custom-sdk/platform-tools/adb',
   );
@@ -91,7 +88,6 @@ test('Android inventory prepares the legacy toolchain before an ANDROID_HOME-onl
         if (request.executable.endsWith('/emulator')) return result('');
         throw new Error(`Unexpected command: ${request.executable} ${request.args.join(' ')}`);
       },
-      [],
       { adb: undefined, emulator: undefined },
       async (candidate) =>
         candidate === '/android-home/platform-tools/adb' ||
@@ -110,21 +106,14 @@ test('Android inventory prepares the legacy toolchain before an ANDROID_HOME-onl
 });
 
 function createHost(
-  run: DeviceInventoryHost['commands']['run'],
-  observed: string[],
+  run: DeviceInventoryHostFor<'android'>['commands']['run'],
   tools: { adb?: string; emulator?: string } = { adb: 'adb', emulator: 'emulator' },
-  isExecutable: DeviceInventoryHost['files']['isExecutable'] = async () => false,
-): DeviceInventoryHost {
+  isExecutable: DeviceInventoryHostFor<'android'>['files']['isExecutable'] = async () => false,
+): DeviceInventoryHostFor<'android'> {
   return {
     commands: {
       which: async (executable) => tools[executable as keyof typeof tools],
       run,
-    },
-    appleTools: {
-      isXcrunAvailable: async () => false,
-      run: async () => {
-        throw new Error('unused');
-      },
     },
     toolchains: { prepare: async () => undefined },
     files: {
@@ -133,14 +122,7 @@ function createHost(
         throw new Error('unused');
       },
     },
-    hostOs: 'darwin',
-    hostName: 'test-host',
     homeDirectory: '/Users/test',
-    observations: {
-      deviceBooted: async (device) => {
-        observed.push(device.id);
-      },
-    },
   };
 }
 

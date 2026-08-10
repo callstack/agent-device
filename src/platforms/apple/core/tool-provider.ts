@@ -55,9 +55,7 @@ const localAppleToolProvider: AppleToolProvider = {
   whichCommand: whichCmd,
 };
 
-type AppleToolProviderInput = AppleToolProvider | AppleToolCommandExecutor;
-
-const appleToolProviderScope = createScopedProvider<AppleToolProvider, AppleToolProviderInput>(
+const appleToolProviderScope = createScopedProvider<AppleToolProvider>(
   localAppleToolProvider,
   normalizeAppleToolProvider,
 );
@@ -92,12 +90,12 @@ export function createLocalAppleToolProvider(
   };
 }
 
-export function resolveAppleToolProvider(provider?: AppleToolProviderInput): AppleToolProvider {
+export function resolveAppleToolProvider(provider?: AppleToolProvider): AppleToolProvider {
   return appleToolProviderScope.resolve(provider);
 }
 
 export async function withAppleToolProvider<T>(
-  provider: AppleToolProviderInput | undefined,
+  provider: AppleToolProvider | undefined,
   fn: () => Promise<T>,
 ): Promise<T> {
   return await appleToolProviderScope.run(provider, fn);
@@ -135,10 +133,7 @@ export async function readApplePlistJson(
   return (await resolveAppleToolProvider().plist?.readJson(plistPath)) ?? null;
 }
 
-function normalizeAppleToolProvider(provider: AppleToolProviderInput): AppleToolProvider {
-  if (typeof provider === 'function') {
-    return createLocalAppleToolProvider({ runCommand: coerceRunCommand(provider) });
-  }
+function normalizeAppleToolProvider(provider: AppleToolProvider): AppleToolProvider {
   return createLocalAppleToolProvider({
     ...provider,
     runCommand: coerceRunCommand(provider.runCommand),

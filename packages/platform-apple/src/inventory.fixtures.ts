@@ -1,7 +1,6 @@
 import type {
   AppleToolHost,
-  DeviceInventoryHost,
-  HostCommandRequest,
+  DeviceInventoryHostFor,
   HostCommandResult,
   PlatformRequestScope,
 } from '@agent-device/contracts/platform';
@@ -24,18 +23,12 @@ export function createInventoryHost(
   options: {
     run?: AppleToolHost['run'];
     which?: (executable: string) => Promise<string | undefined>;
-    createTemporaryTextFile?: DeviceInventoryHost['files']['createTemporaryTextFile'];
-    hostOs?: DeviceInventoryHost['hostOs'];
+    createTemporaryTextFile?: DeviceInventoryHostFor<'apple'>['files']['createTemporaryTextFile'];
+    hostOs?: DeviceInventoryHostFor<'apple'>['hostOs'];
     observed?: string[];
   } = {},
-): DeviceInventoryHost {
+): DeviceInventoryHostFor<'apple'> {
   return {
-    commands: {
-      which: options.which ?? (async (executable) => `/usr/bin/${executable}`),
-      run: async (request: HostCommandRequest) => {
-        throw new Error(`Unexpected command: ${request.executable} ${request.args.join(' ')}`);
-      },
-    },
     appleTools: {
       isXcrunAvailable: async () =>
         Boolean(await (options.which ?? (async (executable) => `/usr/bin/${executable}`))('xcrun')),
@@ -45,7 +38,6 @@ export function createInventoryHost(
           throw new Error(`Unexpected Apple tool: ${request.tool} ${request.args.join(' ')}`);
         }),
     },
-    toolchains: { prepare: async () => undefined },
     files: {
       isExecutable: async () => false,
       createTemporaryTextFile:
@@ -56,7 +48,6 @@ export function createInventoryHost(
     },
     hostOs: options.hostOs ?? 'darwin',
     hostName: 'Test Mac',
-    homeDirectory: '/Users/test',
     observations: {
       deviceBooted: async (device) => {
         options.observed?.push(device.id);

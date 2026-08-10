@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { DeviceInventoryHost, PlatformRequestScope } from '@agent-device/contracts/platform';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform';
 import { createWebInventory } from './inventory.ts';
 
 const scope: PlatformRequestScope = {
@@ -10,9 +10,7 @@ const scope: PlatformRequestScope = {
 };
 
 test('Web inventory exposes the established static browser target without host probing', async () => {
-  const observed: string[] = [];
-  const host = createHost(observed);
-  assert.deepEqual(await createWebInventory(host).discover({}, scope), [
+  assert.deepEqual(await createWebInventory().discover({}, scope), [
     {
       platform: 'web',
       id: 'agent-browser-chrome',
@@ -22,43 +20,4 @@ test('Web inventory exposes the established static browser target without host p
       booted: true,
     },
   ]);
-  assert.deepEqual(observed, []);
 });
-
-function createHost(observed: string[]): DeviceInventoryHost {
-  return {
-    commands: {
-      which: async () => {
-        throw new Error('must stay lazy');
-      },
-      run: async () => {
-        throw new Error('must stay lazy');
-      },
-    },
-    appleTools: {
-      isXcrunAvailable: async () => {
-        throw new Error('must stay lazy');
-      },
-      run: async () => {
-        throw new Error('must stay lazy');
-      },
-    },
-    toolchains: { prepare: async () => undefined },
-    files: {
-      isExecutable: async () => {
-        throw new Error('must stay lazy');
-      },
-      createTemporaryTextFile: async () => {
-        throw new Error('must stay lazy');
-      },
-    },
-    hostOs: 'darwin',
-    hostName: 'test-host',
-    homeDirectory: '/Users/test',
-    observations: {
-      deviceBooted: async (device) => {
-        observed.push(device.id);
-      },
-    },
-  };
-}

@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import type { DeviceInventoryHost, PlatformRequestScope } from '@agent-device/contracts/platform';
+import type {
+  DeviceInventoryHostFor,
+  PlatformRequestScope,
+} from '@agent-device/contracts/platform';
 import { createVegaInventory, parseVegaDeviceList } from './inventory.ts';
 
 const scope: PlatformRequestScope = {
@@ -11,7 +14,6 @@ const scope: PlatformRequestScope = {
 };
 
 test('Vega inventory resolves the default CLI lazily and accepts only its virtual device', async () => {
-  const observed: string[] = [];
   const host = createHost({
     which: async () => undefined,
     isExecutable: async (path) => path === '/Users/test/vega/bin/vega',
@@ -21,13 +23,11 @@ test('Vega inventory resolves the default CLI lazily and accepts only its virtua
       assert.equal(request.timeoutMs, 10_000);
       return result('physical : tv\nVirtualDevice : tv - aarch64 - VegaOS\n');
     },
-    observed,
   });
 
   const devices = await createVegaInventory(host).discover({}, scope);
 
   assert.deepEqual(devices, parseVegaDeviceList('VirtualDevice : tv\n'));
-  assert.deepEqual(observed, []);
 });
 
 test('Vega inventory fails closed when only an unsupported physical target is present', async () => {
@@ -39,34 +39,19 @@ test('Vega inventory fails closed when only an unsupported physical target is pr
 });
 
 function createHost(options: {
-  which?: DeviceInventoryHost['commands']['which'];
-  isExecutable?: DeviceInventoryHost['files']['isExecutable'];
-  run: DeviceInventoryHost['commands']['run'];
-  observed?: string[];
-}): DeviceInventoryHost {
+  which?: DeviceInventoryHostFor<'vega'>['commands']['which'];
+  isExecutable?: DeviceInventoryHostFor<'vega'>['files']['isExecutable'];
+  run: DeviceInventoryHostFor<'vega'>['commands']['run'];
+}): DeviceInventoryHostFor<'vega'> {
   return {
     commands: { which: options.which ?? (async () => 'vega'), run: options.run },
-    appleTools: {
-      isXcrunAvailable: async () => false,
-      run: async () => {
-        throw new Error('unused');
-      },
-    },
-    toolchains: { prepare: async () => undefined },
     files: {
       isExecutable: options.isExecutable ?? (async () => false),
       createTemporaryTextFile: async () => {
         throw new Error('unused');
       },
     },
-    hostOs: 'darwin',
-    hostName: 'test-host',
     homeDirectory: '/Users/test',
-    observations: {
-      deviceBooted: async (device) => {
-        options.observed?.push(device.id);
-      },
-    },
   };
 }
 

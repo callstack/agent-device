@@ -11,6 +11,8 @@ export type CommandPlatformExecution =
   | Readonly<{ kind: 'inventory'; use: InventoryUse }>
   | Readonly<{ kind: 'device-runtime'; use: RuntimeUseDeclaration }>;
 
+// The discriminated union cannot prove uniqueness or required/preferred disjointness inside
+// readonly arrays. Validate those declaration invariants where descriptors enter the registry.
 export function assertCommandPlatformExecution(
   value: unknown,
 ): asserts value is CommandPlatformExecution {

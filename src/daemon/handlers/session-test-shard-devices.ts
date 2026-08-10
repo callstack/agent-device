@@ -1,5 +1,6 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import { listDeviceInventory, type DeviceInventoryRequest } from '../../core/dispatch-resolve.ts';
+import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
+import { listDeviceInventory } from '../../core/device-inventory-context.ts';
 import {
   resolveAndroidSerialAllowlist,
   resolveIosSimulatorDeviceSetPath,

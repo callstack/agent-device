@@ -1,6 +1,6 @@
 import { PLATFORMS, isPlatform, type DeviceInfo, type Platform } from '@agent-device/kernel/device';
 import type { DeviceInventoryRequest } from './device-inventory.ts';
-import type { DeviceInventoryHost, PlatformRequestScope } from './platform-runtime-host.ts';
+import type { DeviceInventoryHostFor, PlatformRequestScope } from './platform-runtime-host.ts';
 
 /** Cheap family identity which may be evaluated during root composition. */
 export type PlatformModuleMetadata = Readonly<{
@@ -79,7 +79,6 @@ export type DeviceInventorySource = Readonly<{
 
 export type DeviceInventoryGateway = Readonly<{
   discover(
-    use: InventoryUse,
     request: Readonly<DeviceInventoryRequest>,
     scope: PlatformRequestScope,
   ): Promise<readonly DeviceInfo[]>;
@@ -94,14 +93,29 @@ export type DeviceInventoryDiscovery = Readonly<{
 export type ProviderAwareDeviceInventoryGateway = DeviceInventoryGateway &
   Readonly<{
     discoverWithSource(
-      use: InventoryUse,
       request: Readonly<DeviceInventoryRequest>,
       scope: PlatformRequestScope,
     ): Promise<DeviceInventoryDiscovery>;
   }>;
 
+export type ComposedDeviceInventoryGateways = Readonly<{
+  providerFirst: ProviderAwareDeviceInventoryGateway;
+  localOnly: DeviceInventoryGateway;
+}>;
+
 /** A family module gains this interface only with an honest package-owned source. */
-export type InventoryPlatformModule = PlatformModuleMetadata &
-  Readonly<{
-    loadInventory(host: DeviceInventoryHost): Promise<DeviceInventorySource>;
-  }>;
+/** A family module receives only the host authority its inventory mechanics need. */
+export type InventoryPlatformModule<Family extends Platform = Platform> = Family extends Platform
+  ? PlatformModuleMetadata &
+      Readonly<
+        Family extends 'web'
+          ? {
+              family: Family;
+              loadInventory(): Promise<DeviceInventorySource>;
+            }
+          : {
+              family: Family;
+              loadInventory(host: DeviceInventoryHostFor<Family>): Promise<DeviceInventorySource>;
+            }
+      >
+  : never;

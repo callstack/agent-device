@@ -1,6 +1,7 @@
 import { withResolveTargetDeviceCacheScope } from '../core/dispatch-resolve.ts';
 import { withDeviceInventoryContext } from '../core/device-inventory-context.ts';
 import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
+import type { ComposedDeviceInventoryGateways } from '@agent-device/contracts/platform';
 import {
   AppError,
   normalizeError,
@@ -52,7 +53,6 @@ import { canRunReplayScopedAction } from './daemon-command-registry.ts';
 import { createAgentBrowserWebProvider } from '../platforms/web/agent-browser-provider.ts';
 import { openWebSessionNames } from './web-session-names.ts';
 import { inferFillText } from './action-utils.ts';
-import type { ComposedDeviceInventoryGateways } from '../platform-runtime-device-inventory.ts';
 import { createPlatformRequestScope } from './platform-request-scope.ts';
 
 // ---------------------------------------------------------------------------

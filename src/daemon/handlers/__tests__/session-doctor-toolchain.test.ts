@@ -6,6 +6,7 @@ import { appendToolchainChecks } from '../session-doctor-toolchain.ts';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
 import { withTestDeviceInventory } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 
 vi.mock('../../../utils/exec.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/exec.ts')>();
@@ -66,14 +67,14 @@ test('Vega doctor does not report an unvalidated physical TV as supported readin
   const provider = makeVegaProvider();
   const checks = await withTestDeviceInventory(
     {
-      local: async () => [
-        {
-          ...VEGA_VVD,
-          id: 'G071R20720350DT6',
-          name: 'Physical Vega TV',
-          kind: 'device',
-        },
-      ],
+      local: async () =>
+        Promise.reject(
+          new AppError(
+            'DEVICE_NOT_FOUND',
+            'Vega CLI found devices, but no supported Vega Virtual Device is running.',
+            { listedSerials: ['G071R20720350DT6'] },
+          ),
+        ),
     },
     async () =>
       await withVegaToolProvider(provider, async () => {
@@ -85,6 +86,38 @@ test('Vega doctor does not report an unvalidated physical TV as supported readin
 
   assert.equal(checks[0]?.summary, 'Vega toolchain: Vega CLI 1.3.2; no running VVD.');
   assert.equal(checks[0]?.hint, 'Start the Vega Virtual Device and retry doctor.');
+  assert.deepEqual(checks[0]?.evidence, {
+    vegaVersion: 'Vega CLI 1.3.2',
+    deviceList: 'G071R20720350DT6',
+  });
+});
+
+test('Vega doctor propagates canonical request cancellation', async () => {
+  const provider = makeVegaProvider();
+
+  await assert.rejects(
+    withTestDeviceInventory(
+      {
+        local: async () => Promise.reject(new AppError('COMMAND_FAILED', 'request canceled')),
+      },
+      async () =>
+        await withVegaToolProvider(provider, async () => {
+          await appendToolchainChecks([], 'vega');
+        }),
+    ),
+    (error: unknown) => error instanceof AppError && error.message === 'request canceled',
+  );
+});
+
+test('Vega doctor propagates missing request inventory context', async () => {
+  const provider = makeVegaProvider();
+  await assert.rejects(
+    withVegaToolProvider(provider, async () => {
+      await appendToolchainChecks([], 'vega');
+    }),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'device_inventory_context_unavailable',
+  );
 });
 
 test('Vega doctor preserves the missing-tool diagnostic without probing inventory', async () => {

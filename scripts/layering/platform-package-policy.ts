@@ -35,10 +35,6 @@ function packageDir(family: PlatformFamily): string {
   return `packages/platform-${family}`;
 }
 
-function inventoryModuleName(family: PlatformFamily): string {
-  return `${family}InventoryModule`;
-}
-
 function familyForPackageFile(file: string): string | undefined {
   return /^packages\/platform-([^/]+)\//.exec(file)?.[1];
 }
@@ -126,21 +122,6 @@ function checkSource(file: string, source: string): LayeringViolation[] {
   const ownerFamily = familyForPackageFile(file);
   if (ownerFamily && isProductionSource(file)) {
     violations.push(...checkPlatformPackageSourcePolicy(file, source, ownerFamily));
-  }
-  if (ownerFamily && file === `packages/platform-${ownerFamily}/src/index.ts`) {
-    const metadataFamily =
-      /const\s+metadata\s*=\s*Object\.freeze\s*\(\s*\{[\s\S]*?family:\s*'([^']+)'/.exec(
-        source,
-      )?.[1];
-    if (metadataFamily !== ownerFamily) {
-      violations.push(
-        violation(
-          file,
-          1,
-          `platform-${ownerFamily} facade must declare metadata for '${ownerFamily}', found '${metadataFamily ?? 'none'}'`,
-        ),
-      );
-    }
   }
   for (const site of parseImports(source)) {
     const importedFamily = concretePlatformFamily(site.spec);
@@ -234,10 +215,7 @@ export function checkPlatformPackagePolicy(
       ),
     ),
     ...checkDeclarations(packages),
-    ...checkPlatformComposition(
-      sources.get(COMPOSITION_FILE),
-      CANONICAL_PLATFORM_FAMILIES.map(inventoryModuleName),
-    ),
+    ...checkPlatformComposition(sources.get(COMPOSITION_FILE)),
     ...[...sources].flatMap(([file, source]) => checkSource(file, source)),
   ];
 }

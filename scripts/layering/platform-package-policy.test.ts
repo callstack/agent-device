@@ -102,28 +102,13 @@ test('family packages are exact, private, and expose only their root facade', ()
   assert.match(found, /missing canonical platform package.*platform-web/);
 });
 
-test('the root registry call contains each canonical inventory module alias exactly once', () => {
+test('composition policy does not pin local platform-module identifier spelling', () => {
   const sources = validSources();
   sources.set(
     'src/platform-runtime.ts',
-    composition(['apple', 'android', 'harmonyos', 'vega', 'linux', 'apple'] as const),
+    composition().replaceAll('appleInventoryModule', 'selectedAppleModule'),
   );
-
-  const found = messages(sources).join('\n');
-  assert.match(found, /registration list must be exactly/);
-  assert.match(found, /webInventoryModule/);
-});
-
-test('each package facade declares metadata for its own canonical family', () => {
-  const sources = validSources();
-  sources.set(
-    'packages/platform-apple/src/index.ts',
-    facade('apple').replace("family: 'apple'", "family: 'android'"),
-  );
-  assert.match(
-    messages(sources).join('\n'),
-    /platform-apple facade must declare metadata for 'apple'/,
-  );
+  assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
 });
 
 test('only src/platform-runtime.ts may import a concrete platform package', () => {
@@ -218,36 +203,39 @@ test('platform facades cannot evaluate mechanics eagerly', () => {
   assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
 });
 
-test('composition cannot probe the host or construct helpers', () => {
-  for (const planted of [
-    "import { existsSync } from 'node:fs';\nexistsSync('/tmp/tool');",
-    'class AppleHelperManager {}\nnew AppleHelperManager();',
-    'probeAndroidSdk();',
-  ]) {
+test('composition policy does not infer host authority from function or class names', () => {
+  const sources = validSources();
+  sources.set(
+    'src/platform-runtime.ts',
+    `${composition()}\nclass AppleHelperManager {}\nnew AppleHelperManager();\nprobeAndroidSdk();`,
+  );
+  assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
+});
+
+test('composition keeps platform implementation loaders behind selected use', () => {
+  for (const method of ['loadInventory', 'loadRuntime']) {
     const sources = validSources();
-    sources.set('src/platform-runtime.ts', `${composition()}\n${planted}`);
-    assert.match(
-      messages(sources).join('\n'),
-      /composition may not probe the host, prepare assets, or construct helpers/,
+    sources.set(
+      'src/platform-runtime.ts',
+      `${composition()}\nappleInventoryModule.${method}(host);`,
     );
+    assert.match(messages(sources).join('\n'), /implementation loader.*selected use/, method);
   }
 });
 
-test('probe detection ignores comments, strings, and deferred function bodies', () => {
+test('implementation-loader detection ignores comments, strings, and deferred function bodies', () => {
   const sources = validSources();
   sources.set(
     'src/platform-runtime.ts',
     [
       composition(),
-      "const documentation = 'probeAndroidSdk()';",
-      '// new AppleHelperManager();',
-      'export function deferredProbe() { probeAndroidSdk(); }',
+      "const documentation = 'appleInventoryModule.loadInventory(host)';",
+      '// appleInventoryModule.loadRuntime(host);',
+      'export function loadSelectedFamily() { return appleInventoryModule.loadInventory(host); }',
     ].join('\n'),
   );
   assert.ok(
-    !messages(sources).some((message) =>
-      /composition may not probe the host, prepare assets, or construct helpers/.test(message),
-    ),
+    !messages(sources).some((message) => /implementation loader.*selected use/.test(message)),
   );
 });
 

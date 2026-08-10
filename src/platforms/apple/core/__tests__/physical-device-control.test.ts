@@ -11,7 +11,7 @@ import { closeIosApp, openIosApp } from '../app-launch.ts';
 import { listIosApps } from '../app-resolution.ts';
 import { resolveIosPhysicalDeviceControl } from '../physical-device-control.ts';
 import { withAppleRunnerProvider } from '../runner/runner-provider.ts';
-import { withAppleToolProvider } from '../tool-provider.ts';
+import { createLocalAppleToolProvider, withAppleToolProvider } from '../tool-provider.ts';
 import { mkdtempForTest } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 const IOS_DEVICE: DeviceInfo = {
@@ -34,10 +34,12 @@ test('XCTest readiness uses xcdevice instead of devicectl', async () => {
   const calls: Array<{ cmd: string; args: string[] }> = [];
 
   await withAppleToolProvider(
-    async (cmd, args) => {
-      calls.push({ cmd, args });
-      return { exitCode: 0, stdout: '', stderr: '' };
-    },
+    createLocalAppleToolProvider({
+      runCommand: async (cmd, args) => {
+        calls.push({ cmd, args });
+        return { exitCode: 0, stdout: '', stderr: '' };
+      },
+    }),
     async () =>
       await resolveIosPhysicalDeviceControl(XCTEST_IOS_DEVICE).ensureReady(XCTEST_IOS_DEVICE),
   );
@@ -95,10 +97,12 @@ test('default interactor screenshots stay in-band without invoking devicectl', a
   const toolCalls: string[][] = [];
   try {
     await withAppleToolProvider(
-      async (_cmd, args) => {
-        toolCalls.push(args);
-        return { exitCode: 0, stdout: '', stderr: '' };
-      },
+      createLocalAppleToolProvider({
+        runCommand: async (_cmd, args) => {
+          toolCalls.push(args);
+          return { exitCode: 0, stdout: '', stderr: '' };
+        },
+      }),
       async () =>
         await withAppleRunnerProvider(
           async (_device, command) => {

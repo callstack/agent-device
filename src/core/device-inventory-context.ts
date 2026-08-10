@@ -1,6 +1,5 @@
 import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import {
-  inventoryUse,
   type DeviceInventoryDiscovery,
   type DeviceInventoryGateway,
   type PlatformRequestScope,
@@ -9,9 +8,9 @@ import {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { isRequestCanceledError } from '../request/cancel.ts';
 
 const DEVICE_INVENTORY_CONTEXT_UNAVAILABLE_REASON = 'device_inventory_context_unavailable';
-const REQUEST_CANCELED_REASON = 'request_canceled';
 
 type DeviceInventoryContext = Readonly<{
   providerFirst: ProviderAwareDeviceInventoryGateway;
@@ -36,11 +35,7 @@ export async function readDeviceInventory(
   request: DeviceInventoryRequest,
 ): Promise<DeviceInventoryDiscovery> {
   const context = requiredContext();
-  const result = await context.providerFirst.discoverWithSource(
-    inventoryUse,
-    request,
-    context.requestScope,
-  );
+  const result = await context.providerFirst.discoverWithSource(request, context.requestScope);
   return {
     devices: result.devices.map((device) => ({ ...device })),
     source: result.source,
@@ -58,7 +53,7 @@ async function discoverFrom(
   request: DeviceInventoryRequest,
 ): Promise<DeviceInfo[]> {
   const context = requiredContext();
-  const devices = await context[gateway].discover(inventoryUse, request, context.requestScope);
+  const devices = await context[gateway].discover(request, context.requestScope);
   return devices.map((device) => ({ ...device }));
 }
 
@@ -76,14 +71,13 @@ function requiredContext(): DeviceInventoryContext {
 
 /** Control-flow and composition failures that a best-effort inventory probe must never hide. */
 export function shouldPropagateDeviceInventoryProbeError(error: unknown): boolean {
-  if (error instanceof AppError && error.code === 'COMMAND_FAILED') {
-    const reason = error.details?.reason;
-    if (
-      reason === REQUEST_CANCELED_REASON ||
-      reason === DEVICE_INVENTORY_CONTEXT_UNAVAILABLE_REASON
-    ) {
-      return true;
-    }
+  if (isRequestCanceledError(error)) return true;
+  if (
+    error instanceof AppError &&
+    error.code === 'COMMAND_FAILED' &&
+    error.details?.reason === DEVICE_INVENTORY_CONTEXT_UNAVAILABLE_REASON
+  ) {
+    return true;
   }
   return error instanceof Error && error.name === 'AbortError';
 }

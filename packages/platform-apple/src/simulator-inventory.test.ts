@@ -94,7 +94,7 @@ test('simulator inventory scopes bounded simctl and reports fresh booted observa
   ]);
   assert.deepEqual(
     devices.map((device) => device.id),
-    ['iphone-1'],
+    ['iphone-1', 'tv-1'],
   );
   assert.deepEqual(observed, ['iphone-1']);
   assert.deepEqual(buildSimctlListArgs(undefined), ['list', 'devices', '-j']);

@@ -1,4 +1,8 @@
-import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
+import {
+  isAndroidEmulatorSerial,
+  normalizeAndroidDeviceName,
+  type DeviceInventoryRequest,
+} from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import type { ExecResult } from '../../utils/exec.ts';
@@ -8,7 +12,6 @@ import { sleep } from '../../utils/timeouts.ts';
 import { bootFailureHint, classifyBootFailure } from '../boot-diagnostics.ts';
 import { ensureAndroidSdkPathConfigured } from './sdk.ts';
 
-const EMULATOR_SERIAL_PREFIX = 'emulator-';
 const ANDROID_BOOT_POLL_MS = 1_000;
 const ANDROID_BOOT_PROP_TIMEOUT_MS = 10_000;
 const ANDROID_EMULATOR_BOOT_POLL_MS = 1_000;
@@ -98,22 +101,18 @@ function findEmulatorByAvdName(
   avdName: string,
   serial?: string,
 ): DeviceInfo | undefined {
-  const normalizedName = normalizeAndroidName(avdName);
+  const normalizedName = normalizeAndroidDeviceName(avdName);
   return devices.find(
     (device) =>
       device.platform === 'android' &&
       device.kind === 'emulator' &&
-      normalizeAndroidName(device.name) === normalizedName &&
+      normalizeAndroidDeviceName(device.name) === normalizedName &&
       (!serial || !isRunningEmulator(device) || device.id === serial),
   );
 }
 
 function isRunningEmulator(device: DeviceInfo): boolean {
-  return device.id.startsWith(EMULATOR_SERIAL_PREFIX);
-}
-
-function normalizeAndroidName(value: string): string {
-  return value.toLowerCase().replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+  return isAndroidEmulatorSerial(device.id);
 }
 
 async function waitForEmulatorDiscovery(params: {

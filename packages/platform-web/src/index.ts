@@ -7,10 +7,10 @@ const metadata = Object.freeze({
   family: 'web',
 } satisfies PlatformModuleMetadata);
 
-export const inventoryModule: InventoryPlatformModule = Object.freeze({
+export const inventoryModule: InventoryPlatformModule<'web'> = Object.freeze({
   ...metadata,
-  loadInventory: async (host) => {
+  loadInventory: async () => {
     const { createWebInventory } = await import('./inventory.ts');
-    return createWebInventory(host);
+    return createWebInventory();
   },
 });

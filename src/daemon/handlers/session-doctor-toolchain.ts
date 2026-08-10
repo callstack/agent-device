@@ -1,10 +1,14 @@
 import { access } from 'node:fs/promises';
 import path from 'node:path';
-import type { PlatformSelector } from '@agent-device/kernel/device';
+import type { DeviceInfo, PlatformSelector } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '../../utils/exec.ts';
 import { appendDoctorCheck } from './session-doctor-output.ts';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
-import { listLocalDeviceInventory } from '../../core/device-inventory-context.ts';
+import {
+  listLocalDeviceInventory,
+  shouldPropagateDeviceInventoryProbeError,
+} from '../../core/device-inventory-context.ts';
 
 const TOOLCHAIN_TIMEOUT_MS = 3_000;
 type AndroidLicenseState = 'accepted' | 'missing' | 'unknown';
@@ -17,6 +21,10 @@ type AppleToolchainProbe = {
   selectedPath: string | undefined;
   versionLine: string | undefined;
 };
+type VegaInventoryProbe = Readonly<{
+  devices: readonly DeviceInfo[];
+  listedSerials: readonly string[];
+}>;
 
 export async function appendToolchainChecks(
   checks: DoctorCheck[],
@@ -78,7 +86,7 @@ async function vegaToolchainCheck(): Promise<DoctorCheck> {
   });
   const inventory = await readLocalVegaInventory();
   const versionLine = firstOutputLine(version.stdout);
-  const hasRunningVvd = inventory.some(
+  const hasRunningVvd = inventory.devices.some(
     (device) =>
       device.platform === 'vega' &&
       device.kind === 'emulator' &&
@@ -95,17 +103,39 @@ async function vegaToolchainCheck(): Promise<DoctorCheck> {
     hint: hasRunningVvd ? undefined : 'Start the Vega Virtual Device and retry doctor.',
     evidence: {
       vegaVersion: versionLine ?? null,
-      deviceList: inventory.map((device) => device.id).join(', ') || null,
+      deviceList: vegaInventoryEvidence(inventory),
     },
   };
 }
 
-async function readLocalVegaInventory() {
+async function readLocalVegaInventory(): Promise<VegaInventoryProbe> {
   try {
-    return await listLocalDeviceInventory({ platform: 'vega', target: 'tv' });
-  } catch {
-    return [];
+    return {
+      devices: await listLocalDeviceInventory({ platform: 'vega', target: 'tv' }),
+      listedSerials: [],
+    };
+  } catch (error) {
+    if (shouldPropagateDeviceInventoryProbeError(error)) throw error;
+    return { devices: [], listedSerials: listedVegaSerials(error) };
   }
+}
+
+function listedVegaSerials(error: unknown): readonly string[] {
+  if (!(error instanceof AppError) || error.code !== 'DEVICE_NOT_FOUND') return [];
+  const listed = error.details?.listedSerials;
+  return isStringArray(listed) ? listed : [];
+}
+
+function isStringArray(value: unknown): value is readonly string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
+}
+
+function vegaInventoryEvidence(inventory: VegaInventoryProbe): string | null {
+  const serials =
+    inventory.devices.length > 0
+      ? inventory.devices.map((device) => device.id)
+      : inventory.listedSerials;
+  return serials.join(', ') || null;
 }
 
 async function androidToolchainCheck(): Promise<DoctorCheck> {

@@ -33,6 +33,15 @@ export type DeviceInventoryRequest = {
   booted?: boolean;
 };
 
+export type ProviderDeviceInventoryRequest = Omit<DeviceInventoryRequest, 'booted' | 'kind'>;
+
+export function projectProviderDeviceInventoryRequest(
+  request: Readonly<DeviceInventoryRequest>,
+): ProviderDeviceInventoryRequest {
+  const { booted: _booted, kind: _kind, ...providerRequest } = request;
+  return providerRequest;
+}
+
 export type DeviceInventoryGroup = 'android' | 'harmonyos' | 'apple' | 'vega' | 'linux' | 'web';
 export type DeviceInventoryGroupCounts = Record<
   DeviceInventoryGroup,

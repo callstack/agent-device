@@ -1,3 +1,5 @@
+import { normalizeAndroidDeviceName } from '@agent-device/contracts/device';
+
 export type AndroidDeviceEntry = Readonly<{
   serial: string;
   rawModel: string;
@@ -44,10 +46,6 @@ export function parseAndroidFeatureListForTv(rawOutput: string): boolean {
   );
 }
 
-export function normalizeAndroidName(value: string): string {
-  return value.toLowerCase().replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
 export function inferAndroidAvdTarget(avdName: string): 'mobile' | 'tv' {
-  return /\b(tv|television)\b/i.test(normalizeAndroidName(avdName)) ? 'tv' : 'mobile';
+  return /\b(tv|television)\b/i.test(normalizeAndroidDeviceName(avdName)) ? 'tv' : 'mobile';
 }

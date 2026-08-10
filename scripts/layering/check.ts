@@ -31,8 +31,10 @@
 //   - Over BIN.TS'S ALIAS RESOLUTION: it must delegate to the one alias registry instead of
 //     re-declaring a parallel mapping of its own (R12) — the same "delegate to your single
 //     owner" shape as R7's SessionState ownership, applied to bin.ts's `--help` fast path.
-//   - Over PLATFORM PACKAGE COMPOSITION: six private metadata façades register once at the exact
-//     root composition file; implementation evaluation and forbidden cross-boundary edges fail (R13).
+//   - Over PLATFORM PACKAGE COMPOSITION: six private metadata façades meet at the exact root
+//     composition file; premature implementation loading and forbidden cross-boundary edges fail (R13).
+//   - Over the DEVICES COMMAND CUTOVER: the handler calls the neutral inventory gateway and no
+//     superseded inventory module, import, or identifier remains in production (R13).
 // Only `(root)` is unranked among src/ zones (see `UNRANKED_ZONES` in model.ts):
 // it holds entrypoints and composition roots. Extracted workspace package zones
 // are classified separately and held behind R11 instead of the src folder spine.
@@ -82,6 +84,10 @@ import {
   checkPlatformPackagePolicy,
   platformPackagePolicySummary,
 } from './platform-package-policy.ts';
+import {
+  checkDeviceInventoryCutover,
+  deviceInventoryCutoverSummary,
+} from './device-inventory-cutover-policy.ts';
 import {
   listUntrackedProductionTypeScriptFiles,
   readTrackedPlatformPackageDeclarations,
@@ -536,7 +542,8 @@ function report(
         `all ${sessionStateFieldCount()} SessionState fields are classified and every write is ` +
         `inside its declared owner (R7); every zero-dep CI job resolves without ` +
         `node_modules (R8); ${typeCycleNote(typeCycle)}; ${daemonModularitySummary()}; ` +
-        `${packageBoundariesSummary(repoRoot)}; ${platformPackagePolicySummary()}; and bin.ts imports normalizeCliCommandAlias, ` +
+        `${packageBoundariesSummary(repoRoot)}; ${platformPackagePolicySummary()}; ` +
+        `${deviceInventoryCutoverSummary()}; and bin.ts imports normalizeCliCommandAlias, ` +
         `actually passes it into buildCommandUsageText, and holds no local alias literals ` +
         `(R12).\n`,
     );
@@ -590,6 +597,7 @@ export function main(): number {
       readTrackedPlatformPackageDeclarations(repoRoot),
       { untrackedProductionFiles: listUntrackedProductionTypeScriptFiles(repoRoot) },
     ),
+    ...checkDeviceInventoryCutover(sources),
   ];
   return report(sourceFiles, violations, typeCycle);
 }
