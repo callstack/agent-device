@@ -53,4 +53,3 @@ for (const authority of ['runtime', 'command'] as const) {
     await assert.rejects(waiting, (error) => error === reason);
   });
 }
-
