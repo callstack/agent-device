@@ -4,7 +4,7 @@ import contentionRetryReporter, {
   FAILURE_FILE_ENV,
 } from './scripts/lib/contention-retry-reporter.ts';
 import { SUBPROCESS_STUB_TESTS } from './scripts/lib/contention-retry.ts';
-import { DEFAULT_VITEST_MAX_WORKERS } from './scripts/lib/vitest-concurrency.ts';
+import { resolveVitestMaxWorkers } from './scripts/lib/vitest-concurrency.ts';
 import slowTestGateReporter from './scripts/vitest-slow-test-reporter.ts';
 
 // Tests that stub a real binary (adb/xcrun/npx) by mutating process.env.PATH and
@@ -52,8 +52,10 @@ export default defineConfig({
     // Vitest otherwise derives 11 workers from this 12-core host. Three
     // concurrent Codex worktrees can then request 33 workers and starve the
     // subprocess/test-server paths behind exact timeout budgets. Two workers
-    // per invocation preserves useful parallelism while leaving host headroom.
-    maxWorkers: DEFAULT_VITEST_MAX_WORKERS,
+    // per local invocation preserves useful parallelism while leaving host
+    // headroom. CI stays uncapped so Vitest derives the runner-appropriate
+    // worker count from the isolated machine's available CPU pool.
+    maxWorkers: resolveVitestMaxWorkers(),
     reporters: reporters(),
     projects: [
       {
