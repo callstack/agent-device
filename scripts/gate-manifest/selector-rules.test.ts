@@ -177,6 +177,56 @@ test('a value-preserving chain still proves provenance', () => {
   assert.deepEqual(selectorRuleIds('m.ts', source), ['gate:lint', 'own:swift']);
 });
 
+test('a class declaration shadowing the parameter fails closed', () => {
+  // Not in any binder enumeration — which is why the proof asks "is every use a property
+  // read?" instead of listing the ways a name can be bound.
+  const source = `
+    const BUILD_OWNERSHIP = [{ check: 'swift-runner', rule: 'own:swift', detail: 'd', owns: () => true }];
+    const bad = BUILD_OWNERSHIP.map((entry) => {
+      {
+        class entry {}
+        return reason('lint', file, entry.rule, 'd');
+      }
+    });
+  `;
+  assert.throws(() => selectorRuleIds('m.ts', source), /rule argument is not a string literal/);
+});
+
+test('reassigning the parameter before use fails closed', () => {
+  // Same binding, different value. Proving provenance only at callback ingress would exempt a
+  // rule that is no longer an ownership entry by the time it is read.
+  const source = `
+    const BUILD_OWNERSHIP = [{ check: 'swift-runner', rule: 'own:swift', detail: 'd', owns: () => true }];
+    const bad = BUILD_OWNERSHIP.map((entry) => {
+      entry = config;
+      return reason('lint', file, entry.rule, 'd');
+    });
+  `;
+  assert.throws(() => selectorRuleIds('m.ts', source), /rule argument is not a string literal/);
+});
+
+test('mutating the entry before reading it fails closed', () => {
+  const source = `
+    const BUILD_OWNERSHIP = [{ check: 'swift-runner', rule: 'own:swift', detail: 'd', owns: () => true }];
+    const bad = BUILD_OWNERSHIP.map((entry) => {
+      entry.rule = computed;
+      return reason('lint', file, entry.rule, 'd');
+    });
+  `;
+  assert.throws(() => selectorRuleIds('m.ts', source), /rule argument is not a string literal/);
+});
+
+test('passing the binding elsewhere before use fails closed', () => {
+  const source = `
+    const BUILD_OWNERSHIP = [{ check: 'swift-runner', rule: 'own:swift', detail: 'd', owns: () => true }];
+    const bad = BUILD_OWNERSHIP.map((entry) => {
+      mutate(entry);
+      return reason('lint', file, entry.rule, 'd');
+    });
+  `;
+  assert.throws(() => selectorRuleIds('m.ts', source), /rule argument is not a string literal/);
+});
+
 test('a computed rule argument fails closed rather than being skipped', () => {
   // A category this reader cannot see would bypass the representative-sample and reachability
   // checks entirely — the exact hole the derived universe exists to close.

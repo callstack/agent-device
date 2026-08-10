@@ -163,52 +163,47 @@ function callbackFunctions(node: Node): Node[] {
   return args.filter((argument): argument is Node => isNode(argument) && isFunctionLike(argument));
 }
 
-/** Every identifier a binding pattern introduces, including destructured ones. */
-function patternNames(node: unknown, into: Set<string>): void {
-  if (!isNode(node)) return;
-  const name = identifierName(node);
-  if (name !== null) {
-    into.add(name);
-    return;
-  }
-  for (const child of children(node)) patternNames(child, into);
-}
-
-/** Whether a node introduces `name` as a new binding of any kind. */
-function declaresName(node: Node, name: string): boolean {
-  const names = new Set<string>();
-  if (node.type === 'VariableDeclarator') patternNames(node['id'], names);
-  else if (node.type === 'CatchClause') patternNames(node['param'], names);
-  else if (isFunctionLike(node)) {
-    patternNames(node['id'], names);
-    const params = node['params'];
-    if (Array.isArray(params)) for (const parameter of params) patternNames(parameter, names);
-  }
-  return names.has(name);
-}
-
 /**
- * Any re-declaration of `name` inside `callback` other than the callback's own parameter.
+ * Every use of `name` inside `callback`, other than the parameter itself, must be a plain
+ * property READ — the object of a member access that is not being assigned to.
  *
- * Resolving to the innermost FUNCTION binder is not enough on its own: a block, catch or loop
- * binding shadows the ownership parameter without being a function parameter at all, and the
- * resolver would otherwise fall back to the ownership binding and exempt a dynamic rule —
- *
- *   BUILD_OWNERSHIP.map((entry) => { const entry = config; reason(…, entry.rule, …); })
- *
- * Rather than model every scoping construct, this refuses the exemption whenever the name is
- * re-declared anywhere inside the callback. That over-refuses in principle (a re-declaration in
- * a sibling block cannot reach the call site) and fails closed, which is the right direction.
+ * This replaces an enumeration of binder kinds, which kept failing open one construct at a
+ * time: a `const` in a nested block, then a catch parameter, then a destructured binding, then
+ * `class entry {}`. Enumerating is the wrong shape of proof — there is always another
+ * declaration form. Asking instead "is every occurrence of this name a property read?" is
+ * total: any re-declaration (of any kind), any reassignment, any mutation of the entry, and any
+ * passing of the binding elsewhere all show up as an occurrence that is not a read, and refuse
+ * the exemption. It over-refuses in principle and fails closed, which is the point.
  */
-function shadowsParameter(program: Node, callback: Node, name: string): boolean {
+function onlyReadsAsProperty(
+  program: Node,
+  callback: Node,
+  parameter: Node,
+  name: string,
+): boolean {
   const span = spanOf(callback);
-  if (span === null) return true;
-  let shadowed = false;
+  if (span === null) return false;
+
+  const assigned = new Set<unknown>();
+  const reads = new Set<Node>();
   collect(program, (node) => {
-    if (shadowed || node === callback) return;
-    if (within(span, node) && declaresName(node, name)) shadowed = true;
+    if (!within(span, node)) return;
+    if (node.type === 'AssignmentExpression') assigned.add(node['left']);
+    else if (node.type === 'UpdateExpression') assigned.add(node['argument']);
   });
-  return shadowed;
+  collect(program, (node) => {
+    if (!within(span, node) || !isMemberAccess(node) || assigned.has(node)) return;
+    const object = node['object'];
+    if (isNode(object) && identifierName(object) === name) reads.add(object);
+  });
+
+  let onlyReads = true;
+  collect(program, (node) => {
+    if (!onlyReads || !within(span, node)) return;
+    if (identifierName(node) !== name || node === parameter || reads.has(node)) return;
+    onlyReads = false;
+  });
+  return onlyReads;
 }
 
 /**
@@ -237,8 +232,8 @@ function parameterBindings(program: Node, tables: ReadonlySet<string>): Paramete
     const owns = ownershipCallbacks.has(node);
     for (const parameter of params) {
       const name = identifierName(parameter);
-      if (name === null) continue;
-      const iteratesOwnership = owns && !shadowsParameter(program, node, name);
+      if (name === null || !isNode(parameter)) continue;
+      const iteratesOwnership = owns && onlyReadsAsProperty(program, node, parameter, name);
       bindings.push({ name, span, iteratesOwnership });
     }
   });
