@@ -37,6 +37,28 @@ test('platform facades cannot probe injected host capabilities at module evaluat
   );
 });
 
+test('Apple production must route xcrun availability and execution through appleTools', () => {
+  for (const statement of [
+    "export async function discover(host: Host) { return await host.commands.which('xcrun'); }",
+    "export async function discover(host: Host) { return await host.commands.run({ executable: 'xcrun', args: ['simctl', 'list'] }); }",
+  ]) {
+    assert.match(
+      messages(statement),
+      /platform-apple must route xcrun through the focused appleTools host port/,
+      statement,
+    );
+  }
+});
+
+test('Apple xcrun routing guard ignores comments, strings, and non-xcrun generic commands', () => {
+  const source = [
+    'const documentation = "host.commands.which(\'xcrun\')";',
+    "// await host.commands.run({ executable: 'xcrun', args: [] });",
+    "export async function inspect(host: Host) { return await host.commands.which('log'); }",
+  ].join('\n');
+  assert.deepEqual(checkPlatformPackageSourcePolicy(mechanicsFile, source, 'apple'), []);
+});
+
 test('syntax checks ignore comments and strings and allow deferred imports and host use', () => {
   const source = [
     "const documentation = \"process.env.HOME; fetch('https://example.test'); import('./eager.ts')\";",

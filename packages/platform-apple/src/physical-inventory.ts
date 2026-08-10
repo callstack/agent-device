@@ -76,10 +76,10 @@ async function listPhysicalDevicesFromDevicectl(
       prefix: 'agent-device-devicectl-',
       suffix: '.json',
     });
-    const result = await host.commands.run(
+    const result = await host.appleTools.run(
       {
-        executable: 'xcrun',
-        args: ['devicectl', 'list', 'devices', '--json-output', temporaryFile.path],
+        tool: 'devicectl',
+        args: ['list', 'devices', '--json-output', temporaryFile.path],
         allowFailure: true,
         timeoutMs: IOS_DEVICECTL_LIST_TIMEOUT_MS,
       },
@@ -92,6 +92,7 @@ async function listPhysicalDevicesFromDevicectl(
       return mapped ? [mapped] : [];
     });
   } catch {
+    scope.signal.throwIfAborted();
     return [];
   } finally {
     try {
@@ -107,12 +108,13 @@ async function listPhysicalDevicesFromXctrace(
   scope: PlatformRequestScope,
 ): Promise<DeviceInfo[]> {
   try {
-    const result = await host.commands.run(
-      { executable: 'xcrun', args: ['xctrace', 'list', 'devices'], allowFailure: true },
+    const result = await host.appleTools.run(
+      { tool: 'xctrace', args: ['list', 'devices'], allowFailure: true },
       scope.signal,
     );
     return result.exitCode === 0 ? parseXctracePhysicalAppleDevices(result.stdout) : [];
   } catch {
+    scope.signal.throwIfAborted();
     return [];
   }
 }

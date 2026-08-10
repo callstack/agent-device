@@ -46,6 +46,12 @@ function createHost(options: {
 }): DeviceInventoryHost {
   return {
     commands: { which: options.which ?? (async () => 'vega'), run: options.run },
+    appleTools: {
+      isXcrunAvailable: async () => false,
+      run: async () => {
+        throw new Error('unused');
+      },
+    },
     toolchains: { prepare: async () => undefined },
     files: {
       isExecutable: options.isExecutable ?? (async () => false),

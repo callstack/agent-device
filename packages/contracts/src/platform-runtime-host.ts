@@ -17,10 +17,25 @@ export type HostCommandResult = Readonly<{
   signal?: string;
 }>;
 
-/** The sole process-execution port available to platform packages. */
+/** Generic process-execution port; focused Apple foreground tools use AppleToolHost. */
 export type HostCommandRunner = Readonly<{
   which(executable: string): Promise<string | undefined>;
   run(request: HostCommandRequest, signal?: AbortSignal): Promise<HostCommandResult>;
+}>;
+
+export type AppleXcrunTool = 'simctl' | 'devicectl' | 'xctrace';
+
+export type AppleToolRequest = Readonly<{
+  tool: AppleXcrunTool;
+  args: readonly string[];
+  timeoutMs?: number;
+  allowFailure?: boolean;
+}>;
+
+/** Request-bound foreground Apple tooling backed by the selected scoped provider. */
+export type AppleToolHost = Readonly<{
+  isXcrunAvailable(signal?: AbortSignal): Promise<boolean>;
+  run(request: AppleToolRequest, signal?: AbortSignal): Promise<HostCommandResult>;
 }>;
 
 export type HostOperatingSystem = 'darwin' | 'linux' | 'win32' | 'other';
@@ -61,6 +76,7 @@ export type HostToolchainPreparer = Readonly<{
  */
 export type DeviceInventoryHost = Readonly<{
   commands: HostCommandRunner;
+  appleTools: AppleToolHost;
   toolchains: HostToolchainPreparer;
   files: DeviceInventoryFileHost;
   hostOs: HostOperatingSystem;

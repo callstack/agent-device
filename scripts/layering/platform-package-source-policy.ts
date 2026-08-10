@@ -38,6 +38,54 @@ function rootIdentifier(node: unknown): string | undefined {
   return undefined;
 }
 
+function memberPath(node: unknown): string[] | undefined {
+  if (node === null || typeof node !== 'object') return undefined;
+  const record = node as Record<string, unknown>;
+  if (record['type'] === 'Identifier') {
+    const name = record['name'];
+    return typeof name === 'string' ? [name] : undefined;
+  }
+  if (record['type'] === 'ChainExpression') return memberPath(record['expression']);
+  if (record['type'] !== 'MemberExpression' || record['computed'] === true) return undefined;
+  const object = memberPath(record['object']);
+  const property = record['property'] as Record<string, unknown> | undefined;
+  const name = property?.['type'] === 'Identifier' ? property['name'] : undefined;
+  return object && typeof name === 'string' ? [...object, name] : undefined;
+}
+
+function literalString(node: unknown): string | undefined {
+  if (node === null || typeof node !== 'object') return undefined;
+  const value = (node as Record<string, unknown>)['value'];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function objectPropertyValue(node: unknown, key: string): unknown {
+  if (node === null || typeof node !== 'object') return undefined;
+  const record = node as Record<string, unknown>;
+  if (record['type'] !== 'ObjectExpression' || !Array.isArray(record['properties']))
+    return undefined;
+  for (const property of record['properties'] as Array<Record<string, unknown>>) {
+    if (property['type'] !== 'Property' || property['computed'] === true) continue;
+    const propertyKey = property['key'] as Record<string, unknown> | undefined;
+    const propertyName =
+      propertyKey?.['type'] === 'Identifier' ? propertyKey['name'] : literalString(propertyKey);
+    if (propertyName === key) return property['value'];
+  }
+  return undefined;
+}
+
+function routesXcrunThroughGenericCommands(node: Record<string, unknown>): boolean {
+  if (node['type'] !== 'CallExpression') return false;
+  const path = memberPath(node['callee']);
+  if (!path || path.at(-2) !== 'commands') return false;
+  const args = node['arguments'];
+  if (!Array.isArray(args)) return false;
+  if (path.at(-1) === 'which') return literalString(args[0]) === 'xcrun';
+  return (
+    path.at(-1) === 'run' && literalString(objectPropertyValue(args[0], 'executable')) === 'xcrun'
+  );
+}
+
 export function checkPlatformPackageSourcePolicy(
   file: string,
   source: string,
@@ -103,6 +151,15 @@ export function checkPlatformPackageSourcePolicy(
             file,
             line,
             `platform-${ownerFamily} may not probe the host at module evaluation; defer host-port calls until selected use`,
+          ),
+        );
+      }
+      if (ownerFamily === 'apple' && routesXcrunThroughGenericCommands(record)) {
+        violations.push(
+          violation(
+            file,
+            line,
+            'platform-apple must route xcrun through the focused appleTools host port',
           ),
         );
       }

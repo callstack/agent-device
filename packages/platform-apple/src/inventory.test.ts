@@ -57,7 +57,7 @@ test('simulator-only inventory avoids physical discovery and observes fresh boot
   const host = createInventoryHost({
     observed,
     run: async (request) => {
-      calls.push([...request.args]);
+      calls.push([request.tool, ...request.args]);
       return commandResult(
         JSON.stringify({
           devices: {
@@ -92,7 +92,7 @@ test('simulator-set inventory remains scoped while retaining the host Mac', asyn
   const calls: string[][] = [];
   const host = createInventoryHost({
     run: async (request) => {
-      calls.push([...request.args]);
+      calls.push([request.tool, ...request.args]);
       return commandResult(
         JSON.stringify({
           devices: {

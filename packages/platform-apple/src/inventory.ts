@@ -33,7 +33,7 @@ async function discoverAppleDevices(
   if (host.hostOs !== 'darwin') {
     throw new AppError('UNSUPPORTED_PLATFORM', 'Apple tools are only available on macOS');
   }
-  if (!(await host.commands.which('xcrun'))) {
+  if (!(await host.appleTools.isXcrunAvailable(scope.signal))) {
     throw new AppError('TOOL_MISSING', 'xcrun not found in PATH');
   }
 

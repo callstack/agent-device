@@ -115,6 +115,12 @@ function createHost(
 ): DeviceInventoryHost {
   return {
     commands: { which: tools.which ?? (async () => 'hdc'), run },
+    appleTools: {
+      isXcrunAvailable: async () => false,
+      run: async () => {
+        throw new Error('unused');
+      },
+    },
     toolchains: { prepare: async () => undefined },
     files: {
       isExecutable: tools.isExecutable ?? (async () => false),

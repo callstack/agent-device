@@ -27,9 +27,7 @@ const BOOTED_SIMULATOR_PROBE_TIMEOUT_MS = 3_000;
 
 export function buildSimctlListArgs(simulatorSetPath: string | undefined): string[] {
   const path = simulatorSetPath?.trim();
-  return path
-    ? ['simctl', '--set', path, 'list', 'devices', '-j']
-    : ['simctl', 'list', 'devices', '-j'];
+  return path ? ['--set', path, 'list', 'devices', '-j'] : ['list', 'devices', '-j'];
 }
 
 export function parseSimctlAppleDevices(
@@ -63,9 +61,9 @@ export async function listAppleSimulators(
   scope: PlatformRequestScope,
 ): Promise<DeviceInfo[]> {
   const simulatorSetPath = request.iosSimulatorSetPath?.trim() || undefined;
-  const result = await host.commands.run(
+  const result = await host.appleTools.run(
     {
-      executable: 'xcrun',
+      tool: 'simctl',
       args: buildSimctlListArgs(simulatorSetPath),
       ...(request.booted === true ? { timeoutMs: BOOTED_SIMULATOR_PROBE_TIMEOUT_MS } : {}),
     },

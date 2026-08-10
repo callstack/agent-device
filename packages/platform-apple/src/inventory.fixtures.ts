@@ -1,4 +1,5 @@
 import type {
+  AppleToolHost,
   DeviceInventoryHost,
   HostCommandRequest,
   HostCommandResult,
@@ -21,7 +22,7 @@ export function commandResult(
 
 export function createInventoryHost(
   options: {
-    run?: (request: HostCommandRequest, signal?: AbortSignal) => Promise<HostCommandResult>;
+    run?: AppleToolHost['run'];
     which?: (executable: string) => Promise<string | undefined>;
     createTemporaryTextFile?: DeviceInventoryHost['files']['createTemporaryTextFile'];
     hostOs?: DeviceInventoryHost['hostOs'];
@@ -31,10 +32,17 @@ export function createInventoryHost(
   return {
     commands: {
       which: options.which ?? (async (executable) => `/usr/bin/${executable}`),
+      run: async (request: HostCommandRequest) => {
+        throw new Error(`Unexpected command: ${request.executable} ${request.args.join(' ')}`);
+      },
+    },
+    appleTools: {
+      isXcrunAvailable: async () =>
+        Boolean(await (options.which ?? (async (executable) => `/usr/bin/${executable}`))('xcrun')),
       run:
         options.run ??
         (async (request) => {
-          throw new Error(`Unexpected command: ${request.executable} ${request.args.join(' ')}`);
+          throw new Error(`Unexpected Apple tool: ${request.tool} ${request.args.join(' ')}`);
         }),
     },
     toolchains: { prepare: async () => undefined },

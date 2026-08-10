@@ -9,6 +9,8 @@ import { constants } from 'node:fs';
 import { access, mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { createAppleToolHost } from './platform-runtime-apple-tool-host.ts';
+import { createHostToolchainPreparer } from './platform-runtime-toolchain-host.ts';
 import { runCmd, whichCmd } from './utils/exec.ts';
 
 export function createDeviceInventoryHost(): DeviceInventoryHost {
@@ -30,11 +32,8 @@ export function createDeviceInventoryHost(): DeviceInventoryHost {
         };
       },
     }),
-    toolchains: Object.freeze({
-      prepare: async (family: DeviceInfo['platform']) => {
-        await prepareFamilyToolchain(family);
-      },
-    }),
+    appleTools: createAppleToolHost(),
+    toolchains: createHostToolchainPreparer(),
     files: Object.freeze({
       isExecutable: async (candidate: string) => await isExecutable(candidate),
       createTemporaryTextFile: async (options: { prefix: string; suffix: string }) =>
@@ -50,18 +49,6 @@ export function createDeviceInventoryHost(): DeviceInventoryHost {
       },
     }),
   });
-}
-
-async function prepareFamilyToolchain(family: DeviceInfo['platform']): Promise<void> {
-  if (family === 'android') {
-    const { ensureAndroidSdkPathConfigured } = await import('./platforms/android/sdk.ts');
-    await ensureAndroidSdkPathConfigured();
-    return;
-  }
-  if (family === 'harmonyos') {
-    const { ensureHarmonyToolchainPathConfigured } = await import('./platforms/harmonyos/hdc.ts');
-    await ensureHarmonyToolchainPathConfigured();
-  }
 }
 
 function hostOperatingSystem(platform: NodeJS.Platform): HostOperatingSystem {

@@ -37,6 +37,12 @@ function createHost(
         throw new Error('unused');
       },
     },
+    appleTools: {
+      isXcrunAvailable: async () => false,
+      run: async () => {
+        throw new Error('unused');
+      },
+    },
     toolchains: { prepare: async () => undefined },
     files: {
       isExecutable: async () => false,

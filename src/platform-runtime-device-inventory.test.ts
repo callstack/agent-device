@@ -25,6 +25,10 @@ const host: DeviceInventoryHost = Object.freeze({
     which: async () => undefined,
     run: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
   }),
+  appleTools: Object.freeze({
+    isXcrunAvailable: async () => false,
+    run: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+  }),
   toolchains: Object.freeze({ prepare: async () => {} }),
   files: Object.freeze({
     isExecutable: async () => false,

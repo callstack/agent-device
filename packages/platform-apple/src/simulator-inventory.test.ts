@@ -69,12 +69,12 @@ test('simctl parser keeps available supported runtimes and their target semantic
 });
 
 test('simulator inventory scopes bounded simctl and reports fresh booted observations', async () => {
-  const calls: Array<{ args: readonly string[]; timeoutMs?: number }> = [];
+  const calls: Array<{ tool: string; args: readonly string[]; timeoutMs?: number }> = [];
   const observed: string[] = [];
   const host = createInventoryHost({
     observed,
     run: async (request) => {
-      calls.push({ args: request.args, timeoutMs: request.timeoutMs });
+      calls.push({ tool: request.tool, args: request.args, timeoutMs: request.timeoutMs });
       return commandResult(JSON.stringify(simulatorPayload));
     },
   });
@@ -87,7 +87,8 @@ test('simulator inventory scopes bounded simctl and reports fresh booted observa
 
   assert.deepEqual(calls, [
     {
-      args: ['simctl', '--set', '/tmp/custom-set', 'list', 'devices', '-j'],
+      tool: 'simctl',
+      args: ['--set', '/tmp/custom-set', 'list', 'devices', '-j'],
       timeoutMs: 3_000,
     },
   ]);
@@ -96,7 +97,7 @@ test('simulator inventory scopes bounded simctl and reports fresh booted observa
     ['iphone-1'],
   );
   assert.deepEqual(observed, ['iphone-1']);
-  assert.deepEqual(buildSimctlListArgs(undefined), ['simctl', 'list', 'devices', '-j']);
+  assert.deepEqual(buildSimctlListArgs(undefined), ['list', 'devices', '-j']);
 });
 
 test('simulator inventory classifies malformed native output as a command failure', async () => {

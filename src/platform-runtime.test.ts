@@ -12,6 +12,10 @@ vi.mock('./platform-runtime-host.ts', () => {
         which: async () => undefined,
         run: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
       },
+      appleTools: {
+        isXcrunAvailable: async () => false,
+        run: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+      },
       toolchains: { prepare: async () => {} },
       files: {
         isExecutable: async () => false,

@@ -120,6 +120,12 @@ function createHost(
       which: async (executable) => tools[executable as keyof typeof tools],
       run,
     },
+    appleTools: {
+      isXcrunAvailable: async () => false,
+      run: async () => {
+        throw new Error('unused');
+      },
+    },
     toolchains: { prepare: async () => undefined },
     files: {
       isExecutable,

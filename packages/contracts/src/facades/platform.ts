@@ -41,6 +41,9 @@ export type {
 export type { PlatformGatedProviderResolverKey } from '../platform-providers.ts';
 export type { RunnerLogicalLeaseContext } from '../runner-lease-context.ts';
 export type {
+  AppleToolHost,
+  AppleToolRequest,
+  AppleXcrunTool,
   HostCommandRequest,
   HostCommandResult,
   HostCommandRunner,

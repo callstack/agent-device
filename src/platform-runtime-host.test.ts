@@ -1,55 +1,44 @@
 import { expect, test, vi } from 'vitest';
 
 const toolchains = vi.hoisted(() => ({
-  androidEvaluations: 0,
-  androidPrepares: 0,
-  harmonyEvaluations: 0,
-  harmonyPrepares: 0,
+  appleEvaluations: 0,
+  appleAvailabilityChecks: [] as string[],
+  appleRuns: [] as Array<{ args: string[]; signal?: AbortSignal }>,
 }));
 
-vi.mock('./platforms/android/sdk.ts', () => {
-  toolchains.androidEvaluations += 1;
+vi.mock('./platforms/apple/core/tool-provider.ts', () => {
+  toolchains.appleEvaluations += 1;
   return {
-    ensureAndroidSdkPathConfigured: async () => {
-      toolchains.androidPrepares += 1;
-    },
-  };
-});
-
-vi.mock('./platforms/harmonyos/hdc.ts', () => {
-  toolchains.harmonyEvaluations += 1;
-  return {
-    ensureHarmonyToolchainPathConfigured: async () => {
-      toolchains.harmonyPrepares += 1;
+    resolveAppleToolProvider: () => ({
+      whichCommand: async (command: string) => {
+        toolchains.appleAvailabilityChecks.push(command);
+        return true;
+      },
+    }),
+    runXcrun: async (args: string[], options: { signal?: AbortSignal }) => {
+      toolchains.appleRuns.push({ args, signal: options.signal });
+      return { stdout: 'ok', stderr: '', exitCode: 0 };
     },
   };
 });
 
 import { createDeviceInventoryHost } from './platform-runtime-host.ts';
 
-test('inventory host loads and prepares only the selected family toolchain', async () => {
+test('inventory host loads scoped Apple mechanics only on first Apple tool use', async () => {
   const host = createDeviceInventoryHost();
+  const signal = new AbortController().signal;
 
-  expect(toolchains).toEqual({
-    androidEvaluations: 0,
-    androidPrepares: 0,
-    harmonyEvaluations: 0,
-    harmonyPrepares: 0,
-  });
+  expect(toolchains.appleEvaluations).toBe(0);
+  await expect(host.appleTools.isXcrunAvailable(signal)).resolves.toBe(true);
+  expect(toolchains.appleEvaluations).toBe(1);
+  expect(toolchains.appleAvailabilityChecks).toEqual(['xcrun']);
 
-  await host.toolchains.prepare('android');
-  expect(toolchains).toEqual({
-    androidEvaluations: 1,
-    androidPrepares: 1,
-    harmonyEvaluations: 0,
-    harmonyPrepares: 0,
-  });
-
-  await host.toolchains.prepare('harmonyos');
-  expect(toolchains).toEqual({
-    androidEvaluations: 1,
-    androidPrepares: 1,
-    harmonyEvaluations: 1,
-    harmonyPrepares: 1,
-  });
+  await expect(
+    host.appleTools.run(
+      { tool: 'devicectl', args: ['list', 'devices'], allowFailure: true, timeoutMs: 42 },
+      signal,
+    ),
+  ).resolves.toEqual({ stdout: 'ok', stderr: '', exitCode: 0 });
+  expect(toolchains.appleEvaluations).toBe(1);
+  expect(toolchains.appleRuns).toEqual([{ args: ['devicectl', 'list', 'devices'], signal }]);
 });

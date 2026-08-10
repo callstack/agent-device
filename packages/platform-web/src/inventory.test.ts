@@ -35,6 +35,14 @@ function createHost(observed: string[]): DeviceInventoryHost {
         throw new Error('must stay lazy');
       },
     },
+    appleTools: {
+      isXcrunAvailable: async () => {
+        throw new Error('must stay lazy');
+      },
+      run: async () => {
+        throw new Error('must stay lazy');
+      },
+    },
     toolchains: { prepare: async () => undefined },
     files: {
       isExecutable: async () => {

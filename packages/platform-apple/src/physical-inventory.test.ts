@@ -32,8 +32,8 @@ test('physical inventory prefers CoreDevice, supplements xctrace, and disposes i
   let disposeCount = 0;
   const host = createInventoryHost({
     run: async (request) => {
-      calls.push([...request.args]);
-      if (request.args[0] === 'devicectl') return commandResult();
+      calls.push([request.tool, ...request.args]);
+      if (request.tool === 'devicectl') return commandResult();
       return commandResult(['== Devices ==', 'Phone [core-1]', 'Apple TV [tv-1]'].join('\n'));
     },
     createTemporaryTextFile: async () => ({
@@ -76,7 +76,7 @@ test('physical inventory prefers CoreDevice, supplements xctrace, and disposes i
 test('physical inventory fails soft when either native source is unavailable', async () => {
   const host = createInventoryHost({
     run: async (request) => {
-      if (request.args[0] === 'devicectl') throw new Error('CoreDevice unavailable');
+      if (request.tool === 'devicectl') throw new Error('CoreDevice unavailable');
       return commandResult('== Devices ==\nMy iPhone [phone-1]');
     },
     createTemporaryTextFile: async () => {
@@ -88,4 +88,23 @@ test('physical inventory fails soft when either native source is unavailable', a
     (await listPhysicalAppleDevices(host, inventoryScope)).map((device) => device.id),
     ['phone-1'],
   );
+});
+
+test('physical inventory preserves request cancellation instead of failing soft', async () => {
+  const controller = new AbortController();
+  const reason = new Error('inventory cancelled');
+  const requestScope = { ...inventoryScope, signal: controller.signal };
+  const host = createInventoryHost({
+    run: async () => {
+      controller.abort(reason);
+      throw reason;
+    },
+    createTemporaryTextFile: async () => ({
+      path: '/tmp/devices.json',
+      readText: async () => '{}',
+      [Symbol.asyncDispose]: async () => undefined,
+    }),
+  });
+
+  await assert.rejects(listPhysicalAppleDevices(host, requestScope), reason);
 });
