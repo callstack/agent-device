@@ -77,6 +77,43 @@ test("the reason factory's own return object declares no category", () => {
   assert.deepEqual(selectorRuleIds('m.ts', source), ['gate:lint']);
 });
 
+test('the exemption follows the lexical binding, not the name `entry`', () => {
+  // One file, both shapes. The real BUILD_OWNERSHIP loop contributes a binding spelled `entry`;
+  // that must not make an unrelated `entry.rule` elsewhere in the file exempt too.
+  const source = `
+    const BUILD_OWNERSHIP = [{ check: 'swift-runner', rule: 'own:swift', detail: 'd', owns: () => true }];
+    const good = BUILD_OWNERSHIP.map((entry) => reason(entry.check, file, entry.rule, entry.detail));
+    const bad = OTHER.map((entry) => reason('lint', file, entry.rule, 'd'));
+  `;
+  assert.throws(() => selectorRuleIds('m.ts', source), /rule argument is not a string literal/);
+});
+
+test('a shadowing binding inside the real ownership loop is still rejected', () => {
+  // The inner `entry` shadows the ownership-table one, so its `.rule` is not a collected
+  // literal. Span containment alone would wrongly exempt it; the innermost binder decides.
+  const source = `
+    const BUILD_OWNERSHIP = [{ check: 'swift-runner', rule: 'own:swift', detail: 'd', owns: () => true }];
+    const nested = BUILD_OWNERSHIP.map((entry) =>
+      OTHER.map((entry) => reason('lint', file, entry.rule, 'd')),
+    );
+  `;
+  assert.throws(() => selectorRuleIds('m.ts', source), /rule argument is not a string literal/);
+});
+
+test('the real ownership loop stays exempt when no impostor shares its name', () => {
+  const source = `
+    const BUILD_OWNERSHIP = [
+      { check: 'swift-runner', rule: 'own:swift', detail: 'd', owns: () => true },
+    ];
+    const good = BUILD_OWNERSHIP.filter((entry) => entry.owns(file)).map((entry) =>
+      reason(entry.check, file, entry.rule, entry.detail),
+    );
+    const other = OTHER.map((row) => row.id);
+    const a = reason('lint', file, 'gate:lint', 'd');
+  `;
+  assert.deepEqual(selectorRuleIds('m.ts', source), ['gate:lint', 'own:swift']);
+});
+
 test('a computed rule argument fails closed rather than being skipped', () => {
   // A category this reader cannot see would bypass the representative-sample and reachability
   // checks entirely — the exact hole the derived universe exists to close.

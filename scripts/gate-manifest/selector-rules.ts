@@ -18,7 +18,7 @@
 // universe and therefore the representative-sample and reachability checks too, so a rule that
 // is not a string literal is an error naming its line — never a silent skip. The two shapes
 // that legitimately forward an already-collected rule are exempted by PROOF, not by pattern:
-// see reasonFactorySpan and ownershipIterationBindings.
+// see reasonFactorySpan and parameterBindings.
 
 import {
   calleeName,
@@ -115,8 +115,8 @@ function ownershipTableNames(program: Node, factory: Span | null): Set<string> {
 }
 
 /**
- * Callback parameter names bound while iterating a collected ownership table — the `entry` in
- * `BUILD_OWNERSHIP.filter((entry) => …).map((entry) => reason(…, entry.rule, …))`.
+ * Whether a call iterates a collected ownership table — `BUILD_OWNERSHIP.filter(...)`, and the
+ * `.map(...)` chained onto it.
  *
  * This is what makes the forwarding exemption a proof rather than a pattern. Accepting any
  * member access named `.rule` would silently skip `reason(check, file, config.rule, …)`, whose
@@ -132,36 +132,74 @@ function iteratesOwnershipTable(node: Node, tables: ReadonlySet<string>): boolea
   return root !== null && tables.has(root);
 }
 
-/** The first parameter name of each function argument — `entry` in `.map((entry) => …)`. */
-function callbackParameterNames(node: Node): string[] {
-  const args = node['arguments'];
-  if (!Array.isArray(args)) return [];
-  return args.flatMap((argument): string[] => {
-    if (!isNode(argument)) return [];
-    const isCallback =
-      argument.type === 'ArrowFunctionExpression' || argument.type === 'FunctionExpression';
-    if (!isCallback) return [];
-    const params = argument['params'];
-    const name = identifierName(Array.isArray(params) ? params[0] : undefined);
-    return name === null ? [] : [name];
-  });
+function isFunctionLike(node: Node): boolean {
+  return (
+    node.type === 'ArrowFunctionExpression' ||
+    node.type === 'FunctionExpression' ||
+    node.type === 'FunctionDeclaration'
+  );
 }
 
-function ownershipIterationBindings(program: Node, tables: ReadonlySet<string>): Set<string> {
-  const bindings = new Set<string>();
+/** The function arguments of a call — the `(entry) => …` in `.map((entry) => …)`. */
+function callbackFunctions(node: Node): Node[] {
+  const args = node['arguments'];
+  if (!Array.isArray(args)) return [];
+  return args.filter((argument): argument is Node => isNode(argument) && isFunctionLike(argument));
+}
+
+/**
+ * A name bound by a function's parameter list, with the source span it is visible in.
+ *
+ * Scope, not spelling, is what makes the forwarding exemption safe. Keying it on the NAME
+ * `entry` would mean that once the real `BUILD_OWNERSHIP` loop contributes that name, any
+ * unrelated — or shadowing — `entry.rule` elsewhere in the file is exempt too, and a live
+ * category slips past the derived universe exactly as before. Recording the binding's span
+ * lets a `.rule` access be matched to the innermost binder that actually covers it.
+ */
+type ParameterBinding = { name: string; span: Span; iteratesOwnership: boolean };
+
+function parameterBindings(program: Node, tables: ReadonlySet<string>): ParameterBinding[] {
+  const ownershipCallbacks = new Set<Node>();
   collect(program, (node) => {
     if (!iteratesOwnershipTable(node, tables)) return;
-    for (const name of callbackParameterNames(node)) bindings.add(name);
+    for (const callback of callbackFunctions(node)) ownershipCallbacks.add(callback);
+  });
+
+  const bindings: ParameterBinding[] = [];
+  collect(program, (node) => {
+    const span = isFunctionLike(node) ? spanOf(node) : null;
+    const params = node['params'];
+    if (span === null || !Array.isArray(params)) return;
+    const iteratesOwnership = ownershipCallbacks.has(node);
+    for (const parameter of params) {
+      const name = identifierName(parameter);
+      if (name !== null) bindings.push({ name, span, iteratesOwnership });
+    }
   });
   return bindings;
 }
 
-/** `entry.rule` where `entry` is proven to iterate a collected ownership table. */
-function forwardsACollectedRule(argument: unknown, bindings: ReadonlySet<string>): boolean {
+/**
+ * `entry.rule` where `entry` resolves — at this exact site — to the parameter of a callback
+ * iterating a collected ownership table. The innermost covering binder wins, so a shadowing
+ * `entry` from an unrelated loop is rejected even inside the real one.
+ */
+function forwardsACollectedRule(argument: unknown, bindings: readonly ParameterBinding[]): boolean {
   if (!isNode(argument) || !isMemberAccess(argument)) return false;
   if (identifierName(argument['property']) !== 'rule') return false;
   const object = identifierName(argument['object']);
-  return object !== null && bindings.has(object);
+  const site = spanOf(argument);
+  if (object === null || site === null) return false;
+  const covering = bindings.filter(
+    (binding) =>
+      binding.name === object && binding.span.start <= site.start && site.end <= binding.span.end,
+  );
+  // Latest start = innermost enclosing function that binds this name.
+  const innermost = covering.reduce<ParameterBinding | null>(
+    (best, binding) => (best === null || binding.span.start > best.span.start ? binding : best),
+    null,
+  );
+  return innermost?.iteratesOwnership === true;
 }
 
 /** The `rule:` of a build-ownership entry, or `declared: false` for any other object. */
@@ -188,7 +226,7 @@ function buildOwnershipRule(node: Node): { rule: string | null; declared: boolea
 export function selectorRuleIds(file: string, source: string): string[] {
   const program = parseProgram(file, source);
   const factory = reasonFactorySpan(program);
-  const bindings = ownershipIterationBindings(program, ownershipTableNames(program, factory));
+  const bindings = parameterBindings(program, ownershipTableNames(program, factory));
 
   const rules = new Set<string>();
   const unsupported: string[] = [];
