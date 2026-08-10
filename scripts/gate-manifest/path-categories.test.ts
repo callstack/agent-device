@@ -113,7 +113,7 @@ test("the selector's real rule universe is derived, and excludes its fail-open c
   const { rules } = readSelectorRules(
     SELECTOR_SOURCE,
     fs.readFileSync(path.join(repoRoot, SELECTOR_SOURCE), 'utf8'),
-    FORWARDED_SELECTOR_RULES.map((entry) => entry.call),
+    FORWARDED_SELECTOR_RULES,
   );
   // Live selection rules, read from `reason(...)` calls and the BUILD_OWNERSHIP table.
   for (const expected of ['gate:lint', 'platform-src', 'own:swift', 'own:mcp', 'src-prod']) {

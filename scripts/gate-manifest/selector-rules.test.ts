@@ -45,7 +45,7 @@ test("the reason factory's own return object declares no category", () => {
 // --- Nothing but a literal is derived ---------------------------------------
 
 /**
- * Every shape that six rounds of review argued about, plus the two that ended the argument.
+ * Every shape that seven rounds of review argued about.
  *
  * Earlier revisions tried to decide these case by case — is this `entry` really the ownership
  * table's? — and each answer left the next construct open. They are one test now because the
@@ -141,16 +141,12 @@ const NOT_A_LITERAL: readonly { name: string; source: string }[] = [
       });`,
   },
   {
-    // Round seven, first hole: the mutation is in an UPSTREAM callback, so a proof that only
-    // looked at the forwarding callback saw nothing wrong with the map below it.
     name: 'a mutating upstream filter callback',
     source: `${TABLE}
       const bad = BUILD_OWNERSHIP.filter((entry) => { entry.rule = computed; return true; })
         .map((entry) => reason('lint', file, entry.rule, 'd'));`,
   },
   {
-    // Round seven, second hole: `entry.mutate` is a member access whose object is `entry`, so a
-    // read/write classifier counted invoking it as a read.
     name: 'a member call on the entry before reading it',
     source: `${TABLE}
       const bad = BUILD_OWNERSHIP.map((entry) => {
@@ -167,7 +163,7 @@ const NOT_A_LITERAL: readonly { name: string; source: string }[] = [
 
 for (const { name, source } of NOT_A_LITERAL) {
   test(`fails closed: ${name}`, () => {
-    assert.throws(() => readSelectorRules('m.ts', source), /rule argument is not a string literal/);
+    assert.throws(() => readSelectorRules('m.ts', source), /not a string literal/);
   });
 }
 
@@ -182,7 +178,167 @@ test('a computed ownership-table rule fails closed too', () => {
   );
 });
 
-test('the failure names the line and quotes the call, so it can be waived or fixed', () => {
+// --- Declared forwards ------------------------------------------------------
+
+/**
+ * The live forwarding statement, on one line so its normalized fingerprint is obvious.
+ *
+ * The variants below keep this statement's inner `reason(...)` call byte for byte and change
+ * only the chain around it. That is the point of fingerprinting the statement: an entry keyed on
+ * the call alone accepts every one of them.
+ */
+const LIVE_STATEMENT =
+  'const s = BUILD_OWNERSHIP.filter((entry) => entry.owns(file)).map((entry) => ' +
+  'reason(entry.check, file, entry.rule, entry.detail));';
+
+const MUTATING_FILTER =
+  'const s = BUILD_OWNERSHIP.filter((entry) => { entry.rule = computed; return true; })' +
+  '.map((entry) => reason(entry.check, file, entry.rule, entry.detail));';
+
+const MEMBER_CALL =
+  'const s = BUILD_OWNERSHIP.map((entry) => { entry.mutate(); ' +
+  'return reason(entry.check, file, entry.rule, entry.detail); });';
+
+function inFunction(statement: string, enclosing = 'buildOwnership'): string {
+  return `${TABLE}
+    const ${enclosing} = () => {
+      ${statement}
+      return s;
+    };
+    const a = reason('lint', file, 'gate:lint', 'd');`;
+}
+
+const LIVE_KEY = { file: 'm.ts', enclosing: 'buildOwnership', statement: LIVE_STATEMENT };
+
+test('a waiver admits exactly the statement it fingerprints, and loses no category', () => {
+  const derived = readSelectorRules('m.ts', inFunction(LIVE_STATEMENT), [LIVE_KEY]);
+  // `own:swift` is still there — read from the table entry, which is the whole reason the
+  // forward is safe to declare: the waiver excuses the statement, it does not drop a category.
+  assert.deepEqual(derived.rules, ['gate:lint', 'own:swift']);
+  assert.deepEqual(derived.waiverMatches, [1]);
+});
+
+test('a waiver survives reformatting, because the statement text is normalized', () => {
+  const rewrapped = inFunction(
+    `const s = BUILD_OWNERSHIP.filter((entry) => entry.owns(file)).map(
+        (entry) => reason(entry.check, file, entry.rule, entry.detail),
+      );`,
+  );
+  // Rewrapped across lines with extra indentation, but the same tokens: still one match. (The
+  // trailing comma IS a token difference, so this variant keeps the argument list as written.)
+  const normalized = LIVE_STATEMENT.replace(
+    '.map((entry) => reason(entry.check, file, entry.rule, entry.detail));',
+    '.map( (entry) => reason(entry.check, file, entry.rule, entry.detail), );',
+  );
+  const derived = readSelectorRules('m.ts', rewrapped, [{ ...LIVE_KEY, statement: normalized }]);
+  assert.deepEqual(derived.rules, ['gate:lint', 'own:swift']);
+  assert.deepEqual(derived.waiverMatches, [1]);
+});
+
+/**
+ * The round-eight regressions: the two unsafe chains, each keeping the waived call verbatim.
+ *
+ * A waiver keyed on `reason(entry.check, file, entry.rule, entry.detail)` accepted all of these.
+ * Keyed on the statement, every one is a different statement and fails closed.
+ */
+const BYPASS_ATTEMPTS: readonly { name: string; source: string }[] = [
+  { name: 'a mutating upstream filter callback', source: inFunction(MUTATING_FILTER) },
+  { name: 'a member call on the entry', source: inFunction(MEMBER_CALL) },
+  {
+    name: 'the waived statement relocated to another function',
+    source: inFunction(LIVE_STATEMENT, 'somewhereElse'),
+  },
+  {
+    name: 'the waived statement wrapped in a value-changing chain',
+    source: inFunction(
+      'const s = BUILD_OWNERSHIP.map(transform).map((entry) => ' +
+        'reason(entry.check, file, entry.rule, entry.detail));',
+    ),
+  },
+];
+
+test('the bypass fixtures really do keep the waived call, or they prove nothing', () => {
+  // Non-vacuity guard. These negatives only exercise the bypass while their inner call is byte
+  // for byte the one a call-keyed waiver would have named; edit a fixture so the call differs
+  // and they quietly degrade into ordinary "not a literal" cases that never touched the waiver.
+  const call = 'reason(entry.check, file, entry.rule, entry.detail)';
+  for (const statement of [LIVE_STATEMENT, MUTATING_FILTER, MEMBER_CALL]) {
+    assert.ok(statement.includes(call), `fixture must contain the waived call: ${statement}`);
+  }
+});
+
+for (const { name, source } of BYPASS_ATTEMPTS) {
+  test(`the waiver does not admit: ${name}`, () => {
+    assert.throws(() => readSelectorRules('m.ts', source, [LIVE_KEY]), /not a string literal/);
+  });
+}
+
+test('a forward inside a block callback fingerprints the chain, not the bare return', () => {
+  // The tightest statement around this forward is `return reason(…);`, which says nothing about
+  // the chain that produced `entry`. Fingerprinting that would leave the chain swappable — the
+  // same hole one shape over — so the key climbs to the outermost statement in the function.
+  const blockForm =
+    'const s = BUILD_OWNERSHIP.map((entry) => { return reason(entry.check, file, entry.rule, entry.detail); });';
+  const bareReturn = 'return reason(entry.check, file, entry.rule, entry.detail);';
+
+  assert.throws(
+    () =>
+      readSelectorRules('m.ts', inFunction(blockForm), [
+        { file: 'm.ts', enclosing: 'buildOwnership', statement: bareReturn },
+      ]),
+    /not a string literal/,
+    'a waiver naming only the return must not admit the chain around it',
+  );
+  const derived = readSelectorRules('m.ts', inFunction(blockForm), [
+    { file: 'm.ts', enclosing: 'buildOwnership', statement: blockForm },
+  ]);
+  assert.deepEqual(derived.waiverMatches, [1]);
+});
+
+test('a waiver is bound to its file, so the same statement elsewhere is unreviewed', () => {
+  assert.throws(
+    () => readSelectorRules('other.ts', inFunction(LIVE_STATEMENT), [LIVE_KEY]),
+    /not a string literal/,
+  );
+});
+
+test('an unmatched waiver reports zero, so check.ts can call it inert', () => {
+  const derived = readSelectorRules('m.ts', "const a = reason('lint', file, 'gate:lint', 'd');", [
+    LIVE_KEY,
+  ]);
+  assert.deepEqual(derived.waiverMatches, [0]);
+});
+
+test('a waiver covering two identical statements reports both, so check.ts can refuse it', () => {
+  // One reviewed claim must not silently spread to a second forward nobody looked at.
+  const forward = 'use(BUILD_OWNERSHIP.map((entry) => reason(entry.check, file, entry.rule, 1)));';
+  const source = `${TABLE}
+    const buildOwnership = () => {
+      ${forward}
+      ${forward}
+    };`;
+  const derived = readSelectorRules('m.ts', source, [
+    { file: 'm.ts', enclosing: 'buildOwnership', statement: forward },
+  ]);
+  assert.deepEqual(derived.waiverMatches, [2]);
+});
+
+test('the failure hands back the exact three fields a waiver needs', () => {
+  try {
+    readSelectorRules('m.ts', inFunction(LIVE_STATEMENT));
+    assert.fail('expected a throw');
+  } catch (error) {
+    const message = String(error);
+    assert.match(message, /file: {6}m\.ts/);
+    assert.match(message, /enclosing: buildOwnership/);
+    assert.match(
+      message,
+      new RegExp(`statement: ${LIVE_STATEMENT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`),
+    );
+  }
+});
+
+test('the failure names the line, and top-level forwards report as such', () => {
   try {
     readSelectorRules(
       'm.ts',
@@ -191,90 +347,30 @@ test('the failure names the line and quotes the call, so it can be waived or fix
     assert.fail('expected a throw');
   } catch (error) {
     assert.match(String(error), /line 2/);
-    assert.match(String(error), /reason\('lint', f, X, 'd'\)/);
+    assert.match(String(error), /enclosing: \(top level\)/);
     assert.match(String(error), /FORWARDED_SELECTOR_RULES/);
   }
 });
 
-// --- Declared forwards ------------------------------------------------------
-
-const LIVE_CHAIN = `${TABLE}
-  const s = BUILD_OWNERSHIP.filter((entry) => entry.owns(file)).map((entry) =>
-    reason(entry.check, file, entry.rule, entry.detail),
-  );
-  const a = reason('lint', file, 'gate:lint', 'd');`;
-
-const LIVE_CALL = 'reason(entry.check, file, entry.rule, entry.detail)';
-
-test('a waiver admits exactly the call it names, and the universe stays complete', () => {
-  const derived = readSelectorRules('m.ts', LIVE_CHAIN, [LIVE_CALL]);
-  // `own:swift` is still there — read from the table entry, which is the whole reason the
-  // forward is safe to declare: the waiver excuses the call, it does not drop a category.
-  assert.deepEqual(derived.rules, ['gate:lint', 'own:swift']);
-  assert.equal(derived.waiverMatches.get(LIVE_CALL), 1);
-});
-
-test('a waiver matches across reformatting, because the text is normalized', () => {
-  const rewrapped = `${TABLE}
-    const s = BUILD_OWNERSHIP.map((entry) => reason(
-        entry.check,
-        file,
-        entry.rule,
-        entry.detail
-    ));
-    const a = reason('lint', file, 'gate:lint', 'd');`;
-  assert.throws(
-    () => readSelectorRules('m.ts', rewrapped, [LIVE_CALL]),
-    /rule argument is not a string literal/,
-    'a trailing-comma difference is a real text difference',
-  );
-  const normalized = 'reason( entry.check, file, entry.rule, entry.detail )';
-  assert.deepEqual(readSelectorRules('m.ts', rewrapped, [normalized]).rules, [
-    'gate:lint',
-    'own:swift',
-  ]);
-});
-
-test('a waiver does not admit a different forward in the same file', () => {
-  const source = `${LIVE_CHAIN}
-    const other = BUILD_OWNERSHIP.map((entry) => reason('lint', file, entry.rule, 'd'));`;
-  assert.throws(
-    () => readSelectorRules('m.ts', source, [LIVE_CALL]),
-    /reason\('lint', file, entry\.rule, 'd'\)/,
-  );
-});
-
-test('an unmatched waiver is reported as matching nothing, so check.ts can call it inert', () => {
-  const derived = readSelectorRules('m.ts', "const a = reason('lint', file, 'gate:lint', 'd');", [
-    LIVE_CALL,
-  ]);
-  assert.equal(derived.waiverMatches.get(LIVE_CALL), undefined);
-});
-
-test('a waiver covering two identical calls reports both, so check.ts can refuse it', () => {
-  // One reviewed claim must not silently spread to a second call nobody looked at.
-  const source = `${TABLE}
-    const one = BUILD_OWNERSHIP.map((entry) => reason(entry.check, file, entry.rule, entry.detail));
-    const two = OTHER.map((entry) => reason(entry.check, file, entry.rule, entry.detail));`;
-  assert.equal(readSelectorRules('m.ts', source, [LIVE_CALL]).waiverMatches.get(LIVE_CALL), 2);
-});
+// --- The real tree ----------------------------------------------------------
 
 test("the repo's real selector derives, and its one declared forward is live", () => {
-  const waived = FORWARDED_SELECTOR_RULES.map((entry) => entry.call);
   const derived = readSelectorRules(
     SELECTOR_SOURCE,
     fs.readFileSync(path.join(repoRoot, SELECTOR_SOURCE), 'utf8'),
-    waived,
+    FORWARDED_SELECTOR_RULES,
   );
   assert.ok(
     derived.rules.length >= 20,
     `expected the live selector to yield its categories, got ${derived.rules.length}`,
   );
-  // Each declared forward matches exactly one real call. check.ts fails the gate on 0 or 2+;
-  // asserting it here too means the unit lane catches a rotted waiver without the full manifest.
-  for (const call of waived) {
-    assert.equal(derived.waiverMatches.get(call), 1, `waiver "${call}" should match one call`);
-  }
+  // Each declared forward matches exactly one real statement. check.ts fails the gate on 0 or
+  // 2+; asserting it here means the unit lane catches a rotted waiver without the full manifest.
+  assert.deepEqual(
+    derived.waiverMatches,
+    FORWARDED_SELECTOR_RULES.map(() => 1),
+    'every FORWARDED_SELECTOR_RULES entry must fingerprint exactly one live statement',
+  );
 });
 
 test("the repo's real selector fails closed with the waiver removed", () => {
@@ -286,6 +382,6 @@ test("the repo's real selector fails closed with the waiver removed", () => {
         SELECTOR_SOURCE,
         fs.readFileSync(path.join(repoRoot, SELECTOR_SOURCE), 'utf8'),
       ),
-    /rule argument is not a string literal/,
+    /not a string literal/,
   );
 });

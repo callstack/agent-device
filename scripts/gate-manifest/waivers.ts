@@ -7,6 +7,7 @@
 // stops matching anything fails the gate, so this list cannot rot into a pile of dead excuses.
 
 import type { Terminal } from './execution-terminals.ts';
+import type { ForwardedRuleKey } from './selector-rules.ts';
 
 /** A unit of work that deliberately does not run in CI. */
 export type LocalOnlyWaiver = {
@@ -41,30 +42,38 @@ export const TRANSPARENT_WRAPPERS: readonly { file: string; reason: string }[] =
 ];
 
 /**
- * A `reason(check, file, rule, detail)` call in the affected selector whose rule argument is not
- * a string literal, and the claim that it adds no category the derivation has not already seen.
+ * A statement in the affected selector that forwards a rule which is not a string literal, and
+ * the claim that it adds no category the derivation has not already seen.
  *
- * Keyed on the exact source text of the call (whitespace collapsed). Blunt on purpose: this is a
- * human claim about one specific call, not a shape the reader recognizes, and selector-rules.ts
- * explains at length why the shape-recognizing version had to go. check.ts fails the gate if an
- * entry here matches no call (inert) or more than one (too broad to have been reviewed).
+ * Keyed on the whole enclosing STATEMENT, not the `reason(...)` call — the claim is made true by
+ * the chain around the call, so an entry keyed on the call alone would survive that chain being
+ * swapped for a mutating one. With `file` and `enclosing` it names one reviewed statement in one
+ * place; mutate the chain, reformat past whitespace, or move it, and the waiver stops matching.
+ * Blunt on purpose: any edit to the reviewed code re-opens the review. check.ts fails the gate if
+ * an entry matches no statement (inert) or more than one (standing for code nobody looked at).
+ *
+ * The reader tells you the exact three fields to paste when it refuses a forward.
  */
-export type ForwardedRule = {
-  readonly call: string;
+export type ForwardedRule = ForwardedRuleKey & {
   readonly reason: string;
   readonly issue: string;
 };
 
 export const FORWARDED_SELECTOR_RULES: readonly ForwardedRule[] = [
   {
-    call: 'reason(entry.check, file, entry.rule, entry.detail)',
+    file: 'scripts/check-affected/model.ts',
+    enclosing: 'buildOwnership',
+    statement:
+      'const selections = BUILD_OWNERSHIP.filter((entry) => entry.owns(file)).map((entry) => ' +
+      'reason(entry.check, file, entry.rule, entry.detail), );',
     reason:
-      'buildOwnership maps BUILD_OWNERSHIP onto selections, so `entry.rule` can only ever be ' +
-      "one of that table's own `rule:` literals — which selector-rules.ts already collects " +
-      'directly from the table entries. The forward re-states categories the universe has; it ' +
-      'cannot introduce one. Checked by reading model.ts:368, not by static proof: the ' +
-      'upstream `.filter((entry) => entry.owns(file))` callback invokes a member on the entry, ' +
-      'and no sound reader can rule out that such a call mutates it.',
+      'buildOwnership maps BUILD_OWNERSHIP straight onto selections with no transform between ' +
+      "them, so `entry.rule` can only ever be one of that table's own `rule:` literals — which " +
+      'selector-rules.ts already collects directly from the table entries. The forward ' +
+      're-states categories the universe has; it cannot introduce one. That is checked by ' +
+      'reading the statement above, not by static proof: its `.filter((entry) => ' +
+      'entry.owns(file))` callback invokes a member on the entry, and no sound reader can rule ' +
+      'out that such a call mutates it — which is why the statement, chain included, is the key.',
     issue: '#1429',
   },
 ];

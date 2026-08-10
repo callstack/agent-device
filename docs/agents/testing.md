@@ -237,10 +237,16 @@ Where the two meet is worth knowing before you edit the selector. The path-categ
 each `BUILD_OWNERSHIP` entry's `rule:` — so a new ownership rule widens the universe and fails
 the gate until a representative path exercises it. Only string literals count. A rule the reader
 cannot see would slip past the reachability check while the gate stayed green, so a computed one
-is an error naming its line. The single call that forwards `entry.rule` out of the ownership loop
-is declared in `FORWARDED_SELECTOR_RULES`, keyed on the exact text of the call, rather than
-recognized by shape; `selector-rules.ts` records why the shape-recognizing version could not be
-made sound.
+is an error naming its line. The single statement that forwards `entry.rule` out of the ownership
+loop is declared in `FORWARDED_SELECTOR_RULES` rather than recognized by shape;
+`selector-rules.ts` records why the shape-recognizing version could not be made sound.
+
+That waiver is keyed on the whole enclosing **statement** — chain, callbacks and all — plus the
+file and enclosing function, not on the `reason(...)` call. The claim it makes ("this rule is
+already in the universe") is true because of the chain, so a key naming only the call would
+survive that chain being swapped for a mutating one. Mutate it, or move the statement, and the
+waiver goes inert and fails. When the reader refuses a forward it prints the exact three fields
+to paste.
 
 The gate is deterministic, offline, and needs no GitHub token — it runs from a clean checkout in
 the `Affected-check Selector` job. Branch-protection required-contexts drift is the one part

@@ -74,7 +74,7 @@ const vitestProjects = vitestProjectNames('vitest.config.ts', read('vitest.confi
 const selector = readSelectorRules(
   SELECTOR_SOURCE,
   read(SELECTOR_SOURCE),
-  FORWARDED_SELECTOR_RULES.map((entry) => entry.call),
+  FORWARDED_SELECTOR_RULES,
 );
 const selectorRules = selector.rules;
 
@@ -216,21 +216,23 @@ const staleWaivers = [
       `TRANSPARENT_WRAPPERS "${entry.file}" changes nothing — no resolved command forwards ` +
       `through it, so the waiver is inert`,
   ),
-  // A forwarded-rule waiver is applied-reachable when the call it names is really there — and
-  // only that call. Matching none means the forward is gone and the waiver now excuses nothing;
-  // matching several means one reviewed claim has silently spread to a call nobody looked at.
-  ...FORWARDED_SELECTOR_RULES.map((entry) => ({
+  // A forwarded-rule waiver is applied-reachable when the statement it fingerprints is really
+  // there — and only once. Matching none means the statement changed or moved, so the reviewed
+  // claim no longer describes live code; matching several means one claim now stands for code
+  // nobody looked at. Either way the waiver has stopped meaning what it said.
+  ...FORWARDED_SELECTOR_RULES.map((entry, index) => ({
     entry,
-    matches: selector.waiverMatches.get(entry.call) ?? 0,
+    matches: selector.waiverMatches[index] ?? 0,
   }))
     .filter(({ matches }) => matches !== 1)
     .map(({ entry, matches }) =>
       matches === 0
-        ? `FORWARDED_SELECTOR_RULES "${entry.call}" matches no reason() call in ` +
-          `${SELECTOR_SOURCE} — the forward is gone, so the waiver is inert`
-        : `FORWARDED_SELECTOR_RULES "${entry.call}" matches ${matches} calls in ` +
-          `${SELECTOR_SOURCE} — one waiver cannot stand for several forwards; make each call ` +
-          `distinguishable, or write the rules as literals`,
+        ? `FORWARDED_SELECTOR_RULES ${entry.file}#${entry.enclosing} matches no forwarding ` +
+          `statement — the statement it waives changed, moved, or is gone, so the waiver is ` +
+          `inert. It fingerprints: ${entry.statement}`
+        : `FORWARDED_SELECTOR_RULES ${entry.file}#${entry.enclosing} matches ${matches} ` +
+          `statements — one waiver cannot stand for several forwards; review each and give it ` +
+          `its own entry, or write the rules as literals`,
     ),
   ...DECLARED_EDGES.filter(
     (entry) =>
