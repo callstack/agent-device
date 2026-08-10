@@ -62,6 +62,24 @@ test('returns the verified real parent rather than a symlink alias', () => {
   ).toBe(path.join(fs.realpathSync.native(realSession), 'app-log.pid'));
 });
 
+test('accepts different lexical aliases for the same verified sessions root', () => {
+  const root = temporaryRoot();
+  const realSessionsDir = path.join(root, 'real-sessions');
+  const linkedSessionsDir = path.join(root, 'linked-sessions');
+  const realSession = path.join(realSessionsDir, 'one');
+  fs.mkdirSync(realSession, { recursive: true });
+  fs.symlinkSync(realSessionsDir, linkedSessionsDir);
+
+  expect(
+    requireManagedSessionArtifactPath({
+      sessionsDir: linkedSessionsDir,
+      pathname: path.join(realSession, 'app-log.pid'),
+      basename: 'app-log.pid',
+      label: 'App-log process marker',
+    }),
+  ).toBe(path.join(fs.realpathSync.native(realSession), 'app-log.pid'));
+});
+
 function temporaryRoot(): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-session-artifact-'));
   roots.push(root);
