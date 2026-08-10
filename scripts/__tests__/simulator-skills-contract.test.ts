@@ -19,7 +19,10 @@ const SKILLS = [
         id: 'foreground platform open',
         requiredText: 'agent-device open <app-or-bundle-id> --platform ios --foreground',
       },
-      { id: 'initial interactive snapshot', requiredText: '`open` returns the initial interactive snapshot.' },
+      {
+        id: 'initial interactive snapshot',
+        requiredText: '`open` returns the initial interactive snapshot.',
+      },
       { id: 'current ref or selector', requiredText: 'Use its current refs or a selector.' },
       { id: 'settled planned actions', requiredText: 'agent-device press @eN --settle' },
       { id: 'type settle exception', requiredText: '`type` never takes `--settle`;' },
@@ -38,7 +41,10 @@ const SKILLS = [
         id: 'foreground platform open',
         requiredText: 'agent-device open <app-or-package-id> --platform android --foreground',
       },
-      { id: 'initial interactive snapshot', requiredText: '`open` returns the initial interactive snapshot.' },
+      {
+        id: 'initial interactive snapshot',
+        requiredText: '`open` returns the initial interactive snapshot.',
+      },
       { id: 'current ref or selector', requiredText: 'Use its current refs or a selector.' },
       { id: 'settled planned actions', requiredText: 'agent-device press @eN --settle' },
       { id: 'type settle exception', requiredText: '`type` never takes `--settle`;' },
