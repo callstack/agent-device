@@ -129,6 +129,35 @@ export function digestDeclaration(file: string, source: string, name: string): s
     .digest('hex')}`;
 }
 
+/**
+ * Replaces `from` with `to` **inside `name`'s declaration only**, returning the
+ * whole mutated source.
+ *
+ * The planted-red proofs need this rather than `source.replace`: sibling
+ * declarations in the same file share substrings (two functions in
+ * `request-progress-protocol.ts` both end their template with the same framing),
+ * so a whole-file replace silently mutates the FIRST match and leaves the
+ * declaration under test untouched — a vacuous proof that looks like a real one.
+ * Throws when `from` is absent from the span, so that case fails loudly.
+ */
+export function replaceInDeclaration(
+  file: string,
+  source: string,
+  name: string,
+  from: string,
+  to: string,
+): string {
+  const { span } = findDeclaration(file, source, name);
+  const declaration = source.slice(span.start, span.end);
+  if (!declaration.includes(from)) {
+    throw new Error(
+      `${file}#${name} does not contain ${JSON.stringify(from)}, so a mutation built on it would ` +
+        `be a no-op. Re-point the case at the declaration's current text.`,
+    );
+  }
+  return source.slice(0, span.start) + declaration.replace(from, to) + source.slice(span.end);
+}
+
 function walk(node: unknown, visit: (node: Node) => void): void {
   if (!node || typeof node !== 'object') return;
   if (Array.isArray(node)) {
@@ -162,7 +191,16 @@ function rootTypeName(typeName: unknown): string | null {
 export function readTypeReferences(file: string, source: string, name: string): string[] {
   const { node } = findDeclaration(file, source, name);
   const names = new Set<string>();
+  // A declaration's own generic parameters (`JsonRpcRequestEnvelope<TParams>`)
+  // read as type references but have no declaration site to gate — they are
+  // bound right here. Collected across the whole subtree so a nested generic
+  // helper's parameters drop out too.
+  const typeParameters = new Set<string>();
   walk(node, (child) => {
+    if (child.type === 'TSTypeParameter') {
+      const bound = (child.name as { name?: unknown } | undefined)?.name;
+      if (typeof bound === 'string') typeParameters.add(bound);
+    }
     if (child.type === 'TSTypeReference') {
       const referenced = rootTypeName(child.typeName);
       if (referenced) names.add(referenced);
@@ -173,5 +211,8 @@ export function readTypeReferences(file: string, source: string, name: string): 
     }
   });
   names.delete(name);
+  // `x as const` parses as a type reference to the contextual keyword.
+  names.delete('const');
+  for (const bound of typeParameters) names.delete(bound);
   return [...names].sort();
 }

@@ -18,18 +18,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '../../src/daemon/http-health.ts';
-import {
-  digestDeclaration,
-  readTopLevelDeclarationNames,
-  readTypeReferences,
-} from './declaration-digest.ts';
+import { isExternalWireSpecifier, WIRE_CLOSURE_WAIVERS } from './closure-policy.ts';
+import { findClosureGaps } from './closure.ts';
+import { digestDeclaration } from './declaration-digest.ts';
 import { digestWireSurface, readWireLedger, WIRE_LEDGER_PATH } from './ledger.ts';
-import {
-  WIRE_DECLARATIONS,
-  WIRE_SURFACE,
-  WIRE_SURFACE_FILES,
-  wireDeclarationKey,
-} from './surface.ts';
+import { WIRE_DECLARATIONS, WIRE_SURFACE, wireDeclarationKey } from './surface.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '..', '..');
 const ledger = readWireLedger(repoRoot);
@@ -98,39 +91,40 @@ test('every compatible-change ack names a declaration at its current digest', ()
   }
 });
 
-/** Every top-level name a manifest file declares, mapped to that file. */
-function declarationHomes(): Map<string, string> {
-  const homes = new Map<string, string>();
-  for (const file of WIRE_SURFACE_FILES) {
-    for (const name of readTopLevelDeclarationNames(file, readSource(file))) {
-      homes.set(name, file);
-    }
-  }
-  return homes;
-}
-
 // Without this, adding `foo?: NewShape` to a wire type would move only that
 // type's digest and leave `NewShape` — the declaration that actually decides
 // what the peer parses — outside the gate. The manifest's closure is therefore
 // derived from the AST rather than trusted: "something enumerates N" (#1412).
+//
+// It FAILS CLOSED (review P1). The first version scanned only the manifest's
+// own files and skipped any name it could not place, so an imported payload
+// shape escaped entirely. Now every referenced name must land somewhere
+// someone wrote down: a listed declaration, a closure-policy waiver, a
+// declared external module, or the TypeScript global set.
 test('the manifest is closed over the wire types it references', () => {
-  const homes = declarationHomes();
-  const claimed = new Set(WIRE_DECLARATIONS.map(wireDeclarationKey));
-  const omitted = new Set<string>();
-  for (const ref of WIRE_DECLARATIONS) {
-    for (const name of readTypeReferences(ref.file, readSource(ref.file), ref.name)) {
-      const home = homes.get(name);
-      if (!home) continue;
-      const key = `${home}#${name}`;
-      if (!claimed.has(key)) omitted.add(`${key} (reached from ${ref.name})`);
-    }
-  }
+  const { omitted, unresolved } = findClosureGaps({
+    repoRoot,
+    readSource,
+    declarations: WIRE_DECLARATIONS,
+    claimed: new Set(WIRE_DECLARATIONS.map(wireDeclarationKey)),
+    waivers: WIRE_CLOSURE_WAIVERS,
+    isExternalSpecifier: isExternalWireSpecifier,
+  });
+
   assert.deepEqual(
-    [...omitted].sort(),
+    omitted,
     [],
-    `These declarations are referenced by the daemon RPC wire surface but are not listed in ` +
-      `test/wire-compat/surface.ts, so their shape is ungated. Add them to the group whose ADR 0006 ` +
-      `bullet they serve.`,
+    `These declarations are referenced by the daemon RPC wire surface but are neither listed in ` +
+      `test/wire-compat/surface.ts nor waived in closure-policy.ts, so their shape is ungated. ` +
+      `List the ones that carry payload; waive the ones that cannot, with the reason.`,
+  );
+  assert.deepEqual(
+    unresolved,
+    [],
+    `The closure could not place these type names, and it fails closed rather than skipping them ` +
+      `— an unplaceable name is exactly how an imported payload shape escaped before. Either the ` +
+      `import is a module that belongs in WIRE_EXTERNAL_MODULES, or the resolver needs to learn ` +
+      `the specifier form (test/wire-compat/module-resolution.ts).`,
   );
 });
 

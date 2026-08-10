@@ -23,12 +23,25 @@ interoperate" — `agent-device proxy`, cloud/limrun providers, and a remote mac
 skewed on purpose, and package version is explicitly *not* the compatibility gate there. The one
 place version skew is designed in was the one place with no gate.
 
-## The two gates
+## The three gates
 
 | | Runs | Answers |
 | --- | --- | --- |
-| `wire-compat.test.ts` (`unit-core`) | every PR, offline, shallow-safe | does the ledger still match the source it describes? |
+| `wire-compat.test.ts` (`unit-core`) | every PR, offline, shallow-safe | does the ledger still match the source it describes, and is the manifest closed? |
+| `wire-mutations.test.ts` (`unit-core`) | every PR | does the gate actually **catch** each class of wire break? |
 | `pnpm check:daemon-wire-compat` (`Released-Surface Compatibility`) | own `fetch-depth: 0` job | did the drift **since the last released tag** come with a bump or an ack? |
+
+The mutation lane exists because the first two answer "the manifest describes
+today's source", never "the manifest describes the *right* source". A gate can
+list 117 declarations, pass every check, and still miss the seam that breaks a
+skewed peer — which is exactly what review found in the first version of this
+directory. Each case there mutates one real listed declaration the way a real
+break would (method renamed, envelope unframed, auth header dropped, upload
+ticket field renamed, 308 downgraded, artifact route narrowed) and asserts the
+digest moves. Two guards keep them honest: the mutation is applied **inside the
+declaration's own span** so it cannot silently hit a sibling that shares the
+substring, and the unmutated digest must equal the ledger's so the case is
+pinned to the declaration the gate really watches.
 
 The split is forced, not stylistic. From a single commit a bumped ledger and an unbumped one are
 both just an edited file, so only a baseline read out of git can tell them apart — the same reason
@@ -75,20 +88,46 @@ bullet is only partly digestible the group carries an `uncovered` note saying wh
 reviewer-owned and why — a gate that implies coverage it does not provide is worse than one that
 admits the gap (AGENTS.md, "a registry claim is not a semantic check").
 
-The one such gap today: the `/health` and `/rpc` path literals sit inside `http-server.ts` request
-handlers, whose bodies churn for reasons that are not protocol changes. They stay reviewer-owned
-because their failure mode is the loud one — a moved route 404s at connect time, before any payload
-is exchanged. Everything digested here can misparse *silently*, which is the whole point.
+**Both sides of every boundary are listed.** The first version of this directory digested only the
+payload *types* while quoting all four bullets, which review correctly called an overclaim: method
+sets, response serialization, auth projection, upload ticket and 308 framing, artifact framing, and
+the client's own parsers could all break a skewed peer without moving a listed digest. A
+client-only change breaks an older daemon just as surely as the reverse, so producer and consumer
+seams are both here.
+
+The one remaining gap: `createDaemonHttpServer`, the 200-line dispatcher, and the `/health` and
+`/rpc` path literals inside it. Everything it dispatches *with* is digested individually, so what is
+uncovered is the wiring — and its failure mode is the loud one, a 404 at connect time before any
+payload is exchanged. Everything digested here can misparse *silently*, which is the whole point.
 
 Digests ignore comments and formatting, so reflowing a type or rewriting the prose above a field
 does not move them; only the declaration's tokens do.
 
+## The closure, and why it fails closed
+
+`wire-compat.test.ts` walks each listed declaration's AST and resolves every type name it
+references — through relative imports, workspace specifiers (via the owning package's own `exports`
+map), and façade re-export chains. Every name must land somewhere someone wrote down:
+
+- a **listed** declaration, or
+- a **waiver** in `closure-policy.ts` — a repo declaration that is genuinely not payload, with the
+  reason it cannot change what a peer parses, or
+- a **declared external module** (`node:http`, `undici`) with no declaration site here, or
+- the TypeScript/Node global set.
+
+Anything else fails. The earlier version skipped names it could not place, which made the whole
+claim hollow: a listed type could grow `foo?: ImportedShape` from an unlisted module and stay green.
+Three probes in `wire-mutations.test.ts` prove the walk really reaches across each boundary form —
+drop a listed declaration from the claimed set and the closure must report it.
+
+Challenge the waivers first when reviewing this directory; they are where coverage is traded away.
+The largest pair (`InternalRequestOptions`, `CommandFlags`) rests on ADR 0006's own additive rule:
+those reach the peer inside `DaemonRequest`'s untyped `flags`/`input` bags, and the decision says a
+new flag needs no bump. If a flag ever becomes a typed field, list the type instead of widening the
+waiver.
+
 ## Adding to the surface
 
-The manifest's closure is checked, not asserted: `wire-compat.test.ts` walks each digested
-declaration's AST and fails if it references a type declared in a manifest file that the manifest
-itself omits. So adding `foo?: NewShape` to a wire type tells you to list `NewShape` rather than
-letting the field that decides what the peer parses sit outside the gate.
-
-To add a declaration by hand, put it in the group whose ADR 0006 bullet it serves and paste its
-digest from the failure message.
+Put the declaration in the group whose ADR 0006 bullet it serves and paste its digest from the
+failure message. If it introduces a new break class, add a case to `wire-mutations.test.ts` — a
+listed declaration with no proof that mutating it fails is a claim, not a gate.

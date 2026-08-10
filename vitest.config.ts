@@ -84,6 +84,7 @@ export default defineConfig({
             // declarations, so it needs no history, network, or device — the
             // released-tag half runs in its own full-history job.
             'test/wire-compat/wire-compat.test.ts',
+            'test/wire-compat/wire-mutations.test.ts',
             // The Maestro conformance oracle runs via `node --test` in its own CI
             // job (scripts/maestro-conformance), like the layering guard.
           ],
