@@ -48,3 +48,37 @@ test('Apple tool host rejects pre-aborted requests before invoking the provider'
   });
   expect(runCommand).not.toHaveBeenCalled();
 });
+
+test('Apple tool host preserves the exact abort reason when the provider rejects differently', async () => {
+  const reason = new Error('cancelled');
+  const transportError = new Error('provider transport failed');
+  const controller = new AbortController();
+  const runCommand = vi.fn(async () => {
+    controller.abort(reason);
+    throw transportError;
+  });
+  const provider = createLocalAppleToolProvider({ runCommand });
+  const host = createAppleToolHost();
+
+  await withAppleToolProvider(provider, async () => {
+    await expect(
+      host.run({ tool: 'xctrace', args: ['list', 'devices'] }, controller.signal),
+    ).rejects.toBe(reason);
+  });
+});
+
+test('Apple tool availability preserves the exact abort reason when lookup rejects differently', async () => {
+  const reason = new Error('cancelled');
+  const transportError = new Error('provider lookup failed');
+  const controller = new AbortController();
+  const whichCommand = vi.fn(async () => {
+    controller.abort(reason);
+    throw transportError;
+  });
+  const provider = createLocalAppleToolProvider({ whichCommand });
+  const host = createAppleToolHost();
+
+  await withAppleToolProvider(provider, async () => {
+    await expect(host.isXcrunAvailable(controller.signal)).rejects.toBe(reason);
+  });
+});

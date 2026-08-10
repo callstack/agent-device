@@ -3,23 +3,30 @@ import type { AppleToolHost } from '@agent-device/contracts/platform';
 export function createAppleToolHost(): AppleToolHost {
   return Object.freeze({
     isXcrunAvailable: async (signal?: AbortSignal) => {
-      signal?.throwIfAborted();
-      const { resolveAppleToolProvider } = await import('./platforms/apple/core/tool-provider.ts');
-      signal?.throwIfAborted();
-      const available = await resolveAppleToolProvider().whichCommand('xcrun');
-      signal?.throwIfAborted();
+      const { resolveAppleToolProvider } = await awaitPreservingAbortReason(
+        async () => await import('./platforms/apple/core/tool-provider.ts'),
+        signal,
+      );
+      const available = await awaitPreservingAbortReason(
+        async () => await resolveAppleToolProvider().whichCommand('xcrun'),
+        signal,
+      );
       return available;
     },
     run: async (request, signal) => {
-      signal?.throwIfAborted();
-      const { runXcrun } = await import('./platforms/apple/core/tool-provider.ts');
-      signal?.throwIfAborted();
-      const result = await runXcrun([request.tool, ...request.args], {
-        allowFailure: request.allowFailure,
+      const { runXcrun } = await awaitPreservingAbortReason(
+        async () => await import('./platforms/apple/core/tool-provider.ts'),
         signal,
-        timeoutMs: request.timeoutMs,
-      });
-      signal?.throwIfAborted();
+      );
+      const result = await awaitPreservingAbortReason(
+        async () =>
+          await runXcrun([request.tool, ...request.args], {
+            allowFailure: request.allowFailure,
+            signal,
+            timeoutMs: request.timeoutMs,
+          }),
+        signal,
+      );
       return {
         stdout: result.stdout,
         stderr: result.stderr,
@@ -27,4 +34,19 @@ export function createAppleToolHost(): AppleToolHost {
       };
     },
   });
+}
+
+async function awaitPreservingAbortReason<T>(
+  operation: () => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  signal?.throwIfAborted();
+  try {
+    const result = await operation();
+    signal?.throwIfAborted();
+    return result;
+  } catch (error) {
+    signal?.throwIfAborted();
+    throw error;
+  }
 }
