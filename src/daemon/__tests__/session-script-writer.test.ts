@@ -681,10 +681,11 @@ test('write() publishes atomically: no stray temp file survives a successful rep
   expect(fs.readFileSync(outPath, 'utf8')).toContain(HEAL_COMPLETE_SENTINEL);
 });
 
-// --- #1533: an ABORTED ordinary authoring recording publishes nothing, even
-// once something re-arms `recordSession` behind the terminal status ---
+// --- #1533: an ABORTED ordinary authoring recording publishes nothing, and the
+// lifecycle alone decides that — a session handed to the writer still recording
+// is refused on the strength of its terminal status ---
 
-test('#1533: write() publishes nothing for an aborted authoring lifecycle whose recordSession was re-armed', () => {
+test('#1533: write() publishes nothing for an aborted authoring lifecycle that is still recording', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-authoring-aborted-');
   const sessionsDir = path.join(root, 'sessions');
   const writer = new SessionScriptWriter(sessionsDir);

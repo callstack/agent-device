@@ -148,13 +148,10 @@ export function isRepairCommittable(state: SessionScriptPublicationState): boole
 
 /**
  * #1533: terminal authoring failure — a second successful `open` ended the journey, so the
- * recording publishes NOTHING, forever. The authoring counterpart of an aborted repair.
- *
- * `aborted` is terminal in the same sense `repair{aborted}` is, but it used to be enforced only
- * by `abortAuthoringOnSecondOpen` clearing `session.recordSession` — inert by ordering, not by
- * construction. A later `--save-script` flag ingress re-armed that boolean while leaving the
- * status terminal, and a bare `close` then published the full session log through a writer that
- * only knew how to block repairs. Making the state itself answer the question is what closes it.
+ * recording publishes NOTHING, forever. The authoring counterpart of an aborted repair, and
+ * terminal in the same sense: the state itself answers the question, so no caller re-derives
+ * terminality from `session.recordSession`, which is an evidence-capture flag rather than a
+ * publication authorization.
  */
 export function isAuthoringAborted(state: SessionScriptPublicationState): boolean {
   return state.kind === 'authoring' && state.status === 'aborted';

@@ -95,14 +95,11 @@ function isRepairArmedWriteBlocked(session: SessionState): boolean {
  *
  * - not recording — the ordinary resting state of a session that never armed;
  * - a repair transaction that is committed or not yet committable (above);
- * - #1533: an ABORTED ordinary authoring lifecycle.
+ * - an ABORTED ordinary authoring lifecycle (#1533) — the authoring counterpart of that gate.
  *
- * The last one is the authoring counterpart of the repair gate, and it is not redundant with the
- * recording check even though `abortAuthoringOnSecondOpen` clears `recordSession`: something can
- * re-arm that boolean behind the terminal status, which is exactly what the `--save-script` flag
- * ingress used to do. `close`'s own refusal already promises the caller "Retry with plain close;
- * it will tear down the session without writing" — this is what makes that true from every path
- * reaching the writer (bare `close`, teardown, idle-reap, active publication).
+ * The last one is what makes `close`'s refusal ("Retry with plain close; it will tear down the
+ * session without writing") true from every path reaching the writer: bare `close`, teardown,
+ * idle-reap, active publication.
  */
 function isPublicationWriteBlocked(session: SessionState): boolean {
   if (!session.recordSession) return true;

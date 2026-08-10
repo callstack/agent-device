@@ -58,6 +58,23 @@ export function abortAuthoringOnSecondOpen(session: SessionState): void {
 }
 
 /**
+ * Whether a session carrying `--save-script` on THIS request is left recording.
+ *
+ * Recording is a property of the publication lifecycle, not a flag each surface may set on its
+ * own: an ABORTED authoring lifecycle is terminal (#1533), so the flag arms nothing on any
+ * surface that handles it — the re-open builder, the close finalizer, and the recorded-action
+ * ingress all get the same answer. Every other lifecycle keeps the old meaning: the flag arms
+ * recording, and an already-recording session stays recording without it.
+ */
+export function recordSessionAfterSaveScriptFlag(
+  session: SessionState,
+  saveScript: boolean,
+): boolean {
+  if (isAuthoringAborted(publicationState(session))) return false;
+  return session.recordSession === true || saveScript;
+}
+
+/**
  * The shared `--save-script` ingress on a RECORDED action (`open`/`close`; #1501 pins every
  * other command's raw flag closed at the router). Arms recording and applies target/force to
  * whichever lifecycle the session is in:
@@ -73,11 +90,8 @@ export function abortAuthoringOnSecondOpen(session: SessionState): void {
  * - `authoring` -> retarget under the #1258 per-target force rule (`resolveScriptTarget`).
  * - `repair` -> retarget the repair target the same way (a replayed step may carry the flag).
  *
- * #1533: an ABORTED authoring lifecycle is terminal and takes none of those branches. The flag
- * ingress used to re-arm `session.recordSession` for it — the second `open --save-script` that
- * caused the abort carries the flag into its own recorded action — leaving a session the caller
- * was told was aborted but that a bare `close` still published. Recording-time evidence stops at
- * the abort; there is nothing left to retarget or re-arm.
+ * - `authoring{aborted}` -> nothing. The lifecycle is terminal (#1533), so the flag neither
+ *   re-arms recording nor retargets: recording-time evidence stopped at the abort.
  */
 export function applyRecordedSaveScriptFlags(session: SessionState, flags: CommandFlags): void {
   if (!flags.saveScript) return;
