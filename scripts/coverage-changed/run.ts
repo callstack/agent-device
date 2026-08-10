@@ -23,6 +23,7 @@ import {
 
 const USAGE = 'Usage: pnpm check:coverage-changed [--base <ref>]\n';
 const LCOV_PATH = 'coverage/lcov.info';
+const GIT_DIFF_MAX_BUFFER_BYTES = 16 * 1024 * 1024;
 
 function fmtPct(pct: number | null): string {
   return pct === null ? 'n/a' : `${pct.toFixed(2)}%`;
@@ -73,6 +74,7 @@ export function run(argv: readonly string[], cwd?: string): number {
 
   const diff = runCmdSync('git', ['diff', '--unified=0', '--no-color', `${base}...HEAD`], {
     cwd: root,
+    maxBuffer: GIT_DIFF_MAX_BUFFER_BYTES,
   }).stdout;
   const result = computeChangedCoverage({
     diffs: parseUnifiedDiff(diff),
