@@ -94,7 +94,7 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSinglePointerFlingFallsBackToXCTestCoordinateDragWhenPrivateSynthesisFails \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTypeWithoutResolvedInputReturnsTypedFailureBeforeDispatchingText \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareTypeUsesTappedInputWhenSoftwareKeyboardIsHidden \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPenalizedCoordinateTapPreservesBareTypeWitnessWhenSoftwareKeyboardIsHidden \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPenalizedCoordinateTapOnNonTextControlDoesNotAuthorizeBareType \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareDelayedTypeFailsWhenTappedInputDisappearsMidCommand \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSynthesizedTextCommitProgressWalksExpectedPrefixOnly \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTextEntryTapWitnessIsBoundToTargetIdentity \

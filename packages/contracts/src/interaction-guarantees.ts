@@ -136,6 +136,7 @@ export type InteractionPathContract = {
 };
 
 const GAPS_UMBRELLA_ISSUE = 'https://github.com/callstack/agent-device/issues/1081';
+const PARENT_OWNED_TOUCH_POINT_GAP_ISSUE = 'https://github.com/callstack/agent-device/issues/1718';
 
 // Every path shares the SAME cell by construction: response payloads have one
 // construction site (ADR 0011 Layer 2), and the hand-rolled-literal guard test
@@ -309,7 +310,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'waived',
         reason:
           'gap: the direct runner path has the matched element but no daemon snapshot tree from which to classify independently interactive descendants.',
-        trackingIssue: GAPS_UMBRELLA_ISSUE,
+        trackingIssue: PARENT_OWNED_TOUCH_POINT_GAP_ISSUE,
       },
       offscreen: {
         // Decision: TapPointPolicy (pure geometry, parity-tested against the
@@ -486,7 +487,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'waived',
         reason:
           'gap: Maestro compatibility executes the matched element center runner-side without a daemon snapshot tree of independently interactive descendants.',
-        trackingIssue: GAPS_UMBRELLA_ISSUE,
+        trackingIssue: PARENT_OWNED_TOUCH_POINT_GAP_ISSUE,
       },
       offscreen: {
         // hasTappableFrame keeps two path-specific choices (empty element

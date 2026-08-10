@@ -68,10 +68,7 @@ extension RunnerTests {
     // Dispatching text through XCTest without a resolved target or evidence of a focused
     // responder records a test failure. That tears down the long-lived runner and turns a
     // single invalid request into a restart cascade, so fail before entering that channel.
-    guard initialTarget != nil
-      || shouldUseSynthesizedFirstResponderType
-      || (activeTarget.prefersFocusedElement && isKeyboardVisible(app: app))
-    else {
+    guard initialTarget != nil || (activeTarget.prefersFocusedElement && isKeyboardVisible(app: app)) else {
       logTextEntryPhase(
         commandId: commandId,
         phase: "total",
@@ -110,27 +107,27 @@ extension RunnerTests {
     func typeIntoCurrentTarget(_ value: String) -> (element: XCUIElement?, dispatched: Bool, failure: TextEntryFailure?) {
 #if os(iOS)
       if shouldUseSynthesizedFirstResponderType {
-        let currentTarget = resolveTextEntryElement(app: app, target: activeTarget)
+        guard let currentTarget = resolveTextEntryElement(app: app, target: activeTarget) else {
+          return (nil, false, .notFocused)
+        }
         textEntryRoute = "synthesized-first-responder"
         NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=synthesized-first-responder")
         let textBefore = editableTextValue(for: currentTarget, treatingPlaceholderAsEmpty: true)
         switch synthesizer.enterText(app: app, text: value, replacingExistingText: false) {
         case .continueTyping:
-          if let currentTarget {
-            // No refresh point: like the tap-witness target itself, the commit wait must observe
-            // only the element the tap selected, never rediscover a different field.
-            awaitSynthesizedFirstResponderCommit(
-              app: app,
-              target: TextEntryTarget(
-                element: currentTarget,
-                refreshPoint: nil,
-                prefersFocusedElement: false,
-                fromTapWitness: true
-              ),
-              textBefore: textBefore,
-              typedText: value
-            )
-          }
+          // No refresh point: like the tap-witness target itself, the commit wait must observe
+          // only the element the tap selected, never rediscover a different field.
+          awaitSynthesizedFirstResponderCommit(
+            app: app,
+            target: TextEntryTarget(
+              element: currentTarget,
+              refreshPoint: nil,
+              prefersFocusedElement: false,
+              fromTapWitness: true
+            ),
+            textBefore: textBefore,
+            typedText: value
+          )
           return (currentTarget, true, nil)
         case .fallback:
           return (nil, false, .synthesisUnavailable)

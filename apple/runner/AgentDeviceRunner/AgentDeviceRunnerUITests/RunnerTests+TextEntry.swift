@@ -91,12 +91,7 @@ extension RunnerTests {
   }
 
   struct TextEntryTapWitness {
-    enum Target {
-      case element(XCUIElement)
-      case unresolvedFirstResponder
-    }
-
-    let target: Target
+    let element: XCUIElement
     let bundleId: String?
     let processIdentifier: Int?
 
@@ -156,40 +151,9 @@ extension RunnerTests {
       return
     }
     textEntryTapWitness = TextEntryTapWitness(
-      target: .element(element),
+      element: element,
       bundleId: currentBundleId,
       processIdentifier: currentAppProcessIdentifier
-    )
-  }
-
-  func rememberCoordinateTextEntryTap(
-    _ element: XCUIElement?,
-    xCTestProbeSkipped: Bool
-  ) {
-    if let element {
-      rememberTextEntryTap(element)
-      return
-    }
-    guard xCTestProbeSkipped else {
-      clearRememberedTextEntryTap()
-      return
-    }
-    guard
-      let bundleId = currentBundleId?.trimmingCharacters(in: .whitespacesAndNewlines),
-      !bundleId.isEmpty,
-      let processIdentifier = currentAppProcessIdentifier,
-      processIdentifier > 0
-    else {
-      clearRememberedTextEntryTap()
-      return
-    }
-    // An unhealthy XCTest channel cannot safely resolve the element under a coordinate, but the
-    // successful tap still scopes the immediately following bare `type` to the current process.
-    // Keep that evidence one-shot and distinguish it from a failed text-input probe.
-    textEntryTapWitness = TextEntryTapWitness(
-      target: .unresolvedFirstResponder,
-      bundleId: bundleId,
-      processIdentifier: processIdentifier
     )
   }
 
@@ -210,32 +174,23 @@ extension RunnerTests {
     ) else {
       return nil
     }
-    switch witness.target {
-    case .element(let element):
-      // XCUIElement is query-backed rather than a stable node identity. A same-identifier field
-      // introduced by app-side navigation between tap and this immediate type can therefore
-      // re-resolve here; keep the witness one-shot and fail closed on every observable identity
-      // boundary instead of using frame equality, which would reject legitimate layout changes.
-      guard safely("LAST_TAPPED_TEXT_INPUT_EXISTS", false, { element.exists }) else {
-        return nil
-      }
-      // Keep the target scoped to the element that the preceding tap actually selected. Do not
-      // attach a refresh point: if that element disappeared, bare type must fail closed rather
-      // than rediscovering a different field or dispatching unscoped app.typeText.
-      return TextEntryTarget(
-        element: element,
-        refreshPoint: nil,
-        prefersFocusedElement: false,
-        fromTapWitness: true
-      )
-    case .unresolvedFirstResponder:
-      return TextEntryTarget(
-        element: nil,
-        refreshPoint: nil,
-        prefersFocusedElement: false,
-        fromTapWitness: true
-      )
+    let element = witness.element
+    // XCUIElement is query-backed rather than a stable node identity. A same-identifier field
+    // introduced by app-side navigation between tap and this immediate type can therefore
+    // re-resolve here; keep the witness one-shot and fail closed on every observable identity
+    // boundary instead of using frame equality, which would reject legitimate layout changes.
+    guard safely("LAST_TAPPED_TEXT_INPUT_EXISTS", false, { element.exists }) else {
+      return nil
     }
+    // Keep the target scoped to the element that the preceding tap actually selected. Do not
+    // attach a refresh point: if that element disappeared, bare type must fail closed rather
+    // than rediscovering a different field or dispatching unscoped app.typeText.
+    return TextEntryTarget(
+      element: element,
+      refreshPoint: nil,
+      prefersFocusedElement: false,
+      fromTapWitness: true
+    )
   }
 
   func stabilizeTextInputBeforeTyping(

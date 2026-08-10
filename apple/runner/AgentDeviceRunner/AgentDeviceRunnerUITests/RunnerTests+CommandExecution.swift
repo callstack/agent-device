@@ -1808,6 +1808,7 @@ extension RunnerTests {
         if !xCTestTextInputProbeSkipped {
           textInput = textInputAt(app: activeApp, x: x, y: y)
         } else {
+          // A process-scoped tap cannot authorize later typing without concrete element identity.
           textInput = nil
           NSLog(
             "AGENT_DEVICE_RUNNER_COORDINATE_TAP_TEXT_INPUT_PROBE_SKIPPED bundle=%@",
@@ -1826,10 +1827,7 @@ extension RunnerTests {
           }
           if case .performed = outcome {
             logSynthesizedGesturePolicyDecision(kind: policyKind, context: context, fallbackAttempted: false)
-            rememberCoordinateTextEntryTap(
-              textInput,
-              xCTestProbeSkipped: xCTestTextInputProbeSkipped
-            )
+            rememberTextEntryTap(textInput)
             return gestureResponse(message: "tapped", timing: timing)
           }
           logSynthesizedGesturePolicyDecision(kind: policyKind, context: context, fallbackAttempted: true)
@@ -1841,10 +1839,7 @@ extension RunnerTests {
           clearRememberedTextEntryTap()
           return response
         }
-        rememberCoordinateTextEntryTap(
-          textInput,
-          xCTestProbeSkipped: xCTestTextInputProbeSkipped
-        )
+        rememberTextEntryTap(textInput)
         return gestureResponse(
           message: "tapped",
           timing: timing,
