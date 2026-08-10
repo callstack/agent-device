@@ -9,6 +9,7 @@ export type JsonSchema = {
   items?: JsonSchema;
   prefixItems?: readonly JsonSchema[];
   oneOf?: readonly JsonSchema[];
+  not?: JsonSchema;
   enum?: readonly unknown[];
   const?: unknown;
   minimum?: number;

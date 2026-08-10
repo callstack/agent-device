@@ -41,6 +41,10 @@ function constSchema(value: string): JsonSchema {
   return { type: 'string', const: value };
 }
 
+function nullableStringSchema(description?: string): JsonSchema {
+  return { type: ['string', 'null'], ...(description ? { description } : {}) };
+}
+
 function objectSchema(
   properties: Record<string, JsonSchema>,
   required: readonly string[] = [],
@@ -325,19 +329,66 @@ const tapInteractionResponseDataSchema = interactionResponseDataSchema({
   },
 });
 
+const fillResponseProperties = {
+  text: stringSchema('Text submitted to the field.'),
+  delayMs: numberSchema('Delay between typed characters in milliseconds.'),
+  evidence: interactionEvidenceSchema,
+  settle: settleObservationSchema,
+};
+
+const fillVerificationTargetSchema = objectSchema(
+  {
+    resourceId: nullableStringSchema('Android resource id of the exact field that changed.'),
+    className: nullableStringSchema('Android class name of the exact field that changed.'),
+    packageName: nullableStringSchema('Android package name that owns the exact field.'),
+    rect: objectSchema(
+      {
+        x: numberSchema(),
+        y: numberSchema(),
+        width: numberSchema(),
+        height: numberSchema(),
+      },
+      ['x', 'y', 'width', 'height'],
+      'Screen-space rectangle of the exact field that changed.',
+    ),
+  },
+  ['resourceId', 'className', 'packageName', 'rect'],
+  'Target identity captured before fill and matched after fill.',
+);
+
+const confirmedFillResponseSchema: JsonSchema = {
+  ...interactionResponseDataSchema({
+    properties: fillResponseProperties,
+    required: ['text'],
+  }),
+  // The public result contract omits verification evidence on an ordinary
+  // confirmed fill. Keep this branch disjoint from the unconfirmed branch
+  // without making the response strict to unrelated additive fields.
+  not: objectSchema({}, ['verification']),
+};
+
+const unconfirmedFillResponseSchema = interactionResponseDataSchema({
+  properties: {
+    ...fillResponseProperties,
+    verification: constSchema('unconfirmed'),
+    requested: stringSchema('Literal text requested by the fill command.'),
+    before: nullableStringSchema('Raw target text captured before the fill.'),
+    after: nullableStringSchema('Raw target text captured after the fill.'),
+    target: fillVerificationTargetSchema,
+  },
+  required: ['text', 'verification', 'requested', 'before', 'after', 'target'],
+});
+
 export const COMMAND_OUTPUT_SCHEMAS = {
   // buildInteractionResponseData public payloads for interaction commands.
   press: tapInteractionResponseDataSchema,
   click: tapInteractionResponseDataSchema,
-  fill: interactionResponseDataSchema({
-    properties: {
-      text: stringSchema('Text submitted to the field.'),
-      delayMs: numberSchema('Delay between typed characters in milliseconds.'),
-      evidence: interactionEvidenceSchema,
-      settle: settleObservationSchema,
-    },
-    required: ['text'],
-  }),
+  fill: {
+    type: 'object',
+    description:
+      'Fill response. Android may return target-bound unconfirmed evidence when the exact app-owned field changed but formatting prevented raw equality.',
+    oneOf: [confirmedFillResponseSchema, unconfirmedFillResponseSchema],
+  },
   longpress: interactionResponseDataSchema({
     properties: {
       durationMs: numberSchema(),

@@ -17,9 +17,11 @@ export function validateAgainstSchema(value: unknown, schema: JsonSchema): strin
 }
 
 function collectErrors(value: unknown, schema: JsonSchema, path: string): string[] {
-  if (schema.oneOf) return oneOfErrors(value, schema.oneOf, path);
-
-  const errors = [...constErrors(value, schema, path), ...enumErrors(value, schema, path)];
+  const errors = [
+    ...constErrors(value, schema, path),
+    ...enumErrors(value, schema, path),
+    ...notErrors(value, schema, path),
+  ];
 
   if (schema.type !== undefined && !matchesType(value, schema.type)) {
     errors.push(
@@ -28,8 +30,14 @@ function collectErrors(value: unknown, schema: JsonSchema, path: string): string
     return errors;
   }
 
+  if (schema.oneOf) errors.push(...oneOfErrors(value, schema.oneOf, path));
   errors.push(...objectErrors(value, schema, path), ...arrayErrors(value, schema, path));
   return errors;
+}
+
+function notErrors(value: unknown, schema: JsonSchema, path: string): string[] {
+  if (!schema.not || collectErrors(value, schema.not, path).length > 0) return [];
+  return [`${path}: matched forbidden schema`];
 }
 
 function oneOfErrors(value: unknown, branches: readonly JsonSchema[], path: string): string[] {

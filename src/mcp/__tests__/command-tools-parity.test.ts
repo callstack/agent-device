@@ -7,6 +7,7 @@ import type { AgentDeviceDaemonTransport } from '@agent-device/contracts/client'
 import type { AgentDeviceClient } from '../../client/client-types.ts';
 import type { CommandExecutionResult } from '../../commands/command-surface.ts';
 import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts';
+import { COMMAND_OUTPUT_SCHEMAS } from '../command-output-schemas.ts';
 import { validateAgainstSchema } from './output-schema-validator.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
@@ -62,6 +63,62 @@ test('MCP collection results use object envelopes without changing object result
     assert.ok(schema, `${name} advertises an output schema`);
     assert.deepEqual(validateAgainstSchema(result.structuredContent, schema), []);
   }
+});
+
+test('MCP fill projects target-bound unconfirmed verification through its advertised schema', async () => {
+  const fillResult = {
+    targetKind: 'point',
+    x: 100,
+    y: 50,
+    text: '0501234567',
+    verification: 'unconfirmed',
+    requested: '0501234567',
+    before: '12 123 4567',
+    after: '05 012 3456',
+    target: {
+      resourceId: 'com.example:id/phone',
+      className: 'android.widget.EditText',
+      packageName: 'com.example',
+      rect: { x: 0, y: 0, width: 200, height: 100 },
+    },
+  } satisfies CommandExecutionResult<'fill'>;
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async () => fillResult,
+  });
+
+  const fillTool = listCommandTools().find((tool) => tool.name === 'fill');
+  assert.ok(fillTool?.outputSchema);
+  assert.equal(fillTool.outputSchema, COMMAND_OUTPUT_SCHEMAS.fill);
+  const unconfirmedBranch = fillTool.outputSchema.oneOf?.find(
+    (branch) =>
+      (branch.properties?.verification as { const?: unknown } | undefined)?.const === 'unconfirmed',
+  );
+  assert.ok(unconfirmedBranch, 'fill schema must advertise the unconfirmed verification branch');
+  assert.deepEqual(unconfirmedBranch.required, [
+    'targetKind',
+    'text',
+    'verification',
+    'requested',
+    'before',
+    'after',
+    'target',
+  ]);
+  assert.deepEqual(unconfirmedBranch.properties?.target?.required, [
+    'resourceId',
+    'className',
+    'packageName',
+    'rect',
+  ]);
+
+  const result = await executor.execute('fill', {
+    target: { kind: 'point', x: 100, y: 50 },
+    text: fillResult.requested,
+  });
+  assert.deepEqual(result.structuredContent, fillResult);
+  assert.deepEqual(validateAgainstSchema(result.structuredContent, fillTool.outputSchema), []);
+  const { target: _target, ...missingTarget } = fillResult;
+  assert.notDeepEqual(validateAgainstSchema(missingTarget, fillTool.outputSchema), []);
 });
 
 test('MCP applies config-backed command defaults with explicit-input precedence and applicability', async () => {
