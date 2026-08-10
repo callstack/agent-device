@@ -116,6 +116,20 @@ jobs:
         # rather than in its own job so the two can never be green independently.
         run: pnpm depgraph:test
 
+      # The TMPDIR redirection both test lanes rely on (#1593/#1595). Its own tests ran
+      # in no CI job at all until the #1429 gate manifest found them unowned.
+      #
+      # Deliberately NOT in the Coverage job next to `check:tmpdir-leaks`, where the
+      # subject matter would put it: vitest-tmpdir-global-setup.test.ts proves the
+      # lifecycle by spawning a real nested `vitest run`, and the Coverage lane already
+      # loses runs to `[vitest-pool]: Worker forks emitted error` when a fork is slow to
+      # terminate (observed on main at 18291ba8, unrelated to this gate). Starting a
+      # nested Vitest seconds before the full instrumented suite is a contention risk
+      # with nothing to gain — the manifest proves ownership per unit of work, so any
+      # lane satisfies it.
+      - name: Check the tmpdir redirection model
+        run: pnpm check:tmpdir-leaks:test
+
   affected-selector:
     name: Affected-check Selector
     runs-on: ubuntu-latest
@@ -265,13 +279,6 @@ jobs:
       # must fail before the suite runs rather than quietly keeping its retry.
       - name: Check contention retry policy
         run: pnpm check:contention-retry
-
-      # The TMPDIR redirection both test lanes rely on (#1593/#1595). Its own
-      # tests ran in no CI job until the #1429 gate manifest found them
-      # unowned; they belong here, next to the other policy self-tests that
-      # must pass before the suite they govern runs.
-      - name: Check the tmpdir redirection model
-        run: pnpm check:tmpdir-leaks:test
 
       # Wrapped in the single-retry policy (#1419): a timeout-shaped failure in
       # an enumerated contention-flaky file reruns that file once and reports it
