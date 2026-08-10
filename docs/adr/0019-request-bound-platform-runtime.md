@@ -2,12 +2,13 @@
 
 ## Status
 
-Accepted for staged adoption (2026-08-09). Checkpoint outcome: **pending**. Only the
-platform-module substrate and complete `devices`, `logs`, and `network` command cutovers are
-authorized before the checkpoint. Daemon-owned generic session teardown may invoke the neutral
-app-log disposal contract without changing `close`'s legacy platform-execution owner. If another
-command's platform adapter must change, this Status must name its complete unit before substrate work
-begins. Broader migration requires this Status to record **continue**.
+Accepted for staged adoption (2026-08-09). Checkpoint outcome: **revise** (2026-08-10), measured from
+baseline `44c298d7f3a0ef84bc47f34c54d88b6c9eeb0df2` to clean committed checkpoint
+`99f5af1b7bb8fa62977a6a88b7aed6b934c8a1f3`. The platform-module substrate and complete `devices`,
+`logs`, and `network` command cutovers remain accepted, coherent units. Broader command migration is
+not authorized: the architecture, ownership, laziness, startup, and behavior evidence passed, but all
+four hard package-size thresholds failed. An explicit packaging/budget decision and a clean rerun of
+this checkpoint are required before this Status may record **continue**.
 
 During the `devices` unit, doctor discovery, replay-test sharding, Apple simulator hints, and Android
 emulator lifecycle keep their existing command execution owners while consuming the same injected,
@@ -472,6 +473,81 @@ mechanics rather than the permitted neutral live handle; a persisted record bypa
 neutral envelope or facet-owned descriptor codec, or contains raw live mechanics; implementation
 laziness cannot be preserved; R7/R10/type-cycle pressure grows; or the landed slices add more daemon
 platform ownership than they remove.
+
+#### Checkpoint result: revise (2026-08-10)
+
+The checkpoint compared `44c298d7f3a0ef84bc47f34c54d88b6c9eeb0df2` with
+`99f5af1b7bb8fa62977a6a88b7aed6b934c8a1f3` on the same host and toolchain. The clean committed tree
+passed the architectural and behavioral checks:
+
+- `pnpm check:layering` passed 117 structural tests and the real-tree scan over 1,141 source files.
+  R13 owns exactly six private implementation-lazy family packages behind one composition root;
+  R14 and R15 leave one typed route for `logs` and `network`; R11 reports 16 workspace packages, 38
+  exported subpaths, and zero root or sibling-package back-imports. The focused planted-red command
+  `node --experimental-strip-types --test scripts/layering/platform-package-policy.test.ts
+  scripts/layering/logs-runtime-cutover-policy.test.ts
+  scripts/layering/network-runtime-cutover-policy.test.ts` passed 28 tests after proving eager imports,
+  back-edges, duplicate/neither routes, legacy admission, and narrowed-runtime repairs red.
+- `pnpm typecheck` independently built declarations for contracts, all six platform packages, and the
+  provider packages before checking the root and examples. `pnpm check:affected --run` passed 3,968
+  affected tests with 87.70% changed-line coverage, plus package, layering, fallow,
+  integration-progress, provider, and replay-compatibility gates. A focused 17-file runtime/lifetime
+  run passed 87 tests.
+- Coverage includes six local inventory/runtime owners, the three production provider inventory IDs
+  (`browserstack`, `aws-device-farm`, `limrun`), and the independently enumerated eight-cell Apple
+  table: iOS simulator, iOS CoreDevice physical, iOS XCTest physical, iPadOS, tvOS, macOS, visionOS,
+  and the watchOS sentinel. Provider ownership is fail-closed; provider-authoritative inventory and
+  exact-owner runtime tests prove no provider-to-local fallback.
+- Request-binding tests prove one cached broad binding, narrowed non-disposable projections,
+  reverse-order exactly-once disposal, adopted-handle survival, and primary-error precedence.
+  App-log contract/daemon/provider tests cover pending transfer, every persist/adopt gap,
+  descriptor-version and invalid-envelope retention, exact-owner reattachment, cleanup-only recovery,
+  descriptor-only cleanup, fencing, idempotent teardown, and cleanup error precedence.
+- Static composition evaluates no host or family mechanics. Provider-authoritative inventory loads no
+  local host, selected discovery/binding evaluates only its family, and façades keep implementation
+  imports inside deferred loaders. No emitted module is duplicated. The controlled 15-run medians also
+  passed the startup threshold: `--version` was 30.1 ms to 31.7 ms (+1.6 ms) and `--help` was 46.5 ms
+  to 46.8 ms (+0.4 ms), both below `max(5 ms, 10%)`.
+- The locked daemon-platform import command
+  `rg -n "(?:from\\s+|import\\()(['\"])(?:\\.\\./)+platforms/" src/daemon -g '*.ts' -g
+  '!**/__tests__/**' -g '!*.test.ts'` decreased from 141 to 128. Checkpoint-owned `logs`/`network`
+  platform decision lines decreased from 14 to zero. The baseline-to-checkpoint range diff removed 24
+  matching platform-decision lines and added one (net -23); this is a range-diff count, not a newly
+  invented absolute denominator. Legacy behavior-indirection families decreased from four to three:
+  the app-log tag/map is gone while performance, recording, and provider-key indirection remain.
+- R7/R10 remain at 23 writer-owned `SessionState` fields and 29 owner claims, with all 34 fields
+  classified. The largest type cycle decreased from 47 to 46; the two external production
+  `daemon/types.ts` importers are unchanged.
+- Final adversarial `claude -p` review found one P1—bounded-tail parsing lost absolute app-log line
+  numbers. The network unit fixed it and reran its parity evidence; the final review reported no
+  remaining P0/P1 findings.
+
+The same-host size comparison used `pnpm build`, then
+`node scripts/size-report.mjs --json <report>.json --startup-runs 15` for each clean snapshot and
+`node scripts/size-report.mjs --compare <base-report>.json --startup-runs 15` for the checkpoint.
+Every package-size metric exceeded the hard +3% limit:
+
+| Metric | Baseline | Checkpoint | Change | Amount beyond +3% |
+| --- | ---: | ---: | ---: | ---: |
+| Raw JavaScript | 2,036,067 B | 2,121,980 B | +4.22% | 24,831 B |
+| Gzipped JavaScript | 659,646 B | 690,882 B | +4.74% | 11,447 B |
+| npm tarball | 797,027 B | 851,261 B | +6.80% | 30,324 B |
+| npm unpacked | 2,781,186 B | 2,913,110 B | +4.74% | 48,489 B |
+
+The independently reported stack-local deltas were:
+
+| Slice | Raw JS | Gzip JS | Tarball | Unpacked |
+| --- | ---: | ---: | ---: | ---: |
+| `devices` | +10,398 B | +4,581 B | +4,165 B | +11,244 B |
+| `logs` | +69,775 B | +23,407 B | +22,870 B | +81,678 B |
+| `network` | +5,740 B | +3,248 B | +2,007 B | +9,114 B |
+
+Review found no duplicated emitted platform implementation and no bounded trimming that brings all
+four aggregate metrics below the limit without weakening accepted behavior. Removing private Limrun
+declarations could save about 14.9 kB unpacked only, so it does not resolve the hard failure. The
+required revision is therefore a deliberate packaging/budget decision, not an implementation-laziness
+waiver or a silent threshold increase. Until that decision is accepted and this checkpoint reruns on
+a clean commit, broader migration remains prohibited.
 
 The tracking issue owns command order, PR/file lists, test-only compatibility fixtures, exact
 benchmark commands and thresholds, raw evidence, and reviewers. Temporary fixtures never authorize
