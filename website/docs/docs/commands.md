@@ -338,7 +338,9 @@ agent-device get attrs @e1
   controls are not separate elements still lists them. It is iOS-simulator-only and exists for
   planning, not invocation: there is no API to trigger a named action, so reach the affordance
   through the element's detail screen, the same control exposed as a labeled element elsewhere, or
-  coordinates from its rect. See [Snapshots](/docs/snapshots) for the full constraints.
+  coordinates from its rect. It is mutually exclusive with `--raw`, which takes a capture path that
+  cannot carry custom actions: the pair is rejected as `INVALID_ARGS` before any device work. See
+  [Snapshots](/docs/snapshots) for the full constraints.
 - `diff snapshot` compares the current snapshot with the previous session baseline and then updates baseline.
 - `snapshot --diff` is an alias for `diff snapshot`.
 - Default snapshot text is an agent-facing, token-efficient view for planning and targeting actions. It may collapse helper/accessibility noise; use `--raw` or `--json` when you need the full provider tree.

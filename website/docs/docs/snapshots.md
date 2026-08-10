@@ -40,9 +40,9 @@ agent-device snapshot --diff             # Alias for the same diff operation
 - Each merged element costs one accessibility round trip, so the pass is opt-in and bounded. When it
   cannot read every candidate, the response says how many it read — an absent list on an unread
   element is not evidence that it has none.
-- Do not combine it with `--raw`. The raw diagnostic strategy stays tree-first, and only the private
-  accessibility backend can read custom actions, so `--raw --actions` returns a raw tree without
-  them.
+- Mutually exclusive with `--raw`. Custom actions are only readable through the private-AX capture
+  path, which the raw diagnostic strategy does not take, so the pair is rejected as `INVALID_ARGS`
+  before any device work — on the CLI, the Node client, and MCP alike. Choose one or the other.
 
 ## Efficient snapshot usage
 
