@@ -141,7 +141,17 @@
     "src/remote/upload-client.ts#shouldRetryDirectUpload": "sha256:29059f076ff7f2b9540ad15408be48792b2d63a601ef2b9fb2d54f5576d49bbd",
     "src/remote/upload-client.ts#tryDirectUploadWithResume": "sha256:0f57cf9bb1eefa3b988e5d723b2eebf2c4a622c3f7c808f35eae070771acafa6",
     "src/remote/upload-client.ts#uploadDirectArtifact": "sha256:5f26f8f7b6ada2fe2089a214fb8350e3a9f65725212952c17f6787b3ca8fe232",
-    "src/remote/upload-client.ts#uploadLegacyArtifact": "sha256:f3ccab9c5ba18fc2f2000ea8e2a4bbb3cc97f7b50f6111192e513013f635cdd7"
+    "src/remote/upload-client.ts#uploadLegacyArtifact": "sha256:f3ccab9c5ba18fc2f2000ea8e2a4bbb3cc97f7b50f6111192e513013f635cdd7",
+    "src/remote/upload-stream.ts#MAX_UPLOAD_REDIRECTS": "sha256:12ff46dfe33a1dce95bdb79c90c17a3ba4f3919e7dc4b3a1b04590fff430f79f",
+    "src/remote/upload-stream.ts#UploadStreamResponse": "sha256:724e284c2a6bd7b4b3a49b1d8c61c8923d6cc24777c3d76224a69d190e56adce",
+    "src/remote/upload-stream.ts#buildUploadRequestHeaders": "sha256:827576b13a9f3e6cea445119a6a29b2ac5eaa23b66436cf810b2d09765c82a4c",
+    "src/remote/upload-stream.ts#firstHeaderValue": "sha256:f6dba645814124f2ea2267e64a5d27c3bcff6dfc00ed692946180fc20e3d41de",
+    "src/remote/upload-stream.ts#isUploadRedirectStatus": "sha256:4b18a4f97a02a7a609eba85d7d657b3cd2142d5ba6662a9b08cf4c0c9ed02006",
+    "src/remote/upload-stream.ts#isUploadResumeStatus": "sha256:9f730ccd1c3401c326f8df67d1fd8243fef757357a38a1f53736df2b90bd8fdc",
+    "src/remote/upload-stream.ts#parseNonNegativeIntegerHeader": "sha256:5cbe9c6994459d673d988a51407e65556e28175b187ce0a9d27cbb6331962834",
+    "src/remote/upload-stream.ts#parseUploadResumeOffset": "sha256:297184ea22a6dc1cda9aee17034122ae0ea2f43d0355647f6fcf02f3f4b5ca0e",
+    "src/remote/upload-stream.ts#streamFileToHttpRequest": "sha256:eaf2ea49957034f6a7e17d34092dc6cb1998812bddfd68381a0ac34d8a2de58c",
+    "src/remote/upload-stream.ts#streamFileToHttpRequestAttempt": "sha256:da39a79fa7c1f81e55caf613eedc347c0f3a9a9711b265a4db185677532d9552"
   },
   "compatibleChanges": []
 }

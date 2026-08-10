@@ -213,6 +213,53 @@ const MUTATIONS: readonly WireMutation[] = [
     from: 'artifacts/',
     to: 'artifact/',
   },
+  // The client half of the resumable 308 contract. Listing the daemon's
+  // handleResumableUpload proves it still PRODUCES 308; these prove the client
+  // still consumes the released one — which offset headers it accepts, how it
+  // reads `Range`, what `Content-Range` a resumed PUT emits, and that 308 is
+  // still the status it treats as "continue".
+  {
+    breakClass: '308 consumer: the client stops accepting a released offset header',
+    file: 'src/remote/upload-stream.ts',
+    name: 'parseUploadResumeOffset',
+    from: "headers['x-upload-offset'] ?? headers['upload-offset']",
+    to: "headers['x-upload-offset']",
+  },
+  {
+    breakClass: '308 consumer: Range-header offset parsing narrows',
+    file: 'src/remote/upload-stream.ts',
+    name: 'parseUploadResumeOffset',
+    from: '/^bytes=0-(\\d+)$/',
+    to: '/^bytes 0-(\\d+)$/',
+  },
+  {
+    breakClass: '308 consumer: the resumed request emits a different Content-Range',
+    file: 'src/remote/upload-stream.ts',
+    name: 'buildUploadRequestHeaders',
+    from: "'content-range': `bytes ${startOffset}-${payloadSize - 1}/${payloadSize}`,",
+    to: "'content-range': `bytes=${startOffset}-${payloadSize - 1}/${payloadSize}`,",
+  },
+  {
+    breakClass: '308 consumer: the client stops treating 308 as resume-and-continue',
+    file: 'src/remote/upload-stream.ts',
+    name: 'isUploadResumeStatus',
+    from: 'statusCode === 308',
+    to: 'statusCode === 208',
+  },
+  {
+    breakClass: '308 consumer: the streamed response shape a caller parses narrows',
+    file: 'src/remote/upload-stream.ts',
+    name: 'UploadStreamResponse',
+    from: 'statusMessage?: string;',
+    to: '',
+  },
+  {
+    breakClass: '308 consumer: header value coercion drops a released form',
+    file: 'src/remote/upload-stream.ts',
+    name: 'parseNonNegativeIntegerHeader',
+    from: 'firstHeaderValue(value)',
+    to: 'undefined',
+  },
 ];
 
 for (const mutation of MUTATIONS) {

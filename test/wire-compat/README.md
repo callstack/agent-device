@@ -33,12 +33,12 @@ place version skew is designed in was the one place with no gate.
 
 The mutation lane exists because the first two answer "the manifest describes
 today's source", never "the manifest describes the *right* source". A gate can
-list 141 declarations, pass every check, and still miss the seam that breaks a
+list 151 declarations, pass every check, and still miss the seam that breaks a
 skewed peer — which is exactly what review found in the first version of this
 directory. Each case there mutates one real listed declaration the way a real
 break would (method renamed, envelope unframed, auth header dropped, upload
 ticket field renamed, 308 downgraded, artifact route narrowed, health-version
-check defeated) and asserts the
+check defeated, 308 resume contract broken on the client side) and asserts the
 digest moves. Two guards keep them honest: the mutation is applied **inside the
 declaration's own span** so it cannot silently hit a sibling that shares the
 substring, and the unmutated digest must equal the ledger's so the case is
@@ -96,13 +96,19 @@ admits the gap (AGENTS.md, "a registry claim is not a semantic check").
 | `/rpc` | method sets, request projections, `createRpcError`, envelope serializers | `buildHttpRpcPayload`, lease-method mapping, `parseDaemonHttpResponseBody`, `toDaemonHttpRpcError` |
 | `/health` | `DaemonHealthPayload`, `buildDaemonHealthPayload` | `RemoteDaemonHealth`, `readHealthPayload`, `readRemoteDaemonHealth` |
 | `/upload` | route resolver, preflight/finalize/308 handlers, body parsers | `UploadPreflightResponse`, `parseUploadPreflightResult`, direct/legacy/finalize senders, `PreparedUploadArtifact` |
+| `/upload` resume (308) | `handleResumableUpload` emits 308 + offset headers | `isUploadResumeStatus`, `parseUploadResumeOffset`, `buildUploadRequestHeaders`, `streamFileToHttpRequestAttempt` |
 | `/artifacts/*` | route resolver, inventory and download framing | `buildDaemonArtifactUrl`, `downloadRemoteArtifact`, materialization |
 
-A client-only change breaks an older daemon just as surely as the reverse — and the `/health`
-consumer is the sharpest case of all, since narrowing `readHealthPayload` or `readRemoteDaemonHealth`
-disables the very refusal ADR 0006 was written to guarantee. Both took two review rounds to get
-right: the first version digested only payload *types*, the second still omitted the auxiliary
-consumers while claiming both sides.
+A client-only change breaks an older daemon just as surely as the reverse. Two consumers are the
+sharpest cases: narrowing `readHealthPayload` or `readRemoteDaemonHealth` disables the very refusal
+ADR 0006 was written to guarantee, and narrowing `parseUploadResumeOffset` or
+`buildUploadRequestHeaders` breaks resume against a daemon still emitting the released 308 contract.
+
+That took three review rounds, and the pattern is worth naming: each round the coverage sentence was
+written ahead of the coverage. Round one digested only payload *types*; round two added producers but
+left the auxiliary consumers out; round three still had the daemon *producing* 308 with nothing
+proving the client still *consumes* it. Prefer the table above and the `uncovered` notes over any
+prose claim — those are checkable against `surface.ts`, and a sentence is not.
 
 The one remaining gap: `createDaemonHttpServer`, the 200-line dispatcher, and the `/health` and
 `/rpc` path literals inside it. Everything it dispatches *with* is digested individually, so what is

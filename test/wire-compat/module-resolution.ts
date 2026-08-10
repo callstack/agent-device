@@ -56,6 +56,8 @@ const TS_GLOBALS = new Set([
   'Required',
   'ReturnType',
   'Set',
+  'URL',
+  'URLSearchParams',
   'Uint8Array',
   'WeakMap',
 ]);

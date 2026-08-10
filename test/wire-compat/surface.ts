@@ -54,6 +54,7 @@ const CLIENT_PROGRESS = 'src/daemon/client/daemon-client-progress.ts';
 const CLIENT_TRANSPORT = 'src/daemon/client/daemon-client-transport.ts';
 const UPLOAD_CLIENT = 'src/remote/upload-client.ts';
 const REMOTE_ARTIFACTS = 'src/remote/daemon-artifacts.ts';
+const UPLOAD_STREAM = 'src/remote/upload-stream.ts';
 
 function from(file: string, ...names: string[]): WireDeclarationRef[] {
   return names.map((name) => ({ file, name }));
@@ -303,6 +304,31 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
       // The prepared artifact whose fields (sha256, sizeBytes, fileName,
       // artifactType, contentType) ARE the preflight body the daemon parses.
       ...from('src/remote/upload-client-artifact.ts', 'PreparedUploadArtifact'),
+      // Consumer side of the resumable 308 contract. Listing the daemon's
+      // `handleResumableUpload` proves it still PRODUCES 308; it says nothing
+      // about the client still CONSUMING the released one. These own which
+      // offset headers are accepted (`x-upload-offset`, `upload-offset`,
+      // `Range: bytes=0-N`) and what `Content-Range` a resumed PUT emits.
+      //
+      // `streamFileToHttpRequestAttempt` is listed despite its size, unlike
+      // `createDaemonHttpServer` above: that one only dispatches to handlers
+      // that are each digested, while this IS the resume state machine — it
+      // decides whether a 308 continues the upload and what the next request
+      // carries, so a change to its sequencing alone can break a released
+      // daemon while every helper below keeps its digest.
+      ...from(
+        UPLOAD_STREAM,
+        'MAX_UPLOAD_REDIRECTS',
+        'UploadStreamResponse',
+        'streamFileToHttpRequest',
+        'streamFileToHttpRequestAttempt',
+        'buildUploadRequestHeaders',
+        'isUploadRedirectStatus',
+        'isUploadResumeStatus',
+        'parseUploadResumeOffset',
+        'parseNonNegativeIntegerHeader',
+        'firstHeaderValue',
+      ),
       // Consumer side of /artifacts/*: URL construction, the inventory/header/
       // body materialization the client performs, and the artifact fields it
       // rewrites on the way through.
