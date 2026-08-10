@@ -27,6 +27,7 @@ vi.mock('../../../platforms/apple/core/perf-xctrace.ts', async (importOriginal) 
   };
 });
 import { handleSessionObservabilityCommands } from '../session-observability.ts';
+import { createNetworkRuntime, emptyAppLogResult } from './network-runtime-harness.ts';
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -48,6 +49,11 @@ test('network dump validates include mode directly', async () => {
     },
   });
 
+  const session = sessionStore.get('android');
+  assert.ok(session);
+  const runtime = createNetworkRuntime(session.device, async (input) =>
+    emptyAppLogResult('android', input),
+  );
   const response = await handleSessionObservabilityCommands({
     req: {
       token: 't',
@@ -58,6 +64,7 @@ test('network dump validates include mode directly', async () => {
     },
     sessionName: 'android',
     sessionStore,
+    bindDevice: runtime.bindDevice,
   });
 
   assert.ok(response);
@@ -374,6 +381,11 @@ test('network dump accepts explicit include flag and rejects conflicting values'
     },
   });
 
+  const session = sessionStore.get('android');
+  assert.ok(session);
+  const runtime = createNetworkRuntime(session.device, async (input) =>
+    emptyAppLogResult('android', input),
+  );
   const okResponse = await handleSessionObservabilityCommands({
     req: {
       token: 't',
@@ -384,6 +396,7 @@ test('network dump accepts explicit include flag and rejects conflicting values'
     },
     sessionName: 'android',
     sessionStore,
+    bindDevice: runtime.bindDevice,
   });
 
   assert.ok(okResponse);
@@ -402,6 +415,7 @@ test('network dump accepts explicit include flag and rejects conflicting values'
     },
     sessionName: 'android',
     sessionStore,
+    bindDevice: runtime.bindDevice,
   });
 
   assert.ok(conflictResponse);

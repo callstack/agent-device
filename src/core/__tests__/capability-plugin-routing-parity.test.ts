@@ -340,7 +340,9 @@ test('(b.2) unsupportedHint closures are verbatim across the full device matrix'
 
 test('the capability catalog includes runtime-backed commands without restoring legacy admission', () => {
   assert.ok(listCapabilityCommands().includes('logs'));
+  assert.ok(listCapabilityCommands().includes('network'));
   assert.equal(BASE_COMMAND_CAPABILITY_MATRIX['logs'], undefined);
+  assert.equal(BASE_COMMAND_CAPABILITY_MATRIX['network'], undefined);
 });
 
 test('(b.2) the Apple plugin carries exactly the relocated supports/hint closures', () => {

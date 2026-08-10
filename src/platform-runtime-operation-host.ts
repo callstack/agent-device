@@ -1,7 +1,7 @@
 import type {
-  AppLogRuntimeHost,
   AppLogSessionArtifacts,
   HostCommandRequest,
+  PlatformRuntimeHost,
 } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -10,27 +10,39 @@ import { createHostToolchainPreparer } from './platform-runtime-toolchain-host.t
 import { runCmd, whichCmd } from './utils/exec.ts';
 import { openAppLogOutput, readAppLogOutputTail } from './platform-runtime-app-log-output.ts';
 import { createManagedAppLogProcesses } from './platform-runtime-app-log-process.ts';
+import { createNetworkRuntimeHost } from './platform-runtime-network-host.ts';
 
-export function createAppLogRuntimeHost(options: {
+export function createPlatformRuntimeHost(options: {
   sessionsDir: string;
   resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
-}): AppLogRuntimeHost {
+}): PlatformRuntimeHost {
   const processes = createManagedAppLogProcesses(options.sessionsDir);
   const localProcessTransport = Object.freeze({ mode: 'local' as const, start: processes.start });
+  const commands = Object.freeze({
+    which: async (executable: string) => ((await whichCmd(executable)) ? executable : undefined),
+    run: async (request: HostCommandRequest, signal?: AbortSignal) => {
+      const result = await runCmd(request.executable, [...request.args], {
+        allowFailure: request.allowFailure,
+        cwd: request.cwd,
+        env: request.env ? { ...process.env, ...request.env } : undefined,
+        signal,
+        timeoutMs: request.timeoutMs,
+      });
+      return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
+    },
+  });
+  const network = createNetworkRuntimeHost({
+    resolveSessionArtifacts: options.resolveSessionArtifacts,
+    processes,
+    resolveTransport: async (device) => {
+      if (device.platform !== 'web') return Object.freeze({ mode: 'local' as const });
+      const { resolveWebNetworkTransport } =
+        await import('./platform-runtime-network-web-transport.ts');
+      return await resolveWebNetworkTransport(device);
+    },
+  });
   return Object.freeze({
-    commands: Object.freeze({
-      which: async (executable: string) => ((await whichCmd(executable)) ? executable : undefined),
-      run: async (request: HostCommandRequest, signal?: AbortSignal) => {
-        const result = await runCmd(request.executable, [...request.args], {
-          allowFailure: request.allowFailure,
-          cwd: request.cwd,
-          env: request.env ? { ...process.env, ...request.env } : undefined,
-          signal,
-          timeoutMs: request.timeoutMs,
-        });
-        return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
-      },
-    }),
+    commands,
     appleTools: createAppleToolHost(),
     toolchains: createHostToolchainPreparer(),
     artifacts: Object.freeze({ resolveSession: options.resolveSessionArtifacts }),
@@ -52,6 +64,7 @@ export function createAppLogRuntimeHost(options: {
         );
       },
     }),
+    ...network,
     clock: Object.freeze({
       now: () => Date.now(),
       sleep: async (milliseconds: number, signal?: AbortSignal) => {

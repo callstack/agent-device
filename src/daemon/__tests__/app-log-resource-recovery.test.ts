@@ -3,9 +3,9 @@ import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import {
   localRuntimeOwner,
-  type AppLogRuntimeOperations,
   type CleanupOutcome,
   type DeviceRuntimeGateway,
+  type PlatformRuntimeOperations,
   type ReattachOutcome,
 } from '@agent-device/contracts/platform';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
@@ -305,7 +305,7 @@ function makeGateway(
   const handle = createHandle(forceCleanup);
   const bindingDispose = vi.fn(async () => {});
   const cleanup = vi.fn(async () => ({ status: 'cleaned' as const }));
-  const operations: AppLogRuntimeOperations = {
+  const operations: PlatformRuntimeOperations = {
     appLogInspect: async () => ({ backend: 'android' }),
     appLogDoctor: async () => ({ backend: 'android', checks: {}, notes: [] }),
     appLogStart: async () => {
@@ -315,6 +315,24 @@ function makeGateway(
       options.reattachImplementation ??
       (async () => options.reattach ?? { status: 'active', handle }),
     appLogCleanup: cleanup,
+    networkDump: async (input) => ({
+      source: 'app-log',
+      backend: 'android',
+      dump: {
+        path: '/tmp/app.log',
+        exists: false,
+        scannedLines: 0,
+        matchedLines: 0,
+        entries: [],
+        include: input.include,
+        limits: {
+          maxEntries: input.maxEntries,
+          maxPayloadChars: input.maxPayloadChars,
+          maxScanLines: input.maxScanLines,
+        },
+      },
+      notes: [],
+    }),
   };
   const boundSignals: AbortSignal[] = [];
   const bind = vi.fn(async ({ device, scope: bindingScope }) => {
@@ -330,13 +348,14 @@ function makeGateway(
           appLogStart: { available: true as const },
           appLogReattach: { available: true as const },
           appLogCleanup: { available: true as const },
+          networkDump: { available: true as const },
         },
       },
       operations,
       [Symbol.asyncDispose]: bindingDispose,
     };
   });
-  const gateway: DeviceRuntimeGateway<AppLogRuntimeOperations> = {
+  const gateway: DeviceRuntimeGateway<PlatformRuntimeOperations> = {
     bind,
     shutdown: async () => {},
   };

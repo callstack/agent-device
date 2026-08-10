@@ -9,8 +9,8 @@ import {
   localRuntimeOwner,
   narrowDeviceBinding,
   providerRuntimeOwner,
-  type AppLogRuntimeOperations,
   type DeviceBinding,
+  type PlatformRuntimeOperations,
   type RuntimeProviderMode,
 } from '@agent-device/contracts/platform';
 import type { BindDeviceRuntime } from '../../request-runtime-binding.ts';
@@ -25,7 +25,11 @@ test('capabilities reports supported commands for the selected session device', 
   const sessionName = 'android-capabilities';
   const sessionStore = makeSessionStore('agent-device-capabilities-');
   sessionStore.set(sessionName, makeAndroidSession(sessionName));
-  const runtime = createAdmissionRuntime({ available: true, providerMode: 'local' });
+  const runtime = createAdmissionRuntime({
+    appLogAvailable: true,
+    networkAvailable: true,
+    providerMode: 'local',
+  });
 
   const response = await handleSessionCommands({
     req: {
@@ -66,7 +70,10 @@ test('capabilities reports supported commands for the selected session device', 
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.capabilities);
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.devices);
   assertAndroidCapabilityHonesty(response.data?.availableCommands);
-  expect(runtime.uses).toEqual([{ required: [], preferred: ['appLogInspect'] }]);
+  expect(runtime.uses).toEqual([
+    { required: [], preferred: ['appLogInspect'] },
+    { required: [], preferred: ['networkDump'] },
+  ]);
 });
 
 test('capabilities excludes logs from an unavailable provider-mode XCTest runtime fact', async () => {
@@ -86,7 +93,8 @@ test('capabilities excludes logs from an unavailable provider-mode XCTest runtim
     actions: [],
   });
   const runtime = createAdmissionRuntime({
-    available: false,
+    appLogAvailable: false,
+    networkAvailable: true,
     providerMode: 'provider-runtime',
   });
 
@@ -108,7 +116,42 @@ test('capabilities excludes logs from an unavailable provider-mode XCTest runtim
   expect(response?.ok).toBe(true);
   if (!response?.ok) return;
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.logs);
-  expect(runtime.uses).toEqual([{ required: [], preferred: ['appLogInspect'] }]);
+  expect(response.data?.availableCommands).toContain(PUBLIC_COMMANDS.network);
+  expect(runtime.uses).toEqual([
+    { required: [], preferred: ['appLogInspect'] },
+    { required: [], preferred: ['networkDump'] },
+  ]);
+});
+
+test('capabilities excludes network when the runtime fact is unavailable', async () => {
+  const sessionName = 'android-capabilities-no-network';
+  const sessionStore = makeSessionStore('agent-device-capabilities-no-network-');
+  sessionStore.set(sessionName, makeAndroidSession(sessionName));
+  const runtime = createAdmissionRuntime({
+    appLogAvailable: true,
+    networkAvailable: false,
+    providerMode: 'local',
+  });
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: PUBLIC_COMMANDS.capabilities,
+      positionals: [],
+      flags: {},
+    },
+    sessionName,
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    bindDevice: runtime.bindDevice,
+    invoke: async () => ({ ok: true, data: {} }),
+  });
+
+  expect(response?.ok).toBe(true);
+  if (!response?.ok) return;
+  expect(response.data?.availableCommands).toContain(PUBLIC_COMMANDS.logs);
+  expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.network);
 });
 
 test('capabilities accepts a stopped Android AVD placeholder for explicit platform discovery', async () => {
@@ -154,48 +197,92 @@ test('capabilities accepts a stopped Android AVD placeholder for explicit platfo
 });
 
 function createAdmissionRuntime(options: {
-  available: boolean;
+  appLogAvailable: boolean;
+  networkAvailable: boolean;
   providerMode: RuntimeProviderMode;
 }) {
   const uses: Array<{ required: readonly string[]; preferred: readonly string[] }> = [];
   const bindDevice: BindDeviceRuntime = async (device, use) => {
     uses.push({ required: [...use.required], preferred: [...use.preferred] });
-    const unavailable = {
-      available: false as const,
-      reason:
-        options.providerMode === 'provider-runtime'
-          ? ('unsupported-provider-mode' as const)
-          : ('owner-capability-missing' as const),
-    };
-    const binding: DeviceBinding<AppLogRuntimeOperations> = {
-      device,
-      owner:
-        options.providerMode === 'provider-runtime'
-          ? providerRuntimeOwner('test', 'capabilities')
-          : localRuntimeOwner(device.platform),
-      facts: {
-        device: {
-          family: device.platform,
-          ...(device.appleOs === undefined ? {} : { appleOs: device.appleOs }),
-          kind: device.kind,
-          ...(device.target === undefined ? {} : { target: device.target }),
-          ...(device.iosPhysicalDeviceBackend === undefined
-            ? {}
-            : { iosPhysicalDeviceBackend: device.iosPhysicalDeviceBackend }),
-          providerMode: options.providerMode,
-        },
-        operations: {
-          appLogInspect: options.available ? { available: true } : unavailable,
-          appLogDoctor: unavailable,
-          appLogStart: unavailable,
-          appLogReattach: unavailable,
-          appLogCleanup: unavailable,
-        },
-      },
-      operations: options.available ? { appLogInspect: async () => ({ backend: 'android' }) } : {},
-      [Symbol.asyncDispose]: async () => {},
-    };
-    return narrowDeviceBinding(binding, use);
+    return narrowDeviceBinding(createAdmissionBinding(device, options), use);
   };
   return { bindDevice, uses };
 }
+
+type AdmissionRuntimeOptions = Readonly<{
+  appLogAvailable: boolean;
+  networkAvailable: boolean;
+  providerMode: RuntimeProviderMode;
+}>;
+
+function createAdmissionBinding(
+  device: DeviceInfo,
+  options: AdmissionRuntimeOptions,
+): DeviceBinding<PlatformRuntimeOperations> {
+  const unavailable = unavailableOperationFact(options.providerMode);
+  return {
+    device,
+    owner:
+      options.providerMode === 'provider-runtime'
+        ? providerRuntimeOwner('test', 'capabilities')
+        : localRuntimeOwner(device.platform),
+    facts: {
+      device: {
+        family: device.platform,
+        ...(device.appleOs === undefined ? {} : { appleOs: device.appleOs }),
+        kind: device.kind,
+        ...(device.target === undefined ? {} : { target: device.target }),
+        ...(device.iosPhysicalDeviceBackend === undefined
+          ? {}
+          : { iosPhysicalDeviceBackend: device.iosPhysicalDeviceBackend }),
+        providerMode: options.providerMode,
+      },
+      operations: {
+        appLogInspect: options.appLogAvailable ? { available: true } : unavailable,
+        appLogDoctor: unavailable,
+        appLogStart: unavailable,
+        appLogReattach: unavailable,
+        appLogCleanup: unavailable,
+        networkDump: options.networkAvailable ? { available: true } : unavailable,
+      },
+    },
+    operations: {
+      ...(options.appLogAvailable ? { appLogInspect: inspectAndroidAppLog } : {}),
+      ...(options.networkAvailable ? { networkDump: dumpEmptyAndroidNetwork } : {}),
+    },
+    [Symbol.asyncDispose]: async () => {},
+  };
+}
+
+function unavailableOperationFact(providerMode: RuntimeProviderMode) {
+  return {
+    available: false as const,
+    reason:
+      providerMode === 'provider-runtime'
+        ? ('unsupported-provider-mode' as const)
+        : ('owner-capability-missing' as const),
+  };
+}
+
+const inspectAndroidAppLog: PlatformRuntimeOperations['appLogInspect'] = async () => ({
+  backend: 'android',
+});
+
+const dumpEmptyAndroidNetwork: PlatformRuntimeOperations['networkDump'] = async (input) => ({
+  source: 'app-log',
+  backend: 'android',
+  dump: {
+    path: '/tmp/app.log',
+    exists: false,
+    scannedLines: 0,
+    matchedLines: 0,
+    entries: [],
+    include: input.include,
+    limits: {
+      maxEntries: input.maxEntries,
+      maxPayloadChars: input.maxPayloadChars,
+      maxScanLines: input.maxScanLines,
+    },
+  },
+  notes: [],
+});

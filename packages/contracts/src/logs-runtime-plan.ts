@@ -1,8 +1,8 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { AppLogRuntimeOperations } from './app-log-runtime.ts';
 import { runtimeUse } from './platform-runtime.ts';
+import type { PlatformRuntimeOperations } from './platform-runtime-operations.ts';
 
-const appLogUse = runtimeUse<AppLogRuntimeOperations>();
+const appLogUse = runtimeUse<PlatformRuntimeOperations>();
 
 const appLogInspectUse = appLogUse({ required: ['appLogInspect'] });
 const appLogDoctorUse = appLogUse({ required: ['appLogInspect', 'appLogDoctor'] });

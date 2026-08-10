@@ -1,16 +1,16 @@
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type {
-  AppLogRuntimeHost,
-  AppLogRuntimeOperations,
-  AppLogRuntimePlatformModule,
-  AppLogRuntimeProviderModule,
   DeviceBinding,
   DeviceBindingRequest,
   DeviceRuntimeGateway,
-  DeviceRuntimeOwner,
+  PlatformRuntimeHost,
+  PlatformRuntimeModule,
+  PlatformRuntimeOperations,
+  PlatformRuntimeOwner,
+  PlatformRuntimeProviderModule,
   RuntimeOwnerRef,
 } from '@agent-device/contracts/platform';
-import { createUnavailableAppLogBinding } from '@agent-device/capture-kit';
+import { createUnavailablePlatformRuntimeBinding } from '@agent-device/capture-kit';
 import {
   providerRuntimeOwner,
   runtimeOwnerKey,
@@ -26,41 +26,38 @@ import {
 } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 
-export type AppLogRuntimeProviderRegistration = Readonly<{
+export type PlatformRuntimeProviderRegistration = Readonly<{
   runtime: ProviderDeviceRuntime;
-  module: AppLogRuntimeProviderModule;
+  module: PlatformRuntimeProviderModule;
 }>;
 
-export function createComposedAppLogRuntimeGateway(options: {
-  modules: ReadonlyMap<Platform, AppLogRuntimePlatformModule>;
-  loadHost: () => Promise<AppLogRuntimeHost>;
+export function createComposedPlatformRuntimeGateway(options: {
+  modules: ReadonlyMap<Platform, PlatformRuntimeModule>;
+  loadHost: () => Promise<PlatformRuntimeHost>;
   providerRuntimes?: readonly ProviderDeviceRuntime[];
-  providerModules?: readonly AppLogRuntimeProviderRegistration[];
-}): DeviceRuntimeGateway<AppLogRuntimeOperations> {
-  const providersByOwner = new Map<string, AppLogRuntimeProviderRegistration>();
-  const modulesByRuntime = new Map<ProviderDeviceRuntime, AppLogRuntimeProviderModule>();
+  providerModules?: readonly PlatformRuntimeProviderRegistration[];
+}): DeviceRuntimeGateway<PlatformRuntimeOperations> {
+  const providersByOwner = new Map<string, PlatformRuntimeProviderRegistration>();
+  const modulesByRuntime = new Map<ProviderDeviceRuntime, PlatformRuntimeProviderModule>();
   for (const registration of options.providerModules ?? []) {
     const { runtime, module } = registration;
     const key = runtimeOwnerKey(module.owner);
     if (module.owner.provider !== runtime.provider) {
-      throw runtimeContractError(`Provider app-log runtime metadata is invalid: ${key}`);
+      throw runtimeContractError(`Provider platform runtime metadata is invalid: ${key}`);
     }
     if (providersByOwner.has(key)) {
-      throw runtimeContractError(`Duplicate app-log runtime owner: ${key}`);
+      throw runtimeContractError(`Duplicate platform runtime owner: ${key}`);
     }
     if (modulesByRuntime.has(runtime)) {
-      throw runtimeContractError(`Duplicate app-log module registration for ${runtime.provider}`);
+      throw runtimeContractError(`Duplicate platform module registration for ${runtime.provider}`);
     }
     providersByOwner.set(key, registration);
     modulesByRuntime.set(runtime, module);
   }
-  const localLoads = new Map<Platform, Promise<DeviceRuntimeOwner<AppLogRuntimeOperations>>>();
-  const providerLoads = new Map<
-    AppLogRuntimeProviderModule,
-    Promise<DeviceRuntimeOwner<AppLogRuntimeOperations>>
-  >();
-  const loadedOwners = new Map<string, DeviceRuntimeOwner<AppLogRuntimeOperations>>();
-  let hostLoad: Promise<AppLogRuntimeHost> | undefined;
+  const localLoads = new Map<Platform, Promise<PlatformRuntimeOwner>>();
+  const providerLoads = new Map<PlatformRuntimeProviderModule, Promise<PlatformRuntimeOwner>>();
+  const loadedOwners = new Map<string, PlatformRuntimeOwner>();
+  let hostLoad: Promise<PlatformRuntimeHost> | undefined;
   const loadHost = async () => {
     hostLoad ??= options.loadHost();
     try {
@@ -70,11 +67,11 @@ export function createComposedAppLogRuntimeGateway(options: {
       throw error;
     }
   };
-  const registerOwner = (owner: DeviceRuntimeOwner<AppLogRuntimeOperations>) => {
+  const registerOwner = (owner: PlatformRuntimeOwner) => {
     const key = runtimeOwnerKey(owner.owner);
     const existing = loadedOwners.get(key);
     if (existing && existing !== owner) {
-      throw runtimeContractError(`Duplicate app-log runtime owner: ${key}`);
+      throw runtimeContractError(`Duplicate platform runtime owner: ${key}`);
     }
     loadedOwners.set(key, owner);
     return owner;
@@ -83,16 +80,18 @@ export function createComposedAppLogRuntimeGateway(options: {
     const existing = localLoads.get(family);
     if (existing) return await existing;
     const module = options.modules.get(family);
-    if (!module) throw runtimeContractError(`Missing app-log module for ${family}`);
+    if (!module) throw runtimeContractError(`Missing platform runtime module for ${family}`);
     if (module.family !== family) {
       throw runtimeContractError(
-        `App-log module registered for ${family} declares ${module.family}`,
+        `Platform runtime module registered for ${family} declares ${module.family}`,
       );
     }
     const pending = loadHost().then(async (host) => {
       const owner = await module.loadRuntime(host);
       if (owner.owner.kind !== 'local-family' || owner.owner.family !== family) {
-        throw runtimeContractError(`App-log module for ${family} returned a different local owner`);
+        throw runtimeContractError(
+          `Platform runtime module for ${family} returned a different local owner`,
+        );
       }
       return registerOwner(owner);
     });
@@ -104,14 +103,14 @@ export function createComposedAppLogRuntimeGateway(options: {
       throw error;
     }
   };
-  const loadProvider = async (module: AppLogRuntimeProviderModule) => {
+  const loadProvider = async (module: PlatformRuntimeProviderModule) => {
     const existing = providerLoads.get(module);
     if (existing) return await existing;
     const pending = loadHost().then(async (host) => {
       const owner = await module.loadRuntime(host);
       if (!sameRuntimeOwner(owner.owner, module.owner)) {
         throw runtimeContractError(
-          'Provider app-log runtime returned a different advertised owner',
+          'Provider platform runtime returned a different advertised owner',
         );
       }
       return registerOwner(owner);
@@ -164,9 +163,9 @@ export function createComposedAppLogRuntimeGateway(options: {
 }
 
 async function bindAndValidate(
-  owner: DeviceRuntimeOwner<AppLogRuntimeOperations>,
+  owner: PlatformRuntimeOwner,
   request: DeviceBindingRequest,
-): Promise<DeviceBinding<AppLogRuntimeOperations>> {
+): Promise<DeviceBinding<PlatformRuntimeOperations>> {
   const binding = await owner.bind(request);
   const failure = bindingContractFailure(owner, binding, request);
   if (!failure) return binding;
@@ -180,21 +179,21 @@ async function bindAndValidate(
 }
 
 function bindingContractFailure(
-  selected: DeviceRuntimeOwner<AppLogRuntimeOperations>,
-  binding: DeviceBinding<AppLogRuntimeOperations>,
+  selected: PlatformRuntimeOwner,
+  binding: DeviceBinding<PlatformRuntimeOperations>,
   request: DeviceBindingRequest,
 ): string | undefined {
   if (!sameRuntimeOwner(binding.owner, selected.owner)) {
-    return 'App-log binding returned a different owner than the selected runtime';
+    return 'Platform binding returned a different owner than the selected runtime';
   }
   if (!matchesRequestedOwner(binding.owner, request)) {
-    return 'Exact app-log binding returned a different persisted owner';
+    return 'Exact platform binding returned a different persisted owner';
   }
   if (!sameDeviceIdentity(deviceIdentity(binding.device), deviceIdentity(request.device))) {
-    return 'App-log binding returned a different device identity';
+    return 'Platform binding returned a different device identity';
   }
   if (!factsMatchBindingIdentity(binding)) {
-    return 'App-log binding facts do not match its device and owner';
+    return 'Platform binding facts do not match its device and owner';
   }
   return undefined;
 }
@@ -203,7 +202,7 @@ function matchesRequestedOwner(owner: RuntimeOwnerRef, request: DeviceBindingReq
   return request.intent.kind !== 'exact-owner' || sameRuntimeOwner(owner, request.intent.owner);
 }
 
-function factsMatchBindingIdentity(binding: DeviceBinding<AppLogRuntimeOperations>): boolean {
+function factsMatchBindingIdentity(binding: DeviceBinding<PlatformRuntimeOperations>): boolean {
   const { device, owner, facts } = binding;
   return (
     sameDeviceShape(facts.device, deviceShape(device)) &&
@@ -212,7 +211,7 @@ function factsMatchBindingIdentity(binding: DeviceBinding<AppLogRuntimeOperation
 }
 
 function providerModeMatchesOwner(
-  mode: DeviceBinding<AppLogRuntimeOperations>['facts']['device']['providerMode'],
+  mode: DeviceBinding<PlatformRuntimeOperations>['facts']['device']['providerMode'],
   owner: RuntimeOwnerRef,
 ): boolean {
   return owner.kind === 'local-family'
@@ -222,12 +221,10 @@ function providerModeMatchesOwner(
 
 async function selectExactOwner(
   ref: RuntimeOwnerRef,
-  providersByOwner: ReadonlyMap<string, AppLogRuntimeProviderRegistration>,
-  loadProvider: (
-    module: AppLogRuntimeProviderModule,
-  ) => Promise<DeviceRuntimeOwner<AppLogRuntimeOperations>>,
-  loadLocal: (family: Platform) => Promise<DeviceRuntimeOwner<AppLogRuntimeOperations>>,
-): Promise<DeviceRuntimeOwner<AppLogRuntimeOperations>> {
+  providersByOwner: ReadonlyMap<string, PlatformRuntimeProviderRegistration>,
+  loadProvider: (module: PlatformRuntimeProviderModule) => Promise<PlatformRuntimeOwner>,
+  loadLocal: (family: Platform) => Promise<PlatformRuntimeOwner>,
+): Promise<PlatformRuntimeOwner> {
   if (ref.kind === 'local-family') {
     const owner = await loadLocal(ref.family);
     if (sameRuntimeOwner(owner.owner, ref)) return owner;
@@ -241,16 +238,20 @@ async function selectExactOwner(
 function unavailableProviderBinding(
   runtime: ProviderDeviceRuntime,
   device: DeviceInfo,
-): DeviceBinding<AppLogRuntimeOperations> {
+): DeviceBinding<PlatformRuntimeOperations> {
   const owner = providerRuntimeOwner(runtime.provider, 'default');
-  return createUnavailableAppLogBinding(device, owner, {
+  const unavailable = Object.freeze({
     available: false,
     reason: 'unsupported-provider-mode',
+  });
+  return createUnavailablePlatformRuntimeBinding(device, owner, {
+    appLog: unavailable,
+    network: unavailable,
   });
 }
 
 function ownerUnavailable(owner: RuntimeOwnerRef): AppError {
-  return new AppError('UNSUPPORTED_OPERATION', 'The exact app-log runtime owner is unavailable.', {
+  return new AppError('UNSUPPORTED_OPERATION', 'The exact platform runtime owner is unavailable.', {
     reason: 'owner-unavailable',
     owner: runtimeOwnerKey(owner),
   });

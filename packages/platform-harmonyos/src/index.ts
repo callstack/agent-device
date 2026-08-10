@@ -1,6 +1,6 @@
 import type {
-  AppLogRuntimePlatformModule,
   InventoryPlatformModule,
+  PlatformRuntimeModule,
   PlatformModuleMetadata,
 } from '@agent-device/contracts/platform';
 import type { HarmonyInventoryConfig } from './inventory-config.ts';
@@ -12,10 +12,10 @@ const metadata = Object.freeze({
 export const runtimeModule = Object.freeze({
   ...metadata,
   loadRuntime: async (host) => {
-    const { createHarmonyAppLogRuntime } = await import('./logs/runtime.ts');
-    return createHarmonyAppLogRuntime(host);
+    const { createHarmonyPlatformRuntime } = await import('./runtime.ts');
+    return createHarmonyPlatformRuntime(host);
   },
-} satisfies AppLogRuntimePlatformModule);
+} satisfies PlatformRuntimeModule);
 
 export type { HarmonyInventoryConfig } from './inventory-config.ts';
 

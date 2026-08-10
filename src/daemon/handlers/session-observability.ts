@@ -21,13 +21,10 @@ import {
   type RuntimeOwnerRef,
 } from '@agent-device/contracts/platform';
 import { uniqueStrings } from '@agent-device/kernel/collections';
-import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '@agent-device/kernel/contracts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
-import { resolveWebProvider } from '../../platforms/web/provider.ts';
 import { appendAppLogMarker, clearAppLogFiles, getAppLogPathMetadata } from '../app-log.ts';
 import type { AppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
-import { readSessionNetworkCapture } from '../app-log-network-recovery.ts';
 import { resolveAppLogResourcePath } from '../app-log-resource-store.ts';
 import {
   adoptStartedSessionAppLog,
@@ -40,7 +37,7 @@ import { createNextAppLogFence } from '../app-log-start-preflight.ts';
 import type { BindDeviceRuntime } from '../request-runtime-binding.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData, SessionState } from '../types.ts';
-import { errorResponse, requireCommandSupported, type DaemonFailureResponse } from './response.ts';
+import { errorResponse, type DaemonFailureResponse } from './response.ts';
 import { handleAudioCommand } from './session-audio.ts';
 import { handleNativePerfCommand as handleAndroidNativePerfCommand } from './session-native-perf.ts';
 import { handleNativePerfCommand as handleAppleNativePerfCommand } from './session-perf-xctrace.ts';
@@ -49,10 +46,7 @@ import {
   buildPerfMemoryResponseData,
   buildPerfResponseData,
 } from './session-perf.ts';
-
-const NETWORK_ACTIONS = ['dump', 'log'] as const;
-const NETWORK_ACTIONS_MESSAGE = `network requires ${NETWORK_ACTIONS.join(' or ')}`;
-const NETWORK_INCLUDE_MESSAGE = `network include mode must be one of: ${NETWORK_INCLUDE_MODES.join(', ')}`;
+import { handleNetworkCommand } from './session-network.ts';
 
 type ObservabilityParams = {
   req: DaemonRequest;
@@ -137,7 +131,7 @@ export async function handleSessionObservabilityCommands(
     return await handleEventsCommand(params);
   }
   if (req.command === 'network') {
-    return handleNetworkCommand(params);
+    return await handleNetworkCommand(params);
   }
   if (req.command === 'audio') {
     return await handleAudioCommand(params);
@@ -621,7 +615,6 @@ async function startSessionAppLog(
     return { ok: false, error: normalized };
   }
 }
-
 function requireLogsHandlerParams(
   params: ObservabilityParams & { session: SessionState },
 ): LogsHandlerParams {
@@ -640,124 +633,4 @@ function requireLogsHandlerParams(
     bindDevice: params.bindDevice,
     appLogAdmissionLedger: params.appLogAdmissionLedger,
   };
-}
-
-// ---------------------------------------------------------------------------
-// network
-// ---------------------------------------------------------------------------
-
-async function handleNetworkCommand(params: ObservabilityParams): Promise<DaemonResponse> {
-  const request = resolveNetworkCommandRequest(params);
-  if (!request.ok) return request;
-  const { include, maxEntries, session } = request;
-
-  if (session.device.platform === 'web') {
-    return await handleWebNetworkCommand({ include, maxEntries });
-  }
-
-  const appLogSnapshot = session.appLog?.handle.inspect();
-  const capture = await readSessionNetworkCapture({
-    device: session.device,
-    appBundleId: session.appBundleId,
-    appLogState: appLogSnapshot?.state,
-    appLogStartedAt: appLogSnapshot?.startedAt,
-    appLogPath: params.sessionStore.resolveAppLogPath(params.sessionName),
-    maxEntries,
-    include,
-    maxPayloadChars: 2048,
-    maxScanLines: 4000,
-  });
-
-  return {
-    ok: true,
-    data: {
-      ...capture.dump,
-      active: Boolean(session.appLog),
-      state: appLogSnapshot?.state ?? 'inactive',
-      backend: capture.backend,
-      notes: capture.notes,
-    },
-  };
-}
-
-async function handleWebNetworkCommand(params: {
-  include: NetworkIncludeMode;
-  maxEntries: number;
-}): Promise<DaemonResponse> {
-  const provider = resolveWebProvider();
-  if (!provider.dumpNetwork) {
-    return errorResponse('UNSUPPORTED_OPERATION', 'network is not supported by this web provider');
-  }
-  try {
-    const result = await provider.dumpNetwork({
-      include: params.include,
-      limit: params.maxEntries,
-    });
-    return {
-      ok: true,
-      data: {
-        entries: result.entries,
-        active: true,
-        state: 'active',
-        backend: result.backend ?? 'agent-browser',
-        include: params.include,
-        matchedLines: result.entries.length,
-        scannedLines: result.entries.length,
-        limits: {
-          maxEntries: params.maxEntries,
-          maxPayloadChars: 2048,
-          maxScanLines: result.entries.length,
-        },
-        notes: result.notes,
-      },
-    };
-  } catch (error) {
-    return { ok: false, error: normalizeError(error) };
-  }
-}
-
-function resolveNetworkCommandRequest(
-  params: ObservabilityParams,
-):
-  | { ok: true; session: SessionState; maxEntries: number; include: NetworkIncludeMode }
-  | DaemonFailureResponse {
-  const { req, sessionName, sessionStore } = params;
-  const session = sessionStore.get(sessionName);
-  if (!session) {
-    return errorResponse('SESSION_NOT_FOUND', 'network requires an active session');
-  }
-  const unsupported = requireCommandSupported('network', session.device);
-  if (unsupported) return unsupported;
-
-  const action = (req.positionals?.[0] ?? 'dump').toLowerCase();
-  if (!NETWORK_ACTIONS.includes(action as (typeof NETWORK_ACTIONS)[number])) {
-    return errorResponse('INVALID_ARGS', NETWORK_ACTIONS_MESSAGE);
-  }
-
-  const maxEntries = req.positionals?.[1] ? Number.parseInt(req.positionals[1], 10) : 25;
-  if (!Number.isInteger(maxEntries) || maxEntries < 1 || maxEntries > 200) {
-    return errorResponse('INVALID_ARGS', 'network dump limit must be an integer in range 1..200');
-  }
-
-  const includeValidation = resolveNetworkIncludeMode(req);
-  if (!includeValidation.ok) return includeValidation;
-  return { ok: true, session, maxEntries, include: includeValidation.include };
-}
-
-function resolveNetworkIncludeMode(
-  req: DaemonRequest,
-): { ok: true; include: NetworkIncludeMode } | DaemonFailureResponse {
-  const positionalInclude = req.positionals?.[2]?.toLowerCase();
-  const flagInclude = req.flags?.networkInclude;
-  if (positionalInclude && flagInclude && positionalInclude !== flagInclude) {
-    return errorResponse(
-      'INVALID_ARGS',
-      'network include mode was provided both positionally and via --include with different values',
-    );
-  }
-  const requestedInclude = (flagInclude ?? positionalInclude ?? 'summary').toLowerCase();
-  if (!NETWORK_INCLUDE_MODES.includes(requestedInclude as (typeof NETWORK_INCLUDE_MODES)[number])) {
-    return errorResponse('INVALID_ARGS', NETWORK_INCLUDE_MESSAGE);
-  }
-  return { ok: true, include: requestedInclude as NetworkIncludeMode };
 }

@@ -1,9 +1,9 @@
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type {
-  AppLogRuntimeHost,
-  AppLogRuntimeOperations,
   DeviceBinding,
-  DeviceRuntimeOwner,
+  PlatformRuntimeHost,
+  PlatformRuntimeOperations,
+  PlatformRuntimeOwner,
   PlatformRequestScope,
   RuntimeOwnerRef,
 } from '@agent-device/contracts/platform';
@@ -11,9 +11,9 @@ import { providerRuntimeOwner } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { describe, expect, test, vi } from 'vitest';
 import {
-  createComposedAppLogRuntimeGateway,
-  type AppLogRuntimeProviderRegistration,
-} from './platform-runtime-app-log.ts';
+  createComposedPlatformRuntimeGateway,
+  type PlatformRuntimeProviderRegistration,
+} from './platform-runtime-gateway.ts';
 
 const device: DeviceInfo = {
   platform: 'apple',
@@ -30,7 +30,7 @@ const scope: PlatformRequestScope = {
   progress: { report: () => {} },
 };
 
-describe('composed app-log runtime gateway', () => {
+describe('composed platform runtime gateway', () => {
   test('selects an exact provider owner without ordinary ownsDevice arbitration', async () => {
     const ownsDevice = vi.fn(() => false);
     const ref = providerRuntimeOwner('limrun', 'stable');
@@ -65,7 +65,7 @@ describe('composed app-log runtime gateway', () => {
   test('rejects duplicate stable provider owner refs', async () => {
     const ref = providerRuntimeOwner('limrun', 'stable');
     expect(() => gateway([providerRuntime({ ref }), providerRuntime({ ref })])).toThrow(
-      'Duplicate app-log runtime owner',
+      'Duplicate platform runtime owner',
     );
   });
 
@@ -89,11 +89,11 @@ describe('composed app-log runtime gateway', () => {
   });
 
   test('does not fall back to a local runtime for a provider without an app-log module', async () => {
-    const hostLoad = vi.fn(async () => ({}) as AppLogRuntimeHost);
+    const hostLoad = vi.fn(async () => ({}) as PlatformRuntimeHost);
     const localLoad = vi.fn(async () =>
       runtimeOwner({ ref: { kind: 'local-family', family: 'apple' } }),
     );
-    const runtimeGateway = createComposedAppLogRuntimeGateway({
+    const runtimeGateway = createComposedPlatformRuntimeGateway({
       modules: new Map([['apple', { family: 'apple', loadRuntime: localLoad }]]),
       loadHost: hostLoad,
       providerRuntimes: [
@@ -117,8 +117,8 @@ describe('composed app-log runtime gateway', () => {
   });
 
   test('rejects a swapped local module before loading host mechanics', async () => {
-    const hostLoad = vi.fn(async () => ({}) as AppLogRuntimeHost);
-    const runtimeGateway = createComposedAppLogRuntimeGateway({
+    const hostLoad = vi.fn(async () => ({}) as PlatformRuntimeHost);
+    const runtimeGateway = createComposedPlatformRuntimeGateway({
       modules: new Map([
         [
           'apple',
@@ -139,7 +139,7 @@ describe('composed app-log runtime gateway', () => {
 
   test('accepts transport-composed facts from the selected local family owner', async () => {
     const ref = { kind: 'local-family', family: 'apple' } as const;
-    const runtimeGateway = createComposedAppLogRuntimeGateway({
+    const runtimeGateway = createComposedPlatformRuntimeGateway({
       modules: new Map([
         [
           'apple',
@@ -149,7 +149,7 @@ describe('composed app-log runtime gateway', () => {
           },
         ],
       ]),
-      loadHost: async () => ({}) as AppLogRuntimeHost,
+      loadHost: async () => ({}) as PlatformRuntimeHost,
     });
 
     await expect(
@@ -178,10 +178,10 @@ describe('composed app-log runtime gateway', () => {
   );
 });
 
-function gateway(registrations: readonly AppLogRuntimeProviderRegistration[]) {
-  return createComposedAppLogRuntimeGateway({
+function gateway(registrations: readonly PlatformRuntimeProviderRegistration[]) {
+  return createComposedPlatformRuntimeGateway({
     modules: new Map(),
-    loadHost: async () => ({}) as AppLogRuntimeHost,
+    loadHost: async () => ({}) as PlatformRuntimeHost,
     providerRuntimes: registrations.map(({ runtime }) => runtime),
     providerModules: registrations,
   });
@@ -193,8 +193,8 @@ function providerRuntime(options: {
   ownsDevice?: (device: DeviceInfo) => boolean;
   mismatch?: 'owner' | 'device' | 'facts';
   disposed?: () => Promise<void>;
-  load?: () => Promise<DeviceRuntimeOwner<AppLogRuntimeOperations>>;
-}): AppLogRuntimeProviderRegistration {
+  load?: () => Promise<PlatformRuntimeOwner>;
+}): PlatformRuntimeProviderRegistration {
   const owner = runtimeOwner(options);
   const runtime: ProviderDeviceRuntime = {
     provider: options.provider ?? 'limrun',
@@ -218,7 +218,7 @@ function runtimeOwner(options: {
   mismatch?: 'owner' | 'device' | 'facts';
   providerMode?: 'local' | 'transport-composed' | 'provider-runtime';
   disposed?: () => Promise<void>;
-}): DeviceRuntimeOwner<AppLogRuntimeOperations> {
+}): PlatformRuntimeOwner {
   return {
     owner: options.ref,
     ownsDevice: () => true,
@@ -232,7 +232,7 @@ function binding(options: {
   mismatch?: 'owner' | 'device' | 'facts';
   providerMode?: 'local' | 'transport-composed' | 'provider-runtime';
   disposed?: () => Promise<void>;
-}): DeviceBinding<AppLogRuntimeOperations> {
+}): DeviceBinding<PlatformRuntimeOperations> {
   const bindingDevice = options.mismatch === 'device' ? { ...device, id: 'wrong' } : device;
   const bindingOwner =
     options.mismatch === 'owner' ? providerRuntimeOwner('limrun', 'wrong') : options.ref;
@@ -265,5 +265,6 @@ function unavailableFacts() {
     appLogStart: unavailable,
     appLogReattach: unavailable,
     appLogCleanup: unavailable,
+    networkDump: unavailable,
   };
 }

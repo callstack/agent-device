@@ -4,11 +4,11 @@ import type {
 } from '@agent-device/contracts/device';
 import {
   createPlatformModuleRegistry,
-  type AppLogRuntimeOperations,
-  type AppLogRuntimePlatformModule,
   type AppLogSessionArtifacts,
   type ComposedDeviceInventoryGateways,
   type DeviceRuntimeGateway,
+  type PlatformRuntimeModule,
+  type PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform';
 import {
   inventoryModule as appleInventoryModule,
@@ -34,10 +34,8 @@ import {
   inventoryModule as webInventoryModule,
   runtimeModule as webRuntimeModule,
 } from '@agent-device/platform-web';
-import {
-  createComposedAppLogRuntimeGateway,
-  type AppLogRuntimeProviderRegistration,
-} from './platform-runtime-app-log.ts';
+import { createComposedPlatformRuntimeGateway } from './platform-runtime-gateway.ts';
+import type { PlatformRuntimeProviderRegistration } from './platform-runtime-gateway.ts';
 import { createComposedDeviceInventoryGateways } from './platform-runtime-device-inventory.ts';
 
 const androidInventoryModule = createAndroidInventoryModule({
@@ -72,9 +70,9 @@ export function createPlatformDeviceInventoryGateways(
   });
 }
 
-const appLogRuntimeModules: ReadonlyMap<Platform, AppLogRuntimePlatformModule> = new Map<
+const platformRuntimeModules: ReadonlyMap<Platform, PlatformRuntimeModule> = new Map<
   Platform,
-  AppLogRuntimePlatformModule
+  PlatformRuntimeModule
 >([
   ['apple', appleRuntimeModule],
   ['android', androidRuntimeModule],
@@ -84,21 +82,21 @@ const appLogRuntimeModules: ReadonlyMap<Platform, AppLogRuntimePlatformModule> =
   ['web', webRuntimeModule],
 ]);
 
-type Platform = AppLogRuntimePlatformModule['family'];
+type Platform = PlatformRuntimeModule['family'];
 
-export function createPlatformAppLogRuntimeGateway(
+export function createPlatformRuntimeGateway(
   options: Readonly<{
     providerRuntimes?: readonly ProviderDeviceRuntime[];
-    providerModules?: readonly AppLogRuntimeProviderRegistration[];
+    providerModules?: readonly PlatformRuntimeProviderRegistration[];
     resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
     sessionsDir: string;
   }>,
-): DeviceRuntimeGateway<AppLogRuntimeOperations> {
-  return createComposedAppLogRuntimeGateway({
-    modules: appLogRuntimeModules,
+): DeviceRuntimeGateway<PlatformRuntimeOperations> {
+  return createComposedPlatformRuntimeGateway({
+    modules: platformRuntimeModules,
     loadHost: async () => {
-      const { createAppLogRuntimeHost } = await import('./platform-runtime-app-log-host.ts');
-      return createAppLogRuntimeHost({
+      const { createPlatformRuntimeHost } = await import('./platform-runtime-operation-host.ts');
+      return createPlatformRuntimeHost({
         sessionsDir: options.sessionsDir,
         resolveSessionArtifacts: options.resolveSessionArtifacts,
       });

@@ -116,8 +116,8 @@ export const IOS_SIMULATOR_E2E_COVERAGE = {
     'an 800ms hold increments the durable long-press counter',
   ),
   [C.network]: contract(
-    'src/daemon/handlers/__tests__/session-network.test.ts',
-    'network dump recovers iOS simulator entries from simctl log show when the live stream is empty',
+    'packages/platform-apple/src/network/runtime.test.ts',
+    'recovers an empty iOS simulator dump from bounded simctl log history',
     'iOS simulator recovery parses HTTP status, duration, and URL from bounded logs',
   ),
   [C.open]: live('smoke:automation-input', 'fixture cold launch and deep route become visible'),

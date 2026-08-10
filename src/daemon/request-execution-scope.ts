@@ -41,8 +41,8 @@ import {
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { teardownSessionResources } from './session-teardown.ts';
 import type {
-  AppLogRuntimeOperations,
   DeviceRuntimeGateway,
+  PlatformRuntimeOperations,
   PlatformRequestScope,
 } from '@agent-device/contracts/platform';
 import { createRequestRuntimeBindings, type BindDeviceRuntime } from './request-runtime-binding.ts';
@@ -97,7 +97,7 @@ export async function createRequestExecutionScope(params: {
   req: DaemonRequest;
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
-  deviceRuntimeGateway?: DeviceRuntimeGateway<AppLogRuntimeOperations>;
+  deviceRuntimeGateway?: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   platformRequestScope?: PlatformRequestScope;
 }): Promise<RequestExecutionScope> {
   const { sessionStore, leaseRegistry } = params;

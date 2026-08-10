@@ -24,7 +24,7 @@ import { getRequestSignal } from '../../request/cancel.ts';
 import { requireSessionOrExplicitSelector, resolveCommandDevice } from './session-device-utils.ts';
 import { errorResponse, requireCommandSupported } from './response.ts';
 import { resolveImplicitSessionScope, sessionMatchesScope } from '../session-routing.ts';
-import { appLogAdmissionUse } from '@agent-device/contracts/platform';
+import { appLogAdmissionUse, networkAdmissionUse } from '@agent-device/contracts/platform';
 import type { BindDeviceRuntime } from '../request-runtime-binding.ts';
 
 export async function handleSessionInventoryCommands(params: {
@@ -174,15 +174,26 @@ async function capabilitiesInventoryResponse(params: {
   });
   if ('response' in resolution) return resolution.response;
   const { device } = resolution;
-  const logsAvailable = params.bindDevice
-    ? (await params.bindDevice(device, appLogAdmissionUse)).facts.appLogInspect.available
-    : false;
+  const [logsAvailable, networkAvailable] = params.bindDevice
+    ? await Promise.all([
+        params
+          .bindDevice(device, appLogAdmissionUse)
+          .then((runtime) => runtime.facts.appLogInspect.available),
+        params
+          .bindDevice(device, networkAdmissionUse)
+          .then((runtime) => runtime.facts.networkDump.available),
+      ])
+    : [false, false];
   return {
     ok: true,
     data: {
       device: publicDeviceInfo(device),
       availableCommands: listCapabilityCommands().filter((command) =>
-        command === 'logs' ? logsAvailable : isCommandSupportedOnDevice(command, device),
+        command === 'logs'
+          ? logsAvailable
+          : command === 'network'
+            ? networkAvailable
+            : isCommandSupportedOnDevice(command, device),
       ),
     },
   };

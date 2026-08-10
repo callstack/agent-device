@@ -1,6 +1,6 @@
 import type {
-  AppLogRuntimePlatformModule,
   InventoryPlatformModule,
+  PlatformRuntimeModule,
   PlatformModuleMetadata,
 } from '@agent-device/contracts/platform';
 
@@ -11,10 +11,10 @@ const metadata = Object.freeze({
 export const runtimeModule = Object.freeze({
   ...metadata,
   loadRuntime: async (host) => {
-    const { createAppleAppLogRuntime } = await import('./logs/runtime.ts');
-    return createAppleAppLogRuntime(host);
+    const { createApplePlatformRuntime } = await import('./runtime.ts');
+    return createApplePlatformRuntime(host);
   },
-} satisfies AppLogRuntimePlatformModule);
+} satisfies PlatformRuntimeModule);
 
 export const inventoryModule = Object.freeze({
   ...metadata,

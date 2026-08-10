@@ -2,10 +2,10 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { parseLimrunDeviceId } from './device.ts';
 import type {
-  AppLogRuntimeHost,
-  AppLogRuntimeOperations,
   DeviceBinding,
-  DeviceRuntimeOwner,
+  PlatformRuntimeHost,
+  PlatformRuntimeOperations,
+  PlatformRuntimeOwner,
   RuntimeFacts,
 } from '@agent-device/contracts/platform';
 import {
@@ -13,6 +13,7 @@ import {
   assertAppLogSessionArtifacts,
   createAppLogRecoveryOperations,
   createAppLogStartResult,
+  readRecentNetworkTrafficFromText,
 } from '@agent-device/capture-kit';
 import { providerRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform';
 import {
@@ -27,8 +28,8 @@ export type LimrunAppLogReconnectOutcome =
   | Readonly<{ status: 'missing' }>
   | Readonly<{ status: 'ownership-lost' }>;
 
-export type LimrunAppLogRuntimeOwnerOptions = Readonly<{
-  host: AppLogRuntimeHost;
+export type LimrunPlatformRuntimeOwnerOptions = Readonly<{
+  host: PlatformRuntimeHost;
   runtimeInstance: string;
   ownsDevice(device: DeviceInfo): boolean;
   openCurrent(device: DeviceInfo): Promise<LimrunAppLogReader | undefined>;
@@ -40,9 +41,9 @@ export type LimrunAppLogRuntimeOwnerOptions = Readonly<{
 
 const available = Object.freeze({ available: true } as const);
 
-export function createLimrunAppLogRuntimeOwner(
-  options: LimrunAppLogRuntimeOwnerOptions,
-): DeviceRuntimeOwner<AppLogRuntimeOperations> {
+export function createLimrunPlatformRuntimeOwner(
+  options: LimrunPlatformRuntimeOwnerOptions,
+): PlatformRuntimeOwner {
   const owner = providerRuntimeOwner('limrun', options.runtimeInstance);
   return Object.freeze({
     owner,
@@ -64,11 +65,11 @@ export function createLimrunAppLogRuntimeOwner(
 }
 
 function bindLimrunAppLogs(
-  options: LimrunAppLogRuntimeOwnerOptions,
+  options: LimrunPlatformRuntimeOwnerOptions,
   owner: ReturnType<typeof providerRuntimeOwner>,
   device: DeviceInfo,
   signal: AbortSignal,
-): DeviceBinding<AppLogRuntimeOperations> {
+): DeviceBinding<PlatformRuntimeOperations> {
   const recovery = createAppLogRecoveryOperations({
     codec: limrunAppLogDescriptorCodec,
     reattach: async (descriptor, context) => {
@@ -153,7 +154,23 @@ function bindLimrunAppLogs(
       }
     },
     ...recovery,
-  } satisfies AppLogRuntimeOperations;
+    networkDump: async (input) => {
+      const recent = await options.host.appLogs.readRecent(input.sessionId, input.maxScanLines);
+      const backend = backendForDevice(device);
+      const dump = readRecentNetworkTrafficFromText(recent.text, {
+        ...input,
+        path: recent.path,
+        exists: recent.exists,
+        lineNumberOffset: recent.skippedLines,
+        backend,
+      });
+      const notes =
+        dump.entries.length === 0
+          ? ['No HTTP(s) entries were found in recent session app logs.']
+          : [];
+      return Object.freeze({ source: 'app-log' as const, backend, dump, notes });
+    },
+  } satisfies PlatformRuntimeOperations;
   return Object.freeze({
     device,
     owner,
@@ -164,7 +181,7 @@ function bindLimrunAppLogs(
 }
 
 async function currentSessionAvailable(
-  options: LimrunAppLogRuntimeOwnerOptions,
+  options: LimrunPlatformRuntimeOwnerOptions,
   device: DeviceInfo,
   signal: AbortSignal,
 ): Promise<boolean> {
@@ -179,7 +196,7 @@ async function currentSessionAvailable(
   return true;
 }
 
-function facts(device: DeviceInfo): RuntimeFacts<AppLogRuntimeOperations> {
+function facts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> {
   return Object.freeze({
     device: {
       family: device.platform,
@@ -197,6 +214,7 @@ function facts(device: DeviceInfo): RuntimeFacts<AppLogRuntimeOperations> {
       appLogStart: available,
       appLogReattach: available,
       appLogCleanup: available,
+      networkDump: available,
     },
   });
 }

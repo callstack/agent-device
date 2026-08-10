@@ -283,14 +283,6 @@
         "count": 1
       }
     },
-    "src/daemon/network-log.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
     "src/daemon/recording-gestures.ts": {
       "complexity_moderate": {
         "count": 1
@@ -579,7 +571,6 @@
     "src/daemon/session-routing.ts:high impact",
     "src/daemon/handlers/session-state.ts:complexity",
     "src/snapshot/snapshot-processing.ts:high impact",
-    "src/daemon/network-log.ts:high impact",
     "src/commands/cli-grammar/common.ts:high impact",
     "src/daemon/snapshot-presentation/tree.ts:high impact",
     "src/utils/success-text.ts:high impact",

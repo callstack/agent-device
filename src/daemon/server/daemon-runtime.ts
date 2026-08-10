@@ -6,7 +6,7 @@ import { createDaemonHttpServer } from './http-server.ts';
 import { trackDownloadableArtifact } from '../artifact-tracking.ts';
 import { createProviderDeviceRuntimeRequestProviders } from '../../provider-device-runtime.ts';
 import {
-  createPlatformAppLogRuntimeGateway,
+  createPlatformRuntimeGateway,
   createPlatformDeviceInventoryGateways,
 } from '../../platform-runtime.ts';
 import {
@@ -210,9 +210,9 @@ export async function startDaemonRuntime(
   const daemonCodeSignature = resolveDaemonCodeSignature();
   const providerComposition = await createDefaultProviderRuntimeComposition(env);
   const providerDeviceRuntimes = [...providerComposition.runtimes];
-  const deviceRuntimeGateway = createPlatformAppLogRuntimeGateway({
+  const deviceRuntimeGateway = createPlatformRuntimeGateway({
     providerRuntimes: providerDeviceRuntimes,
-    providerModules: providerComposition.appLogModules,
+    providerModules: providerComposition.platformModules,
     sessionsDir,
     resolveSessionArtifacts: (sessionId) => ({
       outputPath: sessionStore.resolveAppLogPath(sessionId),
@@ -396,7 +396,7 @@ export async function startDaemonRuntime(
   const startupAppLogDiagnostics: AppLogRecoveryDiagnostic[] = [];
   try {
     const { recoverLegacyAppLogMarkersAfterDaemonLock } =
-      await import('../../platform-runtime-app-log-host.ts');
+      await import('../../platform-runtime-operation-host.ts');
     const legacyMarkerRecovery = await recoverLegacyAppLogMarkersAfterDaemonLock(sessionsDir);
     appLogAdmissionLedger.retainLegacyMarkers(legacyMarkerRecovery.retained);
     for (const markerPath of legacyMarkerRecovery.recovered) {

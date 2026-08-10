@@ -73,7 +73,6 @@ const WEB_QUERY_COMMANDS = [
   'find',
   'get',
   'is',
-  'network',
   'screenshot',
   'snapshot',
   'wait',

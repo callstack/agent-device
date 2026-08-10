@@ -2,10 +2,11 @@ import { expect, test, vi } from 'vitest';
 import {
   appLogAdmissionUse,
   localRuntimeOwner,
+  networkDumpUse,
   resolveLogsRuntimePlan,
-  type AppLogRuntimeOperations,
   type DeviceBinding,
   type DeviceRuntimeGateway,
+  type PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createRequestRuntimeBindings } from '../request-runtime-binding.ts';
@@ -31,11 +32,13 @@ test('request runtime binding caches one broad owner and projects each declared 
   const admission = await bindings.bindDevice(device('one'), appLogAdmissionUse);
   const inspect = await bindings.bindDevice(device('one'), appLogInspectUse);
   const doctor = await bindings.bindDevice(device('one'), appLogDoctorUse);
+  const network = await bindings.bindDevice(device('one'), networkDumpUse);
 
   expect(runtime.bind).toHaveBeenCalledOnce();
   expect(admission.operations.appLogInspect).toBe(runtime.operations.appLogInspect);
   expect(Object.keys(inspect.operations)).toEqual(['appLogInspect']);
   expect(Object.keys(doctor.operations)).toEqual(['appLogInspect', 'appLogDoctor']);
+  expect(Object.keys(network.operations)).toEqual(['networkDump']);
   expect(Symbol.asyncDispose in doctor).toBe(false);
   await bindings[Symbol.asyncDispose]();
   expect(runtime.disposals).toEqual(['one']);
@@ -58,6 +61,7 @@ test('concurrent uses share one in-flight broad binding for the device', async (
   await Promise.all([
     bindings.bindDevice(selected, appLogInspectUse),
     bindings.bindDevice(selected, appLogDoctorUse),
+    bindings.bindDevice(selected, networkDumpUse),
   ]);
 
   expect(runtime.bind).toHaveBeenCalledOnce();
@@ -79,7 +83,7 @@ test('preferred absence is visible without failing while required absence fails 
 
 function makeGateway(options: { inspectAvailable?: boolean } = {}) {
   const disposals: string[] = [];
-  const operations: AppLogRuntimeOperations = {
+  const operations: PlatformRuntimeOperations = {
     appLogInspect: vi.fn(async () => ({ backend: 'android' as const })),
     appLogDoctor: vi.fn(async () => ({ backend: 'android' as const, checks: {}, notes: [] })),
     appLogStart: vi.fn(async () => {
@@ -87,9 +91,23 @@ function makeGateway(options: { inspectAvailable?: boolean } = {}) {
     }),
     appLogReattach: vi.fn(async () => ({ status: 'missing' as const })),
     appLogCleanup: vi.fn(async () => ({ status: 'already-missing' as const })),
+    networkDump: vi.fn(async () => ({
+      source: 'app-log' as const,
+      backend: 'android' as const,
+      dump: {
+        path: '/tmp/app.log',
+        exists: false,
+        scannedLines: 0,
+        matchedLines: 0,
+        entries: [],
+        include: 'summary' as const,
+        limits: { maxEntries: 25, maxPayloadChars: 2048, maxScanLines: 4000 },
+      },
+      notes: [],
+    })),
   };
   const bind = vi.fn(
-    async ({ device: selected }): Promise<DeviceBinding<AppLogRuntimeOperations>> => ({
+    async ({ device: selected }): Promise<DeviceBinding<PlatformRuntimeOperations>> => ({
       device: selected,
       owner: localRuntimeOwner('android'),
       facts: {
@@ -103,6 +121,7 @@ function makeGateway(options: { inspectAvailable?: boolean } = {}) {
           appLogStart: { available: true },
           appLogReattach: { available: true },
           appLogCleanup: { available: true },
+          networkDump: { available: true },
         },
       },
       operations:
@@ -112,6 +131,7 @@ function makeGateway(options: { inspectAvailable?: boolean } = {}) {
               appLogStart: operations.appLogStart,
               appLogReattach: operations.appLogReattach,
               appLogCleanup: operations.appLogCleanup,
+              networkDump: operations.networkDump,
             }
           : operations,
       [Symbol.asyncDispose]: async () => {
@@ -119,7 +139,7 @@ function makeGateway(options: { inspectAvailable?: boolean } = {}) {
       },
     }),
   );
-  const gateway: DeviceRuntimeGateway<AppLogRuntimeOperations> = {
+  const gateway: DeviceRuntimeGateway<PlatformRuntimeOperations> = {
     bind,
     shutdown: async () => {},
   };

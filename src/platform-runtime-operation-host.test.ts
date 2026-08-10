@@ -15,10 +15,10 @@ vi.mock('./platform-runtime-toolchain-host.ts', () => ({
   createHostToolchainPreparer: () => capabilities.toolchains,
 }));
 
-import { createAppLogRuntimeHost } from './platform-runtime-app-log-host.ts';
+import { createPlatformRuntimeHost } from './platform-runtime-operation-host.ts';
 
-test('app-log host composes the shared lazy Apple-tool and toolchain capabilities', () => {
-  const host = createAppLogRuntimeHost({
+test('operation host composes the shared lazy Apple-tool and toolchain capabilities', () => {
+  const host = createPlatformRuntimeHost({
     sessionsDir: '/tmp/sessions',
     resolveSessionArtifacts: () => ({
       outputPath: '/tmp/sessions/one/app.log',

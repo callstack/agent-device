@@ -3,13 +3,13 @@ import {
   isConfirmedCleanup,
   narrowDeviceBinding,
   runtimeUse,
-  type AppLogRuntimeOperations,
   type AppLogCompletion,
   type AppLogLiveHandle,
   type CleanupOutcome,
   type DeviceBinding,
   type DeviceRuntimeGateway,
   type DurableResourceEnvelope,
+  type PlatformRuntimeOperations,
   type PlatformRequestScope,
   type ReattachOutcome,
 } from '@agent-device/contracts/platform';
@@ -23,7 +23,7 @@ import {
 } from './app-log-resource-store.ts';
 import { safeSessionName } from './session-paths.ts';
 
-const appLogRecoveryUse = runtimeUse<AppLogRuntimeOperations>()({
+const appLogRecoveryUse = runtimeUse<PlatformRuntimeOperations>()({
   required: ['appLogReattach', 'appLogCleanup'],
 });
 
@@ -43,7 +43,7 @@ export type AppLogRecoveryDiagnostic = Readonly<{
 
 type AppLogRecoveryParams = {
   sessionsDir: string;
-  gateway: DeviceRuntimeGateway<AppLogRuntimeOperations>;
+  gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   scope: PlatformRequestScope;
   perRecordDeadlineMs?: number;
   onDiagnostic?: (diagnostic: AppLogRecoveryDiagnostic) => void;
@@ -158,7 +158,7 @@ class AppLogRecoveryDeadlineError extends Error {
 async function recoverOneBeforeDeadline(params: {
   resourcePath: string;
   envelope: DurableResourceEnvelope<'app-log'>;
-  gateway: DeviceRuntimeGateway<AppLogRuntimeOperations>;
+  gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   scope: PlatformRequestScope;
   deadlineMs: number;
   onDiagnostic?: (diagnostic: AppLogRecoveryDiagnostic) => void;
@@ -196,18 +196,18 @@ async function recoverOneBeforeDeadline(params: {
 }
 
 type AppLogRecoveryAuthority = Readonly<{
-  binding: DeviceBinding<AppLogRuntimeOperations>;
+  binding: DeviceBinding<PlatformRuntimeOperations>;
   reattached: ReattachOutcome<AppLogLiveHandle, AppLogCompletion>;
 }>;
 
 async function acquireRecoveryAuthority(params: {
   resourcePath: string;
   envelope: DurableResourceEnvelope<'app-log'>;
-  gateway: DeviceRuntimeGateway<AppLogRuntimeOperations>;
+  gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   scope: PlatformRequestScope;
   onDiagnostic?: (diagnostic: AppLogRecoveryDiagnostic) => void;
 }): Promise<AppLogRecoveryAuthority> {
-  let binding: DeviceBinding<AppLogRuntimeOperations> | undefined;
+  let binding: DeviceBinding<PlatformRuntimeOperations> | undefined;
   let reattached: ReattachOutcome<AppLogLiveHandle, AppLogCompletion> | undefined;
   try {
     binding = await params.gateway.bind({
@@ -233,7 +233,7 @@ async function acquireRecoveryAuthority(params: {
 async function disposeAbortedRecoveryAuthority(
   params: Pick<Parameters<typeof acquireRecoveryAuthority>[0], 'resourcePath' | 'onDiagnostic'>,
   primaryError: unknown,
-  binding: DeviceBinding<AppLogRuntimeOperations> | undefined,
+  binding: DeviceBinding<PlatformRuntimeOperations> | undefined,
   reattached: ReattachOutcome<AppLogLiveHandle, AppLogCompletion> | undefined,
 ): Promise<void> {
   if (reattached?.status === 'active') {
@@ -278,7 +278,7 @@ async function disposeRecoveryValue(
 async function settleRecoveryAuthority(params: {
   resourcePath: string;
   envelope: DurableResourceEnvelope<'app-log'>;
-  binding: DeviceBinding<AppLogRuntimeOperations>;
+  binding: DeviceBinding<PlatformRuntimeOperations>;
   reattached: ReattachOutcome<AppLogLiveHandle, AppLogCompletion>;
   onDiagnostic?: (diagnostic: AppLogRecoveryDiagnostic) => void;
 }): Promise<boolean> {

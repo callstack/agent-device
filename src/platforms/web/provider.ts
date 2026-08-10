@@ -74,6 +74,11 @@ export function resolveWebProvider(provider?: WebProvider): WebProvider {
   return webProviderScope.resolve(provider);
 }
 
+/** True only for an explicitly request-scoped provider, never the local fallback. */
+export function hasScopedWebProvider(): boolean {
+  return webProviderScope.hasScope();
+}
+
 export async function withWebProvider<T>(
   provider: WebProvider | undefined,
   fn: () => Promise<T>,

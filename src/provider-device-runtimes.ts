@@ -1,7 +1,7 @@
 import type { DefaultCloudWebDriverProviderRuntimeEnv } from '@agent-device/provider-webdriver';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { LIMRUN_PROVIDER } from '@agent-device/provider-limrun';
-import type { AppLogRuntimeProviderRegistration } from './platform-runtime-app-log.ts';
+import type { PlatformRuntimeProviderRegistration } from './platform-runtime-gateway.ts';
 import { providerWebDriver } from './provider-webdriver.ts';
 
 export type DefaultProviderDeviceRuntimeEnv = DefaultCloudWebDriverProviderRuntimeEnv &
@@ -14,7 +14,7 @@ export const DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS = [
 
 export type DefaultProviderRuntimeComposition = Readonly<{
   runtimes: readonly ProviderDeviceRuntime[];
-  appLogModules: readonly AppLogRuntimeProviderRegistration[];
+  platformModules: readonly PlatformRuntimeProviderRegistration[];
 }>;
 
 export async function createDefaultProviderRuntimeComposition(
@@ -22,7 +22,7 @@ export async function createDefaultProviderRuntimeComposition(
 ): Promise<DefaultProviderRuntimeComposition> {
   const runtimes = providerWebDriver.createDefaultRuntimes(env);
   const apiKey = env.LIMRUN_API_KEY?.trim();
-  if (!apiKey) return Object.freeze({ runtimes, appLogModules: [] });
+  if (!apiKey) return Object.freeze({ runtimes, platformModules: [] });
 
   const [limrunRuntime, dependencies] = await Promise.all([
     import('@agent-device/provider-limrun'),
@@ -34,12 +34,12 @@ export async function createDefaultProviderRuntimeComposition(
       region: env.LIMRUN_REGION?.trim() || undefined,
     },
     dependencies.createLimrunRuntimeDependencies(),
-    { includeAppLogModule: true },
+    { includePlatformModule: true },
   );
   return Object.freeze({
     runtimes: Object.freeze([...runtimes, registration.runtime]),
-    appLogModules: Object.freeze([
-      { runtime: registration.runtime, module: registration.appLogModule },
+    platformModules: Object.freeze([
+      { runtime: registration.runtime, module: registration.platformModule },
     ]),
   });
 }

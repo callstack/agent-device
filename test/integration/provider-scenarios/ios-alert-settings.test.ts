@@ -4,8 +4,8 @@ import path from 'node:path';
 import { test } from 'vitest';
 import {
   providerRuntimeOwner,
-  type AppLogRuntimeOperations,
   type DeviceRuntimeGateway,
+  type PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform';
 import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { createTestAppLogLiveHandle } from '../../../src/__tests__/test-utils/app-log-live-handle.ts';
@@ -92,7 +92,7 @@ test('Provider-backed integration iOS Settings permission and alert flow uses pr
   });
   let appLogStopCount = 0;
   const appLogStarts: Array<{ appBundleId: string; outPath: string }> = [];
-  const deviceRuntimeGateway = createRecordingAppLogRuntimeGateway({
+  const deviceRuntimeGateway = createRecordingPlatformRuntimeGateway({
     starts: appLogStarts,
     stopped: () => {
       appLogStopCount += 1;
@@ -193,10 +193,10 @@ test('Provider-backed integration iOS Settings permission and alert flow uses pr
   }
 });
 
-function createRecordingAppLogRuntimeGateway(params: {
+function createRecordingPlatformRuntimeGateway(params: {
   starts: Array<{ appBundleId: string; outPath: string }>;
   stopped(): void;
-}): DeviceRuntimeGateway<AppLogRuntimeOperations> {
+}): DeviceRuntimeGateway<PlatformRuntimeOperations> {
   const owner = providerRuntimeOwner('provider-scenario', 'ios-settings');
   return {
     bind: async ({ device }) => {
@@ -221,6 +221,10 @@ function createRecordingAppLogRuntimeGateway(params: {
             appLogStart: { available: true },
             appLogReattach: { available: true },
             appLogCleanup: { available: true },
+            networkDump: {
+              available: false,
+              reason: 'unsupported-provider-mode',
+            },
           },
         },
         operations: {

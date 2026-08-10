@@ -12,7 +12,7 @@ test('provider-inventory Apple logs doctor stays on the scoped Apple tool provid
     },
   });
   const daemon = await createProviderScenarioHarness({
-    platformAppLogRuntime: true,
+    platformRuntime: true,
     appleToolProvider: () => appleTool.provider,
     deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
   });

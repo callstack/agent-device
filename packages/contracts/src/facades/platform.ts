@@ -98,12 +98,40 @@ export type {
   AppLogProcessTransport,
   AppLogRuntimeHost,
   AppLogRuntimeOperations,
-  AppLogRuntimePlatformModule,
-  AppLogRuntimeProviderModule,
   AppLogSessionArtifacts,
   AppLogStartInput,
   AppLogStartResult,
 } from '../app-log-runtime.ts';
+export type { NetworkDump, NetworkDumpParserOptions } from '../network-traffic.ts';
+export type {
+  NetworkAppLogRead,
+  NetworkAppLogSnapshot,
+  NetworkDumpInput,
+  NetworkDumpResult,
+  NetworkProviderDump,
+  NetworkProviderDumpResult,
+  NetworkProviderEntry,
+  NetworkRuntimeHost,
+  NetworkRuntimeOperations,
+  NetworkTransport,
+} from '../network-runtime.ts';
+export {
+  networkAdmissionUse,
+  networkDumpUse,
+  resolveNetworkRuntimePlan,
+} from '../network-runtime-plan.ts';
+export type {
+  NetworkRuntimeAction,
+  NetworkRuntimePlan,
+  NetworkRuntimePlanInput,
+} from '../network-runtime-plan.ts';
+export type {
+  PlatformRuntimeHost,
+  PlatformRuntimeModule,
+  PlatformRuntimeOperations,
+  PlatformRuntimeOwner,
+  PlatformRuntimeProviderModule,
+} from '../platform-runtime-operations.ts';
 export {
   appLogAdmissionUse,
   appLogRuntimePlanUses,

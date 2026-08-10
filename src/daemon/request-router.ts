@@ -2,9 +2,9 @@ import { withResolveTargetDeviceCacheScope } from '../core/dispatch-resolve.ts';
 import { withDeviceInventoryContext } from '../core/device-inventory-context.ts';
 import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
 import type {
-  AppLogRuntimeOperations,
   ComposedDeviceInventoryGateways,
   DeviceRuntimeGateway,
+  PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform';
 import {
   AppError,
@@ -80,7 +80,7 @@ export type RequestRouterDeps = {
   webProvider?: WebProviderResolver;
   recordingProvider?: RecordingProviderResolver;
   deviceInventoryGateways: ComposedDeviceInventoryGateways;
-  deviceRuntimeGateway: DeviceRuntimeGateway<AppLogRuntimeOperations>;
+  deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   appLogAdmissionLedger?: AppLogAdmissionLedger;
   providerRuntimeIds?: readonly string[];
   providerRuntimeRequiredIds?: readonly string[];

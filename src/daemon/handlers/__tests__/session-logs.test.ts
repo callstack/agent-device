@@ -5,6 +5,7 @@ import {
   type AppLogRuntimeOperations,
   type CleanupOutcome,
   type DeviceBinding,
+  type PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform';
 import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { createTestAppLogLiveHandle } from '../../../__tests__/test-utils/app-log-live-handle.ts';
@@ -358,16 +359,34 @@ function createRuntimeHarness(options: { inspectAvailable?: boolean } = {}) {
     });
     return createAppLogStartResult(handle, envelope);
   });
-  const operations: AppLogRuntimeOperations = {
+  const operations: PlatformRuntimeOperations = {
     appLogInspect: inspect,
     appLogDoctor: doctor,
     appLogStart: start,
     appLogReattach: async () => ({ status: 'missing' }),
     appLogCleanup: async () => ({ status: 'cleaned' }),
+    networkDump: async (input) => ({
+      source: 'app-log',
+      backend: 'ios-simulator',
+      dump: {
+        path: '/tmp/app.log',
+        exists: false,
+        scannedLines: 0,
+        matchedLines: 0,
+        entries: [],
+        include: input.include,
+        limits: {
+          maxEntries: input.maxEntries,
+          maxPayloadChars: input.maxPayloadChars,
+          maxScanLines: input.maxScanLines,
+        },
+      },
+      notes: [],
+    }),
   };
   const uses: Array<{ required: readonly string[]; preferred: readonly string[] }> = [];
   const bind = vi.fn(
-    async (device: DeviceInfo): Promise<DeviceBinding<AppLogRuntimeOperations>> => ({
+    async (device: DeviceInfo): Promise<DeviceBinding<PlatformRuntimeOperations>> => ({
       device,
       owner,
       facts: {
@@ -390,6 +409,7 @@ function createRuntimeHarness(options: { inspectAvailable?: boolean } = {}) {
           appLogStart: { available: true },
           appLogReattach: { available: true },
           appLogCleanup: { available: true },
+          networkDump: { available: true },
         },
       },
       operations,

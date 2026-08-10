@@ -35,10 +35,9 @@ import {
 import { createLimrunDeviceSession, type LimrunDeviceSession } from './device-session.ts';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 import type {
-  AppLogRuntimeHost,
-  AppLogRuntimeOperations,
-  AppLogRuntimeProviderModule,
-  DeviceRuntimeOwner,
+  PlatformRuntimeHost,
+  PlatformRuntimeOwner,
+  PlatformRuntimeProviderModule,
 } from '@agent-device/contracts/platform';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform';
 import type { LimrunAppLogDescriptor } from './app-log-descriptor.ts';
@@ -70,13 +69,13 @@ export type LimrunRuntime = ProviderDeviceRuntime & {
 
 export type LimrunRuntimeRegistration = Readonly<{
   runtime: LimrunRuntime;
-  appLogModule: AppLogRuntimeProviderModule;
+  platformModule: PlatformRuntimeProviderModule;
 }>;
 
 export function createLimrunRuntime(
   options: LimrunRuntimeOptions,
   dependencies: LimrunRuntimeDependencies,
-  mode: Readonly<{ includeAppLogModule: true }>,
+  mode: Readonly<{ includePlatformModule: true }>,
 ): LimrunRuntimeRegistration;
 export function createLimrunRuntime(
   options: LimrunRuntimeOptions,
@@ -85,18 +84,18 @@ export function createLimrunRuntime(
 export function createLimrunRuntime(
   options: LimrunRuntimeOptions,
   dependencies: LimrunRuntimeDependencies,
-  mode?: Readonly<{ includeAppLogModule: true }>,
+  mode?: Readonly<{ includePlatformModule: true }>,
 ): LimrunRuntime | LimrunRuntimeRegistration {
   const runtime = new LimrunRuntimeImplementation(options, dependencies);
-  if (!mode?.includeAppLogModule) return runtime;
+  if (!mode?.includePlatformModule) return runtime;
   const owner = providerRuntimeOwner(LIMRUN_PROVIDER, resolveLimrunRuntimeInstance(options));
   if (owner.kind !== 'provider-runtime') throw new TypeError('Invalid Limrun runtime owner');
   return Object.freeze({
     runtime,
-    appLogModule: Object.freeze({
+    platformModule: Object.freeze({
       owner,
-      loadRuntime: async (host: AppLogRuntimeHost) =>
-        await loadLimrunAppLogRuntime(runtime, owner.instance, host),
+      loadRuntime: async (host: PlatformRuntimeHost) =>
+        await loadLimrunPlatformRuntime(runtime, owner.instance, host),
     }),
   });
 }
@@ -367,13 +366,13 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   }
 }
 
-async function loadLimrunAppLogRuntime(
+async function loadLimrunPlatformRuntime(
   runtime: LimrunRuntimeImplementation,
   runtimeInstance: string,
-  host: AppLogRuntimeHost,
-): Promise<DeviceRuntimeOwner<AppLogRuntimeOperations>> {
-  const { createLimrunAppLogRuntimeOwner } = await import('./app-log-runtime.ts');
-  return createLimrunAppLogRuntimeOwner({
+  host: PlatformRuntimeHost,
+): Promise<PlatformRuntimeOwner> {
+  const { createLimrunPlatformRuntimeOwner } = await import('./app-log-runtime.ts');
+  return createLimrunPlatformRuntimeOwner({
     host,
     runtimeInstance,
     ownsDevice: (device) => runtime.ownsDevice(device),

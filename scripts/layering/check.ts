@@ -35,6 +35,8 @@
 //     composition file; premature implementation loading and forbidden cross-boundary edges fail (R13).
 //   - Over the DEVICES COMMAND CUTOVER: the handler calls the neutral inventory gateway and no
 //     superseded inventory module, import, or identifier remains in production (R13).
+//   - Over COMMAND-ATOMIC RUNTIME CUTOVERS: retired logs and network routes/admission cannot coexist
+//     with their operation-fact-derived descriptor and handler paths (R14-R15).
 // Only `(root)` is unranked among src/ zones (see `UNRANKED_ZONES` in model.ts):
 // it holds entrypoints and composition roots. Extracted workspace package zones
 // are classified separately and held behind R11 instead of the src folder spine.
@@ -100,6 +102,11 @@ import {
   sourceExecutedUsingDeclarationViolations,
 } from './logs-runtime-cutover-policy.ts';
 import { contractsImplementationAuthorityViolations } from './contracts-implementation-policy.ts';
+import {
+  networkLegacyRouteViolations,
+  networkRuntimeNarrowingViolations,
+  networkRuntimeRouteViolations,
+} from './network-runtime-cutover-policy.ts';
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
@@ -193,6 +200,23 @@ function checkContractsImplementationAuthority(
   return contractsImplementationAuthorityViolations(
     [...sources].map(([path, source]) => ({ path, source })),
   );
+}
+
+function checkNetworkRuntimeCutover(sources: ReadonlyMap<string, string>): LayeringViolation[] {
+  const production = [...sources].map(([file, source]) => ({ path: file, source }));
+  return [
+    ...networkLegacyRouteViolations(production),
+    ...networkRuntimeNarrowingViolations(production),
+    ...networkRuntimeRouteViolations(production),
+  ].map((violation) => {
+    const separator = violation.indexOf(': ');
+    return {
+      rule: 'R15 network-runtime-cutover',
+      file: separator < 0 ? '(network runtime)' : violation.slice(0, separator),
+      line: 1,
+      message: separator < 0 ? violation : violation.slice(separator + 2),
+    };
+  });
 }
 
 function checkBackEdges(edges: readonly ResolvedImportEdge[]): LayeringViolation[] {
@@ -608,6 +632,8 @@ export function main(): number {
     ...checkLayeringRules(edges),
     ...checkCycles(edges),
     ...checkLogsRuntimeCutover(sources),
+    ...checkContractsImplementationAuthority(sources),
+    ...checkNetworkRuntimeCutover(sources),
     ...checkContractsImplementationAuthority(sources),
     ...checkBackEdges(edges),
     ...checkTypeInversions(edges),

@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import { expect, test, vi } from 'vitest';
 import {
   localRuntimeOwner,
-  type AppLogRuntimeOperations,
   type DeviceRuntimeGateway,
+  type PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform';
 import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { createTestAppLogLiveHandle } from '../../__tests__/test-utils/app-log-live-handle.ts';
@@ -45,7 +45,7 @@ test('primary request failure survives a rejecting binding disposal', async () =
   expect(phases).toContain('request_binding_cleanup_failed');
 });
 
-function makeHandler(gateway: DeviceRuntimeGateway<AppLogRuntimeOperations>) {
+function makeHandler(gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>) {
   const sessionStore = makeSessionStore('request-runtime-binding-router-');
   sessionStore.set('session', {
     name: 'session',
@@ -90,7 +90,7 @@ function makeGateway(disposeError?: Error) {
     }),
     forceCleanup,
   });
-  const operations: AppLogRuntimeOperations = {
+  const operations: PlatformRuntimeOperations = {
     appLogInspect: async () => ({ backend: 'android' }),
     appLogDoctor: async () => ({ backend: 'android', checks: {}, notes: [] }),
     appLogStart: async (input) =>
@@ -108,6 +108,24 @@ function makeGateway(disposeError?: Error) {
       ),
     appLogReattach: async () => ({ status: 'missing' }),
     appLogCleanup: async () => ({ status: 'cleaned' }),
+    networkDump: async (input) => ({
+      source: 'app-log',
+      backend: 'android',
+      dump: {
+        path: '/tmp/app.log',
+        exists: false,
+        scannedLines: 0,
+        matchedLines: 0,
+        entries: [],
+        include: input.include,
+        limits: {
+          maxEntries: input.maxEntries,
+          maxPayloadChars: input.maxPayloadChars,
+          maxScanLines: input.maxScanLines,
+        },
+      },
+      notes: [],
+    }),
   };
   const bindingDispose = vi.fn(async () => {
     if (disposeError) throw disposeError;
@@ -123,12 +141,13 @@ function makeGateway(disposeError?: Error) {
         appLogStart: { available: true as const },
         appLogReattach: { available: true as const },
         appLogCleanup: { available: true as const },
+        networkDump: { available: true as const },
       },
     },
     operations,
     [Symbol.asyncDispose]: bindingDispose,
   }));
-  const gateway: DeviceRuntimeGateway<AppLogRuntimeOperations> = {
+  const gateway: DeviceRuntimeGateway<PlatformRuntimeOperations> = {
     bind,
     shutdown: async () => {},
   };

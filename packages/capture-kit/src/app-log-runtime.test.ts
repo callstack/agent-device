@@ -2,14 +2,11 @@ import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
-  localRuntimeOwner,
-  providerRuntimeOwner,
   type AppLogCompletion,
   type AppLogBackgroundProcessRequest,
   type AppLogProcessOwnership,
   type AppLogProcessTransport,
   type AppLogRuntimeHost,
-  type AppLogRuntimeProviderModule,
   type DurableDescriptorCodec,
 } from '@agent-device/contracts/platform';
 import { APP_LOG_ENVELOPE_FIXTURE } from './durable-resource-envelope.fixtures.ts';
@@ -25,18 +22,6 @@ const completion: AppLogCompletion = {
   outputPath: '/tmp/app.log',
   completedAt: 42,
 };
-
-function compileTimeProviderModuleProof(): void {
-  const invalid: AppLogRuntimeProviderModule = {
-    // @ts-expect-error Provider modules cannot advertise a local-family owner.
-    owner: localRuntimeOwner('apple'),
-    loadRuntime: async () => {
-      throw new Error('not loaded');
-    },
-  };
-  void invalid;
-}
-void compileTimeProviderModuleProof;
 
 function compileTimeProcessTransportProof(): void {
   const invalid: AppLogProcessTransport = {
@@ -229,21 +214,4 @@ test('app-log artifact authority resolves canonical paths from durable session i
     outputPath: '/sessions/session-a/app.log',
     pidPath: '/sessions/session-a/app-log.pid',
   });
-});
-
-test('app-log provider module exposes inert exact-owner metadata without loading mechanics', () => {
-  const loadRuntime = vi.fn(async () => {
-    throw new Error('not loaded');
-  });
-  const module: AppLogRuntimeProviderModule = {
-    owner: providerRuntimeOwner('limrun', 'tenant-a'),
-    loadRuntime,
-  };
-
-  assert.deepEqual(module.owner, {
-    kind: 'provider-runtime',
-    provider: 'limrun',
-    instance: 'tenant-a',
-  });
-  assert.equal(loadRuntime.mock.calls.length, 0);
 });

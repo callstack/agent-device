@@ -23,7 +23,7 @@ import {
   createTestDeviceInventoryGateways,
   createTestDeviceInventoryGatewaysFromProvider,
 } from '../../../src/__tests__/test-utils/device-inventory-gateways.ts';
-import { createPlatformAppLogRuntimeGateway } from '../../../src/platform-runtime.ts';
+import { createPlatformRuntimeGateway } from '../../../src/platform-runtime.ts';
 import { unavailableDeviceRuntimeGateway } from '../../../src/daemon/__tests__/test-device-runtime-gateway.ts';
 
 const PROVIDER_SCENARIO_TOKEN = 'provider-scenario-token';
@@ -63,7 +63,7 @@ export async function createProviderScenarioHarness(
     (
       | { deviceInventoryProvider: DeviceInventoryProvider; deviceInventorySource?: never }
       | { deviceInventorySource: ProviderDeviceInventorySource; deviceInventoryProvider?: never }
-    ) & { platformAppLogRuntime?: boolean },
+    ) & { platformRuntime?: boolean },
 ): Promise<ProviderScenarioHarness> {
   const sessionDir = fs.mkdtempSync(
     path.join(os.tmpdir(), 'agent-device-provider-scenario-session-'),
@@ -73,13 +73,13 @@ export async function createProviderScenarioHarness(
     deviceInventoryProvider,
     deviceInventorySource,
     deviceRuntimeGateway: configuredDeviceRuntimeGateway,
-    platformAppLogRuntime,
+    platformRuntime,
     ...routerDeps
   } = deps;
   const deviceRuntimeGateway =
     configuredDeviceRuntimeGateway ??
-    (platformAppLogRuntime
-      ? createPlatformAppLogRuntimeGateway({
+    (platformRuntime
+      ? createPlatformRuntimeGateway({
           sessionsDir: sessionDir,
           resolveSessionArtifacts: (sessionId) => ({
             outputPath: sessionStore.resolveAppLogPath(sessionId),

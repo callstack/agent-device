@@ -2,25 +2,25 @@ import { deviceIdentity, deviceIdentityKey, type DeviceInfo } from '@agent-devic
 import {
   AsyncCleanupStack,
   narrowDeviceBinding,
-  type AppLogRuntimeOperations,
   type BoundDeviceRuntime,
   type DeviceBinding,
   type DeviceRuntimeGateway,
+  type PlatformRuntimeOperations,
   type PlatformRequestScope,
   type RuntimeOperationKey,
   type RuntimeUse,
 } from '@agent-device/contracts/platform';
 
 export type BindDeviceRuntime = <
-  const Required extends readonly RuntimeOperationKey<AppLogRuntimeOperations>[],
+  const Required extends readonly RuntimeOperationKey<PlatformRuntimeOperations>[],
   const Preferred extends readonly Exclude<
-    RuntimeOperationKey<AppLogRuntimeOperations>,
+    RuntimeOperationKey<PlatformRuntimeOperations>,
     Required[number]
   >[],
 >(
   device: DeviceInfo,
-  use: RuntimeUse<AppLogRuntimeOperations, Required, Preferred>,
-) => Promise<BoundDeviceRuntime<RuntimeUse<AppLogRuntimeOperations, Required, Preferred>>>;
+  use: RuntimeUse<PlatformRuntimeOperations, Required, Preferred>,
+) => Promise<BoundDeviceRuntime<RuntimeUse<PlatformRuntimeOperations, Required, Preferred>>>;
 
 export type RequestRuntimeBindings = AsyncDisposable &
   Readonly<{
@@ -29,11 +29,11 @@ export type RequestRuntimeBindings = AsyncDisposable &
 
 /** Private broad-binding cache; handlers receive only the selected projection. */
 export function createRequestRuntimeBindings(params: {
-  gateway: DeviceRuntimeGateway<AppLogRuntimeOperations>;
+  gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   scope: PlatformRequestScope;
 }): RequestRuntimeBindings {
   const cleanups = new AsyncCleanupStack();
-  const bindings = new Map<string, Promise<DeviceBinding<AppLogRuntimeOperations>>>();
+  const bindings = new Map<string, Promise<DeviceBinding<PlatformRuntimeOperations>>>();
 
   const bindDevice: BindDeviceRuntime = async (device, use) => {
     const key = deviceIdentityKey(deviceIdentity(device));

@@ -1,8 +1,8 @@
 import {
   localRuntimeOwner,
   narrowDeviceBinding,
-  type AppLogRuntimeOperations,
   type DeviceRuntimeGateway,
+  type PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform';
 import {
   createRequestHandler as createProductionRequestHandler,
@@ -10,7 +10,7 @@ import {
 } from '../request-router.ts';
 import type { BindDeviceRuntime } from '../request-runtime-binding.ts';
 
-export const unavailableDeviceRuntimeGateway: DeviceRuntimeGateway<AppLogRuntimeOperations> =
+export const unavailableDeviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations> =
   Object.freeze({
     bind: async ({ device }) => ({
       device,
@@ -32,6 +32,7 @@ export const unavailableDeviceRuntimeGateway: DeviceRuntimeGateway<AppLogRuntime
           appLogStart: unavailable,
           appLogReattach: unavailable,
           appLogCleanup: unavailable,
+          networkDump: unavailable,
         },
       },
       operations: {},

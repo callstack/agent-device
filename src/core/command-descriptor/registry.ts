@@ -16,6 +16,7 @@ import {
   appLogRuntimePlanUses,
   assertCommandPlatformExecution,
   inventoryUse,
+  networkDumpUse,
 } from '@agent-device/contracts/platform';
 import type {
   CommandCatalogGroup,
@@ -543,7 +544,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     catalog: { group: 'public' },
     recordsSessionAction: false,
     daemon: { route: 'session', refFrameEffect: 'preserve', sessionKind: 'observability' },
-    capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_NONE },
+    platformExecution: { kind: 'device-runtime', use: networkDumpUse },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
   },
