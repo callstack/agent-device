@@ -2,16 +2,16 @@
 
 ## Status
 
-Accepted for staged adoption (2026-08-09). Checkpoint outcome: **revise** (2026-08-10), measured from
-baseline `44c298d7f3a0ef84bc47f34c54d88b6c9eeb0df2` to the corrected, clean committed migration stack
-`d73bdb4aec27bd4d49f723b33fdb72f43d6137b3`. The first checkpoint review was not behavior-passing:
-later human review found a stale app-log marker wedge plus Apple scoped-provider and Android optional
-network-recovery regressions. Commits `2d8ca8a3702de168abdc7eaa9d43f7becd11b3ad` and
-`d73bdb4aec27bd4d49f723b33fdb72f43d6137b3` closed those findings with planted red cases and a clean
-rerun. Broader command migration is still not authorized: the corrected architecture, ownership,
-laziness, startup, and behavior evidence passed, but all four hard package-size thresholds failed. An
-explicit packaging/budget decision and another clean checkpoint rerun are required before this Status
-may record **continue**.
+Accepted for staged adoption (2026-08-09). Checkpoint outcome: **continue** (2026-08-10), under the
+revised cumulative package budget accepted in issue 1704. The clean checkpoint is measured from the
+original baseline `44c298d7f3a0ef84bc47f34c54d88b6c9eeb0df2`, through merged `devices`
+`c06bed9f773a27ae0a02cb012570def2f2d0b90e`, to `logs`
+`188795386466cfdba5d5748db5c9d3477e70eb4e` and `network`
+`457fafe6399a95a4ddbfac57f02b3a7fe4157a54`. The earlier checkpoints at `99f5af1b7` and `d73bdb4ae`
+are superseded and were not behavior-passing: later review found correctness failures and the first
+budget decision still used the unrevised +3% limit. The required cleanup package, explicit budget
+decision, and clean rerun are now complete. The next authorized command unit is recordings onto the
+durable-capture substrate; this decision does not authorize an unbounded platform migration.
 
 During the `devices` unit, doctor discovery, replay-test sharding, Apple simulator hints, and Android
 emulator lifecycle keep their existing command execution owners while consuming the same injected,
@@ -304,6 +304,14 @@ contract handle beside its descriptor and metadata; the field has one R7 transit
 descriptor and neutral metadata enter the authoritative persisted recovery record. Concrete platform
 classes, provider clients, child handles, timers, transports, and wait promises enter neither store.
 
+A daemon-owned, process-lifetime admission ledger may retain bounded cleanup uncertainty that has no
+honest durable representation, but it is not a second live-resource store: it contains no handle or
+descriptor, never supersedes the persisted manifest, and is keyed by canonical device identity when
+that identity is known. Evidence that can be checked again, such as a retained legacy marker path, is
+revalidated at admission so manual recovery can unblock the matching device without a daemon restart.
+Unknown-identity evidence remains globally fail-closed, while undurable in-memory blocks expire only
+under an explicit bounded policy with diagnostics.
+
 Persisted JSON re-enters as `unknown`. Contracts first validate a neutral envelope containing resource
 kind/envelope version, session/device identity, exact owner reference, fence, and lifecycle state.
 Only after exact-owner selection does that facet's total codec decode its descriptor body. Invalid or
@@ -477,85 +485,81 @@ neutral envelope or facet-owned descriptor codec, or contains raw live mechanics
 laziness cannot be preserved; R7/R10/type-cycle pressure grows; or the landed slices add more daemon
 platform ownership than they remove.
 
-#### Checkpoint result: revise after correctness rerun (2026-08-10)
+#### Checkpoint result: continue under the revised cumulative budget (2026-08-10)
 
-The checkpoint compared `44c298d7f3a0ef84bc47f34c54d88b6c9eeb0df2` with
-`d73bdb4aec27bd4d49f723b33fdb72f43d6137b3` on the same host and toolchain. The initial checkpoint at
-`99f5af1b7bb8fa62977a6a88b7aed6b934c8a1f3` did not pass behavior review: its evidence missed a dead
-owned-marker path that blocked the next log start, an iOS simulator recovery path that bypassed the
-request-scoped Apple tool provider, and an Android optional-logcat failure that discarded canonical
-network traffic. The corrected committed tree passed the rerun:
+The final checkpoint compares `44c298d7f3a0ef84bc47f34c54d88b6c9eeb0df2` with stack head
+`457fafe6399a95a4ddbfac57f02b3a7fe4157a54` on the same host and toolchain. Merged `devices`
+`c06bed9f773a27ae0a02cb012570def2f2d0b90e` is part of that range; rebasing the remaining PRs onto it
+does not reset the denominator. The earlier `99f5af1b7` checkpoint missed a stale owned-marker wedge,
+Apple scoped-provider bypass, Android optional-recovery loss, and absolute network line-number
+regression. The later cleanup review found a cross-device retained-marker wedge, a manual-recovery
+hint that remained blocked until daemon restart, and an Android app-log stream that stayed pinned to
+the pre-relaunch app PID. Each correction was observed red before its focused test passed; the final
+admission test proves removal of the matching retained marker permits a second start in the same
+daemon process. On exact final logs head `188795386`, a controlled Android relaunch moved the app from
+PID 10952 to 11455, rotated the durable logcat marker to PID 11455, and retained both before/after
+canaries plus the new process output in one `app.log`. Guarded daemon/dead-child recovery separately
+terminalized the manifest and allowed a clean second start.
 
-- `pnpm check:layering` passed 117 structural tests and the real-tree scan over 1,141 source files.
-  R13 owns exactly six private implementation-lazy family packages behind one composition root;
-  R14 and R15 leave one typed route for `logs` and `network`; R11 reports 16 workspace packages, 38
-  exported subpaths, and zero root or sibling-package back-imports. The focused planted-red command
-  `node --experimental-strip-types --test scripts/layering/platform-package-policy.test.ts
-  scripts/layering/logs-runtime-cutover-policy.test.ts
-  scripts/layering/network-runtime-cutover-policy.test.ts` passed 28 tests after proving eager imports,
-  back-edges, duplicate/neither routes, legacy admission, and narrowed-runtime repairs red.
-- `pnpm typecheck` independently built declarations for contracts, all six platform packages, and the
-  provider packages before checking the root and examples. `pnpm check:affected --run` passed 3,973
-  affected tests with 87.73% changed-line coverage, plus package, layering, fallow,
-  integration-progress, provider, and replay-compatibility gates. A focused 17-file runtime/lifetime
-  run passed 87 tests.
-- Coverage includes six local inventory/runtime owners, the three production provider inventory IDs
-  (`browserstack`, `aws-device-farm`, `limrun`), and the independently enumerated eight-cell Apple
-  table: iOS simulator, iOS CoreDevice physical, iOS XCTest physical, iPadOS, tvOS, macOS, visionOS,
-  and the watchOS sentinel. Provider ownership is fail-closed; provider-authoritative inventory and
-  exact-owner runtime tests prove no provider-to-local fallback.
-- Request-binding tests prove one cached broad binding, narrowed non-disposable projections,
-  reverse-order exactly-once disposal, adopted-handle survival, and primary-error precedence.
-  App-log contract/daemon/provider tests cover pending transfer, every persist/adopt gap,
-  descriptor-version and invalid-envelope retention, exact-owner reattachment, cleanup-only recovery,
-  descriptor-only cleanup, fencing, idempotent teardown, and cleanup error precedence.
-- Static composition evaluates no host or family mechanics. Provider-authoritative inventory loads no
-  local host, selected discovery/binding evaluates only its family, and façades keep implementation
-  imports inside deferred loaders. No emitted module is duplicated. The controlled 15-run medians also
-  passed the startup threshold: `--version` was 30.1 ms to 31.7 ms (+1.6 ms) and `--help` was 46.5 ms
-  to 46.8 ms (+0.4 ms), both below `max(5 ms, 10%)`.
-- The locked daemon-platform import command
-  `rg -n "(?:from\\s+|import\\()(['\"])(?:\\.\\./)+platforms/" src/daemon -g '*.ts' -g
-  '!**/__tests__/**' -g '!*.test.ts'` decreased from 141 to 128. Checkpoint-owned `logs`/`network`
-  platform decision lines decreased from 14 to zero. The baseline-to-checkpoint range diff removed 24
-  matching platform-decision lines and added one (net -23); this is a range-diff count, not a newly
-  invented absolute denominator. Legacy behavior-indirection families decreased from four to three:
-  the app-log tag/map is gone while performance, recording, and provider-key indirection remain.
+The required revision package is complete:
+
+- `@agent-device/capture-kit` is the private durable-capture implementation package. Contracts keeps
+  pure runtime types and plan models; capture-kit owns process/recovery/live-handle mechanics,
+  envelope/descriptor codecs, and network parsers. The dependency order is
+  `kernel < contracts < capture-kit < platform/provider/daemon`. A planted-red gate rejects process,
+  filesystem, or timer mechanics drifting into contracts. The package is wired into affected-check
+  selection, the layering test enumeration, and the workspace typecheck project list.
+- Canonical kernel device identity replaces the duplicate encoders while facts-shape validation stays
+  separate. The bounded Android/Harmony PID owner factory lives in capture-kit; Apple and Limrun stay
+  custom, there is no network factory, and all loaders retain their lazy boundary. The managed-command
+  allowlist, unused façade exports, public Limrun runtime-module declaration leak, quadratic JSON walk,
+  and duplicate lifecycle/reconnect mechanics are gone. The temporary Android implementation files
+  introduced by the devices PR are also absent from contracts at this checkpoint.
+- Plan-declared app-session requirements replace repeated handler guards. Persisted durable lifecycle
+  is `open | completed`, with transient phase retained as metadata. A daemon-owned admission ledger
+  scopes decodable evidence by device identity, rechecks manually removed legacy markers, bounds
+  undurable blocks, and remains subordinate to the durable manifest. Discriminated teardown settles
+  app-log state, re-reads the replaced session record, then runs generic teardown, avoiding the stale
+  reference and double-cleanup path.
+
+The final gates passed:
+
+- `pnpm check:affected --run` at `457fafe63` passed 799 test files / 6,424 tests with 2,097/2,401
+  changed executable lines covered (87.34%), plus format, lint, typecheck, build/declarations,
+  published-package clean install, fallow, provider integration, replay compatibility, and
+  integration-progress checks.
+- `pnpm check:layering` passed 131 structural/model tests and scanned 1,157 production source files.
+  R11 owns 17 workspace packages behind 39 exported subpaths with no root back-imports; R13 keeps six
+  private implementation-lazy platform packages above capture-kit behind one composition root; R14
+  and R15 retain one typed route for `logs` and `network` with no legacy route.
+- Six local inventory/runtime owners, all enumerated Apple leaf/kind cells, and the production
+  BrowserStack, AWS Device Farm, and Limrun provider modes remain covered. Provider ownership and
+  inventory are fail-closed; exact-owner recovery and provider-authoritative tests prove there is no
+  provider-to-local fallback. Durable tests cover every start/persist/adopt gap, exact-owner recovery,
+  cleanup-only and descriptor-only cleanup, fencing, idempotence, and primary-error precedence.
 - R7/R10 remain at 23 writer-owned `SessionState` fields and 29 owner claims, with all 34 fields
-  classified. The largest type cycle decreased from 47 to 46; the two external production
-  `daemon/types.ts` importers are unchanged.
-- The first adversarial `claude -p` pass found one P1—bounded-tail parsing lost absolute app-log line
-  numbers—and the network unit fixed it with a failing 5,001-line case. Human review then found the
-  three additional correctness failures above, disproving the earlier clearance. The app-log fix
-  first failed with `stale marker still blocks replacement`, then cleared the exact verified marker;
-  live Android/iOS log start, relaunch, stop, and guarded daemon-takeover recovery proved that a second
-  start succeeds. The Apple generic-command path and Android rejecting-logcat path were each observed
-  red before the scoped `runSimctl` port and optional-recovery correction; live Android/iOS public
-  network dumps then returned the expected app-log backend, URL, and status before clean stop/close.
+  classified. The largest type cycle is 46 against the 47-file ceiling, and the two external
+  production `daemon/types.ts` importers are unchanged. Checkpoint-owned `logs`/`network` platform
+  decision lines remain zero.
 
-The same-host size comparison used `pnpm build`, then
-`node scripts/size-report.mjs --json <report>.json --startup-runs 15` for each clean snapshot and
-`node scripts/size-report.mjs --compare <base-report>.json --startup-runs 15` for the checkpoint.
-Every package-size metric exceeded the hard +3% limit:
+Issue 1704 revised the budget for this checkpoint for three explicit reasons: capture-pipeline
+reliability through fenced ownership and exact recovery, durable cloud log streaming that did not
+exist in the baseline, and a reusable durable-capture substrate. This is not a new observability
+layer: the CLI-observable `logs` behavior remains parity work. The budget stays cumulative from
+`44c298d7f`; the exact clean post-revision measurement is the reviewed upper bound for this checkpoint,
+not a reusable allowance for future units:
 
-| Metric | Baseline | Checkpoint | Change | Amount beyond +3% |
-| --- | ---: | ---: | ---: | ---: |
-| Raw JavaScript | 2,036,067 B | 2,122,782 B | +4.26% | 25,633 B |
-| Gzipped JavaScript | 659,646 B | 691,173 B | +4.78% | 11,738 B |
-| npm tarball | 797,027 B | 851,652 B | +6.85% | 30,715 B |
-| npm unpacked | 2,781,186 B | 2,914,493 B | +4.79% | 49,872 B |
+| Metric | Original baseline | Revised cumulative bound / checkpoint | Change |
+| --- | ---: | ---: | ---: |
+| Raw JavaScript | 2,036,067 B | 2,131,689 B | +95,622 B (+4.696%) |
+| Gzipped JavaScript | 659,646 B | 695,134 B | +35,488 B (+5.380%) |
+| npm tarball | 797,027 B | 826,761 B | +29,734 B (+3.731%) |
+| npm unpacked | 2,781,186 B | 2,878,492 B | +97,306 B (+3.499%) |
 
-The controlled pre-correction slice attribution identified `logs` as the dominant contributor:
-+69,775 B raw JavaScript, +23,407 B gzip, +22,870 B tarball, and +81,678 B unpacked. The aggregate
-table above is the authoritative final measurement after the correctness commits; the earlier slice
-figures remain diagnostic rather than arithmetic for the final head.
-
-Review found no duplicated emitted platform implementation and no bounded trimming that brings all
-four aggregate metrics below the limit without weakening accepted behavior. Removing private Limrun
-declarations could save about 14.9 kB unpacked only, so it does not resolve the hard failure. The
-required revision is therefore a deliberate packaging/budget decision, not an implementation-laziness
-waiver or a silent threshold increase. Until that decision is accepted and this checkpoint reruns on
-a clean commit, broader migration remains prohibited.
+The controlled 15-run startup medians showed no regression (`--version` 94.5 ms to 47.4 ms;
+`--help` 91.2 ms to 72.0 ms). Module-level source-map inspection found no duplicate implementation
+emission; the distribution cost is the accepted reliability/cloud/substrate decision above. Future
+units must define and review their own cumulative budget rather than inheriting this headroom.
 
 The tracking issue owns command order, PR/file lists, test-only compatibility fixtures, exact
 benchmark commands and thresholds, raw evidence, and reviewers. Temporary fixtures never authorize
@@ -621,9 +625,9 @@ boundaries, and the early adoption checkpoint keep that coexistence shippable an
   explicitly preserves the same no-state-from-events rule.
 - **A separate process-local resource ledger beside `SessionState` for live handles:** rejected. The
   session store is in-memory, so live `SessionState` already is the process-local home; a parallel
-  ledger keyed by the same session/resource identity would duplicate the ownership its R7 transition
-  owner already governs. The live/persisted boundary, not a second live store, is the protection:
-  only the descriptor and neutral metadata enter the persisted recovery record.
+  handle/descriptor store would duplicate the ownership its R7 transition owner governs. The accepted
+  admission ledger is narrower: it holds only bounded cleanup-block evidence, contains no live handle
+  or descriptor, and never replaces the authoritative manifest.
 - **Rely only on performance thresholds for lazy loading:** rejected. Thresholds catch regressions
   late and can pass while unrelated implementation graphs load; the import/evaluation shape is also
   contract-tested.
