@@ -27,6 +27,56 @@ test('a fail-open literal is not a category, because it pairs rule: with path:',
   assert.deepEqual(selectorRuleIds('m.ts', source), ['gate:lint']);
 });
 
+test('an arbitrary .rule member access is NOT an exempt forwarding shape', () => {
+  // The exemption exists only for a binding proven to iterate the collected ownership table.
+  // Accepting any member named `.rule` would silently skip a category this reader never sees,
+  // while the other literal categories keep the derived-universe gate green.
+  assert.throws(
+    () => selectorRuleIds('m.ts', "const a = reason('lint', file, config.rule, 'd');"),
+    /rule argument is not a string literal/,
+  );
+  // Same shape, but iterating an array that is not an ownership table: still not proven.
+  assert.throws(
+    () =>
+      selectorRuleIds(
+        'm.ts',
+        `const OTHER = [{ id: 'x', rule: 'not-a-category' }];
+         const a = OTHER.map((entry) => reason('lint', file, entry.rule, 'd'));`,
+      ),
+    /rule argument is not a string literal/,
+  );
+  // And a binding named `entry` that never came from a table does not inherit the exemption.
+  assert.throws(
+    () => selectorRuleIds('m.ts', "const a = reason('lint', file, entry.rule, 'd');"),
+    /rule argument is not a string literal/,
+  );
+});
+
+test('forwarding from the real ownership-table iteration is exempt and loses no category', () => {
+  const source = `
+    const BUILD_OWNERSHIP = [
+      { check: 'swift-runner', rule: 'own:swift', detail: 'd', owns: () => true },
+      { check: 'macos-helper', rule: 'own:macos-helper', detail: 'd', owns: () => true },
+    ];
+    const a = reason('lint', file, 'gate:lint', 'd');
+    const b = BUILD_OWNERSHIP.filter((entry) => entry.owns(file)).map((entry) =>
+      reason(entry.check, file, entry.rule, entry.detail),
+    );
+  `;
+  assert.deepEqual(selectorRuleIds('m.ts', source), ['gate:lint', 'own:macos-helper', 'own:swift']);
+});
+
+test("the reason factory's own return object declares no category", () => {
+  // `return { check, path: file, rule, detail }` pairs check with rule and would otherwise read
+  // as a build-ownership entry whose rule is not a literal. It is excluded by the factory's
+  // source span, not by "any shorthand rule" — which would also swallow a real table entry.
+  const source = `
+    function reason(check, file, rule, detail) { return { check, path: file, rule, detail }; }
+    const a = reason('lint', file, 'gate:lint', 'd');
+  `;
+  assert.deepEqual(selectorRuleIds('m.ts', source), ['gate:lint']);
+});
+
 test('a computed rule argument fails closed rather than being skipped', () => {
   // A category this reader cannot see would bypass the representative-sample and reachability
   // checks entirely — the exact hole the derived universe exists to close.
