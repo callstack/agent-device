@@ -4,10 +4,11 @@
 // the gate is deterministic against renames and deletes. run.ts owns all I/O.
 //
 // The coverable universe is the lcov report itself, not a second copy of
-// vitest's exclude globs: coverage runs with `all` on, so every includable
-// `src/**/*.ts` file appears in lcov even when untested. A changed includable
-// file ABSENT from lcov was dropped by an exclude glob — reported (non-gating)
-// so exclusions cannot silently absorb new logic.
+// vitest's exclude globs: coverage runs with `all` on, so every includable file
+// under either coverage root (`src/**/*.ts` and `packages/*/src/**/*.ts`)
+// appears in lcov even when untested. A changed includable file ABSENT from
+// lcov was dropped by an exclude glob — reported (non-gating) so exclusions
+// cannot silently absorb new logic.
 
 // Single source of truth for the gate. Changed-line coverage below this
 // percentage fails the Coverage CI job (unless waived).
@@ -149,15 +150,20 @@ export function parseUnifiedDiff(diff: string): ChangedFileDiff[] {
   return files;
 }
 
-// Vitest coverage `include` is `src/**/*.ts`. Test files are excluded there and
-// carry no product logic, so they never count toward the gate or the excluded
-// tally (which exists to surface hidden logic, not test code).
+// Vitest coverage `include` spans two roots: `src/**/*.ts` and
+// `packages/*/src/**/*.ts`. Test files are excluded there and carry no product
+// logic, so they never count toward the gate or the excluded tally (which
+// exists to surface hidden logic, not test code).
 export function isTestFile(path: string): boolean {
   return /\.test\.ts$/.test(path) || /(^|\/)__tests__\//.test(path);
 }
 
+// Both coverage roots, package-generic so a new workspace needs no edit here.
+// Anything outside them — scripts, package-level `test/`, `.tsx` — stays out.
+const SOURCE_ROOT = /^(?:packages\/[^/]+\/)?src\/.*\.ts$/;
+
 export function isIncludableSource(path: string): boolean {
-  return /^src\/.*\.ts$/.test(path) && !isTestFile(path);
+  return SOURCE_ROOT.test(path) && !isTestFile(path);
 }
 
 // A changed line looks like product code (not blank, not a comment-only line).

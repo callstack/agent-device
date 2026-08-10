@@ -89,6 +89,14 @@ test('source/test classification matches the coverage include glob', () => {
   assert.equal(isIncludableSource('src/core/__tests__/x.ts'), false);
   assert.equal(isIncludableSource('scripts/y.ts'), false);
   assert.equal(isIncludableSource('src/core/x.tsx'), false);
+  // Workspace packages are the second coverage root.
+  assert.equal(isIncludableSource('packages/contracts/src/x.ts'), true);
+  assert.equal(isIncludableSource('packages/contracts/src/deep/x.ts'), true);
+  assert.equal(isIncludableSource('packages/contracts/src/x.test.ts'), false);
+  assert.equal(isIncludableSource('packages/contracts/src/__tests__/x.ts'), false);
+  assert.equal(isIncludableSource('packages/contracts/src/x.tsx'), false);
+  assert.equal(isIncludableSource('packages/contracts/test/x.ts'), false);
+  assert.equal(isIncludableSource('packages/contracts/x.ts'), false);
   assert.equal(isTestFile('src/a.test.ts'), true);
   assert.equal(isTestFile('src/__tests__/a.ts'), true);
   assert.equal(isTestFile('src/a.ts'), false);
@@ -145,6 +153,23 @@ test('gate fails when changed-line coverage is below threshold and lists offende
   // Branches on changed lines are reported, not gated.
   assert.equal(result.branch.total, 2);
   assert.equal(result.branch.covered, 1);
+});
+
+test('workspace package source counts toward the gate like root source', () => {
+  const packageCoverage = parseLcov(
+    ['SF:packages/contracts/src/feature.ts', 'DA:1,4', 'DA:2,0', 'end_of_record'].join('\n'),
+  );
+  const result = computeChangedCoverage({
+    diffs: [diff('packages/contracts/src/feature.ts', [1, 2])],
+    coverage: packageCoverage,
+    fileLines: () => null,
+  });
+  // 1/2 = 50% < 70: a package change can now fail the gate on its own.
+  assert.equal(result.totalLines, 2);
+  assert.equal(result.coveredLines, 1);
+  assert.equal(result.passed, false);
+  assert.equal(result.offenders[0]?.path, 'packages/contracts/src/feature.ts');
+  assert.deepEqual(result.offenders[0]?.uncoveredLines, [2]);
 });
 
 test('non-executable added lines (absent from DA) never enter the denominator', () => {
