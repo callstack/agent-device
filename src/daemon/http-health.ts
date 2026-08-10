@@ -1,6 +1,9 @@
 import { readVersion } from '../utils/version.ts';
 
 // See docs/adr/0006-daemon-rpc-protocol-version.md before changing this value.
+// Enforced, not just documented: `test/wire-compat/` digests the declarations
+// that cross this boundary and fails when one changes shape without a bump or
+// an acknowledged-compatible entry (#1432).
 export const DAEMON_RPC_PROTOCOL_VERSION = 2;
 
 export type DaemonHealthPayload = {

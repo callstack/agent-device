@@ -104,6 +104,7 @@ const ALL_SCRIPTS: Record<string, string> = {
   'test:integration:node': 'x',
   'test:integration:progress:check': 'x',
   'check:replay-compat': 'x',
+  'check:daemon-wire-compat': 'x',
 };
 
 const ARGS = { base: 'origin/main', head: 'HEAD', json: false, run: true };

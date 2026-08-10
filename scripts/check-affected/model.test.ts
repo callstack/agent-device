@@ -224,6 +224,7 @@ test('every catalog command resolves against package scripts', () => {
     'build:macos-helper': 'x',
     'test:smoke:web': 'x',
     'check:replay-compat': 'x',
+    'check:daemon-wire-compat': 'x',
   };
   for (const spec of CHECK_CATALOG) {
     const command = resolveCommand(spec, scripts, 'origin/main');

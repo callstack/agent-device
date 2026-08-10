@@ -38,7 +38,6 @@ asked or when the work is intentionally incomplete.
   validation does not apply instead of writing a command checklist.
 - Call out real tradeoffs, known gaps, and follow-ups; omit boilerplate when there are none.
 - Note touched-file count and whether scope expanded beyond the initial command family.
-
 ## Reviewing
 
 - Review against the linked issue, not only the diff. State the issue's motivating behavior and
@@ -52,6 +51,10 @@ asked or when the work is intentionally incomplete.
   backend. Tests that mock away the router, or exercise only a helper, do not prove the shipped path.
 - For each key regression test, identify what deletion or revert would make it fail. If reverting the
   implementation still passes, the test is vacuous.
+- For recurring failures, prefer a design that makes the class impossible at the owning interface;
+  keep one small regression as evidence rather than enumerating examples. If a custom guard needs
+  repeated exceptions or reconstructs compiler/schema behavior, move the invariant to its source of
+  truth instead of extending the guard.
 - Check for hidden behavior changes separately from intended refactors: output shape,
   warning/error propagation, artifact paths, fallback/retry tiers.
 - Verify tests cover the issue's motivating failure, not just the new abstraction. Prefer
