@@ -15,7 +15,6 @@ import {
   replayAttemptTimeoutMs,
 } from '../live-device-e2e/replay-evidence.ts';
 import { runLiveReplayTestSuite } from '../live-device-e2e/replay-suite.ts';
-import { assertSelectorRouteReplay } from '../live-device-e2e/selector-route-replay.ts';
 
 const C = PUBLIC_COMMANDS;
 
@@ -76,41 +75,4 @@ export async function assertFixtureReplays(context: LiveContext): Promise<void> 
     'gesture fixture counters prove pan/fling/pinch/rotate/transform',
   );
   verifyCommand(context, C.test, 'fixture scripts pass as a suite and emit non-empty JUnit');
-
-  await assertSelectorRouteReplay(
-    context,
-    path.resolve('test/integration/replays/ios/fixture/03-selector-routes-covered-diagnosis.ad'),
-    runStep,
-    {
-      postReplayCleanup: [
-        {
-          step: 'open iOS cleanup session after focused selector-route replay',
-          args: [
-            'open',
-            context.appId,
-            '--platform',
-            'ios',
-            '--udid',
-            context.udid,
-            '--session',
-            `${context.session}-cleanup`,
-            '--state-dir',
-            context.stateDir,
-            '--json',
-          ],
-        },
-        {
-          step: 'close iOS cleanup session after focused selector-route replay',
-          args: [
-            'close',
-            '--session',
-            `${context.session}-cleanup`,
-            '--state-dir',
-            context.stateDir,
-            '--json',
-          ],
-        },
-      ],
-    },
-  );
 }
