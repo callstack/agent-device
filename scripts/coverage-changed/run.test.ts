@@ -83,6 +83,20 @@ test('fails when a changed source line is uncovered and names that line', () => 
   assert.match(out, /`src\/feature\.ts`: 2/);
 });
 
+test('fails when a changed workspace package line is uncovered and names that line', () => {
+  write(
+    'packages/contracts/src/feature.ts',
+    'export const covered = 1;\nexport const uncovered = 2;\n',
+  );
+  git('add', '-A');
+  git('commit', '-q', '-m', 'package feature');
+  writeLcov('SF:packages/contracts/src/feature.ts\nDA:1,3\nDA:2,0\nend_of_record\n');
+  const { code, out } = capture(() => run(['--base', 'main'], repo));
+  assert.equal(code, 1);
+  assert.match(out, /Changed-line coverage gate: FAIL/);
+  assert.match(out, /`packages\/contracts\/src\/feature\.ts`: 2/);
+});
+
 test('waiver env keeps the job green, still reporting numbers to the job summary', () => {
   write('src/feature.ts', 'export const covered = 1;\nexport const uncovered = 2;\n');
   git('add', '-A');

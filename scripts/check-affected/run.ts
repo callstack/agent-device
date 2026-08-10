@@ -10,6 +10,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runCmdStreaming, runCmdSync } from '../../src/utils/exec.ts';
 import { parseScriptArgs } from '../lib/cli-args.ts';
+import { DEFAULT_VITEST_MAX_WORKERS } from '../lib/vitest-concurrency.ts';
 import {
   assertCatalogComplete,
   CHECK_CATALOG,
@@ -243,7 +244,7 @@ function resolveAffectedCoverageCommands(
       // starve otherwise-green subprocess/provider tests past their exact
       // timeout budgets. Bound this aggregate feedback lane without changing
       // the suites' own timeout or serialization contracts.
-      '--maxWorkers=4',
+      `--maxWorkers=${DEFAULT_VITEST_MAX_WORKERS}`,
       '--coverage',
       '--coverage.reporter=lcov',
       '--coverage.thresholds.statements=0',

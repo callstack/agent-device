@@ -2,6 +2,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
+import {
+  DEFAULT_VITEST_MAX_WORKERS,
+  resolveVitestMaxWorkers,
+} from '../../scripts/lib/vitest-concurrency.ts';
 import vitestConfig from '../../vitest.config.ts';
 
 const HERMETIC_ENV_SETUP = 'src/__tests__/hermetic-env-setup.ts';
@@ -12,6 +16,12 @@ const AMBIENT_DAEMON_VARS = [
 const VITEST_CLAIMS_DIR = path.join(os.tmpdir(), `agent-device-vitest-claims-${process.pid}`);
 
 type ProjectShape = { test?: { name?: string; setupFiles?: readonly string[] } };
+
+test('vitest caps aggregate worker concurrency for parallel worktrees', () => {
+  assert.equal(vitestConfig.test?.maxWorkers, resolveVitestMaxWorkers());
+  assert.equal(resolveVitestMaxWorkers({}), DEFAULT_VITEST_MAX_WORKERS);
+  assert.equal(resolveVitestMaxWorkers({ CI: 'true' }), undefined);
+});
 
 // Wiring: the scrub only helps if every project loads it as a setup file. CI runs with the
 // vars unset, so a dropped wiring is otherwise invisible — assert it structurally instead.
