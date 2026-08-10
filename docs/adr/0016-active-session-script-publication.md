@@ -144,10 +144,16 @@ fresh session is the only re-arming boundary.
 >   is unrepresentable rather than guarded against. `buildNextOpenSession` and the close finalizer
 >   make no recording decision at all now.
 > - The writer's publication gate is answered entirely by the aggregate. Its separate ABORTED check
->   is gone, because a terminal authoring lifecycle is already not recording — one question, with
->   no second gate that could disagree with the first.
-> - Evidence capture and publication authorization are now the same question asked of the same
->   state, which is what they always described.
+>   is gone, because a terminal authoring lifecycle is already not recording — no second gate that
+>   could disagree with the first about *authoring*.
+> - Evidence capture and publication authorization now derive from the same aggregate, but they
+>   remain **distinct predicates**, and deliberately so. They coincide for ordinary authoring:
+>   ARMED both records and publishes, ABORTED and PUBLISHED do neither. They do NOT coincide for
+>   repair — `isRecordingPublication` is true for every repair status, `committed` and `aborted`
+>   included, while publication additionally requires `isRepairArmedWriteBlocked` to pass, which
+>   refuses a committed transaction (idempotent no-op) and one that is not yet committable (ADR
+>   0012 decision 6, C2). A repair that captures evidence is therefore not necessarily a repair
+>   that may publish, and collapsing the two would silently republish or commit a prefix.
 >
 > This is behavior-preserving: the derivation reproduces exactly what the flag held at every
 > transition. Whether a *committed* repair should still capture recording-time evidence is a real
