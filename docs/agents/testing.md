@@ -226,10 +226,21 @@ action → package script → aggregate chain → terminal`, and asserts:
 Two properties are load-bearing. **Ownership is proven, never inferred from a name appearing in
 workflow text** — commands resolve to *terminals* (`vitest:<project>`, `node-test:<file>`,
 `exec:<argv>`), so renaming an intermediate script breaks the chain instead of leaving the claim
-standing. And it **fails closed**: an unreadable edge (a `${{ … }}` in command position, a
-missing local action, an opaque runner that spawns its own child) is a failure until classified
-in `scripts/gate-manifest/waivers.ts` with a reason and a tracking issue. Waivers are themselves
-checked, so one that stops applying fails rather than rotting.
+standing. And it **fails closed**: anything unreadable — a `${{ … }}` in command position, a
+missing local action, an opaque runner that spawns its own child, a selector rule that is not a
+string literal — is a failure until classified in `scripts/gate-manifest/waivers.ts` with a
+reason and a tracking issue. Waivers are themselves checked, so one that stops applying fails
+rather than rotting: each is re-resolved with itself removed and must change the outcome.
+
+Where the two meet is worth knowing before you edit the selector. The path-category universe is
+*derived* from `scripts/check-affected/model.ts` — the third argument of each `reason()` call and
+each `BUILD_OWNERSHIP` entry's `rule:` — so a new ownership rule widens the universe and fails
+the gate until a representative path exercises it. Only string literals count. A rule the reader
+cannot see would slip past the reachability check while the gate stayed green, so a computed one
+is an error naming its line. The single call that forwards `entry.rule` out of the ownership loop
+is declared in `FORWARDED_SELECTOR_RULES`, keyed on the exact text of the call, rather than
+recognized by shape; `selector-rules.ts` records why the shape-recognizing version could not be
+made sound.
 
 The gate is deterministic, offline, and needs no GitHub token — it runs from a clean checkout in
 the `Affected-check Selector` job. Branch-protection required-contexts drift is the one part

@@ -27,13 +27,14 @@ import {
   unrepresentedRules,
   type PathCategory,
 } from './path-categories.ts';
-import { selectorRuleIds } from './selector-rules.ts';
+import { readSelectorRules } from './selector-rules.ts';
 import { suiteUniverse, unownedTerminals } from './suite-ownership.ts';
 import { buildLanes, parseWorkflow, type WorkflowFile } from './workflow-lanes.ts';
 import {
   CATALOG_CLAIM_WAIVERS,
   DECLARED_EDGES,
   DOCS_LANE_OWNERS,
+  FORWARDED_SELECTOR_RULES,
   LOCAL_ONLY,
   TRANSPARENT_WRAPPERS,
   type DocsLaneOwner,
@@ -70,7 +71,12 @@ const actions = new Map(
 const packageJson = JSON.parse(read('package.json')) as { scripts?: Record<string, string> };
 const packageScripts = new Map(Object.entries(packageJson.scripts ?? {}));
 const vitestProjects = vitestProjectNames('vitest.config.ts', read('vitest.config.ts'));
-const selectorRules = selectorRuleIds(SELECTOR_SOURCE, read(SELECTOR_SOURCE));
+const selector = readSelectorRules(
+  SELECTOR_SOURCE,
+  read(SELECTOR_SOURCE),
+  FORWARDED_SELECTOR_RULES.map((entry) => entry.call),
+);
+const selectorRules = selector.rules;
 
 const trackedFiles = listFiles();
 const trackedSet = new Set(trackedFiles);
@@ -210,6 +216,22 @@ const staleWaivers = [
       `TRANSPARENT_WRAPPERS "${entry.file}" changes nothing — no resolved command forwards ` +
       `through it, so the waiver is inert`,
   ),
+  // A forwarded-rule waiver is applied-reachable when the call it names is really there — and
+  // only that call. Matching none means the forward is gone and the waiver now excuses nothing;
+  // matching several means one reviewed claim has silently spread to a call nobody looked at.
+  ...FORWARDED_SELECTOR_RULES.map((entry) => ({
+    entry,
+    matches: selector.waiverMatches.get(entry.call) ?? 0,
+  }))
+    .filter(({ matches }) => matches !== 1)
+    .map(({ entry, matches }) =>
+      matches === 0
+        ? `FORWARDED_SELECTOR_RULES "${entry.call}" matches no reason() call in ` +
+          `${SELECTOR_SOURCE} — the forward is gone, so the waiver is inert`
+        : `FORWARDED_SELECTOR_RULES "${entry.call}" matches ${matches} calls in ` +
+          `${SELECTOR_SOURCE} — one waiver cannot stand for several forwards; make each call ` +
+          `distinguishable, or write the rules as literals`,
+    ),
   ...DECLARED_EDGES.filter(
     (entry) =>
       reportedProblems(
@@ -414,5 +436,10 @@ console.log(
     `across ${lanes.length} jobs in ${workflows.length} workflows (${prLanes} PR-triggered); ` +
     `${CHECK_CATALOG.length} catalog entries wired to live jobs; ` +
     `${selectorRules.length} selector categories represented and reachable; ` +
-    `${LOCAL_ONLY.length + DECLARED_EDGES.length + TRANSPARENT_WRAPPERS.length} owned waivers.`,
+    `${
+      LOCAL_ONLY.length +
+      DECLARED_EDGES.length +
+      TRANSPARENT_WRAPPERS.length +
+      FORWARDED_SELECTOR_RULES.length
+    } owned waivers.`,
 );

@@ -8,9 +8,10 @@ import { selectChecks } from '../check-affected/model.ts';
 import type { CatalogEntry } from './catalog-wiring.ts';
 import { pathFilterMatches, triggersOnPath } from './path-filters.ts';
 import { unreachablePathCategories, unrepresentedRules } from './path-categories.ts';
-import { selectorRuleIds } from './selector-rules.ts';
+import { readSelectorRules } from './selector-rules.ts';
 import { buildLanes, parseWorkflow } from './workflow-lanes.ts';
 import { context } from './test-context.ts';
+import { FORWARDED_SELECTOR_RULES } from './waivers.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 const SELECTOR_SOURCE = 'scripts/check-affected/model.ts';
@@ -109,9 +110,10 @@ test('a selector rule no sample path exercises is reported as unrepresented', ()
 // --- The real tree ----------------------------------------------------------
 
 test("the selector's real rule universe is derived, and excludes its fail-open classes", () => {
-  const rules = selectorRuleIds(
+  const { rules } = readSelectorRules(
     SELECTOR_SOURCE,
     fs.readFileSync(path.join(repoRoot, SELECTOR_SOURCE), 'utf8'),
+    FORWARDED_SELECTOR_RULES.map((entry) => entry.call),
   );
   // Live selection rules, read from `reason(...)` calls and the BUILD_OWNERSHIP table.
   for (const expected of ['gate:lint', 'platform-src', 'own:swift', 'own:mcp', 'src-prod']) {

@@ -14,11 +14,25 @@
 // manifest fails until a representative path exercises it. That is the "something enumerates N"
 // discipline the umbrella asks for, applied to the selector rather than to a second list.
 //
-// Anything else fails closed. A category this reader cannot see would bypass the derived
-// universe and therefore the representative-sample and reachability checks too, so a rule that
-// is not a string literal is an error naming its line — never a silent skip. The two shapes
-// that legitimately forward an already-collected rule are exempted by PROOF, not by pattern:
-// see reasonFactorySpan and parameterBindings.
+// This reader collects STRING LITERALS and nothing else. Anything else is an error naming its
+// line, never a silent skip: a category this reader cannot see would bypass the derived universe
+// and the representative-sample and reachability checks with it.
+//
+// Earlier revisions tried to PROVE that one non-literal shape was safe — `entry.rule`, forwarded
+// out of a loop over the ownership table — by tracing the binding back to the table. That did
+// not work, and the way it failed is the reason it is gone. Six rounds each closed the reported
+// hole and left the same class open one level down: match by pattern, then by name, then by
+// lexical scope, then by binder kind, then a total "every use is a property read" proof — which
+// still admitted a mutating upstream `.filter()` callback and a mutating `entry.method()` call.
+// Closing those two requires treating any member call on the binding as unsafe, and the live
+// call site is `BUILD_OWNERSHIP.filter((entry) => entry.owns(file)).map(...)`: `entry.owns(file)`
+// is itself a member call that could mutate the entry. A proof strict enough to be sound rejects
+// the one call it existed to admit, so there is no proof left to keep.
+//
+// The forward is therefore DECLARED, not detected — FORWARDED_SELECTOR_RULES in waivers.ts,
+// keyed on the exact source text of the call, and policed like every other waiver: a waiver that
+// matches no call is inert and fails, and a waiver that matches two calls fails too, so one
+// entry can never quietly come to stand for a second forward somebody added later.
 
 import {
   calleeName,
@@ -55,8 +69,17 @@ function identifierName(node: unknown): string | null {
     : null;
 }
 
-function isMemberAccess(node: Node): boolean {
-  return node.type === 'MemberExpression' || node.type === 'StaticMemberExpression';
+/**
+ * A call's own source text, whitespace collapsed.
+ *
+ * This is what a FORWARDED_SELECTOR_RULES waiver is keyed on. Text is a blunt key, and that is
+ * the point: it cannot drift into meaning something broader than what was reviewed. Reformatting
+ * or rewrapping the call keeps the waiver (whitespace is normalized); changing an argument, a
+ * name, or the shape does not, and the gate says so.
+ */
+function callText(source: string, node: Node): string {
+  const span = spanOf(node);
+  return span === null ? '' : source.slice(span.start, span.end).replace(/\s+/g, ' ').trim();
 }
 
 /**
@@ -80,189 +103,6 @@ function reasonFactorySpan(program: Node): Span | null {
   return span;
 }
 
-/** Variables initialized to an array literal containing at least one `{ check, rule }` entry. */
-function ownershipTableNames(program: Node, factory: Span | null): Set<string> {
-  const names = new Set<string>();
-  collect(program, (node) => {
-    if (node.type !== 'VariableDeclarator') return;
-    const name = identifierName(node['id']);
-    const init = node['init'];
-    if (name === null || !isNode(init) || init.type !== 'ArrayExpression') return;
-    const holdsOwnershipEntry = children(init).some((element) => {
-      if (element.type !== 'ObjectExpression' || within(factory, element)) return false;
-      const properties = children(element);
-      return (
-        properties.some((property) => propertyKey(property) === 'check') &&
-        properties.some((property) => propertyKey(property) === 'rule')
-      );
-    });
-    if (holdsOwnershipEntry) names.add(name);
-  });
-  return names;
-}
-
-/**
- * Array methods that yield the SAME elements. An ownership entry stays an ownership entry
- * through `.filter(...)`; it does not through `.map(transform)`, whose callback can return
- * anything, so the elements downstream are no longer table entries and their `.rule` is no
- * longer a literal this reader has collected.
- */
-const VALUE_PRESERVING_METHODS = new Set([
-  'filter',
-  'slice',
-  'reverse',
-  'sort',
-  'toSorted',
-  'toReversed',
-]);
-
-/** Whether an expression evaluates to elements of a collected ownership table, unchanged. */
-function yieldsOwnershipEntries(node: unknown, tables: ReadonlySet<string>): boolean {
-  let current: unknown = node;
-  for (let depth = 0; isNode(current) && depth < 32; depth++) {
-    const name = identifierName(current);
-    if (name !== null) return tables.has(name);
-    if (current.type !== 'CallExpression') return false;
-    const callee = current['callee'];
-    if (!isNode(callee) || !isMemberAccess(callee)) return false;
-    const method = identifierName(callee['property']);
-    if (method === null || !VALUE_PRESERVING_METHODS.has(method)) return false;
-    current = callee['object'];
-  }
-  return false;
-}
-
-/**
- * Whether a call iterates a collected ownership table — `BUILD_OWNERSHIP.filter(...).map(cb)`.
- *
- * This is what makes the forwarding exemption a proof rather than a pattern. Accepting any
- * member access named `.rule` would silently skip `reason(check, file, config.rule, …)`, whose
- * literal this reader never sees — a live category slipping past the derived universe while
- * the gate stays green. Only a binding whose values are provably unchanged table entries
- * qualifies, because only then is the literal guaranteed to have been collected already.
- */
-function iteratesOwnershipTable(node: Node, tables: ReadonlySet<string>): boolean {
-  if (node.type !== 'CallExpression') return false;
-  const callee = node['callee'];
-  if (!isNode(callee) || !isMemberAccess(callee)) return false;
-  return yieldsOwnershipEntries(callee['object'], tables);
-}
-
-function isFunctionLike(node: Node): boolean {
-  return (
-    node.type === 'ArrowFunctionExpression' ||
-    node.type === 'FunctionExpression' ||
-    node.type === 'FunctionDeclaration'
-  );
-}
-
-/** The function arguments of a call — the `(entry) => …` in `.map((entry) => …)`. */
-function callbackFunctions(node: Node): Node[] {
-  const args = node['arguments'];
-  if (!Array.isArray(args)) return [];
-  return args.filter((argument): argument is Node => isNode(argument) && isFunctionLike(argument));
-}
-
-/**
- * Every use of `name` inside `callback`, other than the parameter itself, must be a plain
- * property READ — the object of a member access that is not being assigned to.
- *
- * This replaces an enumeration of binder kinds, which kept failing open one construct at a
- * time: a `const` in a nested block, then a catch parameter, then a destructured binding, then
- * `class entry {}`. Enumerating is the wrong shape of proof — there is always another
- * declaration form. Asking instead "is every occurrence of this name a property read?" is
- * total: any re-declaration (of any kind), any reassignment, any mutation of the entry, and any
- * passing of the binding elsewhere all show up as an occurrence that is not a read, and refuse
- * the exemption. It over-refuses in principle and fails closed, which is the point.
- */
-function onlyReadsAsProperty(
-  program: Node,
-  callback: Node,
-  parameter: Node,
-  name: string,
-): boolean {
-  const span = spanOf(callback);
-  if (span === null) return false;
-
-  const assigned = new Set<unknown>();
-  const reads = new Set<Node>();
-  collect(program, (node) => {
-    if (!within(span, node)) return;
-    if (node.type === 'AssignmentExpression') assigned.add(node['left']);
-    else if (node.type === 'UpdateExpression') assigned.add(node['argument']);
-  });
-  collect(program, (node) => {
-    if (!within(span, node) || !isMemberAccess(node) || assigned.has(node)) return;
-    const object = node['object'];
-    if (isNode(object) && identifierName(object) === name) reads.add(object);
-  });
-
-  let onlyReads = true;
-  collect(program, (node) => {
-    if (!onlyReads || !within(span, node)) return;
-    if (identifierName(node) !== name || node === parameter || reads.has(node)) return;
-    onlyReads = false;
-  });
-  return onlyReads;
-}
-
-/**
- * A name bound by a function's parameter list, with the source span it is visible in.
- *
- * Scope, not spelling, is what makes the forwarding exemption safe. Keying it on the NAME
- * `entry` would mean that once the real `BUILD_OWNERSHIP` loop contributes that name, any
- * unrelated — or shadowing — `entry.rule` elsewhere in the file is exempt too, and a live
- * category slips past the derived universe exactly as before. Recording the binding's span
- * lets a `.rule` access be matched to the innermost binder that actually covers it.
- */
-type ParameterBinding = { name: string; span: Span; iteratesOwnership: boolean };
-
-function parameterBindings(program: Node, tables: ReadonlySet<string>): ParameterBinding[] {
-  const ownershipCallbacks = new Set<Node>();
-  collect(program, (node) => {
-    if (!iteratesOwnershipTable(node, tables)) return;
-    for (const callback of callbackFunctions(node)) ownershipCallbacks.add(callback);
-  });
-
-  const bindings: ParameterBinding[] = [];
-  collect(program, (node) => {
-    const span = isFunctionLike(node) ? spanOf(node) : null;
-    const params = node['params'];
-    if (span === null || !Array.isArray(params)) return;
-    const owns = ownershipCallbacks.has(node);
-    for (const parameter of params) {
-      const name = identifierName(parameter);
-      if (name === null || !isNode(parameter)) continue;
-      const iteratesOwnership = owns && onlyReadsAsProperty(program, node, parameter, name);
-      bindings.push({ name, span, iteratesOwnership });
-    }
-  });
-  return bindings;
-}
-
-/**
- * `entry.rule` where `entry` resolves — at this exact site — to the parameter of a callback
- * iterating a collected ownership table. The innermost covering binder wins, so a shadowing
- * `entry` from an unrelated loop is rejected even inside the real one.
- */
-function forwardsACollectedRule(argument: unknown, bindings: readonly ParameterBinding[]): boolean {
-  if (!isNode(argument) || !isMemberAccess(argument)) return false;
-  if (identifierName(argument['property']) !== 'rule') return false;
-  const object = identifierName(argument['object']);
-  const site = spanOf(argument);
-  if (object === null || site === null) return false;
-  const covering = bindings.filter(
-    (binding) =>
-      binding.name === object && binding.span.start <= site.start && site.end <= binding.span.end,
-  );
-  // Latest start = innermost enclosing function that binds this name.
-  const innermost = covering.reduce<ParameterBinding | null>(
-    (best, binding) => (best === null || binding.span.start > best.span.start ? binding : best),
-    null,
-  );
-  return innermost?.iteratesOwnership === true;
-}
-
 /** The `rule:` of a build-ownership entry, or `declared: false` for any other object. */
 function buildOwnershipRule(node: Node): { rule: string | null; declared: boolean } {
   if (node.type !== 'ObjectExpression') return { rule: null, declared: false };
@@ -279,46 +119,83 @@ function buildOwnershipRule(node: Node): { rule: string | null; declared: boolea
   return { rule: stringValue(rule), declared: true };
 }
 
+/** What one node contributes: a category, a waiver hit, a problem, or nothing. */
+type Reading =
+  | { kind: 'rule'; rule: string }
+  | { kind: 'waived'; call: string }
+  | { kind: 'unsupported'; problem: string }
+  | null;
+
+function readReasonCall(source: string, node: Node, waivedCalls: ReadonlySet<string>): Reading {
+  const args = node['arguments'];
+  const argument = Array.isArray(args) ? args[RULE_ARGUMENT_INDEX] : undefined;
+  const literal = literalText(argument);
+  if (literal !== null) return { kind: 'rule', rule: literal };
+  const call = callText(source, node);
+  if (waivedCalls.has(call)) return { kind: 'waived', call };
+  return {
+    kind: 'unsupported',
+    problem:
+      `line ${lineOf(source, isNode(argument) ? argument : node)}: \`${call}\` — ` +
+      `rule argument is not a string literal`,
+  };
+}
+
+function readOwnershipEntry(source: string, node: Node): Reading {
+  const owned = buildOwnershipRule(node);
+  if (!owned.declared) return null;
+  if (owned.rule !== null) return { kind: 'rule', rule: owned.rule };
+  return {
+    kind: 'unsupported',
+    problem: `line ${lineOf(source, node)}: build-ownership \`rule:\` is not a string literal`,
+  };
+}
+
+function readNode(
+  source: string,
+  node: Node,
+  factory: Span | null,
+  waivedCalls: ReadonlySet<string>,
+): Reading {
+  if (calleeName(node) === REASON_FACTORY) return readReasonCall(source, node, waivedCalls);
+  // The build-ownership table states its rule as a property instead of a call argument.
+  return within(factory, node) ? null : readOwnershipEntry(source, node);
+}
+
+export type SelectorRules = {
+  /** Every category id the selector can attach to a selection, sorted. */
+  readonly rules: readonly string[];
+  /** Waived call text → how many `reason(...)` calls in this file it matched. */
+  readonly waiverMatches: ReadonlyMap<string, number>;
+};
+
 /**
- * Every category id `scripts/check-affected/model.ts` can attach to a selection. Throws when a
- * rule is not statically readable, and when it finds none at all — an empty universe would
- * silently mean "nothing to represent", the same class of quiet pass this gate exists to stop.
+ * Reads every category id `scripts/check-affected/model.ts` can attach to a selection.
+ *
+ * Throws when a rule is not a statically readable literal and no waiver in `waived` names that
+ * exact call, and when it finds no rules at all — an empty universe would silently mean "nothing
+ * to represent", the same class of quiet pass this gate exists to stop.
  */
-export function selectorRuleIds(file: string, source: string): string[] {
+export function readSelectorRules(
+  file: string,
+  source: string,
+  waived: readonly string[] = [],
+): SelectorRules {
   const program = parseProgram(file, source);
   const factory = reasonFactorySpan(program);
-  const bindings = parameterBindings(program, ownershipTableNames(program, factory));
+  const waivedCalls = new Set(waived);
 
   const rules = new Set<string>();
+  const waiverMatches = new Map<string, number>();
   const unsupported: string[] = [];
 
   collect(program, (node) => {
-    if (calleeName(node) === REASON_FACTORY) {
-      const args = node['arguments'];
-      const argument = Array.isArray(args) ? args[RULE_ARGUMENT_INDEX] : undefined;
-      const literal = literalText(argument);
-      if (literal !== null) {
-        rules.add(literal);
-        return;
-      }
-      if (forwardsACollectedRule(argument, bindings)) return;
-      unsupported.push(
-        `line ${lineOf(source, isNode(argument) ? argument : node)}: \`${REASON_FACTORY}(...)\` ` +
-          `rule argument is not a string literal`,
-      );
-      return;
-    }
-    // The build-ownership table states its rule as a property instead of a call argument.
-    if (within(factory, node)) return;
-    const owned = buildOwnershipRule(node);
-    if (!owned.declared) return;
-    if (owned.rule !== null) {
-      rules.add(owned.rule);
-      return;
-    }
-    unsupported.push(
-      `line ${lineOf(source, node)}: build-ownership \`rule:\` is not a string literal`,
-    );
+    const reading = readNode(source, node, factory, waivedCalls);
+    if (reading === null) return;
+    if (reading.kind === 'rule') rules.add(reading.rule);
+    else if (reading.kind === 'waived') {
+      waiverMatches.set(reading.call, (waiverMatches.get(reading.call) ?? 0) + 1);
+    } else unsupported.push(reading.problem);
   });
 
   if (unsupported.length > 0) {
@@ -327,8 +204,9 @@ export function selectorRuleIds(file: string, source: string): string[] {
         `${unsupported.length} rule(s) are not statically readable:\n` +
         unsupported.map((entry) => `  - ${entry}`).join('\n') +
         `\nThe gate manifest needs every category id as a literal so it can check that a ` +
-        `representative path exercises it. Write the rule as a string literal, or teach ` +
-        `scripts/gate-manifest/selector-rules.ts the new shape.`,
+        `representative path exercises it. Write the rule as a string literal, or — if the call ` +
+        `only re-states rules the ownership table already declares — add its exact text to ` +
+        `FORWARDED_SELECTOR_RULES in scripts/gate-manifest/waivers.ts with a reason.`,
     );
   }
 
@@ -340,5 +218,5 @@ export function selectorRuleIds(file: string, source: string): string[] {
         `scripts/gate-manifest/selector-rules.ts to follow it.`,
     );
   }
-  return [...rules].sort();
+  return { rules: [...rules].sort(), waiverMatches };
 }

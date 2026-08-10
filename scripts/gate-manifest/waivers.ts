@@ -40,6 +40,35 @@ export const TRANSPARENT_WRAPPERS: readonly { file: string; reason: string }[] =
   },
 ];
 
+/**
+ * A `reason(check, file, rule, detail)` call in the affected selector whose rule argument is not
+ * a string literal, and the claim that it adds no category the derivation has not already seen.
+ *
+ * Keyed on the exact source text of the call (whitespace collapsed). Blunt on purpose: this is a
+ * human claim about one specific call, not a shape the reader recognizes, and selector-rules.ts
+ * explains at length why the shape-recognizing version had to go. check.ts fails the gate if an
+ * entry here matches no call (inert) or more than one (too broad to have been reviewed).
+ */
+export type ForwardedRule = {
+  readonly call: string;
+  readonly reason: string;
+  readonly issue: string;
+};
+
+export const FORWARDED_SELECTOR_RULES: readonly ForwardedRule[] = [
+  {
+    call: 'reason(entry.check, file, entry.rule, entry.detail)',
+    reason:
+      'buildOwnership maps BUILD_OWNERSHIP onto selections, so `entry.rule` can only ever be ' +
+      "one of that table's own `rule:` literals — which selector-rules.ts already collects " +
+      'directly from the table entries. The forward re-states categories the universe has; it ' +
+      'cannot introduce one. Checked by reading model.ts:368, not by static proof: the ' +
+      'upstream `.filter((entry) => entry.owns(file))` callback invokes a member on the entry, ' +
+      'and no sound reader can rule out that such a call mutates it.',
+    issue: '#1429',
+  },
+];
+
 export const DECLARED_EDGES: readonly DeclaredEdge[] = [
   {
     file: 'scripts/lib/contention-retry-run.ts',
