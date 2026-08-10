@@ -21,7 +21,11 @@ vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOrigi
 
 vi.mock('../../platforms/apple/core/apps.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../platforms/apple/core/apps.ts')>();
-  return { ...actual, resolveIosApp: vi.fn(async () => 'com.example.app') };
+  return {
+    ...actual,
+    resolveIosApp: vi.fn(async () => 'com.example.app'),
+    resolveIosSimulatorDeepLinkBundleId: vi.fn(async () => undefined),
+  };
 });
 
 vi.mock('../handlers/session-device-utils.ts', async (importOriginal) => {
@@ -204,7 +208,7 @@ test('fresh replay retains a dynamically selected device through finalization', 
   const externalResponse = handler({
     token: 'test-token',
     session: 'external',
-    command: 'snapshot',
+    command: 'home',
     positionals: [],
     meta: {
       cwd: root,

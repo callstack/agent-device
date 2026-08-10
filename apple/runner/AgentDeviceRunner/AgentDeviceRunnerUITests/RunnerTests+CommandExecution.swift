@@ -1798,7 +1798,23 @@ extension RunnerTests {
         return Response(ok: false, error: ErrorPayload(code: "ELEMENT_NOT_FOUND", message: "element not found"))
       }
       if let x = command.x, let y = command.y {
-        let textInput = textInputAt(app: activeApp, x: x, y: y)
+        let xCTestChannelPenalized = isSnapshotXCTestChannelPenalized(
+          bundleId: currentBundleId
+        )
+        let xCTestTextInputProbeSkipped = !shouldProbeCoordinateTapTextInput(
+          xCTestChannelPenalized: xCTestChannelPenalized
+        )
+        let textInput: XCUIElement?
+        if !xCTestTextInputProbeSkipped {
+          textInput = textInputAt(app: activeApp, x: x, y: y)
+        } else {
+          // A process-scoped tap cannot authorize later typing without concrete element identity.
+          textInput = nil
+          NSLog(
+            "AGENT_DEVICE_RUNNER_COORDINATE_TAP_TEXT_INPUT_PROBE_SKIPPED bundle=%@",
+            currentBundleId ?? ""
+          )
+        }
         var fallback: GestureFallback?
         if command.synthesized == true {
           let policyKind = SynthesizedGesturePolicyKind.coordinateTap
@@ -2492,11 +2508,11 @@ extension RunnerTests {
     return message == "scrolled" ? "scroll" : "drag"
   }
 
-  private func currentXCTestFailureCount() -> Int {
+  func currentXCTestFailureCount() -> Int {
     return testRun?.failureCount ?? 0
   }
 
-  private func didRecordXCTestFailure(since failureCountBefore: Int) -> Bool {
+  func didRecordXCTestFailure(since failureCountBefore: Int) -> Bool {
     return currentXCTestFailureCount() > failureCountBefore
   }
 
@@ -2518,7 +2534,7 @@ extension RunnerTests {
     )
   }
 
-  private func runnerCommandFixture(_ json: String) throws -> Command {
+  func runnerCommandFixture(_ json: String) throws -> Command {
     try JSONDecoder().decode(Command.self, from: Data(json.utf8))
   }
 
@@ -2602,7 +2618,7 @@ extension RunnerTests {
     return XCUIApplication(bundleIdentifier: bundleId)
   }
 
-  private func executeTypeCommand(activeApp: XCUIApplication, command: Command) -> Response {
+  func executeTypeCommand(activeApp: XCUIApplication, command: Command) -> Response {
     guard let text = command.text else {
       return Response(ok: false, error: ErrorPayload(message: "type requires text"))
     }

@@ -2,6 +2,8 @@ import { definePathCoverage } from './coverage-manifest.ts';
 
 export const RUNTIME_REF_COVERAGE = definePathCoverage('runtime-ref', {
   occlusion: 'runtime-ref occlusion: covered ref is refused',
+  parentOwnedTouchPoint:
+    'runtime-ref parentOwnedTouchPoint: a fully tiled parent ref refuses before dispatch',
   offscreen: 'runtime-ref offscreen: closed-drawer ref refused with offscreen_ref',
   nonHittable: 'runtime-ref nonHittable: non-hittable ref is annotated but still tapped',
   responseConstruction:

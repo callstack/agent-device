@@ -160,9 +160,9 @@ Warning: The session is open, but the initial interactive snapshot failed (COMMA
 // Reply/Repost/menu controls have no separate child nodes in the tree, so
 // snapshot -i alone would show a plain link with no way to act on it.
 // snapshot -i --actions names the hidden affordances instead of hiding them
-// silently; the names are evidence only, never directly invokable (help
-// workflow: "reach via its detail screen, labeled children elsewhere, or
-// coordinates").
+// silently; the names are destination hints, never directly invokable. The
+// parent ref reaches the detail screen, whose settled diff reveals the child
+// control. Coordinates remain the last resort.
 export const MERGED_CARD_ACTIONS_SAMPLE = {
   command: 'agent-device snapshot -i --actions',
   output: `Snapshot: 4 nodes

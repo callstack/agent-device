@@ -106,9 +106,10 @@ extension RunnerTests {
 
     func typeIntoCurrentTarget(_ value: String) -> (element: XCUIElement?, dispatched: Bool, failure: TextEntryFailure?) {
 #if os(iOS)
-      if shouldUseSynthesizedFirstResponderType,
-        let currentTarget = resolveTextEntryElement(app: app, target: activeTarget)
-      {
+      if shouldUseSynthesizedFirstResponderType {
+        guard let currentTarget = resolveTextEntryElement(app: app, target: activeTarget) else {
+          return (nil, false, .notFocused)
+        }
         textEntryRoute = "synthesized-first-responder"
         NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=synthesized-first-responder")
         let textBefore = editableTextValue(for: currentTarget, treatingPlaceholderAsEmpty: true)

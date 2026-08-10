@@ -61,6 +61,15 @@ Protocol-breaking changes must update `DAEMON_RPC_PROTOCOL_VERSION`, tests that 
 metadata, and at least one remote-client regression test that proves mismatched protocols fail before
 command RPC.
 
+The bump rules above are enforced rather than remembered (#1432). `test/wire-compat/surface.ts`
+declares the wire surface grouped by the bullets in this decision, and `test/wire-compat/ledger.json`
+records what each declaration hashes to and at which protocol version. The unit lane fails when a
+declaration's shape moves without the ledger following, and `pnpm check:daemon-wire-compat` compares
+the ledger against the last released tag: drift since that release must carry either a bump or a
+`compatibleChanges` acknowledgment invoking the additive list above. Where a bullet is only partly
+digestible — the `/health` and `/rpc` path literals inside `http-server.ts` — the manifest records
+the gap and its reason instead of implying coverage. See `test/wire-compat/README.md`.
+
 Legacy remote daemons without `rpcProtocolVersion` remain reachable. This keeps the first release of
 the proxy compatible with older HTTP daemons, but it means absence of the marker is not proof of
 compatibility.

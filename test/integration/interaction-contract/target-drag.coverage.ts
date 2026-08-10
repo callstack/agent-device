@@ -6,6 +6,8 @@ const DUAL_ENDPOINT_SUCCESS =
 export const TARGET_DRAG_COVERAGE = definePathCoverage('target-drag', {
   disambiguation: DUAL_ENDPOINT_SUCCESS,
   occlusion: 'target-drag occlusion: a covered destination is refused before gesture dispatch',
+  parentOwnedTouchPoint:
+    'target-drag parentOwnedTouchPoint: a fully tiled selector endpoint refuses before gesture dispatch',
   offscreen: 'target-drag offscreen: an off-screen source is refused before gesture dispatch',
   responseConstruction:
     'target-drag responseConstruction: daemon response carries the canonical dual-target gesture shape',

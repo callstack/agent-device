@@ -94,9 +94,11 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSinglePointerFlingFallsBackToXCTestCoordinateDragWhenPrivateSynthesisFails \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTypeWithoutResolvedInputReturnsTypedFailureBeforeDispatchingText \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareTypeUsesTappedInputWhenSoftwareKeyboardIsHidden \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPenalizedCoordinateTapOnNonTextControlDoesNotAuthorizeBareType \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareDelayedTypeFailsWhenTappedInputDisappearsMidCommand \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSynthesizedTextCommitProgressWalksExpectedPrefixOnly \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTextEntryTapWitnessIsBoundToTargetIdentity \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCoordinateTapTextInputProbeSkipsPenalizedXCTestChannel \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testQuerySelectorPrefersHittableMatchOverNonHittableDuplicate \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testActivateTargetSkipsForegroundAndActivatesNonForegroundApplication \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testMissingBundleCommandInvalidatesCompleteCachedTargetState \
@@ -112,6 +114,7 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testDeepExtensionCountsMissedFrontiers \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPreferredPrivateAXBackendPlansAsPenalized \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testDecodedPreferredBackendReachesOptionsAndApplicablePlan \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSparsePayloadReasonMatrix \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledNeedsEnoughSamples \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledTrueWhenWindowMatches \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledFalseOnMidWindowMismatch \

@@ -167,6 +167,41 @@ export function coveredButtonSnapshot(): SnapshotState {
   ]);
 }
 
+// A semantic parent whose entire surface belongs to independently interactive
+// children. Parent-targeted coordinate paths must fail closed and preserve the
+// caller's selector/ref context instead of silently activating any child.
+export function fullyTiledParentSnapshot(): SnapshotState {
+  const children = Array.from({ length: 10 }, (_, childIndex) => ({
+    index: childIndex + 2,
+    depth: 2,
+    parentIndex: 1,
+    type: 'Button',
+    label: `Action ${childIndex + 1}`,
+    rect: { x: 20, y: 100 + childIndex * 20, width: 360, height: 20 },
+    hittable: true,
+  }));
+  return makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      label: 'Example',
+      rect: { x: 0, y: 0, width: 400, height: 800 },
+      hittable: true,
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Link',
+      label: 'Card',
+      rect: { x: 20, y: 100, width: 360, height: 200 },
+      hittable: true,
+    },
+    ...children,
+  ]);
+}
+
 // A visible list cell that iOS reports as non-hittable (#1037 shape): the
 // interaction must proceed but be annotated.
 export function nonHittableCellSnapshot(): SnapshotState {

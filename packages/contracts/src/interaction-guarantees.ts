@@ -34,6 +34,10 @@ export const INTERACTION_GUARANTEES = [
   'disambiguation',
   // Targets covered by another visible element are refused.
   'occlusion',
+  // Element-targeted coordinate paths keep the resolved parent identity while
+  // choosing a point outside independently interactive descendants. A parent
+  // whose safe region is fully tiled fails closed instead of activating a child.
+  'parentOwnedTouchPoint',
   // The tap point (rect center) must lie inside the root viewport; closed
   // drawers / off-viewport carousels are refused, not silently no-op tapped.
   'offscreen',
@@ -132,6 +136,7 @@ export type InteractionPathContract = {
 };
 
 const GAPS_UMBRELLA_ISSUE = 'https://github.com/callstack/agent-device/issues/1081';
+const PARENT_OWNED_TOUCH_POINT_GAP_ISSUE = 'https://github.com/callstack/agent-device/issues/1718';
 
 // Every path shares the SAME cell by construction: response payloads have one
 // construction site (ADR 0011 Layer 2), and the hand-rolled-literal guard test
@@ -148,6 +153,10 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
   occlusion: {
     kind: 'runtime',
     via: 'src/snapshot/snapshot-occlusion.ts#isSnapshotNodeInteractionBlocked',
+  },
+  parentOwnedTouchPoint: {
+    kind: 'runtime',
+    via: 'src/core/interaction-touch-point.ts#resolveInteractionTouchPoint',
   },
   // #1542: the base decision is isNodeVisibleOnScreen (bulk accessibility
   // tree), but throwIfOffscreenInteractionTarget is the actual end-to-end
@@ -242,6 +251,10 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'runtime',
         via: 'src/snapshot/snapshot-occlusion.ts#isSnapshotNodeInteractionBlocked',
       },
+      parentOwnedTouchPoint: {
+        kind: 'runtime',
+        via: 'src/core/interaction-touch-point.ts#resolveInteractionTouchPoint',
+      },
       offscreen: {
         kind: 'runtime',
         via: 'src/commands/interaction/runtime/resolution.ts#throwIfOffscreenInteractionTarget',
@@ -292,6 +305,12 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'delegated',
         to: 'runtime-selector',
         via: 'runner ELEMENT_NOT_FOUND/AMBIGUOUS_MATCH fall back to tree-based resolution (isDirectIosSelectorFallbackError delegateSemanticFailures; non-maestro dispatches only) — XCTest skips covered/non-hittable matches, so the runtime path raises the covered-element refusal with its hint',
+      },
+      parentOwnedTouchPoint: {
+        kind: 'waived',
+        reason:
+          'gap: the direct runner path has the matched element but no daemon snapshot tree from which to classify independently interactive descendants.',
+        trackingIssue: PARENT_OWNED_TOUCH_POINT_GAP_ISSUE,
       },
       offscreen: {
         // Decision: TapPointPolicy (pure geometry, parity-tested against the
@@ -353,6 +372,11 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'runtime',
         via: 'src/snapshot/snapshot-occlusion.ts#isSnapshotNodeInteractionBlocked',
       },
+      parentOwnedTouchPoint: {
+        kind: 'inapplicable',
+        reason:
+          'The native web ref path activates a provider-owned semantic handle rather than choosing a coordinate from the daemon snapshot.',
+      },
       // Same enforcement point as the runtime-tree paths (#1542): the
       // preflight guard IS throwIfOffscreenInteractionTarget, which can
       // rescue via the optional iOS confirmOffscreenTargetVisible hook — see
@@ -409,6 +433,10 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'inapplicable',
         reason: 'Coordinates bypass element semantics by design (escape hatch).',
       },
+      parentOwnedTouchPoint: {
+        kind: 'inapplicable',
+        reason: 'Coordinates name the exact point to activate; no parent element is resolved.',
+      },
       offscreen: {
         kind: 'runtime',
         via: 'src/commands/interaction/runtime/resolution.ts#resolveInteractionTarget',
@@ -454,6 +482,12 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       occlusion: {
         kind: 'waived',
         reason: 'Intentional: Maestro taps resolved bounds regardless of overlay state.',
+      },
+      parentOwnedTouchPoint: {
+        kind: 'waived',
+        reason:
+          'gap: Maestro compatibility executes the matched element center runner-side without a daemon snapshot tree of independently interactive descendants.',
+        trackingIssue: PARENT_OWNED_TOUCH_POINT_GAP_ISSUE,
       },
       offscreen: {
         // hasTappableFrame keeps two path-specific choices (empty element
