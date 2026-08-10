@@ -43,6 +43,7 @@ The mapping it encodes, for when you need to run a gate directly or reason about
 | Anything in `src/`, `test/` | `pnpm format` (`skills/` is Markdown-only guidance: oxfmt ignores `**/*.md`, and the affected-check selector classifies it docs-only) |
 | Workspace package source (`packages/*/src/**`) | Root format/lint/typecheck plus layering (R11 package-boundaries); Vitest resolves affected tests through the module graph; package manifests/tsconfigs fail open to the full set |
 | A decision kernel or its tests (`packages/kernel/src/errors.ts`, `src/daemon/ref-frame.ts`, `src/commands/interaction/runtime/settle.ts`, `src/utils/scroll-edge-state.ts`, `packages/selectors/src/`) | `pnpm mutation:affected --base origin/main` (minutes; GitHub runs it per PR — see the mutation ratchet section) |
+| A workflow, a local action, a `test:*`/`check:*` script, or a Vitest project | `pnpm check:gate-manifest` — proves the gate you touched is still wired (see the gate manifest section) |
 
 Two traps worth naming:
 
@@ -203,6 +204,37 @@ The output tells you which gates to run and which live scenarios claim the behav
 Lists are bounded (`--limit`, default 10) and always disclose what they hid; `--json` is
 unbounded. The query is read-only, runs in well under a second, and adds no CI work — its model is
 covered by `pnpm depgraph:test` (the existing `Layering Guard` job).
+
+## Gate manifest: proving the gates still run
+
+Every gate above answers "is the code right?". None of them can answer "is this gate still
+running?" — and a check that silently stops executing looks exactly like a green build. Two
+verified instances motivated the manifest: `CHECK_CATALOG.ciJobs` named CI jobs as unchecked
+strings, and four suites (`check:tmpdir-leaks`, its model tests, `test:fixture-cache`,
+`check:mcp-metadata`) ran in no workflow at all.
+
+`pnpm check:gate-manifest` (`scripts/gate-manifest/`) derives the answer from the real sources —
+`.github/workflows/*.yml`, `.github/actions/*`, `package.json`, `vitest.config.ts` — with no
+hand-maintained second list. It resolves an execution graph, `workflow job → local composite
+action → package script → aggregate chain → terminal`, and asserts:
+
+- every Vitest project and every `test:*`/`check:*` script is reachable from some job;
+- every `CHECK_CATALOG.ciJobs` name is a job that exists, and the jobs it names collectively
+  reach everything the check's script does;
+- a path category's owning job actually fires on a PR touching only that category.
+
+Two properties are load-bearing. **Ownership is proven, never inferred from a name appearing in
+workflow text** — commands resolve to *terminals* (`vitest:<project>`, `node-test:<file>`,
+`exec:<argv>`), so renaming an intermediate script breaks the chain instead of leaving the claim
+standing. And it **fails closed**: an unreadable edge (a `${{ … }}` in command position, a
+missing local action, an opaque runner that spawns its own child) is a failure until classified
+in `scripts/gate-manifest/waivers.ts` with a reason and a tracking issue. Waivers are themselves
+checked, so one that stops applying fails rather than rotting.
+
+The gate is deterministic, offline, and needs no GitHub token — it runs from a clean checkout in
+the `Affected-check Selector` job. Branch-protection required-contexts drift is the one part
+that needs the API; it stays a separate scheduled read-only concern and must never become a
+dependency of this PR gate.
 
 ## Mutation ratchet over decision kernels
 

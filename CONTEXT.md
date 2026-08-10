@@ -459,6 +459,14 @@ when landing it, satisfy the gate where one exists.
 - **Information hiding.** Gate: R7 — every `SessionState` field is classified and every write must
   occur inside its declared owner. Encapsulation of the one shared mutable object, enforced
   per-field. This covers `SessionState`; other shared state has no equivalent gate today.
+- **A gate that stops running is worse than no gate.** Gate: the derived gate manifest
+  (`scripts/gate-manifest/`, #1429) resolves `workflow job → local action → package script →
+  terminal` and fails when a Vitest project or `test:*`/`check:*` script is reachable from no
+  job, when a `CHECK_CATALOG.ciJobs` name matches no live job, or when a path category is
+  excluded by its own owning workflow's triggers. Derived from the workflows, package scripts,
+  and Vitest config themselves, so there is no second list to drift; deterministic and offline,
+  and fail-closed on any edge it cannot resolve. Ledger: `waivers.ts`, where each unprovable
+  edge carries a reason and a tracking issue, and a waiver that stops applying fails the gate.
 - **Boundaries are earned, not speculative.** Norm with local evidence, not a gate: the platform
   descriptor layer (~600 LOC of boundary nobody needed) was deleted, and the depgraph viewer
   (#1409) was closed unmerged. A new abstraction layer needs a demonstrated second consumer or

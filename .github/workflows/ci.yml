@@ -137,6 +137,17 @@ jobs:
       - name: Check affected-selector model
         run: pnpm check:affected:test
 
+      # The gate-of-gates (#1429). It shares this job because it validates the
+      # same artifact the selector is built on — CHECK_CATALOG's `ciJobs` — and
+      # because a gate that proves the other gates are wired must not be the one
+      # gate sitting in its own job, green on its own. Deterministic and
+      # network-free: every input is a file in the checkout.
+      - name: Check the gate manifest model
+        run: pnpm check:gate-manifest:test
+
+      - name: Check every gate is owned, wired, and reachable
+        run: pnpm check:gate-manifest
+
   maestro-conformance:
     name: Maestro Conformance Oracle
     runs-on: ubuntu-latest
@@ -255,6 +266,13 @@ jobs:
       - name: Check contention retry policy
         run: pnpm check:contention-retry
 
+      # The TMPDIR redirection both test lanes rely on (#1593/#1595). Its own
+      # tests ran in no CI job until the #1429 gate manifest found them
+      # unowned; they belong here, next to the other policy self-tests that
+      # must pass before the suite they govern runs.
+      - name: Check the tmpdir redirection model
+        run: pnpm check:tmpdir-leaks:test
+
       # Wrapped in the single-retry policy (#1419): a timeout-shaped failure in
       # an enumerated contention-flaky file reruns that file once and reports it
       # in the job summary. Assertion failures fail here on the first run.
@@ -262,6 +280,15 @@ jobs:
         env:
           OUTPUT_ECONOMY_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: pnpm test:coverage:ci
+
+      # A run whose globalTeardown never fired (crash, OOM, timeout kill) leaves
+      # its tmpdir behind. `check:unit` runs this locally after the suite; until
+      # #1429 nothing ran it in CI, which is the environment where those kills
+      # actually happen. Runs even on failure — a killed run is exactly the case
+      # worth reporting.
+      - name: Check for leaked test tmpdirs
+        if: always()
+        run: pnpm check:tmpdir-leaks
 
       - name: Upload contention-retry envelope
         if: always()
@@ -294,6 +321,13 @@ jobs:
 
       - name: Run typecheck
         run: pnpm typecheck
+
+      # CHECK_CATALOG has always claimed this job mirrors the `mcp-metadata`
+      # check; until #1429 checked the claim, no PR job ran it at all, so
+      # server.json/smithery.yaml drift only surfaced at publish time (where
+      # publish-mcp-registry.yml duplicates the same command). Parse-only.
+      - name: Check MCP registry metadata is in sync
+        run: pnpm check:mcp-metadata
 
   freerange:
     name: FreeRange
@@ -347,6 +381,12 @@ jobs:
       # failing `gh`.
       - name: Setup-fixture-app cache-failure fallback
         run: sh ./test/scripts/setup-fixture-app-fallback-smoke.sh
+
+      # The trust rules that decide whether a cached fixture APK/app may be
+      # reused at all — same subject as the fallback smoke above, and parse-only.
+      # Ran in no CI job until the #1429 gate manifest found it unowned.
+      - name: Check trusted fixture-artifact selection
+        run: pnpm test:fixture-cache
 
   web-smoke:
     name: Web Platform Smoke
