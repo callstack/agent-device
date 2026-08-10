@@ -50,7 +50,7 @@ extension RunnerTests {
 
     RunnerTargetActivationSpy.state = .runningForeground
     textEntryTapWitness = TextEntryTapWitness(
-      element: app,
+      target: .element(app),
       bundleId: "com.example.previous",
       processIdentifier: 41
     )
@@ -118,7 +118,7 @@ extension RunnerTests {
 
   func testTextEntryTapWitnessIsBoundToTargetIdentity() {
     let witness = TextEntryTapWitness(
-      element: app,
+      target: .element(app),
       bundleId: "com.example.app",
       processIdentifier: 42
     )

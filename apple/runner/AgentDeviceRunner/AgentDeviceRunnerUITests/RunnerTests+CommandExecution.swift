@@ -1801,10 +1801,11 @@ extension RunnerTests {
         let xCTestChannelPenalized = isSnapshotXCTestChannelPenalized(
           bundleId: currentBundleId
         )
-        let textInput: XCUIElement?
-        if shouldProbeCoordinateTapTextInput(
+        let xCTestTextInputProbeSkipped = !shouldProbeCoordinateTapTextInput(
           xCTestChannelPenalized: xCTestChannelPenalized
-        ) {
+        )
+        let textInput: XCUIElement?
+        if !xCTestTextInputProbeSkipped {
           textInput = textInputAt(app: activeApp, x: x, y: y)
         } else {
           textInput = nil
@@ -1825,7 +1826,10 @@ extension RunnerTests {
           }
           if case .performed = outcome {
             logSynthesizedGesturePolicyDecision(kind: policyKind, context: context, fallbackAttempted: false)
-            rememberTextEntryTap(textInput)
+            rememberCoordinateTextEntryTap(
+              textInput,
+              xCTestProbeSkipped: xCTestTextInputProbeSkipped
+            )
             return gestureResponse(message: "tapped", timing: timing)
           }
           logSynthesizedGesturePolicyDecision(kind: policyKind, context: context, fallbackAttempted: true)
@@ -1837,7 +1841,10 @@ extension RunnerTests {
           clearRememberedTextEntryTap()
           return response
         }
-        rememberTextEntryTap(textInput)
+        rememberCoordinateTextEntryTap(
+          textInput,
+          xCTestProbeSkipped: xCTestTextInputProbeSkipped
+        )
         return gestureResponse(
           message: "tapped",
           timing: timing,
@@ -2506,11 +2513,11 @@ extension RunnerTests {
     return message == "scrolled" ? "scroll" : "drag"
   }
 
-  private func currentXCTestFailureCount() -> Int {
+  func currentXCTestFailureCount() -> Int {
     return testRun?.failureCount ?? 0
   }
 
-  private func didRecordXCTestFailure(since failureCountBefore: Int) -> Bool {
+  func didRecordXCTestFailure(since failureCountBefore: Int) -> Bool {
     return currentXCTestFailureCount() > failureCountBefore
   }
 
@@ -2532,7 +2539,7 @@ extension RunnerTests {
     )
   }
 
-  private func runnerCommandFixture(_ json: String) throws -> Command {
+  func runnerCommandFixture(_ json: String) throws -> Command {
     try JSONDecoder().decode(Command.self, from: Data(json.utf8))
   }
 
@@ -2616,7 +2623,7 @@ extension RunnerTests {
     return XCUIApplication(bundleIdentifier: bundleId)
   }
 
-  private func executeTypeCommand(activeApp: XCUIApplication, command: Command) -> Response {
+  func executeTypeCommand(activeApp: XCUIApplication, command: Command) -> Response {
     guard let text = command.text else {
       return Response(ok: false, error: ErrorPayload(message: "type requires text"))
     }
