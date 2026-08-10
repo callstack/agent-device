@@ -1,0 +1,14 @@
+# Focused selector reads followed by a deliberate covered-target refusal.
+context platform=ios kind=simulator timeout=120000
+
+env APP_TARGET="Agent Device Tester"
+
+open "${APP_TARGET}" --launch-url "agent-device-test-app:///automation?event=selector.routes&payload=%7B%22source%22%3A%22replay%22%7D"
+wait "id=\"automation-title\"" 30000
+get text "id=\"automation-title\""
+get attrs "id=\"automation-title\""
+is visible "id=\"automation-title\""
+find id "automation-title" get attrs
+app-switcher
+snapshot -i
+click "id=\"gearshape.fill\""

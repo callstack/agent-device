@@ -15,6 +15,7 @@ import {
   replayAttemptTimeoutMs,
 } from '../live-device-e2e/replay-evidence.ts';
 import { runLiveReplayTestSuite } from '../live-device-e2e/replay-suite.ts';
+import { assertSelectorRouteReplay } from '../live-device-e2e/selector-route-replay.ts';
 
 const C = PUBLIC_COMMANDS;
 
@@ -96,5 +97,40 @@ export async function assertFixtureReplays(context: LiveContext): Promise<void> 
     context,
     'helper-backed-gesture-recovery',
     'gesture fixture observed two-pointer pan, fling, pinch, rotate, and transform outcomes',
+  );
+
+  await assertSelectorRouteReplay(
+    context,
+    path.resolve(
+      'test/integration/replays/android/fixture/02-selector-routes-covered-diagnosis.ad',
+    ),
+    runStep,
+    {
+      postReplayCleanup: [
+        {
+          step: 'open Android cleanup session after focused selector-route replay',
+          args: [
+            'open',
+            'settings',
+            '--platform',
+            'android',
+            '--serial',
+            context.serial,
+            '--session',
+            `${context.session}-cleanup`,
+            '--no-test-ime',
+            '--json',
+          ],
+        },
+        {
+          step: 'restore portrait after focused selector-route replay',
+          args: ['orientation', 'portrait', '--session', `${context.session}-cleanup`, '--json'],
+        },
+        {
+          step: 'close Android cleanup session after focused selector-route replay',
+          args: ['close', '--session', `${context.session}-cleanup`, '--json'],
+        },
+      ],
+    },
   );
 }

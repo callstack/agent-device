@@ -1,0 +1,14 @@
+# Focused selector reads followed by a deliberate covered-target refusal.
+context platform=android kind=emulator timeout=120000
+
+env APP_TARGET="com.callstack.agentdevicelab"
+
+open "${APP_TARGET}" --no-test-ime --launch-url "agent-device-test-app:///form"
+wait "id=\"field-name\"" 30000
+get text "id=\"field-name\""
+get attrs "id=\"field-name\""
+is visible "id=\"field-name\""
+find id "field-name" get attrs
+orientation landscape-left
+click "id=\"field-name\""
+click "id=\"field-name\""

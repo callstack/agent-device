@@ -46,6 +46,11 @@ export function appendOpenActionScriptArgs(
   if (action.flags?.relaunch) {
     parts.push('--relaunch');
   }
+  if (action.flags?.testIme === true) {
+    parts.push('--test-ime');
+  } else if (action.flags?.testIme === false) {
+    parts.push('--no-test-ime');
+  }
   appendRuntimeHintFlags(parts, action.runtime);
 }
 
@@ -59,6 +64,14 @@ export function parseReplayOpenFlags(args: string[]): {
   for (const token of args) {
     if (token === '--relaunch') {
       flags.relaunch = true;
+      continue;
+    }
+    if (token === '--test-ime') {
+      flags.testIme = true;
+      continue;
+    }
+    if (token === '--no-test-ime') {
+      flags.testIme = false;
       continue;
     }
     argsWithoutRelaunch.push(token);

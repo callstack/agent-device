@@ -37,6 +37,7 @@ module.exports = {
     android: {
       package: 'com.callstack.agentdevicelab',
       predictiveBackGestureEnabled: false,
+      softwareKeyboardLayoutMode: 'pan',
     },
   },
 };
