@@ -27,6 +27,7 @@ import {
 } from './snapshot-quality-latch.ts';
 import { createDaemonRuntimePolicy } from './runtime-policy.ts';
 import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
+import { getRequestSignal } from '../request/cancel.ts';
 import { isInteractiveObservation } from './session-action-recorder.ts';
 import { setSnapshotLineage } from './session-snapshot.ts';
 import { SessionStore } from './session-store.ts';
@@ -284,6 +285,7 @@ function createSnapshotRuntime(params: {
       capturedQuality: params.capturedQuality,
     }),
     ...createDaemonRuntimePolicy('snapshot'),
+    signal: getRequestSignal(req.meta?.requestId),
     sessions: createDaemonRuntimeSessionStore({
       sessionName,
       getSession: () => sessionStore.get(sessionName),
@@ -394,7 +396,7 @@ function createDaemonSnapshotBackend(params: {
   const { req, logPath, session, device, snapshotScope } = params;
   return {
     platform: publicPlatformString(device),
-    captureSnapshot: async (_context, options): Promise<BackendSnapshotResult> => {
+    captureSnapshot: async (context, options): Promise<BackendSnapshotResult> => {
       const capture = await captureSnapshot({
         device,
         session,
@@ -402,6 +404,7 @@ function createDaemonSnapshotBackend(params: {
         outPath: options?.outPath ?? req.flags?.out,
         logPath,
         snapshotScope,
+        signal: context.signal,
       });
       const annotations = snapshotCaptureAnnotationsFrom(capture);
       // Feed the latch seam the capture's own verdict: the stored session
