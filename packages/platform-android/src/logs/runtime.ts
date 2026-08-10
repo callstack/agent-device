@@ -4,7 +4,7 @@ import {
   bestEffortAppLogCheck,
   createPidScopedAppLogRuntimeOwner,
   resolveFirstNumericAppLogPid,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/capture-kit';
 import { assertAndroidLogPackageSafe } from './package-name.ts';
 import { androidAppLogDescriptorCodec, createAndroidAppLogEnvelope } from './descriptor.ts';
 

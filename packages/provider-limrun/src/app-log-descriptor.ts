@@ -4,11 +4,8 @@ import type {
   DurableResourceEnvelope,
   RuntimeOwnerRef,
 } from '@agent-device/contracts/platform';
-import {
-  APP_LOG_RESOURCE_KIND,
-  createDurableResourceEnvelope,
-  encodeDurableDescriptor,
-} from '@agent-device/contracts/platform';
+import { APP_LOG_RESOURCE_KIND } from '@agent-device/contracts/platform';
+import { createDurableResourceEnvelope, encodeDurableDescriptor } from '@agent-device/capture-kit';
 
 export type LimrunAppLogDescriptor = Readonly<{
   transport: 'limrun-log-poller';
@@ -76,7 +73,7 @@ export function createLimrunAppLogEnvelope(input: {
     },
     owner: input.owner,
     fence: input.fence,
-    lifecycle: 'active',
+    lifecycle: 'open',
     descriptor: encodeDurableDescriptor(limrunAppLogDescriptorCodec, input.descriptor),
   });
 }

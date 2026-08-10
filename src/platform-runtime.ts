@@ -34,7 +34,10 @@ import {
   inventoryModule as webInventoryModule,
   runtimeModule as webRuntimeModule,
 } from '@agent-device/platform-web';
-import { createComposedAppLogRuntimeGateway } from './platform-runtime-app-log.ts';
+import {
+  createComposedAppLogRuntimeGateway,
+  type AppLogRuntimeProviderRegistration,
+} from './platform-runtime-app-log.ts';
 import { createComposedDeviceInventoryGateways } from './platform-runtime-device-inventory.ts';
 
 const androidInventoryModule = createAndroidInventoryModule({
@@ -86,6 +89,7 @@ type Platform = AppLogRuntimePlatformModule['family'];
 export function createPlatformAppLogRuntimeGateway(
   options: Readonly<{
     providerRuntimes?: readonly ProviderDeviceRuntime[];
+    providerModules?: readonly AppLogRuntimeProviderRegistration[];
     resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
     sessionsDir: string;
   }>,
@@ -100,6 +104,7 @@ export function createPlatformAppLogRuntimeGateway(
       });
     },
     providerRuntimes: options.providerRuntimes,
+    providerModules: options.providerModules,
   });
 }
 

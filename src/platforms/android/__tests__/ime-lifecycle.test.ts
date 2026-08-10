@@ -267,7 +267,7 @@ test('session teardown fails when a real IME restore reports set-failed', async 
     await assert.rejects(
       async () =>
         await teardownSessionResources({
-          kind: 'after-app-log',
+          appLog: 'already-settled',
           session,
           sessionName: session.name,
           stateDir,

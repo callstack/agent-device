@@ -11,12 +11,12 @@ import type {
   RuntimeOwnerRef,
 } from '@agent-device/contracts/platform';
 import type { LogBackend } from '@agent-device/contracts/observability';
+import { AsyncCleanupStack } from '@agent-device/contracts/platform';
 import {
-  AsyncCleanupStack,
   assertAppLogSessionArtifacts,
   createAppLogLiveHandleFromFinish,
   createAppLogStartResult,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/capture-kit';
 import { APPLE_XCTEST_LOGS_HINT, backendForAppleDevice } from './backend.ts';
 import {
   checkCoreDeviceConsoleCaptureSupport,

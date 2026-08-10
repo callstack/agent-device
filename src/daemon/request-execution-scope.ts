@@ -184,7 +184,7 @@ export async function createRequestExecutionScope(params: {
           leaseRegistry,
           teardownSession: async (session, expiredSessionName) =>
             await teardownSessionResources({
-              kind: 'full',
+              appLog: 'run',
               session,
               sessionName: expiredSessionName,
               stateDir: sessionStore.resolveDaemonStateDir(),

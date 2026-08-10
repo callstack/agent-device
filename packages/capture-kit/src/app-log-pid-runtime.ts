@@ -1,17 +1,6 @@
 import type { DeviceInfo, Platform } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import type { LogBackend } from './logs.ts';
-import type { HostCommandRequest } from './platform-runtime-host.ts';
 import type {
-  DeviceBinding,
-  DeviceRuntimeOwner,
-  RuntimeFacts,
-  RuntimeOwnerRef,
-} from './platform-runtime.ts';
-import { localRuntimeOwner, sameRuntimeOwner } from './platform-runtime.ts';
-import type {
-  AppLogDescriptorCodec,
-  AppLogDoctorResult,
   AppLogProcessCommand,
   AppLogProcessTransport,
   AppLogRuntimeHost,
@@ -19,9 +8,17 @@ import type {
   AppLogSessionArtifacts,
   AppLogStartInput,
   AppLogStartResult,
-} from './app-log-runtime.ts';
+  DeviceBinding,
+  DeviceRuntimeOwner,
+  DurableDescriptorCodec,
+  DurableResourceEnvelope,
+  HostCommandRequest,
+  RuntimeFacts,
+  RuntimeOwnerRef,
+} from '@agent-device/contracts/platform';
+import { localRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform';
+import type { LogBackend } from '@agent-device/contracts/observability';
 import { createAppLogRecoveryOperations, createAppLogStartResult } from './app-log-runtime.ts';
-import type { DurableResourceEnvelope } from './durable-resource-envelope.ts';
 import {
   cleanupManagedAppLogProcess,
   reattachCleanupOnlyAppLogProcess,
@@ -69,13 +66,13 @@ export type PidScopedAppLogRuntimeOptions<
   family: Family;
   backend: LogBackend;
   label: string;
-  codec: AppLogDescriptorCodec<Descriptor>;
+  codec: DurableDescriptorCodec<Descriptor, 'app-log'>;
   startUnavailableHint: string;
   cleanupFailureMessage: string;
   doctor(
     context: PidScopedAppLogRuntimeContext,
     appBundleId: string | undefined,
-  ): Promise<AppLogDoctorResult>;
+  ): ReturnType<AppLogRuntimeOperations['appLogDoctor']>;
   validateStart?(context: PidScopedAppLogStartContext): void;
   process(context: PidScopedAppLogStartContext): Promise<PidScopedAppLogProcessPlan>;
   descriptor(input: {

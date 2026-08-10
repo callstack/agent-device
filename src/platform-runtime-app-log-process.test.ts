@@ -257,6 +257,34 @@ describe('managed app-log process host', () => {
     expect(fs.existsSync(corruptPath)).toBe(true);
     expect(fs.existsSync(skippedPath)).toBe(true);
   });
+
+  test('scopes ownership-lost legacy markers to the device encoded by their command', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-app-log-legacy-identity-'));
+    roots.push(root);
+    const sessionsDir = path.join(root, 'sessions');
+    const markerPath = legacyMarker(sessionsDir, 'android', {
+      pid: 99,
+      startTime: processIdentity.startTime,
+      command: 'adb -s emulator-5554 logcat -v time',
+    });
+    processIdentity.command = 'unrelated process';
+
+    const result = await recoverLegacyAppLogMarkersAfterDaemonLock(sessionsDir);
+
+    expect(result.retained).toEqual([
+      {
+        markerPath,
+        reason: 'ownership-lost',
+        device: {
+          id: 'emulator-5554',
+          family: 'android',
+          kind: 'emulator',
+          target: 'mobile',
+        },
+      },
+    ]);
+    expect(fs.existsSync(markerPath)).toBe(true);
+  });
 });
 
 function legacyMarker(sessionsDir: string, sessionId: string, marker: unknown): string {

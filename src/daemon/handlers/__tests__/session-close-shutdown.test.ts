@@ -429,7 +429,7 @@ test('daemon session teardown stops active Apple xctrace perf capture', async ()
     },
   } as unknown as SessionState;
 
-  await teardownSessionResources({ kind: 'after-app-log', session, sessionName });
+  await teardownSessionResources({ appLog: 'already-settled', session, sessionName });
 
   expect(mockCleanupAppleXctracePerfCapture).toHaveBeenCalledWith(activeCapture);
   expect(session.applePerf?.active).toBeUndefined();
@@ -501,7 +501,7 @@ test('daemon session teardown finalizes an active iOS simulator recording', asyn
   const session = makeIosSimulatorRecordingSession(sessionName);
   const kill = recordingKillMock(session);
 
-  await teardownSessionResources({ kind: 'after-app-log', session, sessionName });
+  await teardownSessionResources({ appLog: 'already-settled', session, sessionName });
 
   expect(kill).toHaveBeenCalledWith('SIGINT');
   expect(session.recording).toBeUndefined();
@@ -513,7 +513,7 @@ test('daemon session teardown surfaces a recording finalization failure', async 
   const kill = recordingKillMock(session);
 
   await expect(
-    teardownSessionResources({ kind: 'after-app-log', session, sessionName }),
+    teardownSessionResources({ appLog: 'already-settled', session, sessionName }),
   ).rejects.toThrow(/recording: .*failed to stop recording/);
 
   expect(kill).toHaveBeenCalledWith('SIGINT');
@@ -750,7 +750,7 @@ test('daemon session teardown stops active Android native perf capture', async (
     },
   } as unknown as SessionState;
 
-  await teardownSessionResources({ kind: 'after-app-log', session, sessionName });
+  await teardownSessionResources({ appLog: 'already-settled', session, sessionName });
 
   expect(mockCleanupAndroidNativePerfSession).toHaveBeenCalledWith(session.device, activeCapture);
   expect(session.nativePerf?.android).toBeUndefined();
@@ -769,7 +769,7 @@ test('daemon session teardown stops Android snapshot helper session', async () =
     appBundleId: 'com.example.app',
   } as SessionState;
 
-  await teardownSessionResources({ kind: 'after-app-log', session, sessionName });
+  await teardownSessionResources({ appLog: 'already-settled', session, sessionName });
 
   expect(mockStopAndroidSnapshotHelperSessionForDevice).toHaveBeenCalledWith(session.device);
 });
@@ -957,7 +957,7 @@ test('daemon session teardown attempts every resource after an earlier cleanup r
   );
 
   await expect(
-    teardownSessionResources({ kind: 'after-app-log', session, sessionName }),
+    teardownSessionResources({ appLog: 'already-settled', session, sessionName }),
   ).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     details: expect.objectContaining({

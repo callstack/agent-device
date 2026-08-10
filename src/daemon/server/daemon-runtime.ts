@@ -10,7 +10,7 @@ import {
   createPlatformDeviceInventoryGateways,
 } from '../../platform-runtime.ts';
 import {
-  createDefaultProviderDeviceRuntimes,
+  createDefaultProviderRuntimeComposition,
   DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS,
 } from '../../provider-device-runtimes.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
@@ -122,7 +122,7 @@ export async function teardownDaemonSessionForShutdown(params: {
   );
   const sessionAfterAppLog = sessionStore.get(session.name) ?? session;
   const teardown = teardownSessionResources({
-    kind: 'after-app-log',
+    appLog: 'already-settled',
     session: sessionAfterAppLog,
     sessionName: session.name,
     stateDir,
@@ -208,9 +208,11 @@ export async function startDaemonRuntime(
   const token = crypto.randomBytes(24).toString('hex');
   const daemonProcessStartTime = readProcessStartTime(process.pid) ?? undefined;
   const daemonCodeSignature = resolveDaemonCodeSignature();
-  const providerDeviceRuntimes = await createDefaultProviderDeviceRuntimes(env);
+  const providerComposition = await createDefaultProviderRuntimeComposition(env);
+  const providerDeviceRuntimes = [...providerComposition.runtimes];
   const deviceRuntimeGateway = createPlatformAppLogRuntimeGateway({
     providerRuntimes: providerDeviceRuntimes,
+    providerModules: providerComposition.appLogModules,
     sessionsDir,
     resolveSessionArtifacts: (sessionId) => ({
       outputPath: sessionStore.resolveAppLogPath(sessionId),
@@ -396,9 +398,7 @@ export async function startDaemonRuntime(
     const { recoverLegacyAppLogMarkersAfterDaemonLock } =
       await import('../../platform-runtime-app-log-host.ts');
     const legacyMarkerRecovery = await recoverLegacyAppLogMarkersAfterDaemonLock(sessionsDir);
-    appLogAdmissionLedger.retainLegacyMarkers(
-      legacyMarkerRecovery.retained.map((marker) => marker.markerPath),
-    );
+    appLogAdmissionLedger.retainLegacyMarkers(legacyMarkerRecovery.retained);
     for (const markerPath of legacyMarkerRecovery.recovered) {
       startupAppLogDiagnostics.push({
         phase: 'app_log_legacy_marker_recovered',

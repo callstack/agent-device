@@ -1,11 +1,8 @@
 import { isMacOs } from '@agent-device/kernel/device';
 import { expect, vi, beforeEach } from 'vitest';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
-import {
-  createDurableResourceEnvelope,
-  localRuntimeOwner,
-  type AppLogLiveState,
-} from '@agent-device/contracts/platform';
+import { localRuntimeOwner, type AppLogLiveState } from '@agent-device/contracts/platform';
+import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { createTestAppLogLiveHandle } from '../../../__tests__/test-utils/app-log-live-handle.ts';
 import type { LogBackend } from '@agent-device/contracts/observability';
 
@@ -254,7 +251,7 @@ export function makeTestAppLogResource(
     },
     owner: localRuntimeOwner(session.device.platform),
     fence: { token: 'test-fence', generation: 1 },
-    lifecycle: 'active',
+    lifecycle: 'open',
     descriptor: { version: 1, body: {} },
   });
   return { handle, envelope };

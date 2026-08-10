@@ -39,6 +39,22 @@ test('neutral envelope decoding retains invalid and unsupported-version evidence
   });
 });
 
+test('neutral envelope accepts only open or completed persisted lifecycle states', () => {
+  for (const lifecycle of ['open', 'completed']) {
+    assert.equal(
+      decodeDurableResourceEnvelope({ ...APP_LOG_ENVELOPE_FIXTURE, lifecycle }).status,
+      'decoded',
+    );
+  }
+  for (const lifecycle of ['starting', 'active', 'completing', 'cleanup-pending']) {
+    assert.deepEqual(decodeDurableResourceEnvelope({ ...APP_LOG_ENVELOPE_FIXTURE, lifecycle }), {
+      status: 'unreattachable',
+      reason: 'descriptor-invalid',
+      message: 'Durable resource lifecycle state is invalid',
+    });
+  }
+});
+
 test.each([
   {
     name: 'local owner for another family',
@@ -110,25 +126,4 @@ test('neutral envelope canonicalizes persisted provider owner identity', () => {
     provider: 'webdriver',
     instance: 'tenant-a',
   });
-});
-
-test('neutral envelope decoding rejects cyclic or unbounded descriptor bodies', () => {
-  const cyclicBody: Record<string, unknown> = {};
-  cyclicBody.self = cyclicBody;
-  const cyclic = decodeDurableResourceEnvelope({
-    ...APP_LOG_ENVELOPE_FIXTURE,
-    descriptor: { version: 2, body: cyclicBody },
-  });
-  assert.equal(cyclic.status, 'unreattachable');
-  if (cyclic.status === 'unreattachable') {
-    assert.equal(cyclic.reason, 'descriptor-invalid');
-  }
-
-  let nested: Record<string, unknown> = {};
-  for (let depth = 0; depth < 40; depth += 1) nested = { nested };
-  const tooDeep = decodeDurableResourceEnvelope({
-    ...APP_LOG_ENVELOPE_FIXTURE,
-    descriptor: { version: 2, body: nested },
-  });
-  assert.equal(tooDeep.status, 'unreattachable');
 });

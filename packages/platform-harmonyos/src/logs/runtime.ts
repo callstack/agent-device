@@ -3,7 +3,7 @@ import type { AppLogRuntimeHost } from '@agent-device/contracts/platform';
 import {
   createPidScopedAppLogRuntimeOwner,
   resolveFirstNumericAppLogPid,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/capture-kit';
 import { createHarmonyAppLogEnvelope, harmonyAppLogDescriptorCodec } from './descriptor.ts';
 
 const START_UNAVAILABLE_HINT =

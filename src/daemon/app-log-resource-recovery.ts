@@ -291,7 +291,9 @@ async function settleRecoveryAuthority(params: {
           resourcePath: params.resourcePath,
           expected: params.envelope.fence,
           run: async (lease) => {
-            lease.transition('completing');
+            lease.transition('open', {
+              metadata: { ...(lease.envelope.metadata ?? {}), phase: 'completing' },
+            });
             const outcome = await reattached.handle.forceCleanup();
             transitionCleanupOutcome(lease, outcome);
             return outcome;
@@ -349,7 +351,7 @@ async function transitionRecoveredTerminal(
     expected: params.envelope.fence,
     run: async (lease) => {
       lease.transition('completed', {
-        metadata: { ...(lease.envelope.metadata ?? {}), ...metadata },
+        metadata: { ...(lease.envelope.metadata ?? {}), phase: 'completed', ...metadata },
       });
     },
   });
@@ -359,9 +361,10 @@ function transitionCleanupOutcome(
   lease: Parameters<Parameters<typeof withAppLogResourceFence>[0]['run']>[0],
   outcome: CleanupOutcome,
 ): void {
-  lease.transition(isConfirmedCleanup(outcome) ? 'completed' : 'cleanup-pending', {
+  lease.transition(isConfirmedCleanup(outcome) ? 'completed' : 'open', {
     metadata: {
       ...(lease.envelope.metadata ?? {}),
+      phase: isConfirmedCleanup(outcome) ? 'completed' : 'cleanup-pending',
       cleanupStatus: outcome.status,
       ...(outcome.status === 'cleanup-pending'
         ? {

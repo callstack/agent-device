@@ -1,5 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { AppLogRuntimeHost, AppLogStartInput } from './app-log-runtime.ts';
+import type { AppLogRuntimeHost, AppLogStartInput } from '@agent-device/contracts/platform';
 
 export type AppLogArtifactPaths = Readonly<{
   outputPath: string;

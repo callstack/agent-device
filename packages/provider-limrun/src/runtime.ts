@@ -63,17 +63,42 @@ export type LimrunRuntimeOptions = {
   runtimeInstance?: string;
 };
 
-export type LimrunRuntime = ProviderDeviceRuntime &
-  AppLogRuntimeProviderModule & {
-    recoverExpiredLease: ProviderExpiredLeaseRecovery;
-    getDeviceSession(device: DeviceInfo): LimrunDeviceSession | undefined;
-  };
+export type LimrunRuntime = ProviderDeviceRuntime & {
+  recoverExpiredLease: ProviderExpiredLeaseRecovery;
+  getDeviceSession(device: DeviceInfo): LimrunDeviceSession | undefined;
+};
+
+export type LimrunRuntimeRegistration = Readonly<{
+  runtime: LimrunRuntime;
+  appLogModule: AppLogRuntimeProviderModule;
+}>;
 
 export function createLimrunRuntime(
   options: LimrunRuntimeOptions,
   dependencies: LimrunRuntimeDependencies,
-): LimrunRuntime {
-  return new LimrunRuntimeImplementation(options, dependencies);
+  mode: Readonly<{ includeAppLogModule: true }>,
+): LimrunRuntimeRegistration;
+export function createLimrunRuntime(
+  options: LimrunRuntimeOptions,
+  dependencies: LimrunRuntimeDependencies,
+): LimrunRuntime;
+export function createLimrunRuntime(
+  options: LimrunRuntimeOptions,
+  dependencies: LimrunRuntimeDependencies,
+  mode?: Readonly<{ includeAppLogModule: true }>,
+): LimrunRuntime | LimrunRuntimeRegistration {
+  const runtime = new LimrunRuntimeImplementation(options, dependencies);
+  if (!mode?.includeAppLogModule) return runtime;
+  const owner = providerRuntimeOwner(LIMRUN_PROVIDER, resolveLimrunRuntimeInstance(options));
+  if (owner.kind !== 'provider-runtime') throw new TypeError('Invalid Limrun runtime owner');
+  return Object.freeze({
+    runtime,
+    appLogModule: Object.freeze({
+      owner,
+      loadRuntime: async (host: AppLogRuntimeHost) =>
+        await loadLimrunAppLogRuntime(runtime, owner.instance, host),
+    }),
+  });
 }
 
 class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
@@ -82,7 +107,6 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   private readonly options: LimrunRuntimeOptions;
   private readonly dependencies: LimrunRuntimeDependencies;
   readonly provider = LIMRUN_PROVIDER;
-  readonly owner: AppLogRuntimeProviderModule['owner'];
 
   readonly leaseLifecycle: LeaseLifecycleProvider = {
     allocate: async (lease) => await this.allocate(lease),
@@ -111,9 +135,6 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   constructor(options: LimrunRuntimeOptions, dependencies: LimrunRuntimeDependencies) {
     this.options = options;
     this.dependencies = dependencies;
-    const owner = providerRuntimeOwner(LIMRUN_PROVIDER, resolveLimrunRuntimeInstance(options));
-    if (owner.kind !== 'provider-runtime') throw new TypeError('Invalid Limrun runtime owner');
-    this.owner = owner;
     this.limrun = new Limrun(
       buildLimrunClientOptions({
         apiKey: options.apiKey,
@@ -137,17 +158,6 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   getDeviceSession(device: DeviceInfo): LimrunDeviceSession | undefined {
     const session = this.getSessionForDevice(device);
     return session ? createLimrunDeviceSession(session) : undefined;
-  }
-
-  async loadRuntime(host: AppLogRuntimeHost): Promise<DeviceRuntimeOwner<AppLogRuntimeOperations>> {
-    const { createLimrunAppLogRuntimeOwner } = await import('./app-log-runtime.ts');
-    return createLimrunAppLogRuntimeOwner({
-      host,
-      runtimeInstance: this.owner.instance,
-      ownsDevice: (device) => this.ownsDevice(device),
-      openCurrent: async (device) => this.currentAppLogReader(device),
-      reconnect: async (descriptor, signal) => await this.reconnectAppLogReader(descriptor, signal),
-    });
   }
 
   async installApp(
@@ -321,7 +331,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     return session?.platform === parsed.platform ? session : undefined;
   }
 
-  private currentAppLogReader(device: DeviceInfo): LimrunAppLogReader | undefined {
+  currentAppLogReader(device: DeviceInfo): LimrunAppLogReader | undefined {
     const session = this.getSessionForDevice(device);
     if (!session) return undefined;
     const publicSession = createLimrunDeviceSession(session);
@@ -337,7 +347,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     };
   }
 
-  private async reconnectAppLogReader(descriptor: LimrunAppLogDescriptor, signal?: AbortSignal) {
+  async reconnectAppLogReader(descriptor: LimrunAppLogDescriptor, signal?: AbortSignal) {
     const { reconnectLimrunAppLogReader } = await import('./app-log-reconnect.ts');
     return await reconnectLimrunAppLogReader({
       limrun: this.limrun,
@@ -355,6 +365,22 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       'Direct Limrun iOS sessions cannot reach local host ports; use a bridge public URL.',
     );
   }
+}
+
+async function loadLimrunAppLogRuntime(
+  runtime: LimrunRuntimeImplementation,
+  runtimeInstance: string,
+  host: AppLogRuntimeHost,
+): Promise<DeviceRuntimeOwner<AppLogRuntimeOperations>> {
+  const { createLimrunAppLogRuntimeOwner } = await import('./app-log-runtime.ts');
+  return createLimrunAppLogRuntimeOwner({
+    host,
+    runtimeInstance,
+    ownsDevice: (device) => runtime.ownsDevice(device),
+    openCurrent: async (device) => runtime.currentAppLogReader(device),
+    reconnect: async (descriptor, signal) =>
+      await runtime.reconnectAppLogReader(descriptor, signal),
+  });
 }
 
 function portReverseResult(options: ProviderPortReverseOptions): Record<string, unknown> {

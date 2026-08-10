@@ -1,12 +1,20 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
+  isAndroidEmulatorSerial,
+  normalizeAndroidDeviceName,
   parseAndroidAvdList,
   parseAndroidDeviceEntries,
   parseAndroidEmulatorAvdNameOutput,
   parseAndroidFeatureListForTv,
   parseAndroidTargetFromCharacteristics,
 } from './inventory-parsers.ts';
+
+test('Android inventory identity normalizes AVD names and recognizes emulator serials', () => {
+  assert.equal(normalizeAndroidDeviceName(' Pixel_9   Pro '), 'pixel 9 pro');
+  assert.equal(isAndroidEmulatorSerial('emulator-5554'), true);
+  assert.equal(isAndroidEmulatorSerial('R58M123ABC'), false);
+});
 
 test('Android inventory parsers preserve device, AVD-name, and TV detection semantics', () => {
   assert.deepEqual(

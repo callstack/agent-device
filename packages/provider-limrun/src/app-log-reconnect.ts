@@ -29,18 +29,19 @@ async function reconnectIos(options: {
   descriptor: LimrunAppLogDescriptor;
   signal?: AbortSignal;
 }): Promise<LimrunAppLogReconnectOutcome> {
-  const instance = await options.limrun.iosInstances.get(options.descriptor.instanceId, {
-    timeout: 5_000,
-    maxRetries: 0,
-    signal: options.signal,
-  });
-  if (!hasDescriptorOwnership(instance.metadata.labels, options.descriptor)) {
-    return { status: 'ownership-lost' };
-  }
-  if (instance.status.state === 'terminated') return { status: 'missing' };
-  if (!instance.status.apiUrl) return { status: 'missing' };
+  const selected = await selectOwnedActiveInstance(
+    async () =>
+      await options.limrun.iosInstances.get(options.descriptor.instanceId, {
+        timeout: 5_000,
+        maxRetries: 0,
+        signal: options.signal,
+      }),
+    options.descriptor,
+  );
+  if (selected.status !== 'active') return selected;
+  const { instance } = selected;
   const client = await createIosInstanceClient({
-    apiUrl: instance.status.apiUrl,
+    apiUrl: selected.apiUrl,
     token: instance.status.token,
     logLevel: 'warn',
   });
@@ -60,18 +61,20 @@ async function reconnectAndroid(options: {
   dependencies: LimrunRuntimeDependencies;
   signal?: AbortSignal;
 }): Promise<LimrunAppLogReconnectOutcome> {
-  const instance = await options.limrun.androidInstances.get(options.descriptor.instanceId, {
-    timeout: 5_000,
-    maxRetries: 0,
-    signal: options.signal,
-  });
-  if (!hasDescriptorOwnership(instance.metadata.labels, options.descriptor)) {
-    return { status: 'ownership-lost' };
-  }
-  if (instance.status.state === 'terminated') return { status: 'missing' };
-  if (!instance.status.apiUrl || !instance.status.adbWebSocketUrl) return { status: 'missing' };
+  const selected = await selectOwnedActiveInstance(
+    async () =>
+      await options.limrun.androidInstances.get(options.descriptor.instanceId, {
+        timeout: 5_000,
+        maxRetries: 0,
+        signal: options.signal,
+      }),
+    options.descriptor,
+  );
+  if (selected.status !== 'active') return selected;
+  const { instance } = selected;
+  if (!instance.status.adbWebSocketUrl) return { status: 'missing' };
   const client = await createAndroidInstanceClient({
-    apiUrl: instance.status.apiUrl,
+    apiUrl: selected.apiUrl,
     adbUrl: instance.status.adbWebSocketUrl,
     token: instance.status.token,
     logLevel: 'warn',
@@ -119,6 +122,28 @@ async function reconnectAndroid(options: {
   } finally {
     await rollback[Symbol.asyncDispose]();
   }
+}
+
+type ReconnectableLimrunInstance = Readonly<{
+  metadata: Readonly<{ labels?: Record<string, string> }>;
+  status: Readonly<{ state: string; apiUrl?: string | null }>;
+}>;
+
+async function selectOwnedActiveInstance<Instance extends ReconnectableLimrunInstance>(
+  load: () => Promise<Instance>,
+  descriptor: LimrunAppLogDescriptor,
+): Promise<
+  | Readonly<{ status: 'active'; instance: Instance; apiUrl: string }>
+  | Extract<LimrunAppLogReconnectOutcome, { status: 'missing' | 'ownership-lost' }>
+> {
+  const instance = await load();
+  if (!hasDescriptorOwnership(instance.metadata.labels, descriptor)) {
+    return { status: 'ownership-lost' };
+  }
+  if (instance.status.state === 'terminated' || !instance.status.apiUrl) {
+    return { status: 'missing' };
+  }
+  return { status: 'active', instance, apiUrl: instance.status.apiUrl };
 }
 
 function hasDescriptorOwnership(

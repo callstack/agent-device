@@ -1,10 +1,18 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type {
-  AppLogCompletion,
-  AppLogLiveHandle,
-  AppLogLiveHandleImplementation,
-} from './app-log-runtime.ts';
-import { isConfirmedCleanup, type CleanupOutcome, type FinishOutcome } from './durable-resource.ts';
+import {
+  isConfirmedCleanup,
+  type AppLogCompletion,
+  type AppLogLiveHandle,
+  type AppLogLiveSnapshot,
+  type CleanupOutcome,
+  type FinishOutcome,
+} from '@agent-device/contracts/platform';
+
+type AppLogLiveHandleImplementation = Readonly<{
+  inspect(): AppLogLiveSnapshot;
+  finish(): Promise<FinishOutcome<AppLogCompletion>>;
+  forceCleanup(): Promise<CleanupOutcome>;
+}>;
 
 /** Internal idempotent adapter underlying the narrower public handle factories. */
 export function createAppLogLiveHandle(
@@ -21,6 +29,25 @@ export function createAppLogLiveHandle(
     [Symbol.asyncDispose]: async () => {
       disposal ??= forceCleanup().then(assertConfirmedCleanup);
       await disposal;
+    },
+  });
+}
+
+/** Derives forced cleanup from an idempotent finish transaction. */
+export function createAppLogLiveHandleFromFinish(
+  implementation: Readonly<{
+    inspect(): AppLogLiveSnapshot;
+    finish(): Promise<FinishOutcome<AppLogCompletion>>;
+  }>,
+): AppLogLiveHandle {
+  return createAppLogLiveHandle({
+    inspect: implementation.inspect,
+    finish: implementation.finish,
+    forceCleanup: async () => {
+      const outcome = await implementation.finish();
+      return outcome.status === 'completed'
+        ? { status: 'cleaned' }
+        : { status: 'cleanup-pending', reason: outcome.reason, message: outcome.message };
     },
   });
 }

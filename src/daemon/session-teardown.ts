@@ -157,14 +157,14 @@ type SessionResourceTeardownRequest = {
   session: SessionState;
   sessionName: string;
   stateDir?: string;
-} & ({ kind: 'full'; sessionStore: SessionStore } | { kind: 'after-app-log' });
+} & ({ appLog: 'run'; sessionStore: SessionStore } | { appLog: 'already-settled' });
 
 export async function teardownSessionResources(
   request: SessionResourceTeardownRequest,
 ): Promise<void> {
   const { session, sessionName, stateDir } = request;
   const appLogSteps: SessionCleanupStep[] =
-    request.kind === 'full'
+    request.appLog === 'run'
       ? [
           {
             step: 'app_log',

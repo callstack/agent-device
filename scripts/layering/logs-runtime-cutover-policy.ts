@@ -233,7 +233,10 @@ export function logsSessionStateOwnershipViolations(
     visitAst(parsed.program, (node) => {
       if (node.type === 'Property' && node.kind === 'init' && node.computed !== true) {
         const field = propertyName(node.key);
-        if (field === 'appLog' || field === 'appLogFailure') {
+        if (
+          (field === 'appLog' || field === 'appLogFailure') &&
+          !isAppLogTeardownDiscriminant(field, node.value)
+        ) {
           violations.push(
             astViolation(file, node, `session ${field} record constructed outside its owner`),
           );
@@ -242,6 +245,12 @@ export function logsSessionStateOwnershipViolations(
     });
   }
   return violations;
+}
+
+function isAppLogTeardownDiscriminant(field: string, valueNode: unknown): boolean {
+  if (field !== 'appLog' || !valueNode || typeof valueNode !== 'object') return false;
+  const value = valueNode as Record<string, unknown>;
+  return value.type === 'Literal' && (value.value === 'run' || value.value === 'already-settled');
 }
 
 /**

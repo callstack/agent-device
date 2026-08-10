@@ -14,28 +14,23 @@ import type {
   RuntimeOwnerRef,
   RuntimePlatformModule,
 } from './platform-runtime.ts';
-import { PendingTransferGuard } from './async-lifecycle.ts';
+import type { PendingTransferGuard } from './async-lifecycle.ts';
 import {
   type CleanupOutcome,
-  type FinishOutcome,
   type LiveResourceHandle,
   type ReattachOutcome,
 } from './durable-resource.ts';
-import { decodeDurableDescriptor } from './durable-descriptor-codec.ts';
-import {
-  type DurableDescriptorCodec,
-  type DurableResourceEnvelope,
-} from './durable-resource-envelope.ts';
+import type { DurableResourceEnvelope } from './durable-resource-envelope.ts';
 
 export const APP_LOG_RESOURCE_KIND = 'app-log' as const;
 
 export type AppLogLiveState = 'active' | 'recovering' | 'ended' | 'failed';
 
-export type AppLogInspection = Readonly<{ backend: LogBackend }>;
+type AppLogInspection = Readonly<{ backend: LogBackend }>;
 
-export type AppLogDoctorInput = Readonly<{ appBundleId?: string }>;
+type AppLogDoctorInput = Readonly<{ appBundleId?: string }>;
 
-export type AppLogDoctorResult = Readonly<{
+type AppLogDoctorResult = Readonly<{
   backend: LogBackend;
   checks: Readonly<Record<string, boolean>>;
   notes: readonly string[];
@@ -66,12 +61,6 @@ export type AppLogLiveHandle = LiveResourceHandle<AppLogCompletion> &
     inspect(): AppLogLiveSnapshot;
   }>;
 
-export type AppLogLiveHandleImplementation = Readonly<{
-  inspect(): AppLogLiveSnapshot;
-  finish(): Promise<FinishOutcome<AppLogCompletion>>;
-  forceCleanup(): Promise<CleanupOutcome>;
-}>;
-
 export type AppLogStartInput = Readonly<{
   sessionId: string;
   appBundleId: string;
@@ -85,24 +74,11 @@ export type AppLogStartResult = Readonly<{
   envelope: DurableResourceEnvelope<typeof APP_LOG_RESOURCE_KIND>;
 }>;
 
-export function createAppLogStartResult(
-  handle: AppLogLiveHandle,
-  envelope: DurableResourceEnvelope<typeof APP_LOG_RESOURCE_KIND>,
-): AppLogStartResult {
-  return Object.freeze({ pendingHandle: new PendingTransferGuard(handle), envelope });
-}
-
-export type AppLogReattachInput = Readonly<{
+type AppLogReattachInput = Readonly<{
   envelope: DurableResourceEnvelope<typeof APP_LOG_RESOURCE_KIND>;
 }>;
 
-export type AppLogCleanupInput = AppLogReattachInput;
-
-/** Persisted recovery coordinates supplied from the decoded envelope, never from a request. */
-export type AppLogRecoveryContext = Readonly<{
-  sessionId: string;
-  fence: ResourceOwnershipFence;
-}>;
+type AppLogCleanupInput = AppLogReattachInput;
 
 export type AppLogRuntimeOperations = Readonly<{
   appLogInspect(): Promise<AppLogInspection>;
@@ -113,45 +89,6 @@ export type AppLogRuntimeOperations = Readonly<{
   ): Promise<ReattachOutcome<AppLogLiveHandle, AppLogCompletion>>;
   appLogCleanup(input: AppLogCleanupInput): Promise<CleanupOutcome>;
 }>;
-
-export type AppLogDescriptorCodec<Descriptor extends object> = DurableDescriptorCodec<
-  Descriptor,
-  typeof APP_LOG_RESOURCE_KIND
->;
-
-export function createAppLogRecoveryOperations<Descriptor extends object>(implementation: {
-  codec: AppLogDescriptorCodec<Descriptor>;
-  reattach(
-    descriptor: Descriptor,
-    context: AppLogRecoveryContext,
-  ): Promise<ReattachOutcome<AppLogLiveHandle, AppLogCompletion>>;
-  cleanup(descriptor: Descriptor, context: AppLogRecoveryContext): Promise<CleanupOutcome>;
-}): Pick<AppLogRuntimeOperations, 'appLogReattach' | 'appLogCleanup'> {
-  return Object.freeze({
-    appLogReattach: async ({ envelope }) => {
-      const decoded = decodeDurableDescriptor(envelope, implementation.codec);
-      if (decoded.status === 'unreattachable') return decoded;
-      return await implementation.reattach(decoded.descriptor, recoveryContext(envelope));
-    },
-    appLogCleanup: async ({ envelope }) => {
-      const decoded = decodeDurableDescriptor(envelope, implementation.codec);
-      if (decoded.status === 'decoded') {
-        return await implementation.cleanup(decoded.descriptor, recoveryContext(envelope));
-      }
-      return {
-        status: 'cleanup-pending',
-        reason: 'manual-recovery-required',
-        message: decoded.message,
-      };
-    },
-  });
-}
-
-function recoveryContext(
-  envelope: DurableResourceEnvelope<typeof APP_LOG_RESOURCE_KIND>,
-): AppLogRecoveryContext {
-  return Object.freeze({ sessionId: envelope.sessionId, fence: envelope.fence });
-}
 
 export type AppLogOutputSink = AsyncDisposable &
   Readonly<{
@@ -170,37 +107,6 @@ export type AppLogProcessMarkerReadOutcome =
   | Readonly<{ status: 'decoded'; marker: AppLogProcessMarker }>;
 
 export type AppLogProcessOwnership = 'missing' | 'owned-alive' | 'ownership-lost';
-
-/** Validates a present marker without collapsing corrupt or incomplete data into absence. */
-export function decodeAppLogProcessMarker(value: unknown): AppLogProcessMarkerReadOutcome {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    return { status: 'invalid', message: 'App-log process marker must be an object' };
-  }
-  const marker = value as Record<string, unknown>;
-  if (!Number.isInteger(marker.pid) || Number(marker.pid) <= 0) {
-    return { status: 'invalid', message: 'App-log process marker pid must be a positive integer' };
-  }
-  if (typeof marker.startTime !== 'string' || marker.startTime.trim().length === 0) {
-    return {
-      status: 'invalid',
-      message: 'App-log process marker startTime must be a non-empty string',
-    };
-  }
-  if (typeof marker.command !== 'string' || marker.command.trim().length === 0) {
-    return {
-      status: 'invalid',
-      message: 'App-log process marker command must be a non-empty string',
-    };
-  }
-  return {
-    status: 'decoded',
-    marker: Object.freeze({
-      pid: Number(marker.pid),
-      startTime: marker.startTime,
-      command: marker.command,
-    }),
-  };
-}
 
 export type AppLogBackgroundProcess = AsyncDisposable &
   Readonly<{
@@ -288,5 +194,3 @@ export type AppLogRuntimeProviderModule = Readonly<{
   owner: Extract<RuntimeOwnerRef, { kind: 'provider-runtime' }>;
   loadRuntime(host: AppLogRuntimeHost): Promise<DeviceRuntimeOwner<AppLogRuntimeOperations>>;
 }>;
-
-export type AppLogRuntimeOwner = DeviceRuntimeOwner<AppLogRuntimeOperations>;

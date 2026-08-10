@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
-import { createDurableResourceEnvelope, localRuntimeOwner } from '@agent-device/contracts/platform';
+import { localRuntimeOwner } from '@agent-device/contracts/platform';
+import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { createTestAppLogLiveHandle } from '../../__tests__/test-utils/app-log-live-handle.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
@@ -81,7 +82,7 @@ test('daemon shutdown settles fenced app-log cleanup before finalization can rel
     device: { id: session.device.id, family: 'web', kind: 'device' },
     owner: localRuntimeOwner('web'),
     fence,
-    lifecycle: 'active',
+    lifecycle: 'open',
     descriptor: { version: 1, body: {} },
   });
   let releaseCleanup!: () => void;

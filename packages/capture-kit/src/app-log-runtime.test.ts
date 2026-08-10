@@ -1,22 +1,24 @@
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
+import {
+  localRuntimeOwner,
+  providerRuntimeOwner,
+  type AppLogCompletion,
+  type AppLogBackgroundProcessRequest,
+  type AppLogProcessOwnership,
+  type AppLogProcessTransport,
+  type AppLogRuntimeHost,
+  type AppLogRuntimeProviderModule,
+  type DurableDescriptorCodec,
+} from '@agent-device/contracts/platform';
 import { APP_LOG_ENVELOPE_FIXTURE } from './durable-resource-envelope.fixtures.ts';
-import { createAppLogLiveHandle } from './app-log-live-handle-core.ts';
+import { createAppLogLiveHandle } from './app-log-live-handle.ts';
 import {
   createAppLogRecoveryOperations,
   createAppLogStartResult,
   decodeAppLogProcessMarker,
-  type AppLogCompletion,
-  type AppLogBackgroundProcessRequest,
-  type AppLogDescriptorCodec,
-  type AppLogProcessOwnership,
-  type AppLogProcessTransport,
-  type AppLogRecoveryContext,
-  type AppLogRuntimeHost,
-  type AppLogRuntimeProviderModule,
 } from './app-log-runtime.ts';
-import { localRuntimeOwner, providerRuntimeOwner } from './platform-runtime.ts';
 
 const completion: AppLogCompletion = {
   backend: 'android',
@@ -117,7 +119,7 @@ test('app-log start result retains pending ownership until explicit transfer', a
 
 test('app-log recovery decodes only after exact-owner selection and fails closed', async () => {
   type Descriptor = Readonly<{ pid: number }>;
-  const codec: AppLogDescriptorCodec<Descriptor> = {
+  const codec: DurableDescriptorCodec<Descriptor, 'app-log'> = {
     resourceKind: 'app-log',
     version: 2,
     encode: ({ pid }) => ({ pid }),
@@ -127,13 +129,12 @@ test('app-log recovery decodes only after exact-owner selection and fails closed
         : { status: 'invalid', message: 'pid is invalid' },
   };
   let reattachedDescriptor: Descriptor | undefined;
-  const reattach = vi.fn(async (descriptor: Descriptor, _context: AppLogRecoveryContext) => {
+  const reattach = vi.fn(async (descriptor: Descriptor, _context: unknown) => {
     reattachedDescriptor = descriptor;
     return { status: 'missing' } as const;
   });
   const cleanup = vi.fn(
-    async (_descriptor: Descriptor, _context: AppLogRecoveryContext) =>
-      ({ status: 'already-missing' }) as const,
+    async (_descriptor: Descriptor) => ({ status: 'already-missing' }) as const,
   );
   const operations = createAppLogRecoveryOperations({ codec, reattach, cleanup });
 

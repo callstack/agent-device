@@ -1,11 +1,10 @@
 {
-  "name": "@agent-device/platform-vega",
+  "name": "@agent-device/capture-kit",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Vega-family platform runtime metadata and implementations for agent-device.",
+  "description": "Private durable-capture mechanics shared by platform runtimes, providers, and daemon orchestration.",
   "dependencies": {
-    "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
     "@agent-device/kernel": "workspace:*"
   },

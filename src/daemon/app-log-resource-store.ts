@@ -2,10 +2,10 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  decodeDurableResourceEnvelope,
   type DurableEnvelopeDecodeOutcome,
   type DurableResourceEnvelope,
 } from '@agent-device/contracts/platform';
+import { decodeDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { openVerifiedFileForRead } from '../utils/verified-file.ts';
 
 const APP_LOG_RESOURCE_FILENAME = 'app-log.resource.json';

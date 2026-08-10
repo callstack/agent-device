@@ -147,6 +147,7 @@ test('workspace package source selects static gates, fallow, layering, and the b
   for (const file of [
     'packages/kernel/src/errors.ts',
     'packages/contracts/src/facades/device.ts',
+    'packages/capture-kit/src/app-log-live-handle.ts',
   ]) {
     const result = plan([file]);
     assert.equal(result.failOpen, false, file);

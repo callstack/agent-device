@@ -84,6 +84,7 @@ export function zoneRank(zone: string): number | null {
 export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
   '(root)',
   'kernel',
+  'capture-kit',
   'platform-apple',
   'platform-android',
   'platform-harmonyos',

@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
-import { createDurableResourceEnvelope, localRuntimeOwner } from '@agent-device/contracts/platform';
+import { localRuntimeOwner } from '@agent-device/contracts/platform';
+import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { withAppLogResourceFence } from '../app-log-resource-fence.ts';
 import {
@@ -40,7 +41,7 @@ test('ownership fence serializes validation, side effect, and persisted transiti
       order.push('first-start');
       markFirstStarted();
       await firstReleased;
-      lease.transition('completing');
+      lease.transition('open', { metadata: { phase: 'completing' } });
       order.push('first-end');
     },
   });
@@ -58,7 +59,7 @@ test('ownership fence serializes validation, side effect, and persisted transiti
   expect(order).toEqual(['first-start', 'first-end', 'second']);
   expect(readAppLogResourceRecord(resourcePath)).toMatchObject({
     status: 'decoded',
-    envelope: { lifecycle: 'completing' },
+    envelope: { lifecycle: 'open', metadata: { phase: 'completing' } },
   });
 });
 
@@ -74,7 +75,7 @@ function makeRecord(): string {
       device: { id: 'emulator-5554', family: 'android', kind: 'emulator' },
       owner: localRuntimeOwner('android'),
       fence: { token: 'current', generation: 1 },
-      lifecycle: 'active',
+      lifecycle: 'open',
       descriptor: { version: 1, body: {} },
     }),
   );

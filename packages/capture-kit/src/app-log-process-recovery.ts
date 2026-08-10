@@ -3,8 +3,9 @@ import type {
   AppLogLiveHandle,
   AppLogProcessMarkerReadOutcome,
   AppLogRuntimeHost,
-} from './app-log-runtime.ts';
-import type { CleanupOutcome, ReattachOutcome } from './durable-resource.ts';
+  CleanupOutcome,
+  ReattachOutcome,
+} from '@agent-device/contracts/platform';
 
 type ManagedAppLogProcessHost = Readonly<{
   processes: Pick<

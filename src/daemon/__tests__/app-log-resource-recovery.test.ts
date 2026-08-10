@@ -2,13 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import {
-  createDurableResourceEnvelope,
   localRuntimeOwner,
   type AppLogRuntimeOperations,
   type CleanupOutcome,
   type DeviceRuntimeGateway,
   type ReattachOutcome,
 } from '@agent-device/contracts/platform';
+import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { createTestAppLogLiveHandle } from '../../__tests__/test-utils/app-log-live-handle.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { recoverAppLogResourcesAfterDaemonLock } from '../app-log-resource-recovery.ts';
@@ -110,7 +110,7 @@ test('uncertain active cleanup persists cleanup-pending for the next exact-owner
   ).toEqual({ scanned: 1, recovered: 0, retained: 1 });
   expect(readAppLogResourceRecord(resourcePath)).toMatchObject({
     status: 'decoded',
-    envelope: { lifecycle: 'cleanup-pending' },
+    envelope: { lifecycle: 'open', metadata: { phase: 'cleanup-pending' } },
   });
 });
 
@@ -145,7 +145,7 @@ test('startup recovery bounds a never-settling owner and retains its durable evi
     });
     expect(readAppLogResourceRecord(resourcePath)).toMatchObject({
       status: 'decoded',
-      envelope: { lifecycle: 'active' },
+      envelope: { lifecycle: 'open' },
     });
   } finally {
     vi.useRealTimers();
@@ -283,7 +283,7 @@ function makeRecord(options: { physicalSessionId?: string; envelopeSessionId?: s
       device: { id: 'emulator-5554', family: 'android', kind: 'emulator' },
       owner: localRuntimeOwner('android'),
       fence: { token: 'fence', generation: 1 },
-      lifecycle: 'active',
+      lifecycle: 'open',
       descriptor: { version: 1, body: { pid: 123 } },
     }),
   );

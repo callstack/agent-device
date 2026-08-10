@@ -1,12 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
-import {
-  createAppLogStartResult,
-  createDurableResourceEnvelope,
-  localRuntimeOwner,
-  type CleanupOutcome,
-} from '@agent-device/contracts/platform';
+import { localRuntimeOwner, type CleanupOutcome } from '@agent-device/contracts/platform';
+import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { createTestAppLogLiveHandle } from '../../__tests__/test-utils/app-log-live-handle.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -17,7 +13,7 @@ import { createNextAppLogFence } from '../app-log-start-preflight.ts';
 import { readAppLogResourceRecord, resolveAppLogResourcePath } from '../app-log-resource-store.ts';
 import type { SessionState } from '../types.ts';
 
-test('start persists starting/active recovery truth before adopting the live handle', async () => {
+test('start persists open recovery truth before adopting the live handle', async () => {
   const context = makeContext();
   const runtime = makeStartResult(context);
   await adoptStartedSessionAppLog({
@@ -28,7 +24,7 @@ test('start persists starting/active recovery truth before adopting the live han
   expect(context.sessionStore.get(context.sessionName)?.appLog?.handle).toBe(runtime.handle);
   expect(readAppLogResourceRecord(context.resourcePath)).toMatchObject({
     status: 'decoded',
-    envelope: { lifecycle: 'active' },
+    envelope: { lifecycle: 'open', metadata: { phase: 'active' } },
   });
 });
 
@@ -70,7 +66,7 @@ test('rejecting canceled-start cleanup retains cleanup-pending truth and blocks 
   ).rejects.toBe(primary);
   expect(readAppLogResourceRecord(context.resourcePath)).toMatchObject({
     status: 'decoded',
-    envelope: { lifecycle: 'cleanup-pending' },
+    envelope: { lifecycle: 'open', metadata: { phase: 'cleanup-pending' } },
   });
   expect(() =>
     createNextAppLogFence({
@@ -129,8 +125,8 @@ test('incoherent start envelope with rejecting cleanup persists a blocking tombs
     status: 'decoded',
     envelope: {
       sessionId: context.sessionName,
-      lifecycle: 'cleanup-pending',
-      metadata: { runtimeContractInvalid: true },
+      lifecycle: 'open',
+      metadata: { phase: 'cleanup-pending', runtimeContractInvalid: true },
     },
   });
   expect(() =>
@@ -314,7 +310,7 @@ function makeStartResult(
     },
     owner: context.owner,
     fence: context.fence,
-    lifecycle: 'starting',
+    lifecycle: 'open',
     descriptor: { version: 1, body: { pid: 123 } },
   });
   return {

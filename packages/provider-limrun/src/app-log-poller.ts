@@ -5,10 +5,8 @@ import type {
   AppLogRuntimeHost,
   FinishOutcome,
 } from '@agent-device/contracts/platform';
-import {
-  AsyncCleanupStack,
-  createAppLogLiveHandleFromFinish,
-} from '@agent-device/contracts/platform';
+import { AsyncCleanupStack } from '@agent-device/contracts/platform';
+import { createAppLogLiveHandleFromFinish } from '@agent-device/capture-kit';
 import type { LogBackend } from '@agent-device/contracts/observability';
 
 export type LimrunAppLogReader = AsyncDisposable &

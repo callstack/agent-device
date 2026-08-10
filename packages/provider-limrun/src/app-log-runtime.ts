@@ -13,9 +13,8 @@ import {
   assertAppLogSessionArtifacts,
   createAppLogRecoveryOperations,
   createAppLogStartResult,
-  providerRuntimeOwner,
-  sameRuntimeOwner,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/capture-kit';
+import { providerRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform';
 import {
   createLimrunAppLogEnvelope,
   limrunAppLogDescriptorCodec,

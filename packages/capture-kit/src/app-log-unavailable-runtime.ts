@@ -1,15 +1,15 @@
 import { deviceShape, type DeviceInfo, type Platform } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import type { AppLogRuntimeOperations } from './app-log-runtime.ts';
 import {
   localRuntimeOwner,
   sameRuntimeOwner,
+  type AppLogRuntimeOperations,
   type DeviceBinding,
   type DeviceRuntimeOwner,
   type RuntimeFacts,
   type RuntimeOperationUnavailability,
   type RuntimeOwnerRef,
-} from './platform-runtime.ts';
+} from '@agent-device/contracts/platform';
 
 /** Builds an honest family owner for platforms with no app-log mechanics. */
 export function createUnavailableAppLogRuntimeOwner(

@@ -221,12 +221,21 @@ test('session state scan catches planted app-log record construction outside its
           path: 'src/daemon/app-log-session-resource.ts',
           source: `sessionStore.set(name, { ...session, appLog: resource });`,
         },
+        {
+          path: 'src/daemon/session-teardown.ts',
+          source: `teardownSessionResources({ appLog: 'run' }); teardownSessionResources({ appLog: 'already-settled' });`,
+        },
+        {
+          path: 'src/daemon/handlers/invalid-teardown.ts',
+          source: `teardownSessionResources({ appLog: 'skip' });`,
+        },
       ]),
     ),
     [
       'src/daemon/handlers/planted.ts: session appLog record constructed outside its owner',
       'src/daemon/handlers/planted.ts: session appLogFailure record constructed outside its owner',
       'src/daemon/request-platform-providers.ts: session appLog record constructed outside its owner',
+      'src/daemon/handlers/invalid-teardown.ts: session appLog record constructed outside its owner',
     ],
   );
 });

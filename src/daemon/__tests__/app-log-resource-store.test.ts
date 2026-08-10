@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { createDurableResourceEnvelope, localRuntimeOwner } from '@agent-device/contracts/platform';
+import { localRuntimeOwner } from '@agent-device/contracts/platform';
+import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import {
   listAppLogResourcePaths,
@@ -18,7 +19,7 @@ test('app-log resource records publish atomically with owner-only permissions', 
 
   expect(readAppLogResourceRecord(resourcePath)).toMatchObject({
     status: 'decoded',
-    envelope: { resourceKind: 'app-log', lifecycle: 'active' },
+    envelope: { resourceKind: 'app-log', lifecycle: 'open' },
   });
   expect(fs.statSync(resourcePath).mode & 0o777).toBe(0o600);
   expect(fs.readdirSync(path.dirname(resourcePath))).toEqual(['app-log.resource.json']);
@@ -79,7 +80,7 @@ function envelope(sessionId: string) {
     device: { id: 'emulator-5554', family: 'android', kind: 'emulator' },
     owner: localRuntimeOwner('android'),
     fence: { token: `fence-${sessionId}`, generation: 1 },
-    lifecycle: 'active',
+    lifecycle: 'open',
     descriptor: { version: 1, body: {} },
   });
 }

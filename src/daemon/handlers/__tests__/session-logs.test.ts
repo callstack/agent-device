@@ -1,13 +1,12 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import {
-  createAppLogStartResult,
-  createDurableResourceEnvelope,
   localRuntimeOwner,
   narrowDeviceBinding,
   type AppLogRuntimeOperations,
   type CleanupOutcome,
   type DeviceBinding,
 } from '@agent-device/contracts/platform';
+import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { createTestAppLogLiveHandle } from '../../../__tests__/test-utils/app-log-live-handle.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -158,7 +157,7 @@ test('logs start persists the durable envelope before adopting the live handle',
   expect(sessionStore.get(sessionName)?.appLog).toBeDefined();
   expect(readRecord(sessionStore, sessionName)).toMatchObject({
     status: 'decoded',
-    envelope: { lifecycle: 'active', sessionId: sessionName },
+    envelope: { lifecycle: 'open', sessionId: sessionName, metadata: { phase: 'active' } },
   });
   expect(runtime.boundUses()).toEqual([
     { required: [], preferred: ['appLogInspect'] },
@@ -208,7 +207,11 @@ test('logs clear --restart finishes generation one before adopting generation tw
   expect(response).toMatchObject({ ok: true, data: { cleared: true, restarted: true } });
   expect(readRecord(sessionStore, sessionName)).toMatchObject({
     status: 'decoded',
-    envelope: { lifecycle: 'active', fence: { generation: 2 } },
+    envelope: {
+      lifecycle: 'open',
+      fence: { generation: 2 },
+      metadata: { phase: 'active' },
+    },
   });
 });
 
@@ -252,7 +255,7 @@ test('rejected pending cleanup retains cleanup-pending record and blocks replace
   expect(canceled?.ok).toBe(false);
   expect(readRecord(sessionStore, sessionName)).toMatchObject({
     status: 'decoded',
-    envelope: { lifecycle: 'cleanup-pending' },
+    envelope: { lifecycle: 'open', metadata: { phase: 'cleanup-pending' } },
   });
   runtime.bind.mockClear();
   const replacement = await runLogs(sessionStore, sessionName, ['start'], {}, runtime.bindDevice);
@@ -350,7 +353,7 @@ function createRuntimeHarness(options: { inspectAvailable?: boolean } = {}) {
       device: { id: DEVICE.id, family: DEVICE.platform, appleOs: 'ios', kind: DEVICE.kind },
       owner,
       fence: input.fence,
-      lifecycle: 'starting',
+      lifecycle: 'open',
       descriptor: { version: 1, body: { outputPath: input.outputPath } },
     });
     return createAppLogStartResult(handle, envelope);

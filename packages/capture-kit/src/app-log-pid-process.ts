@@ -1,4 +1,4 @@
-import type { LogBackend } from './logs.ts';
+import type { LogBackend } from '@agent-device/contracts/observability';
 import type {
   AppLogBackgroundProcess,
   AppLogLiveHandle,
@@ -6,7 +6,7 @@ import type {
   AppLogProcessStart,
   AppLogProcessCommand,
   AppLogRuntimeHost,
-} from './app-log-runtime.ts';
+} from '@agent-device/contracts/platform';
 import { createAppLogLiveHandleFromFinish } from './app-log-live-handle.ts';
 
 export type PidScopedAppLogProcessOptions = Readonly<{

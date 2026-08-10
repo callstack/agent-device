@@ -22,13 +22,18 @@ export const appLogRuntimePlanUses = Object.freeze([
 ] as const);
 
 export type LogsRuntimePlan =
-  | Readonly<{ kind: 'path'; use: typeof appLogInspectUse }>
-  | Readonly<{ kind: 'start'; use: typeof appLogStartUse }>
-  | Readonly<{ kind: 'stop'; use: typeof appLogInspectUse }>
-  | Readonly<{ kind: 'doctor'; use: typeof appLogDoctorUse }>
-  | Readonly<{ kind: 'mark'; marker: string; use: typeof appLogInspectUse }>
-  | Readonly<{ kind: 'clear'; use: typeof appLogInspectUse }>
-  | Readonly<{ kind: 'clear-restart'; use: typeof appLogStartUse }>;
+  | Readonly<{ kind: 'path'; requiresAppSession: false; use: typeof appLogInspectUse }>
+  | Readonly<{ kind: 'start'; requiresAppSession: true; use: typeof appLogStartUse }>
+  | Readonly<{ kind: 'stop'; requiresAppSession: false; use: typeof appLogInspectUse }>
+  | Readonly<{ kind: 'doctor'; requiresAppSession: false; use: typeof appLogDoctorUse }>
+  | Readonly<{
+      kind: 'mark';
+      marker: string;
+      requiresAppSession: false;
+      use: typeof appLogInspectUse;
+    }>
+  | Readonly<{ kind: 'clear'; requiresAppSession: false; use: typeof appLogInspectUse }>
+  | Readonly<{ kind: 'clear-restart'; requiresAppSession: true; use: typeof appLogStartUse }>;
 
 export type LogsRuntimePlanInput = Readonly<{
   action?: string;
@@ -43,19 +48,28 @@ export function resolveLogsRuntimePlan(input: LogsRuntimePlanInput): LogsRuntime
   }
   switch (action) {
     case 'path':
-      return Object.freeze({ kind: 'path', use: appLogInspectUse });
+      return Object.freeze({ kind: 'path', requiresAppSession: false, use: appLogInspectUse });
     case 'start':
-      return Object.freeze({ kind: 'start', use: appLogStartUse });
+      return Object.freeze({ kind: 'start', requiresAppSession: true, use: appLogStartUse });
     case 'stop':
-      return Object.freeze({ kind: 'stop', use: appLogInspectUse });
+      return Object.freeze({ kind: 'stop', requiresAppSession: false, use: appLogInspectUse });
     case 'doctor':
-      return Object.freeze({ kind: 'doctor', use: appLogDoctorUse });
+      return Object.freeze({ kind: 'doctor', requiresAppSession: false, use: appLogDoctorUse });
     case 'mark':
-      return Object.freeze({ kind: 'mark', marker: input.marker ?? '', use: appLogInspectUse });
+      return Object.freeze({
+        kind: 'mark',
+        marker: input.marker ?? '',
+        requiresAppSession: false,
+        use: appLogInspectUse,
+      });
     case 'clear':
       return input.restart
-        ? Object.freeze({ kind: 'clear-restart', use: appLogStartUse })
-        : Object.freeze({ kind: 'clear', use: appLogInspectUse });
+        ? Object.freeze({
+            kind: 'clear-restart',
+            requiresAppSession: true,
+            use: appLogStartUse,
+          })
+        : Object.freeze({ kind: 'clear', requiresAppSession: false, use: appLogInspectUse });
     default:
       throw new AppError('INVALID_ARGS', 'logs requires path, start, stop, doctor, mark, or clear');
   }

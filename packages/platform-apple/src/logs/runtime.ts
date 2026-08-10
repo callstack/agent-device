@@ -11,10 +11,9 @@ import {
   appLogSessionArtifactsMatch,
   cleanupManagedAppLogProcess,
   createAppLogRecoveryOperations,
-  localRuntimeOwner,
   reattachCleanupOnlyAppLogProcess,
-  sameRuntimeOwner,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/capture-kit';
+import { localRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform';
 import { APPLE_XCTEST_LOGS_HINT, backendForAppleDevice } from './backend.ts';
 import { appleAppLogDescriptorCodec } from './descriptor.ts';
 import { doctorAppleAppLogs } from './doctor.ts';

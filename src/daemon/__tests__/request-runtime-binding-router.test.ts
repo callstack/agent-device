@@ -1,12 +1,11 @@
 import fs from 'node:fs';
 import { expect, test, vi } from 'vitest';
 import {
-  createAppLogStartResult,
-  createDurableResourceEnvelope,
   localRuntimeOwner,
   type AppLogRuntimeOperations,
   type DeviceRuntimeGateway,
 } from '@agent-device/contracts/platform';
+import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { createTestAppLogLiveHandle } from '../../__tests__/test-utils/app-log-live-handle.ts';
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
@@ -103,7 +102,7 @@ function makeGateway(disposeError?: Error) {
           device: { id: 'emulator-5554', family: 'android', kind: 'emulator' },
           owner,
           fence: input.fence,
-          lifecycle: 'starting',
+          lifecycle: 'open',
           descriptor: { version: 1, body: {} },
         }),
       ),

@@ -99,6 +99,7 @@ import {
   logsSessionStateOwnershipViolations,
   sourceExecutedUsingDeclarationViolations,
 } from './logs-runtime-cutover-policy.ts';
+import { contractsImplementationAuthorityViolations } from './contracts-implementation-policy.ts';
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
@@ -184,6 +185,14 @@ function checkLogsRuntimeCutover(sources: ReadonlyMap<string, string>): Layering
     ...logsSessionStateOwnershipViolations(production),
     ...sourceExecutedUsingDeclarationViolations(production),
   ];
+}
+
+function checkContractsImplementationAuthority(
+  sources: ReadonlyMap<string, string>,
+): LayeringViolation[] {
+  return contractsImplementationAuthorityViolations(
+    [...sources].map(([path, source]) => ({ path, source })),
+  );
 }
 
 function checkBackEdges(edges: readonly ResolvedImportEdge[]): LayeringViolation[] {
@@ -599,6 +608,7 @@ export function main(): number {
     ...checkLayeringRules(edges),
     ...checkCycles(edges),
     ...checkLogsRuntimeCutover(sources),
+    ...checkContractsImplementationAuthority(sources),
     ...checkBackEdges(edges),
     ...checkTypeInversions(edges),
     ...checkSessionStateOwnership(sources),

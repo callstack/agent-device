@@ -92,6 +92,15 @@ process primitives outside the shared host-command port. R11 applies these rules
 dynamic, and re-export edges; package-owned tests may import their own public façade. Contracts may
 depend on kernel vocabulary but never on concrete platform packages or daemon implementation types.
 
+Durable-capture mechanics shared by more than one implementation live in the private
+`@agent-device/capture-kit` workspace package, with the enforced direction
+`kernel < contracts < capture-kit < platform/provider/daemon`. Contracts retains pure vocabulary and
+plan models; process supervision, live-handle implementations, recovery helpers, runtime codecs, and
+capture parsers do not live there. `capture-kit` is a domain package for durable capture, not a generic
+platform-common package, and it preserves the package façades' implementation-lazy loading boundary.
+Its introduction carries the normal workspace-package compliance surface: `check:affected`
+selection, R11/R13 package enumeration, and the composite typecheck project list.
+
 Canonical family, `AppleOS`, public-leaf, and selector identity remain declared in
 `@agent-device/kernel/device`. Platform-module metadata references one canonical family; during
 coexistence the legacy plugin registry derives its family identity from the same declaration rather
@@ -330,11 +339,14 @@ but reattachment never scans telemetry to rebuild state.
 
 Every authoritative home exposes a deterministic facet-owned lookup or enumeration path after
 process loss. Its neutral record carries session/device identity, the exact runtime-owner reference,
-descriptor and metadata, an ownership/fence token, and a lifecycle state sufficient to distinguish
-starting, active, completing, completed, and cleanup-pending recovery. A new handle is not exposed
-until the persisted ownership fence is acquired. Every finish/cleanup attempt holds that ownership
-guard through destructive work and the persisted transition, or delegates to an operation that
-atomically enforces the token, so a prior owner cannot later terminate a transferred resource.
+descriptor and metadata, an ownership/fence token, and one of two persisted lifecycle states:
+`open` or `completed`. In-progress distinctions such as starting, active, completing, and
+cleanup-pending are phase metadata on the open record, not additional lifecycle states. The fence and
+the descriptor remain authoritative across every open phase; cleanup uncertainty therefore cannot be
+encoded as a terminal lifecycle. A new handle is not exposed until the persisted ownership fence is
+acquired. Every finish/cleanup attempt holds that ownership guard through destructive work and the
+persisted transition, or delegates to an operation that atomically enforces the token, so a prior
+owner cannot later terminate a transferred resource.
 
 Persisting a descriptor does not make external-resource start and descriptor write atomic. A
 platform whose native tool cannot close that crash window retains a platform-owned orphan marker or

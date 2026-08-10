@@ -1,8 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { createDurableResourceEnvelope, localRuntimeOwner } from '@agent-device/contracts/platform';
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import { localRuntimeOwner } from '@agent-device/contracts/platform';
+import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
+import { deviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 import { createNextAppLogFence } from '../app-log-start-preflight.ts';
@@ -27,7 +28,8 @@ test('nonterminal record from an old session blocks replacement on the same devi
       device: { id: device.id, family: 'android', kind: 'emulator' },
       owner: localRuntimeOwner('android'),
       fence: { token: 'old', generation: 1 },
-      lifecycle: 'cleanup-pending',
+      lifecycle: 'open',
+      metadata: { phase: 'cleanup-pending' },
       descriptor: { version: 1, body: {} },
     }),
   );
@@ -51,7 +53,9 @@ test('an undecodable manifest or retained legacy marker blocks all replacement s
   expect(() => createNextAppLogFence({ ledger, resourcePath, device })).toThrow(/unreattachable/);
 
   fs.rmSync(corruptPath);
-  ledger.retainLegacyMarkers(['/sessions/legacy/app-log.pid']);
+  ledger.retainLegacyMarkers([
+    { markerPath: '/sessions/legacy/app-log.pid', device: deviceIdentity(device) },
+  ]);
   expect(() => createNextAppLogFence({ ledger, resourcePath, device })).toThrow(
     /legacy app-log marker/,
   );

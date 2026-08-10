@@ -72,7 +72,8 @@ test('the inventory substrate has six private lazy packages and one exact compos
   assert.deepEqual(checkPlatformPackagePolicy(validSources(), declarations()), []);
 });
 
-test('platform workspace packages are R11-owned unranked zones', () => {
+test('capture-kit and platform workspace packages are R11-owned unranked zones', () => {
+  assert.equal(classifyZone('capture-kit'), 'unranked');
   for (const family of CANONICAL_PLATFORM_FAMILIES) {
     assert.equal(classifyZone(`platform-${family}`), 'unranked', family);
   }
@@ -157,7 +158,14 @@ test('platform packages cannot escape to root, daemon, siblings, or raw process 
   }
 });
 
-test('platform packages cannot depend on any other workspace implementation package', () => {
+test('platform packages may use capture-kit but no unrelated workspace implementation package', () => {
+  const allowed = validSources();
+  allowed.set(
+    'packages/platform-apple/src/probe.test.ts',
+    "import { createAppLogLiveHandle } from '@agent-device/capture-kit';",
+  );
+  assert.deepEqual(checkPlatformPackagePolicy(allowed, declarations()), []);
+
   for (const specifier of [
     '@agent-device/selectors',
     '@agent-device/provider-webdriver',
@@ -170,7 +178,7 @@ test('platform packages cannot depend on any other workspace implementation pack
     );
     assert.match(
       messages(sources).join('\n'),
-      /may import workspace code only from contracts or kernel/,
+      /may import workspace code only from capture-kit, contracts, or kernel/,
     );
   }
 });

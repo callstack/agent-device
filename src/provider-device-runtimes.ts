@@ -1,6 +1,7 @@
 import type { DefaultCloudWebDriverProviderRuntimeEnv } from '@agent-device/provider-webdriver';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { LIMRUN_PROVIDER } from '@agent-device/provider-limrun';
+import type { AppLogRuntimeProviderRegistration } from './platform-runtime-app-log.ts';
 import { providerWebDriver } from './provider-webdriver.ts';
 
 export type DefaultProviderDeviceRuntimeEnv = DefaultCloudWebDriverProviderRuntimeEnv &
@@ -11,19 +12,34 @@ export const DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS = [
   'limrun' satisfies typeof LIMRUN_PROVIDER,
 ] as const;
 
-export async function createDefaultProviderDeviceRuntimes(
+export type DefaultProviderRuntimeComposition = Readonly<{
+  runtimes: readonly ProviderDeviceRuntime[];
+  appLogModules: readonly AppLogRuntimeProviderRegistration[];
+}>;
+
+export async function createDefaultProviderRuntimeComposition(
   env: DefaultProviderDeviceRuntimeEnv = process.env,
-): Promise<ProviderDeviceRuntime[]> {
+): Promise<DefaultProviderRuntimeComposition> {
   const runtimes = providerWebDriver.createDefaultRuntimes(env);
   const apiKey = env.LIMRUN_API_KEY?.trim();
-  if (!apiKey) return runtimes;
+  if (!apiKey) return Object.freeze({ runtimes, appLogModules: [] });
 
-  const { LimrunRuntime } = await import('./provider-limrun-runtime.ts');
-  return [
-    ...runtimes,
-    new LimrunRuntime({
+  const [limrunRuntime, dependencies] = await Promise.all([
+    import('@agent-device/provider-limrun'),
+    import('./sdk/limrun-runtime-dependencies.ts'),
+  ]);
+  const registration = limrunRuntime.createLimrunRuntime(
+    {
       apiKey,
       region: env.LIMRUN_REGION?.trim() || undefined,
-    }),
-  ];
+    },
+    dependencies.createLimrunRuntimeDependencies(),
+    { includeAppLogModule: true },
+  );
+  return Object.freeze({
+    runtimes: Object.freeze([...runtimes, registration.runtime]),
+    appLogModules: Object.freeze([
+      { runtime: registration.runtime, module: registration.appLogModule },
+    ]),
+  });
 }

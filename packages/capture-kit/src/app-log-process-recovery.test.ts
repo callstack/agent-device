@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
-import type { AppLogProcessMarkerReadOutcome, AppLogProcessOwnership } from './app-log-runtime.ts';
+import type {
+  AppLogProcessMarkerReadOutcome,
+  AppLogProcessOwnership,
+} from '@agent-device/contracts/platform';
 import {
   cleanupManagedAppLogProcess,
   reattachCleanupOnlyAppLogProcess,

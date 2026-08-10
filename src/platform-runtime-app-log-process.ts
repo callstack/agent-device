@@ -8,7 +8,8 @@ import type {
   HostCommandRequest,
   HostCommandResult,
 } from '@agent-device/contracts/platform';
-import { decodeAppLogProcessMarker } from '@agent-device/contracts/platform';
+import { decodeAppLogProcessMarker } from '@agent-device/capture-kit';
+import type { DeviceIdentity } from '@agent-device/kernel/device';
 import fs from 'node:fs';
 import path from 'node:path';
 import { runCmdBackground } from './utils/exec.ts';
@@ -63,6 +64,7 @@ export type LegacyAppLogMarkerRecovery = Readonly<{
     markerPath: string;
     reason: 'invalid' | 'ownership-lost';
     message?: string;
+    device?: DeviceIdentity;
   }>[];
 }>;
 
@@ -75,6 +77,7 @@ export async function recoverLegacyAppLogMarkersAfterDaemonLock(
     markerPath: string;
     reason: 'invalid' | 'ownership-lost';
     message?: string;
+    device?: DeviceIdentity;
   }> = [];
   if (!fs.existsSync(sessionsDir)) return { recovered, retained };
   const root = path.resolve(sessionsDir);
@@ -91,13 +94,48 @@ export async function recoverLegacyAppLogMarkersAfterDaemonLock(
     }
     const outcome = await terminateOwnedProcess(read.marker);
     if (outcome === 'ownership-lost') {
-      retained.push({ markerPath, reason: 'ownership-lost' });
+      const device = legacyMarkerDeviceIdentity(read.marker.command);
+      retained.push({ markerPath, reason: 'ownership-lost', ...(device ? { device } : {}) });
       continue;
     }
     clearMarker(root, markerPath);
     recovered.push(markerPath);
   }
   return Object.freeze({ recovered: Object.freeze(recovered), retained: Object.freeze(retained) });
+}
+
+function legacyMarkerDeviceIdentity(command: string): DeviceIdentity | undefined {
+  const android = /(?:^|\s)(?:\S*\/)?adb\s+-s\s+([^\s]+)/.exec(command)?.[1];
+  if (android) {
+    return Object.freeze({
+      id: android,
+      family: 'android',
+      kind: android.startsWith('emulator-') ? 'emulator' : 'device',
+      target: 'mobile',
+    });
+  }
+  const simulator = /(?:^|\s)xcrun\s+(?:--set\s+\S+\s+)?simctl\s+spawn\s+([^\s]+)/.exec(
+    command,
+  )?.[1];
+  if (simulator) {
+    return Object.freeze({
+      id: simulator,
+      family: 'apple',
+      appleOs: 'ios',
+      kind: 'simulator',
+      target: 'mobile',
+    });
+  }
+  const device = /(?:^|\s)xcrun\s+devicectl\b[^\n]*?\s--device\s+([^\s]+)/.exec(command)?.[1];
+  if (!device) return undefined;
+  return Object.freeze({
+    id: device,
+    family: 'apple',
+    appleOs: 'ios',
+    kind: 'device',
+    target: 'mobile',
+    iosPhysicalDeviceBackend: 'coredevice',
+  });
 }
 
 async function startAppLogProcess(

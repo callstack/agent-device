@@ -1,12 +1,15 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test, vi } from 'vitest';
 import {
+  type AppLogBackgroundProcess,
+  type AppLogRuntimeHost,
+  type DurableDescriptorCodec,
+} from '@agent-device/contracts/platform';
+import {
   createDurableResourceEnvelope,
   encodeDurableDescriptor,
 } from './durable-resource-envelope.ts';
-import type { AppLogBackgroundProcess, AppLogRuntimeHost } from './app-log-runtime.ts';
 import { createPidScopedAppLogRuntimeOwner } from './app-log-pid-runtime.ts';
-import type { DurableDescriptorCodec } from './durable-resource-envelope.ts';
 
 type TestDescriptor = Readonly<{
   transport: 'test-local' | 'test-provider';
@@ -74,7 +77,7 @@ test('PID-scoped runtime owner derives canonical artifacts and publishes one com
         },
         owner: selectedOwner,
         fence: input.fence,
-        lifecycle: 'active',
+        lifecycle: 'open',
         descriptor: encodeDurableDescriptor(descriptorCodec, descriptor),
       }),
   });

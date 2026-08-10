@@ -3,7 +3,7 @@ import type {
   AppLogBackgroundProcess,
   AppLogOutputSink,
   AppLogRuntimeHost,
-} from './app-log-runtime.ts';
+} from '@agent-device/contracts/platform';
 import { createPidScopedAppLogProcess } from './app-log-pid-process.ts';
 
 describe('PID-scoped app-log process lifecycle', () => {

@@ -2,6 +2,8 @@ import type { LogBackend } from '@agent-device/contracts/observability';
 import {
   createDurableResourceEnvelope,
   decodeDurableResourceEnvelope,
+} from '@agent-device/capture-kit';
+import {
   isConfirmedCleanup,
   runtimeOwnerKey,
   type AppLogCompletion,
@@ -18,7 +20,10 @@ import { emitDiagnostic } from '../utils/diagnostics.ts';
 import type { AppLogAdmissionLedger } from './app-log-admission-ledger.ts';
 import type { SessionStore } from './session-store.ts';
 import type { SessionState } from './types.ts';
-import { withAppLogResourceFence } from './app-log-resource-fence.ts';
+import {
+  withAppLogResourceFence,
+  type AppLogResourceFenceLease,
+} from './app-log-resource-fence.ts';
 import { readAppLogResourceRecord, writeAppLogResourceRecord } from './app-log-resource-store.ts';
 
 export type AppLogSessionSnapshot = Readonly<{
@@ -76,15 +81,10 @@ export async function adoptStartedSessionAppLog(
 ): Promise<void> {
   let state: AppLogAdoptionState = { kind: 'pending' };
   try {
-    const startingEnvelope = Object.freeze({
-      ...validateStartedEnvelope(params),
-      lifecycle: 'starting' as const,
-    });
-    writeAppLogResourceRecord(params.resourcePath, startingEnvelope);
+    const envelope = withAppLogPhase(validateStartedEnvelope(params), 'active');
+    writeAppLogResourceRecord(params.resourcePath, envelope);
     state = { kind: 'persisted' };
     params.throwIfCanceled();
-    const envelope = Object.freeze({ ...startingEnvelope, lifecycle: 'active' as const });
-    writeAppLogResourceRecord(params.resourcePath, envelope);
     const handle = params.pendingHandle.transfer();
     state = { kind: 'transferred', handle };
     params.sessionStore.set(params.sessionName, {
@@ -247,9 +247,9 @@ function createExpectedRecoveryEnvelope(
     device: deviceIdentity(params.device),
     owner: params.owner,
     fence: params.fence,
-    lifecycle: 'starting',
+    lifecycle: 'open',
     descriptor,
-    metadata: { runtimeContractInvalid: true },
+    metadata: { phase: 'runtime-contract-invalid', runtimeContractInvalid: true },
   });
 }
 
@@ -299,7 +299,7 @@ export async function finishSessionAppLog(params: {
     resourcePath: params.resourcePath,
     expected: resource.envelope.fence,
     run: async (lease) => {
-      lease.transition('completing');
+      markAppLogResourceCompleting(lease);
       const result = await resource.handle.finish();
       if (result.status === 'completed') {
         lease.transition('completed', {
@@ -308,12 +308,14 @@ export async function finishSessionAppLog(params: {
             backend: result.result.backend,
             outputPath: result.result.outputPath,
             completedAt: result.result.completedAt,
+            phase: 'completed',
           },
         });
       } else {
-        lease.transition('cleanup-pending', {
+        lease.transition('open', {
           metadata: {
             ...(lease.envelope.metadata ?? {}),
+            phase: 'cleanup-pending',
             cleanupPendingReason: result.reason,
             ...(result.message ? { cleanupPendingMessage: result.message } : {}),
           },
@@ -344,11 +346,12 @@ export async function forceCleanupSessionAppLog(params: {
     resourcePath: params.resourcePath,
     expected: resource.envelope.fence,
     run: async (lease) => {
-      lease.transition('completing');
+      markAppLogResourceCompleting(lease);
       const result = await resource.handle.forceCleanup();
-      lease.transition(isConfirmedCleanup(result) ? 'completed' : 'cleanup-pending', {
+      lease.transition(isConfirmedCleanup(result) ? 'completed' : 'open', {
         metadata: {
           ...(lease.envelope.metadata ?? {}),
+          phase: isConfirmedCleanup(result) ? 'completed' : 'cleanup-pending',
           cleanupStatus: result.status,
           ...(result.status === 'cleanup-pending'
             ? {
@@ -369,6 +372,12 @@ export async function forceCleanupSessionAppLog(params: {
       appLogFailure: undefined,
     });
   }
+}
+
+function markAppLogResourceCompleting(lease: AppLogResourceFenceLease): void {
+  lease.transition('open', {
+    metadata: { ...(lease.envelope.metadata ?? {}), phase: 'completing' },
+  });
 }
 
 function validateStartedEnvelope(params: {
@@ -411,7 +420,7 @@ function matchesStartedEnvelopeAuthority(
 }
 
 function isStartedLifecycle(lifecycle: DurableResourceEnvelope['lifecycle']): boolean {
-  return lifecycle === 'starting' || lifecycle === 'active';
+  return lifecycle === 'open';
 }
 
 function invalidStartedEnvelope(): AppError {
@@ -436,13 +445,25 @@ function markCleanupAfterFailedAdoption(
   }
   writeAppLogResourceRecord(resourcePath, {
     ...record.envelope,
-    lifecycle: confirmed ? 'completed' : 'cleanup-pending',
+    lifecycle: confirmed ? 'completed' : 'open',
     metadata: {
       ...(record.envelope.metadata ?? {}),
+      phase: confirmed ? 'completed' : 'cleanup-pending',
       cleanupStatus: confirmed ? 'cleaned' : 'cleanup-pending',
     },
   });
   return true;
+}
+
+function withAppLogPhase(
+  envelope: DurableResourceEnvelope<'app-log'>,
+  phase: string,
+): DurableResourceEnvelope<'app-log'> {
+  return Object.freeze({
+    ...envelope,
+    lifecycle: 'open',
+    metadata: { ...(envelope.metadata ?? {}), phase },
+  });
 }
 
 function cleanupPendingError(

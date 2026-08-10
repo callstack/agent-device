@@ -3,12 +3,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import {
-  createAppLogStartResult,
-  createDurableResourceEnvelope,
   providerRuntimeOwner,
   type AppLogRuntimeOperations,
   type DeviceRuntimeGateway,
 } from '@agent-device/contracts/platform';
+import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { createTestAppLogLiveHandle } from '../../../src/__tests__/test-utils/app-log-live-handle.ts';
 import { assertFlatToolCall } from './assertions.ts';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
@@ -283,7 +282,7 @@ function createRecordingAppLogRuntimeGateway(params: {
                 },
                 owner,
                 fence: input.fence,
-                lifecycle: 'starting',
+                lifecycle: 'open',
                 descriptor: { version: 1, body: { transport: 'provider-scenario' } },
               }),
             );

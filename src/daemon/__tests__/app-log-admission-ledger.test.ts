@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import { deviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 import { createNextAppLogFence } from '../app-log-start-preflight.ts';
 import { resolveAppLogResourcePath } from '../app-log-resource-store.ts';
@@ -9,6 +9,13 @@ const DEVICE: DeviceInfo = {
   platform: 'android',
   id: 'ledger-device',
   name: 'Pixel',
+  kind: 'emulator',
+};
+
+const OTHER_DEVICE: DeviceInfo = {
+  platform: 'android',
+  id: 'other-ledger-device',
+  name: 'Other Pixel',
   kind: 'emulator',
 };
 
@@ -35,7 +42,9 @@ test('retained legacy markers fail closed only in the daemon ledger that observe
   const sessionStore = makeSessionStore('app-log-admission-legacy-ledger-');
   const resourcePath = resolveAppLogResourcePath(sessionStore.resolveSessionDir('session'));
 
-  retainingLedger.retainLegacyMarkers(['/sessions/legacy/app-log.pid']);
+  retainingLedger.retainLegacyMarkers([
+    { markerPath: '/sessions/legacy/app-log.pid', device: deviceIdentity(DEVICE) },
+  ]);
 
   expect(() =>
     createNextAppLogFence({ ledger: retainingLedger, resourcePath, device: DEVICE }),
@@ -44,4 +53,29 @@ test('retained legacy markers fail closed only in the daemon ledger that observe
     createNextAppLogFence({ ledger: restartedDaemonLedger, resourcePath, device: DEVICE })
       .generation,
   ).toBe(1);
+  expect(
+    createNextAppLogFence({ ledger: retainingLedger, resourcePath, device: OTHER_DEVICE })
+      .generation,
+  ).toBe(1);
+});
+
+test('undurable cleanup blocks expire within the configured bound and report a diagnostic', () => {
+  let now = 1_000;
+  const expired: string[] = [];
+  const ledger = createAppLogAdmissionLedger({
+    now: () => now,
+    undurableCleanupTtlMs: 500,
+    onUndurableCleanupExpired: ({ reason }) => expired.push(reason),
+  });
+  const sessionStore = makeSessionStore('app-log-admission-expiry-');
+  const resourcePath = resolveAppLogResourcePath(sessionStore.resolveSessionDir('session'));
+
+  ledger.blockUndurableCleanup(DEVICE, 'cleanup could not be confirmed');
+  expect(() => createNextAppLogFence({ ledger, resourcePath, device: DEVICE })).toThrow(
+    /process-local/,
+  );
+
+  now += 501;
+  expect(createNextAppLogFence({ ledger, resourcePath, device: DEVICE }).generation).toBe(1);
+  expect(expired).toEqual(['cleanup could not be confirmed']);
 });

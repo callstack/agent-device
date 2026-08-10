@@ -304,6 +304,19 @@ test('the real tree parses, declares, and passes R11', () => {
   assert.ok(contractsPackage, 'contracts package must exist');
   assert.deepEqual([...contractsPackage.exportTargets.keys()].sort(), [...CONTRACT_EXPORTS].sort());
   assert.deepEqual([...contractsPackage.workspaceDependencies], ['@agent-device/kernel']);
+  const captureKitPackage = packages.find((pkg) => pkg.name === '@agent-device/capture-kit');
+  assert.ok(captureKitPackage, 'capture-kit package must exist');
+  assert.equal(
+    JSON.parse(fs.readFileSync(path.join(repoRoot, 'packages/capture-kit/package.json'), 'utf8'))
+      .private,
+    true,
+    'capture-kit stays a private implementation package',
+  );
+  assert.deepEqual([...captureKitPackage.exportTargets.keys()], ['@agent-device/capture-kit']);
+  assert.deepEqual([...captureKitPackage.workspaceDependencies].sort(), [
+    '@agent-device/contracts',
+    '@agent-device/kernel',
+  ]);
   const maestroPackage = packages.find((pkg) => pkg.name === '@agent-device/maestro');
   assert.ok(maestroPackage, 'maestro package must exist');
   assert.deepEqual([...maestroPackage.exportTargets.keys()], ['@agent-device/maestro']);
@@ -451,6 +464,7 @@ test('the real tree parses, declares, and passes R11', () => {
     ['@agent-device/provider-limrun'],
   );
   assert.deepEqual([...providerLimrunPackage.workspaceDependencies].sort(), [
+    '@agent-device/capture-kit',
     '@agent-device/contracts',
     '@agent-device/kernel',
   ]);
@@ -468,6 +482,10 @@ test('the real tree parses, declares, and passes R11', () => {
   assert.ok(xmlPackage, 'xml package must exist');
   assert.deepEqual([...xmlPackage.exportTargets.keys()], ['@agent-device/xml']);
   assert.deepEqual([...xmlPackage.workspaceDependencies], []);
+  assert.ok(
+    rootWorkspaceDependencyNames(repoRoot).has('@agent-device/capture-kit'),
+    'root must declare the capture-kit workspace dependency',
+  );
   assert.ok(
     rootWorkspaceDependencyNames(repoRoot).has('@agent-device/kernel'),
     'root must declare the kernel workspace dependency',

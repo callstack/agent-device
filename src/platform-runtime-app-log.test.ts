@@ -10,7 +10,10 @@ import type {
 import { providerRuntimeOwner } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { describe, expect, test, vi } from 'vitest';
-import { createComposedAppLogRuntimeGateway } from './platform-runtime-app-log.ts';
+import {
+  createComposedAppLogRuntimeGateway,
+  type AppLogRuntimeProviderRegistration,
+} from './platform-runtime-app-log.ts';
 
 const device: DeviceInfo = {
   platform: 'apple',
@@ -175,11 +178,12 @@ describe('composed app-log runtime gateway', () => {
   );
 });
 
-function gateway(providerRuntimes: readonly ProviderDeviceRuntime[]) {
+function gateway(registrations: readonly AppLogRuntimeProviderRegistration[]) {
   return createComposedAppLogRuntimeGateway({
     modules: new Map(),
     loadHost: async () => ({}) as AppLogRuntimeHost,
-    providerRuntimes,
+    providerRuntimes: registrations.map(({ runtime }) => runtime),
+    providerModules: registrations,
   });
 }
 
@@ -190,18 +194,23 @@ function providerRuntime(options: {
   mismatch?: 'owner' | 'device' | 'facts';
   disposed?: () => Promise<void>;
   load?: () => Promise<DeviceRuntimeOwner<AppLogRuntimeOperations>>;
-}): ProviderDeviceRuntime {
+}): AppLogRuntimeProviderRegistration {
   const owner = runtimeOwner(options);
-  return {
+  const runtime: ProviderDeviceRuntime = {
     provider: options.provider ?? 'limrun',
     leaseLifecycle: {},
     deviceInventoryProvider: async () => null,
     ownsDevice: options.ownsDevice ?? (() => true),
     getInteractor: () => undefined,
     shutdown: async () => {},
-    owner: options.ref,
-    loadRuntime: options.load ?? (async () => owner),
-  } as ProviderDeviceRuntime;
+  };
+  return {
+    runtime,
+    module: {
+      owner: options.ref as Extract<RuntimeOwnerRef, { kind: 'provider-runtime' }>,
+      loadRuntime: options.load ?? (async () => owner),
+    },
+  };
 }
 
 function runtimeOwner(options: {

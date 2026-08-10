@@ -63,11 +63,6 @@ export type {
   RuntimeUse,
   RuntimeUseDeclaration,
 } from '../platform-runtime.ts';
-export {
-  createDurableResourceEnvelope,
-  decodeDurableResourceEnvelope,
-  encodeDurableDescriptor,
-} from '../durable-resource-envelope.ts';
 export type {
   DurableDescriptorBodyDecodeOutcome,
   DurableDescriptorCodec,
@@ -85,49 +80,13 @@ export type {
   ReattachOutcome,
   ResourceUnreattachableReason,
 } from '../durable-resource.ts';
-export {
-  APP_LOG_RESOURCE_KIND,
-  createAppLogRecoveryOperations,
-  createAppLogStartResult,
-  decodeAppLogProcessMarker,
-} from '../app-log-runtime.ts';
-export {
-  cleanupManagedAppLogProcess,
-  reattachCleanupOnlyAppLogProcess,
-} from '../app-log-process-recovery.ts';
-export { createAppLogLiveHandleFromFinish } from '../app-log-live-handle.ts';
-export {
-  createPidScopedAppLogRuntimeOwner,
-  resolveFirstNumericAppLogPid,
-} from '../app-log-pid-runtime.ts';
-export type {
-  PidScopedAppLogRuntimeContext,
-  PidScopedAppLogRuntimeOptions,
-  PidScopedAppLogProcessPlan,
-  PidScopedAppLogStartContext,
-} from '../app-log-pid-runtime.ts';
-export { appLogCommandSucceeded, bestEffortAppLogCheck } from '../app-log-probe.ts';
-export {
-  appLogSessionArtifactsMatch,
-  assertAppLogSessionArtifacts,
-} from '../app-log-session-artifacts.ts';
-export type { AppLogArtifactPaths } from '../app-log-session-artifacts.ts';
-export {
-  createUnavailableAppLogBinding,
-  createUnavailableAppLogRuntimeOwner,
-} from '../app-log-unavailable-runtime.ts';
+export { APP_LOG_RESOURCE_KIND } from '../app-log-runtime.ts';
 export type {
   AppLogBackgroundProcess,
   AppLogBackgroundProcessRequest,
-  AppLogCleanupInput,
   AppLogCompletion,
-  AppLogDescriptorCodec,
-  AppLogDoctorInput,
-  AppLogDoctorResult,
   AppLogFailure,
-  AppLogInspection,
   AppLogLiveHandle,
-  AppLogLiveHandleImplementation,
   AppLogLiveSnapshot,
   AppLogLiveState,
   AppLogOutputSink,
@@ -137,18 +96,14 @@ export type {
   AppLogProcessCommand,
   AppLogProcessStart,
   AppLogProcessTransport,
-  AppLogRecoveryContext,
-  AppLogReattachInput,
   AppLogRuntimeHost,
   AppLogRuntimeOperations,
-  AppLogRuntimeOwner,
   AppLogRuntimePlatformModule,
   AppLogRuntimeProviderModule,
   AppLogSessionArtifacts,
   AppLogStartInput,
   AppLogStartResult,
 } from '../app-log-runtime.ts';
-export type { CleanupOnlyAppLogProcessReattachOutcome } from '../app-log-process-recovery.ts';
 export {
   appLogAdmissionUse,
   appLogRuntimePlanUses,

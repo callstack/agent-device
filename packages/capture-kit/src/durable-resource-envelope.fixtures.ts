@@ -11,7 +11,7 @@ export const APP_LOG_ENVELOPE_FIXTURE = createDurableResourceEnvelope({
   },
   owner: { kind: 'local-family', family: 'android' },
   fence: { token: 'fence-2', generation: 2 },
-  lifecycle: 'active',
+  lifecycle: 'open',
   descriptor: {
     version: 2,
     body: { pid: 42, outputPath: '/tmp/app.log' },

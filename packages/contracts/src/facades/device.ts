@@ -1,7 +1,4 @@
 export type { TriggerAppEventCommandResult } from '../app-events.ts';
-export { ANDROID_ADB_TIMEOUT_FAILURE, classifyAndroidAdbFailure } from '../android-adb-failure.ts';
-export type { AndroidAdbFailureClassification } from '../android-adb-failure.ts';
-export { isAndroidEmulatorSerial, normalizeAndroidDeviceName } from '../android-device.ts';
 export {
   DEFAULT_APPS_FILTER,
   assertResolvedAppsFilter,

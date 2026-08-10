@@ -68,6 +68,9 @@ type LogsHandlerParams = Omit<ObservabilityParams, 'bindDevice' | 'appLogAdmissi
   bindDevice: BindDeviceRuntime;
   appLogAdmissionLedger: AppLogAdmissionLedger;
 };
+type ExecutableLogsRuntimePlan =
+  | Extract<LogsRuntimePlan, { requiresAppSession: false }>
+  | (Extract<LogsRuntimePlan, { requiresAppSession: true }> & { appBundleId: string });
 type SessionLogStatus = {
   active: boolean;
   state: 'active' | 'recovering' | 'ended' | 'failed' | 'inactive';
@@ -380,7 +383,9 @@ async function handleLogsCommand(params: ObservabilityParams): Promise<DaemonRes
       restart: Boolean(req.flags?.restart),
       marker: req.positionals?.slice(1).join(' '),
     });
-    return await executeLogsRuntimePlan(logsParams, plan);
+    const executablePlan = requireLogsPlanSession(plan, session);
+    if ('ok' in executablePlan) return executablePlan;
+    return await executeLogsRuntimePlan(logsParams, executablePlan);
   } catch (error) {
     return { ok: false, error: normalizeError(error) };
   }
@@ -388,7 +393,7 @@ async function handleLogsCommand(params: ObservabilityParams): Promise<DaemonRes
 
 async function executeLogsRuntimePlan(
   params: LogsHandlerParams,
-  plan: LogsRuntimePlan,
+  plan: ExecutableLogsRuntimePlan,
 ): Promise<DaemonResponse> {
   switch (plan.kind) {
     case 'path': {
@@ -420,24 +425,29 @@ async function executeLogsRuntimePlan(
 
 async function executeLogsStartCapablePlan(
   params: LogsHandlerParams,
-  plan: Extract<LogsRuntimePlan, { kind: 'start' | 'clear-restart' }>,
+  plan: Extract<ExecutableLogsRuntimePlan, { kind: 'start' | 'clear-restart' }>,
 ): Promise<DaemonResponse> {
-  const appBundleId = params.session.appBundleId;
-  if (!appBundleId) {
-    return errorResponse(
-      'INVALID_ARGS',
-      `logs ${plan.kind === 'start' ? 'start' : 'clear --restart'} requires an app session; run open <app> first`,
-    );
-  }
   const runtime = await params.bindDevice(params.session.device, plan.use);
   return plan.kind === 'start'
-    ? await handleLogsStart(params, appBundleId, runtime.owner, runtime.operations.appLogStart)
+    ? await handleLogsStart(params, plan.appBundleId, runtime.owner, runtime.operations.appLogStart)
     : await handleLogsClearRestart(
         params,
-        appBundleId,
+        plan.appBundleId,
         runtime.owner,
         runtime.operations.appLogStart,
       );
+}
+
+function requireLogsPlanSession(
+  plan: LogsRuntimePlan,
+  session: SessionState,
+): ExecutableLogsRuntimePlan | DaemonFailureResponse {
+  if (!plan.requiresAppSession) return plan;
+  if (session.appBundleId) return Object.freeze({ ...plan, appBundleId: session.appBundleId });
+  return errorResponse(
+    'INVALID_ARGS',
+    `logs ${plan.kind === 'start' ? 'start' : 'clear --restart'} requires an app session; run open <app> first`,
+  );
 }
 
 function handleLogsPath(params: LogsHandlerParams, backend: LogBackend): DaemonResponse {
