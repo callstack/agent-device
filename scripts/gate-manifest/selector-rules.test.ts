@@ -114,6 +114,69 @@ test('the real ownership loop stays exempt when no impostor shares its name', ()
   assert.deepEqual(selectorRuleIds('m.ts', source), ['gate:lint', 'own:swift']);
 });
 
+test('a block-scoped re-declaration inside the ownership callback fails closed', () => {
+  // `const entry = config` shadows the callback parameter without being a parameter itself,
+  // so function-level resolution alone would fall back to the ownership binding and exempt a
+  // rule that is not a collected literal.
+  const source = `
+    const BUILD_OWNERSHIP = [{ check: 'swift-runner', rule: 'own:swift', detail: 'd', owns: () => true }];
+    const bad = BUILD_OWNERSHIP.map((entry) => {
+      {
+        const entry = config;
+        return reason('lint', file, entry.rule, 'd');
+      }
+    });
+  `;
+  assert.throws(() => selectorRuleIds('m.ts', source), /rule argument is not a string literal/);
+});
+
+test('a catch or destructured re-declaration is caught the same way', () => {
+  const caught = `
+    const BUILD_OWNERSHIP = [{ check: 'swift-runner', rule: 'own:swift', detail: 'd', owns: () => true }];
+    const bad = BUILD_OWNERSHIP.map((entry) => {
+      try { go(); } catch (entry) { return reason('lint', file, entry.rule, 'd'); }
+    });
+  `;
+  assert.throws(() => selectorRuleIds('m.ts', caught), /rule argument is not a string literal/);
+
+  const destructured = `
+    const BUILD_OWNERSHIP = [{ check: 'swift-runner', rule: 'own:swift', detail: 'd', owns: () => true }];
+    const bad = BUILD_OWNERSHIP.map((entry) => {
+      {
+        const { entry } = config;
+        return reason('lint', file, entry.rule, 'd');
+      }
+    });
+  `;
+  assert.throws(
+    () => selectorRuleIds('m.ts', destructured),
+    /rule argument is not a string literal/,
+  );
+});
+
+test('a value-changing chain is not proven provenance, even rooted at the table', () => {
+  // `.map(transform)` can return anything, so the downstream elements are no longer ownership
+  // entries and their `.rule` is not a literal this reader collected.
+  const source = `
+    const BUILD_OWNERSHIP = [{ check: 'swift-runner', rule: 'own:swift', detail: 'd', owns: () => true }];
+    const bad = BUILD_OWNERSHIP.map(transform).map((entry) => reason('lint', file, entry.rule, 'd'));
+  `;
+  assert.throws(() => selectorRuleIds('m.ts', source), /rule argument is not a string literal/);
+});
+
+test('a value-preserving chain still proves provenance', () => {
+  const source = `
+    const BUILD_OWNERSHIP = [
+      { check: 'swift-runner', rule: 'own:swift', detail: 'd', owns: () => true },
+    ];
+    const good = BUILD_OWNERSHIP.filter((e) => e.owns(file)).slice(0).map((entry) =>
+      reason(entry.check, file, entry.rule, entry.detail),
+    );
+    const a = reason('lint', file, 'gate:lint', 'd');
+  `;
+  assert.deepEqual(selectorRuleIds('m.ts', source), ['gate:lint', 'own:swift']);
+});
+
 test('a computed rule argument fails closed rather than being skipped', () => {
   // A category this reader cannot see would bypass the representative-sample and reachability
   // checks entirely — the exact hole the derived universe exists to close.

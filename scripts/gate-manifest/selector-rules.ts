@@ -59,19 +59,6 @@ function isMemberAccess(node: Node): boolean {
   return node.type === 'MemberExpression' || node.type === 'StaticMemberExpression';
 }
 
-/** Walks `a.b().c` down to its root identifier, or null when the root is not one. */
-function rootIdentifier(node: unknown): string | null {
-  let current: unknown = node;
-  for (let depth = 0; isNode(current) && depth < 32; depth++) {
-    const name = identifierName(current);
-    if (name !== null) return name;
-    if (isMemberAccess(current)) current = current['object'];
-    else if (current.type === 'CallExpression') current = current['callee'];
-    else return null;
-  }
-  return null;
-}
-
 /**
  * The body of the `reason(check, file, rule, detail)` factory itself.
  *
@@ -115,21 +102,50 @@ function ownershipTableNames(program: Node, factory: Span | null): Set<string> {
 }
 
 /**
- * Whether a call iterates a collected ownership table — `BUILD_OWNERSHIP.filter(...)`, and the
- * `.map(...)` chained onto it.
+ * Array methods that yield the SAME elements. An ownership entry stays an ownership entry
+ * through `.filter(...)`; it does not through `.map(transform)`, whose callback can return
+ * anything, so the elements downstream are no longer table entries and their `.rule` is no
+ * longer a literal this reader has collected.
+ */
+const VALUE_PRESERVING_METHODS = new Set([
+  'filter',
+  'slice',
+  'reverse',
+  'sort',
+  'toSorted',
+  'toReversed',
+]);
+
+/** Whether an expression evaluates to elements of a collected ownership table, unchanged. */
+function yieldsOwnershipEntries(node: unknown, tables: ReadonlySet<string>): boolean {
+  let current: unknown = node;
+  for (let depth = 0; isNode(current) && depth < 32; depth++) {
+    const name = identifierName(current);
+    if (name !== null) return tables.has(name);
+    if (current.type !== 'CallExpression') return false;
+    const callee = current['callee'];
+    if (!isNode(callee) || !isMemberAccess(callee)) return false;
+    const method = identifierName(callee['property']);
+    if (method === null || !VALUE_PRESERVING_METHODS.has(method)) return false;
+    current = callee['object'];
+  }
+  return false;
+}
+
+/**
+ * Whether a call iterates a collected ownership table — `BUILD_OWNERSHIP.filter(...).map(cb)`.
  *
  * This is what makes the forwarding exemption a proof rather than a pattern. Accepting any
  * member access named `.rule` would silently skip `reason(check, file, config.rule, …)`, whose
  * literal this reader never sees — a live category slipping past the derived universe while
- * the gate stays green. Only a binding whose origin is an ownership-table iteration qualifies,
- * because only then is the literal guaranteed to have been collected from the table already.
+ * the gate stays green. Only a binding whose values are provably unchanged table entries
+ * qualifies, because only then is the literal guaranteed to have been collected already.
  */
 function iteratesOwnershipTable(node: Node, tables: ReadonlySet<string>): boolean {
   if (node.type !== 'CallExpression') return false;
   const callee = node['callee'];
   if (!isNode(callee) || !isMemberAccess(callee)) return false;
-  const root = rootIdentifier(callee['object']);
-  return root !== null && tables.has(root);
+  return yieldsOwnershipEntries(callee['object'], tables);
 }
 
 function isFunctionLike(node: Node): boolean {
@@ -145,6 +161,54 @@ function callbackFunctions(node: Node): Node[] {
   const args = node['arguments'];
   if (!Array.isArray(args)) return [];
   return args.filter((argument): argument is Node => isNode(argument) && isFunctionLike(argument));
+}
+
+/** Every identifier a binding pattern introduces, including destructured ones. */
+function patternNames(node: unknown, into: Set<string>): void {
+  if (!isNode(node)) return;
+  const name = identifierName(node);
+  if (name !== null) {
+    into.add(name);
+    return;
+  }
+  for (const child of children(node)) patternNames(child, into);
+}
+
+/** Whether a node introduces `name` as a new binding of any kind. */
+function declaresName(node: Node, name: string): boolean {
+  const names = new Set<string>();
+  if (node.type === 'VariableDeclarator') patternNames(node['id'], names);
+  else if (node.type === 'CatchClause') patternNames(node['param'], names);
+  else if (isFunctionLike(node)) {
+    patternNames(node['id'], names);
+    const params = node['params'];
+    if (Array.isArray(params)) for (const parameter of params) patternNames(parameter, names);
+  }
+  return names.has(name);
+}
+
+/**
+ * Any re-declaration of `name` inside `callback` other than the callback's own parameter.
+ *
+ * Resolving to the innermost FUNCTION binder is not enough on its own: a block, catch or loop
+ * binding shadows the ownership parameter without being a function parameter at all, and the
+ * resolver would otherwise fall back to the ownership binding and exempt a dynamic rule —
+ *
+ *   BUILD_OWNERSHIP.map((entry) => { const entry = config; reason(…, entry.rule, …); })
+ *
+ * Rather than model every scoping construct, this refuses the exemption whenever the name is
+ * re-declared anywhere inside the callback. That over-refuses in principle (a re-declaration in
+ * a sibling block cannot reach the call site) and fails closed, which is the right direction.
+ */
+function shadowsParameter(program: Node, callback: Node, name: string): boolean {
+  const span = spanOf(callback);
+  if (span === null) return true;
+  let shadowed = false;
+  collect(program, (node) => {
+    if (shadowed || node === callback) return;
+    if (within(span, node) && declaresName(node, name)) shadowed = true;
+  });
+  return shadowed;
 }
 
 /**
@@ -170,10 +234,12 @@ function parameterBindings(program: Node, tables: ReadonlySet<string>): Paramete
     const span = isFunctionLike(node) ? spanOf(node) : null;
     const params = node['params'];
     if (span === null || !Array.isArray(params)) return;
-    const iteratesOwnership = ownershipCallbacks.has(node);
+    const owns = ownershipCallbacks.has(node);
     for (const parameter of params) {
       const name = identifierName(parameter);
-      if (name !== null) bindings.push({ name, span, iteratesOwnership });
+      if (name === null) continue;
+      const iteratesOwnership = owns && !shadowsParameter(program, node, name);
+      bindings.push({ name, span, iteratesOwnership });
     }
   });
   return bindings;
