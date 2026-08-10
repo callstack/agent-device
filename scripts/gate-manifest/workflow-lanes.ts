@@ -115,20 +115,37 @@ export type Lane = {
   readonly workflowName: string;
   readonly job: string;
   readonly checkNames: readonly string[];
-  /** How the lane is triggered — a suite owned only by a scheduled lane is not a PR gate. */
-  readonly kind: 'pull-request' | 'scheduled' | 'release' | 'push';
+  /**
+   * How the lane is triggered. #1429 accepts a PR workflow job or a scheduled workflow as an
+   * owner; `release`, `push` and `manual` lanes do not qualify (see OWNING_LANE_KINDS) because
+   * a suite that only runs at release time, on a push to main, or when somebody clicks the
+   * button is not gating anything on the way in.
+   */
+  readonly kind: 'pull-request' | 'scheduled' | 'release' | 'push' | 'manual';
   readonly terminals: ReadonlySet<Terminal>;
   readonly unresolved: readonly UnresolvedEdge[];
 };
 
+/**
+ * Ordered most to least gating. `workflow_dispatch` is checked LAST and maps to `manual`, not
+ * `scheduled`: nearly every scheduled and release workflow also carries it as a manual escape
+ * hatch, so treating it as a schedule would silently promote the release lanes into owners.
+ */
 function laneKind(triggers: WorkflowTriggers): Lane['kind'] {
   if (triggers.events.includes('pull_request')) return 'pull-request';
-  if (triggers.events.includes('schedule') || triggers.events.includes('workflow_dispatch')) {
-    return 'scheduled';
-  }
+  if (triggers.events.includes('schedule')) return 'scheduled';
   if (triggers.events.includes('release')) return 'release';
-  return 'push';
+  if (triggers.events.includes('push')) return 'push';
+  return triggers.events.includes('workflow_dispatch') ? 'manual' : 'push';
 }
+
+/**
+ * Lane kinds that can own a suite, per #1429: "owned by a PR workflow job, a scheduled
+ * workflow, or an explicit local-only declaration with a reason". A release/push/manual lane
+ * runs too late or too rarely to be the thing keeping a check honest, so a suite reachable
+ * only from one of those is unowned and must be wired or classified.
+ */
+export const OWNING_LANE_KINDS: ReadonlySet<Lane['kind']> = new Set(['pull-request', 'scheduled']);
 
 /** Substitutes `${{ inputs.x }}` in a composite action step from the caller's `with:` block. */
 function substituteInputs(

@@ -12,7 +12,7 @@ import {
   type Terminal,
   type UnresolvedEdge,
 } from './execution-terminals.ts';
-import type { Lane } from './workflow-lanes.ts';
+import { OWNING_LANE_KINDS, type Lane } from './workflow-lanes.ts';
 
 export type Suite = {
   /** `vitest:<project>` or the package script name. */
@@ -66,9 +66,17 @@ export type UnownedTerminal = {
 };
 
 /**
- * Terminals some suite needs that no lane reaches. Ownership is per terminal rather than per
- * suite so an aggregate script (`check:tooling`, whose parts are spread across five jobs)
- * cannot report as unowned merely because no single job runs all of it.
+ * Terminals some suite needs that no QUALIFYING lane reaches.
+ *
+ * Two rules are doing work here. Ownership is per terminal rather than per suite, so an
+ * aggregate script (`check:tooling`, whose parts are spread across five jobs) is not reported
+ * as unowned merely because no single job runs all of it. And only PR-triggered and scheduled
+ * lanes count (OWNING_LANE_KINDS): a suite reachable only from a release, push-to-main, or
+ * manually-dispatched workflow is NOT gating anything on the way in, so #1429 requires it to
+ * be wired or classified local-only rather than quietly credited to that lane.
+ *
+ * The filter lives here rather than at the call site so a caller cannot re-introduce the hole
+ * by passing every lane it happens to have.
  */
 export function unownedTerminals(
   suites: readonly Suite[],
@@ -76,7 +84,10 @@ export function unownedTerminals(
   waived: ReadonlySet<Terminal>,
 ): UnownedTerminal[] {
   const owned = new Set<Terminal>();
-  for (const lane of lanes) for (const terminal of lane.terminals) owned.add(terminal);
+  for (const lane of lanes) {
+    if (!OWNING_LANE_KINDS.has(lane.kind)) continue;
+    for (const terminal of lane.terminals) owned.add(terminal);
+  }
 
   const needed = new Map<Terminal, string[]>();
   for (const suite of suites) {

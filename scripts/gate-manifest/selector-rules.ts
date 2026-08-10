@@ -18,6 +18,8 @@ import {
   calleeName,
   children,
   collect,
+  isNode,
+  lineOf,
   literalText,
   parseProgram,
   propertyKey,
@@ -39,12 +41,38 @@ const RULE_ARGUMENT_INDEX = 2;
  * exclude them. Requiring a sibling `check:` separates the two by shape rather than by a
  * hand-maintained exclusion list, which is the thing this module exists to avoid.
  */
-function buildOwnershipRule(node: Node): string | null {
-  if (node.type !== 'ObjectExpression') return null;
+function buildOwnershipRule(node: Node): { rule: string | null; declared: boolean } {
+  if (node.type !== 'ObjectExpression') return { rule: null, declared: false };
   const properties = children(node);
-  if (!properties.some((property) => propertyKey(property) === 'check')) return null;
+  if (!properties.some((property) => propertyKey(property) === 'check')) {
+    return { rule: null, declared: false };
+  }
   const rule = properties.find((property) => propertyKey(property) === 'rule');
-  return rule ? stringValue(rule) : null;
+  if (!rule) return { rule: null, declared: false };
+  // `{ check, path: file, rule, detail }` — the `reason` factory forwarding its own parameter.
+  // A shorthand property cannot name a category; the literal is at the call site, which this
+  // reader visits separately. Declaring it "not declared" keeps it out of the fail-closed set
+  // without weakening the rule for a genuinely dynamic value.
+  if (rule['shorthand'] === true) return { rule: null, declared: false };
+  return { rule: stringValue(rule), declared: true };
+}
+
+/**
+ * Whether a `reason(...)` rule argument merely forwards a rule already read from elsewhere.
+ *
+ * `reason(entry.check, file, entry.rule, entry.detail)` in the build-ownership loop is the one
+ * live case: the literal lives in the BUILD_OWNERSHIP table, which this reader already
+ * collects, so the forwarding call adds no category. Anything else non-literal — a template
+ * string, a variable, a call — could name a category this reader would never see, and must
+ * fail closed.
+ */
+function forwardsAKnownRule(argument: unknown): boolean {
+  if (!isNode(argument)) return false;
+  const isMemberAccess =
+    argument.type === 'MemberExpression' || argument.type === 'StaticMemberExpression';
+  if (!isMemberAccess) return false;
+  const property = argument['property'];
+  return isNode(property) && property['name'] === 'rule';
 }
 
 /**
@@ -56,17 +84,50 @@ export function selectorRuleIds(file: string, source: string): string[] {
   const program = parseProgram(file, source);
   const rules = new Set<string>();
 
+  // Shapes this reader cannot turn into a category id. Silently skipping them would let a
+  // future live category slip past the derived universe — and therefore past the
+  // representative-sample and reachability checks — which is the whole hole this module
+  // closes. So they fail closed, pointing at the line to fix.
+  const unsupported: string[] = [];
+
   collect(program, (node) => {
     if (calleeName(node) === REASON_FACTORY) {
       const args = node['arguments'];
-      const literal = Array.isArray(args) ? literalText(args[RULE_ARGUMENT_INDEX]) : null;
-      if (literal !== null) rules.add(literal);
+      const argument = Array.isArray(args) ? args[RULE_ARGUMENT_INDEX] : undefined;
+      const literal = literalText(argument);
+      if (literal !== null) {
+        rules.add(literal);
+        return;
+      }
+      if (forwardsAKnownRule(argument)) return;
+      unsupported.push(
+        `line ${lineOf(source, isNode(argument) ? argument : node)}: \`${REASON_FACTORY}(...)\` ` +
+          `rule argument is not a string literal`,
+      );
       return;
     }
     // The build-ownership table states its rule as a property instead of a call argument.
     const owned = buildOwnershipRule(node);
-    if (owned !== null) rules.add(owned);
+    if (!owned.declared) return;
+    if (owned.rule !== null) {
+      rules.add(owned.rule);
+      return;
+    }
+    unsupported.push(
+      `line ${lineOf(source, node)}: build-ownership \`rule:\` is not a string literal`,
+    );
   });
+
+  if (unsupported.length > 0) {
+    throw new Error(
+      `Cannot derive the path-category universe from ${file} — ` +
+        `${unsupported.length} rule(s) are not statically readable:\n` +
+        unsupported.map((entry) => `  - ${entry}`).join('\n') +
+        `\nThe gate manifest needs every category id as a literal so it can check that a ` +
+        `representative path exercises it. Write the rule as a string literal, or teach ` +
+        `scripts/gate-manifest/selector-rules.ts the new shape.`,
+    );
+  }
 
   if (rules.size === 0) {
     throw new Error(

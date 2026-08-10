@@ -63,6 +63,16 @@ export function collect(node: Node, visit: (candidate: Node) => void): void {
   for (const child of children(node)) collect(child, visit);
 }
 
+/** 1-based line of a node's start offset, for pointing a failure at real source. */
+export function lineOf(source: string, node: unknown): number {
+  const start = isNode(node) && typeof node['start'] === 'number' ? node['start'] : 0;
+  let line = 1;
+  for (let index = 0; index < start && index < source.length; index++) {
+    if (source[index] === '\n') line++;
+  }
+  return line;
+}
+
 /** The name of a call expression's callee, when it is a plain identifier. */
 export function calleeName(node: Node): string | null {
   if (node.type !== 'CallExpression') return null;

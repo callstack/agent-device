@@ -10,7 +10,8 @@ test('a new vitest project no lane runs is unowned until it is wired or waived',
   const lanes = lanesFor(
     {
       'ci.yml':
-        'jobs:\n  cov:\n    steps:\n      - run: pnpm exec vitest run --project unit-core\n',
+        'on:\n  pull_request:\njobs:\n  cov:\n' +
+        '    steps:\n      - run: pnpm exec vitest run --project unit-core\n',
     },
     ctx,
   );
@@ -33,7 +34,7 @@ test('ownership is per unit of work, so a split aggregate is not reported as uno
   const lanes = lanesFor(
     {
       'ci.yml':
-        'jobs:\n  cov:\n    steps:\n      - run: pnpm test:unit\n' +
+        'on:\n  pull_request:\njobs:\n  cov:\n    steps:\n      - run: pnpm test:unit\n' +
         '  int:\n    steps:\n      - run: pnpm test:smoke\n',
     },
     ctx,
@@ -54,4 +55,44 @@ test('the suite universe is every vitest project plus every test:/check: script'
     suiteUniverse(ctx).map((suite) => suite.id),
     ['check:one', 'test:two', 'vitest:unit-core'],
   );
+});
+
+test('a suite reachable only from a push or release lane is not owned', () => {
+  // #1429 accepts a PR job or a scheduled workflow as an owner. A script that runs only on a
+  // push to main, at release time, or on manual dispatch gates nothing on the way in, so
+  // crediting those lanes would report a hole as covered.
+  const ctx = context({
+    vitestProjects: [],
+    packageScripts: new Map([['check:published', 'node scripts/published.ts']]),
+  });
+  const nonOwning = lanesFor(
+    {
+      'release.yml':
+        'name: R\non:\n  release:\n    types: [published]\n  workflow_dispatch:\n' +
+        'jobs:\n  publish:\n    steps:\n      - run: pnpm check:published\n',
+      'deploy.yml':
+        'name: D\non:\n  push:\n    branches: [main]\n' +
+        'jobs:\n  deploy:\n    steps:\n      - run: pnpm check:published\n',
+    },
+    ctx,
+  );
+  assert.deepEqual(
+    nonOwning.map((lane) => lane.kind).sort(),
+    ['push', 'release'],
+    'workflow_dispatch beside release must not promote the lane to scheduled',
+  );
+  assert.deepEqual(unownedTerminals(suiteUniverse(ctx), nonOwning, new Set()), [
+    { terminal: 'exec:scripts/published.ts', suites: ['check:published'] },
+  ]);
+
+  // The same script reached from a scheduled lane is owned.
+  const scheduled = lanesFor(
+    {
+      'nightly.yml':
+        'name: N\non:\n  schedule:\n    - cron: "0 0 * * *"\n' +
+        'jobs:\n  nightly:\n    steps:\n      - run: pnpm check:published\n',
+    },
+    ctx,
+  );
+  assert.deepEqual(unownedTerminals(suiteUniverse(ctx), scheduled, new Set()), []);
 });
