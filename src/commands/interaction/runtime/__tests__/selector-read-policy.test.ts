@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { selector } from '../selector-read-utils.ts';
-import { ambiguousSelectorReadSnapshot, createSelectorDevice } from './test-utils/index.ts';
+import {
+  ambiguousSelectorReadSnapshot,
+  createSelectorDevice,
+  skippedAlternativeSelectorSnapshot,
+} from './test-utils/index.ts';
 
 /**
  * #1630: the read commands share one resolution interface and differ ONLY by
@@ -65,12 +69,32 @@ test('is fails closed on the same ambiguous selector (readUnique row)', async ()
   assert.equal((error.details as { reason?: string } | undefined)?.reason, 'selector_not_found');
 });
 
+test('is exists answers from the first matching alternative (readAny row)', async () => {
+  const device = createSelectorDevice(skippedAlternativeSelectorSnapshot());
+
+  // `exists` exposes no node ref, so the row has to be read off WHICH
+  // alternative answered. On a fixture whose first alternative is merely
+  // tiebreakable, `pass: true` + the same count come out of first-match,
+  // disambiguation, and the pre-#1630 raw lookup alike — which is why the
+  // first alternative here is an undecidable tie: only a first-match row
+  // answers from it (#1715 review).
+  const result = await device.selectors.is({
+    session: 'default',
+    predicate: 'exists',
+    selector: 'label="Save" || id="save-unique"',
+  });
+
+  assert.equal(result.pass, true);
+  assert.equal(result.selector, 'label="Save"');
+  assert.equal(result.matches, 2);
+});
+
 test('is exists tolerates the ambiguity its sibling predicates refuse (readAny row)', async () => {
   const device = createSelectorDevice(ambiguousSelectorReadSnapshot());
 
-  // The same screen and selector the fail-closed `is` above refuses: presence
-  // is a different question from "which one", so `exists` answers it and
-  // discloses the real count instead of guessing a winner.
+  // Caller-facing contrast on the shared fixture: the same screen and selector
+  // the fail-closed `is` above refuses, answered here because presence is a
+  // different question from "which one".
   const result = await device.selectors.is({
     session: 'default',
     predicate: 'exists',

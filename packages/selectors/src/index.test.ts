@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import * as selectorsFacade from './index.ts';
 import {
   buildSelectorCandidates,
   readReplaySelectorDisplayValue,
@@ -186,4 +187,30 @@ test('replay suggestion resolution and display values stay string-only at the fa
   );
   assert.equal(resolved.kind, 'resolved');
   assert.equal(resolved.kind === 'resolved' ? resolved.resolution.selector : null, 'id="save"');
+});
+
+/**
+ * #1630 made `resolveSelectorChainWithPolicy` the façade's ONLY resolution
+ * entry: a native caller states its ambiguity contract by naming a policy row
+ * because there is no knob-taking or count-only resolver here to state it
+ * inline with instead.
+ *
+ * This guard is structural on purpose. Restoring either removed lookup is
+ * BEHAVIOURALLY invisible — `findSelectorChainMatch` is equivalent to the
+ * `readAny` row it was migrated to, which is exactly why that migration
+ * preserved semantics — so no fixture-tree assertion can catch a revert
+ * (#1715 review). The absence of the symbol is the only observable.
+ */
+test('the façade exposes no resolver that bypasses the policy matrix', () => {
+  const exported = Object.keys(selectorsFacade);
+  assert.ok(exported.includes('resolveSelectorChainWithPolicy'));
+  assert.ok(!exported.includes('resolveSelectorChain'), 'knob-taking resolver must stay private');
+  assert.ok(
+    !exported.includes('findSelectorChainMatch'),
+    'count-only existence lookup must stay private; `is exists` names the readAny row',
+  );
+  assert.ok(
+    !exported.includes('selectorResolutionKnobs'),
+    'knob derivation must stay private so a call site cannot rebuild a contract from knobs',
+  );
 });
