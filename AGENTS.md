@@ -124,6 +124,13 @@ the new thing — never to suppress or allowlist it.
   redundant tests, stale helpers/fixtures, and duplication the change made unnecessary.
 - Name durable module concepts with `CONTEXT.md` vocabulary. Do not coin parallel names across docs,
   tests, and code.
+- Custom enforcement must name its authoritative source and explain why existing types, registries,
+  schemas, or declaration-site completeness cannot enforce the invariant. Compare at least one
+  simpler alternative before adding a parser, resolver, compatibility ledger, or mutation harness.
+  If the same reconstructed model causes a second omission finding, stop extending it and redesign
+  around the source of truth. Crossing 500 added implementation lines or 1,000 combined
+  implementation/test lines requires the PR's `## Simplicity review`; the CI tripwire is a prompt
+  for human judgment, not proof that smaller code is automatically sound.
 
 Module size is about agent context safety, and the unit is questions, not lines: a file should answer
 one question so `rg` → read-whole-file stays one cheap bounded read.

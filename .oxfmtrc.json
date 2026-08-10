@@ -7,6 +7,7 @@
   "ignorePatterns": [
     "dist/**",
     "node_modules/**",
+    ".codex/automation/**",
     "**/*.md",
     "scripts/maestro-conformance/corpus/**",
     "fallow-baselines/**",
