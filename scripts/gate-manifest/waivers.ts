@@ -6,7 +6,7 @@
 // carries a reason and a tracking reference, and every entry is itself checked: a waiver that
 // stops matching anything fails the gate, so this list cannot rot into a pile of dead excuses.
 
-import type { Terminal } from './model.ts';
+import type { Terminal } from './execution-terminals.ts';
 
 /** A unit of work that deliberately does not run in CI. */
 export type LocalOnlyWaiver = {

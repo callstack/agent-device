@@ -1,35 +1,35 @@
 // `pnpm check:gate-manifest` — runs the derived gate manifest (#1429) against the real tree.
 //
 // Deterministic and offline by construction: every input is a file in the checkout (workflows,
-// local actions, package.json, vitest.config.ts, `git ls-files`). Nothing here calls the GitHub
-// API. Branch-protection required-contexts drift is a separate, online, scheduled concern and
-// must never become a dependency of this PR gate — a gate that needs a token is a gate that
-// goes green when the token expires.
+// local actions, package.json, vitest.config.ts, the affected selector's own source, and
+// `git ls-files`). Nothing here calls the GitHub API. Branch-protection required-contexts drift
+// is a separate, online, scheduled concern and must never become a dependency of this PR gate —
+// a gate that needs a token is a gate that goes green when the token expires.
 //
-// Failures name both sides and the fix. That is the whole product: the message has to be
-// enough for an agent to act on without reading this file.
+// Failures name both sides and the fix. That is the whole product: the message has to be enough
+// for an agent to act on without reading this file.
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { CHECK_CATALOG } from '../check-affected/checks.ts';
 import { selectChecks } from '../check-affected/model.ts';
+import { deriveCategories } from './path-category-samples.ts';
 import {
-  buildLanes,
   missingCatalogJobs,
-  parseWorkflow,
-  pathFilterMatches,
-  suiteUniverse,
-  triggersOnPath,
-  unownedTerminals,
   unreachableCatalogClaims,
-  unreachablePathCategories,
   type CatalogEntry,
+} from './catalog-wiring.ts';
+import type { ResolveContext, Terminal, UnresolvedEdge } from './execution-terminals.ts';
+import { pathFilterMatches, triggersOnPath } from './path-filters.ts';
+import {
+  unreachablePathCategories,
+  unrepresentedRules,
   type PathCategory,
-  type ResolveContext,
-  type UnresolvedEdge,
-  type WorkflowFile,
-} from './model.ts';
+} from './path-categories.ts';
+import { selectorRuleIds } from './selector-rules.ts';
+import { suiteUniverse, unownedTerminals } from './suite-ownership.ts';
+import { buildLanes, parseWorkflow, type WorkflowFile } from './workflow-lanes.ts';
 import {
   CATALOG_CLAIM_WAIVERS,
   DECLARED_EDGES,
@@ -54,6 +54,8 @@ function listFiles(...pathspecs: string[]): string[] {
 
 // --- Sources ----------------------------------------------------------------
 
+const SELECTOR_SOURCE = 'scripts/check-affected/model.ts';
+
 const workflows: WorkflowFile[] = listFiles('.github/workflows/*.yml', '.github/workflows/*.yaml')
   .map((file) => parseWorkflow(file, read(file)))
   .sort((left, right) => left.file.localeCompare(right.file));
@@ -68,27 +70,65 @@ const actions = new Map(
 const packageJson = JSON.parse(read('package.json')) as { scripts?: Record<string, string> };
 const packageScripts = new Map(Object.entries(packageJson.scripts ?? {}));
 const vitestProjects = vitestProjectNames('vitest.config.ts', read('vitest.config.ts'));
+const selectorRules = selectorRuleIds(SELECTOR_SOURCE, read(SELECTOR_SOURCE));
 
 const trackedFiles = listFiles();
 const trackedSet = new Set(trackedFiles);
 
-const ctx: ResolveContext = {
-  packageScripts,
-  actions,
-  vitestProjects,
-  expandTestPaths: (pattern) => {
-    if (trackedSet.has(pattern)) return [pattern];
-    const matches = trackedFiles.filter((file) => pathFilterMatches(pattern, file));
-    // An unmatched pattern stays visible as its own terminal: a test glob that matches nothing
-    // must surface as unowned work, not vanish into an empty set and read as covered.
-    return matches.length > 0 ? matches : [pattern];
-  },
-  transparentWrappers: new Set(TRANSPARENT_WRAPPERS.map((entry) => entry.file)),
-  declaredTerminals: new Map(DECLARED_EDGES.map((entry) => [entry.file, entry.reaches])),
-};
+function expandTestPaths(pattern: string): readonly string[] {
+  if (trackedSet.has(pattern)) return [pattern];
+  const matches = trackedFiles.filter((file) => pathFilterMatches(pattern, file));
+  // An unmatched pattern stays visible as its own terminal: a test glob that matches nothing
+  // must surface as unowned work, not vanish into an empty set and read as covered.
+  return matches.length > 0 ? matches : [pattern];
+}
 
+function context(overrides: Partial<ResolveContext> = {}): ResolveContext {
+  return {
+    packageScripts,
+    actions,
+    vitestProjects,
+    expandTestPaths,
+    transparentWrappers: new Set(TRANSPARENT_WRAPPERS.map((entry) => entry.file)),
+    declaredTerminals: new Map(DECLARED_EDGES.map((entry) => [entry.file, entry.reaches])),
+    ...overrides,
+  };
+}
+
+const ctx = context();
 const lanes = buildLanes(workflows, ctx);
 const suites = suiteUniverse(ctx);
+
+/** Every terminal the whole model resolves to, for differencing a waiver against its absence. */
+function resolvedTerminals(candidate: ResolveContext): Set<Terminal> {
+  return new Set([
+    ...buildLanes(workflows, candidate).flatMap((lane) => [...lane.terminals]),
+    ...suiteUniverse(candidate).flatMap((suite) => [...suite.terminals]),
+  ]);
+}
+
+function sameTerminals(left: ReadonlySet<Terminal>, right: ReadonlySet<Terminal>): boolean {
+  return left.size === right.size && [...left].every((terminal) => right.has(terminal));
+}
+
+const baselineTerminals = resolvedTerminals(ctx);
+
+/**
+ * How much the gate would report under `candidate`. The two waiver kinds are effective in
+ * different ways, so they need different differentials: a TRANSPARENT_WRAPPERS entry changes
+ * what a command RESOLVES to (the terminal set moves), while a DECLARED_EDGES entry changes
+ * what is OWNED — remove it and the suites behind the opaque runner go unowned, even though
+ * the terminal set is unchanged because the suites still name them.
+ */
+function reportedProblems(candidate: ResolveContext, waived: ReadonlySet<Terminal>): number {
+  const candidateLanes = buildLanes(workflows, candidate);
+  const candidateSuites = suiteUniverse(candidate);
+  return (
+    unownedTerminals(candidateSuites, candidateLanes, waived).length +
+    candidateLanes.reduce((total, lane) => total + lane.unresolved.length, 0) +
+    candidateSuites.reduce((total, suite) => total + suite.unresolved.length, 0)
+  );
+}
 
 // --- Assertions -------------------------------------------------------------
 
@@ -125,9 +165,13 @@ if (unowned.length > 0) {
   );
 }
 
-// 3. Every waiver still applies. A stale waiver is a hole with a comment on it.
+// 3. Every waiver still earns its place. A stale waiver is a hole with a comment on it, and an
+//    INERT one is worse: it reads as a considered exception while changing nothing, so the day
+//    the edge it describes comes back nobody is told. Existence is not enough — each waiver is
+//    re-resolved with itself removed and must actually change the outcome.
 const laneTerminals = new Set(lanes.flatMap((lane) => [...lane.terminals]));
 const suiteTerminals = new Set(suites.flatMap((suite) => [...suite.terminals]));
+const baselineProblems = reportedProblems(ctx, waivedTerminals);
 const staleWaivers = [
   ...LOCAL_ONLY.filter((entry) => !suiteTerminals.has(entry.terminal)).map(
     (entry) => `LOCAL_ONLY "${entry.terminal}" matches no suite terminal`,
@@ -146,6 +190,43 @@ const staleWaivers = [
       .filter((terminal) => terminal.startsWith('vitest:'))
       .filter((terminal) => !vitestProjects.includes(terminal.slice('vitest:'.length)))
       .map((terminal) => `DECLARED_EDGES "${entry.file}" claims unknown project "${terminal}"`),
+  ),
+  // Applied-reachability: drop the waiver and the resolved terminal set must move.
+  ...TRANSPARENT_WRAPPERS.filter((entry) =>
+    sameTerminals(
+      baselineTerminals,
+      resolvedTerminals(
+        context({
+          transparentWrappers: new Set(
+            TRANSPARENT_WRAPPERS.filter((other) => other.file !== entry.file).map(
+              (other) => other.file,
+            ),
+          ),
+        }),
+      ),
+    ),
+  ).map(
+    (entry) =>
+      `TRANSPARENT_WRAPPERS "${entry.file}" changes nothing — no resolved command forwards ` +
+      `through it, so the waiver is inert`,
+  ),
+  ...DECLARED_EDGES.filter(
+    (entry) =>
+      reportedProblems(
+        context({
+          declaredTerminals: new Map(
+            DECLARED_EDGES.filter((other) => other.file !== entry.file).map((other) => [
+              other.file,
+              other.reaches,
+            ]),
+          ),
+        }),
+        waivedTerminals,
+      ) <= baselineProblems,
+  ).map(
+    (entry) =>
+      `DECLARED_EDGES "${entry.file}" changes nothing — every suite behind it is owned without ` +
+      `the declaration, so the waiver is inert`,
   ),
 ];
 if (staleWaivers.length > 0) {
@@ -223,28 +304,25 @@ if (unreachableClaims.length > 0) {
 }
 
 // 6. A category's owning job must actually fire on a PR touching only that category.
-const PATH_CATEGORY_SAMPLES: readonly { label: string; path: string }[] = [
-  { label: 'production source', path: 'src/commands/press.ts' },
-  { label: 'workspace package source', path: 'packages/kernel/src/errors.ts' },
-  { label: 'platform package source', path: 'packages/platform-android/src/index.ts' },
-  { label: 'node integration test', path: 'test/integration/smoke-cli.test.ts' },
-  { label: 'Swift runner source', path: 'apple/runner/Sources/Runner/main.swift' },
-  { label: 'Android helper source', path: 'android/snapshot-helper/src/main/Snapshot.kt' },
-  { label: 'macOS helper source', path: 'apple/macos-helper/Sources/Helper/main.swift' },
-  { label: 'MCP registry metadata', path: 'server.json' },
-  { label: 'Expo test app', path: 'examples/test-app/App.tsx' },
-  { label: 'replay-compat corpus', path: 'test/replay-compat/entry.ad' },
-];
-const categories: PathCategory[] = PATH_CATEGORY_SAMPLES.map(({ label, path: sample }) => {
-  const plan = selectChecks({ changedFiles: [sample] });
-  return {
-    label,
-    path: sample,
-    // A fail-open sample would demand every check reach every path, which is not the claim
-    // being tested; the samples are chosen to classify cleanly and this asserts they still do.
-    checks: plan.failOpen ? [] : plan.checks,
-  };
-});
+//
+//    The category universe is derived from the selector's own ownership rules
+//    (selector-rules.ts), so it cannot fall behind the selector. These samples only supply a
+//    representative PATH per category; assertion 6a fails when the selector grows a rule no
+//    sample exercises, which is what stops this from degrading into a hand-picked list.
+const categories: PathCategory[] = deriveCategories(selectChecks);
+
+// 6a. The samples must cover the whole derived category universe.
+const unrepresented = unrepresentedRules(selectorRules, categories);
+if (unrepresented.length > 0) {
+  fail(
+    `${unrepresented.length} affected-selector category/categories have no representative path`,
+    unrepresented.map(
+      (rule) => `"${rule}" is a live selector rule that no PATH_CATEGORY_SAMPLES entry exercises`,
+    ),
+    `add a sample path that the selector routes through that rule to PATH_CATEGORY_SAMPLES in ` +
+      `scripts/gate-manifest/check.ts, so its owning jobs' triggers are checked too`,
+  );
+}
 const failOpenSamples = categories.filter((category) => category.checks.length === 0);
 if (failOpenSamples.length > 0) {
   fail(
@@ -271,6 +349,7 @@ if (pathMisses.length > 0) {
 }
 
 // 7. Docs paths ci.yml drops must have a declared owner that really fires on them.
+
 /** How many units of work the lane a docs-lane owner names actually resolves to. */
 function declaredOwnerGateCount(owner: DocsLaneOwner): number {
   const lane = lanes.find(
@@ -309,6 +388,7 @@ function docsOwnerFailure(owner: DocsLaneOwner): string | null {
   const broken = DOCS_OWNER_CONDITIONS.find((condition) => condition.broken(owner, workflow));
   return broken ? `${owner.workflow}#${owner.job} ${broken.problem(owner)}` : null;
 }
+
 const docsFailures = DOCS_LANE_OWNERS.map(docsOwnerFailure).filter(
   (failure): failure is string => failure !== null,
 );
@@ -333,5 +413,6 @@ console.log(
   `Gate manifest OK: ${suites.length} suites (${vitestProjects.length} Vitest projects) owned ` +
     `across ${lanes.length} jobs in ${workflows.length} workflows (${prLanes} PR-triggered); ` +
     `${CHECK_CATALOG.length} catalog entries wired to live jobs; ` +
+    `${selectorRules.length} selector categories represented and reachable; ` +
     `${LOCAL_ONLY.length + DECLARED_EDGES.length + TRANSPARENT_WRAPPERS.length} owned waivers.`,
 );

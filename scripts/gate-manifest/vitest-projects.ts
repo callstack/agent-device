@@ -13,51 +13,15 @@
 // `name:` would also match the coverage/reporters blocks and any nested option called `name`,
 // so this walks the AST and only collects `name` properties inside the `projects` array.
 
-import { parseSync } from 'oxc-parser';
-
-type Node = { type?: string; [key: string]: unknown };
-
-function isNode(value: unknown): value is Node {
-  return value !== null && typeof value === 'object';
-}
-
-function children(node: Node): Node[] {
-  return Object.entries(node).flatMap(([key, value]) => {
-    if (key === 'type') return [];
-    if (Array.isArray(value)) return value.filter(isNode);
-    return isNode(value) ? [value] : [];
-  });
-}
-
-/** The static key of an object property, whether written bare or quoted. */
-function propertyKey(node: Node): string | null {
-  if (node.type !== 'Property' && node.type !== 'ObjectProperty') return null;
-  const key = node['key'];
-  if (!isNode(key)) return null;
-  if (key.type === 'Identifier' && typeof key['name'] === 'string') return key['name'];
-  if (typeof key['value'] === 'string') return key['value'];
-  return null;
-}
-
-function stringValue(node: Node): string | null {
-  const value = node['value'];
-  if (!isNode(value)) return null;
-  return typeof value['value'] === 'string' ? value['value'] : null;
-}
-
-function findFirst(node: Node, predicate: (candidate: Node) => boolean): Node | null {
-  if (predicate(node)) return node;
-  for (const child of children(node)) {
-    const found = findFirst(child, predicate);
-    if (found) return found;
-  }
-  return null;
-}
-
-function collect(node: Node, visit: (candidate: Node) => void): void {
-  visit(node);
-  for (const child of children(node)) collect(child, visit);
-}
+import {
+  collect,
+  findFirst,
+  isNode,
+  parseProgram,
+  propertyKey,
+  stringValue,
+  type Node,
+} from './ts-ast.ts';
 
 /**
  * Every Vitest project name declared in `source`. Throws when the `projects` array cannot be
@@ -65,7 +29,7 @@ function collect(node: Node, visit: (candidate: Node) => void): void {
  * whole module exists to prevent.
  */
 export function vitestProjectNames(file: string, source: string): string[] {
-  const program = parseSync(file, source).program as unknown as Node;
+  const program = parseProgram(file, source);
   const projects = findFirst(
     program,
     (node) =>
