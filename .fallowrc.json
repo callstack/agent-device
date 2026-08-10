@@ -27,6 +27,9 @@
     // subprocess (test/integration/daemon-replace-exit-flush.test.ts), so
     // dependency analysis cannot follow the runCmdSync string path to it.
     "test/integration/support/exit-after-flush.ts",
+    // #1706 regression fixture: loaded into the real src/bin.ts subprocess
+    // through NODE_OPTIONS=--import, which dependency analysis cannot follow.
+    "test/integration/support/cli-success-fetch.mjs",
     "src/utils/update-check-entry.ts",
     "examples/sdk/client-session.ts",
     "examples/sdk/metro-runtime.ts",

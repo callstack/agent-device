@@ -19,42 +19,48 @@ function installFixture(payloadMarker) {
 }
 
 function createFixtureFetch(payloadMarker) {
-  return async (input, init) => {
-    const request = new Request(input, init);
-    if (request.method === 'GET' && request.url === `${DAEMON_BASE_URL}/health`) {
+  return async (input, init) => await routeFixtureRequest(new Request(input, init), payloadMarker);
+}
+
+async function routeFixtureRequest(request, payloadMarker) {
+  switch (`${request.method} ${request.url}`) {
+    case `GET ${DAEMON_BASE_URL}/health`:
       return jsonResponse({
         ok: true,
         service: 'agent-device-daemon',
         version: '0.20.6',
         rpcProtocolVersion: 2,
       });
-    }
-    if (request.method === 'POST' && request.url === `${DAEMON_BASE_URL}/rpc`) {
-      const body = await request.json();
-      return jsonResponse({
-        jsonrpc: '2.0',
-        id: body?.id ?? 'cli-success-exit-flush',
-        result: {
-          ok: true,
-          data: {
-            nodes: [
-              {
-                ref: 'e1',
-                index: 0,
-                depth: 0,
-                type: 'StaticText',
-                label: `${'x'.repeat(256_000)}${payloadMarker}`,
-                enabled: true,
-              },
-            ],
-            truncated: false,
-            refsGeneration: 1,
+    case `POST ${DAEMON_BASE_URL}/rpc`:
+      return await rpcResponse(request, payloadMarker);
+    default:
+      throw new Error(`Unexpected CLI success fixture request: ${request.method} ${request.url}`);
+  }
+}
+
+async function rpcResponse(request, payloadMarker) {
+  const body = await request.json();
+  return jsonResponse({
+    jsonrpc: '2.0',
+    id: body.id ?? 'cli-success-exit-flush',
+    result: {
+      ok: true,
+      data: {
+        nodes: [
+          {
+            ref: 'e1',
+            index: 0,
+            depth: 0,
+            type: 'StaticText',
+            label: `${'x'.repeat(256_000)}${payloadMarker}`,
+            enabled: true,
           },
-        },
-      });
-    }
-    throw new Error(`Unexpected CLI success fixture request: ${request.method} ${request.url}`);
-  };
+        ],
+        truncated: false,
+        refsGeneration: 1,
+      },
+    },
+  });
 }
 
 function createFetchBackedHttpsRequest(fixtureFetch) {
