@@ -32,18 +32,24 @@ async function discoverAppleDevices(
     throw new AppError('TOOL_MISSING', 'xcrun not found in PATH');
   }
 
-  const simulators = await listAppleSimulators(host, request, scope);
-  if (request.kind === 'simulator') return simulators;
+  const simulatorDiscovery = listAppleSimulators(host, request, scope);
+  if (request.kind === 'simulator') return await simulatorDiscovery;
 
-  const withHost = [...simulators, hostMacDevice(host)];
-  if (
-    request.iosSimulatorSetPath ||
-    (request.udid && simulators.some((device) => device.id === request.udid))
-  ) {
-    return sortAppleDevicesForSelection(withHost);
+  if (request.iosSimulatorSetPath || request.udid) {
+    const simulators = await simulatorDiscovery;
+    const withHost = [...simulators, hostMacDevice(host)];
+    if (request.iosSimulatorSetPath || simulators.some((device) => device.id === request.udid)) {
+      return sortAppleDevicesForSelection(withHost);
+    }
+    const physical = await listPhysicalAppleDevices(host, scope);
+    return sortAppleDevicesForSelection(mergeAppleDevices(withHost, physical));
   }
 
-  const physical = await listPhysicalAppleDevices(host, scope);
+  const [simulators, physical] = await Promise.all([
+    simulatorDiscovery,
+    listPhysicalAppleDevices(host, scope),
+  ]);
+  const withHost = [...simulators, hostMacDevice(host)];
   return sortAppleDevicesForSelection(mergeAppleDevices(withHost, physical));
 }
 

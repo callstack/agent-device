@@ -13,7 +13,7 @@ vi.mock('../host-process.ts', () => ({
   readProcessStartTime: mockReadProcessStartTime,
 }));
 
-import { classifyOwnerLiveness } from '../owner-identity.ts';
+import { classifyOwnerLiveness, classifyOwnerLivenessFromObservation } from '../owner-identity.ts';
 
 const OWNER_PID = 4242;
 
@@ -49,4 +49,13 @@ test('a null-start-time owner stays fail-closed while its pid is alive', () => {
   // a clock step could make a live owner look like it started after the
   // resource was acquired, so an alive pid must never be condemned on age.
   assert.equal(classifyOwnerLiveness({ owner: { pid: OWNER_PID, startTime: null } }), 'live');
+});
+
+test('a missing entry in a completed process snapshot stays fail-closed without another ps read', () => {
+  assert.equal(
+    classifyOwnerLivenessFromObservation({ owner: { pid: OWNER_PID, startTime: 'start-a' } }, null),
+    'live',
+  );
+  assert.equal(mockIsProcessZombie.mock.calls.length, 0);
+  assert.equal(mockReadProcessStartTime.mock.calls.length, 0);
 });

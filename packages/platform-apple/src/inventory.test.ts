@@ -121,3 +121,29 @@ test('simulator-set inventory remains scoped while retaining the host Mac', asyn
   );
   assert.deepEqual(calls, [['simctl', '--set', '/tmp/custom-set', 'list', 'devices', '-j']]);
 });
+
+test('unscoped Apple inventory starts simulator and physical discovery concurrently', async () => {
+  const calls: string[] = [];
+  let releaseSimulators!: () => void;
+  const simulatorsBlocked = new Promise<void>((resolve) => {
+    releaseSimulators = resolve;
+  });
+  const host = createInventoryHost({
+    run: async (request) => {
+      calls.push(request.tool);
+      if (request.tool === 'simctl') {
+        await simulatorsBlocked;
+        return commandResult(JSON.stringify({ devices: {} }));
+      }
+      return commandResult(request.tool === 'xctrace' ? '== Devices ==' : '');
+    },
+  });
+
+  const discovery = createAppleInventorySource(host).discover({}, inventoryScope);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.ok(calls.includes('simctl'));
+  assert.ok(calls.includes('xctrace'));
+  releaseSimulators();
+  await discovery;
+});
