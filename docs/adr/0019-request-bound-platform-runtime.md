@@ -304,6 +304,15 @@ contract handle beside its descriptor and metadata; the field has one R7 transit
 descriptor and neutral metadata enter the authoritative persisted recovery record. Concrete platform
 classes, provider clients, child handles, timers, transports, and wait promises enter neither store.
 
+The daemon shares the lifecycle mechanics of those facet-specific resources through one
+`DurableCaptureResource` coordinator. It owns bounded manifest I/O, per-resource fence serialization,
+start/persist/adopt compensation, terminal transitions, and deadline-bounded exact-owner recovery.
+The coordinator receives a facet's resource kind and manifest store, neutral session slot, completion
+metadata projection, failure wording, and exact-owner recovery adapter; it does not select platforms,
+interpret command flags, or form a generic runtime facet. App-log and screen recording retain distinct handles,
+descriptors, facts, native finalization semantics, and admission policy. Reusable codec/live-handle
+mechanics below the daemon remain in `@agent-device/capture-kit`, preserving the package direction.
+
 A daemon-owned, process-lifetime admission ledger may retain bounded cleanup uncertainty that has no
 honest durable representation, but it is not a second live-resource store: it contains no handle or
 descriptor, never supersedes the persisted manifest, and is keyed by canonical device identity when

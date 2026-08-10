@@ -6,8 +6,10 @@ import {
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-
-const DEFAULT_UNDURABLE_CLEANUP_TTL_MS = 5 * 60_000;
+import {
+  createDurableCaptureAdmissionLedger,
+  type DurableCaptureAdmissionLedger,
+} from './durable-capture-admission-ledger.ts';
 
 export type RetainedLegacyAppLogMarker = Readonly<{
   markerPath: string;
@@ -22,12 +24,10 @@ export type AppLogAdmissionLedgerOptions = Readonly<{
 }>;
 
 /** Process-lifetime admission evidence that is intentionally reset by daemon restart. */
-export type AppLogAdmissionLedger = Readonly<{
-  retainLegacyMarkers(markers: readonly RetainedLegacyAppLogMarker[]): void;
-  blockUndurableCleanup(device: DeviceInfo, reason: string): void;
-  clearUndurableCleanup(device: DeviceInfo): void;
-  assertStartAllowed(device: DeviceInfo): void;
-}>;
+export type AppLogAdmissionLedger = DurableCaptureAdmissionLedger &
+  Readonly<{
+    retainLegacyMarkers(markers: readonly RetainedLegacyAppLogMarker[]): void;
+  }>;
 
 function findRetainedLegacyMarker(
   retainedMarkers: Map<string, RetainedLegacyAppLogMarker>,
@@ -51,32 +51,21 @@ function findRetainedLegacyMarker(
 export function createAppLogAdmissionLedger(
   options: AppLogAdmissionLedgerOptions = {},
 ): AppLogAdmissionLedger {
-  const now = options.now ?? Date.now;
   const markerExists = options.markerExists ?? fs.existsSync;
-  const ttlMs = options.undurableCleanupTtlMs ?? DEFAULT_UNDURABLE_CLEANUP_TTL_MS;
-  const undurableCleanupBlocks = new Map<
-    string,
-    Readonly<{ device: DeviceIdentity; reason: string; expiresAt: number }>
-  >();
+  const durableLedger = createDurableCaptureAdmissionLedger({
+    displayName: 'app-log',
+    now: options.now,
+    undurableCleanupTtlMs: options.undurableCleanupTtlMs,
+    onUndurableCleanupExpired: options.onUndurableCleanupExpired,
+  });
   const retainedLegacyMarkers = new Map<string, RetainedLegacyAppLogMarker>();
   return Object.freeze({
+    ...durableLedger,
     retainLegacyMarkers(markers: readonly RetainedLegacyAppLogMarker[]): void {
       for (const marker of markers) retainedLegacyMarkers.set(marker.markerPath, marker);
     },
-    blockUndurableCleanup(device: DeviceInfo, reason: string): void {
-      const identity = deviceIdentity(device);
-      undurableCleanupBlocks.set(deviceIdentityKey(identity), {
-        device: identity,
-        reason,
-        expiresAt: now() + ttlMs,
-      });
-    },
-    clearUndurableCleanup(device: DeviceInfo): void {
-      undurableCleanupBlocks.delete(deviceIdentityKey(deviceIdentity(device)));
-    },
     assertStartAllowed(device: DeviceInfo): void {
-      const identity = deviceIdentity(device);
-      const identityKey = deviceIdentityKey(identity);
+      const identityKey = deviceIdentityKey(deviceIdentity(device));
       const retained = findRetainedLegacyMarker(retainedLegacyMarkers, identityKey, markerExists);
       if (retained) {
         throw new AppError(
@@ -88,22 +77,7 @@ export function createAppLogAdmissionLedger(
           },
         );
       }
-
-      const block = undurableCleanupBlocks.get(identityKey);
-      if (!block) return;
-      if (now() > block.expiresAt) {
-        undurableCleanupBlocks.delete(identityKey);
-        options.onUndurableCleanupExpired?.({ device: block.device, reason: block.reason });
-        return;
-      }
-      throw new AppError(
-        'COMMAND_FAILED',
-        'The existing app-log resource has process-local unconfirmed ownership',
-        {
-          reason: 'cleanup-unconfirmed',
-          hint: `Do not start a replacement in this daemon process: ${block.reason}`,
-        },
-      );
+      durableLedger.assertStartAllowed(device);
     },
   });
 }

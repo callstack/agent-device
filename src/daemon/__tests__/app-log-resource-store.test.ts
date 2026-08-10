@@ -39,6 +39,25 @@ test.each([
   expect(fs.readFileSync(resourcePath, 'utf8')).toBe(body);
 });
 
+test('malformed app-log records preserve the underlying decoder message', () => {
+  const resourcePath = resolveAppLogResourcePath(
+    path.join(mkdtempForTestSync('app-log-malformed-message-'), 'session'),
+  );
+  fs.mkdirSync(path.dirname(resourcePath), { recursive: true });
+  fs.writeFileSync(resourcePath, '{');
+  let expectedMessage = '';
+  try {
+    JSON.parse('{');
+  } catch (error) {
+    expectedMessage = error instanceof Error ? error.message : '';
+  }
+
+  expect(readAppLogResourceRecord(resourcePath)).toMatchObject({
+    status: 'unreattachable',
+    message: expectedMessage,
+  });
+});
+
 test('app-log resource listing is deterministic and ignores unrelated artifacts', () => {
   const sessionsDir = mkdtempForTestSync('app-log-record-list-');
   for (const sessionName of ['zeta', 'alpha']) {
