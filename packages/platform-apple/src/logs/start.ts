@@ -174,12 +174,10 @@ async function resolveSimulatorExecutable(
   appBundleId: string,
   signal?: AbortSignal,
 ): Promise<string | undefined> {
-  const prefix = device.simulatorSetPath
-    ? ['simctl', '--set', device.simulatorSetPath]
-    : ['simctl'];
-  const container = await host.commands.run(
+  const prefix = device.simulatorSetPath ? ['--set', device.simulatorSetPath] : [];
+  const container = await host.appleTools.run(
     {
-      executable: 'xcrun',
+      tool: 'simctl',
       args: [...prefix, 'get_app_container', device.id, appBundleId, 'app'],
       allowFailure: true,
       timeoutMs: 4_000,

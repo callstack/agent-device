@@ -152,6 +152,16 @@ async function startHarmonyAppLogs(
     );
   }
   assertAppLogSessionArtifacts(host, input);
+  signal.throwIfAborted();
+  await host.toolchains.prepare('harmonyos');
+  signal.throwIfAborted();
+  const hdc = await host.commands.which('hdc');
+  signal.throwIfAborted();
+  if (!hdc) {
+    throw new AppError('TOOL_MISSING', 'hdc not found in PATH', {
+      hint: 'Install HarmonyOS Command Line Tools, then add its sdk/default/openharmony/toolchains directory to PATH.',
+    });
+  }
   const handle = await createPidScopedAppLogProcess({
     host,
     backend: 'harmonyos',
@@ -163,7 +173,7 @@ async function startHarmonyAppLogs(
       await resolveFirstNumericAppLogPid(
         host,
         {
-          executable: 'hdc',
+          executable: hdc,
           args: ['-t', device.id, 'shell', 'pidof', input.appBundleId],
           allowFailure: true,
           timeoutMs: 5_000,
@@ -171,7 +181,7 @@ async function startHarmonyAppLogs(
         pidSignal,
       ),
     command: (pid) => ({
-      executable: 'hdc',
+      executable: hdc,
       args: ['-t', device.id, 'shell', 'hilog', '-P', pid],
       allowFailure: true,
     }),

@@ -174,6 +174,13 @@ function outputFixture() {
 function hostFixture(output: AppLogOutputSink, onOpen?: () => void): AppLogRuntimeHost {
   const start = vi.fn();
   return {
+    appleTools: {
+      isXcrunAvailable: async () => false,
+      run: async () => {
+        throw new Error('unused');
+      },
+    },
+    toolchains: { prepare: async () => undefined },
     artifacts: { resolveSession: () => ({ outputPath: '/tmp/app.log', pidPath: '/tmp/pid' }) },
     commands: {
       which: async () => undefined,

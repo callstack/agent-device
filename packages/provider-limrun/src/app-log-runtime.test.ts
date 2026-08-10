@@ -147,6 +147,13 @@ test.each([
 
 function unusedHost(): AppLogRuntimeHost {
   return {
+    appleTools: {
+      isXcrunAvailable: async () => false,
+      run: async () => {
+        throw new Error('unused');
+      },
+    },
+    toolchains: { prepare: async () => undefined },
     artifacts: {
       resolveSession: (sessionId) => ({
         outputPath: `/sessions/${sessionId}/app.log`,

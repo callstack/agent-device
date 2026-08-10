@@ -1,14 +1,7 @@
-import type { AppLogRuntimeHost, PlatformRequestScope } from '@agent-device/contracts/platform';
-import type { DeviceInfo } from '@agent-device/kernel/device';
-import { describe, expect, test, vi } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { createAppleAppLogEnvelope } from './descriptor.ts';
 import { createAppleAppLogRuntime } from './runtime.ts';
-
-const scope: PlatformRequestScope = {
-  signal: new AbortController().signal,
-  diagnostics: { emit: () => {} },
-  progress: { report: () => {} },
-};
+import { appleDevice, hostFixture, scope } from './runtime.fixtures.ts';
 
 describe('Apple app-log runtime', () => {
   test.each([
@@ -195,7 +188,7 @@ describe('Apple app-log runtime', () => {
     const controller = new AbortController();
     const reason = new Error('request cancelled');
     const fixture = hostFixture({
-      commandRun: async () => {
+      appleToolRun: async () => {
         controller.abort(reason);
         throw reason;
       },
@@ -217,86 +210,3 @@ describe('Apple app-log runtime', () => {
     await expect(request).rejects.toBe(reason);
   });
 });
-
-function appleDevice(overrides: Partial<DeviceInfo> = {}): DeviceInfo {
-  return {
-    platform: 'apple',
-    appleOs: 'ios',
-    id: 'apple-1',
-    name: 'iPhone',
-    kind: 'simulator',
-    target: 'mobile',
-    booted: true,
-    ...overrides,
-  };
-}
-
-function hostFixture(
-  options: {
-    failProcessStart?: boolean;
-    commandRun?: AppLogRuntimeHost['commands']['run'];
-  } = {},
-) {
-  const backgroundCommands: string[][] = [];
-  let outputDisposed = false;
-  let outputOpens = 0;
-  let markerReads = 0;
-  const startProcess: AppLogRuntimeHost['processes']['start'] = vi.fn(async ({ command }) => {
-    backgroundCommands.push([command.executable, ...command.args]);
-    if (options.failProcessStart) throw new Error('start failed');
-    return {
-      wait: new Promise<never>(() => {}),
-      terminate: async () => {},
-      [Symbol.asyncDispose]: async () => {},
-    };
-  });
-  const host: AppLogRuntimeHost = {
-    artifacts: {
-      resolveSession: () => ({ outputPath: '/tmp/app.log', pidPath: '/tmp/app-log.pid' }),
-    },
-    commands: {
-      which: async () => undefined,
-      run: async (request, signal) => {
-        if (options.commandRun) return await options.commandRun(request, signal);
-        const { args } = request;
-        if (args.includes('get_app_container')) {
-          return { stdout: '', stderr: '', exitCode: 1 };
-        }
-        return { stdout: '', stderr: '', exitCode: 0 };
-      },
-    },
-    outputs: {
-      readTail: async () => '',
-      openAppend: async () => {
-        outputOpens += 1;
-        return {
-          write: async () => {},
-          [Symbol.asyncDispose]: async () => {
-            outputDisposed = true;
-          },
-        };
-      },
-    },
-    processTransports: {
-      resolve: async () => ({ mode: 'local', start: startProcess }),
-    },
-    processes: {
-      start: startProcess,
-      readMarker: async () => {
-        markerReads += 1;
-        return { status: 'missing' };
-      },
-      clearMarker: async () => {},
-      inspect: async () => 'missing',
-      terminate: async () => 'already-missing',
-    },
-    clock: { now: () => 10, sleep: async () => {} },
-  };
-  return {
-    host,
-    backgroundCommands,
-    outputDisposed: () => outputDisposed,
-    outputOpens: () => outputOpens,
-    markerReads: () => markerReads,
-  };
-}

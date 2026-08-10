@@ -5,6 +5,8 @@ import type {
 } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { createAppleToolHost } from './platform-runtime-apple-tool-host.ts';
+import { createHostToolchainPreparer } from './platform-runtime-toolchain-host.ts';
 import { runCmd, whichCmd } from './utils/exec.ts';
 import { openAppLogOutput, readAppLogOutputTail } from './platform-runtime-app-log-output.ts';
 import { createManagedAppLogProcesses } from './platform-runtime-app-log-process.ts';
@@ -29,6 +31,8 @@ export function createAppLogRuntimeHost(options: {
         return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
       },
     }),
+    appleTools: createAppleToolHost(),
+    toolchains: createHostToolchainPreparer(),
     artifacts: Object.freeze({ resolveSession: options.resolveSessionArtifacts }),
     outputs: Object.freeze({
       openAppend: async (pathname: string) => await openAppLogOutput(options.sessionsDir, pathname),

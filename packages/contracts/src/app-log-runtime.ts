@@ -1,9 +1,11 @@
 import type { LogBackend } from './logs.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type {
+  AppleToolHost,
   HostCommandRequest,
   HostCommandResult,
   HostCommandRunner,
+  HostToolchainPreparer,
 } from './platform-runtime-host.ts';
 import type {
   DeviceRuntimeOwner,
@@ -233,6 +235,8 @@ export type AppLogSessionArtifacts = Readonly<{
 
 export type AppLogRuntimeHost = Readonly<{
   commands: HostCommandRunner;
+  appleTools: AppleToolHost;
+  toolchains: HostToolchainPreparer;
   artifacts: Readonly<{
     resolveSession(sessionId: string): AppLogSessionArtifacts;
   }>;

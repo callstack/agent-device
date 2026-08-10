@@ -160,6 +160,13 @@ function pollerHost(options: {
   failure?: 'readTail' | 'openAppend';
 }): AppLogRuntimeHost {
   return {
+    appleTools: {
+      isXcrunAvailable: async () => false,
+      run: async () => {
+        throw new Error('unused');
+      },
+    },
+    toolchains: { prepare: async () => undefined },
     artifacts: {
       resolveSession: () => ({
         outputPath: '/sessions/one/app.log',

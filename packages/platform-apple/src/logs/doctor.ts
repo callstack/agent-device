@@ -24,10 +24,10 @@ export async function doctorAppleAppLogs(
     checks.simctlAvailable = await bestEffortAppLogCheck(
       async () =>
         appLogCommandSucceeded(
-          await host.commands.run(
+          await host.appleTools.run(
             {
-              executable: 'xcrun',
-              args: ['simctl', 'help'],
+              tool: 'simctl',
+              args: ['help'],
               allowFailure: true,
             },
             signal,
@@ -43,10 +43,10 @@ export async function doctorAppleAppLogs(
     checks.devicectlAvailable = await bestEffortAppLogCheck(
       async () =>
         appLogCommandSucceeded(
-          await host.commands.run(
+          await host.appleTools.run(
             {
-              executable: 'xcrun',
-              args: ['devicectl', '--version'],
+              tool: 'devicectl',
+              args: ['--version'],
               allowFailure: true,
             },
             signal,

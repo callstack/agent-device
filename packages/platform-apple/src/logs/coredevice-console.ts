@@ -19,10 +19,10 @@ export async function checkCoreDeviceConsoleCaptureSupport(
   signal?: AbortSignal,
 ): Promise<CoreDeviceConsoleCaptureSupport> {
   try {
-    const result = await host.commands.run(
+    const result = await host.appleTools.run(
       {
-        executable: 'xcrun',
-        args: ['devicectl', 'device', 'process', 'launch', '--help'],
+        tool: 'devicectl',
+        args: ['device', 'process', 'launch', '--help'],
         allowFailure: true,
         timeoutMs: 5_000,
       },

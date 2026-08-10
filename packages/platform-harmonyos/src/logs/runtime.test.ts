@@ -82,7 +82,90 @@ test('rejects cross-session start and recovery paths before host authority is us
   expect(fixture.outputOpens()).toBe(0);
 });
 
-function hostFixture() {
+test('rejects a missing HDC tool before opening output or starting a process', async () => {
+  const fixture = hostFixture({ whichHdc: async () => undefined });
+  const binding = await createHarmonyAppLogRuntime(fixture.host).bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope,
+  });
+
+  await expect(
+    binding.operations.appLogStart?.({
+      sessionId: 'session',
+      appBundleId: 'com.example.harmony',
+      outputPath: '/tmp/app.log',
+      fence: { token: 'fence', generation: 1 },
+    }),
+  ).rejects.toMatchObject({
+    code: 'TOOL_MISSING',
+    message: 'hdc not found in PATH',
+    details: {
+      hint: 'Install HarmonyOS Command Line Tools, then add its sdk/default/openharmony/toolchains directory to PATH.',
+    },
+  });
+  expect(fixture.outputOpens()).toBe(0);
+  expect(fixture.backgroundCommands).toEqual([]);
+});
+
+test('provider-selected HarmonyOS logs prepare configured HDC without local inventory discovery', async () => {
+  const prepare = vi.fn(async () => undefined);
+  const whichHdc = vi.fn(async () => '/configured/toolchains/hdc');
+  const fixture = hostFixture({ prepare, whichHdc });
+  const binding = await createHarmonyAppLogRuntime(fixture.host).bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope,
+  });
+
+  const started = await binding.operations.appLogStart?.({
+    sessionId: 'session',
+    appBundleId: 'com.example.harmony',
+    outputPath: '/tmp/app.log',
+    fence: { token: 'fence', generation: 1 },
+  });
+
+  expect(prepare).toHaveBeenCalledWith('harmonyos');
+  expect(whichHdc).toHaveBeenCalledWith('hdc');
+  expect(fixture.backgroundCommands).toEqual([
+    ['/configured/toolchains/hdc', '-t', 'harmony-1', 'shell', 'hilog', '-P', '456'],
+  ]);
+  await started?.pendingHandle.transfer().finish();
+});
+
+test('HarmonyOS log preflight propagates cancellation before tool lookup or side effects', async () => {
+  const controller = new AbortController();
+  const reason = new Error('cancelled');
+  const whichHdc = vi.fn(async () => 'hdc');
+  const fixture = hostFixture({
+    prepare: async () => controller.abort(reason),
+    whichHdc,
+  });
+  const binding = await createHarmonyAppLogRuntime(fixture.host).bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: { ...scope, signal: controller.signal },
+  });
+
+  await expect(
+    binding.operations.appLogStart?.({
+      sessionId: 'session',
+      appBundleId: 'com.example.harmony',
+      outputPath: '/tmp/app.log',
+      fence: { token: 'fence', generation: 1 },
+    }),
+  ).rejects.toBe(reason);
+  expect(whichHdc).not.toHaveBeenCalled();
+  expect(fixture.outputOpens()).toBe(0);
+  expect(fixture.backgroundCommands).toEqual([]);
+});
+
+function hostFixture(
+  options: {
+    prepare?: AppLogRuntimeHost['toolchains']['prepare'];
+    whichHdc?: AppLogRuntimeHost['commands']['which'];
+  } = {},
+) {
   const backgroundCommands: string[][] = [];
   let outputOpens = 0;
   let markerReads = 0;
@@ -100,11 +183,18 @@ function hostFixture() {
     return process;
   };
   const host: AppLogRuntimeHost = {
+    appleTools: {
+      isXcrunAvailable: async () => false,
+      run: async () => {
+        throw new Error('unused');
+      },
+    },
+    toolchains: { prepare: options.prepare ?? (async () => undefined) },
     artifacts: {
       resolveSession: () => ({ outputPath: '/tmp/app.log', pidPath: '/tmp/app-log.pid' }),
     },
     commands: {
-      which: async () => 'hdc',
+      which: options.whichHdc ?? (async () => 'hdc'),
       run: async () => ({ stdout: '456\n', stderr: '', exitCode: 0 }),
     },
     outputs: {

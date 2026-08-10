@@ -272,6 +272,13 @@ function hostFixture(
     return process;
   };
   const host: AppLogRuntimeHost = {
+    appleTools: {
+      isXcrunAvailable: async () => false,
+      run: async () => {
+        throw new Error('unused');
+      },
+    },
+    toolchains: { prepare: async () => undefined },
     artifacts: {
       resolveSession: () => ({ outputPath: '/tmp/app.log', pidPath: '/tmp/app-log.pid' }),
     },
