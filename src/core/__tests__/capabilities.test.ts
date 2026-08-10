@@ -253,11 +253,12 @@ test('viewport resizing is admitted only on web, where a backend exists', () => 
 });
 
 test('capabilities reject CoreDevice-only commands for XCTest-backed devices', () => {
+  // Runtime-backed logs admission is proven from exact device facts in
+  // session-capabilities.test.ts, never through this legacy matrix projection.
   const coreDeviceOnlyCommands = [
     'apps',
     'install',
     'install-from-source',
-    'logs',
     'perf',
     'record',
     'reinstall',
@@ -291,7 +292,6 @@ test('macOS supports the Apple runner interaction core but excludes mobile-only 
       'is',
       'longpress',
       'logs',
-      'network',
       'open',
       'perf',
       'press',
@@ -371,6 +371,8 @@ test('tvOS follows iOS capability matrix by device kind', () => {
 });
 
 test('Linux supports desktop interaction commands and blocks mobile/unsupported ones', () => {
+  // Runtime-backed network admission is proven from operation facts in
+  // session-capabilities.test.ts, not through this legacy matrix projection.
   assertCommandSupport(
     [
       'back',
@@ -405,8 +407,6 @@ test('Linux supports desktop interaction commands and blocks mobile/unsupported 
       'install',
       'install-from-source',
       'keyboard',
-      'logs',
-      'network',
       'perf',
       'push',
       'record',
@@ -431,7 +431,6 @@ test('web supports only the initial browser interaction slice', () => {
       'find',
       'get',
       'is',
-      'network',
       'open',
       'press',
       'record',
@@ -457,7 +456,6 @@ test('web supports only the initial browser interaction slice', () => {
       'install',
       'install-from-source',
       'keyboard',
-      'logs',
       'longpress',
       'perf',
       'push',

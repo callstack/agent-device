@@ -86,7 +86,6 @@ const APPLE_SUPPORTS_BY_DEFAULT: Record<string, (device: DeviceInfo) => boolean>
   [PUBLIC_COMMANDS.install]: supportsAppInstallation,
   [PUBLIC_COMMANDS.reinstall]: supportsAppInstallation,
   [PUBLIC_COMMANDS.installFromSource]: supportsAppInstallation,
-  [PUBLIC_COMMANDS.logs]: supportsCoreDevicePhysicalOperation,
   [PUBLIC_COMMANDS.perf]: supportsCoreDevicePhysicalOperation,
   [PUBLIC_COMMANDS.record]: supportsCoreDevicePhysicalOperation,
   [PUBLIC_COMMANDS.push]: supportsAppAndDeviceLifecycle,
@@ -113,7 +112,6 @@ const APPLE_UNSUPPORTED_HINT_BY_DEFAULT: Record<
   [PUBLIC_COMMANDS.install]: coreDeviceOnlyPhysicalOperationHint,
   [PUBLIC_COMMANDS.reinstall]: coreDeviceOnlyPhysicalOperationHint,
   [PUBLIC_COMMANDS.installFromSource]: coreDeviceOnlyPhysicalOperationHint,
-  [PUBLIC_COMMANDS.logs]: coreDeviceOnlyPhysicalOperationHint,
   [PUBLIC_COMMANDS.perf]: coreDeviceOnlyPhysicalOperationHint,
   [PUBLIC_COMMANDS.record]: coreDeviceOnlyPhysicalOperationHint,
   [PUBLIC_COMMANDS.viewport]: (device) =>
@@ -153,12 +151,6 @@ export const applePlugin = {
     supportsByDefault: APPLE_SUPPORTS_BY_DEFAULT,
     unsupportedHintByDefault: APPLE_UNSUPPORTED_HINT_BY_DEFAULT,
   },
-  // Wraps the Apple arm of `resolveLogBackend` verbatim: macOS -> 'macos';
-  // an iOS `device` -> 'ios-device'; every other iOS kind -> 'ios-simulator'.
-  appLog: {
-    resolveBackend: (device: DeviceInfo) =>
-      isMacOs(device) ? 'macos' : device.kind === 'device' ? 'ios-device' : 'ios-simulator',
-  },
   // Wraps the Apple arm of `supportsPlatformPerfMetrics`: every Apple device
   // (ios/macos, any kind/target) reports perf-metrics support. `metricsSamplerTag`
   // wraps the else-arm of the former `buildPerfResponseData` sampling branch: every
@@ -166,7 +158,7 @@ export const applePlugin = {
   perf: { supportsMetrics: () => true, metricsSamplerTag: () => 'apple' },
   // Wraps the Apple arm of `resolveRecordingBackendForDevice` verbatim: macOS ->
   // 'macos'; an iOS `device` -> 'ios-device'; every other iOS kind (simulator, incl.
-  // tvOS/iPadOS/visionOS) -> 'ios-simulator'. Mirrors the appLog resolveBackend shape.
+  // tvOS/iPadOS/visionOS) -> 'ios-simulator'.
   recording: {
     resolveBackendTag: (device: DeviceInfo) =>
       isMacOs(device) ? 'macos' : device.kind === 'device' ? 'ios-device' : 'ios-simulator',

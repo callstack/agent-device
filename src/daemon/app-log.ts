@@ -1,432 +1,40 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
-import { tryGetPlugin } from '../core/platform-plugin-registry.ts';
-import { registerBuiltinPlatformPlugins } from '../core/interactors/register-builtins.ts';
-import { createScopedProvider } from '../utils/scoped-provider.ts';
+import { ensureAppLogPath } from '../utils/app-log-files.ts';
 import {
-  assertAndroidPackageArgSafe,
-  readTrackedAndroidLogcatPid,
-  readRecentAndroidLogcatForPackage,
-  resolveAndroidPid,
-  startAndroidAppLog,
-} from './app-log-android.ts';
-import {
-  readRecentIosSimulatorLogShowForBundle,
-  startIosDeviceAppLog,
-  startIosSimulatorAppLog,
-  startMacOsAppLog,
-} from './app-log-ios.ts';
-import { APP_LOG_PID_FILENAME, type AppLogResult, type AppLogState } from './app-log-process.ts';
-import { waitForChildExit } from './app-log-stream.ts';
-import { startHarmonyAppLog } from './app-log-harmonyos.ts';
-import {
-  mergeNetworkDumps,
-  readRecentNetworkTraffic,
-  readRecentNetworkTrafficFromText,
-  type NetworkDump,
-  type NetworkIncludeMode,
-} from './network-log.ts';
-import type { LogBackend } from '@agent-device/contracts/observability';
-
-// Populate the PlatformPlugin registry once at module load (idempotent; registers
-// only lazy closures, so no leaf code is imported and CLI cold-start is unaffected
-// — mirrors the same call in `core/capabilities.ts`). `resolveLogBackend` reads the
-// per-platform app-log facet from this registry, so it must be populated first.
-registerBuiltinPlatformPlugins();
-
-export type { AppLogResult } from './app-log-process.ts';
-export type { AppLogState } from './app-log-process.ts';
-export type { AppLogFailure } from './app-log-process.ts';
-export { runAppLogDoctor } from './app-log-doctor.ts';
-
-export type SessionNetworkCapture = {
-  backend: LogBackend;
-  dump: NetworkDump;
-  notes: string[];
-};
-
-type AndroidNetworkRecoveryContext = {
-  reason: 'inactive' | 'stale-active';
-  trackedPid?: string;
-};
-
-type IosSimulatorNetworkRecovery = {
-  dump: NetworkDump;
-  recoveredLineCount: number;
-};
-
-export type AppLogStartRequest = {
-  device: DeviceInfo;
-  appBundleId: string;
-  outPath: string;
-  pidPath?: string;
-};
-
-type SessionNetworkCaptureParams = {
-  device: DeviceInfo;
-  appBundleId?: string;
-  appLogState?: AppLogState;
-  appLogStartedAt?: number;
-  appLogPath: string;
-  maxEntries: number;
-  include: NetworkIncludeMode;
-  maxPayloadChars: number;
-  maxScanLines: number;
-};
-
-export type AppLogProvider = {
-  start(request: AppLogStartRequest): Promise<AppLogResult>;
-};
-
-const DEFAULT_MAX_APP_LOG_BYTES = 5 * 1024 * 1024;
-const DEFAULT_MAX_ROTATED_FILES = 1;
-
-const localAppLogProvider: AppLogProvider = {
-  start: async (request) => await startLocalAppLog(request),
-};
-
-const appLogProviderScope = createScopedProvider(localAppLogProvider, createLocalAppLogProvider);
-
-function createLocalAppLogProvider(provider: Partial<AppLogProvider> = {}): AppLogProvider {
-  return {
-    ...localAppLogProvider,
-    ...provider,
-  };
-}
-
-function resolveAppLogProvider(provider?: AppLogProvider): AppLogProvider {
-  return appLogProviderScope.resolve(provider);
-}
-
-export async function withAppLogProvider<T>(
-  provider: AppLogProvider | undefined,
-  fn: () => Promise<T>,
-): Promise<T> {
-  return await appLogProviderScope.run(provider, fn);
-}
-
-function parsePositiveIntEnv(name: string, fallback: number): number {
-  const raw = process.env[name];
-  if (!raw) return fallback;
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function getAppLogConfig(): { maxBytes: number; maxRotatedFiles: number } {
-  return {
-    maxBytes: parsePositiveIntEnv('AGENT_DEVICE_APP_LOG_MAX_BYTES', DEFAULT_MAX_APP_LOG_BYTES),
-    maxRotatedFiles: parsePositiveIntEnv(
-      'AGENT_DEVICE_APP_LOG_MAX_FILES',
-      DEFAULT_MAX_ROTATED_FILES,
-    ),
-  };
-}
-
-function getAppLogRedactionPatterns(): RegExp[] {
-  const raw = process.env.AGENT_DEVICE_APP_LOG_REDACT_PATTERNS;
-  if (!raw) return [];
-  const patterns = raw
-    .split(',')
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
-  const result: RegExp[] = [];
-  for (const pattern of patterns) {
-    try {
-      result.push(new RegExp(pattern, 'gi'));
-    } catch {
-      // Skip invalid user pattern.
-    }
-  }
-  return result;
-}
-
-export function rotateAppLogIfNeeded(
-  outPath: string,
-  config: { maxBytes: number; maxRotatedFiles: number },
-): void {
-  if (!fs.existsSync(outPath)) return;
-  const stats = fs.statSync(outPath);
-  if (stats.size < config.maxBytes) return;
-
-  for (let index = config.maxRotatedFiles; index >= 1; index -= 1) {
-    const from = index === 1 ? outPath : `${outPath}.${index - 1}`;
-    const to = `${outPath}.${index}`;
-    if (!fs.existsSync(from)) continue;
-    if (fs.existsSync(to)) fs.unlinkSync(to);
-    fs.renameSync(from, to);
-  }
-}
-
-function ensureLogPath(outPath: string): void {
-  const dir = path.dirname(outPath);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  rotateAppLogIfNeeded(outPath, getAppLogConfig());
-}
+  openVerifiedFileForAppend,
+  openVerifiedFileForRead,
+  openVerifiedFileForTruncate,
+} from '../utils/verified-file.ts';
 
 export function getAppLogPathMetadata(outPath: string): {
   exists: boolean;
   sizeBytes: number;
   modifiedAt?: string;
 } {
-  if (!fs.existsSync(outPath)) {
-    return { exists: false, sizeBytes: 0 };
+  const descriptor = openVerifiedFileForRead(outPath);
+  if (descriptor === undefined) return { exists: false, sizeBytes: 0 };
+  try {
+    const stats = fs.fstatSync(descriptor);
+    return {
+      exists: true,
+      sizeBytes: stats.size,
+      modifiedAt: stats.mtime.toISOString(),
+    };
+  } finally {
+    fs.closeSync(descriptor);
   }
-  const stats = fs.statSync(outPath);
-  return {
-    exists: true,
-    sizeBytes: stats.size,
-    modifiedAt: stats.mtime.toISOString(),
-  };
-}
-
-export function resolveLogBackend(device: DeviceInfo): LogBackend {
-  // Routes the platform branch through the PlatformPlugin app-log facet (issue
-  // #974). Apple/Android carry a `resolveBackend`; linux/web (and any unregistered
-  // platform) fall through to the historical `'android'` default. The daemon
-  // app-log routing parity test pins this against the former hand branch.
-  return tryGetPlugin(device.platform)?.appLog?.resolveBackend(device) ?? 'android';
-}
-
-export async function readSessionNetworkCapture(
-  params: SessionNetworkCaptureParams,
-): Promise<SessionNetworkCapture> {
-  const {
-    device,
-    appBundleId,
-    appLogState,
-    appLogStartedAt,
-    appLogPath,
-    maxEntries,
-    include,
-    maxPayloadChars,
-    maxScanLines,
-  } = params;
-  const backend = resolveLogBackend(device);
-  let dump = readRecentNetworkTraffic(appLogPath, {
-    backend,
-    maxEntries,
-    include,
-    maxPayloadChars,
-    maxScanLines,
-  });
-  const notes: string[] = [];
-
-  const androidRecovery = await resolveAndroidNetworkRecoveryContext({
-    device,
-    appBundleId,
-    appLogPath,
-    appLogState,
-  });
-  if (androidRecovery) {
-    const recovered = await readRecentAndroidLogcatForPackage(device.id, appBundleId as string);
-    if (recovered) {
-      const recoveredDump = readRecentNetworkTrafficFromText(recovered.text, {
-        path: `${appLogPath} (adb logcat recovery)`,
-        backend: 'android',
-        maxEntries,
-        include,
-        maxPayloadChars,
-        maxScanLines,
-      });
-      if (recoveredDump.entries.length > 0) {
-        dump = mergeNetworkDumps(recoveredDump, dump, maxEntries);
-        notes.push(buildAndroidRecoveryNote(androidRecovery, recovered.recoveredPids));
-      }
-    }
-  }
-
-  const canRecoverIosSimulatorLogShow =
-    isIosFamily(device) && device.kind === 'simulator' && Boolean(appBundleId);
-  if (canRecoverIosSimulatorLogShow && dump.entries.length === 0) {
-    const recovered = await readRecentIosSimulatorNetworkCapture({
-      deviceId: device.id,
-      appBundleId: appBundleId as string,
-      startedAt: appLogStartedAt,
-      simulatorSetPath: device.simulatorSetPath,
-      appLogPath,
-      maxEntries,
-      include,
-      maxPayloadChars,
-      maxScanLines,
-    });
-    if (recovered) {
-      if (recovered.dump.entries.length > 0) {
-        dump = mergeNetworkDumps(recovered.dump, dump, maxEntries);
-        notes.push(
-          `Recovered ${recovered.dump.entries.length} iOS simulator HTTP entr${
-            recovered.dump.entries.length === 1 ? 'y' : 'ies'
-          } from simctl log show (${recovered.recoveredLineCount} app log lines scanned).`,
-        );
-      } else if (recovered.recoveredLineCount > 0) {
-        notes.push(
-          `Recovered ${recovered.recoveredLineCount} recent iOS simulator app log lines from simctl log show, but none looked like HTTP traffic. This app may not emit request URLs, status, or timing into Unified Logging for this repro window.`,
-        );
-      }
-    }
-  }
-
-  if (appLogState === undefined) {
-    notes.push(
-      'Capture uses the session app log file. For fresh traffic, run logs clear --restart before reproducing requests.',
-    );
-  } else if (appLogState !== 'active' && notes.length === 0) {
-    if (isIosFamily(device) && device.kind === 'simulator') {
-      notes.push(
-        'Session app log stream is inactive. The iOS simulator recovery path scanned recent simctl log history, but a fresh logs clear --restart window is still the most reliable repro loop.',
-      );
-    } else {
-      notes.push(
-        'Session app log stream is inactive. Run logs clear --restart, reproduce the request window again, then rerun network dump.',
-      );
-    }
-  }
-
-  if (dump.entries.length === 0) {
-    notes.push(buildNoHttpEntriesNote(device));
-  }
-
-  return { backend, dump, notes };
-}
-
-async function resolveAndroidNetworkRecoveryContext(params: {
-  device: DeviceInfo;
-  appBundleId?: string;
-  appLogPath: string;
-  appLogState?: AppLogState;
-}): Promise<AndroidNetworkRecoveryContext | null> {
-  const { device, appBundleId, appLogPath, appLogState } = params;
-  if (device.platform !== 'android' || !appBundleId) {
-    return null;
-  }
-  if (appLogState !== undefined && appLogState !== 'active') {
-    return { reason: 'inactive' };
-  }
-  if (appLogState !== 'active') {
-    return null;
-  }
-
-  const trackedPid = readTrackedAndroidLogcatPid(
-    path.join(path.dirname(appLogPath), APP_LOG_PID_FILENAME),
-  );
-  if (!trackedPid) {
-    return null;
-  }
-  const currentPid = await resolveAndroidPid(device.id, appBundleId);
-  if (!currentPid || currentPid === trackedPid) {
-    return null;
-  }
-  return { reason: 'stale-active', trackedPid };
-}
-
-function buildAndroidRecoveryNote(
-  context: AndroidNetworkRecoveryContext,
-  recoveredPids: string[],
-): string {
-  if (context.reason === 'stale-active') {
-    return `Session app log stream was still bound to prior Android PID ${context.trackedPid}. Recovered recent Android HTTP entries from adb logcat for PID set ${recoveredPids.join(', ')}.`;
-  }
-  return `Session app log stream was inactive. Recovered recent Android HTTP entries from adb logcat for PID set ${recoveredPids.join(', ')}.`;
-}
-
-export async function startAppLog(
-  device: DeviceInfo,
-  appBundleId: string,
-  outPath: string,
-  pidPath?: string,
-): Promise<AppLogResult> {
-  return await resolveAppLogProvider().start({ device, appBundleId, outPath, pidPath });
-}
-
-async function startLocalAppLog({
-  device,
-  appBundleId,
-  outPath,
-  pidPath,
-}: AppLogStartRequest): Promise<AppLogResult> {
-  ensureLogPath(outPath);
-  const stream = fs.createWriteStream(outPath, { flags: 'a' });
-  const redactionPatterns = getAppLogRedactionPatterns();
-  if (isIosFamily(device)) {
-    if (device.kind === 'device') {
-      return await startIosDeviceAppLog(device.id, appBundleId, stream, redactionPatterns, pidPath);
-    }
-    return await startIosSimulatorAppLog(
-      device.id,
-      appBundleId,
-      stream,
-      redactionPatterns,
-      device.simulatorSetPath,
-      pidPath,
-    );
-  }
-  if (device.platform === 'android') {
-    assertAndroidPackageArgSafe(appBundleId);
-    return await startAndroidAppLog(device.id, appBundleId, stream, redactionPatterns, pidPath);
-  }
-  if (device.platform === 'harmonyos') {
-    return await startHarmonyAppLog(device.id, appBundleId, stream, redactionPatterns, pidPath);
-  }
-  if (isMacOs(device)) {
-    return await startMacOsAppLog(appBundleId, stream, redactionPatterns, pidPath);
-  }
-  stream.end();
-  throw new AppError('UNSUPPORTED_PLATFORM', `unsupported platform: ${device.platform}`);
-}
-
-async function readRecentIosSimulatorNetworkCapture(params: {
-  deviceId: string;
-  appBundleId: string;
-  startedAt?: number;
-  simulatorSetPath?: string;
-  appLogPath: string;
-  maxEntries: number;
-  include: NetworkIncludeMode;
-  maxPayloadChars: number;
-  maxScanLines: number;
-}): Promise<IosSimulatorNetworkRecovery | null> {
-  const recovered = await readRecentIosSimulatorLogShowForBundle({
-    deviceId: params.deviceId,
-    appBundleId: params.appBundleId,
-    startedAt: params.startedAt,
-    simulatorSetPath: params.simulatorSetPath,
-  });
-  if (!recovered) {
-    return null;
-  }
-  return {
-    dump: readRecentNetworkTrafficFromText(recovered.text, {
-      path: `${params.appLogPath} (simctl log show recovery)`,
-      backend: 'ios-simulator',
-      maxEntries: params.maxEntries,
-      include: params.include,
-      maxPayloadChars: params.maxPayloadChars,
-      maxScanLines: params.maxScanLines,
-    }),
-    recoveredLineCount: recovered.recoveredLineCount,
-  };
-}
-
-function buildNoHttpEntriesNote(device: DeviceInfo): string {
-  if (isIosFamily(device) && device.kind === 'simulator') {
-    return 'No HTTP(s) entries were found in recent iOS simulator app logs. If the app only emits non-HTTP diagnostics, inspect logs path or add app-side URLSession/network logging for per-request timing and payload details.';
-  }
-  if (isIosFamily(device)) {
-    return 'No HTTP(s) entries were found in recent iOS device app logs. iOS network dump only sees what the app emits into Unified Logging for this process.';
-  }
-  return 'No HTTP(s) entries were found in recent session app logs.';
-}
-
-export async function stopAppLog(appLog: AppLogResult): Promise<void> {
-  await appLog.stop();
-  await waitForChildExit(appLog.wait);
 }
 
 export function appendAppLogMarker(outPath: string, marker: string): void {
-  ensureLogPath(outPath);
+  ensureAppLogPath(outPath);
   const line = `[agent-device][mark][${new Date().toISOString()}] ${marker.trim() || 'marker'}\n`;
-  fs.appendFileSync(outPath, line, 'utf8');
+  const descriptor = openVerifiedFileForAppend(outPath);
+  try {
+    fs.writeFileSync(descriptor, line, 'utf8');
+  } finally {
+    fs.closeSync(descriptor);
+  }
 }
 
 export function clearAppLogFiles(outPath: string): {
@@ -437,10 +45,11 @@ export function clearAppLogFiles(outPath: string): {
   const dir = path.dirname(outPath);
   const base = path.basename(outPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  if (fs.existsSync(outPath)) {
-    fs.truncateSync(outPath, 0);
-  } else {
-    fs.writeFileSync(outPath, '', 'utf8');
+  const descriptor = openVerifiedFileForTruncate(outPath);
+  try {
+    fs.fsyncSync(descriptor);
+  } finally {
+    fs.closeSync(descriptor);
   }
   let removedRotatedFiles = 0;
   for (const entry of fs.readdirSync(dir)) {

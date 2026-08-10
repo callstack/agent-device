@@ -11,6 +11,7 @@ import { contextFromFlags } from '../context.ts';
 import { handleLeaseCommands } from '../handlers/lease.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { runRequestHandlerChain } from '../request-handler-chain.ts';
+import { unavailableBindDevice } from './test-device-runtime-gateway.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
@@ -254,6 +255,8 @@ async function runCatalogCommandThroughHandlerChain(
           leaseRegistry,
           invoke: async () => ({ ok: true, data: {} }),
           androidAdbExecutor: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+          bindDevice: unavailableBindDevice,
+          throwIfCanceled: () => {},
           contextFromFlags: (flags, appBundleId, traceLogPath) =>
             contextFromFlags(
               '/tmp/agent-device-catalog-route.log',

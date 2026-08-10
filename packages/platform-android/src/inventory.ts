@@ -7,15 +7,13 @@ import type {
   HostCommandResult,
   PlatformRequestScope,
 } from '@agent-device/contracts/platform';
-import {
-  isAndroidEmulatorSerial,
-  normalizeAndroidDeviceName,
-  type DeviceInventoryRequest,
-} from '@agent-device/contracts/device';
+import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import { androidDiscoveryCommandError, attachAndroidDiscoveryTimeout } from './adb-failure.ts';
 import type { AndroidInventoryConfig } from './inventory-config.ts';
 import {
   inferAndroidAvdTarget,
+  isAndroidEmulatorSerial,
+  normalizeAndroidDeviceName,
   parseAndroidAvdList,
   parseAndroidDeviceEntries,
   parseAndroidEmulatorAvdNameOutput,

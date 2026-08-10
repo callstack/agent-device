@@ -46,6 +46,8 @@ import { LeaseRegistry } from '../lease-registry.ts';
 import { PREPARE_REQUEST_TIMEOUT_MS } from '../../core/command-descriptor/timeout-policy.ts';
 import { Deadline } from '../../utils/retry.ts';
 import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
+import type { BindDeviceRuntime } from '../request-runtime-binding.ts';
+import type { AppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 
 const PREPARE_IOS_RUNNER_TIMING_NOTE =
   'Top-level prepare timing fields are diagnostic and may overlap; use timing.additiveParts for additive wall-clock phases.';
@@ -276,6 +278,9 @@ type SessionCommandParams = {
   invoke: DaemonInvokeFn;
   invokeReplayAction?: DaemonInvokeFn;
   androidAdbExecutor?: AndroidAdbExecutor;
+  bindDevice?: BindDeviceRuntime;
+  appLogAdmissionLedger?: AppLogAdmissionLedger;
+  throwIfCanceled?: () => void;
 };
 
 type SessionCommandHandler = (params: SessionCommandParams) => Promise<DaemonResponse | null>;
@@ -284,7 +289,8 @@ const handleSessionInventoryCommandGroup: SessionCommandHandler = async ({
   req,
   sessionName,
   sessionStore,
-}) => await handleSessionInventoryCommands({ req, sessionName, sessionStore });
+  bindDevice,
+}) => await handleSessionInventoryCommands({ req, sessionName, sessionStore, bindDevice });
 
 const handleSessionStateCommandGroup: SessionCommandHandler = async ({
   req,
@@ -298,8 +304,19 @@ const handleSessionObservabilityCommandGroup: SessionCommandHandler = async ({
   sessionName,
   sessionStore,
   androidAdbExecutor,
+  bindDevice,
+  appLogAdmissionLedger,
+  throwIfCanceled,
 }) =>
-  await handleSessionObservabilityCommands({ req, sessionName, sessionStore, androidAdbExecutor });
+  await handleSessionObservabilityCommands({
+    req,
+    sessionName,
+    sessionStore,
+    androidAdbExecutor,
+    bindDevice,
+    appLogAdmissionLedger,
+    throwIfCanceled,
+  });
 
 const handleSessionReplayCommandGroup: SessionCommandHandler = async ({
   req,
@@ -489,6 +506,9 @@ export async function handleSessionCommands(params: {
   invoke: DaemonInvokeFn;
   invokeReplayAction?: DaemonInvokeFn;
   androidAdbExecutor?: AndroidAdbExecutor;
+  bindDevice?: BindDeviceRuntime;
+  appLogAdmissionLedger?: AppLogAdmissionLedger;
+  throwIfCanceled?: () => void;
 }): Promise<DaemonResponse | null> {
   const {
     req,
@@ -500,6 +520,9 @@ export async function handleSessionCommands(params: {
     invoke,
     invokeReplayAction,
     androidAdbExecutor,
+    bindDevice,
+    appLogAdmissionLedger,
+    throwIfCanceled,
   } = params;
 
   const handler =
@@ -516,6 +539,9 @@ export async function handleSessionCommands(params: {
     invoke,
     invokeReplayAction,
     androidAdbExecutor,
+    bindDevice,
+    appLogAdmissionLedger,
+    throwIfCanceled,
   });
 }
 

@@ -1,15 +1,14 @@
 import type { InventoryUse } from './platform-module.ts';
-
-/** Serializable operation requirements owned by a runtime-backed command descriptor. */
-export type RuntimeUseDeclaration = Readonly<{
-  required: readonly string[];
-  preferred: readonly string[];
-}>;
+import type { RuntimeUseDeclaration } from './platform-runtime.ts';
 
 export type CommandPlatformExecution =
   | Readonly<{ kind: 'legacy' }>
   | Readonly<{ kind: 'inventory'; use: InventoryUse }>
-  | Readonly<{ kind: 'device-runtime'; use: RuntimeUseDeclaration }>;
+  | Readonly<{ kind: 'device-runtime'; use: RuntimeUseDeclaration }>
+  | Readonly<{
+      kind: 'device-runtime';
+      uses: readonly [RuntimeUseDeclaration, ...RuntimeUseDeclaration[]];
+    }>;
 
 // The discriminated union cannot prove uniqueness or required/preferred disjointness inside
 // readonly arrays. Validate those declaration invariants where descriptors enter the registry.
@@ -34,7 +33,30 @@ export function assertCommandPlatformExecution(
   ) {
     return;
   }
+  if (
+    declaration['kind'] === 'device-runtime' &&
+    sameKeys(keys, ['kind', 'uses']) &&
+    hasRuntimeUseDeclarations(declaration['uses'])
+  ) {
+    return;
+  }
   throw invalidPlatformExecution();
+}
+
+function hasRuntimeUseDeclarations(
+  value: unknown,
+): value is readonly [RuntimeUseDeclaration, ...RuntimeUseDeclaration[]] {
+  if (!Array.isArray(value) || value.length === 0) return false;
+  if (!value.every(hasRuntimeUseDeclaration)) return false;
+  const identities = value.map(runtimeUseIdentity);
+  return new Set(identities).size === identities.length;
+}
+
+function runtimeUseIdentity(use: RuntimeUseDeclaration): string {
+  return JSON.stringify({
+    required: [...use.required].sort(),
+    preferred: [...use.preferred].sort(),
+  });
 }
 
 function hasExactInventoryUse(value: unknown): boolean {

@@ -3,38 +3,41 @@ import {
   isPerfArea,
   isPerfKind,
   isPerfMemoryKind,
-  LOG_ACTION_VALUES as LOG_ACTIONS,
   PERF_ACTION_ERROR_MESSAGE,
   PERF_AREA_ERROR_MESSAGE,
   PERF_KIND_ERROR_MESSAGE,
   PERF_MEMORY_KIND_ERROR_MESSAGE,
   type LogBackend,
-  type LogAction as LogsAction,
   type PerfAction,
   type PerfArea,
   type PerfKind,
 } from '@agent-device/contracts/observability';
+import {
+  appLogAdmissionUse,
+  resolveLogsRuntimePlan,
+  type AppLogFailure,
+  type AppLogRuntimeOperations,
+  type LogsRuntimePlan,
+  type RuntimeOwnerRef,
+} from '@agent-device/contracts/platform';
 import { uniqueStrings } from '@agent-device/kernel/collections';
-import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '@agent-device/kernel/contracts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
-import { resolveWebProvider } from '../../platforms/web/provider.ts';
+import { appendAppLogMarker, clearAppLogFiles, getAppLogPathMetadata } from '../app-log.ts';
+import type { AppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
+import { resolveAppLogResourcePath } from '../app-log-resource-store.ts';
 import {
-  appendAppLogMarker,
-  clearAppLogFiles,
-  getAppLogPathMetadata,
-  readSessionNetworkCapture,
-  resolveLogBackend,
-  runAppLogDoctor,
-  startAppLog,
-  stopAppLog,
-  type AppLogFailure,
-  type AppLogResult,
-  type AppLogState,
-} from '../app-log.ts';
+  adoptStartedSessionAppLog,
+  clearSessionAppLogFailure,
+  finishSessionAppLog,
+  inspectSessionAppLog,
+  recordSessionAppLogFailure,
+} from '../app-log-session-resource.ts';
+import { createNextAppLogFence } from '../app-log-start-preflight.ts';
+import type { BindDeviceRuntime } from '../request-runtime-binding.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData, SessionState } from '../types.ts';
-import { errorResponse, requireCommandSupported, type DaemonFailureResponse } from './response.ts';
+import { errorResponse, type DaemonFailureResponse } from './response.ts';
 import { handleAudioCommand } from './session-audio.ts';
 import { handleNativePerfCommand as handleAndroidNativePerfCommand } from './session-native-perf.ts';
 import { handleNativePerfCommand as handleAppleNativePerfCommand } from './session-perf-xctrace.ts';
@@ -43,25 +46,28 @@ import {
   buildPerfMemoryResponseData,
   buildPerfResponseData,
 } from './session-perf.ts';
-
-const LOG_ACTIONS_MESSAGE = `logs requires ${LOG_ACTIONS.slice(0, -1).join(', ')}, or ${LOG_ACTIONS.at(-1)}`;
-const NETWORK_ACTIONS = ['dump', 'log'] as const;
-const NETWORK_ACTIONS_MESSAGE = `network requires ${NETWORK_ACTIONS.join(' or ')}`;
-const NETWORK_INCLUDE_MESSAGE = `network include mode must be one of: ${NETWORK_INCLUDE_MODES.join(', ')}`;
+import { handleNetworkCommand } from './session-network.ts';
 
 type ObservabilityParams = {
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
   androidAdbExecutor?: AndroidAdbExecutor;
+  bindDevice?: BindDeviceRuntime;
+  appLogAdmissionLedger?: AppLogAdmissionLedger;
+  throwIfCanceled?: () => void;
 };
-type LogsHandlerParams = ObservabilityParams & {
+type LogsHandlerParams = Omit<ObservabilityParams, 'bindDevice' | 'appLogAdmissionLedger'> & {
   session: SessionState;
-  restart: boolean;
+  bindDevice: BindDeviceRuntime;
+  appLogAdmissionLedger: AppLogAdmissionLedger;
 };
+type ExecutableLogsRuntimePlan =
+  | Extract<LogsRuntimePlan, { requiresAppSession: false }>
+  | (Extract<LogsRuntimePlan, { requiresAppSession: true }> & { appBundleId: string });
 type SessionLogStatus = {
   active: boolean;
-  state: AppLogState | 'inactive';
+  state: 'active' | 'recovering' | 'ended' | 'failed' | 'inactive';
   backend: LogBackend;
   startedAt?: number;
   failureCode?: string;
@@ -70,62 +76,18 @@ type SessionLogStatus = {
   notes?: string[];
 };
 
-const LOG_ACTION_HANDLERS: Record<
-  LogsAction,
-  (params: LogsHandlerParams) => Promise<DaemonResponse> | DaemonResponse
-> = {
-  path: ({ session, sessionName, sessionStore }) =>
-    handleLogsPath(session, sessionName, sessionStore),
-  doctor: ({ session, sessionName, sessionStore }) =>
-    handleLogsDoctor(session, sessionName, sessionStore),
-  mark: ({ req, sessionName, sessionStore }) => handleLogsMark(req, sessionName, sessionStore),
-  clear: ({ session, sessionName, sessionStore, restart }) =>
-    handleLogsClear(session, sessionName, sessionStore, restart),
-  start: ({ session, sessionName, sessionStore }) =>
-    handleLogsStart(session, sessionName, sessionStore),
-  stop: ({ session, sessionName, sessionStore }) =>
-    handleLogsStop(session, sessionName, sessionStore),
-};
-
-function resolveSessionLogStatus(session: SessionState): SessionLogStatus {
-  if (session.appLog) {
-    const state = session.appLog.getState();
-    const active = state === 'active' || state === 'recovering';
-    return {
-      active,
-      state,
-      backend: session.appLog.backend,
-      startedAt: session.appLog.startedAt,
-      notes: buildAppLogStateNotes(state),
-    };
-  }
-  if (session.appLogFailure) {
-    return {
-      active: false,
-      state: 'failed',
-      backend: session.appLogFailure.backend,
-      failureCode: session.appLogFailure.code,
-      failureMessage: session.appLogFailure.message,
-      hint: session.appLogFailure.hint,
-      notes: [buildAppLogFailureNote(session.appLogFailure)],
-    };
-  }
+function resolveSessionLogStatus(
+  session: SessionState,
+  fallbackBackend: LogBackend,
+): SessionLogStatus {
+  const snapshot = inspectSessionAppLog(session);
   return {
-    active: false,
-    state: 'inactive',
-    backend: resolveLogBackend(session.device),
-  };
-}
-
-function buildAppLogFailure(
-  normalized: ReturnType<typeof normalizeError>,
-  backend: LogBackend,
-): AppLogFailure {
-  return {
-    backend,
-    code: normalized.code,
-    message: normalized.message,
-    hint: normalized.hint,
+    ...snapshot,
+    backend: snapshot.backend ?? fallbackBackend,
+    notes:
+      snapshot.state === 'failed' && session.appLogFailure
+        ? [buildAppLogFailureNote(session.appLogFailure)]
+        : buildAppLogStateNotes(snapshot.state),
   };
 }
 
@@ -133,7 +95,7 @@ function buildAppLogFailureNote(failure: AppLogFailure): string {
   return failure.hint ? `${failure.message} ${failure.hint}` : failure.message;
 }
 
-function buildAppLogStateNotes(state: AppLogState): string[] | undefined {
+function buildAppLogStateNotes(state: SessionLogStatus['state']): string[] | undefined {
   if (state === 'failed') {
     return [
       'The app log stream process exited with an error. Run logs doctor for backend diagnostics.',
@@ -148,37 +110,10 @@ function buildAppLogStateNotes(state: AppLogState): string[] | undefined {
 }
 
 function mergeLogDoctorNotes(
-  doctorNotes: string[],
+  doctorNotes: readonly string[],
   status: Pick<SessionLogStatus, 'notes'>,
 ): string[] {
   return uniqueStrings([...doctorNotes, ...(status.notes ?? [])]);
-}
-
-function buildSessionAppLog(
-  session: SessionState,
-  outPath: string,
-  appLog: AppLogResult,
-): NonNullable<SessionState['appLog']> {
-  return {
-    ...appLog,
-    platform: session.device.platform,
-    outPath,
-  };
-}
-
-function storeAppLogStartFailure(
-  sessionStore: SessionStore,
-  sessionName: string,
-  session: SessionState,
-  error: unknown,
-): DaemonFailureResponse {
-  const normalized = normalizeError(error);
-  sessionStore.set(sessionName, {
-    ...session,
-    appLog: undefined,
-    appLogFailure: buildAppLogFailure(normalized, resolveLogBackend(session.device)),
-  });
-  return { ok: false, error: normalized };
 }
 
 export async function handleSessionObservabilityCommands(
@@ -196,7 +131,7 @@ export async function handleSessionObservabilityCommands(
     return await handleEventsCommand(params);
   }
   if (req.command === 'network') {
-    return handleNetworkCommand(params);
+    return await handleNetworkCommand(params);
   }
   if (req.command === 'audio') {
     return await handleAudioCommand(params);
@@ -423,40 +358,97 @@ async function handleLogsCommand(params: ObservabilityParams): Promise<DaemonRes
   if (!session) {
     return errorResponse('SESSION_NOT_FOUND', 'logs requires an active session');
   }
-  const unsupported = requireCommandSupported('logs', session.device);
-  if (unsupported) return unsupported;
-
-  const request = resolveLogsCommandRequest(req);
-  if (!request.ok) return request;
-  return await LOG_ACTION_HANDLERS[request.action]({
-    ...params,
-    session,
-    restart: request.restart,
-  });
+  try {
+    const logsParams = requireLogsHandlerParams({ ...params, session });
+    const admission = await logsParams.bindDevice(session.device, appLogAdmissionUse);
+    const inspectFact = admission.facts.appLogInspect;
+    if (!inspectFact.available) {
+      return {
+        ok: false,
+        error: {
+          code: 'UNSUPPORTED_OPERATION',
+          message: 'logs is not supported on this device',
+          hint: inspectFact.hint,
+        },
+      };
+    }
+    const plan = resolveLogsRuntimePlan({
+      action: req.positionals?.[0],
+      restart: Boolean(req.flags?.restart),
+      marker: req.positionals?.slice(1).join(' '),
+    });
+    const executablePlan = requireLogsPlanSession(plan, session);
+    if ('ok' in executablePlan) return executablePlan;
+    return await executeLogsRuntimePlan(logsParams, executablePlan);
+  } catch (error) {
+    return { ok: false, error: normalizeError(error) };
+  }
 }
 
-function resolveLogsCommandRequest(
-  req: DaemonRequest,
-): { ok: true; action: LogsAction; restart: boolean } | DaemonFailureResponse {
-  const action = (req.positionals?.[0] ?? 'path').toLowerCase();
-  const restart = Boolean(req.flags?.restart);
-  if (!LOG_ACTIONS.includes(action as LogsAction)) {
-    return errorResponse('INVALID_ARGS', LOG_ACTIONS_MESSAGE);
+async function executeLogsRuntimePlan(
+  params: LogsHandlerParams,
+  plan: ExecutableLogsRuntimePlan,
+): Promise<DaemonResponse> {
+  switch (plan.kind) {
+    case 'path': {
+      const runtime = await params.bindDevice(params.session.device, plan.use);
+      const inspection = await runtime.operations.appLogInspect();
+      return handleLogsPath(params, inspection.backend);
+    }
+    case 'doctor': {
+      const runtime = await params.bindDevice(params.session.device, plan.use);
+      const doctor = await runtime.operations.appLogDoctor({
+        appBundleId: params.session.appBundleId,
+      });
+      return handleLogsDoctor(params, doctor);
+    }
+    case 'start':
+    case 'clear-restart':
+      return await executeLogsStartCapablePlan(params, plan);
+    case 'stop':
+      await params.bindDevice(params.session.device, plan.use);
+      return await handleLogsStop(params);
+    case 'mark':
+      await params.bindDevice(params.session.device, plan.use);
+      return handleLogsMark(plan.marker, params.sessionName, params.sessionStore);
+    case 'clear':
+      await params.bindDevice(params.session.device, plan.use);
+      return handleLogsClear(params);
   }
-  if (restart && action !== 'clear') {
-    return errorResponse('INVALID_ARGS', 'logs --restart is only supported with logs clear');
-  }
-  return { ok: true, action: action as LogsAction, restart };
 }
 
-function handleLogsPath(
+async function executeLogsStartCapablePlan(
+  params: LogsHandlerParams,
+  plan: Extract<ExecutableLogsRuntimePlan, { kind: 'start' | 'clear-restart' }>,
+): Promise<DaemonResponse> {
+  const runtime = await params.bindDevice(params.session.device, plan.use);
+  return plan.kind === 'start'
+    ? await handleLogsStart(params, plan.appBundleId, runtime.owner, runtime.operations.appLogStart)
+    : await handleLogsClearRestart(
+        params,
+        plan.appBundleId,
+        runtime.owner,
+        runtime.operations.appLogStart,
+      );
+}
+
+function requireLogsPlanSession(
+  plan: LogsRuntimePlan,
   session: SessionState,
-  sessionName: string,
-  sessionStore: SessionStore,
-): DaemonResponse {
+): ExecutableLogsRuntimePlan | DaemonFailureResponse {
+  if (!plan.requiresAppSession) return plan;
+  if (session.appBundleId) return Object.freeze({ ...plan, appBundleId: session.appBundleId });
+  return errorResponse(
+    'INVALID_ARGS',
+    `logs ${plan.kind === 'start' ? 'start' : 'clear --restart'} requires an app session; run open <app> first`,
+  );
+}
+
+function handleLogsPath(params: LogsHandlerParams, backend: LogBackend): DaemonResponse {
+  const { session, sessionName, sessionStore } = params;
   const logPath = sessionStore.resolveAppLogPath(sessionName);
   const metadata = getAppLogPathMetadata(logPath);
-  const status = resolveSessionLogStatus(session);
+  const status = resolveSessionLogStatus(session, backend);
   return {
     ok: true,
     data: {
@@ -478,13 +470,16 @@ function handleLogsPath(
 }
 
 async function handleLogsDoctor(
-  session: SessionState,
-  sessionName: string,
-  sessionStore: SessionStore,
+  params: LogsHandlerParams,
+  doctor: Readonly<{
+    backend: LogBackend;
+    checks: Readonly<Record<string, boolean>>;
+    notes: readonly string[];
+  }>,
 ): Promise<DaemonResponse> {
+  const { session, sessionName, sessionStore } = params;
   const logPath = sessionStore.resolveAppLogPath(sessionName);
-  const doctor = await runAppLogDoctor(session.device, session.appBundleId);
-  const status = resolveSessionLogStatus(session);
+  const status = resolveSessionLogStatus(session, doctor.backend);
   return {
     ok: true,
     data: {
@@ -502,224 +497,140 @@ async function handleLogsDoctor(
 }
 
 function handleLogsMark(
-  req: DaemonRequest,
+  marker: string,
   sessionName: string,
   sessionStore: SessionStore,
 ): DaemonResponse {
-  const marker = req.positionals?.slice(1).join(' ') ?? '';
   const logPath = sessionStore.resolveAppLogPath(sessionName);
   appendAppLogMarker(logPath, marker);
   return { ok: true, data: { path: logPath, marked: true } };
 }
 
-async function handleLogsClear(
-  session: SessionState,
-  sessionName: string,
-  sessionStore: SessionStore,
-  restart: boolean,
-): Promise<DaemonResponse> {
-  if (session.appLog && !restart) {
+function handleLogsClear(params: LogsHandlerParams): DaemonResponse {
+  const { session, sessionName, sessionStore } = params;
+  if (session.appLog) {
     return errorResponse(
       'INVALID_ARGS',
       'logs clear requires logs to be stopped first; run logs stop',
     );
   }
   const logPath = sessionStore.resolveAppLogPath(sessionName);
-  if (!restart) {
-    const cleared = clearAppLogFiles(logPath);
-    sessionStore.set(sessionName, { ...session, appLogFailure: undefined });
-    return { ok: true, data: cleared };
-  }
-  const appBundleId = session.appBundleId;
-  if (!appBundleId) {
-    return errorResponse(
-      'INVALID_ARGS',
-      'logs clear --restart requires an app session; run open <app> first',
-    );
-  }
-
-  if (session.appLog) {
-    await stopAppLog(session.appLog);
-  }
   const cleared = clearAppLogFiles(logPath);
-  const appLogPidPath = sessionStore.resolveAppLogPidPath(sessionName);
-  try {
-    const appLogStream = await startAppLog(session.device, appBundleId, logPath, appLogPidPath);
-    sessionStore.set(sessionName, {
-      ...session,
-      appLog: buildSessionAppLog(session, logPath, appLogStream),
-      appLogFailure: undefined,
+  clearSessionAppLogFailure({ session, sessionName, sessionStore });
+  return { ok: true, data: cleared };
+}
+
+async function handleLogsClearRestart(
+  params: LogsHandlerParams,
+  appBundleId: string,
+  owner: RuntimeOwnerRef,
+  start: AppLogRuntimeOperations['appLogStart'],
+): Promise<DaemonResponse> {
+  const { session, sessionName, sessionStore } = params;
+  if (session.appLog) {
+    await finishSessionAppLog({
+      session,
+      sessionName,
+      sessionStore,
+      resourcePath: resolveAppLogResourcePath(sessionStore.resolveSessionDir(sessionName)),
     });
-    return { ok: true, data: { ...cleared, restarted: true } };
-  } catch (err) {
-    return storeAppLogStartFailure(sessionStore, sessionName, session, err);
   }
+  const logPath = sessionStore.resolveAppLogPath(sessionName);
+  const cleared = clearAppLogFiles(logPath);
+  const started = await startSessionAppLog(params, appBundleId, start, owner);
+  return started.ok ? { ok: true, data: { ...cleared, restarted: true } } : started;
 }
 
 async function handleLogsStart(
-  session: SessionState,
-  sessionName: string,
-  sessionStore: SessionStore,
+  params: LogsHandlerParams,
+  appBundleId: string,
+  owner: RuntimeOwnerRef,
+  start: AppLogRuntimeOperations['appLogStart'],
 ): Promise<DaemonResponse> {
+  const { session } = params;
   if (session.appLog) {
     return errorResponse('INVALID_ARGS', 'app log already streaming; run logs stop first');
   }
-  if (!session.appBundleId) {
-    return errorResponse(
-      'INVALID_ARGS',
-      'logs start requires an app session; run open <app> first',
-    );
-  }
-
-  const appLogPath = sessionStore.resolveAppLogPath(sessionName);
-  const appLogPidPath = sessionStore.resolveAppLogPidPath(sessionName);
-  try {
-    const appLogStream = await startAppLog(
-      session.device,
-      session.appBundleId,
-      appLogPath,
-      appLogPidPath,
-    );
-    sessionStore.set(sessionName, {
-      ...session,
-      appLog: buildSessionAppLog(session, appLogPath, appLogStream),
-      appLogFailure: undefined,
-    });
-    return { ok: true, data: { path: appLogPath, started: true } };
-  } catch (err) {
-    return storeAppLogStartFailure(sessionStore, sessionName, session, err);
-  }
+  return await startSessionAppLog(params, appBundleId, start, owner);
 }
 
-async function handleLogsStop(
-  session: SessionState,
-  sessionName: string,
-  sessionStore: SessionStore,
-): Promise<DaemonResponse> {
+async function handleLogsStop(params: LogsHandlerParams): Promise<DaemonResponse> {
+  const { session, sessionName, sessionStore } = params;
   if (!session.appLog) {
     return errorResponse('INVALID_ARGS', 'no app log stream active');
   }
-  const outPath = session.appLog.outPath;
-  await stopAppLog(session.appLog);
-  sessionStore.set(sessionName, { ...session, appLog: undefined, appLogFailure: undefined });
+  const outPath = sessionStore.resolveAppLogPath(sessionName);
+  await finishSessionAppLog({
+    session,
+    sessionName,
+    sessionStore,
+    resourcePath: resolveAppLogResourcePath(sessionStore.resolveSessionDir(sessionName)),
+  });
   return { ok: true, data: { path: outPath, stopped: true } };
 }
 
-// ---------------------------------------------------------------------------
-// network
-// ---------------------------------------------------------------------------
-
-async function handleNetworkCommand(params: ObservabilityParams): Promise<DaemonResponse> {
-  const request = resolveNetworkCommandRequest(params);
-  if (!request.ok) return request;
-  const { include, maxEntries, session } = request;
-
-  if (session.device.platform === 'web') {
-    return await handleWebNetworkCommand({ include, maxEntries });
-  }
-
-  const capture = await readSessionNetworkCapture({
-    device: session.device,
-    appBundleId: session.appBundleId,
-    appLogState: session.appLog?.getState(),
-    appLogStartedAt: session.appLog?.startedAt,
-    appLogPath: params.sessionStore.resolveAppLogPath(params.sessionName),
-    maxEntries,
-    include,
-    maxPayloadChars: 2048,
-    maxScanLines: 4000,
-  });
-
-  return {
-    ok: true,
-    data: {
-      ...capture.dump,
-      active: Boolean(session.appLog),
-      state: session.appLog?.getState() ?? 'inactive',
-      backend: capture.backend,
-      notes: capture.notes,
-    },
-  };
-}
-
-async function handleWebNetworkCommand(params: {
-  include: NetworkIncludeMode;
-  maxEntries: number;
-}): Promise<DaemonResponse> {
-  const provider = resolveWebProvider();
-  if (!provider.dumpNetwork) {
-    return errorResponse('UNSUPPORTED_OPERATION', 'network is not supported by this web provider');
-  }
+async function startSessionAppLog(
+  params: LogsHandlerParams,
+  appBundleId: string,
+  start: AppLogRuntimeOperations['appLogStart'],
+  owner: RuntimeOwnerRef,
+): Promise<DaemonResponse> {
+  const { session, sessionName, sessionStore } = params;
+  const outputPath = sessionStore.resolveAppLogPath(sessionName);
+  const resourcePath = resolveAppLogResourcePath(sessionStore.resolveSessionDir(sessionName));
   try {
-    const result = await provider.dumpNetwork({
-      include: params.include,
-      limit: params.maxEntries,
+    const fence = createNextAppLogFence({
+      ledger: params.appLogAdmissionLedger,
+      resourcePath,
+      device: session.device,
     });
-    return {
-      ok: true,
-      data: {
-        entries: result.entries,
-        active: true,
-        state: 'active',
-        backend: result.backend ?? 'agent-browser',
-        include: params.include,
-        matchedLines: result.entries.length,
-        scannedLines: result.entries.length,
-        limits: {
-          maxEntries: params.maxEntries,
-          maxPayloadChars: 2048,
-          maxScanLines: result.entries.length,
-        },
-        notes: result.notes,
-      },
-    };
+    const result = await start({
+      sessionId: sessionName,
+      appBundleId,
+      outputPath,
+      pidPath: sessionStore.resolveAppLogPidPath(sessionName),
+      fence,
+    });
+    await adoptStartedSessionAppLog({
+      admissionLedger: params.appLogAdmissionLedger,
+      session,
+      sessionName,
+      sessionStore,
+      resourcePath,
+      device: session.device,
+      owner,
+      fence,
+      pendingHandle: result.pendingHandle,
+      envelope: result.envelope,
+      throwIfCanceled: params.throwIfCanceled ?? (() => {}),
+    });
+    return { ok: true, data: { path: outputPath, started: true } };
   } catch (error) {
-    return { ok: false, error: normalizeError(error) };
+    const normalized = recordSessionAppLogFailure({
+      session,
+      sessionName,
+      sessionStore,
+      error,
+    });
+    return { ok: false, error: normalized };
   }
 }
-
-function resolveNetworkCommandRequest(
-  params: ObservabilityParams,
-):
-  | { ok: true; session: SessionState; maxEntries: number; include: NetworkIncludeMode }
-  | DaemonFailureResponse {
-  const { req, sessionName, sessionStore } = params;
-  const session = sessionStore.get(sessionName);
-  if (!session) {
-    return errorResponse('SESSION_NOT_FOUND', 'network requires an active session');
+function requireLogsHandlerParams(
+  params: ObservabilityParams & { session: SessionState },
+): LogsHandlerParams {
+  if (!params.bindDevice) {
+    throw new AppError('COMMAND_FAILED', 'Device runtime gateway is not configured', {
+      reason: 'runtime-gateway-missing',
+    });
   }
-  const unsupported = requireCommandSupported('network', session.device);
-  if (unsupported) return unsupported;
-
-  const action = (req.positionals?.[0] ?? 'dump').toLowerCase();
-  if (!NETWORK_ACTIONS.includes(action as (typeof NETWORK_ACTIONS)[number])) {
-    return errorResponse('INVALID_ARGS', NETWORK_ACTIONS_MESSAGE);
+  if (!params.appLogAdmissionLedger) {
+    throw new AppError('COMMAND_FAILED', 'App-log admission ledger is not configured', {
+      reason: 'runtime-gateway-missing',
+    });
   }
-
-  const maxEntries = req.positionals?.[1] ? Number.parseInt(req.positionals[1], 10) : 25;
-  if (!Number.isInteger(maxEntries) || maxEntries < 1 || maxEntries > 200) {
-    return errorResponse('INVALID_ARGS', 'network dump limit must be an integer in range 1..200');
-  }
-
-  const includeValidation = resolveNetworkIncludeMode(req);
-  if (!includeValidation.ok) return includeValidation;
-  return { ok: true, session, maxEntries, include: includeValidation.include };
-}
-
-function resolveNetworkIncludeMode(
-  req: DaemonRequest,
-): { ok: true; include: NetworkIncludeMode } | DaemonFailureResponse {
-  const positionalInclude = req.positionals?.[2]?.toLowerCase();
-  const flagInclude = req.flags?.networkInclude;
-  if (positionalInclude && flagInclude && positionalInclude !== flagInclude) {
-    return errorResponse(
-      'INVALID_ARGS',
-      'network include mode was provided both positionally and via --include with different values',
-    );
-  }
-  const requestedInclude = (flagInclude ?? positionalInclude ?? 'summary').toLowerCase();
-  if (!NETWORK_INCLUDE_MODES.includes(requestedInclude as (typeof NETWORK_INCLUDE_MODES)[number])) {
-    return errorResponse('INVALID_ARGS', NETWORK_INCLUDE_MESSAGE);
-  }
-  return { ok: true, include: requestedInclude as NetworkIncludeMode };
+  return {
+    ...params,
+    bindDevice: params.bindDevice,
+    appLogAdmissionLedger: params.appLogAdmissionLedger,
+  };
 }

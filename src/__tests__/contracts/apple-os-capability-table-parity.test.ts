@@ -72,7 +72,6 @@ const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
   install: supportsAppInstallation,
   reinstall: supportsAppInstallation,
   'install-from-source': supportsAppInstallation,
-  logs: supportsCoreDevicePhysicalOperation,
   perf: supportsCoreDevicePhysicalOperation,
   record: supportsCoreDevicePhysicalOperation,
   push: isNotMacOs,
@@ -105,7 +104,6 @@ const HINT_REF: Record<string, (device: DeviceInfo) => string | undefined> = {
   install: coreDeviceOnlyPhysicalOperationHint,
   reinstall: coreDeviceOnlyPhysicalOperationHint,
   'install-from-source': coreDeviceOnlyPhysicalOperationHint,
-  logs: coreDeviceOnlyPhysicalOperationHint,
   perf: coreDeviceOnlyPhysicalOperationHint,
   record: coreDeviceOnlyPhysicalOperationHint,
   'tv-remote': (device) => {

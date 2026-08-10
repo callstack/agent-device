@@ -34,10 +34,110 @@ export {
 } from '../audio-probe-support.ts';
 export type { PlatformPlugin } from '../platform-plugin.ts';
 export { assertCommandPlatformExecution } from '../command-platform-execution.ts';
+export type { CommandPlatformExecution } from '../command-platform-execution.ts';
+export { AsyncCleanupStack, PendingTransferGuard } from '../async-lifecycle.ts';
+export {
+  localRuntimeOwner,
+  narrowDeviceBinding,
+  providerRuntimeOwner,
+  runtimeOwnerKey,
+  runtimeUse,
+  sameRuntimeOwner,
+} from '../platform-runtime.ts';
 export type {
-  CommandPlatformExecution,
+  BoundDeviceRuntime,
+  DeviceBinding,
+  DeviceBindingIntent,
+  DeviceBindingRequest,
+  DeviceRuntimeGateway,
+  DeviceRuntimeOwner,
+  ResourceOwnershipFence,
+  RuntimeDeviceShape,
+  RuntimeFacts,
+  RuntimeOperationFact,
+  RuntimeOperationKey,
+  RuntimeOperationUnavailability,
+  RuntimeOwnerRef,
+  RuntimePlatformModule,
+  RuntimeProviderMode,
+  RuntimeUse,
   RuntimeUseDeclaration,
-} from '../command-platform-execution.ts';
+} from '../platform-runtime.ts';
+export type {
+  DurableDescriptorBodyDecodeOutcome,
+  DurableDescriptorCodec,
+  DurableEnvelopeDecodeOutcome,
+  DurableResourceEnvelope,
+  DurableResourceLifecycleState,
+  EncodedDurableDescriptor,
+} from '../durable-resource-envelope.ts';
+export { isConfirmedCleanup } from '../durable-resource.ts';
+export type {
+  CleanupOutcome,
+  CleanupPendingReason,
+  FinishOutcome,
+  LiveResourceHandle,
+  ReattachOutcome,
+  ResourceUnreattachableReason,
+} from '../durable-resource.ts';
+export { APP_LOG_RESOURCE_KIND } from '../app-log-runtime.ts';
+export type {
+  AppLogBackgroundProcess,
+  AppLogBackgroundProcessRequest,
+  AppLogCompletion,
+  AppLogFailure,
+  AppLogLiveHandle,
+  AppLogLiveSnapshot,
+  AppLogLiveState,
+  AppLogOutputSink,
+  AppLogProcessMarker,
+  AppLogProcessMarkerReadOutcome,
+  AppLogProcessOwnership,
+  AppLogProcessCommand,
+  AppLogProcessStart,
+  AppLogProcessTransport,
+  AppLogRuntimeHost,
+  AppLogRuntimeOperations,
+  AppLogSessionArtifacts,
+  AppLogStartInput,
+  AppLogStartResult,
+} from '../app-log-runtime.ts';
+export type { NetworkDump, NetworkDumpParserOptions } from '../network-traffic.ts';
+export type {
+  NetworkAppLogRead,
+  NetworkAppLogSnapshot,
+  NetworkDumpInput,
+  NetworkDumpResult,
+  NetworkProviderDump,
+  NetworkProviderDumpResult,
+  NetworkProviderEntry,
+  NetworkRuntimeHost,
+  NetworkRuntimeOperations,
+  NetworkTransport,
+} from '../network-runtime.ts';
+export {
+  networkAdmissionUse,
+  networkDumpUse,
+  resolveNetworkRuntimePlan,
+} from '../network-runtime-plan.ts';
+export type {
+  NetworkRuntimeAction,
+  NetworkRuntimePlan,
+  NetworkRuntimePlanInput,
+} from '../network-runtime-plan.ts';
+export type {
+  PlatformRuntimeHost,
+  PlatformRuntimeModule,
+  PlatformRuntimeOperations,
+  PlatformRuntimeOwner,
+  PlatformRuntimeProviderModule,
+} from '../platform-runtime-operations.ts';
+export {
+  appLogAdmissionUse,
+  appLogRuntimePlanUses,
+  resolveLogsRuntimePlan,
+} from '../logs-runtime-plan.ts';
+export type { LogsRuntimePlan, LogsRuntimePlanInput } from '../logs-runtime-plan.ts';
 export type { PlatformGatedProviderResolverKey } from '../platform-providers.ts';
 export type { RunnerLogicalLeaseContext } from '../runner-lease-context.ts';
 export type {

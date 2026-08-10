@@ -32,8 +32,6 @@ const androidPlugin = {
         device.target === 'tv' ? undefined : 'tv-remote is supported only on Android TV targets.',
     },
   },
-  // Wraps the Android arm of `resolveLogBackend`: every Android device -> 'android'.
-  appLog: { resolveBackend: () => 'android' },
   // Wraps the Android arm of `supportsPlatformPerfMetrics`: every Android device
   // reports perf-metrics support. `metricsSamplerTag` wraps the Android arm of the
   // former `buildPerfResponseData` sampling branch: every supported Android device
@@ -55,7 +53,6 @@ const harmonyosPlugin = {
   id: 'harmonyos',
   platforms: ['harmonyos'],
   capability: { bucket: 'harmonyos' },
-  appLog: { resolveBackend: () => 'harmonyos' },
   perf: { supportsMetrics: () => true, metricsSamplerTag: () => 'harmonyos' },
   // HarmonyOS exposes the system recorder only on physical devices. The backend
   // validates its whole-screen-only scope before starting the service.

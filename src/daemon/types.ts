@@ -5,7 +5,6 @@ import type {
   PreresolvedInteractionTarget,
   ScrollDirection,
 } from '@agent-device/contracts/interaction';
-import type { LogBackend } from '@agent-device/contracts/observability';
 import type { RecordingExportQuality, RecordingScope } from '@agent-device/contracts/recording';
 import type { SessionAction, SessionSurface } from '@agent-device/contracts/session';
 import type {
@@ -18,14 +17,19 @@ import type {
   SessionRuntimeHints as PublicSessionRuntimeHints,
   DaemonRequest as WireRequest,
 } from '@agent-device/kernel/contracts';
-import type { DeviceInfo, Platform, PlatformSelector } from '@agent-device/kernel/device';
+import type { DeviceInfo, PlatformSelector } from '@agent-device/kernel/device';
 import type { Rect, SnapshotState, SnapshotCaptureBackend } from '@agent-device/kernel/snapshot';
 import type { ExecBackgroundResult, ExecResult } from '../utils/exec.ts';
 // Type-only import; erased at runtime. ref-frame.ts imports SessionState from
 // here, so this back-edge must stay type-only to avoid a runtime cycle.
 import type { SnapshotDiagnosticsState } from '@agent-device/contracts/capture';
 import type { DeviceLease } from '@agent-device/contracts/device';
-import type { AudioProbeSource } from '@agent-device/contracts/platform';
+import type {
+  AudioProbeSource,
+  AppLogFailure,
+  AppLogLiveHandle,
+  DurableResourceEnvelope,
+} from '@agent-device/contracts/platform';
 import type { AndroidNativePerfSession } from '../platforms/android/perf.ts';
 import type { SessionScriptPublicationState } from './session-script-publication-state.ts';
 import type {
@@ -36,7 +40,6 @@ import type {
   ReplayTargetGuardDenotation,
   TargetAnnotationV1,
 } from '@agent-device/contracts/replay';
-import type { AppLogFailure, AppLogState } from './app-log-process.ts';
 import type { RefFrameScope, RefFrameState } from './ref-frame.ts';
 export type DaemonInstallSource = PublicDaemonInstallSource;
 export type SessionRuntimeHints = PublicSessionRuntimeHints;
@@ -520,15 +523,14 @@ export type SessionState = {
     | (SessionRecordingBase & {
         platform: 'web';
       });
-  /** Session-scoped app log stream; logs written to outPath for agent to grep */
+  /**
+   * Neutral session-owned app-log resource. Durable coordinates are persisted
+   * independently; the in-memory handle is never serialized or reconstructed
+   * by SessionStore.
+   */
   appLog?: {
-    platform: Platform;
-    backend: LogBackend;
-    outPath: string;
-    startedAt: number;
-    getState: () => AppLogState;
-    stop: () => Promise<void>;
-    wait: Promise<ExecResult>;
+    handle: AppLogLiveHandle;
+    envelope: DurableResourceEnvelope<'app-log'>;
   };
   appLogFailure?: AppLogFailure;
 };

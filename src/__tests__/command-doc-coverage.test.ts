@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'vitest';
 import { PUBLIC_COMMANDS, isKnownCliCommandName } from '../command-catalog.ts';
 import { cliCommandAlias } from '../commands/cli-command-aliases.ts';
+import { getCliCommandSchema } from '../cli-schema/command-schema.ts';
+import { buildCommandUsage } from '../cli-schema/usage.ts';
 
 // Enumerates the public command surface (`PUBLIC_COMMANDS`, derived from the
 // command descriptor registry) against the human-facing command reference at
@@ -29,29 +31,52 @@ const UNDOCUMENTED_PUBLIC_COMMAND_WAIVERS: readonly CommandDocWaiver[] = [];
 // companion binary). Empty today.
 const UNKNOWN_DOCUMENTED_COMMAND_WAIVERS: readonly CommandDocWaiver[] = [];
 
-// Extracts the set of `agent-device <token>` command tokens documented inside
-// fenced code blocks, mapped to the 1-based line where each first appears. Prose
-// mentions outside code fences are ignored on purpose: only executable usage
-// lines count as "documenting" a command, so a passing reference like
-// "the effective agent-device state dir" is not read as an `agent-device state`
-// command.
-function extractDocumentedCommandTokens(markdown: string): Map<string, number> {
-  const documented = new Map<string, number>();
+// Yields the lines inside fenced code blocks with their 1-based line numbers.
+// Prose outside code fences is skipped on purpose: only executable usage lines
+// count as "documenting" a command, so a passing reference like "the effective
+// agent-device state dir" is not read as an `agent-device state` command.
+function* fencedLines(markdown: string): Generator<{ text: string; lineNumber: number }> {
   let insideFence = false;
   const lines = markdown.split('\n');
   for (let index = 0; index < lines.length; index++) {
-    const line = lines[index] ?? '';
-    if (/^\s*(?:```|~~~)/.test(line)) {
+    const text = lines[index] ?? '';
+    if (/^\s*(?:```|~~~)/.test(text)) {
       insideFence = !insideFence;
       continue;
     }
-    if (!insideFence) continue;
-    const token = /^\s*agent-device\s+([a-z0-9-]+)/.exec(line)?.[1];
+    if (insideFence) yield { text, lineNumber: index + 1 };
+  }
+}
+
+// Extracts the set of `agent-device <token>` command tokens documented inside
+// fenced code blocks, mapped to the 1-based line where each first appears.
+function extractDocumentedCommandTokens(markdown: string): Map<string, number> {
+  const documented = new Map<string, number>();
+  for (const { text, lineNumber } of fencedLines(markdown)) {
+    const token = /^\s*agent-device\s+([a-z0-9-]+)/.exec(text)?.[1];
     if (token !== undefined && !documented.has(token)) {
-      documented.set(token, index + 1);
+      documented.set(token, lineNumber);
     }
   }
   return documented;
+}
+
+// Locates a verbatim executable usage line inside a code block. Command names
+// are covered by the token checks above; this is the stricter per-command gate
+// that keeps a published invocation identical to the schema that produces it.
+function findUsageLine(markdown: string, usageLine: string): number | undefined {
+  for (const { text, lineNumber } of fencedLines(markdown)) {
+    if (text.trim() === usageLine) return lineNumber;
+  }
+  return undefined;
+}
+
+// The canonical `snapshot` invocation, derived from the command schema rather
+// than restated here: `snapshot` grew `--actions`, `--force-full`, and
+// `--timeout` while the command reference still published a three-flag usage
+// line, so the flag list must stay owned by the schema.
+function canonicalSnapshotUsageLine(): string {
+  return `agent-device ${buildCommandUsage('snapshot', getCliCommandSchema('snapshot'))}`;
 }
 
 function isRegistryCommandToken(token: string): boolean {
@@ -111,6 +136,14 @@ function undocumentedMessage(missing: readonly string[]): string {
   );
 }
 
+function canonicalUsageMessage(usageLine: string): string {
+  return (
+    `${COMMANDS_DOC_PATH} does not publish the canonical usage line \`${usageLine}\`. ` +
+    'The command schema owns CLI syntax: update the documented code block to match it rather ' +
+    'than editing this expectation.'
+  );
+}
+
 function unknownMessage(unknown: readonly string[]): string {
   return (
     `${COMMANDS_DOC_PATH} documents command token(s) absent from the command registry: ` +
@@ -140,6 +173,15 @@ describe('command reference doc coverage', () => {
       UNKNOWN_DOCUMENTED_COMMAND_WAIVERS,
     );
     assert.deepEqual(unknown, [], unknownMessage(unknown));
+  });
+
+  test('commands.md publishes the canonical snapshot CLI usage', () => {
+    const usageLine = canonicalSnapshotUsageLine();
+    assert.notEqual(
+      findUsageLine(markdown, usageLine),
+      undefined,
+      canonicalUsageMessage(usageLine),
+    );
   });
 
   test('no stale waivers', () => {
@@ -214,6 +256,15 @@ describe('command reference doc coverage gate behavior', () => {
     const message = unknownMessage(unknown);
     assert.match(message, /website\/docs\/docs\/commands\.md/);
     assert.match(message, /retired-command/);
+  });
+
+  test('a drifted snapshot usage line fails, naming file and canonical usage', () => {
+    const usageLine = canonicalSnapshotUsageLine();
+    const driftedDocs = markdown.replaceAll(usageLine, 'agent-device snapshot [-i]');
+    assert.equal(findUsageLine(driftedDocs, usageLine), undefined);
+    const message = canonicalUsageMessage(usageLine);
+    assert.match(message, /website\/docs\/docs\/commands\.md/);
+    assert.ok(message.includes(usageLine), 'the failure names the usage line the schema produces');
   });
 
   test('a waiver suppresses an intentional forward omission', () => {

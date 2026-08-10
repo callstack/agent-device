@@ -2,12 +2,16 @@
 
 ## Status
 
-Accepted for staged adoption (2026-08-09). Checkpoint outcome: **pending**. Only the
-platform-module substrate and complete `devices`, `logs`, and `network` command cutovers are
-authorized before the checkpoint. Daemon-owned generic session teardown may invoke the neutral
-app-log disposal contract without changing `close`'s legacy platform-execution owner. If another
-command's platform adapter must change, this Status must name its complete unit before substrate work
-begins. Broader migration requires this Status to record **continue**.
+Accepted for staged adoption (2026-08-09). Checkpoint outcome: **continue** (2026-08-10), under the
+revised cumulative package budget accepted in issue 1704. The clean checkpoint is measured from the
+original baseline `44c298d7f3a0ef84bc47f34c54d88b6c9eeb0df2`, through merged `devices`
+`c06bed9f773a27ae0a02cb012570def2f2d0b90e`, to `logs`
+`188795386466cfdba5d5748db5c9d3477e70eb4e` and `network`
+`457fafe6399a95a4ddbfac57f02b3a7fe4157a54`. The earlier checkpoints at `99f5af1b7` and `d73bdb4ae`
+are superseded and were not behavior-passing: later review found correctness failures and the first
+budget decision still used the unrevised +3% limit. The required cleanup package, explicit budget
+decision, and clean rerun are now complete. The next authorized command unit is recordings onto the
+durable-capture substrate; this decision does not authorize an unbounded platform migration.
 
 During the `devices` unit, doctor discovery, replay-test sharding, Apple simulator hints, and Android
 emulator lifecycle keep their existing command execution owners while consuming the same injected,
@@ -91,6 +95,15 @@ session state, command catalogs/grammar, root implementation files, sibling plat
 process primitives outside the shared host-command port. R11 applies these rules to static, type-only,
 dynamic, and re-export edges; package-owned tests may import their own public façade. Contracts may
 depend on kernel vocabulary but never on concrete platform packages or daemon implementation types.
+
+Durable-capture mechanics shared by more than one implementation live in the private
+`@agent-device/capture-kit` workspace package, with the enforced direction
+`kernel < contracts < capture-kit < platform/provider/daemon`. Contracts retains pure vocabulary and
+plan models; process supervision, live-handle implementations, recovery helpers, runtime codecs, and
+capture parsers do not live there. `capture-kit` is a domain package for durable capture, not a generic
+platform-common package, and it preserves the package façades' implementation-lazy loading boundary.
+Its introduction carries the normal workspace-package compliance surface: `check:affected`
+selection, R11/R13 package enumeration, and the composite typecheck project list.
 
 Canonical family, `AppleOS`, public-leaf, and selector identity remain declared in
 `@agent-device/kernel/device`. Platform-module metadata references one canonical family; during
@@ -291,6 +304,14 @@ contract handle beside its descriptor and metadata; the field has one R7 transit
 descriptor and neutral metadata enter the authoritative persisted recovery record. Concrete platform
 classes, provider clients, child handles, timers, transports, and wait promises enter neither store.
 
+A daemon-owned, process-lifetime admission ledger may retain bounded cleanup uncertainty that has no
+honest durable representation, but it is not a second live-resource store: it contains no handle or
+descriptor, never supersedes the persisted manifest, and is keyed by canonical device identity when
+that identity is known. Evidence that can be checked again, such as a retained legacy marker path, is
+revalidated at admission so manual recovery can unblock the matching device without a daemon restart.
+Unknown-identity evidence remains globally fail-closed, while undurable in-memory blocks expire only
+under an explicit bounded policy with diagnostics.
+
 Persisted JSON re-enters as `unknown`. Contracts first validate a neutral envelope containing resource
 kind/envelope version, session/device identity, exact owner reference, fence, and lifecycle state.
 Only after exact-owner selection does that facet's total codec decode its descriptor body. Invalid or
@@ -330,11 +351,14 @@ but reattachment never scans telemetry to rebuild state.
 
 Every authoritative home exposes a deterministic facet-owned lookup or enumeration path after
 process loss. Its neutral record carries session/device identity, the exact runtime-owner reference,
-descriptor and metadata, an ownership/fence token, and a lifecycle state sufficient to distinguish
-starting, active, completing, completed, and cleanup-pending recovery. A new handle is not exposed
-until the persisted ownership fence is acquired. Every finish/cleanup attempt holds that ownership
-guard through destructive work and the persisted transition, or delegates to an operation that
-atomically enforces the token, so a prior owner cannot later terminate a transferred resource.
+descriptor and metadata, an ownership/fence token, and one of two persisted lifecycle states:
+`open` or `completed`. In-progress distinctions such as starting, active, completing, and
+cleanup-pending are phase metadata on the open record, not additional lifecycle states. The fence and
+the descriptor remain authoritative across every open phase; cleanup uncertainty therefore cannot be
+encoded as a terminal lifecycle. A new handle is not exposed until the persisted ownership fence is
+acquired. Every finish/cleanup attempt holds that ownership guard through destructive work and the
+persisted transition, or delegates to an operation that atomically enforces the token, so a prior
+owner cannot later terminate a transferred resource.
 
 Persisting a descriptor does not make external-resource start and descriptor write atomic. A
 platform whose native tool cannot close that crash window retains a platform-owned orphan marker or
@@ -461,6 +485,82 @@ neutral envelope or facet-owned descriptor codec, or contains raw live mechanics
 laziness cannot be preserved; R7/R10/type-cycle pressure grows; or the landed slices add more daemon
 platform ownership than they remove.
 
+#### Checkpoint result: continue under the revised cumulative budget (2026-08-10)
+
+The final checkpoint compares `44c298d7f3a0ef84bc47f34c54d88b6c9eeb0df2` with stack head
+`457fafe6399a95a4ddbfac57f02b3a7fe4157a54` on the same host and toolchain. Merged `devices`
+`c06bed9f773a27ae0a02cb012570def2f2d0b90e` is part of that range; rebasing the remaining PRs onto it
+does not reset the denominator. The earlier `99f5af1b7` checkpoint missed a stale owned-marker wedge,
+Apple scoped-provider bypass, Android optional-recovery loss, and absolute network line-number
+regression. The later cleanup review found a cross-device retained-marker wedge, a manual-recovery
+hint that remained blocked until daemon restart, and an Android app-log stream that stayed pinned to
+the pre-relaunch app PID. Each correction was observed red before its focused test passed; the final
+admission test proves removal of the matching retained marker permits a second start in the same
+daemon process. On exact final logs head `188795386`, a controlled Android relaunch moved the app from
+PID 10952 to 11455, rotated the durable logcat marker to PID 11455, and retained both before/after
+canaries plus the new process output in one `app.log`. Guarded daemon/dead-child recovery separately
+terminalized the manifest and allowed a clean second start.
+
+The required revision package is complete:
+
+- `@agent-device/capture-kit` is the private durable-capture implementation package. Contracts keeps
+  pure runtime types and plan models; capture-kit owns process/recovery/live-handle mechanics,
+  envelope/descriptor codecs, and network parsers. The dependency order is
+  `kernel < contracts < capture-kit < platform/provider/daemon`. A planted-red gate rejects process,
+  filesystem, or timer mechanics drifting into contracts. The package is wired into affected-check
+  selection, the layering test enumeration, and the workspace typecheck project list.
+- Canonical kernel device identity replaces the duplicate encoders while facts-shape validation stays
+  separate. The bounded Android/Harmony PID owner factory lives in capture-kit; Apple and Limrun stay
+  custom, there is no network factory, and all loaders retain their lazy boundary. The managed-command
+  allowlist, unused façade exports, public Limrun runtime-module declaration leak, quadratic JSON walk,
+  and duplicate lifecycle/reconnect mechanics are gone. The temporary Android implementation files
+  introduced by the devices PR are also absent from contracts at this checkpoint.
+- Plan-declared app-session requirements replace repeated handler guards. Persisted durable lifecycle
+  is `open | completed`, with transient phase retained as metadata. A daemon-owned admission ledger
+  scopes decodable evidence by device identity, rechecks manually removed legacy markers, bounds
+  undurable blocks, and remains subordinate to the durable manifest. Discriminated teardown settles
+  app-log state, re-reads the replaced session record, then runs generic teardown, avoiding the stale
+  reference and double-cleanup path.
+
+The final gates passed:
+
+- `pnpm check:affected --run` at `457fafe63` passed 799 test files / 6,424 tests with 2,097/2,401
+  changed executable lines covered (87.34%), plus format, lint, typecheck, build/declarations,
+  published-package clean install, fallow, provider integration, replay compatibility, and
+  integration-progress checks.
+- `pnpm check:layering` passed 131 structural/model tests and scanned 1,157 production source files.
+  R11 owns 17 workspace packages behind 39 exported subpaths with no root back-imports; R13 keeps six
+  private implementation-lazy platform packages above capture-kit behind one composition root; R14
+  and R15 retain one typed route for `logs` and `network` with no legacy route.
+- Six local inventory/runtime owners, all enumerated Apple leaf/kind cells, and the production
+  BrowserStack, AWS Device Farm, and Limrun provider modes remain covered. Provider ownership and
+  inventory are fail-closed; exact-owner recovery and provider-authoritative tests prove there is no
+  provider-to-local fallback. Durable tests cover every start/persist/adopt gap, exact-owner recovery,
+  cleanup-only and descriptor-only cleanup, fencing, idempotence, and primary-error precedence.
+- R7/R10 remain at 23 writer-owned `SessionState` fields and 29 owner claims, with all 34 fields
+  classified. The largest type cycle is 46 against the 47-file ceiling, and the two external
+  production `daemon/types.ts` importers are unchanged. Checkpoint-owned `logs`/`network` platform
+  decision lines remain zero.
+
+Issue 1704 revised the budget for this checkpoint for three explicit reasons: capture-pipeline
+reliability through fenced ownership and exact recovery, durable cloud log streaming that did not
+exist in the baseline, and a reusable durable-capture substrate. This is not a new observability
+layer: the CLI-observable `logs` behavior remains parity work. The budget stays cumulative from
+`44c298d7f`; the exact clean post-revision measurement is the reviewed upper bound for this checkpoint,
+not a reusable allowance for future units:
+
+| Metric | Original baseline | Revised cumulative bound / checkpoint | Change |
+| --- | ---: | ---: | ---: |
+| Raw JavaScript | 2,036,067 B | 2,131,689 B | +95,622 B (+4.696%) |
+| Gzipped JavaScript | 659,646 B | 695,134 B | +35,488 B (+5.380%) |
+| npm tarball | 797,027 B | 826,761 B | +29,734 B (+3.731%) |
+| npm unpacked | 2,781,186 B | 2,878,492 B | +97,306 B (+3.499%) |
+
+The controlled 15-run startup medians showed no regression (`--version` 94.5 ms to 47.4 ms;
+`--help` 91.2 ms to 72.0 ms). Module-level source-map inspection found no duplicate implementation
+emission; the distribution cost is the accepted reliability/cloud/substrate decision above. Future
+units must define and review their own cumulative budget rather than inheriting this headroom.
+
 The tracking issue owns command order, PR/file lists, test-only compatibility fixtures, exact
 benchmark commands and thresholds, raw evidence, and reviewers. Temporary fixtures never authorize
 a production bridge, duplicate route, or recorded package back-import. After the checkpoint, this
@@ -525,9 +625,9 @@ boundaries, and the early adoption checkpoint keep that coexistence shippable an
   explicitly preserves the same no-state-from-events rule.
 - **A separate process-local resource ledger beside `SessionState` for live handles:** rejected. The
   session store is in-memory, so live `SessionState` already is the process-local home; a parallel
-  ledger keyed by the same session/resource identity would duplicate the ownership its R7 transition
-  owner already governs. The live/persisted boundary, not a second live store, is the protection:
-  only the descriptor and neutral metadata enter the persisted recovery record.
+  handle/descriptor store would duplicate the ownership its R7 transition owner governs. The accepted
+  admission ledger is narrower: it holds only bounded cleanup-block evidence, contains no live handle
+  or descriptor, and never replaces the authoritative manifest.
 - **Rely only on performance thresholds for lazy loading:** rejected. Thresholds catch regressions
   late and can pass while unrelated implementation graphs load; the import/evaluation shape is also
   contract-tested.

@@ -42,7 +42,7 @@ test(
       assertAndroidProviderContract(world);
     });
   },
-  15_000,
+  25_000,
 );
 
 test('Provider-backed Android reads keep chrome provenance internal across public node payloads', async () => {

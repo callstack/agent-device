@@ -8,6 +8,7 @@ import {
   effectiveWriteForce,
   isSessionScriptPublished,
   markCloseGeneratedPublicationDone,
+  recordSessionAfterSaveScriptFlag,
 } from '../session-script-publication-capability.ts';
 import { abortRepairTransaction, isRepairArmedSession } from '../session-replay-transaction.ts';
 
@@ -80,7 +81,9 @@ export function finalizeOrdinaryCloseScript(params: {
   // The recorded close action already armed target/force through the recorder's flag ingress.
   // On a platform-close failure that action was never recorded; the log still publishes, but —
   // as before this migration — to the session default, not the request's explicit path.
-  if (req.flags?.saveScript) session.recordSession = true;
+  if (req.flags?.saveScript) {
+    session.recordSession = recordSessionAfterSaveScriptFlag(session, true);
+  }
 
   try {
     const result = sessionStore.writeSessionLog(session, {

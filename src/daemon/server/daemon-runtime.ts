@@ -1,21 +1,23 @@
 import crypto from 'node:crypto';
 import { asAppError, AppError } from '@agent-device/kernel/errors';
 import { SessionStore } from '../session-store.ts';
-import { cleanupStaleAppLogProcesses } from '../app-log-process.ts';
 import { resolveDaemonPaths, resolveDaemonServerMode } from '../config.ts';
 import { createDaemonHttpServer } from './http-server.ts';
 import { trackDownloadableArtifact } from '../artifact-tracking.ts';
 import { createProviderDeviceRuntimeRequestProviders } from '../../provider-device-runtime.ts';
-import { createPlatformDeviceInventoryGateways } from '../../platform-runtime.ts';
 import {
-  createDefaultProviderDeviceRuntimes,
+  createPlatformRuntimeGateway,
+  createPlatformDeviceInventoryGateways,
+} from '../../platform-runtime.ts';
+import {
+  createDefaultProviderRuntimeComposition,
   DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS,
 } from '../../provider-device-runtimes.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
 import { clearDaemonShutdownReport, writeDaemonShutdownReport } from '../daemon-shutdown-report.ts';
 import { createRequestHandler } from '../request-router.ts';
-import { teardownSessionResources } from '../session-teardown.ts';
+import { stopSessionAppLog, teardownSessionResources } from '../session-teardown.ts';
 import { IOS_SIMULATOR_RECORDING_STOP_ESCALATION_BUDGET_MS } from '../handlers/record-trace-ios-simulator.ts';
 import { closeDaemonServers } from './server-shutdown.ts';
 import type { DaemonInvokeFn, SessionState } from '../types.ts';
@@ -55,6 +57,12 @@ import {
   listAndroidAdbSerialsQuick,
   restoreOrphanedAndroidTestImeOnDaemonStartup,
 } from '../../platforms/android/ime-lifecycle.ts';
+import {
+  recoverAppLogResourcesAfterDaemonLock,
+  type AppLogRecoveryDiagnostic,
+} from '../app-log-resource-recovery.ts';
+import { createDaemonRecoveryPlatformScope } from '../platform-request-scope.ts';
+import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 
 const DAEMON_SESSION_TEARDOWN_TIMEOUT_MS = 5_000;
 const DAEMON_SESSION_LEASE_RELEASE_TIMEOUT_MS = 1_000;
@@ -98,7 +106,27 @@ export async function teardownDaemonSessionForShutdown(params: {
 }): Promise<void> {
   const { session, sessionStore, stateDir, stderr, beforeDelete, afterSuccessfulTeardown } = params;
   const timeoutMs = resolveDaemonSessionTeardownTimeoutMs(session);
-  const teardown = teardownSessionResources(session, session.name, stateDir).then(
+  // The ownership-fenced app-log side effect must settle while this process
+  // still owns the daemon lock. It is intentionally outside the generic
+  // teardown race so lock release and runtime shutdown cannot overtake it.
+  const appLogTeardownSucceeded = await stopSessionAppLog({ session, sessionStore }).then(
+    () => true,
+    (error) => {
+      stderr.write(
+        `Daemon app-log teardown error (${session.name}): ${
+          error instanceof Error ? error.message : String(error)
+        }\n`,
+      );
+      return false;
+    },
+  );
+  const sessionAfterAppLog = sessionStore.get(session.name) ?? session;
+  const teardown = teardownSessionResources({
+    appLog: 'already-settled',
+    session: sessionAfterAppLog,
+    sessionName: session.name,
+    stateDir,
+  }).then(
     () => true,
     (error) => {
       stderr.write(
@@ -109,13 +137,14 @@ export async function teardownDaemonSessionForShutdown(params: {
       return false;
     },
   );
-  const teardownSucceeded = await Promise.race([
+  const genericTeardownSucceeded = await Promise.race([
     teardown,
     sleep(timeoutMs).then(() => {
       stderr.write(`Daemon session teardown timed out (${session.name}).\n`);
       return false;
     }),
   ]);
+  const teardownSucceeded = appLogTeardownSucceeded && genericTeardownSucceeded;
   // ADR 0012 decision 6, R7 + commit semantics (C2/C5a): commit the healed
   // `.ad` iff the repair transaction completed, else leave a bounded
   // `REPAIR_SESSION_EXPIRED` tombstone for the reaped-before-finalize case.
@@ -140,6 +169,26 @@ export type DaemonRuntimeController = {
   token: string;
 };
 
+export async function flushDaemonStartupDiagnostics(
+  logPath: string,
+  diagnostics: readonly AppLogRecoveryDiagnostic[],
+): Promise<void> {
+  if (diagnostics.length === 0) return;
+  await withDiagnosticsScope(
+    { command: 'daemon-startup', session: 'daemon', logPath, debug: false },
+    async () => {
+      for (const diagnostic of diagnostics) {
+        emitDiagnostic({
+          level: 'warn',
+          phase: diagnostic.phase,
+          data: { resourcePath: diagnostic.resourcePath, ...diagnostic.data },
+        });
+      }
+      flushDiagnosticsToSessionFile({ force: true });
+    },
+  );
+}
+
 export async function startDaemonRuntime(
   options: DaemonRuntimeOptions = {},
 ): Promise<DaemonRuntimeController | null> {
@@ -153,14 +202,23 @@ export async function startDaemonRuntime(
   const retainArtifacts = isEnvTruthy(env.AGENT_DEVICE_RETAIN_ARTIFACTS);
   setRunnerLeaseOwnerStateDir(baseDir);
 
-  cleanupStaleAppLogProcesses(sessionsDir);
-
   const sessionStore = new SessionStore(sessionsDir);
+  const appLogAdmissionLedger = createAppLogAdmissionLedger();
   const version = readVersion();
   const token = crypto.randomBytes(24).toString('hex');
   const daemonProcessStartTime = readProcessStartTime(process.pid) ?? undefined;
   const daemonCodeSignature = resolveDaemonCodeSignature();
-  const providerDeviceRuntimes = await createDefaultProviderDeviceRuntimes(env);
+  const providerComposition = await createDefaultProviderRuntimeComposition(env);
+  const providerDeviceRuntimes = [...providerComposition.runtimes];
+  const deviceRuntimeGateway = createPlatformRuntimeGateway({
+    providerRuntimes: providerDeviceRuntimes,
+    providerModules: providerComposition.platformModules,
+    sessionsDir,
+    resolveSessionArtifacts: (sessionId) => ({
+      outputPath: sessionStore.resolveAppLogPath(sessionId),
+      pidPath: sessionStore.resolveAppLogPidPath(sessionId),
+    }),
+  });
   const providerRuntimeProviders = createProviderDeviceRuntimeRequestProviders(
     providerDeviceRuntimes,
     { providerRuntimeRequiredIds: DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS },
@@ -196,6 +254,8 @@ export async function startDaemonRuntime(
     leaseLifecycleProvider: providerRuntimeProviders.leaseLifecycleProvider,
     cloudArtifactProvider,
     deviceInventoryGateways,
+    deviceRuntimeGateway,
+    appLogAdmissionLedger,
     appleRunnerProvider: providerRuntimeProviders.appleRunnerProvider,
     providerRuntimeIds: providerRuntimeProviders.providerRuntimeIds,
     providerRuntimeRequiredIds: providerRuntimeProviders.providerRuntimeRequiredIds,
@@ -333,7 +393,35 @@ export async function startDaemonRuntime(
   let servers: DaemonServer[] = [];
   let socketPort: number | undefined;
   let httpPort: number | undefined;
+  const startupAppLogDiagnostics: AppLogRecoveryDiagnostic[] = [];
   try {
+    const { recoverLegacyAppLogMarkersAfterDaemonLock } =
+      await import('../../platform-runtime-operation-host.ts');
+    const legacyMarkerRecovery = await recoverLegacyAppLogMarkersAfterDaemonLock(sessionsDir);
+    appLogAdmissionLedger.retainLegacyMarkers(legacyMarkerRecovery.retained);
+    for (const markerPath of legacyMarkerRecovery.recovered) {
+      startupAppLogDiagnostics.push({
+        phase: 'app_log_legacy_marker_recovered',
+        resourcePath: markerPath,
+        data: {},
+      });
+    }
+    for (const retained of legacyMarkerRecovery.retained) {
+      startupAppLogDiagnostics.push({
+        phase: 'app_log_legacy_marker_retained',
+        resourcePath: retained.markerPath,
+        data: {
+          reason: retained.reason,
+          ...(retained.message === undefined ? {} : { message: retained.message }),
+        },
+      });
+    }
+    await recoverAppLogResourcesAfterDaemonLock({
+      sessionsDir,
+      gateway: deviceRuntimeGateway,
+      scope: createDaemonRecoveryPlatformScope(),
+      onDiagnostic: (diagnostic) => startupAppLogDiagnostics.push(diagnostic),
+    });
     await cleanupWebBrowserOrphansForDaemonStartup({ stateDir: baseDir, sessionStore });
     // Fire-and-forget: gated on a state-dir marker so it only touches adb when a prior run here
     // actually activated the test IME (never on hosts that don't use it, e.g. the macOS runner).
@@ -346,6 +434,7 @@ export async function startDaemonRuntime(
     socketPort = opened.socketPort;
     httpPort = opened.httpPort;
     publishDaemonInfo(socketPort, httpPort);
+    await flushDaemonStartupDiagnostics(logPath, startupAppLogDiagnostics);
     // After publication: publishDaemonInfo truncates daemon.log, so anything
     // written before it is lost — including the prune's own diagnostic.
     await pruneDeviceClaimsForDaemonStartup(logPath);
@@ -409,6 +498,7 @@ export async function startDaemonRuntime(
       },
     });
     expiredProviderLeaseReleaser.shutdown();
+    await deviceRuntimeGateway.shutdown();
     await Promise.allSettled(
       providerDeviceRuntimes.map(async (runtime) => await runtime.shutdown()),
     );

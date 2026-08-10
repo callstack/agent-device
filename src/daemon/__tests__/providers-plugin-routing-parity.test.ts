@@ -41,7 +41,7 @@ import type { DaemonRequest } from '../types.ts';
 
 registerBuiltinPlatformPlugins();
 
-// The platform-gated resolver keys, and the two ungated resolvers (no platform gate;
+// The platform-gated resolver keys, and the ungated resolver (no platform gate;
 // they apply on every platform and are NOT part of the facet).
 const GATED_KEYS: PlatformGatedProviderResolverKey[] = [
   'androidAdbProvider',
@@ -51,7 +51,7 @@ const GATED_KEYS: PlatformGatedProviderResolverKey[] = [
   'linuxToolProvider',
   'webProvider',
 ];
-const UNGATED_KEYS = ['appLogProvider', 'recordingProvider'] as const;
+const UNGATED_KEYS = ['recordingProvider'] as const;
 
 // --- INDEPENDENT verbatim copy of the former per-descriptor platform gates ---
 function gatedResolversByHand(device: DeviceInfo): Set<PlatformGatedProviderResolverKey> {
@@ -137,7 +137,7 @@ test('every family carries the providers facet with the resolvers it owns', () =
 
 // End-to-end routing proof: drive the REAL `withRequestPlatformProviderScope` with a
 // spy for every resolver and assert exactly the gated resolvers the former hand gate
-// admitted are invoked (plus the two ungated resolvers, on every platform). Each spy
+// admitted are invoked (plus the ungated resolver, on every platform). Each spy
 // returns `undefined`, so no wrapper is composed — but the resolver is still called iff
 // its gate passed, which is precisely what the former `device.platform === …` branch
 // decided. Breaking the facet flips which resolvers run and fails this test.
@@ -155,7 +155,6 @@ test('withRequestPlatformProviderScope invokes exactly the resolvers the former 
       vegaToolProvider: spy('vegaToolProvider'),
       linuxToolProvider: spy('linuxToolProvider'),
       webProvider: spy('webProvider'),
-      appLogProvider: spy('appLogProvider'),
       recordingProvider: spy('recordingProvider'),
     };
 

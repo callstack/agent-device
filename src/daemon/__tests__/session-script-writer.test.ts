@@ -680,3 +680,49 @@ test('write() publishes atomically: no stray temp file survives a successful rep
   expect(fs.readdirSync(path.dirname(outPath))).toEqual([path.basename(outPath)]);
   expect(fs.readFileSync(outPath, 'utf8')).toContain(HEAL_COMPLETE_SENTINEL);
 });
+
+// --- #1533: an ABORTED ordinary authoring recording publishes nothing, and the
+// lifecycle alone decides that — a session handed to the writer still recording
+// is refused on the strength of its terminal status ---
+
+test('#1533: write() publishes nothing for an aborted authoring lifecycle that is still recording', () => {
+  const root = mkdtempForTestSync('agent-device-script-writer-authoring-aborted-');
+  const sessionsDir = path.join(root, 'sessions');
+  const writer = new SessionScriptWriter(sessionsDir);
+  // The production shape after `open --save-script` -> `open --save-script`:
+  // the second open aborted the lifecycle AND cleared recording, then its own
+  // recorded action's `--save-script` ingress set the boolean back to true.
+  const session = makeAuthoringSession('default', {
+    scriptPublication: authoringPublication('aborted'),
+    actions: [action({ command: 'click', positionals: ['id="save"'] })],
+  });
+
+  expect(writer.write(session)).toEqual({ written: false });
+  expect(fs.existsSync(sessionsDir)).toBe(false);
+});
+
+test('#1533: the abort is terminal per-target too — an explicit --save-script path is not written either', () => {
+  const root = mkdtempForTestSync('agent-device-script-writer-authoring-aborted-explicit-');
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const outPath = path.join(root, 'flows', 'aborted.ad');
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  const session = makeAuthoringSession('default', {
+    scriptPublication: authoringPublication('aborted', { path: outPath }),
+    actions: [action({ command: 'click', positionals: ['id="save"'] })],
+  });
+
+  expect(writer.write(session, { force: true })).toEqual({ written: false });
+  expect(fs.readdirSync(path.dirname(outPath))).toEqual([]);
+});
+
+test('#1533: an ARMED authoring recording is untouched by the abort gate', () => {
+  const root = mkdtempForTestSync('agent-device-script-writer-authoring-armed-');
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const session = makeAuthoringSession('default', {
+    scriptPublication: authoringPublication('armed'),
+    actions: [action({ command: 'click', positionals: ['id="save"'] })],
+  });
+
+  const { parsed } = writeAndParse(writer, session);
+  expect(parsed.actions.map((a) => a.command)).toEqual(['click']);
+});

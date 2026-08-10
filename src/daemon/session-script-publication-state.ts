@@ -146,6 +146,17 @@ export function isRepairCommittable(state: SessionScriptPublicationState): boole
   );
 }
 
+/**
+ * #1533: terminal authoring failure — a second successful `open` ended the journey, so the
+ * recording publishes NOTHING, forever. The authoring counterpart of an aborted repair, and
+ * terminal in the same sense: the state itself answers the question, so no caller re-derives
+ * terminality from `session.recordSession`, which is an evidence-capture flag rather than a
+ * publication authorization.
+ */
+export function isAuthoringAborted(state: SessionScriptPublicationState): boolean {
+  return state.kind === 'authoring' && state.status === 'aborted';
+}
+
 /** A committed publication is idempotent: a second write no-ops rather than republishing. */
 export function isScriptPublished(state: SessionScriptPublicationState): boolean {
   if (state.kind === 'repair') return state.status === 'committed';

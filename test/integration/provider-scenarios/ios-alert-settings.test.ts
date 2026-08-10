@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import type { AppLogProvider } from '../../../src/daemon/app-log.ts';
+import {
+  providerRuntimeOwner,
+  type DeviceRuntimeGateway,
+  type PlatformRuntimeOperations,
+} from '@agent-device/contracts/platform';
+import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
+import { createTestAppLogLiveHandle } from '../../../src/__tests__/test-utils/app-log-live-handle.ts';
 import { assertFlatToolCall } from './assertions.ts';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import { createProviderScenarioHarness } from './harness.ts';
@@ -86,24 +92,14 @@ test('Provider-backed integration iOS Settings permission and alert flow uses pr
   });
   let appLogStopCount = 0;
   const appLogStarts: Array<{ appBundleId: string; outPath: string }> = [];
-  const appLogProvider: AppLogProvider = {
-    start: async ({ appBundleId, outPath }) => {
-      appLogStarts.push({ appBundleId, outPath });
-      fs.mkdirSync(path.dirname(outPath), { recursive: true });
-      fs.appendFileSync(outPath, 'Settings log stream started\n', 'utf8');
-      return {
-        backend: 'ios-simulator',
-        startedAt: Date.now(),
-        getState: () => 'active',
-        stop: async () => {
-          appLogStopCount += 1;
-        },
-        wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-      };
+  const deviceRuntimeGateway = createRecordingPlatformRuntimeGateway({
+    starts: appLogStarts,
+    stopped: () => {
+      appLogStopCount += 1;
     },
-  };
+  });
   const daemon = await createProviderScenarioHarness({
-    appLogProvider: () => appLogProvider,
+    deviceRuntimeGateway,
     appleRunnerProvider: () => appleRunnerProvider,
     appleToolProvider: () => appleTool.provider,
     deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
@@ -196,3 +192,111 @@ test('Provider-backed integration iOS Settings permission and alert flow uses pr
     await daemon.close();
   }
 });
+
+function createRecordingPlatformRuntimeGateway(params: {
+  starts: Array<{ appBundleId: string; outPath: string }>;
+  stopped(): void;
+}): DeviceRuntimeGateway<PlatformRuntimeOperations> {
+  const owner = providerRuntimeOwner('provider-scenario', 'ios-settings');
+  return {
+    bind: async ({ device }) => {
+      if (device.platform !== 'apple' || !device.appleOs) {
+        throw new TypeError('The iOS provider scenario requires an explicit Apple leaf');
+      }
+      const appleOs = device.appleOs;
+      return {
+        device,
+        owner,
+        facts: {
+          device: {
+            family: 'apple',
+            appleOs,
+            kind: device.kind,
+            ...(device.target === undefined ? {} : { target: device.target }),
+            providerMode: 'provider-runtime',
+          },
+          operations: {
+            appLogInspect: { available: true },
+            appLogDoctor: { available: true },
+            appLogStart: { available: true },
+            appLogReattach: { available: true },
+            appLogCleanup: { available: true },
+            networkDump: {
+              available: false,
+              reason: 'unsupported-provider-mode',
+            },
+          },
+        },
+        operations: {
+          appLogInspect: async () => ({ backend: 'ios-simulator' }),
+          appLogDoctor: async () => ({
+            backend: 'ios-simulator',
+            checks: { simctlAvailable: true },
+            notes: [],
+          }),
+          appLogStart: async (input) => {
+            params.starts.push({ appBundleId: input.appBundleId, outPath: input.outputPath });
+            fs.mkdirSync(path.dirname(input.outputPath), { recursive: true });
+            fs.appendFileSync(input.outputPath, 'Settings log stream started\n', 'utf8');
+            let completion:
+              | Promise<{
+                  status: 'completed';
+                  result: {
+                    backend: 'ios-simulator';
+                    outputPath: string;
+                    completedAt: number;
+                  };
+                }>
+              | undefined;
+            const finish = async () =>
+              (completion ??= (async () => {
+                params.stopped();
+                return {
+                  status: 'completed' as const,
+                  result: {
+                    backend: 'ios-simulator' as const,
+                    outputPath: input.outputPath,
+                    completedAt: Date.now(),
+                  },
+                };
+              })());
+            const handle = createTestAppLogLiveHandle({
+              inspect: () => ({
+                backend: 'ios-simulator',
+                state: 'active',
+                startedAt: Date.now(),
+              }),
+              finish,
+              forceCleanup: async () => {
+                await finish();
+                return { status: 'cleaned' };
+              },
+            });
+            return createAppLogStartResult(
+              handle,
+              createDurableResourceEnvelope({
+                resourceKind: 'app-log',
+                sessionId: input.sessionId,
+                device: {
+                  id: device.id,
+                  family: 'apple',
+                  appleOs,
+                  kind: device.kind,
+                  ...(device.target === undefined ? {} : { target: device.target }),
+                },
+                owner,
+                fence: input.fence,
+                lifecycle: 'open',
+                descriptor: { version: 1, body: { transport: 'provider-scenario' } },
+              }),
+            );
+          },
+          appLogReattach: async () => ({ status: 'missing' }),
+          appLogCleanup: async () => ({ status: 'already-missing' }),
+        },
+        [Symbol.asyncDispose]: async () => {},
+      };
+    },
+    shutdown: async () => {},
+  };
+}

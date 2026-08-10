@@ -265,7 +265,13 @@ test('session teardown fails when a real IME restore reports set-failed', async 
     await activateAndroidTestIme(ANDROID_EMULATOR, { stateDir });
     state.blockImeSetTo(LATIN_IME);
     await assert.rejects(
-      async () => await teardownSessionResources(session, session.name, stateDir),
+      async () =>
+        await teardownSessionResources({
+          appLog: 'already-settled',
+          session,
+          sessionName: session.name,
+          stateDir,
+        }),
       /android_ime: Android test IME could not be restored/,
     );
   });

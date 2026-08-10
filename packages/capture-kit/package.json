@@ -1,0 +1,17 @@
+{
+  "name": "@agent-device/capture-kit",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Private durable-capture mechanics shared by platform runtimes, providers, and daemon orchestration.",
+  "dependencies": {
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/kernel": "workspace:*"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  }
+}

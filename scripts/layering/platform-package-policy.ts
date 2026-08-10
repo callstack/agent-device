@@ -151,6 +151,8 @@ function checkSource(file: string, source: string): LayeringViolation[] {
     if (
       site.spec.startsWith('@agent-device/') &&
       !site.spec.startsWith('@agent-device/contracts/') &&
+      site.spec !== '@agent-device/capture-kit' &&
+      !site.spec.startsWith('@agent-device/capture-kit/') &&
       !site.spec.startsWith('@agent-device/kernel/') &&
       !isPackageOwnedFacadeTest(file, ownerFamily, site.spec)
     ) {
@@ -158,7 +160,7 @@ function checkSource(file: string, source: string): LayeringViolation[] {
         violation(
           file,
           site.line,
-          `platform-${ownerFamily} may import workspace code only from contracts or kernel; found '${site.spec}'`,
+          `platform-${ownerFamily} may import workspace code only from capture-kit, contracts, or kernel; found '${site.spec}'`,
         ),
       );
     }
@@ -221,5 +223,5 @@ export function checkPlatformPackagePolicy(
 }
 
 export function platformPackagePolicySummary(): string {
-  return 'R13 holds six private implementation-lazy platform inventory packages behind one composition root';
+  return 'R13 holds six private implementation-lazy platform packages above capture-kit behind one composition root';
 }

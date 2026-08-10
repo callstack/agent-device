@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Vega-family platform runtime metadata and implementations for agent-device.",
   "dependencies": {
+    "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
     "@agent-device/kernel": "workspace:*"
   },

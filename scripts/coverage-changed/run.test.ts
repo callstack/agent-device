@@ -72,6 +72,19 @@ test('passes and prints n/a for a docs-only change without touching coverage', (
   assert.match(out, /0\/0 \(n\/a\)/);
 });
 
+test('reads a large stacked diff beyond the subprocess default buffer', () => {
+  write('README.md', '# large stack\n' + 'documentation line\n'.repeat(80_000));
+  git('add', '-A');
+  git('commit', '-q', '-m', 'large docs stack');
+  writeLcov('SF:src/base.ts\nDA:1,1\nend_of_record\n');
+
+  const { code, out } = capture(() => run(['--base', 'main'], repo));
+
+  assert.equal(code, 0);
+  assert.match(out, /Changed-line coverage gate: PASS/);
+  assert.match(out, /0\/0 \(n\/a\)/);
+});
+
 test('fails when a changed source line is uncovered and names that line', () => {
   write('src/feature.ts', 'export const covered = 1;\nexport const uncovered = 2;\n');
   git('add', '-A');

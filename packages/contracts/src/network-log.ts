@@ -1,8 +1,7 @@
 // One parsed network-log entry.
 //
-// Lives here rather than in the daemon because the `network` command's output formatting
-// (`commands/observability/`) is declared in terms of it: the daemon parses the log, the
-// command surface renders what was parsed.
+// Lives here because platform runtimes parse neutral host-supplied app-log text and the
+// command surface renders the same cross-layer result shape.
 
 export type NetworkEntry = {
   method?: string;

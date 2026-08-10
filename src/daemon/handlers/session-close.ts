@@ -131,7 +131,7 @@ async function stopBestEffortSessionResources(
 ): Promise<void> {
   // Recording overlay finalization needs the Apple runner.
   await attemptCleanup('recording', () => stopSessionRecordingForTeardown(session));
-  await attemptCleanup('app_log', () => stopSessionAppLog(session));
+  await attemptCleanup('app_log', () => stopSessionAppLog({ session, sessionStore }));
   await attemptCleanup('audio_probe', async () => {
     await stopSessionAudioProbe(session, 'session-close');
   });
@@ -291,9 +291,12 @@ async function stopOrRetainAppleRunnerAfterClose(
 // fallback chains but no `target-v1` recording-time evidence — degraded replay verification with
 // no signal to the caller. Recording-time evidence can only be captured from action zero
 // (`armAuthoringOnOpen`), so an unarmed session has nothing to retroactively arm; the only
-// correct response is refusal, before any teardown or publication work runs. This intentionally
-// does not resolve #1533 (aborted-mid-recording close --save-script); that is a distinct,
-// already-armed case with its own resolution.
+// correct response is refusal, before any teardown or publication work runs.
+//
+// #1533 (aborted-mid-recording) is the adjacent already-armed case: this refusal promises "plain
+// close tears down without writing", and an ABORTED authoring lifecycle keeps that promise —
+// `--save-script` re-arms nothing on any surface (`recordSessionAfterSaveScriptFlag`) and the
+// writer refuses to publish the lifecycle from every path that reaches it.
 function assertTerminalRecordingCloseAllowed(req: DaemonRequest, session: SessionState): void {
   if (!req.flags?.saveScript) return;
   if (isAuthoringArmedSession(session)) return;

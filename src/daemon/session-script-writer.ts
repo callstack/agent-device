@@ -21,6 +21,7 @@ import type { SessionState } from './types.ts';
 import {
   NO_SCRIPT_PUBLICATION,
   commitRepair,
+  isAuthoringAborted,
   isRepairCommittable,
   scriptTargetPath,
 } from './session-script-publication-state.ts';
@@ -34,7 +35,8 @@ import {
 /**
  * `{ written: true; path }` — committed. `{ written: false }` (no `error`) —
  * intentionally not written (not recording, an aborted/incomplete repair
- * transaction, or an idempotent already-committed no-op). `{ written: false;
+ * transaction, an aborted ordinary authoring recording (#1533), or an
+ * idempotent already-committed no-op). `{ written: false;
  * error }` — ADR 0012 decision 6 (BLOCKER 2): a repair COMMIT was attempted but
  * FAILED (no-clobber refusal, a bare-`@ref` R4 failure, or a filesystem write
  * error). The `error` (a distinct AppError code/message) is surfaced to
@@ -87,6 +89,24 @@ function isRepairArmedWriteBlocked(session: SessionState): boolean {
   return !isRepairCommittable(state);
 }
 
+/**
+ * The single "may this session publish AT ALL" question, asked once by `write()` before any
+ * formatting or filesystem work. Three independent reasons to publish nothing:
+ *
+ * - not recording — the ordinary resting state of a session that never armed;
+ * - a repair transaction that is committed or not yet committable (above);
+ * - an ABORTED ordinary authoring lifecycle (#1533) — the authoring counterpart of that gate.
+ *
+ * The last one is what makes `close`'s refusal ("Retry with plain close; it will tear down the
+ * session without writing") true from every path reaching the writer: bare `close`, teardown,
+ * idle-reap, active publication.
+ */
+function isPublicationWriteBlocked(session: SessionState): boolean {
+  if (!session.recordSession) return true;
+  if (isAuthoringAborted(session.scriptPublication ?? NO_SCRIPT_PUBLICATION)) return true;
+  return isRepairArmedWriteBlocked(session);
+}
+
 export class SessionScriptWriter {
   private readonly sessionsDir: string;
 
@@ -99,8 +119,7 @@ export class SessionScriptWriter {
     const activePublication = options?.publication === 'active';
     let scriptPath: string | undefined;
     try {
-      if (!session.recordSession) return { written: false };
-      if (isRepairArmedWriteBlocked(session)) return { written: false };
+      if (isPublicationWriteBlocked(session)) return { written: false };
       const prepared = prepareSessionScript(session, {
         appendCompleteSentinel: repairArmed,
         activePublication,

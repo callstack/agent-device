@@ -17,7 +17,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 import { LeaseRegistry } from '../lease-registry.ts';
-import { createRequestHandler } from '../request-router.ts';
+import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { SessionStore } from '../session-store.ts';
 import { createDaemonHttpServer } from '../server/http-server.ts';
 import { createSocketServer, listenNetServer } from '../server/transport.ts';

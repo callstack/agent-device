@@ -2,7 +2,6 @@ import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { isMacOs, isApplePlatform } from '@agent-device/kernel/device';
 import { runMacOsAlertAction } from '../platforms/apple/os/macos/helper.ts';
-import { stopAppLog } from './app-log.ts';
 import { stopIosRunnerSession } from '../platforms/apple/core/runner/runner-client.ts';
 import { cleanupAppleXctracePerfCapture } from '../platforms/apple/core/perf-xctrace.ts';
 import { cleanupAndroidNativePerfSession } from '../platforms/android/perf.ts';
@@ -12,6 +11,9 @@ import { cleanupRetainedMaterializedPathsForSession } from './materialized-path-
 import { stopSessionAudioProbe } from './audio-probe.ts';
 import { stopSessionRecordingForTeardown } from './handlers/record-trace-recording.ts';
 import type { SessionState } from './types.ts';
+import type { SessionStore } from './session-store.ts';
+import { forceCleanupSessionAppLog } from './app-log-session-resource.ts';
+import { resolveAppLogResourcePath } from './app-log-resource-store.ts';
 
 export { stopSessionAudioProbe } from './audio-probe.ts';
 
@@ -39,9 +41,18 @@ export async function stopAppleRunnerForClose(session: SessionState): Promise<vo
   });
 }
 
-export async function stopSessionAppLog(session: SessionState): Promise<void> {
+export async function stopSessionAppLog(params: {
+  session: SessionState;
+  sessionStore: SessionStore;
+}): Promise<void> {
+  const { session, sessionStore } = params;
   if (!session.appLog) return;
-  await stopAppLog(session.appLog);
+  await forceCleanupSessionAppLog({
+    session,
+    sessionName: session.name,
+    sessionStore,
+    resourcePath: resolveAppLogResourcePath(sessionStore.resolveSessionDir(session.name)),
+  });
 }
 
 export async function stopSessionApplePerfCapture(session: SessionState): Promise<void> {
@@ -142,11 +153,25 @@ export function reportSessionCleanupFailures(params: {
   );
 }
 
+type SessionResourceTeardownRequest = {
+  session: SessionState;
+  sessionName: string;
+  stateDir?: string;
+} & ({ appLog: 'run'; sessionStore: SessionStore } | { appLog: 'already-settled' });
+
 export async function teardownSessionResources(
-  session: SessionState,
-  sessionName: string,
-  stateDir?: string,
+  request: SessionResourceTeardownRequest,
 ): Promise<void> {
+  const { session, sessionName, stateDir } = request;
+  const appLogSteps: SessionCleanupStep[] =
+    request.appLog === 'run'
+      ? [
+          {
+            step: 'app_log',
+            run: () => stopSessionAppLog({ session, sessionStore: request.sessionStore }),
+          },
+        ]
+      : [];
   const steps: SessionCleanupStep[] = [
     // Finalize any still-active recording BEFORE the Apple runner is stopped
     // below: the runner supplies gesture-telemetry for overlay finalization, and
@@ -154,7 +179,7 @@ export async function teardownSessionResources(
     // (and its 0-byte, slot-holding mp4) when a session is torn down — including
     // on daemon shutdown — without an explicit `record stop`.
     { step: 'recording', run: () => stopSessionRecordingForTeardown(session) },
-    { step: 'app_log', run: () => stopSessionAppLog(session) },
+    ...appLogSteps,
     {
       step: 'audio_probe',
       run: async () => {

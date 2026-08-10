@@ -7,13 +7,17 @@ import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../session-teardown.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../session-teardown.ts')>();
+  return { ...actual, stopAppleRunnerForClose: vi.fn(async () => {}) };
+});
 vi.mock('../../utils/host-process.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../utils/host-process.ts')>();
   return { ...actual, readProcessStartTime: vi.fn(() => 'test-process-start') };
 });
 
 import { dispatchCommand } from '../../core/dispatch.ts';
-import { createRequestHandler } from '../request-router.ts';
+import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { resolveRequestExecutionLockKeys } from '../request-binding.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { ensureDeviceReady } from '../device-ready.ts';

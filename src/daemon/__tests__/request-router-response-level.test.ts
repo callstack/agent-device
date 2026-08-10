@@ -33,7 +33,7 @@ vi.mock('../response-views.ts', async (importOriginal) => {
 });
 
 import { dispatchCommand } from '../../core/dispatch.ts';
-import { createRequestHandler } from '../request-router.ts';
+import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import type { DaemonRequest, SessionState } from '../types.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';

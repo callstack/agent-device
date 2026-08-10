@@ -18,7 +18,7 @@ vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOrigi
 vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
 import { dispatchCommand } from '../../core/dispatch.ts';
-import { createRequestHandler } from '../request-router.ts';
+import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import type { DaemonRequest, SessionState } from '../types.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';

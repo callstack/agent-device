@@ -3,6 +3,7 @@ import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  authoringPublication,
   makeIosSession,
   makeRepairCompleteSession,
 } from '../../../__tests__/test-utils/session-factories.ts';
@@ -25,7 +26,8 @@ afterEach(() => {
 function setup(name: string, session = makeIosSession(name, { appBundleId: 'com.example.app' })) {
   const root = mkdtempForTestSync('agent-device-session-close-script-');
   roots.push(root);
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionsDir = path.join(root, 'sessions');
+  const sessionStore = new SessionStore(sessionsDir);
   sessionStore.set(name, session);
   const req: DaemonRequest = {
     token: 'token',
@@ -34,7 +36,7 @@ function setup(name: string, session = makeIosSession(name, { appBundleId: 'com.
     positionals: [],
     flags: {},
   };
-  return { req, session, sessionStore };
+  return { req, session, sessionStore, sessionsDir };
 }
 
 test('failed repair publication removes only its synthetic close before retry', () => {
@@ -109,4 +111,59 @@ test('ordinary publication failure retains its close action after making the err
       retriable: false,
     },
   });
+});
+
+// --- #1533: a bare `close` after an aborted --save-script re-arm publishes nothing ---
+//
+// `close --save-script` on this session is refused by `assertTerminalRecordingCloseAllowed`
+// with "Retry with plain close; it will tear down the session without writing." These pin
+// that promise: the plain-close teardown path must write nothing.
+
+test('#1533: bare close on an aborted authoring session writes no script', () => {
+  const { req, session, sessionStore, sessionsDir } = setup(
+    'aborted',
+    makeIosSession('aborted', {
+      appBundleId: 'com.example.app',
+      // Post-`abortAuthoringOnSecondOpen`, then re-armed by the second open's own
+      // `--save-script` flag ingress.
+      recordSession: true,
+      scriptPublication: authoringPublication('aborted'),
+      actions: [{ ts: 1, command: 'click', positionals: ['id="save"'], flags: {} }],
+    }),
+  );
+
+  expect(
+    finalizeOrdinaryCloseScript({
+      req,
+      session,
+      sessionStore,
+      platformCloseError: undefined,
+    }),
+  ).toBeUndefined();
+
+  expect(sessionStore.get('aborted')?.scriptPublication).toEqual(authoringPublication('aborted'));
+  expect(fs.existsSync(sessionsDir) ? fs.readdirSync(sessionsDir) : []).toEqual([]);
+});
+
+test('#1533: an ordinary armed authoring session still publishes on bare close', () => {
+  const { req, session, sessionStore, sessionsDir } = setup(
+    'armed',
+    makeIosSession('armed', {
+      appBundleId: 'com.example.app',
+      recordSession: true,
+      scriptPublication: authoringPublication('armed'),
+      actions: [{ ts: 1, command: 'click', positionals: ['id="save"'], flags: {} }],
+    }),
+  );
+
+  expect(
+    finalizeOrdinaryCloseScript({
+      req,
+      session,
+      sessionStore,
+      platformCloseError: undefined,
+    }),
+  ).toBeUndefined();
+
+  expect(fs.readdirSync(sessionsDir)).toHaveLength(1);
 });

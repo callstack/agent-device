@@ -34,7 +34,16 @@ import {
 } from './ios.ts';
 import { createLimrunDeviceSession, type LimrunDeviceSession } from './device-session.ts';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
+import type {
+  PlatformRuntimeHost,
+  PlatformRuntimeOwner,
+  PlatformRuntimeProviderModule,
+} from '@agent-device/contracts/platform';
+import { providerRuntimeOwner } from '@agent-device/contracts/platform';
+import type { LimrunAppLogDescriptor } from './app-log-descriptor.ts';
+import type { LimrunAppLogReader } from './app-log-poller.ts';
 import { buildLimrunClientOptions, LIMRUN_CLIENT_HEADER } from './client-options.ts';
+import { resolveLimrunRuntimeInstance } from './runtime-instance.ts';
 
 type LimrunInstance = {
   metadata: { id: string };
@@ -50,6 +59,7 @@ type LimrunRuntimeSession = LimrunIosSession | LimrunAndroidSession;
 export type LimrunRuntimeOptions = {
   apiKey: string;
   region?: string;
+  runtimeInstance?: string;
 };
 
 export type LimrunRuntime = ProviderDeviceRuntime & {
@@ -57,11 +67,37 @@ export type LimrunRuntime = ProviderDeviceRuntime & {
   getDeviceSession(device: DeviceInfo): LimrunDeviceSession | undefined;
 };
 
+export type LimrunRuntimeRegistration = Readonly<{
+  runtime: LimrunRuntime;
+  platformModule: PlatformRuntimeProviderModule;
+}>;
+
 export function createLimrunRuntime(
   options: LimrunRuntimeOptions,
   dependencies: LimrunRuntimeDependencies,
-): LimrunRuntime {
-  return new LimrunRuntimeImplementation(options, dependencies);
+  mode: Readonly<{ includePlatformModule: true }>,
+): LimrunRuntimeRegistration;
+export function createLimrunRuntime(
+  options: LimrunRuntimeOptions,
+  dependencies: LimrunRuntimeDependencies,
+): LimrunRuntime;
+export function createLimrunRuntime(
+  options: LimrunRuntimeOptions,
+  dependencies: LimrunRuntimeDependencies,
+  mode?: Readonly<{ includePlatformModule: true }>,
+): LimrunRuntime | LimrunRuntimeRegistration {
+  const runtime = new LimrunRuntimeImplementation(options, dependencies);
+  if (!mode?.includePlatformModule) return runtime;
+  const owner = providerRuntimeOwner(LIMRUN_PROVIDER, resolveLimrunRuntimeInstance(options));
+  if (owner.kind !== 'provider-runtime') throw new TypeError('Invalid Limrun runtime owner');
+  return Object.freeze({
+    runtime,
+    platformModule: Object.freeze({
+      owner,
+      loadRuntime: async (host: PlatformRuntimeHost) =>
+        await loadLimrunPlatformRuntime(runtime, owner.instance, host),
+    }),
+  });
 }
 
 class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
@@ -294,6 +330,32 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     return session?.platform === parsed.platform ? session : undefined;
   }
 
+  currentAppLogReader(device: DeviceInfo): LimrunAppLogReader | undefined {
+    const session = this.getSessionForDevice(device);
+    if (!session) return undefined;
+    const publicSession = createLimrunDeviceSession(session);
+    return {
+      platform: session.platform,
+      leaseId: session.lease.leaseId,
+      instanceId: session.instanceId,
+      readLogs: async (appBundleId, lineLimit) =>
+        publicSession.platform === 'ios'
+          ? await publicSession.readLogs(appBundleId, lineLimit)
+          : await publicSession.readLogs(lineLimit),
+      [Symbol.asyncDispose]: async () => undefined,
+    };
+  }
+
+  async reconnectAppLogReader(descriptor: LimrunAppLogDescriptor, signal?: AbortSignal) {
+    const { reconnectLimrunAppLogReader } = await import('./app-log-reconnect.ts');
+    return await reconnectLimrunAppLogReader({
+      limrun: this.limrun,
+      descriptor,
+      dependencies: this.dependencies,
+      signal,
+    });
+  }
+
   private requireAndroidPortReverseSession(leaseId: string): LimrunAndroidSession | undefined {
     const session = this.sessions.get(leaseId);
     if (!session || session.platform === 'android') return session;
@@ -302,6 +364,22 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       'Direct Limrun iOS sessions cannot reach local host ports; use a bridge public URL.',
     );
   }
+}
+
+async function loadLimrunPlatformRuntime(
+  runtime: LimrunRuntimeImplementation,
+  runtimeInstance: string,
+  host: PlatformRuntimeHost,
+): Promise<PlatformRuntimeOwner> {
+  const { createLimrunPlatformRuntimeOwner } = await import('./app-log-runtime.ts');
+  return createLimrunPlatformRuntimeOwner({
+    host,
+    runtimeInstance,
+    ownsDevice: (device) => runtime.ownsDevice(device),
+    openCurrent: async (device) => runtime.currentAppLogReader(device),
+    reconnect: async (descriptor, signal) =>
+      await runtime.reconnectAppLogReader(descriptor, signal),
+  });
 }
 
 function portReverseResult(options: ProviderPortReverseOptions): Record<string, unknown> {

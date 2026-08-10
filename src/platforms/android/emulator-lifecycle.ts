@@ -1,8 +1,4 @@
-import {
-  isAndroidEmulatorSerial,
-  normalizeAndroidDeviceName,
-  type DeviceInventoryRequest,
-} from '@agent-device/contracts/device';
+import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import type { ExecResult } from '../../utils/exec.ts';
@@ -16,6 +12,7 @@ const ANDROID_BOOT_POLL_MS = 1_000;
 const ANDROID_BOOT_PROP_TIMEOUT_MS = 10_000;
 const ANDROID_EMULATOR_BOOT_POLL_MS = 1_000;
 const ANDROID_EMULATOR_BOOT_TIMEOUT_MS = 120_000;
+const ANDROID_EMULATOR_SERIAL_PREFIX = 'emulator-';
 
 export type AndroidEmulatorLifecycleDependencies = Readonly<{
   discoverLocal: (request: DeviceInventoryRequest) => Promise<readonly DeviceInfo[]>;
@@ -113,6 +110,14 @@ function findEmulatorByAvdName(
 
 function isRunningEmulator(device: DeviceInfo): boolean {
   return isAndroidEmulatorSerial(device.id);
+}
+
+function isAndroidEmulatorSerial(serial: string): boolean {
+  return serial.startsWith(ANDROID_EMULATOR_SERIAL_PREFIX);
+}
+
+function normalizeAndroidDeviceName(value: string): string {
+  return value.toLowerCase().replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 async function waitForEmulatorDiscovery(params: {

@@ -7,7 +7,10 @@
  */
 import { test, expect } from 'vitest';
 import { recordActionEntry } from '../session-action-recorder.ts';
-import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
+import {
+  authoringPublication,
+  makeIosSession,
+} from '../../__tests__/test-utils/session-factories.ts';
 
 test('an observation-only action is excluded while repair-armed and no --record is given', () => {
   const session = makeIosSession('default', {
@@ -260,4 +263,59 @@ test('whitespace-only fills collapse ambiguous recorder output and keys', () => 
     selectorChain: ['id="password"'],
   });
   expect(JSON.stringify(session.actions)).not.toContain(whitespace);
+});
+
+test('#1533: the --save-script ingress does not re-arm an aborted authoring lifecycle', () => {
+  const session = makeIosSession('s', {
+    // What `abortAuthoringOnSecondOpen` leaves behind: terminal status, recording off.
+    recordSession: false,
+    scriptPublication: authoringPublication('aborted'),
+  });
+
+  // The second `open --save-script` records its own action, carrying the flag
+  // that caused the abort into the recorder's shared ingress.
+  recordActionEntry(session, {
+    command: 'open',
+    positionals: ['com.example.other'],
+    flags: { saveScript: true },
+  });
+
+  expect(session.recordSession).toBe(false);
+  expect(session.scriptPublication).toEqual(authoringPublication('aborted'));
+});
+
+test('#1533: an aborted lifecycle cannot be retargeted by a later --save-script=<path> either', () => {
+  const session = makeIosSession('s', {
+    recordSession: false,
+    scriptPublication: authoringPublication('aborted', { path: '/tmp/original.ad' }),
+  });
+
+  recordActionEntry(session, {
+    command: 'open',
+    positionals: ['com.example.other'],
+    flags: { saveScript: '/tmp/hijacked.ad', force: true },
+  });
+
+  expect(session.recordSession).toBe(false);
+  expect(session.scriptPublication).toEqual(
+    authoringPublication('aborted', { path: '/tmp/original.ad' }),
+  );
+});
+
+test('#1533: an ARMED authoring lifecycle still takes the ingress (retarget + force unchanged)', () => {
+  const session = makeIosSession('s', {
+    recordSession: true,
+    scriptPublication: authoringPublication('armed'),
+  });
+
+  recordActionEntry(session, {
+    command: 'close',
+    positionals: [],
+    flags: { saveScript: '/tmp/out.ad', force: true },
+  });
+
+  expect(session.recordSession).toBe(true);
+  expect(session.scriptPublication).toEqual(
+    authoringPublication('armed', { path: '/tmp/out.ad', force: true }),
+  );
 });

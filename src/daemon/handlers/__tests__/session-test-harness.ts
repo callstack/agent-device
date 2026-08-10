@@ -1,6 +1,10 @@
 import { isMacOs } from '@agent-device/kernel/device';
 import { expect, vi, beforeEach } from 'vitest';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { localRuntimeOwner, type AppLogLiveState } from '@agent-device/contracts/platform';
+import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
+import { createTestAppLogLiveHandle } from '../../../__tests__/test-utils/app-log-live-handle.ts';
+import type { LogBackend } from '@agent-device/contracts/observability';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -75,15 +79,6 @@ vi.mock('../../../platforms/apple/core/apps.ts', async (importOriginal) => {
     resolveIosSimulatorDeepLinkBundleId: vi.fn(async () => undefined),
   };
 });
-vi.mock('../../app-log.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../app-log.ts')>();
-  return {
-    ...actual,
-    runAppLogDoctor: vi.fn(async () => ({ checks: {}, notes: [] })),
-    startAppLog: vi.fn(),
-    stopAppLog: vi.fn(async () => {}),
-  };
-});
 vi.mock('../session-deploy.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../session-deploy.ts')>();
   return {
@@ -118,7 +113,6 @@ import {
   resolveIosApp,
   resolveIosSimulatorDeepLinkBundleId,
 } from '../../../platforms/apple/core/apps.ts';
-import { runAppLogDoctor, startAppLog, stopAppLog } from '../../app-log.ts';
 import { defaultInstallOps, defaultReinstallOps } from '../session-deploy.ts';
 
 export const mockDispatch = vi.mocked(dispatchCommand);
@@ -145,9 +139,6 @@ export const mockResolveIosSimulatorDeepLinkBundleId = vi.mocked(
   resolveIosSimulatorDeepLinkBundleId,
 );
 export const mockEnsureAndroidEmulatorBooted = vi.mocked(ensureAndroidEmulatorBooted);
-export const mockStartAppLog = vi.mocked(startAppLog);
-const mockStopAppLog = vi.mocked(stopAppLog);
-export const mockRunAppLogDoctor = vi.mocked(runAppLogDoctor);
 const mockDefaultInstallOpsIos = vi.mocked(defaultInstallOps.ios);
 const mockDefaultInstallOpsAndroid = vi.mocked(defaultInstallOps.android);
 const mockDefaultReinstallOpsIos = vi.mocked(defaultReinstallOps.ios);
@@ -203,11 +194,6 @@ beforeEach(() => {
   mockResolveIosSimulatorDeepLinkBundleId.mockReset();
   mockResolveIosSimulatorDeepLinkBundleId.mockResolvedValue(undefined);
   mockEnsureAndroidEmulatorBooted.mockReset();
-  mockStartAppLog.mockReset();
-  mockStopAppLog.mockReset();
-  mockStopAppLog.mockResolvedValue(undefined);
-  mockRunAppLogDoctor.mockReset();
-  mockRunAppLogDoctor.mockResolvedValue({ checks: {}, notes: [] });
   mockDefaultInstallOpsIos.mockReset();
   mockDefaultInstallOpsAndroid.mockReset();
   mockDefaultReinstallOpsIos.mockReset();
@@ -226,6 +212,49 @@ export function makeSession(name: string, device: SessionState['device']): Sessi
     createdAt: Date.now(),
     actions: [],
   };
+}
+
+export function makeTestAppLogResource(
+  session: Pick<SessionState, 'name' | 'device'>,
+  options: {
+    backend: LogBackend;
+    state?: AppLogLiveState;
+    startedAt?: number;
+    outputPath?: string;
+  },
+): NonNullable<SessionState['appLog']> {
+  const outputPath = options.outputPath ?? '/tmp/app.log';
+  const handle = createTestAppLogLiveHandle({
+    inspect: () => ({
+      backend: options.backend,
+      state: options.state ?? 'active',
+      startedAt: options.startedAt ?? Date.now(),
+    }),
+    finish: async () => ({
+      status: 'completed',
+      result: { backend: options.backend, outputPath, completedAt: Date.now() },
+    }),
+    forceCleanup: async () => ({ status: 'cleaned' }),
+  });
+  const envelope = createDurableResourceEnvelope({
+    resourceKind: 'app-log',
+    sessionId: session.name,
+    device: {
+      id: session.device.id,
+      family: session.device.platform,
+      kind: session.device.kind,
+      ...(session.device.appleOs === undefined ? {} : { appleOs: session.device.appleOs }),
+      ...(session.device.target === undefined ? {} : { target: session.device.target }),
+      ...(session.device.iosPhysicalDeviceBackend === undefined
+        ? {}
+        : { iosPhysicalDeviceBackend: session.device.iosPhysicalDeviceBackend }),
+    },
+    owner: localRuntimeOwner(session.device.platform),
+    fence: { token: 'test-fence', generation: 1 },
+    lifecycle: 'open',
+    descriptor: { version: 1, body: {} },
+  });
+  return { handle, envelope };
 }
 
 export const noopInvoke = async (_req: DaemonRequest): Promise<DaemonResponse> => ({

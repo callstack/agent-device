@@ -34,6 +34,12 @@ import {
   type WebDriverRequestPolicy,
 } from './webdriver-client.ts';
 import { createWebDriverInteractor } from './webdriver-interactor.ts';
+import type {
+  PlatformRuntimeHost,
+  PlatformRuntimeOwner,
+  PlatformRuntimeProviderModule,
+} from '@agent-device/contracts/platform';
+import { providerRuntimeOwner } from '@agent-device/contracts/platform';
 
 export type CloudWebDriverPlatform = 'android' | 'ios';
 
@@ -143,6 +149,7 @@ export function buildCloudWebDriverBaseCapabilities(
 
 class CloudWebDriverRuntime implements ProviderDeviceRuntime {
   readonly provider: string;
+  readonly owner: PlatformRuntimeProviderModule['owner'];
   readonly leaseLifecycle: LeaseLifecycleProvider;
   readonly cloudArtifacts: CloudArtifactProvider;
   readonly deviceInventoryProvider: DeviceInventoryProvider;
@@ -155,6 +162,7 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
   constructor(options: CloudWebDriverRuntimeOptions) {
     this.options = options;
     this.provider = options.provider;
+    this.owner = providerRuntimeOwner(options.provider, options.platform);
     this.capabilities = createCloudWebDriverCapabilities({
       provider: options.provider,
       platform: options.platform,
@@ -174,6 +182,15 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
       const session = this.sessionsByLeaseId.get(request.leaseId);
       return session ? [session.device] : [];
     };
+  }
+
+  async loadRuntime(host: PlatformRuntimeHost): Promise<PlatformRuntimeOwner> {
+    const { createWebDriverPlatformRuntimeOwner } = await import('./platform-runtime.ts');
+    return createWebDriverPlatformRuntimeOwner({
+      host,
+      owner: this.owner,
+      ownsDevice: (device) => this.ownsDevice(device),
+    });
   }
 
   ownsDevice(device: DeviceInfo): boolean {

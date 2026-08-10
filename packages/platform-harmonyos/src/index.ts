@@ -1,5 +1,6 @@
 import type {
   InventoryPlatformModule,
+  PlatformRuntimeModule,
   PlatformModuleMetadata,
 } from '@agent-device/contracts/platform';
 import type { HarmonyInventoryConfig } from './inventory-config.ts';
@@ -7,6 +8,14 @@ import type { HarmonyInventoryConfig } from './inventory-config.ts';
 const metadata = Object.freeze({
   family: 'harmonyos',
 } satisfies PlatformModuleMetadata);
+
+export const runtimeModule = Object.freeze({
+  ...metadata,
+  loadRuntime: async (host) => {
+    const { createHarmonyPlatformRuntime } = await import('./runtime.ts');
+    return createHarmonyPlatformRuntime(host);
+  },
+} satisfies PlatformRuntimeModule);
 
 export type { HarmonyInventoryConfig } from './inventory-config.ts';
 

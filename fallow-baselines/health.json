@@ -117,11 +117,6 @@
         "count": 1
       }
     },
-    "src/daemon/app-log.ts": {
-      "complexity_high": {
-        "count": 1
-      }
-    },
     "src/daemon/client/daemon-client-lifecycle.ts": {
       "complexity_high": {
         "count": 1
@@ -285,14 +280,6 @@
     },
     "src/daemon/install-source-resolution.ts": {
       "crap_moderate": {
-        "count": 1
-      }
-    },
-    "src/daemon/network-log.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
         "count": 1
       }
     },
@@ -584,7 +571,6 @@
     "src/daemon/session-routing.ts:high impact",
     "src/daemon/handlers/session-state.ts:complexity",
     "src/snapshot/snapshot-processing.ts:high impact",
-    "src/daemon/network-log.ts:high impact",
     "src/commands/cli-grammar/common.ts:high impact",
     "src/daemon/snapshot-presentation/tree.ts:high impact",
     "src/utils/success-text.ts:high impact",
@@ -596,7 +582,6 @@
     "src/utils/rect-center.ts:high impact",
     "src/platforms/apple/core/app-launch.ts:complexity",
     "src/utils/parsing.ts:high impact",
-    "src/daemon/app-log-process.ts:high impact",
     "src/daemon/daemon-command-registry.ts:high impact",
     "src/replay/script.ts:complexity",
     "src/daemon/handlers/session-doctor-output.ts:high impact",

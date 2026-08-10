@@ -98,6 +98,7 @@ test('web provider is scoped through the request router and dispatch path', asyn
 
   const harness = await createProviderScenarioHarness({
     deviceInventoryProvider: async () => [WEB_DESKTOP_DEVICE],
+    platformRuntime: true,
     webProvider: ({ device, session }) => {
       calls.push(`scope:${session?.name ?? 'none'}:${device.id}`);
       return webProvider;
