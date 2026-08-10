@@ -13,18 +13,30 @@ const PATH_CATEGORY_SAMPLES: readonly {
   path: string;
   packageEntryFiles?: readonly string[];
 }[] = [
-  { label: 'production source', path: 'src/commands/press.ts' },
-  { label: 'platform source', path: 'src/platforms/android/index.ts' },
+  { label: 'production source', path: 'src/commands/batch/index.ts' },
+  { label: 'platform source', path: 'src/platforms/android/adb.ts' },
   { label: 'workspace package source', path: 'packages/kernel/src/errors.ts' },
   { label: 'platform package source', path: 'packages/platform-android/src/index.ts' },
   { label: 'node integration test', path: 'test/integration/smoke-cli.test.ts' },
-  { label: 'Swift runner source', path: 'apple/runner/Sources/Runner/main.swift' },
-  { label: 'Android helper source', path: 'android/snapshot-helper/src/main/Snapshot.kt' },
-  { label: 'macOS helper source', path: 'apple/macos-helper/Sources/Helper/main.swift' },
+  {
+    label: 'Swift runner source',
+    path: 'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTapPointPolicy.swift',
+  },
+  {
+    label: 'Android helper source',
+    path: 'android/snapshot-helper/src/main/java/com/callstack/agentdevice/snapshothelper/AccessibilityTreeCapture.java',
+  },
+  {
+    label: 'macOS helper source',
+    path: 'apple/macos-helper/Sources/AgentDeviceMacOSHelper/AudioProbe.swift',
+  },
   { label: 'MCP registry metadata', path: 'server.json' },
-  { label: 'Expo test app', path: 'examples/test-app/App.tsx' },
-  { label: 'replay-compat corpus', path: 'test/replay-compat/entry.ad' },
-  { label: 'replay-compat fixture', path: 'test/replay-compat/entry.ts' },
+  { label: 'Expo test app', path: 'examples/test-app/app/(tabs)/audio.tsx' },
+  {
+    label: 'replay-compat corpus',
+    path: 'test/replay-compat/scripts/docs/context-header-conflicting-platform.v0.15.1.ad',
+  },
+  { label: 'replay-compat fixture', path: 'test/replay-compat/corpus.test.ts' },
   // A wire-surface file under `packages/` already reaches this rule, but only incidentally —
   // it is some other category's sample. Naming the ledger directory directly is what puts
   // `test/wire-compat/**` itself under the path-filter reachability assertion.

@@ -34,10 +34,33 @@ export function suiteUniverse(ctx: ResolveContext): Suite[] {
     unresolved: [],
   }));
   for (const [name, command] of ctx.packageScripts) {
-    if (!/^(?:test|check):/.test(name)) continue;
+    // The `test:`/`check:` convention is the primary universe, but a naming convention does not
+    // enforce itself: `maestro:conformance`, `mutation:test` and `fuzz:parsers` all run real
+    // gates in real lanes under other names, and were invisible here. Membership is therefore
+    // decided by what a script RUNS, not what it is called, so the universe cannot be dodged —
+    // by accident or otherwise — by naming a gate something else.
+    if (!/^(?:test|check):/.test(name) && !runsTestRunner(name, command, ctx)) continue;
     suites.push(packageScriptSuite(name, command, ctx));
   }
   return suites.sort((left, right) => left.id.localeCompare(right.id));
+}
+
+/**
+ * Whether a script reaches a test runner. Probed WITHOUT reporting, because most scripts here are
+ * ordinary (`build`, `dev`) and resolve to nothing — reporting during the probe would file every
+ * one of them as an unresolved edge.
+ */
+function runsTestRunner(name: string, command: string, ctx: ResolveContext): boolean {
+  const probe: Sink = {
+    terminals: new Set(),
+    unresolved: [],
+    source: `package.json#${name}`,
+    step: name,
+  };
+  resolveScript(name, command, ctx, probe);
+  return [...probe.terminals].some(
+    (terminal) => terminal.startsWith('vitest:') || terminal.startsWith('node-test:'),
+  );
 }
 
 export function packageScriptSuite(name: string, command: string, ctx: ResolveContext): Suite {

@@ -358,6 +358,23 @@ if (failOpenSamples.length > 0) {
       'PATH_CATEGORY_SAMPLES in scripts/gate-manifest/check.ts',
   );
 }
+// 6b. A sample must be a real tracked file. The selector classifies by prefix, so a made-up path
+//     still resolves and the gate still reads green — while asserting "a PR touching only this
+//     path fires that job" about a path no PR can ever touch. Worse, a fictional path can sit on
+//     the wrong side of a `paths:` filter that every real member of its category is inside, so
+//     the reachability below would be checking a case that does not occur.
+const untrackedSamples = categories.filter((category) => !trackedSet.has(category.path));
+if (untrackedSamples.length > 0) {
+  fail(
+    `${untrackedSamples.length} path-category sample(s) name a file that does not exist`,
+    untrackedSamples.map(
+      (category) => `"${category.path}" (${category.label}) is not a tracked file`,
+    ),
+    'point the sample at a real tracked file in that category, in PATH_CATEGORY_SAMPLES in ' +
+      'scripts/gate-manifest/path-category-samples.ts',
+  );
+}
+
 const pathMisses = unreachablePathCategories(categories, catalog, workflows, lanes, new Set());
 if (pathMisses.length > 0) {
   fail(

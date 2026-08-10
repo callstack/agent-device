@@ -1,6 +1,7 @@
 // Does a category's own gate fire on a PR that only touches that category?
 
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
@@ -8,6 +9,7 @@ import { selectChecks } from '../check-affected/model.ts';
 import type { CatalogEntry } from './catalog-wiring.ts';
 import { pathFilterMatches, triggersOnPath } from './path-filters.ts';
 import { unreachablePathCategories, unrepresentedRules } from './path-categories.ts';
+import { deriveCategories } from './path-category-samples.ts';
 import { readSelectorRules } from './selector-rules.ts';
 import { buildLanes, parseWorkflow } from './workflow-lanes.ts';
 import { context } from './test-context.ts';
@@ -164,4 +166,16 @@ test('planting a paths-ignore over a real category makes the real gate report it
   );
   assert.ok(misses.length > 0, 'excluding a live category from its owning workflow must fail');
   assert.ok(misses.every((miss) => miss.path === 'src/platforms/android/index.ts'));
+});
+
+test('every category sample is a real tracked file', () => {
+  // A made-up path still classifies by prefix, so the gate reads green while asserting "a PR
+  // touching only this path fires that job" about a path no PR can touch — and it can sit on the
+  // wrong side of a `paths:` filter every real member of its category is inside.
+  const tracked = new Set(
+    execFileSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'utf8' }).split('\n'),
+  );
+  for (const category of deriveCategories(selectChecks)) {
+    assert.ok(tracked.has(category.path), `sample "${category.path}" is not a tracked file`);
+  }
 });

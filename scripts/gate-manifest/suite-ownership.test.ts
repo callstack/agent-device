@@ -96,3 +96,18 @@ test('a suite reachable only from a push or release lane is not owned', () => {
   );
   assert.deepEqual(unownedTerminals(suiteUniverse(ctx), scheduled, new Set()), []);
 });
+
+test('a gate named outside the test:/check: convention is still in the universe', () => {
+  // The convention does not enforce itself. `maestro:conformance`, `mutation:test` and
+  // `fuzz:parsers` all run real gates in real lanes under other names and were invisible here,
+  // so membership follows what a script RUNS, not what it is called.
+  const ctx = context({
+    packageScripts: new Map([
+      ['maestro:conformance', 'node --test test/conformance/oracle.test.ts'],
+      ['build', 'tsc -b'],
+    ]),
+  });
+  const ids = suiteUniverse(ctx).map((suite) => suite.id);
+  assert.ok(ids.includes('maestro:conformance'), 'a test-running script must be governed');
+  assert.ok(!ids.includes('build'), 'an ordinary script must stay out of the universe');
+});
