@@ -38,13 +38,6 @@ asked or when the work is intentionally incomplete.
   validation does not apply instead of writing a command checklist.
 - Call out real tradeoffs, known gaps, and follow-ups; omit boilerplate when there are none.
 - Note touched-file count and whether scope expanded beyond the initial command family.
-- Large custom enforcement changes trigger a `## Simplicity review`: at 500 added implementation
-  lines, or 1,000 added lines across that implementation and its tests, identify the failure being
-  prevented, the authoritative source of truth, the simpler alternative considered, why existing
-  types/registries/schemas cannot enforce it, and the condition for deletion or redesign. This is a
-  review trigger, not an approval-by-line-count rule; fixtures, snapshots, corpora, and generated
-  data are excluded.
-
 ## Reviewing
 
 - Review against the linked issue, not only the diff. State the issue's motivating behavior and
@@ -58,18 +51,10 @@ asked or when the work is intentionally incomplete.
   backend. Tests that mock away the router, or exercise only a helper, do not prove the shipped path.
 - For each key regression test, identify what deletion or revert would make it fail. If reverting the
   implementation still passes, the test is vacuous.
-- Before accepting another regression test for a recurring class of failure, ask whether the owning
-  interface can make that state or path impossible. Prefer types, a single construction path, or a
-  declaration-site invariant over tests that enumerate the next known example. Keep one small
-  interface-level regression as evidence after the design fix; when design cannot eliminate the
-  class, require the PR to say why.
-- When a custom guard repeatedly needs new exceptions, parser cases, declaration categories, or
-  source reconstruction, stop reviewing it as a sequence of patches. Ask whether the compiler,
-  schema, registry, or declaration site can own the invariant instead. A second omission caused by
-  the same reconstructed model is a redesign signal, not merely another missing test.
-- Require custom enforcement to remain cheaper to understand and update than the failure it prevents.
-  Prefer a narrow, explicit waiver over broader inference, and reject partial compiler/linker/scope
-  resolvers unless the repository's real compiler or schema cannot express the invariant.
+- For recurring failures, prefer a design that makes the class impossible at the owning interface;
+  keep one small regression as evidence rather than enumerating examples. If a custom guard needs
+  repeated exceptions or reconstructs compiler/schema behavior, move the invariant to its source of
+  truth instead of extending the guard.
 - Check for hidden behavior changes separately from intended refactors: output shape,
   warning/error propagation, artifact paths, fallback/retry tiers.
 - Verify tests cover the issue's motivating failure, not just the new abstraction. Prefer

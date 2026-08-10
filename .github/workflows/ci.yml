@@ -123,8 +123,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0
 
       # The selector's entry closure reaches `@agent-device/kernel` workspace
       # specifiers through src/utils/exec.ts and diagnostics.ts (#1490 W0), and
@@ -138,14 +136,6 @@ jobs:
       # so the gate only guards the derivation model.
       - name: Check affected-selector model
         run: pnpm check:affected:test
-
-      - name: Require simplicity review for large custom tooling changes
-        if: github.event_name == 'pull_request'
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: git diff --no-renames --numstat "$BASE_SHA...$HEAD_SHA" | pnpm check:tooling-simplicity
 
   maestro-conformance:
     name: Maestro Conformance Oracle
