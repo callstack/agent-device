@@ -1,10 +1,10 @@
 import type { LogBackend } from './logs.ts';
-import type { HostCommandRequest } from './platform-runtime-host.ts';
 import type {
   AppLogBackgroundProcess,
   AppLogLiveHandle,
   AppLogLiveSnapshot,
   AppLogProcessStart,
+  AppLogProcessCommand,
   AppLogRuntimeHost,
 } from './app-log-runtime.ts';
 import { createAppLogLiveHandleFromFinish } from './app-log-live-handle.ts';
@@ -13,23 +13,13 @@ export type PidScopedAppLogProcessOptions = Readonly<{
   host: AppLogRuntimeHost;
   backend: LogBackend;
   outputPath: string;
-  pidPath?: string;
+  pidPath: string;
   processStart: AppLogProcessStart;
   setupSignal: AbortSignal;
   resolvePid(signal?: AbortSignal): Promise<string>;
-  command(pid: string): HostCommandRequest;
+  command(pid: string): AppLogProcessCommand;
   cleanupFailureMessage: string;
 }>;
-
-export async function resolveFirstNumericAppLogPid(
-  host: AppLogRuntimeHost,
-  request: HostCommandRequest,
-  signal?: AbortSignal,
-): Promise<string> {
-  const result = await host.commands.run(request, signal);
-  const pid = result.stdout.trim().split(/\s+/)[0] ?? '';
-  return /^\d+$/.test(pid) ? pid : '';
-}
 
 /** Owns the neutral retry and cleanup lifecycle for PID-scoped local log streams. */
 export async function createPidScopedAppLogProcess(
@@ -53,7 +43,7 @@ export async function createPidScopedAppLogProcess(
           {
             command: options.command(initialPid),
             output,
-            ...(options.pidPath === undefined ? {} : { markerPath: options.pidPath }),
+            markerPath: options.pidPath,
           },
           setupController.signal,
         );
@@ -173,7 +163,7 @@ async function startAndAdoptSubsequentProcess(
   const process = await input.options.processStart({
     command: input.options.command(pid),
     output: input.output,
-    ...(input.options.pidPath === undefined ? {} : { markerPath: input.options.pidPath }),
+    markerPath: input.options.pidPath,
   });
   input.setActive(process);
   if (!input.stopped()) return { status: 'started', process };

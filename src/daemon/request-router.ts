@@ -1,7 +1,11 @@
 import { withResolveTargetDeviceCacheScope } from '../core/dispatch-resolve.ts';
 import { withDeviceInventoryContext } from '../core/device-inventory-context.ts';
 import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
-import type { ComposedDeviceInventoryGateways } from '@agent-device/contracts/platform';
+import type {
+  AppLogRuntimeOperations,
+  ComposedDeviceInventoryGateways,
+  DeviceRuntimeGateway,
+} from '@agent-device/contracts/platform';
 import {
   AppError,
   normalizeError,
@@ -53,10 +57,10 @@ import { createAgentBrowserWebProvider } from '../platforms/web/agent-browser-pr
 import { openWebSessionNames } from './web-session-names.ts';
 import { inferFillText } from './action-utils.ts';
 import { createPlatformRequestScope } from './platform-request-scope.ts';
-import type {
-  AppLogRuntimeOperations,
-  DeviceRuntimeGateway,
-} from '@agent-device/contracts/platform';
+import {
+  createAppLogAdmissionLedger,
+  type AppLogAdmissionLedger,
+} from './app-log-admission-ledger.ts';
 
 // ---------------------------------------------------------------------------
 // Request handler API
@@ -77,6 +81,7 @@ export type RequestRouterDeps = {
   recordingProvider?: RecordingProviderResolver;
   deviceInventoryGateways: ComposedDeviceInventoryGateways;
   deviceRuntimeGateway: DeviceRuntimeGateway<AppLogRuntimeOperations>;
+  appLogAdmissionLedger?: AppLogAdmissionLedger;
   providerRuntimeIds?: readonly string[];
   providerRuntimeRequiredIds?: readonly string[];
   leaseLifecycleProvider?: LeaseLifecycleProvider;
@@ -104,6 +109,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     recordingProvider,
     deviceInventoryGateways,
     deviceRuntimeGateway,
+    appLogAdmissionLedger = createAppLogAdmissionLedger(),
     providerRuntimeIds,
     providerRuntimeRequiredIds,
     leaseLifecycleProvider,
@@ -259,6 +265,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         : undefined,
       androidAdbExecutor: providerScope.androidAdbExecutor,
       bindDevice: lockedScope.bindDevice,
+      appLogAdmissionLedger,
       throwIfCanceled: lockedScope.throwIfCanceled,
       contextFromFlags: lockedScope.handlerContextFromFlags,
     });

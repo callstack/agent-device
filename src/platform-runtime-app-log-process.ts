@@ -4,6 +4,7 @@ import type {
   AppLogProcessMarker,
   AppLogProcessMarkerReadOutcome,
   AppLogProcessOwnership,
+  AppLogProcessCommand,
   HostCommandRequest,
   HostCommandResult,
 } from '@agent-device/contracts/platform';
@@ -17,6 +18,7 @@ import {
   readProcessStartTime,
   waitForProcessExit,
 } from './utils/host-process.ts';
+import { requireManagedSessionArtifactPath } from './utils/managed-session-artifact-path.ts';
 import { openVerifiedFileForRead } from './utils/verified-file.ts';
 
 const APP_LOG_PID_FILENAME = 'app-log.pid';
@@ -35,7 +37,7 @@ export type ManagedAppLogCommand = Readonly<{
 }>;
 
 export type ManagedAppLogCommandLauncher = (
-  command: HostCommandRequest,
+  command: AppLogProcessCommand,
   signal?: AbortSignal,
 ) => ManagedAppLogCommand | Promise<ManagedAppLogCommand>;
 
@@ -123,17 +125,27 @@ async function startAppLogProcess(
 }
 
 function launchLocalAppLogCommand(
-  command: HostCommandRequest,
+  command: AppLogProcessCommand,
   signal?: AbortSignal,
 ): ManagedAppLogCommand {
-  return runCmdBackground(command.executable, [...command.args], {
-    allowFailure: command.allowFailure,
-    cwd: command.cwd,
-    env: command.env ? { ...process.env, ...command.env } : undefined,
-    timeoutMs: command.timeoutMs,
+  const request = localHostCommand(command);
+  return runCmdBackground(request.executable, [...request.args], {
+    allowFailure: request.allowFailure,
+    cwd: request.cwd,
+    env: request.env ? { ...process.env, ...request.env } : undefined,
+    timeoutMs: request.timeoutMs,
     captureOutput: false,
     signal,
   });
+}
+
+function localHostCommand(command: AppLogProcessCommand): HostCommandRequest {
+  if (command.kind === 'host') return command.request;
+  return {
+    executable: 'adb',
+    args: ['-s', command.serial, ...command.args],
+    ...command.options,
+  };
 }
 
 function assertMarkerAvailable(root: string, markerPath?: string): void {
@@ -229,7 +241,7 @@ function clearPublishedMarker(
 function processMarker(pid: number): AppLogProcessMarker | undefined {
   const startTime = readProcessStartTime(pid);
   const command = readProcessCommand(pid);
-  if (!startTime || !command || !isManagedAppLogCommand(command)) return undefined;
+  if (!startTime || !command) return undefined;
   return Object.freeze({
     pid,
     startTime,
@@ -330,23 +342,12 @@ function clearMarker(root: string, markerPath: string): void {
 }
 
 function requireManagedMarkerPath(root: string, markerPath: string): string {
-  const resolved = path.resolve(markerPath);
-  if (
-    path.basename(resolved) !== APP_LOG_PID_FILENAME ||
-    (resolved !== root && !resolved.startsWith(`${root}${path.sep}`))
-  ) {
-    throw new Error('App-log process marker is outside the daemon-owned sessions directory');
-  }
-  if (fs.existsSync(root) && fs.existsSync(path.dirname(resolved))) {
-    const realRoot = fs.realpathSync.native(root);
-    const realParent = fs.realpathSync.native(path.dirname(resolved));
-    if (realParent !== realRoot && !realParent.startsWith(`${realRoot}${path.sep}`)) {
-      throw new Error(
-        'App-log process marker resolves outside the daemon-owned sessions directory',
-      );
-    }
-  }
-  return resolved;
+  return requireManagedSessionArtifactPath({
+    sessionsDir: root,
+    pathname: markerPath,
+    basename: APP_LOG_PID_FILENAME,
+    label: 'App-log process marker',
+  });
 }
 
 function inspectOwnedProcess(marker: AppLogProcessMarker): AppLogProcessOwnership {
@@ -377,19 +378,9 @@ async function terminateOwnedProcess(
 }
 
 function markerMatchesLiveProcess(marker: AppLogProcessMarker): boolean {
-  if (!marker.startTime || !marker.command || !isManagedAppLogCommand(marker.command)) return false;
+  if (!marker.startTime || !marker.command) return false;
   return (
     readProcessStartTime(marker.pid) === marker.startTime &&
     readProcessCommand(marker.pid) === marker.command
-  );
-}
-
-function isManagedAppLogCommand(command: string): boolean {
-  const normalized = command.toLowerCase().replaceAll('\\', '/');
-  return (
-    normalized.includes('log stream') ||
-    normalized.includes('logcat') ||
-    normalized.includes('hilog') ||
-    normalized.includes('devicectl device process launch')
   );
 }

@@ -56,6 +56,21 @@ describe('managed app-log process host', () => {
     expect(running.marker).toBeDefined();
   });
 
+  test('authorizes cleanup by exact process identity instead of command vocabulary', async () => {
+    processIdentity.command = '/opt/acme/bin/device-output --stream session-1';
+    const fixture = processFixture({ settled: true });
+    const processes = createManagedAppLogProcesses(fixture.sessionsDir);
+
+    const running = await processes.start(fixture.request);
+
+    expect(running.marker).toEqual({
+      pid: 99,
+      startTime: processIdentity.startTime,
+      command: processIdentity.command,
+    });
+    await expect(processes.inspect(running.marker!)).resolves.toBe('owned-alive');
+  });
+
   test('rolls back start when process identity is incomplete', async () => {
     processIdentity.startTime = null;
     const fixture = processFixture({ settled: true });
@@ -279,7 +294,10 @@ function processFixture(options: { settled?: boolean; rejectOutput?: boolean } =
     child,
     resolveWait,
     request: {
-      command: { executable: 'adb', args: ['logcat', '--pid', '123'], allowFailure: true },
+      command: {
+        kind: 'host',
+        request: { executable: 'adb', args: ['logcat', '--pid', '123'], allowFailure: true },
+      },
       output: {
         write: async () => {
           if (options.rejectOutput) throw new Error('sink failed');
@@ -287,6 +305,6 @@ function processFixture(options: { settled?: boolean; rejectOutput?: boolean } =
         [Symbol.asyncDispose]: async () => {},
       },
       markerPath,
-    },
+    } as const,
   };
 }

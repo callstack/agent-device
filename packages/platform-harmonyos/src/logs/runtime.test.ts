@@ -5,7 +5,7 @@ import type {
 } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test, vi } from 'vitest';
-import { createHarmonyAppLogEnvelope } from './descriptor.ts';
+import { createHarmonyAppLogEnvelope, harmonyAppLogDescriptorCodec } from './descriptor.ts';
 import { createHarmonyAppLogRuntime } from './runtime.ts';
 
 const device: DeviceInfo = {
@@ -21,6 +21,15 @@ const scope: PlatformRequestScope = {
   diagnostics: { emit: () => {} },
   progress: { report: () => {} },
 };
+
+test('rejects durable HarmonyOS descriptors without the canonical process marker', () => {
+  expect(
+    harmonyAppLogDescriptorCodec.decode({
+      transport: 'harmony-hilog',
+      outputPath: '/tmp/app.log',
+    }),
+  ).toMatchObject({ status: 'invalid' });
+});
 
 test('starts HarmonyOS hilog with the resolved application pid', async () => {
   const fixture = hostFixture();
@@ -219,7 +228,8 @@ function hostFixture(
     [Symbol.asyncDispose]: async () => {},
   };
   const startProcess: AppLogRuntimeHost['processes']['start'] = async ({ command }) => {
-    backgroundCommands.push([command.executable, ...command.args]);
+    if (command.kind !== 'host') throw new Error('Expected a HarmonyOS host command');
+    backgroundCommands.push([command.request.executable, ...command.request.args]);
     return process;
   };
   const host: AppLogRuntimeHost = {

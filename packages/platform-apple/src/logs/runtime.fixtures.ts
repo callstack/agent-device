@@ -33,7 +33,8 @@ export function hostFixture(
   let outputOpens = 0;
   let markerReads = 0;
   const startProcess: AppLogRuntimeHost['processes']['start'] = vi.fn(async ({ command }) => {
-    backgroundCommands.push([command.executable, ...command.args]);
+    if (command.kind !== 'host') throw new Error('Expected an Apple host command');
+    backgroundCommands.push([command.request.executable, ...command.request.args]);
     if (options.failProcessStart) throw new Error('start failed');
     return {
       wait: new Promise<never>(() => {}),

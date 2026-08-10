@@ -47,6 +47,7 @@ import { PREPARE_REQUEST_TIMEOUT_MS } from '../../core/command-descriptor/timeou
 import { Deadline } from '../../utils/retry.ts';
 import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
 import type { BindDeviceRuntime } from '../request-runtime-binding.ts';
+import type { AppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 
 const PREPARE_IOS_RUNNER_TIMING_NOTE =
   'Top-level prepare timing fields are diagnostic and may overlap; use timing.additiveParts for additive wall-clock phases.';
@@ -278,6 +279,7 @@ type SessionCommandParams = {
   invokeReplayAction?: DaemonInvokeFn;
   androidAdbExecutor?: AndroidAdbExecutor;
   bindDevice?: BindDeviceRuntime;
+  appLogAdmissionLedger?: AppLogAdmissionLedger;
   throwIfCanceled?: () => void;
 };
 
@@ -303,6 +305,7 @@ const handleSessionObservabilityCommandGroup: SessionCommandHandler = async ({
   sessionStore,
   androidAdbExecutor,
   bindDevice,
+  appLogAdmissionLedger,
   throwIfCanceled,
 }) =>
   await handleSessionObservabilityCommands({
@@ -311,6 +314,7 @@ const handleSessionObservabilityCommandGroup: SessionCommandHandler = async ({
     sessionStore,
     androidAdbExecutor,
     bindDevice,
+    appLogAdmissionLedger,
     throwIfCanceled,
   });
 
@@ -503,6 +507,7 @@ export async function handleSessionCommands(params: {
   invokeReplayAction?: DaemonInvokeFn;
   androidAdbExecutor?: AndroidAdbExecutor;
   bindDevice?: BindDeviceRuntime;
+  appLogAdmissionLedger?: AppLogAdmissionLedger;
   throwIfCanceled?: () => void;
 }): Promise<DaemonResponse | null> {
   const {
@@ -516,6 +521,7 @@ export async function handleSessionCommands(params: {
     invokeReplayAction,
     androidAdbExecutor,
     bindDevice,
+    appLogAdmissionLedger,
     throwIfCanceled,
   } = params;
 
@@ -534,6 +540,7 @@ export async function handleSessionCommands(params: {
     invokeReplayAction,
     androidAdbExecutor,
     bindDevice,
+    appLogAdmissionLedger,
     throwIfCanceled,
   });
 }

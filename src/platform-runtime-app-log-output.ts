@@ -1,7 +1,7 @@
 import type { AppLogOutputSink } from '@agent-device/contracts/platform';
 import fs from 'node:fs';
-import path from 'node:path';
 import { ensureAppLogPath } from './utils/app-log-files.ts';
+import { requireManagedSessionArtifactPath } from './utils/managed-session-artifact-path.ts';
 import { openVerifiedFileForAppend, openVerifiedFileForRead } from './utils/verified-file.ts';
 
 export async function openAppLogOutput(
@@ -81,22 +81,12 @@ export async function readAppLogOutputTail(
 }
 
 function requireManagedOutputPath(sessionsDir: string, pathname: string): string {
-  const root = path.resolve(sessionsDir);
-  const resolved = path.resolve(pathname);
-  if (
-    path.basename(resolved) !== 'app.log' ||
-    (resolved !== root && !resolved.startsWith(`${root}${path.sep}`))
-  ) {
-    throw new Error('App-log output is outside the daemon-owned sessions directory');
-  }
-  if (fs.existsSync(root) && fs.existsSync(path.dirname(resolved))) {
-    const realRoot = fs.realpathSync.native(root);
-    const realParent = fs.realpathSync.native(path.dirname(resolved));
-    if (realParent !== realRoot && !realParent.startsWith(`${realRoot}${path.sep}`)) {
-      throw new Error('App-log output resolves outside the daemon-owned sessions directory');
-    }
-  }
-  return resolved;
+  return requireManagedSessionArtifactPath({
+    sessionsDir,
+    pathname,
+    basename: 'app.log',
+    label: 'App-log output',
+  });
 }
 
 function redactionPatterns(): RegExp[] {

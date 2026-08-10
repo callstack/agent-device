@@ -209,8 +209,20 @@ export type AppLogBackgroundProcess = AsyncDisposable &
     terminate(): Promise<void>;
   }>;
 
+export type AppLogProcessCommand =
+  | Readonly<{
+      kind: 'host';
+      request: HostCommandRequest;
+    }>
+  | Readonly<{
+      kind: 'android-adb';
+      serial: string;
+      args: readonly string[];
+      options?: Pick<HostCommandRequest, 'allowFailure' | 'cwd' | 'env' | 'timeoutMs'>;
+    }>;
+
 export type AppLogBackgroundProcessRequest = Readonly<{
-  command: HostCommandRequest;
+  command: AppLogProcessCommand;
   output: AppLogOutputSink;
   markerPath?: string;
 }>;

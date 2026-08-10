@@ -26,6 +26,7 @@ import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 import { resolveWebProvider } from '../../platforms/web/provider.ts';
 import { appendAppLogMarker, clearAppLogFiles, getAppLogPathMetadata } from '../app-log.ts';
+import type { AppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 import { readSessionNetworkCapture } from '../app-log-network-recovery.ts';
 import { resolveAppLogResourcePath } from '../app-log-resource-store.ts';
 import {
@@ -59,10 +60,13 @@ type ObservabilityParams = {
   sessionStore: SessionStore;
   androidAdbExecutor?: AndroidAdbExecutor;
   bindDevice?: BindDeviceRuntime;
+  appLogAdmissionLedger?: AppLogAdmissionLedger;
   throwIfCanceled?: () => void;
 };
-type LogsHandlerParams = ObservabilityParams & {
+type LogsHandlerParams = Omit<ObservabilityParams, 'bindDevice' | 'appLogAdmissionLedger'> & {
   session: SessionState;
+  bindDevice: BindDeviceRuntime;
+  appLogAdmissionLedger: AppLogAdmissionLedger;
 };
 type SessionLogStatus = {
   active: boolean;
@@ -358,8 +362,8 @@ async function handleLogsCommand(params: ObservabilityParams): Promise<DaemonRes
     return errorResponse('SESSION_NOT_FOUND', 'logs requires an active session');
   }
   try {
-    const bindDevice = requireRuntimeBinding(params.bindDevice);
-    const admission = await bindDevice(session.device, appLogAdmissionUse);
+    const logsParams = requireLogsHandlerParams({ ...params, session });
+    const admission = await logsParams.bindDevice(session.device, appLogAdmissionUse);
     const inspectFact = admission.facts.appLogInspect;
     if (!inspectFact.available) {
       return {
@@ -376,7 +380,7 @@ async function handleLogsCommand(params: ObservabilityParams): Promise<DaemonRes
       restart: Boolean(req.flags?.restart),
       marker: req.positionals?.slice(1).join(' '),
     });
-    return await executeLogsRuntimePlan({ ...params, session }, plan);
+    return await executeLogsRuntimePlan(logsParams, plan);
   } catch (error) {
     return { ok: false, error: normalizeError(error) };
   }
@@ -388,61 +392,52 @@ async function executeLogsRuntimePlan(
 ): Promise<DaemonResponse> {
   switch (plan.kind) {
     case 'path': {
-      const bindDevice = requireRuntimeBinding(params.bindDevice);
-      const runtime = await bindDevice(params.session.device, plan.use);
+      const runtime = await params.bindDevice(params.session.device, plan.use);
       const inspection = await runtime.operations.appLogInspect();
       return handleLogsPath(params, inspection.backend);
     }
     case 'doctor': {
-      const bindDevice = requireRuntimeBinding(params.bindDevice);
-      const runtime = await bindDevice(params.session.device, plan.use);
+      const runtime = await params.bindDevice(params.session.device, plan.use);
       const doctor = await runtime.operations.appLogDoctor({
         appBundleId: params.session.appBundleId,
       });
       return handleLogsDoctor(params, doctor);
     }
     case 'start':
-      return await executeLogsStartPlan(params, plan);
+    case 'clear-restart':
+      return await executeLogsStartCapablePlan(params, plan);
     case 'stop':
-      await requireRuntimeBinding(params.bindDevice)(params.session.device, plan.use);
+      await params.bindDevice(params.session.device, plan.use);
       return await handleLogsStop(params);
     case 'mark':
-      await requireRuntimeBinding(params.bindDevice)(params.session.device, plan.use);
+      await params.bindDevice(params.session.device, plan.use);
       return handleLogsMark(plan.marker, params.sessionName, params.sessionStore);
     case 'clear':
-      await requireRuntimeBinding(params.bindDevice)(params.session.device, plan.use);
+      await params.bindDevice(params.session.device, plan.use);
       return handleLogsClear(params);
-    case 'clear-restart':
-      return await executeLogsClearRestartPlan(params, plan);
   }
 }
 
-async function executeLogsStartPlan(
+async function executeLogsStartCapablePlan(
   params: LogsHandlerParams,
-  plan: Extract<LogsRuntimePlan, { kind: 'start' }>,
+  plan: Extract<LogsRuntimePlan, { kind: 'start' | 'clear-restart' }>,
 ): Promise<DaemonResponse> {
-  if (!params.session.appBundleId) {
+  const appBundleId = params.session.appBundleId;
+  if (!appBundleId) {
     return errorResponse(
       'INVALID_ARGS',
-      'logs start requires an app session; run open <app> first',
+      `logs ${plan.kind === 'start' ? 'start' : 'clear --restart'} requires an app session; run open <app> first`,
     );
   }
-  const runtime = await requireRuntimeBinding(params.bindDevice)(params.session.device, plan.use);
-  return await handleLogsStart(params, runtime.owner, runtime.operations.appLogStart);
-}
-
-async function executeLogsClearRestartPlan(
-  params: LogsHandlerParams,
-  plan: Extract<LogsRuntimePlan, { kind: 'clear-restart' }>,
-): Promise<DaemonResponse> {
-  if (!params.session.appBundleId) {
-    return errorResponse(
-      'INVALID_ARGS',
-      'logs clear --restart requires an app session; run open <app> first',
-    );
-  }
-  const runtime = await requireRuntimeBinding(params.bindDevice)(params.session.device, plan.use);
-  return await handleLogsClearRestart(params, runtime.owner, runtime.operations.appLogStart);
+  const runtime = await params.bindDevice(params.session.device, plan.use);
+  return plan.kind === 'start'
+    ? await handleLogsStart(params, appBundleId, runtime.owner, runtime.operations.appLogStart)
+    : await handleLogsClearRestart(
+        params,
+        appBundleId,
+        runtime.owner,
+        runtime.operations.appLogStart,
+      );
 }
 
 function handleLogsPath(params: LogsHandlerParams, backend: LogBackend): DaemonResponse {
@@ -523,18 +518,11 @@ function handleLogsClear(params: LogsHandlerParams): DaemonResponse {
 
 async function handleLogsClearRestart(
   params: LogsHandlerParams,
+  appBundleId: string,
   owner: RuntimeOwnerRef,
   start: AppLogRuntimeOperations['appLogStart'],
 ): Promise<DaemonResponse> {
   const { session, sessionName, sessionStore } = params;
-  const appBundleId = session.appBundleId;
-  if (!appBundleId) {
-    return errorResponse(
-      'INVALID_ARGS',
-      'logs clear --restart requires an app session; run open <app> first',
-    );
-  }
-
   if (session.appLog) {
     await finishSessionAppLog({
       session,
@@ -545,12 +533,13 @@ async function handleLogsClearRestart(
   }
   const logPath = sessionStore.resolveAppLogPath(sessionName);
   const cleared = clearAppLogFiles(logPath);
-  const started = await startSessionAppLog(params, start, owner);
+  const started = await startSessionAppLog(params, appBundleId, start, owner);
   return started.ok ? { ok: true, data: { ...cleared, restarted: true } } : started;
 }
 
 async function handleLogsStart(
   params: LogsHandlerParams,
+  appBundleId: string,
   owner: RuntimeOwnerRef,
   start: AppLogRuntimeOperations['appLogStart'],
 ): Promise<DaemonResponse> {
@@ -558,13 +547,7 @@ async function handleLogsStart(
   if (session.appLog) {
     return errorResponse('INVALID_ARGS', 'app log already streaming; run logs stop first');
   }
-  if (!session.appBundleId) {
-    return errorResponse(
-      'INVALID_ARGS',
-      'logs start requires an app session; run open <app> first',
-    );
-  }
-  return await startSessionAppLog(params, start, owner);
+  return await startSessionAppLog(params, appBundleId, start, owner);
 }
 
 async function handleLogsStop(params: LogsHandlerParams): Promise<DaemonResponse> {
@@ -584,21 +567,19 @@ async function handleLogsStop(params: LogsHandlerParams): Promise<DaemonResponse
 
 async function startSessionAppLog(
   params: LogsHandlerParams,
+  appBundleId: string,
   start: AppLogRuntimeOperations['appLogStart'],
   owner: RuntimeOwnerRef,
 ): Promise<DaemonResponse> {
   const { session, sessionName, sessionStore } = params;
-  const appBundleId = session.appBundleId;
-  if (!appBundleId) {
-    return errorResponse(
-      'INVALID_ARGS',
-      'logs start requires an app session; run open <app> first',
-    );
-  }
   const outputPath = sessionStore.resolveAppLogPath(sessionName);
   const resourcePath = resolveAppLogResourcePath(sessionStore.resolveSessionDir(sessionName));
   try {
-    const fence = createNextAppLogFence({ resourcePath, device: session.device });
+    const fence = createNextAppLogFence({
+      ledger: params.appLogAdmissionLedger,
+      resourcePath,
+      device: session.device,
+    });
     const result = await start({
       sessionId: sessionName,
       appBundleId,
@@ -607,6 +588,7 @@ async function startSessionAppLog(
       fence,
     });
     await adoptStartedSessionAppLog({
+      admissionLedger: params.appLogAdmissionLedger,
       session,
       sessionName,
       sessionStore,
@@ -630,11 +612,24 @@ async function startSessionAppLog(
   }
 }
 
-function requireRuntimeBinding(bindDevice: BindDeviceRuntime | undefined): BindDeviceRuntime {
-  if (bindDevice) return bindDevice;
-  throw new AppError('COMMAND_FAILED', 'Device runtime gateway is not configured', {
-    reason: 'runtime-gateway-missing',
-  });
+function requireLogsHandlerParams(
+  params: ObservabilityParams & { session: SessionState },
+): LogsHandlerParams {
+  if (!params.bindDevice) {
+    throw new AppError('COMMAND_FAILED', 'Device runtime gateway is not configured', {
+      reason: 'runtime-gateway-missing',
+    });
+  }
+  if (!params.appLogAdmissionLedger) {
+    throw new AppError('COMMAND_FAILED', 'App-log admission ledger is not configured', {
+      reason: 'runtime-gateway-missing',
+    });
+  }
+  return {
+    ...params,
+    bindDevice: params.bindDevice,
+    appLogAdmissionLedger: params.appLogAdmissionLedger,
+  };
 }
 
 // ---------------------------------------------------------------------------

@@ -12,17 +12,14 @@ import {
   type ResourceOwnershipFence,
   type RuntimeOwnerRef,
 } from '@agent-device/contracts/platform';
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import { deviceIdentity, sameDeviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
+import type { AppLogAdmissionLedger } from './app-log-admission-ledger.ts';
 import type { SessionStore } from './session-store.ts';
 import type { SessionState } from './types.ts';
 import { withAppLogResourceFence } from './app-log-resource-fence.ts';
 import { readAppLogResourceRecord, writeAppLogResourceRecord } from './app-log-resource-store.ts';
-import {
-  blockUndurableAppLogCleanup,
-  clearUndurableAppLogCleanup,
-} from './app-log-start-preflight.ts';
 
 export type AppLogSessionSnapshot = Readonly<{
   active: boolean;
@@ -56,6 +53,7 @@ export function inspectSessionAppLog(session: SessionState): AppLogSessionSnapsh
 }
 
 type AdoptStartedSessionAppLogParams = {
+  admissionLedger: AppLogAdmissionLedger;
   session: SessionState;
   sessionName: string;
   sessionStore: SessionStore;
@@ -68,42 +66,36 @@ type AdoptStartedSessionAppLogParams = {
   throwIfCanceled(): void;
 };
 
-type AppLogAdoptionState = {
-  persisted: boolean;
-  transferredHandle?: AppLogLiveHandle;
-};
+type AppLogAdoptionState =
+  | { kind: 'pending' }
+  | { kind: 'persisted' }
+  | { kind: 'transferred'; handle: AppLogLiveHandle };
 
 export async function adoptStartedSessionAppLog(
   params: AdoptStartedSessionAppLogParams,
 ): Promise<void> {
-  const state: AppLogAdoptionState = { persisted: false };
+  let state: AppLogAdoptionState = { kind: 'pending' };
   try {
-    adoptValidatedAppLogResource(params, state);
+    const startingEnvelope = Object.freeze({
+      ...validateStartedEnvelope(params),
+      lifecycle: 'starting' as const,
+    });
+    writeAppLogResourceRecord(params.resourcePath, startingEnvelope);
+    state = { kind: 'persisted' };
+    params.throwIfCanceled();
+    const envelope = Object.freeze({ ...startingEnvelope, lifecycle: 'active' as const });
+    writeAppLogResourceRecord(params.resourcePath, envelope);
+    const handle = params.pendingHandle.transfer();
+    state = { kind: 'transferred', handle };
+    params.sessionStore.set(params.sessionName, {
+      ...params.session,
+      appLog: { handle, envelope },
+      appLogFailure: undefined,
+    });
   } catch (error) {
     await recoverFailedAppLogAdoption(params, state, error);
     throw error;
   }
-}
-
-function adoptValidatedAppLogResource(
-  params: AdoptStartedSessionAppLogParams,
-  state: AppLogAdoptionState,
-): void {
-  const startingEnvelope = Object.freeze({
-    ...validateStartedEnvelope(params),
-    lifecycle: 'starting' as const,
-  });
-  writeAppLogResourceRecord(params.resourcePath, startingEnvelope);
-  state.persisted = true;
-  params.throwIfCanceled();
-  const envelope = Object.freeze({ ...startingEnvelope, lifecycle: 'active' as const });
-  writeAppLogResourceRecord(params.resourcePath, envelope);
-  state.transferredHandle = params.pendingHandle.transfer();
-  params.sessionStore.set(params.sessionName, {
-    ...params.session,
-    appLog: { handle: state.transferredHandle, envelope },
-    appLogFailure: undefined,
-  });
 }
 
 async function recoverFailedAppLogAdoption(
@@ -111,11 +103,17 @@ async function recoverFailedAppLogAdoption(
   state: AppLogAdoptionState,
   primaryError: unknown,
 ): Promise<void> {
-  if (!state.persisted) state.persisted = persistIncoherentRuntimeEnvelope(params);
+  const persisted = state.kind === 'pending' ? persistIncoherentRuntimeEnvelope(params) : true;
   let cleanupError = await disposeFailedAppLogAdoption(params.pendingHandle, state);
-  const transition = confirmFailedAdoptionTransition(params, state.persisted, cleanupError);
+  const transition = confirmFailedAdoptionTransition(params, persisted, cleanupError);
   cleanupError = transition.cleanupError;
-  updateUndurableCleanupBlock(params.device, state.persisted, cleanupError, transition.confirmed);
+  updateUndurableCleanupBlock(
+    params.admissionLedger,
+    params.device,
+    persisted,
+    cleanupError,
+    transition.confirmed,
+  );
   emitFailedAdoptionCleanupDiagnostic(params.sessionName, primaryError, cleanupError);
 }
 
@@ -124,7 +122,7 @@ async function disposeFailedAppLogAdoption(
   state: AppLogAdoptionState,
 ): Promise<unknown | undefined> {
   try {
-    if (state.transferredHandle) await state.transferredHandle[Symbol.asyncDispose]();
+    if (state.kind === 'transferred') await state.handle[Symbol.asyncDispose]();
     else await pendingHandle[Symbol.asyncDispose]();
     return undefined;
   } catch (error) {
@@ -162,16 +160,17 @@ function confirmFailedAdoptionTransition(
 }
 
 function updateUndurableCleanupBlock(
+  ledger: AppLogAdmissionLedger,
   device: DeviceInfo,
   persisted: boolean,
   cleanupError: unknown | undefined,
   transitionConfirmed: boolean,
 ): void {
   if ((!persisted && cleanupError === undefined) || transitionConfirmed) {
-    clearUndurableAppLogCleanup(device);
+    ledger.clearUndurableCleanup(device);
     return;
   }
-  blockUndurableAppLogCleanup(
+  ledger.blockUndurableCleanup(
     device,
     cleanupError instanceof Error
       ? cleanupError.message
@@ -245,16 +244,7 @@ function createExpectedRecoveryEnvelope(
   return createDurableResourceEnvelope({
     resourceKind: 'app-log',
     sessionId: params.sessionName,
-    device: {
-      id: params.device.id,
-      family: params.device.platform,
-      ...(params.device.appleOs === undefined ? {} : { appleOs: params.device.appleOs }),
-      kind: params.device.kind,
-      ...(params.device.target === undefined ? {} : { target: params.device.target }),
-      ...(params.device.iosPhysicalDeviceBackend === undefined
-        ? {}
-        : { iosPhysicalDeviceBackend: params.device.iosPhysicalDeviceBackend }),
-    },
+    device: deviceIdentity(params.device),
     owner: params.owner,
     fence: params.fence,
     lifecycle: 'starting',
@@ -412,7 +402,7 @@ function matchesStartedEnvelopeAuthority(
 ): boolean {
   return (
     envelope.sessionId === expected.sessionName &&
-    sameDurableDeviceIdentity(envelope.device, expected.device) &&
+    sameDeviceIdentity(envelope.device, deviceIdentity(expected.device)) &&
     runtimeOwnerKey(envelope.owner) === runtimeOwnerKey(expected.owner) &&
     envelope.fence.token === expected.fence.token &&
     envelope.fence.generation === expected.fence.generation &&
@@ -422,20 +412,6 @@ function matchesStartedEnvelopeAuthority(
 
 function isStartedLifecycle(lifecycle: DurableResourceEnvelope['lifecycle']): boolean {
   return lifecycle === 'starting' || lifecycle === 'active';
-}
-
-function sameDurableDeviceIdentity(
-  durable: DurableResourceEnvelope<'app-log'>['device'],
-  selected: DeviceInfo,
-): boolean {
-  return (
-    durable.id === selected.id &&
-    durable.family === selected.platform &&
-    durable.appleOs === selected.appleOs &&
-    durable.kind === selected.kind &&
-    durable.target === selected.target &&
-    durable.iosPhysicalDeviceBackend === selected.iosPhysicalDeviceBackend
-  );
 }
 
 function invalidStartedEnvelope(): AppError {

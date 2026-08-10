@@ -13,7 +13,7 @@ import {
 export type HarmonyAppLogDescriptor = Readonly<{
   transport: 'harmony-hilog';
   outputPath: string;
-  pidPath?: string;
+  pidPath: string;
 }>;
 
 export const harmonyAppLogDescriptorCodec: DurableDescriptorCodec<
@@ -27,7 +27,7 @@ export const harmonyAppLogDescriptorCodec: DurableDescriptorCodec<
     if (
       body.transport !== 'harmony-hilog' ||
       !isNonEmptyString(body.outputPath) ||
-      (body.pidPath !== undefined && !isNonEmptyString(body.pidPath))
+      !isNonEmptyString(body.pidPath)
     ) {
       return { status: 'invalid', message: 'Invalid HarmonyOS app-log descriptor' } as const;
     }
@@ -36,7 +36,7 @@ export const harmonyAppLogDescriptorCodec: DurableDescriptorCodec<
       descriptor: Object.freeze({
         transport: 'harmony-hilog',
         outputPath: body.outputPath,
-        ...(body.pidPath === undefined ? {} : { pidPath: body.pidPath }),
+        pidPath: body.pidPath,
       }),
     } as const;
   },

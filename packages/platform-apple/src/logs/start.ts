@@ -129,7 +129,7 @@ async function startCheckedAppleProcess(
   }
   signal?.throwIfAborted();
   return await host.processes.start({
-    command,
+    command: { kind: 'host', request: command },
     output,
     ...(pidPath ? { markerPath: pidPath } : {}),
   });

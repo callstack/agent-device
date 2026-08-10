@@ -27,7 +27,10 @@ describe('PID-scoped app-log process lifecycle', () => {
       processStart: starts,
       setupSignal: new AbortController().signal,
       resolvePid: async () => (starts.mock.calls.length === 0 ? '123' : '456'),
-      command: (pid) => ({ executable: 'adb', args: ['logcat', '--pid', pid] }),
+      command: (pid) => ({
+        kind: 'host',
+        request: { executable: 'adb', args: ['logcat', '--pid', pid] },
+      }),
       cleanupFailureMessage: 'cleanup failed',
     });
 
@@ -55,10 +58,14 @@ describe('PID-scoped app-log process lifecycle', () => {
         host,
         backend: 'android',
         outputPath: '/tmp/app.log',
+        pidPath: '/tmp/app-log.pid',
         processStart: start,
         setupSignal: controller.signal,
         resolvePid,
-        command: () => ({ executable: 'adb', args: ['logcat'] }),
+        command: () => ({
+          kind: 'host',
+          request: { executable: 'adb', args: ['logcat'] },
+        }),
         cleanupFailureMessage: 'cleanup failed',
       }),
     ).rejects.toBe(reason);
@@ -78,10 +85,14 @@ describe('PID-scoped app-log process lifecycle', () => {
       host: hostFixture(output.sink),
       backend: 'android',
       outputPath: '/tmp/app.log',
+      pidPath: '/tmp/app-log.pid',
       processStart: start,
       setupSignal: new AbortController().signal,
       resolvePid,
-      command: (pid) => ({ executable: 'adb', args: ['logcat', '--pid', pid] }),
+      command: (pid) => ({
+        kind: 'host',
+        request: { executable: 'adb', args: ['logcat', '--pid', pid] },
+      }),
       cleanupFailureMessage: 'cleanup failed',
     });
 
@@ -120,6 +131,7 @@ describe('PID-scoped app-log process lifecycle', () => {
         host,
         backend: 'android',
         outputPath: '/tmp/app.log',
+        pidPath: '/tmp/app-log.pid',
         processStart: async (_request, signal) => {
           expect(signal?.aborted).toBe(false);
           controller.abort(reason);
@@ -128,7 +140,10 @@ describe('PID-scoped app-log process lifecycle', () => {
         },
         setupSignal: controller.signal,
         resolvePid: async () => '123',
-        command: () => ({ executable: 'adb', args: ['logcat'] }),
+        command: () => ({
+          kind: 'host',
+          request: { executable: 'adb', args: ['logcat'] },
+        }),
         cleanupFailureMessage: 'cleanup failed',
       }),
     ).rejects.toBe(reason);

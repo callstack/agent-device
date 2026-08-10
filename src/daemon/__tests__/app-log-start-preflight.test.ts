@@ -4,10 +4,8 @@ import { expect, test } from 'vitest';
 import { createDurableResourceEnvelope, localRuntimeOwner } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import {
-  createNextAppLogFence,
-  replaceRetainedLegacyAppLogMarkers,
-} from '../app-log-start-preflight.ts';
+import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
+import { createNextAppLogFence } from '../app-log-start-preflight.ts';
 import { resolveAppLogResourcePath, writeAppLogResourceRecord } from '../app-log-resource-store.ts';
 
 const device: DeviceInfo = {
@@ -18,6 +16,7 @@ const device: DeviceInfo = {
 };
 
 test('nonterminal record from an old session blocks replacement on the same device', () => {
+  const ledger = createAppLogAdmissionLedger();
   const sessionStore = makeSessionStore('app-log-start-preflight-cross-session-');
   const oldResourcePath = resolveAppLogResourcePath(sessionStore.resolveSessionDir('old-session'));
   writeAppLogResourceRecord(
@@ -36,30 +35,30 @@ test('nonterminal record from an old session blocks replacement on the same devi
     sessionStore.resolveSessionDir('replacement-session'),
   );
 
-  expect(() => createNextAppLogFence({ resourcePath: newResourcePath, device })).toThrow(
+  expect(() => createNextAppLogFence({ ledger, resourcePath: newResourcePath, device })).toThrow(
     /this device/,
   );
 });
 
 test('an undecodable manifest or retained legacy marker blocks all replacement starts', () => {
+  const ledger = createAppLogAdmissionLedger();
   const sessionStore = makeSessionStore('app-log-start-preflight-global-');
   const resourcePath = resolveAppLogResourcePath(sessionStore.resolveSessionDir('new-session'));
   const corruptPath = resolveAppLogResourcePath(sessionStore.resolveSessionDir('corrupt-session'));
   fs.mkdirSync(path.dirname(corruptPath), { recursive: true });
   fs.writeFileSync(corruptPath, '{');
 
-  expect(() => createNextAppLogFence({ resourcePath, device })).toThrow(/unreattachable/);
+  expect(() => createNextAppLogFence({ ledger, resourcePath, device })).toThrow(/unreattachable/);
 
   fs.rmSync(corruptPath);
-  replaceRetainedLegacyAppLogMarkers(['/sessions/legacy/app-log.pid']);
-  try {
-    expect(() => createNextAppLogFence({ resourcePath, device })).toThrow(/legacy app-log marker/);
-  } finally {
-    replaceRetainedLegacyAppLogMarkers([]);
-  }
+  ledger.retainLegacyMarkers(['/sessions/legacy/app-log.pid']);
+  expect(() => createNextAppLogFence({ ledger, resourcePath, device })).toThrow(
+    /legacy app-log marker/,
+  );
 });
 
 test('a symlinked manifest blocks replacement globally without touching its external target', () => {
+  const ledger = createAppLogAdmissionLedger();
   const sessionStore = makeSessionStore('app-log-start-preflight-symlink-');
   const sessionsDir = path.dirname(sessionStore.resolveSessionDir('unused'));
   const outsidePath = path.join(path.dirname(sessionsDir), 'outside.json');
@@ -82,7 +81,7 @@ test('a symlinked manifest blocks replacement globally without touching its exte
     sessionStore.resolveSessionDir('replacement-session'),
   );
 
-  expect(() => createNextAppLogFence({ resourcePath: replacementPath, device })).toThrow(
+  expect(() => createNextAppLogFence({ ledger, resourcePath: replacementPath, device })).toThrow(
     /unreattachable/,
   );
   expect(fs.lstatSync(symlinkPath).isSymbolicLink()).toBe(true);

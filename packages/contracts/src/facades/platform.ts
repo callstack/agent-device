@@ -72,7 +72,6 @@ export type {
   DurableDescriptorBodyDecodeOutcome,
   DurableDescriptorCodec,
   DurableEnvelopeDecodeOutcome,
-  DurableResourceDeviceIdentity,
   DurableResourceEnvelope,
   DurableResourceLifecycleState,
   EncodedDurableDescriptor,
@@ -81,7 +80,6 @@ export { isConfirmedCleanup } from '../durable-resource.ts';
 export type {
   CleanupOutcome,
   CleanupPendingReason,
-  DurableResourceFacet,
   FinishOutcome,
   LiveResourceHandle,
   ReattachOutcome,
@@ -99,10 +97,15 @@ export {
 } from '../app-log-process-recovery.ts';
 export { createAppLogLiveHandleFromFinish } from '../app-log-live-handle.ts';
 export {
-  createPidScopedAppLogProcess,
+  createPidScopedAppLogRuntimeOwner,
   resolveFirstNumericAppLogPid,
-} from '../app-log-pid-process.ts';
-export type { PidScopedAppLogProcessOptions } from '../app-log-pid-process.ts';
+} from '../app-log-pid-runtime.ts';
+export type {
+  PidScopedAppLogRuntimeContext,
+  PidScopedAppLogRuntimeOptions,
+  PidScopedAppLogProcessPlan,
+  PidScopedAppLogStartContext,
+} from '../app-log-pid-runtime.ts';
 export { appLogCommandSucceeded, bestEffortAppLogCheck } from '../app-log-probe.ts';
 export {
   appLogSessionArtifactsMatch,
@@ -131,6 +134,7 @@ export type {
   AppLogProcessMarker,
   AppLogProcessMarkerReadOutcome,
   AppLogProcessOwnership,
+  AppLogProcessCommand,
   AppLogProcessStart,
   AppLogProcessTransport,
   AppLogRecoveryContext,

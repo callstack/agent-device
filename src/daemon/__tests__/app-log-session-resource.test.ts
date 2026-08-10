@@ -11,6 +11,7 @@ import { createTestAppLogLiveHandle } from '../../__tests__/test-utils/app-log-l
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 import { adoptStartedSessionAppLog } from '../app-log-session-resource.ts';
 import { createNextAppLogFence } from '../app-log-start-preflight.ts';
 import { readAppLogResourceRecord, resolveAppLogResourcePath } from '../app-log-resource-store.ts';
@@ -72,7 +73,11 @@ test('rejecting canceled-start cleanup retains cleanup-pending truth and blocks 
     envelope: { lifecycle: 'cleanup-pending' },
   });
   expect(() =>
-    createNextAppLogFence({ resourcePath: context.resourcePath, device: context.device }),
+    createNextAppLogFence({
+      ledger: context.admissionLedger,
+      resourcePath: context.resourcePath,
+      device: context.device,
+    }),
   ).toThrow(/terminal state/);
 });
 
@@ -129,7 +134,11 @@ test('incoherent start envelope with rejecting cleanup persists a blocking tombs
     },
   });
   expect(() =>
-    createNextAppLogFence({ resourcePath: context.resourcePath, device: context.device }),
+    createNextAppLogFence({
+      ledger: context.admissionLedger,
+      resourcePath: context.resourcePath,
+      device: context.device,
+    }),
   ).toThrow(/terminal state/);
 });
 
@@ -204,7 +213,11 @@ test('unwritable tombstone plus rejecting cleanup blocks same-process replacemen
 
   expect(readAppLogResourceRecord(context.resourcePath)).toEqual({ status: 'missing' });
   expect(() =>
-    createNextAppLogFence({ resourcePath: context.resourcePath, device: context.device }),
+    createNextAppLogFence({
+      ledger: context.admissionLedger,
+      resourcePath: context.resourcePath,
+      device: context.device,
+    }),
   ).toThrow(/process-local/);
 });
 
@@ -234,7 +247,11 @@ test('lost durable record during failed adoption installs a same-device process 
 
   expect(readAppLogResourceRecord(context.resourcePath)).toEqual({ status: 'missing' });
   expect(() =>
-    createNextAppLogFence({ resourcePath: context.resourcePath, device: context.device }),
+    createNextAppLogFence({
+      ledger: context.admissionLedger,
+      resourcePath: context.resourcePath,
+      device: context.device,
+    }),
   ).toThrow(/process-local/);
 });
 
@@ -257,6 +274,7 @@ function makeContext(
   sessionStore.set(sessionName, session);
   const resourcePath = resolveAppLogResourcePath(sessionStore.resolveSessionDir(sessionName));
   return {
+    admissionLedger: createAppLogAdmissionLedger(),
     session,
     sessionName,
     sessionStore,

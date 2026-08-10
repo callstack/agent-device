@@ -2,6 +2,7 @@ import {
   isAppleOs,
   isPlatform,
   type AppleOS,
+  type DeviceIdentity,
   type DeviceInfo,
   type DeviceKind,
   type DeviceTarget,
@@ -24,15 +25,6 @@ export type DurableResourceLifecycleState =
   | 'completed'
   | 'cleanup-pending';
 
-export type DurableResourceDeviceIdentity = Readonly<{
-  id: string;
-  family: Platform;
-  appleOs?: AppleOS;
-  kind: DeviceKind;
-  target?: DeviceTarget;
-  iosPhysicalDeviceBackend?: DeviceInfo['iosPhysicalDeviceBackend'];
-}>;
-
 export type EncodedDurableDescriptor = Readonly<{
   version: number;
   body: JsonObject;
@@ -43,7 +35,7 @@ export type DurableResourceEnvelope<ResourceKind extends string = string> = Read
   envelopeVersion: typeof DURABLE_RESOURCE_ENVELOPE_VERSION;
   resourceKind: ResourceKind;
   sessionId: string;
-  device: DurableResourceDeviceIdentity;
+  device: DeviceIdentity;
   owner: RuntimeOwnerRef;
   fence: ResourceOwnershipFence;
   lifecycle: DurableResourceLifecycleState;
@@ -143,7 +135,7 @@ export function encodeDurableDescriptor<Descriptor extends object, ResourceKind 
 export function createDurableResourceEnvelope<ResourceKind extends string>(input: {
   resourceKind: ResourceKind;
   sessionId: string;
-  device: DurableResourceDeviceIdentity;
+  device: DeviceIdentity;
   owner: RuntimeOwnerRef;
   fence: ResourceOwnershipFence;
   lifecycle: DurableResourceLifecycleState;
@@ -179,7 +171,7 @@ function decodeRuntimeOwnerRef(value: unknown): RuntimeOwnerRef | null {
   return null;
 }
 
-function decodeDeviceIdentity(value: unknown): DurableResourceDeviceIdentity | null {
+function decodeDeviceIdentity(value: unknown): DeviceIdentity | null {
   if (!isObject(value)) return null;
   const id = readDeviceIdentityId(value.id);
   const family = readDeviceIdentityFamily(value.family);
@@ -199,7 +191,7 @@ function buildDeviceIdentity(
   family: Platform,
   kind: DeviceKind,
   target: DeviceTarget | undefined,
-): DurableResourceDeviceIdentity {
+): DeviceIdentity {
   return Object.freeze({
     id,
     family,

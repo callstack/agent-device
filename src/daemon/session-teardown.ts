@@ -41,18 +41,12 @@ export async function stopAppleRunnerForClose(session: SessionState): Promise<vo
   });
 }
 
-export async function stopSessionAppLog(
-  session: SessionState,
-  sessionStore?: SessionStore,
-): Promise<void> {
+export async function stopSessionAppLog(params: {
+  session: SessionState;
+  sessionStore: SessionStore;
+}): Promise<void> {
+  const { session, sessionStore } = params;
   if (!session.appLog) return;
-  if (!sessionStore) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'App-log teardown requires the owning session store for fenced cleanup',
-      { reason: 'runtime-gateway-missing' },
-    );
-  }
   await forceCleanupSessionAppLog({
     session,
     sessionName: session.name,
@@ -159,13 +153,25 @@ export function reportSessionCleanupFailures(params: {
   );
 }
 
+type SessionResourceTeardownRequest = {
+  session: SessionState;
+  sessionName: string;
+  stateDir?: string;
+} & ({ kind: 'full'; sessionStore: SessionStore } | { kind: 'after-app-log' });
+
 export async function teardownSessionResources(
-  session: SessionState,
-  sessionName: string,
-  stateDir?: string,
-  sessionStore?: SessionStore,
-  options: { skipAppLog?: boolean } = {},
+  request: SessionResourceTeardownRequest,
 ): Promise<void> {
+  const { session, sessionName, stateDir } = request;
+  const appLogSteps: SessionCleanupStep[] =
+    request.kind === 'full'
+      ? [
+          {
+            step: 'app_log',
+            run: () => stopSessionAppLog({ session, sessionStore: request.sessionStore }),
+          },
+        ]
+      : [];
   const steps: SessionCleanupStep[] = [
     // Finalize any still-active recording BEFORE the Apple runner is stopped
     // below: the runner supplies gesture-telemetry for overlay finalization, and
@@ -173,6 +179,7 @@ export async function teardownSessionResources(
     // (and its 0-byte, slot-holding mp4) when a session is torn down — including
     // on daemon shutdown — without an explicit `record stop`.
     { step: 'recording', run: () => stopSessionRecordingForTeardown(session) },
+    ...appLogSteps,
     {
       step: 'audio_probe',
       run: async () => {
@@ -184,12 +191,6 @@ export async function teardownSessionResources(
     { step: 'android_snapshot_helper', run: () => stopSessionAndroidSnapshotHelper(session) },
     { step: 'android_ime', run: () => restoreSessionAndroidIme(session, stateDir) },
   ];
-  if (!options.skipAppLog) {
-    steps.splice(1, 0, {
-      step: 'app_log',
-      run: () => stopSessionAppLog(session, sessionStore),
-    });
-  }
   if (isApplePlatform(session.device.platform)) {
     steps.push({ step: 'apple_runner', run: () => stopAppleRunnerForClose(session) });
   }

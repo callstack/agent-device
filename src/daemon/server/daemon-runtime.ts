@@ -62,7 +62,7 @@ import {
   type AppLogRecoveryDiagnostic,
 } from '../app-log-resource-recovery.ts';
 import { createDaemonRecoveryPlatformScope } from '../platform-request-scope.ts';
-import { replaceRetainedLegacyAppLogMarkers } from '../app-log-start-preflight.ts';
+import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 
 const DAEMON_SESSION_TEARDOWN_TIMEOUT_MS = 5_000;
 const DAEMON_SESSION_LEASE_RELEASE_TIMEOUT_MS = 1_000;
@@ -109,7 +109,7 @@ export async function teardownDaemonSessionForShutdown(params: {
   // The ownership-fenced app-log side effect must settle while this process
   // still owns the daemon lock. It is intentionally outside the generic
   // teardown race so lock release and runtime shutdown cannot overtake it.
-  const appLogTeardownSucceeded = await stopSessionAppLog(session, sessionStore).then(
+  const appLogTeardownSucceeded = await stopSessionAppLog({ session, sessionStore }).then(
     () => true,
     (error) => {
       stderr.write(
@@ -120,8 +120,12 @@ export async function teardownDaemonSessionForShutdown(params: {
       return false;
     },
   );
-  const teardown = teardownSessionResources(session, session.name, stateDir, sessionStore, {
-    skipAppLog: true,
+  const sessionAfterAppLog = sessionStore.get(session.name) ?? session;
+  const teardown = teardownSessionResources({
+    kind: 'after-app-log',
+    session: sessionAfterAppLog,
+    sessionName: session.name,
+    stateDir,
   }).then(
     () => true,
     (error) => {
@@ -199,6 +203,7 @@ export async function startDaemonRuntime(
   setRunnerLeaseOwnerStateDir(baseDir);
 
   const sessionStore = new SessionStore(sessionsDir);
+  const appLogAdmissionLedger = createAppLogAdmissionLedger();
   const version = readVersion();
   const token = crypto.randomBytes(24).toString('hex');
   const daemonProcessStartTime = readProcessStartTime(process.pid) ?? undefined;
@@ -248,6 +253,7 @@ export async function startDaemonRuntime(
     cloudArtifactProvider,
     deviceInventoryGateways,
     deviceRuntimeGateway,
+    appLogAdmissionLedger,
     appleRunnerProvider: providerRuntimeProviders.appleRunnerProvider,
     providerRuntimeIds: providerRuntimeProviders.providerRuntimeIds,
     providerRuntimeRequiredIds: providerRuntimeProviders.providerRuntimeRequiredIds,
@@ -390,7 +396,7 @@ export async function startDaemonRuntime(
     const { recoverLegacyAppLogMarkersAfterDaemonLock } =
       await import('../../platform-runtime-app-log-host.ts');
     const legacyMarkerRecovery = await recoverLegacyAppLogMarkersAfterDaemonLock(sessionsDir);
-    replaceRetainedLegacyAppLogMarkers(
+    appLogAdmissionLedger.retainLegacyMarkers(
       legacyMarkerRecovery.retained.map((marker) => marker.markerPath),
     );
     for (const markerPath of legacyMarkerRecovery.recovered) {

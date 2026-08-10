@@ -16,7 +16,14 @@ import {
   runtimeOwnerKey,
   sameRuntimeOwner,
 } from '@agent-device/contracts/platform';
-import type { DeviceInfo, Platform } from '@agent-device/kernel/device';
+import {
+  deviceIdentity,
+  deviceShape,
+  sameDeviceIdentity,
+  sameDeviceShape,
+  type DeviceInfo,
+  type Platform,
+} from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 
 type ProviderAppLogRuntime = ProviderDeviceRuntime & AppLogRuntimeProviderModule;
@@ -173,7 +180,7 @@ function bindingContractFailure(
   if (!matchesRequestedOwner(binding.owner, request)) {
     return 'Exact app-log binding returned a different persisted owner';
   }
-  if (!sameDeviceIdentity(binding.device, request.device)) {
+  if (!sameDeviceIdentity(deviceIdentity(binding.device), deviceIdentity(request.device))) {
     return 'App-log binding returned a different device identity';
   }
   if (!factsMatchBindingIdentity(binding)) {
@@ -189,11 +196,7 @@ function matchesRequestedOwner(owner: RuntimeOwnerRef, request: DeviceBindingReq
 function factsMatchBindingIdentity(binding: DeviceBinding<AppLogRuntimeOperations>): boolean {
   const { device, owner, facts } = binding;
   return (
-    facts.device.family === device.platform &&
-    facts.device.appleOs === device.appleOs &&
-    facts.device.kind === device.kind &&
-    facts.device.target === device.target &&
-    facts.device.iosPhysicalDeviceBackend === device.iosPhysicalDeviceBackend &&
+    sameDeviceShape(facts.device, deviceShape(device)) &&
     providerModeMatchesOwner(facts.device.providerMode, owner)
   );
 }
@@ -205,17 +208,6 @@ function providerModeMatchesOwner(
   return owner.kind === 'local-family'
     ? mode === 'local' || mode === 'transport-composed'
     : mode === 'provider-runtime';
-}
-
-function sameDeviceIdentity(left: DeviceInfo, right: DeviceInfo): boolean {
-  return (
-    left.id === right.id &&
-    left.platform === right.platform &&
-    left.appleOs === right.appleOs &&
-    left.kind === right.kind &&
-    left.target === right.target &&
-    left.iosPhysicalDeviceBackend === right.iosPhysicalDeviceBackend
-  );
 }
 
 async function selectExactOwner(

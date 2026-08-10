@@ -1,5 +1,14 @@
 import { AppError } from './errors.ts';
 
+export {
+  deviceIdentity,
+  deviceIdentityKey,
+  deviceShape,
+  sameDeviceIdentity,
+  sameDeviceShape,
+  type DeviceIdentity,
+} from './device-identity.ts';
+
 // Legacy Apple leaf platforms. Retained ONLY as accepted `--platform` / read-path
 // input aliases (approach b back-compat) and as the PUBLIC leaf strings the daemon
 // still emits; the internal `Platform` no longer carries them — every Apple OS

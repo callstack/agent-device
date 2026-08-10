@@ -1,6 +1,6 @@
 import type {
+  AppLogProcessCommand,
   AppLogProcessTransport,
-  HostCommandRequest,
   HostCommandResult,
 } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -24,12 +24,12 @@ export async function resolveAndroidAppLogProcessTransport(
   const processes = createManagedAppLogProcesses(sessionsDir, {
     launch: async (command, signal) => {
       signal?.throwIfAborted();
-      const args = providerAdbArgs(command, device.id);
-      const child = spawn(args, {
-        allowFailure: command.allowFailure,
-        cwd: command.cwd,
-        env: command.env ? { ...process.env, ...command.env } : undefined,
-        timeoutMs: command.timeoutMs,
+      const adb = providerAdbCommand(command, device.id);
+      const child = spawn([...adb.args], {
+        allowFailure: adb.options?.allowFailure,
+        cwd: adb.options?.cwd,
+        env: adb.options?.env ? { ...process.env, ...adb.options.env } : undefined,
+        timeoutMs: adb.options?.timeoutMs,
         captureOutput: false,
         signal,
       });
@@ -39,11 +39,14 @@ export async function resolveAndroidAppLogProcessTransport(
   return Object.freeze({ mode: 'transport-composed', start: processes.start });
 }
 
-function providerAdbArgs(command: HostCommandRequest, deviceId: string): string[] {
-  if (command.executable !== 'adb' || command.args[0] !== '-s' || command.args[1] !== deviceId) {
+function providerAdbCommand(
+  command: AppLogProcessCommand,
+  deviceId: string,
+): Extract<AppLogProcessCommand, { kind: 'android-adb' }> {
+  if (command.kind !== 'android-adb' || command.serial !== deviceId) {
     throw new Error('Android app-log provider transport received a non-device-scoped adb command');
   }
-  return command.args.slice(2);
+  return command;
 }
 
 function providerBackgroundCommand(child: AndroidAdbProcess): ManagedAppLogCommand {

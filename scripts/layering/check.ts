@@ -183,15 +183,7 @@ function checkLogsRuntimeCutover(sources: ReadonlyMap<string, string>): Layering
     ...logsRuntimeNarrowingViolations(production),
     ...logsSessionStateOwnershipViolations(production),
     ...sourceExecutedUsingDeclarationViolations(production),
-  ].map((violation) => {
-    const separator = violation.indexOf(': ');
-    return {
-      rule: 'R14 logs-runtime-cutover',
-      file: separator < 0 ? '(logs runtime)' : violation.slice(0, separator),
-      line: 1,
-      message: separator < 0 ? violation : violation.slice(separator + 2),
-    };
-  });
+  ];
 }
 
 function checkBackEdges(edges: readonly ResolvedImportEdge[]): LayeringViolation[] {

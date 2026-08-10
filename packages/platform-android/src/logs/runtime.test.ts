@@ -266,7 +266,8 @@ function hostFixture(
     [Symbol.asyncDispose]: async () => {},
   };
   const startProcess: AppLogRuntimeHost['processes']['start'] = async ({ command, markerPath }) => {
-    backgroundCommands.push([command.executable, ...command.args]);
+    if (command.kind !== 'android-adb') throw new Error('Expected a typed Android adb command');
+    backgroundCommands.push(['adb', '-s', command.serial, ...command.args]);
     markerPaths.push(markerPath);
     if (options.processStartError) throw options.processStartError;
     return process;

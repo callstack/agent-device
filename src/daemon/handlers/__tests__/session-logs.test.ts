@@ -11,6 +11,10 @@ import {
 import { createTestAppLogLiveHandle } from '../../../__tests__/test-utils/app-log-live-handle.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import {
+  createAppLogAdmissionLedger,
+  type AppLogAdmissionLedger,
+} from '../../app-log-admission-ledger.ts';
 import { handleSessionCommands } from '../session.ts';
 import {
   resolveAppLogResourcePath,
@@ -37,9 +41,11 @@ const DEVICE: DeviceInfo = {
 type RuntimeHarness = ReturnType<typeof createRuntimeHarness>;
 
 let runtime: RuntimeHarness;
+let admissionLedger: AppLogAdmissionLedger;
 
 beforeEach(() => {
   runtime = createRuntimeHarness();
+  admissionLedger = createAppLogAdmissionLedger();
 });
 
 test('logs requires an active session', async () => {
@@ -148,6 +154,7 @@ test('logs stop uses the adopted handle after the required support bind', async 
 test('logs start persists the durable envelope before adopting the live handle', async () => {
   const { sessionStore, sessionName } = openSession();
   await expectStarted(await runLogs(sessionStore, sessionName, ['start'], {}, runtime.bindDevice));
+  expect(runtime.start.mock.calls[0]?.[0].appBundleId).toBe('com.example.app');
   expect(sessionStore.get(sessionName)?.appLog).toBeDefined();
   expect(readRecord(sessionStore, sessionName)).toMatchObject({
     status: 'decoded',
@@ -158,6 +165,35 @@ test('logs start persists the durable envelope before adopting the live handle',
     { required: ['appLogInspect', 'appLogStart'], preferred: [] },
   ]);
 });
+
+test.each([
+  { action: ['start'], message: /logs start requires an app session/ },
+  {
+    action: ['clear'],
+    flags: { restart: true },
+    message: /logs clear --restart requires an app session/,
+  },
+] as const)(
+  '$action proves the app session before binding start operations',
+  async ({ action, flags = {}, message }) => {
+    const { sessionStore, sessionName } = openSession();
+    const session = sessionStore.get(sessionName)!;
+    sessionStore.set(sessionName, { ...session, appBundleId: undefined });
+
+    const response = await runLogs(
+      sessionStore,
+      sessionName,
+      [...action],
+      flags,
+      runtime.bindDevice,
+    );
+
+    expect(response).toMatchObject({ ok: false, error: { code: 'INVALID_ARGS' } });
+    if (response?.ok === false) expect(response.error.message).toMatch(message);
+    expect(runtime.boundUses()).toEqual([{ required: [], preferred: ['appLogInspect'] }]);
+    expect(runtime.start).not.toHaveBeenCalled();
+  },
+);
 
 test('logs clear --restart finishes generation one before adopting generation two', async () => {
   const { sessionStore, sessionName } = openSession();
@@ -264,6 +300,7 @@ async function runLogs(
     sessionStore,
     invoke: noopInvoke,
     bindDevice,
+    appLogAdmissionLedger: admissionLedger,
     throwIfCanceled,
   });
 }

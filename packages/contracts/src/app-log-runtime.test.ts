@@ -8,6 +8,7 @@ import {
   createAppLogStartResult,
   decodeAppLogProcessMarker,
   type AppLogCompletion,
+  type AppLogBackgroundProcessRequest,
   type AppLogDescriptorCodec,
   type AppLogProcessOwnership,
   type AppLogProcessTransport,
@@ -43,6 +44,19 @@ function compileTimeProcessTransportProof(): void {
   void invalid;
 }
 void compileTimeProcessTransportProof;
+
+function compileTimeBackgroundCommandProof(): void {
+  const invalid: AppLogBackgroundProcessRequest = {
+    // @ts-expect-error Background commands require an explicit host/provider transport descriptor.
+    command: { executable: 'adb', args: ['-s', 'serial-1', 'logcat'] },
+    output: {
+      write: async () => {},
+      [Symbol.asyncDispose]: async () => {},
+    },
+  };
+  void invalid;
+}
+void compileTimeBackgroundCommandProof;
 
 test('app-log live handle makes finish and forced async disposal idempotent', async () => {
   const finish = vi.fn(async () => ({ status: 'completed', result: completion }) as const);

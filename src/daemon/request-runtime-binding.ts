@@ -1,4 +1,4 @@
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import { deviceIdentity, deviceIdentityKey, type DeviceInfo } from '@agent-device/kernel/device';
 import {
   AsyncCleanupStack,
   narrowDeviceBinding,
@@ -36,7 +36,7 @@ export function createRequestRuntimeBindings(params: {
   const bindings = new Map<string, Promise<DeviceBinding<AppLogRuntimeOperations>>>();
 
   const bindDevice: BindDeviceRuntime = async (device, use) => {
-    const key = runtimeDeviceKey(device);
+    const key = deviceIdentityKey(deviceIdentity(device));
     let bindingPromise = bindings.get(key);
     if (!bindingPromise) {
       bindingPromise = params.gateway
@@ -59,15 +59,4 @@ export function createRequestRuntimeBindings(params: {
     bindDevice,
     [Symbol.asyncDispose]: async () => await cleanups[Symbol.asyncDispose](),
   };
-}
-
-function runtimeDeviceKey(device: DeviceInfo): string {
-  return JSON.stringify([
-    device.platform,
-    device.appleOs ?? null,
-    device.kind,
-    device.target ?? null,
-    device.iosPhysicalDeviceBackend ?? null,
-    device.id,
-  ]);
 }

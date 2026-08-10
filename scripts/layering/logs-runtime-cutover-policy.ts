@@ -1,6 +1,9 @@
 import { parseSync } from 'oxc-parser';
+import type { LayeringViolation } from './model.ts';
 
 export type LogsRuntimeProductionSource = Readonly<{ path: string; source: string }>;
+
+const LOGS_RUNTIME_CUTOVER_RULE = 'R14 logs-runtime-cutover';
 
 const LEGACY_LOG_ROUTE_NAMES = new Set([
   'startAppLog',
@@ -20,8 +23,8 @@ const BRACKETED_RUNTIME_OPERATION = /\.operations\[['"]appLog[A-Za-z]+['"]\]/g;
 /** Legacy provider/tag execution is forbidden once the logs descriptor is runtime-backed. */
 export function logsLegacyRouteViolations(
   sources: readonly LogsRuntimeProductionSource[],
-): string[] {
-  const violations: string[] = [];
+): LayeringViolation[] {
+  const violations: LayeringViolation[] = [];
   for (const file of sources) {
     const parsed = parseSync(file.path, file.source);
     const seenRoutes = new Set<string>();
@@ -31,30 +34,31 @@ export function logsLegacyRouteViolations(
         const identity = `${String(node.start ?? '')}:${route}`;
         if (!seenRoutes.has(identity)) {
           seenRoutes.add(identity);
-          violations.push(`${file.path}: legacy logs route ${route}`);
+          violations.push(astViolation(file, node, `legacy logs route ${route}`));
         }
       }
       if (isLegacyLogsAdmission(node)) {
-        violations.push(`${file.path}: legacy logs capability admission requireCommandSupported`);
+        violations.push(
+          astViolation(file, node, 'legacy logs capability admission requireCommandSupported'),
+        );
       }
-      if (
-        file.path === 'src/core/command-descriptor/registry.ts' &&
-        isLogsDescriptorWithCapability(node)
-      ) {
-        violations.push(`${file.path}: logs descriptor retains legacy capability admission`);
+      if (isLogsDescriptorWithCapability(node)) {
+        violations.push(
+          astViolation(file, node, 'logs descriptor retains legacy capability admission'),
+        );
       }
-      if (file.path === 'src/platforms/apple/plugin.ts' && isAppleLogsCommandMember(node)) {
-        violations.push(`${file.path}: Apple plugin retains legacy logs support or hint closure`);
+      if (isAppleLogsCommandMember(node)) {
+        violations.push(
+          astViolation(file, node, 'Apple plugin retains legacy logs support or hint closure'),
+        );
       }
-      if (file.path === 'src/core/capabilities.ts' && isHarmonyLogsCommandSetDeclaration(node)) {
-        violations.push(`${file.path}: HarmonyOS static command set retains logs admission`);
+      if (isHarmonyLogsCommandSetDeclaration(node)) {
+        violations.push(
+          astViolation(file, node, 'HarmonyOS static command set retains logs admission'),
+        );
       }
-      if (
-        (file.path === 'packages/contracts/src/platform-plugin.ts' ||
-          /^src\/platforms\/.+\/plugin\.ts$/.test(file.path)) &&
-        isPlatformPluginAppLogFacet(node)
-      ) {
-        violations.push(`${file.path}: legacy PlatformPlugin appLog facet`);
+      if (isPlatformPluginAppLogDeclaration(node)) {
+        violations.push(astViolation(file, node, 'legacy PlatformPlugin appLog facet'));
       }
     });
   }
@@ -124,12 +128,40 @@ function isHarmonyLogsCommandSetDeclaration(node: Record<string, unknown>): bool
   );
 }
 
-function isPlatformPluginAppLogFacet(node: Record<string, unknown>): boolean {
-  return (
-    (node.type === 'Property' || node.type === 'TSPropertySignature') &&
-    node.computed !== true &&
-    propertyName(node.key) === 'appLog'
-  );
+function isPlatformPluginAppLogDeclaration(node: Record<string, unknown>): boolean {
+  if (node.type === 'TSTypeAliasDeclaration' || node.type === 'TSInterfaceDeclaration') {
+    const id = node.id as Record<string, unknown> | undefined;
+    return id?.type === 'Identifier' && id.name === 'PlatformPlugin' && astContainsAppLog(node);
+  }
+  if (node.type === 'TSSatisfiesExpression' || node.type === 'TSAsExpression') {
+    return isNamedType(node.typeAnnotation, 'PlatformPlugin') && astContainsAppLog(node.expression);
+  }
+  if (node.type !== 'VariableDeclarator') return false;
+  const id = node.id as Record<string, unknown> | undefined;
+  return isNamedType(id?.typeAnnotation, 'PlatformPlugin') && astContainsAppLog(node.init);
+}
+
+function isNamedType(node: unknown, expected: string): boolean {
+  if (node === null || typeof node !== 'object') return false;
+  const record = node as Record<string, unknown>;
+  if (record.type === 'TSTypeAnnotation') return isNamedType(record.typeAnnotation, expected);
+  if (record.type !== 'TSTypeReference') return false;
+  const name = record.typeName as Record<string, unknown> | undefined;
+  return name?.type === 'Identifier' && name.name === expected;
+}
+
+function astContainsAppLog(node: unknown): boolean {
+  let found = false;
+  visitAst(node, (candidate) => {
+    if (
+      (candidate.type === 'Property' || candidate.type === 'TSPropertySignature') &&
+      candidate.computed !== true &&
+      propertyName(candidate.key) === 'appLog'
+    ) {
+      found = true;
+    }
+  });
+  return found;
 }
 
 function memberName(node: Record<string, unknown>): string | undefined {
@@ -161,8 +193,8 @@ function visitAst(node: unknown, visitor: (node: Record<string, unknown>) => voi
 /** Migrated daemon owners consume narrowed operations without manufacturing facet proof. */
 export function logsRuntimeNarrowingViolations(
   sources: readonly LogsRuntimeProductionSource[],
-): string[] {
-  const violations: string[] = [];
+): LayeringViolation[] {
+  const violations: LayeringViolation[] = [];
   for (const file of sources.filter(({ path }) => path.startsWith('src/daemon/'))) {
     for (const pattern of [
       RUNTIME_TYPE_ASSERTION,
@@ -170,7 +202,9 @@ export function logsRuntimeNarrowingViolations(
       BRACKETED_RUNTIME_OPERATION,
     ]) {
       for (const match of file.source.matchAll(pattern)) {
-        violations.push(`${file.path}: widened logs runtime access ${match[0]}`);
+        violations.push(
+          offsetViolation(file, match.index, `widened logs runtime access ${match[0]}`),
+        );
       }
     }
   }
@@ -180,8 +214,8 @@ export function logsRuntimeNarrowingViolations(
 /** Session app-log state transitions have one whole-record replacement owner. */
 export function logsSessionStateOwnershipViolations(
   sources: readonly LogsRuntimeProductionSource[],
-): string[] {
-  const violations: string[] = [];
+): LayeringViolation[] {
+  const violations: LayeringViolation[] = [];
   for (const file of sources) {
     if (
       !file.path.startsWith('src/daemon/') ||
@@ -195,7 +229,9 @@ export function logsSessionStateOwnershipViolations(
       if (node.type === 'Property' && node.kind === 'init' && node.computed !== true) {
         const field = propertyName(node.key);
         if (field === 'appLog' || field === 'appLogFailure') {
-          violations.push(`${file.path}: session ${field} record constructed outside its owner`);
+          violations.push(
+            astViolation(file, node, `session ${field} record constructed outside its owner`),
+          );
         }
       }
     });
@@ -210,8 +246,8 @@ export function logsSessionStateOwnershipViolations(
  */
 export function sourceExecutedUsingDeclarationViolations(
   sources: readonly LogsRuntimeProductionSource[],
-): string[] {
-  const violations: string[] = [];
+): LayeringViolation[] {
+  const violations: LayeringViolation[] = [];
   for (const file of sources) {
     const parsed = parseSync(file.path, file.source);
     visitAst(parsed.program, (node) => {
@@ -220,12 +256,37 @@ export function sourceExecutedUsingDeclarationViolations(
         (node.kind === 'using' || node.kind === 'await using')
       ) {
         violations.push(
-          `${file.path}: source-executed TypeScript uses unsupported ${String(node.kind)} declaration`,
+          astViolation(
+            file,
+            node,
+            `source-executed TypeScript uses unsupported ${String(node.kind)} declaration`,
+          ),
         );
       }
     });
   }
   return violations;
+}
+
+function astViolation(
+  file: LogsRuntimeProductionSource,
+  node: Record<string, unknown>,
+  message: string,
+): LayeringViolation {
+  return offsetViolation(file, typeof node.start === 'number' ? node.start : 0, message);
+}
+
+function offsetViolation(
+  file: LogsRuntimeProductionSource,
+  offset: number,
+  message: string,
+): LayeringViolation {
+  return {
+    rule: LOGS_RUNTIME_CUTOVER_RULE,
+    file: file.path,
+    line: file.source.slice(0, offset).split('\n').length,
+    message,
+  };
 }
 
 function propertyName(node: unknown): string | undefined {

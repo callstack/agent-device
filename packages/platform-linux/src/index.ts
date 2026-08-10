@@ -1,4 +1,5 @@
 import type {
+  AppLogRuntimePlatformModule,
   InventoryPlatformModule,
   PlatformModuleMetadata,
 } from '@agent-device/contracts/platform';

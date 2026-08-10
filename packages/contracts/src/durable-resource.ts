@@ -1,7 +1,3 @@
-import type { DurableDescriptorCodec } from './durable-resource-envelope.ts';
-import type { PlatformRequestScope } from './platform-runtime-host.ts';
-import type { ResourceOwnershipFence } from './platform-runtime.ts';
-
 export type CleanupPendingReason =
   | 'ownership-fence-lost'
   | 'owner-unavailable'
@@ -49,26 +45,6 @@ export type ReattachOutcome<Handle extends AsyncDisposable, Result> =
       reason: ResourceUnreattachableReason;
       message?: string;
     }>;
-
-/** Facets specialize this with their own descriptor, live handle, and result types. */
-export type DurableResourceFacet<
-  Descriptor extends object,
-  Handle extends AsyncDisposable,
-  Result,
-  ResourceKind extends string,
-> = Readonly<{
-  codec: DurableDescriptorCodec<Descriptor, ResourceKind>;
-  reattach(
-    descriptor: Descriptor,
-    fence: ResourceOwnershipFence,
-    scope: PlatformRequestScope,
-  ): Promise<ReattachOutcome<Handle, Result>>;
-  cleanup(
-    descriptor: Descriptor,
-    fence: ResourceOwnershipFence,
-    scope: PlatformRequestScope,
-  ): Promise<CleanupOutcome>;
-}>;
 
 export function isConfirmedCleanup(
   outcome: CleanupOutcome,

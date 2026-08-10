@@ -183,12 +183,13 @@ export async function createRequestExecutionScope(params: {
           sessionStore,
           leaseRegistry,
           teardownSession: async (session, expiredSessionName) =>
-            await teardownSessionResources(
+            await teardownSessionResources({
+              kind: 'full',
               session,
-              expiredSessionName,
-              sessionStore.resolveDaemonStateDir(),
+              sessionName: expiredSessionName,
+              stateDir: sessionStore.resolveDaemonStateDir(),
               sessionStore,
-            ),
+            }),
         });
         scopedReq = admitRequestLeaseForLockedScope({
           req: scopedReq,

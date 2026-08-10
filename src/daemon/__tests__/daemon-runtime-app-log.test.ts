@@ -92,14 +92,15 @@ test('daemon shutdown settles fenced app-log cleanup before finalization can rel
   const cleanupStarted = new Promise<void>((resolve) => {
     markCleanupStarted = resolve;
   });
+  const forceCleanup = vi.fn(async () => {
+    markCleanupStarted();
+    await cleanupReleased;
+    return { status: 'cleaned' as const };
+  });
   const handle = createTestAppLogLiveHandle({
     inspect: () => ({ backend: 'android', state: 'active', startedAt: 1 }),
     finish: async () => ({ status: 'cleanup-pending', reason: 'cleanup-unconfirmed' }),
-    forceCleanup: async () => {
-      markCleanupStarted();
-      await cleanupReleased;
-      return { status: 'cleaned' };
-    },
+    forceCleanup,
   });
   session.appLog = { handle, envelope };
   sessionStore.set(session.name, session);
@@ -121,6 +122,7 @@ test('daemon shutdown settles fenced app-log cleanup before finalization can rel
   releaseCleanup();
   await teardown;
 
+  expect(forceCleanup).toHaveBeenCalledOnce();
   expect(beforeDelete).toHaveBeenCalledOnce();
   expect(sessionStore.get(session.name)).toBeUndefined();
   expect(readAppLogResourceRecord(resourcePath)).toMatchObject({
