@@ -1,4 +1,0 @@
-interface:
-  display_name: 'Verify iOS Simulator'
-  short_description: 'Inspect and verify iOS Simulator apps with agent-device.'
-  default_prompt: 'Use $ios-simulator to verify this iOS Simulator change with agent-device.'
