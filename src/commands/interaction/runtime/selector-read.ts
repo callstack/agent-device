@@ -1,7 +1,6 @@
 import {
   FIND_VALUE_REQUIRED_MESSAGE,
   findBestMatchesByLocator,
-  findSelectorChainMatch,
   formatSelectorFailure,
   resolveSelectorChainWithPolicy,
   selectorFailureHint,
@@ -298,10 +297,18 @@ export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = asyn
   });
 
   if (predicate === 'exists') {
-    const matched = findSelectorChainMatch(capture.snapshot.nodes, selectorExpression, {
-      platform: runtime.backend.platform,
-    });
-    if (!matched) {
+    // `readAny`, the same row find's read actions use: presence is the
+    // question, so any match count passes and the first one answers. The row
+    // already documented itself as serving `exists`, but this branch used to
+    // reach the engine directly — the claim was true of the docs and not of
+    // the code (#1630).
+    const matched = resolveSelectorChainWithPolicy(
+      capture.snapshot.nodes,
+      selectorExpression,
+      SELECTOR_RESOLUTION_POLICIES.readAny,
+      { platform: runtime.backend.platform },
+    );
+    if (matched.kind !== 'resolved') {
       throw new AppError(
         'COMMAND_FAILED',
         formatSelectorFailure(selectorExpression, [], { unique: false }),
@@ -313,8 +320,8 @@ export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = asyn
     return {
       predicate: predicate,
       pass: true,
-      selector: matched.selector,
-      matches: matched.matches,
+      selector: matched.resolution.selector,
+      matches: matched.resolution.matches,
       selectorChain: readSelectorAlternatives(selectorExpression),
     };
   }

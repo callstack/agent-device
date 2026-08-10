@@ -99,7 +99,11 @@ export function listSelectorChainMatches(
   return null;
 }
 
-/** The parser-side twin of the façade's `SelectorChainMatch`. */
+/**
+ * A first-match lookup used by existence checks. No façade twin: the root
+ * façade resolves through the policy interface only, so this shape reaches
+ * consumers via the published `./ast` surface alone (#1630).
+ */
 export type AstSelectorChainMatch = {
   selectorIndex: number;
   selector: Selector;

@@ -2,7 +2,6 @@ import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import type { Selector } from './internal/parse.ts';
 import type {
   PolicyResolutionOutcome,
-  SelectorChainMatch,
   SelectorChainMatchList,
   SelectorMatchOptions,
 } from './internal/public-resolution-types.ts';
@@ -32,7 +31,6 @@ import {
   normalizeIsPositionals,
 } from './internal/predicates.ts';
 import {
-  findSelectorChainMatch as findSelectorChainMatchAst,
   listSelectorChainMatches as listSelectorChainMatchesAst,
   selectorFailureHint,
   STALE_REF_HINT,
@@ -61,7 +59,6 @@ export type { IsPredicate } from './internal/predicates.ts';
 export type {
   PolicyResolutionOutcome,
   SelectorChainMatchList,
-  SelectorChainMatch,
   SelectorResolution,
 } from './internal/public-resolution-types.ts';
 export { formatSelectorFailure } from './internal/resolve.ts';
@@ -78,7 +75,6 @@ export {
   detectUnknownSelectorKeyToken,
   evaluateIsPredicate,
   findBestMatchesByLocator,
-  findSelectorChainMatch,
   isReadOnlyFindAction,
   normalizeFindActionToken,
   isRoleHintWord,
@@ -227,16 +223,6 @@ function isValidSelectorExpression(expression: string): boolean {
 /** Throw the same INVALID_ARGS parser failure while keeping the AST private. */
 function validateSelectorExpression(expression: string): void {
   parseSelectorChain(expression);
-}
-
-/** Public façade wrapper that accepts/returns selector text, never an AST. */
-function findSelectorChainMatch(
-  nodes: SnapshotState['nodes'],
-  expression: string,
-  options: SelectorMatchOptions,
-): SelectorChainMatch | null {
-  const result = findSelectorChainMatchAst(nodes, parseSelectorChain(expression), options);
-  return result ? { ...result, selector: result.selector.raw } : null;
 }
 
 /** Public façade wrapper that accepts/returns selector text, never an AST. */

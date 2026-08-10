@@ -45,11 +45,14 @@ export type PolicyResolutionOutcome =
   /** No selector alternative matched anything. */
   | { kind: 'none' }
   /**
-   * The node this policy authorizes acting on, plus the full candidate set of
-   * the alternative it came from. Callers that verify identity across
-   * candidates (wait's #1349 landmark check) need the whole set — a policy
-   * that picks one winner must not throw the rest away, or a first impostor
-   * would hide a later genuine match.
+   * The node this policy authorizes acting on, plus the candidate set of the
+   * first matching alternative. Callers that verify identity across candidates
+   * (wait's #1349 landmark check) need the whole set — a policy that picks one
+   * winner must not throw the rest away, or a first impostor would hide a
+   * later genuine match. Those callers use `first-match` rows, where the two
+   * fields describe the same alternative by construction; a uniqueness row can
+   * resolve from a LATER alternative, so pair `matchedNodes` with
+   * `resolution.selector` before reading them as one set.
    */
   | { kind: 'resolved'; resolution: SelectorResolution; matchedNodes: SnapshotNode[] }
   /**
@@ -64,14 +67,6 @@ export type SelectorChainMatchList = {
   selector: string;
   selectorIndex: number;
   matchedNodes: SnapshotNode[];
-};
-
-/** A first-match lookup used by existence checks. */
-export type SelectorChainMatch = {
-  selectorIndex: number;
-  selector: string;
-  matches: number;
-  diagnostics: SelectorDiagnostics[];
 };
 
 /**

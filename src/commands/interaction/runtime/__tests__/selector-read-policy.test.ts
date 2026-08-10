@@ -65,6 +65,22 @@ test('is fails closed on the same ambiguous selector (readUnique row)', async ()
   assert.equal((error.details as { reason?: string } | undefined)?.reason, 'selector_not_found');
 });
 
+test('is exists tolerates the ambiguity its sibling predicates refuse (readAny row)', async () => {
+  const device = createSelectorDevice(ambiguousSelectorReadSnapshot());
+
+  // The same screen and selector the fail-closed `is` above refuses: presence
+  // is a different question from "which one", so `exists` answers it and
+  // discloses the real count instead of guessing a winner.
+  const result = await device.selectors.is({
+    session: 'default',
+    predicate: 'exists',
+    selector: AMBIGUOUS_SELECTOR,
+  });
+
+  assert.equal(result.pass, true);
+  assert.equal(result.matches, 2);
+});
+
 test('find takes the document-order head on the same tree (readAny row)', async () => {
   const device = createSelectorDevice(ambiguousSelectorReadSnapshot());
 
