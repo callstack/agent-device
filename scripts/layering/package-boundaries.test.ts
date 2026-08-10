@@ -451,6 +451,7 @@ test('the real tree parses, declares, and passes R11', () => {
     ['@agent-device/provider-webdriver'],
   );
   assert.deepEqual([...providerWebDriverPackage.workspaceDependencies].sort(), [
+    '@agent-device/capture-kit',
     '@agent-device/contracts',
     '@agent-device/kernel',
     '@agent-device/xml',

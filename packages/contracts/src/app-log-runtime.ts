@@ -7,10 +7,7 @@ import type {
   HostCommandRunner,
   HostToolchainPreparer,
 } from './platform-runtime-host.ts';
-import type {
-  ResourceOwnershipFence,
-  RuntimeProviderMode,
-} from './platform-runtime.ts';
+import type { ResourceOwnershipFence, RuntimeProviderMode } from './platform-runtime.ts';
 import type { PendingTransferGuard } from './async-lifecycle.ts';
 import {
   type CleanupOutcome,

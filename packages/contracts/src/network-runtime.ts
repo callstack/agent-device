@@ -2,7 +2,7 @@ import type { NetworkIncludeMode } from '@agent-device/kernel/contracts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppLogLiveState, AppLogProcessMarkerReadOutcome } from './app-log-runtime.ts';
 import type { LogBackend } from './logs.ts';
-import type { HostCommandRunner } from './platform-runtime-host.ts';
+import type { AppleToolHost, HostCommandRunner } from './platform-runtime-host.ts';
 import type { RuntimeProviderMode } from './platform-runtime.ts';
 import type { NetworkDump } from './network-traffic.ts';
 
@@ -75,6 +75,7 @@ export type NetworkAppLogRead = Readonly<{
 
 export type NetworkRuntimeHost = Readonly<{
   commands: HostCommandRunner;
+  appleTools: AppleToolHost;
   appLogs: Readonly<{
     readRecent(sessionId: string, maxScanLines: number): Promise<NetworkAppLogRead>;
     readProcessMarker(sessionId: string): Promise<AppLogProcessMarkerReadOutcome>;

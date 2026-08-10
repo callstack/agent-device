@@ -1,4 +1,6 @@
 import type {
+  HostCommandRequest,
+  HostCommandResult,
   NetworkDumpInput,
   NetworkDumpResult,
   PlatformRuntimeHost,
@@ -29,6 +31,7 @@ export async function dumpAndroidNetworkTraffic(
   const notes: string[] = [];
   const context = await recoveryContext(host, device, input, signal);
   if (context && input.appBundleId) {
+    assertAndroidLogPackageSafe(input.appBundleId);
     const recovered = await recoverPackageTraffic(host, device, input.appBundleId, signal);
     if (recovered) {
       const recoveryDump = readRecentNetworkTrafficFromText(recovered.text, {
@@ -67,6 +70,22 @@ export async function dumpAndroidNetworkTraffic(
   });
 }
 
+async function runOptionalRecoveryCommand(
+  host: PlatformRuntimeHost,
+  request: HostCommandRequest,
+  signal: AbortSignal,
+): Promise<HostCommandResult | undefined> {
+  signal.throwIfAborted();
+  try {
+    const result = await host.commands.run(request, signal);
+    signal.throwIfAborted();
+    return result;
+  } catch {
+    signal.throwIfAborted();
+    return undefined;
+  }
+}
+
 async function recoveryContext(
   host: PlatformRuntimeHost,
   device: DeviceInfo,
@@ -97,9 +116,9 @@ async function recoverPackageTraffic(
   appBundleId: string,
   signal: AbortSignal,
 ): Promise<{ text: string; pids: readonly string[] } | undefined> {
-  assertAndroidLogPackageSafe(appBundleId);
   const currentPid = await resolveAndroidPid(host, device.id, appBundleId, signal);
-  const result = await host.commands.run(
+  const result = await runOptionalRecoveryCommand(
+    host,
     {
       executable: 'adb',
       args: ['-s', device.id, 'logcat', '-d', '-v', 'time', '-t', '4000'],
@@ -108,6 +127,7 @@ async function recoverPackageTraffic(
     },
     signal,
   );
+  if (!result) return undefined;
   if (result.exitCode !== 0 || !result.stdout.trim()) return undefined;
   const pids = collectPackagePids(result.stdout, appBundleId, currentPid);
   if (pids.length === 0) return undefined;
@@ -130,7 +150,8 @@ async function resolveAndroidPid(
   appBundleId: string,
   signal: AbortSignal,
 ): Promise<string | undefined> {
-  const result = await host.commands.run(
+  const result = await runOptionalRecoveryCommand(
+    host,
     {
       executable: 'adb',
       args: ['-s', deviceId, 'shell', 'pidof', appBundleId],
@@ -138,6 +159,7 @@ async function resolveAndroidPid(
     },
     signal,
   );
+  if (!result) return undefined;
   const pid = result.stdout.trim().split(/\s+/)[0];
   return pid && /^\d+$/.test(pid) ? pid : undefined;
 }

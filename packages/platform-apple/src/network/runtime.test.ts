@@ -14,7 +14,7 @@ const simulator: DeviceInfo = {
 };
 
 test('recovers an empty iOS simulator dump from bounded simctl log history', async () => {
-  const commandRun = vi.fn(async () => ({
+  const runSimctl = vi.fn(async () => ({
     stdout: [
       'Timestamp               Ty Process[PID:TID]',
       '2026-08-10T10:00:00Z GET https://recovered.example.test status=200',
@@ -23,7 +23,7 @@ test('recovers an empty iOS simulator dump from bounded simctl log history', asy
     exitCode: 0,
   }));
   const result = await dumpAppleNetworkTraffic(
-    host({ commandRun }),
+    host({ runSimctl }),
     simulator,
     input({ appLogSnapshot: { state: 'active', startedAt: 1_000 } }),
     new AbortController().signal,
@@ -37,10 +37,10 @@ test('recovers an empty iOS simulator dump from bounded simctl log history', asy
   expect(result.source).toBe('app-log');
   if (result.source !== 'app-log') throw new Error('expected app-log result');
   expect(result.notes[0]).toContain('Recovered 1 iOS simulator HTTP entry');
-  expect(commandRun).toHaveBeenCalledWith(
+  expect(runSimctl).toHaveBeenCalledWith(
     expect.objectContaining({
-      executable: 'xcrun',
-      args: expect.arrayContaining(['simctl', 'spawn', 'sim-1', '--start', '@1']),
+      tool: 'simctl',
+      args: expect.arrayContaining(['spawn', 'sim-1', '--start', '@1']),
       timeoutMs: 4_000,
     }),
     expect.any(AbortSignal),
@@ -50,7 +50,7 @@ test('recovers an empty iOS simulator dump from bounded simctl log history', asy
 test('preserves the simulator no-HTTP explanation after recovery returns app lines', async () => {
   const result = await dumpAppleNetworkTraffic(
     host({
-      commandRun: async () => ({
+      runSimctl: async () => ({
         stdout: '2026-08-10T10:00:00Z application diagnostic only\n',
         stderr: '',
         exitCode: 0,
@@ -69,10 +69,10 @@ test('preserves the simulator no-HTTP explanation after recovery returns app lin
 });
 
 test('parses macOS session app-log traffic without loading simulator recovery', async () => {
-  const commandRun = vi.fn();
+  const runSimctl = vi.fn();
   const result = await dumpAppleNetworkTraffic(
     host({
-      commandRun,
+      runSimctl,
       text: '2026-08-10T10:00:00Z GET https://mac.example.test status=204\n',
     }),
     { ...simulator, appleOs: 'macos', kind: 'device', target: 'desktop' },
@@ -84,7 +84,7 @@ test('parses macOS session app-log traffic without loading simulator recovery', 
     backend: 'macos',
     dump: { entries: [{ url: 'https://mac.example.test', status: 204 }] },
   });
-  expect(commandRun).not.toHaveBeenCalled();
+  expect(runSimctl).not.toHaveBeenCalled();
 });
 
 function input(overrides: Partial<NetworkDumpInput> = {}): NetworkDumpInput {
@@ -101,11 +101,17 @@ function input(overrides: Partial<NetworkDumpInput> = {}): NetworkDumpInput {
 
 function host(options: {
   text?: string;
-  commandRun: PlatformRuntimeHost['commands']['run'];
+  runSimctl: PlatformRuntimeHost['appleTools']['run'];
 }): PlatformRuntimeHost {
   return {
     ...unusedAppLogHost(),
-    commands: { which: async () => undefined, run: options.commandRun },
+    commands: {
+      which: async () => undefined,
+      run: async () => {
+        throw new Error('generic command runner must not own Apple network recovery');
+      },
+    },
+    appleTools: { isXcrunAvailable: async () => true, run: options.runSimctl },
     appLogs: {
       readRecent: async () => ({
         path: '/sessions/one/app.log',
@@ -121,13 +127,9 @@ function host(options: {
 
 function unusedAppLogHost(): Omit<
   PlatformRuntimeHost,
-  'commands' | 'appLogs' | 'networkTransports'
+  'appleTools' | 'commands' | 'appLogs' | 'networkTransports'
 > {
   return {
-    appleTools: {
-      isXcrunAvailable: async () => false,
-      run: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
-    },
     toolchains: { prepare: async () => {} },
     artifacts: {
       resolveSession: () => ({

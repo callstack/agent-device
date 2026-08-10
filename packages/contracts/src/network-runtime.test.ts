@@ -21,6 +21,13 @@ function compileTimeNetworkProjectionProof(
 void compileTimeNetworkProjectionProof;
 
 function compileTimeCanonicalHostProof(host: NetworkRuntimeHost): void {
+  void host.appleTools.run({ tool: 'simctl', args: ['spawn', 'sim-1', 'log', 'show'] });
+  void host.appleTools.run({
+    tool: 'simctl',
+    // @ts-expect-error The focused Apple port cannot execute an arbitrary binary.
+    executable: 'xcrun',
+    args: ['simctl', 'list'],
+  });
   void host.appLogs.readRecent('session-id', 4000);
   void host.appLogs.readProcessMarker('session-id');
   // @ts-expect-error Callers cannot supply an arbitrary app-log path.

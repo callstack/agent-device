@@ -65,7 +65,6 @@ async function recoverSimulatorTraffic(
   signal: AbortSignal,
 ): Promise<{ dump: NetworkDump; lineCount: number } | undefined> {
   const args = [
-    'simctl',
     ...(device.simulatorSetPath ? ['--set', device.simulatorSetPath] : []),
     'spawn',
     device.id,
@@ -83,8 +82,8 @@ async function recoverSimulatorTraffic(
       ? ['--start', `@${Math.floor(startedAt / 1000)}`]
       : ['--last', '5m']),
   );
-  const result = await host.commands.run(
-    { executable: 'xcrun', args, allowFailure: true, timeoutMs: 4_000 },
+  const result = await host.appleTools.run(
+    { tool: 'simctl', args, allowFailure: true, timeoutMs: 4_000 },
     signal,
   );
   if (result.exitCode !== 0 || !result.stdout.trim()) return undefined;

@@ -26,5 +26,4 @@ export {
   createUnavailablePlatformRuntimeBinding,
   createUnavailablePlatformRuntimeOwner,
 } from './platform-runtime-unavailable.ts';
-export type { UnavailablePlatformRuntimeFacts } from './platform-runtime-unavailable.ts';
 export { mergeNetworkDumps, readRecentNetworkTrafficFromText } from './network-traffic.ts';

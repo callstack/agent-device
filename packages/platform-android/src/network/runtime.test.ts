@@ -69,6 +69,44 @@ test('detects an active stream still bound to the previous Android pid', async (
   expect(command.mock.calls.some(([request]) => request.args.includes('logcat'))).toBe(true);
 });
 
+test('keeps canonical traffic when optional logcat recovery fails', async () => {
+  const result = await dumpAndroidNetworkTraffic(
+    host({
+      marker: { status: 'missing' },
+      command: (request) => commandResult(request, '222'),
+      appLogText: '01-01 00:00:00.000 D/App (222): GET https://canonical.example.test status=200',
+      logcat: new Error('adb transport unavailable'),
+    }),
+    device,
+    input({ appLogSnapshot: { state: 'ended', startedAt: 1 } }),
+    new AbortController().signal,
+  );
+
+  expect(result).toMatchObject({
+    source: 'app-log',
+    dump: { entries: [{ url: 'https://canonical.example.test', status: 200 }] },
+  });
+});
+
+test('preserves the exact request cancellation reason during optional recovery', async () => {
+  const controller = new AbortController();
+  const reason = new Error('request cancelled');
+  controller.abort(reason);
+
+  await expect(
+    dumpAndroidNetworkTraffic(
+      host({
+        marker: { status: 'missing' },
+        command: (request) => commandResult(request, '222'),
+        logcat: new Error('transport error after cancellation'),
+      }),
+      device,
+      input({ appLogSnapshot: { state: 'ended', startedAt: 1 } }),
+      controller.signal,
+    ),
+  ).rejects.toBe(reason);
+});
+
 function input(overrides: Partial<NetworkDumpInput> = {}): NetworkDumpInput {
   return {
     sessionId: 'one',
@@ -85,7 +123,7 @@ function host(options: {
   marker: Awaited<ReturnType<PlatformRuntimeHost['appLogs']['readProcessMarker']>>;
   command(request: HostCommandRequest): { stdout: string; stderr: string; exitCode: number };
   appLogText?: string;
-  logcat: string;
+  logcat: string | Error;
 }): PlatformRuntimeHost {
   return {
     ...unusedAppLogHost(),
@@ -94,7 +132,14 @@ function host(options: {
       run: async (request) => {
         if (!request.args.includes('logcat')) return options.command(request);
         options.command(request);
+        if (options.logcat instanceof Error) throw options.logcat;
         return { stdout: options.logcat, stderr: '', exitCode: 0 };
+      },
+    },
+    appleTools: {
+      isXcrunAvailable: async () => false,
+      run: async () => {
+        throw new Error('unused');
       },
     },
     appLogs: {
@@ -118,13 +163,9 @@ function commandResult(request: HostCommandRequest, pid: string) {
 
 function unusedAppLogHost(): Omit<
   PlatformRuntimeHost,
-  'commands' | 'appLogs' | 'networkTransports'
+  'appleTools' | 'commands' | 'appLogs' | 'networkTransports'
 > {
   return {
-    appleTools: {
-      isXcrunAvailable: async () => false,
-      run: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
-    },
     toolchains: { prepare: async () => {} },
     artifacts: {
       resolveSession: () => ({
