@@ -85,4 +85,3 @@ for (const command of ['snapshot', 'diff snapshot'] as const) {
     }
   });
 }
-
