@@ -14,6 +14,7 @@ import {
   drawerWithVisibleTwinSnapshot,
   equivalentWrapperChainSnapshot,
   edgeGrazingDrawerSnapshot,
+  fullyTiledParentSnapshot,
   nonHittableButtonSnapshot,
   RUNNER_CONTINUE_NODES,
   settledWelcomeSnapshot,
@@ -123,6 +124,33 @@ test(scenario('occlusion'), async () => {
   await assert.rejects(
     () => device.interactions.click(selector('label="Save draft"'), { session: 'default' }),
     /covered by another visible element/,
+  );
+  assert.deepEqual(taps, []);
+});
+
+test(scenario('parentOwnedTouchPoint'), async () => {
+  const taps: Point[] = [];
+  const device = createContractDevice(fullyTiledParentSnapshot(), {
+    tap: async (_context, point) => {
+      taps.push(point);
+    },
+  });
+
+  await assert.rejects(
+    () => device.interactions.click(selector('label=Card'), { session: 'default' }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal((error as { code?: unknown }).code, 'COMMAND_FAILED');
+      assert.match(error.message, /Selector label=Card has no parent-owned touch point/);
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'covered_by_interactive_descendants');
+      assert.equal(details?.selector, 'label=Card');
+      assert.equal(details?.ref, undefined);
+      assert.deepEqual(details?.competitorRefs, ['@e3', '@e4', '@e5', '@e6', '@e7']);
+      assert.equal(details?.competitorCount, 10);
+      assert.match(String(details?.hint), /more specific selector/);
+      return true;
+    },
   );
   assert.deepEqual(taps, []);
 });

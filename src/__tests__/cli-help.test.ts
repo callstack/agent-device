@@ -145,7 +145,7 @@ test('help workflow advertises open --foreground and snapshot -i --actions', asy
   );
   assert.match(
     result.stdout,
-    /iOS sim: snapshot -i --actions shows merged actions; use detail\/coords, not names/,
+    /iOS merged: child ref => press it; else press parent @ref --settle\. Names are not selectors/,
   );
 });
 
@@ -200,22 +200,22 @@ test('help gestures prints the multi-touch topic and skips daemon dispatch', asy
   assert.match(result.stdout, /agent-device gesture transform 200 420 80 -40 2 35 700/);
 });
 
-test('help unknown command prints error plus global usage and skips daemon dispatch', async () => {
+test('help unknown command prints error plus root decision card and skips daemon dispatch', async () => {
   const result = await runCliCapture(['help', 'not-a-command']);
   assert.equal(result.code, 1);
   assert.equal(result.calls.length, 0);
   assert.match(result.stderr, /Error \(INVALID_ARGS\): Unknown command: not-a-command/);
-  assert.match(result.stdout, /Commands:/);
-  assert.match(result.stdout, /Global Flags:/);
-  assert.match(result.stdout, /--config <path>/);
+  assert.match(result.stdout, /All \d+ commands: agent-device help commands/);
+  assert.match(result.stdout, /When starting a task with a known app/);
+  assert.doesNotMatch(result.stdout, /Global Flags:/);
 });
 
-test('unknown command --help prints error plus global usage and skips daemon dispatch', async () => {
+test('unknown command --help prints error plus root decision card and skips daemon dispatch', async () => {
   const result = await runCliCapture(['not-a-command', '--help']);
   assert.equal(result.code, 1);
   assert.equal(result.calls.length, 0);
   assert.match(result.stderr, /Error \(INVALID_ARGS\): Unknown command: not-a-command/);
-  assert.match(result.stdout, /Commands:/);
+  assert.match(result.stdout, /All \d+ commands: agent-device help commands/);
 });
 
 test('runtime command is rejected before daemon dispatch', async () => {

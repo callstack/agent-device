@@ -11,6 +11,7 @@ import {
   closedDrawerSnapshot,
   continueButtonSnapshot,
   coveredButtonSnapshot,
+  fullyTiledParentSnapshot,
   nonHittableCellSnapshot,
   RUNNER_CONTINUE_NODES,
   settledWelcomeSnapshot,
@@ -36,6 +37,29 @@ test(scenario('occlusion'), async () => {
   await assert.rejects(
     () => device.interactions.click(ref('@e2'), { session: 'default' }),
     /Ref @e2 is covered by another visible element/,
+  );
+  assert.deepEqual(taps, []);
+});
+
+test(scenario('parentOwnedTouchPoint'), async () => {
+  const taps: Point[] = [];
+  const device = createContractDevice(fullyTiledParentSnapshot(), {
+    tap: async (_context, point) => {
+      taps.push(point);
+    },
+  });
+
+  await assert.rejects(
+    () => device.interactions.click(ref('@e2'), { session: 'default' }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /Ref @e2 has no parent-owned touch point/);
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'covered_by_interactive_descendants');
+      assert.equal(details?.ref, '@e2');
+      assert.equal(details?.selector, undefined);
+      return true;
+    },
   );
   assert.deepEqual(taps, []);
 });

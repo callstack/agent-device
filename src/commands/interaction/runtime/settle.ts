@@ -373,7 +373,7 @@ function resolveSettleHint(
   if (!outcome.settled) return { hint: NEVER_SETTLED_HINT };
   if (!stored) {
     return {
-      hint: 'Settled on a sparse, unreadable tree — the diff is omitted. Use screenshot as visual truth before interacting further.',
+      hint: 'Settled on a sparse, unreadable tree — the diff is omitted and its refs/selectors are invalid. Use screenshot as visual truth and coordinate taps; retry snapshot after navigating.',
     };
   }
   // Same weak-readiness signal wait stable reports: a settled-but-tiny tree

@@ -249,6 +249,34 @@ test('penalty-deferred private-ax captures do not reset the settle budget', asyn
   assert.equal(settle.hint, NEVER_SETTLED_HINT);
 });
 
+test('a settled sparse capture directs agents away from invalid refs and selectors', async () => {
+  const before = buttonSnapshot();
+  const sparseAfter = welcomeSnapshot();
+  sparseAfter.snapshotQuality = {
+    state: 'sparse',
+    backend: 'private-ax',
+    reasonCode: 'sparse-tree',
+    reason: 'snapshot returned no semantic controls or content',
+  };
+  let captures = 0;
+  const device = createSettleDevice({
+    stored: before,
+    captureSnapshot: () => {
+      captures += 1;
+      return { snapshot: captures === 1 ? before : sparseAfter };
+    },
+  });
+
+  const result = await device.interactions.press(selector('label=Continue'), {
+    session: 'default',
+    settle: {},
+  });
+
+  assert.match(result.settle?.hint ?? '', /refs\/selectors are invalid/);
+  assert.match(result.settle?.hint ?? '', /screenshot.*coordinate taps/i);
+  assert.equal(result.settle?.diff, undefined);
+});
+
 test('a broken settle capture never fails the action', async () => {
   const before = buttonSnapshot();
   let captures = 0;

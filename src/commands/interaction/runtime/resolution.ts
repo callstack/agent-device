@@ -44,6 +44,7 @@ import type {
 } from '@agent-device/contracts/interaction';
 import { now, toBackendContext } from '../../runtime-common.ts';
 import { resolveActionableTouchResolution } from '../../../core/interaction-targeting.ts';
+import { resolveInteractionTouchPoint } from '../../../core/interaction-touch-point.ts';
 import {
   localIdentitiesEqual,
   readNodeLocalIdentity,
@@ -301,7 +302,11 @@ async function resolveRefInteractionTarget(
     target.ref,
     params.action,
   );
-  const point = resolveNodeCenter(visibleNode, `Ref ${target.ref} not found or has invalid bounds`);
+  const point = resolveNodeTouchPoint(visibleNode, nodes, {
+    invalidMessage: `Ref ${target.ref} not found or has invalid bounds`,
+    blockedTargetLabel: `Ref ${target.ref}`,
+    blockedTargetDetails: { ref: `@${normalizeRef(target.ref) ?? visibleNode.ref}` },
+  });
   return {
     kind: 'ref',
     point,
@@ -374,10 +379,11 @@ async function resolveSelectorInteractionTarget(
     resolved.selector,
     params.action,
   );
-  const point = resolveNodeCenter(
-    visibleNode,
-    `Selector ${resolved.selector} resolved to invalid bounds`,
-  );
+  const point = resolveNodeTouchPoint(visibleNode, capture.snapshot.nodes, {
+    invalidMessage: `Selector ${resolved.selector} resolved to invalid bounds`,
+    blockedTargetLabel: `Selector ${selectorExpression}`,
+    blockedTargetDetails: { selector: selectorExpression },
+  });
   return {
     kind: 'selector',
     point,
@@ -764,10 +770,35 @@ type ResolvedRefNode = {
   resolution: ResolutionDisclosure;
 };
 
-function resolveNodeCenter(node: SnapshotNode, message: string): Point {
-  const point = resolveRectCenter(node.rect);
-  if (!point) throw new AppError('COMMAND_FAILED', message);
-  return point;
+function resolveNodeTouchPoint(
+  node: SnapshotNode,
+  nodes: SnapshotState['nodes'],
+  failure: {
+    invalidMessage: string;
+    blockedTargetLabel: string;
+    blockedTargetDetails: { ref: string } | { selector: string };
+  },
+): Point {
+  const effectiveViewport = resolveEffectiveViewportRect(node, nodes);
+  const rootViewport = node.rect ? resolveViewportRect(nodes, node.rect) : null;
+  const resolution = resolveInteractionTouchPoint(nodes, node, {
+    bounds: [effectiveViewport, rootViewport].filter((rect) => rect !== null),
+  });
+  if (resolution.kind === 'resolved') return resolution.point;
+  if (resolution.kind === 'invalid') {
+    throw new AppError('COMMAND_FAILED', failure.invalidMessage);
+  }
+  throw new AppError(
+    'COMMAND_FAILED',
+    `${failure.blockedTargetLabel} has no parent-owned touch point outside its interactive descendants`,
+    {
+      reason: 'covered_by_interactive_descendants',
+      ...failure.blockedTargetDetails,
+      competitorRefs: resolution.competitorRefs.slice(0, 5).map((ref) => `@${ref}`),
+      competitorCount: resolution.competitorRefs.length,
+      hint: 'Tap the specific interactive child you intend, or use a more specific selector. Every safely tappable region of the parent belongs to one of its child controls.',
+    },
+  );
 }
 
 function isUsableResolvedNode(node: SnapshotNode | null | undefined): node is SnapshotNode {

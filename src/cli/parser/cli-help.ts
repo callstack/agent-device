@@ -16,100 +16,7 @@ import {
 } from '../../cli-schema/command-schema.ts';
 import { buildCommandUsage } from '../../cli-schema/usage.ts';
 import { readVersion } from '../../utils/version.ts';
-
-const AGENT_WORKFLOWS = [
-  {
-    label: 'agent-device help manual-qa',
-    description: 'Follow a manual test script with exact interactions and verification',
-  },
-  {
-    label: 'agent-device help dogfood',
-    description: 'Explore an app and report issues with evidence',
-  },
-  {
-    label: 'agent-device help validate',
-    description: 'Validate code changes, perf, visuals, logs, and cleanup',
-  },
-  {
-    label: 'agent-device help workflow',
-    description: 'Full app automation reference for commands, refs, selectors, and waits',
-  },
-  {
-    label: 'agent-device help debugging',
-    description:
-      'Use when logs, network, audio, perf memory, traces, alerts, or diagnostics matter',
-  },
-  {
-    label: 'agent-device help tv',
-    description: 'Use when navigating Android TV, tvOS, or Vega VVD focus-first surfaces',
-  },
-  {
-    label: 'agent-device help react-native',
-    description: 'Use when the target app is React Native, Expo, or a dev client',
-  },
-  {
-    label: 'agent-device help react-devtools',
-    description: 'Use when inspecting components, props/state/hooks, renders, or profiles',
-  },
-  {
-    label: 'agent-device help cdp',
-    description: 'Use when investigating JS heap growth, heap snapshots, or retainers',
-  },
-  {
-    label: 'agent-device help physical-device',
-    description: 'Use when using a connected phone/tablet or iOS signing setup',
-  },
-  {
-    label: 'agent-device help remote',
-    description: 'Use when working through cloud config, tenants, leases, or local tunnels',
-  },
-  {
-    label: 'agent-device help web',
-    description: 'Use when automating a browser through agent-device sessions',
-  },
-  {
-    label: 'agent-device help macos',
-    description: 'Use when targeting desktop, frontmost app, or menu bar surfaces',
-  },
-] as const;
-
-const AGENT_START_LINES = [
-  'Write full command lines starting with agent-device; do not output pseudo commands, helper prose, pipes, grep, jq, or hidden stderr.',
-  // The explicit loop and closed target grammar are conformance-gated below;
-  // the foreground-open form was separately validated by the 2026-08-08
-  // controlled app-driving benchmark recorded in PR #1693.
-  'Default app loop: agent-device open <app> --foreground -> mutate a current target from its initial snapshot with --settle -> continue from that settled diff -> agent-device close.',
-  'Use --settle only on planned press, click, fill, longpress, scroll, or back commands; never add it to open, snapshot, or close. type never accepts --settle: run agent-device type "text", then diff snapshot if verification is needed. Once the task\'s requested end state or an explicit success confirmation is visible, stop; do not tap transient follow-up controls or navigate away only to re-verify.',
-  'Follow structured command hints before choosing a recovery action.',
-  'Targets are concrete refs or selectors: @e12, label="Query", role=button label="Submit".',
-  'Selector keys are only: id, role, text, label, value, appname, windowtitle, visible, hidden, editable, selected, focused, enabled, hittable. placeholder, index, and key are not selector keys.',
-  'A literal @ handle is a label such as label="@account.example", never a bare @ref.',
-  'Boundary shapes: agent-device fill \'label="Query"\' "text" --settle; agent-device press \'role=button label="Submit"\' --settle.',
-  'fill takes a target then text. press targets an accessible element; key=Enter is not a supported target.',
-  'Pick the help mode below when the task is manual QA, dogfooding, engineering validation, or debugging.',
-] as const;
-
-const AGENT_QUICKSTART_LINES = [
-  'Planning output contract: when asked to plan commands, output command lines only: no prose, numbering, Markdown fences, pipes, or shell helpers.',
-  'If you did not use --settle, verify a mutation with diff snapshot (or diff snapshot -i), not a full snapshot: it prints only the added/removed/changed lines since the last snapshot in this session.',
-  'Network-backed or debounced results may arrive after the --settle quiet window; follow the settled action with wait text "Expected result" or wait <selector> instead of polling full snapshots.',
-  'Pin a raw CLI ref to the response that minted it with ~s<n> (n = refsGeneration): press @e12~s4. On iOS, stale refs are rejected for mutations; refresh refs or use a stable selector.',
-  'Plain snapshot reads state; snapshot -i refreshes current interactive refs only.',
-  'Default snapshot text is an agent-facing, token-efficient view for planning and targeting actions.',
-  'Read-only visible/state question: use snapshot/get/is/find; use snapshot -i only when refs are needed.',
-  'Truncated text/input preview: expand first with snapshot -s @e12, not get text.',
-  'React Native apps: read help react-native.',
-  'Text fields: use fill <target> <text> --settle to replace a field value. Use type <text> only to append after focusing a field with press.',
-  'Clearing text: do not use fill <target> ""; use a visible clear/reset control or report that clearing is unsupported.',
-  'Implicit default sessions are scoped to the current worktree; if a prompt names a Session, include --session <name> on every command in that flow.',
-  'Run mutating commands serially within one session; parallelize only read-only commands or separate sessions/devices.',
-  'After mutation: refs are stale. If the next target is known, use its selector directly; otherwise refresh with snapshot -i, scoped with -s when a stable container is known. Use press/click for taps.',
-  'macOS context menus use click <ref> --button secondary, then snapshot -i. Longpress is for mobile hold gestures, not macOS secondary-click menus.',
-  'Remote lifecycle: use connect, then open, commands, close, and disconnect. Read help remote for proxy, cloud, and device-cloud provider flows.',
-  'TV/D-pad targets: read help tv. Web browser sessions: read help web.',
-  'Debug evidence: Session state contains request diagnostics and runner.log; use logs clear --restart/mark/path, trace, and network dump --include headers for app evidence.',
-  'Routine QA loop with concrete command shapes: agent-device help manual-qa. Full operating guide: agent-device help workflow. Exploratory QA: agent-device help dogfood.',
-] as const;
+import { renderCliHelpOverview } from './cli-help-overview.ts';
 
 const CONFIGURATION_LINES = [
   'Default config files: ~/.agent-device/config.json, ./agent-device.json (project-safe defaults only).',
@@ -154,6 +61,10 @@ const WAIT_FAILURE_CONTRACT = `Wait failure contract:
 `;
 
 const HELP_TOPICS = {
+  commands: {
+    summary: 'Full command catalog, global flags, configuration, and environment',
+    body: 'agent-device help commands',
+  },
   'manual-qa': {
     summary: 'Follow manual test scripts with exact interactions and verification',
     body: `agent-device help manual-qa
@@ -264,7 +175,7 @@ Validation and evidence:
   Nearby mutation diff: diff snapshot -i; with no prior snapshot it initializes the baseline (zero changes) instead of failing.
   Named expectations need the exact text/selector via wait/is/get/find -- a bare screenshot/snapshot is not verification. Before declaring a task done, confirm the requested end state is actually visible on the current screen, scrolling it into view if needed; get text alone, or stopping one screen early, is not enough.
   When an action only reveals or reaches a target, verify the exact target named, not just the action. Prefer testIDs/ids/selectors over visible text. Icon/tappable proof: screenshot --overlay-refs; if snapshot is sparse/AX-unavailable, use plain screenshot and coordinates, then retry snapshot -i on another screen.
-  iOS sim: snapshot -i --actions shows merged actions; use detail/coords, not names.
+  iOS merged: child ref => press it; else press parent @ref --settle. Names are not selectors.
   Perf/memory/log/network/trace/crash: help debugging. Recording, save-script, batch, replay repair: help scripting.
 
 React Native: help react-native for Metro/Re.Pack reload, DevTools, RN overlays. JS-only change: metro reload, find "Home"; open --relaunch for native reset.
@@ -1120,9 +1031,13 @@ function buildCommandListUsage(commandName: string, schema: CommandSchema): stri
 }
 
 function renderUsageText(): string {
-  const header = `agent-device <command> [args] [--json]
+  return renderCliHelpOverview();
+}
 
-CLI to automate supported app, device, desktop, and web targets for AI agents.
+function renderFullCommandReferenceText(): string {
+  const header = `agent-device help commands
+
+Full command catalog. Use agent-device help <command> for exact flags and behavior.
 `;
 
   const commands = listCliCommandNames().map((name) => {
@@ -1137,23 +1052,14 @@ CLI to automate supported app, device, desktop, and web targets for AI agents.
 
   const helpFlags = listHelpFlags(GLOBAL_FLAG_KEYS);
   const flagsSection = renderFlagSection('Global Flags:', helpFlags);
-  const startSection = renderTextSection('Agent Starting Point:', AGENT_START_LINES);
-  const quickstartSection = renderTextSection('Agent Quickstart:', AGENT_QUICKSTART_LINES);
-  const workflowsSection = renderAlignedSection('Agent Workflows:', AGENT_WORKFLOWS);
   const configSection = renderTextSection('Configuration:', CONFIGURATION_LINES);
   const environmentSection = renderAlignedSection('Environment:', ENVIRONMENT_LINES);
   const examplesSection = renderTextSection('Examples:', EXAMPLE_LINES);
 
   return `${header}
-${startSection}
-
-${workflowsSection}
-
 ${commandLines}
 
 ${flagsSection}
-
-${quickstartSection}
 
 ${configSection}
 
@@ -1280,7 +1186,8 @@ export function helpTopicIds(): string[] {
 function buildHelpTopicUsageText(topicName: string): string | null {
   const topic = HELP_TOPICS[topicName as keyof typeof HELP_TOPICS];
   if (!topic) return null;
-  return `${withVersionHeader(topicName, topic.body)}
+  const body = topicName === 'commands' ? renderFullCommandReferenceText() : topic.body;
+  return `${withVersionHeader(topicName, body)}
 
 Related:
   agent-device help <command>   command-specific flags
@@ -1290,7 +1197,7 @@ Related:
 }
 
 // Every topic body's first line is authored as `agent-device help <topicId>`. Swapping in the
-// installed version here (instead of hand-editing 17 topic strings) gives the skill router a
+// installed version here (instead of hand-editing every topic string) gives the skill router a
 // single, reliable header to read the CLI version from without a separate --version call: a
 // missing/old header on `help workflow` means an old CLI that predates this format.
 function withVersionHeader(topicId: string, body: string): string {

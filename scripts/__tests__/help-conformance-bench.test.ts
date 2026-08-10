@@ -523,18 +523,24 @@ test('foreground attach grammar accepts both auto-discovery and an explicit know
 
 test('compact skill starts a known-app task with foreground open and an initial snapshot', async () => {
   const skill = await readFile(AGENT_DEVICE_SKILL, 'utf8');
-  const startIndex = skill.indexOf('For an ordinary app-driving task');
-  const endIndex = skill.indexOf('Default loop:');
-  assert.notEqual(startIndex, -1);
-  assert.ok(endIndex > startIndex);
-  const ordinaryStart = skill.slice(startIndex, endIndex);
-  const openingCommands = ordinaryStart
+  const openingCommands = skill
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line.startsWith('agent-device open <app>'));
 
+  assert.ok(
+    skill.split('\n').length <= 30,
+    'the complete skill must fit the reliable first-30-line read',
+  );
   assert.deepEqual(openingCommands, ['agent-device open <app> --foreground']);
-  assert.match(ordinaryStart, /returns the initial interactive snapshot in the same call/);
+  assert.match(skill, /returns the initial interactive snapshot with `@refs`/);
+  assert.match(
+    skill,
+    /copy refs? byte-for-byte.*keep the `@`/i,
+    'the always-loaded skill must preserve the @ prefix before topic help is available',
+  );
+  assert.match(skill, /sparse\/AX-unavailable.*refs and selectors are invalid/i);
+  assert.match(skill, /`agent-device screenshot`.*use coordinates.*`snapshot -i`/i);
 });
 
 test('plan validator applies narrow grammar to permitted external commands', async () => {

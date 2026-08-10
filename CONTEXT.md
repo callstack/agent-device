@@ -113,6 +113,10 @@ task touches:
   center coordinate when a frame is available. This keeps target selection semantic while avoiding
   `XCUIElement.tap()` post-action element re-resolution after normal navigation. tvOS remains
   focus/remote-driven.
+- Parent-owned touch point: runtime ref/selector activation keeps the resolved parent identity but,
+  when its center belongs to an independently interactive descendant, moves the coordinate to the
+  nearest region with bounded clearance from those child controls. The exact center remains the
+  zero-cost default when no child competes; a fully tiled parent fails closed so a child must be named.
 - Guarantee cell: one (dispatch path, guarantee) entry in `packages/contracts/src/interaction-guarantees.ts`,
   classified as runtime/runner/delegated/inapplicable/waived. Completeness is a compile error;
   honesty is gate-tested.

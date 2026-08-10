@@ -1,10 +1,10 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { SELECTOR_KEY_NAMES } from '@agent-device/selectors';
 import { usage, usageForCommand } from '../args.ts';
 
-test('usage includes concise top-level commands', async () => {
-  const usageText = await usage();
+test('commands topic includes concise command catalog entries', async () => {
+  const usageText = await usageForCommand('commands');
+  if (usageText === null) throw new Error('Expected commands help text');
   assert.match(usageText, /install-from-source\s{2,}Install app builds from URLs or CI artifacts/);
   assert.match(usageText, /prepare\s{2,}Pre-warm platform helpers before automation/);
   assert.match(usageText, /metro\s{2,}Prepare the dev server or reload apps/);
@@ -37,11 +37,12 @@ test('gesture help documents selectors and pinned refs for both drag endpoints',
   assert.match(help, /drag <source-selector\|pinned-ref> <destination-selector\|pinned-ref>/);
 });
 
-test('usage includes only global flags in the top-level global flags section', async () => {
-  const usageText = await usage();
+test('commands topic includes only global flags in its global flags section', async () => {
+  const usageText = await usageForCommand('commands');
+  if (usageText === null) throw new Error('Expected commands help text');
   const flagsSection = usageText.slice(
     usageText.indexOf('Global Flags:'),
-    usageText.indexOf('Agent Quickstart:'),
+    usageText.indexOf('Configuration:'),
   );
   assert.match(flagsSection, /^Global Flags:/);
   assert.match(flagsSection, /--config <path>/);
@@ -72,150 +73,30 @@ test('usage includes only global flags in the top-level global flags section', a
   assert.doesNotMatch(flagsSection, /--metadata/);
 });
 
-test('usage includes agent workflows, config, environment, and examples footers', async () => {
-  const usageText = await usage();
-  assert.match(
-    usageText,
-    /CLI to automate supported app, device, desktop, and web targets for AI agents/,
-  );
-  assert.ok(
-    usageText.indexOf('Agent Workflows:') < usageText.indexOf('Commands:'),
-    'Agent workflows should appear before the command list for agents that only read the top of help.',
-  );
-  assert.ok(
-    usageText.indexOf('Agent Starting Point:') < usageText.indexOf('Agent Workflows:'),
-    'The agent starting point should appear before topic selection.',
-  );
-  assert.match(usageText, /Agent Starting Point:/);
-  assert.match(usageText, /Write full command lines starting with agent-device/);
-  assert.match(usageText, /Default app loop: agent-device open <app> --foreground/);
-  assert.match(
-    usageText,
-    /Use --settle only on planned press, click, fill, longpress, scroll, or back commands; never add it to open, snapshot, or close/,
-  );
-  assert.match(usageText, /type never accepts --settle/);
-  assert.match(usageText, /explicit success confirmation is visible, stop/);
-  assert.match(usageText, /Follow structured command hints before choosing a recovery action/);
-  assert.match(usageText, /Targets are concrete refs or selectors/);
-  assert.ok(
-    usageText.includes(`Selector keys are only: ${SELECTOR_KEY_NAMES.join(', ')}.`),
-    'The first-screen selector vocabulary must match the parser source of truth.',
-  );
-  assert.match(usageText, /placeholder, index, and key are not selector keys/);
-  assert.match(usageText, /A literal @ handle is a label/);
-  assert.match(usageText, /agent-device fill 'label="Query"' "text" --settle/);
-  assert.match(usageText, /key=Enter is not a supported target/);
-  assert.match(usageText, /Pick the help mode below/);
-  const firstThirtyLines = usageText.split('\n').slice(0, 30).join('\n');
-  assert.match(
-    firstThirtyLines,
-    /agent-device help macos/,
-    'Every workflow pointer must remain in the 30-line first-screen benchmark slice.',
-  );
-  assert.match(usageText, /Agent Quickstart:/);
-  assert.match(usageText, /Planning output contract/);
-  assert.match(
-    usageText,
-    /Plain snapshot reads state; snapshot -i refreshes current interactive refs only/,
-  );
-  assert.match(usageText, /agent-facing, token-efficient view for planning and targeting actions/);
-  assert.match(usageText, /Truncated text\/input preview: expand first with snapshot -s @e12/);
-  assert.match(usageText, /React Native apps: read help react-native/);
-  assert.match(usageText, /use fill <target> <text> --settle to replace a field value/);
-  assert.match(usageText, /Use type <text> only to append after focusing a field with press/);
-  assert.match(usageText, /do not use fill <target> ""/);
-  assert.match(usageText, /Implicit default sessions are scoped to the current worktree/);
-  assert.match(usageText, /if a prompt names a Session, include --session <name>/);
-  assert.match(usageText, /Run mutating commands serially within one session/);
-  assert.match(usageText, /After mutation: refs are stale/);
-  assert.match(usageText, /use its selector directly; otherwise refresh with snapshot -i/);
-  assert.match(usageText, /fill <targetOrX> <yOrText> \[text\]\s+Replace text in/);
-  assert.match(usageText, /type <text>\s+Append text to the focused input/);
-  assert.match(usageText, /macOS context menus use click <ref> --button secondary/);
-  assert.match(
-    usageText,
-    /Remote lifecycle: use connect, then open, commands, close, and disconnect/,
-  );
-  // Deep topic-specific detail (Metro/Expo recovery, Android IME capture, coordinate
-  // fallback verification, sparse/AX recovery, direct-proxy flags, back/system-back
-  // wording, the full web command sequence) moved out of the bare-help Agent
-  // Quickstart section and now lives only in the owning topic (help react-native,
-  // help workflow, help remote, help web) so `agent-device help` alone stays small.
-  // Those topics assert the same content in their own usageForCommand tests below.
-  assert.match(usageText, /TV\/D-pad targets: read help tv\. Web browser sessions: read help web/);
-  assert.match(
-    usageText,
-    /Routine QA loop with concrete command shapes: agent-device help manual-qa/,
-  );
-  assert.match(usageText, /Session state contains request diagnostics and runner\.log/);
-  assert.match(usageText, /logs clear --restart\/mark\/path/);
-  assert.match(usageText, /network dump --include headers/);
-  assert.match(usageText, /Full operating guide: agent-device help workflow/);
-  assert.match(usageText, /Exploratory QA: agent-device help dogfood/);
-  assert.match(usageText, /Agent Workflows:/);
-  assert.match(
-    usageText,
-    /agent-device help manual-qa\s+Follow a manual test script with exact interactions and verification/,
-  );
-  assert.match(
-    usageText,
-    /agent-device help dogfood\s+Explore an app and report issues with evidence/,
-  );
-  assert.match(
-    usageText,
-    /agent-device help validate\s+Validate code changes, perf, visuals, logs, and cleanup/,
-  );
-  assert.match(
-    usageText,
-    /agent-device help workflow\s+Full app automation reference for commands, refs, selectors, and waits/,
-  );
-  assert.match(
-    usageText,
-    /agent-device help debugging\s+Use when logs, network, audio, perf memory, traces, alerts, or diagnostics matter/,
-  );
-  assert.match(
-    usageText,
-    /agent-device help tv\s+Use when navigating Android TV, tvOS, or Vega VVD focus-first surfaces/,
-  );
-  assert.match(
-    usageText,
-    /agent-device help react-devtools\s+Use when inspecting components, props\/state\/hooks, renders, or profiles/,
-  );
-  assert.match(
-    usageText,
-    /agent-device help physical-device\s+Use when using a connected phone\/tablet or iOS signing setup/,
-  );
-  assert.match(
-    usageText,
-    /agent-device help react-native\s+Use when the target app is React Native, Expo, or a dev client/,
-  );
-  assert.match(
-    usageText,
-    /agent-device help web\s+Use when automating a browser through agent-device sessions/,
-  );
-  assert.match(usageText, /Configuration:/);
-  assert.match(
-    usageText,
-    /Default config files: ~\/\.agent-device\/config\.json, \.\/agent-device\.json/,
-  );
-  assert.match(
-    usageText,
-    /Use --config <path> or AGENT_DEVICE_CONFIG for explicit connection\/provider defaults; project config cannot select endpoints or credentials\./,
-  );
-  assert.match(usageText, /Environment:/);
-  assert.match(usageText, /AGENT_DEVICE_SESSION\s+Explicit session name/);
-  assert.match(usageText, /AGENT_DEVICE_PLATFORM\s+Default platform binding/);
-  assert.match(usageText, /AGENT_DEVICE_SESSION_LOCK\s+Bound-session conflict mode/);
-  assert.match(usageText, /AGENT_DEVICE_DAEMON_BASE_URL\s+Connect to remote daemon/);
-  assert.match(usageText, /Examples:/);
-  assert.match(usageText, /agent-device open Settings --platform ios/);
-  assert.match(usageText, /agent-device open https:\/\/example\.com --platform web/);
-  assert.match(usageText, /agent-device snapshot -i/);
-  assert.match(usageText, /agent-device fill @e3 "test@example\.com"/);
-  assert.match(usageText, /agent-device replay \.\/session\.ad/);
-  assert.match(usageText, /agent-device test \.\/suite --platform android/);
-});
+test('root help routes detailed reference material to progressive topics', async () => {
+  const rootHelp = await usage();
+  const commandsHelp = await usageForCommand('commands');
+  const workflowHelp = await usageForCommand('workflow');
+  if (commandsHelp === null || workflowHelp === null) {
+    throw new Error('Expected commands and workflow help text');
+  }
 
+  assert.match(rootHelp, /All \d+ commands: agent-device help commands/);
+  assert.match(rootHelp, /workflow\s+full refs, selectors, waits, recovery/);
+  assert.doesNotMatch(rootHelp, /^Configuration:/m);
+  assert.doesNotMatch(rootHelp, /^Environment:/m);
+
+  assert.match(commandsHelp, /^Configuration:/m);
+  assert.match(commandsHelp, /Default config files: ~\/\.agent-device\/config\.json/);
+  assert.match(commandsHelp, /^Environment:/m);
+  assert.match(commandsHelp, /AGENT_DEVICE_SESSION\s+Explicit session name/);
+  assert.match(commandsHelp, /^Examples:/m);
+  assert.match(commandsHelp, /agent-device open Settings --platform ios/);
+
+  assert.match(workflowHelp, /Command shapes, refs, selectors, waits, recovery/);
+  assert.match(workflowHelp, /run serially within one session/i);
+  assert.match(workflowHelp, /Wait failure contract:/);
+});
 test('usageForCommand resolves Maestro compatibility help topic', async () => {
   const help = await usageForCommand('maestro');
   if (help === null) throw new Error('Expected Maestro help text');
@@ -308,7 +189,7 @@ test('usageForCommand resolves workflow help topic', async () => {
   assert.match(help, /get text alone, or stopping one screen early, is not enough/);
   assert.match(
     help,
-    /iOS sim: snapshot -i --actions shows merged actions; use detail\/coords, not names/,
+    /iOS merged: child ref => press it; else press parent @ref --settle\. Names are not selectors/,
   );
   assert.match(help, /Perf\/memory\/log\/network\/trace\/crash: help debugging/);
   assert.match(help, /Recording, save-script, batch, replay repair: help scripting/);
@@ -740,8 +621,9 @@ test('usageForCommand resolves react-native help topic', async () => {
   assert.match(help, /Report React render offenders separately/);
 });
 
-test('usage includes swipe and press series options', async () => {
-  const help = await usage();
+test('commands topic includes swipe and press series options', async () => {
+  const help = await usageForCommand('commands');
+  if (help === null) throw new Error('Expected commands help text');
   assert.match(help, /diff <kind>/);
   assert.match(help, /swipe <x1> <y1> <x2> <y2>/);
   assert.match(help, /settings \[area\] \[options\]/);
@@ -749,8 +631,9 @@ test('usage includes swipe and press series options', async () => {
   assert.doesNotMatch(help, /--interval-ms/);
 });
 
-test('usage renders concise commands inline with descriptions', async () => {
-  const help = await usage();
+test('commands topic renders concise commands inline with descriptions', async () => {
+  const help = await usageForCommand('commands');
+  if (help === null) throw new Error('Expected commands help text');
   assert.match(help, /Commands:[\s\S]*\n  boot\s{2,}Boot target device\/simulator/);
   assert.match(help, /Commands:[\s\S]*\n  shutdown\s{2,}Shutdown target simulator\/emulator/);
   assert.match(help, /  prepare\s{2,}Pre-warm platform helpers/);
