@@ -1,7 +1,22 @@
 import assert from 'node:assert/strict';
+import fc from 'fast-check';
+import type { Point, Rect } from '@agent-device/kernel/snapshot';
 import { test } from 'vitest';
-import { makeSnapshotState } from '../__tests__/test-utils/index.ts';
+import {
+  interactionTouchPointScenarioArb,
+  makeSnapshotState,
+  PROPERTY_RUNS,
+} from '../__tests__/test-utils/index.ts';
 import { resolveInteractionTouchPoint } from './interaction-touch-point.ts';
+
+function containsPoint(rect: Rect, point: Point): boolean {
+  return (
+    point.x >= rect.x &&
+    point.x <= rect.x + rect.width &&
+    point.y >= rect.y &&
+    point.y <= rect.y + rect.height
+  );
+}
 
 function blueskyPostNodes() {
   return makeSnapshotState([
@@ -201,4 +216,41 @@ test('keeps a parent-owned point inside the supplied viewport bounds', () => {
 
   assert.equal(resolution.kind, 'resolved');
   if (resolution.kind === 'resolved') assert.ok(resolution.point.x >= 0);
+});
+
+test('property: resolved parent-owned points stay inside the target and supplied bounds', () => {
+  fc.assert(
+    fc.property(interactionTouchPointScenarioArb, ({ nodes, target, bound }) => {
+      const resolution = resolveInteractionTouchPoint(nodes, target, { bounds: [bound] });
+      if (resolution.kind !== 'resolved') return;
+      assert.ok(containsPoint(target.rect!, resolution.point));
+      assert.ok(containsPoint(bound, resolution.point));
+    }),
+    { numRuns: PROPERTY_RUNS },
+  );
+});
+
+test('property: resolved parent-owned points stay outside every competing descendant', () => {
+  fc.assert(
+    fc.property(interactionTouchPointScenarioArb, ({ nodes, target, bound, competitorRects }) => {
+      const resolution = resolveInteractionTouchPoint(nodes, target, { bounds: [bound] });
+      if (resolution.kind !== 'resolved') return;
+      for (const competitor of competitorRects) {
+        assert.equal(containsPoint(competitor, resolution.point), false);
+      }
+    }),
+    { numRuns: PROPERTY_RUNS },
+  );
+});
+
+test('property: touch-point resolution is invariant to node-array permutations', () => {
+  fc.assert(
+    fc.property(interactionTouchPointScenarioArb, ({ nodes, permutedNodes, target, bound }) => {
+      assert.deepEqual(
+        resolveInteractionTouchPoint(permutedNodes, target, { bounds: [bound] }),
+        resolveInteractionTouchPoint(nodes, target, { bounds: [bound] }),
+      );
+    }),
+    { numRuns: PROPERTY_RUNS },
+  );
 });

@@ -302,11 +302,11 @@ async function resolveRefInteractionTarget(
     target.ref,
     params.action,
   );
-  const point = resolveNodeTouchPoint(
-    visibleNode,
-    nodes,
-    `Ref ${target.ref} not found or has invalid bounds`,
-  );
+  const point = resolveNodeTouchPoint(visibleNode, nodes, {
+    invalidMessage: `Ref ${target.ref} not found or has invalid bounds`,
+    blockedTargetLabel: `Ref ${target.ref}`,
+    blockedTargetDetails: { ref: `@${normalizeRef(target.ref) ?? visibleNode.ref}` },
+  });
   return {
     kind: 'ref',
     point,
@@ -379,11 +379,11 @@ async function resolveSelectorInteractionTarget(
     resolved.selector,
     params.action,
   );
-  const point = resolveNodeTouchPoint(
-    visibleNode,
-    capture.snapshot.nodes,
-    `Selector ${resolved.selector} resolved to invalid bounds`,
-  );
+  const point = resolveNodeTouchPoint(visibleNode, capture.snapshot.nodes, {
+    invalidMessage: `Selector ${resolved.selector} resolved to invalid bounds`,
+    blockedTargetLabel: `Selector ${selectorExpression}`,
+    blockedTargetDetails: { selector: selectorExpression },
+  });
   return {
     kind: 'selector',
     point,
@@ -773,7 +773,11 @@ type ResolvedRefNode = {
 function resolveNodeTouchPoint(
   node: SnapshotNode,
   nodes: SnapshotState['nodes'],
-  message: string,
+  failure: {
+    invalidMessage: string;
+    blockedTargetLabel: string;
+    blockedTargetDetails: { ref: string } | { selector: string };
+  },
 ): Point {
   const effectiveViewport = resolveEffectiveViewportRect(node, nodes);
   const rootViewport = node.rect ? resolveViewportRect(nodes, node.rect) : null;
@@ -781,13 +785,15 @@ function resolveNodeTouchPoint(
     bounds: [effectiveViewport, rootViewport].filter((rect) => rect !== null),
   });
   if (resolution.kind === 'resolved') return resolution.point;
-  if (resolution.kind === 'invalid') throw new AppError('COMMAND_FAILED', message);
+  if (resolution.kind === 'invalid') {
+    throw new AppError('COMMAND_FAILED', failure.invalidMessage);
+  }
   throw new AppError(
     'COMMAND_FAILED',
-    `Ref @${node.ref} has no parent-owned touch point outside its interactive descendants`,
+    `${failure.blockedTargetLabel} has no parent-owned touch point outside its interactive descendants`,
     {
       reason: 'covered_by_interactive_descendants',
-      ref: `@${node.ref}`,
+      ...failure.blockedTargetDetails,
       competitorRefs: resolution.competitorRefs.slice(0, 5).map((ref) => `@${ref}`),
       hint: 'Tap the specific interactive child you intend, or use a more specific selector. Every safely tappable region of the parent belongs to one of its child controls.',
     },

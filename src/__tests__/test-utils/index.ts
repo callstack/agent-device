@@ -41,6 +41,7 @@ export {
   distinctRectPairArb,
   formatRef,
   gestureInViewportArb,
+  interactionTouchPointScenarioArb,
   PROPERTY_RUNS,
   PROPERTY_RUNS_SMALL,
   rawSnapshotNodesArb,

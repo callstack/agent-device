@@ -6,7 +6,11 @@ import { scenarioName } from './coverage-manifest.ts';
 import { assertRpcOk } from '../provider-scenarios/assertions.ts';
 import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from '../provider-scenarios/test-timeouts.ts';
 import { TARGET_DRAG_COVERAGE } from './target-drag.coverage.ts';
-import { coveredButtonSnapshot, dragEndpointsSnapshot } from './fixtures.ts';
+import {
+  coveredButtonSnapshot,
+  dragEndpointsSnapshot,
+  fullyTiledParentSnapshot,
+} from './fixtures.ts';
 import { createContractDevice } from './runtime-harness.ts';
 import {
   runnerGestureEntry,
@@ -70,6 +74,29 @@ test(scenario('occlusion'), async () => {
         },
       }),
     /covered by another visible element/,
+  );
+  assert.equal(dispatches, 0);
+});
+
+test(scenario('parentOwnedTouchPoint'), async () => {
+  let dispatches = 0;
+  const tiled = fullyTiledParentSnapshot();
+  const source = { ...dragEndpointsSnapshot().nodes[1]!, index: 4, parentIndex: 0 };
+  const snapshot = makeSnapshotState([...tiled.nodes, source]);
+  const device = createContractDevice(snapshot, {
+    resolveGestureViewport: async () => ({ x: 0, y: 0, width: 400, height: 800 }),
+    performGesture: async () => {
+      dispatches += 1;
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      device.interactions.gesture({
+        session: 'default',
+        gesture: { intent: 'drag', source: 'id="source"', destination: 'label=Card' },
+      }),
+    /Selector label=Card has no parent-owned touch point/,
   );
   assert.equal(dispatches, 0);
 });
