@@ -3,6 +3,7 @@ import { runCmd, runCmdSync } from './exec.ts';
 import { sleep } from './timeouts.ts';
 
 const PS_TIMEOUT_MS = 1_000;
+const HOST_PS_COMMAND = process.platform === 'win32' ? 'ps' : '/bin/ps';
 
 export type HostProcessInfo = {
   pid: number;
@@ -95,7 +96,7 @@ export function readHostProcessIdentityObservations(
 function readProcessField(pid: number, field: 'lstart=' | 'command=' | 'state='): string | null {
   if (!Number.isInteger(pid) || pid <= 0) return null;
   try {
-    const result = runCmdSync('ps', ['-p', String(pid), '-o', field], {
+    const result = runCmdSync(HOST_PS_COMMAND, ['-p', String(pid), '-o', field], {
       allowFailure: true,
       timeoutMs: PS_TIMEOUT_MS,
     });
@@ -124,10 +125,14 @@ export function parseHostProcessList(stdout: string): HostProcessInfo[] {
 export async function listHostProcesses(
   options: ListHostProcessesOptions,
 ): Promise<HostProcessInfo[]> {
-  const result = await (options.runCommand ?? runCmd)('ps', ['-ax', '-o', 'pid=,ppid=,command='], {
-    allowFailure: true,
-    timeoutMs: options.timeoutMs,
-  });
+  const result = await (options.runCommand ?? runCmd)(
+    options.runCommand ? 'ps' : HOST_PS_COMMAND,
+    ['-ax', '-o', 'pid=,ppid=,command='],
+    {
+      allowFailure: true,
+      timeoutMs: options.timeoutMs,
+    },
+  );
   if (result.exitCode !== 0) return [];
   return parseHostProcessList(result.stdout);
 }

@@ -5,6 +5,7 @@ import type {
   PlatformRequestScope,
   ReattachOutcome,
 } from '@agent-device/contracts/platform';
+import { capitalizeDurableCaptureLabel } from './durable-capture-resource-labels.ts';
 
 export type DurableCaptureRecoveryControl<
   K extends string,
@@ -48,6 +49,7 @@ export async function acquireDurableCaptureRecoveryAuthorityBeforeDeadline<
 >(
   params: DurableCaptureRecoveryAuthorityParams<K, H, C>,
 ): Promise<DurableCaptureRecoveryAuthority<K, H, C>> {
+  params.scope.signal.throwIfAborted();
   const controller = new AbortController();
   const scope = {
     ...params.scope,
@@ -57,6 +59,23 @@ export async function acquireDurableCaptureRecoveryAuthorityBeforeDeadline<
   const deadline = new Promise<never>((_resolve, reject) => {
     rejectDeadline = reject;
   });
+  let stopListeningForCancellation = () => {};
+  const cancellation = new Promise<never>((_resolve, reject) => {
+    const rejectCancellation = () => {
+      try {
+        params.scope.signal.throwIfAborted();
+      } catch (error) {
+        reject(error);
+      }
+    };
+    if (params.scope.signal.aborted) {
+      rejectCancellation();
+      return;
+    }
+    params.scope.signal.addEventListener('abort', rejectCancellation, { once: true });
+    stopListeningForCancellation = () =>
+      params.scope.signal.removeEventListener('abort', rejectCancellation);
+  });
   const timer = setTimeout(() => {
     const error = new DurableCaptureRecoveryDeadlineError(params.displayName, params.deadlineMs);
     controller.abort(error);
@@ -65,9 +84,10 @@ export async function acquireDurableCaptureRecoveryAuthorityBeforeDeadline<
   timer.unref?.();
   const acquisition = acquireRecoveryAuthority(params, scope);
   try {
-    return await Promise.race([acquisition, deadline]);
+    return await Promise.race([acquisition, deadline, cancellation]);
   } finally {
     clearTimeout(timer);
+    stopListeningForCancellation();
     void acquisition.catch(() => {});
   }
 }
@@ -112,12 +132,10 @@ export class DurableCaptureRecoveryDeadlineError extends Error {
   readonly deadlineMs: number;
 
   constructor(displayName: string, deadlineMs: number) {
-    super(`${capitalize(displayName)} recovery exceeded its ${deadlineMs}ms deadline`);
+    super(
+      `${capitalizeDurableCaptureLabel(displayName)} recovery exceeded its ${deadlineMs}ms deadline`,
+    );
     this.name = 'DurableCaptureRecoveryDeadlineError';
     this.deadlineMs = deadlineMs;
   }
-}
-
-function capitalize(value: string): string {
-  return value.length === 0 ? value : value[0]!.toUpperCase() + value.slice(1);
 }

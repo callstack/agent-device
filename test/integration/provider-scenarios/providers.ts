@@ -1,4 +1,5 @@
 import type { AppleRunnerProvider } from '../../../src/platforms/apple/core/runner/runner-provider.ts';
+import type { AppleRunnerScreenRecordingTransport } from '../../../src/platform-runtime-screen-recording-apple-runner-transport.ts';
 import type { RunnerCommand } from '../../../src/platforms/apple/core/runner/runner-contract.ts';
 import type {
   AppleMacOsHostProvider,
@@ -30,6 +31,61 @@ export function createAppleRunnerProviderFromTranscript(
         platform: device.platform,
       }) as Record<string, unknown>,
   };
+}
+
+export function createAppleRunnerScreenRecordingTransportFromTranscript(
+  transcript: ProviderScenarioTranscript,
+  commandPrefix: 'ios.runner' | 'macos.runner',
+  onStopped?: (outputPath: string) => void,
+): AppleRunnerScreenRecordingTransport {
+  const active = new Map<
+    string,
+    Readonly<{ deviceId: string; appBundleId: string; outputPath: string }>
+  >();
+  const knownSessions = new Map<string, string>();
+  return Object.freeze({
+    authority: 'scoped-provider',
+    available: true,
+    start: async ({ device, appBundleId, outputPath, fps }) => {
+      const result = transcript.next(
+        `${commandPrefix}.recordStart`,
+        {
+          command: 'recordStart',
+          outPath: outputPath,
+          ...(fps === undefined ? {} : { fps }),
+          appBundleId,
+        },
+        { deviceId: device.id, platform: device.platform },
+      ) as Readonly<{ runnerSessionId?: unknown }>;
+      if (typeof result.runnerSessionId !== 'string' || result.runnerSessionId.length === 0) {
+        throw new Error('scripted runner recording did not return an exact session identity');
+      }
+      active.set(result.runnerSessionId, { deviceId: device.id, appBundleId, outputPath });
+      knownSessions.set(result.runnerSessionId, device.id);
+      return Object.freeze({ runnerSessionId: result.runnerSessionId });
+    },
+    inspect: async (device, runnerSessionId) => {
+      const recording = active.get(runnerSessionId);
+      if (recording?.deviceId === device.id) return 'owned-alive';
+      return knownSessions.get(runnerSessionId) === device.id ? 'missing' : 'ownership-lost';
+    },
+    stop: async ({ device, runnerSessionId, appBundleId }) => {
+      const recording = active.get(runnerSessionId);
+      if (
+        recording?.deviceId !== device.id ||
+        (appBundleId !== undefined && recording.appBundleId !== appBundleId)
+      ) {
+        throw new Error('scripted runner recording ownership changed before stop');
+      }
+      transcript.next(
+        `${commandPrefix}.recordStop`,
+        { command: 'recordStop', appBundleId },
+        { deviceId: device.id, platform: device.platform },
+      );
+      onStopped?.(recording.outputPath);
+      active.delete(runnerSessionId);
+    },
+  });
 }
 
 function stripRunnerCommandId(command: RunnerCommand): RunnerCommand {

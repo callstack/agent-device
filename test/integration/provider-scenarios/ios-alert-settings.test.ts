@@ -225,6 +225,9 @@ function createRecordingPlatformRuntimeGateway(params: {
               available: false,
               reason: 'unsupported-provider-mode',
             },
+            screenRecordingStart: unavailableRecording,
+            screenRecordingReattach: unavailableRecording,
+            screenRecordingCleanup: unavailableRecording,
           },
         },
         operations: {
@@ -300,3 +303,8 @@ function createRecordingPlatformRuntimeGateway(params: {
     shutdown: async () => {},
   };
 }
+
+const unavailableRecording = Object.freeze({
+  available: false as const,
+  reason: 'unsupported-provider-mode' as const,
+});

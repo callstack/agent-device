@@ -115,6 +115,50 @@ export type {
   NetworkRuntimeOperations,
   NetworkTransport,
 } from '../network-runtime.ts';
+export { SCREEN_RECORDING_RESOURCE_KIND } from '../screen-recording-runtime.ts';
+export type {
+  RecordingGestureEvent,
+  ScreenRecordingChunk,
+  ScreenRecordingCompletion,
+  ScreenRecordingLiveHandle,
+  ScreenRecordingLiveSnapshot,
+  ScreenRecordingReattachInput,
+  ScreenRecordingRuntimeOperations,
+  ScreenRecordingStartInput,
+  ScreenRecordingStartResult,
+} from '../screen-recording-runtime.ts';
+export type {
+  AndroidScreenRecordingHost,
+  AndroidScreenRecordingManifestReadOutcome,
+  AndroidScreenRecordingProcessIdentity,
+  AndroidScreenRecordingProcessOwnership,
+  AndroidScreenRecordingStopOutcome,
+  AndroidScreenRecordingTransport,
+  AppleScreenRecordingAvailability,
+  AppleScreenRecordingClockAnchor,
+  AppleScreenRecordingHost,
+  AppleScreenRecordingRunnerRequest,
+  AppleScreenRecordingRunnerResult,
+  HarmonyScreenRecordingHost,
+  ScreenRecordingBackgroundProcess,
+  ScreenRecordingFinalizer,
+  ScreenRecordingOutputHost,
+  ScreenRecordingRuntimeHost,
+  WebScreenRecordingHost,
+  WebScreenRecordingTransport,
+} from '../screen-recording-runtime-host.ts';
+export {
+  screenRecordingAdmissionUse,
+  screenRecordingRuntimePlanUses,
+  screenRecordingStartUse,
+  screenRecordingRecoveryUse,
+  resolveScreenRecordingRuntimePlan,
+} from '../screen-recording-runtime-plan.ts';
+export type {
+  ScreenRecordingRuntimePlan,
+  ScreenRecordingRuntimePlanInput,
+} from '../screen-recording-runtime-plan.ts';
+export { assertRecordRuntimeExecution } from '../record-runtime-cutover.ts';
 export {
   networkAdmissionUse,
   networkDumpUse,
@@ -150,6 +194,8 @@ export type {
   HostToolchainPreparer,
   HostOperatingSystem,
   HostTemporaryTextFile,
+  ManagedProcessIdentity,
+  ManagedProcessOwnership,
   DeviceInventoryFileHost,
   DeviceInventoryHost,
   DeviceInventoryHostByFamily,

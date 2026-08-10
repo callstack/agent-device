@@ -35,8 +35,8 @@
 //     composition file; premature implementation loading and forbidden cross-boundary edges fail (R13).
 //   - Over the DEVICES COMMAND CUTOVER: the handler calls the neutral inventory gateway and no
 //     superseded inventory module, import, or identifier remains in production (R13).
-//   - Over COMMAND-ATOMIC RUNTIME CUTOVERS: retired logs and network routes/admission cannot coexist
-//     with their operation-fact-derived descriptor and handler paths (R14-R15).
+//   - Over COMMAND-ATOMIC RUNTIME CUTOVERS: retired logs, network, and record routes/admission cannot
+//     coexist with their operation-fact-derived descriptor and handler paths (R14-R16).
 // Only `(root)` is unranked among src/ zones (see `UNRANKED_ZONES` in model.ts):
 // it holds entrypoints and composition roots. Extracted workspace package zones
 // are classified separately and held behind R11 instead of the src folder spine.
@@ -107,6 +107,13 @@ import {
   networkRuntimeNarrowingViolations,
   networkRuntimeRouteViolations,
 } from './network-runtime-cutover-policy.ts';
+import {
+  recordLegacyRouteViolations,
+  recordRuntimeNarrowingViolations,
+  recordRuntimeRouteViolations,
+} from './record-runtime-cutover-policy.ts';
+import { recordRuntimeDaemonMechanicsViolations } from './record-runtime-mechanics-policy.ts';
+import { recordRuntimeRegistryJoinViolations } from './record-runtime-registry-policy.ts';
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
@@ -213,6 +220,25 @@ function checkNetworkRuntimeCutover(sources: ReadonlyMap<string, string>): Layer
     return {
       rule: 'R15 network-runtime-cutover',
       file: separator < 0 ? '(network runtime)' : violation.slice(0, separator),
+      line: 1,
+      message: separator < 0 ? violation : violation.slice(separator + 2),
+    };
+  });
+}
+
+function checkRecordRuntimeCutover(sources: ReadonlyMap<string, string>): LayeringViolation[] {
+  const production = [...sources].map(([file, source]) => ({ path: file, source }));
+  return [
+    ...recordLegacyRouteViolations(production),
+    ...recordRuntimeDaemonMechanicsViolations(production),
+    ...recordRuntimeNarrowingViolations(production),
+    ...recordRuntimeRegistryJoinViolations(production),
+    ...recordRuntimeRouteViolations(production),
+  ].map((violation) => {
+    const separator = violation.indexOf(': ');
+    return {
+      rule: 'R16 record-runtime-cutover',
+      file: separator < 0 ? '(record runtime)' : violation.slice(0, separator),
       line: 1,
       message: separator < 0 ? violation : violation.slice(separator + 2),
     };
@@ -634,6 +660,7 @@ export function main(): number {
     ...checkLogsRuntimeCutover(sources),
     ...checkContractsImplementationAuthority(sources),
     ...checkNetworkRuntimeCutover(sources),
+    ...checkRecordRuntimeCutover(sources),
     ...checkContractsImplementationAuthority(sources),
     ...checkBackEdges(edges),
     ...checkTypeInversions(edges),

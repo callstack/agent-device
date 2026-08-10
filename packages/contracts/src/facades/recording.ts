@@ -9,7 +9,6 @@ export { RECORDING_SCOPE_VALUES, isWholeScreenRecordingScope } from '../recordin
 export type { RecordingScope } from '../recording-scope.ts';
 export type {
   RecordingAppIdentity,
-  RecordingBackendTag,
   RecordingCommandResult,
   RecordingStartCommandResult,
   RecordingStopCommandResult,

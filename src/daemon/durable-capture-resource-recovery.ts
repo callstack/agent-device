@@ -18,6 +18,7 @@ import {
   type DurableCaptureResourceFenceLease,
 } from './durable-capture-resource-fence.ts';
 import type { DurableCaptureResourceDefinition } from './durable-capture-resource.ts';
+import { durableCaptureDiagnosticPrefix } from './durable-capture-resource-labels.ts';
 import { transitionCleanupOutcome } from './durable-capture-resource-transitions.ts';
 import { safeSessionName } from './session-paths.ts';
 
@@ -180,7 +181,7 @@ async function settleRecoveryAuthority<K extends string, H extends LiveResourceH
         });
         return true;
       case 'unreattachable': {
-        if (retainsWithoutCleanup(authority.reattached.reason)) {
+        if (!allowsDurableCaptureDescriptorCleanup(authority.reattached.reason)) {
           report(params, 'retained', resourcePath, {
             reason: authority.reattached.reason,
             message: authority.reattached.message,
@@ -226,15 +227,17 @@ function markCompleting<K extends string>(lease: DurableCaptureResourceFenceLeas
   });
 }
 
-function retainsWithoutCleanup(reason: ResourceUnreattachableReason): boolean {
+export function allowsDurableCaptureDescriptorCleanup(
+  reason: ResourceUnreattachableReason,
+): boolean {
   switch (reason) {
     case 'descriptor-invalid':
     case 'descriptor-version-unsupported':
     case 'ownership-fence-lost':
-      return true;
+      return false;
     case 'owner-unavailable':
     case 'transport-not-reattachable':
-      return false;
+      return true;
   }
 }
 
@@ -245,14 +248,10 @@ function report<K extends string, H extends LiveResourceHandle<C>, C>(
   data: Record<string, unknown>,
 ): void {
   const diagnostic = {
-    phase: `${diagnosticPrefix(params.definition.resourceKind)}_recovery_${suffix}`,
+    phase: `${durableCaptureDiagnosticPrefix(params.definition.resourceKind)}_recovery_${suffix}`,
     resourcePath,
     data,
   };
   if (params.onDiagnostic) params.onDiagnostic(diagnostic);
   else emitDiagnostic({ level: 'warn', phase: diagnostic.phase, data: { resourcePath, ...data } });
-}
-
-function diagnosticPrefix(resourceKind: string): string {
-  return resourceKind.replaceAll('-', '_');
 }

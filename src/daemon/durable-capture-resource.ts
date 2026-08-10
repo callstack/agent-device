@@ -19,6 +19,10 @@ import {
   recoverDurableCaptureResourcesAfterDaemonLock,
   type DurableCaptureRecoveryParams,
 } from './durable-capture-resource-recovery.ts';
+import {
+  finishRecoveredDurableCapture,
+  type FinishRecoveredDurableCaptureParams,
+} from './durable-capture-resource-finish-recovered.ts';
 import type { SessionStore } from './session-store.ts';
 import type { SessionState } from './types.ts';
 
@@ -96,6 +100,9 @@ export function createDurableCaptureResource<K extends string, H extends LiveRes
         params,
         resourcePath(params.sessionStore, params.sessionName),
       );
+    },
+    finishRecovered(params: FinishRecoveredDurableCaptureParams<K, H, C>): Promise<C> {
+      return finishRecoveredDurableCapture(definition, params);
     },
     forceCleanupLive(params: {
       session: SessionState;

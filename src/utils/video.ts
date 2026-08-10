@@ -3,6 +3,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from './exec.ts';
 import { buildSwiftToolEnv, compileSwiftSourceText } from './swift-cache.ts';
 import { sleep } from './timeouts.ts';
+import { hasPlayableWebmStructure } from './video-webm.ts';
 
 // Duration zero must pass: a recording of a fully static screen legitimately contains a single
 // frame (screenrecord only encodes on screen updates), and AVFoundation reports its duration as 0.
@@ -66,12 +67,11 @@ export async function waitForStableFile(
 }
 
 export async function isPlayableVideo(filePath: string): Promise<boolean> {
-  // The moov sniff is the finalization oracle: screen recorders reserve moov space up front
-  // and patch it in place on stop, so a capture pulled too early has a `free` placeholder where
-  // the moov belongs — moov presence, not AVFoundation parseability, tells finalized apart.
-  if (!hasLikelyPlayableVideoContainer(filePath)) {
-    return false;
-  }
+  const container = likelyPlayableVideoContainer(filePath);
+  if (!container) return false;
+  // AVFoundation is the MP4 semantic validator. It does not reliably load WebM on supported
+  // macOS hosts, so WebM completion is established by its EBML document type + Segment marker.
+  if (container === 'webm') return true;
   try {
     const validatorPath = await getVideoValidatorExecutablePath();
     const result = await runCmd(validatorPath, [filePath], {
@@ -140,18 +140,21 @@ function isSwiftVideoValidatorUnavailable(stderr: string, stdout: string): boole
   );
 }
 
-function hasLikelyPlayableVideoContainer(filePath: string): boolean {
+function likelyPlayableVideoContainer(filePath: string): 'mp4' | 'webm' | undefined {
   try {
     const stats = fs.statSync(filePath);
     if (!stats.isFile() || stats.size <= 0) {
-      return false;
+      return undefined;
     }
   } catch {
-    return false;
+    return undefined;
   }
 
+  if (filePath.toLowerCase().endsWith('.webm')) {
+    return hasPlayableWebmStructure(filePath) ? 'webm' : undefined;
+  }
   const atoms = inspectTopLevelAtoms(filePath);
-  return atoms.includes('ftyp') && atoms.includes('moov');
+  return atoms.includes('ftyp') && atoms.includes('moov') ? 'mp4' : undefined;
 }
 
 function inspectTopLevelAtoms(filePath: string): string[] {

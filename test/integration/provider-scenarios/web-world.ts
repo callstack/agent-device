@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { likelyPlayableWebmContainer } from '../../../src/__tests__/test-utils/index.ts';
 import type { WebProvider } from '../../../src/platforms/web/provider.ts';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { validPng } from './assertions.ts';
@@ -42,7 +43,7 @@ export async function createWebDesktopWorld(): Promise<WebDesktopWorld> {
     },
     startRecording: async (outPath) => {
       semanticCalls.push(['web', 'recordStart', outPath]);
-      fs.writeFileSync(outPath, 'webm');
+      fs.writeFileSync(outPath, likelyPlayableWebmContainer());
     },
     stopRecording: async () => {
       semanticCalls.push(['web', 'recordStop']);
@@ -118,6 +119,7 @@ export async function createWebDesktopWorld(): Promise<WebDesktopWorld> {
   };
 
   const daemon = await createProviderScenarioHarness({
+    platformRuntime: true,
     webProvider: () => provider,
     deviceInventoryProvider: async () => [PROVIDER_SCENARIO_WEB],
   });

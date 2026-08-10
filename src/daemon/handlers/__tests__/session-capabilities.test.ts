@@ -73,6 +73,7 @@ test('capabilities reports supported commands for the selected session device', 
   expect(runtime.uses).toEqual([
     { required: [], preferred: ['appLogInspect'] },
     { required: [], preferred: ['networkDump'] },
+    { required: [], preferred: ['screenRecordingStart'] },
   ]);
 });
 
@@ -120,6 +121,7 @@ test('capabilities excludes logs from an unavailable provider-mode XCTest runtim
   expect(runtime.uses).toEqual([
     { required: [], preferred: ['appLogInspect'] },
     { required: [], preferred: ['networkDump'] },
+    { required: [], preferred: ['screenRecordingStart'] },
   ]);
 });
 
@@ -244,6 +246,9 @@ function createAdmissionBinding(
         appLogReattach: unavailable,
         appLogCleanup: unavailable,
         networkDump: options.networkAvailable ? { available: true } : unavailable,
+        screenRecordingStart: unavailable,
+        screenRecordingReattach: unavailable,
+        screenRecordingCleanup: unavailable,
       },
     },
     operations: {

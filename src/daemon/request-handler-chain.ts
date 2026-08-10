@@ -9,8 +9,10 @@ import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
 import type { LeaseRegistry } from './lease-registry.ts';
 import type { SessionStore } from './session-store.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from './types.ts';
-import type { BindDeviceRuntime } from './request-runtime-binding.ts';
+import type { BindDeviceRuntime, BindExactDeviceRuntime } from './request-runtime-binding.ts';
 import type { AppLogAdmissionLedger } from './app-log-admission-ledger.ts';
+import type { ScreenRecordingAdmissionLedger } from './screen-recording-admission-ledger.ts';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform';
 
 type RequestHandlerChainParams = {
   req: DaemonRequest;
@@ -26,7 +28,11 @@ type RequestHandlerChainParams = {
   invokeReplayAction?: DaemonInvokeFn;
   androidAdbExecutor?: AndroidAdbExecutor;
   bindDevice: BindDeviceRuntime;
+  bindExactDevice: BindExactDeviceRuntime;
   appLogAdmissionLedger?: AppLogAdmissionLedger;
+  screenRecordingAdmissionLedger: ScreenRecordingAdmissionLedger;
+  requestScope: PlatformRequestScope;
+  retainDeviceExecutionLock(deviceId: string): Promise<void>;
   throwIfCanceled(): void;
   contextFromFlags: (
     flags: CommandFlags | undefined,
@@ -123,7 +129,11 @@ async function runSessionHandler(
       invokeReplayAction: params.invokeReplayAction,
       androidAdbExecutor: params.androidAdbExecutor,
       bindDevice: params.bindDevice,
+      bindExactDevice: params.bindExactDevice,
       appLogAdmissionLedger: params.appLogAdmissionLedger,
+      screenRecordingAdmissionLedger: params.screenRecordingAdmissionLedger,
+      requestScope: params.requestScope,
+      retainDeviceExecutionLock: params.retainDeviceExecutionLock,
       throwIfCanceled: params.throwIfCanceled,
     }),
   );
@@ -174,6 +184,12 @@ async function runRecordTraceHandler(
       sessionName: params.sessionName,
       sessionStore: params.sessionStore,
       logPath: params.logPath,
+      bindDevice: params.bindDevice,
+      bindExactDevice: params.bindExactDevice,
+      admissionLedger: params.screenRecordingAdmissionLedger,
+      requestScope: params.requestScope,
+      retainDeviceExecutionLock: params.retainDeviceExecutionLock,
+      throwIfCanceled: params.throwIfCanceled,
     }),
   );
 }

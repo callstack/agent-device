@@ -15,7 +15,7 @@ export function buildSessionRecoveryHint(
   context: SessionRecoveryContext,
 ): string {
   // Active recording state controls user recovery text; record-only ownership controls cleanup.
-  if (session.recording) {
+  if (session.screenRecording) {
     return buildRecordingSessionRecoveryHint(session, context);
   }
   return buildOpenSessionRecoveryHint(session, context);

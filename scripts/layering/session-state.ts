@@ -73,8 +73,7 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
   // reach both this watermark and the P4a `scriptPublication` transitions above.
   pendingRecordAndHeal: ['src/daemon/session-replay-coordinator.ts'],
 
-  trace: ['src/daemon/handlers/record-trace.ts'],
-  recording: ['src/daemon/handlers/record-trace-recording.ts'],
+  trace: ['src/daemon/handlers/trace-runtime.ts'],
   applePerf: ['src/daemon/handlers/session-perf-xctrace.ts', 'src/daemon/session-teardown.ts'],
   nativePerf: ['src/daemon/session-teardown.ts'],
   audioProbe: ['src/daemon/audio-probe.ts'],
@@ -109,6 +108,7 @@ export const STORE_OWNED_SESSION_STATE_FIELDS: ReadonlySet<string> = new Set([
   'device',
   'name',
   'recordOnlySession',
+  'screenRecording',
   'sessionScope',
   'snapshotDiagnostics',
   'surface',

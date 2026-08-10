@@ -1,13 +1,18 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { test } from 'vitest';
 import { assertRecordingStarted, assertRecordingStopped, assertRpcOk } from './assertions.ts';
 import { PROVIDER_SCENARIO_MACOS } from './fixtures.ts';
 import { createProviderScenarioTempPath, withProviderScenarioResource } from './harness.ts';
 import { createMacOsDesktopWorld } from './macos-world.ts';
-import { createAppleRunnerProviderFromTranscript } from './providers.ts';
+import {
+  createAppleRunnerProviderFromTranscript,
+  createAppleRunnerScreenRecordingTransportFromTranscript,
+} from './providers.ts';
 import { createProviderTranscript } from './transcript.ts';
 
-test('Provider-backed integration macOS recording flow uses runner provider through daemon path', async () => {
+test('Provider-backed integration macOS recording uses focused exact runner authority', async () => {
   const recordingPath = createProviderScenarioTempPath(
     'agent-device-provider-scenario-macos-record',
     'mp4',
@@ -23,7 +28,7 @@ test('Provider-backed integration macOS recording flow uses runner provider thro
         fps: 30,
         appBundleId: 'com.apple.systempreferences',
       },
-      result: {},
+      result: { runnerSessionId: 'macos-runner-recording-1' },
     },
     {
       command: 'macos.runner.recordStop',
@@ -37,8 +42,22 @@ test('Provider-backed integration macOS recording flow uses runner provider thro
     runnerTranscript,
     'macos.runner',
   );
+  const appleRunnerScreenRecordingTransport =
+    createAppleRunnerScreenRecordingTransportFromTranscript(
+      runnerTranscript,
+      'macos.runner',
+      (outputPath) =>
+        fs.copyFileSync(
+          path.join(process.cwd(), 'website/docs/public/agent-device-contacts.mp4'),
+          outputPath,
+        ),
+    );
   await withProviderScenarioResource(
-    async () => await createMacOsDesktopWorld({ appleRunnerProvider }),
+    async () =>
+      await createMacOsDesktopWorld({
+        appleRunnerProvider,
+        appleRunnerScreenRecordingTransport,
+      }),
     async ({ daemon }) => {
       const open = await daemon.callCommand('open', ['settings'], { platform: 'macos' });
       assert.equal(assertRpcOk(open).appBundleId, 'com.apple.systempreferences');

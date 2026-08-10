@@ -263,6 +263,9 @@ importers:
 
   packages/platform-web:
     dependencies:
+      '@agent-device/capture-kit':
+        specifier: workspace:*
+        version: link:../capture-kit
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts

@@ -36,9 +36,7 @@ function findRetainedLegacyMarker(
 ): RetainedLegacyAppLogMarker | undefined {
   let retained: RetainedLegacyAppLogMarker | undefined;
   for (const [markerPath, marker] of retainedMarkers) {
-    const matchesDevice =
-      marker.device === undefined || deviceIdentityKey(marker.device) === identityKey;
-    if (!matchesDevice) continue;
+    if (!marker.device || deviceIdentityKey(marker.device) !== identityKey) continue;
     if (!markerExists(markerPath)) {
       retainedMarkers.delete(markerPath);
       continue;
@@ -62,7 +60,11 @@ export function createAppLogAdmissionLedger(
   return Object.freeze({
     ...durableLedger,
     retainLegacyMarkers(markers: readonly RetainedLegacyAppLogMarker[]): void {
-      for (const marker of markers) retainedLegacyMarkers.set(marker.markerPath, marker);
+      for (const marker of markers) {
+        // Corrupt legacy markers cannot safely claim a device. They remain on disk as path-local
+        // no-overwrite evidence, but must not wedge app-log admission for every unrelated device.
+        if (marker.device) retainedLegacyMarkers.set(marker.markerPath, marker);
+      }
     },
     assertStartAllowed(device: DeviceInfo): void {
       const identityKey = deviceIdentityKey(deviceIdentity(device));

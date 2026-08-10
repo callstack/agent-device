@@ -1,11 +1,8 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type {
   GestureExecutionProfile,
-  GestureReferenceFrame,
   PreresolvedInteractionTarget,
-  ScrollDirection,
 } from '@agent-device/contracts/interaction';
-import type { RecordingExportQuality, RecordingScope } from '@agent-device/contracts/recording';
 import type { SessionAction, SessionSurface } from '@agent-device/contracts/session';
 import type {
   LeaseBackend,
@@ -29,6 +26,7 @@ import type {
   AppLogFailure,
   AppLogLiveHandle,
   DurableResourceEnvelope,
+  ScreenRecordingLiveHandle,
 } from '@agent-device/contracts/platform';
 import type { AndroidNativePerfSession } from '../platforms/android/perf.ts';
 import type { SessionScriptPublicationState } from './session-script-publication-state.ts';
@@ -160,44 +158,6 @@ export type DaemonRequest = Omit<WireRequest, 'token' | 'session' | 'flags' | 'm
 export type DaemonResponse = PublicDaemonResponse;
 export type DaemonInvokeFn = (req: DaemonRequest) => Promise<DaemonResponse>;
 
-type RecordingTelemetryBase = {
-  tMs: number;
-  x: number;
-  y: number;
-  referenceWidth?: number;
-  referenceHeight?: number;
-};
-
-type RecordingTelemetryTravel = RecordingTelemetryBase & {
-  x2: number;
-  y2: number;
-  durationMs: number;
-};
-
-export type RecordingGestureEvent =
-  | (RecordingTelemetryBase & {
-      kind: 'tap' | 'longpress';
-      durationMs?: number;
-    })
-  | (RecordingTelemetryTravel & {
-      kind: 'swipe';
-    })
-  | (RecordingTelemetryTravel & {
-      kind: 'scroll';
-      contentDirection: ScrollDirection;
-      amount?: number;
-      pixels?: number;
-    })
-  | (RecordingTelemetryTravel & {
-      kind: 'back-swipe';
-      edge: 'left' | 'right';
-    })
-  | (RecordingTelemetryBase & {
-      kind: 'pinch';
-      scale: number;
-      durationMs: number;
-    });
-
 export type AndroidSnapshotFreshness = {
   action: string;
   markedAt: number;
@@ -277,36 +237,6 @@ export type PendingInteractionOutcome = {
   markedAt: number;
   attemptsRemaining: number;
   preSignature: InteractionSurfaceEntry[];
-};
-
-type SessionRecordingBase = {
-  outPath: string;
-  clientOutPath?: string;
-  telemetryPath?: string;
-  warning?: string;
-  overlayWarning?: string;
-  startedAt: number;
-  recordingScope?: RecordingScope;
-  recordingBackend?: string;
-  recordOnlySession?: boolean;
-  activeSessionApp?: {
-    bundleId: string;
-    name?: string;
-  };
-  exportQuality?: RecordingExportQuality;
-  showTouches: boolean;
-  gestureEvents: RecordingGestureEvent[];
-  touchReferenceFrame?: GestureReferenceFrame;
-  gestureClockOriginAtMs?: number;
-  gestureClockOriginUptimeMs?: number;
-  runnerSessionId?: string;
-  invalidatedReason?: string;
-};
-
-export type RecordingChunk = {
-  index: number;
-  path: string;
-  remotePath: string;
 };
 
 type SessionRecordingProcessChild = Pick<ExecBackgroundResult['child'], 'kill' | 'pid'>;
@@ -485,44 +415,6 @@ export type SessionState = {
    */
   pendingRecordAndHeal?: { expectedFrom: number; actionsCountAtDivergence: number };
   actions: SessionAction[];
-  recording?:
-    | (SessionRecordingBase & {
-        platform: 'ios';
-        child: SessionRecordingProcessChild;
-        wait: Promise<ExecResult>;
-        recorderPid?: number;
-        remotePath?: string;
-      })
-    | (SessionRecordingBase & {
-        platform: 'android';
-        recordingId?: string;
-        remotePath: string;
-        remotePid: string;
-        remoteStartedAt?: number;
-        chunks?: RecordingChunk[];
-        rotationTimer?: NodeJS.Timeout;
-        rotationPromise?: Promise<void>;
-        rotationFailedReason?: string;
-        stopping?: boolean;
-      })
-    | (SessionRecordingBase & {
-        platform: 'harmonyos';
-        fileName: string;
-        remotePath: string;
-      })
-    | (SessionRecordingBase & {
-        platform: 'ios-device-runner';
-        remotePath: string;
-        runnerStartedAtUptimeMs?: number;
-        targetAppReadyUptimeMs?: number;
-      })
-    | (SessionRecordingBase & {
-        platform: 'macos-runner';
-        remotePath?: string;
-      })
-    | (SessionRecordingBase & {
-        platform: 'web';
-      });
   /**
    * Neutral session-owned app-log resource. Durable coordinates are persisted
    * independently; the in-memory handle is never serialized or reconstructed
@@ -531,6 +423,11 @@ export type SessionState = {
   appLog?: {
     handle: AppLogLiveHandle;
     envelope: DurableResourceEnvelope<'app-log'>;
+  };
+  /** Native recording mechanics stay behind the adopted runtime handle. */
+  screenRecording?: {
+    handle: ScreenRecordingLiveHandle;
+    envelope: DurableResourceEnvelope<'screen-recording'>;
   };
   appLogFailure?: AppLogFailure;
 };

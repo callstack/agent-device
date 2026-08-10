@@ -10,8 +10,9 @@ original baseline `44c298d7f3a0ef84bc47f34c54d88b6c9eeb0df2`, through merged `de
 `457fafe6399a95a4ddbfac57f02b3a7fe4157a54`. The earlier checkpoints at `99f5af1b7` and `d73bdb4ae`
 are superseded and were not behavior-passing: later review found correctness failures and the first
 budget decision still used the unrevised +3% limit. The required cleanup package, explicit budget
-decision, and clean rerun are now complete. The next authorized command unit is recordings onto the
-durable-capture substrate; this decision does not authorize an unbounded platform migration.
+decision, and clean rerun are now complete. The authorized recordings command unit moves onto the
+durable-capture substrate under its separately reviewed cumulative bound below; this decision does
+not authorize another command unit or an unbounded platform migration.
 
 During the `devices` unit, doctor discovery, replay-test sharding, Apple simulator hints, and Android
 emulator lifecycle keep their existing command execution owners while consuming the same injected,
@@ -569,6 +570,24 @@ The controlled 15-run startup medians showed no regression (`--version` 94.5 ms 
 `--help` 91.2 ms to 72.0 ms). Module-level source-map inspection found no duplicate implementation
 emission; the distribution cost is the accepted reliability/cloud/substrate decision above. Future
 units must define and review their own cumulative budget rather than inheriting this headroom.
+
+The recordings command unit has its own reviewed budget (2026-08-11). The cumulative denominator
+remains the original `44c298d7f` baseline; rebasing onto the completed checkpoint does not reset it.
+The immediate stack-base delta from durable-capture head `e3b0956b` is reported separately so the
+cost of this command unit stays visible. The exact #1724 head that reproduces this table is recorded
+in the acceptance comment before readiness. The increase pays for runtime-owned screen-recording
+transports, fenced artifact finalization and cross-daemon recovery, and provider parity. It is not
+unused checkpoint headroom and is not an allowance for a later command:
+
+| Metric | Original baseline | Recording bound | Cumulative change | Recording-only change |
+| --- | ---: | ---: | ---: | ---: |
+| Raw JavaScript | 2,036,067 B | 2,166,159 B | +130,092 B (+6.389%) | +32,026 B (+1.501%) |
+| Gzipped JavaScript | 659,646 B | 708,776 B | +49,130 B (+7.448%) | +12,902 B (+1.854%) |
+| npm tarball | 797,027 B | 836,426 B | +39,399 B (+4.943%) | +8,987 B (+1.086%) |
+| npm unpacked | 2,781,186 B | 2,913,430 B | +132,244 B (+4.755%) | +32,494 B (+1.128%) |
+
+These bounds admit only the completed recordings cutover. Every subsequent command unit must define
+and review both its original-baseline cumulative bound and its immediate stack-base delta.
 
 The tracking issue owns command order, PR/file lists, test-only compatibility fixtures, exact
 benchmark commands and thresholds, raw evidence, and reviewers. Temporary fixtures never authorize

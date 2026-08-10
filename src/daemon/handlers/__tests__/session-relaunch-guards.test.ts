@@ -1,4 +1,4 @@
-import { test, expect, vi } from 'vitest';
+import { test, expect } from 'vitest';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -10,6 +10,7 @@ import {
   assertInvalidArgsMessage,
 } from './session-test-harness.ts';
 import { handleSessionCommands } from '../session.ts';
+import { makeTestScreenRecordingResource } from '../../../__tests__/test-utils/screen-recording-live-handle.ts';
 
 test('open --relaunch rejects URL targets', async () => {
   const sessionStore = makeSessionStore();
@@ -206,6 +207,7 @@ test('open on in-use device returns DEVICE_IN_USE before readiness checks', asyn
 
   mockResolveTargetDevice.mockResolvedValue({
     platform: 'apple',
+    appleOs: 'ios',
     id: 'ios-device-1',
     name: 'iPhone Device',
     kind: 'device',
@@ -241,25 +243,25 @@ test('open on device owned by recording session returns recording recovery hint'
   const sessionStore = makeSessionStore();
   const recordingSession = makeSession('default', {
     platform: 'apple',
+    appleOs: 'ios',
     id: 'ios-device-1',
     name: 'iPhone Device',
     kind: 'device',
     booted: true,
   });
   recordingSession.recordOnlySession = true;
-  recordingSession.recording = {
-    platform: 'ios',
-    child: { kill: vi.fn(), pid: 123 },
-    wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
+  recordingSession.screenRecording = makeTestScreenRecordingResource(recordingSession, {
+    backend: 'simctl recordVideo',
     outPath: '/tmp/recording.mp4',
     startedAt: Date.now(),
     showTouches: false,
-    gestureEvents: [],
-  };
+    recordOnlySession: true,
+  });
   sessionStore.set('default', recordingSession);
 
   mockResolveTargetDevice.mockResolvedValue({
     platform: 'apple',
+    appleOs: 'ios',
     id: 'ios-device-1',
     name: 'iPhone Device',
     kind: 'device',

@@ -42,6 +42,7 @@ import {
   resetAndroidTestImeActivationCacheForTests,
 } from '../ime-lifecycle.ts';
 import { teardownSessionResources } from '../../../daemon/session-teardown.ts';
+import { SessionStore } from '../../../daemon/session-store.ts';
 import type { SessionState } from '../../../daemon/types.ts';
 
 const LATIN_IME = 'com.google.android.inputmethod.latin/.LatinIME';
@@ -253,6 +254,7 @@ test('a failed restore keeps the recovery value AND the marker for a later retry
 test('session teardown fails when a real IME restore reports set-failed', async () => {
   const state = fakeDeviceState(LATIN_IME);
   const stateDir = await makeStateDir();
+  const sessionStore = new SessionStore(path.join(stateDir, 'sessions'));
   const session: SessionState = {
     name: 'ime-restore-failure',
     device: ANDROID_EMULATOR,
@@ -270,6 +272,7 @@ test('session teardown fails when a real IME restore reports set-failed', async 
           appLog: 'already-settled',
           session,
           sessionName: session.name,
+          sessionStore,
           stateDir,
         }),
       /android_ime: Android test IME could not be restored/,

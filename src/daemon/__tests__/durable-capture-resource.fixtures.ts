@@ -12,7 +12,10 @@ import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { createTestAppLogLiveHandle } from '../../__tests__/test-utils/app-log-live-handle.ts';
 import { createDurableCaptureAdmissionLedger } from '../durable-capture-admission-ledger.ts';
 import { createDurableCaptureResource } from '../durable-capture-resource.ts';
-import { createDurableCaptureResourceStore } from '../durable-capture-resource-store.ts';
+import {
+  createDurableCaptureResourceStore,
+  type DurableCaptureResourceStore,
+} from '../durable-capture-resource-store.ts';
 import type { SessionState } from '../types.ts';
 
 export const testCaptureStore = createDurableCaptureResourceStore({
@@ -21,27 +24,29 @@ export const testCaptureStore = createDurableCaptureResourceStore({
   displayName: 'test capture',
 });
 
-export const testCaptureResource = createDurableCaptureResource<
-  'app-log',
-  AppLogLiveHandle,
-  AppLogCompletion
->({
-  resourceKind: 'app-log',
-  displayName: 'test capture',
-  store: testCaptureStore,
-  sessionSlot: {
-    read: (session) => session.appLog,
-    replace: (session, appLog) => ({ ...session, appLog, appLogFailure: undefined }),
-  },
-  completionMetadata: (completion) => ({
-    outputPath: completion.outputPath,
-    completedAt: completion.completedAt,
-  }),
-  messages: {
-    noActive: 'no test capture active',
-    cleanupPendingHint: 'Keep the test capture manifest for exact-owner recovery.',
-  },
-});
+export function createTestCaptureResource(
+  store: DurableCaptureResourceStore<'app-log'> = testCaptureStore,
+) {
+  return createDurableCaptureResource<'app-log', AppLogLiveHandle, AppLogCompletion>({
+    resourceKind: 'app-log',
+    displayName: 'test capture',
+    store,
+    sessionSlot: {
+      read: (session) => session.appLog,
+      replace: (session, appLog) => ({ ...session, appLog, appLogFailure: undefined }),
+    },
+    completionMetadata: (completion) => ({
+      outputPath: completion.outputPath,
+      completedAt: completion.completedAt,
+    }),
+    messages: {
+      noActive: 'no test capture active',
+      cleanupPendingHint: 'Keep the test capture manifest for exact-owner recovery.',
+    },
+  });
+}
+
+export const testCaptureResource = createTestCaptureResource();
 
 export function makeDurableCaptureContext(
   device: DeviceInfo = {
@@ -76,18 +81,25 @@ export function makeDurableCaptureStartResult(
   context: ReturnType<typeof makeDurableCaptureContext>,
   options: {
     cleanup?: CleanupOutcome;
+    cleanupError?: Error;
     finish?: FinishOutcome<AppLogCompletion>;
+    finishError?: Error;
   } = {},
 ) {
-  const forceCleanup = vi.fn(async () => options.cleanup ?? ({ status: 'cleaned' } as const));
-  const finish = vi.fn(
-    async () =>
+  const forceCleanup = vi.fn(async () => {
+    if (options.cleanupError) throw options.cleanupError;
+    return options.cleanup ?? ({ status: 'cleaned' } as const);
+  });
+  const finish = vi.fn(async () => {
+    if (options.finishError) throw options.finishError;
+    return (
       options.finish ??
       ({
         status: 'completed',
         result: { backend: 'android', outputPath: '/tmp/app.log', completedAt: 2 },
-      } as const),
-  );
+      } as const)
+    );
+  });
   const handle = createTestAppLogLiveHandle({
     inspect: () => ({ backend: 'android', state: 'active', startedAt: 1 }),
     finish,

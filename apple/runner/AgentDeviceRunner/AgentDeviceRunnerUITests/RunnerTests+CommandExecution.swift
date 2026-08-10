@@ -1537,7 +1537,11 @@ extension RunnerTests {
       }
     case .recordStop:
       guard let recorder = activeRecording else {
-        return Response(ok: false, error: ErrorPayload(message: "no active recording"))
+        // The runner protocol is the durable cleanup primitive. A daemon may crash after the
+        // native stop succeeds but before it commits the resource transition, so exact-owner
+        // recovery must be able to repeat this command safely. Public `record stop` still owns
+        // its user-facing no-active validation through the daemon session manifest.
+        return Response(ok: true, data: DataPayload(message: "recording already stopped"))
       }
       do {
         try recorder.stop()

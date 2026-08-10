@@ -359,7 +359,7 @@ function createRuntimeHarness(options: { inspectAvailable?: boolean } = {}) {
     });
     return createAppLogStartResult(handle, envelope);
   });
-  const operations: PlatformRuntimeOperations = {
+  const operations: DeviceBinding<PlatformRuntimeOperations>['operations'] = {
     appLogInspect: inspect,
     appLogDoctor: doctor,
     appLogStart: start,
@@ -410,6 +410,9 @@ function createRuntimeHarness(options: { inspectAvailable?: boolean } = {}) {
           appLogReattach: { available: true },
           appLogCleanup: { available: true },
           networkDump: { available: true },
+          screenRecordingStart: unavailableRecording,
+          screenRecordingReattach: unavailableRecording,
+          screenRecordingCleanup: unavailableRecording,
         },
       },
       operations,
@@ -435,3 +438,8 @@ function createRuntimeHarness(options: { inspectAvailable?: boolean } = {}) {
     forceCleanup,
   };
 }
+
+const unavailableRecording = Object.freeze({
+  available: false as const,
+  reason: 'owner-capability-missing' as const,
+});

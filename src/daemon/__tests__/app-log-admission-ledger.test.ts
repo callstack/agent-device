@@ -59,6 +59,17 @@ test('retained legacy markers fail closed only in the daemon ledger that observe
   ).toBe(1);
 });
 
+test('an unclassified legacy marker does not globally wedge unrelated device admission', () => {
+  const ledger = createAppLogAdmissionLedger({ markerExists: () => true });
+  const sessionStore = makeSessionStore('app-log-admission-unclassified-legacy-');
+  const resourcePath = resolveAppLogResourcePath(sessionStore.resolveSessionDir('session'));
+
+  ledger.retainLegacyMarkers([{ markerPath: '/sessions/corrupt/app-log.pid' }]);
+
+  expect(createNextAppLogFence({ ledger, resourcePath, device: DEVICE }).generation).toBe(1);
+  expect(createNextAppLogFence({ ledger, resourcePath, device: OTHER_DEVICE }).generation).toBe(1);
+});
+
 test('removing a retained legacy marker unblocks the matching device without a daemon restart', () => {
   let markerExists = true;
   const ledger = createAppLogAdmissionLedger({ markerExists: () => markerExists });

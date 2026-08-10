@@ -18,7 +18,6 @@ import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts'
 import { clearDaemonShutdownReport, writeDaemonShutdownReport } from '../daemon-shutdown-report.ts';
 import { createRequestHandler } from '../request-router.ts';
 import { stopSessionAppLog, teardownSessionResources } from '../session-teardown.ts';
-import { IOS_SIMULATOR_RECORDING_STOP_ESCALATION_BUDGET_MS } from '../handlers/record-trace-ios-simulator.ts';
 import { closeDaemonServers } from './server-shutdown.ts';
 import type { DaemonInvokeFn, SessionState } from '../types.ts';
 import { createDaemonIdleReap } from './daemon-idle-reap.ts';
@@ -63,8 +62,10 @@ import {
 } from '../app-log-resource-recovery.ts';
 import { createDaemonRecoveryPlatformScope } from '../platform-request-scope.ts';
 import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
+import { createScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
 
 const DAEMON_SESSION_TEARDOWN_TIMEOUT_MS = 5_000;
+export const SCREEN_RECORDING_SESSION_TEARDOWN_BUDGET_MS = 11_000;
 const DAEMON_SESSION_LEASE_RELEASE_TIMEOUT_MS = 1_000;
 const DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS = 1_000;
 const DAEMON_PROVIDER_RELEASE_DRAIN_TIMEOUT_MS = 2_000;
@@ -74,24 +75,20 @@ type WritableOutput = {
 };
 
 /**
- * Per-session teardown budget for daemon shutdown. The base budget is enough
- * for ordinary resource cleanup, but a session with an active recording must be
- * allowed to run the full recorder-stop escalation (direct-handle SIGINT wait
- * plus PID-based SIGINT/SIGTERM/SIGKILL retries), which alone exceeds the base
- * budget — racing that against the base 5s would let shutdown advance to
- * process exit exactly when fallback cleanup begins, orphaning the recorder
- * with an unfinalized mp4. The recording budget EXTENDS the base one so the
- * session's remaining cleanup steps keep their usual allowance.
+ * Per-session teardown budget for daemon shutdown. The base budget covers ordinary resources;
+ * an active durable recording gets an additional owner-finalization budget so the daemon cannot
+ * exit while its runtime handle is still producing the terminal media artifact. The base portion
+ * remains available to cleanup steps that follow recording finalization.
  */
 export function resolveDaemonSessionTeardownTimeoutMs(session: SessionState): number {
-  if (!session.recording) return DAEMON_SESSION_TEARDOWN_TIMEOUT_MS;
-  return DAEMON_SESSION_TEARDOWN_TIMEOUT_MS + IOS_SIMULATOR_RECORDING_STOP_ESCALATION_BUDGET_MS;
+  if (!session.screenRecording) return DAEMON_SESSION_TEARDOWN_TIMEOUT_MS;
+  return DAEMON_SESSION_TEARDOWN_TIMEOUT_MS + SCREEN_RECORDING_SESSION_TEARDOWN_BUDGET_MS;
 }
 
 /**
  * Daemon-shutdown teardown of one session: bounded resource cleanup (budget
  * from {@link resolveDaemonSessionTeardownTimeoutMs}, resolved BEFORE cleanup
- * starts since finalizing the recording detaches `session.recording`), then the
+ * starts since finalizing the recording detaches `session.screenRecording`), then the
  * repair-commit finalization and session deletion. Cleanup failures — including
  * a recorder that could not be finalized — surface on stderr instead of being
  * silently swallowed.
@@ -125,6 +122,7 @@ export async function teardownDaemonSessionForShutdown(params: {
     appLog: 'already-settled',
     session: sessionAfterAppLog,
     sessionName: session.name,
+    sessionStore,
     stateDir,
   }).then(
     () => true,
@@ -204,6 +202,7 @@ export async function startDaemonRuntime(
 
   const sessionStore = new SessionStore(sessionsDir);
   const appLogAdmissionLedger = createAppLogAdmissionLedger();
+  const screenRecordingAdmissionLedger = createScreenRecordingAdmissionLedger();
   const version = readVersion();
   const token = crypto.randomBytes(24).toString('hex');
   const daemonProcessStartTime = readProcessStartTime(process.pid) ?? undefined;
@@ -256,7 +255,10 @@ export async function startDaemonRuntime(
     deviceInventoryGateways,
     deviceRuntimeGateway,
     appLogAdmissionLedger,
+    screenRecordingAdmissionLedger,
     appleRunnerProvider: providerRuntimeProviders.appleRunnerProvider,
+    appleRunnerScreenRecordingTransport:
+      providerRuntimeProviders.appleRunnerScreenRecordingTransport,
     providerRuntimeIds: providerRuntimeProviders.providerRuntimeIds,
     providerRuntimeRequiredIds: providerRuntimeProviders.providerRuntimeRequiredIds,
     providerDeviceRuntimeScope: providerRuntimeProviders.providerDeviceRuntimeScope,

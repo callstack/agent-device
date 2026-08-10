@@ -5,6 +5,7 @@ import { deviceIdentity, deviceIdentityKey, type DeviceInfo } from '@agent-devic
 import { AppError } from '@agent-device/kernel/errors';
 import type { DurableCaptureAdmissionLedger } from './durable-capture-admission-ledger.ts';
 import type { DurableCaptureResourceDefinition } from './durable-capture-resource.ts';
+import { capitalizeDurableCaptureLabel } from './durable-capture-resource-labels.ts';
 
 export function createNextDurableCaptureFence<K extends string, H extends LiveResourceHandle<C>, C>(
   definition: DurableCaptureResourceDefinition<K, H, C>,
@@ -34,7 +35,7 @@ function assertNoConflictingManifest<K extends string, H extends LiveResourceHan
     if (existing.status === 'unreattachable') {
       throw new AppError(
         'COMMAND_FAILED',
-        `${capitalize(articleFor(definition.displayName))} ${definition.displayName} recovery record is unreattachable: ${existing.message}`,
+        `${capitalizeDurableCaptureLabel(articleFor(definition.displayName))} ${definition.displayName} recovery record is unreattachable: ${existing.message}`,
         {
           reason: existing.reason,
           retriable: false,
@@ -50,7 +51,7 @@ function assertNoConflictingManifest<K extends string, H extends LiveResourceHan
     ) {
       throw new AppError(
         'COMMAND_FAILED',
-        `${capitalize(articleFor(definition.displayName))} ${definition.displayName} resource for this device has not reached a confirmed terminal state`,
+        `${capitalizeDurableCaptureLabel(articleFor(definition.displayName))} ${definition.displayName} resource for this device has not reached a confirmed terminal state`,
         {
           reason: 'cleanup-unconfirmed',
           hint: `Retry exact-owner cleanup using the existing ${definition.displayName} manifest before starting a replacement.`,
@@ -58,10 +59,6 @@ function assertNoConflictingManifest<K extends string, H extends LiveResourceHan
       );
     }
   }
-}
-
-function capitalize(value: string): string {
-  return value.length === 0 ? value : value[0]!.toUpperCase() + value.slice(1);
 }
 
 function articleFor(value: string): 'a' | 'an' {

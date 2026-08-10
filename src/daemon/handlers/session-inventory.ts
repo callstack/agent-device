@@ -24,7 +24,11 @@ import { getRequestSignal } from '../../request/cancel.ts';
 import { requireSessionOrExplicitSelector, resolveCommandDevice } from './session-device-utils.ts';
 import { errorResponse, requireCommandSupported } from './response.ts';
 import { resolveImplicitSessionScope, sessionMatchesScope } from '../session-routing.ts';
-import { appLogAdmissionUse, networkAdmissionUse } from '@agent-device/contracts/platform';
+import {
+  appLogAdmissionUse,
+  networkAdmissionUse,
+  screenRecordingAdmissionUse,
+} from '@agent-device/contracts/platform';
 import type { BindDeviceRuntime } from '../request-runtime-binding.ts';
 
 export async function handleSessionInventoryCommands(params: {
@@ -174,7 +178,7 @@ async function capabilitiesInventoryResponse(params: {
   });
   if ('response' in resolution) return resolution.response;
   const { device } = resolution;
-  const [logsAvailable, networkAvailable] = params.bindDevice
+  const [logsAvailable, networkAvailable, recordingAvailable] = params.bindDevice
     ? await Promise.all([
         params
           .bindDevice(device, appLogAdmissionUse)
@@ -182,8 +186,11 @@ async function capabilitiesInventoryResponse(params: {
         params
           .bindDevice(device, networkAdmissionUse)
           .then((runtime) => runtime.facts.networkDump.available),
+        params
+          .bindDevice(device, screenRecordingAdmissionUse)
+          .then((runtime) => runtime.facts.screenRecordingStart.available),
       ])
-    : [false, false];
+    : [false, false, false];
   return {
     ok: true,
     data: {
@@ -193,7 +200,9 @@ async function capabilitiesInventoryResponse(params: {
           ? logsAvailable
           : command === 'network'
             ? networkAvailable
-            : isCommandSupportedOnDevice(command, device),
+            : command === 'record'
+              ? recordingAvailable
+              : isCommandSupportedOnDevice(command, device),
       ),
     },
   };

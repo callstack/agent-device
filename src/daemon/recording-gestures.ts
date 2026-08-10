@@ -1,5 +1,6 @@
 import { isIosFamily } from '@agent-device/kernel/device';
-import type { RecordingGestureEvent, SessionState } from './types.ts';
+import type { RecordingGestureEvent } from '@agent-device/contracts/platform';
+import type { SessionState } from './types.ts';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import {
   resolveGestureDurationMs,
@@ -35,8 +36,9 @@ export function recordTouchVisualizationEvent(
   startedAtMs = Date.now(),
   finishedAtMs = Date.now(),
 ): void {
-  const recording = session.recording;
-  if (!recording) return;
+  const handle = session.screenRecording?.handle;
+  if (!handle) return;
+  const recording = handle.inspect();
 
   const merged = { ...fallback, ...(result ?? {}) };
   const reportedDurationMs =
@@ -45,8 +47,7 @@ export function recordTouchVisualizationEvent(
     recordingStartedAt: recording.startedAt,
     gestureClockOriginAtMs: recording.gestureClockOriginAtMs,
     gestureClockOriginUptimeMs: recording.gestureClockOriginUptimeMs,
-    runnerStartedAtUptimeMs:
-      recording.platform === 'ios-device-runner' ? recording.runnerStartedAtUptimeMs : undefined,
+    runnerStartedAtUptimeMs: recording.runnerStartedAtUptimeMs,
     gestureStartUptimeMs: readRecordingNumber(merged.gestureStartUptimeMs),
     gestureEndUptimeMs: readRecordingNumber(merged.gestureEndUptimeMs),
     fallbackStartedAtMs: startedAtMs,
@@ -75,7 +76,7 @@ export function recordTouchVisualizationEvent(
     referenceFrame,
   );
   if (events.length === 0) return;
-  recording.gestureEvents.push(...events);
+  handle.appendGestureEvents(events);
   emitDiagnostic({
     level: 'debug',
     phase: 'record_touch_visualization_event',

@@ -6,9 +6,11 @@ import {
 } from '../recording-gestures.ts';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSnapshotState } from '../../__tests__/test-utils/snapshot-builders.ts';
+import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
+import type { ScreenRecordingLiveSnapshot } from '@agent-device/contracts/platform';
 
-function makeSession() {
-  return makeIosSession('default', {
+function makeSession(recording: Partial<ScreenRecordingLiveSnapshot> = {}) {
+  const session = makeIosSession('default', {
     snapshot: makeSnapshotState(
       [
         {
@@ -19,16 +21,14 @@ function makeSession() {
       ],
       { backend: 'xctest' },
     ),
-    recording: {
-      platform: 'ios',
-      outPath: '/tmp/demo.mp4',
-      startedAt: 1_000,
-      showTouches: true,
-      gestureEvents: [],
-      child: { kill: () => {} } as any,
-      wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-    },
   });
+  session.screenRecording = makeTestScreenRecordingResource(session, {
+    backend: 'simctl recordVideo',
+    outPath: '/tmp/demo.mp4',
+    startedAt: 1_000,
+    ...recording,
+  });
+  return session;
 }
 
 test('scroll records a semantic scroll gesture for visualization telemetry', () => {
@@ -39,8 +39,8 @@ test('scroll records a semantic scroll gesture for visualization telemetry', () 
 
   recordTouchVisualizationEvent(session, 'scroll', ['down'], result, {}, 1_500, 1_920);
 
-  assert.equal(session.recording?.gestureEvents.length, 1);
-  const event = session.recording?.gestureEvents[0];
+  assert.equal(session.screenRecording?.handle.inspect().gestureEvents.length, 1);
+  const event = session.screenRecording?.handle.inspect().gestureEvents[0];
   assert.equal(event?.kind, 'scroll');
   if (!event || event.kind !== 'scroll') return;
 
@@ -64,7 +64,7 @@ test('scroll amount scales swipe travel for visualization', () => {
 
   recordTouchVisualizationEvent(session, 'scroll', ['right', '0.6'], result, {}, 1_500);
 
-  const event = session.recording?.gestureEvents[0];
+  const event = session.screenRecording?.handle.inspect().gestureEvents[0];
   assert.equal(event?.kind, 'scroll');
   if (!event || event.kind !== 'scroll') return;
 
@@ -85,7 +85,7 @@ test('scroll augmentation preserves explicit duration for visualization', () => 
 
   recordTouchVisualizationEvent(session, 'scroll', ['up', '0.6'], result, {}, 1_500);
 
-  const event = session.recording?.gestureEvents[0];
+  const event = session.screenRecording?.handle.inspect().gestureEvents[0];
   assert.equal(event?.kind, 'scroll');
   assert.equal(event?.durationMs, 100);
 });
@@ -130,7 +130,7 @@ test('scroll visualization preserves absolute travel in its zero-origin referenc
   assert.equal(augmented.x2, 211);
   assert.equal(augmented.y2, 337);
   assert.equal(augmented.pixels, 240);
-  const event = session.recording?.gestureEvents[0];
+  const event = session.screenRecording?.handle.inspect().gestureEvents[0];
   assert.equal(event?.kind, 'scroll');
   assert.equal(event?.referenceWidth, 412);
   assert.equal(event?.referenceHeight, 894);
@@ -142,15 +142,10 @@ test('scroll visualization preserves absolute travel in its zero-origin referenc
 
 test('gesture recording prefers native runner timing when available', () => {
   const session = makeSession();
-  session.recording = {
-    platform: 'ios-device-runner',
-    outPath: '/tmp/demo.mp4',
-    remotePath: 'tmp/demo.mp4',
-    startedAt: 1_000,
-    showTouches: true,
-    gestureEvents: [],
+  session.screenRecording = makeTestScreenRecordingResource(session, {
+    backend: 'runner AVAssetWriter',
     runnerStartedAtUptimeMs: 5_000,
-  };
+  });
 
   recordTouchVisualizationEvent(
     session,
@@ -161,7 +156,7 @@ test('gesture recording prefers native runner timing when available', () => {
     9_999,
   );
 
-  const event = session.recording?.gestureEvents[0];
+  const event = session.screenRecording?.handle.inspect().gestureEvents[0];
   assert.equal(event?.kind, 'tap');
   assert.equal(event?.tMs, 180);
 });
@@ -171,7 +166,7 @@ test('ios tap visualization anchors near completion when command execution stall
 
   recordTouchVisualizationEvent(session, 'click', [], { x: 201, y: 319 }, {}, 1_500, 3_700);
 
-  const event = session.recording?.gestureEvents[0];
+  const event = session.screenRecording?.handle.inspect().gestureEvents[0];
   assert.equal(event?.kind, 'tap');
   assert.equal(event?.tMs, 2_440);
 });
@@ -197,7 +192,7 @@ test('swipe visualization prefers native gesture duration when available', () =>
     2_300,
   );
 
-  const event = session.recording?.gestureEvents[0];
+  const event = session.screenRecording?.handle.inspect().gestureEvents[0];
   assert.equal(event?.kind, 'swipe');
   if (!event || event.kind !== 'swipe') return;
 
@@ -254,7 +249,7 @@ test('canonical gesture results record pan, fling, and pinch visualization telem
     2_380,
   );
 
-  assert.deepEqual(session.recording?.gestureEvents, [
+  assert.deepEqual(session.screenRecording?.handle.inspect().gestureEvents, [
     {
       kind: 'swipe',
       tMs: 500,
@@ -309,7 +304,7 @@ test('canonical rotate records centroid visualization telemetry', () => {
     1_800,
   );
 
-  assert.deepEqual(session.recording?.gestureEvents, [
+  assert.deepEqual(session.screenRecording?.handle.inspect().gestureEvents, [
     {
       kind: 'swipe',
       tMs: 500,
@@ -358,7 +353,7 @@ test('canonical multi-touch travel does not acquire one-finger back-swipe semant
     2_600,
   );
 
-  assert.deepEqual(session.recording?.gestureEvents, [
+  assert.deepEqual(session.screenRecording?.handle.inspect().gestureEvents, [
     {
       kind: 'swipe',
       tMs: 500,
@@ -385,15 +380,12 @@ test('canonical multi-touch travel does not acquire one-finger back-swipe semant
 });
 
 test('telemetry is still captured when touch overlays are hidden', () => {
-  const session = makeSession();
-  if (session.recording) {
-    session.recording.showTouches = false;
-  }
+  const session = makeSession({ showTouches: false });
 
   recordTouchVisualizationEvent(session, 'press', ['100', '200'], { x: 100, y: 200 }, {}, 1_500);
 
-  assert.equal(session.recording?.gestureEvents.length, 1);
-  assert.equal(session.recording?.gestureEvents[0]?.kind, 'tap');
+  assert.equal(session.screenRecording?.handle.inspect().gestureEvents.length, 1);
+  assert.equal(session.screenRecording?.handle.inspect().gestureEvents[0]?.kind, 'tap');
 });
 
 test('explicit event reference frame overrides stale snapshot geometry', () => {
@@ -413,7 +405,7 @@ test('explicit event reference frame overrides stale snapshot geometry', () => {
     1_500,
   );
 
-  const event = session.recording?.gestureEvents[0];
+  const event = session.screenRecording?.handle.inspect().gestureEvents[0];
   assert.equal(event?.kind, 'tap');
   assert.equal(event?.referenceWidth, 1344);
   assert.equal(event?.referenceHeight, 2992);
@@ -432,7 +424,7 @@ test('edge swipe is classified as a back-swipe telemetry event', () => {
     1_900,
   );
 
-  const event = session.recording?.gestureEvents[0];
+  const event = session.screenRecording?.handle.inspect().gestureEvents[0];
   assert.equal(event?.kind, 'back-swipe');
   if (!event || event.kind !== 'back-swipe') return;
 

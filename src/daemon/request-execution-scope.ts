@@ -45,7 +45,11 @@ import type {
   PlatformRuntimeOperations,
   PlatformRequestScope,
 } from '@agent-device/contracts/platform';
-import { createRequestRuntimeBindings, type BindDeviceRuntime } from './request-runtime-binding.ts';
+import {
+  createRequestRuntimeBindings,
+  type BindDeviceRuntime,
+  type BindExactDeviceRuntime,
+} from './request-runtime-binding.ts';
 
 // Production daemon wiring owns one LeaseRegistry per process; scoping locks by registry keeps
 // test and embedded routers isolated without changing process-level serialization there.
@@ -66,6 +70,7 @@ export type RequestExecutionScope = AsyncDisposable & {
   runLocked<T>(task: () => Promise<T>): Promise<T>;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
   bindDevice: BindDeviceRuntime;
+  bindExactDevice: BindExactDeviceRuntime;
   throwIfCanceled(): void;
 };
 
@@ -76,6 +81,7 @@ export type LockedRequestScope = {
   existingSession: SessionState | undefined;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
   bindDevice: BindDeviceRuntime;
+  bindExactDevice: BindExactDeviceRuntime;
   throwIfCanceled(): void;
   contextFromFlags(
     flags: CommandFlags | undefined,
@@ -168,6 +174,15 @@ export async function createRequestExecutionScope(params: {
         await requestExecutionLocks.retainDevice(deviceId),
       bindDevice:
         runtimeBindings?.bindDevice ??
+        (async () => {
+          throw new AppError(
+            'COMMAND_FAILED',
+            'Device runtime gateway is not configured for this request scope',
+            { reason: 'runtime-gateway-missing' },
+          );
+        }),
+      bindExactDevice:
+        runtimeBindings?.bindExactDevice ??
         (async () => {
           throw new AppError(
             'COMMAND_FAILED',
@@ -294,17 +309,16 @@ export function prepareLockedRequestScope(params: {
   };
   requestScopeFinalizers.set(scope, finalize);
 
-  if (
-    existingSession?.recording?.invalidatedReason &&
-    shouldBlockForInvalidRecording(scope.command)
-  ) {
+  const recordingInvalidatedReason =
+    existingSession?.screenRecording?.handle.inspect().invalidatedReason;
+  if (recordingInvalidatedReason && shouldBlockForInvalidRecording(scope.command)) {
     return {
       type: 'response',
       response: {
         ok: false,
         error: {
           code: 'COMMAND_FAILED',
-          message: existingSession.recording.invalidatedReason,
+          message: recordingInvalidatedReason,
         },
       },
     };
@@ -334,6 +348,7 @@ export function prepareLockedRequestScope(params: {
       existingSession,
       retainDeviceExecutionLock: scope.retainDeviceExecutionLock,
       bindDevice: scope.bindDevice,
+      bindExactDevice: scope.bindExactDevice,
       throwIfCanceled: scope.throwIfCanceled,
       contextFromFlags,
       handlerContextFromFlags: (flags, appBundleId, traceLogPath) =>

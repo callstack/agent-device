@@ -3,9 +3,11 @@ import { test } from 'vitest';
 import {
   ANDROID_EMULATOR,
   IOS_SIMULATOR,
+  MACOS_DEVICE,
   WEB_DESKTOP_DEVICE,
   makeAndroidSession,
   makeIosSession,
+  makeMacOsSession,
   makeSession,
 } from '../../__tests__/test-utils/index.ts';
 import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '../../__tests__/test-utils/device-inventory-gateways.ts';
@@ -14,6 +16,10 @@ import {
   runXcrun,
 } from '../../platforms/apple/core/tool-provider.ts';
 import { resolveWebProvider, type WebProvider } from '../../platforms/web/provider.ts';
+import {
+  resolveAppleRunnerScreenRecordingTransport,
+  type AppleRunnerScreenRecordingTransport,
+} from '../../platform-runtime-screen-recording-apple-runner-transport.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { withRequestPlatformProviderScope } from '../request-platform-providers.ts';
 import type { DaemonRequest } from '../types.ts';
@@ -226,6 +232,80 @@ test('request platform provider scope applies web provider only for web sessions
   );
 
   assert.deepEqual(calls, ['web-session:agent-browser-chrome', 'open:https://example.test']);
+});
+
+test('generic Apple runner provider cannot fall back to local recording authority', async () => {
+  await withRequestPlatformProviderScope(
+    {
+      req: request('record'),
+      existingSession: makeMacOsSession('macos-session'),
+      providers: {
+        appleRunnerProvider: () => ({ runCommand: async () => ({}) }),
+      },
+    },
+    async () => {
+      const transport = resolveAppleRunnerScreenRecordingTransport();
+      assert.equal(transport.authority, 'scoped-provider');
+      assert.equal(transport.available, false);
+    },
+  );
+});
+
+test('focused Apple runner recording authority remains exact across recreated request scopes', async () => {
+  let activeSessionId: string | undefined;
+  const transport: AppleRunnerScreenRecordingTransport = Object.freeze({
+    authority: 'scoped-provider',
+    available: true,
+    start: async () => {
+      activeSessionId = 'provider-runner-session-1';
+      return { runnerSessionId: activeSessionId };
+    },
+    inspect: async (device, runnerSessionId) =>
+      device.id === MACOS_DEVICE.id && runnerSessionId === activeSessionId
+        ? 'owned-alive'
+        : 'ownership-lost',
+    stop: async ({ device, runnerSessionId }) => {
+      assert.equal(device.id, MACOS_DEVICE.id);
+      assert.equal(runnerSessionId, activeSessionId);
+      activeSessionId = undefined;
+    },
+  });
+  const providers = {
+    appleRunnerProvider: () => ({ runCommand: async () => ({}) }),
+    appleRunnerScreenRecordingTransport: () => transport,
+  };
+  const runnerSessionId = await withRequestPlatformProviderScope(
+    {
+      req: request('record'),
+      existingSession: makeMacOsSession('macos-session'),
+      providers,
+    },
+    async () => {
+      const resolved = resolveAppleRunnerScreenRecordingTransport();
+      assert.equal(resolved, transport);
+      return (
+        await resolved.start({
+          device: MACOS_DEVICE,
+          appBundleId: 'com.example.app',
+          outputPath: '/tmp/capture.mp4',
+        })
+      ).runnerSessionId;
+    },
+  );
+
+  await withRequestPlatformProviderScope(
+    {
+      req: request('record'),
+      existingSession: makeMacOsSession('macos-session'),
+      providers,
+    },
+    async () => {
+      const resolved = resolveAppleRunnerScreenRecordingTransport();
+      assert.equal(await resolved.inspect(MACOS_DEVICE, runnerSessionId), 'owned-alive');
+      assert.equal(await resolved.inspect(MACOS_DEVICE, 'replacement-session'), 'ownership-lost');
+      await resolved.stop({ device: MACOS_DEVICE, runnerSessionId });
+    },
+  );
 });
 
 test('request platform provider scope follows explicit web selector', async () => {

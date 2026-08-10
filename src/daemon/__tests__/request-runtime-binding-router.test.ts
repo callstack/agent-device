@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { expect, test, vi } from 'vitest';
 import {
   localRuntimeOwner,
+  type DeviceBinding,
   type DeviceRuntimeGateway,
   type PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform';
@@ -90,7 +91,7 @@ function makeGateway(disposeError?: Error) {
     }),
     forceCleanup,
   });
-  const operations: PlatformRuntimeOperations = {
+  const operations: DeviceBinding<PlatformRuntimeOperations>['operations'] = {
     appLogInspect: async () => ({ backend: 'android' }),
     appLogDoctor: async () => ({ backend: 'android', checks: {}, notes: [] }),
     appLogStart: async (input) =>
@@ -142,6 +143,9 @@ function makeGateway(disposeError?: Error) {
         appLogReattach: { available: true as const },
         appLogCleanup: { available: true as const },
         networkDump: { available: true as const },
+        screenRecordingStart: unavailableRecording,
+        screenRecordingReattach: unavailableRecording,
+        screenRecordingCleanup: unavailableRecording,
       },
     },
     operations,
@@ -153,3 +157,8 @@ function makeGateway(disposeError?: Error) {
   };
   return { gateway, bind, bindingDispose, forceCleanup, handle };
 }
+
+const unavailableRecording = Object.freeze({
+  available: false as const,
+  reason: 'owner-capability-missing' as const,
+});

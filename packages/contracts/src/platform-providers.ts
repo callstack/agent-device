@@ -14,7 +14,7 @@
  * still OWNS the resolver invocation, wrapper composition, and request-scope
  * concurrency isolation — only the platform GATE moved to data.
  *
- * `appLogProvider` / `recordingProvider` are deliberately ABSENT: they carry no
+ * App-log and screen-recording transports are deliberately ABSENT: they carry no
  * platform gate (they apply on every platform), so they stay ungated in the daemon and
  * are not part of the facet.
  */

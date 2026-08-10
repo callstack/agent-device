@@ -16,6 +16,10 @@ import type {
   AdoptStartedDurableCaptureParams,
   DurableCaptureResourceDefinition,
 } from './durable-capture-resource.ts';
+import {
+  capitalizeDurableCaptureLabel,
+  durableCaptureDiagnosticPrefix,
+} from './durable-capture-resource-labels.ts';
 
 type AdoptionState<H extends AsyncDisposable> =
   | { kind: 'pending' }
@@ -93,7 +97,7 @@ function confirmFailedAdoptionTransition<K extends string, H extends LiveResourc
   } catch (transitionError) {
     emitDiagnostic({
       level: 'error',
-      phase: `${diagnosticPrefix(definition.resourceKind)}_pending_adoption_transition_failed`,
+      phase: `${durableCaptureDiagnosticPrefix(definition.resourceKind)}_pending_adoption_transition_failed`,
       data: {
         session: params.sessionName,
         transitionError:
@@ -141,7 +145,7 @@ function persistRecoveryTombstone<K extends string, H extends LiveResourceHandle
     } catch (persistenceError) {
       emitDiagnostic({
         level: 'error',
-        phase: `${diagnosticPrefix(definition.resourceKind)}_runtime_contract_tombstone_failed`,
+        phase: `${durableCaptureDiagnosticPrefix(definition.resourceKind)}_runtime_contract_tombstone_failed`,
         data: {
           session: params.sessionName,
           descriptorError:
@@ -191,7 +195,7 @@ function validateStartedEnvelope<K extends string, H extends LiveResourceHandle<
   }
   throw new AppError(
     'COMMAND_FAILED',
-    `${capitalize(definition.displayName)} runtime returned an incoherent durable envelope`,
+    `${capitalizeDurableCaptureLabel(definition.displayName)} runtime returned an incoherent durable envelope`,
     {
       reason: 'runtime-contract-invalid',
       hint: 'Retain the runtime diagnostics and report the selected device and owner.',
@@ -253,7 +257,7 @@ function emitCleanupDiagnostic<K extends string, H extends LiveResourceHandle<C>
 ): void {
   emitDiagnostic({
     level: 'error',
-    phase: `${diagnosticPrefix(definition.resourceKind)}_pending_adoption_cleanup_failed`,
+    phase: `${durableCaptureDiagnosticPrefix(definition.resourceKind)}_pending_adoption_cleanup_failed`,
     data: {
       session: params.sessionName,
       primaryError: primaryError instanceof Error ? primaryError.message : String(primaryError),
@@ -271,12 +275,4 @@ function withPhase<K extends string>(
     lifecycle: 'open',
     metadata: { ...(envelope.metadata ?? {}), phase },
   });
-}
-
-function capitalize(value: string): string {
-  return value.length === 0 ? value : value[0]!.toUpperCase() + value.slice(1);
-}
-
-function diagnosticPrefix(resourceKind: string): string {
-  return resourceKind.replaceAll('-', '_');
 }

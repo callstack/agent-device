@@ -6,6 +6,8 @@ import type {
   HostCommandResult,
   HostCommandRunner,
   HostToolchainPreparer,
+  ManagedProcessIdentity,
+  ManagedProcessOwnership,
 } from './platform-runtime-host.ts';
 import type { ResourceOwnershipFence, RuntimeProviderMode } from './platform-runtime.ts';
 import type { PendingTransferGuard } from './async-lifecycle.ts';
@@ -89,18 +91,14 @@ export type AppLogOutputSink = AsyncDisposable &
     write(chunk: string | Uint8Array): Promise<void>;
   }>;
 
-export type AppLogProcessMarker = Readonly<{
-  pid: number;
-  startTime: string;
-  command: string;
-}>;
+export type AppLogProcessMarker = ManagedProcessIdentity;
 
 export type AppLogProcessMarkerReadOutcome =
   | Readonly<{ status: 'missing' }>
   | Readonly<{ status: 'invalid'; message: string }>
   | Readonly<{ status: 'decoded'; marker: AppLogProcessMarker }>;
 
-export type AppLogProcessOwnership = 'missing' | 'owned-alive' | 'ownership-lost';
+export type AppLogProcessOwnership = ManagedProcessOwnership;
 
 export type AppLogBackgroundProcess = AsyncDisposable &
   Readonly<{

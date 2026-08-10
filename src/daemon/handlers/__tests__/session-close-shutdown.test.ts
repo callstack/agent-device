@@ -72,6 +72,12 @@ import { setActiveProviderDeviceRuntimes } from '../../../provider-device-runtim
 import { acquireAdvisoryDeviceClaim } from '../../device-claims.ts';
 import { inspectDeviceClaims } from '../../device-claim-inspection.ts';
 import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../../utils/diagnostics.ts';
+import {
+  localRuntimeOwner,
+  type ScreenRecordingLiveHandle,
+} from '@agent-device/contracts/platform';
+import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
+import { screenRecordingResourceStore } from '../../screen-recording-resource-store.ts';
 
 const mockShutdownSimulator = vi.mocked(shutdownSimulator);
 const mockRunCmd = vi.mocked(runCmd);
@@ -100,37 +106,104 @@ function makeSession(name: string, device: SessionState['device']): SessionState
 }
 
 function makeIosSimulatorRecordingSession(
+  sessionStore: SessionStore,
   name: string,
-  options: { recorderExitCode?: number } = {},
+  options: {
+    recorderExitCode?: number;
+    cleanupConfirmed?: boolean;
+    device?: SessionState['device'];
+  } = {},
 ): SessionState {
-  const session = makeSession(name, {
-    platform: 'apple',
-    id: 'sim-udid-recording',
-    name: 'iPhone 15',
-    kind: 'simulator',
-    booted: true,
-  });
+  const session = makeSession(
+    name,
+    options.device ?? {
+      platform: 'apple',
+      id: 'sim-udid-recording',
+      name: 'iPhone 15',
+      kind: 'simulator',
+      booted: true,
+    },
+  );
   session.appBundleId = 'com.example.app';
-  session.recording = {
-    platform: 'ios',
-    outPath: path.join(os.tmpdir(), `${name}.mp4`),
-    startedAt: Date.now() - 5_000,
-    showTouches: false,
-    gestureEvents: [],
-    child: { kill: vi.fn(), pid: 4242 },
-    wait: Promise.resolve({
-      stdout: '',
-      stderr: options.recorderExitCode ? 'recorder crashed' : '',
-      exitCode: options.recorderExitCode ?? 0,
+  const outPath = path.join(os.tmpdir(), `${name}.mp4`);
+  const finish = vi.fn(async () =>
+    options.recorderExitCode
+      ? ({
+          status: 'cleanup-pending',
+          reason: 'transport-failed',
+          message: 'failed to stop recording',
+        } as const)
+      : ({
+          status: 'completed',
+          result: {
+            backend: 'simctl recordVideo',
+            outPath,
+            startedAt: Date.now() - 5_000,
+            completedAt: Date.now(),
+            scope: 'app',
+            showTouches: false,
+            recordOnlySession: false,
+          },
+        } as const),
+  );
+  const forceCleanup = vi.fn(async () =>
+    options.cleanupConfirmed === false
+      ? ({
+          status: 'cleanup-pending',
+          reason: 'transport-failed',
+          message: 'failed to force cleanup recording',
+        } as const)
+      : ({ status: 'cleaned' } as const),
+  );
+  const handle: ScreenRecordingLiveHandle = {
+    inspect: () => ({
+      backend: 'simctl recordVideo',
+      outPath,
+      startedAt: Date.now() - 5_000,
+      scope: 'app',
+      showTouches: false,
+      recordOnlySession: false,
+      gestureEvents: [],
     }),
+    appendGestureEvents: () => {},
+    setTouchReferenceFrame: () => {},
+    setRunnerSessionId: () => {},
+    invalidate: () => {},
+    finish,
+    forceCleanup,
+    [Symbol.asyncDispose]: async () => {},
   };
+  const envelope = createDurableResourceEnvelope({
+    resourceKind: 'screen-recording',
+    sessionId: name,
+    device: { id: session.device.id, family: 'apple', appleOs: 'ios', kind: 'simulator' },
+    owner: localRuntimeOwner('apple'),
+    fence: { token: `${name}-fence`, generation: 1 },
+    lifecycle: 'open',
+    descriptor: { version: 1, body: { recordingId: name } },
+    metadata: { phase: 'active' },
+  });
+  session.screenRecording = {
+    handle,
+    envelope,
+  };
+  screenRecordingResourceStore.write(
+    screenRecordingResourceStore.resolvePath(sessionStore.resolveSessionDir(name)),
+    envelope,
+  );
   return session;
 }
 
-function recordingKillMock(session: SessionState): ReturnType<typeof vi.fn> {
-  const recording = session.recording;
-  if (recording?.platform !== 'ios') throw new Error('expected an iOS simulator recording');
-  return recording.child.kill as ReturnType<typeof vi.fn>;
+function recordingFinishMock(session: SessionState): ReturnType<typeof vi.fn> {
+  const recording = session.screenRecording;
+  if (!recording) throw new Error('expected an active screen recording');
+  return recording.handle.finish as ReturnType<typeof vi.fn>;
+}
+
+function recordingCleanupMock(session: SessionState): ReturnType<typeof vi.fn> {
+  const recording = session.screenRecording;
+  if (!recording) throw new Error('expected an active screen recording');
+  return recording.handle.forceCleanup as ReturnType<typeof vi.fn>;
 }
 
 beforeEach(() => {
@@ -429,7 +502,8 @@ test('daemon session teardown stops active Apple xctrace perf capture', async ()
     },
   } as unknown as SessionState;
 
-  await teardownSessionResources({ appLog: 'already-settled', session, sessionName });
+  const sessionStore = makeSessionStore();
+  await teardownSessionResources({ appLog: 'already-settled', session, sessionName, sessionStore });
 
   expect(mockCleanupAppleXctracePerfCapture).toHaveBeenCalledWith(activeCapture);
   expect(session.applePerf?.active).toBeUndefined();
@@ -438,8 +512,8 @@ test('daemon session teardown stops active Apple xctrace perf capture', async ()
 test('close finalizes an active iOS simulator recording before deleting the session', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-active-recording-close-session';
-  const session = makeIosSimulatorRecordingSession(sessionName);
-  const kill = recordingKillMock(session);
+  const session = makeIosSimulatorRecordingSession(sessionStore, sessionName);
+  const finish = recordingFinishMock(session);
   sessionStore.set(sessionName, session);
 
   const response = await handleSessionCommands({
@@ -459,19 +533,24 @@ test('close finalizes an active iOS simulator recording before deleting the sess
   expect(response?.ok).toBe(true);
   // The recorder was signaled (SIGINT finalizes the simctl mp4), the recording
   // was detached, and the session was deleted — no orphaned recordVideo child.
-  expect(kill).toHaveBeenCalledWith('SIGINT');
-  expect(session.recording).toBeUndefined();
+  expect(finish).toHaveBeenCalledOnce();
   expect(sessionStore.get(sessionName)).toBeUndefined();
   // An active recording at close time still defeats iOS runner retention even
   // though the recording is finalized (and cleared) before the retention step.
   expect(mockStopIosRunnerSession).toHaveBeenCalledWith(session.device.id);
+  expect(finish.mock.invocationCallOrder[0]).toBeLessThan(
+    mockStopIosRunnerSession.mock.invocationCallOrder[0]!,
+  );
 });
 
 test('close surfaces a recording finalization failure through the cleanup-failure channel', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-recording-close-failure-session';
-  const session = makeIosSimulatorRecordingSession(sessionName, { recorderExitCode: 1 });
-  const kill = recordingKillMock(session);
+  const session = makeIosSimulatorRecordingSession(sessionStore, sessionName, {
+    recorderExitCode: 1,
+  });
+  const finish = recordingFinishMock(session);
+  const forceCleanup = recordingCleanupMock(session);
   sessionStore.set(sessionName, session);
 
   await expect(
@@ -491,33 +570,97 @@ test('close surfaces a recording finalization failure through the cleanup-failur
   ).rejects.toThrow(/recording: .*failed to stop recording/);
 
   // Cleanup failure is reported, later cleanup still ran, session still deleted.
-  expect(kill).toHaveBeenCalledWith('SIGINT');
+  expect(finish).toHaveBeenCalledOnce();
+  expect(forceCleanup).toHaveBeenCalledOnce();
   expect(mockStopIosRunnerSession).toHaveBeenCalledWith(session.device.id);
   expect(sessionStore.get(sessionName)).toBeUndefined();
 });
 
 test('daemon session teardown finalizes an active iOS simulator recording', async () => {
   const sessionName = 'ios-active-recording-teardown-session';
-  const session = makeIosSimulatorRecordingSession(sessionName);
-  const kill = recordingKillMock(session);
+  const sessionStore = makeSessionStore();
+  const session = makeIosSimulatorRecordingSession(sessionStore, sessionName);
+  const finish = recordingFinishMock(session);
+  sessionStore.set(sessionName, session);
 
-  await teardownSessionResources({ appLog: 'already-settled', session, sessionName });
+  await teardownSessionResources({
+    appLog: 'already-settled',
+    session,
+    sessionName,
+    sessionStore,
+  });
+  await teardownSessionResources({
+    appLog: 'already-settled',
+    session,
+    sessionName,
+    sessionStore,
+  });
 
-  expect(kill).toHaveBeenCalledWith('SIGINT');
-  expect(session.recording).toBeUndefined();
+  expect(finish).toHaveBeenCalledOnce();
+  expect(sessionStore.get(sessionName)?.screenRecording).toBeUndefined();
+  expect(finish.mock.invocationCallOrder[0]).toBeLessThan(
+    mockStopIosRunnerSession.mock.invocationCallOrder[0]!,
+  );
 });
 
 test('daemon session teardown surfaces a recording finalization failure', async () => {
   const sessionName = 'ios-recording-teardown-failure-session';
-  const session = makeIosSimulatorRecordingSession(sessionName, { recorderExitCode: 1 });
-  const kill = recordingKillMock(session);
+  const sessionStore = makeSessionStore();
+  const session = makeIosSimulatorRecordingSession(sessionStore, sessionName, {
+    recorderExitCode: 1,
+  });
+  const finish = recordingFinishMock(session);
+  const forceCleanup = recordingCleanupMock(session);
+  sessionStore.set(sessionName, session);
 
   await expect(
-    teardownSessionResources({ appLog: 'already-settled', session, sessionName }),
+    teardownSessionResources({
+      appLog: 'already-settled',
+      session,
+      sessionName,
+      sessionStore,
+    }),
   ).rejects.toThrow(/recording: .*failed to stop recording/);
 
-  expect(kill).toHaveBeenCalledWith('SIGINT');
-  expect(session.recording).toBeUndefined();
+  expect(finish).toHaveBeenCalledOnce();
+  expect(forceCleanup).toHaveBeenCalledOnce();
+  expect(sessionStore.get(sessionName)?.screenRecording).toBeUndefined();
+});
+
+test('daemon session teardown retains recording evidence when finish and forced cleanup both fail', async () => {
+  const sessionName = 'ios-recording-teardown-cleanup-failure-session';
+  const sessionStore = makeSessionStore();
+  const session = makeIosSimulatorRecordingSession(sessionStore, sessionName, {
+    recorderExitCode: 1,
+    cleanupConfirmed: false,
+  });
+  const finish = recordingFinishMock(session);
+  const forceCleanup = recordingCleanupMock(session);
+  sessionStore.set(sessionName, session);
+
+  await expect(
+    teardownSessionResources({
+      appLog: 'already-settled',
+      session,
+      sessionName,
+      sessionStore,
+    }),
+  ).rejects.toThrow(/recording: .*failed to stop recording/);
+
+  expect(finish).toHaveBeenCalledOnce();
+  expect(forceCleanup).toHaveBeenCalledOnce();
+  expect(sessionStore.get(sessionName)?.screenRecording).toBeDefined();
+  expect(
+    screenRecordingResourceStore.read(
+      screenRecordingResourceStore.resolvePath(sessionStore.resolveSessionDir(sessionName)),
+    ),
+  ).toMatchObject({
+    status: 'decoded',
+    envelope: {
+      lifecycle: 'open',
+      metadata: { phase: 'cleanup-pending', cleanupPendingReason: 'transport-failed' },
+    },
+  });
 });
 
 test('close stops active Android native perf capture before deleting session', async () => {
@@ -750,7 +893,8 @@ test('daemon session teardown stops active Android native perf capture', async (
     },
   } as unknown as SessionState;
 
-  await teardownSessionResources({ appLog: 'already-settled', session, sessionName });
+  const sessionStore = makeSessionStore();
+  await teardownSessionResources({ appLog: 'already-settled', session, sessionName, sessionStore });
 
   expect(mockCleanupAndroidNativePerfSession).toHaveBeenCalledWith(session.device, activeCapture);
   expect(session.nativePerf?.android).toBeUndefined();
@@ -769,7 +913,8 @@ test('daemon session teardown stops Android snapshot helper session', async () =
     appBundleId: 'com.example.app',
   } as SessionState;
 
-  await teardownSessionResources({ appLog: 'already-settled', session, sessionName });
+  const sessionStore = makeSessionStore();
+  await teardownSessionResources({ appLog: 'already-settled', session, sessionName, sessionStore });
 
   expect(mockStopAndroidSnapshotHelperSessionForDevice).toHaveBeenCalledWith(session.device);
 });
@@ -957,7 +1102,12 @@ test('daemon session teardown attempts every resource after an earlier cleanup r
   );
 
   await expect(
-    teardownSessionResources({ appLog: 'already-settled', session, sessionName }),
+    teardownSessionResources({
+      appLog: 'already-settled',
+      session,
+      sessionName,
+      sessionStore: makeSessionStore(),
+    }),
   ).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     details: expect.objectContaining({
@@ -1032,18 +1182,15 @@ test('close still runs later cleanup and deletes the session after an earlier cl
 test('targeted close preserves the platform-close AppError and still runs later cleanup', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'targeted-close-error-session';
-  const session = {
-    ...makeSession(sessionName, {
+  const session = makeIosSimulatorRecordingSession(sessionStore, sessionName, {
+    device: {
       platform: 'apple',
       id: 'sim-udid-close-error',
       name: 'iPhone 15',
       kind: 'simulator',
       booted: true,
-    }),
-    // Recording defeats runner retention so the apple_runner cleanup runs after
-    // the failed platform close, proving subsequent cleanup is still attempted.
-    recording: { outPath: '/tmp/recording.mp4' },
-  } as unknown as SessionState;
+    },
+  });
   sessionStore.set(sessionName, session);
 
   const platformCloseError = new AppError('DEVICE_UNAVAILABLE', 'platform close failed', {
@@ -1111,13 +1258,8 @@ test('a failed platform close retains the device claim and reports it', async ()
     if (!acquired.ownership) {
       throw new Error('expected the test session to acquire a device claim');
     }
-    const session = {
-      ...makeSession(sessionName, device),
-      // Recording defeats runner retention so this mirrors the platform-close-error test above
-      // rather than exercising a different code path.
-      recording: { outPath: '/tmp/recording.mp4' },
-      deviceClaim: acquired.ownership,
-    } as unknown as SessionState;
+    const session = makeIosSimulatorRecordingSession(sessionStore, sessionName, { device });
+    session.deviceClaim = acquired.ownership;
     sessionStore.set(sessionName, session);
 
     const platformCloseError = new AppError('DEVICE_UNAVAILABLE', 'platform close failed', {
@@ -1424,8 +1566,8 @@ test('close --save-script on a never-armed session is rejected before teardown, 
   // guard runs *before* `stopBestEffortSessionResources` — not just that the response rejects.
   // Without it, moving the guard after teardown would still pass: there would be nothing for
   // teardown to observably touch.
-  const session = makeIosSimulatorRecordingSession(sessionName);
-  const kill = recordingKillMock(session);
+  const session = makeIosSimulatorRecordingSession(sessionStore, sessionName);
+  const finish = recordingFinishMock(session);
   sessionStore.set(sessionName, session);
 
   await expect(
@@ -1456,8 +1598,8 @@ test('close --save-script on a never-armed session is rejected before teardown, 
   // No teardown hook ran: the recording is still live (recorder never signaled) and the runner
   // was never told to stop. This is the assertion that goes red if the guard moves after
   // `stopBestEffortSessionResources` — see the counterfactual in the PR description.
-  expect(kill).not.toHaveBeenCalled();
-  expect(session.recording).toBeDefined();
+  expect(finish).not.toHaveBeenCalled();
+  expect(session.screenRecording).toBeDefined();
   expect(mockStopIosRunnerSession).not.toHaveBeenCalled();
 
   // A plain close (no --save-script) still closes the same session cleanly afterward, and now
@@ -1476,8 +1618,7 @@ test('close --save-script on a never-armed session is rejected before teardown, 
     invoke: noopInvoke,
   });
   expect(plainClose?.ok).toBe(true);
-  expect(kill).toHaveBeenCalledWith('SIGINT');
-  expect(session.recording).toBeUndefined();
+  expect(finish).toHaveBeenCalledOnce();
   expect(mockStopIosRunnerSession).toHaveBeenCalledWith(session.device.id);
   expect(sessionStore.get(sessionName)).toBeUndefined();
 });

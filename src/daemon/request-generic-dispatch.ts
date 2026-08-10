@@ -213,7 +213,7 @@ async function ensureGenericCommandReady(
   if (
     session.device.platform !== 'android' ||
     isActiveProviderDevice(session.device) ||
-    !session.recording ||
+    !session.screenRecording ||
     platformCommand === 'record' ||
     (await recoverAndroidBlockingSystemDialog({ session })).status !== 'failed'
   ) {

@@ -1,27 +1,18 @@
-import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
+import {
+  localRuntimeOwner,
+  type ScreenRecordingCompletion,
+  type ScreenRecordingLiveHandle,
+} from '@agent-device/contracts/platform';
+import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-
-vi.mock('../../utils/exec.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../utils/exec.ts')>();
-  return {
-    ...actual,
-    runCmd: vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 1 })),
-  };
-});
-vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../platforms/apple/core/runner/runner-client.ts')>();
-  return { ...actual, stopIosRunnerSession: vi.fn(async () => {}) };
-});
-
+import { screenRecordingResourceStore } from '../screen-recording-resource-store.ts';
 import { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../types.ts';
-import { IOS_SIMULATOR_RECORDING_STOP_ESCALATION_BUDGET_MS } from '../handlers/record-trace-ios-simulator.ts';
 import {
   resolveDaemonSessionTeardownTimeoutMs,
+  SCREEN_RECORDING_SESSION_TEARDOWN_BUDGET_MS,
   teardownDaemonSessionForShutdown,
 } from './daemon-runtime.ts';
 
@@ -30,88 +21,109 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function makeRecordingSession(name: string): SessionState {
-  const session: SessionState = {
+function makeRecordingSession(params: {
+  name: string;
+  sessionStore: SessionStore;
+  finish: ScreenRecordingLiveHandle['finish'];
+}): SessionState {
+  const { name, sessionStore, finish } = params;
+  const device = {
+    platform: 'apple' as const,
+    id: 'sim-udid-shutdown',
+    name: 'iPhone 15',
+    kind: 'simulator' as const,
+    booted: true,
+  };
+  const outPath = path.join(sessionStore.resolveSessionDir(name), 'recording.mp4');
+  const handle: ScreenRecordingLiveHandle = {
+    inspect: () => ({
+      backend: 'simctl recordVideo',
+      outPath,
+      startedAt: Date.now() - 5_000,
+      scope: 'app',
+      showTouches: false,
+      recordOnlySession: false,
+      gestureEvents: [],
+    }),
+    appendGestureEvents: () => {},
+    setTouchReferenceFrame: () => {},
+    setRunnerSessionId: () => {},
+    invalidate: () => {},
+    finish,
+    forceCleanup: async () => ({ status: 'cleaned' }),
+    [Symbol.asyncDispose]: async () => {},
+  };
+  const envelope = createDurableResourceEnvelope({
+    resourceKind: 'screen-recording',
+    sessionId: name,
+    device: { id: device.id, family: 'apple', appleOs: 'ios', kind: 'simulator' },
+    owner: localRuntimeOwner('apple'),
+    fence: { token: `${name}-fence`, generation: 1 },
+    lifecycle: 'open',
+    descriptor: { version: 1, body: { recordingId: name } },
+    metadata: { phase: 'active' },
+  });
+  screenRecordingResourceStore.write(
+    screenRecordingResourceStore.resolvePath(sessionStore.resolveSessionDir(name)),
+    envelope,
+  );
+  return {
     name,
-    device: {
-      platform: 'apple',
-      id: 'sim-udid-shutdown',
-      name: 'iPhone 15',
-      kind: 'simulator',
-      booted: true,
-    },
+    device,
     createdAt: Date.now(),
     actions: [],
+    screenRecording: { handle, envelope },
   };
-  session.recording = {
-    platform: 'ios',
-    outPath: path.join(os.tmpdir(), `${name}.mp4`),
-    startedAt: Date.now() - 5_000,
-    showTouches: false,
-    gestureEvents: [],
-    recorderPid: 4242,
-    // Slow direct-handle path: the recorder never exits on its own, so the stop
-    // must run the full SIGINT -> SIGTERM -> SIGKILL escalation.
-    child: { kill: vi.fn(), pid: 4242 },
-    wait: new Promise(() => {}),
-  };
-  return session;
 }
 
-test('daemon session teardown budget extends past the recorder-stop escalation for recording sessions', () => {
-  const session = makeRecordingSession('budget-session');
+test('daemon session teardown budget extends for an active durable recording', () => {
+  const root = mkdtempForTestSync('agent-device-shutdown-recording-budget-');
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const session = makeRecordingSession({
+    name: 'budget-session',
+    sessionStore,
+    finish: async () => ({ status: 'cleanup-pending', reason: 'transport-failed' }),
+  });
   const withRecording = resolveDaemonSessionTeardownTimeoutMs(session);
-  session.recording = undefined;
+  session.screenRecording = undefined;
   const withoutRecording = resolveDaemonSessionTeardownTimeoutMs(session);
 
-  // The base budget alone is shorter than the recorder-stop escalation, so a
-  // recording session must get the base budget PLUS the full escalation.
-  expect(withoutRecording).toBeLessThan(IOS_SIMULATOR_RECORDING_STOP_ESCALATION_BUDGET_MS);
-  expect(withRecording - withoutRecording).toBeGreaterThanOrEqual(
-    IOS_SIMULATOR_RECORDING_STOP_ESCALATION_BUDGET_MS,
-  );
+  expect(withRecording - withoutRecording).toBe(SCREEN_RECORDING_SESSION_TEARDOWN_BUDGET_MS);
 });
 
-test('daemon shutdown lets a slow recorder run its full stop escalation instead of timing out', async () => {
+test('daemon shutdown awaits durable recording finalization inside its extended budget', async () => {
   vi.useFakeTimers();
-  const processKill = vi.spyOn(process, 'kill').mockImplementation(() => true);
   const root = mkdtempForTestSync('agent-device-shutdown-recording-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
-  const sessionName = 'shutdown-slow-recorder-session';
-  const session = makeRecordingSession(sessionName);
-  const recording = session.recording;
-  const kill = recording?.platform === 'ios' ? vi.mocked(recording.child.kill) : undefined;
-  sessionStore.set(sessionName, session);
+  const completion: ScreenRecordingCompletion = {
+    backend: 'simctl recordVideo',
+    outPath: path.join(root, 'recording.mp4'),
+    startedAt: 1,
+    completedAt: 2,
+    scope: 'app',
+    showTouches: false,
+    recordOnlySession: false,
+  };
+  const finish = vi.fn(
+    async () =>
+      await new Promise<{ status: 'completed'; result: ScreenRecordingCompletion }>((resolve) => {
+        setTimeout(() => resolve({ status: 'completed', result: completion }), 10_000);
+      }),
+  );
+  const session = makeRecordingSession({ name: 'shutdown-recording', sessionStore, finish });
+  sessionStore.set(session.name, session);
   const stderrChunks: string[] = [];
-  const stderr = { write: (chunk: string) => stderrChunks.push(chunk) };
 
-  try {
-    const teardownPromise = teardownDaemonSessionForShutdown({
-      session,
-      sessionStore,
-      stateDir: root,
-      stderr,
-    });
-    // Advance past the full escalation (direct 5s wait + 3 x 2s retries) but
-    // NOT past the extended per-session budget: the teardown must win the race.
-    await vi.advanceTimersByTimeAsync(12_000);
-    await teardownPromise;
+  const teardown = teardownDaemonSessionForShutdown({
+    session,
+    sessionStore,
+    stateDir: root,
+    stderr: { write: (chunk) => stderrChunks.push(chunk) },
+  });
+  await vi.advanceTimersByTimeAsync(10_000);
+  await teardown;
 
-    // The recorder was escalated all the way to SIGKILL before shutdown moved on.
-    expect(kill?.mock.calls.map((call) => call[0])).toEqual(['SIGINT', 'SIGTERM', 'SIGKILL']);
-    expect(processKill.mock.calls.map((call) => call[1])).toEqual([
-      'SIGINT',
-      'SIGTERM',
-      'SIGKILL',
-      0,
-    ]);
-    // The extended budget covered the escalation: teardown completed (surfacing
-    // the recorder-stop failure) rather than being abandoned by the timeout.
-    expect(stderrChunks.join('')).toMatch(/Daemon session teardown error .*recording/);
-    expect(stderrChunks.join('')).not.toMatch(/timed out/);
-    expect(sessionStore.get(sessionName)).toBeUndefined();
-  } finally {
-    processKill.mockRestore();
-    fs.rmSync(root, { recursive: true, force: true });
-  }
+  expect(finish).toHaveBeenCalledOnce();
+  expect(stderrChunks.join('')).not.toMatch(/timed out/);
+  expect(sessionStore.get(session.name)).toBeUndefined();
 });
