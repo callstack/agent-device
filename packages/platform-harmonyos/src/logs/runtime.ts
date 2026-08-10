@@ -153,9 +153,12 @@ async function startHarmonyAppLogs(
   }
   assertAppLogSessionArtifacts(host, input);
   signal.throwIfAborted();
-  await host.toolchains.prepare('harmonyos');
+  await preserveHarmonyCancellation(async () => await host.toolchains.prepare('harmonyos'), signal);
   signal.throwIfAborted();
-  const hdc = await host.commands.which('hdc');
+  const hdc = await preserveHarmonyCancellation(
+    async () => await host.commands.which('hdc'),
+    signal,
+  );
   signal.throwIfAborted();
   if (!hdc) {
     throw new AppError('TOOL_MISSING', 'hdc not found in PATH', {
@@ -202,4 +205,16 @@ async function startHarmonyAppLogs(
       descriptor,
     }),
   );
+}
+
+async function preserveHarmonyCancellation<T>(
+  operation: () => Promise<T>,
+  signal: AbortSignal,
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    signal.throwIfAborted();
+    throw error;
+  }
 }

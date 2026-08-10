@@ -109,8 +109,15 @@ test('rejects a missing HDC tool before opening output or starting a process', a
 });
 
 test('provider-selected HarmonyOS logs prepare configured HDC without local inventory discovery', async () => {
-  const prepare = vi.fn(async () => undefined);
-  const whichHdc = vi.fn(async () => '/configured/toolchains/hdc');
+  const events: string[] = [];
+  const prepare = vi.fn(async () => {
+    events.push('prepare');
+  });
+  const whichHdc = vi.fn(async () => {
+    expect(events).toEqual(['prepare']);
+    events.push('which');
+    return '/configured/toolchains/hdc';
+  });
   const fixture = hostFixture({ prepare, whichHdc });
   const binding = await createHarmonyAppLogRuntime(fixture.host).bind({
     device,
@@ -127,18 +134,23 @@ test('provider-selected HarmonyOS logs prepare configured HDC without local inve
 
   expect(prepare).toHaveBeenCalledWith('harmonyos');
   expect(whichHdc).toHaveBeenCalledWith('hdc');
+  expect(events).toEqual(['prepare', 'which']);
   expect(fixture.backgroundCommands).toEqual([
     ['/configured/toolchains/hdc', '-t', 'harmony-1', 'shell', 'hilog', '-P', '456'],
   ]);
   await started?.pendingHandle.transfer().finish();
 });
 
-test('HarmonyOS log preflight propagates cancellation before tool lookup or side effects', async () => {
+test('HarmonyOS log preflight preserves cancellation when toolchain preparation rejects differently', async () => {
   const controller = new AbortController();
   const reason = new Error('cancelled');
+  const transportError = new Error('toolchain preparation failed');
   const whichHdc = vi.fn(async () => 'hdc');
   const fixture = hostFixture({
-    prepare: async () => controller.abort(reason),
+    prepare: async () => {
+      controller.abort(reason);
+      throw transportError;
+    },
     whichHdc,
   });
   const binding = await createHarmonyAppLogRuntime(fixture.host).bind({
@@ -156,6 +168,34 @@ test('HarmonyOS log preflight propagates cancellation before tool lookup or side
     }),
   ).rejects.toBe(reason);
   expect(whichHdc).not.toHaveBeenCalled();
+  expect(fixture.outputOpens()).toBe(0);
+  expect(fixture.backgroundCommands).toEqual([]);
+});
+
+test('HarmonyOS log preflight preserves cancellation when HDC lookup rejects differently', async () => {
+  const controller = new AbortController();
+  const reason = new Error('cancelled');
+  const transportError = new Error('tool lookup failed');
+  const fixture = hostFixture({
+    whichHdc: async () => {
+      controller.abort(reason);
+      throw transportError;
+    },
+  });
+  const binding = await createHarmonyAppLogRuntime(fixture.host).bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: { ...scope, signal: controller.signal },
+  });
+
+  await expect(
+    binding.operations.appLogStart?.({
+      sessionId: 'session',
+      appBundleId: 'com.example.harmony',
+      outputPath: '/tmp/app.log',
+      fence: { token: 'fence', generation: 1 },
+    }),
+  ).rejects.toBe(reason);
   expect(fixture.outputOpens()).toBe(0);
   expect(fixture.backgroundCommands).toEqual([]);
 });
