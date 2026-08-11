@@ -484,22 +484,29 @@ test('parseUiHierarchy keeps app content under a childless focusable full-screen
   );
 });
 
-test('parseUiHierarchy keeps content under an overlay whose descendants are only focusable', () => {
+test('parseUiHierarchy suppresses a covered target under a focusable-only foreground surface', () => {
+  // Helper-shaped: the snapshot helper emits clickable/focusable only when true, so a D-pad/TV
+  // control arrives as focusable="true" with no clickable attribute at all. A foreground surface
+  // built from those still covers, or background targets stay selectable behind it.
   const xml = `<hierarchy>
   <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="0">
     <node class="android.view.ViewGroup" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="2">
-      <node class="android.view.View" bounds="[0,0][390,844]" enabled="true" visible-to-user="true" focusable="true" drawing-order="1"/>
+      <node class="android.widget.Button" text="Foreground tile" bounds="[24,120][366,200]" enabled="true" visible-to-user="true" focusable="true" drawing-order="1"/>
     </node>
     <node class="android.view.ViewGroup" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="1">
-      <node class="android.widget.Button" text="Still visible action" bounds="[0,220][280,280]" clickable="true" enabled="true" visible-to-user="true" drawing-order="1"/>
+      <node class="android.widget.Button" text="Background row" bounds="[0,220][280,280]" enabled="true" visible-to-user="true" focusable="true" drawing-order="1"/>
     </node>
   </node>
 </hierarchy>`;
 
   const result = parseUiHierarchy(xml, 800, { raw: true });
   assert.equal(
-    result.nodes.some((node) => node.label === 'Still visible action'),
+    result.nodes.some((node) => node.label === 'Foreground tile'),
     true,
+  );
+  assert.equal(
+    result.nodes.some((node) => node.label === 'Background row'),
+    false,
   );
 });
 

@@ -561,15 +561,16 @@ function shouldKeepAndroidSibling(
 }
 
 /**
- * A childless sibling that announces something of its own and offers no affordance of its own:
- * the screen-level testID RN emits beside its rendered navigator, or a composite widget's label
- * drawn inside a higher sibling's box (Telegram renders the `+` of `+1` as a TextView overlapping
- * the country-code EditText). Drawing order and geometry cannot tell a transparent overlay from an
- * opaque one, and text an agent never sees is the one loss it cannot recover from. Exempting a leaf
- * is bounded — it can never resurrect a covered surface — so leaves are not condemned on geometry.
+ * A childless, non-hittable sibling that announces something of its own: the screen-level testID RN
+ * emits beside its rendered navigator, or a composite widget's label drawn inside a higher sibling's
+ * box (Telegram renders the `+` of `+1` as a TextView overlapping the country-code EditText).
+ * Drawing order and geometry cannot tell a transparent overlay from an opaque one, and text an agent
+ * never sees is the one loss it cannot recover from. Staying on the `hittable` contract keeps a
+ * genuinely covered affordance condemned; exempting a leaf is bounded — it can never resurrect a
+ * covered surface.
  */
 function isUncondemnableLeaf(node: AndroidNode): boolean {
-  if (node.children.length > 0 || node.clickable) return false;
+  if (node.children.length > 0 || node.hittable) return false;
   return hasMeaningfulIdentifier(node) || hasMeaningfulLabel(node);
 }
 
@@ -609,12 +610,14 @@ function canCoverSibling(
 }
 
 /**
- * Whether this node presents something on its own: an affordance to act on, something to announce,
- * or an address to select by. Deliberately keyed on `clickable` rather than `hittable`: `hittable`
- * falls back to `focusable`, and focusability is an accessibility-traversal property that says
- * nothing about painting over a sibling. Telegram wraps its screens in a full-screen focusable
- * `android.view.View` with no text, id, or children — it announces nothing and does nothing, so it
- * must not condemn the sibling that holds the actual UI (#1733).
+ * Whether this node presents something *of its own*: an affordance to act on, something to announce,
+ * or an address to select by. Keyed on `clickable` rather than `hittable` because `hittable` falls
+ * back to `focusable`, and a node that is only focusable — no text, no id, and (per `canCoverSibling`)
+ * no actionable descendant — offers an agent nothing to see or target, so it cannot be the reason a
+ * sibling is hidden. Telegram wraps every screen in exactly such a full-screen View (#1733).
+ *
+ * This is self-classification only. `hasActionableDescendant` deliberately stays on `hittable`: a
+ * surface *containing* focusable-only controls (the norm on D-pad/TV) is a real covering surface.
  */
 function hasOwnAgentVisibleContent(node: AndroidNode): boolean {
   if (node.visibleToUser === false) return false;
@@ -630,10 +633,14 @@ function hasActionableDescendant(node: AndroidNode, state: AndroidTreePruneState
   const cached = state.actionableContentMemo.get(node);
   if (cached !== undefined) return cached;
 
+  // Descendant classification stays on `hittable`. The helper emits clickable/focusable only when
+  // true, so a focusable-only control parses as clickable=undefined, hittable=true — and D-pad/TV
+  // surfaces are built almost entirely from those. Narrowing this to `clickable` would stop such a
+  // foreground surface from covering, leaving background targets selectable behind it.
   const result = node.children.some(
     (child) =>
       child.visibleToUser !== false &&
-      (Boolean(child.clickable) || hasActionableDescendant(child, state)),
+      (Boolean(child.hittable) || hasActionableDescendant(child, state)),
   );
   state.actionableContentMemo.set(node, result);
   return result;
