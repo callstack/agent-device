@@ -1,5 +1,4 @@
 import { dispatchCommand } from '../../core/dispatch.ts';
-import { isViewportRootNode } from '@agent-device/contracts/snapshot';
 import type { PreresolvedInteractionTarget } from '@agent-device/contracts/interaction';
 import {
   findBestMatchesByLocator,
@@ -7,11 +6,15 @@ import {
   checkFindArgs,
   parseFindSelectorExpression,
   type FindLocator,
-  SELECTOR_RESOLUTION_POLICIES,
   resolveSelectorChainWithPolicy,
   type PolicyResolutionOutcome,
   type SelectorResolutionPolicy,
 } from '@agent-device/selectors';
+import {
+  SELECTOR_PIPELINE_POLICIES,
+  resolveSelectorPipelineTarget,
+  selectorPipelineCandidates,
+} from '../../core/selector-pipeline-policy.ts';
 import {
   centerOfRect,
   type SnapshotQualityVerdict,
@@ -22,10 +25,9 @@ import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionState } from
 import { SessionStore } from '../session-store.ts';
 import { contextFromFlags } from '../context.ts';
 import {
-  resolveActionableTouchNode,
+  isRootInteractionContainer,
   resolveActionableTouchResolution,
 } from '../../core/interaction-targeting.ts';
-import { isSnapshotNodeInteractionBlocked } from '../../snapshot/snapshot-occlusion.ts';
 import { formatSnapshotLine } from '../../snapshot/snapshot-lines.ts';
 import type { ElementMatchCandidateDetails } from '../../utils/error-candidates.ts';
 import { readCommandMessage, successText } from '../../utils/success-text.ts';
@@ -74,6 +76,14 @@ type ResolvedMatch = {
   ref: string;
   nodes: SnapshotState['nodes'];
   actionFlags: Record<string, unknown>;
+  /**
+   * The occlusion verdict the `findAct` row produced for this match, carried
+   * rather than raised: `find click`/`fill` re-enter the interaction leaf,
+   * which refuses covered targets in the acting row's own error shape, so only
+   * the focus/type seam — which dispatches to the device directly — surfaces
+   * it here.
+   */
+  occludedNode?: SnapshotState['nodes'][number];
 };
 
 type FindMatchResult =
@@ -163,10 +173,19 @@ export async function handleFindCommands(params: {
   // surface, the response must disclose that app content is occluded.
   if (!matchResult.ok) return withSystemSurfaceDisclosure(matchResult.response, snapshotResult);
   const node = matchResult.node;
-  const resolvedNode = resolveInteractiveMatchNode(nodes, node);
+  // The promotion and occlusion stages of find's row, in one call.
+  const target = resolveSelectorPipelineTarget(SELECTOR_PIPELINE_POLICIES.findAct, nodes, node);
+  const resolvedNode = target.node;
   const ref = `@${resolvedNode.ref}`;
   const actionFlags = { ...(req.flags ?? {}), noRecord: true };
-  const match: ResolvedMatch = { node, resolvedNode, ref, nodes, actionFlags };
+  const match: ResolvedMatch = {
+    node,
+    resolvedNode,
+    ref,
+    nodes,
+    actionFlags,
+    ...(target.kind === 'occluded' ? { occludedNode: target.node } : {}),
+  };
 
   const response = await dispatchFindAction(ctx, match, action, value);
   return response ? withSystemSurfaceDisclosure(response, snapshotResult) : response;
@@ -268,13 +287,20 @@ function resolveFindMatch(params: {
   platform: SessionState['device']['platform'];
 }): FindMatchResult {
   const { nodes, locator, query, selectorExpression, flags, platform } = params;
-  const searchableNodes = nodes.filter((node) => !isRootInteractionContainer(node, nodes[0]));
+  const pipeline = SELECTOR_PIPELINE_POLICIES.findAct;
+  // The occlusion stage of find's row: it declares `refuse`, so covered nodes
+  // stay candidates here (find ranks and reports them) and are refused later,
+  // at the target. Acting rows exclude them from candidacy instead.
+  const searchableNodes = selectorPipelineCandidates(
+    pipeline,
+    nodes.filter((node) => !isRootInteractionContainer(node, nodes[0])),
+  );
   // #1625: selector-shaped and text-shaped queries share ONE ambiguity
   // contract — multiple matches reject with candidates unless --first/--last
   // explicitly opts into positional narrowing. Selectors used to take the
   // first match silently, which was exactly the mis-binding path the error's
   // own recovery advice ("use a selector") pointed agents at.
-  const policy = SELECTOR_RESOLUTION_POLICIES.findAct;
+  const policy = pipeline.resolution;
   let matches: SnapshotState['nodes'];
   if (selectorExpression) {
     // Selector-shaped queries resolve through the policy interface, so the
@@ -387,36 +413,6 @@ function resolvedTouchScore(
 
 function rectArea(node: SnapshotState['nodes'][number]): number {
   return node.rect ? node.rect.width * node.rect.height : Number.POSITIVE_INFINITY;
-}
-
-function resolveInteractiveMatchNode(
-  nodes: SnapshotState['nodes'],
-  node: SnapshotState['nodes'][number],
-): SnapshotState['nodes'][number] {
-  const resolved = resolveActionableTouchNode(nodes, node);
-  if (isRootInteractionContainer(resolved, nodes[0]) && node.rect) return node;
-  return resolved;
-}
-
-function isRootInteractionContainer(
-  node: SnapshotState['nodes'][number],
-  root: SnapshotState['nodes'][number] | undefined,
-): boolean {
-  if (!root?.rect || !node.rect) return false;
-  if (!isViewportRootNode(node)) return false;
-  return rectsMatch(node.rect, root.rect);
-}
-
-function rectsMatch(
-  left: NonNullable<SnapshotState['nodes'][number]['rect']>,
-  right: NonNullable<SnapshotState['nodes'][number]['rect']>,
-): boolean {
-  return (
-    left.x === right.x &&
-    left.y === right.y &&
-    left.width === right.width &&
-    left.height === right.height
-  );
 }
 
 /**
@@ -556,7 +552,7 @@ async function dispatchFocusForFindMatch(
 }
 
 function rejectCoveredFindMatch(match: ResolvedMatch, interaction: string): DaemonResponse | null {
-  const blockedNode = [match.resolvedNode, match.node].find(isSnapshotNodeInteractionBlocked);
+  const blockedNode = match.occludedNode;
   if (!blockedNode) return null;
   return errorResponse(
     'COMMAND_FAILED',

@@ -1,10 +1,19 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { WAIT_REASONS } from '@agent-device/contracts/interaction';
 import { isUnreadableCaptureContentError } from '../../../snapshot/snapshot-quality.ts';
+import {
+  SELECTOR_PIPELINE_POLICIES,
+  selectorPollBudget,
+  type SelectorPipelinePolicy,
+} from '../../../core/selector-pipeline-policy.ts';
 import { runWithinWaitDeadline } from './wait-deadline.ts';
 
-export const DEFAULT_WAIT_TIMEOUT_MS = 10_000;
-const WAIT_POLL_INTERVAL_MS = 300;
+/**
+ * The default `wait` budget, read from the row that owns it (#1656) so the
+ * number has one home. `wait --stable` shares it: the quiet-window loop is a
+ * different observation, run under the same wait deadline.
+ */
+export const DEFAULT_WAIT_TIMEOUT_MS = SELECTOR_PIPELINE_POLICIES.wait.poll.defaultTimeoutMs;
 
 export type WaitPollDeadline = 'capture-stalled' | 'capture-truncated';
 
@@ -38,12 +47,20 @@ type WaitFailurePolling = {
   rethrowIfNeverReadable: () => void;
 };
 
+/**
+ * The poll stage of the caller's selector-pipeline row (#1656): the deadline
+ * and the inter-poll delay come from the row, not from module constants, so a
+ * caller cannot invent a budget and a row that resolves against a single
+ * capture cannot be polled at all.
+ */
 export function createWaitPolling(
   runtime: WaitPollingRuntime,
   options: WaitPollingOptions,
   requestedTimeoutMs: number | null | undefined,
+  policy: SelectorPipelinePolicy,
 ) {
-  const timeoutMs = requestedTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
+  const budget = selectorPollBudget(policy);
+  const timeoutMs = requestedTimeoutMs ?? budget.defaultTimeoutMs;
   const startedAtMs = now(runtime);
   const unreadable = createUnreadablePollTracker();
   const remainingMs = () => Math.max(0, timeoutMs - (now(runtime) - startedAtMs));
@@ -87,11 +104,7 @@ export function createWaitPolling(
     }),
     rethrowIfNeverReadable: unreadable.rethrowIfNeverReadable,
     sleepUntilNextPoll: async () =>
-      await sleepWithWaitCancellation(
-        runtime,
-        options,
-        Math.min(WAIT_POLL_INTERVAL_MS, remainingMs()),
-      ),
+      await sleepWithWaitCancellation(runtime, options, Math.min(budget.intervalMs, remainingMs())),
     timeoutMs,
     waitedMs: () => now(runtime) - startedAtMs,
   };

@@ -9,6 +9,7 @@ import {
 } from './resolution.ts';
 import { resolveRecordedTarget } from '@agent-device/selectors';
 import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
+import { SELECTOR_PIPELINE_POLICIES } from '../../../core/selector-pipeline-policy.ts';
 import type { Point } from '@agent-device/kernel/snapshot';
 import {
   clickRefE2,
@@ -566,6 +567,7 @@ test('throwIfOffscreenInteractionTarget: an on-screen node passes through unchan
     { session: 'default' },
     nodes[1]!,
     nodes,
+    SELECTOR_PIPELINE_POLICIES.promotedTarget,
     fakeOffscreenFailure(),
   );
 
@@ -592,11 +594,44 @@ test('throwIfOffscreenInteractionTarget: off-screen + backend confirms -> return
     { session: 'default' },
     nodes[1]!,
     nodes,
+    SELECTOR_PIPELINE_POLICIES.promotedTarget,
     fakeOffscreenFailure(),
   );
 
   assert.deepEqual(result.rect, { x: 30, y: 30, width: 40, height: 40 });
   assert.equal(result.index, nodes[1]!.index);
+});
+
+test('throwIfOffscreenInteractionTarget: a row whose off-screen stage is ignore returns the node untouched', async () => {
+  // #1656: reads and waits answer about the tree as captured, so the same
+  // node the acting rows refuse below passes through here — and the iOS
+  // rescue hook is never consulted, which is why it would throw if it were.
+  const device = createInteractionDevice(makeSnapshotState([]), {
+    confirmOffscreenTargetVisible: async () => {
+      throw new Error('an observation row must not spend the rescue round trip');
+    },
+  });
+  const nodes = makeSnapshotState([
+    { index: 0, depth: 0, type: 'Application', rect: { x: 0, y: 0, width: 400, height: 800 } },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Button',
+      rect: { x: 20, y: 2000, width: 40, height: 40 },
+    },
+  ]).nodes;
+
+  const result = await throwIfOffscreenInteractionTarget(
+    device,
+    { session: 'default' },
+    nodes[1]!,
+    nodes,
+    SELECTOR_PIPELINE_POLICIES.readUnique,
+    fakeOffscreenFailure(),
+  );
+
+  assert.equal(result, nodes[1]);
 });
 
 test('throwIfOffscreenInteractionTarget: off-screen + no rescue -> throws with the supplied failure shape', async () => {
@@ -619,6 +654,7 @@ test('throwIfOffscreenInteractionTarget: off-screen + no rescue -> throws with t
         { session: 'default' },
         nodes[1]!,
         nodes,
+        SELECTOR_PIPELINE_POLICIES.promotedTarget,
         fakeOffscreenFailure(),
       ),
     /off-screen/,

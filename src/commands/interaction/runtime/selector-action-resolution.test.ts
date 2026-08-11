@@ -5,12 +5,18 @@ import {
   ELEMENT14_DISTINCT_SUBTREE_NODES,
   EQUIVALENT_WRAPPER_CHAIN_NODES,
 } from '../../../core/interaction-targeting.fixtures.ts';
+import { SELECTOR_PIPELINE_POLICIES } from '../../../core/selector-pipeline-policy.ts';
 import { resolveActionSelector } from './selector-action-resolution.ts';
 
 test('mutating selector collapses a wrapper chain that resolves to one actionable node', () => {
   const snapshot = makeSnapshotState(EQUIVALENT_WRAPPER_CHAIN_NODES);
 
-  const result = resolveActionSelector(snapshot.nodes, 'label="Chat"', 'ios');
+  const result = resolveActionSelector(
+    snapshot.nodes,
+    'label="Chat"',
+    'ios',
+    SELECTOR_PIPELINE_POLICIES.promotedTarget,
+  );
 
   assert.equal(result?.node.index, 1);
   assert.equal(result?.matches, 3);
@@ -21,7 +27,13 @@ test('mutating selector rejects element-14-shaped matches in distinct subtrees w
   const snapshot = makeSnapshotState(ELEMENT14_DISTINCT_SUBTREE_NODES);
 
   assert.throws(
-    () => resolveActionSelector(snapshot.nodes, 'label="Team Standup"', 'ios'),
+    () =>
+      resolveActionSelector(
+        snapshot.nodes,
+        'label="Team Standup"',
+        'ios',
+        SELECTOR_PIPELINE_POLICIES.promotedTarget,
+      ),
     (error: unknown) => {
       assert.equal((error as { code?: unknown }).code, 'AMBIGUOUS_MATCH');
       const details = (error as { details?: Record<string, unknown> }).details;

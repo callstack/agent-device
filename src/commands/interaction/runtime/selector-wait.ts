@@ -16,10 +16,13 @@ import type { PublicPlatform } from '@agent-device/kernel/device';
 import {
   checkWaitText,
   type SelectorChainMatchList,
-  SELECTOR_RESOLUTION_POLICIES,
   resolveSelectorChainWithPolicy,
   type PolicyResolutionOutcome,
 } from '@agent-device/selectors';
+import {
+  SELECTOR_PIPELINE_POLICIES,
+  selectorPipelineCandidates,
+} from '../../../core/selector-pipeline-policy.ts';
 import { deriveSelectorCapturePolicy } from './selector-capture-policy.ts';
 import { findNodeByLabel, resolveRefLabel } from './selector-read-utils.ts';
 import {
@@ -248,7 +251,7 @@ async function waitForSelector<Runtime extends SelectorWaitRuntime>(
   timeoutMs: number | null | undefined,
   recordedLandmark: TargetAnnotationV1 | undefined,
 ): Promise<WaitCommandResult> {
-  const polling = createWaitPolling(runtime, options, timeoutMs);
+  const polling = createWaitPolling(runtime, options, timeoutMs, SELECTOR_PIPELINE_POLICIES.wait);
   const capturePolicy = deriveSelectorCapturePolicy();
   // ADR 0012 / #1349: the LAST poll whose capture matched the recorded
   // selector without any match carrying the recorded landmark identity. A
@@ -279,9 +282,11 @@ async function waitForSelector<Runtime extends SelectorWaitRuntime>(
     if (capture) {
       const nodes = capture.snapshot.nodes;
       const outcome = resolveSelectorChainWithPolicy(
-        nodes,
+        // The wait row ignores occlusion: a covered element is present, and
+        // presence is the question this loop asks.
+        selectorPipelineCandidates(SELECTOR_PIPELINE_POLICIES.wait, nodes),
         selectorExpression,
-        SELECTOR_RESOLUTION_POLICIES.wait,
+        SELECTOR_PIPELINE_POLICIES.wait.resolution,
         { platform: runtime.backend.platform },
       );
       // The wait row is `first-match`, so a multi-match screen resolves rather
@@ -361,7 +366,7 @@ async function waitForText<Runtime extends SelectorWaitRuntime>(
   text: string,
   timeoutMs: number | null | undefined,
 ): Promise<WaitCommandResult> {
-  const polling = createWaitPolling(runtime, options, timeoutMs);
+  const polling = createWaitPolling(runtime, options, timeoutMs, SELECTOR_PIPELINE_POLICIES.wait);
   let deadline: WaitPollDeadline | undefined;
   while (polling.hasTimeRemaining()) {
     const poll = await polling.capture(async (signal) =>

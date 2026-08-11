@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { AgentDeviceRuntime } from '../../../runtime-contract.ts';
+import { SELECTOR_PIPELINE_POLICIES } from '../../../core/selector-pipeline-policy.ts';
 import { createWaitPolling } from './wait-polling.ts';
 
 test('poll delay is bounded by the remaining wait budget', async () => {
@@ -15,7 +16,7 @@ test('poll delay is bounded by the remaining wait budget', async () => {
       },
     },
   } as AgentDeviceRuntime;
-  const polling = createWaitPolling(runtime, {}, 125);
+  const polling = createWaitPolling(runtime, {}, 125, SELECTOR_PIPELINE_POLICIES.wait);
 
   assert.equal(await polling.sleepUntilNextPoll(), true);
   assert.deepEqual(sleeps, [125]);
@@ -30,6 +31,7 @@ test('poll delay observes both runtime and command cancellation', async () => {
       { signal: runtimeController.signal } as AgentDeviceRuntime,
       { signal: commandController.signal },
       10_000,
+      SELECTOR_PIPELINE_POLICIES.wait,
     );
     const sleeping = polling.sleepUntilNextPoll();
 

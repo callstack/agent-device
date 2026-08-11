@@ -7,6 +7,7 @@ import type {
   ResolvedTarget,
 } from '@agent-device/contracts/interaction';
 import { AppError } from '@agent-device/kernel/errors';
+import { SELECTOR_PIPELINE_POLICIES } from '../../../core/selector-pipeline-policy.ts';
 import type { Point } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { isFillableType } from '@agent-device/contracts/snapshot';
@@ -105,7 +106,7 @@ export const fillCommand: RuntimeCommand<FillCommandOptions, FillCommandResult> 
   const resolved = await resolveInteractionTarget(runtime, options, {
     action: 'fill',
     requireInteractive: true,
-    promoteToHittableAncestor: false,
+    pipeline: SELECTOR_PIPELINE_POLICIES.resolvedTarget,
     captureEvidenceBaseline: observation.needsPreActionBaseline,
     expectedResolvedTarget: options.expectedResolvedTarget,
     preresolvedTarget: options.preresolvedTarget,
@@ -195,7 +196,7 @@ async function tapCommand(
   const resolved = await resolveInteractionTarget(runtime, options, {
     action,
     requireInteractive: true,
-    promoteToHittableAncestor: true,
+    pipeline: SELECTOR_PIPELINE_POLICIES.promotedTarget,
     captureEvidenceBaseline: observation.needsPreActionBaseline,
     expectedResolvedTarget: options.expectedResolvedTarget,
     preresolvedTarget: options.preresolvedTarget,

@@ -150,9 +150,12 @@ const SHARED_RESPONSE_CONSTRUCTION: GuaranteeEnforcement = {
 // guard/observation implementations; only how the target is found
 // (disambiguation) and how failures are described (errorTaxonomy) differ.
 const RUNTIME_TREE_SHARED_GUARANTEES = {
+  // #1656: the decision point is the pipeline runner, which reads the acting
+  // row's occlusion stage; isSnapshotNodeInteractionBlocked stays the
+  // predicate it applies (and the annotation contract it reads).
   occlusion: {
     kind: 'runtime',
-    via: 'src/snapshot/snapshot-occlusion.ts#isSnapshotNodeInteractionBlocked',
+    via: 'src/core/selector-pipeline-policy.ts#resolveSelectorPipelineTarget',
   },
   parentOwnedTouchPoint: {
     kind: 'runtime',
@@ -171,9 +174,11 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
     kind: 'runtime',
     via: 'src/commands/interaction/runtime/resolution.ts#throwIfOffscreenInteractionTarget',
   },
+  // Promotion runs only for rows that declare it (#1656); the retarget itself
+  // is still resolveActionableTouchResolution.
   nonHittable: {
     kind: 'runtime',
-    via: 'src/core/interaction-targeting.ts#resolveActionableTouchResolution',
+    via: 'src/core/selector-pipeline-policy.ts#resolveSelectorPipelineTarget',
   },
   responseConstruction: SHARED_RESPONSE_CONSTRUCTION,
   responseIdentity: {
@@ -249,7 +254,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       occlusion: {
         kind: 'runtime',
-        via: 'src/snapshot/snapshot-occlusion.ts#isSnapshotNodeInteractionBlocked',
+        via: 'src/core/selector-pipeline-policy.ts#resolveSelectorPipelineTarget',
       },
       parentOwnedTouchPoint: {
         kind: 'runtime',
@@ -370,7 +375,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       occlusion: {
         kind: 'runtime',
-        via: 'src/snapshot/snapshot-occlusion.ts#isSnapshotNodeInteractionBlocked',
+        via: 'src/core/selector-pipeline-policy.ts#resolveSelectorPipelineTarget',
       },
       parentOwnedTouchPoint: {
         kind: 'inapplicable',

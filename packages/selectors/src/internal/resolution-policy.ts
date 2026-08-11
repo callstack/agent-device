@@ -28,11 +28,13 @@ import type { SelectorResolutionOptions } from './public-resolution-types.ts';
  * documented semantics fails a test.
  *
  * The surrounding pipeline stages — occlusion, the off-screen guard,
- * hittable-ancestor promotion, and the wait poll budget — still live in the
- * callers and are NOT declared here. An earlier revision listed them as
- * columns; nothing consumed them, so they were unverifiable claims that read
- * as truth while being free to drift (#1649 review). Routing them into typed
- * behavior is tracked in #1656.
+ * hittable-ancestor promotion, and the wait poll budget — are declared in the
+ * companion structural table, `src/core/selector-pipeline-policy.ts` (#1656),
+ * whose rows each name one row of this matrix. They live there rather than
+ * here because this package is deliberately blind to snapshot occlusion
+ * annotations, backend visibility probes, and the wait clock; a column here
+ * would be a claim nothing in this package could enforce, which is exactly the
+ * unverifiable-column failure the #1649 review caught.
  */
 
 export type KnobBackedSelectorAmbiguity = 'disambiguate' | 'fail-closed' | 'first-match';

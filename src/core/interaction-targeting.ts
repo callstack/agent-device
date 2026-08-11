@@ -98,14 +98,34 @@ function isAncestorOf(
   return false;
 }
 
-export function resolveActionableTouchNode(
-  nodes: SnapshotNode[],
+/**
+ * The tree's viewport root as an interaction target: a viewport root node whose
+ * rect is exactly the tree root's. Promotion that lands here has retargeted to
+ * "the screen" rather than to the thing that matched, which is why the
+ * `hittable-ancestor-below-root` promotion stage declines it and `find`
+ * excludes it from candidacy and ranking.
+ */
+export function isRootInteractionContainer(
   node: SnapshotNode,
-): SnapshotNode {
-  return resolveActionableTouchResolution(nodes, node).node;
+  root: SnapshotNode | undefined,
+): boolean {
+  if (!root?.rect || !node.rect) return false;
+  if (!isViewportRootNode(node)) return false;
+  const left = node.rect;
+  const right = root.rect;
+  return (
+    left.x === right.x &&
+    left.y === right.y &&
+    left.width === right.width &&
+    left.height === right.height
+  );
 }
 
-/** @internal Exposed for focused policy tests; runtime callers should use resolveActionableTouchNode. */
+/**
+ * The retarget itself. Runtime callers reach it through the promotion stage of
+ * `selector-pipeline-policy.ts`, which is what decides whether a given caller
+ * promotes at all; this stays exported for that runner and for focused tests.
+ */
 export function resolveActionableTouchResolution(
   nodes: SnapshotNode[],
   node: SnapshotNode,

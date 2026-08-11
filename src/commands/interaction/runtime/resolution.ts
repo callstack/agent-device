@@ -14,8 +14,15 @@ import {
   STALE_REF_HINT,
   type SelectorResolution,
   buildSelectorChainForNode,
-  SELECTOR_RESOLUTION_POLICIES,
 } from '@agent-device/selectors';
+import {
+  resolveSelectorPipelineTarget,
+  selectorPipelineCandidates,
+  selectorPipelineRefusesOffscreen,
+  SELECTOR_PIPELINE_POLICIES,
+  type ActingPipelinePolicy,
+  type SelectorPipelinePolicy,
+} from '../../../core/selector-pipeline-policy.ts';
 import { resolvePressRecordingTarget } from '../../../core/press-retarget.ts';
 import { requireSnapshotSession } from './selector-read-shared.ts';
 import { findNodeByLabel, resolveRefLabel } from '../../../snapshot/snapshot-processing.ts';
@@ -30,7 +37,6 @@ import {
   classifyOffscreenScrollDirection,
   type OffscreenScrollDirection,
 } from '../../../snapshot/mobile-snapshot-semantics.ts';
-import { isSnapshotNodeInteractionBlocked } from '../../../snapshot/snapshot-occlusion.ts';
 import { truncateUtf8 } from '../../../utils/truncate-utf8.ts';
 import type {
   InteractionTarget,
@@ -42,7 +48,6 @@ import type {
   ResolvedInteractionTarget,
 } from '@agent-device/contracts/interaction';
 import { now, toBackendContext } from '../../runtime-common.ts';
-import { resolveActionableTouchResolution } from '../../../core/interaction-targeting.ts';
 import { resolveInteractionTouchPoint } from '../../../core/interaction-touch-point.ts';
 import {
   localIdentitiesEqual,
@@ -135,7 +140,13 @@ export type InteractionSnapshot = {
 type ResolveInteractionTargetParams = {
   action: InteractionAction;
   requireInteractive: boolean;
-  promoteToHittableAncestor: boolean;
+  /**
+   * The structural pipeline this action runs (#1656): occlusion, off-screen,
+   * and hittable-ancestor promotion are the row's decisions, not per-call-site
+   * booleans. `promotedTarget` for tap-shaped actions, `resolvedTarget` for the
+   * actions that must keep the element they resolved.
+   */
+  pipeline: ActingPipelinePolicy;
   /**
    * `--verify` (#1047): also capture the pre-action node set for a `point` target
    * so `changedFromBefore` evidence has a baseline. Ref/selector targets already
@@ -285,13 +296,10 @@ async function resolveRefInteractionTarget(
     ? adoptPreresolvedRefTarget(target, params.preresolvedTarget)
     : await readRefResolution(runtime, options, target);
   assertReplayTargetResolution(resolved.node, nodes, params);
-  const node = params.promoteToHittableAncestor
-    ? resolveActionableNodeOrThrow(nodes, resolved.node, {
-        action: params.action,
-        label: `Ref ${target.ref}`,
-      })
-    : resolved.node;
-  assertInteractionNotBlocked(node, `Ref ${target.ref}`, params.action);
+  const node = resolveInteractionPipelineTarget(params.pipeline, nodes, resolved.node, {
+    action: params.action,
+    label: `Ref ${target.ref}`,
+  });
   // #1542: point/response read from the returned (possibly rescue-patched) node.
   const visibleNode = await assertVisibleRefTarget(
     runtime,
@@ -299,7 +307,7 @@ async function resolveRefInteractionTarget(
     node,
     nodes,
     target.ref,
-    params.action,
+    params,
   );
   const point = resolveNodeTouchPoint(visibleNode, nodes, {
     invalidMessage: `Ref ${target.ref} not found or has invalid bounds`,
@@ -329,16 +337,18 @@ async function resolveSelectorInteractionTarget(
   const selectorExpression = target.selector;
   let capture = await captureInteractionSnapshot(runtime, options, params.requireInteractive);
   let resolved = resolveActionSelector(
-    interactableSelectorNodes(capture.snapshot.nodes),
+    capture.snapshot.nodes,
     selectorExpression,
     runtime.backend.platform,
+    params.pipeline,
   );
   if ((!resolved || !resolved.node.rect) && params.requireInteractive) {
     capture = await captureInteractionSnapshot(runtime, options, false);
     resolved = resolveActionSelector(
-      interactableSelectorNodes(capture.snapshot.nodes),
+      capture.snapshot.nodes,
       selectorExpression,
       runtime.backend.platform,
+      params.pipeline,
     );
   }
   if (!resolved || !resolved.node.rect) {
@@ -351,13 +361,12 @@ async function resolveSelectorInteractionTarget(
     });
   }
   assertReplayTargetResolution(resolved.node, capture.snapshot.nodes, params);
-  const node = params.promoteToHittableAncestor
-    ? resolveActionableNodeOrThrow(capture.snapshot.nodes, resolved.node, {
-        action: params.action,
-        label: `Selector ${resolved.selector}`,
-      })
-    : resolved.node;
-  assertInteractionNotBlocked(node, `Selector ${resolved.selector}`, params.action);
+  const node = resolveInteractionPipelineTarget(
+    params.pipeline,
+    capture.snapshot.nodes,
+    resolved.node,
+    { action: params.action, label: `Selector ${resolved.selector}` },
+  );
   // #1542: see the ref-target twin above.
   const visibleNode = await assertVisibleSelectorTarget(
     runtime,
@@ -365,7 +374,7 @@ async function resolveSelectorInteractionTarget(
     node,
     capture.snapshot.nodes,
     resolved.selector,
-    params.action,
+    params,
   );
   const point = resolveNodeTouchPoint(visibleNode, capture.snapshot.nodes, {
     invalidMessage: `Selector ${resolved.selector} resolved to invalid bounds`,
@@ -402,19 +411,26 @@ function selectorInteractionFailure(params: {
   resolved: SelectorResolution | null;
 }): AppError {
   const { runtime, nodes, selectorExpression, action, resolved } = params;
+  const pipeline = SELECTOR_PIPELINE_POLICIES.coveredDiagnosis;
   const covered = resolveSelectorChainWithPolicy(
-    nodes,
+    selectorPipelineCandidates(pipeline, nodes),
     selectorExpression,
-    SELECTOR_RESOLUTION_POLICIES.actCoveredDiagnosis,
+    pipeline.resolution,
     { platform: runtime.backend.platform },
   );
-  if (covered.kind === 'resolved' && isSnapshotNodeInteractionBlocked(covered.resolution.node)) {
-    return buildCoveredInteractionError({
-      label: `Selector ${covered.resolution.selector}`,
-      node: covered.resolution.node,
-      action,
-      selector: covered.resolution.selector,
-    });
+  if (covered.kind === 'resolved') {
+    // The diagnosis row keeps covered nodes as candidates precisely so this
+    // stage can report them: "matched but covered" is a different failure with
+    // a different recovery than "did not match".
+    const target = resolveSelectorPipelineTarget(pipeline, nodes, covered.resolution.node);
+    if (target.kind === 'occluded') {
+      return buildCoveredInteractionError({
+        label: `Selector ${covered.resolution.selector}`,
+        node: target.node,
+        action,
+        selector: covered.resolution.selector,
+      });
+    }
   }
   const diagnostics = resolved?.diagnostics ?? [];
   return new AppError(
@@ -592,33 +608,27 @@ function describeNonHittableTarget(
   };
 }
 
-function interactableSelectorNodes(nodes: SnapshotState['nodes']): SnapshotState['nodes'] {
-  return nodes.filter((node) => !isSnapshotNodeInteractionBlocked(node));
-}
-
-function resolveActionableNodeOrThrow(
+/**
+ * The promotion and occlusion stages of this action's row (#1656), plus the
+ * refusal shape the interaction runtime owns. Which stages run is the row's
+ * decision; every acting path — selector, ref, and the native-ref preflight —
+ * enters them here.
+ */
+function resolveInteractionPipelineTarget(
+  policy: SelectorPipelinePolicy,
   nodes: SnapshotState['nodes'],
   node: SnapshotNode,
   options: { action: InteractionAction; label: string },
 ): SnapshotNode {
-  const resolution = resolveActionableTouchResolution(nodes, node);
-  if (resolution.reason === 'covered') {
+  const target = resolveSelectorPipelineTarget(policy, nodes, node);
+  if (target.kind === 'occluded') {
     throw buildCoveredInteractionError({
       label: options.label,
-      node,
+      node: target.node,
       action: options.action,
     });
   }
-  return resolution.node;
-}
-
-function assertInteractionNotBlocked(
-  node: SnapshotNode,
-  label: string,
-  action: InteractionAction,
-): void {
-  if (!isSnapshotNodeInteractionBlocked(node)) return;
-  throw buildCoveredInteractionError({ label, node, action });
+  return target.node;
 }
 
 function buildCoveredInteractionError(params: {
@@ -832,6 +842,9 @@ function isUsableResolvedNode(node: SnapshotNode | null | undefined): node is Sn
   return resolveRectCenter(node.rect) !== null;
 }
 
+/** The two inputs every off-screen stage call needs: the row, and the verb it names. */
+type OffscreenStageParams = { action: InteractionAction; pipeline: SelectorPipelinePolicy };
+
 // Selector parity for the @ref off-screen guard: without it, a selector
 // resolving to a closed drawer/carousel item "succeeds" by tapping coordinates
 // outside the viewport (observed as `Tapped (-161, 265)` against Bluesky's
@@ -842,9 +855,9 @@ async function assertVisibleSelectorTarget(
   node: SnapshotNode,
   nodes: SnapshotState['nodes'],
   selector: string,
-  action: InteractionAction,
+  { action, pipeline }: OffscreenStageParams,
 ): Promise<SnapshotNode> {
-  return await throwIfOffscreenInteractionTarget(runtime, options, node, nodes, {
+  return await throwIfOffscreenInteractionTarget(runtime, options, node, nodes, pipeline, {
     message: `Selector ${selector} resolved to an off-screen element and is not safe to ${action}`,
     details: { reason: 'offscreen_selector', selector },
     // A selector re-resolves against a fresh snapshot on every attempt, so the
@@ -864,9 +877,9 @@ async function assertVisibleRefTarget(
   node: SnapshotNode,
   nodes: SnapshotState['nodes'],
   refInput: string,
-  action: InteractionAction,
+  { action, pipeline }: OffscreenStageParams,
 ): Promise<SnapshotNode> {
-  return await throwIfOffscreenInteractionTarget(runtime, options, node, nodes, {
+  return await throwIfOffscreenInteractionTarget(runtime, options, node, nodes, pipeline, {
     message: `Ref ${refInput} is off-screen and not safe to ${action}`,
     details: { reason: 'offscreen_ref', ref: normalizeRef(refInput) },
     // The scroll that reveals the target expires the ref frame (#1366, ADR
@@ -924,17 +937,20 @@ export async function preflightNativeRefInteraction(
     fallbackLabel: target.fallbackLabel ?? '',
   });
   if (!resolved) return {};
-  assertInteractionNotBlocked(resolved.node, `Ref ${target.ref}`, action);
+  // `resolvedTarget`, whatever the command: this row's `none` promotion is what
+  // makes "the preflight never changes which element the backend acts on" a
+  // declared property rather than an omission at this call site.
+  const pipeline = SELECTOR_PIPELINE_POLICIES.resolvedTarget;
+  const node = resolveInteractionPipelineTarget(pipeline, nodes, resolved.node, {
+    action,
+    label: `Ref ${target.ref}`,
+  });
   // #1542: dispatches by REF, not coordinate, so no point to re-derive — but
   // evidence/annotation below still describes the returned (visible) node.
-  const visibleNode = await assertVisibleRefTarget(
-    runtime,
-    options,
-    resolved.node,
-    nodes,
-    target.ref,
+  const visibleNode = await assertVisibleRefTarget(runtime, options, node, nodes, target.ref, {
     action,
-  );
+    pipeline,
+  });
   return {
     ...describeNonHittableTarget(visibleNode, action),
     // ADR 0012 decision 3: the guard lookup above doubles as the record-time
@@ -968,12 +984,18 @@ export async function throwIfOffscreenInteractionTarget(
   options: CommandContext,
   node: SnapshotNode,
   nodes: SnapshotState['nodes'],
+  policy: SelectorPipelinePolicy,
   failure: {
     message: string;
     details: Record<string, unknown>;
     hint: (direction: OffscreenScrollDirection | null) => string;
   },
 ): Promise<SnapshotNode> {
+  // The off-screen stage of the caller's row (#1656). Rows that observe rather
+  // than act declare `ignore`: an element scrolled out of view still exists,
+  // still has text, and still satisfies a presence wait, so a read must not
+  // refuse it — and must not spend the iOS rescue round trip asking.
+  if (!selectorPipelineRefusesOffscreen(policy)) return node;
   const viewport = node.rect ? resolveEffectiveViewportRect(node, nodes) : null;
   if (!node.rect || !viewport || isNodeVisibleOnScreen(node, nodes)) return node;
   const rootViewport = resolveViewportRect(nodes, node.rect);

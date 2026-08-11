@@ -13,8 +13,11 @@ import {
   parseFindSelectorExpression,
   type FindAction,
   type FindLocator,
-  SELECTOR_RESOLUTION_POLICIES,
 } from '@agent-device/selectors';
+import {
+  SELECTOR_PIPELINE_POLICIES,
+  selectorPipelineCandidates,
+} from '../../../core/selector-pipeline-policy.ts';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { isSparseSnapshotQualityVerdict } from '../../../snapshot/snapshot-quality.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
@@ -211,8 +214,8 @@ export const getCommand: RuntimeCommand<GetCommandOptions, GetCommandResult> = a
     selector: options.target.selector,
     policy:
       options.property === 'text'
-        ? SELECTOR_RESOLUTION_POLICIES.readText
-        : SELECTOR_RESOLUTION_POLICIES.readUnique,
+        ? SELECTOR_PIPELINE_POLICIES.readText
+        : SELECTOR_PIPELINE_POLICIES.readUnique,
   });
   assertExpectedResolvedTarget(
     resolved.node,
@@ -303,9 +306,9 @@ export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = asyn
     // reach the engine directly — the claim was true of the docs and not of
     // the code (#1630).
     const matched = resolveSelectorChainWithPolicy(
-      capture.snapshot.nodes,
+      selectorPipelineCandidates(SELECTOR_PIPELINE_POLICIES.readAny, capture.snapshot.nodes),
       selectorExpression,
-      SELECTOR_RESOLUTION_POLICIES.readAny,
+      SELECTOR_PIPELINE_POLICIES.readAny.resolution,
       { platform: runtime.backend.platform },
     );
     if (matched.kind !== 'resolved') {
@@ -330,9 +333,9 @@ export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = asyn
   // refusal as no match at all, because `is` must never guess which duplicate
   // it answered about.
   const outcome = resolveSelectorChainWithPolicy(
-    capture.snapshot.nodes,
+    selectorPipelineCandidates(SELECTOR_PIPELINE_POLICIES.readUnique, capture.snapshot.nodes),
     selectorExpression,
-    SELECTOR_RESOLUTION_POLICIES.readUnique,
+    SELECTOR_PIPELINE_POLICIES.readUnique.resolution,
     { platform: runtime.backend.platform },
   );
   if (outcome.kind !== 'resolved') {
@@ -411,7 +414,12 @@ async function waitForFindMatch(
   options: FindReadCommandOptions,
   locator: FindLocator,
 ): Promise<FindReadCommandResult> {
-  const polling = createWaitPolling(runtime, options, options.timeoutMs);
+  const polling = createWaitPolling(
+    runtime,
+    options,
+    options.timeoutMs,
+    SELECTOR_PIPELINE_POLICIES.findWait,
+  );
   let deadline: WaitPollDeadline | undefined;
   while (polling.hasTimeRemaining()) {
     // A presence check never consumes scroll hints, so every poll skips deriving them —
@@ -486,9 +494,9 @@ async function findFirstLocatorMatch(
   }
   if (selectorExpression) {
     const outcome = resolveSelectorChainWithPolicy(
-      capture.snapshot.nodes,
+      selectorPipelineCandidates(SELECTOR_PIPELINE_POLICIES.readAny, capture.snapshot.nodes),
       selectorExpression,
-      SELECTOR_RESOLUTION_POLICIES.readAny,
+      SELECTOR_PIPELINE_POLICIES.readAny.resolution,
       { platform: runtime.backend.platform },
     );
     return { capture, match: outcome.kind === 'resolved' ? outcome.resolution.node : undefined };
@@ -500,18 +508,19 @@ async function findFirstLocatorMatch(
 }
 
 /**
- * `get` names the two rows it may consume by type: `readText` disambiguates
- * through the same tiebreak acting uses, `readUnique` fails closed. A row with
- * any other ambiguity contract is a compile error here rather than a silent
- * change to what `get` will bind to.
+ * `get` names the two pipeline rows it may consume by type: `readText`
+ * disambiguates through the same tiebreak acting uses, `readUnique` fails
+ * closed, and both observe rather than act. Any other row is a compile error
+ * here rather than a silent change to what `get` binds to — or, since #1656,
+ * to which structural stages a read would start running.
  */
-type GetResolutionPolicy = (typeof SELECTOR_RESOLUTION_POLICIES)['readText' | 'readUnique'];
+type GetPipelinePolicy = (typeof SELECTOR_PIPELINE_POLICIES)['readText' | 'readUnique'];
 
 async function resolveSelectorNode(
   runtime: AgentDeviceRuntime,
   options: GetCommandOptions,
   sessionName: string,
-  params: { selector: string; policy: GetResolutionPolicy },
+  params: { selector: string; policy: GetPipelinePolicy },
 ): Promise<{ capture: CapturedSnapshot; node: SnapshotNode; selector: string; ref: string }> {
   const capture = await captureSelectorSnapshot(
     runtime,
@@ -522,9 +531,9 @@ async function resolveSelectorNode(
     },
   );
   const outcome = resolveSelectorChainWithPolicy(
-    capture.snapshot.nodes,
+    selectorPipelineCandidates(params.policy, capture.snapshot.nodes),
     params.selector,
-    params.policy,
+    params.policy.resolution,
     { platform: runtime.backend.platform },
   );
   if (outcome.kind !== 'resolved') {

@@ -13,6 +13,7 @@ import {
   singlePointerPlanEndpoints,
 } from '@agent-device/contracts/interaction';
 import { AppError } from '@agent-device/kernel/errors';
+import { SELECTOR_PIPELINE_POLICIES } from '../../../core/selector-pipeline-policy.ts';
 import type { Point, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import {
@@ -164,7 +165,7 @@ export const focusCommand: RuntimeCommand<FocusCommandOptions, FocusCommandResul
   const resolved = await resolveInteractionTarget(runtime, options, {
     action: 'focus',
     requireInteractive: true,
-    promoteToHittableAncestor: false,
+    pipeline: SELECTOR_PIPELINE_POLICIES.resolvedTarget,
   });
   if (!runtime.backend.focus) {
     throw new AppError('UNSUPPORTED_OPERATION', 'focus is not supported by this backend');
@@ -187,7 +188,7 @@ export const longPressCommand: RuntimeCommand<
   const resolved = await resolveInteractionTarget(runtime, options, {
     action: 'longPress',
     requireInteractive: true,
-    promoteToHittableAncestor: true,
+    pipeline: SELECTOR_PIPELINE_POLICIES.promotedTarget,
     captureEvidenceBaseline: observation.needsPreActionBaseline,
     expectedResolvedTarget: options.expectedResolvedTarget,
   });
@@ -277,7 +278,7 @@ async function resolveDragTarget(
     {
       action: 'drag',
       requireInteractive: false,
-      promoteToHittableAncestor: false,
+      pipeline: SELECTOR_PIPELINE_POLICIES.resolvedTarget,
       expectedResolvedTarget: options.expectedResolvedTargets?.[endpoint],
       replayTargetRole: endpoint,
     },
@@ -410,7 +411,7 @@ async function resolveScrollTarget(
     {
       action: 'scroll',
       requireInteractive: false,
-      promoteToHittableAncestor: false,
+      pipeline: SELECTOR_PIPELINE_POLICIES.resolvedTarget,
     },
   );
 }
