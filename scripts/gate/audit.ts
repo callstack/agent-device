@@ -7,15 +7,17 @@
 // functions below, because CI can only reach a gate through `pnpm gate <id>`.
 
 import { CHECK_CATALOG } from '../check-affected/checks.ts';
-import { loadBaseline, reasonFor, type BaselineEntry } from './baseline.ts';
+import { fileDigest, loadBaseline, reasonFor, type BaselineEntry } from './baseline.ts';
 import {
   ALLOWED_ENV,
   EXTERNAL_ACTIONS,
   GATE_ACTIONS,
   GATE_CONDITIONS,
   REASONS,
+  TYPED_INPUTS,
   UNPROVABLE_OWNERS,
   type ExternalAction,
+  type TypedInput,
 } from './declarations.ts';
 import { categories, checkUnits, covered, scriptUnits, type Model } from './model.ts';
 import { commandSegments, stripExpressions } from './shell.ts';
@@ -31,6 +33,7 @@ const HEADINGS: Readonly<Record<string, string>> = {
   external: 'Third-party actions with no declaration',
   surface: 'Execution surfaces the manifest does not model',
   'path-coverage': 'Paths whose selected checks no triggered lane runs',
+  typed: 'Action inputs reaching a shell body with no closed vocabulary',
   census: 'Files running shell outside the runner that nobody has described',
   condition: 'Gate steps behind an `if:` nobody has ruled on',
   inert: 'Declarations that no longer apply',
@@ -392,6 +395,63 @@ function inertOpaque(model: Model): Failure[] {
   });
 }
 
+// 3b. Every local-action input that reaches a shell body has a closed vocabulary, and every
+//     caller stays inside it.
+//
+//     The last standing P1 from rounds 8–10: an action binds `INPUT_COMMAND` from an input
+//     and runs `bash -c "$INPUT_COMMAND"`. The body is constant, so its digest never moves,
+//     and `INPUT_` is allowed wholesale — the caller's command is invisible.
+//
+//     `shellInputs` finds which inputs a body dereferences (a substring scan, not an
+//     interpretation), and the constraint lands on the caller's VALUE. A command cannot be a
+//     member of a closed set of literals, so the attack is unrepresentable rather than
+//     policed — and adding such an input fails until someone writes down what may be passed.
+function typedInputs(
+  model: Model,
+  declared: Readonly<Record<string, Readonly<Record<string, TypedInput>>>>,
+): Failure[] {
+  const uses = model.lanes
+    .filter((lane) => lane.qualifying)
+    .flatMap((lane) => lane.actionInputs.map((use) => ({ ...use, lane: lane.label })));
+  const findings = uses.flatMap((use) => {
+    // A GATE_ACTIONS input is constrained harder than any value list: `gateIds` requires it
+    // to name a registered check, and `gateActionBodies` proves the body runs exactly
+    // `pnpm gate` on it. Listing its values here would be a weaker duplicate that goes stale
+    // every time the catalog grows.
+    if (GATE_ACTIONS[use.source] === use.input) return [];
+    const spec = declared[use.source]?.[use.input];
+    if (spec === undefined) {
+      return [
+        fail(
+          'typed',
+          `${use.source} dereferences \`inputs.${use.input}\` into a shell body, but ` +
+            `TYPED_INPUTS does not say what callers may pass. Declare the exact values, or ` +
+            `stop reading the input from shell.`,
+        ),
+      ];
+    }
+    if (spec.values.includes(use.value)) return [];
+    return [
+      fail(
+        'typed',
+        `${use.lane} passes ${use.source} \`${use.input}: ${use.value}\` (via ${use.via}), ` +
+          `which is not one of its declared values: ${spec.values.join(', ')}.`,
+      ),
+    ];
+  });
+  const live = new Set(uses.map((use) => JSON.stringify([use.source, use.input])));
+  const dead = Object.entries(declared).flatMap(([source, inputs]) =>
+    Object.keys(inputs)
+      .filter((input) => !live.has(JSON.stringify([source, input])))
+      .map((input) =>
+        fail('inert', `TYPED_INPUTS entry ${source} \`${input}\` reaches no shell body.`),
+      ),
+  );
+  return [...new Set(findings.map((f) => f.message))]
+    .map((message) => fail('typed', message))
+    .concat(dead);
+}
+
 // 4b. Every file in the baseline is DESCRIBED, and described with the right arity.
 //
 //     Rounds 8, 9 and 10 all asked for per-edge ownership of the baseline, and the objection
@@ -412,19 +472,27 @@ function censusFiles(declared: readonly BaselineEntry[]): Failure[] {
       fail(
         'census',
         `${source} has ${count} step(s) in the baseline but no REASONS entry: nothing says why ` +
-          `this file runs shell outside the runner. Add one with \`steps: ${count}\`.`,
+          `this file runs shell outside the runner. Add one with ` +
+          `\`steps: ${count}, digest: '${fileDigest(declared, source)}'\`.`,
       ),
     );
-  const miscounted = [...counted.entries()].flatMap(([source, count]) => {
+  const drifted = [...counted.entries()].flatMap(([source, count]) => {
     const declaredFile = REASONS[source];
-    if (declaredFile === undefined || declaredFile.steps === count) return [];
-    const verb = count > declaredFile.steps ? 'added' : 'removed';
+    if (declaredFile === undefined) return [];
+    const digest = fileDigest(declared, source);
+    if (declaredFile.steps === count && declaredFile.digest === digest) return [];
+    // Arity moves on add/delete; the digest moves on those AND on an edit that keeps the
+    // count, which is the case arity alone missed.
+    const what =
+      declaredFile.steps === count
+        ? `a step's body was edited (${count} step(s) either way)`
+        : `a step was ${count > declaredFile.steps ? 'added' : 'removed'} (${declaredFile.steps} → ${count})`;
     return [
       fail(
         'census',
-        `${source} declares ${declaredFile.steps} non-gate step(s) and the baseline has ` +
-          `${count}: a step was ${verb}. Confirm it belongs outside \`pnpm gate\`, update the ` +
-          `reason if it no longer describes the file, and set \`steps: ${count}\`.`,
+        `${source}: ${what}. Confirm the shell still belongs outside \`pnpm gate\`, update the ` +
+          `reason if it no longer describes the file, and set ` +
+          `\`steps: ${count}, digest: '${digest}'\`.`,
       ),
     ];
   });
@@ -433,7 +501,7 @@ function censusFiles(declared: readonly BaselineEntry[]): Failure[] {
     .map((source) =>
       fail('inert', `REASONS entry "${source}" describes no step any qualifying lane reaches.`),
     );
-  return [...undeclared, ...miscounted, ...dead];
+  return [...undeclared, ...drifted, ...dead];
 }
 
 function seenConditions(model: Model): Set<string> {
@@ -533,6 +601,7 @@ export function audit(
   declared: readonly BaselineEntry[] = loadBaseline(),
   externals: readonly ExternalAction[] = EXTERNAL_ACTIONS,
   allowedEnv: readonly string[] = ALLOWED_ENV,
+  typed: Readonly<Record<string, Readonly<Record<string, TypedInput>>>> = TYPED_INPUTS,
 ): Failure[] {
   return [
     ...unowned(model),
@@ -540,6 +609,7 @@ export function audit(
     ...gateIds(model),
     ...gateConditions(model),
     ...gateActionBodies(model, GATE_ACTIONS),
+    ...typedInputs(model, typed),
     ...environment(model, allowedEnv),
     ...laneSurfaces(model),
     ...externalActions(model, externals),

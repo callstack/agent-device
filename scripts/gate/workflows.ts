@@ -26,6 +26,27 @@ export type GateSighting = {
   readonly conditions: readonly string[];
 };
 
+/**
+ * A value a lane hands to a local action's input, for inputs the action DEREFERENCES INTO
+ * SHELL. Round 8–10's remaining P1: an action can bind `INPUT_COMMAND: ${{ inputs.command }}`
+ * and run the constant body `bash -c "$INPUT_COMMAND"`, whose digest never moves however the
+ * caller's value changes. Passing through `env:` does not make a command-valued input inert.
+ *
+ * Asking what the body DOES with the variable is the content analysis this design refuses.
+ * Finding whether the body mentions it at all is a substring scan, and the values callers
+ * pass are literals in this tree — so the constraint goes on the VALUES (`TYPED_INPUTS`),
+ * where it is decidable, rather than on the body, where it is not.
+ */
+export type ActionInputUse = {
+  /** The action declaring the input, as an `action.yml` path. */
+  readonly source: string;
+  readonly input: string;
+  /** Exactly as written at the call site, or the action's default when omitted. */
+  readonly value: string;
+  /** Where it came from, for the failure message. */
+  readonly via: string;
+};
+
 export type Lane = {
   readonly workflow: string;
   /** `Coverage` for the CI workflow, `iOS / Smoke Tests` elsewhere — the catalog's spelling. */
@@ -53,6 +74,8 @@ export type Lane = {
   readonly envKeys: readonly string[];
   /** `owner/repo@ref` for every third-party action the lane reaches, deduplicated. */
   readonly externals: readonly string[];
+  /** Values this lane hands to local-action inputs that reach a shell body. */
+  readonly actionInputs: readonly ActionInputUse[];
   /** Execution surfaces this file uses that the model does not read. Always empty today. */
   readonly unsupported: readonly string[];
 };
@@ -175,6 +198,46 @@ const INPUT_IN_SHELL = /\$\{\{\s*inputs\.([\w-]+)/g;
  * Passing inputs as `env:` and referencing `"$INPUT_X"` closes it by construction: the run
  * block becomes a constant, and no `with:` value can change what executes.
  */
+/** `INPUT_RUNTIME_VERSION` → `runtime-version`, GitHub's own mapping, inverted. */
+const SHELL_INPUT = /\$\{?(INPUT_[A-Z0-9_]+)\}?/g;
+
+/**
+ * Which of an action's declared inputs its own `run:` bodies dereference.
+ *
+ * Matched against the DECLARED input names rather than by transforming the variable back,
+ * because the mapping loses information: `INPUT_A_B` could be `a-b` or `a_b`. Comparing
+ * forwards is exact.
+ */
+function shellInputs(doc: ActionDoc): string[] {
+  const mentioned = new Set(
+    (doc.runs?.steps ?? [])
+      .filter((step) => typeof step.run === 'string')
+      .flatMap((step) => [...String(step.run).matchAll(SHELL_INPUT)].map((match) => match[1])),
+  );
+  return Object.keys(doc.inputs ?? {}).filter((input) =>
+    mentioned.has(`INPUT_${input.toUpperCase().replace(/-/g, '_')}`),
+  );
+}
+
+/** Every shell-reaching input of an action, paired with what this call site gives it. */
+function actionInputUses(
+  step: RawStep,
+  doc: ActionDoc,
+  source: string,
+  jobId: string,
+): ActionInputUse[] {
+  return shellInputs(doc).map((input) => {
+    const passed = step.with?.[input];
+    const supplied = passed === undefined ? doc.inputs?.[input]?.default : passed;
+    return {
+      source,
+      input,
+      value: String(supplied ?? '').trim(),
+      via: passed === undefined ? `${jobId} (action default)` : jobId,
+    };
+  });
+}
+
 function interpolatedInputs(doc: ActionDoc): { step: string; input: string }[] {
   return (doc.runs?.steps ?? []).flatMap((step) =>
     typeof step.run === 'string'
@@ -309,9 +372,17 @@ type Surface = {
   readonly gates: readonly GateSighting[];
   readonly envKeys: readonly string[];
   readonly leaks: readonly string[];
+  readonly actionInputs: readonly ActionInputUse[];
 };
 
-const EMPTY: Surface = { steps: [], externals: [], gates: [], envKeys: [], leaks: [] };
+const EMPTY: Surface = {
+  steps: [],
+  externals: [],
+  gates: [],
+  envKeys: [],
+  leaks: [],
+  actionInputs: [],
+};
 
 /**
  * Every shell block a job reaches: its own `run:` steps, the `run:` steps of every local
@@ -359,6 +430,10 @@ function usedActionSurface(
         conditions: [...guard, ...sighting.conditions],
       })),
       leaks: [...leaks, ...nested.leaks],
+      actionInputs: [
+        ...actionInputUses(step, local.doc, local.source, jobId),
+        ...nested.actionInputs,
+      ],
     };
   }
   const ref = externalRef(step.uses);
@@ -411,6 +486,7 @@ function jobSurface(
     gates: merge('gates') as CheckId[],
     envKeys: merge('envKeys'),
     leaks: merge('leaks'),
+    actionInputs: merge('actionInputs') as ActionInputUse[],
   };
 }
 
@@ -478,6 +554,7 @@ function workflowLanes(
       steps: surface.steps,
       paths,
       pathsIgnore,
+      actionInputs: surface.actionInputs,
       envKeys: [
         ...new Set([
           ...Object.keys(doc.env ?? {}),

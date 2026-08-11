@@ -18,7 +18,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { audit, formatFailures, plainGateStep } from './audit.ts';
 import { census, loadBaseline } from './baseline.ts';
-import { ALLOWED_ENV, EXTERNAL_ACTIONS, GATE_CONDITIONS } from './declarations.ts';
+import { ALLOWED_ENV, EXTERNAL_ACTIONS, GATE_CONDITIONS, TYPED_INPUTS } from './declarations.ts';
 import { loadModel, type Model } from './model.ts';
 import { creditsUnder, loadLanes, stepDigest, type Lane } from './workflows.ts';
 
@@ -434,6 +434,71 @@ test('every declared gate condition that credits is load-bearing', () => {
   }
 });
 
+test('r8-10: the reported `INPUT_*` command smuggle is rejected, verbatim', () => {
+  // The attack as all three rounds described it: bind the input to `env:` so no `${{ }}`
+  // appears in the body, keep the body constant so its digest never moves, and let callers
+  // supply the command. Planted through the real loader, and regenerated first, so it is not
+  // the shipped baseline doing the rejecting.
+  const planted = plantTree({
+    '.github/workflows/planted.yml': workflow(
+      `      - uses: ./.github/actions/probe\n        with:\n          command: node -e 'import("./x.ts")'\n`,
+    ),
+    '.github/actions/probe/action.yml': `inputs:
+  command:
+    description: 'a command'
+runs:
+  using: composite
+  steps:
+    - name: Run it
+      shell: bash
+      env:
+        INPUT_COMMAND: \${{ inputs.command }}
+      run: bash -c "$INPUT_COMMAND"
+`,
+  });
+  const found = audit(planted, regenerate(planted));
+  const typed = found.filter((f) => f.assertion === 'typed');
+  assert.equal(typed.length, 1, 'an input read from shell with no vocabulary must be a finding');
+  assert.match(typed[0]?.message ?? '', /dereferences `inputs\.command` into a shell body/);
+});
+
+test('r8-10: a call-site value outside an input`s vocabulary is rejected', () => {
+  // The other half: the input IS declared, and a caller passes something else. Without this
+  // the vocabulary would only document, never constrain.
+  const planted = plantWorkflow(
+    workflow(`      - uses: ./.github/actions/setup-fixture-app
+        with:
+          platform: windows; node -e '1'
+`),
+  );
+  const found = audit(planted, baseline).filter((f) => f.assertion === 'typed');
+  assert.ok(
+    found.some((f) => /`platform: windows; node -e '1'`/.test(f.message)),
+    'a value outside the declared set must be named in the finding',
+  );
+});
+
+test('every TYPED_INPUTS value is load-bearing', () => {
+  // Dropping any one declared value must produce a finding, or nothing passes it.
+  for (const [source, inputs] of Object.entries(TYPED_INPUTS)) {
+    for (const [input, spec] of Object.entries(inputs)) {
+      for (const value of spec.values) {
+        const narrowed = {
+          ...TYPED_INPUTS,
+          [source]: {
+            ...inputs,
+            [input]: { ...spec, values: spec.values.filter((v) => v !== value) },
+          },
+        };
+        assert.ok(
+          audit(base, baseline, EXTERNAL_ACTIONS, ALLOWED_ENV, narrowed).length > 0,
+          `TYPED_INPUTS ${source} \`${input}\` value ${JSON.stringify(value)} is passed by nobody`,
+        );
+      }
+    }
+  }
+});
+
 // Rounds 8, 9 and 10 each asked for per-edge ownership of the generated baseline. The
 // concrete defect behind that objection — never stated in the reviews, found by reproducing
 // it — is that reasons were keyed per FILE with no arity, so `--update` blessed both a new
@@ -450,7 +515,7 @@ test('r8-10: `--update` cannot bless a new step in an already-described file', (
   );
   const census_ = found.filter((f) => f.assertion === 'census');
   assert.equal(census_.length, 1);
-  assert.match(census_[0]?.message ?? '', /ci\.yml declares 7 non-gate step\(s\).*has 8/s);
+  assert.match(census_[0]?.message ?? '', /ci\.yml: a step was added \(7 → 8\)/);
 });
 
 test('r8-10: `--update` cannot bless a file nobody has described', () => {
@@ -460,6 +525,32 @@ test('r8-10: `--update` cannot bless a file nobody has described', () => {
   const found = audit(planted, regenerate(planted)).filter((f) => f.assertion === 'census');
   assert.equal(found.length, 1);
   assert.match(found[0]?.message ?? '', /planted\.yml has 1 step\(s\).*no REASONS entry/s);
+});
+
+test('r11: `--update` cannot bless a body swapped in at unchanged arity', () => {
+  // Round 11's point, and it was right: `census()` dedupes by {source, digest}, so REPLACING
+  // one non-gate body with another leaves the file's step count identical. Arity alone was
+  // not enough; the per-file digest is what moves.
+  const swapped: Model = {
+    ...base,
+    lanes: base.lanes.map((lane) => ({
+      ...lane,
+      steps: lane.steps.map((step) =>
+        step.source === 'linux.yml' && step.name === 'Install Linux desktop dependencies'
+          ? { ...step, run: `node -e '1'`, digest: stepDigest(`node -e '1'`, step.extras) }
+          : step,
+      ),
+    })),
+  };
+  const found = audit(swapped, regenerate(swapped));
+  assert.deepEqual(
+    found.filter((f) => f.assertion === 'bypass'),
+    [],
+    'regeneration accepts the new digest, and the count is unchanged — so neither can be the guard',
+  );
+  const census_ = found.filter((f) => f.assertion === 'census');
+  assert.equal(census_.length, 1);
+  assert.match(census_[0]?.message ?? '', /linux\.yml: a step's body was edited/);
 });
 
 test('r8-10: a REASONS entry describing no live step is inert', () => {

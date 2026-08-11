@@ -57,23 +57,32 @@ export const OPAQUE_RUNNERS: Readonly<Record<string, readonly string[]>> = {
  * data rather than 685 lines of declarations, and per-edge reasons for 90 entries is that
  * file again. Arity is the cheapest thing that makes an unclassified step fail closed.
  */
-export type NonGateFile = { readonly steps: number; readonly reason: string };
+export type NonGateFile = {
+  readonly steps: number;
+  /** Fingerprint over every digest this file contributes, so an EDIT moves it too. */
+  readonly digest: string;
+  readonly reason: string;
+};
 
 export const REASONS: Readonly<Record<string, NonGateFile>> = {
   '.github/actions/boot-ios-test-simulator/action.yml': {
     steps: 1,
+    digest: 'ca68e892efdf',
     reason: 'boots and settles the iOS simulator',
   },
   '.github/actions/build-docs/action.yml': {
     steps: 1,
+    digest: '0e2b2fb6bda5',
     reason: 'builds the docs site the website preview lane publishes',
   },
   '.github/actions/setup-android-replay-host/action.yml': {
     steps: 6,
+    digest: '921b15bd98b5',
     reason: 'Android SDK, KVM and emulator-host setup',
   },
   '.github/actions/setup-apple-runner-build/action.yml': {
     steps: 4,
+    digest: 'a46156133913',
     reason:
       'Xcode and source-hash cache identity, plus the build itself — which IS `pnpm gate ' +
       '"$INPUT_GATE"`, and is listed here rather than shape-approved only because its ' +
@@ -81,66 +90,92 @@ export const REASONS: Readonly<Record<string, NonGateFile>> = {
   },
   '.github/actions/setup-fixture-app/action.yml': {
     steps: 9,
+    digest: '42f3e78c93ad',
     reason: 'fixture-app cache lookup, download and staging for the device lanes',
   },
   '.github/actions/setup-node-pnpm/action.yml': {
     steps: 3,
+    digest: 'ddbdbf2865af',
     reason: 'toolchain setup: pins pnpm to packageManager and installs dependencies',
   },
   '.github/actions/setup-test-app-dependencies/action.yml': {
     steps: 2,
+    digest: '4f30932a31ab',
     reason: 'Expo test-app dependency setup',
   },
-  'android.yml': { steps: 3, reason: 'Android fixture APK restore, staged without installing' },
+  'android.yml': {
+    steps: 3,
+    digest: '6edeacac4689',
+    reason: 'Android fixture APK restore, staged without installing',
+  },
   'ci.yml': {
     steps: 7,
+    digest: '88d579c487f4',
     reason:
       'macOS runner build for the Swift unit-test surface, gated and carrying the unit-test opt-in',
   },
   'conformance-differential.yml': {
     steps: 3,
+    digest: '19ab7eb32746',
     reason: 'iOS runner build, simulator boot and fixture app',
   },
   'conformance-regenerate.yml': {
     steps: 2,
+    digest: '3b3d227e496f',
     reason: 'regeneration diff assertion and the fixture-seal verification',
   },
-  'ios.yml': { steps: 9, reason: 'iOS runner build, simulator boot and fixture app' },
+  'ios.yml': {
+    steps: 9,
+    digest: '527ddc9a1cf9',
+    reason: 'iOS runner build, simulator boot and fixture app',
+  },
   'linux.yml': {
     steps: 5,
+    digest: '6ca589e02882',
     reason: 'Linux desktop session setup (Xvfb, D-Bus, AT-SPI) and the replay smoke',
   },
   'mutation-affected.yml': {
     steps: 6,
+    digest: '9f6643ba2748',
     reason: 'shard-matrix derivation and the failure-path envelope recorders (#1430)',
   },
   'mutation-weekly.yml': {
     steps: 5,
+    digest: '8eea701004fe',
     reason: 'shard-matrix derivation and the failure-path envelope recorders (#1430)',
   },
   'perf-nightly.yml': {
     steps: 3,
+    digest: '64ae26c62c53',
     reason: 'iOS runner build and simulator boot for the benchmark lane',
   },
   'pr-preview-cleanup.yml': {
     steps: 1,
+    digest: '27f277c85817',
     reason: 'website preview teardown: the same call with the same values, from the cleanup lane',
   },
   'pr-preview.yml': {
     steps: 1,
+    digest: '27f277c85817',
     reason:
       'website preview deploy: the values pr-preview-action interpolates into its own `run:` blocks',
   },
   'replays-nightly.yml': {
     steps: 9,
+    digest: 'd32431a2fd5e',
     reason: 'the nightly Android replay sweep, run inside the emulator action',
   },
   'size.yml': {
     steps: 5,
+    digest: '3b5e45395193',
     reason:
       'bundle-size measurement, which reports rather than gates, and runs at the PR base commit',
   },
-  'test-app-build-cache.yml': { steps: 5, reason: 'Expo release app build and artifact staging' },
+  'test-app-build-cache.yml': {
+    steps: 5,
+    digest: '3e3ac719f52b',
+    reason: 'Expo release app build and artifact staging',
+  },
 };
 
 /**
@@ -153,6 +188,77 @@ export const REASONS: Readonly<Record<string, NonGateFile>> = {
  */
 export const GATE_ACTIONS: Readonly<Record<string, string>> = {
   '.github/actions/setup-apple-runner-build/action.yml': 'gate',
+};
+
+/**
+ * The closed vocabulary of every local-action input that reaches a shell body.
+ *
+ * Rounds 8, 9 and 10 all reported the same P1: an action can bind
+ * `INPUT_COMMAND: ${{ inputs.command }}` and run the constant body `bash -c "$INPUT_COMMAND"`.
+ * The body's digest never moves, `INPUT_` is allowed as a namespace, and nothing looks at the
+ * caller's value — so later callers introduce arbitrary execution with no finding.
+ *
+ * Asking what a body DOES with a variable is the content analysis this design refuses, and
+ * would lose to `eval`, `$X` bare, indirect expansion and the rest. Asking whether the body
+ * MENTIONS the variable is a substring scan. So `workflows.ts` finds every input an action
+ * dereferences, and the constraint goes on the caller's VALUE, which is a literal in this
+ * tree and therefore decidable:
+ *
+ *   every input a local action's shell dereferences must be listed here, with the exact set
+ *   of values callers may pass.
+ *
+ * A command string cannot be a member of a closed set of literals, so the reported attack is
+ * unrepresentable rather than policed: an undeclared dereferenced input fails, and a value
+ * outside the set fails. An expression is admitted only by being written out verbatim, which
+ * puts `${{ github.event.pull_request.title }}` in a diff rather than in a shell.
+ *
+ * Nine inputs across three actions, which is the whole surface. `gate` is absent because
+ * `GATE_ACTIONS` already constrains it to a registered CheckId — a tighter rule than a value
+ * list, and `gateIds` enforces it.
+ */
+export type TypedInput = { readonly values: readonly string[]; readonly reason: string };
+
+export const TYPED_INPUTS: Readonly<Record<string, Readonly<Record<string, TypedInput>>>> = {
+  '.github/actions/boot-ios-test-simulator/action.yml': {
+    'boot-timeout-seconds': {
+      values: ['300'],
+      reason: 'seconds to wait for the simulator; every lane takes the action default',
+    },
+    'preferred-device-name': {
+      values: ['iPhone 17 Pro'],
+      reason: 'the simulator model the device lanes boot',
+    },
+    'runtime-version': {
+      values: ['${{ env.IOS_RUNTIME_VERSION }}'],
+      reason:
+        'the iOS runtime, always from the workflow env of the same name — which is itself on ' +
+        'ALLOWED_ENV, so both halves are named rather than assumed',
+    },
+  },
+  '.github/actions/setup-apple-runner-build/action.yml': {
+    'xcuitest-destination': {
+      values: ['platform=macOS,arch=arm64', 'generic/platform=iOS Simulator'],
+      reason: 'the `-destination` xcodebuild is given, one per platform',
+    },
+    'xcuitest-platform': {
+      values: ['macos', 'ios'],
+      reason: 'selects the build variant; every caller passes one explicitly',
+    },
+  },
+  '.github/actions/setup-fixture-app/action.yml': {
+    platform: { values: ['android', 'ios'], reason: 'which fixture app to stage' },
+    'require-artifact': {
+      values: ['true', 'false'],
+      reason: 'whether a missing artifact fails the lane or falls back to a local build',
+    },
+    'wait-for-artifact-seconds': {
+      values: ['0', '600', '${{ steps.fixture-producer.outputs.wait-seconds }}'],
+      reason:
+        'how long to wait for the producing workflow — `0` is the action default (do not ' +
+        'wait). The expression form is the producer job’s own output, written out so a ' +
+        'different source would be a visible edit',
+    },
+  },
 };
 
 /**

@@ -11,6 +11,7 @@
 // inert. Regenerating is an explicit command whose diff a reviewer reads — `pnpm
 // check:gate-manifest --update` — not something the audit does for itself.
 
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { REASONS } from './declarations.ts';
@@ -36,6 +37,27 @@ export function reasonFor(source: string): string {
 }
 
 const key = (entry: BaselineEntry) => JSON.stringify([entry.source, entry.digest]);
+
+/**
+ * One fingerprint over everything a file contributes to the census.
+ *
+ * Arity alone was not enough, and round 11 said why: `--update` regenerates digests, so
+ * REPLACING one non-gate body with another leaves the count identical and the audit green.
+ * Confirmed on this branch — swapping a `linux.yml` step's body for
+ * `node -e 'import("./scripts/layering/check.ts")'` kept 90 entries and printed `ok`.
+ *
+ * Hashing the file's digests means any add, delete or edit moves this one value, and it lives
+ * in the hand-written declaration rather than the generated file. That is the "explicit owned
+ * waiver" the review asked for three rounds running, expressed as 21 fingerprints instead of
+ * 90 prose entries.
+ */
+export function fileDigest(entries: readonly BaselineEntry[], source: string): string {
+  const digests = entries
+    .filter((entry) => entry.source === source)
+    .map((entry) => entry.digest)
+    .sort();
+  return createHash('sha256').update(digests.join('\n')).digest('hex').slice(0, 12);
+}
 
 /**
  * Every step a qualifying lane reaches that is not a plain gate invocation, deduplicated by
