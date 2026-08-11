@@ -66,15 +66,18 @@ function readDirectSelectorWithMaestroFallback(
   };
 }
 
+/** Click knobs the fused runner request cannot honor; any of them excludes the fast path. */
+const NON_DEFAULT_CLICK_OPTION_KEYS = [
+  'count',
+  'intervalMs',
+  'holdMs',
+  'jitterPx',
+  'doubleTap',
+] as const satisfies readonly (keyof CommandFlags)[];
+
 function hasNonDefaultClickOptions(flags: CommandFlags | undefined): boolean {
-  return Boolean(
-    flags?.count !== undefined ||
-    flags?.intervalMs !== undefined ||
-    flags?.holdMs !== undefined ||
-    flags?.jitterPx !== undefined ||
-    flags?.doubleTap !== undefined ||
-    (flags?.clickButton !== undefined && flags.clickButton !== 'primary'),
-  );
+  if (NON_DEFAULT_CLICK_OPTION_KEYS.some((key) => flags?.[key] !== undefined)) return true;
+  return flags?.clickButton !== undefined && flags.clickButton !== 'primary';
 }
 
 export async function dispatchDirectIosSelectorTap(
