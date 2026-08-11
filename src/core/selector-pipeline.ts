@@ -27,13 +27,13 @@ import type {
  * cannot pair one row's candidate set with another row's ambiguity contract:
  * the row enters once, at the top.
  *
- * That containment is the point. While callers composed the stages by hand, a
- * read route could declare `promotion: 'none'` and be believed without
- * executing anything — the cell was true of the table and unfalsifiable in
- * production. Flipping any cell now changes what `get`, `is`, `wait`, `find`,
- * `click`, and `fill` do, because those routes run the row rather than
- * re-deriving it. `scripts/layering/selector-pipeline-ownership.ts` keeps the
- * raw engine unreachable from anywhere else.
+ * That containment is what makes a cell falsifiable. A route that composes the
+ * stages itself can declare `promotion: 'none'` and be believed without
+ * executing anything, which is true of the table and unprovable in production;
+ * because every route runs its row here instead of re-deriving it, flipping any
+ * cell changes what `get`, `is`, `wait`, `find`, `click`, and `fill` do.
+ * `scripts/layering/selector-pipeline-ownership.ts` keeps the raw engine
+ * unreachable from anywhere else, so that stays true.
  *
  * Three entries, because the rows genuinely ask two different questions of the
  * engine and one route family never asks it at all:

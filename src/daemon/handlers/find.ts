@@ -281,19 +281,18 @@ function resolveFindMatch(params: {
   // own recovery advice ("use a selector") pointed agents at.
   const policy = pipeline.resolution;
   let matches: SnapshotState['nodes'];
-  let searchableNodes: SnapshotState['nodes'];
   if (selectorExpression) {
     // The `reject-candidates` door: the row's candidacy stage runs inside, and
     // the whole candidate set comes back for find to rank and narrow.
-    const listed = listSelectorPipelineMatches(pipeline, rooted, selectorExpression, { platform });
-    searchableNodes = listed.candidates;
-    matches = listed.list?.matchedNodes ?? [];
+    matches =
+      listSelectorPipelineMatches(pipeline, rooted, selectorExpression, { platform }).list
+        ?.matchedNodes ?? [];
   } else {
-    // The locator branch matches by fuzzy text scoring rather than by selector
-    // chains, so it produces its candidate set with its own matcher — under the
-    // same row, whose rect requirement it reads — and joins the contract below.
-    searchableNodes = rooted;
-    matches = findBestMatchesByLocator(searchableNodes, locator, query, {
+    // Fuzzy text scoring, not a selector chain: this branch brings its own
+    // matcher and reads the row's rect requirement. The row still governs the
+    // target it produces — occlusion and promotion run on it below, in the
+    // same node stages the selector branch reaches.
+    matches = findBestMatchesByLocator(rooted, locator, query, {
       requireRect: policy.requireRect,
     }).matches;
   }
