@@ -18,7 +18,11 @@ import type {
 import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { AppleRunnerProviderResolver } from './daemon/request-platform-providers.ts';
+import type {
+  AppleRunnerProviderResolver,
+  AppleRunnerScreenRecordingTransportResolver,
+} from './daemon/request-platform-providers.ts';
+import type { AppleRunnerScreenRecordingTransport } from './platform-runtime-screen-recording-apple-runner-transport.ts';
 import type {
   AppleRunnerCommandExecutor,
   AppleRunnerProvider,
@@ -30,6 +34,12 @@ type AppleRunnerRuntimeExtension = ProviderDeviceRuntime & {
   ): AppleRunnerProvider | AppleRunnerCommandExecutor | undefined;
 };
 
+type AppleRunnerScreenRecordingRuntimeExtension = ProviderDeviceRuntime & {
+  getAppleRunnerScreenRecordingTransport(
+    device: DeviceInfo,
+  ): AppleRunnerScreenRecordingTransport | undefined;
+};
+
 export type ProviderDeviceRuntimeRequestProviders = {
   providerRuntimeIds: readonly string[];
   providerRuntimeRequiredIds: readonly string[];
@@ -39,6 +49,7 @@ export type ProviderDeviceRuntimeRequestProviders = {
   cloudArtifactProvider?: CloudArtifactProvider;
   deviceInventorySource?: ProviderDeviceInventorySource;
   appleRunnerProvider?: AppleRunnerProviderResolver;
+  appleRunnerScreenRecordingTransport?: AppleRunnerScreenRecordingTransportResolver;
   providerDeviceRuntimeScope?: <T>(task: () => Promise<T>) => Promise<T>;
 };
 
@@ -145,8 +156,26 @@ export function createProviderDeviceRuntimeRequestProviders(
     cloudArtifactProvider: composeCloudArtifactProvider(runtimes),
     deviceInventorySource: composeDeviceInventorySource(runtimes),
     appleRunnerProvider: composeAppleRunnerProviderResolver(runtimes),
+    appleRunnerScreenRecordingTransport:
+      composeAppleRunnerScreenRecordingTransportResolver(runtimes),
     providerDeviceRuntimeScope: async (task) =>
       await withProviderDeviceRuntimeScope(runtimes, task),
+  };
+}
+
+function composeAppleRunnerScreenRecordingTransportResolver(
+  runtimes: ProviderDeviceRuntime[],
+): AppleRunnerScreenRecordingTransportResolver | undefined {
+  if (!runtimes.some(hasAppleRunnerScreenRecordingTransport)) return undefined;
+  return (context) => {
+    for (const runtime of runtimes) {
+      if (!hasAppleRunnerScreenRecordingTransport(runtime) || !runtime.ownsDevice(context.device)) {
+        continue;
+      }
+      const transport = runtime.getAppleRunnerScreenRecordingTransport(context.device);
+      if (transport) return transport;
+    }
+    return undefined;
   };
 }
 
@@ -169,6 +198,15 @@ function hasAppleRunnerProvider(
 ): runtime is AppleRunnerRuntimeExtension {
   return (
     'getAppleRunnerProvider' in runtime && typeof runtime.getAppleRunnerProvider === 'function'
+  );
+}
+
+function hasAppleRunnerScreenRecordingTransport(
+  runtime: ProviderDeviceRuntime,
+): runtime is AppleRunnerScreenRecordingRuntimeExtension {
+  return (
+    'getAppleRunnerScreenRecordingTransport' in runtime &&
+    typeof runtime.getAppleRunnerScreenRecordingTransport === 'function'
   );
 }
 

@@ -50,6 +50,33 @@ test('formatPortableActionLine preserves inline open runtime hints', () => {
   );
 });
 
+test('open replay script round-trips explicit Android test IME selection', () => {
+  const actions: SessionAction[] = [
+    {
+      ts: Date.now(),
+      command: 'open',
+      positionals: ['Demo'],
+      flags: { testIme: false },
+    },
+    {
+      ts: Date.now(),
+      command: 'open',
+      positionals: ['Demo'],
+      flags: { testIme: true },
+    },
+  ];
+
+  const script = formatReplayScriptForTest(actions);
+  assert.match(script, /open "Demo" --no-test-ime/);
+  assert.match(script, /open "Demo" --test-ime/);
+
+  const parsed = parseReplayScriptDetailed(script).actions;
+  assert.equal(parsed[0]?.flags.testIme, false);
+  assert.equal(parsed[1]?.flags.testIme, true);
+  assert.deepEqual(parsed[0]?.positionals, ['Demo']);
+  assert.deepEqual(parsed[1]?.positionals, ['Demo']);
+});
+
 test('record replay script parses fps, quality, and hide-touches flags', () => {
   const script = 'record start "./capture.mp4" --fps 24 --quality high --hide-touches\n';
   const parsed = parseReplayScriptDetailed(script).actions;

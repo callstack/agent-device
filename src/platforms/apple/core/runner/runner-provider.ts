@@ -18,6 +18,11 @@ export type AppleRunnerCommandOptions = ExternalXctestRunnerOptions & {
   startupTimeoutMs?: number;
   requestId?: string;
   runnerLeaseContext?: RunnerLogicalLeaseContext;
+  /**
+   * Restricts a command to the already-owned durable runner session. Exact
+   * cleanup must never start, adopt, or dispatch to a replacement session.
+   */
+  expectedRunnerSessionId?: string;
 };
 
 export type AppleRunnerLifecycleOptions = AppleRunnerCommandOptions & {

@@ -1,14 +1,20 @@
 import type { AppLogRuntimeHost, AppLogRuntimeOperations } from './app-log-runtime.ts';
 import type { NetworkRuntimeHost, NetworkRuntimeOperations } from './network-runtime.ts';
+import type { ScreenRecordingRuntimeHost } from './screen-recording-runtime-host.ts';
+import type { ScreenRecordingRuntimeOperations } from './screen-recording-runtime.ts';
 import type {
   DeviceRuntimeOwner,
   RuntimeOwnerRef,
   RuntimePlatformModule,
 } from './platform-runtime.ts';
 
-export type PlatformRuntimeOperations = AppLogRuntimeOperations & NetworkRuntimeOperations;
+export type PlatformRuntimeOperations = AppLogRuntimeOperations &
+  NetworkRuntimeOperations &
+  ScreenRecordingRuntimeOperations;
 
-export type PlatformRuntimeHost = AppLogRuntimeHost & NetworkRuntimeHost;
+export type PlatformRuntimeHost = AppLogRuntimeHost &
+  NetworkRuntimeHost &
+  Readonly<{ screenRecording: ScreenRecordingRuntimeHost }>;
 
 export type PlatformRuntimeOwner = DeviceRuntimeOwner<PlatformRuntimeOperations>;
 

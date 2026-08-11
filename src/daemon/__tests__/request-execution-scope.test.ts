@@ -22,6 +22,7 @@ import {
 import { resolveSessionRequestLogPath } from '../session-store.ts';
 import type { DaemonRequest } from '../types.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
 
 const TEST_ROOT = mkdtempForTestSync('agent-device-request-execution-scope-');
 const LOG_PATH = path.join(TEST_ROOT, 'diagnostics.log');
@@ -599,20 +600,15 @@ test('prepareLockedRequestScope preserves existing-session selector validation',
 
 test('prepareLockedRequestScope blocks commands for invalidated recordings before handlers run', async () => {
   const sessionStore = makeSessionStore('agent-device-request-scope-');
-  sessionStore.set(
-    'default',
-    makeIosSession('default', {
-      recording: {
-        platform: 'ios-device-runner',
-        outPath: '/tmp/recording.mp4',
-        remotePath: '/tmp/remote.mp4',
-        startedAt: Date.now(),
-        showTouches: true,
-        gestureEvents: [],
-        invalidatedReason: 'iOS runner session restarted during recording',
-      },
-    }),
-  );
+  const session = makeIosSession('default');
+  session.screenRecording = makeTestScreenRecordingResource(session, {
+    backend: 'runner AVAssetWriter',
+    outPath: '/tmp/recording.mp4',
+    startedAt: Date.now(),
+    showTouches: true,
+    invalidatedReason: 'iOS runner session restarted during recording',
+  });
+  sessionStore.set('default', session);
   const scope = await createRequestExecutionScope({
     req: makeRequest({ command: 'snapshot' }),
     sessionStore,

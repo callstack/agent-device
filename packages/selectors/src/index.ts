@@ -2,11 +2,8 @@ import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import type { Selector } from './internal/parse.ts';
 import type {
   PolicyResolutionOutcome,
-  SelectorChainMatch,
   SelectorChainMatchList,
   SelectorMatchOptions,
-  SelectorResolution,
-  SelectorResolutionOptions,
 } from './internal/public-resolution-types.ts';
 import { resolveSelectorChainWithPolicy as resolveSelectorChainWithPolicyAst } from './internal/resolve-with-policy.ts';
 import {
@@ -34,9 +31,7 @@ import {
   normalizeIsPositionals,
 } from './internal/predicates.ts';
 import {
-  findSelectorChainMatch as findSelectorChainMatchAst,
   listSelectorChainMatches as listSelectorChainMatchesAst,
-  resolveSelectorChain as resolveSelectorChainAst,
   selectorFailureHint,
   STALE_REF_HINT,
 } from './internal/resolve.ts';
@@ -64,7 +59,6 @@ export type { IsPredicate } from './internal/predicates.ts';
 export type {
   PolicyResolutionOutcome,
   SelectorChainMatchList,
-  SelectorChainMatch,
   SelectorResolution,
 } from './internal/public-resolution-types.ts';
 export { formatSelectorFailure } from './internal/resolve.ts';
@@ -81,7 +75,6 @@ export {
   detectUnknownSelectorKeyToken,
   evaluateIsPredicate,
   findBestMatchesByLocator,
-  findSelectorChainMatch,
   isReadOnlyFindAction,
   normalizeFindActionToken,
   isRoleHintWord,
@@ -99,7 +92,6 @@ export {
   readSelectorExpression,
   resolveRecordedTarget,
   resolveReplaySuggestionCandidate,
-  resolveSelectorChain,
   selectorFailureHint,
   selectorContainsValue,
   splitSelectorFromArgs,
@@ -234,16 +226,6 @@ function validateSelectorExpression(expression: string): void {
 }
 
 /** Public façade wrapper that accepts/returns selector text, never an AST. */
-function findSelectorChainMatch(
-  nodes: SnapshotState['nodes'],
-  expression: string,
-  options: SelectorMatchOptions,
-): SelectorChainMatch | null {
-  const result = findSelectorChainMatchAst(nodes, parseSelectorChain(expression), options);
-  return result ? { ...result, selector: result.selector.raw } : null;
-}
-
-/** Public façade wrapper that accepts/returns selector text, never an AST. */
 function listSelectorChainMatches(
   nodes: SnapshotState['nodes'],
   expression: string,
@@ -253,28 +235,16 @@ function listSelectorChainMatches(
   return result ? { ...result, selector: result.selector.raw } : null;
 }
 
-/** Public façade wrapper that accepts/returns selector text, never an AST. */
-function resolveSelectorChain(
-  nodes: SnapshotState['nodes'],
-  expression: string,
-  options: SelectorResolutionOptions,
-): SelectorResolution | null {
-  const result = resolveSelectorChainAst(nodes, parseSelectorChain(expression), options);
-  return result ? { ...result, selector: result.selector.raw } : null;
-}
-export {
-  SELECTOR_RESOLUTION_POLICIES,
-  selectorResolutionKnobs,
-} from './internal/resolution-policy.ts';
-export type {
-  KnobBackedSelectorAmbiguity,
-  SelectorResolutionPolicy,
-} from './internal/resolution-policy.ts';
+export { SELECTOR_RESOLUTION_POLICIES } from './internal/resolution-policy.ts';
+export type { SelectorResolutionPolicy } from './internal/resolution-policy.ts';
 import type { SelectorResolutionPolicy } from './internal/resolution-policy.ts';
 
 /**
- * Public façade wrapper that accepts selector text and returns selector text —
- * never an AST, in either direction.
+ * The façade's ONLY selector-resolution entry (#1630): every native consumer
+ * of "resolve a selector against the screen" states its contract by naming a
+ * `SELECTOR_RESOLUTION_POLICIES` row, because there is no knob-taking resolver
+ * here to state it inline with instead. Accepts selector text and returns
+ * selector text — never an AST, in either direction.
  *
  * The return leg is the half that is easy to miss: the parser-side outcome
  * carries the winning `Selector` node inside `resolution`, and returning it
@@ -282,8 +252,8 @@ import type { SelectorResolutionPolicy } from './internal/resolution-policy.ts';
  * hands through a nested field. The façade's own boundary gate reads exported
  * *names*, so it cannot see that; `selector-wait.ts` reading
  * `outcome.resolution.selector.raw` was the runtime proof it had happened.
- * Flattening here is the same treatment `resolveSelectorChain` above gives
- * `AstSelectorResolution` (#1589).
+ * Flattening here is the same treatment `listSelectorChainMatches` above gives
+ * its own selector node (#1589).
  */
 function resolveSelectorChainWithPolicy(
   nodes: SnapshotState['nodes'],

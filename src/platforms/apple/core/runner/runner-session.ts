@@ -116,6 +116,7 @@ export async function ensureRunnerSession(
   return await withRunnerSessionLock(device.id, async () => {
     const existing = runnerSessions.get(device.id);
     if (existing) {
+      assertExpectedRunnerSession(existing, options.expectedRunnerSessionId);
       const reusable = await resolveReusableRunnerSession(device, existing);
       if (reusable) return reusable;
     }
@@ -155,6 +156,7 @@ async function startRunnerSessionWithLease(
     async () =>
       await tryAdoptRunnerSessionFromLease(device, {
         startupTimeoutMs: options.startupTimeoutMs,
+        expectedRunnerSessionId: options.expectedRunnerSessionId,
       }),
   );
   if (adopted) {
@@ -163,6 +165,7 @@ async function startRunnerSessionWithLease(
     runnerSessions.set(device.id, adopted);
     return adopted;
   }
+  assertRunnerSessionMayStart(options.expectedRunnerSessionId);
   await measureRunnerStartupStep(startupTimings, 'cleanup_stale_xcodebuild', async () => {
     await prepareRunnerLeaseForStartup(device.id, runnerLeaseCleanupAdapter, logicalLeaseContext);
   });
@@ -307,6 +310,27 @@ async function startRunnerSessionWithLease(
   }
   runnerSessions.set(device.id, session);
   return session;
+}
+
+export function assertExpectedRunnerSession(
+  session: Pick<RunnerSession, 'sessionId'>,
+  expectedRunnerSessionId: string | undefined,
+): void {
+  if (expectedRunnerSessionId !== undefined && session.sessionId !== expectedRunnerSessionId) {
+    throw runnerSessionOwnershipChanged();
+  }
+}
+
+function assertRunnerSessionMayStart(expectedRunnerSessionId: string | undefined): void {
+  if (expectedRunnerSessionId !== undefined) throw runnerSessionOwnershipChanged();
+}
+
+function runnerSessionOwnershipChanged(): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    'Apple runner session ownership changed before command dispatch',
+    { reason: 'runner_session_ownership_changed' },
+  );
 }
 
 async function resolveReusableRunnerSession(

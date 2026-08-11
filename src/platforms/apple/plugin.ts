@@ -2,12 +2,7 @@ import { appleOsCapabilities } from './capabilities.ts';
 import type { PlatformPlugin } from '@agent-device/contracts/platform';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { isAudioProbeSupportedDevice } from '@agent-device/contracts/platform';
-import {
-  isMacOs,
-  isTvOsDevice,
-  resolveDeviceAppleOs,
-  type DeviceInfo,
-} from '@agent-device/kernel/device';
+import { isTvOsDevice, resolveDeviceAppleOs, type DeviceInfo } from '@agent-device/kernel/device';
 import type { RunnerContext } from '@agent-device/contracts/interaction';
 
 // ---------------------------------------------------------------------------
@@ -87,7 +82,6 @@ const APPLE_SUPPORTS_BY_DEFAULT: Record<string, (device: DeviceInfo) => boolean>
   [PUBLIC_COMMANDS.reinstall]: supportsAppInstallation,
   [PUBLIC_COMMANDS.installFromSource]: supportsAppInstallation,
   [PUBLIC_COMMANDS.perf]: supportsCoreDevicePhysicalOperation,
-  [PUBLIC_COMMANDS.record]: supportsCoreDevicePhysicalOperation,
   [PUBLIC_COMMANDS.push]: supportsAppAndDeviceLifecycle,
   [PUBLIC_COMMANDS.home]: supportsAppAndDeviceLifecycle,
   [PUBLIC_COMMANDS.appSwitcher]: supportsAppAndDeviceLifecycle,
@@ -113,7 +107,6 @@ const APPLE_UNSUPPORTED_HINT_BY_DEFAULT: Record<
   [PUBLIC_COMMANDS.reinstall]: coreDeviceOnlyPhysicalOperationHint,
   [PUBLIC_COMMANDS.installFromSource]: coreDeviceOnlyPhysicalOperationHint,
   [PUBLIC_COMMANDS.perf]: coreDeviceOnlyPhysicalOperationHint,
-  [PUBLIC_COMMANDS.record]: coreDeviceOnlyPhysicalOperationHint,
   [PUBLIC_COMMANDS.viewport]: (device) =>
     device.platform === 'apple'
       ? 'viewport resizes web targets only (--platform web). Apple screen geometry is fixed by the selected simulator or device type — open a different simulator to test another screen size.'
@@ -156,13 +149,6 @@ export const applePlugin = {
   // wraps the else-arm of the former `buildPerfResponseData` sampling branch: every
   // supported Apple device routes to the Apple `perf metrics` sampler.
   perf: { supportsMetrics: () => true, metricsSamplerTag: () => 'apple' },
-  // Wraps the Apple arm of `resolveRecordingBackendForDevice` verbatim: macOS ->
-  // 'macos'; an iOS `device` -> 'ios-device'; every other iOS kind (simulator, incl.
-  // tvOS/iPadOS/visionOS) -> 'ios-simulator'.
-  recording: {
-    resolveBackendTag: (device: DeviceInfo) =>
-      isMacOs(device) ? 'macos' : device.kind === 'device' ? 'ios-device' : 'ios-simulator',
-  },
   // Declares the platform-gated request provider resolvers the Apple family owns: the
   // runner + tool providers (formerly gated by `isApplePlatform(device.platform)`).
   providers: { platformGatedResolvers: ['appleRunnerProvider', 'appleToolProvider'] },

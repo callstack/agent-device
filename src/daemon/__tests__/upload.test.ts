@@ -57,6 +57,39 @@ test('receiveUpload rejects app bundle archives containing symlinks', async () =
   }
 });
 
+test('receiveUpload extracts gzip-compressed app bundle archives', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-upload-gzip-');
+  const appDir = path.join(tempRoot, 'Sample.app');
+  const archivePath = path.join(tempRoot, 'Sample.tar.gz');
+
+  try {
+    fs.mkdirSync(appDir, { recursive: true });
+    fs.writeFileSync(path.join(appDir, 'payload.txt'), 'payload');
+    runCmdSync('tar', ['czf', archivePath, '-C', tempRoot, 'Sample.app'], {
+      env: { ...process.env, COPYFILE_DISABLE: '1' },
+    });
+    const archive = fs.readFileSync(archivePath);
+    const req = makeUploadRequest(archive, {
+      'x-artifact-type': 'app-bundle',
+      'x-artifact-filename': 'Sample.app',
+      'content-type': 'application/gzip',
+      'content-length': String(archive.length),
+    });
+
+    const upload = await receiveUpload(req);
+    try {
+      assert.equal(
+        fs.readFileSync(path.join(upload.artifactPath, 'payload.txt'), 'utf8'),
+        'payload',
+      );
+    } finally {
+      fs.rmSync(upload.tempDir, { recursive: true, force: true });
+    }
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('streamReadableToFile removes partial files after stream errors', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-upload-error-');
   const destPath = path.join(tempRoot, 'partial.bin');

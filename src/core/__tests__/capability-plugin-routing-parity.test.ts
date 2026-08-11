@@ -137,7 +137,6 @@ const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
   reinstall: supportsAppInstallation,
   'install-from-source': supportsAppInstallation,
   perf: supportsCoreDevicePhysicalOperation,
-  record: supportsCoreDevicePhysicalOperation,
   push: isNotMacOs,
   home: isNotMacOs,
   'app-switcher': isNotMacOs,
@@ -165,7 +164,6 @@ const HINT_REF: Record<string, (device: DeviceInfo) => string | undefined> = {
   reinstall: coreDeviceOnlyPhysicalOperationHint,
   'install-from-source': coreDeviceOnlyPhysicalOperationHint,
   perf: coreDeviceOnlyPhysicalOperationHint,
-  record: coreDeviceOnlyPhysicalOperationHint,
   'tv-remote': (device) => {
     if (device.platform === 'android') {
       return device.target === 'tv'

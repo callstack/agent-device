@@ -4,6 +4,7 @@ import { expect, test, vi } from 'vitest';
 import {
   localRuntimeOwner,
   type CleanupOutcome,
+  type DeviceBinding,
   type DeviceRuntimeGateway,
   type PlatformRuntimeOperations,
   type ReattachOutcome,
@@ -305,7 +306,7 @@ function makeGateway(
   const handle = createHandle(forceCleanup);
   const bindingDispose = vi.fn(async () => {});
   const cleanup = vi.fn(async () => ({ status: 'cleaned' as const }));
-  const operations: PlatformRuntimeOperations = {
+  const operations: DeviceBinding<PlatformRuntimeOperations>['operations'] = {
     appLogInspect: async () => ({ backend: 'android' }),
     appLogDoctor: async () => ({ backend: 'android', checks: {}, notes: [] }),
     appLogStart: async () => {
@@ -349,6 +350,9 @@ function makeGateway(
           appLogReattach: { available: true as const },
           appLogCleanup: { available: true as const },
           networkDump: { available: true as const },
+          screenRecordingStart: unavailableRecording,
+          screenRecordingReattach: unavailableRecording,
+          screenRecordingCleanup: unavailableRecording,
         },
       },
       operations,
@@ -361,6 +365,11 @@ function makeGateway(
   };
   return { gateway, bind, forceCleanup, cleanup, bindingDispose, boundSignals };
 }
+
+const unavailableRecording = Object.freeze({
+  available: false as const,
+  reason: 'owner-capability-missing' as const,
+});
 
 function createHandle(
   forceCleanup: () => Promise<CleanupOutcome> = vi.fn(

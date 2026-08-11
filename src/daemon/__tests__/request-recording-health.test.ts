@@ -1,5 +1,6 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import type { SessionState } from '../types.ts';
+import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
 
 vi.mock('../../platforms/apple/core/runner/runner-client.ts', () => ({
   getRunnerSessionSnapshot: vi.fn(),
@@ -15,43 +16,38 @@ beforeEach(() => {
 });
 
 function makeIosSimulatorSession(showTouches: boolean): SessionState {
-  return {
+  const session: SessionState = {
     name: 'default',
     createdAt: Date.now(),
     actions: [],
     device: {
       platform: 'apple',
+      appleOs: 'ios',
       target: 'mobile',
       id: 'sim-1',
       name: 'iPhone 17 Pro',
       kind: 'simulator',
       booted: true,
     },
-    recording: {
-      platform: 'ios',
-      outPath: '/tmp/demo.mp4',
-      startedAt: Date.now() - 1_000,
-      showTouches,
-      gestureEvents: [],
-      runnerSessionId: 'runner-before',
-      child: { kill: () => true },
-      wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-    },
   };
+  session.screenRecording = makeTestScreenRecordingResource(session, {
+    backend: 'simctl recordVideo',
+    outPath: '/tmp/demo.mp4',
+    startedAt: Date.now() - 1_000,
+    showTouches,
+    runnerSessionId: 'runner-before',
+  });
+  return session;
 }
 
 test('runner-backed iOS recordings still invalidate on runner restarts', () => {
   const session = makeIosSimulatorSession(true);
   session.device.kind = 'device';
-  session.recording = {
-    platform: 'ios-device-runner',
-    outPath: '/tmp/demo.mp4',
-    remotePath: '/tmp/demo.mp4',
-    startedAt: Date.now() - 1_000,
+  session.screenRecording = makeTestScreenRecordingResource(session, {
+    backend: 'runner AVAssetWriter',
     showTouches: true,
-    gestureEvents: [],
     runnerSessionId: 'runner-before',
-  };
+  });
   mockGetRunnerSessionSnapshot.mockReturnValue({
     alive: true,
     sessionId: 'runner-after',
@@ -60,7 +56,7 @@ test('runner-backed iOS recordings still invalidate on runner restarts', () => {
   refreshRecordingHealth(session);
 
   expect(mockGetRunnerSessionSnapshot).toHaveBeenCalledWith('sim-1');
-  expect(session.recording?.invalidatedReason).toBe(
+  expect(session.screenRecording?.handle.inspect().invalidatedReason).toBe(
     'iOS runner session restarted during recording',
   );
 });

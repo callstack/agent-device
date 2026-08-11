@@ -46,8 +46,10 @@ import { LeaseRegistry } from '../lease-registry.ts';
 import { PREPARE_REQUEST_TIMEOUT_MS } from '../../core/command-descriptor/timeout-policy.ts';
 import { Deadline } from '../../utils/retry.ts';
 import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
-import type { BindDeviceRuntime } from '../request-runtime-binding.ts';
+import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../request-runtime-binding.ts';
 import type { AppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
+import type { ScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform';
 
 const PREPARE_IOS_RUNNER_TIMING_NOTE =
   'Top-level prepare timing fields are diagnostic and may overlap; use timing.additiveParts for additive wall-clock phases.';
@@ -268,19 +270,27 @@ async function handleClipboardCommand(params: {
   return { ok: true, data: { platform: publicPlatformString(device), ...(result ?? {}) } };
 }
 
-type SessionCommandParams = {
+type SessionCommandInput = {
   req: DaemonRequest;
   sessionName: string;
   logPath: string;
   sessionStore: SessionStore;
-  leaseRegistry: LeaseRegistry;
+  leaseRegistry?: LeaseRegistry;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   invoke: DaemonInvokeFn;
   invokeReplayAction?: DaemonInvokeFn;
   androidAdbExecutor?: AndroidAdbExecutor;
   bindDevice?: BindDeviceRuntime;
+  bindExactDevice?: BindExactDeviceRuntime;
   appLogAdmissionLedger?: AppLogAdmissionLedger;
+  screenRecordingAdmissionLedger?: ScreenRecordingAdmissionLedger;
+  requestScope?: PlatformRequestScope;
+  retainDeviceExecutionLock?: (deviceId: string) => Promise<void>;
   throwIfCanceled?: () => void;
+};
+
+type SessionCommandParams = Omit<SessionCommandInput, 'leaseRegistry'> & {
+  leaseRegistry: LeaseRegistry;
 };
 
 type SessionCommandHandler = (params: SessionCommandParams) => Promise<DaemonResponse | null>;
@@ -326,6 +336,12 @@ const handleSessionReplayCommandGroup: SessionCommandHandler = async ({
   leaseRegistry,
   invoke,
   invokeReplayAction,
+  bindDevice,
+  bindExactDevice,
+  screenRecordingAdmissionLedger,
+  requestScope,
+  retainDeviceExecutionLock,
+  throwIfCanceled,
 }) =>
   await handleSessionReplayCommands({
     req,
@@ -334,6 +350,12 @@ const handleSessionReplayCommandGroup: SessionCommandHandler = async ({
     sessionStore,
     leaseRegistry,
     invoke: invokeReplayAction ?? invoke,
+    bindDevice,
+    bindExactDevice,
+    screenRecordingAdmissionLedger,
+    requestScope,
+    retainDeviceExecutionLock,
+    throwIfCanceled,
   });
 
 async function handleKeyboardCommand(params: SessionCommandParams): Promise<DaemonResponse> {
@@ -496,20 +518,9 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
     }),
 } satisfies Record<DescriptorSessionRouteCommandName, SessionCommandHandler>;
 
-export async function handleSessionCommands(params: {
-  req: DaemonRequest;
-  sessionName: string;
-  logPath: string;
-  sessionStore: SessionStore;
-  leaseRegistry?: LeaseRegistry;
-  leaseLifecycleProvider?: LeaseLifecycleProvider;
-  invoke: DaemonInvokeFn;
-  invokeReplayAction?: DaemonInvokeFn;
-  androidAdbExecutor?: AndroidAdbExecutor;
-  bindDevice?: BindDeviceRuntime;
-  appLogAdmissionLedger?: AppLogAdmissionLedger;
-  throwIfCanceled?: () => void;
-}): Promise<DaemonResponse | null> {
+export async function handleSessionCommands(
+  params: SessionCommandInput,
+): Promise<DaemonResponse | null> {
   const {
     req,
     sessionName,
@@ -521,7 +532,11 @@ export async function handleSessionCommands(params: {
     invokeReplayAction,
     androidAdbExecutor,
     bindDevice,
+    bindExactDevice,
     appLogAdmissionLedger,
+    screenRecordingAdmissionLedger,
+    requestScope,
+    retainDeviceExecutionLock,
     throwIfCanceled,
   } = params;
 
@@ -540,7 +555,11 @@ export async function handleSessionCommands(params: {
     invokeReplayAction,
     androidAdbExecutor,
     bindDevice,
+    bindExactDevice,
     appLogAdmissionLedger,
+    screenRecordingAdmissionLedger,
+    requestScope,
+    retainDeviceExecutionLock,
     throwIfCanceled,
   });
 }

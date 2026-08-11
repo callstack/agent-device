@@ -12,8 +12,9 @@ import type { LinuxToolProvider } from '../platforms/linux/tool-provider.ts';
 import type { VegaToolProvider } from '../platforms/vega/tool-provider.ts';
 import { withWebProvider, type WebProvider } from '../platforms/web/provider.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { AppleSimulatorScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-transport.ts';
+import type { AppleRunnerScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-runner-transport.ts';
 import { hasExplicitDeviceSelector } from './device-selector-intent.ts';
-import { withRecordingProvider, type RecordingProvider } from './recording-provider.ts';
 import type { DaemonRequest, SessionState } from './types.ts';
 import { resolveProviderDeviceResolutionIntent } from './daemon-command-registry.ts';
 
@@ -42,7 +43,13 @@ export type VegaToolProviderResolver = PlatformProviderResolver<VegaToolProvider
 
 export type WebProviderResolver = PlatformProviderResolver<WebProvider | undefined>;
 
-export type RecordingProviderResolver = PlatformProviderResolver<RecordingProvider | undefined>;
+export type AppleSimulatorScreenRecordingTransportResolver = PlatformProviderResolver<
+  AppleSimulatorScreenRecordingTransport | undefined
+>;
+
+export type AppleRunnerScreenRecordingTransportResolver = PlatformProviderResolver<
+  AppleRunnerScreenRecordingTransport | undefined
+>;
 
 export type PlatformProviderResolvers = {
   androidAdbProvider?: AndroidAdbProviderResolver;
@@ -51,7 +58,8 @@ export type PlatformProviderResolvers = {
   linuxToolProvider?: LinuxToolProviderResolver;
   vegaToolProvider?: VegaToolProviderResolver;
   webProvider?: WebProviderResolver;
-  recordingProvider?: RecordingProviderResolver;
+  appleRunnerScreenRecordingTransport?: AppleRunnerScreenRecordingTransportResolver;
+  appleSimulatorScreenRecordingTransport?: AppleSimulatorScreenRecordingTransportResolver;
 };
 
 // Compile-time: every gated key is a real resolver key (so the facet can never name a
@@ -119,8 +127,11 @@ type ResolvedRequestPlatformProviders = {
   web?: {
     provider?: WebProvider;
   };
-  recording?: {
-    provider?: RecordingProvider;
+  appleSimulatorScreenRecording?: {
+    provider?: AppleSimulatorScreenRecordingTransport;
+  };
+  appleRunnerScreenRecording?: {
+    provider?: AppleRunnerScreenRecordingTransport;
   };
 };
 
@@ -186,15 +197,17 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
       if (!scopedProviders.appleRunner?.provider) return;
       const { withAppleRunnerProvider } =
         await import('../platforms/apple/core/runner/runner-provider.ts');
-      appendRequestProviderWrapper(wrappers, scopedProviders.appleRunner, (provider, task) =>
-        withAppleRunnerProvider(
-          provider,
-          {
-            deviceId: scopedProviders.appleRunner?.deviceId ?? '',
-            requestId: scopedProviders.appleRunner?.requestId,
-          },
-          task,
-        ),
+      const resolved = scopedProviders.appleRunner;
+      wrappers.push(
+        async (task) =>
+          await withAppleRunnerProvider(
+            resolved.provider,
+            {
+              deviceId: resolved.deviceId ?? '',
+              requestId: resolved.requestId,
+            },
+            task,
+          ),
       );
     },
   },
@@ -253,15 +266,35 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
     },
   },
   {
-    resolverKey: 'recordingProvider',
+    resolverKey: 'appleRunnerScreenRecordingTransport',
     resolve(providers, context) {
-      const recordingProvider = providers.recordingProvider;
-      if (!recordingProvider) return {};
-      return { recording: { provider: recordingProvider(context) } };
+      const resolver = providers.appleRunnerScreenRecordingTransport;
+      if (!resolver) return {};
+      return { appleRunnerScreenRecording: { provider: resolver(context) } };
     },
     async appendWrapper(scopedProviders, wrappers) {
-      if (!scopedProviders.recording?.provider) return;
-      appendRequestProviderWrapper(wrappers, scopedProviders.recording, withRecordingProvider);
+      const runner = scopedProviders.appleRunnerScreenRecording?.provider;
+      if (!runner && !scopedProviders.appleRunner?.provider) return;
+      const { withAppleRunnerScreenRecordingTransport } =
+        await import('../platform-runtime-screen-recording-apple-runner-transport.ts');
+      wrappers.push(async (task) => await withAppleRunnerScreenRecordingTransport(runner, task));
+    },
+  },
+  {
+    resolverKey: 'appleSimulatorScreenRecordingTransport',
+    resolve(providers, context) {
+      const resolver = providers.appleSimulatorScreenRecordingTransport;
+      if (!resolver) return {};
+      return { appleSimulatorScreenRecording: { provider: resolver(context) } };
+    },
+    async appendWrapper(scopedProviders, wrappers) {
+      const simulator = scopedProviders.appleSimulatorScreenRecording?.provider;
+      if (!simulator && !scopedProviders.appleRunner?.provider) return;
+      const { withAppleSimulatorScreenRecordingTransport } =
+        await import('../platform-runtime-screen-recording-apple-transport.ts');
+      wrappers.push(
+        async (task) => await withAppleSimulatorScreenRecordingTransport(simulator, task),
+      );
     },
   },
 ] satisfies RequestPlatformProviderDescriptor[];

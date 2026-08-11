@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import type { AppleRunnerProvider } from '../../../src/platforms/apple/core/runner/runner-provider.ts';
+import type { AppleRunnerScreenRecordingTransport } from '../../../src/platform-runtime-screen-recording-apple-runner-transport.ts';
 import { PROVIDER_SCENARIO_MACOS } from './fixtures.ts';
 import { createProviderScenarioHarness, type ProviderScenarioHarness } from './harness.ts';
 import { createRecordingAppleToolProvider, type FlatToolCall } from './providers.ts';
@@ -16,6 +17,7 @@ export type MacOsDesktopWorld = {
 export async function createMacOsDesktopWorld(
   options: {
     appleRunnerProvider?: AppleRunnerProvider;
+    appleRunnerScreenRecordingTransport?: AppleRunnerScreenRecordingTransport;
   } = {},
 ): Promise<MacOsDesktopWorld> {
   let clipboardText = '';
@@ -50,6 +52,9 @@ export async function createMacOsDesktopWorld(
     platformRuntime: true,
     appleRunnerProvider: options.appleRunnerProvider
       ? () => options.appleRunnerProvider
+      : undefined,
+    appleRunnerScreenRecordingTransport: options.appleRunnerScreenRecordingTransport
+      ? () => options.appleRunnerScreenRecordingTransport
       : undefined,
     appleToolProvider: () => appleTool.provider,
     deviceInventoryProvider: async () => [PROVIDER_SCENARIO_MACOS],

@@ -1,4 +1,6 @@
 type HostProcessModule = typeof import('../../utils/host-process.ts');
+type HostProcessIdentityObservation =
+  import('../../utils/host-process.ts').HostProcessIdentityObservation;
 
 /**
  * `vi.mock` factory for `utils/host-process.ts` in tests that seed a "live"
@@ -8,8 +10,8 @@ type HostProcessModule = typeof import('../../utils/host-process.ts');
  * readProcessStartTime shells out to `ps` with a 1s timeout; under full-suite
  * CPU contention a re-read can miss that deadline and return null, mismatching
  * the seeded value and flipping a genuinely-live owner to 'owner-process-dead'.
- * This factory reads our own pid's start time once for real, then serves the
- * cached value so every read is self-consistent. Other pids read as null, same
+ * This factory assigns our own pid a stable synthetic start time, then serves
+ * that value so every read is self-consistent without a subprocess. Other pids read as null, same
  * as a real `ps` miss. isProcessAlive stays real (a plain `kill(pid, 0)`
  * syscall, not a subprocess), so fabricated dead-pid fixtures still classify
  * as dead through that non-flaky check.
@@ -25,15 +27,23 @@ export async function pinOwnProcessStartTime(
   importOriginal: () => Promise<HostProcessModule>,
 ): Promise<HostProcessModule> {
   const actual = await importOriginal();
-  let cachedOwnStartTime: string | null | undefined;
+  const ownStartTime = 'test-process-start-time';
   return {
     ...actual,
     readProcessStartTime: (pid: number) => {
       if (pid !== process.pid) return null;
-      if (cachedOwnStartTime === undefined) {
-        cachedOwnStartTime = actual.readProcessStartTime(process.pid);
+      return ownStartTime;
+    },
+    readHostProcessIdentityObservations: (pids: Iterable<number>) => {
+      const selected = [...pids];
+      const observations = new Map<number, HostProcessIdentityObservation>();
+      if (selected.includes(process.pid)) {
+        observations.set(process.pid, {
+          state: 'S',
+          startTime: ownStartTime,
+        });
       }
-      return cachedOwnStartTime;
+      return observations;
     },
   };
 }

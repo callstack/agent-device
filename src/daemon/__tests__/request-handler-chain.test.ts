@@ -18,7 +18,11 @@ import {
   createLocalLinuxToolProvider,
   withLinuxToolProvider,
 } from '../../platforms/linux/tool-provider.ts';
-import { unavailableBindDevice } from './test-device-runtime-gateway.ts';
+import {
+  unavailableBindDevice,
+  unavailableBindExactDevice,
+} from './test-device-runtime-gateway.ts';
+import { createScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
 
 function makeRequest(command: string, positionals: string[] = []): DaemonRequest {
   return {
@@ -42,6 +46,14 @@ function makeChainParams(req: DaemonRequest) {
     leaseRegistry: new LeaseRegistry(),
     invoke: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
     bindDevice: unavailableBindDevice,
+    bindExactDevice: unavailableBindExactDevice,
+    screenRecordingAdmissionLedger: createScreenRecordingAdmissionLedger(),
+    requestScope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+    retainDeviceExecutionLock: async () => {},
     throwIfCanceled: () => {},
     contextFromFlags: () => ({ logPath: '/tmp/agent-device-request-chain.log' }),
   };

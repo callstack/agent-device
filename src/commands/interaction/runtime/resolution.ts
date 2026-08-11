@@ -9,13 +9,12 @@ import type {
 } from '../../../runtime-contract.ts';
 import {
   formatSelectorFailure,
-  resolveSelectorChain,
+  resolveSelectorChainWithPolicy,
   selectorFailureHint,
   STALE_REF_HINT,
   type SelectorResolution,
   buildSelectorChainForNode,
   SELECTOR_RESOLUTION_POLICIES,
-  selectorResolutionKnobs,
 } from '@agent-device/selectors';
 import { resolvePressRecordingTarget } from '../../../core/press-retarget.ts';
 import { requireSnapshotSession } from './selector-read-shared.ts';
@@ -321,7 +320,6 @@ async function resolveRefInteractionTarget(
   };
 }
 
-// fallow-ignore-next-line complexity
 async function resolveSelectorInteractionTarget(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
@@ -344,23 +342,13 @@ async function resolveSelectorInteractionTarget(
     );
   }
   if (!resolved || !resolved.node.rect) {
-    const covered = resolveSelectorChain(capture.snapshot.nodes, selectorExpression, {
-      platform: runtime.backend.platform,
-      ...selectorResolutionKnobs(SELECTOR_RESOLUTION_POLICIES.actCoveredDiagnosis),
+    throw selectorInteractionFailure({
+      runtime,
+      nodes: capture.snapshot.nodes,
+      selectorExpression,
+      action: params.action,
+      resolved,
     });
-    if (covered?.node && isSnapshotNodeInteractionBlocked(covered.node)) {
-      throw buildCoveredInteractionError({
-        label: `Selector ${covered.selector}`,
-        node: covered.node,
-        action: params.action,
-        selector: covered.selector,
-      });
-    }
-    throw new AppError(
-      'COMMAND_FAILED',
-      formatSelectorFailure(selectorExpression, resolved?.diagnostics ?? [], { unique: true }),
-      { hint: selectorFailureHint(resolved?.diagnostics ?? []) },
-    );
   }
   assertReplayTargetResolution(resolved.node, capture.snapshot.nodes, params);
   const node = params.promoteToHittableAncestor
@@ -396,6 +384,44 @@ async function resolveSelectorInteractionTarget(
       buildSelectorResolutionDisclosure(resolved, capture.snapshot.nodes),
     ),
   };
+}
+
+/**
+ * No usable acting target. Before reporting "did not match", re-probe the same
+ * tree through the diagnosis row: a selector that DOES match but landed on a
+ * covered node is a different failure with a different recovery, and the
+ * acting row — rect-required, candidates rejected — cannot tell the caller
+ * that. Both probes name a policy row, so the two contracts stay visible side
+ * by side instead of as two sets of engine knobs (#1630).
+ */
+function selectorInteractionFailure(params: {
+  runtime: AgentDeviceRuntime;
+  nodes: SnapshotState['nodes'];
+  selectorExpression: string;
+  action: InteractionAction;
+  resolved: SelectorResolution | null;
+}): AppError {
+  const { runtime, nodes, selectorExpression, action, resolved } = params;
+  const covered = resolveSelectorChainWithPolicy(
+    nodes,
+    selectorExpression,
+    SELECTOR_RESOLUTION_POLICIES.actCoveredDiagnosis,
+    { platform: runtime.backend.platform },
+  );
+  if (covered.kind === 'resolved' && isSnapshotNodeInteractionBlocked(covered.resolution.node)) {
+    return buildCoveredInteractionError({
+      label: `Selector ${covered.resolution.selector}`,
+      node: covered.resolution.node,
+      action,
+      selector: covered.resolution.selector,
+    });
+  }
+  const diagnostics = resolved?.diagnostics ?? [];
+  return new AppError(
+    'COMMAND_FAILED',
+    formatSelectorFailure(selectorExpression, diagnostics, { unique: true }),
+    { hint: selectorFailureHint(diagnostics) },
+  );
 }
 
 function assertReplayTargetResolution(

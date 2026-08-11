@@ -40,6 +40,11 @@ export type LimrunPlatformRuntimeOwnerOptions = Readonly<{
 }>;
 
 const available = Object.freeze({ available: true } as const);
+const recordingUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'Limrun does not expose an exact-owner screen-recording runtime.',
+} as const);
 
 export function createLimrunPlatformRuntimeOwner(
   options: LimrunPlatformRuntimeOwnerOptions,
@@ -170,7 +175,7 @@ function bindLimrunAppLogs(
           : [];
       return Object.freeze({ source: 'app-log' as const, backend, dump, notes });
     },
-  } satisfies PlatformRuntimeOperations;
+  } satisfies DeviceBinding<PlatformRuntimeOperations>['operations'];
   return Object.freeze({
     device,
     owner,
@@ -215,6 +220,9 @@ function facts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> {
       appLogReattach: available,
       appLogCleanup: available,
       networkDump: available,
+      screenRecordingStart: recordingUnavailable,
+      screenRecordingReattach: recordingUnavailable,
+      screenRecordingCleanup: recordingUnavailable,
     },
   });
 }

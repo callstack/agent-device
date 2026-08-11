@@ -1,6 +1,6 @@
 ---
 title: AI Agent Setup
-description: Configure Cursor, Codex, Claude Code, Windsurf, Cline, Goose, skills, and MCP for agent-device mobile, TV, desktop, and web app verification.
+description: Configure Cursor, Codex, Claude Code, Windsurf, Cline, Goose, iOS Simulator and Android Emulator skills, and MCP for agent-device app verification.
 ---
 
 # AI Agent Setup
@@ -40,7 +40,7 @@ Install the skill when your agent runtime supports skills:
 npx skills add callstack/agent-device
 ```
 
-The bundled [agent-device skill](https://github.com/callstack/agent-device/blob/main/skills/agent-device/SKILL.md) is the canonical router for skill-aware clients. It intentionally points agents back to installed CLI help instead of duplicating the command manual.
+The bundled [agent-device skill](https://github.com/callstack/agent-device/blob/main/skills/agent-device/SKILL.md) is the canonical router for skill-aware clients. For focused simulator work, use the [iOS Simulator skill](https://github.com/callstack/agent-device/blob/main/skills/ios-simulator/SKILL.md) or [Android Emulator skill](https://github.com/callstack/agent-device/blob/main/skills/android-emulator/SKILL.md). They intentionally point agents back to installed CLI help instead of duplicating the command manual.
 
 ## Recommended agent rule
 

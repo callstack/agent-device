@@ -1,5 +1,4 @@
 import type { DeviceInfo, Platform, PlatformSelector } from '@agent-device/kernel/device';
-import type { RecordingBackendTag } from './recording.ts';
 import type { PerfMetricsSamplerTag } from './perf.ts';
 import type { PlatformGatedProviderResolverKey } from './platform-providers.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
@@ -28,9 +27,6 @@ type CapabilityBucket = 'apple' | 'android' | 'harmonyos' | 'vega' | 'linux' | '
  * (wraps `supportsPlatformPerfMetrics`) plus the neutral {@link PerfMetricsSamplerTag}
  * resolver (wraps the per-platform metrics-sampling branch formerly open-coded in
  * `buildPerfResponseData`), both pinned by the daemon perf routing parity test;
- * {@link PlatformPlugin.recording} carries the neutral
- * {@link RecordingBackendTag} resolver (wraps the per-platform branch of
- * `resolveRecordingBackendForDevice`, pinned by the recording routing parity test);
  * {@link PlatformPlugin.providers} carries the per-family platform-gated request
  * provider resolver list (replaces the hand `device.platform === …` gate in
  * `request-platform-providers.ts`, pinned by the providers routing parity test). The
@@ -96,21 +92,6 @@ export type PlatformPlugin = {
     metricsSamplerTag(device: DeviceInfo): PerfMetricsSamplerTag;
   };
   /**
-   * The daemon recording facet (issue #974). `resolveBackendTag` wraps the
-   * per-platform branch of `resolveRecordingBackendForDevice`
-   * (src/daemon/handlers/record-trace-recording-backends.ts), returning the neutral
-   * {@link RecordingBackendTag} for `device` (a DATA-ONLY string, type-only in the
-   * plugin). The daemon maps the tag
-   * back to its own {@link RecordingBackend} instance, so core/platforms never construct
-   * the daemon-owned backend objects. Present on families with a recording backend
-   * (Apple + Android + web); left `undefined` for linux, where the hand branch fell
-   * through to the unsupported backend — the daemon lookup preserves that fallthrough
-   * (`?? 'unsupported'`), and the recording routing parity test pins the equivalence.
-   */
-  readonly recording?: {
-    resolveBackendTag(device: DeviceInfo): RecordingBackendTag;
-  };
-  /**
    * The daemon request-scope provider facet (issue #974). `platformGatedResolvers`
    * declares which PLATFORM-GATED request provider resolvers apply to this family's
    * devices — the DATA that replaces the hand `device.platform === …` gate formerly
@@ -118,8 +99,8 @@ export type PlatformPlugin = {
    * src/daemon/request-platform-providers.ts. The daemon still OWNS the resolver
    * functions, their wrapper composition, and the request-scope concurrency isolation;
    * this facet supplies only the per-family gate (a plain string list, the keys
-   * type-only in the plugin). The ungated `recordingProvider`, which applies on every
-   * platform, is intentionally NOT part of the facet and stays ungated in the daemon.
+   * type-only in the plugin). Focused command transports that are not family-gated
+   * are intentionally NOT part of the facet and stay ungated in the daemon.
    * Every family carries this facet (each
    * owns at least one platform-specific resolver); a device on an unregistered platform
    * resolves to no gated resolvers, matching the former hand gate. Pinned by the

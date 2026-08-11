@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { expect, test, vi } from 'vitest';
 import type { NetworkProviderDump, PlatformRuntimeHost } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -48,6 +49,49 @@ test('keeps a web transport without dumpNetwork unavailable instead of throwing 
   });
 });
 
+test('binds agent-browser recording only through the focused web transport', async () => {
+  const calls: string[] = [];
+  const binding = await createWebPlatformRuntime(
+    host(
+      { mode: 'local' },
+      {
+        start: async (outputPath) => {
+          calls.push(`start:${outputPath}`);
+        },
+        stop: async () => {
+          calls.push('stop');
+        },
+      },
+    ),
+  ).bind({ device, intent: { kind: 'ordinary' }, scope: scope() });
+  const started = await binding.operations.screenRecordingStart?.({
+    sessionId: 'one',
+    outputPath: '/tmp/recording.webm',
+    scope: 'app',
+    showTouches: false,
+    hideTouchesRequested: false,
+    recordOnlySession: false,
+    fence: { token: 'one', generation: 1 },
+  });
+  assert.ok(started);
+  await started.pendingHandle.transfer().forceCleanup();
+  expect(calls).toEqual(['start:/tmp/recording.webm', 'stop']);
+  expect(binding.facts.operations.screenRecordingStart).toEqual({ available: true });
+});
+
+test('does not advertise recording without the active agent-browser transport', async () => {
+  const binding = await createWebPlatformRuntime(host({ mode: 'local' })).bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: scope(),
+  });
+  expect(binding.operations.screenRecordingStart).toBeUndefined();
+  expect(binding.facts.operations.screenRecordingStart).toMatchObject({
+    available: false,
+    reason: 'owner-capability-missing',
+  });
+});
+
 function input() {
   return {
     sessionId: 'one',
@@ -68,6 +112,9 @@ function scope() {
 
 function host(
   transport: Awaited<ReturnType<PlatformRuntimeHost['networkTransports']['resolve']>>,
+  webRecording: Awaited<
+    ReturnType<PlatformRuntimeHost['screenRecording']['web']['resolve']>
+  > = undefined,
 ): PlatformRuntimeHost {
   return {
     appleTools: {
@@ -112,5 +159,38 @@ function host(
       readProcessMarker: async () => ({ status: 'missing' }),
     },
     networkTransports: { resolve: async () => transport },
+    screenRecording: {
+      outputs: { prepare: async () => {} },
+      apple: {
+        availability: async () => ({ available: true }),
+        runRunner: async () => ({}),
+        startSimulator: async () => {
+          throw new Error('unused');
+        },
+        inspectProcess: async () => 'missing',
+        terminateProcess: async () => 'already-missing',
+        inspectRunner: async () => 'missing',
+        retrieveRunnerRecording: async () => {},
+        captureClockAnchor: async () => undefined,
+        isRunnerBundleId: async () => false,
+      },
+      android: {
+        resolve: async () => {
+          throw new Error('unused');
+        },
+      },
+      harmony: {
+        start: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+        stop: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+        findMedia: async () => undefined,
+        stageMedia: async () => false,
+        stagedFileSize: async () => undefined,
+        pull: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+        remove: async () => true,
+        removeMedia: async () => true,
+      },
+      web: { resolve: async () => webRecording },
+      finalize: { complete: async () => ({}) },
+    },
   };
 }

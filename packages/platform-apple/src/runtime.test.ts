@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
-import type { PlatformRuntimeHost } from '@agent-device/contracts/platform';
 import type { AppleOS, DeviceInfo } from '@agent-device/kernel/device';
 import { createApplePlatformRuntime } from './runtime.ts';
+import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
 
 function appleDevice(overrides: Partial<DeviceInfo> = {}): DeviceInfo {
   return {
@@ -45,7 +45,7 @@ test.each([
   ['visionOS simulator', leaves.visionos, true, undefined],
   ['watchOS sentinel', leaves.watchos, false, 'watchOS app logs are not supported'],
 ])('classifies the %s leaf explicitly', async (_name, device, available, hint) => {
-  const binding = await createApplePlatformRuntime({} as PlatformRuntimeHost).bind({
+  const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
     device,
     intent: { kind: 'ordinary' },
     scope: {
@@ -61,5 +61,22 @@ test.each([
     const fact = facts.operations[operation];
     expect(fact.available).toBe(available);
     if (!available && hint) expect(fact).toHaveProperty('hint', expect.stringContaining(hint));
+  }
+  for (const operation of [
+    'screenRecordingStart',
+    'screenRecordingReattach',
+    'screenRecordingCleanup',
+  ] as const) {
+    expect(facts.operations[operation].available).toBe(available);
+  }
+  if (device.iosPhysicalDeviceBackend === 'xctest') {
+    expect(facts.operations.screenRecordingStart).toMatchObject({
+      hint: expect.stringContaining('CoreDevice-backed physical iOS device'),
+    });
+  }
+  if (device.appleOs === 'watchos') {
+    expect(facts.operations.screenRecordingStart).toMatchObject({
+      hint: 'watchOS recording is not supported.',
+    });
   }
 });

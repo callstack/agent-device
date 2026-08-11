@@ -37,6 +37,11 @@ prose in this repo, including this file.
   pre-fix code (revert, run, quote the failing number), a moved test against its gates (planted type
   error, discovered-count delta), a structural gate against a planted violation. Three vacuous
   regression tests shipped in one day before this rule; review caught all three.
+- Regression tests are evidence, not the default repair. First make the error class impossible at
+  the owning interface with types, a registry, or one construction path; then add the smallest
+  interface-level regression that proves the invariant. If a custom guard starts reconstructing a
+  compiler, schema, or scope model—or needs a second omission patch—redesign it around the source of
+  truth instead of adding another exception.
 - Typed signals over message sniffing: key on structured details (`details.timeoutMs`, reason codes),
   never on error text. Remaining sniffs are owned debt with in-code rationale — do not copy them.
 - Snapshot output is the token budget. Never add per-node bytes to the tree; response-level metadata
@@ -124,7 +129,6 @@ the new thing — never to suppress or allowlist it.
   redundant tests, stale helpers/fixtures, and duplication the change made unnecessary.
 - Name durable module concepts with `CONTEXT.md` vocabulary. Do not coin parallel names across docs,
   tests, and code.
-
 Module size is about agent context safety, and the unit is questions, not lines: a file should answer
 one question so `rg` → read-whole-file stays one cheap bounded read.
 

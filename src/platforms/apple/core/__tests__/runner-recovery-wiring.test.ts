@@ -124,3 +124,17 @@ test('an unrecoverable lifecycle state still reaches recovery and reports the in
   ).rejects.toThrow(/invalidated the runner session/);
   assert.ok(server.requests.some((request) => request.command === 'status'));
 });
+
+test('an exact-session command never dispatches to a replacement runner', async () => {
+  server = await startFakeRunnerServer({ recordStop: [{ kind: 'ok', data: {} }] });
+  const replacement = seedSession(server.port);
+
+  await expect(
+    runAppleRunnerCommand(
+      IOS_SIMULATOR,
+      { command: 'recordStop' },
+      { expectedRunnerSessionId: `${replacement.sessionId}:replaced` },
+    ),
+  ).rejects.toThrow('runner session ownership changed');
+  assert.deepEqual(server.requests, []);
+});

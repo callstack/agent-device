@@ -17,6 +17,15 @@ export type HostCommandResult = Readonly<{
   signal?: string;
 }>;
 
+/** Exact host-process identity used by durable process-backed capabilities. */
+export type ManagedProcessIdentity = Readonly<{
+  pid: number;
+  startTime: string;
+  command: string;
+}>;
+
+export type ManagedProcessOwnership = 'missing' | 'owned-alive' | 'ownership-lost';
+
 /** Generic process-execution port; focused Apple foreground tools use AppleToolHost. */
 export type HostCommandRunner = Readonly<{
   which(executable: string): Promise<string | undefined>;

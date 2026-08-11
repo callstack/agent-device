@@ -1,8 +1,9 @@
 import path from 'node:path';
 import type { Platform, PlatformSelector } from '@agent-device/kernel/device';
+import { resolveUserPath } from '../utils/path-resolution.ts';
 
 const DEFAULT_RECORDING_EXTENSION = '.mp4';
-export const WEB_RECORDING_EXTENSION = '.webm';
+const WEB_RECORDING_EXTENSION = '.webm';
 
 export function recordingExtensionForPlatform(
   platform: Platform | PlatformSelector | undefined,
@@ -16,4 +17,26 @@ export function appendRecordingExtensionWhenMissing(filePath: string, extension:
 
 export function defaultRecordingPath(platform: Platform | undefined): string {
   return `./recording-${Date.now()}${recordingExtensionForPlatform(platform)}`;
+}
+
+export type RecordingOutputPaths = Readonly<{
+  requestedPath: string;
+  outputPath: string;
+}>;
+
+export function resolveRecordingOutputPaths(params: {
+  requestedPath?: string;
+  platform: Platform;
+  cwd?: string;
+}): RecordingOutputPaths {
+  const requestedPath =
+    params.requestedPath === undefined
+      ? defaultRecordingPath(params.platform)
+      : params.platform === 'web'
+        ? appendRecordingExtensionWhenMissing(params.requestedPath, WEB_RECORDING_EXTENSION)
+        : params.requestedPath;
+  return Object.freeze({
+    requestedPath,
+    outputPath: resolveUserPath(requestedPath, { cwd: params.cwd }),
+  });
 }

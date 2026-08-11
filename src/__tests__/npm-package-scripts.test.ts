@@ -101,6 +101,11 @@ test('the package gate runs the closure audit and both runtime probes', () => {
   }
 });
 
+test('the package gate disables the detached update notifier for its smoke probes', () => {
+  const gate = fs.readFileSync(path.join(repoRoot, 'scripts', 'check-package.ts'), 'utf8');
+  assert.match(gate, /env: \{ \.\.\.process\.env, AGENT_DEVICE_NO_UPDATE_NOTIFIER: '1' \}/);
+});
+
 // The gate reads the packed tarball, so `prepack` is the last point where a broken package can still
 // be stopped. Publishing runs it; nothing else guarantees the tarball is ever verified.
 test('publishing cannot skip the package gate', () => {

@@ -37,9 +37,6 @@ const androidPlugin = {
   // former `buildPerfResponseData` sampling branch: every supported Android device
   // routes to the Android `perf metrics` sampler.
   perf: { supportsMetrics: () => true, metricsSamplerTag: () => 'android' },
-  // Wraps the Android arm of `resolveRecordingBackendForDevice`: every Android device
-  // resolves to the android recording backend.
-  recording: { resolveBackendTag: () => 'android' },
   // Declares the platform-gated request provider resolver the Android family owns (the
   // adb provider, formerly gated by `device.platform === 'android'`).
   providers: { platformGatedResolvers: ['androidAdbProvider'] },
@@ -54,11 +51,6 @@ const harmonyosPlugin = {
   platforms: ['harmonyos'],
   capability: { bucket: 'harmonyos' },
   perf: { supportsMetrics: () => true, metricsSamplerTag: () => 'harmonyos' },
-  // HarmonyOS exposes the system recorder only on physical devices. The backend
-  // validates its whole-screen-only scope before starting the service.
-  recording: {
-    resolveBackendTag: (device) => (device.kind === 'device' ? 'harmonyos' : 'unsupported'),
-  },
   createInteractor: async (device: DeviceInfo, runner: RunnerContext) => {
     const { createHarmonyInteractor } = await import('./harmonyos.ts');
     return createHarmonyInteractor(device, runner);
@@ -69,8 +61,6 @@ const linuxPlugin = {
   id: 'linux',
   platforms: ['linux'],
   capability: { bucket: 'linux' },
-  // No recording facet: linux historically fell through to the unsupported recording
-  // backend; the daemon lookup preserves that (`?? 'unsupported'`).
   // Declares the platform-gated request provider resolver the linux family owns (the
   // linux tool provider, formerly gated by `device.platform === 'linux'`).
   providers: { platformGatedResolvers: ['linuxToolProvider'] },
@@ -84,9 +74,6 @@ const webPlugin = {
   id: 'web',
   platforms: ['web'],
   capability: { bucket: 'web' },
-  // Wraps the web arm of `resolveRecordingBackendForDevice`: the web device resolves to
-  // the web (agent-browser) recording backend.
-  recording: { resolveBackendTag: () => 'web' },
   // Declares the platform-gated request provider resolver the web family owns (the web
   // provider, formerly gated by `device.platform === 'web'`).
   providers: { platformGatedResolvers: ['webProvider'] },

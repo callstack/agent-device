@@ -20,7 +20,6 @@ import {
   type RunnerXctestrunArtifact,
 } from './runner-xctestrun.ts';
 import {
-  buildRunnerSessionId,
   normalizeRunnerStartupTimeoutMs,
   type RunnerProcessHandle,
   type RunnerSession,
@@ -48,7 +47,7 @@ export function isIosRunnerDetachEnabled(env: NodeJS.ProcessEnv = process.env): 
 // lock, like the rest of session startup.
 export async function tryAdoptRunnerSessionFromLease(
   device: DeviceInfo,
-  options: { startupTimeoutMs?: number },
+  options: { startupTimeoutMs?: number; expectedRunnerSessionId?: string },
 ): Promise<RunnerSession | null> {
   if (device.kind !== 'simulator' || !isIosRunnerDetachEnabled()) return null;
   // Custom simulator sets run behind the XCTestDevices redirect, whose
@@ -66,6 +65,13 @@ export async function tryAdoptRunnerSessionFromLease(
     });
     return null;
   };
+
+  if (
+    options.expectedRunnerSessionId !== undefined &&
+    lease.sessionId !== options.expectedRunnerSessionId
+  ) {
+    return skip('session_identity_mismatch');
+  }
 
   const runnerPid = lease.runnerPid;
   if (!runnerPid) return skip('runner_pid_missing');
@@ -141,7 +147,7 @@ function buildAdoptedRunnerSession(
   expectedDerived: string,
   options: { startupTimeoutMs?: number },
 ): RunnerSession & { lease: RunnerLease } {
-  const sessionId = buildRunnerSessionId(device.id, lease.port);
+  const sessionId = lease.sessionId;
   const artifact: RunnerXctestrunArtifact = {
     xctestrunPath: lease.xctestrunPath,
     derived: expectedDerived,

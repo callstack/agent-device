@@ -11,6 +11,7 @@ import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { Interactor } from '@agent-device/contracts/interaction';
 import type { SimulatorLease } from '../daemon/lease-registry.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { AppleRunnerScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-runner-transport.ts';
 
 afterEach(() => {
   setActiveProviderDeviceRuntimes([]);
@@ -50,6 +51,48 @@ test('provider device runtime registry rejects duplicate provider owners', () =>
   assert.throws(
     () => createProviderDeviceRuntimeRequestProviders([first, second]),
     /Duplicate provider device runtime: miss/,
+  );
+});
+
+test('provider device runtime composition exposes focused runner recording authority only for its exact device', () => {
+  const device: DeviceInfo = {
+    platform: 'apple',
+    appleOs: 'macos',
+    kind: 'device',
+    target: 'desktop',
+    id: 'provider:macos:lease-a',
+    name: 'Provider Mac',
+    booted: true,
+  };
+  const transport: AppleRunnerScreenRecordingTransport = Object.freeze({
+    authority: 'scoped-provider',
+    available: true,
+    start: async () => ({ runnerSessionId: 'external-session-1' }),
+    inspect: async (_device, runnerSessionId) =>
+      runnerSessionId === 'external-session-1' ? 'owned-alive' : 'ownership-lost',
+    stop: async () => undefined,
+  });
+  const runtime = {
+    ...makeRuntime({
+      provider: 'mac-provider',
+      leaseResult: undefined,
+      devices: [device],
+      interactor: undefined,
+      installResult: undefined,
+      portReverseResult: undefined,
+    }),
+    getAppleRunnerScreenRecordingTransport: (candidate: DeviceInfo) =>
+      candidate.id === device.id ? transport : undefined,
+  };
+  const resolver = createProviderDeviceRuntimeRequestProviders([
+    runtime,
+  ]).appleRunnerScreenRecordingTransport;
+  const req = { token: 'token', session: 'default', command: 'record', positionals: [], flags: {} };
+
+  assert.equal(resolver?.({ req, device }), transport);
+  assert.equal(
+    resolver?.({ req, device: { ...device, id: 'provider:macos:replacement' } }),
+    undefined,
   );
 });
 

@@ -25,6 +25,7 @@ import { findNodeByLabel, resolveRefLabel } from './selector-read-utils.ts';
 import {
   createWaitPolling,
   DEFAULT_WAIT_TIMEOUT_MS,
+  sleepWithWaitCancellation,
   type WaitPollDeadline,
   waitTimeoutError,
 } from './wait-polling.ts';
@@ -178,7 +179,7 @@ export function createSelectorWaitCommands<Runtime extends SelectorWaitRuntime>(
     options: WaitCommandOptions,
   ): Promise<WaitCommandResult> => {
     if (options.target.kind === 'sleep') {
-      await sleep(runtime, options.target.durationMs);
+      await sleepWithWaitCancellation(runtime, options, options.target.durationMs);
       return { kind: 'sleep', waitedMs: options.target.durationMs };
     }
     if (options.target.kind === 'ref') {
@@ -446,9 +447,4 @@ function backendContext(
     signal: options.signal ?? runtime.signal,
     metadata: options.metadata,
   };
-}
-
-async function sleep(runtime: SelectorWaitRuntime, durationMs: number): Promise<void> {
-  if (runtime.clock) await runtime.clock.sleep(durationMs);
-  else await new Promise((resolve) => setTimeout(resolve, durationMs));
 }

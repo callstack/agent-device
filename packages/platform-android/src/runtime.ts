@@ -8,6 +8,7 @@ import type {
 import { localRuntimeOwner } from '@agent-device/contracts/platform';
 import { createAndroidAppLogRuntime } from './logs/runtime.ts';
 import { dumpAndroidNetworkTraffic } from './network/runtime.ts';
+import { bindAndroidScreenRecordingRuntime } from './recording/runtime.ts';
 
 const owner = localRuntimeOwner('android');
 const available = Object.freeze({ available: true } as const);
@@ -19,17 +20,30 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
     ownsDevice: (device) => device.platform === 'android',
     bind: async (request) => {
       const logs = await appLogs.bind(request);
+      const recording = await bindAndroidScreenRecordingRuntime({
+        host,
+        device: request.device,
+        owner,
+        signal: request.scope.signal,
+      });
       return Object.freeze({
         device: logs.device,
         owner,
         facts: Object.freeze({
           device: logs.facts.device,
-          operations: { ...logs.facts.operations, networkDump: available },
+          operations: {
+            ...logs.facts.operations,
+            networkDump: available,
+            screenRecordingStart: available,
+            screenRecordingReattach: available,
+            screenRecordingCleanup: available,
+          },
         }),
         operations: Object.freeze({
           ...logs.operations,
           networkDump: async (input: NetworkDumpInput) =>
             await dumpAndroidNetworkTraffic(host, request.device, input, request.scope.signal),
+          ...recording,
         }),
         [Symbol.asyncDispose]: async () => await logs[Symbol.asyncDispose](),
       }) satisfies DeviceBinding<PlatformRuntimeOperations>;

@@ -15,6 +15,7 @@ import {
   makeMacOsSession as makeBaseMacOsSession,
 } from '../../../__tests__/test-utils/session-factories.ts';
 import { WEB_DESKTOP_DEVICE } from '../../../__tests__/test-utils/device-fixtures.ts';
+import { makeTestScreenRecordingResource } from '../../../__tests__/test-utils/screen-recording-live-handle.ts';
 
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
@@ -117,6 +118,13 @@ async function emulateCaptureSnapshotForSession(
 
 function makeSession(name: string): SessionState {
   return makeIosSession(name);
+}
+
+function installTestScreenRecording(
+  session: SessionState,
+  overrides: Parameters<typeof makeTestScreenRecordingResource>[1] = {},
+): void {
+  session.screenRecording = makeTestScreenRecordingResource(session, overrides);
 }
 
 function makeAndroidSession(name: string): SessionState {
@@ -1038,15 +1046,12 @@ test('press coordinates appends touch-visualization events while recording', asy
     createdAt: Date.now(),
     backend: 'xctest',
   };
-  session.recording = {
-    platform: 'ios',
+  installTestScreenRecording(session, {
+    backend: 'simctl recordVideo',
     outPath: '/tmp/demo.mp4',
     startedAt: Date.now() - 1_000,
     showTouches: true,
-    gestureEvents: [],
-    child: { kill: () => {} } as any,
-    wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-  };
+  });
   sessionStore.set(sessionName, session);
 
   mockDispatch.mockResolvedValue({
@@ -1069,7 +1074,7 @@ test('press coordinates appends touch-visualization events while recording', asy
   });
 
   expect(response?.ok).toBe(true);
-  const recorded = sessionStore.get(sessionName)?.recording;
+  const recorded = sessionStore.get(sessionName)?.screenRecording?.handle.inspect();
   expect(recorded).toBeTruthy();
   expect(recorded?.gestureEvents.length).toBe(4);
   expect(recorded?.gestureEvents[0]?.kind).toBe('tap');
@@ -1091,15 +1096,12 @@ test('press coordinates on iOS recording captures a full snapshot for the touch 
   const sessionName = 'ios-direct-press-frame';
   const session = makeSession(sessionName);
   session.snapshot = undefined;
-  session.recording = {
-    platform: 'ios',
+  installTestScreenRecording(session, {
+    backend: 'simctl recordVideo',
     outPath: '/tmp/demo.mp4',
     startedAt: Date.now() - 1_000,
     showTouches: true,
-    gestureEvents: [],
-    child: { kill: () => {} } as any,
-    wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-  };
+  });
   sessionStore.set(sessionName, session);
 
   mockDispatch.mockResolvedValue({ x: 220, y: 600 });
@@ -1140,7 +1142,7 @@ test('press coordinates on iOS recording captures a full snapshot for the touch 
   expect(mockCaptureSnapshotForSession.mock.calls[0]?.[4]).toEqual({
     interactiveOnly: true,
   });
-  const event = sessionStore.get(sessionName)?.recording?.gestureEvents[0];
+  const event = sessionStore.get(sessionName)?.screenRecording?.handle.inspect().gestureEvents[0];
   expect(event?.kind).toBe('tap');
   expect(event?.referenceWidth).toBe(440);
   expect(event?.referenceHeight).toBe(956);
@@ -1150,15 +1152,12 @@ test('press coordinates on Android recording uses physical screen size when no s
   const sessionStore = makeSessionStore();
   const sessionName = 'android-direct-press-frame';
   const session = makeAndroidSession(sessionName);
-  session.recording = {
-    platform: 'android',
+  installTestScreenRecording(session, {
+    backend: 'adb screenrecord',
     outPath: '/tmp/demo.mp4',
-    remotePath: '/sdcard/demo.mp4',
-    remotePid: '1234',
     startedAt: Date.now() - 1_000,
     showTouches: true,
-    gestureEvents: [],
-  };
+  });
   session.snapshot = undefined;
   sessionStore.set(sessionName, session);
 
@@ -1178,7 +1177,7 @@ test('press coordinates on Android recording uses physical screen size when no s
   });
 
   expect(response?.ok).toBe(true);
-  const event = sessionStore.get(sessionName)?.recording?.gestureEvents[0];
+  const event = sessionStore.get(sessionName)?.screenRecording?.handle.inspect().gestureEvents[0];
   expect(event?.kind).toBe('tap');
   expect(event?.referenceWidth).toBe(1344);
   expect(event?.referenceHeight).toBe(2992);
@@ -1188,15 +1187,12 @@ test('press coordinates on Android recording caches physical screen size across 
   const sessionStore = makeSessionStore();
   const sessionName = 'android-direct-press-frame-cache';
   const session = makeAndroidSession(sessionName);
-  session.recording = {
-    platform: 'android',
+  installTestScreenRecording(session, {
+    backend: 'adb screenrecord',
     outPath: '/tmp/demo.mp4',
-    remotePath: '/sdcard/demo.mp4',
-    remotePid: '1234',
     startedAt: Date.now() - 1_000,
     showTouches: true,
-    gestureEvents: [],
-  };
+  });
   session.snapshot = undefined;
   sessionStore.set(sessionName, session);
 
@@ -1231,7 +1227,7 @@ test('press coordinates on Android recording caches physical screen size across 
   });
 
   expect(mockGetAndroidScreenSize).toHaveBeenCalledTimes(1);
-  const recording = sessionStore.get(sessionName)?.recording;
+  const recording = sessionStore.get(sessionName)?.screenRecording?.handle.inspect();
   expect(recording?.touchReferenceFrame).toEqual({
     referenceWidth: 1344,
     referenceHeight: 2992,
@@ -1268,15 +1264,12 @@ test('press coordinates during recording still dispatches when Android screen-si
   const sessionStore = makeSessionStore();
   const sessionName = 'android-direct-press-screen-size-failure';
   const session = makeAndroidSession(sessionName);
-  session.recording = {
-    platform: 'android',
+  installTestScreenRecording(session, {
+    backend: 'adb screenrecord',
     outPath: '/tmp/demo.mp4',
-    remotePath: '/sdcard/demo.mp4',
-    remotePid: '1234',
     startedAt: Date.now() - 1_000,
     showTouches: true,
-    gestureEvents: [],
-  };
+  });
   session.snapshot = undefined;
   sessionStore.set(sessionName, session);
 
@@ -1298,7 +1291,7 @@ test('press coordinates during recording still dispatches when Android screen-si
 
   expect(response?.ok).toBe(true);
   expect(mockDispatch).toHaveBeenCalledTimes(1);
-  const event = sessionStore.get(sessionName)?.recording?.gestureEvents[0];
+  const event = sessionStore.get(sessionName)?.screenRecording?.handle.inspect().gestureEvents[0];
   expect(event?.kind).toBe('tap');
   expect(event?.x).toBe(300);
   expect(event?.y).toBe(2300);
@@ -1325,15 +1318,12 @@ test('press @ref preserves native timing in recorded result and touch visualizat
     createdAt: Date.now(),
     backend: 'xctest',
   };
-  session.recording = {
-    platform: 'ios',
+  installTestScreenRecording(session, {
+    backend: 'simctl recordVideo',
     outPath: '/tmp/demo.mp4',
     startedAt: 1_000,
     showTouches: true,
-    gestureEvents: [],
-    child: { kill: () => {} } as any,
-    wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-  };
+  });
   sessionStore.set(sessionName, session);
 
   const originalNow = Date.now;
@@ -1371,7 +1361,7 @@ test('press @ref preserves native timing in recorded result and touch visualizat
   const result = (stored?.actions[0]?.result ?? {}) as Record<string, unknown>;
   expect(result.gestureStartUptimeMs).toBe(5_100);
   expect(result.gestureEndUptimeMs).toBe(5_180);
-  expect(stored?.recording?.gestureEvents[0]?.tMs).toBe(570);
+  expect(stored?.screenRecording?.handle.inspect().gestureEvents[0]?.tMs).toBe(570);
 });
 
 test('press @ref stores resolved coordinate retry payload for lazy outcome retry', async () => {
@@ -2372,15 +2362,12 @@ test('fill @ref preserves fallback coordinates for recording when platform resul
     createdAt: Date.now(),
     backend: 'xctest',
   };
-  session.recording = {
-    platform: 'ios',
+  installTestScreenRecording(session, {
+    backend: 'simctl recordVideo',
     outPath: '/tmp/demo.mp4',
     startedAt: Date.now() - 1_000,
     showTouches: true,
-    gestureEvents: [],
-    child: { kill: () => {} } as any,
-    wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-  };
+  });
   sessionStore.set(sessionName, session);
 
   mockDispatch.mockResolvedValue({ filled: true });
@@ -2414,7 +2401,7 @@ test('fill @ref preserves fallback coordinates for recording when platform resul
   expect(result.y).toBe(40);
   expect(Array.isArray(result.selectorChain)).toBe(true);
 
-  const event = stored?.recording?.gestureEvents[0];
+  const event = stored?.screenRecording?.handle.inspect().gestureEvents[0];
   expect(event?.kind).toBe('tap');
   expect(event?.x).toBe(60);
   expect(event?.y).toBe(40);

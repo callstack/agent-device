@@ -52,6 +52,8 @@ export {
 
 export { withNoColor } from './color.ts';
 
+export { likelyPlayableWebmContainer } from './video-fixtures.ts';
+
 export {
   closeLoopbackServer,
   listenOnLoopback,

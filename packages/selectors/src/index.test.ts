@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import * as selectorsFacade from './index.ts';
 import {
   buildSelectorCandidates,
   readReplaySelectorDisplayValue,
   readSelectorExpression,
   resolveRecordedTarget,
   resolveReplaySuggestionCandidate,
-  resolveSelectorChain,
+  resolveSelectorChainWithPolicy,
+  SELECTOR_RESOLUTION_POLICIES,
 } from './index.ts';
 
 const saveNode: SnapshotNode = {
@@ -177,11 +179,38 @@ test('replay suggestion resolution and display values stay string-only at the fa
   assert.equal(readReplaySelectorDisplayValue('label="Save"'), 'Save');
   assert.equal(readReplaySelectorDisplayValue('label="Save" || label="Draft"'), undefined);
 
-  const resolved = resolveSelectorChain([saveNode], 'id="save"', {
-    platform: 'ios',
-    requireRect: true,
-    requireUnique: true,
-  });
-  assert.equal(resolved?.selector, 'id="save"');
-  assert.equal(typeof resolved?.selector, 'string');
+  const resolved = resolveSelectorChainWithPolicy(
+    [saveNode],
+    'id="save"',
+    SELECTOR_RESOLUTION_POLICIES.act,
+    { platform: 'ios' },
+  );
+  assert.equal(resolved.kind, 'resolved');
+  assert.equal(resolved.kind === 'resolved' ? resolved.resolution.selector : null, 'id="save"');
+});
+
+/**
+ * #1630 made `resolveSelectorChainWithPolicy` the façade's ONLY resolution
+ * entry: a native caller states its ambiguity contract by naming a policy row
+ * because there is no knob-taking or count-only resolver here to state it
+ * inline with instead.
+ *
+ * This guard is structural on purpose. Restoring either removed lookup is
+ * BEHAVIOURALLY invisible — `findSelectorChainMatch` is equivalent to the
+ * `readAny` row it was migrated to, which is exactly why that migration
+ * preserved semantics — so no fixture-tree assertion can catch a revert
+ * (#1715 review). The absence of the symbol is the only observable.
+ */
+test('the façade exposes no resolver that bypasses the policy matrix', () => {
+  const exported = Object.keys(selectorsFacade);
+  assert.ok(exported.includes('resolveSelectorChainWithPolicy'));
+  assert.ok(!exported.includes('resolveSelectorChain'), 'knob-taking resolver must stay private');
+  assert.ok(
+    !exported.includes('findSelectorChainMatch'),
+    'count-only existence lookup must stay private; `is exists` names the readAny row',
+  );
+  assert.ok(
+    !exported.includes('selectorResolutionKnobs'),
+    'knob derivation must stay private so a call site cannot rebuild a contract from knobs',
+  );
 });
