@@ -6,7 +6,7 @@ import { cutoverRowDefects, type MigratedCommandCutover } from './runtime-comman
 import { PLANTED_ROW, rowFor, sources, summariesFor } from './runtime-command-cutover-fixtures.ts';
 
 // The mechanism itself (ADR 0019 §8): one planted row, one planted red. Per-row
-// acceptance for the four migrated commands lives in the table test.
+// acceptance for the migrated commands lives in the table test.
 
 const PLANTED_RULE = 'RPlanted planted-cutover';
 

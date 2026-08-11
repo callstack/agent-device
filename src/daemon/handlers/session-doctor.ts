@@ -8,7 +8,7 @@ import { readVersion } from '../../utils/version.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { appendAndroidChecks } from './session-doctor-android.ts';
-import { appendAppChecks } from './session-doctor-app.ts';
+import { appendAppChecks, type DoctorAppInventory } from './session-doctor-app.ts';
 import {
   appendDeviceInventoryCheck,
   type DoctorDeviceInventory,
@@ -42,6 +42,7 @@ import {
   type InstalledAppInfo,
 } from '@agent-device/contracts/platform';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
+import { ensureAppsRuntimeReady, listAppsFromRuntime } from '../apps-runtime.ts';
 
 export async function handleDoctorCommand(params: {
   req: DaemonRequest;
@@ -203,13 +204,22 @@ async function appendDeviceScopedDoctorChecks(
   },
 ): Promise<void> {
   const { androidAdbExecutor, device, options, session, inspectFacts, bindDevice, req } = params;
-  const listApps = await resolveDoctorAppInventory({
-    device,
-    req,
-    targetApp: options.targetApp,
-    inspectFacts,
-    bindDevice,
-  });
+  let listApps: DoctorAppInventory | undefined;
+  try {
+    listApps = await resolveDoctorAppInventory({
+      device,
+      req,
+      targetApp: options.targetApp,
+      inspectFacts,
+      bindDevice,
+    });
+  } catch (error) {
+    // Keep facts/bind/readiness failures inside appendAppChecks' accumulator path so doctor
+    // reports a failed target-app check and still runs the remaining device checks.
+    listApps = async () => {
+      throw error;
+    };
+  }
   await appendAppChecks(checks, { device, session, targetApp: options.targetApp, listApps });
   await appendAndroidChecks(checks, {
     androidAdbExecutor,
@@ -239,11 +249,11 @@ async function resolveDoctorAppInventory(params: {
     appsRuntimeUse,
   );
   const androidSerialAllowlist = resolveAndroidSerialAllowlist(req.flags?.androidDeviceAllowlist);
-  const readyDevice = await runtime.operations.ensureReady({
+  const readyDevice = await ensureAppsRuntimeReady(runtime, {
     serial: req.flags?.serial,
     androidSerialAllowlist: androidSerialAllowlist ? [...androidSerialAllowlist].sort() : undefined,
   });
-  return async (filter) => await runtime.operations.listApps({ device: readyDevice, filter });
+  return async (filter) => await listAppsFromRuntime(runtime, readyDevice, filter);
 }
 
 function doctorResponse(

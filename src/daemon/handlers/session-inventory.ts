@@ -27,6 +27,7 @@ import {
   screenRecordingAdmissionUse,
 } from '@agent-device/contracts/platform';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform';
+import { ensureAppsRuntimeReady, listAppsFromRuntime } from '../apps-runtime.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 
 export async function handleSessionInventoryCommands(params: {
@@ -48,6 +49,7 @@ export async function handleSessionInventoryCommands(params: {
         sessionName,
         sessionStore,
         bindDevice: params.bindDevice,
+        inspectFacts: params.inspectFacts,
       });
     case 'apps':
       return await handleAppsInventory({
@@ -175,6 +177,7 @@ async function capabilitiesInventoryResponse(params: {
   sessionName: string;
   sessionStore: SessionStore;
   bindDevice?: BindDeviceRuntime;
+  inspectFacts?: InspectDeviceRuntimeFacts;
 }): Promise<DaemonResponse> {
   const resolution = await resolveInventoryCommandDevice({
     ...params,
@@ -183,6 +186,7 @@ async function capabilitiesInventoryResponse(params: {
   });
   if ('response' in resolution) return resolution.response;
   const { device } = resolution;
+  const appsAvailable = await isAppsRuntimeAvailable(device, params.inspectFacts);
   const [logsAvailable, networkAvailable, recordingAvailable] = params.bindDevice
     ? await Promise.all([
         params
@@ -207,7 +211,9 @@ async function capabilitiesInventoryResponse(params: {
             ? networkAvailable
             : command === 'record'
               ? recordingAvailable
-              : isCommandSupportedOnDevice(command, device),
+              : command === 'apps'
+                ? appsAvailable
+                : isCommandSupportedOnDevice(command, device),
       ),
     },
   };
@@ -238,14 +244,29 @@ async function handleAppsInventory(params: {
   const runtimeResolution = await resolveAppsRuntime({ device, inspectFacts, bindDevice });
   if ('response' in runtimeResolution) return runtimeResolution.response;
   const runtime = runtimeResolution.runtime;
-  const readyDevice = await runtime.operations.ensureReady({
+  const readyDevice = await ensureAppsRuntimeReady(runtime, {
     serial: req.flags?.serial,
     androidSerialAllowlist: resolvedAndroidSerialAllowlist
       ? [...resolvedAndroidSerialAllowlist].sort()
       : undefined,
   });
-  const apps = await runtime.operations.listApps({ device: readyDevice, filter: appsFilter });
+  const apps = await listAppsFromRuntime(runtime, readyDevice, appsFilter);
   return appsInventoryResponse(apps);
+}
+
+async function isAppsRuntimeAvailable(
+  device: DeviceInfo,
+  inspectFacts: InspectDeviceRuntimeFacts | undefined,
+): Promise<boolean> {
+  if (!inspectFacts) return false;
+  try {
+    const facts = await inspectFacts(device);
+    return facts.operations.ensureReady.available && facts.operations.listApps.available;
+  } catch {
+    // Capability projection is advisory. A provider facts failure must fail closed rather than
+    // reconstructing apps support from the retired capability matrix.
+    return false;
+  }
 }
 
 async function resolveAppsRuntime(params: {

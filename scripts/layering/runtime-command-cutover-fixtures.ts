@@ -8,7 +8,7 @@ export function sources(entries: readonly SourceEntry[]): ReadonlyMap<string, st
   return new Map(entries);
 }
 
-/** The four rows share one scan, so per-row assertions read their own rule's output. */
+/** The migrated rows share one scan, so per-row assertions read their own rule's output. */
 export function summariesFor(
   rule: string,
   entries: readonly SourceEntry[],

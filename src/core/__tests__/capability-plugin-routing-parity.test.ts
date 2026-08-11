@@ -131,7 +131,6 @@ const coreDeviceOnlyPhysicalOperationHint = (device: DeviceInfo): string | undef
 // end-to-end assertions cross-check this map against production: a command that
 // gains/loses a closure (or whose closure body changes) breaks parity.
 const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
-  apps: supportsCoreDevicePhysicalOperation,
   install: supportsAppInstallation,
   reinstall: supportsAppInstallation,
   'install-from-source': supportsAppInstallation,
