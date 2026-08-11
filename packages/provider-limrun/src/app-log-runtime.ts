@@ -99,7 +99,7 @@ export function createLimrunPlatformRuntimeOwner(
           'Limrun app logs require an iOS simulator or Android emulator device identity',
         );
       }
-      if (!options.hasLiveSession(request.device)) {
+      if (request.intent.kind !== 'exact-owner' && !options.hasLiveSession(request.device)) {
         throw new AppError(
           'UNSUPPORTED_OPERATION',
           'Limrun provider session is no longer live for the selected device',

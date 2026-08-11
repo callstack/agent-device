@@ -47,7 +47,15 @@ export async function readAndroidAppState(
   signal: AbortSignal,
 ): Promise<AppStateRuntimeResult> {
   const { createAppStateRuntimeHost } = await import('./platform-runtime-app-state-host.ts');
-  return await readAndroidPackageAppState(createAppStateRuntimeHost().android, device, signal);
+  return await readAndroidAppStateWithHost(createAppStateRuntimeHost().android, device, signal);
+}
+
+export async function readAndroidAppStateWithHost(
+  host: AppStateRuntimeHost['android'],
+  device: Parameters<AppStateRuntimeHost['android']['run']>[0],
+  signal: AbortSignal,
+): Promise<AppStateRuntimeResult> {
+  return await readAndroidPackageAppState(host, device, signal);
 }
 
 export async function parseAndroidForegroundApp(

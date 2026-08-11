@@ -406,7 +406,7 @@ async function loadLimrunPlatformRuntime(
           'Limrun Android appstate requires an active provider session',
         );
       }
-      const state = await session.getForegroundApp();
+      const state = await session.getForegroundApp(signal);
       signal.throwIfAborted();
       return { package: state?.appId, activity: state?.activity };
     },

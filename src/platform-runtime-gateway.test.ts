@@ -12,6 +12,10 @@ import { providerRuntimeOwner } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createLimrunRuntime, type LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
 import { describe, expect, test, vi } from 'vitest';
+import { handleSessionStateCommands } from './daemon/handlers/session-state.ts';
+import { createRequestRuntimeBindings } from './daemon/request-runtime-binding.ts';
+import { makeSessionStore } from './__tests__/test-utils/store-factory.ts';
+import { withTestDeviceInventory } from './__tests__/test-utils/device-inventory-gateways.ts';
 import {
   createComposedPlatformRuntimeGateway,
   type PlatformRuntimeProviderRegistration,
@@ -59,7 +63,7 @@ describe('composed platform runtime gateway', () => {
     expect(unrelatedLoad).not.toHaveBeenCalled();
   });
 
-  test('keeps a stale Limrun Android id provider-owned and unavailable without binding or local fallback', async () => {
+  test('keeps a stale Limrun Android id unavailable through the production handler without binding or local fallback', async () => {
     const registration = createLimrunRuntime(
       { apiKey: 'test-key', runtimeInstance: 'test-instance' },
       limrunTestDependencies,
@@ -102,19 +106,37 @@ describe('composed platform runtime gateway', () => {
       providerModules: [{ runtime: registration.runtime, module: providerModule }],
     });
 
+    const bindings = createRequestRuntimeBindings({ gateway: runtimeGateway, scope });
     try {
-      const facts = await runtimeGateway.inspectFacts(staleDevice);
-      expect(facts).toMatchObject({
-        device: { providerMode: 'provider-runtime' },
-        operations: {
-          ensureReady: { available: false, reason: 'unsupported-provider-mode' },
-          appState: { available: false, reason: 'unsupported-provider-mode' },
-        },
-      });
+      const response = await withTestDeviceInventory(
+        { local: async () => [staleDevice] },
+        async () =>
+          await handleSessionStateCommands({
+            req: {
+              token: 't',
+              session: 'default',
+              command: 'appstate',
+              positionals: [],
+              flags: { platform: 'android', device: staleDevice.name },
+            },
+            sessionName: 'default',
+            sessionStore: makeSessionStore('agent-device-stale-limrun-'),
+            inspectFacts: bindings.inspectFacts,
+            bindDevice: bindings.bindDevice,
+          }),
+      );
+
+      expect(response?.ok).toBe(false);
+      if (response && !response.ok) {
+        expect(response.error.code).toBe('UNSUPPORTED_OPERATION');
+        expect(response.error.hint).toMatch(/matching live provider session/i);
+      }
       expect(inspectCount).toBe(1);
       expect(bindCount).toBe(0);
       expect(localLoad).not.toHaveBeenCalled();
     } finally {
+      await bindings[Symbol.asyncDispose]();
+      await runtimeGateway.shutdown();
       await registration.runtime.shutdown();
     }
   });

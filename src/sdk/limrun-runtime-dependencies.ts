@@ -29,9 +29,22 @@ export function createLimrunRuntimeDependencies(): LimrunRuntimeDependencies {
           })
         ).map((app) => ({ id: app.package, name: app.name }));
       },
-      getForegroundApp: async (adb) => {
-        const { getAndroidAppStateWithAdb } = await import('../platforms/android/app-helpers.ts');
-        const app = await getAndroidAppStateWithAdb(adb);
+      getForegroundApp: async (device, adb, signal) => {
+        const { readAndroidAppStateWithHost } = await import('../platform-runtime.ts');
+        const app = await readAndroidAppStateWithHost(
+          {
+            run: async (_device, command, commandSignal) => {
+              const result = await adb([...command.args], {
+                allowFailure: command.allowFailure,
+                timeoutMs: command.timeoutMs,
+                signal: commandSignal,
+              });
+              return { stdout: result.stdout };
+            },
+          },
+          device,
+          signal ?? new AbortController().signal,
+        );
         return app.package ? { appId: app.package, activity: app.activity } : undefined;
       },
       getKeyboardState: async (adb) => {

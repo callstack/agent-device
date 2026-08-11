@@ -81,7 +81,9 @@ export type LimrunAndroidRuntimeAdapter = {
     filter: AppsFilter,
   ): Promise<Array<{ id: string; name?: string }>>;
   getForegroundApp(
+    device: DeviceInfo,
     adb: LimrunAdbExecutor,
+    signal?: AbortSignal,
   ): Promise<{ appId?: string; activity?: string } | undefined>;
   getKeyboardState(adb: LimrunAdbExecutor): Promise<LimrunAndroidKeyboardState>;
   dismissKeyboard(adb: LimrunAdbExecutor): Promise<LimrunAndroidKeyboardDismissResult>;

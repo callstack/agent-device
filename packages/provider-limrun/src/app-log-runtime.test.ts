@@ -108,6 +108,53 @@ test('rejects cross-session paths before reconnecting or opening a provider read
   expect(openCurrent).not.toHaveBeenCalled();
 });
 
+test('keeps exact-owner app-log recovery available without a process-local session', async () => {
+  const openCurrent = vi.fn(async () => undefined);
+  const reconnect = vi.fn(async () => ({ status: 'missing' as const }));
+  const owner = createLimrunPlatformRuntimeOwner({
+    host: unusedHost(),
+    runtimeInstance: 'default',
+    ownsDevice: () => true,
+    hasLiveSession: () => false,
+    openCurrent,
+    reconnect,
+    getAppState: async () => ({ package: 'com.example.app', activity: '.MainActivity' }),
+  });
+  const binding = await owner.bind({
+    device,
+    intent: {
+      kind: 'exact-owner',
+      owner: owner.owner,
+      fence: { token: 'fence', generation: 1 },
+    },
+    scope,
+  });
+  const envelope = createLimrunAppLogEnvelope({
+    sessionId: 'session',
+    device,
+    owner: owner.owner,
+    fence: { token: 'fence', generation: 1 },
+    descriptor: {
+      transport: 'limrun-log-poller',
+      platform: 'ios',
+      leaseId: 'lease-a',
+      instanceId: 'instance-a',
+      appBundleId: 'com.example.app',
+      outputPath: '/sessions/session/app.log',
+    },
+  });
+
+  expect(binding.operations.appLogReattach).toEqual(expect.any(Function));
+  await expect(binding.operations.appLogReattach?.({ envelope })).resolves.toEqual({
+    status: 'missing',
+  });
+  await expect(binding.operations.appLogCleanup?.({ envelope })).resolves.toEqual({
+    status: 'cleaned',
+  });
+  expect(openCurrent).not.toHaveBeenCalled();
+  expect(reconnect).toHaveBeenCalledOnce();
+});
+
 test.each([
   {
     name: 'HarmonyOS device carrying an Android-shaped Limrun id',
