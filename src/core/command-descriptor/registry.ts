@@ -14,12 +14,12 @@ import { resolvePostActionObservationSupport } from './post-action-observation.t
 import type { PostActionObservationSupport } from './post-action-observation.ts';
 import {
   appLogRuntimePlanUses,
-  assertCommandPlatformExecution,
   assertRecordRuntimeExecution,
   inventoryUse,
   networkDumpUse,
   screenRecordingRuntimePlanUses,
 } from '@agent-device/contracts/platform';
+import { readDeclaredPlatformExecution } from './platform-execution-entry.ts';
 import type {
   CommandCatalogGroup,
   CommandDescriptor,
@@ -29,11 +29,12 @@ import type {
   TargetIdentityVerification,
 } from './types.ts';
 
+// `platformExecution` stays REQUIRED here (ADR 0019 §6): a raw descriptor that omits it
+// is a compile error, and {@link readDeclaredPlatformExecution} is the matching runtime gate.
 type RawCommandDescriptorShape<T> = T extends CommandDescriptor
-  ? Omit<T, 'mcpExposed' | 'platformExecution'> & {
+  ? Omit<T, 'mcpExposed'> & {
       mcpExposed?: boolean;
       ownerFiles?: readonly [string, ...string[]];
-      platformExecution?: T['platformExecution'];
     }
   : never;
 type RawCommandDescriptor = RawCommandDescriptorShape<CommandDescriptor>;
@@ -212,6 +213,20 @@ const APP_INSTALL_CAPABILITY = {
   linux: LINUX_NONE,
 } satisfies CommandCapability;
 
+// ---------------------------------------------------------------------------
+// ADR 0019 §6 platform-execution modes. Every descriptor declares one; there is
+// no registry-entry default (see `readDeclaredPlatformExecution`).
+//   `none`   — executes no platform behavior at all: never binds a device, owns
+//              no capability bucket, no platform adapter, no runtime/inventory
+//              use. Outside the migration denominator.
+//   `legacy` — unmigrated platform execution. This is the denominator: the
+//              tracker closes when no descriptor declares it.
+// The migrated modes (`inventory`, `device-runtime`) are declared inline with
+// the use they name.
+// ---------------------------------------------------------------------------
+const NO_PLATFORM_EXECUTION = { kind: 'none' } as const;
+const LEGACY_PLATFORM_EXECUTION = { kind: 'legacy' } as const;
+
 const GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS = {
   recordsSessionAction: true,
   recordingEffect: 'mutates-app',
@@ -341,6 +356,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: { route: 'lease', refFrameEffect: 'preserve', ...ADMISSION_AND_LOCK_EXEMPT },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
+    platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
     name: 'lease_heartbeat',
@@ -350,6 +366,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: { route: 'lease', refFrameEffect: 'preserve', ...ADMISSION_AND_LOCK_EXEMPT },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
+    platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
     name: 'lease_release',
@@ -359,6 +376,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: { route: 'lease', refFrameEffect: 'preserve', ...ADMISSION_AND_LOCK_EXEMPT },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
+    platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
     name: 'artifacts',
@@ -368,6 +386,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: { route: 'lease', refFrameEffect: 'preserve', ...ADMISSION_AND_LOCK_EXEMPT },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
+    platformExecution: NO_PLATFORM_EXECUTION,
   },
 
   // -- session (route: session) --
@@ -386,6 +405,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
+    platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
     name: 'session_save_script',
@@ -401,6 +421,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
+    platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
     name: 'devices',
@@ -433,6 +454,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'doctor',
@@ -449,6 +471,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'apps',
@@ -465,6 +488,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     capability: APP_INVENTORY_CAPABILITY,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'boot',
@@ -479,6 +503,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'shutdown',
@@ -493,6 +518,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'appstate',
@@ -503,6 +529,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_NONE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'perf',
@@ -514,6 +541,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_NONE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'logs',
@@ -539,6 +567,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'network',
@@ -563,6 +592,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'replay',
@@ -579,6 +609,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     // Replay durations are script-dependent; --timeout bounds the envelope.
     timeoutPolicy: { ...DEFAULT_TIMEOUT_POLICY, budget: { source: 'flag' } },
     batchable: false,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'test',
@@ -595,6 +626,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     // client envelope at all.
     timeoutPolicy: { ...DEFAULT_TIMEOUT_POLICY, envelopeMs: 'unbounded' },
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'runtime',
@@ -606,6 +638,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: { route: 'session', refFrameEffect: 'preserve' },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'clipboard',
@@ -622,6 +655,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'keyboard',
@@ -642,6 +676,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'install',
@@ -653,6 +688,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     capability: APP_INSTALL_CAPABILITY,
     timeoutPolicy: INSTALL_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'reinstall',
@@ -664,6 +700,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     capability: APP_INSTALL_CAPABILITY,
     timeoutPolicy: INSTALL_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'install_source',
@@ -676,6 +713,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: { route: 'session', refFrameEffect: 'may-invalidate' },
     timeoutPolicy: INSTALL_TIMEOUT_POLICY,
     batchable: false,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'release_materialized_paths',
@@ -687,6 +725,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: { route: 'session', refFrameEffect: 'preserve', ...REQUEST_EXECUTION_EXEMPT },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
+    platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
     name: 'push',
@@ -703,6 +742,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'trigger-app-event',
@@ -715,6 +755,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_NONE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'open',
@@ -732,6 +773,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     capability: VEGA_APP_RUNTIME_CAPABILITY,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'prepare',
@@ -750,6 +792,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     batchable: false,
     mcpExposed: false,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'batch',
@@ -759,6 +802,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: { route: 'session', refFrameEffect: 'delegated' },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'close',
@@ -776,6 +820,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     capability: VEGA_APP_RUNTIME_CAPABILITY,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
 
   // -- snapshot (route: snapshot) --
@@ -792,6 +837,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     // widens the envelope, and a timeout must not tear down the daemon.
     timeoutPolicy: { ...PRESERVE_DAEMON_TIMEOUT_POLICY, budget: { source: 'flag' } },
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'diff',
@@ -803,6 +849,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'wait',
@@ -822,6 +869,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
       budget: { source: 'positional-parser', parser: resolveWaitBudgetMs },
     },
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'alert',
@@ -837,6 +885,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'settings',
@@ -853,6 +902,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
 
   // -- specialized routes --
@@ -866,6 +916,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_NONE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'record',
@@ -892,6 +943,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: { route: 'recordTrace', refFrameEffect: 'preserve' },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'find',
@@ -903,6 +955,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
     timeoutPolicy: PRESERVE_DAEMON_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
 
   // -- interaction (route: interaction) --
@@ -929,6 +982,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     postActionObservation: postActionObservation('click'),
     responseDataTransform: TOUCH_INTERACTION_RESPONSE_DATA_TRANSFORM,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'fill',
@@ -948,6 +1002,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     postActionObservation: postActionObservation('fill'),
     responseDataTransform: FILL_INTERACTION_RESPONSE_DATA_TRANSFORM,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'longpress',
@@ -972,6 +1027,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     postActionObservation: postActionObservation('longpress'),
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'press',
@@ -991,6 +1047,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     postActionObservation: postActionObservation('press'),
     responseDataTransform: TOUCH_INTERACTION_RESPONSE_DATA_TRANSFORM,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'type',
@@ -1007,6 +1064,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
     timeoutPolicy: postActionObservationTimeoutPolicy('type', PRESERVE_DAEMON_TIMEOUT_POLICY),
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'get',
@@ -1019,6 +1077,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
     timeoutPolicy: postActionObservationTimeoutPolicy('get', PRESERVE_DAEMON_TIMEOUT_POLICY),
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'read',
@@ -1028,6 +1087,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     dispatch: {},
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'is',
@@ -1040,6 +1100,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
     timeoutPolicy: postActionObservationTimeoutPolicy('is', PRESERVE_DAEMON_TIMEOUT_POLICY),
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
 
   // -- generic (route: generic) --
@@ -1054,6 +1115,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: postActionObservationTimeoutPolicy('back', DEFAULT_TIMEOUT_POLICY),
     postActionObservation: postActionObservation('back'),
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'gesture',
@@ -1070,6 +1132,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'home',
@@ -1080,6 +1143,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
       ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS.capability,
       vega: VEGA_VVD,
     },
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'tv-remote',
@@ -1101,6 +1165,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'orientation',
@@ -1121,6 +1186,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'scroll',
@@ -1129,6 +1195,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS,
     timeoutPolicy: postActionObservationTimeoutPolicy('scroll', DEFAULT_TIMEOUT_POLICY),
     postActionObservation: postActionObservation('scroll'),
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'swipe',
@@ -1144,12 +1211,14 @@ export const RAW_COMMAND_DESCRIPTORS = [
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'focus',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'screenshot',
@@ -1162,6 +1231,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'viewport',
@@ -1180,6 +1250,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     capability: { apple: {}, android: {}, linux: LINUX_NONE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   // -- capability/batch-only commands (no daemon route) --
   {
@@ -1202,6 +1273,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'install-from-source',
@@ -1212,6 +1284,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     capability: APP_INSTALL_CAPABILITY,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
 
   // -- local client-backed CLI/MCP commands (no daemon route/capability) --
@@ -1222,6 +1295,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     recordsSessionAction: false,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'daemon',
@@ -1231,6 +1305,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
     mcpExposed: false,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'device',
@@ -1240,6 +1315,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
     mcpExposed: false,
+    platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
     name: 'metro',
@@ -1248,6 +1324,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     recordsSessionAction: false,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
+    platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
     name: 'session',
@@ -1256,6 +1333,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     recordsSessionAction: false,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
+    platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
     name: 'cdp',
@@ -1265,6 +1343,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
     mcpExposed: false,
+    platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
     name: 'auth',
@@ -1274,6 +1353,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
     mcpExposed: false,
+    platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
     name: 'connect',
@@ -1283,6 +1363,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
     mcpExposed: false,
+    platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
     name: 'connection',
@@ -1292,6 +1373,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
     mcpExposed: false,
+    platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
     name: 'disconnect',
@@ -1301,6 +1383,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
     mcpExposed: false,
+    platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
     name: 'mcp',
@@ -1310,6 +1393,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
     mcpExposed: false,
+    platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
     name: 'proxy',
@@ -1319,6 +1403,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
     mcpExposed: false,
+    platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
     name: 'react-devtools',
@@ -1328,6 +1413,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
     mcpExposed: false,
+    platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
     name: 'web',
@@ -1337,6 +1423,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
     mcpExposed: false,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
 ] as const satisfies readonly RawCommandDescriptor[];
 
@@ -1368,11 +1455,7 @@ const CLI_COMMAND_NAMES = new Set<string>(
  * union below a precise set of command-name literals rather than `string`.
  */
 export const commandDescriptors = RAW_COMMAND_DESCRIPTORS.map((descriptor) => {
-  const platformExecution =
-    'platformExecution' in descriptor
-      ? descriptor.platformExecution
-      : ({ kind: 'legacy' } as const);
-  assertCommandPlatformExecution(platformExecution);
+  const platformExecution = readDeclaredPlatformExecution(descriptor);
   if (descriptor.name === 'record') assertRecordRuntimeExecution(platformExecution);
   if (!ownerFilesEnabled) {
     return {

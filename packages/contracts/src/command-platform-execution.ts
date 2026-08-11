@@ -2,6 +2,7 @@ import type { InventoryUse } from './platform-module.ts';
 import type { RuntimeUseDeclaration } from './platform-runtime.ts';
 
 export type CommandPlatformExecution =
+  | Readonly<{ kind: 'none' }>
   | Readonly<{ kind: 'legacy' }>
   | Readonly<{ kind: 'inventory'; use: InventoryUse }>
   | Readonly<{ kind: 'device-runtime'; use: RuntimeUseDeclaration }>
@@ -18,6 +19,7 @@ export function assertCommandPlatformExecution(
   if (value === null || typeof value !== 'object') throw invalidPlatformExecution();
   const declaration = value as Record<string, unknown>;
   const keys = Object.keys(declaration).sort();
+  if (declaration['kind'] === 'none' && sameKeys(keys, ['kind'])) return;
   if (declaration['kind'] === 'legacy' && sameKeys(keys, ['kind'])) return;
   if (
     declaration['kind'] === 'inventory' &&
@@ -96,6 +98,6 @@ function sameKeys(actual: readonly string[], expected: readonly string[]): boole
 
 function invalidPlatformExecution(): TypeError {
   return new TypeError(
-    'Command platform execution must declare exactly one of legacy, inventory, or device-runtime',
+    'Command platform execution must declare exactly one of none, legacy, inventory, or device-runtime',
   );
 }

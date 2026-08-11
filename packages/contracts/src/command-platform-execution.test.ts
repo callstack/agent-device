@@ -5,6 +5,7 @@ import { assertCommandPlatformExecution } from './command-platform-execution.ts'
 
 describe('command platform execution declaration', () => {
   test.each([
+    { kind: 'none' },
     { kind: 'legacy' },
     { kind: 'inventory', use: inventoryUse },
     { kind: 'device-runtime', use: { required: ['capture'], preferred: ['inspect'] } },
@@ -14,6 +15,7 @@ describe('command platform execution declaration', () => {
 
   test.each([
     {},
+    { kind: 'none', use: inventoryUse },
     { kind: 'legacy', use: inventoryUse },
     { kind: 'inventory' },
     { kind: 'inventory', use: inventoryUse, legacy: true },
