@@ -1,11 +1,5 @@
-// Wiring-equivalence coverage for the androidAdbExecutor DI slot absorbed into
-// the generic per-request provider-injection mechanism (ADR 0019 §9, issue
-// #1739 wave 0). `RequestHandlerChainParams` used to carry a platform-named
-// `androidAdbExecutor` slot threaded by hand from `request-router.ts`; it now
-// carries only the neutral `providerScope: RequestPlatformProviderScope`
-// already produced by `withRequestPlatformProviderScope`, and the session
-// route picks its own field back out of that scope. These tests prove the
-// exact executor reference still reaches the session handler unchanged.
+// Proves the exact androidAdbExecutor reference reaches the session handler
+// through the neutral providerScope, and that an empty scope forwards none.
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 
