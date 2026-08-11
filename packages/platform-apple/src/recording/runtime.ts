@@ -1,4 +1,5 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import { asAppError } from '@agent-device/kernel/errors';
 import type {
   CleanupOutcome,
   RuntimeOwnerRef,
@@ -138,13 +139,11 @@ async function startAppleRunnerRecording(params: AppleRecordingStartParams) {
   } as const;
   let runnerStop: Promise<void> | undefined;
   const stopRunner = () =>
-    (runnerStop ??= host.screenRecording.apple
-      .runRunner(device, {
-        kind: 'stop',
-        appBundleId,
-        ...runnerOwnership,
-      })
-      .then(() => undefined));
+    (runnerStop ??= runAppleRecordingOperation(() =>
+      host.screenRecording.apple
+        .runRunner(device, { kind: 'stop', appBundleId, ...runnerOwnership })
+        .then(() => undefined),
+    ));
   if (!runnerDescriptorMatchesDevice(device, result.remotePath)) {
     await stopRunner().catch(() => {});
     throw new Error('Apple runner recording did not expose coherent durable media ownership');
@@ -187,6 +186,14 @@ async function startAppleRunnerRecording(params: AppleRecordingStartParams) {
       return { status: 'cleaned' } as const;
     },
   });
+}
+
+async function runAppleRecordingOperation<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    throw asAppError(error, 'COMMAND_FAILED');
+  }
 }
 
 function runnerDescriptorMatchesDevice(
