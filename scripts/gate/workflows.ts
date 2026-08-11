@@ -12,7 +12,7 @@ import path from 'node:path';
 import { parse } from 'yaml';
 import type { CheckId } from '../check-affected/model.ts';
 import { GATE_ACTIONS, GATE_CONDITIONS } from './declarations.ts';
-import { commandSegments } from './shell.ts';
+import { ENV_PREFIX, commandSegments, stripExpressions } from './shell.ts';
 
 /** A `pnpm gate <id>` a lane reaches, and every `if:` standing between the lane and it. */
 export type GateSighting = {
@@ -46,13 +46,72 @@ export type Lane = {
   readonly unsupported: readonly string[];
 };
 
-/** One shell block a lane reaches, with the `if:` that decides whether it runs. */
+/**
+ * One shell block a lane reaches, with EVERY `if:` standing between the lane and it.
+ *
+ * A list rather than one condition: an earlier revision stored the caller's guard with
+ * `guard[0] ?? step.condition`, so a crediting outer condition (`always()`) REPLACED an
+ * inner `if: false` and credited a gate that cannot execute. Every guard has to hold, so
+ * every guard has to be kept.
+ */
 export type LaneStep = {
   readonly run: string;
-  readonly condition: string | null;
+  readonly conditions: readonly string[];
 };
 
-const GATE_INVOCATION = /(?:^|[\s;&|(])pnpm\s+(?:--\S+\s+)*gate\s+([a-z0-9:-]+)/g;
+/** A whole command segment that is a gate invocation, with or without arguments. */
+const GATE_SEGMENT = /^pnpm(?:\s+--\S+)*\s+gate\s+([a-z0-9:-]+)(?:\s.*)?$/;
+
+/**
+ * `modules=$(pnpm --silent gate mutation-affected --list-affected …)` — a gate whose OUTPUT
+ * the lane captures. It runs exactly as much as a bare invocation does, and the assignment
+ * form is unambiguous, so it is read rather than left to fail as unowned.
+ */
+const GATE_CAPTURE = /^[A-Za-z_][A-Za-z0-9_]*=\$\((.*)$/;
+
+/**
+ * Shell that decides whether later commands run, or that quotes text as data. A body
+ * containing any of it earns NO gate credit at all.
+ *
+ * #1429 requires that reachability is not inferred "from a command name merely appearing in
+ * workflow text", and a substring scan does exactly that: `false && pnpm gate x`, a gate
+ * inside `if false; then … fi`, and a gate named in a heredoc or an `echo` all credited a
+ * gate that never runs. This tree has a live instance — conformance-regenerate.yml's
+ * "Fail if regeneration changed anything" step names `pnpm gate maestro-regenerate` inside
+ * an error message telling a human to run it.
+ *
+ * Deciding reachability inside a shell script is not decidable, so this does not try:
+ * anything with structure is simply not credited, and the check reports unowned until a
+ * human wires it as a plain step. Over-conservative in the safe direction.
+ */
+const SHELL_STRUCTURE =
+  /(?:^|[\s;&|(])(?:if|then|elif|else|fi|case|esac|while|until|for|do|done|function|eval|exec|source|trap|exit)(?:\s|$)|<</m;
+
+/**
+ * The gate ids a `run:` body actually invokes.
+ *
+ * A gate counts only as the FIRST command segment of a line, so it is the command the line
+ * runs rather than the right operand of a `&&`/`||` whose left side decides it, and never
+ * an argument to something else (`echo pnpm gate lint`).
+ */
+export function gateIdsIn(run: string): CheckId[] {
+  const body = stripExpressions(run);
+  if (SHELL_STRUCTURE.test(body)) return [];
+  return body
+    .replace(/\\\n/g, ' ')
+    .split('\n')
+    .flatMap((line) => {
+      const first = commandSegments(line)[0];
+      if (first === undefined) return [];
+      const bare = first.replace(ENV_PREFIX, '');
+      // The closing `)` may be absent: segmentation splits `$(… | tail -n1)` at the pipe,
+      // which is fine — the gate is the command being substituted either way.
+      const captured = GATE_CAPTURE.exec(bare);
+      const inner = captured ? (captured[1] as string).replace(/\)\s*$/, '').trim() : bare;
+      const match = GATE_SEGMENT.exec(inner);
+      return match ? [match[1] as CheckId] : [];
+    });
+}
 
 type RawStep = {
   name?: string;
@@ -168,6 +227,8 @@ type Job = {
   name?: string;
   steps?: RawStep[];
   uses?: string;
+  /** Guards every step in the job. Six live jobs carry one; none were modelled before. */
+  if?: unknown;
 };
 
 type WorkflowDoc = {
@@ -199,11 +260,11 @@ function usedActionSurface(step: RawStep, root: string, chain: readonly string[]
   // A conditional `uses:` guards everything the action reaches.
   const guard = step.if === undefined ? [] : [String(step.if)];
   return {
+    // The caller's `if:` applies to every step the action reaches, ON TOP OF whatever
+    // guards that step already carries.
     steps: nested.steps.map((nestedStep) => ({
       ...nestedStep,
-      // The caller's `if:` applies to every step the action reaches. Only one condition is
-      // carried per step because `creditsUnder` is applied to each in turn by `laneGates`.
-      condition: guard[0] ?? nestedStep.condition,
+      conditions: [...guard, ...nestedStep.conditions],
     })),
     gates: [...(gate ? [gate] : []), ...nested.gates].map((sighting) => ({
       ...sighting,
@@ -217,7 +278,7 @@ function stepSurface(step: RawStep, root: string, chain: readonly string[]): Sur
   const used = usedActionSurface(step, root, chain);
   const own: LaneStep[] =
     typeof step.run === 'string'
-      ? [{ run: step.run, condition: step.if === undefined ? null : String(step.if) }]
+      ? [{ run: step.run, conditions: step.if === undefined ? [] : [String(step.if)] }]
       : [];
   return { steps: [...own, ...used.steps], gates: used.gates };
 }
@@ -236,13 +297,11 @@ function laneInvocations(
 ): { gates: GateSighting[]; verbatim: string[] } {
   const gates: GateSighting[] = [];
   const verbatim = new Set<string>();
-  for (const { run, condition } of steps) {
-    const conditions = condition === null ? [] : [condition];
-    for (const match of run.matchAll(GATE_INVOCATION))
-      gates.push({ id: match[1] as CheckId, conditions });
+  for (const { run, conditions } of steps) {
+    for (const id of gateIdsIn(run)) gates.push({ id, conditions });
     // Verbatim credit is ownership too, and is filtered the same way: a lane that inlines
     // a script's body behind an undeclared `if:` has not shown that it runs it.
-    if (creditsUnder(condition))
+    if (conditions.every(creditsUnder))
       for (const name of verbatimScripts(run, scripts)) verbatim.add(name);
   }
   return { gates, verbatim: [...verbatim] };
@@ -271,9 +330,18 @@ function workflowLanes(
   const qualifying = 'pull_request' in on || 'schedule' in on;
   const { paths, pathsIgnore } = triggerPaths(on);
   return Object.entries(doc.jobs ?? {}).map(([jobId, job]) => {
+    // A job-level `if:` decides whether ANY of its steps run, so it guards every sighting
+    // the job produces — including gates reached through a composite action.
+    const jobGuard = job.if === undefined ? [] : [String(job.if)];
     const surface = jobSurface(job, root);
-    const scanned = laneInvocations(surface.steps, scripts);
-    const sightings = [...scanned.gates, ...surface.gates];
+    const scanned = laneInvocations(
+      surface.steps.map((step) => ({ ...step, conditions: [...jobGuard, ...step.conditions] })),
+      scripts,
+    );
+    const sightings = [...scanned.gates, ...surface.gates].map((sighting) => ({
+      ...sighting,
+      conditions: [...jobGuard, ...sighting.conditions],
+    }));
     return {
       workflow: file,
       label: laneLabel(doc.name ?? file, job.name ?? jobId),

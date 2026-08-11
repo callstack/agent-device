@@ -73,6 +73,21 @@ export const GATE_CONDITIONS: Readonly<Record<string, GateCondition>> = {
       'run it, and this declaration does not evaluate that value. Ownership therefore rests ' +
       'on the three lanes that pass `true`, and would need revisiting if they stopped.',
   },
+  "needs.select.outputs.modules != '[]'": {
+    credits: true,
+    reason:
+      'the affected-mutants job, which runs only when the selector found kernel modules the ' +
+      'PR touches. An empty selection means there is nothing for this gate to mutate, so ' +
+      'skipping is equivalent to running it over an empty set — the same claim as the ' +
+      'content-keyed caches above, not a claim that the job always executes.',
+  },
+  "always() && needs.select.result == 'success'": {
+    credits: true,
+    reason:
+      'the affected ratchet, which runs whenever selection succeeded regardless of whether ' +
+      'the mutant shards passed — that is the point of a ratchet, and `always()` here only ' +
+      'stops a red shard from cancelling the verdict.',
+  },
   'failure()': {
     credits: false,
     reason:

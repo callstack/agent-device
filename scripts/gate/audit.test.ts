@@ -17,7 +17,7 @@ import test from 'node:test';
 import { audit, formatFailures } from './audit.ts';
 import { GATE_CONDITIONS } from './declarations.ts';
 import { loadModel, type Model } from './model.ts';
-import { creditsUnder, loadLanes } from './workflows.ts';
+import { creditsUnder, gateIdsIn, loadLanes } from './workflows.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 const tracked = execFileSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'utf8' })
@@ -241,4 +241,94 @@ test('planted failures are reported under the assertion that owns them', () => {
         run: pnpm gate not-a-real-check`),
   );
   assert.deepEqual(kinds(model), ['condition']);
+});
+
+// --- Crediting is by execution shape, not by text appearing in a body -----------------
+//
+// #1429: "Do not infer reachability from a command name merely appearing in workflow text."
+// A substring scan did exactly that. Each row is a body that NAMES a gate without running
+// it, and must therefore leave the check unowned.
+
+const DEAD_TEXT: [string, string][] = [
+  ['right operand of &&', 'false && pnpm gate layering'],
+  ['right operand of ||', 'true || pnpm gate layering'],
+  ['argument to echo', 'echo pnpm gate layering'],
+  ['quoted in a message', 'echo "run pnpm gate layering to fix this"'],
+  ['inside a false branch', 'if false; then\n  pnpm gate layering\nfi'],
+  ['inside a heredoc', "cat <<'EOF'\npnpm gate layering\nEOF"],
+  ['after a shell comment', 'echo hi\n# pnpm gate layering'],
+  ['not the first command', 'echo hi; pnpm gate layering'],
+];
+
+for (const [name, run] of DEAD_TEXT) {
+  test(`a gate ${name} earns no credit`, () => {
+    assert.deepEqual(gateIdsIn(run), [], `"${run.replace(/\n/g, '\\n')}" must not credit`);
+  });
+}
+
+const LIVE: [string, string, string[]][] = [
+  ['a bare invocation', 'pnpm gate layering', ['layering']],
+  ['one per line', 'pnpm gate build\npnpm gate package', ['build', 'package']],
+  ['with arguments', 'pnpm gate fallow --base "$FALLOW_BASE"', ['fallow']],
+  ['after another command', 'pnpm clean:daemon\npnpm gate unit', ['unit']],
+  ['behind an env prefix', 'CI=1 pnpm gate lint', ['lint']],
+  ['with a pnpm flag', 'pnpm --silent gate lint', ['lint']],
+  [
+    'captured from a substitution',
+    'modules=$(pnpm --silent gate mutation-affected --list-affected | tail -n1)',
+    ['mutation-affected'],
+  ],
+  ['carrying a GitHub expression', 'pnpm gate coverage --base "${{ github.sha }}"', ['coverage']],
+];
+
+for (const [name, run, expected] of LIVE) {
+  test(`a gate ${name} is credited`, () => {
+    assert.deepEqual(gateIdsIn(run), expected);
+  });
+}
+
+test('a job-level `if:` guards every gate the job reaches', () => {
+  // Six live jobs carry one, and it was not modelled at all: a job that cannot run still
+  // credited every gate inside it.
+  const model = plantWorkflow(`name: Planted
+on:
+  pull_request:
+jobs:
+  planted:
+    if: github.actor == 'nobody'
+    steps:
+      - name: Planted
+        run: pnpm gate layering`);
+  assert.ok(
+    found(model).some((m) => /github\.actor == 'nobody'/.test(m)),
+    'the job-level condition must reach the sighting',
+  );
+});
+
+test("a caller's crediting `if:` cannot erase an inner `if: false`", () => {
+  // `guard[0] ?? step.condition` REPLACED the nested condition, so an outer `always()` over
+  // an inner `if: false` credited a gate that cannot execute. Every guard has to hold.
+  const model = plantTree({
+    '.github/workflows/planted.yml': `name: Planted
+on:
+  pull_request:
+jobs:
+  planted:
+    steps:
+      - uses: ./.github/actions/inner-false
+        if: always()`,
+    '.github/actions/inner-false/action.yml': `name: 'Inner'
+description: 'a gate its own step disables'
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      if: false
+      run: pnpm gate layering`,
+  });
+  const messages = found(model);
+  assert.ok(
+    messages.some((m) => /if: false/.test(m)),
+    `the inner 'if: false' must survive the outer always(): ${messages.join(' | ')}`,
+  );
 });

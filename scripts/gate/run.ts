@@ -2,8 +2,9 @@
 //
 // Every gating step in .github/workflows goes through here, which is what makes
 // the workflow→check mapping a token scan instead of a shell interpreter, and
-// what makes an unregistered gate impossible to wire up: `check:gate-manifest`
-// fails on project code run in a qualifying lane outside this entry point.
+// the single spelling `check:gate-manifest` reads to decide what a lane runs. It does not
+// prevent a lane from running project code some other way — such a step simply earns no
+// ownership credit, so the check it would have satisfied reports unowned.
 //
 // Extra arguments are forwarded verbatim, so lane-specific flags (`--base`,
 // `--udid`, `--report-junit`) stay in the workflow where they belong.

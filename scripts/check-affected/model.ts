@@ -26,7 +26,8 @@ import { WIRE_SURFACE_FILES } from '../../test/wire-compat/surface.ts';
 // the command-reference docs gate, which used to be reachable only as a workflow
 // job nothing in this repo could name. `pnpm gate <id>` is the only way a CI lane
 // may invoke one, so a gate that is not listed here cannot silently start (or stop)
-// running: `check:gate-manifest` fails on project code run outside the runner.
+// running: `check:gate-manifest` fails when a registered check is run by no lane. Work a
+// lane performs outside the runner earns no credit rather than failing in its own right.
 export type CheckId =
   | 'format'
   | 'lint'
