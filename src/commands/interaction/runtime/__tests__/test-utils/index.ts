@@ -443,6 +443,68 @@ export function ambiguousSelectorReadSnapshot(): SnapshotState {
 }
 
 /**
+ * The tree the OBSERVATION rows' structural stages are visible on (#1656). One
+ * screen, three shapes a read must answer about rather than refuse or retarget:
+ *
+ * - `Covered action` is annotated covered, so a row whose occlusion stage
+ *   refused would fail instead of reporting it.
+ * - `Scrolled away` sits below the viewport, so a row whose off-screen stage
+ *   refused would fail instead of reporting it.
+ * - `Account` is static text inside a hittable cell, so a row that promoted
+ *   would answer about the CELL instead of the text.
+ *
+ * Every label is unique, so the ambiguity contract is silent here and only the
+ * structural stages can move an answer.
+ */
+export function observationStagesSnapshot(): SnapshotState {
+  return makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 400, height: 800 },
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Covered action',
+      rect: { x: 20, y: 700, width: 200, height: 40 },
+      hittable: false,
+      interactionBlocked: 'covered',
+    },
+    {
+      index: 2,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Scrolled away',
+      rect: { x: 20, y: 2000, width: 200, height: 40 },
+      hittable: true,
+    },
+    {
+      index: 3,
+      depth: 1,
+      parentIndex: 0,
+      type: 'XCUIElementTypeCell',
+      label: 'Account row',
+      rect: { x: 20, y: 100, width: 300, height: 60 },
+      hittable: true,
+    },
+    {
+      index: 4,
+      depth: 2,
+      parentIndex: 3,
+      type: 'XCUIElementTypeStaticText',
+      label: 'Account',
+      rect: { x: 30, y: 110, width: 80, height: 20 },
+      hittable: false,
+    },
+  ]);
+}
+
+/**
  * The tree that separates first-match from uniqueness rows (#1715 review).
  * Alternative one (`label="Save"`) matches two nodes that are genuinely
  * indistinguishable — same depth, same area, both on screen — so the engine's
@@ -500,6 +562,13 @@ export function createSelectorDevice(
     findText?: boolean;
     now?: number;
     captureSnapshot?: () => BackendSnapshotResult | Promise<BackendSnapshotResult>;
+    /**
+     * An advancing clock, for routes that poll: with the default frozen clock a
+     * wait that is never satisfied spins instead of reaching its deadline, so a
+     * test asserting what `wait` RESOLVES would hang rather than fail if the
+     * answer ever changed.
+     */
+    clock?: { now: () => number; sleep: (ms: number) => Promise<void> };
   } = {},
 ) {
   const session = { name: 'default', snapshot };
@@ -520,7 +589,7 @@ export function createSelectorDevice(
     artifacts: createLocalArtifactAdapter(),
     sessions,
     policy: localCommandPolicy(),
-    clock: {
+    clock: options.clock ?? {
       now: () => options.now ?? 0,
       sleep: async () => {},
     },

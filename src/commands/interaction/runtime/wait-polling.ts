@@ -1,9 +1,9 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { WAIT_REASONS } from '@agent-device/contracts/interaction';
 import { isUnreadableCaptureContentError } from '../../../snapshot/snapshot-quality.ts';
+import { selectorPollBudget } from '../../../core/selector-pipeline.ts';
 import {
   SELECTOR_PIPELINE_POLICIES,
-  selectorPollBudget,
   type SelectorPipelinePolicy,
 } from '../../../core/selector-pipeline-policy.ts';
 import { runWithinWaitDeadline } from './wait-deadline.ts';

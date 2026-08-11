@@ -81,6 +81,14 @@ export const SELECTOR_RESOLUTION_POLICIES = {
     ambiguity: 'reject-candidates',
     requireRect: true,
   },
+  /**
+   * `find <q> list` — the inspection surface: every match is the ANSWER, so the
+   * candidate set stays whole and nothing needs a tap point.
+   */
+  readList: {
+    ambiguity: 'reject-candidates',
+    requireRect: false,
+  },
 } as const satisfies Record<string, SelectorResolutionPolicy>;
 
 /**

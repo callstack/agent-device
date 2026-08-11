@@ -102,6 +102,7 @@ import {
   sourceExecutedUsingDeclarationViolations,
 } from './logs-runtime-cutover-policy.ts';
 import { contractsImplementationAuthorityViolations } from './contracts-implementation-policy.ts';
+import { selectorPipelineOwnershipViolations } from './selector-pipeline-ownership.ts';
 import {
   networkLegacyRouteViolations,
   networkRuntimeNarrowingViolations,
@@ -670,6 +671,7 @@ export const LAYERING_RULE_IDS = [
   'value-import-cycles',
   'logs-runtime-cutover',
   'contracts-implementation-authority',
+  'selector-pipeline-ownership',
   'network-runtime-cutover',
   'record-runtime-cutover',
   'back-edges',
@@ -691,6 +693,8 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
   'logs-runtime-cutover': (context) => checkLogsRuntimeCutover(context.sources),
   'contracts-implementation-authority': (context) =>
     checkContractsImplementationAuthority(context.sources),
+  'selector-pipeline-ownership': (context) =>
+    selectorPipelineOwnershipViolations(context.edges, workspaceSpecifierTargets(repoRoot)),
   'network-runtime-cutover': (context) => checkNetworkRuntimeCutover(context.sources),
   'record-runtime-cutover': (context) => checkRecordRuntimeCutover(context.sources),
   'back-edges': (context) => checkBackEdges(context.edges),

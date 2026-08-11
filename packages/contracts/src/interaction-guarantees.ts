@@ -155,7 +155,7 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
   // predicate it applies (and the annotation contract it reads).
   occlusion: {
     kind: 'runtime',
-    via: 'src/core/selector-pipeline-policy.ts#resolveSelectorPipelineTarget',
+    via: 'src/core/selector-pipeline.ts#runNodePipelineStages',
   },
   parentOwnedTouchPoint: {
     kind: 'runtime',
@@ -178,7 +178,7 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
   // is still resolveActionableTouchResolution.
   nonHittable: {
     kind: 'runtime',
-    via: 'src/core/selector-pipeline-policy.ts#resolveSelectorPipelineTarget',
+    via: 'src/core/selector-pipeline.ts#runNodePipelineStages',
   },
   responseConstruction: SHARED_RESPONSE_CONSTRUCTION,
   responseIdentity: {
@@ -254,7 +254,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       occlusion: {
         kind: 'runtime',
-        via: 'src/core/selector-pipeline-policy.ts#resolveSelectorPipelineTarget',
+        via: 'src/core/selector-pipeline.ts#runNodePipelineStages',
       },
       parentOwnedTouchPoint: {
         kind: 'runtime',
@@ -375,7 +375,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       occlusion: {
         kind: 'runtime',
-        via: 'src/core/selector-pipeline-policy.ts#resolveSelectorPipelineTarget',
+        via: 'src/core/selector-pipeline.ts#runNodePipelineStages',
       },
       parentOwnedTouchPoint: {
         kind: 'inapplicable',

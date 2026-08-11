@@ -2,22 +2,22 @@ import {
   FIND_VALUE_REQUIRED_MESSAGE,
   findBestMatchesByLocator,
   formatSelectorFailure,
-  resolveSelectorChainWithPolicy,
   selectorFailureHint,
   buildSelectorChainForNode,
   checkIsPredicate,
   evaluateIsPredicate,
   IS_TEXT_VALUE_REQUIRED_MESSAGE,
-  listSelectorChainMatches,
   readSelectorAlternatives,
   parseFindSelectorExpression,
   type FindAction,
   type FindLocator,
 } from '@agent-device/selectors';
 import {
-  SELECTOR_PIPELINE_POLICIES,
-  selectorPipelineCandidates,
-} from '../../../core/selector-pipeline-policy.ts';
+  listSelectorPipelineMatches,
+  resolveSelectorPipeline,
+  type SelectorPipelineHooks,
+} from '../../../core/selector-pipeline.ts';
+import { SELECTOR_PIPELINE_POLICIES } from '../../../core/selector-pipeline-policy.ts';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { isSparseSnapshotQualityVerdict } from '../../../snapshot/snapshot-quality.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
@@ -216,13 +216,11 @@ export const getCommand: RuntimeCommand<GetCommandOptions, GetCommandResult> = a
       options.property === 'text'
         ? SELECTOR_PIPELINE_POLICIES.readText
         : SELECTOR_PIPELINE_POLICIES.readUnique,
+    hooks: {
+      onResolved: (node, nodes) =>
+        assertExpectedResolvedTarget(node, nodes, options.expectedResolvedTarget, 'get'),
+    },
   });
-  assertExpectedResolvedTarget(
-    resolved.node,
-    resolved.capture.snapshot.nodes,
-    options.expectedResolvedTarget,
-    'get',
-  );
 
   const selectorChain = buildSelectorChainForNode(resolved.node, runtime.backend.platform, {
     action: 'get',
@@ -305,13 +303,13 @@ export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = asyn
     // already documented itself as serving `exists`, but this branch used to
     // reach the engine directly — the claim was true of the docs and not of
     // the code (#1630).
-    const matched = resolveSelectorChainWithPolicy(
-      selectorPipelineCandidates(SELECTOR_PIPELINE_POLICIES.readAny, capture.snapshot.nodes),
+    const matched = await resolveSelectorPipeline(
+      SELECTOR_PIPELINE_POLICIES.readAny,
+      capture.snapshot.nodes,
       selectorExpression,
-      SELECTOR_PIPELINE_POLICIES.readAny.resolution,
       { platform: runtime.backend.platform },
     );
-    if (matched.kind !== 'resolved') {
+    if (matched.kind !== 'target') {
       throw new AppError(
         'COMMAND_FAILED',
         formatSelectorFailure(selectorExpression, [], { unique: false }),
@@ -323,8 +321,8 @@ export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = asyn
     return {
       predicate: predicate,
       pass: true,
-      selector: matched.resolution.selector,
-      matches: matched.resolution.matches,
+      selector: matched.selector,
+      matches: matched.matches,
       selectorChain: readSelectorAlternatives(selectorExpression),
     };
   }
@@ -332,13 +330,17 @@ export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = asyn
   // `readUnique` is the fail-closed row: an ambiguous screen reports the same
   // refusal as no match at all, because `is` must never guess which duplicate
   // it answered about.
-  const outcome = resolveSelectorChainWithPolicy(
-    selectorPipelineCandidates(SELECTOR_PIPELINE_POLICIES.readUnique, capture.snapshot.nodes),
+  const outcome = await resolveSelectorPipeline(
+    SELECTOR_PIPELINE_POLICIES.readUnique,
+    capture.snapshot.nodes,
     selectorExpression,
-    SELECTOR_PIPELINE_POLICIES.readUnique.resolution,
     { platform: runtime.backend.platform },
+    {
+      onResolved: (node, nodes) =>
+        assertExpectedResolvedTarget(node, nodes, options.expectedResolvedTarget, 'is'),
+    },
   );
-  if (outcome.kind !== 'resolved') {
+  if (outcome.kind !== 'target') {
     throw new AppError(
       'COMMAND_FAILED',
       formatSelectorFailure(selectorExpression, [], { unique: true }),
@@ -351,13 +353,7 @@ export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = asyn
       },
     );
   }
-  const resolved = outcome.resolution;
-  assertExpectedResolvedTarget(
-    resolved.node,
-    capture.snapshot.nodes,
-    options.expectedResolvedTarget,
-    'is',
-  );
+  const resolved = outcome;
   const result = evaluateIsPredicate({
     predicate: predicate,
     node: resolved.node,
@@ -466,9 +462,12 @@ async function listFindMatches(
     throw sparseSelectorSnapshotError(capture.snapshot.snapshotQuality);
   }
   const matched = selectorExpression
-    ? (listSelectorChainMatches(capture.snapshot.nodes, selectorExpression, {
-        platform: runtime.backend.platform,
-      })?.matchedNodes ?? [])
+    ? (listSelectorPipelineMatches(
+        SELECTOR_PIPELINE_POLICIES.readList,
+        capture.snapshot.nodes,
+        selectorExpression,
+        { platform: runtime.backend.platform },
+      ).list?.matchedNodes ?? [])
     : findBestMatchesByLocator(capture.snapshot.nodes, locator, options.query, {}).matches;
   return {
     kind: 'list',
@@ -493,13 +492,13 @@ async function findFirstLocatorMatch(
     throw sparseSelectorSnapshotError(capture.snapshot.snapshotQuality);
   }
   if (selectorExpression) {
-    const outcome = resolveSelectorChainWithPolicy(
-      selectorPipelineCandidates(SELECTOR_PIPELINE_POLICIES.readAny, capture.snapshot.nodes),
+    const outcome = await resolveSelectorPipeline(
+      SELECTOR_PIPELINE_POLICIES.readAny,
+      capture.snapshot.nodes,
       selectorExpression,
-      SELECTOR_PIPELINE_POLICIES.readAny.resolution,
       { platform: runtime.backend.platform },
     );
-    return { capture, match: outcome.kind === 'resolved' ? outcome.resolution.node : undefined };
+    return { capture, match: outcome.kind === 'target' ? outcome.node : undefined };
   }
   const match = findBestMatchesByLocator(capture.snapshot.nodes, locator, options.query, {
     requireRect: false,
@@ -520,7 +519,7 @@ async function resolveSelectorNode(
   runtime: AgentDeviceRuntime,
   options: GetCommandOptions,
   sessionName: string,
-  params: { selector: string; policy: GetPipelinePolicy },
+  params: { selector: string; policy: GetPipelinePolicy; hooks?: SelectorPipelineHooks },
 ): Promise<{ capture: CapturedSnapshot; node: SnapshotNode; selector: string; ref: string }> {
   const capture = await captureSelectorSnapshot(
     runtime,
@@ -530,13 +529,14 @@ async function resolveSelectorNode(
       ...deriveSelectorCapturePolicy(),
     },
   );
-  const outcome = resolveSelectorChainWithPolicy(
-    selectorPipelineCandidates(params.policy, capture.snapshot.nodes),
+  const outcome = await resolveSelectorPipeline(
+    params.policy,
+    capture.snapshot.nodes,
     params.selector,
-    params.policy.resolution,
     { platform: runtime.backend.platform },
+    params.hooks,
   );
-  if (outcome.kind !== 'resolved') {
+  if (outcome.kind !== 'target') {
     throw new AppError(
       'COMMAND_FAILED',
       formatSelectorFailure(params.selector, [], { unique: true }),
@@ -547,8 +547,8 @@ async function resolveSelectorNode(
   }
   return {
     capture,
-    node: outcome.resolution.node,
-    selector: outcome.resolution.selector,
-    ref: `@${outcome.resolution.node.ref}`,
+    node: outcome.node,
+    selector: outcome.selector,
+    ref: `@${outcome.node.ref}`,
   };
 }

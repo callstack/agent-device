@@ -59,6 +59,7 @@ export type { IsPredicate } from './internal/predicates.ts';
 export type {
   PolicyResolutionOutcome,
   SelectorChainMatchList,
+  SelectorMatchOptions,
   SelectorResolution,
 } from './internal/public-resolution-types.ts';
 export { formatSelectorFailure } from './internal/resolve.ts';

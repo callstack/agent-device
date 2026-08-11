@@ -1,28 +1,30 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { SELECTOR_RESOLUTION_POLICIES } from '@agent-device/selectors';
 import { makeSnapshotState } from '../__tests__/test-utils/index.ts';
 import {
-  SELECTOR_PIPELINE_POLICIES,
-  resolveSelectorPipelineTarget,
-  selectorPipelineCandidates,
-  selectorPipelineRefusesOffscreen,
+  listSelectorPipelineMatches,
+  resolveSelectorPipeline,
+  runNodePipelineStages,
   selectorPollBudget,
+} from './selector-pipeline.ts';
+import {
+  SELECTOR_PIPELINE_POLICIES,
   type SelectorPipelinePolicyName,
 } from './selector-pipeline-policy.ts';
 
 /**
- * #1656: every row is driven through every runner — including the rows whose
- * answer is "skip this stage", since a skip nothing exercises is a claim that
- * cannot fail. Flip any cell in the table and an assertion here changes.
- *
- * Which stages a given CALLER runs is a separate question, pinned by the
- * caller-level suites (resolution.test.ts, find handler tests, selector-read
- * policy tests).
+ * The owner's own contract: that it runs what a row declares, for every row.
+ * Whether a given COMMAND runs the row is proven where it can actually be
+ * falsified — against `get`/`is`/`wait`/`find` in
+ * commands/interaction/runtime/__tests__/selector-read-policy.test.ts and
+ * resolution.test.ts. Neither file alone is enough: this one would pass on a
+ * pipeline nothing calls, those would pass on a pipeline that ignores its row.
  */
 
 const ROWS = Object.keys(SELECTOR_PIPELINE_POLICIES) as SelectorPipelinePolicyName[];
+const MATCH = { platform: 'ios' as const };
 
 /** A covered button beside an uncovered twin, under a full-screen root. */
 const COVERED_TREE: RawSnapshotNode[] = [
@@ -42,15 +44,6 @@ const COVERED_TREE: RawSnapshotNode[] = [
     rect: { x: 20, y: 700, width: 100, height: 40 },
     hittable: false,
     interactionBlocked: 'covered',
-  },
-  {
-    index: 2,
-    depth: 1,
-    parentIndex: 0,
-    type: 'XCUIElementTypeButton',
-    label: 'Save',
-    rect: { x: 20, y: 200, width: 100, height: 40 },
-    hittable: true,
   },
 ];
 
@@ -98,74 +91,111 @@ const ROOT_ANCESTOR_TREE: RawSnapshotNode[] = [
   },
 ];
 
-function nodesOf(raw: RawSnapshotNode[]) {
+function nodesOf(raw: RawSnapshotNode[]): SnapshotNode[] {
   return makeSnapshotState(raw).nodes;
 }
 
-function candidateIndexes(row: SelectorPipelinePolicyName): number[] {
-  return selectorPipelineCandidates(SELECTOR_PIPELINE_POLICIES[row], nodesOf(COVERED_TREE)).map(
-    (node) => node.index,
-  );
-}
-
-function targetFor(row: SelectorPipelinePolicyName, raw: RawSnapshotNode[], index: number) {
+async function stagedIndex(row: SelectorPipelinePolicyName, raw: RawSnapshotNode[], index: number) {
   const nodes = nodesOf(raw);
-  return resolveSelectorPipelineTarget(SELECTOR_PIPELINE_POLICIES[row], nodes, nodes[index]!);
+  const policy = SELECTOR_PIPELINE_POLICIES[row];
+  const target = await runNodePipelineStages(policy, nodes, nodes[index]!, {
+    // Supplied for every row; only rows whose off-screen stage refuses reach it.
+    offscreen: async (node) => node,
+  });
+  return target;
 }
 
-test('the occlusion stage decides candidacy: acting rows drop covered nodes, the rest keep them', () => {
+test('the occlusion stage decides candidacy: acting rows drop covered nodes, the rest keep them', async () => {
+  const nodes = nodesOf(COVERED_TREE);
   for (const row of ['promotedTarget', 'resolvedTarget'] as const) {
-    assert.deepEqual(candidateIndexes(row), [0, 2], row);
+    const listed = listSelectorPipelineMatches(
+      SELECTOR_PIPELINE_POLICIES[row],
+      nodes,
+      'label="Save"',
+      MATCH,
+    );
+    assert.equal(listed.list, null, row);
   }
-  // `refuse` rows see covered nodes (find ranks them, the probe diagnoses
-  // them) and `ignore` rows answer about the tree as captured.
-  for (const row of ['findAct', 'coveredDiagnosis', 'readText', 'readUnique'] as const) {
-    assert.deepEqual(candidateIndexes(row), [0, 1, 2], row);
+  for (const row of ['findAct', 'readList'] as const) {
+    const listed = listSelectorPipelineMatches(
+      SELECTOR_PIPELINE_POLICIES[row],
+      nodes,
+      'label="Save"',
+      MATCH,
+    );
+    assert.equal(listed.list?.matchedNodes.length, 1, row);
   }
-  for (const row of ['readAny', 'wait', 'findWait'] as const) {
-    assert.deepEqual(candidateIndexes(row), [0, 1, 2], row);
+  for (const row of ['readText', 'readUnique', 'readAny', 'wait', 'findWait'] as const) {
+    const outcome = await resolveSelectorPipeline(
+      SELECTOR_PIPELINE_POLICIES[row],
+      nodes,
+      'label="Save"',
+      MATCH,
+    );
+    assert.equal(outcome.kind, 'target', row);
   }
 });
 
-test('the occlusion stage decides refusal: every row that refuses covered targets, and every row that does not', () => {
+test('the occlusion stage decides refusal: every row that refuses a covered target, and every row that does not', async () => {
   for (const row of ['promotedTarget', 'resolvedTarget', 'findAct', 'coveredDiagnosis'] as const) {
-    const target = targetFor(row, COVERED_TREE, 1);
+    const target = await stagedIndex(row, COVERED_TREE, 1);
     assert.equal(target.kind, 'occluded', row);
     assert.equal(target.node.index, 1, row);
   }
-  for (const row of ['readText', 'readUnique', 'readAny', 'wait', 'findWait'] as const) {
-    const target = targetFor(row, COVERED_TREE, 1);
+  for (const row of [
+    'readText',
+    'readUnique',
+    'readAny',
+    'wait',
+    'findWait',
+    'readList',
+  ] as const) {
+    const target = await stagedIndex(row, COVERED_TREE, 1);
     assert.equal(target.kind, 'target', row);
     assert.equal(target.node.index, 1, row);
   }
 });
 
-test('the promotion stage retargets only for the rows that declare it', () => {
+test('the promotion stage retargets only for the rows that declare it', async () => {
   // Same tree, same node: the row is the whole difference.
-  assert.equal(targetFor('promotedTarget', PROMOTABLE_TREE, 1).node.index, 0);
-  assert.equal(targetFor('findAct', PROMOTABLE_TREE, 1).node.index, 0);
+  assert.equal((await stagedIndex('promotedTarget', PROMOTABLE_TREE, 1)).node.index, 0);
+  assert.equal((await stagedIndex('findAct', PROMOTABLE_TREE, 1)).node.index, 0);
   for (const row of ['resolvedTarget', 'readText', 'readUnique', 'readAny', 'wait'] as const) {
-    assert.equal(targetFor(row, PROMOTABLE_TREE, 1).node.index, 1, row);
+    assert.equal((await stagedIndex(row, PROMOTABLE_TREE, 1)).node.index, 1, row);
   }
 });
 
-test('find’s promotion stops below the viewport root; the tap row does not', () => {
+test('find’s promotion stops below the viewport root; the tap row does not', async () => {
   // `find` ranks matches across the whole tree, so a promotion that lands on
   // the root container would turn "the thing that matched" into "the screen".
-  assert.equal(targetFor('promotedTarget', ROOT_ANCESTOR_TREE, 1).node.index, 0);
-  assert.equal(targetFor('findAct', ROOT_ANCESTOR_TREE, 1).node.index, 1);
+  assert.equal((await stagedIndex('promotedTarget', ROOT_ANCESTOR_TREE, 1)).node.index, 0);
+  assert.equal((await stagedIndex('findAct', ROOT_ANCESTOR_TREE, 1)).node.index, 1);
 });
 
-test('the off-screen stage refuses for acting rows and is skipped by observation rows', () => {
-  // The guard itself (including the iOS live-rect rescue) is exercised in
-  // commands/interaction/runtime/resolution.test.ts; this pins which rows
-  // reach it at all.
-  for (const row of ['promotedTarget', 'resolvedTarget'] as const) {
-    assert.equal(selectorPipelineRefusesOffscreen(SELECTOR_PIPELINE_POLICIES[row]), true, row);
+test('the off-screen stage runs the refusal shape only for the rows that refuse', async () => {
+  const nodes = nodesOf(PROMOTABLE_TREE);
+  for (const row of ROWS) {
+    let consulted = false;
+    await runNodePipelineStages(SELECTOR_PIPELINE_POLICIES[row], nodes, nodes[0]!, {
+      offscreen: async (node) => {
+        consulted = true;
+        return node;
+      },
+    });
+    const refuses = SELECTOR_PIPELINE_POLICIES[row].offscreen === 'refuse';
+    assert.equal(consulted, refuses, row);
   }
-  for (const row of ROWS.filter((name) => name !== 'promotedTarget' && name !== 'resolvedTarget')) {
-    assert.equal(selectorPipelineRefusesOffscreen(SELECTOR_PIPELINE_POLICIES[row]), false, row);
-  }
+});
+
+test('a row that refuses off-screen without a refusal shape fails loudly', async () => {
+  // What a flipped observation row hits on its real route: the row declares a
+  // refusal the route has no error to express, and that is a bug, not a
+  // silently skipped stage.
+  const nodes = nodesOf(PROMOTABLE_TREE);
+  await assert.rejects(
+    () => runNodePipelineStages(SELECTOR_PIPELINE_POLICIES.promotedTarget, nodes, nodes[0]!),
+    /supplies no refusal shape/,
+  );
 });
 
 test('the poll stage answers only for the rows that poll', () => {
@@ -183,7 +213,7 @@ test('the poll stage answers only for the rows that poll', () => {
 test('pipeline rows declare only the stages these runners enforce', () => {
   // The #1649 rule, carried to this table: a column nothing consumes is an
   // unverifiable claim that reads as truth. Adding a field here fails until a
-  // runner above reads it and this suite drives every row through it.
+  // runner reads it and every row is driven through that runner.
   for (const [name, policy] of Object.entries(SELECTOR_PIPELINE_POLICIES)) {
     assert.deepEqual(
       Object.keys(policy).sort(),
@@ -227,6 +257,7 @@ test('the documented per-caller pipelines are the ones declared', () => {
       readAny: ['ignore', 'ignore', 'none', 'no-poll'],
       findWait: ['ignore', 'ignore', 'none', 'poll'],
       wait: ['ignore', 'ignore', 'none', 'poll'],
+      readList: ['ignore', 'ignore', 'none', 'no-poll'],
       findAct: ['refuse', 'ignore', 'hittable-ancestor-below-root', 'no-poll'],
     },
   );

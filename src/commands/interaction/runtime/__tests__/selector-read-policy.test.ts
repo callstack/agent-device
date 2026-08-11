@@ -4,7 +4,9 @@ import { AppError } from '@agent-device/kernel/errors';
 import { selector } from '../selector-read-utils.ts';
 import {
   ambiguousSelectorReadSnapshot,
+  createFakeClock,
   createSelectorDevice,
+  observationStagesSnapshot,
   skippedAlternativeSelectorSnapshot,
 } from './test-utils/index.ts';
 
@@ -128,4 +130,96 @@ test('find takes the document-order head on the same tree (readAny row)', async 
     action: 'exists',
   });
   assert.deepEqual(exists, { kind: 'found', found: true });
+});
+
+/**
+ * #1656: the same question for the STRUCTURAL stages. These drive the real
+ * command routes — `get`, `is`, `wait`, `find` — because that is the only
+ * place a stage claim can be falsified: a row that declares `promotion: none`
+ * and is never executed is a claim about a table, not about the product.
+ * Flipping any observation row's occlusion, off-screen, or promotion cell
+ * fails one of these.
+ */
+
+const COVERED_SELECTOR = 'label="Covered action"';
+const OFFSCREEN_SELECTOR = 'label="Scrolled away"';
+const NESTED_TEXT_SELECTOR = 'label="Account"';
+
+test('get attrs answers about a covered element (readUnique ignores occlusion)', async () => {
+  const device = createSelectorDevice(observationStagesSnapshot());
+
+  const attrs = await device.selectors.getAttrs(selector(COVERED_SELECTOR), {
+    session: 'default',
+  });
+
+  // A covered element still exists and still has attributes. The acting rows
+  // refuse it; a read that refused would leave an agent unable to inspect the
+  // very element it needs to clear.
+  assert.equal(attrs.kind, 'attrs');
+  assert.equal(attrs.node.label, 'Covered action');
+});
+
+test('is visible answers about an off-screen element (readUnique ignores off-screen)', async () => {
+  const device = createSelectorDevice(observationStagesSnapshot());
+
+  const result = await device.selectors.is({
+    session: 'default',
+    predicate: 'exists',
+    selector: OFFSCREEN_SELECTOR,
+  });
+
+  assert.equal(result.pass, true);
+});
+
+test('get attrs answers about the node it matched, never its hittable ancestor (readText/readUnique promote nothing)', async () => {
+  const device = createSelectorDevice(observationStagesSnapshot());
+
+  const attrs = await device.selectors.getAttrs(selector(NESTED_TEXT_SELECTOR), {
+    session: 'default',
+  });
+
+  // The acting rows promote this static text to the hittable cell that owns
+  // it. A read must not: the caller asked about `Account`, and answering with
+  // `Account row` would describe an element it never selected.
+  assert.equal(attrs.kind, 'attrs');
+  assert.equal(attrs.node.label, 'Account');
+  assert.equal(attrs.node.type, 'XCUIElementTypeStaticText');
+});
+
+test('wait is satisfied by covered and off-screen matches (wait row ignores both stages)', async () => {
+  for (const target of [COVERED_SELECTOR, OFFSCREEN_SELECTOR]) {
+    // An advancing clock, so a row that stopped being satisfied here reaches
+    // its deadline and FAILS rather than polling forever.
+    const device = createSelectorDevice(observationStagesSnapshot(), {
+      clock: createFakeClock(),
+    });
+
+    const result = await device.selectors.wait({
+      session: 'default',
+      target: { kind: 'selector', selector: target, timeoutMs: 1_000 },
+    });
+
+    assert.equal(result.kind, 'selector', target);
+  }
+});
+
+test('find reads answer about covered and off-screen matches (readAny ignores both stages)', async () => {
+  const device = createSelectorDevice(observationStagesSnapshot());
+
+  for (const query of [COVERED_SELECTOR, OFFSCREEN_SELECTOR]) {
+    const exists = await device.selectors.find({ session: 'default', query, action: 'exists' });
+    assert.deepEqual(exists, { kind: 'found', found: true }, query);
+  }
+
+  // `find list` enumerates through the same owner (`readList`), so its
+  // candidate set is the row's, not a private call into the engine.
+  const listed = await device.selectors.find({
+    session: 'default',
+    query: COVERED_SELECTOR,
+    action: 'list',
+  });
+  assert.equal(listed.kind, 'list');
+  assert.deepEqual(listed.kind === 'list' ? listed.matches.map((entry) => entry.node.label) : [], [
+    'Covered action',
+  ]);
 });

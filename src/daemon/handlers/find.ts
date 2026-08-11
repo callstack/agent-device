@@ -6,15 +6,13 @@ import {
   checkFindArgs,
   parseFindSelectorExpression,
   type FindLocator,
-  resolveSelectorChainWithPolicy,
-  type PolicyResolutionOutcome,
   type SelectorResolutionPolicy,
 } from '@agent-device/selectors';
 import {
-  SELECTOR_PIPELINE_POLICIES,
-  resolveSelectorPipelineTarget,
-  selectorPipelineCandidates,
-} from '../../core/selector-pipeline-policy.ts';
+  listSelectorPipelineMatches,
+  runNodePipelineStages,
+} from '../../core/selector-pipeline.ts';
+import { SELECTOR_PIPELINE_POLICIES } from '../../core/selector-pipeline-policy.ts';
 import {
   centerOfRect,
   type SnapshotQualityVerdict,
@@ -38,17 +36,6 @@ import { stripInternalInteractionFlags } from '../interaction-outcome-policy.ts'
 import { dispatchFindReadOnlyViaRuntime } from '../selector-runtime.ts';
 import { createSelectorCaptureRuntime } from '../selector-capture-runtime.ts';
 import { isSparseSnapshotQualityVerdict } from '../../snapshot/snapshot-quality.ts';
-
-/**
- * Both branches of the `reject-candidates` contract produce a candidate set:
- * a single resolved match, or the full ambiguous set find must refuse (or
- * narrow) explicitly.
- */
-function policyMatchedNodes(outcome: PolicyResolutionOutcome): SnapshotState['nodes'] {
-  if (outcome.kind === 'ambiguous') return outcome.matchedNodes;
-  if (outcome.kind === 'resolved') return [outcome.resolution.node];
-  return [];
-}
 
 function assertRejectsCandidates(policy: SelectorResolutionPolicy): void {
   if (policy.ambiguity !== 'reject-candidates') {
@@ -171,8 +158,8 @@ export async function handleFindCommands(params: {
   // surface, the response must disclose that app content is occluded.
   if (!matchResult.ok) return withSystemSurfaceDisclosure(matchResult.response, snapshotResult);
   const node = matchResult.node;
-  // The promotion and occlusion stages of find's row, in one call.
-  const target = resolveSelectorPipelineTarget(SELECTOR_PIPELINE_POLICIES.findAct, nodes, node);
+  // Every node stage find's row declares, in one call.
+  const target = await runNodePipelineStages(SELECTOR_PIPELINE_POLICIES.findAct, nodes, node);
   const resolvedNode = target.node;
   const ref = `@${resolvedNode.ref}`;
   const actionFlags = { ...(req.flags ?? {}), noRecord: true };
@@ -286,12 +273,7 @@ function resolveFindMatch(params: {
 }): FindMatchResult {
   const { nodes, locator, query, selectorExpression, flags, platform } = params;
   const pipeline = SELECTOR_PIPELINE_POLICIES.findAct;
-  // The occlusion stage of find's row: `refuse` keeps covered nodes as
-  // candidates here — find ranks and reports them — and refuses at the target.
-  const searchableNodes = selectorPipelineCandidates(
-    pipeline,
-    nodes.filter((node) => !isRootInteractionContainer(node, nodes[0])),
-  );
+  const rooted = nodes.filter((node) => !isRootInteractionContainer(node, nodes[0]));
   // #1625: selector-shaped and text-shaped queries share ONE ambiguity
   // contract — multiple matches reject with candidates unless --first/--last
   // explicitly opts into positional narrowing. Selectors used to take the
@@ -299,16 +281,18 @@ function resolveFindMatch(params: {
   // own recovery advice ("use a selector") pointed agents at.
   const policy = pipeline.resolution;
   let matches: SnapshotState['nodes'];
+  let searchableNodes: SnapshotState['nodes'];
   if (selectorExpression) {
-    // Selector-shaped queries resolve through the policy interface, so the
-    // `reject-candidates` contract is the matrix's decision rather than a
-    // local convention. The locator branch cannot: it matches by fuzzy text
-    // scoring, not by selector chains, so it produces its candidate set with
-    // its own matcher and joins the shared contract below.
-    matches = policyMatchedNodes(
-      resolveSelectorChainWithPolicy(searchableNodes, selectorExpression, policy, { platform }),
-    );
+    // The `reject-candidates` door: the row's candidacy stage runs inside, and
+    // the whole candidate set comes back for find to rank and narrow.
+    const listed = listSelectorPipelineMatches(pipeline, rooted, selectorExpression, { platform });
+    searchableNodes = listed.candidates;
+    matches = listed.list?.matchedNodes ?? [];
   } else {
+    // The locator branch matches by fuzzy text scoring rather than by selector
+    // chains, so it produces its candidate set with its own matcher — under the
+    // same row, whose rect requirement it reads — and joins the contract below.
+    searchableNodes = rooted;
     matches = findBestMatchesByLocator(searchableNodes, locator, query, {
       requireRect: policy.requireRect,
     }).matches;

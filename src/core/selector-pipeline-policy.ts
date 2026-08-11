@@ -1,13 +1,7 @@
-import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   SELECTOR_RESOLUTION_POLICIES,
   type SelectorResolutionPolicy,
 } from '@agent-device/selectors';
-import { isSnapshotNodeInteractionBlocked } from '../snapshot/snapshot-occlusion.ts';
-import {
-  isRootInteractionContainer,
-  resolveActionableTouchResolution,
-} from './interaction-targeting.ts';
 
 /**
  * The structural half of the per-caller selector policy (#1656), companion to
@@ -27,8 +21,8 @@ import {
  */
 
 /**
- * Consumed by `selectorPipelineCandidates` (which nodes may match at all) and
- * by `resolveSelectorPipelineTarget` (whether a covered target refuses).
+ * Read by the pipeline owner's candidacy stage (which nodes may match at all)
+ * and by its node stages (whether a covered target refuses).
  *
  * - `exclude-and-refuse` — covered nodes never become candidates, AND a covered
  *   target refuses. Acting paths: tapping something an overlay covers is the
@@ -55,7 +49,7 @@ export type SelectorOcclusionStage = 'exclude-and-refuse' | 'refuse' | 'ignore';
 export type SelectorOffscreenStage = 'refuse' | 'ignore';
 
 /**
- * Consumed by `resolveSelectorPipelineTarget`.
+ * Read by the pipeline owner's promotion stage.
  *
  * - `hittable-ancestor` — retarget a non-tappable match to the actionable node
  *   that owns it (`resolveActionableTouchResolution`). Tap-shaped commands.
@@ -69,7 +63,7 @@ export type SelectorOffscreenStage = 'refuse' | 'ignore';
  */
 export type SelectorPromotionStage = 'hittable-ancestor' | 'hittable-ancestor-below-root' | 'none';
 
-/** The poll budget of a row that polls, consumed by `selectorPollBudget`. */
+/** The poll budget of a row that polls, read by `selectorPollBudget`. */
 export type SelectorPollBudget = {
   /** Used when the caller passes no explicit timeout. */
   defaultTimeoutMs: number;
@@ -167,6 +161,14 @@ export const SELECTOR_PIPELINE_POLICIES = {
     promotion: 'none',
     poll: WAIT_POLL_BUDGET,
   },
+  /** `find <q> list`: enumerate matches; never narrows, never acts. */
+  readList: {
+    resolution: SELECTOR_RESOLUTION_POLICIES.readList,
+    occlusion: 'ignore',
+    offscreen: 'ignore',
+    promotion: 'none',
+    poll: 'none',
+  },
   /** Mutating `find` (#1625). */
   findAct: {
     resolution: SELECTOR_RESOLUTION_POLICIES.findAct,
@@ -180,79 +182,26 @@ export const SELECTOR_PIPELINE_POLICIES = {
 export type SelectorPipelinePolicyName = keyof typeof SELECTOR_PIPELINE_POLICIES;
 
 /**
+ * The two questions a row asks the engine, derived from its ambiguity contract
+ * rather than from a hand-kept list of row names: `reject-candidates` rows go
+ * through `listSelectorPipelineMatches` (the caller narrows or refuses), every
+ * other row through `resolveSelectorPipeline`. Pointing a route at the wrong
+ * family is a compile error, so a row cannot quietly change which door it uses.
+ */
+type PipelineRow = (typeof SELECTOR_PIPELINE_POLICIES)[SelectorPipelinePolicyName];
+
+export type CandidateSetPipelinePolicy = Extract<
+  PipelineRow,
+  { resolution: { ambiguity: 'reject-candidates' } }
+>;
+
+export type SingleTargetPipelinePolicy = Exclude<PipelineRow, CandidateSetPipelinePolicy>;
+
+/**
  * The rows an acting interaction may consume. Naming them as a type keeps
  * `resolveInteractionTarget` from being pointed at a read row, which would
- * silently drop the occlusion and off-screen stages from a device action.
+ * drop the occlusion and off-screen stages from a device action.
  */
 export type ActingPipelinePolicy = (typeof SELECTOR_PIPELINE_POLICIES)[
   | 'promotedTarget'
   | 'resolvedTarget'];
-
-/** Stage 1: the nodes this row lets a selector match against. */
-export function selectorPipelineCandidates(
-  policy: SelectorPipelinePolicy,
-  nodes: SnapshotNode[],
-): SnapshotNode[] {
-  if (policy.occlusion !== 'exclude-and-refuse') return nodes;
-  return nodes.filter((node) => !isSnapshotNodeInteractionBlocked(node));
-}
-
-/**
- * Stage 2, post-resolution: promotion, then the occlusion verdict on what
- * promotion produced.
- *
- * `occluded` carries the node to NAME in the refusal — the promotion input
- * when the match itself is covered (promotion declines to retarget away from a
- * covered node), the promotion output otherwise. The refusal SHAPE stays with
- * the caller: this verdict becomes a thrown interaction error, a daemon
- * response, or a diagnosis, and those are not interchangeable.
- */
-export type SelectorPipelineTarget =
-  | { kind: 'target'; node: SnapshotNode }
-  | { kind: 'occluded'; node: SnapshotNode };
-
-export function resolveSelectorPipelineTarget(
-  policy: SelectorPipelinePolicy,
-  nodes: SnapshotNode[],
-  node: SnapshotNode,
-): SelectorPipelineTarget {
-  const promoted = promoteSelectorTarget(policy.promotion, nodes, node);
-  if (policy.occlusion === 'ignore') return { kind: 'target', node: promoted.node };
-  if (promoted.covered || isSnapshotNodeInteractionBlocked(promoted.node)) {
-    return { kind: 'occluded', node: promoted.node };
-  }
-  return { kind: 'target', node: promoted.node };
-}
-
-function promoteSelectorTarget(
-  stage: SelectorPromotionStage,
-  nodes: SnapshotNode[],
-  node: SnapshotNode,
-): { node: SnapshotNode; covered: boolean } {
-  if (stage === 'none') return { node, covered: false };
-  const resolution = resolveActionableTouchResolution(nodes, node);
-  if (resolution.reason === 'covered') return { node: resolution.node, covered: true };
-  if (
-    stage === 'hittable-ancestor-below-root' &&
-    isRootInteractionContainer(resolution.node, nodes[0]) &&
-    node.rect
-  ) {
-    return { node, covered: false };
-  }
-  return { node: resolution.node, covered: false };
-}
-
-/** Stage 3 is `throwIfOffscreenInteractionTarget`; this is the decision it reads. */
-export function selectorPipelineRefusesOffscreen(policy: SelectorPipelinePolicy): boolean {
-  return policy.offscreen === 'refuse';
-}
-
-/** Stage 4: the poll budget, for the rows that have one. */
-export function selectorPollBudget(policy: SelectorPipelinePolicy): SelectorPollBudget {
-  if (policy.poll === 'none') {
-    throw new Error(
-      'selector pipeline row resolves against one capture and declares no poll budget',
-    );
-  }
-  return policy.poll;
-}
