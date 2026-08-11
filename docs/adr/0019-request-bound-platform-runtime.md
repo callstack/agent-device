@@ -632,28 +632,9 @@ removed against package bytes added; net growth is exceptional and each contribu
 named and justified individually. Contract modules stay vocabulary-thin under the existing
 capture-kit rule; per-unit type inflation is size growth and is reviewed as such.
 
-The appstate request-scoped unit is an explicit reviewed exception to that default: its prior
-reviewed production delta was +6,279 bytes (+2,265 in root `src/`, +4,014 in workspace packages). The growth
-is unavoidable because appstate had no reusable runtime-owned contract: the unit adds the typed
-`ensureReady`/`appState` fact and operation surface, honest local and provider facts for the full
-denominator, sessionless admission/response parity, and the neutral unavailable-runtime owner
-needed by Linux and Vega. It reuses the existing `defineUse`, gateway selection/binding, Android
-and Harmony lifecycle primitives, provider owner plumbing, and session-owned Apple response path;
-it adds no durable capture state, ledger, descriptor, or recovery machinery. The review itemizes
-the net growth by owner (appstate host, session-state admission, contract, Limrun facts, Harmony,
-Android, inventory projection, and descriptor/facade/gateway wiring) and records the four shipped
-size metrics against `44c298d7f` and the immediate stack base.
-
-The final corrected-base replay is reported separately in the unit review: against
-`3ed473400ebb8f29405912856e0bcfdff2b836fc`, the hardened head measures +6,719 production bytes
-(+2,677 root, +4,042 packages). The +440 difference from the prior reviewed figure reflects
-the required Apple session-owned projection/parity hardening, the Android-unknown and
-Harmony-emulator denominator evidence, and relocation of the unavailable-runtime helper out of
-durable capture, offset by removing the stale facade export and the two stale Linux/Vega
-capture-kit dependency edges identified by fallow. Keeping the generic runtime-use factory
-internal to contracts adds a small net relocation cost while preserving the neutral `defineUse`
-surface. The earlier lint-required import consolidation removed 91 bytes before these final
-corrections. This is not an unreviewed allowance or a durable-tier expansion.
+Raw per-unit parity, planted-red, and size evidence belongs in #1739 and its PRs; this ADR retains
+the decision, the evidence tiers, and the rule that each unit must justify exceptional growth
+without treating checkpoint budget as an allowance.
 
 A command surface that is deprecated and scheduled for removal at the next major is never
 migrated. It stays on its legacy execution shape until the major deletes it, and the deletion — not
