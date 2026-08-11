@@ -125,6 +125,70 @@ test('appstate rejects web before Android app-state backend dispatch', async () 
   expect(bound).toBe(false);
 });
 
+test('appstate rejects a missing readiness fact even when appState is available', async () => {
+  const device: DeviceInfo = {
+    platform: 'android',
+    id: 'android-device-1',
+    name: 'Android Device',
+    kind: 'device',
+    target: 'mobile',
+    booted: true,
+  };
+  const facts: RuntimeFacts<PlatformRuntimeOperations> = {
+    device: { ...deviceShape(device), providerMode: 'local' },
+    operations: {
+      appLogInspect: { available: false, reason: 'owner-capability-missing' },
+      appLogDoctor: { available: false, reason: 'owner-capability-missing' },
+      appLogStart: { available: false, reason: 'owner-capability-missing' },
+      appLogReattach: { available: false, reason: 'owner-capability-missing' },
+      appLogCleanup: { available: false, reason: 'owner-capability-missing' },
+      appState: { available: true },
+      networkDump: { available: false, reason: 'owner-capability-missing' },
+      screenRecordingStart: { available: false, reason: 'owner-capability-missing' },
+      screenRecordingReattach: { available: false, reason: 'owner-capability-missing' },
+      screenRecordingCleanup: { available: false, reason: 'owner-capability-missing' },
+      ensureReady: {
+        available: false,
+        reason: 'unsupported-device-kind',
+        hint: 'readiness is unavailable for this device kind',
+      },
+      ensureReadyHeadless: { available: false, reason: 'unsupported-device-kind' },
+    },
+  };
+  const inspectFacts = vi.fn(async () => facts);
+  let bound = false;
+  const bindDevice: BindDeviceRuntime = async () => {
+    bound = true;
+    throw new Error('missing readiness must not bind');
+  };
+  const response = await withTestDeviceInventory(
+    { local: async () => [device] },
+    async () =>
+      await handleSessionStateCommands({
+        req: {
+          token: 't',
+          session: 'default',
+          command: 'appstate',
+          positionals: [],
+          flags: { platform: 'android', device: device.name },
+        },
+        sessionName: 'default',
+        sessionStore: makeSessionStore('agent-device-session-state-'),
+        inspectFacts,
+        bindDevice,
+      }),
+  );
+
+  expect(response).toBeTruthy();
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('UNSUPPORTED_OPERATION');
+    expect(response.error.hint).toMatch(/readiness is unavailable/i);
+  }
+  expect(inspectFacts).toHaveBeenCalledOnce();
+  expect(bound).toBe(false);
+});
+
 test('sessionless Android appstate inspects once, binds once, and preserves operation order', async () => {
   const device: DeviceInfo = {
     platform: 'android',
