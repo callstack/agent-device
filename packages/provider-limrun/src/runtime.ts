@@ -146,6 +146,10 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     return parseLimrunDeviceId(device.id) !== undefined;
   }
 
+  hasLiveSession(device: DeviceInfo): boolean {
+    return this.getSessionForDevice(device) !== undefined;
+  }
+
   getInteractor(device: DeviceInfo): Interactor | undefined {
     const session = this.getSessionForDevice(device);
     if (!session) return undefined;
@@ -376,6 +380,7 @@ async function loadLimrunPlatformRuntime(
     host,
     runtimeInstance,
     ownsDevice: (device) => runtime.ownsDevice(device),
+    hasLiveSession: (device) => runtime.hasLiveSession(device),
     openCurrent: async (device) => runtime.currentAppLogReader(device),
     reconnect: async (descriptor, signal) =>
       await runtime.reconnectAppLogReader(descriptor, signal),
@@ -395,7 +400,12 @@ async function loadLimrunPlatformRuntime(
     getAppState: async (device, signal) => {
       signal.throwIfAborted();
       const session = runtime.getDeviceSession(device);
-      if (session?.platform !== 'android') return {};
+      if (session?.platform !== 'android') {
+        throw new AppError(
+          'UNSUPPORTED_OPERATION',
+          'Limrun Android appstate requires an active provider session',
+        );
+      }
       const state = await session.getForegroundApp();
       signal.throwIfAborted();
       return { package: state?.appId, activity: state?.activity };

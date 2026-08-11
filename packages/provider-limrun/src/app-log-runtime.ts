@@ -17,7 +17,11 @@ import {
   createAppLogStartResult,
   readRecentNetworkTrafficFromText,
 } from '@agent-device/capture-kit';
-import { providerRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform';
+import {
+  createUnavailablePlatformRuntimeFacts,
+  providerRuntimeOwner,
+  sameRuntimeOwner,
+} from '@agent-device/contracts/platform';
 import {
   createLimrunAppLogEnvelope,
   limrunAppLogDescriptorCodec,
@@ -35,6 +39,7 @@ export type LimrunPlatformRuntimeOwnerOptions = Readonly<{
   runtimeInstance: string;
   ownsDevice(device: DeviceInfo): boolean;
   openCurrent(device: DeviceInfo): Promise<LimrunAppLogReader | undefined>;
+  hasLiveSession(device: DeviceInfo): boolean;
   reconnect(
     descriptor: LimrunAppLogDescriptor,
     signal?: AbortSignal,
@@ -58,15 +63,32 @@ const headlessUnavailable = Object.freeze({
   reason: 'unsupported-provider-mode',
   hint: 'Headless boot is unavailable for provider-owned devices.',
 } as const);
+const liveSessionUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'Limrun requires a matching live provider session for this device.',
+} as const);
 
 export function createLimrunPlatformRuntimeOwner(
   options: LimrunPlatformRuntimeOwnerOptions,
 ): PlatformRuntimeOwner {
   const owner = providerRuntimeOwner('limrun', options.runtimeInstance);
+  const ownsDevice = (device: DeviceInfo) =>
+    isSupportedLimrunAppLogDevice(device) && options.ownsDevice(device);
+  const hasLiveSession = (device: DeviceInfo) =>
+    ownsDevice(device) && options.hasLiveSession(device);
   return Object.freeze({
     owner,
-    ownsDevice: (device) => isSupportedLimrunAppLogDevice(device) && options.ownsDevice(device),
-    inspectFacts: async (device) => facts(device),
+    ownsDevice,
+    inspectFacts: async (device) =>
+      hasLiveSession(device)
+        ? facts(device)
+        : createUnavailablePlatformRuntimeFacts(device, owner, {
+            appLog: liveSessionUnavailable,
+            appState: liveSessionUnavailable,
+            network: liveSessionUnavailable,
+            readiness: liveSessionUnavailable,
+          }),
     bind: async (request) => {
       if (request.intent.kind === 'exact-owner' && !sameRuntimeOwner(request.intent.owner, owner)) {
         throw new AppError('UNSUPPORTED_OPERATION', 'Limrun app-log owner identity does not match');
@@ -75,6 +97,13 @@ export function createLimrunPlatformRuntimeOwner(
         throw new AppError(
           'UNSUPPORTED_PLATFORM',
           'Limrun app logs require an iOS simulator or Android emulator device identity',
+        );
+      }
+      if (!options.hasLiveSession(request.device)) {
+        throw new AppError(
+          'UNSUPPORTED_OPERATION',
+          'Limrun provider session is no longer live for the selected device',
+          { reason: 'provider-session-unavailable' },
         );
       }
       return bindLimrunAppLogs(options, owner, request.device, request.scope.signal);

@@ -26,6 +26,7 @@ test('rejects a cross-platform durable descriptor before provider reconnection',
     host: unusedHost(),
     runtimeInstance: 'default',
     ownsDevice: () => true,
+    hasLiveSession: () => true,
     openCurrent: async () => undefined,
     reconnect,
     listApps: async () => [],
@@ -69,6 +70,7 @@ test('rejects cross-session paths before reconnecting or opening a provider read
     host: unusedHost(),
     runtimeInstance: 'default',
     ownsDevice: () => true,
+    hasLiveSession: () => true,
     openCurrent,
     reconnect,
     listApps: async () => [],
@@ -131,6 +133,7 @@ test.each([
     host: unusedHost(),
     runtimeInstance: 'default',
     ownsDevice: () => true,
+    hasLiveSession: () => true,
     openCurrent: async () => undefined,
     reconnect,
     listApps: async () => [],
@@ -170,6 +173,7 @@ test('serves provider-owned network from the canonical session app log without l
     },
     runtimeInstance: 'default',
     ownsDevice: () => true,
+    hasLiveSession: () => true,
     openCurrent: async () => undefined,
     reconnect: async () => ({ status: 'missing' }),
     listApps: async () => [],
@@ -210,6 +214,7 @@ test.each([
     host: unusedHost(),
     runtimeInstance: 'default',
     ownsDevice: () => true,
+    hasLiveSession: () => true,
     openCurrent: async () => undefined,
     reconnect: async () => ({ status: 'missing' }),
     listApps: async () => [],
@@ -242,6 +247,47 @@ test.each([
   } else {
     expect(binding.operations.appState).toBeUndefined();
   }
+});
+
+test('fails closed for a stale Android identity before exposing facts or binding operations', async () => {
+  const getAppState = vi.fn(async () => ({
+    package: 'com.example.app',
+    activity: '.MainActivity',
+  }));
+  const staleDevice: DeviceInfo = {
+    platform: 'android',
+    id: 'limrun:android:released-lease',
+    name: 'Released Limrun Android',
+    kind: 'emulator',
+    target: 'mobile',
+    booted: true,
+  };
+  const owner = createLimrunPlatformRuntimeOwner({
+    host: unusedHost(),
+    runtimeInstance: 'default',
+    ownsDevice: () => true,
+    hasLiveSession: () => false,
+    openCurrent: async () => undefined,
+    reconnect: async () => ({ status: 'missing' }),
+    getAppState,
+  });
+
+  const facts = await owner.inspectFacts(staleDevice);
+  expect(facts.operations.ensureReady).toMatchObject({
+    available: false,
+    reason: 'unsupported-provider-mode',
+  });
+  expect(facts.operations.appState).toMatchObject({
+    available: false,
+    reason: 'unsupported-provider-mode',
+  });
+  await expect(
+    owner.bind({ device: staleDevice, intent: { kind: 'ordinary' }, scope }),
+  ).rejects.toMatchObject({
+    code: 'UNSUPPORTED_OPERATION',
+    details: { reason: 'provider-session-unavailable' },
+  });
+  expect(getAppState).not.toHaveBeenCalled();
 });
 
 function unusedHost(): PlatformRuntimeHost {
