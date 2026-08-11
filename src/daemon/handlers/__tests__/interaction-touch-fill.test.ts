@@ -12,8 +12,8 @@ import {
   runInteraction,
 } from './interaction-touch-fixtures.ts';
 
-// How fill is admitted, parameterized, and executed: target and ref admission,
-// option forwarding, and off-screen/bounds guards.
+// How fill is admitted and projected: its @ref admission and pins, the editable
+// node it keeps, and the guards that refuse before typing.
 
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
@@ -21,9 +21,22 @@ const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
+  return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
+});
+
+vi.mock('../../../platforms/android/input-actions.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../platforms/android/input-actions.ts')>();
+  return { ...actual, getAndroidScreenSize: vi.fn(async () => ({ width: 1344, height: 2992 })) };
+});
+
+vi.mock('../../../platforms/android/app-lifecycle.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../platforms/android/app-lifecycle.ts')>();
   return {
     ...actual,
-    dispatchCommand: vi.fn(async () => ({})),
+    getAndroidAppState: vi.fn(async () => ({})),
+    getAndroidBlockingDialogFocus: vi.fn(async () => null),
   };
 });
 
@@ -42,20 +55,32 @@ vi.mock('../interaction-snapshot.ts', async (importOriginal) => {
 vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('../../../platforms/apple/core/runner/runner-client.ts')>();
-  return {
-    ...actual,
-    runAppleRunnerCommand: mockRunAppleRunnerCommand,
-  };
+  return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
 });
 
 import { dispatchCommand } from '../../../core/dispatch.ts';
-const mockDispatch = vi.mocked(dispatchCommand);
+import {
+  getAndroidAppState,
+  getAndroidBlockingDialogFocus,
+} from '../../../platforms/android/app-lifecycle.ts';
+import { getAndroidScreenSize } from '../../../platforms/android/input-actions.ts';
 import { captureSnapshotForSession } from '../interaction-snapshot.ts';
+
+const mockDispatch = vi.mocked(dispatchCommand);
+const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
+const mockGetAndroidBlockingDialogFocus = vi.mocked(getAndroidBlockingDialogFocus);
+const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
 const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotForSession);
 
 beforeEach(() => {
   mockDispatch.mockReset();
   mockDispatch.mockResolvedValue({});
+  mockGetAndroidAppState.mockReset();
+  mockGetAndroidAppState.mockResolvedValue({});
+  mockGetAndroidBlockingDialogFocus.mockReset();
+  mockGetAndroidBlockingDialogFocus.mockResolvedValue(null);
+  mockGetAndroidScreenSize.mockReset();
+  mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
   mockCaptureSnapshotForSession.mockReset();
   mockCaptureSnapshotForSession.mockImplementation(
     createEmulateCaptureSnapshotForSession(mockDispatch),
@@ -311,4 +336,60 @@ test("ADR 0014 blocker-2: a mutating find's internal fill from an expired frame 
   if (internal?.ok) {
     expect(internal.data?.warning).toBeUndefined();
   }
+});
+
+test('fill @ref keeps the original editable node when its parent is the hittable ancestor', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'default';
+  const session = makeSession(sessionName);
+  session.snapshot = {
+    nodes: attachRefs([
+      {
+        index: 0,
+        type: 'XCUIElementTypeCell',
+        label: 'Email row',
+        rect: { x: 20, y: 100, width: 320, height: 72 },
+        enabled: true,
+        hittable: true,
+      },
+      {
+        index: 1,
+        parentIndex: 0,
+        type: 'XCUIElementTypeTextField',
+        label: 'Email',
+        identifier: 'auth_email',
+        rect: { x: 44, y: 120, width: 200, height: 32 },
+        enabled: true,
+        hittable: false,
+      },
+    ]),
+    createdAt: Date.now(),
+    backend: 'xctest',
+  };
+  sessionStore.set(sessionName, session);
+
+  mockDispatch.mockResolvedValue({ filled: true });
+
+  const response = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'fill',
+      positionals: ['@e2', 'hello@example.com'],
+      flags: {},
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+  });
+
+  expect(response).toBeTruthy();
+  expect(response?.ok).toBe(true);
+  const fillCalls = mockDispatch.mock.calls.filter((c) => c[1] === 'fill');
+  expect(fillCalls.length).toBe(1);
+  expect(fillCalls[0]?.[2]).toEqual(['144', '136', 'hello@example.com']);
+
+  const stored = sessionStore.get(sessionName);
+  const result = (stored?.actions[0]?.result ?? {}) as Record<string, unknown>;
+  expect(result.ref).toBe('e2');
 });

@@ -13,11 +13,28 @@ import {
 // Router ownership: one representative per touch command proves
 // handleTouchInteractionCommands claims press/click/longpress/fill.
 
+const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
+  mockRunAppleRunnerCommand: vi.fn(),
+}));
+
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
+  return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
+});
+
+vi.mock('../../../platforms/android/input-actions.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../platforms/android/input-actions.ts')>();
+  return { ...actual, getAndroidScreenSize: vi.fn(async () => ({ width: 1344, height: 2992 })) };
+});
+
+vi.mock('../../../platforms/android/app-lifecycle.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../platforms/android/app-lifecycle.ts')>();
   return {
     ...actual,
-    dispatchCommand: vi.fn(async () => ({})),
+    getAndroidAppState: vi.fn(async () => ({})),
+    getAndroidBlockingDialogFocus: vi.fn(async () => null),
   };
 });
 
@@ -33,18 +50,41 @@ vi.mock('../interaction-snapshot.ts', async (importOriginal) => {
   };
 });
 
+vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../platforms/apple/core/runner/runner-client.ts')>();
+  return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
+});
+
 import { dispatchCommand } from '../../../core/dispatch.ts';
-const mockDispatch = vi.mocked(dispatchCommand);
+import {
+  getAndroidAppState,
+  getAndroidBlockingDialogFocus,
+} from '../../../platforms/android/app-lifecycle.ts';
+import { getAndroidScreenSize } from '../../../platforms/android/input-actions.ts';
 import { captureSnapshotForSession } from '../interaction-snapshot.ts';
+
+const mockDispatch = vi.mocked(dispatchCommand);
+const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
+const mockGetAndroidBlockingDialogFocus = vi.mocked(getAndroidBlockingDialogFocus);
+const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
 const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotForSession);
 
 beforeEach(() => {
   mockDispatch.mockReset();
   mockDispatch.mockResolvedValue({});
+  mockGetAndroidAppState.mockReset();
+  mockGetAndroidAppState.mockResolvedValue({});
+  mockGetAndroidBlockingDialogFocus.mockReset();
+  mockGetAndroidBlockingDialogFocus.mockResolvedValue(null);
+  mockGetAndroidScreenSize.mockReset();
+  mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
   mockCaptureSnapshotForSession.mockReset();
   mockCaptureSnapshotForSession.mockImplementation(
     createEmulateCaptureSnapshotForSession(mockDispatch),
   );
+  mockRunAppleRunnerCommand.mockReset();
+  mockRunAppleRunnerCommand.mockResolvedValue({});
 });
 
 test('press coordinates dispatches press and records as press', async () => {

@@ -12,10 +12,8 @@ import type { InteractionHandlerParams } from './interaction-common.ts';
 import { settleFlagGuardResponse, type RefSnapshotFlagGuardResponse } from './interaction-flags.ts';
 import { refMutationAdmissionResponse } from './interaction-ref-policy.ts';
 import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
-import {
-  refreshAndroidRefSnapshotIfFreshnessActive,
-  type RefAdmissionContext,
-} from './interaction-touch-android-readiness.ts';
+import { refreshAndroidRefSnapshotIfFreshnessActive } from './interaction-touch-android-freshness.ts';
+import type { RefAdmissionContext } from './interaction-touch-android-readiness.ts';
 import { unsupportedMacOsDesktopSurfaceInteraction } from './interaction-touch-policy.ts';
 import {
   parseLongPressTarget,

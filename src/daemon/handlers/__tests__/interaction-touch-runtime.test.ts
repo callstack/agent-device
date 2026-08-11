@@ -1,26 +1,39 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
-import { activateCompleteRefFrame } from '../../ref-frame.ts';
-import { setSessionSnapshot, STALE_SNAPSHOT_REFS_WARNING } from '../../session-snapshot.ts';
 import { handleInteractionCommands } from '../interaction.ts';
 import {
   contextFromFlags,
   createEmulateCaptureSnapshotForSession,
   makeSession,
-  makeStaleRefSession,
-  makeTwoButtonNodes,
-  runInteraction,
 } from './interaction-touch-fixtures.ts';
 
-// The shared runtime lifecycle: finalization, retry positionals, and the
-// ADR 0014 ref-frame sequences a dispatch crosses across commands.
+// What the shared runtime dispatch does with the resolved target: refuse
+// unusable frame evidence rather than recapture positionally (ADR 0014), refuse
+// off-screen targets, and store the coordinates a lazy outcome retry replays.
+
+const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
+  mockRunAppleRunnerCommand: vi.fn(),
+}));
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
+  return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
+});
+
+vi.mock('../../../platforms/android/input-actions.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../platforms/android/input-actions.ts')>();
+  return { ...actual, getAndroidScreenSize: vi.fn(async () => ({ width: 1344, height: 2992 })) };
+});
+
+vi.mock('../../../platforms/android/app-lifecycle.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../platforms/android/app-lifecycle.ts')>();
   return {
     ...actual,
-    dispatchCommand: vi.fn(async () => ({})),
+    getAndroidAppState: vi.fn(async () => ({})),
+    getAndroidBlockingDialogFocus: vi.fn(async () => null),
   };
 });
 
@@ -36,18 +49,41 @@ vi.mock('../interaction-snapshot.ts', async (importOriginal) => {
   };
 });
 
+vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../platforms/apple/core/runner/runner-client.ts')>();
+  return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
+});
+
 import { dispatchCommand } from '../../../core/dispatch.ts';
-const mockDispatch = vi.mocked(dispatchCommand);
+import {
+  getAndroidAppState,
+  getAndroidBlockingDialogFocus,
+} from '../../../platforms/android/app-lifecycle.ts';
+import { getAndroidScreenSize } from '../../../platforms/android/input-actions.ts';
 import { captureSnapshotForSession } from '../interaction-snapshot.ts';
+
+const mockDispatch = vi.mocked(dispatchCommand);
+const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
+const mockGetAndroidBlockingDialogFocus = vi.mocked(getAndroidBlockingDialogFocus);
+const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
 const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotForSession);
 
 beforeEach(() => {
   mockDispatch.mockReset();
   mockDispatch.mockResolvedValue({});
+  mockGetAndroidAppState.mockReset();
+  mockGetAndroidAppState.mockResolvedValue({});
+  mockGetAndroidBlockingDialogFocus.mockReset();
+  mockGetAndroidBlockingDialogFocus.mockResolvedValue(null);
+  mockGetAndroidScreenSize.mockReset();
+  mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
   mockCaptureSnapshotForSession.mockReset();
   mockCaptureSnapshotForSession.mockImplementation(
     createEmulateCaptureSnapshotForSession(mockDispatch),
   );
+  mockRunAppleRunnerCommand.mockReset();
+  mockRunAppleRunnerCommand.mockResolvedValue({});
 });
 
 test('press @ref stores resolved coordinate retry payload for lazy outcome retry', async () => {
@@ -93,248 +129,233 @@ test('press @ref stores resolved coordinate retry payload for lazy outcome retry
   expect(stored?.actions[0]?.flags).toEqual({});
 });
 
-test('press selector then press @ref rejects refs that outlived the stored snapshot before dispatch', async () => {
+test('press @ref fails closed when the authorized ref has no usable bounds (ADR 0014)', async () => {
   const sessionStore = makeSessionStore();
-  const sessionName = 'stale-ref-warns';
-  const session = makeStaleRefSession(sessionName);
-  sessionStore.set(sessionName, session);
-  mockDispatch.mockImplementation(async (_device, command) =>
-    command === 'snapshot' ? { nodes: makeTwoButtonNodes(), backend: 'xctest' } : {},
-  );
-
-  // Selector press: its resolution capture replaces the stored snapshot
-  // without handing the new refs back to the client.
-  const selectorPress = await runInteraction(sessionStore, sessionName, 'press', [
-    'label=Continue',
-  ]);
-  if (!selectorPress?.ok) {
-    throw new Error(`selector press failed: ${JSON.stringify(selectorPress)}`);
-  }
-  expect(selectorPress.data?.warning).toBeUndefined();
-
-  // ADR 0014: the selector press crossed the side-effect seam and expired the
-  // frame, so the ref that outlived it is rejected before dispatch.
-  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
-  const dispatchCallsBeforeStaleRef = mockDispatch.mock.calls.length;
-  const refPress = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
-  expect(refPress?.ok).toBe(false);
-  if (refPress && !refPress.ok) {
-    expect(refPress.error.code).toBe('COMMAND_FAILED');
-    expect(refPress.error.message).toMatch(/expired ref frame/);
-    expect(refPress.error.details?.reason).toBe('ref_frame_expired');
-    expect(refPress.error.details?.hint).toBe(STALE_SNAPSHOT_REFS_WARNING);
-  }
-  expect(mockDispatch).toHaveBeenCalledTimes(dispatchCallsBeforeStaleRef);
-});
-
-test('a ref press crosses the ADR 0014 side-effect seam and expires the ref frame', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'seam-expiry';
-  const session = makeStaleRefSession(sessionName);
-  sessionStore.set(sessionName, session);
-  mockDispatch.mockImplementation(async (_device, command) =>
-    command === 'snapshot' ? { nodes: makeTwoButtonNodes(), backend: 'xctest' } : {},
-  );
-
-  // A freshly issued complete frame is active.
-  expect(sessionStore.get(sessionName)?.refFrameState).toBe('active');
-
-  const press = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
-  expect(press?.ok).toBe(true);
-  // The transition is wired at the leaf seam.
-  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
-});
-
-test('ADR 0014 evidence #1: a second ref mutation rejects (bare and pinned) until a fresh observation re-authorizes', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'seam-sequence';
-  const session = makeStaleRefSession(sessionName);
-  session.snapshotGeneration = 500;
-  // A complete snapshot issued the frame at generation 500.
-  activateCompleteRefFrame(session);
-  sessionStore.set(sessionName, session);
-  mockDispatch.mockImplementation(async (_device, command) =>
-    command === 'snapshot' ? { nodes: makeTwoButtonNodes(), backend: 'xctest' } : {},
-  );
-
-  // `snapshot -> press @e1`: admitted; crosses the seam and expires the frame.
-  const first = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
-  expect(first?.ok).toBe(true);
-  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
-
-  // `-> press @e2`: the unobserved second mutation rejects (bare).
-  const bare = await runInteraction(sessionStore, sessionName, 'press', ['@e2']);
-  expect(bare?.ok).toBe(false);
-  if (bare && !bare.ok) expect(bare.error.details?.reason).toBe('ref_frame_expired');
-
-  // A pin at the same epoch also rejects — expiry is evaluated before the pin.
-  const pinned = await runInteraction(sessionStore, sessionName, 'press', ['@e2~s500']);
-  expect(pinned?.ok).toBe(false);
-  if (pinned && !pinned.ok) expect(pinned.error.details?.reason).toBe('ref_frame_expired');
-
-  // `-> snapshot -> press @e2`: a fresh complete frame re-authorizes.
-  activateCompleteRefFrame(sessionStore.get(sessionName)!);
-  const reobserved = await runInteraction(sessionStore, sessionName, 'press', ['@e2']);
-  expect(reobserved?.ok).toBe(true);
-});
-
-test('press @ref directly after refs were issued does not warn', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'fresh-ref-no-warning';
-  const session = makeStaleRefSession(sessionName);
-  sessionStore.set(sessionName, session);
-
-  const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
-  expect(response?.ok).toBe(true);
-  if (response?.ok) {
-    expect(response.data?.warning).toBeUndefined();
-  }
-});
-
-test('re-issuing a complete frame lets press @ref succeed again without warning', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'reissued-refs-no-warning';
-  const session = makeStaleRefSession(sessionName);
-  sessionStore.set(sessionName, session);
-  mockDispatch.mockImplementation(async (_device, command) =>
-    command === 'snapshot' ? { nodes: makeTwoButtonNodes(), backend: 'xctest' } : {},
-  );
-
-  const selectorPress = await runInteraction(sessionStore, sessionName, 'press', [
-    'label=Continue',
-  ]);
-  expect(selectorPress?.ok).toBe(true);
-  // The selector press expired the frame (ADR 0014 seam).
-  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
-
-  // Simulate the snapshot command re-issuing the complete ref namespace: it
-  // re-activates a complete frame (through buildNextSnapshotSession; covered in
-  // snapshot-handler tests). Without it the frame would stay expired.
-  const stored = sessionStore.get(sessionName)!;
-  activateCompleteRefFrame(stored);
-  sessionStore.set(sessionName, stored);
-
-  const refPress = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
-  expect(refPress?.ok).toBe(true);
-  if (refPress?.ok) {
-    expect(refPress.data?.warning).toBeUndefined();
-  }
-});
-
-// --- Versioned @ref pins (#1076 follow-up) ---
-
-test('press with a pinned ref matching the current frame epoch is clean', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'pinned-current-clean';
-  const session = makeStaleRefSession(sessionName);
-  session.snapshotGeneration = 5;
-  sessionStore.set(sessionName, session);
-
-  const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1~s5']);
-  expect(response?.ok).toBe(true);
-  if (response?.ok) {
-    expect(response.data?.warning).toBeUndefined();
-  }
-});
-
-test('press with a pinned ref from an older generation rejects with the precise hint', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'pinned-stale-precise';
-  const session = makeStaleRefSession(sessionName);
-  session.snapshotGeneration = 15;
-  sessionStore.set(sessionName, session);
-  mockDispatch.mockRejectedValue(new Error('dispatch should not be called for a stale iOS ref'));
-
-  const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1~s12']);
-  expect(response?.ok).toBe(false);
-  if (response && !response.ok) {
-    expect(response.error.code).toBe('COMMAND_FAILED');
-    expect(response.error.details?.hint).toBe(
-      "Ref @e1 was minted from snapshot s12 but the session's ref frame is now s15 — re-run snapshot -i.",
-    );
-  }
-  expect(mockDispatch).not.toHaveBeenCalled();
-});
-
-test('ADR 0014 evidence #6: a read-only capture does not invalidate a mutation ref', async () => {
-  // An internal read-only capture advances the operational observation (and the
-  // generation counter) but does NOT expire the frame, so a plain ref from the
-  // still-active frame is admitted and dispatches — the old coarse-marker
-  // mutation block was the ADR's false positive.
-  const sessionStore = makeSessionStore();
-  const sessionName = 'read-capture-preserves';
-  const session = makeStaleRefSession(sessionName);
-  // Simulate a read-only capture (e.g. --verify evidence) replacing the
-  // observation: it bumps the generation but leaves the frame active.
-  setSessionSnapshot(session, {
-    nodes: attachRefs(makeTwoButtonNodes() as never),
+  const sessionName = 'stale-ref-refresh';
+  const session = makeSession(sessionName);
+  session.snapshot = {
+    nodes: attachRefs([
+      {
+        index: 0,
+        type: 'XCUIElementTypeButton',
+        label: 'Continue',
+        enabled: true,
+        hittable: true,
+      },
+    ]),
     createdAt: Date.now(),
     backend: 'xctest',
+  };
+  sessionStore.set(sessionName, session);
+
+  mockDispatch.mockRejectedValue(
+    new Error('dispatch must not run: no positional recapture on missing frame evidence'),
+  );
+
+  const response = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'press',
+      positionals: ['@e1'],
+      flags: {},
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
   });
-  expect(session.refFrameState).toBe('active');
-  sessionStore.set(sessionName, session);
-  mockDispatch.mockResolvedValue({ pressed: true });
 
-  const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
-  expect(response?.ok).toBe(true);
-  expect(mockDispatch).toHaveBeenCalled();
-  // Crossing the seam expired the frame, so a SECOND plain ref is now rejected.
-  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
-  const second = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
-  expect(second?.ok).toBe(false);
-  if (second && !second.ok) {
-    expect(second.error.details?.reason).toBe('ref_frame_expired');
-  }
-});
-
-test('a malformed generation suffix is INVALID_ARGS with the ref grammar hint', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'pinned-malformed';
-  const session = makeStaleRefSession(sessionName);
-  sessionStore.set(sessionName, session);
-
-  for (const [command, positionals] of [
-    ['press', ['@e1~x3']],
-    ['fill', ['@e1~s', 'text']],
-    ['get', ['text', '@e1~3']],
-  ] as const) {
-    const response = await runInteraction(sessionStore, sessionName, command, [...positionals]);
-    expect(response?.ok).toBe(false);
-    if (response && !response.ok) {
-      expect(response.error.code).toBe('INVALID_ARGS');
-      expect(response.error.message).toContain('malformed generation suffix');
-      expect(String(response.error.details?.hint)).toContain('@e12~s3');
-    }
-  }
-});
-
-test('after a session reopen, a pin from the previous lifetime rejects (reseeded generations)', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'reopened-pin-warns';
-  // Previous lifetime: a seeded generation minted the client's pin.
-  const previous = makeStaleRefSession(sessionName);
-  setSessionSnapshot(previous, { ...previous.snapshot! });
-  const oldGeneration = previous.snapshotGeneration!;
-
-  // Reopen: fresh session object, same name — the counter reseeds, so the
-  // old pin cannot silently read as current even though both lifetimes are
-  // one replacement deep (a per-lifetime count from 1 would collide here).
-  const reopened = makeStaleRefSession(sessionName);
-  setSessionSnapshot(reopened, { ...reopened.snapshot! });
-  sessionStore.set(sessionName, reopened);
-  // Probabilistic (~1/900000 collision) — accepted residual risk.
-  expect(reopened.snapshotGeneration).not.toBe(oldGeneration);
-  mockDispatch.mockRejectedValue(new Error('dispatch should not be called for a stale iOS ref'));
-
-  const response = await runInteraction(sessionStore, sessionName, 'press', [
-    `@e1~s${oldGeneration}`,
-  ]);
+  // ADR 0014: the authorized frame's @e1 has no usable rect, so the ref FAILS
+  // rather than recapturing and accepting the same index from a newer tree by
+  // positional coincidence. No fresh capture, no dispatch.
   expect(response?.ok).toBe(false);
   if (response && !response.ok) {
     expect(response.error.code).toBe('COMMAND_FAILED');
-    expect(String(response.error.details?.hint)).toContain(
-      `minted from snapshot s${oldGeneration}`,
-    );
+    expect(response.error.message).toMatch(/not found or has no bounds/);
   }
   expect(mockDispatch).not.toHaveBeenCalled();
+});
+
+test('press @ref fails closed when stored ref bounds are invalid (ADR 0014)', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'default';
+  const session = makeSession(sessionName);
+  session.device = {
+    platform: 'android',
+    id: 'emulator-5554',
+    name: 'Pixel 8 Pro',
+    kind: 'emulator',
+    booted: true,
+  };
+  session.snapshot = {
+    nodes: attachRefs([
+      {
+        index: 0,
+        type: 'android.widget.TextView',
+        label: 'My App',
+        rect: { x: 20, y: 40, width: Number.NaN, height: 40 },
+        enabled: true,
+        hittable: true,
+      },
+    ]),
+    createdAt: Date.now(),
+    backend: 'android',
+  };
+  sessionStore.set(sessionName, session);
+
+  mockDispatch.mockRejectedValue(
+    new Error('dispatch must not run: no positional recapture on unusable frame evidence'),
+  );
+
+  const response = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'press',
+      positionals: ['@e1'],
+      flags: {},
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+  });
+
+  // ADR 0014: the authorized frame's @e1 has an unusable rect (NaN), so it FAILS
+  // rather than recapturing and accepting the same index from a newer tree.
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('COMMAND_FAILED');
+    expect(response.error.message).toMatch(/not found or has no bounds/);
+  }
+  expect(mockDispatch).not.toHaveBeenCalled();
+});
+
+test('press @ref fails fast when the target is off-screen', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'press-offscreen-ref';
+  const session = makeSession(sessionName);
+  session.snapshot = {
+    nodes: attachRefs([
+      {
+        index: 0,
+        depth: 0,
+        type: 'Window',
+        rect: { x: 0, y: 0, width: 390, height: 844 },
+      },
+      {
+        index: 1,
+        depth: 1,
+        parentIndex: 0,
+        type: 'XCUIElementTypeButton',
+        label: 'Far item',
+        rect: { x: 20, y: 1200, width: 120, height: 44 },
+        hittable: true,
+      },
+    ]),
+    createdAt: Date.now(),
+    backend: 'xctest',
+  };
+  sessionStore.set(sessionName, session);
+
+  const response = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'press',
+      positionals: ['@e2'],
+      flags: {},
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+  });
+
+  expect(response).toBeTruthy();
+  expect(response?.ok).toBe(false);
+  expect(mockDispatch).not.toHaveBeenCalled();
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('COMMAND_FAILED');
+    expect(response.error.message).toMatch(/off-screen/i);
+    // #1366: the hint names the concrete scroll direction, steers to a
+    // selector-based retry (a @ref would be rejected as expired after the scroll),
+    // and prescribes bounded movement (a large fling scroll overshoots).
+    expect(response.error.hint).toMatch(/scroll down/i);
+    expect(response.error.hint).toMatch(/selector/i);
+    expect(response.error.hint).toMatch(/small steps/i);
+    expect(response.error.hint).toMatch(/gesture pan/i);
+    expect(response.error.details?.reason).toBe('offscreen_ref');
+    expect(response.error.details?.scrollDirection).toBe('down');
+  }
+});
+
+test('press @ref with a trailing label recovers within the authorized frame (no positional recapture)', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'default';
+  const session = makeSession(sessionName);
+  session.device = {
+    platform: 'android',
+    id: 'emulator-5554',
+    name: 'Pixel 8 Pro',
+    kind: 'emulator',
+    booted: true,
+  };
+  // @e1's rect is unusable, but the SAME frame tree carries another node with
+  // the trailing label at usable bounds. ADR 0014 label recovery resolves within
+  // the authorized frame — never by recapturing a fresh tree.
+  session.snapshot = {
+    nodes: attachRefs([
+      {
+        index: 0,
+        type: 'android.widget.TextView',
+        label: 'Different',
+        rect: { x: 20, y: 40, width: Number.NaN, height: 40 },
+        enabled: true,
+        hittable: true,
+      },
+      {
+        index: 1,
+        type: 'android.widget.TextView',
+        label: 'My App',
+        rect: { x: 100, y: 200, width: 80, height: 40 },
+        enabled: true,
+        hittable: true,
+      },
+    ]),
+    createdAt: Date.now(),
+    backend: 'android',
+  };
+  sessionStore.set(sessionName, session);
+
+  mockDispatch.mockImplementation(async (_device, command) => {
+    if (command === 'snapshot') throw new Error('no positional recapture: recovery stays in-frame');
+    return { pressed: true };
+  });
+
+  const response = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'press',
+      positionals: ['@e1', 'My App'],
+      flags: {},
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+  });
+
+  expect(response).toBeTruthy();
+  expect(response?.ok).toBe(true);
+  const pressCalls = mockDispatch.mock.calls.filter((c) => c[1] === 'press');
+  expect(pressCalls.length).toBe(1);
+  expect(pressCalls[0]?.[2]).toEqual(['140', '220']);
+  if (response?.ok) {
+    expect(response.data?.x).toBe(140);
+    expect(response.data?.y).toBe(220);
+    expect(response.data?.resolution).toEqual({
+      source: 'ref',
+      phase: 'pre-action',
+      kind: 'label-fallback',
+    });
+  }
 });

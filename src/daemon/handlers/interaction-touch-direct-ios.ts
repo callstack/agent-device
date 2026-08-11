@@ -1,19 +1,12 @@
-import type { CommandFlags } from '@agent-device/contracts/command';
-import type { GestureReferenceFrame, InteractionTarget } from '@agent-device/contracts/interaction';
+import type { GestureReferenceFrame } from '@agent-device/contracts/interaction';
 import { normalizeError } from '@agent-device/kernel/errors';
-import {
-  commandSupportsSettleObservation,
-  commandSupportsVerifyEvidence,
-} from '../../core/command-descriptor/registry.ts';
 import { dispatchCommand } from '../../core/dispatch.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import {
   isDirectIosSelectorFallbackError,
-  readSimpleIosSelectorTarget,
   type DirectIosSelectorTarget,
 } from '../direct-ios-selector.ts';
 import { expireRefFrame } from '../ref-frame.ts';
-import { isSessionRecording } from '../session-script-publication-capability.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
 import { finalizeTouchInteraction, type InteractionHandlerParams } from './interaction-common.ts';
 import { corroborateIosTapFailure } from './interaction-ios-tap-outcome.ts';
@@ -28,57 +21,11 @@ import {
 } from './interaction-touch-response.ts';
 
 /**
- * When the direct iOS selector fast path runs, and how it dispatches, delegates
- * back to the runtime tree path, or corroborates its own failure. The path is
- * deliberately narrow (CONTEXT.md, Selector Capture Reliability Contract):
- * every exclusion below keeps a capture-backed guarantee on the regular path.
+ * How the direct iOS selector fast path dispatches, delegates back to the
+ * runtime tree path, or corroborates its own failure. Eligibility — the narrow
+ * gate that decides whether this path may run at all — lives in
+ * interaction-touch-direct-ios-eligibility.ts.
  */
-
-export function readDirectIosSelectorTapTarget(params: {
-  session: SessionState;
-  commandLabel: string;
-  target: InteractionTarget;
-  flags: CommandFlags | undefined;
-}): DirectIosSelectorTarget | null {
-  const { session, commandLabel, target, flags } = params;
-  if (commandLabel !== 'click') return null;
-  if (target.kind !== 'selector') return null;
-  if (isSessionRecording(session)) return null;
-  if (hasNonDefaultClickOptions(flags)) return null;
-  if (commandSupportsVerifyEvidence(commandLabel) && flags?.verify === true) return null;
-  if (commandSupportsSettleObservation(commandLabel) && flags?.settle === true) return null;
-  return readDirectSelectorWithMaestroFallback(session, target.selector, flags);
-}
-
-function readDirectSelectorWithMaestroFallback(
-  session: SessionState,
-  selectorExpression: string,
-  flags: CommandFlags | undefined,
-): DirectIosSelectorTarget | null {
-  const selector = readSimpleIosSelectorTarget({ session, selectorExpression });
-  if (!selector) return null;
-  return {
-    ...selector,
-    ...(flags?.maestro?.allowNonHittableCoordinateFallback
-      ? { allowNonHittableCoordinateFallback: true }
-      : {}),
-    ...(flags?.maestro?.expectedTapPoint ? { expectedPoint: flags.maestro.expectedTapPoint } : {}),
-  };
-}
-
-/** Click knobs the fused runner request cannot honor; any of them excludes the fast path. */
-const NON_DEFAULT_CLICK_OPTION_KEYS = [
-  'count',
-  'intervalMs',
-  'holdMs',
-  'jitterPx',
-  'doubleTap',
-] as const satisfies readonly (keyof CommandFlags)[];
-
-function hasNonDefaultClickOptions(flags: CommandFlags | undefined): boolean {
-  if (NON_DEFAULT_CLICK_OPTION_KEYS.some((key) => flags?.[key] !== undefined)) return true;
-  return flags?.clickButton !== undefined && flags.clickButton !== 'primary';
-}
 
 export async function dispatchDirectIosSelectorTap(
   params: InteractionHandlerParams & { captureSnapshotForSession: CaptureSnapshotForSession },

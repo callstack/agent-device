@@ -158,14 +158,14 @@
         "count": 3
       }
     },
+    "src/daemon/handlers/__tests__/interaction-touch-press-admission.test.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
     "src/daemon/handlers/__tests__/interaction-touch-response.test.ts": {
       "crap_moderate": {
         "count": 1
-      }
-    },
-    "src/daemon/handlers/__tests__/interaction-touch-runtime.test.ts": {
-      "crap_moderate": {
-        "count": 2
       }
     },
     "src/daemon/handlers/__tests__/record-trace.test.ts": {

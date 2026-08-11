@@ -11,7 +11,7 @@ import {
 import { assertRecordedFillParameterization } from './interaction-recorded-input.ts';
 import { refMutationAdmissionResponse } from './interaction-ref-policy.ts';
 import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
-import { refreshAndroidRefSnapshotIfFreshnessActive } from './interaction-touch-android-readiness.ts';
+import { refreshAndroidRefSnapshotIfFreshnessActive } from './interaction-touch-android-freshness.ts';
 import { unsupportedMacOsDesktopSurfaceInteraction } from './interaction-touch-policy.ts';
 import { readSnapshotNodesReferenceFrame } from './interaction-touch-reference-frame.ts';
 import {

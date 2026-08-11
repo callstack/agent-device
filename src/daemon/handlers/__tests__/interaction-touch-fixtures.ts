@@ -170,3 +170,58 @@ export async function runInteraction(
     contextFromFlags,
   });
 }
+
+// #1654: the tree a mutating `find` matched against, deliberately NOT the tree
+// stored on the session. `@e2` names the "Continue" button in both trees, but
+// at a distinctive point here and at (60, 40) in the session frame tree — so
+// the tap coordinates say which tree the leaf actually resolved against.
+export function makeFindPreresolvedTree() {
+  const nodes = attachRefs([
+    { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'XCUIElementTypeButton',
+      label: 'Continue',
+      rect: { x: 300, y: 500, width: 20, height: 20 },
+      enabled: true,
+      hittable: true,
+    },
+  ] as never);
+  return { nodes, node: nodes[1] as NonNullable<(typeof nodes)[number]> };
+}
+
+export function findResolvedTarget(
+  preresolved: ReturnType<typeof makeFindPreresolvedTree>,
+  ref = '@e2',
+) {
+  return { ref, node: preresolved.node, nodes: preresolved.nodes };
+}
+
+export async function runFindInternalClick(
+  sessionStore: SessionStore,
+  sessionName: string,
+  internal: Record<string, unknown>,
+) {
+  return await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'click',
+      positionals: ['@e2'],
+      flags: { noRecord: true },
+      internal,
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+  });
+}
+
+/** The coordinates the leaf dispatched a press against, per the caller's mocked dispatch. */
+export function readPressPoint(mockDispatch: {
+  mock: { calls: unknown[][] };
+}): string[] | undefined {
+  const call = mockDispatch.mock.calls.find((entry) => entry[1] === 'press');
+  return call?.[2] as string[] | undefined;
+}

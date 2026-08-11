@@ -6,28 +6,26 @@ import {
   contextFromFlags,
   createEmulateCaptureSnapshotForSession,
   installTestScreenRecording,
-  makeAndroidSession,
   makeSession,
 } from './interaction-touch-fixtures.ts';
 
-// How touch results are projected: the recorded action entry and touch
-// visualization, verification evidence, coordinates, and reference frames.
+// The identity extras the one response site composes: --verify evidence rides
+// the interactionResultExtra allowlist on every branch, and no branch invents
+// an evidence field without it.
+
+const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
+  mockRunAppleRunnerCommand: vi.fn(),
+}));
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return {
-    ...actual,
-    dispatchCommand: vi.fn(async () => ({})),
-  };
+  return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
 });
 
 vi.mock('../../../platforms/android/input-actions.ts', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('../../../platforms/android/input-actions.ts')>();
-  return {
-    ...actual,
-    getAndroidScreenSize: vi.fn(async () => ({ width: 1344, height: 2992 })),
-  };
+  return { ...actual, getAndroidScreenSize: vi.fn(async () => ({ width: 1344, height: 2992 })) };
 });
 
 vi.mock('../../../platforms/android/app-lifecycle.ts', async (importOriginal) => {
@@ -52,366 +50,41 @@ vi.mock('../interaction-snapshot.ts', async (importOriginal) => {
   };
 });
 
+vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../platforms/apple/core/runner/runner-client.ts')>();
+  return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
+});
+
 import { dispatchCommand } from '../../../core/dispatch.ts';
-const mockDispatch = vi.mocked(dispatchCommand);
-import { getAndroidScreenSize } from '../../../platforms/android/input-actions.ts';
-const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
 import {
   getAndroidAppState,
   getAndroidBlockingDialogFocus,
 } from '../../../platforms/android/app-lifecycle.ts';
+import { getAndroidScreenSize } from '../../../platforms/android/input-actions.ts';
+import { captureSnapshotForSession } from '../interaction-snapshot.ts';
+
+const mockDispatch = vi.mocked(dispatchCommand);
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
 const mockGetAndroidBlockingDialogFocus = vi.mocked(getAndroidBlockingDialogFocus);
-import { captureSnapshotForSession } from '../interaction-snapshot.ts';
+const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
 const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotForSession);
 
 beforeEach(() => {
   mockDispatch.mockReset();
   mockDispatch.mockResolvedValue({});
-  mockGetAndroidScreenSize.mockReset();
-  mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
   mockGetAndroidAppState.mockReset();
   mockGetAndroidAppState.mockResolvedValue({});
   mockGetAndroidBlockingDialogFocus.mockReset();
   mockGetAndroidBlockingDialogFocus.mockResolvedValue(null);
+  mockGetAndroidScreenSize.mockReset();
+  mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
   mockCaptureSnapshotForSession.mockReset();
   mockCaptureSnapshotForSession.mockImplementation(
     createEmulateCaptureSnapshotForSession(mockDispatch),
   );
-});
-
-// fallow-ignore-next-line complexity
-test('press coordinates appends touch-visualization events while recording', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'default';
-  const session = makeSession(sessionName);
-  session.snapshot = {
-    nodes: attachRefs([
-      {
-        index: 0,
-        type: 'XCUIElementTypeApplication',
-        rect: { x: 0, y: 0, width: 402, height: 874 },
-      },
-    ]),
-    createdAt: Date.now(),
-    backend: 'xctest',
-  };
-  installTestScreenRecording(session, {
-    backend: 'simctl recordVideo',
-    outPath: '/tmp/demo.mp4',
-    startedAt: Date.now() - 1_000,
-    showTouches: true,
-  });
-  sessionStore.set(sessionName, session);
-
-  mockDispatch.mockResolvedValue({
-    ok: true,
-    videoPath: '/tmp/demo.mp4',
-    artifactUri: 'agent-device://artifacts/demo.mp4',
-  });
-
-  const response = await handleInteractionCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'press',
-      positionals: ['100', '200'],
-      flags: { count: 2, intervalMs: 150, doubleTap: true },
-    },
-    sessionName,
-    sessionStore,
-    contextFromFlags,
-  });
-
-  expect(response?.ok).toBe(true);
-  const recorded = sessionStore.get(sessionName)?.screenRecording?.handle.inspect();
-  expect(recorded).toBeTruthy();
-  expect(recorded?.gestureEvents.length).toBe(4);
-  expect(recorded?.gestureEvents[0]?.kind).toBe('tap');
-  expect(recorded?.gestureEvents[0]?.x).toBe(100);
-  expect(recorded?.gestureEvents[0]?.y).toBe(200);
-  expect(recorded?.gestureEvents[0]?.referenceWidth).toBe(402);
-  expect(recorded?.gestureEvents[0]?.referenceHeight).toBe(874);
-  const actionResult = sessionStore.get(sessionName)?.actions[0]?.result;
-  expect(actionResult?.videoPath).toBe('/tmp/demo.mp4');
-  expect(actionResult?.artifactUri).toBe('agent-device://artifacts/demo.mp4');
-  if (response?.ok) {
-    expect(response.data?.videoPath).toBe('/tmp/demo.mp4');
-    expect(response.data?.artifactUri).toBe('agent-device://artifacts/demo.mp4');
-  }
-});
-
-test('press coordinates on iOS recording captures a full snapshot for the touch reference frame', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'ios-direct-press-frame';
-  const session = makeSession(sessionName);
-  session.snapshot = undefined;
-  installTestScreenRecording(session, {
-    backend: 'simctl recordVideo',
-    outPath: '/tmp/demo.mp4',
-    startedAt: Date.now() - 1_000,
-    showTouches: true,
-  });
-  sessionStore.set(sessionName, session);
-
-  mockDispatch.mockResolvedValue({ x: 220, y: 600 });
-  // Regression: a filtered snapshot has no Application/Window node, so viewport inference would
-  // return a leaf-element bounding box and the recording overlay would misplace tap markers.
-  mockCaptureSnapshotForSession.mockResolvedValueOnce({
-    nodes: attachRefs([
-      {
-        index: 0,
-        type: 'XCUIElementTypeApplication',
-        rect: { x: 0, y: 0, width: 440, height: 956 },
-      },
-      {
-        index: 1,
-        type: 'XCUIElementTypeCell',
-        rect: { x: 16, y: 156, width: 370, height: 52 },
-        hittable: true,
-      },
-    ]),
-    createdAt: Date.now(),
-    backend: 'xctest',
-  });
-
-  const response = await handleInteractionCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'press',
-      positionals: ['220', '600'],
-      flags: {},
-    },
-    sessionName,
-    sessionStore,
-    contextFromFlags,
-  });
-
-  expect(response?.ok).toBe(true);
-  expect(mockCaptureSnapshotForSession.mock.calls[0]?.[4]).toEqual({
-    interactiveOnly: true,
-  });
-  const event = sessionStore.get(sessionName)?.screenRecording?.handle.inspect().gestureEvents[0];
-  expect(event?.kind).toBe('tap');
-  expect(event?.referenceWidth).toBe(440);
-  expect(event?.referenceHeight).toBe(956);
-});
-
-test('press coordinates on Android recording uses physical screen size when no snapshot exists', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'android-direct-press-frame';
-  const session = makeAndroidSession(sessionName);
-  installTestScreenRecording(session, {
-    backend: 'adb screenrecord',
-    outPath: '/tmp/demo.mp4',
-    startedAt: Date.now() - 1_000,
-    showTouches: true,
-  });
-  session.snapshot = undefined;
-  sessionStore.set(sessionName, session);
-
-  mockDispatch.mockResolvedValue({ x: 300, y: 2300 });
-
-  const response = await handleInteractionCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'press',
-      positionals: ['300', '2300'],
-      flags: {},
-    },
-    sessionName,
-    sessionStore,
-    contextFromFlags,
-  });
-
-  expect(response?.ok).toBe(true);
-  const event = sessionStore.get(sessionName)?.screenRecording?.handle.inspect().gestureEvents[0];
-  expect(event?.kind).toBe('tap');
-  expect(event?.referenceWidth).toBe(1344);
-  expect(event?.referenceHeight).toBe(2992);
-});
-
-test('press coordinates on Android recording caches physical screen size across interactions', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'android-direct-press-frame-cache';
-  const session = makeAndroidSession(sessionName);
-  installTestScreenRecording(session, {
-    backend: 'adb screenrecord',
-    outPath: '/tmp/demo.mp4',
-    startedAt: Date.now() - 1_000,
-    showTouches: true,
-  });
-  session.snapshot = undefined;
-  sessionStore.set(sessionName, session);
-
-  mockDispatch.mockResolvedValue({ x: 300, y: 2300 });
-
-  await handleInteractionCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'press',
-      positionals: ['300', '2300'],
-      flags: {},
-    },
-    sessionName,
-    sessionStore,
-    contextFromFlags,
-  });
-
-  mockDispatch.mockResolvedValue({ x: 320, y: 2200 });
-
-  await handleInteractionCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'press',
-      positionals: ['320', '2200'],
-      flags: {},
-    },
-    sessionName,
-    sessionStore,
-    contextFromFlags,
-  });
-
-  expect(mockGetAndroidScreenSize).toHaveBeenCalledTimes(1);
-  const recording = sessionStore.get(sessionName)?.screenRecording?.handle.inspect();
-  expect(recording?.touchReferenceFrame).toEqual({
-    referenceWidth: 1344,
-    referenceHeight: 2992,
-  });
-});
-
-test('press coordinates without recording skips Android screen-size lookup', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'android-direct-press-no-recording';
-  const session = makeAndroidSession(sessionName);
-  session.snapshot = undefined;
-  sessionStore.set(sessionName, session);
-
-  mockDispatch.mockResolvedValue({ x: 300, y: 2300 });
-
-  const response = await handleInteractionCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'press',
-      positionals: ['300', '2300'],
-      flags: {},
-    },
-    sessionName,
-    sessionStore,
-    contextFromFlags,
-  });
-
-  expect(response?.ok).toBe(true);
-  expect(mockGetAndroidScreenSize).not.toHaveBeenCalled();
-});
-
-test('press coordinates during recording still dispatches when Android screen-size lookup fails', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'android-direct-press-screen-size-failure';
-  const session = makeAndroidSession(sessionName);
-  installTestScreenRecording(session, {
-    backend: 'adb screenrecord',
-    outPath: '/tmp/demo.mp4',
-    startedAt: Date.now() - 1_000,
-    showTouches: true,
-  });
-  session.snapshot = undefined;
-  sessionStore.set(sessionName, session);
-
-  mockDispatch.mockResolvedValue({ x: 300, y: 2300 });
-  mockGetAndroidScreenSize.mockRejectedValue(new Error('adb unavailable'));
-
-  const response = await handleInteractionCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'press',
-      positionals: ['300', '2300'],
-      flags: {},
-    },
-    sessionName,
-    sessionStore,
-    contextFromFlags,
-  });
-
-  expect(response?.ok).toBe(true);
-  expect(mockDispatch).toHaveBeenCalledTimes(1);
-  const event = sessionStore.get(sessionName)?.screenRecording?.handle.inspect().gestureEvents[0];
-  expect(event?.kind).toBe('tap');
-  expect(event?.x).toBe(300);
-  expect(event?.y).toBe(2300);
-  expect(event?.referenceWidth).toBeUndefined();
-  expect(event?.referenceHeight).toBeUndefined();
-});
-
-test('press @ref preserves native timing in recorded result and touch visualization', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'default';
-  const session = makeSession(sessionName);
-  session.snapshot = {
-    nodes: attachRefs([
-      {
-        index: 0,
-        type: 'XCUIElementTypeButton',
-        label: 'Continue',
-        identifier: 'auth_continue',
-        rect: { x: 10, y: 20, width: 100, height: 40 },
-        enabled: true,
-        hittable: true,
-      },
-    ]),
-    createdAt: Date.now(),
-    backend: 'xctest',
-  };
-  installTestScreenRecording(session, {
-    backend: 'simctl recordVideo',
-    outPath: '/tmp/demo.mp4',
-    startedAt: 1_000,
-    showTouches: true,
-  });
-  sessionStore.set(sessionName, session);
-
-  const originalNow = Date.now;
-  let now = 1_500;
-  Date.now = () => now;
-
-  try {
-    mockDispatch.mockImplementation(async () => {
-      now = 1_650;
-      return {
-        gestureStartUptimeMs: 5_100,
-        gestureEndUptimeMs: 5_180,
-      };
-    });
-
-    const response = await handleInteractionCommands({
-      req: {
-        token: 't',
-        session: sessionName,
-        command: 'press',
-        positionals: ['@e1'],
-        flags: {},
-      },
-      sessionName,
-      sessionStore,
-      contextFromFlags,
-    });
-
-    expect(response?.ok).toBe(true);
-  } finally {
-    Date.now = originalNow;
-  }
-
-  const stored = sessionStore.get(sessionName);
-  const result = (stored?.actions[0]?.result ?? {}) as Record<string, unknown>;
-  expect(result.gestureStartUptimeMs).toBe(5_100);
-  expect(result.gestureEndUptimeMs).toBe(5_180);
-  expect(stored?.screenRecording?.handle.inspect().gestureEvents[0]?.tMs).toBe(570);
+  mockRunAppleRunnerCommand.mockReset();
+  mockRunAppleRunnerCommand.mockResolvedValue({});
 });
 
 test('press @ref --verify surfaces evidence through the interactionResultExtra allowlist', async () => {
@@ -780,60 +453,4 @@ test('fill @ref preserves fallback coordinates for recording when platform resul
   expect(event?.kind).toBe('tap');
   expect(event?.x).toBe(60);
   expect(event?.y).toBe(40);
-});
-
-test('fill @ref keeps the original editable node when its parent is the hittable ancestor', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'default';
-  const session = makeSession(sessionName);
-  session.snapshot = {
-    nodes: attachRefs([
-      {
-        index: 0,
-        type: 'XCUIElementTypeCell',
-        label: 'Email row',
-        rect: { x: 20, y: 100, width: 320, height: 72 },
-        enabled: true,
-        hittable: true,
-      },
-      {
-        index: 1,
-        parentIndex: 0,
-        type: 'XCUIElementTypeTextField',
-        label: 'Email',
-        identifier: 'auth_email',
-        rect: { x: 44, y: 120, width: 200, height: 32 },
-        enabled: true,
-        hittable: false,
-      },
-    ]),
-    createdAt: Date.now(),
-    backend: 'xctest',
-  };
-  sessionStore.set(sessionName, session);
-
-  mockDispatch.mockResolvedValue({ filled: true });
-
-  const response = await handleInteractionCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'fill',
-      positionals: ['@e2', 'hello@example.com'],
-      flags: {},
-    },
-    sessionName,
-    sessionStore,
-    contextFromFlags,
-  });
-
-  expect(response).toBeTruthy();
-  expect(response?.ok).toBe(true);
-  const fillCalls = mockDispatch.mock.calls.filter((c) => c[1] === 'fill');
-  expect(fillCalls.length).toBe(1);
-  expect(fillCalls[0]?.[2]).toEqual(['144', '136', 'hello@example.com']);
-
-  const stored = sessionStore.get(sessionName);
-  const result = (stored?.actions[0]?.result ?? {}) as Record<string, unknown>;
-  expect(result.ref).toBe('e2');
 });

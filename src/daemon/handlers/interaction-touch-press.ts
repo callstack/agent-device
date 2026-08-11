@@ -9,10 +9,8 @@ import type { DaemonResponse } from '../types.ts';
 import { assertAndroidPressStayedInApp } from './interaction-android-escape.ts';
 import { readSettleRequest } from './interaction-flags.ts';
 import { createInteractionRuntime } from './interaction-runtime.ts';
-import {
-  dispatchDirectIosSelectorTap,
-  readDirectIosSelectorTapTarget,
-} from './interaction-touch-direct-ios.ts';
+import { dispatchDirectIosSelectorTap } from './interaction-touch-direct-ios.ts';
+import { readDirectIosSelectorTapTarget } from './interaction-touch-direct-ios-eligibility.ts';
 import {
   admitTargetedTouch,
   type AdmittedTargetedTouch,

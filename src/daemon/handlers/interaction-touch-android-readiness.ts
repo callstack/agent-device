@@ -1,19 +1,14 @@
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import { getActiveAndroidSnapshotFreshness } from '../android-snapshot-freshness.ts';
 import {
   ensureAndroidBlockingSystemDialogReady,
   type AndroidBlockingDialogReadinessResult,
 } from '../android-system-dialog.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
-import type { InteractionHandlerParams } from './interaction-common.ts';
 import { refMutationAdmissionResponse } from './interaction-ref-policy.ts';
-import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
 
 /**
- * How Android device readiness composes with `@ref` admission around a touch
- * dispatch: the blocking-dialog recovery that must not silently retarget an
- * admitted ref, and the ref-refresh capture that keeps the Android freshness
- * route comparable.
+ * How Android blocking-dialog readiness composes with `@ref` admission around a
+ * touch dispatch: recovery is device-mutating, so it must not silently retarget
+ * an admitted ref.
  */
 
 export type RefAdmissionContext = {
@@ -67,34 +62,4 @@ export async function runWithAndroidDialogReadinessCheck<TResult>(
     phase: 'after-command',
   });
   return { aborted: false, readiness, runtimeResult };
-}
-
-export async function refreshAndroidRefSnapshotIfFreshnessActive(
-  params: InteractionHandlerParams & {
-    captureSnapshotForSession: CaptureSnapshotForSession;
-  },
-  session: SessionState,
-): Promise<SessionState['snapshot']> {
-  if (!getActiveAndroidSnapshotFreshness(session)) return undefined;
-  const freshnessBaseline =
-    session.snapshot?.comparisonSafe === true ? session.snapshot : undefined;
-  try {
-    await params.captureSnapshotForSession(
-      session,
-      params.req.flags,
-      params.sessionStore,
-      params.contextFromFlags,
-      { interactiveOnly: true, androidFreshnessMode: 'ref-refresh' },
-    );
-  } catch (error) {
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'android_ref_snapshot_refresh_failed',
-      data: {
-        command: params.req.command,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    });
-  }
-  return freshnessBaseline;
 }
