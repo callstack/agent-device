@@ -28,6 +28,14 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+const macosDevice = {
+  ...device,
+  appleOs: 'macos' as const,
+  id: 'host-macos-local',
+  name: 'Mac',
+  target: 'desktop' as const,
+};
+
 test('scopes an unavailable runner authority instead of falling back to a local lease', async () => {
   await withAppleRunnerScreenRecordingTransport(undefined, async () => {
     const transport = resolveAppleRunnerScreenRecordingTransport();
@@ -96,4 +104,28 @@ test('does not issue an unowned stop when runner acquisition exposes no session 
   ).rejects.toThrow('did not expose a durable runner session identity');
 
   expect(runner.run).toHaveBeenCalledOnce();
+});
+
+test('keeps macOS runner recording ownership local to the requested output path', async () => {
+  runner.snapshot.mockReturnValue({ sessionId: 'runner-session-1', alive: true });
+  runner.run.mockResolvedValue({ recorderStartUptimeMs: 42 });
+  const transport = resolveAppleRunnerScreenRecordingTransport();
+
+  await expect(
+    transport.start({
+      device: macosDevice,
+      appBundleId: 'com.apple.TextEdit',
+      outputPath: '/tmp/capture.mp4',
+    }),
+  ).resolves.toEqual({ runnerSessionId: 'runner-session-1', recorderStartUptimeMs: 42 });
+
+  expect(runner.run).toHaveBeenCalledWith(
+    macosDevice,
+    {
+      command: 'recordStart',
+      outPath: '/tmp/capture.mp4',
+      appBundleId: 'com.apple.TextEdit',
+    },
+    { signal: undefined },
+  );
 });

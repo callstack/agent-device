@@ -62,7 +62,8 @@ async function startLocalAppleRunnerRecording({
   const { getRunnerSessionSnapshot, runAppleRunnerCommand } =
     await import('./platforms/apple/core/runner/runner-client.ts');
   const recordingFileName = `agent-device-recording-${Date.now()}.mp4`;
-  const remotePath = device.kind === 'device' ? `tmp/${recordingFileName}` : undefined;
+  const remotePath =
+    device.appleOs === 'macos' || device.kind !== 'device' ? undefined : `tmp/${recordingFileName}`;
   const result = await runAppleRunnerCommand(
     device,
     {
