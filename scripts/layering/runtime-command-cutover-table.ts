@@ -1,5 +1,6 @@
 import type { MigratedCommandCutover, UnruledViolation } from './runtime-command-cutover-model.ts';
 import {
+  appStateLegacySessionHandlerViolations,
   appLogSessionStateOwnershipViolations,
   devicesGatewayBindingViolations,
   sourceExecutedUsingDeclarationViolations,
@@ -11,10 +12,27 @@ import { recordRuntimeDaemonMechanicsViolations } from './record-runtime-mechani
  * mechanism in `runtime-command-cutover-policy.ts` carries one planted-red proof for
  * every row, and `cutoverRowDefects` rejects a row that leaves its claims unstated.
  *
- * Rule ids are per row: the layering report groups violations under R20 boot,
- * R21 apps, R17 devices, R14 logs, R15 network, R16 record.
+ * Rule ids are per row: the layering report groups violations under R19 appstate,
+ * R20 boot, R21 apps, R17 devices, R14 logs, R15 network, R16 record.
  */
 export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
+  {
+    rule: 'R19 appstate-runtime-cutover',
+    command: 'appstate',
+    subject: 'foreground app state',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      daemonOnlyRouteNames: ['getHarmonyAppState'],
+    },
+    runtimeTypeNames: ['AppStateRuntimeOperations'],
+    operations: { names: ['ensureReady', 'appState'] },
+    singularExecution: {
+      routes: ['handleSessionStateCommands'],
+      operations: ['ensureReady', 'appState'],
+    },
+    extensions: [appStateLegacySessionHandlerViolations],
+  },
   {
     rule: 'R20 boot-runtime-cutover',
     command: 'boot',

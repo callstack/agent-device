@@ -17,7 +17,11 @@ import {
 } from '../../utils/device-isolation.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { resolveSessionRunnerLogPath, SessionStore } from '../session-store.ts';
-import { requireSessionOrExplicitSelector, resolveCommandDevice } from './session-device-utils.ts';
+import {
+  requireSessionOrExplicitSelector,
+  resolveCommandDevice,
+  selectorTargetsSessionDevice,
+} from './session-device-utils.ts';
 import { errorResponse } from './response.ts';
 import { resolveImplicitSessionScope, sessionMatchesScope } from '../session-routing.ts';
 import {
@@ -186,13 +190,22 @@ async function capabilitiesInventoryResponse(params: {
   });
   if ('response' in resolution) return resolution.response;
   const { device } = resolution;
-  const runtimeFacts = await inspectRuntimeFacts(device, params.inspectFacts);
+  const session = params.sessionStore.get(params.sessionName);
+  const sessionOwnedAppStateAvailable =
+    session !== undefined &&
+    isApplePlatform(device.platform) &&
+    selectorTargetsSessionDevice(params.req.flags, session);
+  const facts =
+    sessionOwnedAppStateAvailable || params.inspectFacts === undefined
+      ? undefined
+      : await inspectRuntimeFacts(device, params.inspectFacts);
   const appsAvailable =
-    runtimeFacts?.operations.ensureReady.available === true &&
-    runtimeFacts.operations.listApps.available === true;
+    facts?.operations.ensureReady.available === true &&
+    facts.operations.listApps.available === true;
   const appStateAvailable =
-    runtimeFacts?.operations.ensureReady.available === true &&
-    runtimeFacts.operations.appState.available === true;
+    sessionOwnedAppStateAvailable === true ||
+    (facts?.operations.ensureReady.available === true &&
+      facts.operations.appState.available === true);
   const [logsAvailable, networkAvailable, recordingAvailable] = params.bindDevice
     ? await Promise.all([
         params

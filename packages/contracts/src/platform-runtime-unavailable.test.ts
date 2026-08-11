@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { localRuntimeOwner, providerRuntimeOwner } from '@agent-device/contracts/platform';
+import { localRuntimeOwner, providerRuntimeOwner } from './platform-runtime.ts';
 import {
   createUnavailablePlatformRuntimeBinding,
   createUnavailablePlatformRuntimeOwner,

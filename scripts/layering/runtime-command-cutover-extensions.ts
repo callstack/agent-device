@@ -14,6 +14,12 @@ const APP_LOG_SESSION_STATE_OWNERS = new Set([
   'src/daemon/app-log-session-resource.ts',
   'src/daemon/types.ts',
 ]);
+const APP_STATE_HANDLER_FILE = 'src/daemon/handlers/session-state.ts';
+const APP_STATE_LEGACY_IMPORT_SOURCES = new Set([
+  '../../platforms/android/app-lifecycle.ts',
+  '../../platforms/harmonyos/app-lifecycle.ts',
+]);
+const APP_STATE_LEGACY_CALLS = new Set(['getAndroidAppState', 'getHarmonyAppState']);
 
 /**
  * `devices` proves its single inventory route by binding identity, not by name: the
@@ -125,6 +131,52 @@ export function sourceExecutedUsingDeclarationViolations(
       }
     });
   }
+  return violations;
+}
+
+/**
+ * `appstate` retires the handler's direct Android/Harmony lifecycle dispatch. Other
+ * daemon commands still use those helpers, so the proof is deliberately scoped to the
+ * appstate handler instead of claiming a repository-wide symbol deletion.
+ */
+export function appStateLegacySessionHandlerViolations(
+  sources: ReadonlyMap<string, string>,
+): UnruledViolation[] {
+  const source = sources.get(APP_STATE_HANDLER_FILE);
+  if (source === undefined) {
+    return [
+      {
+        file: APP_STATE_HANDLER_FILE,
+        line: 1,
+        message: 'appstate handler module is missing',
+      },
+    ];
+  }
+  const violations: UnruledViolation[] = [];
+  const program = parseSync(APP_STATE_HANDLER_FILE, source).program as AstNode;
+  visitAst(program, (node) => {
+    if (node['type'] === 'ImportDeclaration') {
+      const importSource = (node['source'] as AstNode | undefined)?.['value'];
+      if (typeof importSource === 'string' && APP_STATE_LEGACY_IMPORT_SOURCES.has(importSource)) {
+        violations.push({
+          file: APP_STATE_HANDLER_FILE,
+          line: lineOf(source, node),
+          message: 'appstate handler imports a legacy platform app-state module',
+        });
+      }
+      return;
+    }
+    if (
+      node['type'] === 'CallExpression' &&
+      APP_STATE_LEGACY_CALLS.has(identifierName(node['callee']) ?? '')
+    ) {
+      violations.push({
+        file: APP_STATE_HANDLER_FILE,
+        line: lineOf(source, node),
+        message: 'appstate handler calls a legacy platform app-state backend',
+      });
+    }
+  });
   return violations;
 }
 

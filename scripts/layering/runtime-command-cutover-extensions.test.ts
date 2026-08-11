@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  appStateLegacySessionHandlerViolations,
   appLogSessionStateOwnershipViolations,
   devicesGatewayBindingViolations,
   sourceExecutedUsingDeclarationViolations,
@@ -135,5 +136,41 @@ test('source-executed syntax scan rejects using declarations but ignores prose',
       'packages/platform-apple/src/logs/planted.ts: source-executed TypeScript uses unsupported await using declaration',
       'packages/platform-apple/src/logs/planted.ts: source-executed TypeScript uses unsupported using declaration',
     ],
+  );
+});
+
+test('appstate handler rejects legacy platform imports and calls', () => {
+  const handler = [
+    "import { getAndroidAppState } from '../../platforms/android/app-lifecycle.ts';",
+    "import { getHarmonyAppState } from '../../platforms/harmonyos/app-lifecycle.ts';",
+    'export async function handleSessionStateCommands() {',
+    '  await getAndroidAppState();',
+    '  return await getHarmonyAppState();',
+    '}',
+  ].join('\n');
+
+  assert.deepEqual(
+    summaries(
+      appStateLegacySessionHandlerViolations(
+        sources([['src/daemon/handlers/session-state.ts', handler]]),
+      ),
+    ),
+    [
+      'src/daemon/handlers/session-state.ts: appstate handler imports a legacy platform app-state module',
+      'src/daemon/handlers/session-state.ts: appstate handler imports a legacy platform app-state module',
+      'src/daemon/handlers/session-state.ts: appstate handler calls a legacy platform app-state backend',
+      'src/daemon/handlers/session-state.ts: appstate handler calls a legacy platform app-state backend',
+    ],
+  );
+});
+
+test('appstate handler is green after legacy dispatch is removed', () => {
+  assert.deepEqual(
+    appStateLegacySessionHandlerViolations(
+      sources([
+        ['src/daemon/handlers/session-state.ts', 'export const handler = () => undefined;'],
+      ]),
+    ),
+    [],
   );
 });

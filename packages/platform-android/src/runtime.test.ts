@@ -16,10 +16,12 @@ const appStateUnavailable = {
   reason: 'unsupported-device-kind',
   hint: 'Android appstate is supported only for Android emulators and devices.',
 } as const;
+const unknownKindDevice = { ...device, kind: 'unknown' } as unknown as DeviceInfo;
 
 test.each([
   ['emulator', device],
   ['device', { ...device, kind: 'device' as const }],
+  ['unknown', unknownKindDevice],
 ])('classifies the Android %s runtime denominator', async (_name, runtimeDevice) => {
   const listApps = vi.fn(async () => [{ id: 'com.example.app', name: 'Example' }]);
   const appState = vi.fn(async () => ({

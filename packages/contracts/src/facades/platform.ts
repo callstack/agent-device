@@ -70,6 +70,12 @@ export type {
   RuntimeUse,
   RuntimeUseDeclaration,
 } from '../platform-runtime.ts';
+export {
+  createUnavailablePlatformRuntimeBinding,
+  createUnavailablePlatformRuntimeFacts,
+  createUnavailablePlatformRuntimeOwner,
+} from '../platform-runtime-unavailable.ts';
+export type { UnavailablePlatformRuntimeFacts } from '../platform-runtime-unavailable.ts';
 export type {
   DurableDescriptorBodyDecodeOutcome,
   DurableDescriptorCodec,

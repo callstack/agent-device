@@ -26,9 +26,4 @@ export {
   appLogSessionArtifactsMatch,
   assertAppLogSessionArtifacts,
 } from './app-log-session-artifacts.ts';
-export {
-  createUnavailablePlatformRuntimeBinding,
-  createUnavailablePlatformRuntimeFacts,
-  createUnavailablePlatformRuntimeOwner,
-} from './platform-runtime-unavailable.ts';
 export { mergeNetworkDumps, readRecentNetworkTrafficFromText } from './network-traffic.ts';

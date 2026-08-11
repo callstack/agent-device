@@ -3,9 +3,9 @@ import { test, expect, vi } from 'vitest';
 import { handleSessionStateCommands } from '../session-state.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { withTestDeviceInventory } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
-import { createUnavailablePlatformRuntimeFacts } from '@agent-device/capture-kit';
 import {
   appStateUse,
+  createUnavailablePlatformRuntimeFacts,
   localRuntimeOwner,
   narrowDeviceBinding,
   type DeviceBinding,

@@ -13,7 +13,7 @@ import type {
 import {
   createUnavailablePlatformRuntimeBinding,
   createUnavailablePlatformRuntimeFacts,
-} from '@agent-device/capture-kit';
+} from '@agent-device/contracts/platform';
 import {
   providerRuntimeOwner,
   runtimeOwnerKey,

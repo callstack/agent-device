@@ -1,5 +1,7 @@
-import type { PlatformRuntimeOwner } from '@agent-device/contracts/platform';
-import { createUnavailablePlatformRuntimeOwner } from '@agent-device/capture-kit';
+import {
+  createUnavailablePlatformRuntimeOwner,
+  type PlatformRuntimeOwner,
+} from '@agent-device/contracts/platform';
 
 const unavailable = Object.freeze({
   available: false,

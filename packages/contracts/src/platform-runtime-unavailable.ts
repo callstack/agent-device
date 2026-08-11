@@ -4,12 +4,14 @@ import {
   localRuntimeOwner,
   sameRuntimeOwner,
   type DeviceBinding,
-  type PlatformRuntimeOperations,
-  type PlatformRuntimeOwner,
   type RuntimeFacts,
   type RuntimeOperationUnavailability,
   type RuntimeOwnerRef,
-} from '@agent-device/contracts/platform';
+} from './platform-runtime.ts';
+import type {
+  PlatformRuntimeOperations,
+  PlatformRuntimeOwner,
+} from './platform-runtime-operations.ts';
 
 export type UnavailablePlatformRuntimeFacts = Readonly<{
   appLog: RuntimeOperationUnavailability;
@@ -29,7 +31,7 @@ type FrozenUnavailablePlatformRuntimeFacts = Readonly<{
   readiness: RuntimeOperationUnavailability;
 }>;
 
-/** Builds one honest combined owner for a family with no app-log or network mechanics. */
+/** Builds one honest combined owner for a family with no platform operations. */
 export function createUnavailablePlatformRuntimeOwner(
   family: Platform,
   unavailable: UnavailablePlatformRuntimeFacts,
@@ -44,13 +46,13 @@ export function createUnavailablePlatformRuntimeOwner(
       if (request.intent.kind === 'exact-owner' && !sameRuntimeOwner(request.intent.owner, owner)) {
         throw new AppError(
           'UNSUPPORTED_OPERATION',
-          `${family} platform runtime owner identity does not match`,
+          family + ' platform runtime owner identity does not match',
         );
       }
       if (request.device.platform !== family) {
         throw new AppError(
           'UNSUPPORTED_PLATFORM',
-          `${family} platform runtime cannot bind ${request.device.platform}`,
+          family + ' platform runtime cannot bind ' + request.device.platform,
         );
       }
       return createUnavailablePlatformRuntimeBinding(request.device, owner, facts);

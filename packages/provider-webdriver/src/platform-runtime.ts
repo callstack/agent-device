@@ -6,11 +6,11 @@ import type {
   RuntimeFacts,
   RuntimeOwnerRef,
 } from '@agent-device/contracts/platform';
+import { readRecentNetworkTrafficFromText } from '@agent-device/capture-kit';
 import {
   createUnavailablePlatformRuntimeFacts,
-  readRecentNetworkTrafficFromText,
-} from '@agent-device/capture-kit';
-import { sameRuntimeOwner } from '@agent-device/contracts/platform';
+  sameRuntimeOwner,
+} from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 

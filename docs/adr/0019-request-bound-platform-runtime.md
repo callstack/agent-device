@@ -632,6 +632,18 @@ removed against package bytes added; net growth is exceptional and each contribu
 named and justified individually. Contract modules stay vocabulary-thin under the existing
 capture-kit rule; per-unit type inflation is size growth and is reviewed as such.
 
+The appstate request-scoped unit is an explicit reviewed exception to that default: its current
+production delta is +6,279 bytes (+2,265 in root `src/`, +4,014 in workspace packages). The growth
+is unavoidable because appstate had no reusable runtime-owned contract: the unit adds the typed
+`ensureReady`/`appState` fact and operation surface, honest local and provider facts for the full
+denominator, sessionless admission/response parity, and the neutral unavailable-runtime owner
+needed by Linux and Vega. It reuses the existing `defineUse`, gateway selection/binding, Android
+and Harmony lifecycle primitives, provider owner plumbing, and session-owned Apple response path;
+it adds no durable capture state, ledger, descriptor, or recovery machinery. The review itemizes
+the net growth by owner (appstate host, session-state admission, contract, Limrun facts, Harmony,
+Android, inventory projection, and descriptor/facade/gateway wiring) and records the four shipped
+size metrics against `44c298d7f` and the immediate stack base.
+
 A command surface that is deprecated and scheduled for removal at the next major is never
 migrated. It stays on its legacy execution shape until the major deletes it, and the deletion — not
 a migration — retires its platform coupling. Where a command's public surface is being narrowed,

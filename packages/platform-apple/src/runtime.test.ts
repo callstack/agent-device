@@ -56,10 +56,12 @@ test.each([
   });
   const { facts } = binding;
   expect(facts.device.providerMode).toBe('local');
-  expect(facts.operations.appState).toMatchObject({
+  expect(facts.operations.appState).toEqual({
     available: false,
     reason: 'unsupported-platform-leaf',
+    hint: expect.stringContaining('session state'),
   });
+  expect(binding.operations.appState).toBeUndefined();
   expect(facts.operations.networkDump).toEqual({ available: true });
   expect(facts.operations.listApps.available).toBe(
     device.appleOs !== 'watchos' && device.iosPhysicalDeviceBackend !== 'xctest',
