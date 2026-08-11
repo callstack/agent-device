@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { resolveFileOverridePath, runCmd, whichCmd } from '../../utils/exec.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import type { AppStateRuntimeResult } from '@agent-device/contracts/platform';
 import { sleep } from '../../utils/timeouts.ts';
 import type { AppsFilter } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -25,10 +26,9 @@ import {
   parseAndroidLaunchablePackages,
   parseAndroidUserInstalledPackages,
   type AndroidBlockingDialogFocus,
-  type AndroidForegroundApp,
 } from './app-parsers.ts';
 
-export type { AndroidBlockingDialogFocus, AndroidForegroundApp } from './app-parsers.ts';
+export type { AndroidBlockingDialogFocus } from './app-parsers.ts';
 
 const ALIASES: Record<string, { type: 'intent' | 'package'; value: string }> = {
   settings: { type: 'intent', value: 'android.settings.SETTINGS' },
@@ -200,7 +200,7 @@ export function inferAndroidAppName(packageName: string): string {
     .join(' ');
 }
 
-export async function getAndroidAppState(device: DeviceInfo): Promise<AndroidForegroundApp> {
+export async function getAndroidAppState(device: DeviceInfo): Promise<AppStateRuntimeResult> {
   const { readAndroidAppState } = await import('../../platform-runtime.ts');
   return await readAndroidAppState(device, new AbortController().signal);
 }
@@ -642,7 +642,7 @@ async function waitForAndroidPackageNotForeground(
   }
 }
 
-async function readAndroidForegroundApp(device: DeviceInfo): Promise<AndroidForegroundApp | null> {
+async function readAndroidForegroundApp(device: DeviceInfo): Promise<AppStateRuntimeResult | null> {
   const foreground = await getAndroidAppState(device);
   return foreground.package ? foreground : null;
 }

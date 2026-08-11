@@ -25,6 +25,13 @@ export async function readAndroidAppState(
   return await read(host, device, signal);
 }
 
+export async function parseAndroidForegroundApp(
+  text: string,
+): Promise<Readonly<{ package?: string; activity?: string }> | null> {
+  const { parseAndroidForegroundApp: parse } = await import('./app-state.ts');
+  return parse(text);
+}
+
 export const runtimeModule = Object.freeze({
   ...metadata,
   loadRuntime: async (host) => {

@@ -1,4 +1,3 @@
-export type AndroidForegroundApp = { package?: string; activity?: string };
 export type AndroidBlockingDialogFocus = {
   package?: string;
   focusedWindow: string;
@@ -39,10 +38,6 @@ export function parseAndroidUserInstalledPackages(stdout: string): string[] {
     .filter(Boolean);
 }
 
-export function parseAndroidForegroundApp(text: string): AndroidForegroundApp | null {
-  return parseAndroidFocusSegment(text, (segment) => parseAndroidComponentFromSegment(segment));
-}
-
 export function parseAndroidBlockingDialogFocus(text: string): AndroidBlockingDialogFocus | null {
   return parseAndroidFocusSegment(text, (segment, raw) =>
     parseAndroidBlockingDialogFromSegment(segment, raw),
@@ -54,14 +49,12 @@ function parseAndroidFocusSegment<T>(
   parse: (segment: string, raw: string) => T | null,
 ): T | null {
   const lines = text.split('\n');
-
   for (const marker of ANDROID_FOCUS_MARKERS) {
     for (const line of lines) {
       const markerIndex = line.indexOf(marker);
       if (markerIndex === -1) continue;
       const raw = line.trim();
-      const segment = line.slice(markerIndex + marker.length);
-      const parsed = parse(segment, raw);
+      const parsed = parse(line.slice(markerIndex + marker.length), raw);
       if (parsed) return parsed;
     }
   }
@@ -95,39 +88,4 @@ function parseAndroidBlockingDialogFromSegment(
     focusedWindow,
     raw,
   };
-}
-
-function parseAndroidComponentFromSegment(segment: string): AndroidForegroundApp | null {
-  for (const token of segment.trim().split(/\s+/)) {
-    const slashIndex = token.indexOf('/');
-    if (slashIndex <= 0) continue;
-
-    const packageName = readAndroidName(token.slice(0, slashIndex), false);
-    const activity = readAndroidName(token.slice(slashIndex + 1), true);
-    if (packageName && activity && packageName.length === slashIndex) {
-      return { package: packageName, activity };
-    }
-  }
-  return null;
-}
-
-function readAndroidName(value: string, allowDollar: boolean): string {
-  let index = 0;
-  while (index < value.length && isAndroidNameChar(value[index], allowDollar)) {
-    index += 1;
-  }
-  return value.slice(0, index);
-}
-
-function isAndroidNameChar(char: string | undefined, allowDollar: boolean): boolean {
-  if (!char) return false;
-  const code = char.charCodeAt(0);
-  return (
-    (code >= 48 && code <= 57) ||
-    (code >= 65 && code <= 90) ||
-    (code >= 97 && code <= 122) ||
-    char === '_' ||
-    char === '.' ||
-    (allowDollar && char === '$')
-  );
 }

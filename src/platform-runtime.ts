@@ -18,6 +18,7 @@ import {
 } from '@agent-device/platform-apple';
 import {
   createAndroidInventoryModule,
+  parseAndroidForegroundApp as parseAndroidPackageForegroundApp,
   readAndroidAppState as readAndroidPackageAppState,
   runtimeModule as androidRuntimeModule,
 } from '@agent-device/platform-android';
@@ -47,6 +48,12 @@ export async function readAndroidAppState(
 ): Promise<AppStateRuntimeResult> {
   const { createAppStateRuntimeHost } = await import('./platform-runtime-app-state-host.ts');
   return await readAndroidPackageAppState(createAppStateRuntimeHost().android, device, signal);
+}
+
+export async function parseAndroidForegroundApp(
+  text: string,
+): Promise<Readonly<{ package?: string; activity?: string }> | null> {
+  return await parseAndroidPackageForegroundApp(text);
 }
 
 const androidInventoryModule = createAndroidInventoryModule({
