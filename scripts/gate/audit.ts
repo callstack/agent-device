@@ -55,47 +55,40 @@ function isVerbatim(segment: string, lane: Lane, model: Model): boolean {
   return lane.verbatim.some((name) => model.scripts[name]?.replace(/\s+/g, ' ') === normalized);
 }
 
-const PACKAGE_MANAGERS = new Set(['pnpm', 'npm', 'yarn']);
-
 /**
- * Strip command wrappers before classifying. `pnpm exec node scripts/x.ts` runs
- * exactly what `node scripts/x.ts` runs, so the two must classify identically —
- * otherwise wrapping a command is by itself enough to slip an unregistered gate
- * past the no-bypass rule, which is the one invariant this file exists to hold.
- */
-function unwrap(segment: string): string {
-  const parts = segment.split(/\s+/).filter(Boolean);
-  if (parts[0] === 'npx') return parts.slice(1).join(' ');
-  if (!PACKAGE_MANAGERS.has(parts[0] ?? '')) return segment;
-  // Scan for the keyword rather than matching a flag grammar, so `pnpm --dir x exec y`
-  // and `pnpm --silent exec y` unwrap the same way.
-  const at = parts.findIndex((part) => part === 'exec' || part === 'dlx');
-  return at === -1 ? segment : parts.slice(at + 1).join(' ');
-}
-
-/**
- * Whether a segment runs this project's own code, as opposed to shell, SDK and
- * CLI setup. Deliberately narrow on paths: `cp scripts/size-report.mjs …` and
- * `git diff -- scripts/…` name a path under scripts/ without executing anything.
+ * Whether a segment runs this project's own code — decided on the TOKENS it contains,
+ * never on which token is in executable position.
+ *
+ * Position-based classification has to reconstruct wrapper syntax, and loses to the
+ * next spelling every time: `pnpm exec`, then `pnpm --silent exec`, then
+ * `pnpm exec --`, then `npx --yes`. There is no closed set to enumerate. A token scan
+ * has no grammar to get wrong — a command that names a tracked repo file, a test
+ * runner, or a package script IS project code however it is invoked, wrapped, or
+ * prefixed. Anything it over-reports is inventoried once in UNROUTED, which fails
+ * loudly when it stops applying; anything a position parser under-reports is silent.
  */
 function runsProjectCode(segment: string, model: Model): boolean {
   if (isGateInvocation(segment) || invokedScript(segment, model.scripts) !== null) return true;
-  const inner = unwrap(segment);
-  const [executable = ''] = inner.split(/\s+/);
-  // A test runner is project code whatever it is pointed at.
-  if (executable === 'vitest' || /(?:^|\s)--test(?:\s|$)/.test(inner)) return true;
-  return (
-    /^(?:node|sh|bash)$/.test(executable) &&
-    /(?:^|\s)\.?\/?(?:scripts\/\S+|src\/bin\.ts)/.test(inner)
-  );
+  return segment.split(/\s+/).some((token) => {
+    if (token === 'vitest' || token === '--test') return true;
+    const candidate = token.replace(/^["']|["']$/g, '').replace(/^\.\//, '');
+    // A path to runnable code in this repo. Data files (`package.json`) and directories
+    // are excluded: naming one is not executing anything, and `echo "package.json …"`
+    // would otherwise read as a gate.
+    return (
+      candidate.includes('/') &&
+      EXECUTABLE_FILE.test(candidate) &&
+      model.trackedFiles.has(candidate)
+    );
+  });
 }
+
+const EXECUTABLE_FILE = /\.(?:[cm]?[jt]s|sh|bash|py)$/;
 
 function projectCommands(lane: Lane, model: Model): { step: string; command: string }[] {
   return lane.steps.flatMap((step) =>
     step.commands
       .flatMap(commandSegments)
-      // A recorder that cannot fail the lane gates nothing.
-      .filter((segment) => !/\|\|\s*true\s*$/.test(segment))
       .filter((segment) => !isVerbatim(segment, lane, model))
       .filter((segment) => runsProjectCode(segment, model))
       .map((command) => ({ step: step.name, command })),

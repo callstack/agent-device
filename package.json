@@ -175,6 +175,7 @@
     "test:integration:progress": "node --experimental-strip-types scripts/integration-progress.ts",
     "test:integration:progress:check": "node --experimental-strip-types scripts/integration-progress.ts --check",
     "test:fixture-cache": "node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/ci/trusted-fixture-artifact.test.mjs",
+    "test:fixture-fallback": "sh ./test/scripts/setup-fixture-app-fallback-smoke.sh",
     "test:output-economy": "vitest run --project output-economy",
     "test:smoke:web": "pnpm build && node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-web-platform.test.ts",
     "test:smoke": "node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-*.test.ts",

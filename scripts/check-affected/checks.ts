@@ -95,6 +95,7 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   gate('bundle-owner-files', 'Bundle owner-file manifest', 'check:bundle-owner-files'),
   gate('freerange', 'Numeric range audit', 'check:freerange'),
   gate('fixture-cache', 'Trusted fixture-artifact selection', 'test:fixture-cache'),
+  gate('fixture-fallback', 'Fixture-app cache-failure fallback', 'test:fixture-fallback'),
   gate('command-docs', 'Command reference doc coverage', 'check:command-docs'),
 
   // --- Gates that drive their own runner -------------------------------------

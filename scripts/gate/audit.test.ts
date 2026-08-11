@@ -142,24 +142,33 @@ test('running a registered gate script outside the runner fails as a bypass', ()
   assert.match(found[0] ?? '', /pnpm gate <id>/);
 });
 
-test('wrapping a command cannot change how it classifies', () => {
-  // Reported on #1714: `runsProjectCode` read only the first token, so `pnpm exec`
-  // in front of an unregistered gate dropped it before the bypass check ever ran.
-  // The paired form is the assertion — a wrapper is not a classification.
+test('no invocation spelling can hide project code from the bypass rule', () => {
+  // Reported twice on #1714: classification read the executable POSITION, so first
+  // `pnpm exec`, then `pnpm exec --` and `npx --yes`, slipped an unregistered gate
+  // past it. Position parsing has no closed set of wrappers to enumerate, so the
+  // classifier now scans TOKENS — the assertion is that every spelling below, and
+  // any other, resolves to the same verdict as the bare command.
   const bare = 'node --experimental-strip-types scripts/gate/check.ts';
-  const wrapped = [
+  const spellings = [
+    bare,
     `pnpm exec ${bare}`,
+    `pnpm exec -- ${bare}`,
     `pnpm --silent exec ${bare}`,
-    `pnpm --dir . exec ${bare}`,
+    `pnpm --silent exec -- ${bare}`,
+    `pnpm --dir . exec -- ${bare}`,
     `pnpm dlx ${bare}`,
     `npx ${bare}`,
+    `npx --yes ${bare}`,
+    `npx --yes --quiet ${bare}`,
+    `env FOO=1 ${bare}`,
+    `sudo ${bare}`,
+    `time ${bare}`,
+    `bash -c "${bare}"`,
+    `xargs -I{} ${bare}`,
   ];
-  const bypassesFor = (command: string) =>
-    audit(plantCommand(command)).filter((failure) => failure.assertion === 'bypass');
-
-  assert.equal(bypassesFor(bare).length, 1, 'the bare command must be a bypass');
-  for (const command of wrapped) {
-    assert.equal(bypassesFor(command).length, 1, `wrapping must not hide it: ${command}`);
+  for (const command of spellings) {
+    const found = audit(plantCommand(command)).filter((f) => f.assertion === 'bypass');
+    assert.equal(found.length, 1, `must be exactly one bypass: ${command}`);
   }
 });
 

@@ -96,4 +96,18 @@ export const UNROUTED: readonly Unrouted[] = [
   script('build', 'runs at the PR base commit, where `pnpm gate` need not exist yet', 'size.yml'),
 
   ...DEVICE_STEPS.map(([workflow, name]) => step(workflow, name, DEVICE_REASON)),
+
+  // Found by the token scan, which reports a command that NAMES runnable repo code
+  // rather than one that provably runs it. Over-reporting into this inventory is the
+  // intended direction: the alternative is a position parser that stays silent.
+  step(
+    'size.yml',
+    'Preserve report script',
+    'copies the report script out of the tree; does not run it',
+  ),
+  step(
+    'linux.yml',
+    'Verify environment',
+    "prints an AT-SPI tree dump for diagnostics, behind the step's own `|| echo` fallback",
+  ),
 ];

@@ -411,7 +411,7 @@ jobs:
       # build, not fail the caller. This drives that step's real shell against a
       # failing `gh`.
       - name: Setup-fixture-app cache-failure fallback
-        run: sh ./test/scripts/setup-fixture-app-fallback-smoke.sh
+        run: pnpm gate fixture-fallback
 
       # The trust rules that decide whether a cached fixture APK/app may be
       # reused at all — same subject as the fallback smoke above, and parse-only.

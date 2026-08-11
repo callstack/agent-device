@@ -65,6 +65,7 @@ export type CheckId =
   | 'bundle-owner-files'
   | 'freerange'
   | 'fixture-cache'
+  | 'fixture-fallback'
   | 'command-docs'
   // Gates that drive their own runner — declared nowhere, registered here.
   | 'maestro-conformance'
@@ -122,6 +123,7 @@ export const ALL_CHECKS: readonly CheckId[] = [
   'bundle-owner-files',
   'freerange',
   'fixture-cache',
+  'fixture-fallback',
   'command-docs',
   'maestro-conformance',
   'maestro-differential',
