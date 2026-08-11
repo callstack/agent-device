@@ -75,7 +75,9 @@ export function seedAndroidRecordingResource(
           scope: manifest.scope,
           showTouches: manifest.showTouches,
           recordOnlySession: manifest.recordOnlySession,
-          exportQuality: manifest.exportQuality,
+          ...(manifest.exportQuality === undefined
+            ? {}
+            : { exportQuality: manifest.exportQuality }),
           transportMode: manifest.transportMode,
         },
       },

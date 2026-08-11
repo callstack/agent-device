@@ -21,7 +21,7 @@ export type AndroidRecordingManifestFixture = {
   scope: 'device';
   showTouches: boolean;
   recordOnlySession: boolean;
-  exportQuality: 'medium' | 'high';
+  exportQuality?: 'medium' | 'high';
   transportMode: 'transport-composed';
   chunks: NativeChunk[];
   pendingRemotePath?: string;
@@ -126,7 +126,7 @@ function hasCaptureSettings(value: JsonObject): boolean {
     value.scope === 'device' &&
     isBooleanProperty(value, 'showTouches') &&
     isBooleanProperty(value, 'recordOnlySession') &&
-    isExportQuality(value.exportQuality) &&
+    isOptionalExportQuality(value.exportQuality) &&
     value.transportMode === 'transport-composed' &&
     hasChunkList(value.chunks) &&
     hasOptionalString(value, 'pendingRemotePath') &&
@@ -172,6 +172,10 @@ function isBooleanProperty(value: JsonObject, key: string): boolean {
 
 function isExportQuality(value: JsonValue | undefined): boolean {
   return value === 'medium' || value === 'high';
+}
+
+function isOptionalExportQuality(value: JsonValue | undefined): boolean {
+  return value === undefined || isExportQuality(value);
 }
 
 function isJsonObject(value: unknown): value is JsonObject {

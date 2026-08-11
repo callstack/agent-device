@@ -50,7 +50,9 @@ function respondToCommand(
   const pull = respondToPull(args, params, state);
   if (pull) return pull;
   if (args.join(' ') === 'shell getprop sys.boot_completed') return ok('1\n');
-  return respondToShellCommand(args[1] ?? '', state);
+  const response = args[0] === 'shell' ? respondToShellCommand(args[1] ?? '', state) : undefined;
+  if (response) return response;
+  throw new Error(`Unhandled Android recording provider command: ${args.join(' ')}`);
 }
 
 function respondToPull(
@@ -108,10 +110,19 @@ function respondToManifestTarget(
 
 function respondToProcessCommand(command: string, processes: Map<string, NativeProcess>) {
   return (
+    respondToProcessList(command, processes) ??
     respondToProcessDirectory(command, processes) ??
     respondToProcessMetadata(command, processes) ??
     respondToProcessSignal(command, processes)
   );
+}
+
+function respondToProcessList(command: string, processes: Map<string, NativeProcess>) {
+  if (command !== 'ps -A -o pid=') return undefined;
+  const alivePids = [...processes.entries()]
+    .filter(([, nativeProcess]) => nativeProcess.alive)
+    .map(([pid]) => pid);
+  return ok(alivePids.length > 0 ? `${alivePids.join('\n')}\n` : '');
 }
 
 function respondToProcessDirectory(command: string, processes: Map<string, NativeProcess>) {
@@ -148,8 +159,16 @@ function respondToScreenrecordCommand(command: string, processes: Map<string, Na
 }
 
 function respondToArtifactCommand(command: string) {
-  if (command.startsWith('test -e ')) return ok();
-  return command.startsWith('stat -c %s ') ? ok('2048\n') : ok();
+  for (const prefix of ['test -e ', 'rm -f ']) {
+    const target = shellPath(command, prefix);
+    if (target && isRecordingArtifactPath(target)) return ok();
+  }
+  const target = shellPath(command, 'stat -c %s ');
+  return target && isRecordingArtifactPath(target) ? ok('2048\n') : undefined;
+}
+
+function isRecordingArtifactPath(path: string): boolean {
+  return /^\/(?:sdcard|data\/local\/tmp)\/agent-device-recording-\d+\.mp4$/.test(path);
 }
 
 function addManifestProcesses(
