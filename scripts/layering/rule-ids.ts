@@ -55,15 +55,47 @@ export function duplicateRuleIds(declarations: readonly RuleDeclaration[]): stri
 
 /**
  * Collisions that predate this gate: `main` reuses R11 and R13 for two rules
- * each, which #1750 is renaming to R17/R18. Listed rather than pinned by
- * equality so that PR can land in either order without breaking this one —
- * the gate refuses NEW collisions today and these entries fall away with the
- * rename. A stale entry is inert; a missing one is a failure.
+ * each, which #1750 is renaming to R17/R18. Transitional, and each entry
+ * expires on contact — see `ruleIdCollisionFailures`. Empty is the end state,
+ * and the gate gets there on its own.
  */
 export const KNOWN_RULE_ID_COLLISIONS: readonly string[] = [
   'R11 names contracts-implementation-authority and package-boundaries',
   'R13 names device-inventory-cutover and platform-package-substrate',
 ];
+
+/**
+ * Both halves of the transition, because an allowance that outlives the thing
+ * it allows fails OPEN: once #1750 renames R11/R13 apart, a list still naming
+ * those exact collisions would wave them straight back through if anyone
+ * reintroduced them.
+ *
+ * So an allowance is only valid while its collision is actually present. A
+ * collision nobody allowed fails, and an allowance whose collision is gone
+ * fails too — which forces the entry to be deleted in the same change that
+ * removes the collision, and leaves an empty list that admits nothing.
+ */
+export function ruleIdCollisionFailures(params: {
+  declarations: readonly RuleDeclaration[];
+  allowed: readonly string[];
+}): string[] {
+  const present = new Set(duplicateRuleIds(params.declarations));
+  const allowed = new Set(params.allowed);
+  return [
+    ...[...present]
+      .filter((collision) => !allowed.has(collision))
+      .map(
+        (collision) => `two rules answer to one id: ${collision}. Allocate the next free number.`,
+      ),
+    ...[...allowed]
+      .filter((collision) => !present.has(collision))
+      .map(
+        (collision) =>
+          `stale allowance: "${collision}" no longer occurs, so the entry admits a collision ` +
+          'nobody is fixing. Delete it from KNOWN_RULE_ID_COLLISIONS.',
+      ),
+  ].sort();
+}
 
 /** The layering policy modules, which is where rule ids are declared. */
 export function readLayeringSources(directory: string): { path: string; source: string }[] {
