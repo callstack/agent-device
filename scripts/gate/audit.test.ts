@@ -19,7 +19,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { audit } from './audit.ts';
+import { audit, formatFailures } from './audit.ts';
 import { EXTERNAL_ACTIONS, LANE_ENVIRONMENTS, NON_GATE_STEPS } from './declarations.ts';
 import { loadModel, type Model } from './model.ts';
 import { loadLanes, stepDigest, type Lane } from './workflows.ts';
@@ -228,6 +228,32 @@ jobs:
     1,
     'and hands its executable input to the construction rule, which rejects this one',
   );
+});
+
+test('the command PRINTS the undeclared-action guidance, not just a failure count', () => {
+  // Review round 6 follow-up: `audit` emitted `external`, but check.ts's reporter iterated a
+  // heading map that had no entry for it — so `pnpm check:gate-manifest` detected the
+  // undeclared action and printed only `gate manifest: 1 failure(s)`. Detecting a problem
+  // and hiding how to fix it is barely better than not detecting it.
+  const planted = plantedWorkflow(`name: Planted
+on:
+  pull_request:
+jobs:
+  planted:
+    steps:
+      - uses: some-org/some-action@0000000000000000000000000000000000000000
+        with:
+          script: node -e 'import("./scripts/layering/check.ts")'
+`);
+  const printed = formatFailures(audit(planted));
+  assert.match(printed, /Third-party actions with no declaration:/);
+  assert.match(printed, /some-org\/some-action@0{40}/);
+  assert.match(printed, /declare which inputs it runs as shell/);
+
+  // And no assertion can be swallowed again by a heading nobody added.
+  const invented = formatFailures([{ assertion: 'brand-new-kind', message: 'must still print' }]);
+  assert.match(invented, /Other failures \(brand-new-kind\)/);
+  assert.match(invented, /must still print/);
 });
 
 test('a declaration for an action no lane uses is inert', () => {

@@ -21,6 +21,44 @@ import type { Lane } from './workflows.ts';
 
 export type Failure = { readonly assertion: string; readonly message: string };
 
+const HEADINGS: Readonly<Record<string, string>> = {
+  owned: 'Registered checks no lane runs',
+  bypass: 'Project code run outside `pnpm gate`',
+  'lane-env': 'Lane environments that are not inventoried',
+  external: 'Third-party actions with no declaration',
+  surface: 'Execution surfaces the manifest does not model',
+  'path-coverage': 'Paths whose selected checks no triggered lane runs',
+  inert: 'Declarations that no longer apply',
+  registered: 'Suites and projects no registered check covers',
+};
+
+/**
+ * The failures as the command prints them, grouped by assertion so a rewiring round sees
+ * the whole picture instead of one error per run.
+ *
+ * Lives here, next to the assertions, because the two drift apart otherwise: `external`
+ * was added to the audit and not to the reporter, so `pnpm check:gate-manifest` counted an
+ * undeclared action and printed none of the guidance for fixing it. Any assertion without
+ * a heading is therefore still printed, under its own name — a new finding must never be
+ * silently swallowed by the thing whose job is to surface it.
+ */
+export function formatFailures(failures: readonly Failure[]): string {
+  const named = Object.keys(HEADINGS);
+  const unnamed = [...new Set(failures.map((failure) => failure.assertion))]
+    .filter((assertion) => !named.includes(assertion))
+    .sort();
+  const groups: [string, string][] = [
+    ...Object.entries(HEADINGS),
+    ...unnamed.map((assertion): [string, string] => [assertion, `Other failures (${assertion})`]),
+  ];
+  const lines = groups.flatMap(([assertion, heading]) => {
+    const group = failures.filter((failure) => failure.assertion === assertion);
+    if (group.length === 0) return [];
+    return ['', `${heading}:`, ...group.map((failure) => `  - ${failure.message}`)];
+  });
+  return [...lines, '', `gate manifest: ${failures.length} failure(s).`, ''].join('\n');
+}
+
 const REGISTERED = new Set(CHECK_CATALOG.map((spec) => spec.id as string));
 
 function fail(assertion: string, message: string): Failure {
