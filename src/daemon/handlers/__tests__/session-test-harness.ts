@@ -74,7 +74,6 @@ vi.mock('../../../platforms/apple/core/apps.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../platforms/apple/core/apps.ts')>();
   return {
     ...actual,
-    listIosApps: vi.fn(async () => []),
     resolveIosApp: vi.fn(async () => undefined),
     resolveIosSimulatorDeepLinkBundleId: vi.fn(async () => undefined),
   };
