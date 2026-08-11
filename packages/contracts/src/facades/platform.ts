@@ -197,7 +197,6 @@ export {
   resolveDeviceReadinessRuntimePlan,
   appStateRuntimeUses,
   appStateUse,
-  ensureReadyUse,
 } from '../platform-runtime-operations.ts';
 export type { DeviceReadinessRuntimePlan } from '../platform-runtime-operations.ts';
 export type {

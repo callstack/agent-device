@@ -71,7 +71,6 @@ export function resolveDeviceReadinessRuntimePlan(
 ): DeviceReadinessRuntimePlan {
   return input.headless ? bootTargetHeadlessPlan : bootTargetPlan;
 }
-export const ensureReadyUse = defineUse({ required: ['ensureReady'] });
 export const appStateUse = defineUse({ required: ['ensureReady', 'appState'] });
 export const appStateRuntimeUses = Object.freeze([appStateUse] as const);
 
