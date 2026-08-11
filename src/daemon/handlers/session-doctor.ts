@@ -206,7 +206,7 @@ async function appendDeviceScopedDoctorChecks(
   const { androidAdbExecutor, device, options, session, inspectFacts, bindDevice, req } = params;
   let listInstalledApps: DoctorAppInventory | undefined;
   try {
-    listInstalledApps = await resolveDoctorAppInventory({
+    listInstalledApps = await resolveDoctorAppInventoryForDoctor({
       device,
       req,
       targetApp: options.targetApp,
@@ -234,6 +234,15 @@ async function appendDeviceScopedDoctorChecks(
   });
 }
 
+async function resolveDoctorAppInventoryForDoctor(
+  params: Parameters<typeof resolveDoctorAppInventory>[0],
+): ReturnType<typeof resolveDoctorAppInventory> {
+  // Doctor's target-app check preserves its legacy HarmonyOS informational cell; this does not
+  // alter the apps command's facts or runtime binding, which remain available independently.
+  if (params.device.platform === 'harmonyos') return undefined;
+  return resolveDoctorAppInventory(params);
+}
+
 async function resolveDoctorAppInventory(params: {
   device: DeviceInfo;
   req: DaemonRequest;
@@ -244,9 +253,7 @@ async function resolveDoctorAppInventory(params: {
   ((filter: 'all' | 'user-installed') => Promise<readonly InstalledAppInfo[]>) | undefined
 > {
   const { device, req, targetApp, inspectFacts, bindDevice } = params;
-  // Doctor's target-app check preserves its legacy HarmonyOS informational cell; this does not
-  // alter the apps command's facts or runtime binding, which remain available independently.
-  if (!targetApp || !inspectFacts || !bindDevice || device.platform === 'harmonyos') {
+  if (!targetApp || !inspectFacts || !bindDevice) {
     return undefined;
   }
   const facts = await inspectFacts(device);
