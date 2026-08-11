@@ -46,8 +46,10 @@ function runtimeFacts(): RuntimeFacts<PlatformRuntimeOperations> {
 }
 
 const inspectFacts: InspectDeviceRuntimeFacts = vi.fn(async () => runtimeFacts());
-const bindDevice: BindDeviceRuntime = vi.fn(async (device, use) =>
-  narrowDeviceBinding(
+let bindCount = 0;
+const bindDevice: BindDeviceRuntime = async (device, use) => {
+  bindCount += 1;
+  return narrowDeviceBinding(
     {
       device,
       owner: localRuntimeOwner('harmonyos'),
@@ -56,12 +58,12 @@ const bindDevice: BindDeviceRuntime = vi.fn(async (device, use) =>
       [Symbol.asyncDispose]: async () => {},
     },
     use,
-  ),
-);
+  );
+};
 
 beforeEach(() => {
   vi.mocked(inspectFacts).mockClear();
-  vi.mocked(bindDevice).mockClear();
+  bindCount = 0;
 });
 
 async function listApps(): Promise<DaemonResponse | null> {
@@ -90,5 +92,5 @@ test('HarmonyOS apps remains fail-closed when the legacy capability rejected the
     error: { code: 'UNSUPPORTED_OPERATION' },
   });
   expect(inspectFacts).toHaveBeenCalledOnce();
-  expect(bindDevice).not.toHaveBeenCalled();
+  expect(bindCount).toBe(0);
 });
