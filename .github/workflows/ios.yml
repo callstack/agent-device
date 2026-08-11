@@ -73,7 +73,7 @@ jobs:
           derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}
           cache-key-prefix: ios-runner-prebuilt
           cache-key-suffix: -ios-${{ env.IOS_RUNTIME_VERSION }}
-          build-command: sh ./scripts/build-xcuitest-apple.sh
+          gate: swift-runner-ios
           xcuitest-platform: ios
           xcuitest-destination: generic/platform=iOS Simulator
 
@@ -158,7 +158,7 @@ jobs:
           AGENT_DEVICE_IOS_E2E_TIER: smoke
           AGENT_DEVICE_IOS_UDID: ${{ steps.ios-simulator.outputs.simulator-udid }}
         run: |
-          pnpm build
+          pnpm gate build
           node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-ios-simulator-coverage.test.ts test/integration/smoke-ios-simulator.test.ts
 
       - name: Assert simulator automation preserved host focus

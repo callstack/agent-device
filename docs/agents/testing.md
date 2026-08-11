@@ -205,6 +205,44 @@ Lists are bounded (`--limit`, default 10) and always disclose what they hid; `--
 unbounded. The query is read-only, runs in well under a second, and adds no CI work — its model is
 covered by `pnpm depgraph:test` (the existing `Layering Guard` job).
 
+## Gate manifest: proving the gates still run
+
+Every gate above answers "is the code right?". None of them can answer "is this gate still
+running?" — and a check that silently stops executing looks exactly like a green build. Two
+suites had already stopped: `check:tmpdir-leaks` and `test:fixture-cache` were real package
+scripts that no workflow ran, reachable only through the `check:unit` aggregate CI never
+invokes.
+
+`CHECK_CATALOG` (`scripts/check-affected/checks.ts`) is the registry of every check, and
+`pnpm gate <id>` is the only way CI runs one. `pnpm check:gate-manifest` (`scripts/gate/`)
+then asserts, against the real workflows:
+
+- **owned** — every registered check is run by some `pull_request`/`schedule` lane, compared
+  per *unit* (a Vitest project, a `node --test` file) rather than per script name, so a lane
+  running the whole suite covers one running part of it.
+- **path coverage** — for each category the *real* selector emits over the tracked tree, every
+  check it activates is run by a lane a PR touching only that path would actually start. This
+  is #1420's class: a check can run somewhere and still be unreachable for the change that
+  needs it.
+- **registered** — every Vitest project and every suite script belongs to some check, so a new
+  suite cannot arrive unowned.
+
+Plus the wiring that keeps those honest: a gate id must name a registered check, an `if:` on a
+gate step must be ruled on in `GATE_CONDITIONS` (undeclared earns no credit, so `if: false`
+unowns what it guards), an action declared to run a gate is proven to, and a job whose steps
+the loader cannot open fails closed.
+
+What it deliberately does **not** do is prove CI runs project code *only* through `pnpm gate`.
+Whether a shell block executes project code is not decidable from its text — `pnpm exec`,
+`node -e`, indirect variable expansion — and #1714 spent twelve review rounds and ~2,400 lines
+on that invariant without it finding a single defect. Shell this model does not recognise
+simply earns no ownership credit, so the failure direction is a check reported unowned, never
+a check waved through.
+
+Everything the manifest cannot derive lives in `scripts/gate/declarations.ts`, and every entry
+fails in both directions: adding a wrong one is caught by the assertion it feeds, and one that
+stops mattering is reported as inert.
+
 ## Mutation ratchet over decision kernels
 
 Mutation score is the mechanical answer to "is this test load-bearing or decorative". A full-suite

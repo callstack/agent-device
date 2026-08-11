@@ -21,6 +21,12 @@
 
 import { WIRE_SURFACE_FILES } from '../../test/wire-compat/surface.ts';
 
+// The canonical gate universe. Every gate CI runs is one of these — including the
+// ones that drive their own runner (fuzz, mutation, the Maestro differential) and
+// the command-reference docs gate, which used to be reachable only as a workflow
+// job nothing in this repo could name. `pnpm gate <id>` is the only way a CI lane
+// may invoke one, so a gate that is not listed here cannot silently start (or stop)
+// running: `check:gate-manifest` fails on project code run outside the runner.
 export type CheckId =
   | 'format'
   | 'lint'
@@ -33,16 +39,48 @@ export type CheckId =
   | 'package'
   | 'vitest-related'
   | 'unit'
+  | 'unit-ci'
   | 'coverage'
   | 'provider-integration'
   | 'integration-node'
   | 'integration-progress'
-  | 'swift-runner'
+  | 'swift-runner-ios'
+  | 'swift-runner-macos'
   | 'android-helpers'
   | 'macos-helper'
   | 'web-smoke'
   | 'replay-compat'
-  | 'daemon-wire-compat';
+  | 'daemon-wire-compat'
+  // Tooling gates: each proves one of the checkers above still behaves.
+  | 'affected-selector'
+  | 'gate-manifest'
+  | 'gate-manifest-model'
+  | 'depgraph'
+  | 'tmpdir-leaks'
+  | 'tmpdir-leaks-model'
+  | 'contention-retry'
+  | 'coverage-model'
+  | 'wire-compat-model'
+  | 'production-exports'
+  | 'bundle-owner-files'
+  | 'freerange'
+  | 'fixture-cache'
+  | 'fixture-fallback'
+  | 'command-docs'
+  // Gates that drive their own runner — declared nowhere, registered here.
+  | 'maestro-conformance'
+  | 'maestro-differential'
+  | 'maestro-regenerate'
+  | 'fuzz-parsers'
+  | 'mutation'
+  | 'mutation-affected'
+  | 'mutation-check'
+  | 'mutation-model'
+  | 'concurrency-torture'
+  | 'replay-ios'
+  | 'replay-ios-device'
+  | 'replay-macos'
+  | 'replay-linux';
 
 // The complete local check universe. A fail-open plan selects all of these;
 // keep it in sync with the catalog in checks.ts (asserted by the self-test).
@@ -61,15 +99,45 @@ export const ALL_CHECKS: readonly CheckId[] = [
   'integration-node',
   'vitest-related',
   'unit',
+  'unit-ci',
   'coverage',
   'provider-integration',
   'integration-progress',
-  'swift-runner',
+  'swift-runner-ios',
+  'swift-runner-macos',
   'android-helpers',
   'macos-helper',
   'web-smoke',
   'replay-compat',
   'daemon-wire-compat',
+  'affected-selector',
+  'gate-manifest',
+  'gate-manifest-model',
+  'depgraph',
+  'tmpdir-leaks',
+  'tmpdir-leaks-model',
+  'contention-retry',
+  'coverage-model',
+  'wire-compat-model',
+  'production-exports',
+  'bundle-owner-files',
+  'freerange',
+  'fixture-cache',
+  'fixture-fallback',
+  'command-docs',
+  'maestro-conformance',
+  'maestro-differential',
+  'maestro-regenerate',
+  'fuzz-parsers',
+  'mutation',
+  'mutation-affected',
+  'mutation-check',
+  'mutation-model',
+  'concurrency-torture',
+  'replay-ios',
+  'replay-ios-device',
+  'replay-macos',
+  'replay-linux',
 ];
 
 export type SelectionReason = {
@@ -369,10 +437,18 @@ const BUILD_OWNERSHIP: ReadonlyArray<{
   detail: string;
   owns: (file: string) => boolean;
 }> = [
+  // Both platform builds compile the same runner sources, and each is a separate
+  // gate in a separate lane, so a Swift change owns both.
   {
-    check: 'swift-runner',
+    check: 'swift-runner-ios',
     rule: 'own:swift',
-    detail: 'Swift runner sources require the XCUITest build',
+    detail: 'Swift runner sources require the iOS XCUITest build',
+    owns: (file) => file.startsWith('apple/runner/') || file.endsWith('.swift'),
+  },
+  {
+    check: 'swift-runner-macos',
+    rule: 'own:swift',
+    detail: 'Swift runner sources require the macOS XCUITest build',
     owns: (file) => file.startsWith('apple/runner/') || file.endsWith('.swift'),
   },
   {
@@ -413,6 +489,25 @@ const buildOwnership: OwnershipRule = ({ file }, input) => {
   }
   return selections;
 };
+
+// Docs with an owning gate (#1420). Most Markdown has no suite, but the command
+// reference is asserted against the CLI in both directions, and ci.yml ignores
+// `website/**` — so a docs-only PR must still be routed to the lane that runs it.
+// Registering `command-docs` as an ordinary check is what lets the gate manifest
+// prove that with no docs-specific machinery.
+const COMMAND_DOCS = 'website/docs/docs/commands.md';
+
+const docsOwnership: OwnershipRule = ({ file }) =>
+  file === COMMAND_DOCS
+    ? [
+        reason(
+          'command-docs',
+          file,
+          'own:command-docs',
+          'the command reference is asserted against the CLI in both directions',
+        ),
+      ]
+    : [];
 
 const OWNERSHIP_RULES: readonly OwnershipRule[] = [
   formatGate,
@@ -471,7 +566,12 @@ export function selectChecks(input: SelectInput): CheckPlan {
       continue;
     }
     if (isDocs(file)) {
-      docsOnlyPaths.push(file);
+      const owned = docsOwnership(fileFacts(file), input);
+      if (owned.length === 0) {
+        docsOnlyPaths.push(file);
+        continue;
+      }
+      reasons.push(...owned);
       continue;
     }
     const facts = fileFacts(file);

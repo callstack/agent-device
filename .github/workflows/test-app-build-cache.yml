@@ -46,7 +46,7 @@ jobs:
         uses: ./.github/actions/setup-test-app-dependencies
 
       - name: Typecheck test app
-        run: pnpm test-app:typecheck
+        run: pnpm gate test-app-typecheck
 
       - name: Resolve native fingerprint
         id: fingerprint

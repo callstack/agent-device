@@ -10,7 +10,7 @@ name: Concurrency Torture Nightly
 # Scheduled + manual only: the PR gate already runs a fast default sweep via the
 # Node integration lane; this nightly sweeps a much larger seed range to keep
 # mining for ordering bugs. A failure prints the seed and the exact
-# `TORTURE_SEED=<n> pnpm test:concurrency-torture` replay command.
+# `TORTURE_SEED=<n> pnpm gate concurrency-torture` replay command.
 
 on:
   schedule:
@@ -54,7 +54,7 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Run concurrency torture sweep
-        run: pnpm test:concurrency-torture
+        run: pnpm gate concurrency-torture
 
       - name: Upload torture lane envelope
         if: always()

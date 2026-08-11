@@ -24,12 +24,16 @@ runs:
   steps:
     - name: Resolve and boot iOS test simulator
       id: boot
+      env:
+        INPUT_RUNTIME_VERSION: ${{ inputs.runtime-version }}
+        INPUT_PREFERRED_DEVICE_NAME: ${{ inputs.preferred-device-name }}
+        INPUT_BOOT_TIMEOUT_SECONDS: ${{ inputs.boot-timeout-seconds }}
       run: |
         set -euo pipefail
-        RUNTIME_VERSION="${{ inputs.runtime-version }}"
+        RUNTIME_VERSION="$INPUT_RUNTIME_VERSION"
         RUNTIME_TOKEN="SimRuntime.iOS-${RUNTIME_VERSION//./-}"
         export RUNTIME_TOKEN
-        export PREFERRED_DEVICE_NAME="${{ inputs.preferred-device-name }}"
+        export PREFERRED_DEVICE_NAME="$INPUT_PREFERRED_DEVICE_NAME"
         UDID="$(
           xcrun simctl list devices -j | node -e '
             const fs = require("node:fs");
@@ -58,7 +62,7 @@ runs:
         echo "simulator-udid=$UDID" >> "$GITHUB_OUTPUT"
         xcrun simctl shutdown all || true
         xcrun simctl boot "$UDID" || true
-        TIMEOUT_SECONDS="${{ inputs.boot-timeout-seconds }}"
+        TIMEOUT_SECONDS="$INPUT_BOOT_TIMEOUT_SECONDS"
         set +e
         perl -e 'alarm shift; exec @ARGV' "$TIMEOUT_SECONDS" xcrun simctl bootstatus "$UDID" -b
         BOOTSTATUS_EXIT="$?"

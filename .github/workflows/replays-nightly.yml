@@ -42,7 +42,7 @@ jobs:
       # A lane whose classifier or watchdog regressed would pass forever. This runs the
       # broken-on-purpose targets first and fails unless each violation is caught.
       - name: Self-check the harness
-        run: pnpm fuzz:parsers --self-check --artifact-dir .tmp/fuzz/self-check
+        run: pnpm gate fuzz-parsers --self-check --artifact-dir .tmp/fuzz/self-check
 
       # Runs even when the self-check fails, so the lane always produces a fuzz envelope too
       # (a step that never runs writes no envelope, and monitoring cannot tell that apart from
@@ -53,7 +53,7 @@ jobs:
           FUZZ_ITERATIONS: ${{ github.event.inputs.fuzz-iterations || '50000' }}
           FUZZ_SEED: ${{ github.event.inputs.fuzz-seed || github.run_number }}
         run: |
-          pnpm fuzz:parsers \
+          pnpm gate fuzz-parsers \
             --iterations "$FUZZ_ITERATIONS" \
             --seed "$FUZZ_SEED" \
             --artifact-dir .tmp/fuzz/run
@@ -136,7 +136,7 @@ jobs:
             ANDROID_SERIAL="$(adb devices | awk 'NR > 1 && $2 == "device" { print $1; exit }')"
             test -n "$ANDROID_SERIAL"
             BOOT_FINISHED_AT="$(date +%s)"
-            pnpm build
+            pnpm gate build
             pnpm clean:daemon
             adb -s "$ANDROID_SERIAL" install -r "${{ steps.fixture-app.outputs.apk-path }}"
             node --experimental-strip-types src/bin.ts replay examples/test-app/replays/drag-android.ad --platform android --serial "$ANDROID_SERIAL" --session nightly-android-target-drag --json
@@ -183,7 +183,7 @@ jobs:
           derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}
           cache-key-prefix: ios-runner-prebuilt
           cache-key-suffix: -ios-${{ env.IOS_RUNTIME_VERSION }}
-          build-command: sh ./scripts/build-xcuitest-apple.sh
+          gate: swift-runner-ios
           xcuitest-platform: ios
           xcuitest-destination: generic/platform=iOS Simulator
 
@@ -201,7 +201,7 @@ jobs:
           pnpm clean:daemon
 
       - name: Run iOS simulator replay suite
-        run: pnpm test:replay:ios --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --retries 2 --artifacts-dir test/artifacts/replays-ios-simulator --report-junit test/artifacts/replays-ios-simulator.junit.xml
+        run: pnpm gate replay-ios --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --retries 2 --artifacts-dir test/artifacts/replays-ios-simulator --report-junit test/artifacts/replays-ios-simulator.junit.xml
 
       - name: Fetch current fixture app
         id: fixture-app
@@ -228,14 +228,14 @@ jobs:
           AGENT_DEVICE_IOS_E2E_TIER: full
           AGENT_DEVICE_IOS_UDID: ${{ steps.ios-simulator.outputs.simulator-udid }}
         run: |
-          pnpm build
+          pnpm gate build
           node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-ios-simulator-coverage.test.ts test/integration/smoke-ios-simulator.test.ts
 
       - name: Run iOS physical device replay suite
         if: env.IOS_UDID != ''
         env:
           IOS_UDID: ${{ vars.IOS_UDID }}
-        run: pnpm test:replay:ios-device --udid "$IOS_UDID" --retries 2 --artifacts-dir test/artifacts/replays-ios-device --report-junit test/artifacts/replays-ios-device.junit.xml
+        run: pnpm gate replay-ios-device --udid "$IOS_UDID" --retries 2 --artifacts-dir test/artifacts/replays-ios-device --report-junit test/artifacts/replays-ios-device.junit.xml
 
       - name: Upload iOS artifacts
         if: always()
@@ -264,15 +264,15 @@ jobs:
         with:
           derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}
           cache-key-prefix: macos-runner-prebuilt
-          build-command: pnpm build:xcuitest:macos
+          gate: swift-runner-macos
           xcuitest-platform: macos
           xcuitest-destination: platform=macOS,arch=arm64
 
       - name: Build macOS helper
-        run: pnpm build:macos-helper
+        run: pnpm gate macos-helper
 
       - name: Run macOS replay suite
-        run: pnpm test:replay:macos --retries 2 --report-junit test/artifacts/replays-macos.junit.xml
+        run: pnpm gate replay-macos --retries 2 --report-junit test/artifacts/replays-macos.junit.xml
 
       - name: Upload macOS artifacts
         if: always()
