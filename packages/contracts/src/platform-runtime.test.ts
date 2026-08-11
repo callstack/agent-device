@@ -10,7 +10,7 @@ import {
   sameRuntimeOwner,
   type BoundDeviceRuntime,
   type DeviceBinding,
-} from './platform-runtime.ts';
+} from './facades/platform.ts';
 
 type TestOperations = {
   inspect: (input: Readonly<{ depth: number }>) => Promise<Readonly<{ nodes: number }>>;
