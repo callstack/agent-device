@@ -36,9 +36,16 @@ const registryKind: PlatformExecutionKindOf = (command) =>
 
 type RouteDispatch = Readonly<{ route: string; dispatched: string }>;
 
+/**
+ * One dispatch expression, identified by source position. Attribution subtracts
+ * occurrences: two dispatches of the same command are two sites, so a stray one
+ * cannot be absorbed by a routed one that happens to name the same command.
+ */
+type DispatchSite = Readonly<{ command: string; offset: number }>;
+
 type RouteScan = Readonly<{
   dispatches: readonly RouteDispatch[];
-  /** Dispatch literals no `command === '<name>'` route could claim. */
+  /** Commands dispatched at a site no `command === '<name>'` route could claim. */
   unattributed: readonly string[];
 }>;
 
@@ -88,10 +95,15 @@ function routedCommandOf(test: unknown): string | undefined {
 }
 
 /** `command: 'x'`, `command: INTERNAL_COMMANDS.x`, `command: PUBLIC_COMMANDS.x`. */
-function dispatchedCommandOf(node: AstNode): string | undefined {
+function dispatchSiteOf(node: AstNode): DispatchSite | undefined {
   if (node.type !== 'Property' || node['computed'] === true) return undefined;
   if (identifierName(node['key']) !== 'command') return undefined;
-  return dispatchTargetOf(node['value']);
+  const command = dispatchTargetOf(node['value']);
+  if (command === undefined) return undefined;
+  // A node without a source position cannot be matched against an attributed
+  // site, so -1 keeps it distinct from every real offset and it stays unclaimed.
+  const start = node['start'];
+  return { command, offset: typeof start === 'number' ? start : -1 };
 }
 
 function dispatchTargetOf(value: unknown): string | undefined {
@@ -115,17 +127,17 @@ function localFunctionsByName(program: unknown): Map<string, AstNode> {
   return functions;
 }
 
-/** Dispatch literals reachable from `scope`, following calls to same-module functions. */
+/** Dispatch sites reachable from `scope`, following calls to same-module functions. */
 function reachableDispatches(
   scope: unknown,
   functions: ReadonlyMap<string, AstNode>,
   visited: Set<string>,
-): Set<string> {
-  const found = new Set<string>();
+): DispatchSite[] {
+  const found: DispatchSite[] = [];
   const calls: string[] = [];
   walk(scope, (node) => {
-    const dispatched = dispatchedCommandOf(node);
-    if (dispatched !== undefined) found.add(dispatched);
+    const site = dispatchSiteOf(node);
+    if (site !== undefined) found.push(site);
     if (node.type !== 'CallExpression') return;
     const callee = identifierName(node['callee']);
     if (callee !== undefined && functions.has(callee)) calls.push(callee);
@@ -133,9 +145,7 @@ function reachableDispatches(
   for (const name of calls) {
     if (visited.has(name)) continue;
     visited.add(name);
-    for (const dispatched of reachableDispatches(functions.get(name), functions, visited)) {
-      found.add(dispatched);
-    }
+    found.push(...reachableDispatches(functions.get(name), functions, visited));
   }
   return found;
 }
@@ -143,29 +153,34 @@ function reachableDispatches(
 function scanCliRouteDispatches(sourceText: string): RouteScan {
   const program = parseSync('cli.ts', sourceText).program;
   const functions = localFunctionsByName(program);
+  const edges = new Set<string>();
   const dispatches: RouteDispatch[] = [];
-  const attributed = new Set<string>();
+  const attributedOffsets = new Set<number>();
 
   walk(program, (node) => {
     if (node.type !== 'IfStatement') return;
     const route = routedCommandOf(node['test']);
     if (route === undefined) return;
-    for (const dispatched of reachableDispatches(node['consequent'], functions, new Set())) {
-      dispatches.push({ route, dispatched });
-      attributed.add(dispatched);
+    for (const site of reachableDispatches(node['consequent'], functions, new Set())) {
+      attributedOffsets.add(site.offset);
+      const edge = `${route} ${site.command}`;
+      if (edges.has(edge)) continue;
+      edges.add(edge);
+      dispatches.push({ route, dispatched: site.command });
     }
   });
 
-  const all = new Set<string>();
+  const allSites: DispatchSite[] = [];
   walk(program, (node) => {
-    const dispatched = dispatchedCommandOf(node);
-    if (dispatched !== undefined) all.add(dispatched);
+    const site = dispatchSiteOf(node);
+    if (site !== undefined) allSites.push(site);
   });
 
-  return {
-    dispatches,
-    unattributed: [...all].filter((command) => !attributed.has(command)).sort(),
-  };
+  const unclaimed = allSites
+    .filter(({ offset }) => !attributedOffsets.has(offset))
+    .map(({ command }) => command);
+
+  return { dispatches, unattributed: [...new Set(unclaimed)].sort() };
 }
 
 function dominanceFailures(scan: RouteScan, kindOf: PlatformExecutionKindOf): string[] {
@@ -214,5 +229,25 @@ describe('platform-execution coherence across CLI route delegation', () => {
       }
     `;
     expect(scanCliRouteDispatches(planted).unattributed).toEqual(['runtime']);
+  });
+
+  test('planted red: a stray dispatch sharing a routed target name is still reported', () => {
+    const planted = `
+      async function runCli(argv, deps) {
+        if (command === 'react-devtools') {
+          await runReactDevtoolsCli(ctx, deps);
+          return;
+        }
+        await deps.sendToDaemon({ command: INTERNAL_COMMANDS.runtime, positionals: ['stray'] });
+      }
+      async function runReactDevtoolsCli(ctx, deps) {
+        await deps.sendToDaemon({ command: INTERNAL_COMMANDS.runtime, positionals: [] });
+      }
+    `;
+    const scan = scanCliRouteDispatches(planted);
+
+    // Both halves matter: the routed occurrence is claimed, the stray one is not.
+    expect(scan.dispatches).toEqual([{ route: 'react-devtools', dispatched: 'runtime' }]);
+    expect(scan.unattributed).toEqual(['runtime']);
   });
 });
