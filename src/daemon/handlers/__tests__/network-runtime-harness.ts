@@ -46,6 +46,7 @@ export function createNetworkRuntime(
             appLogStart: unavailable,
             appLogReattach: unavailable,
             appLogCleanup: unavailable,
+            appState: unavailable,
             networkDump: networkFact,
             screenRecordingStart: unavailable,
             screenRecordingReattach: unavailable,

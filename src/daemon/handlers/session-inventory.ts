@@ -186,7 +186,13 @@ async function capabilitiesInventoryResponse(params: {
   });
   if ('response' in resolution) return resolution.response;
   const { device } = resolution;
-  const appsAvailable = await isAppsRuntimeAvailable(device, params.inspectFacts);
+  const runtimeFacts = await inspectRuntimeFacts(device, params.inspectFacts);
+  const appsAvailable =
+    runtimeFacts?.operations.ensureReady.available === true &&
+    runtimeFacts.operations.listApps.available === true;
+  const appStateAvailable =
+    runtimeFacts?.operations.ensureReady.available === true &&
+    runtimeFacts.operations.appState.available === true;
   const [logsAvailable, networkAvailable, recordingAvailable] = params.bindDevice
     ? await Promise.all([
         params
@@ -213,7 +219,9 @@ async function capabilitiesInventoryResponse(params: {
               ? recordingAvailable
               : command === 'apps'
                 ? appsAvailable
-                : isCommandSupportedOnDevice(command, device),
+                : command === 'appstate'
+                  ? appStateAvailable
+                  : isCommandSupportedOnDevice(command, device),
       ),
     },
   };
@@ -254,18 +262,17 @@ async function handleAppsInventory(params: {
   return appsInventoryResponse(apps);
 }
 
-async function isAppsRuntimeAvailable(
+async function inspectRuntimeFacts(
   device: DeviceInfo,
   inspectFacts: InspectDeviceRuntimeFacts | undefined,
-): Promise<boolean> {
-  if (!inspectFacts) return false;
+): Promise<Awaited<ReturnType<InspectDeviceRuntimeFacts>> | undefined> {
+  if (!inspectFacts) return undefined;
   try {
-    const facts = await inspectFacts(device);
-    return facts.operations.ensureReady.available && facts.operations.listApps.available;
+    return await inspectFacts(device);
   } catch {
     // Capability projection is advisory. A provider facts failure must fail closed rather than
     // reconstructing apps support from the retired capability matrix.
-    return false;
+    return undefined;
   }
 }
 

@@ -191,6 +191,7 @@ const HARMONYOS_SUPPORTED_COMMANDS_REF = new Set([
   'close',
   'back',
   'appstate',
+  'apps',
   'app-switcher',
   'click',
   'fill',
@@ -284,6 +285,7 @@ test('HarmonyOS advertises only the current HDC-backed command subset', () => {
   assert.deepEqual(availableCommands, [
     'app-switcher',
     'appstate',
+    'apps',
     'back',
     'click',
     'close',

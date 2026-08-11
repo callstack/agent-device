@@ -1,6 +1,7 @@
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import {
   resolveDeviceReadinessRuntimePlan,
+  appStateUse,
   type RuntimeOperationFact,
 } from '@agent-device/contracts/platform';
 import {
@@ -70,6 +71,8 @@ async function handleAppStateCommand(params: {
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
+  inspectFacts?: InspectDeviceRuntimeFacts;
+  bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
   const { req, sessionName, sessionStore } = params;
   const session = sessionStore.get(sessionName);
@@ -148,7 +151,7 @@ async function handleAppStateCommand(params: {
   const device = await resolveCommandDevice({
     session,
     flags,
-    ensureReady: true,
+    ensureReady: false,
   });
   if (isIosFamily(device)) {
     return errorResponse('SESSION_NOT_FOUND', IOS_APPSTATE_SESSION_REQUIRED_MESSAGE);
@@ -156,29 +159,33 @@ async function handleAppStateCommand(params: {
   if (isMacOs(device)) {
     return errorResponse('SESSION_NOT_FOUND', MACOS_APPSTATE_SESSION_REQUIRED_MESSAGE);
   }
-  if (device.platform === 'web') {
-    return errorResponse('UNSUPPORTED_OPERATION', 'appstate is not supported on web.');
+  const inspect = requireInspectFacts(params.inspectFacts);
+  const facts = await inspect(device);
+  const unavailable = [facts.operations.ensureReady, facts.operations.appState].find(
+    (fact) => !fact.available,
+  );
+  if (unavailable && !unavailable.available) {
+    return errorResponse(
+      'UNSUPPORTED_OPERATION',
+      device.platform === 'web'
+        ? 'appstate is not supported on web.'
+        : 'appstate is not supported on this device',
+      undefined,
+      unavailable.hint ? { hint: unavailable.hint } : undefined,
+    );
   }
 
-  if (device.platform === 'harmonyos') {
-    const { getHarmonyAppState } = await import('../../platforms/harmonyos/app-lifecycle.ts');
-    const state = await getHarmonyAppState(device);
-    return {
-      ok: true,
-      data: {
-        platform: 'harmonyos',
-        package: state.package,
-        activity: state.activity,
-      },
-    };
-  }
-
-  const { getAndroidAppState } = await import('../../platforms/android/app-lifecycle.ts');
-  const state = await getAndroidAppState(device);
+  const bindDevice = requireBindDevice(params.bindDevice);
+  const runtime = await bindDevice(device, appStateUse);
+  await runtime.operations.ensureReady({
+    serial: flags.serial,
+    androidSerialAllowlist: resolveAndroidSerialAllowlistForAppState(flags.androidDeviceAllowlist),
+  });
+  const state = await runtime.operations.appState();
   return {
     ok: true,
     data: {
-      platform: 'android',
+      platform: publicPlatformString(device),
       package: state.package,
       activity: state.activity,
     },
@@ -343,10 +350,17 @@ export async function handleSessionStateCommands(params: {
       req,
       sessionName,
       sessionStore,
+      inspectFacts: params.inspectFacts,
+      bindDevice: params.bindDevice,
     });
   }
 
   return null;
+}
+
+function resolveAndroidSerialAllowlistForAppState(value: string | undefined): string[] | undefined {
+  const allowlist = resolveAndroidSerialAllowlist(value);
+  return allowlist ? [...allowlist].sort() : undefined;
 }
 
 function shutdownFailureMessage(

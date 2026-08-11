@@ -77,6 +77,10 @@ test.each([
     },
   });
   expect(binding.facts.device.providerMode).toBe('provider-runtime');
+  expect(binding.facts.operations.appState).toMatchObject({
+    available: false,
+    reason: 'unsupported-provider-mode',
+  });
   expect(binding.facts.operations.networkDump).toEqual({ available: true });
   expect(binding.facts.operations.ensureReady).toEqual({ available: true });
   expect(binding.facts.operations.bootTarget).toEqual({ available: true });
@@ -110,6 +114,10 @@ function host(run: PlatformRuntimeHost['commands']['run']): PlatformRuntimeHost 
       applePhysical: { ensureConnected: async () => {} },
       appleAutomation: { keepHot: () => {} },
       androidEmulator: { discover: async () => [], launch: () => 1, terminate: async () => {} },
+    },
+    appState: {
+      android: { appState: async () => ({}) },
+      harmonyos: { appState: async () => ({}) },
     },
     appleTools: {
       isXcrunAvailable: async () => false,

@@ -406,6 +406,7 @@ function createRuntimeHarness(options: { inspectAvailable?: boolean } = {}) {
           appLogStart: { available: true },
           appLogReattach: { available: true },
           appLogCleanup: { available: true },
+          appState: { available: false, reason: 'owner-capability-missing' },
           networkDump: { available: true },
           screenRecordingStart: unavailableRecording,
           screenRecordingReattach: unavailableRecording,

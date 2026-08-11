@@ -296,6 +296,38 @@ test.each(APPS_UNAVAILABLE_CAPABILITY_CASES)(
   },
 );
 
+test('capabilities excludes appstate when its runtime fact is unavailable', async () => {
+  const sessionName = 'android-capabilities-no-appstate';
+  const sessionStore = makeSessionStore('agent-device-capabilities-no-appstate-');
+  sessionStore.set(sessionName, makeAndroidSession(sessionName));
+  const runtime = createAdmissionRuntime({
+    appLogAvailable: true,
+    appStateAvailable: false,
+    networkAvailable: true,
+    providerMode: 'local',
+  });
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: PUBLIC_COMMANDS.capabilities,
+      positionals: [],
+      flags: {},
+    },
+    sessionName,
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    bindDevice: runtime.bindDevice,
+    inspectFacts: runtime.inspectFacts,
+    invoke: async () => ({ ok: true, data: {} }),
+  });
+
+  expect(response?.ok).toBe(true);
+  if (!response?.ok) return;
+  expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.appState);
+});
+
 test('capabilities accepts a stopped Android AVD placeholder for explicit platform discovery', async () => {
   const stoppedAvd: DeviceInfo = {
     platform: 'android',
@@ -340,6 +372,7 @@ test('capabilities accepts a stopped Android AVD placeholder for explicit platfo
 
 function createAdmissionRuntime(options: {
   appLogAvailable: boolean;
+  appStateAvailable?: boolean;
   networkAvailable: boolean;
   appsAvailable: boolean;
   providerMode: RuntimeProviderMode;
@@ -357,6 +390,7 @@ function createAdmissionRuntime(options: {
 
 type AdmissionRuntimeOptions = Readonly<{
   appLogAvailable: boolean;
+  appStateAvailable?: boolean;
   networkAvailable: boolean;
   appsAvailable: boolean;
   providerMode: RuntimeProviderMode;
@@ -391,6 +425,10 @@ function createAdmissionBinding(
         appLogStart: unavailable,
         appLogReattach: unavailable,
         appLogCleanup: unavailable,
+        appState:
+          (options.appStateAvailable ?? options.appLogAvailable)
+            ? { available: true }
+            : unavailable,
         networkDump: options.networkAvailable ? { available: true } : unavailable,
         screenRecordingStart: unavailable,
         screenRecordingReattach: unavailable,

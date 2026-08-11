@@ -345,6 +345,7 @@ function makeGateway(
           appLogStart: { available: true as const },
           appLogReattach: { available: true as const },
           appLogCleanup: { available: true as const },
+          appState: { available: false as const, reason: 'owner-capability-missing' as const },
           networkDump: { available: true as const },
           screenRecordingStart: unavailableRecording,
           screenRecordingReattach: unavailableRecording,

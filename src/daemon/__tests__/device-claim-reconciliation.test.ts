@@ -57,6 +57,7 @@ test('reconciles the dead owner session resources through their exact runtime ow
         appLogStart: unavailable,
         appLogReattach: { available: true as const },
         appLogCleanup: { available: true as const },
+        appState: unavailable,
         networkDump: unavailable,
         screenRecordingStart: unavailable,
         screenRecordingReattach: unavailable,

@@ -18,6 +18,11 @@ const unavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
 } as const);
+const appStateUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'HarmonyOS appstate is supported only for HarmonyOS emulators and devices.',
+} as const);
 
 export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): PlatformRuntimeOwner {
   const appLogs = createHarmonyAppLogRuntime(host);
@@ -28,6 +33,7 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
       device: logs.device,
       operations: {
         ...logs.operations,
+        appState: device.kind === 'simulator' ? appStateUnavailable : available,
         networkDump: unavailable,
         screenRecordingStart: recordingFacts,
         screenRecordingReattach: recordingFacts,
@@ -53,6 +59,13 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         facts,
         operations: Object.freeze({
           ...logs.operations,
+          ...(facts.operations.appState.available
+            ? {
+                appState: async () =>
+                  await host.appState.harmonyos.appState(request.device, request.scope.signal),
+              }
+            : {}),
+          ensureReady: async () => ({ ...request.device, booted: true }),
           ...(recordingFacts.available
             ? createHarmonyScreenRecordingOperations({
                 host,
@@ -61,7 +74,6 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
                 signal: request.scope.signal,
               })
             : {}),
-          ensureReady: async () => ({ ...request.device, booted: true }),
           listApps: async (input: { device: DeviceInfo; filter: 'all' | 'user-installed' }) =>
             await host.appInventory.harmonyos.listApps(
               input.device,

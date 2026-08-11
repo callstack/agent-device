@@ -224,6 +224,10 @@ function createRecordingPlatformRuntimeGateway(params: {
             appLogStart: { available: true },
             appLogReattach: { available: true },
             appLogCleanup: { available: true },
+            appState: {
+              available: false,
+              reason: 'unsupported-provider-mode',
+            },
             networkDump: {
               available: false,
               reason: 'unsupported-provider-mode',

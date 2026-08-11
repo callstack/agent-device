@@ -29,6 +29,7 @@ test('rejects a cross-platform durable descriptor before provider reconnection',
     openCurrent: async () => undefined,
     reconnect,
     listApps: async () => [],
+    getAppState: async () => ({ package: 'com.example.app', activity: '.MainActivity' }),
   });
   const binding = await owner.bind({
     device,
@@ -71,6 +72,7 @@ test('rejects cross-session paths before reconnecting or opening a provider read
     openCurrent,
     reconnect,
     listApps: async () => [],
+    getAppState: async () => ({ package: 'com.example.app', activity: '.MainActivity' }),
   });
   const binding = await owner.bind({ device, intent: { kind: 'ordinary' }, scope });
   const envelope = createLimrunAppLogEnvelope({
@@ -132,6 +134,7 @@ test.each([
     openCurrent: async () => undefined,
     reconnect,
     listApps: async () => [],
+    getAppState: async () => ({ package: 'com.example.app', activity: '.MainActivity' }),
   });
 
   await expect(
@@ -170,6 +173,7 @@ test('serves provider-owned network from the canonical session app log without l
     openCurrent: async () => undefined,
     reconnect: async () => ({ status: 'missing' }),
     listApps: async () => [],
+    getAppState: async () => ({ package: 'com.example.app', activity: '.MainActivity' }),
   });
   const binding = await owner.bind({ device, intent: { kind: 'ordinary' }, scope });
   await expect(
@@ -209,9 +213,11 @@ test.each([
     openCurrent: async () => undefined,
     reconnect: async () => ({ status: 'missing' }),
     listApps: async () => [],
+    getAppState: async () => ({ package: 'com.example.app', activity: '.MainActivity' }),
   });
   const binding = await owner.bind({ device: runtimeDevice, intent: { kind: 'ordinary' }, scope });
   expect(binding.facts.device.providerMode).toBe('provider-runtime');
+  expect(binding.facts.operations.appState.available).toBe(runtimeDevice.platform === 'android');
   expect(binding.facts.operations.networkDump).toEqual({ available: true });
   expect(binding.facts.operations.ensureReady).toEqual({ available: true });
   expect(binding.facts.operations.bootTarget).toEqual({ available: true });
@@ -228,6 +234,14 @@ test.each([
     id: runtimeDevice.id,
     booted: true,
   });
+  if (runtimeDevice.platform === 'android') {
+    await expect(binding.operations.appState?.()).resolves.toEqual({
+      package: 'com.example.app',
+      activity: '.MainActivity',
+    });
+  } else {
+    expect(binding.operations.appState).toBeUndefined();
+  }
 });
 
 function unusedHost(): PlatformRuntimeHost {
@@ -282,6 +296,10 @@ function unusedHost(): PlatformRuntimeHost {
       apple: { listApps: async () => [] },
       android: { listApps: async () => [] },
       harmonyos: { listApps: async () => [] },
+    },
+    appState: {
+      android: { appState: async () => ({}) },
+      harmonyos: { appState: async () => ({}) },
     },
     deviceReadiness: {
       applePhysical: { ensureConnected: async () => {} },

@@ -14,6 +14,7 @@ import {
 export type UnavailablePlatformRuntimeFacts = Readonly<{
   appLog: RuntimeOperationUnavailability;
   apps?: RuntimeOperationUnavailability;
+  appState?: RuntimeOperationUnavailability;
   network: RuntimeOperationUnavailability;
   screenRecording?: RuntimeOperationUnavailability;
   readiness?: RuntimeOperationUnavailability;
@@ -22,6 +23,7 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
 type FrozenUnavailablePlatformRuntimeFacts = Readonly<{
   appLog: RuntimeOperationUnavailability;
   apps: RuntimeOperationUnavailability;
+  appState: RuntimeOperationUnavailability;
   network: RuntimeOperationUnavailability;
   screenRecording: RuntimeOperationUnavailability;
   readiness: RuntimeOperationUnavailability;
@@ -77,7 +79,8 @@ export function createUnavailablePlatformRuntimeFacts(
   owner: RuntimeOwnerRef,
   unavailable: UnavailablePlatformRuntimeFacts,
 ): RuntimeFacts<PlatformRuntimeOperations> {
-  const { appLog, apps, network, screenRecording, readiness } = freezeUnavailableFacts(unavailable);
+  const { appLog, apps, appState, network, screenRecording, readiness } =
+    freezeUnavailableFacts(unavailable);
   return Object.freeze({
     device: {
       ...deviceShape(device),
@@ -90,6 +93,7 @@ export function createUnavailablePlatformRuntimeFacts(
       appLogReattach: appLog,
       appLogCleanup: appLog,
       listApps: apps,
+      appState,
       networkDump: network,
       screenRecordingStart: screenRecording,
       screenRecordingReattach: screenRecording,
@@ -107,6 +111,7 @@ function freezeUnavailableFacts(
   return Object.freeze({
     appLog: Object.freeze({ ...unavailable.appLog }),
     apps: Object.freeze({ ...(unavailable.apps ?? unavailable.network) }),
+    appState: Object.freeze({ ...(unavailable.appState ?? unavailable.network) }),
     network: Object.freeze({ ...unavailable.network }),
     screenRecording: Object.freeze({
       ...(unavailable.screenRecording ?? unavailable.network),

@@ -34,6 +34,11 @@ const appsUnavailable = Object.freeze({
   reason: 'owner-capability-missing' as const,
   hint: 'WebDriver provider runtimes do not expose app inventory.',
 });
+const appStateUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'WebDriver provider runtimes do not expose a foreground app-state operation.',
+} as const);
 
 export function createWebDriverPlatformRuntimeOwner(
   options: Readonly<{
@@ -122,6 +127,7 @@ function webDriverFacts(
       appLogStart: appLogUnavailable,
       appLogReattach: appLogUnavailable,
       appLogCleanup: appLogUnavailable,
+      appState: appStateUnavailable,
       networkDump: available,
       screenRecordingStart: recordingUnavailable,
       screenRecordingReattach: recordingUnavailable,

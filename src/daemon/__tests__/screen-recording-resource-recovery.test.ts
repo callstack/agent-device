@@ -45,6 +45,7 @@ test('recovery cleans a recording through its exact runtime owner', async () => 
         appLogStart: unavailable,
         appLogReattach: unavailable,
         appLogCleanup: unavailable,
+        appState: unavailable,
         networkDump: unavailable,
         screenRecordingStart: unavailable,
         screenRecordingReattach: { available: true as const },

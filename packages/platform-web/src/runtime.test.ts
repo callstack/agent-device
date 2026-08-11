@@ -32,6 +32,10 @@ test('preserves a narrow web provider dump including empty successful entries', 
     notes: ['provider note'],
   });
   expect(binding.facts.device.providerMode).toBe('transport-composed');
+  expect(binding.facts.operations.appState).toMatchObject({
+    available: false,
+    reason: 'unsupported-platform-leaf',
+  });
   expect(binding.facts.operations.networkDump).toEqual({ available: true });
   expect(binding.facts.operations.ensureReady).toMatchObject({ available: false });
   expect(binding.facts.operations.bootTarget).toMatchObject({ available: false });
@@ -167,6 +171,10 @@ function host(
       apple: { listApps: async () => [] },
       android: { listApps: async () => [] },
       harmonyos: { listApps: async () => [] },
+    },
+    appState: {
+      android: { appState: async () => ({}) },
+      harmonyos: { appState: async () => ({}) },
     },
     deviceReadiness: {
       applePhysical: { ensureConnected: async () => {} },

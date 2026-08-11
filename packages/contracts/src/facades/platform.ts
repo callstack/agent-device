@@ -195,8 +195,16 @@ export {
   bootTargetUse,
   deviceBootRuntimeUses,
   resolveDeviceReadinessRuntimePlan,
+  appStateRuntimeUses,
+  appStateUse,
+  ensureReadyUse,
 } from '../platform-runtime-operations.ts';
 export type { DeviceReadinessRuntimePlan } from '../platform-runtime-operations.ts';
+export type {
+  AppStateRuntimeHost,
+  AppStateRuntimeOperations,
+  AppStateRuntimeResult,
+} from '../app-state-runtime.ts';
 export type {
   DeviceReadinessRuntimeHost,
   DeviceReadinessRuntimeOperations,

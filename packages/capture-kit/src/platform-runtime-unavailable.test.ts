@@ -33,6 +33,7 @@ test('builds one complete combined unavailable owner without fake operations', a
     'appLogInspect',
     'appLogReattach',
     'appLogStart',
+    'appState',
     'bootTarget',
     'bootTargetHeadless',
     'ensureReady',

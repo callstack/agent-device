@@ -1,10 +1,19 @@
-import { test, expect } from 'vitest';
+import { test, expect, vi } from 'vitest';
 
 import { handleSessionStateCommands } from '../session-state.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { withTestDeviceInventory } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/capture-kit';
-import { localRuntimeOwner } from '@agent-device/contracts/platform';
+import {
+  appStateUse,
+  localRuntimeOwner,
+  narrowDeviceBinding,
+  type DeviceBinding,
+  type PlatformRuntimeOperations,
+  type RuntimeFacts,
+} from '@agent-device/contracts/platform';
+import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
+import type { BindDeviceRuntime } from '../../request-runtime-binding.ts';
 
 test('boot rejects --headless outside Android directly', async () => {
   const device = {
@@ -68,18 +77,22 @@ test('appstate returns missing-session error for explicit session flag', async (
 });
 
 test('appstate rejects web before Android app-state backend dispatch', async () => {
+  const device = {
+    platform: 'web' as const,
+    id: 'agent-browser-chrome',
+    name: 'Agent Browser Chrome',
+    kind: 'device' as const,
+    target: 'desktop' as const,
+    booted: true,
+  };
+  let bound = false;
+  const bindDevice: BindDeviceRuntime = async () => {
+    bound = true;
+    throw new Error('unsupported appstate must not bind');
+  };
   const response = await withTestDeviceInventory(
     {
-      local: async () => [
-        {
-          platform: 'web',
-          id: 'agent-browser-chrome',
-          name: 'Agent Browser Chrome',
-          kind: 'device',
-          target: 'desktop',
-          booted: true,
-        },
-      ],
+      local: async () => [device],
     },
     async () =>
       await handleSessionStateCommands({
@@ -92,6 +105,14 @@ test('appstate rejects web before Android app-state backend dispatch', async () 
         },
         sessionName: 'default',
         sessionStore: makeSessionStore('agent-device-session-state-'),
+        bindDevice,
+        inspectFacts: async () =>
+          createUnavailablePlatformRuntimeFacts(device, localRuntimeOwner('web'), {
+            appLog: { available: false, reason: 'unsupported-platform-leaf' },
+            appState: { available: false, reason: 'unsupported-platform-leaf' },
+            network: { available: false, reason: 'unsupported-platform-leaf' },
+            readiness: { available: false, reason: 'unsupported-platform-leaf' },
+          }),
       }),
   );
 
@@ -101,4 +122,100 @@ test('appstate rejects web before Android app-state backend dispatch', async () 
     expect(response.error.code).toBe('UNSUPPORTED_OPERATION');
     expect(response.error.message).toMatch(/appstate is not supported on web/i);
   }
+  expect(bound).toBe(false);
+});
+
+test('sessionless Android appstate inspects once, binds once, and preserves operation order', async () => {
+  const device: DeviceInfo = {
+    platform: 'android',
+    id: 'emulator-5554',
+    name: 'Pixel Emulator',
+    kind: 'emulator',
+    target: 'mobile',
+    booted: true,
+  };
+  const unavailable = { available: false, reason: 'owner-capability-missing' } as const;
+  const available = { available: true } as const;
+  const facts: RuntimeFacts<PlatformRuntimeOperations> = {
+    device: { ...deviceShape(device), providerMode: 'local' },
+    operations: {
+      appLogInspect: unavailable,
+      appLogDoctor: unavailable,
+      appLogStart: unavailable,
+      appLogReattach: unavailable,
+      appLogCleanup: unavailable,
+      appState: available,
+      networkDump: unavailable,
+      screenRecordingStart: unavailable,
+      screenRecordingReattach: unavailable,
+      screenRecordingCleanup: unavailable,
+      ensureReady: available,
+      ensureReadyHeadless: unavailable,
+    },
+  };
+  const events: string[] = [];
+  const binding: DeviceBinding<PlatformRuntimeOperations> = {
+    device,
+    owner: localRuntimeOwner('android'),
+    facts,
+    operations: {
+      ensureReady: async (input) => {
+        events.push(`ensureReady:${JSON.stringify(input)}`);
+        return { ...device, booted: true };
+      },
+      appState: async () => {
+        events.push('appState');
+        return { package: 'com.example.app', activity: '.MainActivity' };
+      },
+    },
+    [Symbol.asyncDispose]: async () => undefined,
+  };
+  const inspectFacts = vi.fn(async () => {
+    events.push('inspectFacts');
+    return facts;
+  });
+  const bindDevice: BindDeviceRuntime = async (selected, use) => {
+    events.push('bindDevice');
+    expect(selected).toEqual(device);
+    expect(use).toBe(appStateUse);
+    return narrowDeviceBinding(binding, use);
+  };
+
+  const response = await withTestDeviceInventory(
+    { local: async () => [device] },
+    async () =>
+      await handleSessionStateCommands({
+        req: {
+          token: 't',
+          session: 'default',
+          command: 'appstate',
+          positionals: [],
+          flags: {
+            platform: 'android',
+            device: 'Pixel Emulator',
+            androidDeviceAllowlist: 'emulator-5555,emulator-5554',
+          },
+        },
+        sessionName: 'default',
+        sessionStore: makeSessionStore('agent-device-session-state-'),
+        inspectFacts,
+        bindDevice,
+      }),
+  );
+
+  expect(response).toEqual({
+    ok: true,
+    data: {
+      platform: 'android',
+      package: 'com.example.app',
+      activity: '.MainActivity',
+    },
+  });
+  expect(inspectFacts).toHaveBeenCalledOnce();
+  expect(events).toEqual([
+    'inspectFacts',
+    'bindDevice',
+    'ensureReady:{"androidSerialAllowlist":["emulator-5554","emulator-5555"]}',
+    'appState',
+  ]);
 });

@@ -11,12 +11,21 @@ const device: DeviceInfo = {
   target: 'mobile',
   booted: true,
 };
+const appStateUnavailable = {
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'Android appstate is supported only for Android emulators and devices.',
+} as const;
 
 test.each([
   ['emulator', device],
   ['device', { ...device, kind: 'device' as const }],
 ])('classifies the Android %s runtime denominator', async (_name, runtimeDevice) => {
   const listApps = vi.fn(async () => [{ id: 'com.example.app', name: 'Example' }]);
+  const appState = vi.fn(async () => ({
+    package: 'com.example.app',
+    activity: '.MainActivity',
+  }));
   const host = {
     commands: {
       which: async () => 'tool',
@@ -29,6 +38,10 @@ test.each([
       apple: { listApps: async () => [] },
       android: { listApps },
       harmonyos: { listApps: async () => [] },
+    },
+    appState: {
+      android: { appState },
+      harmonyos: { appState: async () => ({}) },
     },
     deviceReadiness: {
       applePhysical: { ensureConnected: async () => {} },
@@ -70,6 +83,7 @@ test.each([
   expect(facts.operations.screenRecordingStart).toEqual({ available: true });
   expect(facts.operations.screenRecordingReattach).toEqual({ available: true });
   expect(facts.operations.screenRecordingCleanup).toEqual({ available: true });
+  expect(facts.operations.appState).toEqual({ available: true });
   expect(facts.operations.ensureReady).toEqual({ available: true });
   expect(facts.operations.bootTarget).toEqual({ available: true });
   expect(facts.operations.bootTargetHeadless.available).toBe(runtimeDevice.kind === 'emulator');
@@ -87,6 +101,11 @@ test.each([
     id: runtimeDevice.id,
     booted: true,
   });
+  await expect(binding.operations.appState?.()).resolves.toEqual({
+    package: 'com.example.app',
+    activity: '.MainActivity',
+  });
+  expect(appState).toHaveBeenCalledWith(runtimeDevice, expect.any(AbortSignal));
 
   if (runtimeDevice.kind === 'emulator') {
     await expect(binding.operations.bootTargetHeadless?.({})).resolves.toMatchObject({
@@ -96,4 +115,46 @@ test.each([
   } else {
     expect(binding.operations.bootTargetHeadless).toBeUndefined();
   }
+});
+
+test('rejects the non-discovered Android simulator cell for appstate', async () => {
+  const runtimeDevice = { ...device, kind: 'simulator' as const };
+  const host = {
+    processTransports: { resolve: async () => ({ mode: 'local' as const }) },
+    appState: {
+      android: { appState: async () => ({}) },
+      harmonyos: { appState: async () => ({}) },
+    },
+    deviceReadiness: { android: { ensureReady: async (selected: DeviceInfo) => selected } },
+    screenRecording: {
+      android: {
+        resolve: async () => ({
+          mode: 'local' as const,
+          start: async () => {
+            throw new Error('unused');
+          },
+          signal: async () => true,
+          isRunning: async () => false,
+          exists: async () => false,
+          pull: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+          remove: async () => true,
+          readManifest: async () => undefined,
+          writeManifest: async () => {},
+          removeManifest: async () => {},
+        }),
+      },
+    },
+  } as unknown as PlatformRuntimeHost;
+  const binding = await createAndroidPlatformRuntime(host).bind({
+    device: runtimeDevice,
+    intent: { kind: 'ordinary' },
+    scope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+  });
+
+  expect(binding.facts.operations.appState).toEqual(appStateUnavailable);
+  expect(binding.operations.appState).toBeUndefined();
 });

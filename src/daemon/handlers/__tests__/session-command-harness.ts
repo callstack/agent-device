@@ -67,6 +67,7 @@ function readinessFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperati
       appLogStart: unavailable,
       appLogReattach: unavailable,
       appLogCleanup: unavailable,
+      appState: device.platform === 'android' ? available : unavailable,
       networkDump: unavailable,
       screenRecordingStart: unavailable,
       screenRecordingReattach: unavailable,
@@ -87,6 +88,9 @@ function readinessBinding(device: DeviceInfo): DeviceBinding<PlatformRuntimeOper
     operations: {
       ensureReady: async (input) =>
         (await mockEnsureReadyRuntime(input)) ?? { ...device, booted: true },
+      ...(device.platform === 'android'
+        ? { appState: async () => ({ package: 'com.example.app', activity: '.MainActivity' }) }
+        : {}),
       ...(readinessFacts(device).operations.bootTarget.available
         ? {
             bootTarget: async (input) =>

@@ -34,6 +34,7 @@ export const unavailableDeviceRuntimeGateway: DeviceRuntimeGateway<PlatformRunti
           appLogStart: unavailable,
           appLogReattach: unavailable,
           appLogCleanup: unavailable,
+          appState: unavailable,
           networkDump: unavailable,
           screenRecordingStart: unavailable,
           screenRecordingReattach: unavailable,

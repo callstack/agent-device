@@ -189,6 +189,7 @@ function makeRuntime(session: SessionState, options: RuntimeOptions = {}) {
         appLogStart: unavailable,
         appLogReattach: unavailable,
         appLogCleanup: unavailable,
+        appState: unavailable,
         networkDump: unavailable,
         screenRecordingStart: options.screenRecordingStartFact ?? { available: true },
         screenRecordingReattach: { available: true },

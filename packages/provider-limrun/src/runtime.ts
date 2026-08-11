@@ -392,6 +392,14 @@ async function loadLimrunPlatformRuntime(
         name: app.name ?? app.id,
       }));
     },
+    getAppState: async (device, signal) => {
+      signal.throwIfAborted();
+      const session = runtime.getDeviceSession(device);
+      if (session?.platform !== 'android') return {};
+      const state = await session.getForegroundApp();
+      signal.throwIfAborted();
+      return { package: state?.appId, activity: state?.activity };
+    },
   });
 }
 

@@ -307,6 +307,10 @@ function makeGateway(options: { inspectAvailable?: boolean } = {}) {
     }),
     appLogReattach: vi.fn(async () => ({ status: 'missing' as const })),
     appLogCleanup: vi.fn(async () => ({ status: 'already-missing' as const })),
+    appState: vi.fn(async () => ({
+      package: 'com.example.app',
+      activity: '.MainActivity',
+    })),
     networkDump: vi.fn(async () => ({
       source: 'app-log' as const,
       backend: 'android' as const,
@@ -351,6 +355,7 @@ function makeGateway(options: { inspectAvailable?: boolean } = {}) {
       screenRecordingReattach: { available: true } as const,
       screenRecordingCleanup: { available: true } as const,
       ensureReady: { available: true } as const,
+      appState: { available: true } as const,
       bootTarget: { available: true } as const,
       bootTargetHeadless: { available: true } as const,
       listApps: { available: true } as const,
@@ -373,6 +378,7 @@ function makeGateway(options: { inspectAvailable?: boolean } = {}) {
               screenRecordingReattach: operations.screenRecordingReattach,
               screenRecordingCleanup: operations.screenRecordingCleanup,
               ensureReady: operations.ensureReady,
+              appState: operations.appState,
               bootTarget: operations.bootTarget,
               bootTargetHeadless: operations.bootTargetHeadless,
             }

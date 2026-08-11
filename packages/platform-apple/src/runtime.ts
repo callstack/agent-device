@@ -21,6 +21,11 @@ const unavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
 } as const);
+const appStateUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'Apple appstate reads the active session state; a sessionless runtime foreground probe is unavailable.',
+} as const);
 const headlessUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
@@ -68,6 +73,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
       device: logs.device,
       operations: {
         ...logs.operations,
+        appState: appStateUnavailable,
         networkDump: available,
         screenRecordingStart: recordingFacts,
         screenRecordingReattach: recordingFacts,

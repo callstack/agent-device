@@ -3,6 +3,7 @@ import type { AppsFilter } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { parseLimrunDeviceId } from './device.ts';
 import type {
+  AppStateRuntimeResult,
   DeviceBinding,
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
@@ -43,6 +44,7 @@ export type LimrunPlatformRuntimeOwnerOptions = Readonly<{
     filter: AppsFilter,
     signal: AbortSignal,
   ): Promise<readonly { id: string; name: string }[]>;
+  getAppState(device: DeviceInfo, signal: AbortSignal): Promise<AppStateRuntimeResult>;
 }>;
 
 const available = Object.freeze({ available: true } as const);
@@ -190,6 +192,12 @@ function bindLimrunAppLogs(
     ensureReady: async () => ({ ...device, booted: true }),
     bootTarget: async () => ({ ...device, booted: true }),
     listApps: async (input) => await options.listApps(input.device, input.filter, signal),
+    ...(device.platform === 'android'
+      ? {
+          appState: async () => await options.getAppState(device, signal),
+        }
+      : {}),
+    listApps: async (input) => await options.listApps(input.device, input.filter, signal),
   } satisfies DeviceBinding<PlatformRuntimeOperations>['operations'];
   return Object.freeze({
     device,
@@ -234,6 +242,14 @@ function facts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> {
       appLogStart: available,
       appLogReattach: available,
       appLogCleanup: available,
+      appState:
+        device.platform === 'android'
+          ? available
+          : {
+              available: false,
+              reason: 'unsupported-provider-mode',
+              hint: 'Limrun iOS appstate is session-owned; no sessionless provider foreground probe is exposed.',
+            },
       networkDump: available,
       screenRecordingStart: recordingUnavailable,
       screenRecordingReattach: recordingUnavailable,

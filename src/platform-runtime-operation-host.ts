@@ -16,6 +16,7 @@ import { createApplePhysicalReadinessHost } from './platform-runtime-apple-physi
 import { createAppleAutomationKeepHotHost } from './platform-runtime-apple-automation-keep-hot.ts';
 import { createAndroidEmulatorHost } from './platform-runtime-android-emulator-host.ts';
 import { createAppInventoryRuntimeHost } from './platform-runtime-app-inventory-host.ts';
+import { createAppStateRuntimeHost } from './platform-runtime-app-state-host.ts';
 
 export function createPlatformRuntimeHost(options: {
   sessionsDir: string;
@@ -71,6 +72,7 @@ export function createPlatformRuntimeHost(options: {
     }),
     ...network,
     appInventory: createAppInventoryRuntimeHost(),
+    appState: createAppStateRuntimeHost(),
     deviceReadiness: Object.freeze({
       applePhysical: createApplePhysicalReadinessHost(),
       appleAutomation: createAppleAutomationKeepHotHost(),

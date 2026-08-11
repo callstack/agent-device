@@ -149,6 +149,10 @@ describe('composed platform runtime gateway', () => {
       available: false,
       reason: 'unsupported-provider-mode',
     });
+    expect(binding.facts.operations.appState).toMatchObject({
+      available: false,
+      reason: 'unsupported-provider-mode',
+    });
     expect(hostLoad).not.toHaveBeenCalled();
     expect(localLoad).not.toHaveBeenCalled();
   });
@@ -303,6 +307,7 @@ function unavailableFacts() {
     appLogStart: unavailable,
     appLogReattach: unavailable,
     appLogCleanup: unavailable,
+    appState: unavailable,
     networkDump: unavailable,
     screenRecordingStart: unavailable,
     screenRecordingReattach: unavailable,
