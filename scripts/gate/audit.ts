@@ -8,21 +8,16 @@
 
 import { CHECK_CATALOG } from '../check-affected/checks.ts';
 import {
+  EXTERNAL_ACTIONS,
   LANE_ENVIRONMENTS,
   NON_GATE_STEPS,
+  type ExternalAction,
   type LaneEnvironment,
   type Unrouted,
 } from './declarations.ts';
-import {
-  categories,
-  checkUnits,
-  commandSegments,
-  covered,
-  scriptUnits,
-  stripExpressions,
-  type Lane,
-  type Model,
-} from './model.ts';
+import { categories, checkUnits, covered, scriptUnits, type Model } from './model.ts';
+import { commandSegments, stripExpressions } from './shell.ts';
+import type { Lane } from './workflows.ts';
 
 export type Failure = { readonly assertion: string; readonly message: string };
 
@@ -104,8 +99,10 @@ function plainGateStep(step: {
 //    Round 5 found the same hole one level out: a composite action whose step is
 //    `run: ${{ inputs.build-command }}` has a CONSTANT digest, so a caller could put
 //    anything in the `with:` value and nothing here would move. The answer is not another
-//    rule — such a value is a step of the calling lane (model.ts `inputSurface`), so it
-//    arrives here and this rule already decides it.
+//    rule — such a value is a step of the calling lane (workflows.ts `actionInputSteps`),
+//    so it arrives here and this rule already decides it. Round 6 extended the same
+//    treatment to third-party actions, whose executable inputs are declared rather than
+//    read (`externalActions` below).
 function bypass(model: Model, declared: readonly Unrouted[]): Failure[] {
   const seen = new Map<string, Model['lanes'][number]['steps'][number]>();
   for (const lane of model.lanes.filter((entry) => entry.qualifying)) {
@@ -183,6 +180,48 @@ function laneSurfaces(model: Model): Failure[] {
         ),
       ),
     );
+}
+
+// 3d. Every third-party action a qualifying lane reaches must be declared, at the pinned
+//     ref, with the inputs that version executes.
+//
+//     Round 6: a local composite action is READ, so a `with:` value it interpolates into a
+//     `run:` block arrives at the construction rule as a step. An external action cannot be
+//     read, and the model treated it as contributing nothing — so
+//     `reactivecircus/android-emulator-runner`'s `script:` input, which is how the Android
+//     smoke lanes run their entire suite, was invisible. Declaring per sha is what turns
+//     "the model knows nothing about this action" into a finding instead of silence.
+//
+//     Scoped to qualifying lanes, like every other assertion here: the list is then exactly
+//     the third-party surface the no-bypass rule depends on, and every entry is load-bearing.
+//     An action only a release lane uses is deliberately absent, and becomes required the
+//     moment a workflow that gates the way in starts using it.
+function externalActions(model: Model, declared: readonly ExternalAction[]): Failure[] {
+  const used = new Map<string, string>();
+  for (const lane of model.lanes.filter((entry) => entry.qualifying)) {
+    for (const ref of lane.externals) if (!used.has(ref)) used.set(ref, lane.label);
+  }
+  const undeclared = [...used.keys()]
+    .filter((ref) => !declared.some((entry) => entry.uses === ref))
+    .sort()
+    .map((ref) =>
+      fail(
+        'external',
+        `\`uses: ${ref}\` (reached by ${used.get(ref)}) is not in EXTERNAL_ACTIONS. Read that ` +
+          `version's action.yml and declare which inputs it runs as shell — an action whose ` +
+          `executable inputs are unknown makes the no-bypass rule blind, as its \`script:\` input.`,
+      ),
+    );
+  const inert = declared
+    .filter((entry) => !used.has(entry.uses))
+    .map((entry) =>
+      fail(
+        'inert',
+        `EXTERNAL_ACTIONS \`${entry.uses}\` is used by no qualifying lane; the action was ` +
+          `removed, its pin was bumped, or only a non-gating lane uses it.`,
+      ),
+    );
+  return [...undeclared, ...inert];
 }
 
 function inertEnvironment(entry: LaneEnvironment, model: Model): Failure[] {
@@ -314,12 +353,17 @@ function orphanProjects(model: Model): Failure[] {
     .map((name) => fail('registered', `Vitest project "${name}" is run by no registered check.`));
 }
 
-export function audit(model: Model, declared: readonly Unrouted[] = NON_GATE_STEPS): Failure[] {
+export function audit(
+  model: Model,
+  declared: readonly Unrouted[] = NON_GATE_STEPS,
+  externals: readonly ExternalAction[] = EXTERNAL_ACTIONS,
+): Failure[] {
   return [
     ...unowned(model),
     ...bypass(model, declared),
     ...laneEnvironments(model, LANE_ENVIRONMENTS),
     ...laneSurfaces(model),
+    ...externalActions(model, externals),
     ...LANE_ENVIRONMENTS.flatMap((entry) => inertEnvironment(entry, model)),
     ...pathCoverage(model),
     ...inert(model, declared),

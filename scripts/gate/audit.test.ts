@@ -1,11 +1,17 @@
-// The gate manifest's tests are mutations of the REAL model, not fixtures.
+// Assertion group one: can anything a qualifying lane runs escape `pnpm gate`?
 //
-// #1714's predecessor had 75 unit tests over home-grown parsers, and the two holes
-// that mattered — a suite outside the naming convention, and category samples that
-// named files no PR could touch — were green in every one of them. Fixtures test the
-// parser; only the live tree tests the claim. So each case below plants a failure in
-// the loaded model, asserts the audit goes red for the right reason, and asserts the
-// unmutated model is green — which is what makes the planting non-vacuous.
+// The other half — whether every registered check is actually RUN — is
+// audit-coverage.test.ts. These are mutations of the REAL model, not fixtures: #1714's
+// predecessor had 75 unit tests over home-grown parsers, and the holes that mattered were
+// green in every one of them. Fixtures test the parser; only the live tree tests the
+// claim. So each case below plants a failure in the loaded model, asserts the audit goes
+// red for the right reason, and asserts the unmutated model is green — which is what makes
+// the planting non-vacuous.
+//
+// The cases whose comments name a review round are the reported bypasses, kept as
+// regressions in the order they were found: content analysis (rounds 1–3), the inventory
+// key (round 4), executable inputs to local actions (round 5), and to third-party
+// actions (round 6).
 
 import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
@@ -14,20 +20,15 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { audit } from './audit.ts';
-import { LANE_ENVIRONMENTS, NON_GATE_STEPS } from './declarations.ts';
-import {
-  categories,
-  covered,
-  loadLanes,
-  loadModel,
-  stepDigest,
-  type Lane,
-  type Model,
-} from './model.ts';
-import { CHECK_CATALOG } from '../check-affected/checks.ts';
+import { EXTERNAL_ACTIONS, LANE_ENVIRONMENTS, NON_GATE_STEPS } from './declarations.ts';
+import { loadModel, type Model } from './model.ts';
+import { loadLanes, stepDigest, type Lane } from './workflows.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
-const tracked = execFileSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'utf8' })
+const tracked = execFileSync('git', ['ls-files'], {
+  cwd: repoRoot,
+  encoding: 'utf8',
+})
   .split('\n')
   .filter(Boolean);
 const base = loadModel(repoRoot, tracked);
@@ -96,11 +97,13 @@ const bypassesFor = (run: string, extras: Record<string, string> = {}) =>
  * real tree. The composite action under test is the one CI uses, so these cases exercise
  * parse, resolution and audit together rather than a hand-built lane.
  */
-function plantedWorkflow(yaml: string): Model {
+function plantedWorkflow(yaml: string, externals = EXTERNAL_ACTIONS): Model {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-lane-'));
   try {
     fs.writeFileSync(path.join(dir, 'planted.yml'), yaml);
-    const lanes = loadLanes(dir, repoRoot, base.scripts);
+    // The declaration list is threaded into the LOADER, not just the audit: which inputs a
+    // third-party action executes decides which steps exist at all.
+    const lanes = loadLanes(dir, repoRoot, base.scripts, externals);
     return mutate((model) => ({ lanes: [...model.lanes, ...lanes] }));
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -140,6 +143,118 @@ test('a caller cannot smuggle code through an input a composite action executes'
   assert.match(smuggled[0]?.message ?? '', /build-command/);
 });
 
+const emulatorCall = (script: string) => `name: Planted
+on:
+  pull_request:
+jobs:
+  planted:
+    name: Planted Android Lane
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run Android smoke checks
+        uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b
+        with:
+          api-level: 36
+          script: ${script}
+`;
+
+test('a caller cannot smuggle code through an input a THIRD-PARTY action executes', () => {
+  // Review round 6: the round-5 fix read local composite actions to find which inputs they
+  // interpolate into a `run:` block. An external action cannot be read, and the model then
+  // treated it as executing nothing — so this `script:` value, which is how the Android
+  // smoke lanes run their whole suite, moved no digest and produced no finding.
+  assert.deepEqual(
+    messages(plantedWorkflow(emulatorCall('pnpm gate build'))),
+    [],
+    'a call site whose executable input is a gate needs no declaration',
+  );
+
+  const smuggled = audit(
+    plantedWorkflow(emulatorCall(`node -e 'import("./scripts/layering/check.ts")'`)),
+  ).filter((failure) => failure.assertion === 'bypass');
+  assert.equal(smuggled.length, 1, 'and project code in the same value is a bypass');
+  assert.match(smuggled[0]?.message ?? '', /android-emulator-runner/);
+});
+
+test('an undeclared third-party action is a finding, not an action that executes nothing', () => {
+  const planted = plantedWorkflow(`name: Planted
+on:
+  pull_request:
+jobs:
+  planted:
+    steps:
+      - uses: some-org/some-action@0000000000000000000000000000000000000000
+        with:
+          script: node -e 'import("./scripts/layering/check.ts")'
+`);
+  const found = audit(planted).filter((failure) => failure.assertion === 'external');
+  assert.equal(found.length, 1);
+  assert.match(found[0]?.message ?? '', /some-org\/some-action@0{40}/);
+
+  // Non-vacuity, and the reason the key is the SHA: the same action at a different pin is
+  // a different declaration, because a new version can execute new inputs.
+  const declared = [
+    ...EXTERNAL_ACTIONS,
+    {
+      uses: 'some-org/some-action@0000000000000000000000000000000000000000',
+      executes: ['script'],
+      reason: 'test',
+    },
+  ];
+  const withDeclaration = audit(
+    plantedWorkflow(
+      `name: Planted
+on:
+  pull_request:
+jobs:
+  planted:
+    steps:
+      - uses: some-org/some-action@0000000000000000000000000000000000000000
+        with:
+          script: node -e 'import("./scripts/layering/check.ts")'
+`,
+      declared,
+    ),
+    NON_GATE_STEPS,
+    declared,
+  );
+  assert.equal(
+    withDeclaration.filter((failure) => failure.assertion === 'external').length,
+    0,
+    'declaring the action clears the external finding',
+  );
+  assert.equal(
+    withDeclaration.filter((failure) => failure.assertion === 'bypass').length,
+    1,
+    'and hands its executable input to the construction rule, which rejects this one',
+  );
+});
+
+test('a declaration for an action no lane uses is inert', () => {
+  const stale = [
+    ...EXTERNAL_ACTIONS,
+    { uses: 'gone/away@' + '0'.repeat(40), executes: [], reason: 'test' },
+  ];
+  const found = audit(base, NON_GATE_STEPS, stale).filter(
+    (failure) => failure.assertion === 'inert',
+  );
+  assert.equal(found.length, 1);
+  assert.match(found[0]?.message ?? '', /gone\/away/);
+});
+
+test('every declared external action is load-bearing at its current pin', () => {
+  // The live tree is green, so each entry matches a real `uses:`. This pins the other
+  // direction: dropping any one entry must produce a finding, or it is describing nothing.
+  for (const entry of EXTERNAL_ACTIONS) {
+    const without = EXTERNAL_ACTIONS.filter((candidate) => candidate !== entry);
+    const found = audit(base, NON_GATE_STEPS, without);
+    assert.ok(
+      found.length > 0,
+      `removing EXTERNAL_ACTIONS ${entry.uses} changed nothing; it is inert`,
+    );
+  }
+});
+
 test('an execution surface the model does not read is rejected rather than ignored', () => {
   // Neither shape is used today. `defaults.run` retargets the shell of every step in a
   // lane, and a reusable-workflow job runs steps from a file the loader never opens, so
@@ -177,78 +292,6 @@ test('the live tree is green — every planted failure below is a real differenc
   assert.deepEqual(messages(base), []);
 });
 
-test('deleting the lane that runs a gate reports exactly that gate, naming the runner', () => {
-  const model = mutate((m) => ({
-    lanes: mapLane(
-      m,
-      (lane) => lane.gates.includes('fuzz-parsers'),
-      (lane) => ({ ...lane, gates: lane.gates.filter((id) => id !== 'fuzz-parsers') }),
-    ),
-  }));
-  const found = messages(model);
-  assert.equal(found.length, 1);
-  assert.match(
-    found[0] ?? '',
-    /check "fuzz-parsers" is not run by any pull_request\/schedule lane/,
-  );
-  assert.match(found[0] ?? '', /pnpm gate fuzz-parsers/);
-});
-
-test('a gate outside the test:/check: naming convention is still owned — the #1714 hole', () => {
-  // `fuzz:parsers` resolves to an executable, not a Vitest project or a --test file.
-  // Under the old design that made it invisible to the suite universe; here it is a
-  // registered check like any other, so nothing has to recognise its shape.
-  const spec = CHECK_CATALOG.find((entry) => entry.id === 'fuzz-parsers');
-  assert.ok(spec);
-  const result = covered(spec, null, base);
-  assert.ok(result.covered);
-  assert.deepEqual(result.lanes, ['Replay Nightly / Parser Fuzz Lane']);
-});
-
-test('a docs-only change still reaches the command-reference gate (#1420)', () => {
-  const model = mutate((m) => ({
-    lanes: mapLane(
-      m,
-      (lane) => lane.workflow === 'pr-preview.yml',
-      (lane) => ({ ...lane, paths: ['website/assets/**'] }),
-    ),
-  }));
-  const found = messages(model);
-  assert.equal(found.length, 1);
-  assert.match(found[0] ?? '', /website\/docs\/docs\/commands\.md/);
-  assert.match(found[0] ?? '', /selects "command-docs"/);
-});
-
-test('per-unit coverage catches a lane deletion that whole-check ownership would miss', () => {
-  // command-docs-gate runs one unit-core FILE, so it must not stand in for the
-  // project when Coverage disappears.
-  const model = mutate((m) => ({ lanes: m.lanes.filter((lane) => lane.label !== 'Coverage') }));
-  const found = messages(model);
-  assert.ok(found.some((message) => /check "unit-ci" is not run/.test(message)));
-  assert.ok(found.some((message) => /check "vitest-related" is not run/.test(message)));
-});
-
-test('a path filter that excludes a category fails, though the check still runs somewhere', () => {
-  // Take the category's path from the derivation rather than naming a file, so the
-  // case keeps exercising the real classification as the tree changes.
-  const category = categories(base).find((entry) => entry.rule === 'own:daemon-wire-compat');
-  assert.ok(category, 'the wire ledger must still be a category');
-  const model = mutate((m) => ({
-    lanes: mapLane(
-      m,
-      (lane) => lane.workflow === 'ci.yml',
-      (lane) => ({ ...lane, pathsIgnore: [...lane.pathsIgnore, category.path] }),
-    ),
-  }));
-  const found = messages(model);
-  assert.ok(
-    found.every((message) => !/is not run by any/.test(message)),
-    'the checks still run somewhere — only this path stops reaching them',
-  );
-  assert.ok(found.some((message) => message.includes(category.path)));
-  assert.ok(found.some((message) => /selects "daemon-wire-compat"/.test(message)));
-});
-
 test('a qualifying lane accepts nothing but a gate invocation or a listed step', () => {
   // The rule is about SHAPE, so this is one property, not a list of spellings. Three
   // review rounds killed the content-analysis version: `pnpm exec`, then `pnpm exec --`
@@ -283,12 +326,17 @@ test('editing the body behind a listed step name is rejected', () => {
     ['replaced body', editStep('Run integration tests', () => ({ run: gate }))],
     [
       'appended body',
-      editStep('Run integration tests', (step) => ({ run: `${step.run}\n${gate}` })),
+      editStep('Run integration tests', (step) => ({
+        run: `${step.run}\n${gate}`,
+      })),
     ],
     [
       'injected env',
       editStep('Run integration tests', (step) => ({
-        extras: { ...step.extras, 'env.NODE_OPTIONS': '--import ./scripts/layering/check.ts' },
+        extras: {
+          ...step.extras,
+          'env.NODE_OPTIONS': '--import ./scripts/layering/check.ts',
+        },
       })),
     ],
   ] as const) {
@@ -409,52 +457,15 @@ test('an entry goes inert when the step it describes stops existing', () => {
 
   const invented = [
     ...NON_GATE_STEPS,
-    { workflow: 'ci.yml', step: 'No Such Step', digest: 'deadbeefcafe', reason: 'never existed' },
+    {
+      workflow: 'ci.yml',
+      step: 'No Such Step',
+      digest: 'deadbeefcafe',
+      reason: 'never existed',
+    },
   ];
   assert.ok(
     messages(base, invented).some((message) => /digest deadbeefcafe/.test(message)),
     'an entry naming no live digest is inert',
   );
-});
-
-test('removing the opaque-runner declaration changes the audit, so it is not inert', () => {
-  const model = mutate(() => ({ opaque: {} }));
-  const found = messages(model);
-  assert.ok(found.some((message) => /check "unit" is not run/.test(message)));
-  assert.ok(found.some((message) => /vitest:unit-core/.test(message)));
-});
-
-test('a Vitest project no check runs is reported, and so is a suite script', () => {
-  const project = mutate((m) => ({ vitestProjects: [...m.vitestProjects, 'new-lane'] }));
-  assert.ok(
-    messages(project).some((message) =>
-      /Vitest project "new-lane" is run by no registered check/.test(message),
-    ),
-  );
-
-  const script = mutate((m) => ({
-    scripts: {
-      ...m.scripts,
-      'test:orphan': 'vitest run --project unit-core --project orphan-only',
-    },
-    vitestProjects: [...m.vitestProjects, 'orphan-only'],
-  }));
-  assert.ok(
-    messages(script).some((message) =>
-      /package script "test:orphan" runs vitest:orphan-only/.test(message),
-    ),
-  );
-});
-
-test('categories are derived from the tracked tree, so no sample can be fictional', () => {
-  const found = categories(base);
-  assert.ok(found.length >= 12, `expected the selector's real categories, got ${found.length}`);
-  for (const category of found) {
-    assert.ok(tracked.includes(category.path), `${category.path} must be a tracked file`);
-    assert.ok(category.checks.length > 0, `${category.rule} must select at least one check`);
-  }
-  // The #1420 category in particular has to be present, since ci.yml ignores website/**.
-  const docs = found.find((category) => category.rule === 'own:command-docs');
-  assert.equal(docs?.path, 'website/docs/docs/commands.md');
-  assert.deepEqual(docs?.checks, ['command-docs']);
 });

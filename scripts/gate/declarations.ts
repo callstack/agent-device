@@ -82,6 +82,12 @@ const steps = (
  * data-ish neighbours (a platform name, a device name, a timeout), and one entry per call
  * site is the price. A new caller of the same action is a new entry, which is the point:
  * copying a call is a fact to review, not something the list already covers.
+ *
+ * Round 6: the same applies to THIRD-PARTY actions, whose executable inputs are declared in
+ * `EXTERNAL_ACTIONS` rather than read from the action. The largest command in CI turns out
+ * to live at one of these call sites — the Android smoke suite runs inside
+ * `android-emulator-runner`'s `script:` input — and before it was modelled, editing it
+ * moved no digest at all.
  */
 const EXECUTED_INPUTS: readonly Unrouted[] = [
   ...steps('android.yml', 'Android fixture APK restore, staged without installing', [
@@ -90,6 +96,17 @@ const EXECUTED_INPUTS: readonly Unrouted[] = [
       'Restore fixture APK → setup-fixture-app (platform, wait-for-artifact-seconds, require-artifact)',
     ],
   ]),
+
+  ...steps(
+    'android.yml',
+    'the Android smoke suite itself: resolves the emulator serial, builds through `pnpm gate build`, then runs the emulator smoke test and one replay',
+    [
+      [
+        'b346a3b0abcd',
+        'Run Android smoke checks → reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b (emulator-options, script)',
+      ],
+    ],
+  ),
 
   ...steps(
     'ci.yml',
@@ -139,6 +156,28 @@ const EXECUTED_INPUTS: readonly Unrouted[] = [
     ],
   ]),
 
+  ...steps(
+    'pr-preview.yml',
+    'website preview deploy: the values pr-preview-action interpolates into its own `run:` blocks',
+    [
+      [
+        'e546cec1d5a3',
+        'Deploy preview → rossjrw/pr-preview-action@ffa7509e91a3ec8dfc2e5536c4d5c1acdf7a6de9 (preview-branch, qr-code, source-dir)',
+      ],
+    ],
+  ),
+
+  ...steps(
+    'pr-preview-cleanup.yml',
+    'website preview teardown: the same call with the same values, from the cleanup lane',
+    [
+      [
+        'e546cec1d5a3',
+        'Remove preview → rossjrw/pr-preview-action@ffa7509e91a3ec8dfc2e5536c4d5c1acdf7a6de9 (preview-branch, qr-code, source-dir)',
+      ],
+    ],
+  ),
+
   ...steps('perf-nightly.yml', 'iOS runner build and simulator boot for the benchmark lane', [
     [
       '28d1645e76e6',
@@ -149,6 +188,28 @@ const EXECUTED_INPUTS: readonly Unrouted[] = [
       'Boot iOS test simulator → boot-ios-test-simulator (runtime-version, preferred-device-name, boot-timeout-seconds)',
     ],
   ]),
+
+  ...steps(
+    'perf-nightly.yml',
+    'the Android benchmark suite, run inside the emulator action the same way the smoke lane runs its own',
+    [
+      [
+        '01e17764b28e',
+        'Run Android command perf benchmark → reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b (emulator-options, script)',
+      ],
+    ],
+  ),
+
+  ...steps(
+    'replays-nightly.yml',
+    'the nightly Android replay sweep, run inside the emulator action',
+    [
+      [
+        'e4179061b70b',
+        'Run Android full emulator suite → reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b (emulator-options, script)',
+      ],
+    ],
+  ),
 
   ...steps('replays-nightly.yml', 'Apple runner builds, simulator boot and fixture apps', [
     [
@@ -487,5 +548,138 @@ export const LANE_ENVIRONMENTS: readonly LaneEnvironment[] = [
     digest: '6946ade697b3',
     reason:
       'device identity and state paths for the nightly replay suites (AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH, AGENT_DEVICE_STATE_DIR)',
+  },
+];
+
+/**
+ * Third-party actions, and which of their inputs they execute as shell.
+ *
+ * A LOCAL composite action is read: `workflows.ts` finds the inputs it interpolates into
+ * a `run:` block and treats the caller's values as steps of the calling lane. A
+ * third-party action cannot be read — its source is not in this tree — so the same fact
+ * is declared here, per PINNED ref.
+ *
+ * Pinning is what makes a declaration meaningful. `owner/repo@<sha>` names immutable
+ * content, so "this version executes these inputs" is a checkable claim about a specific
+ * file rather than a guess about a moving tag. Bumping the pin changes the key, which
+ * fails as undeclared until someone re-reads the new version's `action.yml`.
+ *
+ * Fails in both directions, like every other declaration here: an action no entry names
+ * fails as undeclared (audit.ts `external`), and an entry naming an action no lane uses
+ * fails as inert. `executes: []` is a positive claim — "I read this version and it takes
+ * no shell from its caller" — not an absence.
+ *
+ * Each entry below was checked against `action.yml` at the pinned sha. What a caller
+ * OMITS is not audited: that value comes from the pinned action's own default, which the
+ * pin freezes and this review covers.
+ *
+ * Scoped to lanes that gate the way in, so the list is exactly the surface the no-bypass
+ * rule rests on. `JamesIves/github-pages-deploy-action` is therefore absent — deploy.yml
+ * runs on push — and would become required the day a `pull_request` lane used it.
+ */
+export type ExternalAction = {
+  /** `owner/repo@ref`, exactly as the workflow spells it, comment excluded. */
+  readonly uses: string;
+  /** Inputs whose values this version runs as shell. Empty is a claim, not a default. */
+  readonly executes: readonly string[];
+  readonly reason: string;
+};
+
+export const EXTERNAL_ACTIONS: readonly ExternalAction[] = [
+  {
+    uses: 'reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b',
+    executes: ['script', 'pre-emulator-launch-script', 'working-directory', 'emulator-options'],
+    reason:
+      'runs `script` and `pre-emulator-launch-script` in a shell on the emulator host; ' +
+      '`working-directory` is the root it runs them from and `emulator-options` goes on the ' +
+      'emulator command line. This is the action the Android smoke lanes drive the whole ' +
+      'suite through, so its `script` value is the largest single command in CI.',
+  },
+  {
+    uses: 'rossjrw/pr-preview-action@ffa7509e91a3ec8dfc2e5536c4d5c1acdf7a6de9',
+    executes: [
+      'action',
+      'comment',
+      'custom-url',
+      'deploy-commit-message',
+      'deploy-repository',
+      'git-config-email',
+      'git-config-name',
+      'pages-base-path',
+      'pages-base-url',
+      'pr-number',
+      'preview-branch',
+      'qr-code',
+      'remove-commit-message',
+      'source-dir',
+      'token',
+      'umbrella-dir',
+      'wait-for-pages-deployment',
+    ],
+    reason:
+      'a composite action: every input listed here is interpolated into one of its `run:` ' +
+      'blocks, which is the same test `workflows.ts` applies to local composites. Listed in ' +
+      'full rather than narrowed to the three this repo passes, so adding a fourth is caught.',
+  },
+  {
+    uses: 'pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061',
+    executes: ['run_install'],
+    reason:
+      '`run_install` is a YAML spec of pnpm install invocations the action executes; the ' +
+      'rest (version, dest, package_json_file, standalone) select or locate the binary.',
+  },
+  {
+    uses: 'gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a',
+    executes: ['arguments'],
+    reason:
+      '`arguments` is the (deprecated) Gradle command line the action runs after setup. This ' +
+      'repo does not pass it today, so the declaration is what makes passing it visible.',
+  },
+  {
+    uses: 'actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd',
+    executes: [],
+    reason: 'node action; every input names a ref, path, token or checkout flag.',
+  },
+  {
+    uses: 'actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8',
+    executes: [],
+    reason:
+      'the same action at an older pin, still used by three workflows; inputs as above. Two ' +
+      'entries rather than one is the point of keying on the sha.',
+  },
+  {
+    uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02',
+    executes: [],
+    reason: 'node action; inputs are a name, glob paths and retention flags.',
+  },
+  {
+    uses: 'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093',
+    executes: [],
+    reason: 'node action; inputs are a name, pattern, path and token.',
+  },
+  {
+    uses: 'actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830',
+    executes: [],
+    reason: 'node action; inputs are cache key, paths and upload-chunk sizing.',
+  },
+  {
+    uses: 'actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830',
+    executes: [],
+    reason: 'node action; inputs are cache key, restore keys and paths.',
+  },
+  {
+    uses: 'actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238',
+    executes: [],
+    reason: 'node action; inputs select a Node version, registry and cache strategy.',
+  },
+  {
+    uses: 'actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9',
+    executes: [],
+    reason: 'node action; inputs select a JDK, distribution and Maven settings.',
+  },
+  {
+    uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6',
+    executes: [],
+    reason: 'node action; inputs select a Bun version, download URL and registry.',
   },
 ];
