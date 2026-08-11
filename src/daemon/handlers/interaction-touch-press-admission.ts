@@ -33,9 +33,6 @@ import { errorResponse, noActiveSessionError, requireCommandSupported } from './
 
 export type TargetedTouchCommand = 'press' | 'click' | 'longpress';
 
-/** The label the user typed, which capability policy and parse errors quote. */
-type TargetedTouchCommandLabel = TargetedTouchCommand;
-
 export type TargetedTouchParams = InteractionHandlerParams & {
   captureSnapshotForSession: CaptureSnapshotForSession;
   refSnapshotFlagGuardResponse: RefSnapshotFlagGuardResponse;
@@ -44,7 +41,7 @@ export type TargetedTouchParams = InteractionHandlerParams & {
 /** What survives admission: the target this dispatch acts on and its policy context. */
 export type AdmittedTargetedTouch = {
   session: SessionState;
-  commandLabel: TargetedTouchCommandLabel;
+  commandLabel: TargetedTouchCommand;
   clickButton: ReturnType<typeof resolveClickButton>;
   resultButtonTag: ReturnType<typeof buttonTag>;
   target: InteractionTarget;
@@ -104,7 +101,7 @@ export async function admitTargetedTouch(
 function targetedTouchPolicyResponse(
   session: SessionState,
   command: TargetedTouchCommand,
-  commandLabel: TargetedTouchCommandLabel,
+  commandLabel: TargetedTouchCommand,
   flags: CommandFlags | undefined,
 ): DaemonResponse | undefined {
   const capabilityCommand = command === 'longpress' ? 'longpress' : 'press';
@@ -123,7 +120,7 @@ function targetedTouchPolicyResponse(
 function clickButtonValidationResponse(
   session: SessionState,
   command: TargetedTouchCommand,
-  commandLabel: TargetedTouchCommandLabel,
+  commandLabel: TargetedTouchCommand,
   flags: CommandFlags | undefined,
 ): DaemonResponse | undefined {
   const clickButton = resolveClickButton(flags);
