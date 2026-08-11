@@ -1,6 +1,6 @@
 import {
+  defineUse,
   narrowDeviceBinding,
-  runtimeUse,
   type AppLogCompletion,
   type AppLogLiveHandle,
   type DeviceRuntimeGateway,
@@ -16,7 +16,7 @@ import type {
   DurableCaptureRecoverySummary,
 } from './durable-capture-resource-recovery.ts';
 
-const appLogRecoveryUse = runtimeUse<PlatformRuntimeOperations>()({
+const appLogRecoveryUse = defineUse({
   required: ['appLogReattach', 'appLogCleanup'],
 });
 

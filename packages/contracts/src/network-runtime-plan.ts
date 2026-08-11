@@ -1,14 +1,11 @@
 import type { NetworkIncludeMode } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
-import { runtimeUse } from './platform-runtime.ts';
-import type { PlatformRuntimeOperations } from './platform-runtime-operations.ts';
+import { defineUse } from './platform-runtime.ts';
 
-const defineNetworkUse = runtimeUse<PlatformRuntimeOperations>();
-
-export const networkDumpUse = defineNetworkUse({ required: ['networkDump'] });
+export const networkDumpUse = defineUse({ required: ['networkDump'] });
 
 /** Fact-only capability projection; it is not an execution-plan variant. */
-export const networkAdmissionUse = defineNetworkUse({
+export const networkAdmissionUse = defineUse({
   required: [],
   preferred: ['networkDump'],
 });

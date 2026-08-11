@@ -37,6 +37,7 @@ export { assertCommandPlatformExecution } from '../command-platform-execution.ts
 export type { CommandPlatformExecution } from '../command-platform-execution.ts';
 export { AsyncCleanupStack, PendingTransferGuard } from '../async-lifecycle.ts';
 export {
+  defineUse,
   localRuntimeOwner,
   narrowDeviceBinding,
   providerRuntimeOwner,

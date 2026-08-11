@@ -1,15 +1,12 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { runtimeUse } from './platform-runtime.ts';
-import type { PlatformRuntimeOperations } from './platform-runtime-operations.ts';
+import { defineUse } from './platform-runtime.ts';
 
-const appLogUse = runtimeUse<PlatformRuntimeOperations>();
-
-const appLogInspectUse = appLogUse({ required: ['appLogInspect'] });
-const appLogDoctorUse = appLogUse({ required: ['appLogInspect', 'appLogDoctor'] });
-const appLogStartUse = appLogUse({ required: ['appLogInspect', 'appLogStart'] });
+const appLogInspectUse = defineUse({ required: ['appLogInspect'] });
+const appLogDoctorUse = defineUse({ required: ['appLogInspect', 'appLogDoctor'] });
+const appLogStartUse = defineUse({ required: ['appLogInspect', 'appLogStart'] });
 
 /** Fact-only admission probe; it is deliberately not an execution-plan variant. */
-export const appLogAdmissionUse = appLogUse({
+export const appLogAdmissionUse = defineUse({
   required: [],
   preferred: ['appLogInspect'],
 });

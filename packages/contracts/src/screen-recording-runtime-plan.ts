@@ -1,20 +1,17 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { runtimeUse } from './platform-runtime.ts';
-import type { PlatformRuntimeOperations } from './platform-runtime-operations.ts';
+import { defineUse } from './platform-runtime.ts';
 import type { RecordingScope } from './recording-scope.ts';
 
-const defineScreenRecordingUse = runtimeUse<PlatformRuntimeOperations>();
-
-export const screenRecordingStartUse = defineScreenRecordingUse({
+export const screenRecordingStartUse = defineUse({
   required: ['screenRecordingStart'],
 });
-export const screenRecordingRecoveryUse = defineScreenRecordingUse({
+export const screenRecordingRecoveryUse = defineUse({
   required: ['screenRecordingReattach', 'screenRecordingCleanup'],
 });
-const screenRecordingNoRuntimeUse = defineScreenRecordingUse({ required: [] });
+const screenRecordingNoRuntimeUse = defineUse({ required: [] });
 
 /** Fact-only admission preserves start's preferred-fast-path semantics. */
-export const screenRecordingAdmissionUse = defineScreenRecordingUse({
+export const screenRecordingAdmissionUse = defineUse({
   required: [],
   preferred: ['screenRecordingStart'],
 });

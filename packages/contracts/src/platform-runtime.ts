@@ -9,6 +9,7 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import type { PlatformModuleMetadata } from './platform-module.ts';
 import type { PlatformRequestScope } from './platform-runtime-host.ts';
+import type { PlatformRuntimeOperations } from './platform-runtime-operations.ts';
 
 type RuntimeOperation = (...args: never[]) => unknown;
 
@@ -72,6 +73,14 @@ export function runtimeUse<Operations extends object>() {
     return Object.freeze({ required, preferred }) as RuntimeUse<Operations, Required, Preferred>;
   };
 }
+
+/**
+ * The one neutral runtime-use declaration every command domain shares. Per-domain currying
+ * wrappers around `runtimeUse<PlatformRuntimeOperations>()` add a module per domain for no
+ * information (ADR 0019 §9); every device runtime-use declaration is built through this
+ * single export instead.
+ */
+export const defineUse = runtimeUse<PlatformRuntimeOperations>();
 
 function freezeUniqueKeys<Keys extends readonly string[]>(keys: Keys, label: string): Keys {
   const copy = [...keys];
