@@ -646,6 +646,74 @@ function report(
   return 1;
 }
 
+/** Everything the guard reads once per run, so a rule takes one argument whatever it needs. */
+export type LayeringContext = Readonly<{
+  sourceFiles: readonly string[];
+  sources: ReadonlyMap<string, string>;
+  allTypeScriptSources: ReadonlyMap<string, string>;
+  edges: readonly ResolvedImportEdge[];
+  typeCycleMembers: readonly string[];
+}>;
+
+export type LayeringRule = (context: LayeringContext) => LayeringViolation[];
+
+/**
+ * The rules this guard runs. Registering one is writing a key here, which is why the list is data
+ * rather than a hand-written array of spreads: an object cannot hold the same key twice, so a rule
+ * cannot be run — and reported, and ::error-annotated — twice by a copy-paste. `LayeringRuleId`
+ * then makes a missing key a type error rather than a silently retired rule.
+ *
+ * Order is the reporting order: report() groups by rule in first-seen order.
+ */
+export const LAYERING_RULE_IDS = [
+  'zone-policies',
+  'value-import-cycles',
+  'logs-runtime-cutover',
+  'contracts-implementation-authority',
+  'network-runtime-cutover',
+  'record-runtime-cutover',
+  'back-edges',
+  'type-spine-inversions',
+  'session-state-ownership',
+  'daemon-modularity-ratchets',
+  'zero-dep-job-closure',
+  'bin-alias-fast-path',
+  'package-boundaries',
+  'platform-package-policy',
+  'device-inventory-cutover',
+] as const;
+
+export type LayeringRuleId = (typeof LAYERING_RULE_IDS)[number];
+
+export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
+  'zone-policies': (context) => checkLayeringRules(context.edges),
+  'value-import-cycles': (context) => checkCycles(context.edges),
+  'logs-runtime-cutover': (context) => checkLogsRuntimeCutover(context.sources),
+  'contracts-implementation-authority': (context) =>
+    checkContractsImplementationAuthority(context.sources),
+  'network-runtime-cutover': (context) => checkNetworkRuntimeCutover(context.sources),
+  'record-runtime-cutover': (context) => checkRecordRuntimeCutover(context.sources),
+  'back-edges': (context) => checkBackEdges(context.edges),
+  'type-spine-inversions': (context) => checkTypeInversions(context.edges),
+  'session-state-ownership': (context) => checkSessionStateOwnership(context.sources),
+  'daemon-modularity-ratchets': (context) =>
+    checkDaemonModularityRatchets(context.edges, context.typeCycleMembers),
+  'zero-dep-job-closure': () => checkZeroDepJobs(),
+  'bin-alias-fast-path': (context) => checkBinAliasFastPath(context.sources),
+  'package-boundaries': () =>
+    checkPackageBoundaries(
+      repoRoot,
+      zeroDepClosureFiles(repoZeroDepJobs(), readSourceOrNull, fileExists),
+    ),
+  'platform-package-policy': (context) =>
+    checkPlatformPackagePolicy(
+      context.allTypeScriptSources,
+      readTrackedPlatformPackageDeclarations(repoRoot),
+      { untrackedProductionFiles: listUntrackedProductionTypeScriptFiles(repoRoot) },
+    ),
+  'device-inventory-cutover': (context) => checkDeviceInventoryCutover(context.sources),
+};
+
 export function main(): number {
   const sourceFiles = listSourceFiles();
   const sources = readSources(sourceFiles);
@@ -654,30 +722,14 @@ export function main(): number {
   // Computed once and threaded: the rule and the success line must report the same number.
   const typeCycleMembers = largestTypeCycleMembers(edges);
   const typeCycle = typeCycleMembers.length;
-  const violations = [
-    ...checkLayeringRules(edges),
-    ...checkCycles(edges),
-    ...checkLogsRuntimeCutover(sources),
-    ...checkContractsImplementationAuthority(sources),
-    ...checkNetworkRuntimeCutover(sources),
-    ...checkRecordRuntimeCutover(sources),
-    ...checkBackEdges(edges),
-    ...checkTypeInversions(edges),
-    ...checkSessionStateOwnership(sources),
-    ...checkDaemonModularityRatchets(edges, typeCycleMembers),
-    ...checkZeroDepJobs(),
-    ...checkBinAliasFastPath(sources),
-    ...checkPackageBoundaries(
-      repoRoot,
-      zeroDepClosureFiles(repoZeroDepJobs(), readSourceOrNull, fileExists),
-    ),
-    ...checkPlatformPackagePolicy(
-      allTypeScriptSources,
-      readTrackedPlatformPackageDeclarations(repoRoot),
-      { untrackedProductionFiles: listUntrackedProductionTypeScriptFiles(repoRoot) },
-    ),
-    ...checkDeviceInventoryCutover(sources),
-  ];
+  const context: LayeringContext = {
+    sourceFiles,
+    sources,
+    allTypeScriptSources,
+    edges,
+    typeCycleMembers,
+  };
+  const violations = Object.values(LAYERING_RULES).flatMap((rule) => rule(context));
   return report(sourceFiles, violations, typeCycle);
 }
 
