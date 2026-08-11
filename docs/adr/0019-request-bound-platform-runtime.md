@@ -10,9 +10,15 @@ original baseline `44c298d7f3a0ef84bc47f34c54d88b6c9eeb0df2`, through merged `de
 `457fafe6399a95a4ddbfac57f02b3a7fe4157a54`. The earlier checkpoints at `99f5af1b7` and `d73bdb4ae`
 are superseded and were not behavior-passing: later review found correctness failures and the first
 budget decision still used the unrevised +3% limit. The required cleanup package, explicit budget
-decision, and clean rerun are now complete. The authorized recordings command unit moves onto the
-durable-capture substrate under its separately reviewed cumulative bound below; this decision does
-not authorize another command unit or an unbounded platform migration.
+decision, and clean rerun are now complete. The recordings command unit has since completed on the
+durable-capture substrate under its separately reviewed cumulative bound below (section 7). No
+further command unit is authorized by this Status: subsequent units are planned, budgeted, and
+authorized individually through the successor tracking issue under the amendment's governance.
+
+Amended 2026-08-11 with broader-migration governance (sections 8–10). The amendment changes no
+checkpoint outcome and re-authorizes nothing by itself: command units still migrate one at a time
+under sections 2–6, but subsequent units follow the move-dominated size discipline, the evidence
+tiers, the binding ergonomics, and the process-lifetime rules added below.
 
 During the `devices` unit, doctor discovery, replay-test sharding, Apple simulator hints, and Android
 emulator lifecycle keep their existing command execution owners while consuming the same injected,
@@ -49,11 +55,23 @@ those descriptors or authorize a second local/provider chooser.
   facet handle under R7; only the descriptor and neutral metadata enter persisted recovery state.
   Concrete platform process objects never cross the seam.
 - The migration unit is one command descriptor across its full existing denominator: every inventory
-  source or every supported device-runtime cell. A descriptor has exactly one legacy,
-  inventory-backed, or device-runtime-backed platform-execution shape at every committed state, and a
-  migrated command has no legacy execution fallback.
+  source or every supported device-runtime cell. A descriptor has exactly one explicitly declared
+  platform-execution shape at every committed state — `none`, legacy, inventory-backed, or
+  device-runtime-backed — and a migrated command has no legacy execution fallback. `none` declares
+  the absence of platform execution and is never a migration target or source.
 - Broader adoption pauses after the first real slices. Evidence records one decision: continue,
   revise the seam and rerun the checkpoint, or stop with every landed command still coherent.
+- Post-checkpoint units are move-dominated: platform mechanics leave root `src/` for platform
+  packages, net shipped-size growth is exceptional and individually justified, and surfaces already
+  scheduled for removal at the next major are deleted on legacy, never migrated.
+- Evidence is tiered by what a unit imports: request-scoped device units prove facts, operations,
+  and parity cells; only durable-resource units carry the section 4–5 lifecycle evidence.
+- A handler binds once with its execution use. Admission, `capabilities`, and doctor questions use
+  side-effect-free facts inspection; required-only declarations are the default and a preferred
+  operation requires a recorded measurement.
+- Cross-cutting facets land with their first consuming command unit. Daemon startup recovery is
+  evidence-gated, daemon shutdown is two-phase (detach, then stop), and session-teardown steps
+  belong to their owning domains — there is no generic lifecycle-hook API.
 
 ## Context
 
@@ -386,13 +404,22 @@ disposable transaction.
 
 The command descriptor is the sole migration discriminant, but it does not own a daemon handler
 value. It declares command identity and an internal-only execution mode excluded from public
-projections. The mode selects one neutral declaration shape: legacy platform admission, device
-`runtimeUse`, or `inventoryUse`. ADR 0003's daemon-owned total route table continues to own specialized
+projections. The mode selects one neutral declaration shape: `none`, legacy platform admission,
+device `runtimeUse`, or `inventoryUse`. The `none` mode (amendment, 2026-08-11) is the explicit
+declaration that a command executes no platform behavior: a `none` descriptor never binds a device,
+carries no capability bucket, owns no platform adapter, and declares no runtime or inventory use;
+lease, session-management, and daemon-management commands are `none`. The mode is declared
+explicitly on every descriptor — a registry-entry default that silently assigns a mode cannot
+distinguish a command with no platform execution from an unmigrated one and is prohibited. ADR
+0003's daemon-owned total route table continues to own specialized
 handler implementations and request-policy traits; that route/policy projection remains present and
 unchanged in every mode. A derived coherence gate joins the declarations without importing daemon
 handlers into the descriptor registry.
 
-The descriptor-derived **runtime-command-cutover gate** covers the command's whole platform-execution
+The descriptor-derived **runtime-command-cutover gate** applies to platform-executing descriptors
+only; `none` descriptors are outside its denominator, and the gate separately rejects a `none`
+declaration on any descriptor that binds devices, keeps a capability bucket, or reaches platform
+behavior. For a platform-executing descriptor it covers the command's whole platform-execution
 projection: either legacy admission/hints plus its complete legacy platform adapter; device runtime
 use plus fact-derived admission and its complete runtime-backed adapter; or inventory use plus the
 composed inventory gateway. Never more than one and never none. A migrated device unit deletes its old
@@ -559,12 +586,12 @@ layer: the CLI-observable `logs` behavior remains parity work. The budget stays 
 `44c298d7f`; the exact clean post-revision measurement is the reviewed upper bound for this checkpoint,
 not a reusable allowance for future units:
 
-| Metric | Original baseline | Revised cumulative bound / checkpoint | Change |
-| --- | ---: | ---: | ---: |
-| Raw JavaScript | 2,036,067 B | 2,131,689 B | +95,622 B (+4.696%) |
-| Gzipped JavaScript | 659,646 B | 695,134 B | +35,488 B (+5.380%) |
-| npm tarball | 797,027 B | 826,761 B | +29,734 B (+3.731%) |
-| npm unpacked | 2,781,186 B | 2,878,492 B | +97,306 B (+3.499%) |
+| Metric             | Original baseline | Revised cumulative bound / checkpoint |              Change |
+| ------------------ | ----------------: | ------------------------------------: | ------------------: |
+| Raw JavaScript     |       2,036,067 B |                           2,131,689 B | +95,622 B (+4.696%) |
+| Gzipped JavaScript |         659,646 B |                             695,134 B | +35,488 B (+5.380%) |
+| npm tarball        |         797,027 B |                             826,761 B | +29,734 B (+3.731%) |
+| npm unpacked       |       2,781,186 B |                           2,878,492 B | +97,306 B (+3.499%) |
 
 The controlled 15-run startup medians showed no regression (`--version` 94.5 ms to 47.4 ms;
 `--help` 91.2 ms to 72.0 ms). Module-level source-map inspection found no duplicate implementation
@@ -579,12 +606,12 @@ in the acceptance comment before readiness. The increase pays for runtime-owned 
 transports, fenced artifact finalization and cross-daemon recovery, and provider parity. It is not
 unused checkpoint headroom and is not an allowance for a later command:
 
-| Metric | Original baseline | Recording bound | Cumulative change | Recording-only change |
-| --- | ---: | ---: | ---: | ---: |
-| Raw JavaScript | 2,036,067 B | 2,166,159 B | +130,092 B (+6.389%) | +32,026 B (+1.501%) |
-| Gzipped JavaScript | 659,646 B | 708,776 B | +49,130 B (+7.448%) | +12,902 B (+1.854%) |
-| npm tarball | 797,027 B | 836,426 B | +39,399 B (+4.943%) | +8,987 B (+1.086%) |
-| npm unpacked | 2,781,186 B | 2,913,430 B | +132,244 B (+4.755%) | +32,494 B (+1.128%) |
+| Metric             | Original baseline | Recording bound |    Cumulative change | Recording-only change |
+| ------------------ | ----------------: | --------------: | -------------------: | --------------------: |
+| Raw JavaScript     |       2,036,067 B |     2,166,159 B | +130,092 B (+6.389%) |   +32,026 B (+1.501%) |
+| Gzipped JavaScript |         659,646 B |       708,776 B |  +49,130 B (+7.448%) |   +12,902 B (+1.854%) |
+| npm tarball        |         797,027 B |       836,426 B |  +39,399 B (+4.943%) |    +8,987 B (+1.086%) |
+| npm unpacked       |       2,781,186 B |     2,913,430 B | +132,244 B (+4.755%) |   +32,494 B (+1.128%) |
 
 These bounds admit only the completed recordings cutover. Every subsequent command unit must define
 and review both its original-baseline cumulative bound and its immediate stack-base delta.
@@ -593,6 +620,93 @@ The tracking issue owns command order, PR/file lists, test-only compatibility fi
 benchmark commands and thresholds, raw evidence, and reviewers. Temporary fixtures never authorize
 a production bridge, duplicate route, or recorded package back-import. After the checkpoint, this
 ADR's status records its outcome; it does not retain a migration diary.
+
+### 8. Broader migration is move-dominated and evidence-tiered
+
+The checkpoint and recordings budgets paid for machinery that later units reuse; they are not a
+precedent for growth. Every post-checkpoint unit still defines its original-baseline cumulative
+bound and immediate stack-base delta, but the default expectation inverts: a unit relocates
+existing platform mechanics from root `src/` into platform packages and deletes superseded daemon
+code, so its shipped-size delta trends to zero or negative. The unit's review reports root bytes
+removed against package bytes added; net growth is exceptional and each contributing addition is
+named and justified individually. Contract modules stay vocabulary-thin under the existing
+capture-kit rule; per-unit type inflation is size growth and is reviewed as such.
+
+A command surface that is deprecated and scheduled for removal at the next major is never
+migrated. It stays on its legacy execution shape until the major deletes it, and the deletion — not
+a migration — retires its platform coupling. Where a command's public surface is being narrowed,
+the narrowing merges first so the migration denominator is the surviving surface only.
+
+Evidence requirements follow what a unit imports, in two tiers. A **request-scoped device unit**
+uses facts and operations only: its evidence is the typed use declaration, fact coverage for every
+denominator cell, the enumerated legacy-parity cell table recorded in the unit review, and the
+cutover gate. It must not import admission ledgers, fences, durable descriptors, or recovery
+adapters, and their evidence items do not apply to it. A **durable-resource unit** additionally
+carries the full section 4–5 lifecycle evidence. The tier is declared in the unit review; importing
+durable machinery promotes the unit to the durable tier.
+
+The per-command cutover gates consolidate into one parametrized runtime-command-cutover gate driven
+by a table of migrated commands. Adding a unit adds a row; the parametrized gate carries one
+planted-red violation for the mechanism, not one per row. The four existing per-command policy
+files fold into it in the first post-amendment unit that would otherwise add a fifth.
+
+Facts are the only support authority for a migrated command. The unit deletes the command's
+descriptor capability bucket and its `requireCommandSupported` wiring together with the legacy
+adapter; retaining both is a dual admission path and fails the cutover gate.
+
+### 9. Binding ergonomics: one bind per handler
+
+The gateway exposes side-effect-free facts inspection for an ownership-resolved device. It answers
+admission, `capabilities`, and doctor questions without creating a request binding, acquiring
+helpers, or touching the device; it shares the owner's lazy loading. A handler binds exactly once,
+with the execution use its plan selected. The admission-use idiom — binding with an empty required
+set to read facts — is retired for new units: they may not introduce admission-only binds. Moving
+an already-migrated handler onto facts inspection changes production admission behavior; it is its
+own independently reviewed unit with parity evidence, never a side effect of a structural change.
+
+Use declarations share one neutral `defineUse`; per-domain currying wrappers add a module per
+domain for no information and are not added. Required-only declarations are the default. Declaring
+a preferred operation requires a recorded measurement of the fast path's benefit in the unit
+review; the direct-selector fast path is the model. A preferred operation declared without a
+measurement is speculative surface and is rejected in review.
+
+### 10. Process-lifetime and cross-cutting surfaces
+
+A cross-cutting facet — one consumed from more than one command's execution path, such as snapshot
+freshness, the system-chrome guard, presentation rules, or runtime hints — lands inside the first
+command unit that consumes it and is named in that unit's review. Its contract has one owner. Later
+units consume the existing facet; forking a parallel contract for the same concern is a seam
+violation. A facet PR with no consuming command remains prohibited under section 6.
+
+Daemon startup gains no per-platform entrypoints. Startup recovery is evidence-gated: persisted
+durable manifests and platform-owned markers are the only triggers, and a family's mechanics load
+only when its evidence exists — preserving implementation laziness because an evidence-free family
+is never evaluated. The app-log recovery path is the model. Remaining platform-specific startup
+recovery (the Android test-IME marker, web browser orphans) moves onto this pattern when its owning
+domain migrates, not before.
+
+Daemon shutdown is two-phase through the gateway. The detach phase runs before daemon session
+teardown and offers each process-lived helper manager its handoff policy — a healthy kept-hot
+helper may transfer to a successor daemon rather than stop. The stop phase runs after session
+resources are finalized and terminates each still-owned generation at most once, per section 4.
+Platform-specific shutdown calls in the daemon runtime are deleted as their owners migrate onto the
+phases.
+
+Session teardown keeps its isolated-step skeleton and gains no generic hook API. Each remaining
+platform-specific step belongs to a domain and is deleted by that domain's unit: perf steps by the
+perf unit, test-IME restoration by the input domain as durable device state with marker-based
+recovery, helper stops by the owning platform module's device-lifecycle policy, close-time alert
+dismissal by the close unit. A teardown step that survives its domain's cutover is a migration gap.
+
+As a daemon area loses its last platform import, the same unit narrows the R3 platforms-seam
+allowlist to match; the seam list may never grow. Seam removal alone is not the end-state
+enforcement: R3 tolerates dynamic and type-only platform imports, and legacy daemon behavior
+reaches platforms through exactly those edges. The end state is a dedicated planted-red rule
+rejecting every dependency edge — static, dynamic, re-export, and type-only — from production
+`src/daemon/**` modules (test files excluded, matching the layering scanner's scope) to
+`src/platforms/**` and to concrete `@agent-device/platform-*` packages; daemon types come from
+contracts only. Once that rule is green with `src/daemon/` removed from the seam, daemon
+platform-freedom is structurally enforced rather than measured.
 
 ## Relationship to prior decisions
 
