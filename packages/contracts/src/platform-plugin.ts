@@ -1,5 +1,4 @@
 import type { DeviceInfo, Platform, PlatformSelector } from '@agent-device/kernel/device';
-import type { PerfMetricsSamplerTag } from './perf.ts';
 import type { PlatformGatedProviderResolverKey } from './platform-providers.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 
@@ -23,10 +22,8 @@ type CapabilityBucket = 'apple' | 'android' | 'harmonyos' | 'vega' | 'linux' | '
  * populated by wrapping the existing daemon branch AND pinned by a table-equivalence
  * parity test before a real call-site routes through it. A facet's type stays
  * PLATFORM-NEUTRAL and daemon-owned (never the iOS-simulator-shaped provider seam):
- * {@link PlatformPlugin.perf} carries the neutral perf-metrics support predicate
- * (wraps `supportsPlatformPerfMetrics`) plus the neutral {@link PerfMetricsSamplerTag}
- * resolver (wraps the per-platform metrics-sampling branch formerly open-coded in
- * `buildPerfResponseData`), both pinned by the daemon perf routing parity test;
+ * {@link PlatformPlugin.perf} carries the neutral perf-observation support predicate,
+ * pinned by the daemon perf routing parity test;
  * {@link PlatformPlugin.providers} carries the per-family platform-gated request
  * provider resolver list (replaces the hand `device.platform === …` gate in
  * `request-platform-providers.ts`, pinned by the providers routing parity test). The
@@ -67,29 +64,12 @@ export type PlatformPlugin = {
     >;
   };
   /**
-   * The daemon perf facet (issue #974). `supportsMetrics` wraps the platform
-   * predicate `supportsPlatformPerfMetrics` in
-   * `src/daemon/handlers/session-perf.ts`, reporting whether `device`'s platform
-   * can produce session perf metrics (startup/fps/memory/cpu). Present only on
-   * families that expose perf metrics (Apple + Android); left `undefined` for
-   * linux/web, where the hand predicate returned `false` — the daemon lookup
-   * preserves that fallthrough, and the daemon perf routing parity test pins the
-   * equivalence.
-   *
-   * `metricsSamplerTag` returns the neutral {@link PerfMetricsSamplerTag} naming which
-   * `perf metrics` sampler a device's family owns (`'apple'` / `'android'`), replacing
-   * the `device.platform === 'android'` sampling branch formerly open-coded in
-   * `buildPerfResponseData`. The daemon still OWNS the samplers and maps the tag back to
-   * them (`PERF_METRICS_SAMPLERS_BY_TAG`), so core/platforms never carry the daemon-owned
-   * sampling composition — exactly like {@link recording}'s tag. It is only ever consulted
-   * after `supportsMetrics` gates the platform in, so it is present on the SAME families
-   * (Apple + Android) and the parity test pins both to a verbatim copy of the former
-   * branch. The `perf memory`/`perf frames` bodies and the Android-only native-collector
-   * gate stay on their daemon branch until each clears the same gate.
+   * The daemon perf facet (issue #974). `supportsMetrics` reports whether a device family
+   * can produce the explicit `perf frames` or `perf memory` observations. Present only on
+   * Apple, Android, and HarmonyOS; factless families omit the facet.
    */
   readonly perf?: {
     supportsMetrics(device: DeviceInfo): boolean;
-    metricsSamplerTag(device: DeviceInfo): PerfMetricsSamplerTag;
   };
   /**
    * The daemon request-scope provider facet (issue #974). `platformGatedResolvers`

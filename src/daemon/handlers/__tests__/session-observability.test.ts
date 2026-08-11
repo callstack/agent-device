@@ -309,6 +309,16 @@ test('perf cpu profile report uses last profile trace and writes compact JSON re
     summary: {
       runCount: 1,
       tableSchemas: ['time-profile'],
+      sampleCount: 20,
+      totalSampleWeightMs: 20,
+      topFunctions: [
+        {
+          symbol: 'hot',
+          binary: 'Example',
+          selfSampleMs: 8,
+          selfSamplePercent: 40,
+        },
+      ],
     },
   });
 
@@ -329,6 +339,16 @@ test('perf cpu profile report uses last profile trace and writes compact JSON re
   assert.deepEqual(response?.data?.summary, {
     runCount: 1,
     tableSchemas: ['time-profile'],
+    sampleCount: 20,
+    totalSampleWeightMs: 20,
+    topFunctions: [
+      {
+        symbol: 'hot',
+        binary: 'Example',
+        selfSampleMs: 8,
+        selfSamplePercent: 40,
+      },
+    ],
   });
   assert.equal(
     applePerfMocks.writeAppleXctracePerfReport.mock.calls[0]?.[0].tracePath,

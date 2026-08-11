@@ -32,11 +32,8 @@ const androidPlugin = {
         device.target === 'tv' ? undefined : 'tv-remote is supported only on Android TV targets.',
     },
   },
-  // Wraps the Android arm of `supportsPlatformPerfMetrics`: every Android device
-  // reports perf-metrics support. `metricsSamplerTag` wraps the Android arm of the
-  // former `buildPerfResponseData` sampling branch: every supported Android device
-  // routes to the Android `perf metrics` sampler.
-  perf: { supportsMetrics: () => true, metricsSamplerTag: () => 'android' },
+  // Android exposes explicit frame-health and memory observations.
+  perf: { supportsMetrics: () => true },
   // Declares the platform-gated request provider resolver the Android family owns (the
   // adb provider, formerly gated by `device.platform === 'android'`).
   providers: { platformGatedResolvers: ['androidAdbProvider'] },
@@ -50,7 +47,7 @@ const harmonyosPlugin = {
   id: 'harmonyos',
   platforms: ['harmonyos'],
   capability: { bucket: 'harmonyos' },
-  perf: { supportsMetrics: () => true, metricsSamplerTag: () => 'harmonyos' },
+  perf: { supportsMetrics: () => true },
   createInteractor: async (device: DeviceInfo, runner: RunnerContext) => {
     const { createHarmonyInteractor } = await import('./harmonyos.ts');
     return createHarmonyInteractor(device, runner);

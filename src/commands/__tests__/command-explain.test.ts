@@ -130,7 +130,6 @@ describe('explainCommand table-driven coverage', () => {
   test.each([
     ['launch', 'open', [{ alias: 'launch' }, { alias: 'relaunch', impliedFlags: ['relaunch'] }]],
     ['long-press', 'longpress', [{ alias: 'long-press' }]],
-    ['metrics', 'perf', [{ alias: 'metrics' }]],
     ['TAP', 'press', [{ alias: 'tap' }]],
   ])('resolves CLI alias %s to %s', (query, command, aliases) => {
     const result = explainCommand(query as string, { fileExists });

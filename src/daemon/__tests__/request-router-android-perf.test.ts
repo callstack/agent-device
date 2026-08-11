@@ -39,7 +39,7 @@ function makeHandler(sessionStore: SessionStore, androidAdbProvider: () => Andro
   });
 }
 
-test('request handler reports injected Android adb failures per perf metric', async () => {
+test('request handler reports injected Android adb failures for memory sampling', async () => {
   const sessionStore = makeAndroidSessionStore('agent-device-request-router-perf-unavailable-test');
   const adb: AndroidAdbExecutor = async () => {
     throw new AppError('COMMAND_FAILED', 'Remote Android ADB executor is unavailable');
@@ -50,17 +50,15 @@ test('request handler reports injected Android adb failures per perf metric', as
     token: 'token',
     session: 'default',
     command: 'perf',
-    positionals: [],
+    positionals: ['memory', 'sample'],
     flags: {},
   });
 
   expect(response.ok).toBe(true);
   if (!response.ok) throw new Error('Expected perf response to succeed');
   const metrics = response.data?.metrics as Record<string, any>;
-  for (const metricName of ['memory', 'cpu', 'fps']) {
-    const metric = metrics[metricName];
-    expect(metric.available).toBe(false);
-    expect(metric.reason).toBe('Remote Android ADB executor is unavailable');
-    expect(metric.error.details.metric).toBe(metricName);
-  }
+  const memory = metrics.memory;
+  expect(memory.available).toBe(false);
+  expect(memory.reason).toBe('Remote Android ADB executor is unavailable');
+  expect(memory.error.details.metric).toBe('memory');
 });

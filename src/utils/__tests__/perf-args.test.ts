@@ -3,10 +3,6 @@ import assert from 'node:assert/strict';
 import { parseArgs, usageForCommand } from '../../cli/parser/args.ts';
 
 test('parseArgs accepts perf area subcommands', () => {
-  const metrics = parseArgs(['perf', 'metrics'], { strictFlags: true });
-  assert.equal(metrics.command, 'perf');
-  assert.deepEqual(metrics.positionals, ['metrics']);
-
   const frames = parseArgs(['perf', 'frames'], { strictFlags: true });
   assert.equal(frames.command, 'perf');
   assert.deepEqual(frames.positionals, ['frames']);
@@ -28,10 +24,9 @@ test('parseArgs accepts perf area subcommands', () => {
   assert.equal(profile.flags.out, 'app.trace');
 });
 
-test('usageForCommand advertises perf area subcommands for metrics alias', async () => {
-  const help = await usageForCommand('metrics');
+test('usageForCommand advertises focused perf area subcommands', async () => {
+  const help = await usageForCommand('perf');
   assert.equal(help === null, false);
-  assert.match(help ?? '', /agent-device perf metrics --json/);
   assert.match(help ?? '', /agent-device perf frames --json/);
   assert.match(help ?? '', /perf memory snapshot/);
   assert.match(help ?? '', /perf cpu profile report --kind xctrace --out <report\.json>/);

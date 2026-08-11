@@ -27,6 +27,7 @@ import {
   type AppleXctracePerfCapture,
 } from '../perf-xctrace.ts';
 import { parseAppleFramePerfSample } from '../perf-frame.ts';
+import { parseAppleTimeProfileSummary } from '../perf-xml.ts';
 import { runCmd, runCmdBackground } from '../../../../utils/exec.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -35,6 +36,43 @@ const mockRunCmd = vi.mocked(runCmd);
 const mockRunCmdBackground = vi.mocked(runCmdBackground);
 type MockRunCmdResult = Awaited<ReturnType<typeof runCmd>>;
 type XcrunMockHandler = (args: string[]) => Promise<MockRunCmdResult | null>;
+
+test('time-profile report aggregates weighted leaf frames and follows xctrace references', () => {
+  const summary = parseAppleTimeProfileSummary(
+    `<trace-query-result><node><row>
+      <weight id="weight-1">1000000</weight>
+      <backtrace id="stack-1"><frame id="frame-1" name="hot"><binary id="binary-1" name="App"/></frame></backtrace>
+    </row><row>
+      <weight ref="weight-1"/><backtrace ref="stack-1"/>
+    </row><row>
+      <weight>500000</weight>
+      <backtrace><frame name="cool"><binary ref="binary-1"/></frame></backtrace>
+    </row></node></trace-query-result>`,
+    1,
+  );
+
+  assert.deepEqual(summary, {
+    sampleCount: 3,
+    totalSampleWeightMs: 2.5,
+    topFunctions: [
+      {
+        symbol: 'hot',
+        binary: 'App',
+        selfSampleMs: 2,
+        selfSamplePercent: 80,
+      },
+    ],
+  });
+});
+
+test('time-profile report skips incomplete rows', () => {
+  assert.deepEqual(
+    parseAppleTimeProfileSummary(
+      '<trace-query-result><node><row><weight>1000000</weight></row></node></trace-query-result>',
+    ),
+    { sampleCount: 0, totalSampleWeightMs: 0, topFunctions: [] },
+  );
+});
 
 const IOS_SIMULATOR: DeviceInfo = {
   platform: 'apple',
@@ -870,7 +908,7 @@ test('stopAppleXctracePerfCapture reports confirmed cleanup after forced kill ex
   }
 });
 
-test('writeAppleXctracePerfReport writes compact trace metadata JSON', async () => {
+test('writeAppleXctracePerfReport writes compact weighted CPU evidence', async () => {
   const tmpDir = await mkdtempForTest('agent-device-xctrace-report-');
   const tracePath = path.join(tmpDir, 'app.trace');
   const reportPath = path.join(tmpDir, 'app-profile.json');
@@ -879,8 +917,19 @@ test('writeAppleXctracePerfReport writes compact trace metadata JSON', async () 
     async (args) => {
       if (args[0] !== 'xctrace' || args[1] !== 'export') return null;
       assert.equal(args[args.indexOf('--input') + 1], tracePath);
-      assert.equal(args[args.indexOf('--xpath') + 1], '/trace-toc');
-      await fs.writeFile(readOutputPath(args), makeTraceTocXml(), 'utf8');
+      if (args.includes('--toc')) {
+        await fs.writeFile(readOutputPath(args), makeTraceTocXml(), 'utf8');
+        return emptyRunResult();
+      }
+      assert.equal(
+        args[args.indexOf('--xpath') + 1],
+        '/trace-toc/run[@number="1"]/data/table[@schema="time-profile"]',
+      );
+      await fs.writeFile(
+        readOutputPath(args),
+        '<trace-query-result><node><row><weight>2000000</weight><backtrace><frame name="hot"><binary name="Example"/></frame></backtrace></row></node></trace-query-result>',
+        'utf8',
+      );
       return emptyRunResult();
     },
   ]);
@@ -895,6 +944,15 @@ test('writeAppleXctracePerfReport writes compact trace metadata JSON', async () 
     });
     assert.equal(report.reportPath, reportPath);
     assert.deepEqual(report.summary.tableSchemas, ['cpu-profile', 'time-profile']);
+    assert.equal(report.summary.sampleCount, 1);
+    assert.deepEqual(report.summary.topFunctions, [
+      {
+        symbol: 'hot',
+        binary: 'Example',
+        selfSampleMs: 2,
+        selfSamplePercent: 100,
+      },
+    ]);
     const written = JSON.parse(await fs.readFile(reportPath, 'utf8')) as typeof report;
     assert.equal(written.tracePath, tracePath);
     assert.deepEqual(written.summary.tableSchemas, ['cpu-profile', 'time-profile']);

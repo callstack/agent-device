@@ -19,7 +19,11 @@ import {
   type ExecResult,
 } from '../../../utils/exec.ts';
 import { uniqueStrings } from '@agent-device/kernel/collections';
-import { findAllXmlNodes } from './perf-xml.ts';
+import {
+  findAllXmlNodes,
+  parseAppleTimeProfileSummary,
+  type AppleTimeProfileFunction,
+} from './perf-xml.ts';
 import {
   isRetryableIosDeviceTraceRecordFailure,
   prepareAppleTraceRecordRetry,
@@ -81,6 +85,9 @@ export type AppleXctracePerfReport = {
   summary: {
     runCount: number;
     tableSchemas: string[];
+    sampleCount: number;
+    totalSampleWeightMs: number;
+    topFunctions: AppleTimeProfileFunction[];
   };
 };
 
@@ -179,14 +186,14 @@ export async function writeAppleXctracePerfReport(params: {
 }): Promise<AppleXctracePerfReport> {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-xctrace-report-'));
   const tocPath = path.join(tempDir, 'trace-toc.xml');
+  const timeProfilePath = path.join(tempDir, 'time-profile.xml');
   try {
     const exportArgs = [
       'xctrace',
       'export',
       '--input',
       params.tracePath,
-      '--xpath',
-      '/trace-toc',
+      '--toc',
       '--output',
       tocPath,
     ];
@@ -203,16 +210,56 @@ export async function writeAppleXctracePerfReport(params: {
         hint: resolveIosDevicePerfHint(exportResult.stdout, exportResult.stderr),
       }),
     );
+    const tocXml = await fs.readFile(tocPath, 'utf8');
+    const timeProfileXml =
+      params.mode === 'cpu-profile'
+        ? await exportAppleTimeProfile(params.tracePath, timeProfilePath)
+        : undefined;
     const report = buildAppleXctracePerfReport({
       ...params,
-      tocXml: await fs.readFile(tocPath, 'utf8'),
+      tocXml,
+      timeProfileXml,
     });
+    if (params.mode === 'cpu-profile' && report.summary.sampleCount === 0) {
+      throw new AppError('COMMAND_FAILED', 'Apple xctrace CPU report contained no samples', {
+        tracePath: params.tracePath,
+        tableSchemas: report.summary.tableSchemas,
+        hint: 'Keep the app active while recording, then retry. Open the raw trace in Instruments if it still contains no Time Profiler samples.',
+      });
+    }
     await fs.mkdir(path.dirname(params.outPath), { recursive: true });
     await fs.writeFile(params.outPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
     return report;
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   }
+}
+
+async function exportAppleTimeProfile(tracePath: string, outPath: string): Promise<string> {
+  const exportArgs = [
+    'xctrace',
+    'export',
+    '--input',
+    tracePath,
+    '--xpath',
+    '/trace-toc/run[@number="1"]/data/table[@schema="time-profile"]',
+    '--output',
+    outPath,
+  ];
+  requireExecSuccess(
+    await runXcrun(exportArgs, {
+      allowFailure: true,
+      timeoutMs: IOS_DEVICE_PERF_EXPORT_TIMEOUT_MS,
+    }),
+    'Failed to export Apple xctrace Time Profiler samples',
+    (exportResult) => ({
+      cmd: 'xcrun',
+      args: exportArgs,
+      tracePath,
+      hint: resolveIosDevicePerfHint(exportResult.stdout, exportResult.stderr),
+    }),
+  );
+  return await fs.readFile(outPath, 'utf8');
 }
 
 async function resolveAppleXctracePerfTarget(
@@ -392,6 +439,7 @@ function buildAppleXctracePerfReport(params: {
   template?: string;
   appBundleId?: string;
   tocXml: string;
+  timeProfileXml?: string;
 }): AppleXctracePerfReport {
   const document = parseXmlDocumentSync(params.tocXml);
   const runs = findAllXmlNodes(document, (node) => node.name === 'run');
@@ -400,6 +448,9 @@ function buildAppleXctracePerfReport(params: {
       .map((node) => node.attributes.schema)
       .filter((schema): schema is string => typeof schema === 'string' && schema.length > 0),
   ).sort();
+  const timeProfile = params.timeProfileXml
+    ? parseAppleTimeProfileSummary(params.timeProfileXml)
+    : { sampleCount: 0, totalSampleWeightMs: 0, topFunctions: [] };
   return {
     kind: 'xctrace',
     mode: params.mode,
@@ -411,6 +462,7 @@ function buildAppleXctracePerfReport(params: {
     summary: {
       runCount: runs.length,
       tableSchemas,
+      ...timeProfile,
     },
   };
 }

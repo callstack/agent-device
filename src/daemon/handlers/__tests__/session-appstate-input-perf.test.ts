@@ -398,7 +398,7 @@ test('perf requires an active session', async () => {
   }
 });
 
-test('perf reports startup metric as unavailable when no sample exists', async () => {
+test('perf memory reports missing app context when no app is associated', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'perf-session-empty';
   sessionStore.set(
@@ -417,7 +417,7 @@ test('perf reports startup metric as unavailable when no sample exists', async (
       token: 't',
       session: sessionName,
       command: 'perf',
-      positionals: [],
+      positionals: ['memory', 'sample'],
       flags: {},
     },
     sessionName,
@@ -428,19 +428,13 @@ test('perf reports startup metric as unavailable when no sample exists', async (
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
   if (response && response.ok) {
-    const startup = (response.data?.metrics as any)?.startup;
     const memory = (response.data?.metrics as any)?.memory;
-    const cpu = (response.data?.metrics as any)?.cpu;
-    expect(startup?.available).toBe(false);
-    expect(String(startup?.reason ?? '')).toMatch(/no startup sample captured yet/i);
     expect(memory?.available).toBe(false);
     expect(String(memory?.reason ?? '')).toMatch(/run open <app> first/i);
-    expect(cpu?.available).toBe(false);
-    expect(String(cpu?.reason ?? '')).toMatch(/run open <app> first/i);
   }
 });
 
-test('perf preserves successful metrics and normalizes per-metric Android sampling failures', async () => {
+test('perf memory normalizes Android sampling failures', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'perf-session-android-error';
   sessionStore.set(sessionName, {
@@ -473,7 +467,7 @@ test('perf preserves successful metrics and normalizes per-metric Android sampli
       token: 't',
       session: sessionName,
       command: 'perf',
-      positionals: [],
+      positionals: ['memory', 'sample'],
       flags: {},
     },
     sessionName,
@@ -485,10 +479,7 @@ test('perf preserves successful metrics and normalizes per-metric Android sampli
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
   if (response && response.ok) {
-    const startup = (response.data?.metrics as any)?.startup;
     const memory = (response.data?.metrics as any)?.memory;
-    const cpu = (response.data?.metrics as any)?.cpu;
-    expect(startup?.available).toBe(false);
     expect(memory?.available).toBe(false);
     // The bare `error:` severity prefix is stripped by the stderr-excerpt noise filter.
     expect(memory?.reason).toBe('device offline');
@@ -496,12 +487,10 @@ test('perf preserves successful metrics and normalizes per-metric Android sampli
     expect(memory?.error?.hint).toMatch(/adb reconnect/i);
     expect(memory?.error?.details?.metric).toBe('memory');
     expect(memory?.error?.details?.package).toBe('com.example.app');
-    expect(cpu?.available).toBe(true);
-    expect(cpu?.usagePercent).toBe(0);
   }
 });
 
-test('perf samples Apple cpu and memory metrics on macOS app sessions', async () => {
+test('perf memory samples macOS app sessions', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'perf-session-macos';
   sessionStore.set(sessionName, {
@@ -542,7 +531,7 @@ test('perf samples Apple cpu and memory metrics on macOS app sessions', async ()
       token: 't',
       session: sessionName,
       command: 'perf',
-      positionals: [],
+      positionals: ['memory', 'sample'],
       flags: {},
     },
     sessionName,
@@ -554,15 +543,11 @@ test('perf samples Apple cpu and memory metrics on macOS app sessions', async ()
   expect(response?.ok).toBe(true);
   if (!response?.ok) throw new Error('Expected perf response to succeed for macOS session');
   const memory = (response.data?.metrics as any)?.memory;
-  const cpu = (response.data?.metrics as any)?.cpu;
   expect(memory?.available).toBe(true);
   expect(memory?.residentMemoryKb).toBe(5120);
-  expect(cpu?.available).toBe(true);
-  expect(cpu?.usagePercent).toBe(8);
-  expect(cpu?.matchedProcesses).toEqual(['ExampleExec']);
 });
 
-test('perf samples Apple cpu and memory metrics on iOS simulator app sessions', async () => {
+test('perf memory samples iOS simulator app sessions', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'perf-session-ios-sim';
   sessionStore.set(sessionName, {
@@ -597,7 +582,7 @@ test('perf samples Apple cpu and memory metrics on iOS simulator app sessions', 
       token: 't',
       session: sessionName,
       command: 'perf',
-      positionals: [],
+      positionals: ['memory', 'sample'],
       flags: {},
     },
     sessionName,
@@ -609,15 +594,11 @@ test('perf samples Apple cpu and memory metrics on iOS simulator app sessions', 
   expect(response?.ok).toBe(true);
   if (!response?.ok) throw new Error('Expected perf response to succeed for iOS simulator session');
   const memory = (response.data?.metrics as any)?.memory;
-  const cpu = (response.data?.metrics as any)?.cpu;
   expect(memory?.available).toBe(true);
   expect(memory?.residentMemoryKb).toBe(6144);
-  expect(cpu?.available).toBe(true);
-  expect(cpu?.usagePercent).toBe(11);
-  expect(cpu?.matchedProcesses).toEqual(['ExampleSimExec']);
 });
 
-test('perf samples Apple cpu and memory metrics on physical iOS devices', async () => {
+test('perf memory samples physical iOS devices', async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-04-01T10:00:00.000Z'));
   const sessionStore = makeSessionStore();
@@ -723,7 +704,7 @@ test('perf samples Apple cpu and memory metrics on physical iOS devices', async 
       token: 't',
       session: sessionName,
       command: 'perf',
-      positionals: [],
+      positionals: ['memory', 'sample'],
       flags: {},
     },
     sessionName,
@@ -735,15 +716,11 @@ test('perf samples Apple cpu and memory metrics on physical iOS devices', async 
   expect(response?.ok).toBe(true);
   if (!response?.ok) throw new Error('Expected perf response to succeed for physical iOS session');
   const memory = (response.data?.metrics as any)?.memory;
-  const cpu = (response.data?.metrics as any)?.cpu;
   expect(memory?.available).toBe(true);
   expect(memory?.residentMemoryKb).toBe(8192);
-  expect(cpu?.available).toBe(true);
-  expect(cpu?.usagePercent).toBe(25);
-  expect(cpu?.matchedProcesses).toEqual(['ExampleDeviceApp']);
 });
 
-test('perf reports physical iOS cpu and memory as unavailable without an app bundle id', async () => {
+test('perf memory reports physical iOS as unavailable without an app bundle id', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'perf-session-ios-device-no-bundle';
   sessionStore.set(sessionName, {
@@ -761,7 +738,7 @@ test('perf reports physical iOS cpu and memory as unavailable without an app bun
       token: 't',
       session: sessionName,
       command: 'perf',
-      positionals: [],
+      positionals: ['memory', 'sample'],
       flags: {},
     },
     sessionName,
@@ -775,9 +752,6 @@ test('perf reports physical iOS cpu and memory as unavailable without an app bun
     throw new Error('Expected perf response to succeed for physical iOS session without bundle id');
   }
   const memory = (response.data?.metrics as any)?.memory;
-  const cpu = (response.data?.metrics as any)?.cpu;
   expect(memory?.available).toBe(false);
   expect(memory?.reason).toMatch(/no apple app bundle id is associated with this session/i);
-  expect(cpu?.available).toBe(false);
-  expect(cpu?.reason).toMatch(/no apple app bundle id is associated with this session/i);
 });

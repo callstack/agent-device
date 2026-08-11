@@ -9,14 +9,11 @@ import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts
 import {
   ANDROID_HPROF_SNAPSHOT_DESCRIPTION,
   ANDROID_HPROF_SNAPSHOT_METHOD,
-  ANDROID_CPU_SAMPLE_DESCRIPTION,
-  ANDROID_CPU_SAMPLE_METHOD,
   ANDROID_FRAME_SAMPLE_DESCRIPTION,
   ANDROID_FRAME_SAMPLE_METHOD,
   ANDROID_MEMORY_SAMPLE_DESCRIPTION,
   ANDROID_MEMORY_SAMPLE_METHOD,
   captureAndroidHeapSnapshot,
-  sampleAndroidCpuPerf,
   sampleAndroidFramePerf,
   sampleAndroidMemoryPerf,
 } from '../../platforms/android/perf.ts';
@@ -25,28 +22,19 @@ import {
   APPLE_MEMGRAPH_SNAPSHOT_METHOD,
   buildAppleMemorySnapshotSupport,
   buildAppleFrameSamplingMetadata,
-  buildAppleSamplingMetadata,
+  buildAppleMemorySamplingMetadata,
   captureAppleMemorySnapshot,
   sampleAppleFramePerf,
   sampleApplePerfMetrics,
 } from '../../platforms/apple/core/perf.ts';
 import {
-  HARMONYOS_CPU_SAMPLE_DESCRIPTION,
-  HARMONYOS_CPU_SAMPLE_METHOD,
   HARMONYOS_MEMORY_SAMPLE_DESCRIPTION,
   HARMONYOS_MEMORY_SAMPLE_METHOD,
-  sampleHarmonyCpuPerf,
   sampleHarmonyMemoryPerf,
 } from '../../platforms/harmonyos/perf.ts';
-import type { PerfKind, PerfMetricsSamplerTag } from '@agent-device/contracts/observability';
+import type { PerfKind } from '@agent-device/contracts/observability';
 import { SessionStore } from '../session-store.ts';
-import {
-  PERF_STARTUP_SAMPLE_LIMIT,
-  PERF_UNAVAILABLE_REASON,
-  STARTUP_SAMPLE_DESCRIPTION,
-  STARTUP_SAMPLE_METHOD,
-  type StartupPerfSample,
-} from './session-startup-metrics.ts';
+import { PERF_UNAVAILABLE_REASON } from './session-startup-metrics.ts';
 
 // Populate the PlatformPlugin registry once at module load (idempotent; registers
 // only lazy closures, so no leaf code is imported and CLI cold-start is unaffected
@@ -58,19 +46,17 @@ type SettledMetricResult = PromiseSettledResult<Record<string, unknown>>;
 type MetricResult =
   | ({ available: true } & Record<string, unknown>)
   | { available: false; reason: string; error?: ReturnType<typeof normalizeError> };
-type PerfResponseData = {
+type PerfResponseBase = {
   session: string;
   platform: string;
   device: string;
   deviceId: string;
-  metrics: Record<string, unknown>;
-  sampling: Record<string, unknown>;
 };
-type PerfFramesResponseData = Omit<PerfResponseData, 'metrics' | 'sampling'> & {
+type PerfFramesResponseData = PerfResponseBase & {
   metrics: { fps: unknown };
   sampling: { fps: unknown };
 };
-type PerfMemoryResponseData = Omit<PerfResponseData, 'metrics' | 'sampling'> & {
+type PerfMemoryResponseData = PerfResponseBase & {
   metrics?: { memory: unknown };
   artifact?: Record<string, unknown>;
   sampling: { memory?: unknown; snapshot?: unknown };
@@ -89,85 +75,6 @@ type BuildPerfMemoryResponseOptions = BuildPerfResponseOptions & {
 };
 
 const RELATED_PERF_ACTION_LIMIT = 12;
-
-type SampledPerfMetrics = {
-  memory: SettledMetricResult;
-  cpu: SettledMetricResult;
-  fps: SettledMetricResult;
-};
-
-type PerfMetricsSampler = (
-  session: SessionState,
-  appBundleId: string,
-  options: BuildPerfResponseOptions,
-) => Promise<SampledPerfMetrics>;
-
-function readStartupPerfSamples(actions: SessionAction[]): StartupPerfSample[] {
-  const samples: StartupPerfSample[] = [];
-  for (const action of actions) {
-    if (action.command !== 'open') continue;
-    const startup = action.result?.startup;
-    if (!startup || typeof startup !== 'object') continue;
-    const record = startup as Record<string, unknown>;
-    if (
-      typeof record.durationMs !== 'number' ||
-      !Number.isFinite(record.durationMs) ||
-      typeof record.measuredAt !== 'string' ||
-      record.measuredAt.trim().length === 0 ||
-      record.method !== STARTUP_SAMPLE_METHOD
-    ) {
-      continue;
-    }
-    samples.push({
-      durationMs: Math.max(0, Math.round(record.durationMs)),
-      measuredAt: record.measuredAt,
-      method: STARTUP_SAMPLE_METHOD,
-      appTarget:
-        typeof record.appTarget === 'string' && record.appTarget.length > 0
-          ? record.appTarget
-          : undefined,
-      appBundleId:
-        typeof record.appBundleId === 'string' && record.appBundleId.length > 0
-          ? record.appBundleId
-          : undefined,
-    });
-  }
-  return samples.slice(-PERF_STARTUP_SAMPLE_LIMIT);
-}
-
-export async function buildPerfResponseData(
-  session: SessionState,
-  options: BuildPerfResponseOptions = {},
-): Promise<PerfResponseData> {
-  const response = buildBasePerfResponse(session);
-
-  if (!supportsPlatformPerfMetrics(session)) {
-    return response;
-  }
-
-  if (!session.appBundleId) {
-    applyMissingAppPerfMetrics(response, session);
-    return response;
-  }
-
-  const sampler = resolvePerfMetricsSampler(session.device);
-  if (!sampler) return response;
-  const results = await sampler(session, session.appBundleId, options);
-  applySampledPerfMetrics(response, session, results);
-  return response;
-}
-
-// Routes the former `device.platform === 'android'` sampling branch through the
-// PlatformPlugin perf facet (issue #1188): Apple/Android carry `perf.metricsSamplerTag`,
-// and the daemon maps the neutral tag back to its own sampler. `buildPerfResponseData`
-// consults this only after `supportsPlatformPerfMetrics` admits the platform, so the
-// facet (hence the tag) is always present; the `undefined` fallthrough preserves the
-// former base response for the unreachable unsupported case. The daemon perf routing
-// parity test pins the tag to a verbatim copy of the former branch.
-function resolvePerfMetricsSampler(device: SessionState['device']): PerfMetricsSampler | undefined {
-  const tag = tryGetPlugin(device.platform)?.perf?.metricsSamplerTag(device);
-  return tag ? PERF_METRICS_SAMPLERS_BY_TAG[tag] : undefined;
-}
 
 export async function buildPerfFramesResponseData(
   session: SessionState,
@@ -219,51 +126,6 @@ export async function buildPerfMemoryResponseData(
   return response;
 }
 
-function buildBasePerfResponse(session: SessionState): PerfResponseData {
-  const startupSamples = readStartupPerfSamples(session.actions);
-  const latestStartupSample = startupSamples.at(-1);
-  const startupMetric = latestStartupSample
-    ? {
-        available: true,
-        lastDurationMs: latestStartupSample.durationMs,
-        lastMeasuredAt: latestStartupSample.measuredAt,
-        method: STARTUP_SAMPLE_METHOD,
-        sampleCount: startupSamples.length,
-        samples: startupSamples,
-      }
-    : {
-        available: false,
-        reason: 'No startup sample captured yet. Run open <app|url> in this session first.',
-        method: STARTUP_SAMPLE_METHOD,
-      };
-  return {
-    session: session.name,
-    platform: publicPlatformString(session.device),
-    device: session.device.name,
-    deviceId: session.device.id,
-    metrics: {
-      startup: startupMetric,
-      ...buildDefaultUnavailableMetrics(),
-    },
-    sampling: {
-      startup: {
-        method: STARTUP_SAMPLE_METHOD,
-        description: STARTUP_SAMPLE_DESCRIPTION,
-        unit: 'ms',
-      },
-      ...buildPlatformSamplingMetadata(session),
-    },
-  };
-}
-
-function buildDefaultUnavailableMetrics(): Record<string, unknown> {
-  return {
-    fps: buildDefaultUnavailableFrameMetric(),
-    memory: { available: false, reason: PERF_UNAVAILABLE_REASON },
-    cpu: { available: false, reason: PERF_UNAVAILABLE_REASON },
-  };
-}
-
 function buildDefaultUnavailableFrameMetric(): Record<string, unknown> {
   return {
     available: false,
@@ -298,26 +160,6 @@ function buildBasePerfMemoryResponse(session: SessionState): PerfMemoryResponseD
       snapshot: buildMemorySnapshotSamplingMetadata(session),
     },
   };
-}
-
-function applyMissingAppPerfMetrics(response: PerfResponseData, session: SessionState): void {
-  const reason = buildMissingAppPerfReason(session);
-  response.metrics.fps = { available: false, reason };
-  response.metrics.memory = { available: false, reason };
-  response.metrics.cpu = { available: false, reason };
-}
-
-function applySampledPerfMetrics(
-  response: PerfResponseData,
-  session: SessionState,
-  results: SampledPerfMetrics,
-): void {
-  response.metrics.memory = buildMetricResult(results.memory);
-  response.metrics.cpu = buildMetricResult(results.cpu);
-  response.metrics.fps = enrichFrameMetricWithSessionContext(
-    buildMetricResult(results.fps),
-    session,
-  );
 }
 
 async function applyFramePerfMetric(
@@ -356,48 +198,6 @@ function buildMissingAppPerfReason(session: SessionState): string {
   return 'No Apple app bundle ID is associated with this session. Run open <app> first.';
 }
 
-function buildPlatformSamplingMetadata(session: SessionState): Record<string, unknown> {
-  if (session.device.platform === 'android') {
-    return {
-      memory: {
-        method: ANDROID_MEMORY_SAMPLE_METHOD,
-        description: ANDROID_MEMORY_SAMPLE_DESCRIPTION,
-        unit: 'kB',
-      },
-      cpu: {
-        method: ANDROID_CPU_SAMPLE_METHOD,
-        description: ANDROID_CPU_SAMPLE_DESCRIPTION,
-        unit: 'percent',
-      },
-      fps: {
-        method: ANDROID_FRAME_SAMPLE_METHOD,
-        description: ANDROID_FRAME_SAMPLE_DESCRIPTION,
-        unit: 'percent',
-        primaryField: 'droppedFramePercent',
-        window: 'since previous Android gfxinfo reset or app process start',
-        resetsAfterRead: true,
-        relatedActionsLimit: RELATED_PERF_ACTION_LIMIT,
-      },
-    };
-  }
-  if (session.device.platform === 'harmonyos') {
-    return {
-      memory: {
-        method: HARMONYOS_MEMORY_SAMPLE_METHOD,
-        description: HARMONYOS_MEMORY_SAMPLE_DESCRIPTION,
-        unit: 'kB',
-      },
-      cpu: {
-        method: HARMONYOS_CPU_SAMPLE_METHOD,
-        description: HARMONYOS_CPU_SAMPLE_DESCRIPTION,
-        unit: 'percent',
-      },
-      fps: buildDefaultUnavailableFrameMetric(),
-    };
-  }
-  return buildAppleSamplingMetadata(session.device);
-}
-
 function buildMemorySamplingMetadata(session: SessionState): Record<string, unknown> {
   if (session.device.platform === 'android') {
     return {
@@ -415,7 +215,7 @@ function buildMemorySamplingMetadata(session: SessionState): Record<string, unkn
       topConsumerLimit: 1,
     };
   }
-  return buildAppleSamplingMetadata(session.device).memory as Record<string, unknown>;
+  return buildAppleMemorySamplingMetadata(session.device);
 }
 
 function buildMemorySnapshotSamplingMetadata(session: SessionState): Record<string, unknown> {
@@ -457,74 +257,6 @@ function buildFrameSamplingMetadata(session: SessionState): Record<string, unkno
   if (session.device.platform === 'harmonyos') return buildDefaultUnavailableFrameMetric();
   return buildAppleFrameSamplingMetadata(session.device);
 }
-
-async function sampleAndroidPerfResults(
-  session: SessionState,
-  appBundleId: string,
-  options: BuildPerfResponseOptions,
-): Promise<SampledPerfMetrics> {
-  const androidPerfOptions = { adb: options.androidAdb };
-  const [memory, cpu, fps] = await Promise.allSettled([
-    sampleAndroidMemoryPerf(session.device, appBundleId, androidPerfOptions),
-    sampleAndroidCpuPerf(session.device, appBundleId, androidPerfOptions),
-    sampleAndroidFramePerf(session.device, appBundleId, androidPerfOptions),
-  ]);
-  return { memory, cpu, fps };
-}
-
-async function sampleApplePerfResultsForSession(
-  session: SessionState,
-  appBundleId: string,
-): Promise<SampledPerfMetrics> {
-  const fps = await settleMetric(sampleAppleFramePerf(session.device, appBundleId));
-  const processSample = await settleMetric(sampleApplePerfMetrics(session.device, appBundleId));
-  if (processSample.status === 'fulfilled') {
-    const processMetrics = processSample.value as {
-      memory: Record<string, unknown>;
-      cpu: Record<string, unknown>;
-    };
-    return {
-      memory: { status: 'fulfilled', value: processMetrics.memory },
-      cpu: { status: 'fulfilled', value: processMetrics.cpu },
-      fps,
-    };
-  }
-  return {
-    memory: { status: 'rejected', reason: processSample.reason },
-    cpu: { status: 'rejected', reason: processSample.reason },
-    fps,
-  };
-}
-
-async function sampleHarmonyPerfResults(
-  session: SessionState,
-  appBundleId: string,
-): Promise<SampledPerfMetrics> {
-  const unsupportedFrames = Promise.reject(
-    new AppError(
-      'UNSUPPORTED_OPERATION',
-      'HarmonyOS frame sampling is not available through the current HDC toolchain.',
-    ),
-  );
-  const [memory, cpu, fps] = await Promise.allSettled([
-    sampleHarmonyMemoryPerf(session.device, appBundleId),
-    sampleHarmonyCpuPerf(session.device, appBundleId),
-    unsupportedFrames,
-  ]);
-  return { memory, cpu, fps };
-}
-
-// Maps the neutral {@link PerfMetricsSamplerTag} the plugin facet returns back to the
-// daemon-owned `perf metrics` sampler. Exhaustive over the tag union (a compile error if
-// a tag is added without a sampler), so `resolvePerfMetricsSampler` is a pure data lookup
-// with no platform branch of its own. The Apple sampler ignores the trailing options bag
-// (only Android threads a request-scoped adb executor), so its narrower arity is
-// assignable to {@link PerfMetricsSampler}.
-const PERF_METRICS_SAMPLERS_BY_TAG: Record<PerfMetricsSamplerTag, PerfMetricsSampler> = {
-  android: sampleAndroidPerfResults,
-  apple: sampleApplePerfResultsForSession,
-  harmonyos: sampleHarmonyPerfResults,
-};
 
 async function buildMemorySampleMetric(
   session: SessionState,

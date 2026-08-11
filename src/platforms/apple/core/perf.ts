@@ -356,23 +356,13 @@ export function buildAppleFrameSamplingMetadata(device: DeviceInfo): Record<stri
       };
 }
 
-export function buildAppleSamplingMetadata(device: DeviceInfo): Record<string, unknown> {
-  const fps = buildAppleFrameSamplingMetadata(device);
+export function buildAppleMemorySamplingMetadata(device: DeviceInfo): Record<string, unknown> {
   if (isIosFamily(device) && device.kind === 'device') {
     return {
-      fps,
-      memory: {
-        method: IOS_DEVICE_MEMORY_SAMPLE_METHOD,
-        description:
-          'Resident memory snapshot from a short xctrace Activity Monitor sample on the connected iOS device.',
-        unit: 'kB',
-      },
-      cpu: {
-        method: IOS_DEVICE_CPU_SAMPLE_METHOD,
-        description:
-          'Recent CPU usage snapshot from a short xctrace Activity Monitor sample on the connected iOS device.',
-        unit: 'percent',
-      },
+      method: IOS_DEVICE_MEMORY_SAMPLE_METHOD,
+      description:
+        'Resident memory snapshot from a short xctrace Activity Monitor sample on the connected iOS device.',
+      unit: 'kB',
     };
   }
 
@@ -380,17 +370,9 @@ export function buildAppleSamplingMetadata(device: DeviceInfo): Record<string, u
     ? 'host ps for the running macOS app executable resolved from the bundle ID.'
     : 'xcrun simctl spawn ps, with host ps fallback, for the running iOS simulator app executable resolved from the bundle ID.';
   return {
-    fps,
-    memory: {
-      method: APPLE_MEMORY_SAMPLE_METHOD,
-      description: `Resident memory snapshot from ${source}`,
-      unit: 'kB',
-    },
-    cpu: {
-      method: APPLE_CPU_SAMPLE_METHOD,
-      description: `Recent CPU usage snapshot from ${source}`,
-      unit: 'percent',
-    },
+    method: APPLE_MEMORY_SAMPLE_METHOD,
+    description: `Resident memory snapshot from ${source}`,
+    unit: 'kB',
   };
 }
 

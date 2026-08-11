@@ -41,11 +41,7 @@ import { errorResponse, type DaemonFailureResponse } from './response.ts';
 import { handleAudioCommand } from './session-audio.ts';
 import { handleNativePerfCommand as handleAndroidNativePerfCommand } from './session-native-perf.ts';
 import { handleNativePerfCommand as handleAppleNativePerfCommand } from './session-perf-xctrace.ts';
-import {
-  buildPerfFramesResponseData,
-  buildPerfMemoryResponseData,
-  buildPerfResponseData,
-} from './session-perf.ts';
+import { buildPerfFramesResponseData, buildPerfMemoryResponseData } from './session-perf.ts';
 import { handleNetworkCommand } from './session-network.ts';
 
 type ObservabilityParams = {
@@ -167,7 +163,8 @@ async function handlePerfCommand(params: ObservabilityParams): Promise<DaemonRes
     return errorResponse('SESSION_NOT_FOUND', 'perf requires an active session. Run open first.');
   }
 
-  const area = (req.positionals?.[0] ?? 'metrics').toLowerCase();
+  const area = req.positionals?.[0]?.toLowerCase();
+  if (!area) return errorResponse('INVALID_ARGS', PERF_AREA_ERROR_MESSAGE);
   if (isNativePerfArea(area)) {
     if (session.device.platform === 'android') {
       return await handleAndroidNativePerfCommand({
@@ -210,7 +207,7 @@ type PerfCommandRequest =
   | {
       ok: true;
       native: false;
-      area: 'metrics' | 'frames' | 'memory';
+      area: 'frames' | 'memory';
       action: 'sample' | 'snapshot';
       kind?: PerfKind;
       out?: string;
@@ -265,14 +262,12 @@ async function buildPerfCommandData(
       androidAdb: androidAdbExecutor,
     });
   }
-  if (request.area === 'frames') {
-    return await buildPerfFramesResponseData(session, { androidAdb: androidAdbExecutor });
-  }
-  return await buildPerfResponseData(session, { androidAdb: androidAdbExecutor });
+  return await buildPerfFramesResponseData(session, { androidAdb: androidAdbExecutor });
 }
 
 function readPerfArea(value: unknown): PerfArea | undefined {
-  const area = (value ?? 'metrics').toString().toLowerCase();
+  if (value == null) return undefined;
+  const area = value.toString().toLowerCase();
   return isPerfArea(area) ? area : undefined;
 }
 
@@ -299,7 +294,7 @@ function validatePerfAreaAction(
       : errorResponse('INVALID_ARGS', 'perf memory requires sample or snapshot');
   }
   if (action === 'sample') return undefined;
-  return errorResponse('INVALID_ARGS', 'perf metrics and perf frames only support sample');
+  return errorResponse('INVALID_ARGS', 'perf frames only supports sample');
 }
 
 function isPerfMemoryAction(action: PerfAction): action is 'sample' | 'snapshot' {

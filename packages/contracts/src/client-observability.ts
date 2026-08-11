@@ -8,7 +8,7 @@ import type { NetworkIncludeMode } from '@agent-device/kernel/contracts';
 import type { AgentDeviceRequestOverrides, DeviceCommandBaseOptions } from './client-connection.ts';
 
 export type PerfOptions = DeviceCommandBaseOptions & {
-  area?: PerfArea;
+  area: PerfArea;
   subject?: PerfSubject;
   action?: PerfAction;
   kind?: PerfKind;

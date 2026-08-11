@@ -404,7 +404,7 @@ Diagnostics and traces:
     agent-device perf cpu profile report --kind xctrace --out ./artifacts/app-profile.json
     agent-device perf trace start --kind xctrace --template "Animation Hitches" --out ./artifacts/hitches.trace
     agent-device perf trace stop --kind xctrace --out ./artifacts/hitches.trace
-  perf xctrace returns artifact paths and compact metadata only. Do not dump .trace contents into context.
+  perf xctrace keeps the .trace artifact on disk; CPU report returns a bounded weighted top-function summary. Do not dump .trace contents into context.
   For Android native CPU/trace evidence, use perf artifacts instead of raw adb/simpleperf/perfetto output:
     agent-device perf cpu profile start --kind simpleperf --out /tmp/cpu.perf.data
     agent-device perf cpu profile stop --kind simpleperf
@@ -422,7 +422,7 @@ Memory diagnostics:
     {"metrics":{"memory":{"available":true,"totalPssKb":562958,"totalRssKb":570304,"topConsumers":[{"name":"Dalvik Heap","pssKb":213456}]}}}
   Example default snapshot output:
     Memory artifact (android-hprof): /tmp/app.hprof (42MB)
-  Prefer perf memory sample over raw dumpsys/leaks output for first-pass agent diagnosis: it keeps arrays bounded, preserves the same memory source as perf metrics, and returns only memory data instead of startup/CPU/frame noise.
+  Prefer perf memory sample over raw dumpsys/leaks output for first-pass agent diagnosis: it keeps arrays bounded and returns only relevant memory evidence.
   Prefer perf memory snapshot over printing heap/memgraph data: snapshots return path, size, kind, method, and support metadata while the large artifact stays on disk for external inspection.
   Unsupported platforms return artifact.available=false with reason/hint; do not pretend a heap or memgraph was captured.
 
@@ -504,7 +504,7 @@ Example:
   agent-device react-devtools profile report @c5
   agent-device network dump --include headers
 
-Use snapshot, screenshot, logs, network, and perf metrics for device/app runtime evidence. Use react-devtools only when component internals or React rendering behavior matters.`,
+Use snapshot, screenshot, logs, network, perf frames, and perf memory for device/app runtime evidence. Use react-devtools when component internals or React rendering behavior matters.`,
   },
   cdp: {
     summary: 'React Native CDP targets, JS heap snapshots, and leak triage',
@@ -618,7 +618,7 @@ Overlays and busy RN UIs:
 React DevTools routing:
   Keep the agent-device react-devtools prefix on every React DevTools command.
   Use help react-devtools for status/wait, component trees, props/state/hooks, profile windows, slow renders, rerenders, and remote bridge rules.
-  If React DevTools cannot connect, report status and continue with logs, network, perf metrics, screenshot, and trace evidence instead of blocking the whole flow.
+  If React DevTools cannot connect, report status and continue with logs, network, perf frames, perf memory, screenshot, and trace evidence instead of blocking the whole flow.
 
 CDP memory routing:
   Keep the agent-device cdp prefix on every CDP command.
@@ -635,7 +635,7 @@ Slow-flow investigation:
   If the task says to open the app, include the open command even when it also describes the current screen.
   Use help react-devtools for the narrow React profile window. Profiling plans need both status and wait --connected before profile start.
   Check status before wait/profile. Do not substitute react-devtools start for status; start launches the helper, while status reports connection state.
-  Use help debugging for logs clear --restart, logs mark, network dump --include headers, perf metrics --json, traces, and runtime failure evidence.
+  Use help debugging for logs clear --restart, logs mark, network dump --include headers, perf frames, perf memory, native profiles, traces, and runtime failure evidence.
   For 15-20s async work, use wait with the exact expected text or selector instead of repeated snapshots.
   Report React render offenders separately from network/backend waits and device frame/CPU/memory findings.`,
   },
@@ -962,7 +962,7 @@ Rules:
   scroll takes direction then amount and does not support a selector or --settle: agent-device scroll down 3.
   Keep commands in the report reproducible; use selectors or refs from fresh snapshots, not guessed coordinates.
   Prefer refs for exploration and selectors for deterministic replay.
-  Use logs, network, screenshot --overlay-refs, trace, perf metrics, perf frames, or react-devtools only when they add evidence to a specific issue.
+  Use logs, network, screenshot --overlay-refs, trace, perf frames, perf memory, native profiles, or react-devtools only when they add evidence to a specific issue.
   Never delete screenshots, videos, traces, or report artifacts during a session.
   Escalate to help debugging or help react-devtools when runtime symptoms require those tools.`,
   },
@@ -997,7 +997,7 @@ Evidence:
   Visual claim: screenshot, optionally screenshot --overlay-refs when target mapping matters.
   Runtime/logging claim: logs clear --restart, logs mark, reproduce, logs path.
   Network claim: network dump --include headers when headers are relevant.
-  Performance claim: perf metrics, perf frames, perf memory sample, or trace artifacts with bounded output.
+  Performance claim: perf frames, perf memory sample, native profile reports, or trace artifacts with bounded output.
   Replay/regression claim: replay or test through the public command path.
 
 Report:

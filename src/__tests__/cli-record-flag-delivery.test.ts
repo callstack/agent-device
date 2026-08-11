@@ -90,7 +90,7 @@ const RECORDABLE_ARGV: Array<[CommandName, string[]]> = [
   ['trigger-app-event', ['trigger-app-event', 'evt']],
   ['record', ['record', 'start']],
   ['trace', ['trace', 'start', '/tmp/t.log']],
-  ['perf', ['perf', 'metrics']],
+  ['perf', ['perf', 'frames']],
   ['react-native', ['react-native', 'dismiss-overlay']],
 ];
 

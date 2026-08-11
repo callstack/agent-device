@@ -431,7 +431,7 @@ export function createAgentDeviceClient(
       run: async (options) => await executeCommand('batch', options),
     },
     observability: {
-      perf: async (options = {}) => await executeCommand('perf', options),
+      perf: async (options) => await executeCommand('perf', options),
       logs: async (options = {}) => await executeCommand('logs', options),
       events: async (options = {}) => await executeCommand('events', options),
       network: async (options = {}) => await executeCommand('network', options),

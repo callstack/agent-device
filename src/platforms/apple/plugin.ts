@@ -144,11 +144,8 @@ export const applePlugin = {
     supportsByDefault: APPLE_SUPPORTS_BY_DEFAULT,
     unsupportedHintByDefault: APPLE_UNSUPPORTED_HINT_BY_DEFAULT,
   },
-  // Wraps the Apple arm of `supportsPlatformPerfMetrics`: every Apple device
-  // (ios/macos, any kind/target) reports perf-metrics support. `metricsSamplerTag`
-  // wraps the else-arm of the former `buildPerfResponseData` sampling branch: every
-  // supported Apple device routes to the Apple `perf metrics` sampler.
-  perf: { supportsMetrics: () => true, metricsSamplerTag: () => 'apple' },
+  // Apple exposes explicit frame-health and memory observations.
+  perf: { supportsMetrics: () => true },
   // Declares the platform-gated request provider resolvers the Apple family owns: the
   // runner + tool providers (formerly gated by `isApplePlatform(device.platform)`).
   providers: { platformGatedResolvers: ['appleRunnerProvider', 'appleToolProvider'] },

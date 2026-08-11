@@ -886,33 +886,21 @@ async function runAndroidAppControlAndObservabilityWorkflow(
   assert.equal(latestNetworkEntry.requestBody, '{"email":"test@example.com"}');
   assert.equal(latestNetworkEntry.responseBody, '{"error":"bad_credentials"}');
 
-  const perf = await client.observability.perf(selection);
-  assert.equal(perf.platform, 'android');
-  assert.equal(perf.deviceId, PROVIDER_SCENARIO_ANDROID.id);
-  const metrics = perf.metrics as Record<string, any>;
-  assert.equal(metrics.startup?.available, true, JSON.stringify(perf));
-  assert.equal(metrics.startup?.method, 'open-command-roundtrip');
-  assert.ok(metrics.startup?.sampleCount >= 2, JSON.stringify(metrics.startup));
-  const startupSamples = Array.isArray(metrics.startup?.samples) ? metrics.startup.samples : [];
-  assert.equal(startupSamples.at(-1)?.appTarget, 'com.example.demo');
-  assert.equal(startupSamples.at(-1)?.appBundleId, 'com.example.demo');
-  assert.equal(metrics.memory?.available, true, JSON.stringify(perf));
-  assert.equal(metrics.memory?.totalPssKb, 216524);
-  assert.equal(metrics.memory?.totalRssKb, 340112);
-  assert.equal(metrics.cpu?.available, true, JSON.stringify(perf));
-  assert.equal(metrics.cpu?.usagePercent, 9);
-  assert.deepEqual(metrics.cpu?.matchedProcesses, ['com.example.demo', 'com.example.demo:sync']);
-  assert.equal(metrics.fps?.available, true, JSON.stringify(perf));
-  assert.equal(metrics.fps?.droppedFramePercent, 25);
-  const relatedActions = Array.isArray(metrics.fps?.relatedActions)
-    ? metrics.fps.relatedActions
+  const frameSample = await client.observability.perf({ area: 'frames', ...selection });
+  assert.equal(frameSample.platform, 'android');
+  assert.equal(frameSample.deviceId, PROVIDER_SCENARIO_ANDROID.id);
+  const initialFrameMetrics = frameSample.metrics as Record<string, any>;
+  assert.equal(initialFrameMetrics.fps?.available, true, JSON.stringify(frameSample));
+  assert.equal(initialFrameMetrics.fps?.droppedFramePercent, 25);
+  const relatedActions = Array.isArray(initialFrameMetrics.fps?.relatedActions)
+    ? initialFrameMetrics.fps.relatedActions
     : [];
   assert.ok(
     relatedActions.some(
       (action: Record<string, unknown>) =>
         action.command === 'open' && action.target === 'com.example.demo',
     ),
-    JSON.stringify(metrics.fps),
+    JSON.stringify(initialFrameMetrics.fps),
   );
 
   const events = await client.observability.events({ limit: 100, ...selection });
@@ -926,14 +914,6 @@ async function runAndroidAppControlAndObservabilityWorkflow(
   assert.equal(traceStop.json?.result?.data?.trace, 'stopped');
   assert.equal(traceStop.json?.result?.data?.outPath, finalTracePath);
   assert.equal(fs.existsSync(finalTracePath), true);
-
-  const explicitMetrics = await client.observability.perf({ area: 'metrics', ...selection });
-  assert.deepEqual(Object.keys(explicitMetrics.metrics as Record<string, unknown>).sort(), [
-    'cpu',
-    'fps',
-    'memory',
-    'startup',
-  ]);
 
   const memorySample = await client.observability.perf({
     area: 'memory',
@@ -999,7 +979,7 @@ async function runAndroidAppControlAndObservabilityWorkflow(
     platform: 'android',
     serial: PROVIDER_SCENARIO_ANDROID.id,
   });
-  assertRpcError(invalidPerfAction, 'INVALID_ARGS', /perf action must be sample/i);
+  assertRpcError(invalidPerfAction, 'INVALID_ARGS', /perf area must be frames/i);
 
   const logsStop = await client.observability.logs({ action: 'stop', ...selection });
   assert.equal(logsStop.stopped, true);
@@ -1490,7 +1470,6 @@ function assertAndroidObservabilityContract(world: AndroidSettingsWorld): void {
   const { adbCalls, spawnedLogcat } = world;
   assertCommandCall(adbCalls, ['shell', 'pidof', 'com.example.demo']);
   assertCommandCall(adbCalls, ['shell', 'dumpsys', 'meminfo', 'com.example.demo']);
-  assertCommandCall(adbCalls, ['shell', 'dumpsys', 'cpuinfo']);
   assertCommandCall(adbCalls, ['shell', 'dumpsys', 'gfxinfo', 'com.example.demo', 'framestats']);
   assertCommandCall(adbCalls, ['shell', 'dumpsys', 'gfxinfo', 'com.example.demo', 'reset']);
   assert.ok(

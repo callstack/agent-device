@@ -305,7 +305,7 @@ test('the real tree imports the resolver, calls it into buildCommandUsageText, h
   const registrySource = readFileSync(path.join(repoRoot, ALIAS_REGISTRY_FILE), 'utf8');
   const binSource = readFileSync(path.join(repoRoot, BIN_FILE), 'utf8');
   const tokens = registryAliasTokens(registrySource);
-  assert.deepEqual(tokens, ['launch', 'long-press', 'metrics', 'relaunch', 'tap']);
+  assert.deepEqual(tokens, ['launch', 'long-press', 'relaunch', 'tap']);
   const localName = aliasResolverLocalName(binSource);
   assert.equal(localName, 'normalizeCliCommandAlias');
   assert.equal(helpTargetBindingName(binSource), 'helpTarget');

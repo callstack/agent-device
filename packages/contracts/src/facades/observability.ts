@@ -42,10 +42,4 @@ export {
   isPerfMemoryKind,
   isPerfSubject,
 } from '../perf.ts';
-export type {
-  PerfAction,
-  PerfArea,
-  PerfKind,
-  PerfMetricsSamplerTag,
-  PerfSubject,
-} from '../perf.ts';
+export type { PerfAction, PerfArea, PerfKind, PerfSubject } from '../perf.ts';

@@ -638,7 +638,7 @@ test('commands topic renders concise commands inline with descriptions', async (
   assert.match(help, /Commands:[\s\S]*\n  shutdown\s{2,}Shutdown target simulator\/emulator/);
   assert.match(help, /  prepare\s{2,}Pre-warm platform helpers/);
   assert.match(help, /  metro\s{2,}Prepare the dev server or reload apps/);
-  assert.match(help, /  perf\s{2,}Check metrics, frames, memory, or profiles/);
+  assert.match(help, /  perf\s{2,}Check frames, memory, or native profiles/);
   assert.match(help, /  cdp\s{2,}Inspect CDP targets, JS heap, and leaks/);
   assert.match(help, /  react-devtools\s{2,}Inspect components, hooks, and render profiles/);
   assert.match(help, /  proxy\s{2,}Expose a local daemon through an HTTP tunnel/);

@@ -3,14 +3,12 @@ import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { requireExecSuccess } from '../../utils/exec.ts';
-import { splitNonEmptyTrimmedLines } from '../../utils/parsing.ts';
 import {
   androidAdbResultError,
   resolveAndroidAdbExecutor,
   type AndroidAdbExecutor,
 } from './adb-executor.ts';
 import { parseNumericToken } from './perf-parsing.ts';
-import { roundPercent } from '../perf-utils.ts';
 export {
   ANDROID_FRAME_SAMPLE_DESCRIPTION,
   ANDROID_FRAME_SAMPLE_METHOD,
@@ -28,9 +26,6 @@ export {
   type AndroidNativePerfSession,
 } from './perf-native.ts';
 
-export const ANDROID_CPU_SAMPLE_METHOD = 'adb-shell-dumpsys-cpuinfo';
-export const ANDROID_CPU_SAMPLE_DESCRIPTION =
-  'Aggregated CPU usage for app processes matched from adb shell dumpsys cpuinfo.';
 export const ANDROID_MEMORY_SAMPLE_METHOD = 'adb-shell-dumpsys-meminfo';
 export const ANDROID_MEMORY_SAMPLE_DESCRIPTION =
   'Memory snapshot from adb shell dumpsys meminfo <package>. Values are reported in kilobytes.';
@@ -45,13 +40,6 @@ const ANDROID_MEMORY_TOP_CONSUMER_LIMIT = 5;
 
 export type AndroidPerfOptions = {
   adb?: AndroidAdbExecutor;
-};
-
-export type AndroidCpuPerfSample = {
-  usagePercent: number;
-  measuredAt: string;
-  method: typeof ANDROID_CPU_SAMPLE_METHOD;
-  matchedProcesses: string[];
 };
 
 export type AndroidMemoryPerfSample = {
@@ -78,22 +66,6 @@ export type AndroidHeapSnapshotResult = {
   pid: number;
   remotePath: string;
 };
-
-export async function sampleAndroidCpuPerf(
-  device: DeviceInfo,
-  packageName: string,
-  options: AndroidPerfOptions = {},
-): Promise<AndroidCpuPerfSample> {
-  const adb = resolveAndroidAdbExecutor(device, options.adb);
-  try {
-    const result = await adb(['shell', 'dumpsys', 'cpuinfo'], {
-      timeoutMs: ANDROID_PERF_TIMEOUT_MS,
-    });
-    return parseAndroidCpuInfoSample(result.stdout, packageName, new Date().toISOString());
-  } catch (error) {
-    throw annotateAndroidPerfSamplingError('cpu', packageName, error);
-  }
-}
 
 export async function sampleAndroidMemoryPerf(
   device: DeviceInfo,
@@ -206,38 +178,6 @@ async function cleanupLocalArtifact(filePath: string, existedBefore: boolean): P
   await fs.rm(filePath, { force: true }).catch(() => {});
 }
 
-function parseAndroidCpuInfoSample(
-  stdout: string,
-  packageName: string,
-  measuredAt: string,
-): AndroidCpuPerfSample {
-  const matchedProcesses = new Set<string>();
-  let usagePercent = 0;
-
-  for (const line of splitNonEmptyTrimmedLines(stdout)) {
-    const match = line.match(/^([0-9]+(?:\.[0-9]+)?)%\s+\d+\/([^\s]+):\s/);
-    if (!match) continue;
-
-    const percentToken = match[1];
-    const processName = match[2];
-    if (percentToken === undefined || processName === undefined) continue;
-    const percent = Number(percentToken);
-    if (!Number.isFinite(percent) || !matchesAndroidPackageProcess(processName, packageName)) {
-      continue;
-    }
-
-    usagePercent += percent;
-    matchedProcesses.add(processName);
-  }
-
-  return {
-    usagePercent: roundPercent(usagePercent),
-    measuredAt,
-    method: ANDROID_CPU_SAMPLE_METHOD,
-    matchedProcesses: [...matchedProcesses],
-  };
-}
-
 export function parseAndroidMemInfoSample(
   stdout: string,
   packageName: string,
@@ -348,7 +288,7 @@ function buildAndroidMemInfoConsumer(
 }
 
 function annotateAndroidPerfSamplingError(
-  metric: 'cpu' | 'memory',
+  metric: 'memory',
   packageName: string,
   error: unknown,
 ): AppError {
@@ -374,10 +314,6 @@ function annotateAndroidPerfSamplingError(
     },
     error,
   );
-}
-
-function matchesAndroidPackageProcess(processName: string, packageName: string): boolean {
-  return processName === packageName || processName.startsWith(`${packageName}:`);
 }
 
 function matchLabeledNumber(text: string, label: string): number | undefined {

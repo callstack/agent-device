@@ -66,15 +66,14 @@ test('usageForCommand documents keyboard dismissal flow', async () => {
   assert.match(help ?? '', /UNSUPPORTED_OPERATION/);
 });
 
-test('usageForCommand supports metrics alias', async () => {
-  const help = await usageForCommand('metrics');
+test('usageForCommand explains focused perf evidence', async () => {
+  const help = await usageForCommand('perf');
   assert.equal(help === null, false);
-  assert.match(help ?? '', /agent-device perf/);
+  assert.match(help ?? '', /agent-device perf frames/);
   assert.match(help ?? '', /report --kind xctrace --out <report\.json>/);
   assert.match(help ?? '', /profile report --kind simpleperf --out <cpu-report\.json>/);
-  assert.match(help ?? '', /report writes a compact \.json summary/);
-  assert.match(help ?? '', /Native perf output is agent evidence/);
-  assert.match(help ?? '', /raw profiles\/traces stay on disk/);
+  assert.match(help ?? '', /report produces bounded agent-readable evidence/);
+  assert.match(help ?? '', /raw artifacts on disk/);
 });
 
 test('usageForCommand includes Maestro replay flag', async () => {

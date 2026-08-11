@@ -911,12 +911,6 @@ test('parseArgs accepts --save-script with optional path value', () => {
   assert.equal(ambiguousBareValue.flags.saveScript, true);
 });
 
-test('parseArgs supports metrics alias for perf', () => {
-  const parsed = parseArgs(['metrics'], { strictFlags: true });
-  assert.equal(parsed.command, 'perf');
-  assert.deepEqual(parsed.positionals, []);
-});
-
 test('parseArgs recognizes debug symbols command shape', () => {
   const parsed = parseArgs([
     'debug',
