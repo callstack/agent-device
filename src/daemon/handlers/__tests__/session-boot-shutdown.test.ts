@@ -14,7 +14,7 @@ import {
   noopInvoke,
 } from './session-test-harness.ts';
 import type { SessionState } from '../../types.ts';
-import { handleSessionCommands } from '../session.ts';
+import { handleSessionCommands } from './session-command-harness.ts';
 
 test('boot requires session or explicit selector', async () => {
   const sessionStore = makeSessionStore();

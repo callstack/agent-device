@@ -36,11 +36,11 @@ test('a failed start-time read is not proof of death for an alive pid', () => {
   assert.equal(classifyOwnerLiveness({ owner: { pid: OWNER_PID, startTime: 'start-a' } }), 'live');
 });
 
-test('a definite start-time mismatch classifies as owner-process-dead', () => {
+test('a definite start-time mismatch classifies as owner-process-reused', () => {
   mockReadProcessStartTime.mockReturnValue('start-b');
   assert.equal(
     classifyOwnerLiveness({ owner: { pid: OWNER_PID, startTime: 'start-a' } }),
-    'owner-process-dead',
+    'owner-process-reused',
   );
 });
 

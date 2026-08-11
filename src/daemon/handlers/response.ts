@@ -10,10 +10,17 @@ export function errorResponse(
   code: string,
   message: string,
   details?: Record<string, unknown>,
+  options?: { hint?: string; retriable?: boolean },
 ): DaemonFailureResponse {
   return {
     ok: false,
-    error: { code, message, ...(details ? { details } : {}) },
+    error: {
+      code,
+      message,
+      ...(options?.hint ? { hint: options.hint } : {}),
+      ...(options?.retriable === undefined ? {} : { retriable: options.retriable }),
+      ...(details ? { details } : {}),
+    },
   };
 }
 

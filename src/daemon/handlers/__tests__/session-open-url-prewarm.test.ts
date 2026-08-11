@@ -17,7 +17,7 @@ import {
   noopInvoke,
 } from './session-test-harness.ts';
 import type { SessionState } from '../../types.ts';
-import { handleSessionCommands } from '../session.ts';
+import { handleSessionCommands } from './session-command-harness.ts';
 
 test('open URL on existing iOS session clears stale app bundle id', async () => {
   const sessionStore = makeSessionStore();

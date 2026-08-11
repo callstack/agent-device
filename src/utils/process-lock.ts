@@ -124,5 +124,6 @@ function readProcessLockDiagnostics(
 }
 
 function isLiveProcessLockOwner(owner: ProcessLockOwner): boolean {
-  return classifyOwnerLiveness({ owner }) !== 'owner-process-dead';
+  const liveness = classifyOwnerLiveness({ owner });
+  return liveness !== 'owner-process-dead' && liveness !== 'owner-process-reused';
 }

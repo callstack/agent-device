@@ -53,7 +53,7 @@ vi.mock('../../../utils/host-process.ts', async (importOriginal) => {
   return { ...actual, readProcessStartTime: vi.fn(() => 'test-process-start') };
 });
 
-import { handleSessionCommands } from '../session.ts';
+import { handleSessionCommands } from './session-command-harness.ts';
 import { dispatchCommand, resolveTargetDevice } from '../../../core/dispatch.ts';
 import { applyRuntimeHintsToApp, clearRuntimeHintsFromApp } from '../../runtime-hints.ts';
 import { resolveAndroidPackageForOpen } from '../session-open-target.ts';

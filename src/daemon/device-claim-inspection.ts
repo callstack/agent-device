@@ -1,27 +1,24 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  DEVICE_TARGETS,
   deviceFieldsFromPublicPlatform,
-  isAppleOs,
   isPublicPlatform,
   matchesPlatformSelector,
+  type DeviceIdentity,
   type PlatformSelector,
 } from '@agent-device/kernel/device';
+import { decodeDeviceIdentity } from '@agent-device/capture-kit';
 import {
   classifyOwnerLivenessFromObservation,
   type OwnerLiveness,
 } from '../utils/owner-identity.ts';
 import { readHostProcessIdentityObservations } from '../utils/host-process.ts';
-import {
-  isCanonicalPersistedLocalDeviceKey,
-  resolveDeviceClaimRoot,
-} from './device-claim-paths.ts';
+import { canonicalLocalDeviceKey, resolveDeviceClaimRoot } from './device-claim-paths.ts';
 import type { DeviceClaim } from './device-claims.ts';
 
-const DEVICE_CLAIM_SCHEMA_VERSION = 1;
+const DEVICE_CLAIM_SCHEMA_VERSION = 2;
 
-export type DeviceClaimClassification = OwnerLiveness | 'owner-process-reused' | 'inconsistent';
+export type DeviceClaimClassification = OwnerLiveness | 'inconsistent';
 
 export type InspectedDeviceClaim = {
   fileName: string;
@@ -94,7 +91,7 @@ function matchesClaimDevice(claim: DeviceClaim, device: string | undefined): boo
 
 function matchesClaimPlatform(claim: DeviceClaim, platform: PlatformSelector | undefined): boolean {
   return matchesPlatformSelector(
-    { ...deviceFieldsFromPublicPlatform(claim.device.platform), appleOs: claim.device.appleOs },
+    { platform: claim.device.family, appleOs: claim.device.appleOs },
     platform,
   );
 }
@@ -141,13 +138,6 @@ function classifyInspectedClaim(
   observation: Parameters<typeof classifyOwnerLivenessFromObservation>[1],
 ): InspectedDeviceClaim {
   if (!entry.claim) return entry;
-  if (
-    observation &&
-    entry.claim.ownerStartTime &&
-    observation.startTime !== entry.claim.ownerStartTime
-  ) {
-    return { ...entry, classification: 'owner-process-reused' };
-  }
   return {
     ...entry,
     classification: classifyOwnerLivenessFromObservation(
@@ -160,87 +150,118 @@ function classifyInspectedClaim(
   };
 }
 
-function normalizeClaim(value: unknown): DeviceClaim | null {
-  if (!isClaimObject(value)) return null;
-  const raw = value as Partial<DeviceClaim>;
-  return isValidClaimRecord(raw) ? (raw as DeviceClaim) : null;
+/** Claims hidden by the default status view and exposed through `device status --stale`. */
+export function deviceClaimRequiresStaleInspection(
+  classification: DeviceClaimClassification,
+): boolean {
+  switch (classification) {
+    case 'owner-process-dead':
+    case 'owner-process-reused':
+    case 'owner-state-dir-gone':
+      return true;
+    case 'live':
+    case 'unknown':
+    case 'inconsistent':
+      return false;
+  }
 }
 
-function isClaimObject(value: unknown): value is object {
+function normalizeClaim(value: unknown): DeviceClaim | null {
+  if (!isClaimObject(value)) return null;
+  if (value.schemaVersion === DEVICE_CLAIM_SCHEMA_VERSION) return decodeCurrentClaim(value);
+  if (value.schemaVersion === 1) return migrateLegacyClaim(value);
+  return null;
+}
+
+function isClaimObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function isValidClaimRecord(raw: Partial<DeviceClaim>): boolean {
-  if (raw.schemaVersion !== DEVICE_CLAIM_SCHEMA_VERSION || !hasValidClaimIdentity(raw)) {
-    return false;
-  }
-  return (
-    isCanonicalPersistedLocalDeviceKey(raw.device, raw.deviceKey) &&
-    hasValidClaimOwner(raw) &&
-    hasValidClaimTimestamps(raw)
-  );
+function decodeCurrentClaim(raw: Record<string, unknown>): DeviceClaim | null {
+  if (!isClaimObject(raw.device) || !isNonEmptyString(raw.device.name)) return null;
+  const identity = decodeDeviceIdentity(raw.device);
+  return identity ? buildDecodedClaim(raw, identity, raw.device.name) : null;
 }
 
-function hasValidClaimIdentity(
-  raw: Partial<DeviceClaim>,
-): raw is Partial<DeviceClaim> &
-  Pick<DeviceClaim, 'device' | 'deviceKey' | 'session' | 'workspace' | 'stateDir' | 'ownerToken'> {
-  return (
-    isClaimDevice(raw.device) &&
-    [raw.deviceKey, raw.session, raw.workspace, raw.stateDir, raw.ownerToken].every(
-      isNonEmptyString,
-    )
-  );
+/** Released schema-v1 advisory claims are normalized into the canonical v2 model on read. */
+function migrateLegacyClaim(raw: Record<string, unknown>): DeviceClaim | null {
+  if (!isClaimObject(raw.device)) return null;
+  const legacy = raw.device;
+  const name = legacy.name;
+  if (!isNonEmptyString(name)) return null;
+  if (!isPublicPlatform(legacy.platform)) return null;
+  const fields = deviceFieldsFromPublicPlatform(legacy.platform);
+  const identity = decodeDeviceIdentity({
+    id: legacy.id,
+    family: fields.platform,
+    kind: legacy.kind,
+    target: legacy.target,
+    ...(legacy.appleOs === undefined
+      ? fields.platform === 'apple'
+        ? { appleOs: legacy.platform === 'macos' ? 'macos' : 'ios' }
+        : {}
+      : { appleOs: legacy.appleOs }),
+    ...(legacy.iosPhysicalDeviceBackend === undefined
+      ? {}
+      : { iosPhysicalDeviceBackend: legacy.iosPhysicalDeviceBackend }),
+  });
+  return identity ? buildDecodedClaim(raw, identity, name) : null;
 }
 
-function hasValidClaimOwner(raw: Partial<DeviceClaim>): boolean {
-  return (
-    isPositiveInteger(raw.ownerPid) &&
-    (raw.ownerStartTime === null || isNonEmptyString(raw.ownerStartTime))
-  );
+function buildDecodedClaim(
+  raw: Record<string, unknown>,
+  identity: DeviceIdentity,
+  name: string,
+): DeviceClaim | null {
+  const location = decodeClaimLocation(raw);
+  const owner = decodeClaimOwner(raw);
+  const timestamps = decodeClaimTimestamps(raw);
+  if (!location || !owner || !timestamps) return null;
+  if (location.deviceKey !== canonicalLocalDeviceKey(identity)) return null;
+  return {
+    schemaVersion: DEVICE_CLAIM_SCHEMA_VERSION,
+    ...location,
+    device: { ...identity, name },
+    ...owner,
+    ...timestamps,
+  };
 }
 
-function hasValidClaimTimestamps(raw: Partial<DeviceClaim>): boolean {
-  return isFiniteNumber(raw.createdAtMs) && isFiniteNumber(raw.updatedAtMs);
+function decodeClaimLocation(
+  raw: Record<string, unknown>,
+): Pick<DeviceClaim, 'deviceKey' | 'session' | 'workspace' | 'stateDir'> | null {
+  const deviceKey = readNonEmptyString(raw.deviceKey);
+  const session = readNonEmptyString(raw.session);
+  const workspace = readNonEmptyString(raw.workspace);
+  const stateDir = readNonEmptyString(raw.stateDir);
+  if (!deviceKey || !session || !workspace || !stateDir) return null;
+  return { deviceKey, session, workspace, stateDir };
 }
 
-function isClaimDevice(value: unknown): value is DeviceClaim['device'] {
-  if (!isClaimObject(value)) return false;
-  const device = value as Partial<DeviceClaim['device']>;
-  return (
-    [device.id, device.name].every(isNonEmptyString) &&
-    isPublicPlatform(device.platform) &&
-    isClaimDeviceKind(device.kind) &&
-    (device.target === undefined || DEVICE_TARGETS.includes(device.target)) &&
-    isConsistentAppleIdentity(device) &&
-    isConsistentPhysicalIosBackend(device)
-  );
+function decodeClaimOwner(
+  raw: Record<string, unknown>,
+): Pick<DeviceClaim, 'ownerPid' | 'ownerStartTime' | 'ownerToken'> | null {
+  const { ownerPid, ownerStartTime } = raw;
+  const ownerToken = readNonEmptyString(raw.ownerToken);
+  if (!isPositiveInteger(ownerPid) || !ownerToken) return null;
+  if (ownerStartTime !== null && !isNonEmptyString(ownerStartTime)) return null;
+  return { ownerPid, ownerStartTime, ownerToken };
 }
 
-function isClaimDeviceKind(value: unknown): value is DeviceClaim['device']['kind'] {
-  return value === 'simulator' || value === 'emulator' || value === 'device';
-}
-
-function isConsistentAppleIdentity(device: Partial<DeviceClaim['device']>): boolean {
-  if (device.appleOs !== undefined && !isAppleOs(device.appleOs)) return false;
-  if (device.platform === 'macos')
-    return device.appleOs === undefined || device.appleOs === 'macos';
-  if (device.platform === 'ios') return device.appleOs !== 'macos';
-  return device.appleOs === undefined;
-}
-
-function isConsistentPhysicalIosBackend(device: Partial<DeviceClaim['device']>): boolean {
-  if (device.iosPhysicalDeviceBackend === undefined) return true;
-  return (
-    device.platform === 'ios' &&
-    device.kind === 'device' &&
-    (device.iosPhysicalDeviceBackend === 'coredevice' ||
-      device.iosPhysicalDeviceBackend === 'xctest')
-  );
+function decodeClaimTimestamps(
+  raw: Record<string, unknown>,
+): Pick<DeviceClaim, 'createdAtMs' | 'updatedAtMs'> | null {
+  const { createdAtMs, updatedAtMs } = raw;
+  if (!isFiniteNumber(createdAtMs) || !isFiniteNumber(updatedAtMs)) return null;
+  return { createdAtMs, updatedAtMs };
 }
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
+}
+
+function readNonEmptyString(value: unknown): string | null {
+  return isNonEmptyString(value) ? value : null;
 }
 
 function isPositiveInteger(value: unknown): value is number {

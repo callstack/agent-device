@@ -30,7 +30,7 @@ type RequestHandlerChainParams = {
   androidAdbExecutor?: AndroidAdbExecutor;
   bindDevice: BindDeviceRuntime;
   bindExactDevice: BindExactDeviceRuntime;
-  reconcileOrphanedDeviceClaim?: DeviceClaimReconciler;
+  reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
   appLogAdmissionLedger?: AppLogAdmissionLedger;
   screenRecordingAdmissionLedger: ScreenRecordingAdmissionLedger;
   requestScope: PlatformRequestScope;

@@ -9,7 +9,7 @@ import {
   noopInvoke,
   assertInvalidArgsMessage,
 } from './session-test-harness.ts';
-import { handleSessionCommands } from '../session.ts';
+import { handleSessionCommands } from './session-command-harness.ts';
 import { makeTestScreenRecordingResource } from '../../../__tests__/test-utils/screen-recording-live-handle.ts';
 
 test('open --relaunch rejects URL targets', async () => {

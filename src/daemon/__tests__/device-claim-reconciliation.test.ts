@@ -109,7 +109,7 @@ test('unreattachable resource evidence retains the claim without binding', async
 
   await expect(createDeviceClaimReconciler({ gateway, scope })(claim)).resolves.toEqual({
     status: 'retained',
-    reason: 'durable-resource-cleanup-pending',
+    reason: 'app-log-descriptor-invalid',
   });
   expect(bind).not.toHaveBeenCalled();
   expect(fs.readFileSync(resourcePath, 'utf8')).toBe('{');
@@ -122,9 +122,9 @@ const unavailable = Object.freeze({
 
 function makeClaim(stateDir: string): DeviceClaim {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     deviceKey: 'local:android:none:emulator-5554',
-    device: { platform: 'android', id: 'emulator-5554', name: 'Pixel', kind: 'emulator' },
+    device: { family: 'android', id: 'emulator-5554', name: 'Pixel', kind: 'emulator' },
     session: 'claimed-session',
     workspace: '/worktrees/dead',
     stateDir,

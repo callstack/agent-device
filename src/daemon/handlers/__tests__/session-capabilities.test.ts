@@ -14,7 +14,7 @@ import {
   type RuntimeProviderMode,
 } from '@agent-device/contracts/platform';
 import type { BindDeviceRuntime } from '../../request-runtime-binding.ts';
-import { handleSessionCommands } from '../session.ts';
+import { handleSessionCommands } from './session-command-harness.ts';
 
 function assertAndroidCapabilityHonesty(availableCommands: unknown): void {
   expect(availableCommands).not.toContain(PUBLIC_COMMANDS.prepare);

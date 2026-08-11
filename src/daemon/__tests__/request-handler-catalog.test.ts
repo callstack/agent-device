@@ -261,6 +261,10 @@ async function runCatalogCommandThroughHandlerChain(
           androidAdbExecutor: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
           bindDevice: unavailableBindDevice,
           bindExactDevice: unavailableBindExactDevice,
+          reconcileOrphanedDeviceClaim: async () => ({
+            status: 'retained' as const,
+            reason: 'test-no-recovery',
+          }),
           screenRecordingAdmissionLedger: createScreenRecordingAdmissionLedger(),
           requestScope: {
             signal: new AbortController().signal,

@@ -94,7 +94,7 @@ test('keeps normal status compact while retaining proven-stale claims for explic
   }
 });
 
-test('keeps corrupt and state-dir-gone claims visible in normal status', async () => {
+test('keeps corrupt claims visible and requires --stale for uncertain reclaimable views', async () => {
   const claimsDir = mkdtempForTestSync('agent-device-cli-claims-');
   const owner = readCurrentOwnerIdentity();
   try {
@@ -120,18 +120,41 @@ test('keeps corrupt and state-dir-gone claims visible in normal status', async (
         updatedAtMs: 1,
       }),
     );
+    fs.writeFileSync(
+      path.join(claimsDir, 'pid-reused.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        deviceKey: 'local:android:none:pid-reused',
+        device: {
+          platform: 'android',
+          id: 'pid-reused',
+          name: 'PID-reused Pixel',
+          kind: 'emulator',
+        },
+        session: 'pid-reused-session',
+        workspace: '/worktrees/pid-reused',
+        stateDir: process.cwd(),
+        ownerPid: owner.pid,
+        ownerStartTime: 'different-readable-start-time',
+        ownerToken: 'pid-reused-token',
+        createdAtMs: 1,
+        updatedAtMs: 1,
+      }),
+    );
 
     const normal = await runCliCapture(['device', 'status'], {
       env: { AGENT_DEVICE_CLAIMS_DIR: claimsDir },
     });
     assert.match(normal.stdout, /corrupt.json: inconsistent/);
     assert.doesNotMatch(normal.stdout, /State-dir-gone Pixel/);
-    assert.match(normal.stdout, /1 stale claim hidden/);
+    assert.doesNotMatch(normal.stdout, /PID-reused Pixel/);
+    assert.match(normal.stdout, /2 stale claims hidden/);
 
     const stale = await runCliCapture(['device', 'status', '--stale'], {
       env: { AGENT_DEVICE_CLAIMS_DIR: claimsDir },
     });
     assert.match(stale.stdout, /State-dir-gone Pixel: owner-state-dir-gone/);
+    assert.match(stale.stdout, /PID-reused Pixel: owner-process-reused/);
   } finally {
     fs.rmSync(claimsDir, { recursive: true, force: true });
   }
@@ -163,7 +186,7 @@ test('states that nothing is claimed when every claim is stale', async () => {
       env: { AGENT_DEVICE_CLAIMS_DIR: claimsDir },
     });
 
-    assert.match(result.stdout, /No live local advisory device claims found\./);
+    assert.match(result.stdout, /No live local device claims found\./);
     assert.match(result.stdout, /1 stale claim hidden/);
     assert.doesNotMatch(result.stdout, /Dead iPhone/);
   } finally {

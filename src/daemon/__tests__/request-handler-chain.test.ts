@@ -47,6 +47,10 @@ function makeChainParams(req: DaemonRequest) {
     invoke: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
     bindDevice: unavailableBindDevice,
     bindExactDevice: unavailableBindExactDevice,
+    reconcileOrphanedDeviceClaim: async () => ({
+      status: 'retained' as const,
+      reason: 'test-no-recovery',
+    }),
     screenRecordingAdmissionLedger: createScreenRecordingAdmissionLedger(),
     requestScope: {
       signal: new AbortController().signal,

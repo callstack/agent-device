@@ -45,7 +45,10 @@ export type RunnerLease = {
 // it) is only safe when the owner PROCESS is proven dead - a dir-gone-but-
 // alive owner may still hold a live connection to the runner, so it must go
 // through the force-stop path (kill runner processes, rebuild) instead.
-type RunnerLeaseStaleReason = 'owner-process-dead' | 'owner-state-dir-gone';
+type RunnerLeaseStaleReason =
+  | 'owner-process-dead'
+  | 'owner-process-reused'
+  | 'owner-state-dir-gone';
 
 type RunnerLeaseState =
   | { type: 'empty' }
@@ -125,11 +128,12 @@ function readRunnerLease(deviceId: string): RunnerLease | null {
 function classifyRunnerLease(lease: RunnerLease | null): RunnerLeaseState {
   if (!lease) return { type: 'empty' };
   if (lease.ownerToken === RUNNER_OWNER_TOKEN) return { type: 'owned', lease };
-  if (!isRunnerLeaseOwnerProcessAlive(lease)) {
-    return { type: 'stale', lease, staleReason: 'owner-process-dead' };
-  }
-  if (isRunnerLeaseOwnerStateDirGone(lease)) {
-    return { type: 'stale', lease, staleReason: 'owner-state-dir-gone' };
+  const ownerLiveness = classifyOwnerLiveness({
+    owner: { pid: lease.ownerPid, startTime: lease.ownerStartTime },
+    ...(lease.ownerStateDir ? { stateDir: lease.ownerStateDir } : {}),
+  });
+  if (ownerLiveness !== 'live' && ownerLiveness !== 'unknown') {
+    return { type: 'stale', lease, staleReason: ownerLiveness };
   }
   return { type: 'busy', lease };
 }
@@ -257,7 +261,10 @@ function shellQuote(value: string): string {
 // the leased runner processes, then rebuild) instead.
 export function readStaleRunnerLease(deviceId: string): RunnerLease | null {
   const state = classifyRunnerLease(readRunnerLease(deviceId));
-  return state.type === 'stale' && state.staleReason === 'owner-process-dead' ? state.lease : null;
+  return state.type === 'stale' &&
+    (state.staleReason === 'owner-process-dead' || state.staleReason === 'owner-process-reused')
+    ? state.lease
+    : null;
 }
 
 // Marks a lease as handed off during graceful shutdown: the token no longer
@@ -415,7 +422,7 @@ function readFiniteNumber(value: unknown): number | null {
 }
 
 // A lease owner counts as gone - and its lease reclaimable as stale - when its
-// PID is dead/recycled (classified as owner-process-dead) OR its
+// PID is dead/recycled OR its
 // AGENT_DEVICE_STATE_DIR no longer exists on disk (owner-state-dir-gone). The
 // state-dir check covers daemons left running by a deleted sandbox/worktree:
 // the process is technically still alive, but nothing can ever route a request
@@ -423,24 +430,6 @@ function readFiniteNumber(value: unknown): number | null {
 // can never legitimately contend for the runner. Leases written before this
 // field existed (no ownerStateDir) skip the check and fall back to PID
 // liveness only.
-function isRunnerLeaseOwnerProcessAlive(lease: RunnerLease): boolean {
-  return (
-    classifyOwnerLiveness({
-      owner: { pid: lease.ownerPid, startTime: lease.ownerStartTime },
-    }) === 'live'
-  );
-}
-
-function isRunnerLeaseOwnerStateDirGone(lease: RunnerLease): boolean {
-  if (!lease.ownerStateDir) return false;
-  return (
-    classifyOwnerLiveness({
-      owner: { pid: lease.ownerPid, startTime: lease.ownerStartTime },
-      stateDir: lease.ownerStateDir,
-    }) === 'owner-state-dir-gone'
-  );
-}
-
 async function cleanupLeasedRunnerProcesses(
   lease: RunnerLease,
   reason: 'owned' | 'stale' | 'same-state-dir' | 'logical-lease-takeover',

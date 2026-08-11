@@ -12,7 +12,7 @@ import {
   noopInvoke,
 } from './session-test-harness.ts';
 import type { SessionState } from '../../types.ts';
-import { handleSessionCommands } from '../session.ts';
+import { handleSessionCommands } from './session-command-harness.ts';
 
 test('appstate on iOS requires active session on selected device', async () => {
   const sessionStore = makeSessionStore();

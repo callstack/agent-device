@@ -2,38 +2,22 @@ import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  deviceFieldsFromPublicPlatform,
-  isAppleOs,
   type AppleOS,
+  type DeviceIdentity,
   type DeviceInfo,
-  type PublicPlatform,
+  type Platform,
 } from '@agent-device/kernel/device';
 
-export function canonicalLocalDeviceKey(device: DeviceInfo): string {
-  return formatLocalDeviceKey(device.platform, device.appleOs, device.id);
-}
-
-export function isCanonicalPersistedLocalDeviceKey(
-  device: { platform: PublicPlatform; appleOs?: AppleOS; id: string },
-  deviceKey: string,
-): boolean {
-  const internal = deviceFieldsFromPublicPlatform(device.platform);
-  if (device.appleOs !== undefined) {
-    return deviceKey === formatLocalDeviceKey(internal.platform, device.appleOs, device.id);
-  }
-  const prefix = `local:${internal.platform}:`;
-  const suffix = `:${device.id}`;
-  if (!deviceKey.startsWith(prefix) || !deviceKey.endsWith(suffix)) return false;
-  const appleOs = deviceKey.slice(prefix.length, -suffix.length);
-  if (device.platform === 'macos') return appleOs === 'none' || appleOs === 'macos';
-  if (device.platform === 'ios') {
-    return appleOs === 'none' || (isAppleOs(appleOs) && appleOs !== 'macos');
-  }
-  return appleOs === 'none';
+export function canonicalLocalDeviceKey(device: DeviceInfo | DeviceIdentity): string {
+  return formatLocalDeviceKey(
+    'family' in device ? device.family : device.platform,
+    device.appleOs,
+    device.id,
+  );
 }
 
 function formatLocalDeviceKey(
-  platform: DeviceInfo['platform'],
+  platform: Platform,
   appleOs: AppleOS | undefined,
   id: string,
 ): string {

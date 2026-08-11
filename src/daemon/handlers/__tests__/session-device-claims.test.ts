@@ -33,12 +33,12 @@ import { applyRuntimeHintsToApp } from '../../runtime-hints.ts';
 import { resolveAndroidPackageForOpen } from '../session-open-target.ts';
 import { activateAndroidTestIme } from '../../../platforms/android/ime-lifecycle.ts';
 import { clearRequestCanceled, markRequestCanceled } from '../../../request/cancel.ts';
-import { acquireDeviceClaim } from '../../device-claims.ts';
+import { acquireDeviceClaim as acquireProductionDeviceClaim } from '../../device-claims.ts';
 import { inspectDeviceClaims } from '../../device-claim-inspection.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
 import { SessionStore } from '../../session-store.ts';
 import { handleCloseCommand } from '../session-close.ts';
-import { handleOpenCommand } from '../session-open.ts';
+import { handleOpenCommand as handleProductionOpenCommand } from '../session-open.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeAuthoringSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -49,6 +49,22 @@ const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
 const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintsToApp);
 const mockResolveAndroidPackage = vi.mocked(resolveAndroidPackageForOpen);
 const roots: string[] = [];
+const reconcileOrphanedDeviceClaim = async () => ({
+  status: 'retained' as const,
+  reason: 'test-no-recovery',
+});
+
+function handleOpenCommand(
+  params: Omit<Parameters<typeof handleProductionOpenCommand>[0], 'reconcileOrphanedDeviceClaim'>,
+) {
+  return handleProductionOpenCommand({ ...params, reconcileOrphanedDeviceClaim });
+}
+
+function acquireDeviceClaim(
+  params: Omit<Parameters<typeof acquireProductionDeviceClaim>[0], 'reconcileOrphanedDeviceClaim'>,
+) {
+  return acquireProductionDeviceClaim({ ...params, reconcileOrphanedDeviceClaim });
+}
 
 afterEach(() => {
   vi.clearAllMocks();

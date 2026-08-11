@@ -129,7 +129,7 @@ function decodeRuntimeOwnerRef(value: unknown): RuntimeOwnerRef | null {
   return null;
 }
 
-function decodeDeviceIdentity(value: unknown): DeviceIdentity | null {
+export function decodeDeviceIdentity(value: unknown): DeviceIdentity | null {
   if (!isObject(value)) return null;
   const id = readDeviceIdentityId(value.id);
   const family = readDeviceIdentityFamily(value.family);

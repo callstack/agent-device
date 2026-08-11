@@ -10,14 +10,14 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test('classifies dead and PID-reused owners as owner-process-dead', () => {
+test('distinguishes dead and PID-reused owners', () => {
   assert.equal(
     classifyOwnerLiveness({ owner: { pid: 999_999_999, startTime: 'old-start' } }),
     'owner-process-dead',
   );
   assert.equal(
     classifyOwnerLiveness({ owner: { pid: process.pid, startTime: 'not-this-process' } }),
-    'owner-process-dead',
+    'owner-process-reused',
   );
 });
 

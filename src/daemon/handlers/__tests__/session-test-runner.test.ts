@@ -11,7 +11,7 @@ import {
   assertInvalidArgsMessage,
 } from './session-test-harness.ts';
 import type { DaemonRequest } from '../../types.ts';
-import { handleSessionCommands } from '../session.ts';
+import { handleSessionCommands } from './session-command-harness.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 test('session_list includes device_udid and ios_simulator_device_set for iOS sessions', async () => {

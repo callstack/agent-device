@@ -17,7 +17,7 @@ vi.mock('../session-deploy.ts', async (importOriginal) => {
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { handleSessionCommands } from '../session.ts';
+import { handleSessionCommands } from './session-command-harness.ts';
 import { trackUploadedArtifact } from '../../artifact-tracking.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';

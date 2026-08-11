@@ -57,7 +57,7 @@ vi.mock('../session-device-utils.ts', async (importOriginal) => {
   return { ...actual, settleIosSimulator: vi.fn(async () => {}) };
 });
 
-import { handleSessionCommands } from '../session.ts';
+import { handleSessionCommands } from './session-command-harness.ts';
 import { teardownSessionResources } from '../../session-teardown.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
 import { shutdownSimulator } from '../../../platforms/apple/core/simulator.ts';
@@ -1254,6 +1254,10 @@ test('a failed platform close retains the device claim and reports it', async ()
       session: sessionName,
       workspace: process.cwd(),
       stateDir: sessionStore.resolveDaemonStateDir(),
+      reconcileOrphanedDeviceClaim: async () => ({
+        status: 'retained',
+        reason: 'test-no-recovery',
+      }),
     });
     if (acquired.status !== 'acquired') {
       throw new Error('expected the test session to acquire a device claim');
@@ -1350,6 +1354,10 @@ test('a failing best-effort cleanup also retains the device claim and reports it
       session: sessionName,
       workspace: process.cwd(),
       stateDir: sessionStore.resolveDaemonStateDir(),
+      reconcileOrphanedDeviceClaim: async () => ({
+        status: 'retained',
+        reason: 'test-no-recovery',
+      }),
     });
     if (acquired.status !== 'acquired') {
       throw new Error('expected the test session to acquire a device claim');
@@ -1457,6 +1465,10 @@ test('a successful close clears the device claim', async () => {
       session: sessionName,
       workspace: process.cwd(),
       stateDir: sessionStore.resolveDaemonStateDir(),
+      reconcileOrphanedDeviceClaim: async () => ({
+        status: 'retained',
+        reason: 'test-no-recovery',
+      }),
     });
     if (acquired.status !== 'acquired') {
       throw new Error('expected the test session to acquire a device claim');

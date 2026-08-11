@@ -4,6 +4,7 @@ import {
   APP_NOT_INSTALLED_SAMPLE,
   BROWSERSTACK_CONNECT_SAMPLE,
   DEVICE_IN_USE_SAMPLE,
+  DEVICE_CLAIM_IN_USE_SAMPLE,
   FOREGROUND_SNAPSHOT_FAILURE_SAMPLE,
   MERGED_CARD_ACTIONS_SAMPLE,
   NOT_SETTLED_SAMPLE,
@@ -21,6 +22,7 @@ import { NEVER_SETTLED_HINT } from '../../src/commands/interaction/runtime/settl
 import { buildAmbiguousMatchError } from '../../src/daemon/handlers/find.ts';
 import { refMutationAdmissionResponse } from '../../src/daemon/handlers/interaction-ref-policy.ts';
 import { buildDeviceInUseBySessionError } from '../../src/daemon/handlers/session-open.ts';
+import { buildDeviceClaimConflictError } from '../../src/daemon/device-claim-conflict.ts';
 import { resolveRefStalenessWarning } from '../../src/daemon/session-snapshot.ts';
 import type { SessionState } from '../../src/daemon/types.ts';
 import { buildAppNotInstalledError } from '../../src/platforms/apple/core/app-resolution.ts';
@@ -76,7 +78,16 @@ function renderHumanError(error: AppError): string {
   return lines.join('').trimEnd();
 }
 
-type ErrorResponse = { ok: false; error: { code: string; message: string; details?: unknown } };
+type ErrorResponse = {
+  ok: false;
+  error: {
+    code: string;
+    message: string;
+    hint?: string;
+    retriable?: boolean;
+    details?: Record<string, unknown>;
+  };
+};
 
 /** Renders a daemon error response the way the CLI prints it for a human. */
 function renderErrorResponse(response: ErrorResponse): string {
@@ -84,7 +95,11 @@ function renderErrorResponse(response: ErrorResponse): string {
     new AppError(
       response.error.code as ConstructorParameters<typeof AppError>[0],
       response.error.message,
-      response.error.details as ConstructorParameters<typeof AppError>[2],
+      {
+        ...response.error.details,
+        ...(response.error.hint ? { hint: response.error.hint } : {}),
+        ...(response.error.retriable === undefined ? {} : { retriable: response.error.retriable }),
+      } as ConstructorParameters<typeof AppError>[2],
     ),
   );
 }
@@ -356,6 +371,46 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
       >[1];
       const response = buildDeviceInUseBySessionError(owningSession, device);
       assertErrorResponse(response, 'the by-session conflict');
+      return renderErrorResponse(response);
+    },
+  },
+  {
+    name: 'DEVICE_CLAIM_IN_USE_SAMPLE',
+    producer: 'the enforced cross-daemon device-claim conflict producer',
+    sample: DEVICE_CLAIM_IN_USE_SAMPLE,
+    render: () => {
+      const response = buildDeviceClaimConflictError(
+        {
+          platform: 'android',
+          id: 'emulator-5554',
+          name: 'Pixel',
+          kind: 'emulator',
+        },
+        {
+          fileName: 'claim.json',
+          deviceKey: 'local:android:none:emulator-5554',
+          classification: 'live',
+          claim: {
+            schemaVersion: 2,
+            deviceKey: 'local:android:none:emulator-5554',
+            device: {
+              family: 'android',
+              id: 'emulator-5554',
+              name: 'Pixel',
+              kind: 'emulator',
+            },
+            session: 'checkout',
+            workspace: '/worktrees/checkout',
+            stateDir: '/state/checkout',
+            ownerPid: 4242,
+            ownerStartTime: 'start',
+            ownerToken: 'token',
+            createdAtMs: 1,
+            updatedAtMs: 1,
+          },
+        },
+      );
+      assertErrorResponse(response, 'the enforced device-claim conflict');
       return renderErrorResponse(response);
     },
   },

@@ -21,7 +21,7 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { handleSessionCommands } from '../session.ts';
+import { handleSessionCommands } from './session-command-harness.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData } from '../../types.ts';
 import { withRequestProgressSink } from '../../../request/progress.ts';

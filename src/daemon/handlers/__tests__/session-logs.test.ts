@@ -15,7 +15,7 @@ import {
   createAppLogAdmissionLedger,
   type AppLogAdmissionLedger,
 } from '../../app-log-admission-ledger.ts';
-import { handleSessionCommands } from '../session.ts';
+import { handleSessionCommands } from './session-command-harness.ts';
 import {
   resolveAppLogResourcePath,
   readAppLogResourceRecord,

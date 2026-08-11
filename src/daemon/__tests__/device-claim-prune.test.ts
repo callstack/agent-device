@@ -66,7 +66,7 @@ test('reconciles claims whose owner is gone and keeps every other claim', async 
     const summary = await reconcileOrphanedDeviceClaims(async () => ({ status: 'reconciled' }));
 
     const claimPathFor = (name: string) => resolveDeviceClaimPath(`local:android:none:${name}`);
-    assert.deepEqual(summary, { reconciled: 1, retained: 0 });
+    assert.deepEqual(summary, { examined: 1, reconciled: 1, retained: 0, changed: 0 });
     assert.equal(fs.existsSync(claimPathFor('dead.json')), false);
     assert.equal(fs.existsSync(claimPathFor('live.json')), true);
     assert.equal(fs.existsSync(claimPathFor('state-dir-gone.json')), true);
@@ -82,8 +82,10 @@ test('reconciles nothing when the claim store does not exist', async () => {
     'agent-device-reconciliation-absent-store',
   );
   assert.deepEqual(await reconcileOrphanedDeviceClaims(async () => ({ status: 'reconciled' })), {
+    examined: 0,
     reconciled: 0,
     retained: 0,
+    changed: 0,
   });
 });
 
@@ -131,7 +133,12 @@ test('leaves a live successor written while the reconciliation waited for the cl
     writeContested(owner.pid, owner.startTime, 'live-token');
     await release();
 
-    assert.deepEqual(await reconciliation, { reconciled: 0, retained: 0 });
+    assert.deepEqual(await reconciliation, {
+      examined: 1,
+      reconciled: 0,
+      retained: 0,
+      changed: 1,
+    });
     assert.equal(fs.existsSync(claimPath), true);
     assert.equal(JSON.parse(fs.readFileSync(claimPath, 'utf8')).ownerToken, 'live-token');
   } finally {

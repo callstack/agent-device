@@ -11,7 +11,7 @@ import {
   noopInvoke,
 } from './session-test-harness.ts';
 import { buildSessionOpenLaunchPlan } from '../session-open-launch-url.ts';
-import { handleSessionCommands } from '../session.ts';
+import { handleSessionCommands } from './session-command-harness.ts';
 
 describe('buildSessionOpenLaunchPlan', () => {
   test('folds an iOS launch URL into the app open', () => {

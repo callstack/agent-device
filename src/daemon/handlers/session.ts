@@ -271,7 +271,7 @@ async function handleClipboardCommand(params: {
   return { ok: true, data: { platform: publicPlatformString(device), ...(result ?? {}) } };
 }
 
-type SessionCommandInput = {
+export type SessionCommandInput = {
   req: DaemonRequest;
   sessionName: string;
   logPath: string;
@@ -288,7 +288,7 @@ type SessionCommandInput = {
   requestScope?: PlatformRequestScope;
   retainDeviceExecutionLock?: (deviceId: string) => Promise<void>;
   throwIfCanceled?: () => void;
-  reconcileOrphanedDeviceClaim?: DeviceClaimReconciler;
+  reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
 };
 
 type SessionCommandParams = Omit<SessionCommandInput, 'leaseRegistry'> & {
@@ -502,7 +502,7 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
         sessionName,
         logPath,
         sessionStore,
-        reconcileOrphanedClaim: reconcileOrphanedDeviceClaim,
+        reconcileOrphanedDeviceClaim,
       }),
     }),
   replay: handleSessionReplayCommandGroup,

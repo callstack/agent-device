@@ -91,6 +91,15 @@ export const DEVICE_IN_USE_SAMPLE = {
 Hint: Run agent-device session list to inspect active sessions. To reuse this device, rerun the command with --session checkout. To open a new session on this device, first run agent-device close --session checkout.`,
 };
 
+// Enforced cross-daemon device claim conflict from
+// src/daemon/device-claim-conflict.ts. This path is deliberately non-retriable:
+// the exact status command is the only safe next step while ownership is live.
+export const DEVICE_CLAIM_IN_USE_SAMPLE = {
+  command: 'agent-device open Demo --platform android --serial emulator-5554',
+  output: `Error (DEVICE_IN_USE): android device emulator-5554 is owned by session "checkout" in workspace "/worktrees/checkout".
+Hint: Inspect the owner with: agent-device device status --platform android --serial emulator-5554`,
+};
+
 // ADR 0014 mutation rejection from
 // src/daemon/handlers/interaction-ref-policy.ts: a pinned ref minted from a
 // superseded generation is rejected before dispatch. The daemon strips the

@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { handleSessionCommands } from '../session.ts';
+import { handleSessionCommands } from './session-command-harness.ts';
 import { createNetworkRuntime, emptyAppLogResult } from './network-runtime-harness.ts';
 import { makeSession, makeSessionStore, noopInvoke } from './session-test-harness.ts';
 

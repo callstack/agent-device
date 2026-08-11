@@ -3,7 +3,11 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
-import { acquireDeviceClaim, canonicalLocalDeviceKey, clearDeviceClaim } from '../device-claims.ts';
+import {
+  acquireDeviceClaim as acquireProductionDeviceClaim,
+  canonicalLocalDeviceKey,
+  clearDeviceClaim,
+} from '../device-claims.ts';
 import { inspectDeviceClaims } from '../device-claim-inspection.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
@@ -23,6 +27,24 @@ const device: DeviceInfo = {
 };
 
 const roots: string[] = [];
+
+function acquireDeviceClaim(
+  params: Omit<
+    Parameters<typeof acquireProductionDeviceClaim>[0],
+    'reconcileOrphanedDeviceClaim'
+  > & {
+    reconcileOrphanedDeviceClaim?: Parameters<
+      typeof acquireProductionDeviceClaim
+    >[0]['reconcileOrphanedDeviceClaim'];
+  },
+) {
+  return acquireProductionDeviceClaim({
+    ...params,
+    reconcileOrphanedDeviceClaim:
+      params.reconcileOrphanedDeviceClaim ??
+      (async () => ({ status: 'retained', reason: 'test-no-recovery' })),
+  });
+}
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -52,6 +74,14 @@ test('preserves and reports a live foreign claim without overwriting it', async 
     stateDir: root,
   });
   assert.equal(first.status, 'acquired');
+  const persisted = JSON.parse(fs.readFileSync(claimPath(root), 'utf8')) as Record<string, unknown>;
+  assert.equal(persisted.schemaVersion, 2);
+  assert.deepEqual(persisted.device, {
+    id: device.id,
+    family: device.platform,
+    kind: device.kind,
+    name: device.name,
+  });
   const second = await acquireDeviceClaim({
     device,
     session: 'second',
@@ -108,7 +138,7 @@ test('reconciles a proven-dead owner and replaces it while acquiring the same cl
     session: 'replacement',
     workspace: '/worktrees/replacement',
     stateDir: root,
-    reconcileOrphanedClaim: reconcile,
+    reconcileOrphanedDeviceClaim: reconcile,
   });
 
   assert.equal(second.status, 'acquired');
@@ -135,7 +165,7 @@ test('retains a proven-dead claim when exact-owner cleanup remains pending', asy
     session: 'blocked',
     workspace: '/worktrees/blocked',
     stateDir: root,
-    reconcileOrphanedClaim: async () => ({
+    reconcileOrphanedDeviceClaim: async () => ({
       status: 'retained',
       reason: 'cleanup-pending',
     }),
@@ -164,7 +194,7 @@ test('PID reuse is uncertain ownership and never authorizes reconciliation', asy
     session: 'blocked',
     workspace: '/worktrees/new',
     stateDir: root,
-    reconcileOrphanedClaim: reconcile,
+    reconcileOrphanedDeviceClaim: reconcile,
   });
 
   assert.equal(result.status, 'conflict');
@@ -199,7 +229,7 @@ test('an internally inconsistent dead claim never authorizes reconciliation', as
     session: 'blocked',
     workspace: '/worktrees/new',
     stateDir: root,
-    reconcileOrphanedClaim: reconcile,
+    reconcileOrphanedDeviceClaim: reconcile,
   });
 
   assert.equal(result.status, 'conflict');
@@ -301,6 +331,28 @@ test('matches public Apple claim records through the shared platform selector se
   assert.equal(inspectDeviceClaims({ platform: 'apple' }).length, 1);
   assert.equal(inspectDeviceClaims({ platform: 'ios' }).length, 1);
   assert.equal(inspectDeviceClaims({ platform: 'macos' }).length, 0);
+});
+
+test('canonicalizes legacy Apple devices without an explicit OS before persisting', async () => {
+  const root = useClaimsRoot();
+  const legacyAppleDevice: DeviceInfo = {
+    platform: 'apple',
+    id: 'legacy-ios-claim',
+    name: 'iPhone',
+    kind: 'simulator',
+    booted: true,
+  };
+  const acquired = await acquireDeviceClaim({
+    device: legacyAppleDevice,
+    session: 'legacy-ios',
+    workspace: process.cwd(),
+    stateDir: root,
+  });
+  assert.equal(acquired.status, 'acquired');
+  const inspected = inspectDeviceClaims({ udid: legacyAppleDevice.id })[0];
+  assert.equal(inspected?.classification, 'live');
+  assert.equal(inspected?.claim?.device.appleOs, 'ios');
+  assert.equal(inspected?.deviceKey, 'local:apple:ios:legacy-ios-claim');
 });
 
 test.each([

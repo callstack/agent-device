@@ -27,7 +27,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
-import { handleSessionCommands } from '../session.ts';
+import { handleSessionCommands } from './session-command-harness.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../types.ts';
 import { withRequestProgressSink } from '../../../request/progress.ts';

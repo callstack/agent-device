@@ -1,5 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
+import { publicPlatformString } from '@agent-device/kernel/device';
 import {
+  deviceClaimRequiresStaleInspection,
   inspectDeviceClaims,
   type InspectedDeviceClaim,
 } from '../../daemon/device-claim-inspection.ts';
@@ -7,6 +9,8 @@ import { shellQuoteIfNeeded } from '../../utils/shell-quote.ts';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 
+// Loaded dynamically by dedicatedCliCommandHandlerLoaders in router.ts.
+// fallow-ignore-next-line unused-export
 export const deviceCommand: ClientCommandHandler = async ({ positionals, flags }) => {
   if (positionals[0] !== 'status' || positionals.length !== 1) {
     throw new AppError('INVALID_ARGS', 'device accepts only: status');
@@ -17,9 +21,13 @@ export const deviceCommand: ClientCommandHandler = async ({ positionals, flags }
     udid: flags.udid,
     serial: flags.serial,
   });
-  const staleClaims = inspectedClaims.filter(isStaleClaim);
+  const staleClaims = inspectedClaims.filter((claim) =>
+    deviceClaimRequiresStaleInspection(claim.classification),
+  );
   const claims = (
-    flags.stale ? staleClaims : inspectedClaims.filter((claim) => !isStaleClaim(claim))
+    flags.stale
+      ? staleClaims
+      : inspectedClaims.filter((claim) => !deviceClaimRequiresStaleInspection(claim.classification))
   ).map(serializeClaim);
   const data = {
     claims,
@@ -35,12 +43,6 @@ export const deviceCommand: ClientCommandHandler = async ({ positionals, flags }
   return true;
 };
 
-function isStaleClaim(claim: InspectedDeviceClaim): boolean {
-  return (
-    claim.classification === 'owner-process-dead' || claim.classification === 'owner-state-dir-gone'
-  );
-}
-
 function serializeClaim(entry: InspectedDeviceClaim): Record<string, unknown> {
   const claim = entry.claim;
   return {
@@ -49,7 +51,7 @@ function serializeClaim(entry: InspectedDeviceClaim): Record<string, unknown> {
     classification: entry.classification,
     ...(claim
       ? {
-          device: claim.device,
+          device: serializeClaimDevice(claim.device),
           owner: {
             session: claim.session,
             workspace: claim.workspace,
@@ -63,19 +65,27 @@ function serializeClaim(entry: InspectedDeviceClaim): Record<string, unknown> {
   };
 }
 
+function serializeClaimDevice(device: NonNullable<InspectedDeviceClaim['claim']>['device']) {
+  const { family, ...rest } = device;
+  return {
+    ...rest,
+    platform: publicPlatformString({ platform: family, appleOs: device.appleOs }),
+  };
+}
+
 function renderDeviceStatus(
   claims: Record<string, unknown>[],
   options: { staleOnly: boolean; hiddenStaleClaims: number; staleCommand: string },
 ): string {
   const claimLines = claims.map(renderClaimLine);
   if (claimLines.length === 0) {
-    if (options.staleOnly) return 'No stale local advisory device claims found.';
-    if (options.hiddenStaleClaims === 0) return 'No local advisory device claims found.';
+    if (options.staleOnly) return 'No stale local device claims found.';
+    if (options.hiddenStaleClaims === 0) return 'No local device claims found.';
   }
   return [
     // Without this the all-stale case renders only the hidden-claim notice, so
     // the answer to "what holds this device" reads as a maintenance warning.
-    ...(claimLines.length === 0 ? ['No live local advisory device claims found.'] : claimLines),
+    ...(claimLines.length === 0 ? ['No live local device claims found.'] : claimLines),
     !options.staleOnly && options.hiddenStaleClaims > 0
       ? `${options.hiddenStaleClaims} stale ${options.hiddenStaleClaims === 1 ? 'claim' : 'claims'} hidden; inspect with: ${options.staleCommand}`
       : null,

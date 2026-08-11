@@ -32,11 +32,7 @@ export function recoverAppLogResourcesAfterDaemonLock(params: {
 }): Promise<AppLogRecoverySummary> {
   return appLogDurableResource.recoverAll({
     sessionsDir: params.sessionsDir,
-    scope: params.scope,
-    perRecordDeadlineMs: params.perRecordDeadlineMs,
-    onDiagnostic: params.onDiagnostic,
-    acquireControl: async (envelope, scope) =>
-      await acquireAppLogRecoveryControl(params.gateway, envelope, scope),
+    ...buildAppLogRecoveryParams(params),
   });
 }
 
@@ -49,16 +45,26 @@ export function recoverAppLogResourceAfterDaemonLock(params: {
   onDiagnostic?: (diagnostic: AppLogRecoveryDiagnostic) => void;
 }) {
   return appLogDurableResource.recoverOne(
-    {
-      sessionsDir: params.sessionsDir,
-      scope: params.scope,
-      perRecordDeadlineMs: params.perRecordDeadlineMs,
-      onDiagnostic: params.onDiagnostic,
-      acquireControl: async (envelope, scope) =>
-        await acquireAppLogRecoveryControl(params.gateway, envelope, scope),
-    },
+    { sessionsDir: params.sessionsDir, ...buildAppLogRecoveryParams(params) },
     params.resourcePath,
   );
+}
+
+function buildAppLogRecoveryParams(params: {
+  gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
+  scope: PlatformRequestScope;
+  perRecordDeadlineMs?: number;
+  onDiagnostic?: (diagnostic: AppLogRecoveryDiagnostic) => void;
+}) {
+  return {
+    scope: params.scope,
+    perRecordDeadlineMs: params.perRecordDeadlineMs,
+    onDiagnostic: params.onDiagnostic,
+    acquireControl: async (
+      envelope: DurableResourceEnvelope<'app-log'>,
+      scope: PlatformRequestScope,
+    ) => await acquireAppLogRecoveryControl(params.gateway, envelope, scope),
+  };
 }
 
 async function acquireAppLogRecoveryControl(

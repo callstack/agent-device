@@ -26,6 +26,7 @@ import {
 } from './durable-capture-resource-finish-recovered.ts';
 import type { SessionStore } from './session-store.ts';
 import type { SessionState } from './types.ts';
+import type { DurableSessionResourceKind } from './durable-session-resource-kinds.ts';
 
 export type DurableCaptureSessionResource<K extends string, H extends AsyncDisposable> = Readonly<{
   handle: H;
@@ -69,9 +70,11 @@ export type AdoptStartedDurableCaptureParams<K extends string, H extends AsyncDi
   throwIfCanceled(): void;
 };
 
-export function createDurableCaptureResource<K extends string, H extends LiveResourceHandle<C>, C>(
-  definition: DurableCaptureResourceDefinition<K, H, C>,
-) {
+export function createDurableCaptureResource<
+  K extends DurableSessionResourceKind,
+  H extends LiveResourceHandle<C>,
+  C,
+>(definition: DurableCaptureResourceDefinition<K, H, C>) {
   const resourcePath = (sessionStore: SessionStore, sessionName: string): string =>
     definition.store.resolvePath(sessionStore.resolveSessionDir(sessionName));
 

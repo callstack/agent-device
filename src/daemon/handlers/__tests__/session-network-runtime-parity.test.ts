@@ -2,7 +2,7 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform';
 import type { BindDeviceRuntime } from '../../request-runtime-binding.ts';
-import { handleSessionCommands } from '../session.ts';
+import { handleSessionCommands } from './session-command-harness.ts';
 import {
   makeSession,
   makeSessionStore,

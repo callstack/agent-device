@@ -569,7 +569,7 @@ async function reconcileDeviceClaimsForDaemonStartup(
     async () => {
       try {
         const summary = await reconcileOrphanedDeviceClaims(reconcile);
-        if (summary.reconciled > 0 || summary.retained > 0) {
+        if (summary.examined > 0) {
           emitDiagnostic({ phase: 'device_claim_reconcile', data: summary });
           flushDiagnosticsToSessionFile({ force: true });
         }

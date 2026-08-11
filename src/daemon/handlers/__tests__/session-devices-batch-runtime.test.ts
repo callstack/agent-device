@@ -11,7 +11,7 @@ import {
   noopInvoke,
 } from './session-test-harness.ts';
 import type { DaemonRequest } from '../../types.ts';
-import { handleSessionCommands } from '../session.ts';
+import { handleSessionCommands } from './session-command-harness.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import { withTestDeviceInventory } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';

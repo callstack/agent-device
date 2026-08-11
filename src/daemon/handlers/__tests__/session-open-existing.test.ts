@@ -15,7 +15,7 @@ import {
   withMockedPlatform,
 } from './session-test-harness.ts';
 import type { SessionState } from '../../types.ts';
-import { handleSessionCommands } from '../session.ts';
+import { handleSessionCommands } from './session-command-harness.ts';
 
 test('open web URL on iOS device session without active app falls back to Safari', async () => {
   const sessionStore = makeSessionStore();

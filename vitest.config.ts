@@ -56,6 +56,10 @@ export default defineConfig({
     // headroom. CI stays uncapped so Vitest derives the runner-appropriate
     // worker count from the isolated machine's available CPU pool.
     maxWorkers: resolveVitestMaxWorkers(),
+    // hermetic-env-setup clears worker-scoped device claims after every case.
+    // Capping explicit `test.concurrent` work at one enforces that teardown
+    // assumption without reducing ordinary file-level parallelism.
+    maxConcurrency: 1,
     reporters: reporters(),
     projects: [
       {

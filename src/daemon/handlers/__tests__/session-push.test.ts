@@ -1,6 +1,6 @@
 import { test, expect } from 'vitest';
 
-import { handleSessionCommands } from '../session.ts';
+import { handleSessionCommands } from './session-command-harness.ts';
 import type { DaemonRequest, DaemonResponse } from '../../types.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 

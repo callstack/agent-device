@@ -16,7 +16,7 @@ import {
   makeSession,
   noopInvoke,
 } from './session-test-harness.ts';
-import { handleSessionCommands } from '../session.ts';
+import { handleSessionCommands } from './session-command-harness.ts';
 
 test('open --relaunch closes and reopens active session app', async () => {
   const sessionStore = makeSessionStore();
