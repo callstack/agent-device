@@ -15,7 +15,10 @@ import { commandDescriptors } from '../registry.ts';
  * only when D is `none` too.
  *
  * Scope is `src/cli.ts`, the composition root where injected callbacks are built.
- * The scan is total within it — a dispatch no route can claim fails the gate.
+ * The scan is total within it in both directions: a dispatch no route can claim
+ * fails, and a daemon send whose command target cannot be resolved to a registered
+ * command also fails. An unresolvable target is a gate error rather than a skip,
+ * because a skipped dispatch is indistinguishable from an absent one.
  */
 
 type AstNode = { type: string } & Record<string, unknown>;
@@ -47,7 +50,16 @@ type RouteScan = Readonly<{
   dispatches: readonly RouteDispatch[];
   /** Commands dispatched at a site no `command === '<name>'` route could claim. */
   unattributed: readonly string[];
+  /**
+   * Daemon sends whose `command` target is not a registered command literal —
+   * a computed target, a variable, an unknown catalog key, or no target at all.
+   * Reported by source line: the gate cannot reason about them, so it refuses them.
+   */
+  unresolvedTargets: readonly string[];
 }>;
+
+/** Calls that hand a request envelope to the daemon. */
+const DAEMON_SEND_CALLEES = new Set(['sendToDaemon']);
 
 function isAstNode(value: unknown): value is AstNode {
   return typeof value === 'object' && value !== null && typeof (value as AstNode).type === 'string';
@@ -96,14 +108,25 @@ function routedCommandOf(test: unknown): string | undefined {
 
 /** `command: 'x'`, `command: INTERNAL_COMMANDS.x`, `command: PUBLIC_COMMANDS.x`. */
 function dispatchSiteOf(node: AstNode): DispatchSite | undefined {
-  if (node.type !== 'Property' || node['computed'] === true) return undefined;
-  if (identifierName(node['key']) !== 'command') return undefined;
-  const command = dispatchTargetOf(node['value']);
+  const commandProperty = commandPropertyOf(node);
+  if (commandProperty === undefined) return undefined;
+  const command = dispatchTargetOf(commandProperty['value']);
   if (command === undefined) return undefined;
-  // A node without a source position cannot be matched against an attributed
-  // site, so -1 keeps it distinct from every real offset and it stays unclaimed.
+  return { command, offset: offsetOf(commandProperty) };
+}
+
+function commandPropertyOf(node: AstNode): AstNode | undefined {
+  if (node.type !== 'Property' || node['computed'] === true) return undefined;
+  return identifierName(node['key']) === 'command' ? node : undefined;
+}
+
+/**
+ * A node without a source position cannot be matched against an attributed site, so
+ * -1 keeps it distinct from every real offset and it stays unclaimed.
+ */
+function offsetOf(node: AstNode): number {
   const start = node['start'];
-  return { command, offset: typeof start === 'number' ? start : -1 };
+  return typeof start === 'number' ? start : -1;
 }
 
 function dispatchTargetOf(value: unknown): string | undefined {
@@ -115,6 +138,37 @@ function dispatchTargetOf(value: unknown): string | undefined {
   const catalog = identifierName(value['object']);
   const key = identifierName(value['property']);
   return catalog === undefined || key === undefined ? undefined : COMMAND_CATALOGS[catalog]?.[key];
+}
+
+/**
+ * Every request envelope handed to the daemon, whether or not its command target can
+ * be resolved. `command:` alone cannot mark a dispatch — diagnostics scopes and context
+ * builders carry the same key — so the envelope is identified by the send call it is
+ * passed to.
+ */
+function daemonSendEnvelopes(program: unknown): AstNode[] {
+  const envelopes: AstNode[] = [];
+  walk(program, (node) => {
+    if (node.type !== 'CallExpression' || !isDaemonSendCallee(node['callee'])) return;
+    // `sendToDaemon(request, options)`: only the first argument is the request.
+    const args = node['arguments'];
+    const request = Array.isArray(args) ? args[0] : undefined;
+    if (isAstNode(request) && request.type === 'ObjectExpression') envelopes.push(request);
+  });
+  return envelopes;
+}
+
+function isDaemonSendCallee(callee: unknown): boolean {
+  if (!isAstNode(callee)) return false;
+  if (callee.type === 'Identifier') return DAEMON_SEND_CALLEES.has(String(callee['name']));
+  if (callee.type !== 'MemberExpression' || callee['computed'] === true) return false;
+  const property = identifierName(callee['property']);
+  return property !== undefined && DAEMON_SEND_CALLEES.has(property);
+}
+
+function envelopeProperties(envelope: AstNode): AstNode[] {
+  const properties = envelope['properties'];
+  return Array.isArray(properties) ? properties.filter(isAstNode) : [];
 }
 
 function localFunctionsByName(program: unknown): Map<string, AstNode> {
@@ -180,7 +234,39 @@ function scanCliRouteDispatches(sourceText: string): RouteScan {
     .filter(({ offset }) => !attributedOffsets.has(offset))
     .map(({ command }) => command);
 
-  return { dispatches, unattributed: [...new Set(unclaimed)].sort() };
+  return {
+    dispatches,
+    unattributed: [...new Set(unclaimed)].sort(),
+    unresolvedTargets: unresolvedDaemonSendTargets(program, sourceText),
+  };
+}
+
+/**
+ * A daemon send whose command target the gate cannot resolve. Dropping these would
+ * leave an evasion path: an unknown literal or a computed target would simply never
+ * appear in the scan, so the gate reports them instead of skipping them.
+ */
+function unresolvedDaemonSendTargets(program: unknown, sourceText: string): string[] {
+  const unresolved: string[] = [];
+  for (const envelope of daemonSendEnvelopes(program)) {
+    const commandProperty = envelopeProperties(envelope).find(
+      (property) => commandPropertyOf(property) !== undefined,
+    );
+    if (commandProperty === undefined) {
+      unresolved.push(`${lineOf(sourceText, offsetOf(envelope))}: daemon send declares no command`);
+      continue;
+    }
+    if (dispatchTargetOf(commandProperty['value']) === undefined) {
+      unresolved.push(
+        `${lineOf(sourceText, offsetOf(commandProperty))}: daemon send target is not a registered command`,
+      );
+    }
+  }
+  return unresolved;
+}
+
+function lineOf(sourceText: string, offset: number): number {
+  return offset < 0 ? 0 : sourceText.slice(0, offset).split('\n').length;
 }
 
 function dominanceFailures(scan: RouteScan, kindOf: PlatformExecutionKindOf): string[] {
@@ -204,6 +290,10 @@ describe('platform-execution coherence across CLI route delegation', () => {
 
   test('every CLI daemon dispatch is attributable to a routed command', () => {
     expect(scanCompositionRoot().unattributed).toEqual([]);
+  });
+
+  test('every CLI daemon send resolves to a registered command', () => {
+    expect(scanCompositionRoot().unresolvedTargets).toEqual([]);
   });
 
   test('the composition root still carries the react-devtools runtime delegation', () => {
@@ -249,5 +339,36 @@ describe('platform-execution coherence across CLI route delegation', () => {
     // Both halves matter: the routed occurrence is claimed, the stray one is not.
     expect(scan.dispatches).toEqual([{ route: 'react-devtools', dispatched: 'runtime' }]);
     expect(scan.unattributed).toEqual(['runtime']);
+  });
+
+  test('planted red: a stray dispatch with an unknown target surfaces', () => {
+    const planted = `
+      async function runCli(argv, deps) {
+        if (command === 'react-devtools') {
+          await runReactDevtoolsCli(ctx, deps);
+          return;
+        }
+        await deps.sendToDaemon({ command: SOME_OTHER_CATALOG.hidden, positionals: [] });
+      }
+      async function runReactDevtoolsCli(ctx, deps) {
+        await deps.sendToDaemon({ command: INTERNAL_COMMANDS.runtime, positionals: [] });
+      }
+    `;
+    const scan = scanCliRouteDispatches(planted);
+
+    // The known routed dispatch still resolves, so the failure is the stray one alone.
+    expect(scan.dispatches).toEqual([{ route: 'react-devtools', dispatched: 'runtime' }]);
+    expect(scan.unresolvedTargets).toEqual(['7: daemon send target is not a registered command']);
+  });
+
+  test.each([
+    ['a computed target', 'deps.sendToDaemon({ command: catalog[key], positionals: [] });'],
+    ['an unknown literal', "deps.sendToDaemon({ command: 'not-a-command', positionals: [] });"],
+    ['a variable target', 'deps.sendToDaemon({ command: chosen, positionals: [] });'],
+    ['no target at all', 'deps.sendToDaemon({ positionals: [] });'],
+  ])('planted red: %s is a gate error, not a skip', (_label, send) => {
+    const scan = scanCliRouteDispatches(`async function runCli(argv, deps) { await ${send} }`);
+
+    expect(scan.unresolvedTargets).toHaveLength(1);
   });
 });
