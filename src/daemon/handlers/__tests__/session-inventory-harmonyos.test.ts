@@ -22,18 +22,18 @@ const HARMONY_DEVICE = {
   booted: true,
 };
 const available = { available: true } as const;
-const unavailable = { available: false, reason: 'owner-capability-missing' } as const;
+const unavailable = { available: false, reason: 'unsupported-platform-leaf' } as const;
 
 function runtimeFacts(): RuntimeFacts<PlatformRuntimeOperations> {
   return {
     device: { family: 'harmonyos', kind: 'device', target: 'mobile', providerMode: 'local' },
     operations: {
-      appLogInspect: unavailable,
-      appLogDoctor: unavailable,
-      appLogStart: unavailable,
-      appLogReattach: unavailable,
-      appLogCleanup: unavailable,
-      listApps: available,
+      appLogInspect: available,
+      appLogDoctor: available,
+      appLogStart: available,
+      appLogReattach: available,
+      appLogCleanup: available,
+      listApps: unavailable,
       networkDump: unavailable,
       screenRecordingStart: unavailable,
       screenRecordingReattach: unavailable,
@@ -45,39 +45,27 @@ function runtimeFacts(): RuntimeFacts<PlatformRuntimeOperations> {
   };
 }
 
-const inspectFactsImpl: InspectDeviceRuntimeFacts = async () => runtimeFacts();
-const inspectFacts = vi.fn(inspectFactsImpl);
-const ensureReady = vi.fn(async () => HARMONY_DEVICE);
-const listAppsOperation = vi.fn(async () => [{ id: 'com.example.app', name: 'Example' }]);
-let bindCount = 0;
-const bindDeviceImpl: BindDeviceRuntime = async (device, use) =>
+const inspectFacts: InspectDeviceRuntimeFacts = vi.fn(async () => runtimeFacts());
+const bindDevice: BindDeviceRuntime = vi.fn(async (device, use) =>
   narrowDeviceBinding(
     {
       device,
       owner: localRuntimeOwner('harmonyos'),
       facts: runtimeFacts(),
-      operations: {
-        ensureReady,
-        listApps: listAppsOperation,
-      },
+      operations: { ensureReady: async () => device },
       [Symbol.asyncDispose]: async () => {},
     },
     use,
-  );
-const bindDevice: BindDeviceRuntime = async (device, use) => {
-  bindCount += 1;
-  return await bindDeviceImpl(device, use);
-};
+  ),
+);
 
 beforeEach(() => {
-  inspectFacts.mockClear();
-  ensureReady.mockClear();
-  listAppsOperation.mockClear();
-  bindCount = 0;
+  vi.mocked(inspectFacts).mockClear();
+  vi.mocked(bindDevice).mockClear();
 });
 
-async function listApps(appsFilter: 'all' | 'user-installed'): Promise<DaemonResponse | null> {
-  const sessionName = `harmony-apps-${appsFilter}`;
+async function listApps(): Promise<DaemonResponse | null> {
+  const sessionName = 'harmony-apps';
   const sessionStore = makeSessionStore();
   sessionStore.set(sessionName, makeSession(sessionName, HARMONY_DEVICE));
   const req: DaemonRequest = {
@@ -85,7 +73,7 @@ async function listApps(appsFilter: 'all' | 'user-installed'): Promise<DaemonRes
     session: sessionName,
     command: 'apps',
     positionals: [],
-    flags: { appsFilter },
+    flags: { appsFilter: 'all' },
   };
   return await handleSessionInventoryCommands({
     req,
@@ -96,11 +84,11 @@ async function listApps(appsFilter: 'all' | 'user-installed'): Promise<DaemonRes
   });
 }
 
-test('HarmonyOS apps consumes generic readiness and app inventory through one runtime bind', async () => {
-  const response = await listApps('all');
-  expect(response).toEqual({ ok: true, data: { apps: ['Example (com.example.app)'] } });
+test('HarmonyOS apps remains fail-closed when the legacy capability rejected the leaf', async () => {
+  await expect(listApps()).resolves.toMatchObject({
+    ok: false,
+    error: { code: 'UNSUPPORTED_OPERATION' },
+  });
   expect(inspectFacts).toHaveBeenCalledOnce();
-  expect(bindCount).toBe(1);
-  expect(ensureReady).toHaveBeenCalledOnce();
-  expect(listAppsOperation).toHaveBeenCalledOnce();
+  expect(bindDevice).not.toHaveBeenCalled();
 });
