@@ -244,7 +244,11 @@ async function resolveDoctorAppInventory(params: {
   ((filter: 'all' | 'user-installed') => Promise<readonly InstalledAppInfo[]>) | undefined
 > {
   const { device, req, targetApp, inspectFacts, bindDevice } = params;
-  if (!targetApp || !inspectFacts || !bindDevice) return undefined;
+  // Doctor's target-app check preserves its legacy HarmonyOS informational cell; this does not
+  // alter the apps command's facts or runtime binding, which remain available independently.
+  if (!targetApp || !inspectFacts || !bindDevice || device.platform === 'harmonyos') {
+    return undefined;
+  }
   const facts = await inspectFacts(device);
   const appFact = facts.operations.listApps;
   const readyFact = facts.operations.ensureReady;
