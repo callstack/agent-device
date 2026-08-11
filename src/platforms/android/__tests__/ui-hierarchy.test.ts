@@ -460,6 +460,90 @@ test('parseUiHierarchy keeps React Native content under a transparent Expo tools
   );
 });
 
+test('parseUiHierarchy keeps app content under a childless focusable full-screen overlay', () => {
+  // Telegram wraps every screen in a childless full-screen focusable View drawn above the content
+  // container. Focusability is accessibility traversal, not paint (#1733).
+  const xml = `<hierarchy>
+  <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="0">
+    <node class="android.view.View" bounds="[0,0][390,844]" enabled="true" visible-to-user="true" focusable="true" drawing-order="3"/>
+    <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="1">
+      <node class="android.widget.TextView" text="Your phone number" bounds="[24,200][366,260]" enabled="true" visible-to-user="true" drawing-order="1"/>
+      <node class="android.widget.EditText" text="208 379 7171" bounds="[24,320][366,380]" clickable="true" focusable="true" enabled="true" visible-to-user="true" drawing-order="2"/>
+    </node>
+  </node>
+</hierarchy>`;
+
+  const result = parseUiHierarchy(xml, 800, { raw: true });
+  assert.equal(
+    result.nodes.some((node) => node.label === 'Your phone number'),
+    true,
+  );
+  assert.equal(
+    result.nodes.some((node) => node.label === '208 379 7171'),
+    true,
+  );
+});
+
+test('parseUiHierarchy keeps content under an overlay whose descendants are only focusable', () => {
+  const xml = `<hierarchy>
+  <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="0">
+    <node class="android.view.ViewGroup" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="2">
+      <node class="android.view.View" bounds="[0,0][390,844]" enabled="true" visible-to-user="true" focusable="true" drawing-order="1"/>
+    </node>
+    <node class="android.view.ViewGroup" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="1">
+      <node class="android.widget.Button" text="Still visible action" bounds="[0,220][280,280]" clickable="true" enabled="true" visible-to-user="true" drawing-order="1"/>
+    </node>
+  </node>
+</hierarchy>`;
+
+  const result = parseUiHierarchy(xml, 800, { raw: true });
+  assert.equal(
+    result.nodes.some((node) => node.label === 'Still visible action'),
+    true,
+  );
+});
+
+test('parseUiHierarchy keeps an overlapped text leaf drawn inside a composite widget sibling', () => {
+  // Telegram renders the "+" of "+1" as a TextView sitting inside the country-code EditText's box.
+  const xml = `<hierarchy>
+  <node class="android.widget.LinearLayout" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="0">
+    <node class="android.widget.EditText" text="1" content-desc="Country code" bounds="[40,300][130,380]" clickable="true" focusable="true" enabled="true" visible-to-user="true" drawing-order="2"/>
+    <node class="android.widget.TextView" text="+" bounds="[40,310][55,370]" enabled="true" visible-to-user="true" drawing-order="1"/>
+  </node>
+</hierarchy>`;
+
+  const result = parseUiHierarchy(xml, 800, { raw: true });
+  assert.equal(
+    result.nodes.some((node) => node.label === '+'),
+    true,
+  );
+  assert.equal(
+    result.nodes.some((node) => node.label === '1'),
+    true,
+  );
+});
+
+test('parseUiHierarchy still condemns a clickable leaf covered by a foreground sibling', () => {
+  const xml = `<hierarchy>
+  <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="0">
+    <node class="android.view.ViewGroup" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="2">
+      <node class="android.widget.Button" text="Modal action" bounds="[24,420][366,480]" clickable="true" enabled="true" visible-to-user="true" drawing-order="1"/>
+    </node>
+    <node class="android.widget.Button" text="Behind the modal" bounds="[0,220][280,280]" clickable="true" enabled="true" visible-to-user="true" drawing-order="1"/>
+  </node>
+</hierarchy>`;
+
+  const result = parseUiHierarchy(xml, 800, { raw: true });
+  assert.equal(
+    result.nodes.some((node) => node.label === 'Modal action'),
+    true,
+  );
+  assert.equal(
+    result.nodes.some((node) => node.label === 'Behind the modal'),
+    false,
+  );
+});
+
 test('parseUiHierarchy ignores attribute-name prefix spoofing', () => {
   const xml =
     "<hierarchy><node class='android.widget.TextView' hint-text='Spoofed' text='Actual' bounds='[10,20][110,60]'/></hierarchy>";

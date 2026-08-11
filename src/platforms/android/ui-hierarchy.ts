@@ -422,6 +422,7 @@ export type AndroidUiHierarchy = {
   drawingOrder?: number;
   focused?: boolean;
   hittable?: boolean;
+  clickable?: boolean;
   depth: number;
   parentIndex?: number;
   hiddenContentAbove?: boolean;
@@ -493,6 +494,7 @@ export function parseUiHierarchyTree(xml: string): AndroidUiHierarchy {
       visibleToUser: attrs.visibleToUser,
       drawingOrder: attrs.drawingOrder,
       hittable: attrs.clickable ?? attrs.focusable,
+      clickable: attrs.clickable,
       scrollable: attrs.scrollable,
       canScrollForward: attrs.canScrollForward,
       canScrollBackward: attrs.canScrollBackward,
@@ -554,14 +556,21 @@ function shouldKeepAndroidSibling(
   coveringCandidates: AndroidCoveringCandidate[],
 ): boolean {
   return (
-    isSemanticIdentifierMarker(node) ||
-    !isCoveredByHigherDrawingOrderSibling(node, coveringCandidates)
+    isUncondemnableLeaf(node) || !isCoveredByHigherDrawingOrderSibling(node, coveringCandidates)
   );
 }
 
-function isSemanticIdentifierMarker(node: AndroidNode): boolean {
-  // RN can emit a screen-level testID as an empty sibling beside its rendered navigator.
-  return hasMeaningfulIdentifier(node) && !node.hittable && node.children.length === 0;
+/**
+ * A childless sibling that announces something of its own and offers no affordance of its own:
+ * the screen-level testID RN emits beside its rendered navigator, or a composite widget's label
+ * drawn inside a higher sibling's box (Telegram renders the `+` of `+1` as a TextView overlapping
+ * the country-code EditText). Drawing order and geometry cannot tell a transparent overlay from an
+ * opaque one, and text an agent never sees is the one loss it cannot recover from. Exempting a leaf
+ * is bounded — it can never resurrect a covered surface — so leaves are not condemned on geometry.
+ */
+function isUncondemnableLeaf(node: AndroidNode): boolean {
+  if (node.children.length > 0 || node.clickable) return false;
+  return hasMeaningfulIdentifier(node) || hasMeaningfulLabel(node);
 }
 
 function isCoveredByHigherDrawingOrderSibling(
@@ -599,14 +608,22 @@ function canCoverSibling(
   );
 }
 
+/**
+ * Whether this node presents something on its own: an affordance to act on, something to announce,
+ * or an address to select by. Deliberately keyed on `clickable` rather than `hittable`: `hittable`
+ * falls back to `focusable`, and focusability is an accessibility-traversal property that says
+ * nothing about painting over a sibling. Telegram wraps its screens in a full-screen focusable
+ * `android.view.View` with no text, id, or children — it announces nothing and does nothing, so it
+ * must not condemn the sibling that holds the actual UI (#1733).
+ */
 function hasOwnAgentVisibleContent(node: AndroidNode): boolean {
   if (node.visibleToUser === false) return false;
-  if (node.hittable) return true;
+  return node.clickable === true || hasMeaningfulLabel(node) || hasMeaningfulIdentifier(node);
+}
+
+function hasMeaningfulLabel(node: AndroidNode): boolean {
   const label = node.label?.trim() ?? '';
-  if (label && !isGenericAndroidId(label)) return true;
-  const identifier = node.identifier?.trim() ?? '';
-  if (identifier && !isGenericAndroidId(identifier)) return true;
-  return false;
+  return Boolean(label && !isGenericAndroidId(label));
 }
 
 function hasActionableDescendant(node: AndroidNode, state: AndroidTreePruneState): boolean {
@@ -616,7 +633,7 @@ function hasActionableDescendant(node: AndroidNode, state: AndroidTreePruneState
   const result = node.children.some(
     (child) =>
       child.visibleToUser !== false &&
-      (Boolean(child.hittable) || hasActionableDescendant(child, state)),
+      (Boolean(child.clickable) || hasActionableDescendant(child, state)),
   );
   state.actionableContentMemo.set(node, result);
   return result;
