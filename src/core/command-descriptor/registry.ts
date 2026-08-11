@@ -1413,7 +1413,10 @@ export const RAW_COMMAND_DESCRIPTORS = [
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
     mcpExposed: false,
-    platformExecution: NO_PLATFORM_EXECUTION,
+    // `react-devtools start` on a Limrun Android instance dispatches internal
+    // `runtime port-reverse`, which reaches a provider device runtime. Platform
+    // execution delegated through another command is still platform execution.
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
     name: 'web',

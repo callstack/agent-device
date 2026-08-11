@@ -4,9 +4,9 @@ import {
 } from '@agent-device/contracts/platform';
 
 /**
- * The shape the entry gate reads. Structural on purpose: the registry's raw
- * descriptor type is derived from this module's consumer, and the gate must be
- * able to see an *absent* discriminator, which a nominal type cannot express.
+ * Structural on purpose: the gate must see an *absent* discriminator, and the
+ * registry's raw descriptor type — which forbids that — lives in this module's
+ * consumer.
  */
 type PlatformExecutionDeclarationSite = {
   readonly name: string;
@@ -15,15 +15,17 @@ type PlatformExecutionDeclarationSite = {
 };
 
 /**
- * ADR 0019 §6: every command descriptor declares its platform-execution mode
- * explicitly. A registry-entry default cannot distinguish a command with *no*
- * platform execution (`none`) from an unmigrated one (`legacy`), which is what
- * makes the migration denominator machine-readable — so an undeclared
- * discriminator is a registry-load error, not a silently defaulted value.
+ * ADR 0019 §6: every descriptor declares its platform-execution mode explicitly.
+ * A default cannot distinguish a command with *no* platform execution (`none`)
+ * from an unmigrated one (`legacy`), so an undeclared discriminator is a
+ * registry-load error and the migration denominator stays machine-readable.
  *
- * The same gate rejects `none` on a descriptor that still owns a capability
- * bucket: capability buckets are legacy platform admission, and a command that
- * admits per platform executes platform behavior by definition.
+ * `none` with a capability bucket is also rejected: a capability bucket is
+ * platform admission, so the command executes platform behavior.
+ *
+ * This gate sees one descriptor at a time. Platform execution delegated to
+ * another command is covered by the CLI-route dominance gate in
+ * `__tests__/platform-execution-cli-route.test.ts`.
  */
 export function readDeclaredPlatformExecution(
   descriptor: PlatformExecutionDeclarationSite,
