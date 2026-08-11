@@ -48,22 +48,32 @@ export const OPAQUE_RUNNERS: Readonly<Record<string, readonly string[]>> = {
  */
 export type Unrouted = {
   readonly workflow: string;
-  /** The step's `name:`, matched exactly against a live `run:` step. */
+  /** Human label only. The DIGEST is what is matched — a name is mutable metadata. */
   readonly step: string;
+  /**
+   * Fingerprint of the step's executable identity: `run` plus every execution-affecting
+   * key (`env`, `shell`, `working-directory`). Editing any of them makes this entry stop
+   * matching, so the step becomes unlisted and the entry becomes inert at the same time.
+   * `pnpm check:gate-manifest` prints the current digest when one does not match.
+   */
+  readonly digest: string;
   readonly reason: string;
 };
 
-const steps = (workflow: string, reason: string, names: readonly string[]): Unrouted[] =>
-  names.map((step) => ({ workflow, step, reason }));
+const steps = (
+  workflow: string,
+  reason: string,
+  entries: readonly (readonly [digest: string, step: string])[],
+): Unrouted[] => entries.map(([digest, step]) => ({ workflow, step, digest, reason }));
 
 export const NON_GATE_STEPS: readonly Unrouted[] = [
   ...steps(
     '.github/actions/setup-node-pnpm/action.yml',
     'toolchain setup: pins pnpm to packageManager and installs dependencies',
     [
-      'Resolve pnpm version from packageManager',
-      'Assert pnpm matches packageManager',
-      'Install dependencies',
+      ['41219311e090', 'Resolve pnpm version from packageManager'],
+      ['0387cba3d55b', 'Assert pnpm matches packageManager'],
+      ['3d5a9aa23cac', 'Install dependencies'],
     ],
   ),
 
@@ -71,50 +81,69 @@ export const NON_GATE_STEPS: readonly Unrouted[] = [
     '.github/actions/setup-android-replay-host/action.yml',
     'Android SDK, KVM and emulator-host setup',
     [
-      'Resolve agent-device daemon state',
-      'Enable KVM',
-      'Resolve Android helper source hash',
-      'Install Android helper SDK packages',
-      'Verify packaged Android helpers',
+      ['4c95d2bc3461', 'Resolve agent-device daemon state'],
+      ['11bef5c793af', 'Enable KVM'],
+      ['18a370b8fb17', 'Resolve Android helper source hash'],
+      ['4ec0d4376bd6', 'Install Android helper SDK packages'],
+      ['54920b131266', 'Verify packaged Android helpers'],
     ],
+  ),
+
+  ...steps(
+    '.github/actions/setup-android-replay-host/action.yml',
+    'gate invocation carrying env; fingerprinted because env can inject execution',
+    [['5bc39413ac70', 'Package npm-bundled Android helpers']],
   ),
 
   ...steps(
     '.github/actions/setup-test-app-dependencies/action.yml',
     'Expo test-app dependency setup',
-    ['Resolve test app dependency cache key', 'Install test app dependencies'],
+    [
+      ['ba6d6cd8145a', 'Resolve test app dependency cache key'],
+      ['44eed4516be9', 'Install test app dependencies'],
+    ],
   ),
 
   ...steps(
     '.github/actions/setup-fixture-app/action.yml',
     'fixture-app cache lookup, download and staging for the device lanes',
     [
-      'Ensure Android artifact build tools',
-      'Fetch the cached Release binary',
-      'Build the Release app (fallback)',
-      'Locate fixture app',
-      'Repack the cached app with the current JS',
-      'Install fixture app',
-      'Build the Android Release APK (fallback)',
-      'Locate fixture APK',
-      'Repack the cached APK with the current JS',
+      ['397c8a78e2df', 'Ensure Android artifact build tools'],
+      ['f7017bc64a49', 'Fetch the cached Release binary'],
+      ['a5dfaa5d3f5a', 'Build the Release app (fallback)'],
+      ['35528dd1eec9', 'Locate fixture app'],
+      ['dd92c52ace08', 'Repack the cached app with the current JS'],
+      ['85dc3176fdf4', 'Install fixture app'],
+      ['64b53382aba5', 'Build the Android Release APK (fallback)'],
+      ['8a75d6b6a9f1', 'Locate fixture APK'],
+      ['2d1b4bb57faa', 'Repack the cached APK with the current JS'],
     ],
   ),
 
   ...steps('android.yml', 'Android device-lane orchestration against the booted emulator', [
-    'Report fixture cache source',
-    'Run Android emulator catalog coverage contract',
+    ['2d62b9316f7e', 'Report fixture cache source'],
+    ['65f0e1e8591a', 'Run Android emulator catalog coverage contract'],
   ]),
 
   ...steps(
     'ci.yml',
     'inline grep assertions, the Node 22.12 floor where pnpm cannot start, and daemon cleanup around the suites',
     [
-      'Disallow trailing commas before closing parenthesis in Swift',
-      'Fail if test-only DI seams reappear in production code',
-      'Verify the published package on Node.js 22.12',
-      'Run integration tests',
-      'Run live web smoke',
+      ['7d72f44785ff', 'Disallow trailing commas before closing parenthesis in Swift'],
+      ['977bb80cfacf', 'Fail if test-only DI seams reappear in production code'],
+      ['00de3d74baf5', 'Verify the published package on Node.js 22.12'],
+      ['96fe444c5201', 'Run integration tests'],
+      ['09420a052135', 'Run live web smoke'],
+    ],
+  ),
+
+  ...steps(
+    'ci.yml',
+    'gate invocation carrying env; fingerprinted because env can inject execution',
+    [
+      ['27033c110f7f', 'Run Fallow audit'],
+      ['afe0f39bd70a', 'Run coverage'],
+      ['261485f43a17', 'Enforce changed-line coverage gate'],
     ],
   ),
 
@@ -122,62 +151,74 @@ export const NON_GATE_STEPS: readonly Unrouted[] = [
     '.github/actions/setup-apple-runner-build/action.yml',
     "Apple runner build-cache identity; the build itself is the caller's build-command input",
     [
-      'Resolve Xcode cache identity',
-      'Resolve Apple runner source hash',
-      'Resolve Apple runner build variant',
-      'Build Apple runner artifacts on cache miss',
+      ['68bd46353e4e', 'Resolve Xcode cache identity'],
+      ['268697051628', 'Resolve Apple runner source hash'],
+      ['6a6d8aef7c78', 'Resolve Apple runner build variant'],
+      ['7af6f73d05e8', 'Build Apple runner artifacts on cache miss'],
     ],
   ),
 
   ...steps(
     '.github/actions/boot-ios-test-simulator/action.yml',
     'boots and settles the iOS simulator',
-    ['Resolve and boot iOS test simulator'],
+    [['f3d2c3174490', 'Resolve and boot iOS test simulator']],
   ),
 
   ...steps('conformance-differential.yml', 'pinned Maestro CLI install and its version assertion', [
-    'Verify the installed app is the one the scenarios target',
-    'Install pinned Maestro CLI',
-    'Verify the Maestro CLI matches the oracle pin',
+    ['78ef1dbf019c', 'Verify the installed app is the one the scenarios target'],
+    ['ae452f2af223', 'Install pinned Maestro CLI'],
+    ['aab5fb9ce671', 'Verify the Maestro CLI matches the oracle pin'],
+    ['e2a39626f485', 'Run differential'],
   ]),
 
   ...steps(
     'conformance-regenerate.yml',
     'regeneration diff assertion and the fixture-seal verification',
-    ['Fail if regeneration changed anything', 'Verify fixture seals and conformance'],
+    [
+      ['17b1db3209a8', 'Fail if regeneration changed anything'],
+      ['fb4f1fc9e03c', 'Verify fixture seals and conformance'],
+    ],
   ),
 
   ...steps(
     'ios.yml',
     'iOS device-lane orchestration against the booted simulator or attached device',
     [
-      'Set fixture producer wait policy',
-      'Establish host focus canary',
-      'Run targeted iOS runner XCTest regressions',
-      'Preflight iOS runner through public CLI',
-      'Run iOS Settings replay smoke test',
-      'Report fixture cache source',
-      'Run fixture-backed iOS simulator E2E smoke',
-      'Assert simulator automation preserved host focus',
-      'Run iOS physical device smoke replay',
+      ['eaca4542cef9', 'Set fixture producer wait policy'],
+      ['62b370048948', 'Establish host focus canary'],
+      ['cbc5df84affa', 'Run targeted iOS runner XCTest regressions'],
+      ['92918d83107d', 'Preflight iOS runner through public CLI'],
+      ['e6ca1d4bf6bc', 'Run iOS Settings replay smoke test'],
+      ['8247e4be6bf3', 'Report fixture cache source'],
+      ['72f933b9e08f', 'Assert simulator automation preserved host focus'],
+      ['a3b6685baf76', 'Run iOS physical device smoke replay'],
     ],
   ),
 
+  ...steps(
+    'ios.yml',
+    'gate invocation carrying env; fingerprinted because env can inject execution',
+    [['522da450f393', 'Run fixture-backed iOS simulator E2E smoke']],
+  ),
+
   ...steps('linux.yml', 'Linux desktop session setup (Xvfb, D-Bus, AT-SPI) and the replay smoke', [
-    'Install Linux desktop dependencies',
-    'Start Xvfb and D-Bus',
-    'Start AT-SPI2 registry',
-    'Verify environment',
-    'Run Linux replay smoke test',
+    ['d6ea8276c6dc', 'Install Linux desktop dependencies'],
+    ['c67494e7066e', 'Start Xvfb and D-Bus'],
+    ['55d179abe434', 'Start AT-SPI2 registry'],
+    ['049e4dfb08c7', 'Verify environment'],
+    ['3c9cbfebe4c9', 'Run Linux replay smoke test'],
   ]),
 
   ...steps(
     'mutation-affected.yml',
     'shard-matrix derivation and the failure-path envelope recorders (#1430)',
     [
-      'Derive the affected shard matrix',
-      'Run mutants for ${{ matrix.name }}',
-      'Ratchet the affected modules',
+      ['823b9d45dcb0', 'Derive the affected shard matrix'],
+      ['a8ab8b5182b3', 'Record a failed lane envelope'],
+      ['1b6eac0b3509', 'Run mutants for ${{ matrix.name }}'],
+      ['7a702a60ddc3', 'Record a failed shard envelope'],
+      ['f31977ec7713', 'Ratchet the affected modules'],
+      ['221892da8b4b', 'Record a failed lane envelope'],
     ],
   ),
 
@@ -185,44 +226,65 @@ export const NON_GATE_STEPS: readonly Unrouted[] = [
     'mutation-weekly.yml',
     'shard-matrix derivation and the failure-path envelope recorders (#1430)',
     [
-      'Run mutants for ${{ matrix.name }}',
-      'Ratchet the merged sweep and propose the next baseline',
-      'Lane envelope',
+      ['1b6eac0b3509', 'Run mutants for ${{ matrix.name }}'],
+      ['3873f41f331f', 'Record a failed shard envelope'],
+      ['b25594b32ba7', 'Ratchet the merged sweep and propose the next baseline'],
+      ['e13647b2fefa', 'Record a failed lane envelope'],
+      ['e6a7f47eee4c', 'Lane envelope'],
     ],
   ),
 
   ...steps(
     'perf-nightly.yml',
     'perf-lane orchestration and the benchmark, which reports rather than gates',
-    ['Preflight iOS runner through public CLI', 'Run iOS command perf benchmark'],
+    [
+      ['3544460a1732', 'Preflight iOS runner through public CLI'],
+      ['98f652a2e30c', 'Run iOS command perf benchmark'],
+    ],
+  ),
+
+  ...steps(
+    '.github/actions/build-docs/action.yml',
+    "builds the website package in its own working-directory, not this package's scripts",
+    [['a802705fdeb5', 'Build docs']],
   ),
 
   ...steps('replays-nightly.yml', 'nightly device-lane orchestration', [
-    'Summarize',
-    'Mark Android emulator setup complete',
-    'Preflight iOS runner through public CLI',
-    'Report fixture cache source',
-    'Prove selector drag reaches its destination on iOS',
-    'Run full fixture-backed iOS simulator E2E',
+    ['637427dab1d3', 'Summarize'],
+    ['50120e99db45', 'Mark Android emulator setup complete'],
+    ['92918d83107d', 'Preflight iOS runner through public CLI'],
+    ['a98229438e10', 'Run iOS simulator replay suite'],
+    ['8247e4be6bf3', 'Report fixture cache source'],
+    ['d987520fe290', 'Prove selector drag reaches its destination on iOS'],
   ]),
+
+  ...steps(
+    'replays-nightly.yml',
+    'gate invocation carrying env; fingerprinted because env can inject execution',
+    [
+      ['197ae940fa57', 'Fuzz parsers'],
+      ['1b8d6fc776ae', 'Run full fixture-backed iOS simulator E2E'],
+      ['45a7e46875f8', 'Run iOS physical device replay suite'],
+    ],
+  ),
 
   ...steps(
     'size.yml',
     'bundle-size measurement, which reports rather than gates, and runs at the PR base commit',
     [
-      'Preserve report script',
-      'Measure base size',
-      'Measure PR size',
-      'Add job summary',
-      'Comment on PR',
+      ['d579f6da75cd', 'Preserve report script'],
+      ['0a2945cd88b6', 'Measure base size'],
+      ['12307ef05978', 'Measure PR size'],
+      ['ed11b888d999', 'Add job summary'],
+      ['da40926b1e04', 'Comment on PR'],
     ],
   ),
 
   ...steps('test-app-build-cache.yml', 'Expo release app build and artifact staging', [
-    'Resolve native fingerprint',
-    'Build the iOS Release app',
-    'Install Android SDK packages',
-    'Build the Android Release apk',
-    'Stage the binary for upload',
+    ['ec81a594278d', 'Resolve native fingerprint'],
+    ['f73b2699856e', 'Build the iOS Release app'],
+    ['5baa4a7b5af5', 'Install Android SDK packages'],
+    ['bd6dcf8e0dda', 'Build the Android Release apk'],
+    ['6153d35b3227', 'Stage the binary for upload'],
   ]),
 ];

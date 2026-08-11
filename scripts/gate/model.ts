@@ -17,6 +17,7 @@
 // `pnpm gate <id>`, not an attempt to understand arbitrary shell. That is what removes
 // the interpretation framework this file replaces.
 
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { parse } from 'yaml';
@@ -65,11 +66,34 @@ export type LaneStep = {
   readonly source: string;
   readonly run?: string;
   readonly inputs: readonly string[];
+  /**
+   * Everything besides `run` that changes what the step executes. `env` matters because
+   * `NODE_OPTIONS=--import ./x.ts` runs code without appearing in any command; `shell`
+   * and `working-directory` change the interpreter and the resolution root.
+   */
+  readonly extras: Readonly<Record<string, string>>;
+  /**
+   * Fingerprint over the step's executable identity — `run` plus every extra. The
+   * inventory binds THIS, not the step's name: a name is mutable metadata, and an entry
+   * keyed on it accepts whatever body is later put behind it.
+   */
+  readonly digest: string;
 };
 
-/** GitHub evaluates `${{ … }}` before the shell sees it, so it is not shell syntax. */
+/** Exported so tests re-seal a mutated step with the real function, never a copy. */
+export function stepDigest(run: string, extras: Readonly<Record<string, string>>): string {
+  const canonical = JSON.stringify({ run: run.replace(/\s+/g, ' ').trim(), extras });
+  return createHash('sha256').update(canonical).digest('hex').slice(0, 12);
+}
+
+/**
+ * GitHub evaluates `${{ … }}` before the shell sees it, so it is not shell syntax.
+ * The placeholder deliberately contains no shell metacharacters: an earlier `<expr>`
+ * collided with the redirection characters the gate grammar rejects, so every gate
+ * step carrying a matrix expression looked like a bypass.
+ */
 export function stripExpressions(text: string): string {
-  return text.replace(/\$\{\{[^}]*\}\}/g, '<expr>');
+  return text.replace(/\$\{\{[^}]*\}\}/g, 'GITHUB_EXPR');
 }
 
 export type Model = {
@@ -229,9 +253,20 @@ type RawStep = {
   name?: string;
   run?: string;
   uses?: string;
+  shell?: string;
+  env?: Record<string, unknown>;
   with?: Record<string, unknown>;
   'working-directory'?: string;
 };
+
+/** Execution-affecting keys other than `run`, flattened for the fingerprint. */
+function stepExtras(step: RawStep): Record<string, string> {
+  const extras: Record<string, string> = {};
+  for (const [key, value] of Object.entries(step.env ?? {})) extras[`env.${key}`] = String(value);
+  if (step.shell) extras['shell'] = step.shell;
+  if (step['working-directory']) extras['working-directory'] = step['working-directory'];
+  return extras;
+}
 
 /** String values a step hands to an action — scanned for gate invocations, not shell. */
 function stepInputs(step: RawStep): string[] {
@@ -278,28 +313,34 @@ type WorkflowDoc = {
   jobs?: Record<string, { name?: string; steps?: RawStep[] }>;
 };
 
-/** A job's own steps plus the steps of every local composite action it uses. */
+/**
+ * A job's own steps plus the steps of every local composite action it uses.
+ *
+ * Nothing is filtered out. An earlier version dropped steps carrying
+ * `working-directory`, which made a bypass placed in one invisible.
+ */
 function laneSteps(
   job: { name?: string; steps?: RawStep[] },
   jobId: string,
   root: string,
   workflow: string,
 ): LaneStep[] {
-  return (
-    (job.steps ?? [])
-      .flatMap((step) => [
-        { step, source: workflow },
-        ...(step.uses ? compositeSteps(step.uses, root) : []),
-      ])
-      // The website build runs its own package's scripts, not this one's.
-      .filter(({ step }) => !step['working-directory'])
-      .map(({ step, source }) => ({
+  return (job.steps ?? [])
+    .flatMap((step) => [
+      { step, source: workflow },
+      ...(step.uses ? compositeSteps(step.uses, root) : []),
+    ])
+    .map(({ step, source }) => {
+      const extras = stepExtras(step);
+      return {
         name: step.name ?? jobId,
         source,
         ...(typeof step.run === 'string' ? { run: step.run } : {}),
         inputs: stepInputs(step),
-      }))
-  );
+        extras,
+        digest: typeof step.run === 'string' ? stepDigest(step.run, extras) : '',
+      };
+    });
 }
 
 function laneInvocations(

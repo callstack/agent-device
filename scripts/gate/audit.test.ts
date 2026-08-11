@@ -13,7 +13,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { audit } from './audit.ts';
 import { NON_GATE_STEPS } from './declarations.ts';
-import { categories, covered, loadModel, type Lane, type Model } from './model.ts';
+import { categories, covered, loadModel, stepDigest, type Lane, type Model } from './model.ts';
 import { CHECK_CATALOG } from '../check-affected/checks.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
@@ -38,22 +38,49 @@ function mapLane(
   return model.lanes.map((lane) => (match(lane) ? change(lane) : lane));
 }
 
-/** Plant one `run:` step into a qualifying lane. */
-function plantCommand(run: string): Model {
+/** Plant one `run:` step into a qualifying lane, sealed the way loadLanes seals it. */
+function plantCommand(run: string, extras: Record<string, string> = {}): Model {
+  const step = {
+    name: 'Planted',
+    source: 'ci.yml',
+    run,
+    inputs: [],
+    extras,
+    digest: stepDigest(run, extras),
+  };
   return mutate((m) => ({
     lanes: mapLane(
       m,
       (lane) => lane.label === 'Layering Guard',
-      (lane) => ({
-        ...lane,
-        steps: [...lane.steps, { name: 'Planted', source: 'ci.yml', run, inputs: [] }],
-      }),
+      (lane) => ({ ...lane, steps: [...lane.steps, step] }),
     ),
   }));
 }
 
-const bypassesFor = (run: string) =>
-  audit(plantCommand(run)).filter((failure) => failure.assertion === 'bypass');
+/** Edit a live step and re-seal it, which is what editing the YAML does. */
+function editStep(
+  name: string,
+  change: (step: Model['lanes'][number]['steps'][number]) => {
+    run?: string;
+    extras?: Record<string, string>;
+  },
+): Model {
+  return mutate((m) => ({
+    lanes: m.lanes.map((lane) => ({
+      ...lane,
+      steps: lane.steps.map((step) => {
+        if (step.name !== name || step.run === undefined) return step;
+        const next = change(step);
+        const run = next.run ?? step.run;
+        const extras = next.extras ?? step.extras;
+        return { ...step, run, extras, digest: stepDigest(run, extras) };
+      }),
+    })),
+  }));
+}
+
+const bypassesFor = (run: string, extras: Record<string, string> = {}) =>
+  audit(plantCommand(run, extras)).filter((failure) => failure.assertion === 'bypass');
 
 test('the live tree is green — every planted failure below is a real difference', () => {
   assert.deepEqual(messages(base), []);
@@ -154,6 +181,61 @@ test('a qualifying lane accepts nothing but a gate invocation or a listed step',
   }
 });
 
+test('editing the body behind a listed step name is rejected', () => {
+  // Review round 4: the inventory keyed on {workflow, step name} and then trusted the
+  // body, so a listed step could be repointed at anything. The entry binds the DIGEST —
+  // `run` plus every execution-affecting key — so an edit trips bypass and inert at once.
+  const gate = `node -e 'await import("./scripts/layering/check.ts")'`;
+  for (const [label, model] of [
+    ['replaced body', editStep('Run integration tests', () => ({ run: gate }))],
+    [
+      'appended body',
+      editStep('Run integration tests', (step) => ({ run: `${step.run}\n${gate}` })),
+    ],
+    [
+      'injected env',
+      editStep('Run integration tests', (step) => ({
+        extras: { ...step.extras, 'env.NODE_OPTIONS': '--import ./scripts/layering/check.ts' },
+      })),
+    ],
+  ] as const) {
+    const found = audit(model).filter((failure) => failure.assertion === 'bypass');
+    assert.equal(found.length, 1, `must be rejected: ${label}`);
+    assert.match(found[0]?.message ?? '', /records digest/, `must name the digest drift: ${label}`);
+  }
+});
+
+test('a gate invocation cannot carry a payload or an injecting environment', () => {
+  // Two more round-4 witnesses: a prefix-only matcher accepted command substitution in
+  // the arguments, and `env` was not modelled at all, so NODE_OPTIONS ran code with
+  // nothing visible on the command line.
+  assert.equal(
+    bypassesFor(`pnpm gate gate-manifest $(node -e 'import("./scripts/layering/check.ts")')`)
+      .length,
+    1,
+    'command substitution in a gate argument must be rejected',
+  );
+  assert.equal(
+    bypassesFor('pnpm gate layering', {
+      'env.NODE_OPTIONS': '--import ./scripts/layering/check.ts',
+    }).length,
+    1,
+    'a gate step carrying env must be inventoried, not accepted by shape',
+  );
+  // `$VAR` expands to a value rather than running a program, so it stays allowed.
+  assert.deepEqual(bypassesFor('pnpm gate fallow --base "$FALLOW_BASE"'), []);
+});
+
+test('a step is not hidden by working-directory', () => {
+  // loadLanes used to drop these, which made anything placed in one invisible.
+  const found = audit(
+    plantCommand(`node -e 'import("./scripts/layering/check.ts")'`, {
+      'working-directory': 'website',
+    }),
+  ).filter((failure) => failure.assertion === 'bypass');
+  assert.equal(found.length, 1);
+});
+
 test('the gate shape is accepted, including the forms real lanes use', () => {
   for (const run of [
     'pnpm gate layering',
@@ -174,39 +256,33 @@ test('`pnpm gate` naming an unregistered check is rejected even though the shape
   assert.match(found[0]?.message ?? '', /`pnpm gate laering` names no registered check/);
 });
 
-test('a declaration that stops applying is reported inert, in both shapes', () => {
-  const renamed = mutate((m) => ({
-    lanes: mapLane(
-      m,
-      (lane) => lane.workflow === 'ios.yml',
-      (lane) => ({
-        ...lane,
-        steps: lane.steps.map((step) =>
-          step.name === 'Run iOS Settings replay smoke test' ? { ...step, name: 'Renamed' } : step,
-        ),
-      }),
-    ),
+test('an entry goes inert when the step it describes stops existing', () => {
+  // Deleting the step orphans its entry. Renaming it does NOT, by design: the digest
+  // binds what the step RUNS, and a name is metadata — keying on the name is exactly
+  // the mistake review round 4 found, because it let the body change underneath it.
+  const deleted = mutate((m) => ({
+    lanes: m.lanes.map((lane) => ({
+      ...lane,
+      steps: lane.steps.filter((step) => step.name !== 'Run iOS Settings replay smoke test'),
+    })),
   }));
-  // Renaming the step both orphans the entry AND leaves the renamed step unlisted,
-  // so the inventory cannot drift in either direction.
-  const found = messages(renamed);
   assert.ok(
-    found.some((message) => /matches no `run:` step/.test(message)),
-    'entry goes inert',
-  );
-  assert.ok(
-    found.some((message) => /Renamed: a `run:` step/.test(message)),
-    'renamed step is unlisted',
+    messages(deleted).some((message) =>
+      /matches no `run:` step a qualifying lane reaches/.test(message),
+    ),
+    'a deleted step orphans its entry',
   );
 
-  const extra = [
+  const renamed = editStep('Run iOS Settings replay smoke test', () => ({}));
+  assert.deepEqual(messages(renamed), [], 'a pure rename changes nothing that runs');
+
+  const invented = [
     ...NON_GATE_STEPS,
-    { workflow: 'ci.yml', step: 'No Such Step', reason: 'never existed' },
+    { workflow: 'ci.yml', step: 'No Such Step', digest: 'deadbeefcafe', reason: 'never existed' },
   ];
   assert.ok(
-    messages(base, extra).some((message) =>
-      /NON_GATE_STEPS ci\.yml \/ "No Such Step"/.test(message),
-    ),
+    messages(base, invented).some((message) => /digest deadbeefcafe/.test(message)),
+    'an entry naming no live digest is inert',
   );
 });
 

@@ -44,61 +44,66 @@ function unowned(model: Model): Failure[] {
 }
 
 /**
- * A step whose shell is nothing but gate invocations. `${{ … }}` is stripped first
- * (GitHub evaluates it before the shell); a trailing `true` is allowed so a
- * `pnpm gate x || true` envelope recorder still reads as a gate step.
+ * A gate invocation, matched over the WHOLE segment rather than as a prefix.
+ *
+ * Arguments may not contain command substitution — `$(…)` and backticks execute
+ * something else, so `pnpm gate x $(node -e '…')` is a gate call carrying a payload.
+ * `$VAR` is fine: it expands to a value, it does not run a program.
  */
-function isGateStep(run: string): boolean {
-  const segments = commandSegments(stripExpressions(run));
-  return (
-    segments.length > 0 &&
-    segments.every((segment) => GATE_CALL.test(segment) || segment === 'true')
-  );
+const GATE_SEGMENT = /^pnpm(?:\s+--\S+)*\s+gate\s+([a-z0-9:-]+)((?:\s+[^\s;&|<>]+)*)\s*$/;
+
+function gateSegment(segment: string): { id: string } | null {
+  const match = GATE_SEGMENT.exec(segment);
+  if (!match) return null;
+  if (/\$\(|`/.test(match[2] ?? '')) return null;
+  return { id: match[1] as string };
 }
 
-const GATE_CALL = /^pnpm(?:\s+--\S+)*\s+gate\s+([a-z0-9:-]+)/;
-
-function gateIds(run: string): string[] {
-  return commandSegments(stripExpressions(run)).flatMap((segment) => {
-    const id = GATE_CALL.exec(segment)?.[1];
-    return id ? [id] : [];
-  });
+/**
+ * A step allowed by shape alone: its shell is nothing but gate invocations, and it
+ * declares no extras. Extras (`env`, `shell`, `working-directory`) change what runs
+ * without appearing in a command — `NODE_OPTIONS=--import ./x.ts` is a bypass with an
+ * empty command line — so a gate step carrying any of them is fingerprinted instead.
+ */
+function plainGateStep(step: {
+  run?: string;
+  extras: Readonly<Record<string, string>>;
+}): string[] | null {
+  if (step.run === undefined || Object.keys(step.extras).length > 0) return null;
+  const segments = commandSegments(stripExpressions(step.run));
+  if (segments.length === 0) return null;
+  const ids: string[] = [];
+  for (const segment of segments) {
+    if (segment === 'true') continue;
+    const gate = gateSegment(segment);
+    if (!gate) return null;
+    ids.push(gate.id);
+  }
+  return ids;
 }
 
-function isUnrouted(entry: Unrouted, step: { source: string; name: string }): boolean {
-  return entry.workflow === step.source && entry.step === step.name;
-}
-
-// 3. No bypass — asserted as a CONSTRUCTION rule, not by analysing what a command does.
+// 3. No bypass — a CONSTRUCTION rule over the step's executable identity.
 //
-//    Every `run:` block in a qualifying lane must be either a `pnpm gate <id>`
-//    invocation or an inventoried exception. Nothing inspects the command's content.
+//    Every `run:` step a qualifying lane reaches must be either a plain gate invocation
+//    or an inventory entry whose DIGEST matches. Nothing inspects what a command does.
 //
-//    Three review rounds established why. Content analysis was defeated by `pnpm exec`,
-//    then by `pnpm exec --` and `npx --yes`, then by
-//    `node -e 'import("./scripts/layering/check.ts")'`. Each fix bought exactly the next
-//    spelling, because "does this text run project code?" is not decidable from text:
-//    `-e`, `eval`, a heredoc and base64 are all available. So the question is no longer
-//    asked. A step is allowed because of its SHAPE, and anything else is listed by a
-//    human — which is the only boundary an unknown spelling cannot walk through.
+//    Four review rounds shaped this. Content analysis fell to `pnpm exec`, then
+//    `pnpm exec --`/`npx --yes`, then `node -e 'import(…)'` — "does this text run project
+//    code?" is not decidable from text. Keying the inventory on the step NAME then fell to
+//    editing the body behind a listed name. A name is mutable metadata; the digest binds
+//    `run` plus every execution-affecting key, so changing any of them makes the entry stop
+//    matching — the step becomes unlisted (bypass) and the entry becomes inert, at once.
 function bypass(model: Model, declared: readonly Unrouted[]): Failure[] {
-  // Keyed on the DECLARING file, so a composite action shared by eight lanes is
-  // inventoried once rather than once per caller.
-  const seen = new Map<string, { source: string; name: string; run: string }>();
+  const seen = new Map<string, Model['lanes'][number]['steps'][number]>();
   for (const lane of model.lanes.filter((entry) => entry.qualifying)) {
     for (const step of lane.steps) {
-      if (step.run !== undefined) {
-        seen.set(`${step.source}\u0000${step.name}`, {
-          source: step.source,
-          name: step.name,
-          run: step.run,
-        });
-      }
+      if (step.run !== undefined) seen.set(`${step.source}\u0000${step.digest}`, step);
     }
   }
   return [...seen.values()].flatMap((step) => {
-    if (isGateStep(step.run)) {
-      return gateIds(step.run)
+    const ids = plainGateStep(step);
+    if (ids !== null) {
+      return ids
         .filter((id) => !REGISTERED.has(id))
         .map((id) =>
           fail(
@@ -107,12 +112,20 @@ function bypass(model: Model, declared: readonly Unrouted[]): Failure[] {
           ),
         );
     }
-    if (declared.some((entry) => isUnrouted(entry, step))) return [];
+    if (declared.some((entry) => entry.workflow === step.source && entry.digest === step.digest)) {
+      return [];
+    }
+    const listedName = declared.find(
+      (entry) => entry.workflow === step.source && entry.step === step.name,
+    );
+    const detail = listedName
+      ? `its NON_GATE_STEPS entry records digest ${listedName.digest}, but the step is now ${step.digest}`
+      : `it is not in NON_GATE_STEPS (digest ${step.digest})`;
     return [
       fail(
         'bypass',
-        `${step.source} / ${step.name}: a \`run:\` step reached by a qualifying lane must be ` +
-          `\`pnpm gate <id>\` or listed in NON_GATE_STEPS.`,
+        `${step.source} / ${step.name}: a \`run:\` step a qualifying lane reaches must be ` +
+          `\`pnpm gate <id>\` with no env/shell/working-directory, or inventoried — ${detail}.`,
       ),
     ];
   });
@@ -146,21 +159,17 @@ function pathCoverage(model: Model): Failure[] {
 //    qualifying lane — so deleting or renaming the step it covers is loud rather than
 //    silent, and the inventory cannot accumulate entries for steps that are long gone.
 function inertStep(entry: Unrouted, qualifying: readonly Lane[]): Failure[] {
-  const matches = new Set(
-    qualifying
-      .flatMap((lane) => lane.steps)
-      .filter(
-        (step) =>
-          step.run !== undefined && step.source === entry.workflow && step.name === entry.step,
-      )
-      .map((step) => step.run),
-  );
-  if (matches.size === 1) return [];
-  const detail =
-    matches.size === 0
-      ? 'matches no `run:` step a qualifying lane reaches; remove it'
-      : `matches ${matches.size} distinct steps`;
-  return [fail('inert', `NON_GATE_STEPS ${entry.workflow} / "${entry.step}" ${detail}.`)];
+  const matches = qualifying
+    .flatMap((lane) => lane.steps)
+    .filter((step) => step.source === entry.workflow && step.digest === entry.digest);
+  if (matches.length > 0) return [];
+  return [
+    fail(
+      'inert',
+      `NON_GATE_STEPS ${entry.workflow} / "${entry.step}" (digest ${entry.digest}) matches no ` +
+        `\`run:\` step a qualifying lane reaches; the step was edited, renamed away or deleted.`,
+    ),
+  ];
 }
 
 function inertOpaque(model: Model): Failure[] {
