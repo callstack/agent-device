@@ -645,11 +645,12 @@ Android, inventory projection, and descriptor/facade/gateway wiring) and records
 size metrics against `44c298d7f` and the immediate stack base.
 
 The final corrected-base replay is reported separately in the unit review: against
-`3ed473400ebb8f29405912856e0bcfdff2b836fc`, the hardened head measures +6,796 production bytes
-(+2,741 root, +4,055 packages). The +517 difference from the prior reviewed figure is the
+`3ed473400ebb8f29405912856e0bcfdff2b836fc`, the hardened head measures +6,705 production bytes
+(+2,677 root, +4,028 packages). The +426 difference from the prior reviewed figure is the
 required Apple session-owned projection/parity hardening, the Android-unknown and Harmony-emulator
 denominator evidence, and relocation of the unavailable-runtime helper out of durable capture;
-it is not an unreviewed allowance or a durable-tier expansion.
+the final lint-required import consolidation removes a further 91 bytes. This is not an
+unreviewed allowance or a durable-tier expansion.
 
 A command surface that is deprecated and scheduled for removal at the next major is never
 migrated. It stays on its legacy execution shape until the major deletes it, and the deletion — not
