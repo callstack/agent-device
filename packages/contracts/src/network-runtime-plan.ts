@@ -1,6 +1,6 @@
 import type { NetworkIncludeMode } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
-import { defineUse } from './platform-runtime.ts';
+import { defineUse } from './platform-runtime-operations.ts';
 
 export const networkDumpUse = defineUse({ required: ['networkDump'] });
 

@@ -1,5 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { defineUse } from './platform-runtime.ts';
+import { defineUse } from './platform-runtime-operations.ts';
 
 const appLogInspectUse = defineUse({ required: ['appLogInspect'] });
 const appLogDoctorUse = defineUse({ required: ['appLogInspect', 'appLogDoctor'] });

@@ -37,7 +37,6 @@ export { assertCommandPlatformExecution } from '../command-platform-execution.ts
 export type { CommandPlatformExecution } from '../command-platform-execution.ts';
 export { AsyncCleanupStack, PendingTransferGuard } from '../async-lifecycle.ts';
 export {
-  defineUse,
   localRuntimeOwner,
   narrowDeviceBinding,
   providerRuntimeOwner,
@@ -170,6 +169,7 @@ export type {
   NetworkRuntimePlan,
   NetworkRuntimePlanInput,
 } from '../network-runtime-plan.ts';
+export { defineUse } from '../platform-runtime-operations.ts';
 export type {
   PlatformRuntimeHost,
   PlatformRuntimeModule,
