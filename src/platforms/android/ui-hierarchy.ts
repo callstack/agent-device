@@ -193,7 +193,7 @@ function walkUiHierarchyNode(
   const currentIndex = include
     ? appendAndroidSnapshotNode(state, node, parentIndex, systemChrome)
     : parentIndex;
-  const nextAncestorHittable = ancestorHittable || Boolean(node.hittable);
+  const nextAncestorHittable = ancestorHittable || isAgentTarget(node);
   const nextAncestorCollection = ancestorCollection || isCollectionContainerType(node.type);
   for (const child of node.children) {
     walkUiHierarchyNode(
@@ -232,7 +232,7 @@ function appendAndroidSnapshotNode(
     enabled: node.enabled,
     focused: node.focused,
     visibleToUser: node.visibleToUser,
-    hittable: node.hittable,
+    hittable: isAgentTarget(node) || undefined,
     depth: compactedAndroidNodeDepth(state.nodes, parentIndex),
     parentIndex,
     ...(node.hiddenContentAbove ? { hiddenContentAbove: true } : {}),
@@ -255,7 +255,7 @@ function hasInteractiveDescendant(state: AndroidSnapshotBuildState, node: Androi
   for (const child of node.children) {
     if (
       child.visibleToUser !== false &&
-      (child.hittable || hasInteractiveDescendant(state, child))
+      (isAgentTarget(child) || hasInteractiveDescendant(state, child))
     ) {
       state.interactiveDescendantMemo.set(node, true);
       return true;
@@ -421,8 +421,11 @@ export type AndroidUiHierarchy = {
   visibleToUser?: boolean;
   drawingOrder?: number;
   focused?: boolean;
-  hittable?: boolean;
-  clickable?: boolean;
+  // Two independent facts, never collapsed, and never undefined: the helper omits false attributes
+  // while stock UiAutomator writes them out, so reading an absent attribute as a value gave two
+  // encodings of one control opposite answers.
+  clickable: boolean;
+  focusable: boolean;
   depth: number;
   parentIndex?: number;
   hiddenContentAbove?: boolean;
@@ -467,6 +470,8 @@ export function parseUiHierarchyTree(xml: string): AndroidUiHierarchy {
     value: null,
     identifier: null,
     packageName: null,
+    clickable: false,
+    focusable: false,
     depth: -1,
     children: [],
   };
@@ -493,8 +498,8 @@ export function parseUiHierarchyTree(xml: string): AndroidUiHierarchy {
       focused: attrs.focused,
       visibleToUser: attrs.visibleToUser,
       drawingOrder: attrs.drawingOrder,
-      hittable: attrs.clickable ?? attrs.focusable,
-      clickable: attrs.clickable,
+      clickable: attrs.clickable === true,
+      focusable: attrs.focusable === true,
       scrollable: attrs.scrollable,
       canScrollForward: attrs.canScrollForward,
       canScrollBackward: attrs.canScrollBackward,
@@ -523,6 +528,53 @@ export function parseUiHierarchyTree(xml: string): AndroidUiHierarchy {
   pruneAndroidCoveredSubtrees(root, { actionableContentMemo: new WeakMap() });
   applyAndroidScrollActionHints(root);
   return root;
+}
+
+/** A node a touch can act on. */
+function isTouchTarget(node: AndroidNode): boolean {
+  return node.clickable;
+}
+
+/** A node D-pad/keyboard traversal can land on. Normal for TV controls, which are rarely clickable. */
+function isFocusTarget(node: AndroidNode): boolean {
+  return node.focusable || node.focused === true;
+}
+
+/** A node an agent can drive by either input model. This is what the public `hittable` projects. */
+function isAgentTarget(node: AndroidNode): boolean {
+  return isTouchTarget(node) || isFocusTarget(node);
+}
+
+/** Text or an address an agent can read or select by. */
+function hasSemanticContent(node: AndroidNode): boolean {
+  return hasMeaningfulLabel(node) || hasMeaningfulIdentifier(node);
+}
+
+/** Focusability is traversal, not paint, so it is not evidence a node hides anything (#1733). */
+function hasDirectOcclusionEvidence(node: AndroidNode): boolean {
+  return node.visibleToUser !== false && (isTouchTarget(node) || hasSemanticContent(node));
+}
+
+/** Evidence the node is a real surface because it contains something an agent could drive. */
+function hasDescendantOcclusionEvidence(node: AndroidNode, state: AndroidTreePruneState): boolean {
+  const cached = state.actionableContentMemo.get(node);
+  if (cached !== undefined) return cached;
+  const result = node.children.some(
+    (child) =>
+      child.visibleToUser !== false &&
+      (isAgentTarget(child) || hasDescendantOcclusionEvidence(child, state)),
+  );
+  state.actionableContentMemo.set(node, result);
+  return result;
+}
+
+/**
+ * A childless sibling that only presents: an RN screen-level testID, or a label drawn inside a
+ * higher sibling's box (Telegram's `+` over the country-code EditText). Geometry cannot tell a
+ * transparent overlay from an opaque one, and exempting a leaf cannot resurrect a covered surface.
+ */
+function isPresentationLeaf(node: AndroidNode): boolean {
+  return node.children.length === 0 && !isAgentTarget(node) && hasSemanticContent(node);
 }
 
 function pruneAndroidInvisibleSubtrees(node: AndroidNode): void {
@@ -556,22 +608,8 @@ function shouldKeepAndroidSibling(
   coveringCandidates: AndroidCoveringCandidate[],
 ): boolean {
   return (
-    isUncondemnableLeaf(node) || !isCoveredByHigherDrawingOrderSibling(node, coveringCandidates)
+    isPresentationLeaf(node) || !isCoveredByHigherDrawingOrderSibling(node, coveringCandidates)
   );
-}
-
-/**
- * A childless, non-hittable sibling that announces something of its own: the screen-level testID RN
- * emits beside its rendered navigator, or a composite widget's label drawn inside a higher sibling's
- * box (Telegram renders the `+` of `+1` as a TextView overlapping the country-code EditText).
- * Drawing order and geometry cannot tell a transparent overlay from an opaque one, and text an agent
- * never sees is the one loss it cannot recover from. Staying on the `hittable` contract keeps a
- * genuinely covered affordance condemned; exempting a leaf is bounded — it can never resurrect a
- * covered surface.
- */
-function isUncondemnableLeaf(node: AndroidNode): boolean {
-  if (node.children.length > 0 || node.hittable) return false;
-  return hasMeaningfulIdentifier(node) || hasMeaningfulLabel(node);
 }
 
 function isCoveredByHigherDrawingOrderSibling(
@@ -605,45 +643,18 @@ function canCoverSibling(
     node.visibleToUser !== false &&
     node.drawingOrder !== undefined &&
     hasPositiveRect(node) &&
-    (hasOwnAgentVisibleContent(node) || hasActionableDescendant(node, state))
+    hasOcclusionEvidence(node, state)
   );
 }
 
-/**
- * Whether this node presents something *of its own*: an affordance to act on, something to announce,
- * or an address to select by. Keyed on `clickable` rather than `hittable` because `hittable` falls
- * back to `focusable`, and a node that is only focusable — no text, no id, and (per `canCoverSibling`)
- * no actionable descendant — offers an agent nothing to see or target, so it cannot be the reason a
- * sibling is hidden. Telegram wraps every screen in exactly such a full-screen View (#1733).
- *
- * This is self-classification only. `hasActionableDescendant` deliberately stays on `hittable`: a
- * surface *containing* focusable-only controls (the norm on D-pad/TV) is a real covering surface.
- */
-function hasOwnAgentVisibleContent(node: AndroidNode): boolean {
-  if (node.visibleToUser === false) return false;
-  return node.clickable === true || hasMeaningfulLabel(node) || hasMeaningfulIdentifier(node);
+/** The single occlusion classification. Covering is never re-derived from a raw attribute. */
+function hasOcclusionEvidence(node: AndroidNode, state: AndroidTreePruneState): boolean {
+  return hasDirectOcclusionEvidence(node) || hasDescendantOcclusionEvidence(node, state);
 }
 
 function hasMeaningfulLabel(node: AndroidNode): boolean {
   const label = node.label?.trim() ?? '';
   return Boolean(label && !isGenericAndroidId(label));
-}
-
-function hasActionableDescendant(node: AndroidNode, state: AndroidTreePruneState): boolean {
-  const cached = state.actionableContentMemo.get(node);
-  if (cached !== undefined) return cached;
-
-  // Descendant classification stays on `hittable`. The helper emits clickable/focusable only when
-  // true, so a focusable-only control parses as clickable=undefined, hittable=true — and D-pad/TV
-  // surfaces are built almost entirely from those. Narrowing this to `clickable` would stop such a
-  // foreground surface from covering, leaving background targets selectable behind it.
-  const result = node.children.some(
-    (child) =>
-      child.visibleToUser !== false &&
-      (Boolean(child.hittable) || hasActionableDescendant(child, state)),
-  );
-  state.actionableContentMemo.set(node, result);
-  return result;
 }
 
 function hasPositiveRect(node: AndroidNode): node is AndroidNode & { rect: Rect } {
@@ -776,8 +787,7 @@ function shouldIncludeInteractiveAndroidNode(
   ancestorCollection: boolean,
 ): boolean {
   if (hasNonPositiveRect(node)) return false;
-  if (node.focused) return true;
-  if (node.hittable) return true;
+  if (isAgentTarget(node)) return true;
   if (isScrollableType(info.type) && descendantHittable) return true;
   return shouldIncludeInteractiveProxyNode(
     info,
@@ -808,7 +818,7 @@ function shouldIncludeStructuralAndroidNode(
   info: AndroidNodeInclusionInfo,
   descendantHittable: boolean,
 ): boolean {
-  if (node.hittable) return true;
+  if (isAgentTarget(node)) return true;
   if (info.hasMeaningfulText) return true;
   if (info.hasMeaningfulId) return true;
   return descendantHittable;

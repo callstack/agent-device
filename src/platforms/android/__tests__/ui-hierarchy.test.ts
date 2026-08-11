@@ -243,7 +243,43 @@ test('parseUiHierarchy keeps focused non-clickable Android TV nodes in interacti
   const focused = result.nodes.find((node) => node.label === 'Featured');
 
   assert.equal(focused?.focused, true);
-  assert.equal(focused?.hittable, false);
+  // A D-pad control an agent can drive is a target regardless of which input model reaches it.
+  assert.equal(focused?.hittable, true);
+});
+
+test('parseUiHierarchy reads an omitted clickable attribute the same as clickable="false"', () => {
+  // The snapshot helper omits false attributes; stock UiAutomator writes them out. Those are two
+  // encodings of one control, so every derived answer — public projection and pruning alike — has
+  // to agree. Reading an absent attribute as a value is what made them diverge.
+  const tree = (clickable: string) => `<hierarchy>
+  <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="0">
+    <node class="android.view.ViewGroup" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="2">
+      <node class="android.widget.TextView" text="Foreground tile" bounds="[24,120][366,200]" enabled="true" visible-to-user="true" focusable="true" ${clickable} drawing-order="1"/>
+    </node>
+    <node class="android.view.ViewGroup" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="1">
+      <node class="android.widget.TextView" text="Background row" bounds="[0,220][280,280]" enabled="true" visible-to-user="true" focusable="true" ${clickable} drawing-order="1"/>
+    </node>
+  </node>
+</hierarchy>`;
+
+  const omitted = parseUiHierarchy(tree(''), 800, { raw: true });
+  const explicitFalse = parseUiHierarchy(tree('clickable="false"'), 800, { raw: true });
+
+  assert.deepEqual(
+    explicitFalse.nodes.map((node) => [node.label, node.hittable]),
+    omitted.nodes.map((node) => [node.label, node.hittable]),
+  );
+  // Both encodings must also agree that the foreground surface covers the background one.
+  for (const result of [omitted, explicitFalse]) {
+    assert.equal(
+      result.nodes.some((node) => node.label === 'Foreground tile'),
+      true,
+    );
+    assert.equal(
+      result.nodes.some((node) => node.label === 'Background row'),
+      false,
+    );
+  }
 });
 
 test('parseUiHierarchy prunes Android nodes that are not visible to the user in raw snapshots', () => {
@@ -481,32 +517,6 @@ test('parseUiHierarchy keeps app content under a childless focusable full-screen
   assert.equal(
     result.nodes.some((node) => node.label === '208 379 7171'),
     true,
-  );
-});
-
-test('parseUiHierarchy suppresses a covered target under a focusable-only foreground surface', () => {
-  // Helper-shaped: the snapshot helper emits clickable/focusable only when true, so a D-pad/TV
-  // control arrives as focusable="true" with no clickable attribute at all. A foreground surface
-  // built from those still covers, or background targets stay selectable behind it.
-  const xml = `<hierarchy>
-  <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="0">
-    <node class="android.view.ViewGroup" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="2">
-      <node class="android.widget.Button" text="Foreground tile" bounds="[24,120][366,200]" enabled="true" visible-to-user="true" focusable="true" drawing-order="1"/>
-    </node>
-    <node class="android.view.ViewGroup" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="1">
-      <node class="android.widget.Button" text="Background row" bounds="[0,220][280,280]" enabled="true" visible-to-user="true" focusable="true" drawing-order="1"/>
-    </node>
-  </node>
-</hierarchy>`;
-
-  const result = parseUiHierarchy(xml, 800, { raw: true });
-  assert.equal(
-    result.nodes.some((node) => node.label === 'Foreground tile'),
-    true,
-  );
-  assert.equal(
-    result.nodes.some((node) => node.label === 'Background row'),
-    false,
   );
 });
 

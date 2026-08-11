@@ -31,7 +31,9 @@ function rawFixtureToTreeNode(raw: RawSnapshotNode): AndroidUiHierarchy {
     identifier: raw.identifier ?? null,
     packageName: raw.bundleId ?? null,
     rect: raw.rect,
-    hittable: raw.hittable,
+    // Fixtures speak the public projection; split it back into the two facts the tree stores.
+    clickable: raw.hittable === true,
+    focusable: false,
     visibleToUser: raw.visibleToUser,
     depth: 0,
     children: [],
@@ -45,6 +47,8 @@ function rawFixtureToAndroidTree(rawNodes: RawSnapshotNode[]): AndroidUiHierarch
     value: null,
     identifier: null,
     packageName: null,
+    clickable: false,
+    focusable: false,
     depth: -1,
     children: [],
   };
