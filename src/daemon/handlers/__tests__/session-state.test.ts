@@ -152,7 +152,8 @@ test('appstate rejects a missing readiness fact even when appState is available'
         reason: 'unsupported-device-kind',
         hint: 'readiness is unavailable for this device kind',
       },
-      ensureReadyHeadless: { available: false, reason: 'unsupported-device-kind' },
+      bootTarget: { available: false, reason: 'unsupported-device-kind' },
+      bootTargetHeadless: { available: false, reason: 'unsupported-device-kind' },
     },
   };
   const inspectFacts = vi.fn(async () => facts);
@@ -214,7 +215,8 @@ test('sessionless Android appstate inspects once, binds once, and preserves oper
       screenRecordingReattach: unavailable,
       screenRecordingCleanup: unavailable,
       ensureReady: available,
-      ensureReadyHeadless: unavailable,
+      bootTarget: available,
+      bootTargetHeadless: unavailable,
     },
   };
   const events: string[] = [];
