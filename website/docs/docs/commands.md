@@ -727,7 +727,7 @@ agent-device perf trace start --kind perfetto --out app.perfetto-trace
 agent-device perf trace stop --kind perfetto --out app.perfetto-trace
 ```
 
-- Prefer an explicit `frames`, `memory`, `cpu`, or `trace` area so each request answers one profiling question. Bare `perf`, `perf sample`, `perf metrics`, and the `metrics` alias remain deprecated compatibility forms until the next major release; they return aggregate evidence plus migration guidance.
+- Prefer an explicit `frames`, `memory`, `cpu`, or `trace` area so each request answers one profiling question. Bare `perf`, `perf sample`, `perf metrics`, and the `metrics` alias remain deprecated compatibility forms until the next major release; they return aggregate evidence plus migration guidance. On Android, this compatibility path retains the released `dumpsys cpuinfo` point sample; use `perf cpu profile` for new CPU profiling workflows.
 - `perf frames` returns a focused, bounded frame/jank-health JSON blob.
 - `perf memory sample` returns a compact memory-only JSON blob for agents investigating growth/leaks without collecting a large artifact. It is better than raw memory command output for first-pass diagnosis because arrays and top offenders are bounded.
 - Example sample shape: `{"metrics":{"memory":{"available":true,"totalPssKb":562958,"totalRssKb":570304,"topConsumers":[{"name":"Dalvik Heap","pssKb":213456}]}}}`.

@@ -57,6 +57,25 @@ test('perf metrics retains the released aggregate compatibility route', async ()
   assert.deepEqual(result.calls[0]?.positionals, ['metrics']);
 });
 
+test('deprecated aggregate perf output retains released CPU summary semantics', async () => {
+  const warning =
+    'perf metrics, bare perf, and perf sample are deprecated compatibility forms and will be removed in the next major release.';
+  const result = await runCliCapture(['perf', 'metrics'], async () => ({
+    ok: true,
+    data: {
+      metrics: {
+        cpu: { available: true, usagePercent: 16 },
+        memory: { available: true, totalPssKb: 2048 },
+        fps: { available: false, reason: 'No frame data.' },
+      },
+      warnings: [warning],
+    },
+  }));
+
+  assert.equal(result.code, null);
+  assert.equal(result.stdout, `Performance: CPU 16%, memory 2.0MB\nDeprecated: ${warning}\n`);
+});
+
 test('metrics alias retains the released aggregate compatibility route', async () => {
   const result = await runCliCapture(['metrics', '--json'], async () => ({ ok: true, data: {} }));
 

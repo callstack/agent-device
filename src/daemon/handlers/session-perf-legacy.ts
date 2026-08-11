@@ -1,6 +1,12 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import { publicPlatformString } from '@agent-device/kernel/device';
+import { normalizeError } from '@agent-device/kernel/errors';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
+import {
+  ANDROID_LEGACY_CPU_SAMPLE_DESCRIPTION,
+  ANDROID_LEGACY_CPU_SAMPLE_METHOD,
+  sampleLegacyAndroidCpuPerf,
+} from '../../platforms/android/perf-legacy-cpu.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../types.ts';
 import { buildPerfFramesResponseData, buildPerfMemoryResponseData } from './session-perf.ts';
@@ -27,6 +33,7 @@ export async function buildLegacyPerfMetricsResponseData(
   // sampling can both own an xctrace recording, and concurrent recordings contend for kperf.
   const frames = await buildPerfFramesResponseData(session, options);
   const memory = await buildPerfMemoryResponseData(session, { ...options, action: 'sample' });
+  const cpu = await buildLegacyCpuMetric(session, options.androidAdb);
   return {
     session: session.name,
     platform: publicPlatformString(session.device),
@@ -34,11 +41,7 @@ export async function buildLegacyPerfMetricsResponseData(
     deviceId: session.device.id,
     metrics: {
       startup: buildLegacyStartupMetric(session.actions),
-      cpu: {
-        available: false,
-        reason:
-          'Point CPU sampling is deprecated. Use perf cpu profile start/stop/report for native CPU evidence.',
-      },
+      cpu,
       fps: frames.metrics.fps,
       memory: memory.metrics?.memory ?? { available: false, reason: PERF_UNAVAILABLE_REASON },
     },
@@ -48,14 +51,57 @@ export async function buildLegacyPerfMetricsResponseData(
         description: STARTUP_SAMPLE_DESCRIPTION,
         unit: 'ms',
       },
-      cpu: {
-        method: 'deprecated',
-        description: 'Use a native CPU profile instead of a point-in-time percentage.',
-      },
+      cpu: buildLegacyCpuSamplingMetadata(session),
       fps: frames.sampling.fps,
       memory: memory.sampling.memory,
     },
     warnings: [LEGACY_PERF_METRICS_WARNING],
+  };
+}
+
+async function buildLegacyCpuMetric(
+  session: SessionState,
+  androidAdb: AndroidAdbExecutor | undefined,
+): Promise<Record<string, unknown>> {
+  if (session.device.platform !== 'android') return buildUnavailableLegacyCpuMetric();
+  if (!session.appBundleId) {
+    return {
+      available: false,
+      reason: 'No Android app package is associated with this session. Run open <app> first.',
+    };
+  }
+  try {
+    return {
+      available: true,
+      ...(await sampleLegacyAndroidCpuPerf(session.device, session.appBundleId, {
+        adb: androidAdb,
+      })),
+    };
+  } catch (reason) {
+    const error = normalizeError(reason);
+    return { available: false, reason: error.message, error };
+  }
+}
+
+function buildUnavailableLegacyCpuMetric(): Record<string, unknown> {
+  return {
+    available: false,
+    reason: 'Point CPU sampling is unavailable. Use a native CPU profile for CPU evidence.',
+  };
+}
+
+function buildLegacyCpuSamplingMetadata(session: SessionState): Record<string, unknown> {
+  if (session.device.platform === 'android') {
+    return {
+      method: ANDROID_LEGACY_CPU_SAMPLE_METHOD,
+      description: ANDROID_LEGACY_CPU_SAMPLE_DESCRIPTION,
+      unit: 'percent',
+      deprecated: true,
+    };
+  }
+  return {
+    method: 'deprecated',
+    description: 'Use a native CPU profile instead of a point-in-time percentage.',
   };
 }
 

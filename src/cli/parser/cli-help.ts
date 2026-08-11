@@ -414,6 +414,7 @@ Diagnostics and traces:
   Treat native perf output as the agent evidence: for example, state=stopped, outPath=/tmp/app.perfetto-trace, sizeBytes=5392410, method=adb-shell-perfetto. The 5.3 MB raw trace stays in the artifact.
   CPU reports return at most ten top functions in structured data and print five in default CLI output.
   Prefer explicit perf frames, perf memory, perf cpu, or perf trace forms. Bare perf, perf sample, perf metrics, and metrics are deprecated compatibility forms until the next major release.
+  On Android, those deprecated aggregate forms retain the released dumpsys cpuinfo point sample for compatibility; new profiling workflows should use perf cpu profile.
   Startup duration belongs to the open command's startup result; read it there instead of using aggregate perf.
 
 Memory diagnostics:
