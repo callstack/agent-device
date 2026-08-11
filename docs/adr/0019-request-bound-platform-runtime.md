@@ -645,14 +645,15 @@ Android, inventory projection, and descriptor/facade/gateway wiring) and records
 size metrics against `44c298d7f` and the immediate stack base.
 
 The final corrected-base replay is reported separately in the unit review: against
-`3ed473400ebb8f29405912856e0bcfdff2b836fc`, the hardened head measures +6,595 production bytes
-(+2,677 root, +3,918 packages). The +316 difference from the prior reviewed figure reflects
+`3ed473400ebb8f29405912856e0bcfdff2b836fc`, the hardened head measures +6,719 production bytes
+(+2,677 root, +4,042 packages). The +440 difference from the prior reviewed figure reflects
 the required Apple session-owned projection/parity hardening, the Android-unknown and
 Harmony-emulator denominator evidence, and relocation of the unavailable-runtime helper out of
 durable capture, offset by removing the stale facade export and the two stale Linux/Vega
-capture-kit dependency edges identified by fallow. The earlier lint-required import consolidation
-removed 91 bytes before this final fallow cleanup. This is not an unreviewed allowance or a
-durable-tier expansion.
+capture-kit dependency edges identified by fallow. Keeping the generic runtime-use factory
+internal to contracts adds a small net relocation cost while preserving the neutral `defineUse`
+surface. The earlier lint-required import consolidation removed 91 bytes before these final
+corrections. This is not an unreviewed allowance or a durable-tier expansion.
 
 A command surface that is deprecated and scheduled for removal at the next major is never
 migrated. It stays on its legacy execution shape until the major deletes it, and the deletion — not
