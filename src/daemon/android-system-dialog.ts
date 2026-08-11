@@ -10,7 +10,7 @@ import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { centerOfRect, attachRefs, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import { sleep } from '../utils/timeouts.ts';
-import { pruneGroupNodes } from '../snapshot/snapshot-processing.ts';
+import { pruneGroupNodes } from '../core/snapshot-tree-ingestion.ts';
 import { expireRefFrame } from './ref-frame.ts';
 import type { SessionState } from './types.ts';
 

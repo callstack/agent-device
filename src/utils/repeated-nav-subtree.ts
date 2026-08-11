@@ -1,6 +1,5 @@
 import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
-import { normalizeRepeatedNodeLabel } from '../snapshot/snapshot-label-signals.ts';
-import { displayNodeLabel } from '../snapshot/snapshot-tree.ts';
+import { extractNodeText } from '@agent-device/contracts/snapshot';
 
 export function detectPossibleRepeatedNavSubtree(nodes: SnapshotNode[]): boolean {
   if (nodes.length < 20) {
@@ -9,7 +8,7 @@ export function detectPossibleRepeatedNavSubtree(nodes: SnapshotNode[]): boolean
   const groups = new Map<string, SnapshotNode[]>();
   for (const node of nodes) {
     const type = (node.type ?? '').toLowerCase();
-    const label = normalizeRepeatedNodeLabel(displayNodeLabel(node));
+    const label = normalizeRepeatedNodeLabel(extractNodeText(node));
     if (!label) continue;
     const signature = `${type}|${label}`;
     const group = groups.get(signature) ?? [];
@@ -24,6 +23,16 @@ export function detectPossibleRepeatedNavSubtree(nodes: SnapshotNode[]): boolean
     duplicateCount += group.length;
   }
   return duplicateCount >= 8;
+}
+
+function normalizeRepeatedNodeLabel(label: string): string | null {
+  const normalized = label.trim().replace(/\s+/g, ' ').toLowerCase();
+  if (!normalized || isEmailLikeLabel(normalized)) return null;
+  return normalized;
+}
+
+function isEmailLikeLabel(label: string): boolean {
+  return /\S+@\S+\.\S+/.test(label);
 }
 
 function hasOverlappingDuplicateRects(nodes: SnapshotNode[]): boolean {

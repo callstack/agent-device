@@ -5,6 +5,7 @@ import {
   type SnapshotCaptureAnnotations,
 } from '@agent-device/contracts/capture';
 import { isMacOs, publicPlatformString } from '@agent-device/kernel/device';
+import { isAndroidInputMethodNode } from '@agent-device/contracts/platform';
 import {
   attachRefs,
   buildSnapshotPresentationKey,
@@ -18,14 +19,9 @@ import {
 import { dispatchCommand } from '../../core/dispatch.ts';
 import { runMacOsSnapshotAction } from '../../platforms/apple/os/macos/helper.ts';
 import { snapshotLinux } from '../../platforms/linux/snapshot.ts';
-import { isAndroidInputMethodSnapshotNode } from '../../snapshot/android-input-method-overlays.ts';
 import { annotateCoveredSnapshotNodes } from '../../snapshot/snapshot-occlusion.ts';
-import {
-  findNodeByLabel,
-  pruneGroupNodes,
-  resolveRefLabel,
-} from '../../snapshot/snapshot-processing.ts';
-import { normalizeSnapshotTree } from '../../snapshot/snapshot-tree.ts';
+import { findNodeByLabel, resolveRefLabel } from '../../core/snapshot-node-lookup.ts';
+import { normalizeSnapshotTree, pruneGroupNodes } from '../../core/snapshot-tree-ingestion.ts';
 import {
   clearAndroidSnapshotFreshness,
   type AndroidFreshnessMode,
@@ -181,7 +177,7 @@ export function buildSnapshotState(
       ? presentableNodes
       : annotateCoveredSnapshotNodes(presentableNodes, {
           isAdditionalOverlayNode:
-            data?.backend === 'android' ? isAndroidInputMethodSnapshotNode : undefined,
+            data?.backend === 'android' ? isAndroidInputMethodNode : undefined,
         }),
   );
   const snapshotQuality = snapshotCaptureAnnotationsFrom(data).quality;

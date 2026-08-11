@@ -9,8 +9,11 @@ import {
 import type { PNG } from '../utils/png.ts';
 import { decodePngAsync, encodePngAsync } from '../utils/png-worker-client.ts';
 import { analyzeReactNativeOverlay } from '../core/react-native-overlay.ts';
-import { isViewportRootNode, normalizeType } from '@agent-device/contracts/snapshot';
-import { findNearestAncestor } from '../snapshot/snapshot-processing.ts';
+import {
+  findNearestAncestor,
+  isViewportRootNode,
+  normalizeType,
+} from '@agent-device/contracts/snapshot';
 import { resolveAndroidOverlaySourceRect } from './screenshot-overlay-android.ts';
 import { hasPositiveRect, rectArea, rectContains } from './screenshot-overlay-rects.ts';
 
@@ -228,7 +231,7 @@ function resolveOverlayTarget(
   return (
     [
       isOverlayActionableNode(node) ? node : null,
-      findNearestAncestor(nodes, node, (parent) => isOverlayActionableNode(parent)),
+      findNearestAncestor(nodes, node, isOverlayActionableNode),
       node.hittable ? node : null,
       findNearestAncestor(nodes, node, (parent) => parent.hittable === true),
     ].find(isUsableOverlayTarget) ?? null

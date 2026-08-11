@@ -2,7 +2,7 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import { handleFindCommands } from '../find.ts';
 import { dispatchFindReadOnlyViaRuntime, dispatchWaitViaRuntime } from '../../selector-runtime.ts';
 import type { DaemonRequest, DaemonResponse } from '../../types.ts';
-import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '../../../snapshot/system-surface-disclosure.ts';
+import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '../../../core/android-system-surface-disclosure.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { makeAndroidSession } from '../../../__tests__/test-utils/session-factories.ts';
 

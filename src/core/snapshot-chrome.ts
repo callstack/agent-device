@@ -1,10 +1,10 @@
 import {
   ANDROID_SYSTEM_CHROME_PACKAGE,
   hasAndroidSystemChromeProvenance,
+  isAndroidInputMethodNode,
   isAndroidSystemChromeWindowResourceId,
 } from '@agent-device/contracts/platform';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { isAndroidInputMethodSnapshotNode } from '../snapshot/android-input-method-overlays.ts';
 import { normalizeType } from '@agent-device/contracts/snapshot';
 
 /**
@@ -240,7 +240,9 @@ function collectAndroidSettleChrome(
 ): SettleChrome {
   const byIndex = new Map(nodes.map((node) => [node.index, node]));
   const imeIndexes = new Set(
-    nodes.filter((node) => isAndroidInputMethodSnapshotNode(node)).map((node) => node.index),
+    nodes
+      .filter(isAndroidInputMethodNode)
+      .map((node) => node.index),
   );
   const imeContainerIndexes = new Set(
     [...imeIndexes].filter((index) => {

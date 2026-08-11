@@ -1,6 +1,7 @@
 import { isRectVisibleInViewport } from '@agent-device/kernel/rect';
 import {
   buildSnapshotNodeMap,
+  extractNodeText,
   findNearestScrollableAncestor,
   isNodeVisibleInEffectiveViewport,
   isTapPointInsideViewport,
@@ -9,7 +10,6 @@ import {
 } from '@agent-device/contracts/snapshot';
 import { inferVerticalScrollIndicatorDirections } from '../utils/scroll-indicator.ts';
 import type { HiddenContentHint, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
-import { displayNodeLabel } from './snapshot-tree.ts';
 
 type Direction = 'above' | 'below';
 
@@ -335,7 +335,7 @@ function isDiscoverableOffscreenNode(node: SnapshotNode): boolean {
     type.includes('radio') ||
     type.includes('switch') ||
     type.includes('menuitem') ||
-    Boolean(displayNodeLabel(node))
+    Boolean(extractNodeText(node))
   );
 }
 
@@ -343,7 +343,7 @@ function uniqueLabels(nodes: SnapshotNode[]): string[] {
   const seen = new Set<string>();
   const labels: string[] = [];
   for (const node of nodes) {
-    const label = displayNodeLabel(node);
+    const label = extractNodeText(node);
     if (!label || seen.has(label)) {
       continue;
     }

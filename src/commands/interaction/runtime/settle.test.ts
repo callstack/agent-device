@@ -11,7 +11,7 @@ import {
 import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
 import { ref, selector } from './selector-read-utils.ts';
 import { buildSettleTailEntries, NEVER_SETTLED_HINT } from './settle.ts';
-import { readSnapshotQualityVerdict } from '../../../snapshot/snapshot-quality.ts';
+import { readSnapshotQualityVerdict } from '../../../snapshot-quality/verdict.ts';
 
 // #1101 --settle: quiet-window settle loop composition on the interaction
 // commands. Budgets are injected (fake clock) — no real waiting.

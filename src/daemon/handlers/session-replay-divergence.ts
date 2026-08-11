@@ -1,10 +1,8 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { sleep } from '../../utils/timeouts.ts';
-import {
-  isSparseSnapshotQualityVerdict,
-  isUnreadableCaptureContentError,
-} from '../../snapshot/snapshot-quality.ts';
+import { isUnreadableCaptureContentError } from '@agent-device/contracts/platform';
+import { isSparseSnapshotQualityVerdict } from '../../snapshot-quality/verdict.ts';
 import { displayLabel, formatRole } from '../../snapshot/snapshot-lines.ts';
 import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import type { DaemonError } from '@agent-device/kernel/errors';

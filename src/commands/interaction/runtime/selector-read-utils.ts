@@ -3,7 +3,7 @@ import type { RefTarget, SelectorTarget } from '@agent-device/contracts/interact
 import { AppError } from '@agent-device/kernel/errors';
 import type { FindLocator } from '@agent-device/selectors';
 
-export { findNodeByLabel, resolveRefLabel } from '../../../snapshot/snapshot-processing.ts';
+export { findNodeByLabel, resolveRefLabel } from '../../../core/snapshot-node-lookup.ts';
 
 function shouldScopeFind(locator: string): boolean {
   return locator === 'text' || locator === 'label' || locator === 'any';

@@ -35,7 +35,7 @@ import { recordSessionAction } from './handler-utils.ts';
 import { stripInternalInteractionFlags } from '../interaction-outcome-policy.ts';
 import { dispatchFindReadOnlyViaRuntime } from '../selector-runtime.ts';
 import { createSelectorCaptureRuntime } from '../selector-capture-runtime.ts';
-import { isSparseSnapshotQualityVerdict } from '../../snapshot/snapshot-quality.ts';
+import { isSparseSnapshotQualityVerdict } from '../../snapshot-quality/verdict.ts';
 
 function assertRejectsCandidates(policy: SelectorResolutionPolicy): void {
   if (policy.ambiguity !== 'reject-candidates') {

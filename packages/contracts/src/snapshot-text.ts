@@ -1,5 +1,5 @@
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 
 export function normalizeType(type: string): string {
   let normalized = type
@@ -30,7 +30,17 @@ export function isFillableType(type: string, platform: Platform | PublicPlatform
   );
 }
 
-export function extractNodeText(node: SnapshotState['nodes'][number]): string {
+export function isMeaningfulLabel(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (/^(true|false)$/i.test(trimmed)) return false;
+  if (/^\d+$/.test(trimmed)) return false;
+  return true;
+}
+
+export function extractNodeText(
+  node: Pick<RawSnapshotNode, 'label' | 'value' | 'identifier'>,
+): string {
   const candidates = [node.label, node.value, node.identifier]
     .map((value) => (typeof value === 'string' ? value.trim() : ''))
     .filter((value) => value.length > 0);

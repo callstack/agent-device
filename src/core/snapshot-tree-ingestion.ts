@@ -1,4 +1,5 @@
-import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import { extractNodeText, isMeaningfulLabel, normalizeType } from '@agent-device/contracts/snapshot';
 
 export function normalizeSnapshotTree(nodes: RawSnapshotNode[]): RawSnapshotNode[] {
   const originalToNormalizedIndex = new Map<number, number>();
@@ -36,6 +37,22 @@ export function normalizeSnapshotTree(nodes: RawSnapshotNode[]): RawSnapshotNode
   return normalized;
 }
 
-export function displayNodeLabel(node: SnapshotNode): string {
-  return node.label?.trim() || node.value?.trim() || node.identifier?.trim() || '';
+export function pruneGroupNodes(nodes: RawSnapshotNode[]): RawSnapshotNode[] {
+  const skippedDepths: number[] = [];
+  const result: RawSnapshotNode[] = [];
+  for (const node of nodes) {
+    const depth = node.depth ?? 0;
+    while (skippedDepths.length > 0 && depth <= skippedDepths[skippedDepths.length - 1]!) {
+      skippedDepths.pop();
+    }
+    const type = normalizeType(node.type ?? '');
+    const hasMeaningfulLabel = isMeaningfulLabel(extractNodeText(node));
+    if ((type === 'group' || type === 'ioscontentgroup') && !hasMeaningfulLabel) {
+      skippedDepths.push(depth);
+      continue;
+    }
+    const adjustedDepth = Math.max(0, depth - skippedDepths.length);
+    result.push({ ...node, depth: adjustedDepth });
+  }
+  return result;
 }

@@ -2,7 +2,7 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import type { InteractionTarget } from '@agent-device/contracts/interaction';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { asAppError } from '@agent-device/kernel/errors';
-import { isSparseSnapshotQualityVerdict } from '../../snapshot/snapshot-quality.ts';
+import { isSparseSnapshotQualityVerdict } from '../../snapshot-quality/verdict.ts';
 import { summarizeAxEvidence } from '../../utils/ax-digest.ts';
 import { getRequestSignal } from '../../request/cancel.ts';
 import { isLocalIosRunnerSession } from '../direct-ios-selector.ts';

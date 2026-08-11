@@ -8,7 +8,7 @@ import { normalizeError } from '@agent-device/kernel/errors';
 import { stripUndefined } from '../../utils/parsing.ts';
 import { successText } from '../../utils/success-text.ts';
 import type { SnapshotQualityVerdict, SnapshotState } from '@agent-device/kernel/snapshot';
-import { isSparseSnapshotQualityVerdict } from '../../snapshot/snapshot-quality.ts';
+import { isSparseSnapshotQualityVerdict } from '../../snapshot-quality/verdict.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
 import { errorResponse, noActiveSessionError, requireCommandSupported } from './response.ts';
 import { captureSnapshotForSession } from './interaction-snapshot.ts';

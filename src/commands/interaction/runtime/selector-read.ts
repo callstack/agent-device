@@ -19,7 +19,7 @@ import {
 } from '../../../core/selector-pipeline.ts';
 import { SELECTOR_PIPELINE_POLICIES } from '../../../core/selector-pipeline-policy.ts';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { isSparseSnapshotQualityVerdict } from '../../../snapshot/snapshot-quality.ts';
+import { isSparseSnapshotQualityVerdict } from '../../../snapshot-quality/verdict.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type {

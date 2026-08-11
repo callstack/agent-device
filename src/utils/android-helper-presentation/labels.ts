@@ -1,8 +1,8 @@
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { displayNodeLabel } from '../../snapshot/snapshot-tree.ts';
+import { extractNodeText } from '@agent-device/contracts/snapshot';
 
 export function visibleNodeLabel(node: SnapshotNode): string {
-  const label = displayNodeLabel(node);
+  const label = extractNodeText(node);
   if (!label || label !== node.identifier?.trim()) {
     return label;
   }

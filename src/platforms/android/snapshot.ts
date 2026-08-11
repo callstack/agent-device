@@ -47,7 +47,7 @@ import {
   classifyAndroidHelperContent,
   type AndroidHelperContentRecoveryDecision,
 } from './snapshot-content-recovery.ts';
-import type { AndroidContentRecoveryReason } from '../../snapshot/snapshot-quality.ts';
+import type { AndroidContentRecoveryReason } from '@agent-device/contracts/platform';
 import {
   resetAndroidSnapshotHelperRuntime,
   retireAndroidSnapshotHelperAfterContentFailure,

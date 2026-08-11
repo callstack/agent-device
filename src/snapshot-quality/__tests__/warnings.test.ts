@@ -1,6 +1,75 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { readSnapshotQualityVerdict, renderSnapshotQualityWarnings } from '../snapshot-quality.ts';
+import { readSnapshotQualityVerdict } from '../verdict.ts';
+import { renderSnapshotQualityWarnings } from '../warnings.ts';
+
+test("the runner-wire 'deferred' reasonCode survives parsing into warning suppression", () => {
+  // End-to-end through the raw wire parser: 'deferred' must be a member of the accepted
+  // reason-code set, or it is silently stripped and every downstream deferred behavior
+  // (warning suppression, settle budget-reset skip) quietly reverts.
+  const verdict = readSnapshotQualityVerdict({
+    state: 'recovered',
+    backend: 'private-ax',
+    reason: 'XCTest-backed snapshot tiers were deferred after recent slow accessibility work',
+    reasonCode: 'deferred',
+  });
+  assert.equal(verdict?.reasonCode, 'deferred');
+  assert.deepEqual(renderSnapshotQualityWarnings(verdict!, []), []);
+});
+
+test('penalty-deferred recovered captures suppress the fallback warning but keep depth copy', () => {
+  // Every capture of a hostile screen re-stamps recovered/deferred; the capture that armed the
+  // penalty already carried the full warning, so repeating it each capture is context noise.
+  const warnings = renderSnapshotQualityWarnings(
+    {
+      state: 'recovered',
+      backend: 'private-ax',
+      reason: 'XCTest-backed snapshot tiers were deferred after recent slow accessibility work',
+      reasonCode: 'deferred',
+      effectiveDepth: 56,
+    },
+    [],
+  );
+
+  assert.deepEqual(warnings, [
+    'Some deeper accessibility nodes were omitted; this tree is capped at depth 56. Re-run with --depth 56 --scope <container> only if you need deeper content.',
+  ]);
+});
+
+test('renderSnapshotQualityWarnings keeps recovered snapshot copy concise', () => {
+  const warnings = renderSnapshotQualityWarnings(
+    {
+      state: 'recovered',
+      backend: 'private-ax',
+      reason:
+        'iOS XCTest snapshot failed while serializing the accessibility tree. Error kAXErrorIllegalArgument getting snapshot for element <AXUIElementRef 0x1>',
+      reasonCode: 'ax-rejected',
+      effectiveDepth: 56,
+    },
+    [],
+  );
+
+  assert.deepEqual(warnings, [
+    'Detected an overly complex or slow accessibility tree. Fell back to the private-ax snapshot backend. It is OK to continue; use --json to inspect snapshotQuality.reason if you need recovery details.',
+    'Some deeper accessibility nodes were omitted; this tree is capped at depth 56. Re-run with --depth 56 --scope <container> only if you need deeper content.',
+  ]);
+});
+
+test('renderSnapshotQualityWarnings rejects semantic targets from a sparse tree', () => {
+  const warnings = renderSnapshotQualityWarnings(
+    {
+      state: 'sparse',
+      backend: 'private-ax',
+      reason: 'snapshot returned no semantic controls or content',
+      reasonCode: 'sparse-tree',
+    },
+    [],
+  );
+
+  assert.deepEqual(warnings, [
+    'No snapshot backend could read this screen (snapshot returned no semantic controls or content). Its refs and selectors are invalid. Use screenshot as visual truth and coordinate taps; retry snapshot after navigating.',
+  ]);
+});
 
 const pinned = {
   state: 'recovered',

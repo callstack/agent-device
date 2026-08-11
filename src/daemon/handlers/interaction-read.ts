@@ -2,10 +2,9 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import { isIosFamily } from '@agent-device/kernel/device';
 import { dispatchCommand } from '../../core/dispatch.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import { extractNodeReadText } from '../../snapshot/snapshot-processing.ts';
 import type { SessionState } from '../types.ts';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { prefersValueForReadableText } from '../../utils/text-surface.ts';
+import { extractReadableText, prefersValueForReadableText } from '../../utils/text-surface.ts';
 import type { ContextFromFlags } from './interaction-common.ts';
 import { resolveRectCenter } from './interaction-targeting.ts';
 
@@ -19,7 +18,7 @@ export async function readTextForNode(params: {
   contextFromFlags: ContextFromFlags;
 }): Promise<string> {
   const { device, node, flags, appBundleId, traceOutPath, surface, contextFromFlags } = params;
-  const fallbackText = extractNodeReadText(node);
+  const fallbackText = extractReadableText(node);
   const center = resolveRectCenter(node.rect);
   if (!center) {
     return fallbackText;

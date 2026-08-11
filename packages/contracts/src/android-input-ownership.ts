@@ -1,3 +1,5 @@
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+
 export type AndroidInputOwner = 'app' | 'ime' | 'unknown';
 
 const KNOWN_ANDROID_IME_PACKAGES = new Set([
@@ -66,6 +68,15 @@ export function isAndroidInputMethodOwnedNode(options: {
   activeInputMethodPackage?: string | null | undefined;
 }): boolean {
   return classifyAndroidInputOwnership(options).inputMethodOwned;
+}
+
+export function isAndroidInputMethodNode(
+  node: Pick<RawSnapshotNode, 'bundleId' | 'identifier'>,
+): boolean {
+  return isAndroidInputMethodOwnedNode({
+    packageName: node.bundleId,
+    resourceId: node.identifier,
+  });
 }
 
 export function isFallbackAndroidInputMethodPackage(

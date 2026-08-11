@@ -1,6 +1,7 @@
 export {
   classifyAndroidInputOwner,
   classifyAndroidInputOwnership,
+  isAndroidInputMethodNode,
   isAndroidInputMethodOwnedNode,
   isFallbackAndroidInputMethodPackage,
   isFallbackAndroidInputMethodResource,
@@ -12,6 +13,12 @@ export type {
   AndroidInputOwnership,
   AndroidInputOwnershipSource,
 } from '../android-input-ownership.ts';
+export {
+  ANDROID_CONTENT_RECOVERY_REASONS,
+  isAndroidContentRecoveryReason,
+  isUnreadableCaptureContentError,
+} from '../android-snapshot-quality.ts';
+export type { AndroidContentRecoveryReason } from '../android-snapshot-quality.ts';
 export {
   ANDROID_SYSTEM_CHROME_PACKAGE,
   hasAndroidSystemChromeProvenance,

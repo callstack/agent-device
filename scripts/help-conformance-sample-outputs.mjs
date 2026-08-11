@@ -72,7 +72,7 @@ hint: The UI kept changing for the whole settle budget (animation, carousel, or 
 
 // Recovered snapshot: the private-ax fallback fired but still exposed
 // actionable refs. Warning wording is renderSnapshotQualityWarnings
-// (src/snapshot/snapshot-quality.ts); lines are the structured snapshot
+// (src/snapshot-quality/warnings.ts); lines are the structured snapshot
 // renderer (src/utils/output.ts formatSnapshotText).
 export const PRIVATE_AX_RECOVERY_SAMPLE = {
   command: 'agent-device snapshot -i',

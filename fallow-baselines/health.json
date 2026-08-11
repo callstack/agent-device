@@ -580,7 +580,6 @@
     "src/compat/maestro/support.ts:high impact",
     "src/daemon/session-routing.ts:high impact",
     "src/daemon/handlers/session-state.ts:complexity",
-    "src/snapshot/snapshot-processing.ts:high impact",
     "src/commands/cli-grammar/common.ts:high impact",
     "src/daemon/snapshot-presentation/tree.ts:high impact",
     "src/utils/success-text.ts:high impact",

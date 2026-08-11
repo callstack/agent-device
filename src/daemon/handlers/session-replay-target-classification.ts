@@ -32,7 +32,7 @@
 
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import { findNodeByRef, normalizeRef, type SnapshotNode } from '@agent-device/kernel/snapshot';
-import { findNodeByLabel } from '../../snapshot/snapshot-processing.ts';
+import { findNodeByLabel } from '../../core/snapshot-node-lookup.ts';
 import {
   buildAncestryChain,
   buildIndexMap,

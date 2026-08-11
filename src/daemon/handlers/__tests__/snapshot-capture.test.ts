@@ -393,6 +393,22 @@ test('buildSnapshotState returns empty nodes when scoped snapshot has no label m
   expect(state.nodes).toEqual([]);
 });
 
+test('buildSnapshotState preserves macOS helper scope behavior', () => {
+  const state = buildSnapshotState(
+    {
+      nodes: [
+        { index: 0, depth: 0, type: 'Window', label: 'Desktop surface' },
+        { index: 1, depth: 1, parentIndex: 0, type: 'Button', label: 'Target' },
+      ],
+      backend: 'macos-helper',
+    },
+    { snapshotScope: 'missing scope' },
+  );
+
+  expect(state.nodes.map((node) => node.label)).toEqual(['Desktop surface', 'Target']);
+  expect(state.nodes.every((node) => node.ref)).toBe(true);
+});
+
 test('buildSnapshotVisibility returns non-partial for empty node list', () => {
   const vis = buildSnapshotVisibility({ nodes: [], backend: 'android' });
   expect(vis.partial).toBe(false);

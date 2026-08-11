@@ -9,7 +9,7 @@ import { createAgentDevice } from '../runtime.ts';
 import { isMacOs, isApplePlatform, publicPlatformString } from '@agent-device/kernel/device';
 import { noActiveSessionError, requireCommandSupported } from './handlers/response.ts';
 import type { SnapshotState, SnapshotNode } from '@agent-device/kernel/snapshot';
-import { findNodeByLabel } from '../snapshot/snapshot-processing.ts';
+import { findNodeByLabel } from '../core/snapshot-node-lookup.ts';
 import { runAppleRunnerCommand } from '../platforms/apple/core/runner/runner-client.ts';
 import { buildAppleRunnerRequestOptions } from './apple-runner-options.ts';
 import { createDaemonRuntimePolicy } from './runtime-policy.ts';

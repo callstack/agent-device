@@ -30,7 +30,7 @@ import type {
   RunnerContext,
   ScreenshotOptions,
 } from '@agent-device/contracts/interaction';
-import { readSnapshotQualityVerdict } from '../../snapshot/snapshot-quality.ts';
+import { readSnapshotQualityVerdict } from '../../snapshot-quality/verdict.ts';
 
 export function createAppleInteractor(
   device: DeviceInfo,

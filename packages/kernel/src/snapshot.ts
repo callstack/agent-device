@@ -3,8 +3,8 @@
  * The daemon renders it; it never re-derives degradation from node shapes.
  *
  * Defined here (the foundational snapshot type module) rather than in
- * snapshot-quality.ts so SnapshotNode can reference it without a cyclic import;
- * snapshot-quality.ts (the validation logic) re-exports it for existing callers.
+ * snapshot-quality/verdict.ts so SnapshotNode can reference it without a cyclic import;
+ * snapshot-quality/verdict.ts owns the validation logic.
  */
 /**
  * Which capture STRATEGY produced a snapshot, within one platform's plan —
@@ -175,7 +175,7 @@ export type SnapshotState = {
   /**
    * Android: the capture is an occluding system surface (notification shade, quick settings)
    * rather than app content. Consumers that surface this tree to the agent must disclose the
-   * occlusion (see snapshot/system-surface-disclosure.ts).
+   * occlusion (see core/android-system-surface-disclosure.ts).
    */
   systemSurfaceOnly?: boolean;
 };

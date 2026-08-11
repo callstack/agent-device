@@ -4,7 +4,7 @@ import type {
   CommandContext,
   CommandSessionRecord,
 } from '../../../runtime-contract.ts';
-import { isSparseSnapshotQualityVerdict } from '../../../snapshot/snapshot-quality.ts';
+import { isSparseSnapshotQualityVerdict } from '../../../snapshot-quality/verdict.ts';
 import { buildSnapshotDiff } from '../../../snapshot/snapshot-diff.ts';
 import { displayLabel, formatRole } from '../../../snapshot/snapshot-lines.ts';
 import { collectSettleChromeRefs, withoutSettleChrome } from '../../../core/snapshot-chrome.ts';
