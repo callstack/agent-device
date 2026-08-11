@@ -37,7 +37,7 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Check command reference doc coverage
-        run: pnpm check:command-docs
+        run: pnpm gate command-docs
 
   deploy-preview:
     if: github.event.pull_request.head.repo.full_name == github.repository

@@ -1,9 +1,14 @@
-// Catalog for the check-affected selector: how each derived CheckId maps to a
-// runnable command and the authoritative GitHub CI job(s) it mirrors.
+// The canonical gate registry: every check this repo can run, and how to run it.
 //
-// Commands are resolved from real package.json scripts or Vitest's native
-// affected-test command, so this stays a thin projection over existing
-// aggregate checks rather than a second source of truth for how to run them.
+// One entry per gate, and one universe — the affected-selector's vocabulary and
+// the set of gates CI runs are the same list, because CI may only invoke a gate
+// through `pnpm gate <id>` (scripts/gate/run.ts). That is what lets the gate
+// manifest derive the workflow→check mapping with a token scan instead of an
+// interpreter, and what makes an unregistered gate impossible to wire up.
+//
+// The jobs that run a check are NOT recorded here. They are derived from the
+// workflows by scripts/gate/model.ts, so the "GitHub-authoritative" claim an
+// agent reads before skipping a check locally cannot go stale.
 
 import { ALL_CHECKS, type CheckId } from './model.ts';
 
@@ -15,167 +20,115 @@ export type CheckSpec = {
   readonly id: CheckId;
   readonly label: string;
   readonly kind: CheckKind;
-  readonly ciJobs: readonly string[];
-  // Whether `--run` should attempt the check locally. Device/emulator lanes and
-  // network/toolchain-gated lanes stay authoritative on GitHub CI.
+  // Whether `--run` should attempt the check locally. Device/emulator lanes,
+  // network/toolchain-gated lanes, and long scheduled sweeps (mutation, fuzz,
+  // torture) stay authoritative on GitHub CI.
   readonly localRunnable: boolean;
 };
 
+function gate(id: CheckId, label: string, script: string, localRunnable = true): CheckSpec {
+  return { id, label, kind: { type: 'script', script }, localRunnable };
+}
+
 export const CHECK_CATALOG: readonly CheckSpec[] = [
-  {
-    id: 'format',
-    label: 'Formatting (oxfmt)',
-    kind: { type: 'script', script: 'format:check' },
-    ciJobs: ['Lint & Format'],
-    localRunnable: true,
-  },
-  {
-    id: 'lint',
-    label: 'Lint (oxlint)',
-    kind: { type: 'script', script: 'lint' },
-    ciJobs: ['Lint & Format'],
-    localRunnable: true,
-  },
-  {
-    id: 'typecheck',
-    label: 'Typecheck (tsc)',
-    kind: { type: 'script', script: 'typecheck' },
-    ciJobs: ['Typecheck'],
-    localRunnable: true,
-  },
-  {
-    id: 'test-app-typecheck',
-    label: 'Expo test app typecheck',
-    kind: { type: 'script', script: 'test-app:typecheck' },
-    ciJobs: ['Resolve native fingerprint'],
-    // The test app intentionally owns a separate Expo dependency graph. Do
-    // not make every root-checkout validation install it implicitly.
-    localRunnable: false,
-  },
-  {
-    id: 'layering',
-    label: 'Import-direction layering guard',
-    kind: { type: 'script', script: 'check:layering' },
-    ciJobs: ['Layering Guard'],
-    localRunnable: true,
-  },
-  {
-    id: 'fallow',
-    label: 'Fallow code-quality audit',
-    kind: { type: 'script', script: 'check:fallow' },
-    ciJobs: ['Fallow Code Quality'],
-    localRunnable: true,
-  },
-  {
-    id: 'mcp-metadata',
-    label: 'MCP registry metadata sync',
-    kind: { type: 'script', script: 'check:mcp-metadata' },
-    ciJobs: ['Typecheck'],
-    localRunnable: true,
-  },
-  {
-    id: 'build',
-    label: 'Build (tsdown + declarations)',
-    kind: { type: 'script', script: 'build' },
-    ciJobs: ['Packaged CLI Node 22.12'],
-    localRunnable: true,
-  },
-  {
-    id: 'package',
-    label: 'Published package (publint, attw, clean-install resolution)',
-    kind: { type: 'script', script: 'check:package' },
-    ciJobs: ['Packaged CLI Node 22.12'],
-    // Needs a `pnpm build` output and the npm registry, both of which local runs already have.
-    localRunnable: true,
-  },
-  {
-    id: 'integration-node',
-    label: 'Node integration smoke',
-    kind: { type: 'script', script: 'test:integration:node' },
-    ciJobs: ['Integration Tests'],
-    localRunnable: true,
-  },
+  gate('format', 'Formatting (oxfmt)', 'format:check'),
+  gate('lint', 'Lint (oxlint)', 'lint'),
+  gate('typecheck', 'Typecheck (tsc)', 'typecheck'),
+  // The test app intentionally owns a separate Expo dependency graph. Do not
+  // make every root-checkout validation install it implicitly.
+  gate('test-app-typecheck', 'Expo test app typecheck', 'test-app:typecheck', false),
+  gate('layering', 'Import-direction layering guard', 'check:layering'),
+  gate('fallow', 'Fallow code-quality audit', 'check:fallow'),
+  gate('mcp-metadata', 'MCP registry metadata sync', 'check:mcp-metadata'),
+  gate('build', 'Build (tsdown + declarations)', 'build'),
+  gate('package', 'Published package (publint, attw, clean-install resolution)', 'check:package'),
+  gate('integration-node', 'Node integration smoke', 'test:integration:node'),
   {
     id: 'vitest-related',
     label: 'Tests related by Vitest module graph',
     kind: { type: 'vitest-related' },
-    ciJobs: ['Coverage'],
     localRunnable: true,
   },
-  {
-    id: 'unit',
-    label: 'Unit + smoke suite',
-    kind: { type: 'script', script: 'check:unit' },
-    ciJobs: ['Coverage', 'Integration Tests'],
-    localRunnable: true,
-  },
-  {
-    id: 'coverage',
-    label: 'Affected LCOV + changed-line coverage',
-    kind: { type: 'script', script: 'check:coverage-changed' },
-    ciJobs: ['Coverage'],
-    localRunnable: true,
-  },
-  {
-    id: 'provider-integration',
-    label: 'Provider-backed integration suite',
-    kind: { type: 'script', script: 'test:integration:provider' },
-    ciJobs: ['Integration Tests', 'Coverage'],
-    localRunnable: true,
-  },
-  {
-    id: 'integration-progress',
-    label: 'Integration architecture-progress gate',
-    kind: { type: 'script', script: 'test:integration:progress:check' },
-    ciJobs: ['Integration Tests'],
-    localRunnable: true,
-  },
-  {
-    id: 'swift-runner',
-    label: 'Swift runner build',
-    kind: { type: 'script', script: 'build:xcuitest' },
-    ciJobs: ['Swift Runner Unit Compile', 'iOS / Smoke Tests', 'macOS / Smoke Tests'],
-    localRunnable: false,
-  },
-  {
-    id: 'android-helpers',
-    label: 'Android helper builds',
-    kind: { type: 'script', script: 'build:android-snapshot-helper' },
-    ciJobs: ['Android / Smoke Tests'],
-    localRunnable: false,
-  },
-  {
-    id: 'macos-helper',
-    label: 'macOS helper build',
-    kind: { type: 'script', script: 'build:macos-helper' },
-    ciJobs: ['macOS / Smoke Tests'],
-    localRunnable: false,
-  },
-  {
-    id: 'web-smoke',
-    label: 'Live web platform smoke',
-    kind: { type: 'script', script: 'test:smoke:web' },
-    ciJobs: ['Web Platform Smoke'],
-    localRunnable: false,
-  },
-  {
-    id: 'replay-compat',
-    label: 'Replay-compat corpus provenance (released blobs)',
-    kind: { type: 'script', script: 'check:replay-compat' },
-    // Needs full history and tags, so it runs in its own fetch-depth: 0 job
-    // rather than inside the shallow-clone-safe unit lane.
-    ciJobs: ['Replay-Compat Provenance'],
-    localRunnable: true,
-  },
-  {
-    id: 'daemon-wire-compat',
-    label: 'Daemon RPC wire surface vs. last released tag',
-    kind: { type: 'script', script: 'check:daemon-wire-compat' },
-    // Same shape as replay-compat: the released ledger is only readable from a
-    // full-history checkout, so this cannot live in the shallow unit lane.
-    ciJobs: ['Released-Surface Compatibility'],
-    localRunnable: true,
-  },
+  gate('unit', 'Unit + smoke suite', 'check:unit'),
+  gate('coverage', 'Affected LCOV + changed-line coverage', 'check:coverage-changed'),
+  gate('provider-integration', 'Provider-backed integration suite', 'test:integration:provider'),
+  gate(
+    'integration-progress',
+    'Integration architecture-progress gate',
+    'test:integration:progress:check',
+  ),
+  gate('swift-runner-ios', 'Swift runner build (iOS)', 'build:xcuitest:ios', false),
+  gate('swift-runner-macos', 'Swift runner build (macOS)', 'build:xcuitest:macos', false),
+  gate('android-helpers', 'Android helper builds', 'build:android-snapshot-helper', false),
+  gate('macos-helper', 'macOS helper build', 'build:macos-helper', false),
+  gate('web-smoke', 'Live web platform smoke', 'test:smoke:web', false),
+  // Needs full history and tags, so it runs in its own fetch-depth: 0 job rather
+  // than inside the shallow-clone-safe unit lane.
+  gate('replay-compat', 'Replay-compat corpus provenance (released blobs)', 'check:replay-compat'),
+  gate(
+    'daemon-wire-compat',
+    'Daemon RPC wire surface vs. last released tag',
+    'check:daemon-wire-compat',
+  ),
+
+  // --- Tooling gates ---------------------------------------------------------
+  // Each proves one of the checkers above still behaves. They were always real CI
+  // steps; before the registry became canonical, nothing in the repo could name
+  // them, so nothing could ask whether they still ran.
+  //
+  // `unit-ci` is the CI form of the unit suite. Locally you run `unit` and
+  // `coverage`; the contention-retry coverage wrapper would just repeat them.
+  gate('unit-ci', 'CI unit suite under coverage + contention retry', 'test:coverage:ci', false),
+  gate('affected-selector', 'Affected-check selector model', 'check:affected:test'),
+  gate('gate-manifest', 'Gate manifest — every gate owned and wired', 'check:gate-manifest'),
+  gate('gate-manifest-model', 'Gate manifest model', 'check:gate-manifest:test'),
+  gate('depgraph', 'Dependency graph report agrees with the gate', 'depgraph:test'),
+  gate('tmpdir-leaks', 'Leaked test tmpdir detector', 'check:tmpdir-leaks'),
+  gate('tmpdir-leaks-model', 'TMPDIR redirection model', 'check:tmpdir-leaks:test'),
+  gate('contention-retry', 'Contention single-retry policy', 'check:contention-retry'),
+  gate('coverage-model', 'Changed-line coverage model', 'check:coverage-changed:test'),
+  gate('wire-compat-model', 'Wire-compat rules model', 'check:daemon-wire-compat:test'),
+  gate('production-exports', 'Production-unused exports', 'check:production-exports'),
+  gate('bundle-owner-files', 'Bundle owner-file manifest', 'check:bundle-owner-files'),
+  gate('freerange', 'Numeric range audit', 'check:freerange'),
+  gate('fixture-cache', 'Trusted fixture-artifact selection', 'test:fixture-cache'),
+  gate('command-docs', 'Command reference doc coverage', 'check:command-docs'),
+
+  // --- Gates that drive their own runner -------------------------------------
+  // The ones no naming convention could find: an executable terminal for
+  // `scripts/fuzz/run.ts` and one for `scripts/size-report.mjs` are the same
+  // shape, and only one of them can fail a build. Registering them is what tells
+  // the two apart, and `pnpm gate` is what keeps the registration load-bearing —
+  // delete an entry and its lane stops resolving, instead of the suite quietly
+  // leaving the universe.
+  gate('maestro-conformance', 'Maestro conformance fixtures', 'maestro:conformance'),
+  gate(
+    'maestro-differential',
+    'Maestro differential oracle',
+    'maestro:conformance:differential',
+    false,
+  ),
+  gate(
+    'maestro-regenerate',
+    'Maestro fixture regeneration is a no-op',
+    'maestro:conformance:regenerate',
+    false,
+  ),
+  gate('fuzz-parsers', 'Parser fuzz invariants', 'fuzz:parsers', false),
+  gate('mutation', 'Mutation sweep', 'mutation:run', false),
+  gate('mutation-affected', 'Affected mutation shard selection', 'mutation:affected', false),
+  gate('mutation-check', 'Mutation ratchet against the baseline', 'mutation:check', false),
+  gate('mutation-model', 'Mutation ratchet self-test', 'mutation:test'),
+  gate(
+    'concurrency-torture',
+    'Session/lease/lock torture sweep',
+    'test:concurrency-torture',
+    false,
+  ),
+  gate('replay-ios', 'iOS simulator replay suite', 'test:replay:ios', false),
+  gate('replay-ios-device', 'iOS physical device replay suite', 'test:replay:ios-device', false),
+  gate('replay-macos', 'macOS replay suite', 'test:replay:macos', false),
+  gate('replay-linux', 'Linux replay suite', 'test:replay:linux', false),
 ];
 
 export function getCheckSpec(id: CheckId): CheckSpec {

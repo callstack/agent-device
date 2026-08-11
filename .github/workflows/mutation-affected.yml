@@ -65,12 +65,12 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Ratchet self-test
-        run: pnpm mutation:test
+        run: pnpm gate mutation-model
 
       - id: select
         name: Derive the affected shard matrix
         run: |
-          modules=$(pnpm --silent mutation:affected --list-affected \
+          modules=$(pnpm --silent gate mutation-affected --list-affected \
             --base "origin/${{ github.event.pull_request.base.ref }}" | tail -n1)
           echo "modules=$modules" >> "$GITHUB_OUTPUT"
           echo "Affected mutation shards: $modules" >> "$GITHUB_STEP_SUMMARY"
@@ -80,7 +80,7 @@ jobs:
       - name: Record a failed lane envelope
         if: failure()
         run: |
-          pnpm mutation:run --affected --fail-envelope \
+          pnpm gate mutation --affected --fail-envelope \
             "affected selection failed before any mutant ran (run ${{ github.run_id }})" || true
 
       - name: Upload selection envelope
@@ -110,13 +110,13 @@ jobs:
 
       - name: Run mutants for ${{ matrix.name }}
         run: |
-          pnpm mutation:run --modules ${{ matrix.module }} \
+          pnpm gate mutation --modules ${{ matrix.module }} \
             ${{ matrix.shard && format('--shard {0}', matrix.shard) || '' }}
 
       - name: Record a failed shard envelope
         if: failure()
         run: |
-          pnpm mutation:run --affected --modules ${{ matrix.module }} --fail-envelope \
+          pnpm gate mutation --affected --modules ${{ matrix.module }} --fail-envelope \
             "shard ${{ matrix.name }} failed before producing a report (run ${{ github.run_id }})" || true
 
       - name: Upload shard report
@@ -158,17 +158,17 @@ jobs:
         run: |
           if [ -d .tmp/mutation/shards ]; then
             expected=$(echo '${{ needs.select.outputs.modules }}' | jq length)
-            pnpm mutation:check --report-dir .tmp/mutation/shards --affected \
+            pnpm gate mutation-check --report-dir .tmp/mutation/shards --affected \
               --expect-shards "$expected" \
               --base "origin/${{ github.event.pull_request.base.ref }}"
           else
-            pnpm mutation:affected --base "origin/${{ github.event.pull_request.base.ref }}"
+            pnpm gate mutation-affected --base "origin/${{ github.event.pull_request.base.ref }}"
           fi
 
       - name: Record a failed lane envelope
         if: failure()
         run: |
-          pnpm mutation:run --affected --fail-envelope \
+          pnpm gate mutation --affected --fail-envelope \
             "affected ratchet failed before producing a verdict (run ${{ github.run_id }})" || true
 
       - name: Upload mutation report

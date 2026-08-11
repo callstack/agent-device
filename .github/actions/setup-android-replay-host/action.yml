@@ -68,10 +68,7 @@ runs:
     - name: Package npm-bundled Android helpers
       if: inputs.package-helpers == 'true' && steps.android-helpers-cache.outputs.cache-hit != 'true'
       run: |
-        VERSION="${{ steps.android-helper-source.outputs.version }}"
-        rm -rf android/snapshot-helper/dist android/ime-helper/dist
-        sh ./scripts/package-android-helper.sh snapshot "$VERSION" "v$VERSION" android/snapshot-helper/dist
-        sh ./scripts/package-android-helper.sh ime "$VERSION" android/ime-helper/dist
+        pnpm gate android-helpers
       shell: bash
 
     - name: Verify packaged Android helpers

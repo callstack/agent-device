@@ -49,13 +49,13 @@ jobs:
       # Verifies the pinned jar SHA-256s against pinned-upstream.json, runs the
       # harness over the corpus, and rewrites fixtures/ + corpus/manifest.json.
       - name: Regenerate fixtures from pinned upstream
-        run: pnpm maestro:conformance:regenerate
+        run: pnpm gate maestro-regenerate
 
       - name: Fail if regeneration changed anything
         run: |
           if ! git diff --exit-code -- scripts/maestro-conformance/fixtures scripts/maestro-conformance/corpus/manifest.json; then
             echo "::error::Checked-in conformance fixtures do not match a fresh regeneration from the pinned upstream artifacts."
-            echo "The fixtures are generated: run 'pnpm maestro:conformance:regenerate' and commit the result."
+            echo "The fixtures are generated: run 'pnpm gate maestro-regenerate' and commit the result."
             exit 1
           fi
           echo "Fixtures are byte-identical to a fresh regeneration from Maestro ${{ github.sha }}."

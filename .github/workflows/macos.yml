@@ -41,15 +41,15 @@ jobs:
         with:
           derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}
           cache-key-prefix: macos-runner-prebuilt
-          build-command: pnpm build:xcuitest:macos
+          build-command: pnpm gate swift-runner-macos
           xcuitest-platform: macos
           xcuitest-destination: platform=macOS,arch=arm64
 
       - name: Build macOS helper
-        run: pnpm build:macos-helper
+        run: pnpm gate macos-helper
 
       - name: Run macOS integration test
-        run: pnpm test:replay:macos --retries 2 --report-junit test/artifacts/replays-macos.junit.xml
+        run: pnpm gate replay-macos --retries 2 --report-junit test/artifacts/replays-macos.junit.xml
 
       - name: Upload macOS artifacts
         if: always()

@@ -214,40 +214,37 @@ verified instances motivated the manifest: `CHECK_CATALOG.ciJobs` named CI jobs 
 strings, and four suites (`check:tmpdir-leaks`, its model tests, `test:fixture-cache`,
 `check:mcp-metadata`) ran in no workflow at all.
 
-`pnpm check:gate-manifest` (`scripts/gate-manifest/`) derives the answer from the real sources —
-`.github/workflows/*.yml`, `.github/actions/*`, `package.json`, `vitest.config.ts` — with no
-hand-maintained second list. It resolves an execution graph, `workflow job → local composite
-action → package script → aggregate chain → terminal`, and asserts:
+`pnpm check:gate-manifest` (`scripts/gate/`) answers it with one rule and one primitive.
 
-- every Vitest project and every `test:*`/`check:*` script is reachable from some job;
-- every `CHECK_CATALOG.ciJobs` name is a job that exists, and the jobs it names collectively
-  reach everything the check's script does;
-- a path category's owning job actually fires on a PR touching only that category.
+The rule: **CI may invoke a gate only through `pnpm gate <check-id>`.** Every gate is a `CheckId`
+in the registry (`scripts/check-affected/checks.ts`) — the same universe the affected-selector
+uses — so the workflow→check mapping is a token scan over `run:` blocks and action inputs rather
+than an interpretation of shell. That is what makes a new gate impossible to hide: an unregistered
+one cannot be wired into a lane, because project code run outside the runner fails the manifest.
 
-Two properties are load-bearing. **Ownership is proven, never inferred from a name appearing in
-workflow text** — commands resolve to *terminals* (`vitest:<project>`, `node-test:<file>`,
-`exec:<argv>`), so renaming an intermediate script breaks the chain instead of leaving the claim
-standing. And it **fails closed**: anything unreadable — a `${{ … }}` in command position, a
-missing local action, an opaque runner that spawns its own child, a selector rule that is not a
-string literal — is a failure until classified in `scripts/gate-manifest/waivers.ts` with a
-reason and a tracking issue. Waivers are themselves checked, so one that stops applying fails
-rather than rotting: each is re-resolved with itself removed and must change the outcome.
+The primitive: `covered(check, path)` — some `pull_request`/`schedule` lane runs every *unit* of
+the check, and (when a path is given) a change to that path starts the lane. Units are Vitest
+projects and `node --test` files, not script names, so the Coverage lane running the whole suite
+covers a lane running part of it, and a docs lane running one unit-core file does **not** stand in
+for the project. Every assertion is phrased against it:
 
-Where the two meet is worth knowing before you edit the selector. The path-category universe is
-*derived* from `scripts/check-affected/model.ts` — the third argument of each `reason()` call and
-each `BUILD_OWNERSHIP` entry's `rule:` — so a new ownership rule widens the universe and fails
-the gate until a representative path exercises it. Only string literals count. A rule the reader
-cannot see would slip past the reachability check while the gate stayed green, so a computed one
-is an error naming its line. The single statement that forwards `entry.rule` out of the ownership
-loop is declared in `FORWARDED_SELECTOR_RULES` rather than recognized by shape;
-`selector-rules.ts` records why the shape-recognizing version could not be made sound.
+- every registered check is covered — `covered(c, null)`;
+- for each category sample path, every check a real `selectChecks()` call activates is covered
+  *for that path*, which is what holds the `website/**` docs lane (#1420);
+- no lane runs project code outside the runner;
+- no declaration is inert;
+- every Vitest project and suite script belongs to some check.
 
-That waiver is keyed on the whole enclosing **statement** — chain, callbacks and all — plus the
-file and enclosing function, not on the `reason(...)` call. The claim it makes ("this rule is
-already in the universe") is true because of the chain, so a key naming only the call would
-survive that chain being swapped for a mutating one. Mutate it, or move the statement, and the
-waiver goes inert and fails. When the reader refuses a forward it prints the exact three fields
-to paste.
+The residue that cannot be derived lives in `scripts/gate/declarations.ts`, and every entry is
+live in both directions: an unlisted exception fails as a bypass, and a listed one that stops
+matching a live step fails as inert. That polarity is the point — the predecessor's `GATE_RUNNERS`
+list made a *deleted* entry quieter, which is the one direction a ledger must never have.
+
+Worth knowing before you edit the selector: the category universe is not parsed out of
+`scripts/check-affected/model.ts` any more. The manifest *runs* the selector on a representative
+path per category (`PATH_SAMPLES`) and asserts against what it really returns, so there is no
+static reader to defeat. Samples must be tracked files that still classify — a sample naming a
+path no PR can touch fails rather than resolving by prefix and reading green.
 
 The gate is deterministic, offline, and needs no GitHub token — it runs from a clean checkout in
 the `Affected-check Selector` job. Branch-protection required-contexts drift is the one part

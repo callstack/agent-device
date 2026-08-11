@@ -18,7 +18,15 @@ import {
   resolveCommand,
   type CheckSpec,
 } from './checks.ts';
-import { ALL_CHECKS, selectChecks, type CheckPlan } from './model.ts';
+import { loadModel, owningLanes } from '../gate/model.ts';
+import { ALL_CHECKS, selectChecks, type CheckId, type CheckPlan } from './model.ts';
+
+// Which GitHub jobs run each check, read off the workflows rather than declared
+// next to the check. A skipped check tells the reader where it is authoritative,
+// and that pointer is only useful if it cannot drift from the workflows.
+function ciJobsByCheck(): Map<CheckId, string[]> {
+  return owningLanes(loadModel(repoRoot, []));
+}
 
 type Args = { base: string; head: string; json: boolean; run: boolean };
 
@@ -88,12 +96,13 @@ function packageEntryFiles(pkg: PackageJson): string[] {
 }
 
 function printPlanJson(plan: CheckPlan, args: Args): void {
+  const ciJobs = ciJobsByCheck();
   const checks = plan.checks.map((id) => {
     const spec = getCheckSpec(id);
     return {
       id,
       label: spec.label,
-      ciJobs: spec.ciJobs,
+      ciJobs: ciJobs.get(id) ?? [],
       localRunnable: spec.localRunnable,
       reasons: plan.reasons.filter((reason) => reason.check === id),
     };
@@ -181,10 +190,10 @@ export async function runChecks(
   const runnable = plan.checks.map(getCheckSpec).filter((spec: CheckSpec) => spec.localRunnable);
   const skipped = plan.checks.map(getCheckSpec).filter((spec: CheckSpec) => !spec.localRunnable);
   const coverageSelected = plan.checks.includes('coverage');
+  const ciJobs = skipped.length > 0 ? ciJobsByCheck() : new Map<CheckId, string[]>();
   for (const spec of skipped) {
-    process.stdout.write(
-      `\n[skip] ${spec.id} — GitHub-authoritative (jobs: ${spec.ciJobs.join(', ')})\n`,
-    );
+    const jobs = ciJobs.get(spec.id) ?? [];
+    process.stdout.write(`\n[skip] ${spec.id} — GitHub-authoritative (jobs: ${jobs.join(', ')})\n`);
   }
   for (const spec of runnable) {
     if (isCoveredByAffectedCoverage(spec, coverageSelected)) {

@@ -88,24 +88,15 @@ test('readChangedFiles unions staged and unstaged so a net diff cannot hide a fi
   }
 });
 
-const ALL_SCRIPTS: Record<string, string> = {
-  'format:check': 'x',
-  lint: 'x',
-  typecheck: 'x',
-  'test-app:typecheck': 'x',
-  'check:layering': 'x',
-  'check:fallow': 'x',
-  'check:mcp-metadata': 'x',
-  build: 'x',
-  'check:package': 'x',
-  'check:unit': 'x',
-  'check:coverage-changed': 'x',
-  'test:integration:provider': 'x',
-  'test:integration:node': 'x',
-  'test:integration:progress:check': 'x',
-  'check:replay-compat': 'x',
-  'check:daemon-wire-compat': 'x',
-};
+const repoRoot = path.resolve(import.meta.dirname, '../..');
+
+// The real package scripts: a fixture map has to be hand-extended for every new
+// gate, which is the drift the registry exists to remove.
+const ALL_SCRIPTS: Record<string, string> = (
+  JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as {
+    scripts: Record<string, string>;
+  }
+).scripts;
 
 const ARGS = { base: 'origin/main', head: 'HEAD', json: false, run: true };
 
@@ -163,7 +154,7 @@ test('runChecks skips GitHub-authoritative checks and passes when locals succeed
   const code = await runChecks(plan, { scripts: ALL_SCRIPTS }, ARGS, { execute, cwd: '.' });
   assert.equal(code, 0);
   const ran = executed.map((command) => command[command.length - 1]);
-  for (const skipped of ['build:xcuitest', 'build:android-snapshot-helper', 'test:smoke:web']) {
+  for (const skipped of ['build:xcuitest:ios', 'build:android-snapshot-helper', 'test:smoke:web']) {
     assert.ok(
       !ran.includes(skipped),
       `${skipped} is GitHub-authoritative and must not run locally`,

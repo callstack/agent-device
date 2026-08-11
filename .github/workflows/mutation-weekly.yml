@@ -63,7 +63,7 @@ jobs:
 
       - name: Run mutants for ${{ matrix.name }}
         run: |
-          pnpm mutation:run --modules ${{ matrix.module }} \
+          pnpm gate mutation --modules ${{ matrix.module }} \
             ${{ matrix.shard && format('--shard {0}', matrix.shard) || '' }}
 
       # A shard can die before Stryker writes anything (install, config, crash);
@@ -72,7 +72,7 @@ jobs:
       - name: Record a failed shard envelope
         if: failure()
         run: |
-          pnpm mutation:run --modules ${{ matrix.module }} --fail-envelope \
+          pnpm gate mutation --modules ${{ matrix.module }} --fail-envelope \
             "shard ${{ matrix.name }} failed before producing a report (run ${{ github.run_id }})" || true
 
       - name: Upload shard report
@@ -99,7 +99,7 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Ratchet self-test
-        run: pnpm mutation:test
+        run: pnpm gate mutation-model
 
       - name: Download shard reports
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -111,7 +111,7 @@ jobs:
       # runner exports it, so the summary and the artifact carry the same numbers.
       - name: Ratchet the merged sweep and propose the next baseline
         run: |
-          pnpm mutation:check --report-dir .tmp/mutation/shards --expect-shards 10 --update
+          pnpm gate mutation-check --report-dir .tmp/mutation/shards --expect-shards 10 --update
           cp mutation-baselines/decision-kernels.json .tmp/mutation/proposed-baseline.json
           git checkout -- mutation-baselines/decision-kernels.json
 
@@ -120,7 +120,7 @@ jobs:
       - name: Record a failed lane envelope
         if: failure()
         run: |
-          pnpm mutation:run --fail-envelope \
+          pnpm gate mutation --fail-envelope \
             "weekly ratchet job failed before producing a verdict (run ${{ github.run_id }})" || true
 
       # Freshness/drift telemetry (#1430): the envelope states commit, Stryker
