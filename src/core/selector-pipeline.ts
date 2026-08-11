@@ -1,10 +1,9 @@
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SelectorChainMatchList, SelectorMatchOptions } from '@agent-device/selectors';
 import {
   listSelectorChainMatches,
   resolveSelectorChainWithPolicy,
-  type SelectorChainMatchList,
-  type SelectorMatchOptions,
-} from '@agent-device/selectors';
+} from '@agent-device/selectors/engine';
 import { isSnapshotNodeInteractionBlocked } from '../snapshot/snapshot-occlusion.ts';
 import {
   isRootInteractionContainer,
@@ -12,6 +11,7 @@ import {
 } from './interaction-targeting.ts';
 import type {
   CandidateSetPipelinePolicy,
+  SelectorListPolicy,
   SelectorPipelinePolicy,
   SelectorPollBudget,
   SelectorPromotionStage,
@@ -41,6 +41,9 @@ import type {
  *   covered-diagnosis probe).
  * - `listSelectorPipelineMatches` — `reject-candidates` rows, whose contract is
  *   that the caller sees every candidate and narrows or refuses explicitly.
+ *   A row whose RESULT is the candidate set (`find <q> list`) declares only the
+ *   two stages a listing can run, so the node-stage entries below reject it at
+ *   the type level rather than skipping stages it claimed.
  * - `runNodePipelineStages` — the node stages for a target that came from a
  *   non-chain matcher (`@ref` lookup, find's fuzzy locator) or from a narrowed
  *   candidate set. Not a bypass: it runs every stage the row declares.
@@ -167,7 +170,7 @@ export async function runNodePipelineStages(
 }
 
 /** The nodes this row lets a selector match against. */
-function pipelineCandidates(policy: SelectorPipelinePolicy, nodes: SnapshotNode[]): SnapshotNode[] {
+function pipelineCandidates(policy: SelectorListPolicy, nodes: SnapshotNode[]): SnapshotNode[] {
   if (policy.occlusion !== 'exclude-and-refuse') return nodes;
   return nodes.filter((candidate) => !isSnapshotNodeInteractionBlocked(candidate));
 }

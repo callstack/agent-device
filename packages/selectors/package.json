@@ -4,7 +4,7 @@
   "private": true,
   "sideEffects": false,
   "type": "module",
-  "description": "Shared selector matching, argument, and replay semantics for agent-device. `.` is string-only; `./ast` is the published parser surface behind `agent-device/selectors`.",
+  "description": "Shared selector matching, argument, and replay semantics for agent-device. `.` is string-only; `./ast` is the published parser surface behind `agent-device/selectors`; `./engine` is the resolve/list surface reserved for the selector-pipeline owner (R19).",
   "dependencies": {
     "@agent-device/ad-script": "workspace:*",
     "@agent-device/contracts": "workspace:*",
@@ -18,6 +18,10 @@
     "./ast": {
       "types": "./src/ast.ts",
       "default": "./src/ast.ts"
+    },
+    "./engine": {
+      "types": "./src/engine.ts",
+      "default": "./src/engine.ts"
     }
   },
   "devDependencies": {

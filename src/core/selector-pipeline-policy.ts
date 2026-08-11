@@ -79,10 +79,26 @@ export type SelectorPollBudget = {
  */
 export type SelectorPollStage = SelectorPollBudget | 'none';
 
-export type SelectorPipelinePolicy = {
+/**
+ * A row whose result is the candidate SET, not a target: `find <q> list`.
+ * Only two stages can apply — which nodes are candidates, and how the matches
+ * are gathered — so those are the only two it may declare. Promotion, the
+ * off-screen guard, and a poll budget all presuppose a single element to
+ * retarget, keep on screen, or wait for; a listing has none, and declaring
+ * them here would be a claim no listing flow could execute (#1656 review).
+ *
+ * The narrower shape is load-bearing, not documentation: `runNodePipelineStages`
+ * and `selectorPollBudget` take the full row, so handing them a listing row is
+ * a compile error rather than a silently skipped stage.
+ */
+export type SelectorListPolicy = {
   /** The ambiguity contract this row resolves under (#1630). */
   resolution: SelectorResolutionPolicy;
   occlusion: SelectorOcclusionStage;
+};
+
+/** A row whose result is ONE target, and therefore runs the node stages too. */
+export type SelectorPipelinePolicy = SelectorListPolicy & {
   offscreen: SelectorOffscreenStage;
   promotion: SelectorPromotionStage;
   poll: SelectorPollStage;
@@ -165,9 +181,6 @@ export const SELECTOR_PIPELINE_POLICIES = {
   readList: {
     resolution: SELECTOR_RESOLUTION_POLICIES.readList,
     occlusion: 'ignore',
-    offscreen: 'ignore',
-    promotion: 'none',
-    poll: 'none',
   },
   /** Mutating `find` (#1625). */
   findAct: {
@@ -177,7 +190,7 @@ export const SELECTOR_PIPELINE_POLICIES = {
     promotion: 'hittable-ancestor-below-root',
     poll: 'none',
   },
-} as const satisfies Record<string, SelectorPipelinePolicy>;
+} as const satisfies Record<string, SelectorPipelinePolicy | SelectorListPolicy>;
 
 export type SelectorPipelinePolicyName = keyof typeof SELECTOR_PIPELINE_POLICIES;
 

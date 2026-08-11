@@ -1,14 +1,15 @@
 import assert from 'node:assert/strict';
+import { resolveSelectorChainWithPolicy } from './engine.ts';
 import { test } from 'vitest';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import * as selectorsFacade from './index.ts';
+import * as selectorsEngine from './engine.ts';
 import {
   buildSelectorCandidates,
   readReplaySelectorDisplayValue,
   readSelectorExpression,
   resolveRecordedTarget,
   resolveReplaySuggestionCandidate,
-  resolveSelectorChainWithPolicy,
   SELECTOR_RESOLUTION_POLICIES,
 } from './index.ts';
 
@@ -201,16 +202,36 @@ test('replay suggestion resolution and display values stay string-only at the fa
  * preserved semantics — so no fixture-tree assertion can catch a revert
  * (#1715 review). The absence of the symbol is the only observable.
  */
-test('the façade exposes no resolver that bypasses the policy matrix', () => {
+test('the façade exposes no resolver at all, and the engine door exposes only the two entries', () => {
   const exported = Object.keys(selectorsFacade);
-  assert.ok(exported.includes('resolveSelectorChainWithPolicy'));
-  assert.ok(!exported.includes('resolveSelectorChain'), 'knob-taking resolver must stay private');
+  // #1656 moved both engine entries behind `./engine`, which R19 reserves for
+  // the selector-pipeline owner: a route that could reach a resolver from the
+  // root façade would get an ambiguity contract while skipping every
+  // structural stage its policy row declares.
   assert.ok(
-    !exported.includes('findSelectorChainMatch'),
-    'count-only existence lookup must stay private; `is exists` names the readAny row',
+    !exported.includes('resolveSelectorChainWithPolicy'),
+    'resolution belongs to the engine subpath, behind the pipeline owner',
   );
   assert.ok(
-    !exported.includes('selectorResolutionKnobs'),
-    'knob derivation must stay private so a call site cannot rebuild a contract from knobs',
+    !exported.includes('listSelectorChainMatches'),
+    'enumeration belongs to the engine subpath, behind the pipeline owner',
   );
+  assert.deepEqual(Object.keys(selectorsEngine).sort(), [
+    'listSelectorChainMatches',
+    'resolveSelectorChainWithPolicy',
+  ]);
+
+  // Unchanged since #1630, on both surfaces: neither door hands out a knob
+  // resolver a call site could rebuild its contract from.
+  for (const [surface, names] of [
+    ['facade', exported],
+    ['engine', Object.keys(selectorsEngine)],
+  ] as const) {
+    assert.ok(!names.includes('resolveSelectorChain'), `${surface}: knob-taking resolver`);
+    assert.ok(
+      !names.includes('findSelectorChainMatch'),
+      `${surface}: count-only existence lookup; \`is exists\` names the readAny row`,
+    );
+    assert.ok(!names.includes('selectorResolutionKnobs'), `${surface}: knob derivation`);
+  }
 });

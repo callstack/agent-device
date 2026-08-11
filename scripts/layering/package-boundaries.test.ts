@@ -387,13 +387,17 @@ test('the real tree parses, declares, and passes R11', () => {
   );
   const selectorsPackage = packages.find((pkg) => pkg.name === '@agent-device/selectors');
   assert.ok(selectorsPackage, 'selectors package must exist');
-  // Two subpaths, and the split is the point: `.` is the string-only façade
+  // Three subpaths, and each split is the point: `.` is the string-only façade
   // every in-repo consumer uses, `./ast` is the published parser surface that
   // `agent-device/selectors` has shipped since before the engine moved into
-  // this package. A third subpath, or the AST leaking into `.`, fails here.
+  // this package, and `./engine` is the resolve/list surface reserved for the
+  // selector-pipeline owner (R19, #1656) — a route reaching it skips the
+  // structural stages its policy row declares. A fourth subpath, or the AST
+  // leaking into `.`, fails here.
   assert.deepEqual([...selectorsPackage.exportTargets.keys()].sort(), [
     '@agent-device/selectors',
     '@agent-device/selectors/ast',
+    '@agent-device/selectors/engine',
   ]);
   assert.deepEqual([...selectorsPackage.workspaceDependencies].sort(), [
     '@agent-device/ad-script',

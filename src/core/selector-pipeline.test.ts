@@ -9,10 +9,23 @@ import {
   runNodePipelineStages,
   selectorPollBudget,
 } from './selector-pipeline.ts';
-import {
-  SELECTOR_PIPELINE_POLICIES,
-  type SelectorPipelinePolicyName,
-} from './selector-pipeline-policy.ts';
+import { SELECTOR_PIPELINE_POLICIES } from './selector-pipeline-policy.ts';
+
+/**
+ * Rows whose result is ONE target. The listing row is absent by TYPE, not by
+ * omission: it declares no node stages, so the entries below cannot take it.
+ */
+const NODE_STAGE_ROWS = [
+  'promotedTarget',
+  'resolvedTarget',
+  'coveredDiagnosis',
+  'readText',
+  'readUnique',
+  'readAny',
+  'findWait',
+  'wait',
+  'findAct',
+] as const;
 
 /**
  * The owner's own contract: that it runs what a row declares, for every row.
@@ -23,7 +36,6 @@ import {
  * pipeline nothing calls, those would pass on a pipeline that ignores its row.
  */
 
-const ROWS = Object.keys(SELECTOR_PIPELINE_POLICIES) as SelectorPipelinePolicyName[];
 const MATCH = { platform: 'ios' as const };
 
 /** A covered button beside an uncovered twin, under a full-screen root. */
@@ -95,7 +107,11 @@ function nodesOf(raw: RawSnapshotNode[]): SnapshotNode[] {
   return makeSnapshotState(raw).nodes;
 }
 
-async function stagedIndex(row: SelectorPipelinePolicyName, raw: RawSnapshotNode[], index: number) {
+async function stagedIndex(
+  row: (typeof NODE_STAGE_ROWS)[number],
+  raw: RawSnapshotNode[],
+  index: number,
+) {
   const nodes = nodesOf(raw);
   const policy = SELECTOR_PIPELINE_POLICIES[row];
   const target = await runNodePipelineStages(policy, nodes, nodes[index]!, {
@@ -142,14 +158,9 @@ test('the occlusion stage decides refusal: every row that refuses a covered targ
     assert.equal(target.kind, 'occluded', row);
     assert.equal(target.node.index, 1, row);
   }
-  for (const row of [
-    'readText',
-    'readUnique',
-    'readAny',
-    'wait',
-    'findWait',
-    'readList',
-  ] as const) {
+  // `readList` is absent by construction: a listing row declares no node
+  // stages, so it has no occlusion verdict to make on a target.
+  for (const row of ['readText', 'readUnique', 'readAny', 'wait', 'findWait'] as const) {
     const target = await stagedIndex(row, COVERED_TREE, 1);
     assert.equal(target.kind, 'target', row);
     assert.equal(target.node.index, 1, row);
@@ -174,7 +185,7 @@ test('find’s promotion stops below the viewport root; the tap row does not', a
 
 test('the off-screen stage runs the refusal shape only for the rows that refuse', async () => {
   const nodes = nodesOf(PROMOTABLE_TREE);
-  for (const row of ROWS) {
+  for (const row of NODE_STAGE_ROWS) {
     let consulted = false;
     await runNodePipelineStages(SELECTOR_PIPELINE_POLICIES[row], nodes, nodes[0]!, {
       offscreen: async (node) => {
@@ -205,21 +216,46 @@ test('the poll stage answers only for the rows that poll', () => {
       intervalMs: 300,
     });
   }
-  for (const row of ROWS.filter((name) => name !== 'wait' && name !== 'findWait')) {
+  for (const row of NODE_STAGE_ROWS.filter((name) => name !== 'wait' && name !== 'findWait')) {
     assert.throws(() => selectorPollBudget(SELECTOR_PIPELINE_POLICIES[row]), /no poll budget/, row);
   }
 });
 
-test('pipeline rows declare only the stages these runners enforce', () => {
+test('a listing row cannot be handed the node stages it does not declare', () => {
+  // The `@ts-expect-error` directives ARE the assertion: a listing has no
+  // single target to retarget, keep on screen, or wait for, so widening
+  // `readList` to declare one of those stages makes these calls legal, leaves
+  // the directives unused, and fails the typecheck. Type-level rather than
+  // executed, because the point is that these entries never accept the row.
+
+  // @ts-expect-error a listing row declares no promotion or off-screen stage.
+  const nodeStages: Parameters<typeof runNodePipelineStages>[0] =
+    SELECTOR_PIPELINE_POLICIES.readList;
+  // @ts-expect-error a listing row declares no poll budget to ask for.
+  const pollBudget: Parameters<typeof selectorPollBudget>[0] = SELECTOR_PIPELINE_POLICIES.readList;
+
+  // The runtime half of the same claim, so the row cannot grow a node stage
+  // while the directives are updated to match.
+  assert.deepEqual(
+    Object.keys(SELECTOR_PIPELINE_POLICIES.readList).filter((stage) =>
+      ['promotion', 'offscreen', 'poll'].includes(stage),
+    ),
+    [],
+  );
+  assert.ok(nodeStages && pollBudget);
+});
+
+test('pipeline rows declare only the stages their kind enforces', () => {
   // The #1649 rule, carried to this table: a column nothing consumes is an
-  // unverifiable claim that reads as truth. Adding a field here fails until a
-  // runner reads it and every row is driven through that runner.
+  // unverifiable claim that reads as truth. A row declares the stages ITS KIND
+  // can run — a listing row that grew a `promotion` cell would be claiming a
+  // stage no listing flow executes, which is the same disease one level down.
+  const TARGET_ROW_STAGES = ['occlusion', 'offscreen', 'poll', 'promotion', 'resolution'];
+  const LIST_ROW_STAGES = ['occlusion', 'resolution'];
   for (const [name, policy] of Object.entries(SELECTOR_PIPELINE_POLICIES)) {
-    assert.deepEqual(
-      Object.keys(policy).sort(),
-      ['occlusion', 'offscreen', 'poll', 'promotion', 'resolution'],
-      `${name} declares a stage no runner consumes`,
-    );
+    const declared = Object.keys(policy).sort();
+    const expected = name === 'readList' ? LIST_ROW_STAGES : TARGET_ROW_STAGES;
+    assert.deepEqual(declared, expected, `${name} declares a stage its kind cannot run`);
   }
 });
 
@@ -238,15 +274,18 @@ test('every ambiguity row is named by a pipeline row', () => {
 test('the documented per-caller pipelines are the ones declared', () => {
   assert.deepEqual(
     Object.fromEntries(
-      Object.entries(SELECTOR_PIPELINE_POLICIES).map(([name, policy]) => [
-        name,
-        [
-          policy.occlusion,
-          policy.offscreen,
-          policy.promotion,
-          policy.poll === 'none' ? 'no-poll' : 'poll',
-        ],
-      ]),
+      NODE_STAGE_ROWS.map((name) => {
+        const policy = SELECTOR_PIPELINE_POLICIES[name];
+        return [
+          name,
+          [
+            policy.occlusion,
+            policy.offscreen,
+            policy.promotion,
+            policy.poll === 'none' ? 'no-poll' : 'poll',
+          ],
+        ];
+      }),
     ),
     {
       promotedTarget: ['exclude-and-refuse', 'refuse', 'hittable-ancestor', 'no-poll'],
@@ -257,7 +296,6 @@ test('the documented per-caller pipelines are the ones declared', () => {
       readAny: ['ignore', 'ignore', 'none', 'no-poll'],
       findWait: ['ignore', 'ignore', 'none', 'poll'],
       wait: ['ignore', 'ignore', 'none', 'poll'],
-      readList: ['ignore', 'ignore', 'none', 'no-poll'],
       findAct: ['refuse', 'ignore', 'hittable-ancestor-below-root', 'no-poll'],
     },
   );

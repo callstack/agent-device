@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import {
-  SELECTOR_RESOLUTION_POLICIES,
-  resolveSelectorChainWithPolicy,
-} from '@agent-device/selectors';
+import { SELECTOR_RESOLUTION_POLICIES } from '@agent-device/selectors';
+// The engine's own subpath (#1656): this file pins what a ROW means to the
+// engine, so it is the one consumer that legitimately holds it directly. R19
+// governs shipped routes — the layering scan reads production sources only.
+import { resolveSelectorChainWithPolicy } from '@agent-device/selectors/engine';
 
 /**
  * The matrix is exercised through the interface callers actually use
