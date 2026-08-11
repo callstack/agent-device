@@ -5,13 +5,13 @@ import type {
 import {
   createPlatformModuleRegistry,
   type AppLogSessionArtifacts,
+  type AppStateRuntimeHost,
   type AppStateRuntimeResult,
   type ComposedDeviceInventoryGateways,
   type DeviceRuntimeGateway,
   type PlatformRuntimeModule,
   type PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform';
-import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   inventoryModule as appleInventoryModule,
   runtimeModule as appleRuntimeModule,
@@ -43,7 +43,7 @@ import type { PlatformRuntimeProviderRegistration } from './platform-runtime-gat
 import { createComposedDeviceInventoryGateways } from './platform-runtime-device-inventory.ts';
 
 export async function readAndroidAppState(
-  device: DeviceInfo,
+  device: Parameters<AppStateRuntimeHost['android']['run']>[0],
   signal: AbortSignal,
 ): Promise<AppStateRuntimeResult> {
   const { createAppStateRuntimeHost } = await import('./platform-runtime-app-state-host.ts');
