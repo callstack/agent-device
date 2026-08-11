@@ -23,6 +23,18 @@ const HARMONY_DEVICE = {
 };
 const available = { available: true } as const;
 const unavailable = { available: false, reason: 'unsupported-platform-leaf' } as const;
+const listAppsOperation: PlatformRuntimeOperations['listApps'] = vi.fn(async ({ filter }) =>
+  filter === 'all'
+    ? [
+        { id: 'com.example.application', name: 'application' },
+        { id: 'com.ohos.settings', name: 'settings' },
+      ]
+    : [{ id: 'com.example.application', name: 'application' }],
+);
+const ensureReady = vi.fn(async (device: typeof HARMONY_DEVICE) => ({
+  ...device,
+  booted: true,
+}));
 
 function runtimeFacts(): RuntimeFacts<PlatformRuntimeOperations> {
   return {
@@ -33,7 +45,7 @@ function runtimeFacts(): RuntimeFacts<PlatformRuntimeOperations> {
       appLogStart: available,
       appLogReattach: available,
       appLogCleanup: available,
-      listApps: unavailable,
+      listApps: { available: true },
       networkDump: unavailable,
       screenRecordingStart: unavailable,
       screenRecordingReattach: unavailable,
@@ -54,7 +66,7 @@ const bindDevice: BindDeviceRuntime = async (device, use) => {
       device,
       owner: localRuntimeOwner('harmonyos'),
       facts: runtimeFacts(),
-      operations: { ensureReady: async () => device },
+      operations: { ensureReady, listApps: listAppsOperation },
       [Symbol.asyncDispose]: async () => {},
     },
     use,
@@ -63,10 +75,12 @@ const bindDevice: BindDeviceRuntime = async (device, use) => {
 
 beforeEach(() => {
   vi.mocked(inspectFacts).mockClear();
+  vi.mocked(listAppsOperation).mockClear();
+  vi.mocked(ensureReady).mockClear();
   bindCount = 0;
 });
 
-async function listApps(): Promise<DaemonResponse | null> {
+async function listApps(appsFilter: 'all' | 'user-installed'): Promise<DaemonResponse | null> {
   const sessionName = 'harmony-apps';
   const sessionStore = makeSessionStore();
   sessionStore.set(sessionName, makeSession(sessionName, HARMONY_DEVICE));
@@ -75,7 +89,7 @@ async function listApps(): Promise<DaemonResponse | null> {
     session: sessionName,
     command: 'apps',
     positionals: [],
-    flags: { appsFilter: 'all' },
+    flags: { appsFilter },
   };
   return await handleSessionInventoryCommands({
     req,
@@ -86,11 +100,25 @@ async function listApps(): Promise<DaemonResponse | null> {
   });
 }
 
-test('HarmonyOS apps remains fail-closed when the legacy capability rejected the leaf', async () => {
-  await expect(listApps()).resolves.toMatchObject({
-    ok: false,
-    error: { code: 'UNSUPPORTED_OPERATION' },
+test.each([
+  {
+    appsFilter: 'user-installed' as const,
+    expected: ['application (com.example.application)'],
+  },
+  {
+    appsFilter: 'all' as const,
+    expected: ['application (com.example.application)', 'settings (com.ohos.settings)'],
+  },
+])('HarmonyOS apps preserves the $appsFilter response parity', async ({ appsFilter, expected }) => {
+  await expect(listApps(appsFilter)).resolves.toMatchObject({
+    ok: true,
+    data: { apps: expected },
   });
   expect(inspectFacts).toHaveBeenCalledOnce();
-  expect(bindCount).toBe(0);
+  expect(bindCount).toBe(1);
+  expect(ensureReady).toHaveBeenCalledOnce();
+  expect(listAppsOperation).toHaveBeenCalledWith({
+    device: expect.any(Object),
+    filter: appsFilter,
+  });
 });

@@ -173,6 +173,51 @@ test('capabilities excludes network when the runtime fact is unavailable', async
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.network);
 });
 
+test('capabilities includes apps for the available HarmonyOS runtime fact', async () => {
+  const sessionName = 'harmony-capabilities';
+  const sessionStore = makeSessionStore('agent-device-capabilities-harmony-');
+  const harmonyDevice = {
+    platform: 'harmonyos',
+    id: 'harmony-capabilities',
+    name: 'HarmonyOS device',
+    kind: 'device',
+    target: 'mobile',
+    booted: true,
+  } as const;
+  sessionStore.set(sessionName, makeSession(sessionName, { device: harmonyDevice }));
+  const runtime = createAdmissionRuntime({
+    appLogAvailable: true,
+    networkAvailable: false,
+    appsAvailable: true,
+    providerMode: 'local',
+  });
+
+  const response = await withTargetDeviceResolutionScope(
+    async (request) => (request.platform === 'harmonyos' ? [harmonyDevice] : []),
+    async () =>
+      await handleSessionCommands({
+        req: {
+          token: 't',
+          session: sessionName,
+          command: PUBLIC_COMMANDS.capabilities,
+          positionals: [],
+          flags: {},
+        },
+        sessionName,
+        logPath: path.join(os.tmpdir(), 'daemon.log'),
+        sessionStore,
+        bindDevice: runtime.bindDevice,
+        inspectFacts: runtime.inspectFacts,
+        invoke: async () => ({ ok: true, data: {} }),
+      }),
+  );
+
+  expect(response?.ok).toBe(true);
+  if (!response?.ok) return;
+  expect(response.data?.availableCommands).toContain(PUBLIC_COMMANDS.apps);
+  expect(runtime.inspectFacts).toHaveBeenCalledOnce();
+});
+
 const APPS_UNAVAILABLE_CAPABILITY_CASES = [
   { label: 'Linux', device: LINUX_DEVICE, providerMode: 'local' },
   { label: 'Web', device: WEB_DESKTOP_DEVICE, providerMode: 'local' },
