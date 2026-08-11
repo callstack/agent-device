@@ -404,46 +404,70 @@ function createAdmissionBinding(
   const appsFact = appsOperationFact(options);
   return {
     device,
-    owner:
-      options.providerMode === 'provider-runtime'
-        ? providerRuntimeOwner('test', 'capabilities')
-        : localRuntimeOwner(device.platform),
-    facts: {
-      device: {
-        family: device.platform,
-        ...(device.appleOs === undefined ? {} : { appleOs: device.appleOs }),
-        kind: device.kind,
-        ...(device.target === undefined ? {} : { target: device.target }),
-        ...(device.iosPhysicalDeviceBackend === undefined
-          ? {}
-          : { iosPhysicalDeviceBackend: device.iosPhysicalDeviceBackend }),
-        providerMode: options.providerMode,
-      },
-      operations: {
-        appLogInspect: options.appLogAvailable ? { available: true } : unavailable,
-        appLogDoctor: unavailable,
-        appLogStart: unavailable,
-        appLogReattach: unavailable,
-        appLogCleanup: unavailable,
-        appState:
-          (options.appStateAvailable ?? options.appLogAvailable)
-            ? { available: true }
-            : unavailable,
-        networkDump: options.networkAvailable ? { available: true } : unavailable,
-        screenRecordingStart: unavailable,
-        screenRecordingReattach: unavailable,
-        screenRecordingCleanup: unavailable,
-        ensureReady: appsFact,
-        bootTarget: unavailable,
-        bootTargetHeadless: unavailable,
-        listApps: appsFact,
-      },
-    },
-    operations: {
-      ...(options.appLogAvailable ? { appLogInspect: inspectAndroidAppLog } : {}),
-      ...(options.networkAvailable ? { networkDump: dumpEmptyAndroidNetwork } : {}),
-    },
+    owner: createAdmissionOwner(device, options.providerMode),
+    facts: createAdmissionFacts(device, options, unavailable, appsFact),
+    operations: createAdmissionOperations(options),
     [Symbol.asyncDispose]: async () => {},
+  };
+}
+
+function createAdmissionOwner(device: DeviceInfo, providerMode: RuntimeProviderMode) {
+  return providerMode === 'provider-runtime'
+    ? providerRuntimeOwner('test', 'capabilities')
+    : localRuntimeOwner(device.platform);
+}
+
+function createAdmissionFacts(
+  device: DeviceInfo,
+  options: AdmissionRuntimeOptions,
+  unavailable: ReturnType<typeof unavailableOperationFact>,
+  appsFact: ReturnType<typeof appsOperationFact>,
+) {
+  return {
+    device: {
+      family: device.platform,
+      ...(device.appleOs === undefined ? {} : { appleOs: device.appleOs }),
+      kind: device.kind,
+      ...(device.target === undefined ? {} : { target: device.target }),
+      ...(device.iosPhysicalDeviceBackend === undefined
+        ? {}
+        : { iosPhysicalDeviceBackend: device.iosPhysicalDeviceBackend }),
+      providerMode: options.providerMode,
+    },
+    operations: createAdmissionOperationFacts(options, unavailable, appsFact),
+  };
+}
+
+function createAdmissionOperationFacts(
+  options: AdmissionRuntimeOptions,
+  unavailable: ReturnType<typeof unavailableOperationFact>,
+  appsFact: ReturnType<typeof appsOperationFact>,
+) {
+  return {
+    appLogInspect: options.appLogAvailable ? { available: true as const } : unavailable,
+    appLogDoctor: unavailable,
+    appLogStart: unavailable,
+    appLogReattach: unavailable,
+    appLogCleanup: unavailable,
+    appState:
+      (options.appStateAvailable ?? options.appLogAvailable)
+        ? { available: true as const }
+        : unavailable,
+    networkDump: options.networkAvailable ? { available: true as const } : unavailable,
+    screenRecordingStart: unavailable,
+    screenRecordingReattach: unavailable,
+    screenRecordingCleanup: unavailable,
+    ensureReady: appsFact,
+    bootTarget: unavailable,
+    bootTargetHeadless: unavailable,
+    listApps: appsFact,
+  };
+}
+
+function createAdmissionOperations(options: AdmissionRuntimeOptions) {
+  return {
+    ...(options.appLogAvailable ? { appLogInspect: inspectAndroidAppLog } : {}),
+    ...(options.networkAvailable ? { networkDump: dumpEmptyAndroidNetwork } : {}),
   };
 }
 
