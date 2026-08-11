@@ -38,8 +38,8 @@ describe('perf command interface', () => {
     });
   });
 
-  test('requires an explicit perf area and writes it to the daemon request', () => {
-    expectInvalidArgs(() => perfCliReader([], NO_FLAGS), 'perf area');
+  test('retains optional aggregate compatibility and writes focused areas', () => {
+    expect(perfCliReader([], NO_FLAGS)).toEqual({});
     expect(perfDaemonWriter({ area: 'frames' })).toMatchObject({
       command: 'perf',
       positionals: ['frames'],

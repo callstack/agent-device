@@ -25,7 +25,7 @@ import {
   buildAppleMemorySamplingMetadata,
   captureAppleMemorySnapshot,
   sampleAppleFramePerf,
-  sampleApplePerfMetrics,
+  sampleAppleMemoryPerf,
 } from '../../platforms/apple/core/perf.ts';
 import {
   HARMONYOS_MEMORY_SAMPLE_DESCRIPTION,
@@ -38,7 +38,7 @@ import { PERF_UNAVAILABLE_REASON } from './session-startup-metrics.ts';
 
 // Populate the PlatformPlugin registry once at module load (idempotent; registers
 // only lazy closures, so no leaf code is imported and CLI cold-start is unaffected
-// — mirrors the same call in `daemon/app-log.ts`). `supportsPlatformPerfMetrics`
+// — mirrors the same call in `daemon/app-log.ts`). `supportsPlatformPerfObservations`
 // reads the per-platform perf facet from this registry, so it must be populated first.
 registerBuiltinPlatformPlugins();
 
@@ -82,7 +82,7 @@ export async function buildPerfFramesResponseData(
 ): Promise<PerfFramesResponseData> {
   const response = buildBasePerfFramesResponse(session);
 
-  if (!supportsPlatformPerfMetrics(session)) {
+  if (!supportsPlatformPerfObservations(session)) {
     return response;
   }
 
@@ -101,7 +101,7 @@ export async function buildPerfMemoryResponseData(
 ): Promise<PerfMemoryResponseData> {
   const response = buildBasePerfMemoryResponse(session);
 
-  if (!supportsPlatformPerfMetrics(session)) {
+  if (!supportsPlatformPerfObservations(session)) {
     if (options.action === 'snapshot') {
       const kind = resolveMemorySnapshotKind(session, options.kind);
       response.artifact = unsupportedMemorySnapshotArtifact(session, kind);
@@ -180,12 +180,12 @@ async function applyFramePerfMetric(
   response.metrics.fps = enrichFrameMetricWithSessionContext(buildMetricResult(result), session);
 }
 
-function supportsPlatformPerfMetrics(session: SessionState): boolean {
+function supportsPlatformPerfObservations(session: SessionState): boolean {
   // Routes the platform gate through the PlatformPlugin perf facet (issue #974).
-  // Apple/Android carry `perf.supportsMetrics`; linux/web (and any unregistered
+  // Apple/Android carry `perf.supportsObservations`; linux/web (and any unregistered
   // platform) fall through to `false`, matching the former hand predicate. The
   // daemon perf routing parity test pins this equivalence.
-  return tryGetPlugin(session.device.platform)?.perf?.supportsMetrics(session.device) ?? false;
+  return tryGetPlugin(session.device.platform)?.perf?.supportsObservations(session.device) ?? false;
 }
 
 function buildMissingAppPerfReason(session: SessionState): string {
@@ -275,16 +275,17 @@ async function buildMemorySampleMetric(
         )
       : session.device.platform === 'harmonyos'
         ? await settleMetric(sampleHarmonyMemoryPerf(session.device, session.appBundleId))
-        : await settleMetric(sampleAppleMemoryPerf(session));
+        : await settleMetric(sampleAppleSessionMemoryPerf(session));
   return buildMetricResult(result);
 }
 
-async function sampleAppleMemoryPerf(session: SessionState): Promise<Record<string, unknown>> {
+async function sampleAppleSessionMemoryPerf(
+  session: SessionState,
+): Promise<Record<string, unknown>> {
   if (!session.appBundleId) {
     throw new AppError('INVALID_ARGS', buildMissingAppPerfReason(session));
   }
-  const processSample = await sampleApplePerfMetrics(session.device, session.appBundleId);
-  return processSample.memory;
+  return await sampleAppleMemoryPerf(session.device, session.appBundleId);
 }
 
 async function buildMemorySnapshotArtifact(

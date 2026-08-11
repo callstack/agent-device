@@ -13,7 +13,6 @@ import { AppError } from '@agent-device/kernel/errors';
 import { parseXmlDocumentSync, type XmlNode } from '@agent-device/xml';
 import { execFailureDetails, requireExecSuccess, type ExecResult } from '../../../utils/exec.ts';
 import { splitNonEmptyTrimmedLines } from '../../../utils/parsing.ts';
-import { roundPercent } from '../../perf-utils.ts';
 import { uniqueStrings } from '@agent-device/kernel/collections';
 import { IOS_DEVICECTL_DEFAULT_HINT, resolveIosDevicectlHint } from './devicectl.ts';
 import type { IosDeviceProcessInfo } from './app-info.ts';
@@ -35,9 +34,7 @@ import {
   type AppleFramePerfSample,
 } from './perf-frame.ts';
 
-const APPLE_CPU_SAMPLE_METHOD = 'ps-process-snapshot';
 const APPLE_MEMORY_SAMPLE_METHOD = 'ps-process-snapshot';
-const IOS_DEVICE_CPU_SAMPLE_METHOD = 'xctrace-activity-monitor';
 const IOS_DEVICE_MEMORY_SAMPLE_METHOD = 'xctrace-activity-monitor';
 export const APPLE_MEMGRAPH_SNAPSHOT_METHOD = 'leaks-output-graph';
 export const APPLE_MEMGRAPH_SNAPSHOT_DESCRIPTION =
@@ -52,13 +49,6 @@ const IOS_DEVICE_PERF_TRACE_DURATION = '1s';
 const IOS_DEVICE_FRAME_TRACE_DURATION = '2s';
 const IOS_DEVICE_TRACE_RECORD_MAX_ATTEMPTS = 3;
 const IOS_DEVICE_TRACE_RECORD_RETRY_DELAY_MS = 1_500;
-
-export type AppleCpuPerfSample = {
-  usagePercent: number;
-  measuredAt: string;
-  method: typeof APPLE_CPU_SAMPLE_METHOD | typeof IOS_DEVICE_CPU_SAMPLE_METHOD;
-  matchedProcesses: string[];
-};
 
 export type AppleMemoryPerfSample = {
   residentMemoryKb: number;
@@ -98,7 +88,6 @@ export type AppleProcessSample = {
 type IosDevicePerfProcessSample = {
   pid: number;
   processName: string;
-  cpuTimeNs: number | null;
   residentMemoryBytes: number | null;
 };
 
@@ -125,12 +114,12 @@ type IosDeviceTraceRecordAttempt = IosDeviceTraceRecord & {
   result: ExecResult;
 };
 
-export async function sampleApplePerfMetrics(
+export async function sampleAppleMemoryPerf(
   device: DeviceInfo,
   appBundleId: string,
-): Promise<{ cpu: AppleCpuPerfSample; memory: AppleMemoryPerfSample }> {
+): Promise<AppleMemoryPerfSample> {
   if (isIosFamily(device) && device.kind === 'device') {
-    return await sampleIosDevicePerfMetrics(device, appBundleId);
+    return await sampleIosDeviceMemoryPerf(device, appBundleId);
   }
 
   const executable = await resolveAppleExecutable(device, appBundleId);
@@ -143,12 +132,10 @@ export async function sampleApplePerfMetrics(
   }
 
   const measuredAt = new Date().toISOString();
-  return buildApplePerfSamples({
-    usagePercent: processes.reduce((total, process) => total + process.cpuPercent, 0),
+  return buildAppleMemoryPerfSample({
     residentMemoryKb: processes.reduce((total, process) => total + process.rssKb, 0),
     measuredAt,
     matchedProcesses: [executable.executableName],
-    cpuMethod: APPLE_CPU_SAMPLE_METHOD,
     memoryMethod: APPLE_MEMORY_SAMPLE_METHOD,
   });
 }
@@ -686,9 +673,8 @@ async function parseIosDevicePerfTable(xml: string): Promise<IosDevicePerfProces
   }
   const pidIndex = mnemonics.indexOf('pid');
   const processIndex = mnemonics.indexOf('process');
-  const cpuTimeIndex = mnemonics.indexOf('cpu-total');
   const residentMemoryIndex = mnemonics.indexOf('memory-real');
-  if (pidIndex < 0 || processIndex < 0 || cpuTimeIndex < 0 || residentMemoryIndex < 0) {
+  if (pidIndex < 0 || processIndex < 0 || residentMemoryIndex < 0) {
     throw new AppError(
       'COMMAND_FAILED',
       'xctrace activity-monitor-process-live export is missing expected columns',
@@ -731,7 +717,6 @@ async function parseIosDevicePerfTable(xml: string): Promise<IosDevicePerfProces
     samples.push({
       pid,
       processName,
-      cpuTimeNs: resolveXmlNumber(elements[cpuTimeIndex], references),
       residentMemoryBytes: resolveXmlNumber(elements[residentMemoryIndex], references),
     });
   }
@@ -764,42 +749,19 @@ export async function resolveAppleExecutable(
   };
 }
 
-async function sampleIosDevicePerfMetrics(
+async function sampleIosDeviceMemoryPerf(
   device: DeviceInfo,
   appBundleId: string,
-): Promise<{ cpu: AppleCpuPerfSample; memory: AppleMemoryPerfSample }> {
+): Promise<AppleMemoryPerfSample> {
   const processes = await resolveIosDevicePerfTarget(device, appBundleId);
-  const firstCapture = await captureIosDevicePerfTable(device, appBundleId);
-  const secondCapture = await captureIosDevicePerfTable(device, appBundleId);
-  const firstSnapshot = summarizeIosDevicePerfSnapshot(
-    await parseIosDevicePerfTable(firstCapture.xml),
+  const capture = await captureIosDevicePerfTable(device, appBundleId);
+  const snapshot = summarizeIosDeviceMemorySnapshot(
+    await parseIosDevicePerfTable(capture.xml),
     processes,
     appBundleId,
     device,
   );
-  const secondSnapshot = summarizeIosDevicePerfSnapshot(
-    await parseIosDevicePerfTable(secondCapture.xml),
-    processes,
-    appBundleId,
-    device,
-  );
-
-  const elapsedMs = secondCapture.capturedAtMs - firstCapture.capturedAtMs;
-  if (elapsedMs <= 0) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      `Invalid Activity Monitor sample window for ${appBundleId}`,
-      {
-        appBundleId,
-        deviceId: device.id,
-      },
-    );
-  }
-  if (
-    firstSnapshot.cpuTimeNs === null ||
-    secondSnapshot.cpuTimeNs === null ||
-    secondSnapshot.residentMemoryBytes === null
-  ) {
+  if (snapshot.residentMemoryBytes === null) {
     throw new AppError('COMMAND_FAILED', `Incomplete Activity Monitor sample for ${appBundleId}`, {
       appBundleId,
       deviceId: device.id,
@@ -807,15 +769,10 @@ async function sampleIosDevicePerfMetrics(
     });
   }
 
-  const cpuDeltaNs = Math.max(0, secondSnapshot.cpuTimeNs - firstSnapshot.cpuTimeNs);
-  const usagePercent = (cpuDeltaNs / (elapsedMs * 1_000_000)) * 100;
-
-  return buildApplePerfSamples({
-    usagePercent,
-    residentMemoryKb: secondSnapshot.residentMemoryBytes / 1024,
-    measuredAt: new Date(secondCapture.capturedAtMs).toISOString(),
-    matchedProcesses: secondSnapshot.matchedProcesses,
-    cpuMethod: IOS_DEVICE_CPU_SAMPLE_METHOD,
+  return buildAppleMemoryPerfSample({
+    residentMemoryKb: snapshot.residentMemoryBytes / 1024,
+    measuredAt: new Date(capture.capturedAtMs).toISOString(),
+    matchedProcesses: snapshot.matchedProcesses,
     memoryMethod: IOS_DEVICE_MEMORY_SAMPLE_METHOD,
   });
 }
@@ -873,13 +830,12 @@ async function captureIosDevicePerfTable(
   }
 }
 
-function summarizeIosDevicePerfSnapshot(
+function summarizeIosDeviceMemorySnapshot(
   samples: IosDevicePerfProcessSample[],
   processes: IosDeviceProcessInfo[],
   appBundleId: string,
   device: DeviceInfo,
 ): {
-  cpuTimeNs: number | null;
   residentMemoryBytes: number | null;
   matchedProcesses: string[];
 } {
@@ -908,7 +864,6 @@ function summarizeIosDevicePerfSnapshot(
     latestSamplesByPid.set(sample.pid, {
       pid: sample.pid,
       processName: sample.processName || previous.processName,
-      cpuTimeNs: maxNullableNumber(previous.cpuTimeNs, sample.cpuTimeNs),
       residentMemoryBytes: maxNullableNumber(
         previous.residentMemoryBytes,
         sample.residentMemoryBytes,
@@ -917,15 +872,10 @@ function summarizeIosDevicePerfSnapshot(
   }
 
   const latestSamples = [...latestSamplesByPid.values()];
-  const cpuTimeValues = latestSamples
-    .map((sample) => sample.cpuTimeNs)
-    .filter((value): value is number => value !== null);
   const residentMemoryValues = latestSamples
     .map((sample) => sample.residentMemoryBytes)
     .filter((value): value is number => value !== null);
   return {
-    cpuTimeNs:
-      cpuTimeValues.length > 0 ? cpuTimeValues.reduce((total, value) => total + value, 0) : null,
     residentMemoryBytes:
       residentMemoryValues.length > 0
         ? residentMemoryValues.reduce((total, value) => total + value, 0)
@@ -1131,27 +1081,17 @@ function readProcessCommandToken(command: string): string {
   return token;
 }
 
-function buildApplePerfSamples(args: {
-  usagePercent: number;
+function buildAppleMemoryPerfSample(args: {
   residentMemoryKb: number;
   measuredAt: string;
   matchedProcesses: string[];
-  cpuMethod: AppleCpuPerfSample['method'];
   memoryMethod: AppleMemoryPerfSample['method'];
-}): { cpu: AppleCpuPerfSample; memory: AppleMemoryPerfSample } {
+}): AppleMemoryPerfSample {
   return {
-    cpu: {
-      usagePercent: roundPercent(args.usagePercent),
-      measuredAt: args.measuredAt,
-      method: args.cpuMethod,
-      matchedProcesses: args.matchedProcesses,
-    },
-    memory: {
-      residentMemoryKb: Math.round(args.residentMemoryKb),
-      measuredAt: args.measuredAt,
-      method: args.memoryMethod,
-      matchedProcesses: args.matchedProcesses,
-    },
+    residentMemoryKb: Math.round(args.residentMemoryKb),
+    measuredAt: args.measuredAt,
+    method: args.memoryMethod,
+    matchedProcesses: args.matchedProcesses,
   };
 }
 

@@ -66,7 +66,7 @@ const SAMPLE_DEVICES: DeviceInfo[] = [
 test('perf support facet matches explicit frame and memory observation support', () => {
   for (const device of SAMPLE_DEVICES) {
     assert.equal(
-      getPlugin(device.platform).perf?.supportsMetrics(device) ?? false,
+      getPlugin(device.platform).perf?.supportsObservations(device) ?? false,
       supportsPlatformPerfObservationsByHand(device),
       `perf observation support for ${device.id}`,
     );

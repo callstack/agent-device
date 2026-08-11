@@ -28,6 +28,8 @@ import {
   type AndroidSimpleperfReportResult,
 } from './perf-native-types.ts';
 
+const SIMPLEPERF_AGENT_TOP_FUNCTION_LIMIT = 10;
+
 export async function startAndroidSimpleperfProfile(
   device: DeviceInfo,
   packageName: string,
@@ -85,6 +87,11 @@ export async function writeAndroidSimpleperfReport(
   const report = await runAndroidSimpleperfReport(adb, session);
   const generatedAt = new Date().toISOString();
   const entries = parseSimpleperfReportEntries(report.stdout);
+  const topFunctions = entries.slice(0, SIMPLEPERF_AGENT_TOP_FUNCTION_LIMIT).map((entry) => ({
+    symbol: entry.symbol ?? '<unknown>',
+    binary: entry.dso,
+    selfSamplePercent: entry.percentage,
+  }));
   const payload = {
     kind: 'simpleperf-report',
     generatedAt,
@@ -93,6 +100,7 @@ export async function writeAndroidSimpleperfReport(
     sourceProfilePath: session.outPath,
     sourceRemotePath: session.remotePath,
     entryCount: entries.length,
+    summary: { topFunctions },
     entries,
   };
   await writeJsonArtifact(outPath, payload);
@@ -109,6 +117,7 @@ export async function writeAndroidSimpleperfReport(
     sizeBytes,
     generatedAt,
     entryCount: entries.length,
+    summary: { topFunctions },
     method: ANDROID_SIMPLEPERF_METHOD,
     message: `Wrote Android Simpleperf report for ${session.packageName}`,
   };

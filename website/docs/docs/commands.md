@@ -727,20 +727,21 @@ agent-device perf trace start --kind perfetto --out app.perfetto-trace
 agent-device perf trace stop --kind perfetto --out app.perfetto-trace
 ```
 
-- `perf` requires an explicit area: use `frames`, `memory`, `cpu`, or `trace` so each request answers one profiling question.
+- Prefer an explicit `frames`, `memory`, `cpu`, or `trace` area so each request answers one profiling question. Bare `perf`, `perf sample`, `perf metrics`, and the `metrics` alias remain deprecated compatibility forms until the next major release; they return aggregate evidence plus migration guidance.
 - `perf frames` returns a focused, bounded frame/jank-health JSON blob.
-- `perf memory sample` returns a compact memory-only JSON blob for agents investigating growth/leaks without collecting a large artifact. It is better than raw memory command output for first-pass diagnosis because arrays are bounded, top offenders are compact, and the payload omits unrelated startup/CPU/frame data.
+- `perf memory sample` returns a compact memory-only JSON blob for agents investigating growth/leaks without collecting a large artifact. It is better than raw memory command output for first-pass diagnosis because arrays and top offenders are bounded.
 - Example sample shape: `{"metrics":{"memory":{"available":true,"totalPssKb":562958,"totalRssKb":570304,"topConsumers":[{"name":"Dalvik Heap","pssKb":213456}]}}}`.
 - `perf memory snapshot` writes a heap/memgraph artifact to disk and returns path, size, kind, method, and support metadata. Large artifacts are never dumped into CLI/MCP/default JSON output.
 - Example default snapshot output: `Memory artifact (android-hprof): /tmp/app.hprof (42MB)`.
 - `cdp` targets React Native JavaScript heap evidence through Metro CDP. Use it for JS heap usage samples and heap snapshots; use `perf memory sample` and `perf memory snapshot` for native/process memory. See [Debugging & Profiling](/docs/debugging-profiling) for the bounded leak workflow.
-- `perf cpu profile ... --kind xctrace` records an Apple `.trace` with the requested xctrace template. `report` writes compact JSON with weighted top self-time functions and prints at most five, while the raw trace stays on disk.
+- `perf cpu profile ... --kind xctrace` records an Apple `.trace` with the requested xctrace template. `report` aggregates every run, writes compact JSON with at most ten weighted top self-time functions, and prints at most five while the raw trace stays on disk.
 - `perf trace ... --kind xctrace` records an Apple `.trace` such as Animation Hitches for native diagnosis.
 - xctrace perf commands return artifact paths and compact metadata only; inspect `.trace` files in Instruments/Xcode instead of dumping trace contents into agent context.
-- `perf cpu profile ... --kind simpleperf` starts/stops Android native CPU profiling for the active session package and can generate a compact JSON report artifact from the captured profile.
+- `perf cpu profile ... --kind simpleperf` starts/stops Android native CPU profiling for the active session package. Its report artifact keeps up to 50 parsed rows, while the response returns at most ten top functions and the CLI prints at most five.
 - `perf trace ... --kind perfetto` starts/stops Android Perfetto trace capture for the active session package.
 - Native profile/trace outputs are compact agent evidence: state, artifact path, size, and method. Raw `.perf.data` and `.perfetto-trace` contents stay on disk.
 - Without `--json`, each explicit perf area prints a compact focused summary.
+- App startup duration is measured by `open` and returned in `open`'s `startup` result. Use that result directly instead of the deprecated aggregate perf form.
 - Use native perf stop/report results as compact agent evidence, not raw profiler output. A successful Perfetto stop can return `state: "stopped"`, `outPath: "/tmp/app.perfetto-trace"`, `sizeBytes: 5392410`, and `method: "adb-shell-perfetto"` while the 5.3 MB raw trace stays on disk as the artifact.
 - Android app sessions with an active package support:
   - `fps` frame health from `adb shell dumpsys gfxinfo <package> framestats`, with `droppedFramePercent` as the primary value and `worstWindows` for dropped-frame clusters
@@ -757,6 +758,7 @@ agent-device perf trace stop --kind perfetto --out app.perfetto-trace
   - `perf cpu profile --kind xctrace`: iOS simulator app sessions, connected iOS device app sessions where xctrace can attach to the active process, and macOS app sessions when the app process can be resolved from the bundle ID.
   - `perf trace --kind xctrace`: iOS simulator app sessions, connected iOS device app sessions where xctrace can attach to the active process, and macOS app sessions when the selected xctrace template supports the target.
   - Android native profiling is not implemented under Apple xctrace perf; Android profiling is tracked separately.
+- HarmonyOS performance evidence is memory-only on the current public HDC surface: CPU profiling, frame sampling, and memory-snapshot artifacts are unavailable.
 - Android URL/deep-link opens infer the foreground package after launch when possible, including Expo Go/dev-client shells. If the session still has no app package/bundle ID, package-bound metrics remain unavailable until you `open <app>`.
 - Android frame health is reset after each successful `perf frames` read and after `open <app>`, so run `perf frames`, perform the interaction, then run `perf frames` again for a focused window.
 - Android Simpleperf and Perfetto collectors require an active Android app session with a running package process. They return artifact paths, sizes, and compact state summaries; they do not print profile or trace contents into the agent context. iOS native Simpleperf/Perfetto support is not provided by these commands.

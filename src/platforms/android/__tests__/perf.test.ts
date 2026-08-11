@@ -519,7 +519,7 @@ test('start and stop Android Perfetto trace use perfetto trace storage and clean
   assert.ok(findCallIndex(calls, 'rm -f') > findCallIndex(calls, 'pull'));
 });
 
-test('writeAndroidSimpleperfReport writes JSON report artifact without returning report contents', async () => {
+test('writeAndroidSimpleperfReport writes full artifact rows and returns bounded top functions', async () => {
   const tmpDir = await mkdtempForTest('agent-device-simpleperf-report-test-');
   const outPath = path.join(tmpDir, 'cpu-report.json');
   const session: AndroidNativePerfSession = {
@@ -554,6 +554,13 @@ test('writeAndroidSimpleperfReport writes JSON report artifact without returning
 
   assert.equal(result.outPath, outPath);
   assert.equal(result.entryCount, 1);
+  assert.deepEqual(result.summary.topFunctions, [
+    {
+      symbol: 'Java_com_example_Foo',
+      binary: '/data/app/libapp.so',
+      selfSamplePercent: 12.3,
+    },
+  ]);
   assert.equal(report.entries[0]?.percentage, 12.3);
   assert.equal(report.entries[0]?.symbol, 'Java_com_example_Foo');
   assert.equal('entries' in result, false);

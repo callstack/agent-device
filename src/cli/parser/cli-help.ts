@@ -412,6 +412,9 @@ Diagnostics and traces:
     agent-device perf trace start --kind perfetto --out /tmp/app.perfetto-trace
     agent-device perf trace stop --kind perfetto
   Treat native perf output as the agent evidence: for example, state=stopped, outPath=/tmp/app.perfetto-trace, sizeBytes=5392410, method=adb-shell-perfetto. The 5.3 MB raw trace stays in the artifact.
+  CPU reports return at most ten top functions in structured data and print five in default CLI output.
+  Prefer explicit perf frames, perf memory, perf cpu, or perf trace forms. Bare perf, perf sample, perf metrics, and metrics are deprecated compatibility forms until the next major release.
+  Startup duration belongs to the open command's startup result; read it there instead of using aggregate perf.
 
 Memory diagnostics:
   Use perf memory when the symptom is leak/growth/OOM suspicion and you need agent-readable evidence.

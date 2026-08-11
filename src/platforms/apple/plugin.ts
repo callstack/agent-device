@@ -145,7 +145,7 @@ export const applePlugin = {
     unsupportedHintByDefault: APPLE_UNSUPPORTED_HINT_BY_DEFAULT,
   },
   // Apple exposes explicit frame-health and memory observations.
-  perf: { supportsMetrics: () => true },
+  perf: { supportsObservations: () => true },
   // Declares the platform-gated request provider resolvers the Apple family owns: the
   // runner + tool providers (formerly gated by `isApplePlatform(device.platform)`).
   providers: { platformGatedResolvers: ['appleRunnerProvider', 'appleToolProvider'] },

@@ -47,15 +47,22 @@ test('perf frames prints compact platform-independent frame health summary by de
   assert.doesNotMatch(result.stdout, /android|Pixel|memory|cpu|gfxinfo/i);
 });
 
-test('perf rejects the removed metrics aggregate before daemon dispatch', async () => {
+test('perf metrics retains the released aggregate compatibility route', async () => {
   const result = await runCliCapture(['perf', 'metrics', '--json'], async () => ({
     ok: true,
-    data: {},
+    data: { warnings: ['deprecated compatibility forms'] },
   }));
 
-  assert.equal(result.code, 1);
-  assert.equal(result.calls.length, 0);
-  assert.match(JSON.parse(result.stdout).error.message, /frames, memory, cpu, or trace/);
+  assert.equal(result.code, null);
+  assert.deepEqual(result.calls[0]?.positionals, ['metrics']);
+});
+
+test('metrics alias retains the released aggregate compatibility route', async () => {
+  const result = await runCliCapture(['metrics', '--json'], async () => ({ ok: true, data: {} }));
+
+  assert.equal(result.code, null);
+  assert.equal(result.calls[0]?.command, 'perf');
+  assert.deepEqual(result.calls[0]?.positionals, []);
 });
 
 test('perf frames forwards frames area and prints focused frame summary', async () => {
@@ -286,12 +293,35 @@ test('perf xctrace output prints bounded top CPU self-time evidence', async () =
   assert.doesNotMatch(result.stdout, /time-profile|app\.trace/);
 });
 
-test('bare perf requires an explicit profiling area', async () => {
+test('perf simpleperf output prints the shared bounded top CPU evidence', async () => {
+  const result = await runCliCapture(
+    ['perf', 'cpu', 'profile', 'report', '--kind', 'simpleperf', '--out', 'cpu-report.json'],
+    async () => ({
+      ok: true,
+      data: {
+        action: 'report',
+        kind: 'simpleperf',
+        type: 'cpu-profile-report',
+        outPath: '/tmp/cpu-report.json',
+        sizeBytes: 256,
+        summary: {
+          topFunctions: [
+            { symbol: 'Java_com_example_Foo', binary: 'libapp.so', selfSamplePercent: 31.2 },
+          ],
+        },
+      },
+    }),
+  );
+
+  assert.equal(result.code, null);
+  assert.match(result.stdout, /Top CPU self time:\n- 31.2% Java_com_example_Foo \(libapp\.so\)/);
+});
+
+test('bare perf retains the released aggregate compatibility route', async () => {
   const result = await runCliCapture(['perf', '--json'], async () => ({ ok: true, data: {} }));
 
-  assert.equal(result.code, 1);
-  assert.equal(result.calls.length, 0);
-  assert.match(JSON.parse(result.stdout).error.message, /frames, memory, cpu, or trace/);
+  assert.equal(result.code, null);
+  assert.deepEqual(result.calls[0]?.positionals, []);
 });
 
 test('perf area and action positionals are case-insensitive', async () => {
@@ -335,7 +365,7 @@ test('perf rejects unknown CLI area before daemon dispatch', async () => {
   assert.equal(result.calls.length, 0);
   const payload = JSON.parse(result.stdout);
   assert.equal(payload.error.code, 'INVALID_ARGS');
-  assert.match(payload.error.message, /perf area must be frames, memory, cpu, or trace/i);
+  assert.match(payload.error.message, /perf area must be metrics, frames, memory, cpu, or trace/i);
 });
 
 test('perf cpu profile start forwards simpleperf kind and out path', async () => {

@@ -94,6 +94,13 @@ export type AndroidSimpleperfReportResult = {
   sizeBytes: number;
   generatedAt: string;
   entryCount: number;
+  summary: {
+    topFunctions: Array<{
+      symbol: string;
+      binary?: string;
+      selfSamplePercent: number;
+    }>;
+  };
   method: typeof ANDROID_SIMPLEPERF_METHOD;
   message: string;
 };

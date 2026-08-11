@@ -1,6 +1,6 @@
 import { defineStringEnum } from './string-enum.ts';
 
-export const PERF_AREA_VALUES = ['frames', 'memory', 'cpu', 'trace'] as const;
+export const PERF_AREA_VALUES = ['metrics', 'frames', 'memory', 'cpu', 'trace'] as const;
 export const PERF_ACTION_VALUES = ['sample', 'snapshot', 'start', 'stop', 'report'] as const;
 export const PERF_SUBJECT_VALUES = ['profile'] as const;
 export const PERF_KIND_VALUES = [
@@ -22,7 +22,7 @@ export type PerfAction = (typeof PERF_ACTION_VALUES)[number];
 export type PerfSubject = (typeof PERF_SUBJECT_VALUES)[number];
 export type PerfKind = (typeof PERF_KIND_VALUES)[number];
 
-export const PERF_AREA_ERROR_MESSAGE = 'perf area must be frames, memory, cpu, or trace';
+export const PERF_AREA_ERROR_MESSAGE = 'perf area must be metrics, frames, memory, cpu, or trace';
 export const PERF_ACTION_ERROR_MESSAGE =
   'perf action must be sample, snapshot, start, stop, or report';
 export const PERF_SUBJECT_ERROR_MESSAGE = 'perf cpu requires profile';

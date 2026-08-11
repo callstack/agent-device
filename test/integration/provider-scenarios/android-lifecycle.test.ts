@@ -979,7 +979,7 @@ async function runAndroidAppControlAndObservabilityWorkflow(
     platform: 'android',
     serial: PROVIDER_SCENARIO_ANDROID.id,
   });
-  assertRpcError(invalidPerfAction, 'INVALID_ARGS', /perf area must be frames/i);
+  assertRpcError(invalidPerfAction, 'INVALID_ARGS', /perf action must be sample/i);
 
   const logsStop = await client.observability.logs({ action: 'stop', ...selection });
   assert.equal(logsStop.stopped, true);

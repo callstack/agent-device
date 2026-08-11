@@ -244,7 +244,6 @@ async function handleNativePerfReport(
   const report = await writeAppleXctracePerfReport({
     tracePath: SessionStore.expandHome(tracePath.value, params.req.meta?.cwd),
     outPath,
-    mode: request.mode,
     template: session.applePerf?.lastProfileTemplate ?? request.template,
     appBundleId: session.appBundleId,
   });

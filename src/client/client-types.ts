@@ -295,7 +295,7 @@ export type AgentDeviceClient = {
     run: (options: BatchRunOptions) => Promise<BatchRunResult>;
   };
   observability: {
-    perf: (options: PerfOptions) => Promise<CommandRequestResult>;
+    perf: (options?: PerfOptions) => Promise<CommandRequestResult>;
     logs: (options?: LogsOptions) => Promise<CommandRequestResult>;
     events: (options?: EventsOptions) => Promise<CommandRequestResult>;
     network: (options?: NetworkOptions) => Promise<CommandRequestResult>;

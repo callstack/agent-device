@@ -1,8 +1,17 @@
 import { splitNonEmptyTrimmedLines } from '../../utils/parsing.ts';
 import { roundPercent } from '../perf-utils.ts';
 
-export function parseSimpleperfReportEntries(stdout: string): Array<Record<string, unknown>> {
-  const entries: Array<Record<string, unknown>> = [];
+const SIMPLEPERF_REPORT_ARTIFACT_ENTRY_LIMIT = 50;
+
+export type SimpleperfReportEntry = {
+  percentage: number;
+  command?: string;
+  dso?: string;
+  symbol?: string;
+};
+
+export function parseSimpleperfReportEntries(stdout: string): SimpleperfReportEntry[] {
+  const entries: SimpleperfReportEntry[] = [];
   for (const line of splitNonEmptyTrimmedLines(stdout)) {
     const match = line.match(/^([0-9]+(?:\.[0-9]+)?)%\s+(.+)$/);
     if (!match) continue;
@@ -16,7 +25,7 @@ export function parseSimpleperfReportEntries(stdout: string): Array<Record<strin
       dso: columns[1],
       symbol: columns.slice(2).join(' ') || undefined,
     });
-    if (entries.length >= 50) break;
+    if (entries.length >= SIMPLEPERF_REPORT_ARTIFACT_ENTRY_LIMIT) break;
   }
   return entries;
 }

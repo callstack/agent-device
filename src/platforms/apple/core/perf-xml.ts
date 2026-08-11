@@ -1,19 +1,4 @@
-import { parseXmlDocumentSync, type XmlNode } from '@agent-device/xml';
-
-export type AppleTimeProfileFunction = {
-  symbol: string;
-  binary?: string;
-  selfSampleMs: number;
-  selfSamplePercent: number;
-};
-
-export type AppleTimeProfileSummary = {
-  sampleCount: number;
-  totalSampleWeightMs: number;
-  topFunctions: AppleTimeProfileFunction[];
-};
-
-const DEFAULT_TOP_FUNCTION_LIMIT = 10;
+import type { XmlNode } from '@agent-device/xml';
 
 export function findFirstXmlNode(
   nodes: XmlNode[],
@@ -71,57 +56,7 @@ export function resolveXmlNumber(
   return parseDirectXmlNumber(element);
 }
 
-export function parseAppleTimeProfileSummary(
-  xml: string,
-  limit = DEFAULT_TOP_FUNCTION_LIMIT,
-): AppleTimeProfileSummary {
-  const document = parseXmlDocumentSync(xml);
-  const nodesById = indexXmlNodesById(document);
-  const weightsByFunction = new Map<
-    string,
-    { symbol: string; binary?: string; weightNs: number }
-  >();
-  let sampleCount = 0;
-  let totalWeightNs = 0;
-
-  for (const row of findAllXmlNodes(document, (node) => node.name === 'row')) {
-    const weightNs = readRowWeightNs(row, nodesById);
-    const leafFrame = readLeafFrame(row, nodesById);
-    if (weightNs === undefined || !leafFrame) continue;
-    const symbol = leafFrame.attributes.name?.trim() || '<unknown>';
-    const binary = readFrameBinaryName(leafFrame, nodesById);
-    const key = `${binary ?? ''}\u0000${symbol}`;
-    const previous = weightsByFunction.get(key);
-    weightsByFunction.set(key, {
-      symbol,
-      binary,
-      weightNs: (previous?.weightNs ?? 0) + weightNs,
-    });
-    sampleCount += 1;
-    totalWeightNs += weightNs;
-  }
-
-  const boundedLimit = Math.max(0, Math.floor(limit));
-  const topFunctions = [...weightsByFunction.values()]
-    .sort(
-      (left, right) => right.weightNs - left.weightNs || left.symbol.localeCompare(right.symbol),
-    )
-    .slice(0, boundedLimit)
-    .map(({ symbol, binary, weightNs }) => ({
-      symbol,
-      binary,
-      selfSampleMs: round(weightNs / 1_000_000, 3),
-      selfSamplePercent: totalWeightNs > 0 ? round((weightNs / totalWeightNs) * 100, 1) : 0,
-    }));
-
-  return {
-    sampleCount,
-    totalSampleWeightMs: round(totalWeightNs / 1_000_000, 3),
-    topFunctions,
-  };
-}
-
-function indexXmlNodesById(document: XmlNode[]): Map<string, XmlNode> {
+export function indexXmlNodesById(document: XmlNode[]): Map<string, XmlNode> {
   return new Map(
     findAllXmlNodes(document, (node) => Boolean(node.attributes.id)).flatMap((node) => {
       const id = node.attributes.id;
@@ -130,44 +65,10 @@ function indexXmlNodesById(document: XmlNode[]): Map<string, XmlNode> {
   );
 }
 
-function resolveReference(
+export function resolveXmlReference(
   node: XmlNode | undefined,
   nodesById: Map<string, XmlNode>,
 ): XmlNode | undefined {
   if (!node) return undefined;
   return node.attributes.ref ? nodesById.get(node.attributes.ref) : node;
-}
-
-function readRowWeightNs(row: XmlNode, nodesById: Map<string, XmlNode>): number | undefined {
-  const weight = resolveReference(
-    row.children.find((node) => node.name === 'weight'),
-    nodesById,
-  );
-  if (!weight?.text) return undefined;
-  const value = Number(weight.text);
-  return Number.isFinite(value) && value > 0 ? value : undefined;
-}
-
-function readLeafFrame(row: XmlNode, nodesById: Map<string, XmlNode>): XmlNode | undefined {
-  const backtrace = resolveReference(
-    row.children.find((node) => node.name === 'backtrace'),
-    nodesById,
-  );
-  return resolveReference(
-    backtrace?.children.find((node) => node.name === 'frame'),
-    nodesById,
-  );
-}
-
-function readFrameBinaryName(frame: XmlNode, nodesById: Map<string, XmlNode>): string | undefined {
-  const binary = resolveReference(
-    frame.children.find((node) => node.name === 'binary'),
-    nodesById,
-  );
-  return binary?.attributes.name?.trim() || undefined;
-}
-
-function round(value: number, fractionDigits: number): number {
-  const scale = 10 ** fractionDigits;
-  return Math.round(value * scale) / scale;
 }

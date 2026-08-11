@@ -64,12 +64,12 @@ export type PlatformPlugin = {
     >;
   };
   /**
-   * The daemon perf facet (issue #974). `supportsMetrics` reports whether a device family
+   * The daemon perf facet (issue #974). `supportsObservations` reports whether a device family
    * can produce the explicit `perf frames` or `perf memory` observations. Present only on
    * Apple, Android, and HarmonyOS; factless families omit the facet.
    */
   readonly perf?: {
-    supportsMetrics(device: DeviceInfo): boolean;
+    supportsObservations(device: DeviceInfo): boolean;
   };
   /**
    * The daemon request-scope provider facet (issue #974). `platformGatedResolvers`

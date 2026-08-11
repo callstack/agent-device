@@ -13,17 +13,59 @@ export const perfCliOutputFormatters = {
 } as const satisfies Record<string, CliOutputFormatter>;
 
 function formatPerfCliOutput(data: Record<string, unknown>): string {
-  const nativeOutput = formatNativePerfOutput(data);
-  if (nativeOutput) return nativeOutput;
+  return formatNativePerfOutput(data) ?? formatObservationPerfOutput(data);
+}
+
+function formatObservationPerfOutput(data: Record<string, unknown>): string {
   const artifact = isRecord(data.artifact) ? data.artifact : undefined;
-  if (artifact) {
-    return formatMemoryArtifactSummary(artifact);
-  }
+  if (artifact) return formatMemoryArtifactSummary(artifact);
   const metrics = isRecord(data.metrics) ? data.metrics : undefined;
-  if (isRecord(metrics?.fps)) return formatFramePerfOutput(metrics);
-  const memoryOutput = formatMemoryPerfOutput(metrics);
-  if (memoryOutput) return memoryOutput;
-  return formatFramePerfOutput(metrics);
+  return formatObservedMetrics(data, metrics);
+}
+
+function formatObservedMetrics(
+  data: Record<string, unknown>,
+  metrics: Record<string, unknown> | undefined,
+): string {
+  if (hasLegacyPerfWarning(data) && isRecord(metrics?.fps) && isRecord(metrics?.memory)) {
+    return formatLegacyMetricsOutput(data, metrics);
+  }
+  return formatFocusedMetrics(metrics);
+}
+
+function formatFocusedMetrics(metrics: Record<string, unknown> | undefined): string {
+  return isRecord(metrics?.fps)
+    ? formatFramePerfOutput(metrics)
+    : (formatMemoryPerfOutput(metrics) ?? 'Memory: unavailable - missing memory metric');
+}
+
+function hasLegacyPerfWarning(data: Record<string, unknown>): boolean {
+  return (
+    Array.isArray(data.warnings) &&
+    data.warnings.some(
+      (entry) => typeof entry === 'string' && entry.includes('deprecated compatibility forms'),
+    )
+  );
+}
+
+function formatLegacyMetricsOutput(
+  data: Record<string, unknown>,
+  metrics: Record<string, unknown>,
+): string {
+  const warning = Array.isArray(data.warnings)
+    ? data.warnings.find((entry): entry is string => typeof entry === 'string')
+    : undefined;
+  const parts = [
+    formatMemoryPerfSummary(isRecord(metrics.memory) ? metrics.memory : undefined),
+    formatLegacyFrameSummary(isRecord(metrics.fps) ? metrics.fps : undefined),
+  ].filter((part): part is string => Boolean(part));
+  const summary = parts.length > 0 ? `Performance: ${parts.join(', ')}` : 'Performance unavailable';
+  return warning ? `${summary}\nDeprecated: ${warning}` : summary;
+}
+
+function formatLegacyFrameSummary(fps: Record<string, unknown> | undefined): string | undefined {
+  const summary = fps?.available === true ? formatFrameHealthSummary(fps) : undefined;
+  return summary ? `frames ${summary}` : undefined;
 }
 
 function formatMemoryPerfOutput(metrics: Record<string, unknown> | undefined): string | undefined {
@@ -89,16 +131,18 @@ function formatAppleNativePerfOutput(data: Record<string, unknown>): string | un
   if (!state || !outPath || data.kind !== 'xctrace') return undefined;
   const mode = typeof data.mode === 'string' ? data.mode : 'capture';
   const lines = formatNativePerfLines(outPath, mode, state, data.template);
-  const topFunctions = formatAppleTimeProfileFunctions(data);
+  const topFunctions = formatNativeTopFunctions(data);
   return topFunctions.length > 0
     ? `${lines}\nTop CPU self time:\n${topFunctions.join('\n')}`
     : lines;
 }
 
-function formatAppleTimeProfileFunctions(data: Record<string, unknown>): string[] {
+const PERF_CLI_TOP_FUNCTION_LIMIT = 5;
+
+function formatNativeTopFunctions(data: Record<string, unknown>): string[] {
   const summary = isRecord(data.summary) ? data.summary : undefined;
   if (!Array.isArray(summary?.topFunctions)) return [];
-  return summary.topFunctions.slice(0, 5).flatMap((entry) => {
+  return summary.topFunctions.slice(0, PERF_CLI_TOP_FUNCTION_LIMIT).flatMap((entry) => {
     if (!isRecord(entry)) return [];
     const symbol = readString(entry.symbol);
     const percent = readFiniteNumber(entry.selfSamplePercent);
@@ -127,9 +171,13 @@ function formatNativePerfLines(
 function formatAndroidNativePerfOutput(data: Record<string, unknown>): string | undefined {
   const summary = readNativePerfSummary(data);
   if (!summary) return undefined;
-  return `Perf ${summary.action}: ${summary.kind} ${summary.type}${formatNativePerfState(
+  const lines = `Perf ${summary.action}: ${summary.kind} ${summary.type}${formatNativePerfState(
     data,
   )}${formatNativePerfArtifact(data)}${formatNativePerfFrameHealth(data)}`;
+  const topFunctions = formatNativeTopFunctions(data);
+  return topFunctions.length > 0
+    ? `${lines}\nTop CPU self time:\n${topFunctions.join('\n')}`
+    : lines;
 }
 
 function readNativePerfSummary(

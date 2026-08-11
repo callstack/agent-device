@@ -19,11 +19,11 @@ import {
   type ExecResult,
 } from '../../../utils/exec.ts';
 import { uniqueStrings } from '@agent-device/kernel/collections';
+import { findAllXmlNodes } from './perf-xml.ts';
 import {
-  findAllXmlNodes,
   parseAppleTimeProfileSummary,
   type AppleTimeProfileFunction,
-} from './perf-xml.ts';
+} from './perf-time-profile.ts';
 import {
   isRetryableIosDeviceTraceRecordFailure,
   prepareAppleTraceRecordRetry,
@@ -74,9 +74,9 @@ export type AppleXctracePerfResult = {
   endedAt: string;
 };
 
-export type AppleXctracePerfReport = {
+export type AppleXctraceCpuProfileReport = {
   kind: 'xctrace';
-  mode: AppleXctracePerfMode;
+  mode: 'cpu-profile';
   template?: string;
   tracePath: string;
   reportPath: string;
@@ -180,10 +180,9 @@ export async function cleanupAppleXctracePerfCapture(
 export async function writeAppleXctracePerfReport(params: {
   tracePath: string;
   outPath: string;
-  mode: AppleXctracePerfMode;
   template?: string;
   appBundleId?: string;
-}): Promise<AppleXctracePerfReport> {
+}): Promise<AppleXctraceCpuProfileReport> {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-xctrace-report-'));
   const tocPath = path.join(tempDir, 'trace-toc.xml');
   const timeProfilePath = path.join(tempDir, 'time-profile.xml');
@@ -211,16 +210,13 @@ export async function writeAppleXctracePerfReport(params: {
       }),
     );
     const tocXml = await fs.readFile(tocPath, 'utf8');
-    const timeProfileXml =
-      params.mode === 'cpu-profile'
-        ? await exportAppleTimeProfile(params.tracePath, timeProfilePath)
-        : undefined;
+    const timeProfileXml = await exportAppleTimeProfile(params.tracePath, timeProfilePath);
     const report = buildAppleXctracePerfReport({
       ...params,
       tocXml,
       timeProfileXml,
     });
-    if (params.mode === 'cpu-profile' && report.summary.sampleCount === 0) {
+    if (report.summary.sampleCount === 0) {
       throw new AppError('COMMAND_FAILED', 'Apple xctrace CPU report contained no samples', {
         tracePath: params.tracePath,
         tableSchemas: report.summary.tableSchemas,
@@ -242,7 +238,7 @@ async function exportAppleTimeProfile(tracePath: string, outPath: string): Promi
     '--input',
     tracePath,
     '--xpath',
-    '/trace-toc/run[@number="1"]/data/table[@schema="time-profile"]',
+    '/trace-toc/run/data/table[@schema="time-profile"]',
     '--output',
     outPath,
   ];
@@ -435,12 +431,11 @@ async function assertTracePathHasData(
 function buildAppleXctracePerfReport(params: {
   tracePath: string;
   outPath: string;
-  mode: AppleXctracePerfMode;
   template?: string;
   appBundleId?: string;
   tocXml: string;
-  timeProfileXml?: string;
-}): AppleXctracePerfReport {
+  timeProfileXml: string;
+}): AppleXctraceCpuProfileReport {
   const document = parseXmlDocumentSync(params.tocXml);
   const runs = findAllXmlNodes(document, (node) => node.name === 'run');
   const tableSchemas = uniqueStrings(
@@ -448,12 +443,10 @@ function buildAppleXctracePerfReport(params: {
       .map((node) => node.attributes.schema)
       .filter((schema): schema is string => typeof schema === 'string' && schema.length > 0),
   ).sort();
-  const timeProfile = params.timeProfileXml
-    ? parseAppleTimeProfileSummary(params.timeProfileXml)
-    : { sampleCount: 0, totalSampleWeightMs: 0, topFunctions: [] };
+  const timeProfile = parseAppleTimeProfileSummary(params.timeProfileXml);
   return {
     kind: 'xctrace',
-    mode: params.mode,
+    mode: 'cpu-profile',
     template: params.template,
     tracePath: params.tracePath,
     reportPath: params.outPath,
