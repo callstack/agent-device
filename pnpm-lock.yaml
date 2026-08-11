@@ -239,9 +239,6 @@ importers:
 
   packages/platform-linux:
     dependencies:
-      '@agent-device/capture-kit':
-        specifier: workspace:*
-        version: link:../capture-kit
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -251,9 +248,6 @@ importers:
 
   packages/platform-vega:
     dependencies:
-      '@agent-device/capture-kit':
-        specifier: workspace:*
-        version: link:../capture-kit
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts

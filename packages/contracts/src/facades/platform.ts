@@ -48,7 +48,6 @@ export {
   narrowDeviceBinding,
   providerRuntimeOwner,
   runtimeOwnerKey,
-  runtimeUse,
   sameRuntimeOwner,
 } from '../platform-runtime.ts';
 export type {
