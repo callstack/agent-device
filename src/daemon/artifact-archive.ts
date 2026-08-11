@@ -12,10 +12,11 @@ export async function extractTarInstallableArtifact(params: {
 }): Promise<string> {
   const outputRoot = path.join(params.tempDir, 'extracted');
   let rootName = '';
+  const type = await detectTarArchiveType(params.archivePath);
   await extractArchiveSafely({
     archivePath: params.archivePath,
     outputRoot,
-    type: 'tar',
+    type,
     validateManifest: (manifest) => {
       rootName = resolveArchiveRootName(manifest, params.platform, params.expectedRootName);
     },
@@ -29,6 +30,19 @@ export async function extractTarInstallableArtifact(params: {
     );
   }
   return installablePath;
+}
+
+async function detectTarArchiveType(archivePath: string): Promise<'tar' | 'tgz'> {
+  const handle = await fs.promises.open(archivePath, 'r');
+  try {
+    const signature = Buffer.alloc(2);
+    const { bytesRead } = await handle.read(signature, 0, signature.length, 0);
+    return bytesRead === signature.length && signature[0] === 0x1f && signature[1] === 0x8b
+      ? 'tgz'
+      : 'tar';
+  } finally {
+    await handle.close();
+  }
 }
 
 function resolveArchiveRootName(
