@@ -204,9 +204,9 @@ async function appendDeviceScopedDoctorChecks(
   },
 ): Promise<void> {
   const { androidAdbExecutor, device, options, session, inspectFacts, bindDevice, req } = params;
-  let listApps: DoctorAppInventory | undefined;
+  let listInstalledApps: DoctorAppInventory | undefined;
   try {
-    listApps = await resolveDoctorAppInventory({
+    listInstalledApps = await resolveDoctorAppInventory({
       device,
       req,
       targetApp: options.targetApp,
@@ -216,11 +216,16 @@ async function appendDeviceScopedDoctorChecks(
   } catch (error) {
     // Keep facts/bind/readiness failures inside appendAppChecks' accumulator path so doctor
     // reports a failed target-app check and still runs the remaining device checks.
-    listApps = async () => {
+    listInstalledApps = async () => {
       throw error;
     };
   }
-  await appendAppChecks(checks, { device, session, targetApp: options.targetApp, listApps });
+  await appendAppChecks(checks, {
+    device,
+    session,
+    targetApp: options.targetApp,
+    listInstalledApps,
+  });
   await appendAndroidChecks(checks, {
     androidAdbExecutor,
     device,

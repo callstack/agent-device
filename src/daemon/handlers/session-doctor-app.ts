@@ -15,17 +15,17 @@ export async function appendAppChecks(
     device: DeviceInfo;
     session: SessionState | undefined;
     targetApp?: string;
-    listApps?: DoctorAppInventory;
+    listInstalledApps?: DoctorAppInventory;
   },
 ): Promise<void> {
-  const { device, targetApp, session, listApps } = params;
+  const { device, targetApp, session, listInstalledApps } = params;
   if (!targetApp) {
     return;
   }
 
   try {
-    const resolved = listApps
-      ? resolveUniqueInstalledAppMatch(targetApp, await listApps('all'))?.id
+    const resolved = listInstalledApps
+      ? resolveUniqueInstalledAppMatch(targetApp, await listInstalledApps('all'))?.id
       : undefined;
     if (!resolved) {
       appendDoctorCheck(checks, {
