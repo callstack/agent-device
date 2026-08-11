@@ -1,16 +1,14 @@
-import type {
-  DeviceBinding,
-  PlatformRuntimeHost,
-  PlatformRuntimeOperations,
-  PlatformRuntimeOwner,
-  RuntimeFacts,
-  RuntimeOwnerRef,
-} from '@agent-device/contracts/platform';
-import { readRecentNetworkTrafficFromText } from '@agent-device/capture-kit';
 import {
   createUnavailablePlatformRuntimeFacts,
   sameRuntimeOwner,
+  type DeviceBinding,
+  type PlatformRuntimeHost,
+  type PlatformRuntimeOperations,
+  type PlatformRuntimeOwner,
+  type RuntimeFacts,
+  type RuntimeOwnerRef,
 } from '@agent-device/contracts/platform';
+import { readRecentNetworkTrafficFromText } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 

@@ -1,23 +1,19 @@
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
-import type {
-  DeviceBinding,
-  DeviceBindingRequest,
-  DeviceRuntimeGateway,
-  PlatformRuntimeHost,
-  PlatformRuntimeModule,
-  PlatformRuntimeOperations,
-  PlatformRuntimeOwner,
-  PlatformRuntimeProviderModule,
-  RuntimeOwnerRef,
-} from '@agent-device/contracts/platform';
 import {
   createUnavailablePlatformRuntimeBinding,
   createUnavailablePlatformRuntimeFacts,
-} from '@agent-device/contracts/platform';
-import {
   providerRuntimeOwner,
   runtimeOwnerKey,
   sameRuntimeOwner,
+  type DeviceBinding,
+  type DeviceBindingRequest,
+  type DeviceRuntimeGateway,
+  type PlatformRuntimeHost,
+  type PlatformRuntimeModule,
+  type PlatformRuntimeOperations,
+  type PlatformRuntimeOwner,
+  type PlatformRuntimeProviderModule,
+  type RuntimeOwnerRef,
 } from '@agent-device/contracts/platform';
 import {
   deviceIdentity,
