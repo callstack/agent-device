@@ -16,21 +16,20 @@ const SKILLS = [
     path: join(ROOT, 'skills', 'ios-simulator', 'SKILL.md'),
     contracts: [
       {
+        id: 'human-owned CLI installation',
+        requiredText: 'npm install -g agent-device@latest',
+      },
+      { id: 'installed CLI check', requiredText: 'agent-device --version' },
+      { id: 'routine help routing', requiredText: 'agent-device help manual-qa' },
+      { id: 'validation help routing', requiredText: 'agent-device help validate' },
+      {
+        id: 'autonomous mutable install refusal',
+        requiredText: 'Do not run that command autonomously',
+      },
+      {
         id: 'foreground platform open',
         requiredText: 'agent-device open <app-or-bundle-id> --platform ios --foreground',
       },
-      {
-        id: 'initial interactive snapshot',
-        requiredText: '`open` returns the initial interactive snapshot.',
-      },
-      { id: 'current ref or selector', requiredText: 'Use its current refs or a selector.' },
-      { id: 'settled planned actions', requiredText: 'agent-device press @eN --settle' },
-      { id: 'type settle exception', requiredText: '`type` never takes `--settle`;' },
-      {
-        id: 'end-state verification',
-        requiredText: 'Verify the end state with a selector or exact text, then close:',
-      },
-      { id: 'session close', requiredText: 'agent-device close' },
     ] satisfies Contract[],
   },
   {
@@ -38,21 +37,20 @@ const SKILLS = [
     path: join(ROOT, 'skills', 'android-emulator', 'SKILL.md'),
     contracts: [
       {
+        id: 'human-owned CLI installation',
+        requiredText: 'npm install -g agent-device@latest',
+      },
+      { id: 'installed CLI check', requiredText: 'agent-device --version' },
+      { id: 'routine help routing', requiredText: 'agent-device help manual-qa' },
+      { id: 'validation help routing', requiredText: 'agent-device help validate' },
+      {
+        id: 'autonomous mutable install refusal',
+        requiredText: 'Do not run that command autonomously',
+      },
+      {
         id: 'foreground platform open',
         requiredText: 'agent-device open <app-or-package-id> --platform android --foreground',
       },
-      {
-        id: 'initial interactive snapshot',
-        requiredText: '`open` returns the initial interactive snapshot.',
-      },
-      { id: 'current ref or selector', requiredText: 'Use its current refs or a selector.' },
-      { id: 'settled planned actions', requiredText: 'agent-device press @eN --settle' },
-      { id: 'type settle exception', requiredText: '`type` never takes `--settle`;' },
-      {
-        id: 'end-state verification',
-        requiredText: 'Verify the end state with a selector or exact text, then close:',
-      },
-      { id: 'session close', requiredText: 'agent-device close' },
     ] satisfies Contract[],
   },
 ] as const;

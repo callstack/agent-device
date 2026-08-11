@@ -196,8 +196,6 @@
     "!android/ime-helper/dist/*.idsig",
     "!android/ime-helper/README.md",
     "linux/atspi-dump.py",
-    "skills/agent-device",
-    "skills/dogfood",
     "server.json",
     "smithery.yaml",
     "README.md",

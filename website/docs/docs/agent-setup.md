@@ -26,21 +26,21 @@ npx agent-device --version
 npx agent-device help workflow
 ```
 
-Global install is better for normal agent workflows because repeated commands, skills, and terminal sessions resolve to one stable version. Project-local installs are also good when you want a lockfile-pinned agent-device version.
+Global install is better for normal agent workflows because repeated commands and terminal sessions resolve to one stable version. Project-local installs are also good when you want a lockfile-pinned agent-device version.
 
 Avoid telling agents to choose an npm version or run `npx -y agent-device@latest` autonomously: it fetches and executes a mutable npm package without a human prompt. For unattended agent use, prefer a trusted installed binary, a project-local install, or a version supplied by the user or project config.
 
 For Node, Xcode, Android SDK, macOS, and iOS device prerequisites, see [Installation](/docs/installation).
 
-## Install the skill
+## Install the skills
 
-Install the skill when your agent runtime supports skills:
+Install the CLI first, then install the repository skills when your agent runtime supports them:
 
 ```bash
 npx skills add callstack/agent-device
 ```
 
-The bundled [agent-device skill](https://github.com/callstack/agent-device/blob/main/skills/agent-device/SKILL.md) is the canonical router for skill-aware clients. For focused simulator work, use the [iOS Simulator skill](https://github.com/callstack/agent-device/blob/main/skills/ios-simulator/SKILL.md) or [Android Emulator skill](https://github.com/callstack/agent-device/blob/main/skills/android-emulator/SKILL.md). They intentionally point agents back to installed CLI help instead of duplicating the command manual.
+Skills are distributed from the GitHub repository rather than the npm package. The [agent-device skill](https://github.com/callstack/agent-device/blob/main/skills/agent-device/SKILL.md) is the canonical router for skill-aware clients. For focused simulator work, use the [iOS Simulator skill](https://github.com/callstack/agent-device/blob/main/skills/ios-simulator/SKILL.md) or [Android Emulator skill](https://github.com/callstack/agent-device/blob/main/skills/android-emulator/SKILL.md). They intentionally point agents back to the separately installed, version-matched CLI help instead of duplicating the command manual.
 
 ## Recommended agent rule
 

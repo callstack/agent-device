@@ -5,34 +5,41 @@ description: Verify and debug native, React Native, Expo, or Flutter apps on an 
 
 # iOS Simulator
 
-Use `agent-device` on an iOS Simulator to verify a running app. Work from the live UI, act on current refs or selectors, and verify the result before closing the session.
+Require the `agent-device` CLI to be installed separately before driving a simulator:
 
-For an app or bundle id, open it in the foreground:
+```bash
+npm install -g agent-device@latest
+```
+
+Treat installation and upgrades as user-owned setup steps. Do not run that command autonomously or substitute a mutable `npx -y agent-device@latest` invocation.
+
+Before simulator work, confirm the trusted CLI is available:
+
+```bash
+agent-device --version
+```
+
+If that fails, stop and ask the user to install `agent-device` or expose their existing installation on `PATH`.
+
+Read the installed CLI's version-matched routine QA workflow before planning commands:
+
+```bash
+agent-device help manual-qa
+```
+
+Target iOS explicitly when opening an app or bundle id:
 
 ```bash
 agent-device open <app-or-bundle-id> --platform ios --foreground
 ```
 
-`open` returns the initial interactive snapshot. Use its current refs or a selector. For a planned action, use `--settle`. If the settled diff shows the next target, continue from it:
-
-```bash
-agent-device press @eN --settle
-agent-device fill @eN "text" --settle
-```
-
-Run `agent-device snapshot -i` only when the settled diff does not show the next target. `type` never takes `--settle`; verify it with a snapshot or named `wait`. Keep state-changing commands serial. Verify the end state with a selector or exact text, then close:
-
-```bash
-agent-device close
-```
-
-For non-routine work, use the version-matched CLI help:
+Also read the validation workflow when the task covers a code change or regression:
 
 ```bash
 agent-device help validate
 ```
 
-Read only the relevant follow-up topic for specialized work:
+Read only the relevant follow-up topic for specialized work; the installed help owns command shapes and platform limits:
 
 ```bash
 agent-device help debugging       # screenshots, logs, traces, video, and failures
@@ -40,5 +47,3 @@ agent-device help react-native    # React Native and Expo runtime guidance
 agent-device help react-devtools  # component tree, props/state/hooks, and renders
 agent-device help scripting       # durable replay and CI workflows
 ```
-
-If platform help says a capability is unavailable, follow it. Keep diagnostic output when verification fails.
