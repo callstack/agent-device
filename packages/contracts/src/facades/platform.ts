@@ -41,9 +41,9 @@ export {
   narrowDeviceBinding,
   providerRuntimeOwner,
   runtimeOwnerKey,
+  runtimeUse,
   sameRuntimeOwner,
 } from '../platform-runtime.ts';
-export { runtimeUse } from '../platform-runtime.ts';
 export type {
   BoundDeviceRuntime,
   DeviceBinding,
