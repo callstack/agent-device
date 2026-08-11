@@ -94,12 +94,15 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
+        INPUT_PLATFORM: ${{ inputs.platform }}
+        INPUT_WAIT_FOR_ARTIFACT_SECONDS: ${{ inputs.wait-for-artifact-seconds }}
+        INPUT_REQUIRE_ARTIFACT: ${{ inputs.require-artifact }}
       run: |
         DEST="${{ github.workspace }}/.tmp/fixture-app"
         bash "$GITHUB_ACTION_PATH/fetch-artifact.sh" \
-          "${{ inputs.platform }}" "$DEST" "${{ inputs.wait-for-artifact-seconds }}" \
+          "$INPUT_PLATFORM" "$DEST" "$INPUT_WAIT_FOR_ARTIFACT_SECONDS" \
           "${{ github.repository }}" "${{ github.event.pull_request.head.sha || github.sha }}" \
-          "$GITHUB_ACTION_PATH" "${{ inputs.require-artifact }}"
+          "$GITHUB_ACTION_PATH" "$INPUT_REQUIRE_ARTIFACT"
 
     # Fallback only: the producer builds the same way. `--device generic` avoids
     # needing a booted simulator; Release embeds the bundle so no Metro is needed.

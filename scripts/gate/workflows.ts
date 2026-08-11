@@ -1,18 +1,18 @@
 // What each CI lane executes: one Lane per workflow job, carrying every shell block the
 // job reaches and the gate ids it invokes.
 //
-// The whole file answers one question — "what will GitHub run for this job?" — and it
-// answers it by CONSTRUCTION rather than interpretation. A shell block is a shell block
-// whether it was spelled as a `run:` step, as a `run:` step inside a composite action, or
-// as a `with:` value the action interpolates into one; collapsing those three spellings
-// into `LaneStep` is what lets audit.ts hold all of them to a single rule.
+// The file answers one question — "what will GitHub run for this job?" — and answers it by
+// CONSTRUCTION. The construction was narrowed in review round 7: rather than modelling every
+// way a caller can hand a command to an action and then policing it, the seams that used to
+// accept commands now accept gate ids, and an action may not interpolate an input into a
+// shell body at all. What is left to model is `run:` blocks.
 
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { parse } from 'yaml';
 import type { CheckId } from '../check-affected/model.ts';
-import { EXTERNAL_ACTIONS, type ExternalAction } from './declarations.ts';
+import { EXTERNAL_ACTIONS, GATE_ACTIONS, type ExternalAction } from './declarations.ts';
 import { commandSegments } from './shell.ts';
 
 export type Lane = {
@@ -31,52 +31,35 @@ export type Lane = {
   readonly steps: readonly LaneStep[];
   readonly paths: readonly string[];
   readonly pathsIgnore: readonly string[];
-  /**
-   * Workflow- and job-level `env:`, which every step in the lane inherits. Modelled at
-   * the lane rather than folded into each step's digest: one `NODE_OPTIONS` here injects
-   * into every step at once, so it is one fact about the lane, not N facts about steps.
-   */
-  readonly env: Readonly<Record<string, string>>;
-  readonly envDigest: string;
+  /** Every environment variable name the lane's steps see, from any level. */
+  readonly envKeys: readonly string[];
   /** `owner/repo@ref` for every third-party action the lane reaches, deduplicated. */
   readonly externals: readonly string[];
   /** Execution surfaces this file uses that the model does not read. Always empty today. */
   readonly unsupported: readonly string[];
 };
 
-/**
- * One shell block a lane executes — the unit the no-bypass rule is asserted over.
- *
- * A step is not always a `run:` block. A composite action that runs
- * `${{ inputs.build-command }}` executes whatever its CALLER passed, so the caller's
- * value is a step of the calling lane too (`actionInputSteps`). Modelling both as the
- * same thing is what keeps one construction rule sufficient.
- */
+/** One shell block a lane executes — the unit the no-bypass rule is asserted over. */
 export type LaneStep = {
   readonly name: string;
   /** The file declaring the step: a workflow, or the composite action it came from. */
   readonly source: string;
   readonly run: string;
   /**
-   * Everything besides `run` that changes what the step executes. `env` matters because
-   * `NODE_OPTIONS=--import ./x.ts` runs code without appearing in any command; `shell`
-   * and `working-directory` change the interpreter and the resolution root.
+   * Everything besides `run` that changes what the step executes: `shell` and
+   * `working-directory` change the interpreter and the resolution root. Environment is no
+   * longer folded in — it is checked by name instead (see `envKeys`), because digesting
+   * ordinary device configuration taxed 11 lanes to catch a class of variable that can be
+   * named outright.
    */
   readonly extras: Readonly<Record<string, string>>;
-  /**
-   * Fingerprint over the step's executable identity — `run` plus every extra. The
-   * inventory binds THIS, not the step's name: a name is mutable metadata, and an entry
-   * keyed on it accepts whatever body is later put behind it.
-   */
+  /** Fingerprint over `run` plus every extra. The inventory binds THIS, never the name. */
   readonly digest: string;
 };
 
 /** Exported so tests re-seal a mutated step with the real function, never a copy. */
 export function stepDigest(run: string, extras: Readonly<Record<string, string>>): string {
-  const canonical = JSON.stringify({
-    run: run.replace(/\s+/g, ' ').trim(),
-    extras,
-  });
+  const canonical = JSON.stringify({ run: run.replace(/\s+/g, ' ').trim(), extras });
   return createHash('sha256').update(canonical).digest('hex').slice(0, 12);
 }
 
@@ -92,10 +75,8 @@ type RawStep = {
   'working-directory'?: string;
 };
 
-/** Execution-affecting keys other than `run`, flattened for the fingerprint. */
 function stepExtras(step: RawStep): Record<string, string> {
   const extras: Record<string, string> = {};
-  for (const [key, value] of Object.entries(step.env ?? {})) extras[`env.${key}`] = String(value);
   if (step.shell) extras['shell'] = step.shell;
   if (step['working-directory']) extras['working-directory'] = step['working-directory'];
   return extras;
@@ -119,10 +100,7 @@ function triggerPaths(on: Record<string, { paths?: string[]; 'paths-ignore'?: st
   return { paths: pr.paths ?? [], pathsIgnore: pr['paths-ignore'] ?? [] };
 }
 
-type ActionDoc = {
-  inputs?: Record<string, { default?: string }>;
-  runs?: { steps?: RawStep[] };
-};
+type ActionDoc = { inputs?: Record<string, { default?: string }>; runs?: { steps?: RawStep[] } };
 
 /** A local composite action, by the `uses:` path that names it. */
 function readAction(
@@ -143,10 +121,9 @@ function externalRef(uses: string | undefined): string | null {
 }
 
 /**
- * Guards composite-action recursion. A cycle cannot run on GitHub either, so this is a
- * repository error rather than a case to model — but it must be LOUD: the depth cutoff
- * this replaces returned an empty step list, which reads to every assertion downstream
- * as "this action executes nothing".
+ * Guards composite-action recursion. A cycle cannot run on GitHub either, so it is a
+ * repository error rather than a case to model — but it must be LOUD: a depth cutoff would
+ * return an empty step list, which reads downstream as "this action executes nothing".
  */
 function enterAction(source: string, chain: readonly string[]): string[] {
   if (chain.includes(source)) {
@@ -158,104 +135,68 @@ function enterAction(source: string, chain: readonly string[]): string[] {
   return [...chain, source];
 }
 
-const INPUT_REFERENCE = /\$\{\{\s*inputs\.([\w-]+)/g;
+const INPUT_IN_SHELL = /\$\{\{\s*inputs\.([\w-]+)/g;
 
 /**
- * Inputs the action interpolates into a `run:` block — directly, or by forwarding the
- * value to another action that does. Those inputs are shell, so their VALUES are shell.
+ * Inputs a local action interpolates into a `run:` block.
  *
- * Deliberately not "is the value in command position?": that is the shell-context
- * reconstruction this design exists to avoid. Any interpolation into a run block counts,
- * which sweeps in data-ish inputs (a device name, a timeout) and costs a few inventory
- * entries. That is the cheap direction to be wrong in.
+ * Must be empty, always. An input reaching a shell by interpolation is a seam a caller can
+ * write commands through, and rounds 5–6 were both that seam found one level further out.
+ * Passing inputs as `env:` and referencing `"$INPUT_X"` closes it by construction: the run
+ * block becomes a constant, and no `with:` value can change what executes.
  */
-function executedInputs(doc: ActionDoc, root: string, chain: readonly string[]): string[] {
-  const texts = (doc.runs?.steps ?? []).flatMap((step) => {
-    if (typeof step.run === 'string') return [step.run];
-    const nested = readAction(step.uses, root);
-    if (!nested) return [];
-    return executedInputs(nested.doc, root, enterAction(nested.source, chain)).map((name) =>
-      String(step.with?.[name] ?? ''),
-    );
-  });
-  return [
-    ...new Set(
-      texts.flatMap((text) =>
-        [...text.matchAll(INPUT_REFERENCE)].map((match) => match[1] as string),
-      ),
-    ),
-  ];
+function interpolatedInputs(doc: ActionDoc): { step: string; input: string }[] {
+  return (doc.runs?.steps ?? []).flatMap((step) =>
+    typeof step.run === 'string'
+      ? [...new Set([...step.run.matchAll(INPUT_IN_SHELL)].map((m) => m[1] as string))].map(
+          (input) => ({ step: step.name ?? '<unnamed>', input }),
+        )
+      : [],
+  );
 }
 
 /**
- * The inputs of a third-party action whose values it executes, from its declaration.
+ * The gate id a `uses:` step names, for an action declared to run exactly one gate.
  *
- * A local action is read; an external one cannot be, so it is DECLARED per pinned ref
- * (`declarations.ts` `EXTERNAL_ACTIONS`). An undeclared ref contributes no steps here and
- * is reported by audit.ts instead — the model must not quietly decide that an action it
- * knows nothing about executes nothing, which is the hole this closes.
+ * `setup-apple-runner-build` used to take `build-command: pnpm gate swift-runner-ios` — a
+ * command, which is why its value had to be digested at every call site. It now takes
+ * `gate: swift-runner-ios`, and the action runs `pnpm gate "$INPUT_GATE"`. The id is data
+ * the audit validates against the registry, so seven call-site digests become nothing.
  */
-function declaredInputs(ref: string, externals: readonly ExternalAction[]): string[] | null {
-  const entry = externals.find((candidate) => candidate.uses === ref);
-  return entry ? [...entry.executes] : null;
+function gateInput(step: RawStep, source: string): CheckId | null {
+  const input = GATE_ACTIONS[source];
+  if (input === undefined) return null;
+  const value = step.with?.[input];
+  return typeof value === 'string' && value.trim() !== '' ? (value.trim() as CheckId) : null;
 }
 
 /**
- * The executable surface of the action a `uses:` step names, however it is spelled.
- *
- * `executed` is in the action's declared order, so a reordered `with:` block does not move
- * the digest. `defaults` is what an OMITTED input falls back to — knowable only for a local
- * action; for a third-party one the default lives in the pinned action rather than in this
- * repo, so only what the call site supplies is audited, and the pin freezes the rest.
+ * Shell a third-party action runs on the caller's behalf. Its source is not in this tree,
+ * so which inputs it executes is declared per pinned sha (`EXTERNAL_ACTIONS`).
  */
-type ActionSurface = {
-  readonly called: string;
-  readonly executed: readonly string[];
-  readonly defaults: Readonly<Record<string, string>>;
-};
-
-function actionSurface(
+function externalInputSteps(
   step: RawStep,
-  root: string,
-  externals: readonly ExternalAction[],
-  chain: readonly string[],
-): ActionSurface | null {
-  const local = readAction(step.uses, root);
-  if (local) {
-    const executed = new Set(executedInputs(local.doc, root, enterAction(local.source, chain)));
-    const inputs = Object.entries(local.doc.inputs ?? {});
-    return {
-      called: path.basename(step.uses ?? ''),
-      executed: inputs.map(([name]) => name).filter((name) => executed.has(name)),
-      defaults: Object.fromEntries(
-        inputs.map(([name, spec]) => [name, String(spec.default ?? '')]),
-      ),
-    };
-  }
-  const ref = externalRef(step.uses);
-  const declared = ref === null ? null : declaredInputs(ref, externals);
-  if (ref === null || declared === null) return null;
-  return { called: ref, executed: [...declared].sort(), defaults: {} };
-}
-
-/** The values a `uses:` step supplies for inputs the action executes, as one lane step. */
-function actionInputSteps(
-  step: RawStep,
+  ref: string,
   source: string,
   jobId: string,
-  root: string,
   externals: readonly ExternalAction[],
-  chain: readonly string[],
 ): LaneStep[] {
-  const surface = actionSurface(step, root, externals, chain);
-  if (surface === null) return [];
-  const supplied = surface.executed
-    .map((name) => [name, String(step.with?.[name] ?? surface.defaults[name] ?? '')] as const)
+  const entry = externals.find((candidate) => candidate.uses === ref);
+  if (!entry) return [];
+  const supplied = [...entry.executes]
+    .sort()
+    .map((name) => [name, String(step.with?.[name] ?? '')] as const)
     .filter(([, value]) => value.trim() !== '');
   if (supplied.length === 0) return [];
   const names = supplied.map(([name]) => name).join(', ');
-  const label = `${step.name ?? jobId} → ${surface.called} (${names})`;
-  return [sealed(label, source, supplied.map(([, value]) => value).join('\n'), {})];
+  return [
+    sealed(
+      `${step.name ?? jobId} → ${ref} (${names})`,
+      source,
+      supplied.map(([, v]) => v).join('\n'),
+      {},
+    ),
+  ];
 }
 
 type Job = {
@@ -279,16 +220,79 @@ type WorkflowDoc = {
 type Surface = {
   readonly steps: readonly LaneStep[];
   readonly externals: readonly string[];
+  readonly gates: readonly CheckId[];
+  readonly envKeys: readonly string[];
+  readonly leaks: readonly string[];
 };
+
+const EMPTY: Surface = { steps: [], externals: [], gates: [], envKeys: [], leaks: [] };
 
 /**
  * Every shell block a job reaches: its own `run:` steps, the `run:` steps of every local
- * composite action it uses, and the executable inputs it passes to any action, local or
- * third-party.
+ * composite action it uses, and any shell it hands to a third-party action.
  *
  * Nothing is filtered out. An earlier version dropped steps carrying `working-directory`,
  * which made a bypass placed in one invisible.
  */
+/** What the action a step `uses:` contributes — nothing, for a step that uses none. */
+function usedActionSurface(
+  step: RawStep,
+  jobId: string,
+  root: string,
+  source: string,
+  externals: readonly ExternalAction[],
+  chain: readonly string[],
+): Surface {
+  const local = readAction(step.uses, root);
+  if (local) {
+    const nested = jobSurface(
+      local.doc.runs ?? {},
+      jobId,
+      root,
+      local.source,
+      externals,
+      enterAction(local.source, chain),
+    );
+    const gate = gateInput(step, local.source);
+    const leaks = interpolatedInputs(local.doc).map(
+      (leak) => `${local.source} / ${leak.step}: \`inputs.${leak.input}\``,
+    );
+    return {
+      ...nested,
+      gates: [...(gate ? [gate] : []), ...nested.gates],
+      leaks: [...leaks, ...nested.leaks],
+    };
+  }
+  const ref = externalRef(step.uses);
+  if (ref === null) return EMPTY;
+  return {
+    ...EMPTY,
+    steps: externalInputSteps(step, ref, source, jobId, externals),
+    externals: [ref],
+  };
+}
+
+/** What one step contributes: its own shell, plus everything the action it uses reaches. */
+function stepSurface(
+  step: RawStep,
+  jobId: string,
+  root: string,
+  source: string,
+  externals: readonly ExternalAction[],
+  chain: readonly string[],
+): Surface {
+  const used = usedActionSurface(step, jobId, root, source, externals, chain);
+  const own =
+    typeof step.run === 'string'
+      ? [sealed(step.name ?? jobId, source, step.run, stepExtras(step))]
+      : [];
+  return {
+    ...used,
+    steps: [...own, ...used.steps],
+    envKeys: [...Object.keys(step.env ?? {}), ...used.envKeys],
+  };
+}
+
 function jobSurface(
   job: Job,
   jobId: string,
@@ -297,33 +301,18 @@ function jobSurface(
   externals: readonly ExternalAction[],
   chain: readonly string[] = [],
 ): Surface {
-  const parts = (job.steps ?? []).map((step): Surface => {
-    const local = readAction(step.uses, root);
-    const ref = externalRef(step.uses);
-    const nested = local
-      ? jobSurface(
-          local.doc.runs ?? {},
-          jobId,
-          root,
-          local.source,
-          externals,
-          enterAction(local.source, chain),
-        )
-      : { steps: [], externals: [] };
-    return {
-      steps: [
-        ...(typeof step.run === 'string'
-          ? [sealed(step.name ?? jobId, source, step.run, stepExtras(step))]
-          : []),
-        ...actionInputSteps(step, source, jobId, root, externals, chain),
-        ...nested.steps,
-      ],
-      externals: [...(ref ? [ref] : []), ...nested.externals],
-    };
-  });
+  const parts = (job.steps ?? []).map((step) =>
+    stepSurface(step, jobId, root, source, externals, chain),
+  );
+  const merge = <K extends keyof Surface>(key: K) => [
+    ...new Set(parts.flatMap((part) => part[key] as readonly string[])),
+  ];
   return {
     steps: parts.flatMap((part) => part.steps),
-    externals: [...new Set(parts.flatMap((part) => part.externals))],
+    externals: merge('externals'),
+    gates: merge('gates') as CheckId[],
+    envKeys: merge('envKeys'),
+    leaks: merge('leaks'),
   };
 }
 
@@ -345,18 +334,13 @@ function laneInvocations(
  * today; `defaults.run` would change the shell of every step in a lane, and a
  * reusable-workflow job runs steps declared in a file this loader never opens.
  */
-function unsupported(doc: WorkflowDoc, job: Job): string[] {
+function unsupported(doc: WorkflowDoc, job: Job, leaks: readonly string[]): string[] {
   return [
     ...(doc.defaults ? ['workflow-level `defaults:`'] : []),
     ...(job.defaults ? ['job-level `defaults:`'] : []),
     ...(job.uses ? [`\`uses: ${job.uses}\` (reusable workflow)`] : []),
+    ...leaks.map((leak) => `${leak} is interpolated into a \`run:\` block; pass it as \`env:\``),
   ];
-}
-
-function inheritedEnv(doc: WorkflowDoc, job: Job): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const [key, value] of Object.entries({ ...doc.env, ...job.env })) env[key] = String(value);
-  return env;
 }
 
 function workflowLanes(
@@ -374,19 +358,25 @@ function workflowLanes(
   const { paths, pathsIgnore } = triggerPaths(on);
   return Object.entries(doc.jobs ?? {}).map(([jobId, job]) => {
     const surface = jobSurface(job, jobId, root, file, externals);
-    const env = inheritedEnv(doc, job);
+    const scanned = laneInvocations(surface.steps, scripts);
     return {
       workflow: file,
       label: laneLabel(doc.name ?? file, job.name ?? jobId),
       qualifying,
-      ...laneInvocations(surface.steps, scripts),
+      gates: [...new Set([...scanned.gates, ...surface.gates])],
+      verbatim: scanned.verbatim,
       steps: surface.steps,
       paths,
       pathsIgnore,
-      env,
-      envDigest: Object.keys(env).length === 0 ? '' : stepDigest('', env),
+      envKeys: [
+        ...new Set([
+          ...Object.keys(doc.env ?? {}),
+          ...Object.keys(job.env ?? {}),
+          ...surface.envKeys,
+        ]),
+      ],
       externals: surface.externals,
-      unsupported: unsupported(doc, job),
+      unsupported: unsupported(doc, job, surface.leaks),
     };
   });
 }

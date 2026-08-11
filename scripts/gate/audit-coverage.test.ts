@@ -15,7 +15,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
 import { audit } from './audit.ts';
-import { NON_GATE_STEPS } from './declarations.ts';
+import { loadBaseline } from './baseline.ts';
 import { categories, covered, loadModel, type Model } from './model.ts';
 import type { Lane } from './workflows.ts';
 import { CHECK_CATALOG } from '../check-affected/checks.ts';
@@ -28,12 +28,13 @@ const tracked = execFileSync('git', ['ls-files'], {
   .split('\n')
   .filter(Boolean);
 const base = loadModel(repoRoot, tracked);
+const baseline = loadBaseline();
 
 function mutate(change: (model: Model) => Partial<Model>): Model {
   return { ...base, ...change(base) };
 }
 
-function messages(model: Model, declared = NON_GATE_STEPS): string[] {
+function messages(model: Model, declared = baseline): string[] {
   return audit(model, declared).map((failure) => failure.message);
 }
 

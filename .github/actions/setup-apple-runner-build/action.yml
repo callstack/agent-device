@@ -12,8 +12,8 @@ inputs:
     description: 'Optional suffix for the cache key'
     required: false
     default: ''
-  build-command:
-    description: 'Command used to build Apple runner artifacts'
+  gate:
+    description: 'Registered check id built through `pnpm gate`'
     required: true
   xcuitest-platform:
     description: 'Optional AGENT_DEVICE_XCUITEST_PLATFORM value'
@@ -49,13 +49,17 @@ runs:
 
     - name: Resolve Apple runner build variant
       id: build-variant
+      env:
+        INPUT_GATE: ${{ inputs.gate }}
+        INPUT_XCUITEST_PLATFORM: ${{ inputs.xcuitest-platform }}
+        INPUT_XCUITEST_DESTINATION: ${{ inputs.xcuitest-destination }}
       run: |
         set -euo pipefail
         VARIANT="$(
           printf '%s\n' \
-            '${{ inputs.build-command }}' \
-            '${{ inputs.xcuitest-platform }}' \
-            '${{ inputs.xcuitest-destination }}' \
+            "$INPUT_GATE" \
+            "$INPUT_XCUITEST_PLATFORM" \
+            "$INPUT_XCUITEST_DESTINATION" \
             "${AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS:-0}" \
             | shasum -a 256 \
             | cut -c1-16
@@ -72,9 +76,10 @@ runs:
 
     - name: Build Apple runner artifacts on cache miss
       if: steps.restore-runner-build.outputs.cache-hit != 'true'
-      run: ${{ inputs.build-command }}
+      run: pnpm gate "$INPUT_GATE"
       shell: bash
       env:
+        INPUT_GATE: ${{ inputs.gate }}
         AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ inputs.derived-path }}
         AGENT_DEVICE_XCUITEST_PLATFORM: ${{ inputs.xcuitest-platform }}
         AGENT_DEVICE_XCUITEST_DESTINATION: ${{ inputs.xcuitest-destination }}

@@ -465,10 +465,11 @@ when landing it, satisfy the gate where one exists.
   per-field. This covers `SessionState`; other shared state has no equivalent gate today.
 - **A gate that stops running is worse than no gate.** Gate: the gate manifest
   (`scripts/gate/`, #1429). every shell block a qualifying lane reaches — a `run:` step, or a value
-  passed to an action input the action executes — is either `pnpm gate <check-id>` or inventoried in
-  `scripts/gate/declarations.ts`. Which inputs an action executes is read for a local composite and
-  declared per pinned sha for a third-party one, so an undeclared action is a failure rather than an
-  assumption that it runs nothing. The workflow→check mapping is a shape check
+  passed to a third-party action it executes — is either `pnpm gate <check-id>` or recorded in the
+  generated baseline (`scripts/gate/baseline.json`). The construction is narrowed so most of that
+  cannot arise: a local action may not interpolate an input into a `run:` block, an action that
+  builds through a gate takes the gate ID rather than a command, and environment is checked against
+  an allowlist by name instead of by digest. The workflow→check mapping is a shape check
   rather than an interpretation of shell, and a gate that is not in the registry
   (`scripts/check-affected/checks.ts`) cannot run at all — the failure
   mode is a red build, not an invisible one. `check:gate-manifest` fails when a registered check

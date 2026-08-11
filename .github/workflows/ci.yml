@@ -53,6 +53,10 @@ jobs:
     name: Swift Runner Unit Compile
     runs-on: macos-26
     timeout-minutes: 20
+    # Was an inline `VAR=1 pnpm gate …` prefix on the action's build-command input. The
+    # input is a gate id now, so the variable lives where ios.yml already puts it: the job.
+    env:
+      AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS: '1'
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -65,7 +69,7 @@ jobs:
         with:
           derived-path: ${{ github.workspace }}/.tmp/swift-runner-unit-derived
           cache-key-prefix: swift-runner-unit
-          build-command: AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS=1 pnpm gate swift-runner-macos
+          gate: swift-runner-macos
           xcuitest-platform: macos
           xcuitest-destination: platform=macOS,arch=arm64
 

@@ -1,0 +1,407 @@
+[
+  {
+    "source": ".github/actions/boot-ios-test-simulator/action.yml",
+    "step": "Resolve and boot iOS test simulator",
+    "digest": "bbf7d1085767"
+  },
+  {
+    "source": ".github/actions/build-docs/action.yml",
+    "step": "Build docs",
+    "digest": "64756dd96c40"
+  },
+  {
+    "source": ".github/actions/setup-android-replay-host/action.yml",
+    "step": "Enable KVM",
+    "digest": "11bef5c793af"
+  },
+  {
+    "source": ".github/actions/setup-android-replay-host/action.yml",
+    "step": "Resolve Android helper source hash",
+    "digest": "18a370b8fb17"
+  },
+  {
+    "source": ".github/actions/setup-android-replay-host/action.yml",
+    "step": "Resolve agent-device daemon state",
+    "digest": "4c95d2bc3461"
+  },
+  {
+    "source": ".github/actions/setup-android-replay-host/action.yml",
+    "step": "Install Android helper SDK packages",
+    "digest": "4ec0d4376bd6"
+  },
+  {
+    "source": ".github/actions/setup-android-replay-host/action.yml",
+    "step": "Verify packaged Android helpers",
+    "digest": "54920b131266"
+  },
+  {
+    "source": ".github/actions/setup-android-replay-host/action.yml",
+    "step": "Package npm-bundled Android helpers",
+    "digest": "5bc39413ac70"
+  },
+  {
+    "source": ".github/actions/setup-apple-runner-build/action.yml",
+    "step": "Resolve Apple runner source hash",
+    "digest": "268697051628"
+  },
+  {
+    "source": ".github/actions/setup-apple-runner-build/action.yml",
+    "step": "Resolve Xcode cache identity",
+    "digest": "68bd46353e4e"
+  },
+  {
+    "source": ".github/actions/setup-apple-runner-build/action.yml",
+    "step": "Resolve Apple runner build variant",
+    "digest": "bc755a568918"
+  },
+  {
+    "source": ".github/actions/setup-apple-runner-build/action.yml",
+    "step": "Build Apple runner artifacts on cache miss",
+    "digest": "cbc973ccc33d"
+  },
+  {
+    "source": ".github/actions/setup-fixture-app/action.yml",
+    "step": "Repack the cached APK with the current JS",
+    "digest": "2d1b4bb57faa"
+  },
+  {
+    "source": ".github/actions/setup-fixture-app/action.yml",
+    "step": "Locate fixture app",
+    "digest": "35528dd1eec9"
+  },
+  {
+    "source": ".github/actions/setup-fixture-app/action.yml",
+    "step": "Ensure Android artifact build tools",
+    "digest": "397c8a78e2df"
+  },
+  {
+    "source": ".github/actions/setup-fixture-app/action.yml",
+    "step": "Build the Android Release APK (fallback)",
+    "digest": "64b53382aba5"
+  },
+  {
+    "source": ".github/actions/setup-fixture-app/action.yml",
+    "step": "Fetch the cached Release binary",
+    "digest": "681fdb861206"
+  },
+  {
+    "source": ".github/actions/setup-fixture-app/action.yml",
+    "step": "Install fixture app",
+    "digest": "85dc3176fdf4"
+  },
+  {
+    "source": ".github/actions/setup-fixture-app/action.yml",
+    "step": "Locate fixture APK",
+    "digest": "8a75d6b6a9f1"
+  },
+  {
+    "source": ".github/actions/setup-fixture-app/action.yml",
+    "step": "Build the Release app (fallback)",
+    "digest": "a5dfaa5d3f5a"
+  },
+  {
+    "source": ".github/actions/setup-fixture-app/action.yml",
+    "step": "Repack the cached app with the current JS",
+    "digest": "dd92c52ace08"
+  },
+  {
+    "source": ".github/actions/setup-node-pnpm/action.yml",
+    "step": "Install dependencies",
+    "digest": "3d5a9aa23cac"
+  },
+  {
+    "source": ".github/actions/setup-node-pnpm/action.yml",
+    "step": "Resolve pnpm version from packageManager",
+    "digest": "41219311e090"
+  },
+  {
+    "source": ".github/actions/setup-node-pnpm/action.yml",
+    "step": "Assert pnpm matches packageManager",
+    "digest": "eee60d99b757"
+  },
+  {
+    "source": ".github/actions/setup-test-app-dependencies/action.yml",
+    "step": "Install test app dependencies",
+    "digest": "44eed4516be9"
+  },
+  {
+    "source": ".github/actions/setup-test-app-dependencies/action.yml",
+    "step": "Resolve test app dependency cache key",
+    "digest": "ba6d6cd8145a"
+  },
+  {
+    "source": "android.yml",
+    "step": "Report fixture cache source",
+    "digest": "2d62b9316f7e"
+  },
+  {
+    "source": "android.yml",
+    "step": "Run Android emulator catalog coverage contract",
+    "digest": "65f0e1e8591a"
+  },
+  {
+    "source": "android.yml",
+    "step": "Run Android smoke checks → reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b (emulator-options, script)",
+    "digest": "b346a3b0abcd"
+  },
+  {
+    "source": "ci.yml",
+    "step": "Verify the published package on Node.js 22.12",
+    "digest": "00de3d74baf5"
+  },
+  {
+    "source": "ci.yml",
+    "step": "Run live web smoke",
+    "digest": "09420a052135"
+  },
+  {
+    "source": "ci.yml",
+    "step": "Disallow trailing commas before closing parenthesis in Swift",
+    "digest": "7d72f44785ff"
+  },
+  {
+    "source": "ci.yml",
+    "step": "Run integration tests",
+    "digest": "96fe444c5201"
+  },
+  {
+    "source": "ci.yml",
+    "step": "Fail if test-only DI seams reappear in production code",
+    "digest": "977bb80cfacf"
+  },
+  {
+    "source": "conformance-differential.yml",
+    "step": "Verify the installed app is the one the scenarios target",
+    "digest": "78ef1dbf019c"
+  },
+  {
+    "source": "conformance-differential.yml",
+    "step": "Verify the Maestro CLI matches the oracle pin",
+    "digest": "aab5fb9ce671"
+  },
+  {
+    "source": "conformance-differential.yml",
+    "step": "Install pinned Maestro CLI",
+    "digest": "ae452f2af223"
+  },
+  {
+    "source": "conformance-regenerate.yml",
+    "step": "Fail if regeneration changed anything",
+    "digest": "17b1db3209a8"
+  },
+  {
+    "source": "conformance-regenerate.yml",
+    "step": "Verify fixture seals and conformance",
+    "digest": "fb4f1fc9e03c"
+  },
+  {
+    "source": "ios.yml",
+    "step": "Establish host focus canary",
+    "digest": "62b370048948"
+  },
+  {
+    "source": "ios.yml",
+    "step": "Assert simulator automation preserved host focus",
+    "digest": "72f933b9e08f"
+  },
+  {
+    "source": "ios.yml",
+    "step": "Report fixture cache source",
+    "digest": "8247e4be6bf3"
+  },
+  {
+    "source": "ios.yml",
+    "step": "Preflight iOS runner through public CLI",
+    "digest": "92918d83107d"
+  },
+  {
+    "source": "ios.yml",
+    "step": "Run fixture-backed iOS simulator E2E smoke",
+    "digest": "9abc355c0eb0"
+  },
+  {
+    "source": "ios.yml",
+    "step": "Run targeted iOS runner XCTest regressions",
+    "digest": "cbc5df84affa"
+  },
+  {
+    "source": "ios.yml",
+    "step": "Run iOS physical device smoke replay",
+    "digest": "cdd416fce098"
+  },
+  {
+    "source": "ios.yml",
+    "step": "Run iOS Settings replay smoke test",
+    "digest": "e6ca1d4bf6bc"
+  },
+  {
+    "source": "ios.yml",
+    "step": "Set fixture producer wait policy",
+    "digest": "eaca4542cef9"
+  },
+  {
+    "source": "linux.yml",
+    "step": "Verify environment",
+    "digest": "049e4dfb08c7"
+  },
+  {
+    "source": "linux.yml",
+    "step": "Run Linux replay smoke test",
+    "digest": "3c9cbfebe4c9"
+  },
+  {
+    "source": "linux.yml",
+    "step": "Start AT-SPI2 registry",
+    "digest": "55d179abe434"
+  },
+  {
+    "source": "linux.yml",
+    "step": "Start Xvfb and D-Bus",
+    "digest": "c67494e7066e"
+  },
+  {
+    "source": "linux.yml",
+    "step": "Install Linux desktop dependencies",
+    "digest": "d6ea8276c6dc"
+  },
+  {
+    "source": "mutation-affected.yml",
+    "step": "Run mutants for ${{ matrix.name }}",
+    "digest": "1b6eac0b3509"
+  },
+  {
+    "source": "mutation-affected.yml",
+    "step": "Derive the affected shard matrix",
+    "digest": "823b9d45dcb0"
+  },
+  {
+    "source": "mutation-affected.yml",
+    "step": "Ratchet the affected modules",
+    "digest": "f31977ec7713"
+  },
+  {
+    "source": "mutation-weekly.yml",
+    "step": "Run mutants for ${{ matrix.name }}",
+    "digest": "1b6eac0b3509"
+  },
+  {
+    "source": "mutation-weekly.yml",
+    "step": "Ratchet the merged sweep and propose the next baseline",
+    "digest": "b25594b32ba7"
+  },
+  {
+    "source": "mutation-weekly.yml",
+    "step": "Lane envelope",
+    "digest": "e6a7f47eee4c"
+  },
+  {
+    "source": "perf-nightly.yml",
+    "step": "Run Android command perf benchmark → reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b (emulator-options, script)",
+    "digest": "01e17764b28e"
+  },
+  {
+    "source": "perf-nightly.yml",
+    "step": "Preflight iOS runner through public CLI",
+    "digest": "3544460a1732"
+  },
+  {
+    "source": "perf-nightly.yml",
+    "step": "Run iOS command perf benchmark",
+    "digest": "98f652a2e30c"
+  },
+  {
+    "source": "pr-preview-cleanup.yml",
+    "step": "Remove preview → rossjrw/pr-preview-action@ffa7509e91a3ec8dfc2e5536c4d5c1acdf7a6de9 (preview-branch, qr-code, source-dir)",
+    "digest": "e546cec1d5a3"
+  },
+  {
+    "source": "pr-preview.yml",
+    "step": "Deploy preview → rossjrw/pr-preview-action@ffa7509e91a3ec8dfc2e5536c4d5c1acdf7a6de9 (preview-branch, qr-code, source-dir)",
+    "digest": "e546cec1d5a3"
+  },
+  {
+    "source": "replays-nightly.yml",
+    "step": "Mark Android emulator setup complete",
+    "digest": "50120e99db45"
+  },
+  {
+    "source": "replays-nightly.yml",
+    "step": "Summarize",
+    "digest": "637427dab1d3"
+  },
+  {
+    "source": "replays-nightly.yml",
+    "step": "Report fixture cache source",
+    "digest": "8247e4be6bf3"
+  },
+  {
+    "source": "replays-nightly.yml",
+    "step": "Preflight iOS runner through public CLI",
+    "digest": "92918d83107d"
+  },
+  {
+    "source": "replays-nightly.yml",
+    "step": "Run full fixture-backed iOS simulator E2E",
+    "digest": "9abc355c0eb0"
+  },
+  {
+    "source": "replays-nightly.yml",
+    "step": "Prove selector drag reaches its destination on iOS",
+    "digest": "d987520fe290"
+  },
+  {
+    "source": "replays-nightly.yml",
+    "step": "Run Android full emulator suite → reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b (emulator-options, script)",
+    "digest": "e4179061b70b"
+  },
+  {
+    "source": "size.yml",
+    "step": "Measure base size",
+    "digest": "0a2945cd88b6"
+  },
+  {
+    "source": "size.yml",
+    "step": "Measure PR size",
+    "digest": "12307ef05978"
+  },
+  {
+    "source": "size.yml",
+    "step": "Comment on PR",
+    "digest": "a50df64b32bd"
+  },
+  {
+    "source": "size.yml",
+    "step": "Preserve report script",
+    "digest": "d579f6da75cd"
+  },
+  {
+    "source": "size.yml",
+    "step": "Add job summary",
+    "digest": "ed11b888d999"
+  },
+  {
+    "source": "test-app-build-cache.yml",
+    "step": "Install Android SDK packages",
+    "digest": "5baa4a7b5af5"
+  },
+  {
+    "source": "test-app-build-cache.yml",
+    "step": "Stage the binary for upload",
+    "digest": "6153d35b3227"
+  },
+  {
+    "source": "test-app-build-cache.yml",
+    "step": "Build the Android Release apk",
+    "digest": "bd6dcf8e0dda"
+  },
+  {
+    "source": "test-app-build-cache.yml",
+    "step": "Resolve native fingerprint",
+    "digest": "d327fdcf3d5c"
+  },
+  {
+    "source": "test-app-build-cache.yml",
+    "step": "Build the iOS Release app",
+    "digest": "f73b2699856e"
+  }
+]

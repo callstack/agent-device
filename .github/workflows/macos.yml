@@ -41,7 +41,7 @@ jobs:
         with:
           derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}
           cache-key-prefix: macos-runner-prebuilt
-          build-command: pnpm gate swift-runner-macos
+          gate: swift-runner-macos
           xcuitest-platform: macos
           xcuitest-destination: platform=macOS,arch=arm64
 

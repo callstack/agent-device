@@ -216,38 +216,34 @@ strings, and four suites (`check:tmpdir-leaks`, its model tests, `test:fixture-c
 
 `pnpm check:gate-manifest` (`scripts/gate/`) answers it with one rule and one primitive.
 
-The rule: **every shell block a qualifying lane reaches is either `pnpm gate <check-id>`
-or listed in `NON_GATE_STEPS`.** A shell block is a `run:` step — in a workflow or in a local
-composite action — or a value passed to an action input that the action executes. That second
-kind matters because `setup-apple-runner-build` runs `${{ inputs.build-command }}`: its own step
-digest is constant, so the command is really written at the call site, and the caller's value is
-held to the rule instead. Which inputs an action executes is *read* for a local composite (any
-input it interpolates into a `run:` block) and *declared* for a third-party one, per pinned sha,
-in `EXTERNAL_ACTIONS` — an action nothing declares fails the audit rather than being assumed
-inert. The Android smoke suite runs entirely inside `android-emulator-runner`'s `script:` input,
-so that is not a hypothetical surface. Nothing inspects what a command does. That is deliberate
-and was learned the hard way: a content-based classifier was defeated by `pnpm exec`, then
-by `pnpm exec --` and `npx --yes`, then by `node -e 'import("./scripts/…")'` — and after
-those, `eval`, heredocs and base64 remain. "Does this text run project code?" is not
-answerable from text, so the question is not asked. A step is allowed because of its
-shape; everything else is written down by a human, which is the only boundary an unknown
-spelling cannot walk through.
+The rule: **every shell block a qualifying lane reaches is either `pnpm gate <check-id>` or
+recorded in the generated baseline.** Nothing inspects what a command does. That is
+deliberate and was learned the hard way: a content-based classifier was defeated by
+`pnpm exec`, then by `pnpm exec --` and `npx --yes`, then by `node -e 'import("./scripts/…")'`
+— and after those, `eval`, heredocs and base64 remain. "Does this text run project code?" is
+not answerable from text, so the question is not asked.
 
-The price is a long inventory (109 entries today, keyed on the file that declares them, so a
-composite action shared by eight lanes is listed once — but an executed input is listed per call
-site, because a new caller of the same action is a new command to review). That is the census of
-everything CI does outside the runner, and it fails in both directions — an unlisted step fails as
-a bypass, a listed step whose body is edited fails as both, since entries bind the step's digest
-(`run` plus `env`/`shell`/`working-directory`) rather than its name. Lane-level `env:` is
-fingerprinted the same way in `LANE_ENVIRONMENTS`, and the two execution surfaces the loader does
-not read — `defaults.run` and reusable-workflow jobs — fail closed rather than being ignored. A
-composite-action cycle raises rather than truncating: the depth cutoff it replaces returned an
-empty step list, which every assertion downstream would read as "this action executes nothing".
-Every gate is a `CheckId` in the registry (`scripts/check-affected/checks.ts`) — the same universe
-the affected-selector uses — so the workflow→check mapping is a token scan for `pnpm gate <id>`
-rather than an interpretation of shell. That is what makes a new gate impossible to hide: an
-unregistered one cannot be wired into a lane, because project code run outside the runner fails
-the manifest.
+What keeps the rule small is that the *construction* is narrow, not that the verifier is
+clever. Three seams that used to accept arbitrary commands no longer can:
+
+- **a local action may not interpolate an input into a `run:` block.** Inputs arrive as
+  `env:` and are referenced as `"$INPUT_X"`, so the run body is a constant and no `with:`
+  value can change what executes. Violating this is a `surface` failure.
+- **an action that builds through a gate takes the gate ID, not a command.**
+  `setup-apple-runner-build` takes `gate: swift-runner-ios` and runs `pnpm gate "$INPUT_GATE"`.
+  The id is validated against the registry, so a typo fails rather than silently running
+  nothing.
+- **environment is checked by name, not by digest.** `ALLOWED_ENV` is an allowlist, so
+  `NODE_OPTIONS`, `BASH_ENV`, `PERL5OPT`, `LD_PRELOAD` and `PATH` cannot arrive by accident,
+  while ordinary device configuration needs no waiver at all.
+
+The residue — everything CI genuinely runs outside the runner — is a generated baseline
+(`scripts/gate/baseline.json`, 81 entries of file + step + digest), refreshed with
+`pnpm check:gate-manifest --update` so a reviewer reads the diff. The prose lives once per
+declaring file in `REASONS`. It fails in both directions: an unrecorded step fails as a
+bypass, and an entry matching no live step fails as inert. Two execution surfaces the loader
+does not read — `defaults.run` and reusable-workflow jobs — fail closed, and a
+composite-action cycle raises rather than truncating.
 
 The primitive: `covered(check, path)` — some `pull_request`/`schedule` lane runs every *unit* of
 the check, and (when a path is given) a change to that path starts the lane. Units are Vitest

@@ -7,14 +7,8 @@
 // functions below, because CI can only reach a gate through `pnpm gate <id>`.
 
 import { CHECK_CATALOG } from '../check-affected/checks.ts';
-import {
-  EXTERNAL_ACTIONS,
-  LANE_ENVIRONMENTS,
-  NON_GATE_STEPS,
-  type ExternalAction,
-  type LaneEnvironment,
-  type Unrouted,
-} from './declarations.ts';
+import { loadBaseline, reasonFor, type BaselineEntry } from './baseline.ts';
+import { ALLOWED_ENV, EXTERNAL_ACTIONS, type ExternalAction } from './declarations.ts';
 import { categories, checkUnits, covered, scriptUnits, type Model } from './model.ts';
 import { commandSegments, stripExpressions } from './shell.ts';
 import type { Lane } from './workflows.ts';
@@ -24,7 +18,8 @@ export type Failure = { readonly assertion: string; readonly message: string };
 const HEADINGS: Readonly<Record<string, string>> = {
   owned: 'Registered checks no lane runs',
   bypass: 'Project code run outside `pnpm gate`',
-  'lane-env': 'Lane environments that are not inventoried',
+  gate: 'Gate ids that name no registered check',
+  env: 'Environment variables that are not on the allowlist',
   external: 'Third-party actions with no declaration',
   surface: 'Execution surfaces the manifest does not model',
   'path-coverage': 'Paths whose selected checks no triggered lane runs',
@@ -105,7 +100,7 @@ function gateSegment(segment: string): { id: string } | null {
  * An inline `VAR=… pnpm gate x` is the same thing spelled in the shell, and is rejected
  * the same way: `commandSegments` keeps the prefix, and the grammar starts at `pnpm`.
  */
-function plainGateStep(step: {
+export function plainGateStep(step: {
   run: string;
   extras: Readonly<Record<string, string>>;
 }): string[] | null {
@@ -141,32 +136,23 @@ function plainGateStep(step: {
 //    so it arrives here and this rule already decides it. Round 6 extended the same
 //    treatment to third-party actions, whose executable inputs are declared rather than
 //    read (`externalActions` below).
-function bypass(model: Model, declared: readonly Unrouted[]): Failure[] {
+function bypass(model: Model, declared: readonly BaselineEntry[]): Failure[] {
   const seen = new Map<string, Model['lanes'][number]['steps'][number]>();
   for (const lane of model.lanes.filter((entry) => entry.qualifying)) {
     for (const step of lane.steps) seen.set(`${step.source}\u0000${step.digest}`, step);
   }
   return [...seen.values()].flatMap((step) => {
-    const ids = plainGateStep(step);
-    if (ids !== null) {
-      return ids
-        .filter((id) => !REGISTERED.has(id))
-        .map((id) =>
-          fail(
-            'bypass',
-            `${step.source} / ${step.name}: \`pnpm gate ${id}\` names no registered check.`,
-          ),
-        );
-    }
-    if (declared.some((entry) => entry.workflow === step.source && entry.digest === step.digest)) {
+    if (plainGateStep(step) !== null) return [];
+    if (declared.some((entry) => entry.source === step.source && entry.digest === step.digest)) {
       return [];
     }
     const listedName = declared.find(
-      (entry) => entry.workflow === step.source && entry.step === step.name,
+      (entry) => entry.source === step.source && entry.step === step.name,
     );
     const detail = listedName
-      ? `its NON_GATE_STEPS entry records digest ${listedName.digest}, but the step is now ${step.digest}`
-      : `it is not in NON_GATE_STEPS (digest ${step.digest})`;
+      ? `the baseline records digest ${listedName.digest}, but the step is now ${step.digest}`
+      : `it is not in the baseline (digest ${step.digest}). \`pnpm check:gate-manifest --update\` ` +
+        `records it; the diff is what a reviewer reads. ${reasonFor(step.source)}`;
     return [
       fail(
         'bypass',
@@ -177,28 +163,48 @@ function bypass(model: Model, declared: readonly Unrouted[]): Failure[] {
   });
 }
 
-// 3b. A lane's inherited environment is fingerprinted too. `env` at workflow or job
-//     level reaches every step, so `NODE_OPTIONS=--import ./x.ts` there would inject
-//     into a plain gate step while the step itself stayed byte-identical.
-function laneEnvironments(model: Model, declared: readonly LaneEnvironment[]): Failure[] {
+// 3a. Every gate id a lane claims must be registered.
+//
+//     Both spellings land here: an id scanned out of `pnpm gate <id>`, and one supplied to a
+//     gate-valued action input (`gate: swift-runner-ios`). Checking at the lane rather than
+//     at the step is what makes the second spelling safe — round 7 turned a command-valued
+//     input into an id, and an id nobody validates is a typo that silently runs nothing.
+function gateIds(model: Model): Failure[] {
   return model.lanes
-    .filter((lane) => lane.qualifying && lane.envDigest !== '')
-    .flatMap((lane) => {
-      if (
-        declared.some(
-          (entry) => entry.workflow === lane.workflow && entry.digest === lane.envDigest,
-        )
-      ) {
-        return [];
-      }
-      return [
-        fail(
-          'lane-env',
-          `${lane.workflow} / ${lane.label}: the lane's inherited env is not in LANE_ENVIRONMENTS ` +
-            `(digest ${lane.envDigest}): ${Object.keys(lane.env).sort().join(', ')}.`,
+    .filter((lane) => lane.qualifying)
+    .flatMap((lane) =>
+      lane.gates
+        .filter((id) => !REGISTERED.has(id))
+        .map((id) =>
+          fail('gate', `${lane.workflow} / ${lane.label}: "${id}" names no registered check.`),
         ),
-      ];
-    });
+    );
+}
+
+// 3b. Environment is checked by NAME, not by digest.
+//
+//     `NODE_OPTIONS=--import ./x.ts` runs code with nothing on the command line, so it has
+//     to be rejected — but the previous answer, fingerprinting every inherited environment,
+//     made eleven lanes carry a digest waiver for runtime versions and an Xvfb display.
+//     Naming the dangerous class is both smaller and stricter: ALLOWED_ENV is an allowlist,
+//     so a variable that hijacks an interpreter cannot be introduced without editing it.
+function environment(model: Model, allowed: readonly string[]): Failure[] {
+  const permitted = (key: string) =>
+    allowed.some((entry) => (entry.endsWith('_') ? key.startsWith(entry) : key === entry));
+  return model.lanes
+    .filter((lane) => lane.qualifying)
+    .flatMap((lane) =>
+      lane.envKeys
+        .filter((key) => !permitted(key))
+        .map((key) =>
+          fail(
+            'env',
+            `${lane.workflow} / ${lane.label}: \`${key}\` is not in ALLOWED_ENV. Variables that ` +
+              `retarget an interpreter (NODE_OPTIONS, BASH_ENV, PERL5OPT, LD_PRELOAD, PATH) run ` +
+              `code no command line names; add it deliberately if it is ordinary configuration.`,
+          ),
+        ),
+    );
 }
 
 // 3c. Execution surfaces the model does not read are rejected rather than ignored.
@@ -262,21 +268,6 @@ function externalActions(model: Model, declared: readonly ExternalAction[]): Fai
   return [...undeclared, ...inert];
 }
 
-function inertEnvironment(entry: LaneEnvironment, model: Model): Failure[] {
-  const live = model.lanes.some(
-    (lane) =>
-      lane.qualifying && lane.workflow === entry.workflow && lane.envDigest === entry.digest,
-  );
-  if (live) return [];
-  return [
-    fail(
-      'inert',
-      `LANE_ENVIRONMENTS ${entry.workflow} / "${entry.job}" (digest ${entry.digest}) matches no ` +
-        `qualifying lane; the environment was edited or the job removed.`,
-    ),
-  ];
-}
-
 // 4. Per-path coverage (#1420's class): every check a real selector run activates
 //    for a category's path must be run by a lane that a PR touching only that path
 //    actually starts. Assertion 1 can stay green while this fails — that is the point.
@@ -304,16 +295,16 @@ function pathCoverage(model: Model): Failure[] {
 // 4. No inert declaration. Every listed step must still exist, exactly once, in a
 //    qualifying lane — so deleting or renaming the step it covers is loud rather than
 //    silent, and the inventory cannot accumulate entries for steps that are long gone.
-function inertStep(entry: Unrouted, qualifying: readonly Lane[]): Failure[] {
+function inertStep(entry: BaselineEntry, qualifying: readonly Lane[]): Failure[] {
   const matches = qualifying
     .flatMap((lane) => lane.steps)
-    .filter((step) => step.source === entry.workflow && step.digest === entry.digest);
+    .filter((step) => step.source === entry.source && step.digest === entry.digest);
   if (matches.length > 0) return [];
   return [
     fail(
       'inert',
-      `NON_GATE_STEPS ${entry.workflow} / "${entry.step}" (digest ${entry.digest}) matches no ` +
-        `shell a qualifying lane reaches; the step was edited, renamed away or deleted.`,
+      `baseline ${entry.source} / "${entry.step}" (digest ${entry.digest}) matches no shell a ` +
+        `qualifying lane reaches; the step was edited, renamed away or deleted.`,
     ),
   ];
 }
@@ -335,7 +326,7 @@ function inertOpaque(model: Model): Failure[] {
   });
 }
 
-function inert(model: Model, declared: readonly Unrouted[]): Failure[] {
+function inert(model: Model, declared: readonly BaselineEntry[]): Failure[] {
   const qualifying = model.lanes.filter((lane) => lane.qualifying);
   return [...declared.flatMap((entry) => inertStep(entry, qualifying)), ...inertOpaque(model)];
 }
@@ -393,16 +384,17 @@ function orphanProjects(model: Model): Failure[] {
 
 export function audit(
   model: Model,
-  declared: readonly Unrouted[] = NON_GATE_STEPS,
+  declared: readonly BaselineEntry[] = loadBaseline(),
   externals: readonly ExternalAction[] = EXTERNAL_ACTIONS,
+  allowedEnv: readonly string[] = ALLOWED_ENV,
 ): Failure[] {
   return [
     ...unowned(model),
     ...bypass(model, declared),
-    ...laneEnvironments(model, LANE_ENVIRONMENTS),
+    ...gateIds(model),
+    ...environment(model, allowedEnv),
     ...laneSurfaces(model),
     ...externalActions(model, externals),
-    ...LANE_ENVIRONMENTS.flatMap((entry) => inertEnvironment(entry, model)),
     ...pathCoverage(model),
     ...inert(model, declared),
     ...unregisteredSuites(model),
