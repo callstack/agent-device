@@ -15,7 +15,6 @@ import type { PostActionObservationSupport } from './post-action-observation.ts'
 import {
   appLogRuntimePlanUses,
   appsRuntimeUse,
-  assertCommandPlatformExecution,
   assertRecordRuntimeExecution,
   deviceBootRuntimeUses,
   inventoryUse,
