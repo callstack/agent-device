@@ -11,25 +11,6 @@ export function parseHarmonyBundleList(rawOutput: string): string[] {
     .filter((line) => /^([a-zA-Z0-9_]+\.)+[a-zA-Z0-9_]+$/.test(line));
 }
 
-export interface HarmonyForegroundApp {
-  package: string;
-  activity: string;
-}
-
-/** Reads the foreground page ability from `aa dump -l`. */
-export function parseHarmonyForegroundApp(rawOutput: string): HarmonyForegroundApp | undefined {
-  const missions = rawOutput.split(/(?=^\s*Mission ID #)/m);
-  for (const mission of missions) {
-    if (!/\bstate #FOREGROUND\b/.test(mission)) continue;
-    const match = mission.match(/mission name #\[#([^:]+):[^:]*:([^\]]+)]/);
-    if (!match) continue;
-    const [, packageName, activity] = match;
-    if (!packageName || !activity) continue;
-    return { package: packageName, activity };
-  }
-  return undefined;
-}
-
 export interface HarmonyLaunchTarget {
   ability: string;
   module?: string;
@@ -213,19 +194,6 @@ function combineHarmonySignals(
   const definedSignals = signals.filter((signal): signal is AbortSignal => Boolean(signal));
   if (definedSignals.length === 0) return undefined;
   return definedSignals.length === 1 ? definedSignals[0] : AbortSignal.any(definedSignals);
-}
-
-export async function getHarmonyAppState(device: DeviceInfo): Promise<HarmonyForegroundApp> {
-  const result = await runHarmonyHdc(device, ['shell', 'aa', 'dump', '-l'], {
-    timeoutMs: 15_000,
-  });
-  const foreground = parseHarmonyForegroundApp(result.stdout);
-  if (!foreground) {
-    throw new AppError('COMMAND_FAILED', 'Could not determine the foreground HarmonyOS app', {
-      hint: 'Open an app on the target, then retry appstate.',
-    });
-  }
-  return foreground;
 }
 
 export async function openHarmonyApp(

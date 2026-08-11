@@ -21,7 +21,6 @@ import {
 import { classifyAndroidAppTarget } from './open-target.ts';
 import { prepareAndroidInstallArtifact } from './install-artifact.ts';
 import {
-  parseAndroidForegroundApp,
   parseAndroidBlockingDialogFocus,
   parseAndroidLaunchablePackages,
   parseAndroidUserInstalledPackages,
@@ -202,18 +201,8 @@ export function inferAndroidAppName(packageName: string): string {
 }
 
 export async function getAndroidAppState(device: DeviceInfo): Promise<AndroidForegroundApp> {
-  const windowFocus = await readAndroidFocus(device, [
-    ['shell', 'dumpsys', 'window', 'windows'],
-    ['shell', 'dumpsys', 'window'],
-  ]);
-  if (windowFocus) return windowFocus;
-
-  const activityFocus = await readAndroidFocus(device, [
-    ['shell', 'dumpsys', 'activity', 'activities'],
-    ['shell', 'dumpsys', 'activity'],
-  ]);
-  if (activityFocus) return activityFocus;
-  return {};
+  const { readAndroidAppState } = await import('../../platform-runtime.ts');
+  return await readAndroidAppState(device, new AbortController().signal);
 }
 
 export async function getAndroidBlockingDialogFocus(
@@ -223,19 +212,6 @@ export async function getAndroidBlockingDialogFocus(
     ['shell', 'dumpsys', 'window', 'windows'],
     ['shell', 'dumpsys', 'window'],
   ]);
-}
-
-async function readAndroidFocus(
-  device: DeviceInfo,
-  commands: string[][],
-): Promise<AndroidForegroundApp | null> {
-  for (const args of commands) {
-    const result = await runAndroidAdb(device, args, { allowFailure: true });
-    const text = result.stdout ?? '';
-    const parsed = parseAndroidForegroundApp(text);
-    if (parsed) return parsed;
-  }
-  return null;
 }
 
 async function readAndroidBlockingDialogFocus(
@@ -667,17 +643,8 @@ async function waitForAndroidPackageNotForeground(
 }
 
 async function readAndroidForegroundApp(device: DeviceInfo): Promise<AndroidForegroundApp | null> {
-  for (const args of [
-    ['shell', 'dumpsys', 'window', 'windows'],
-    ['shell', 'dumpsys', 'window'],
-    ['shell', 'dumpsys', 'activity', 'activities'],
-    ['shell', 'dumpsys', 'activity'],
-  ]) {
-    const result = await runAndroidAdb(device, args, { allowFailure: true });
-    const parsed = parseAndroidForegroundApp(result.stdout ?? '');
-    if (parsed) return parsed;
-  }
-  return null;
+  const foreground = await getAndroidAppState(device);
+  return foreground.package ? foreground : null;
 }
 
 async function waitForAndroidPackageProcessGone(
