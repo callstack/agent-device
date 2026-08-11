@@ -66,6 +66,114 @@ const steps = (
   entries: readonly (readonly [digest: string, step: string])[],
 ): Unrouted[] => entries.map(([digest, step]) => ({ workflow, step, digest, reason }));
 
+/**
+ * Values a workflow passes to an action input the action EXECUTES.
+ *
+ * `setup-apple-runner-build` runs `${{ inputs.build-command }}`, so the shell that lane
+ * runs is written at the CALL SITE, not in the action. The action's own step therefore has
+ * a constant digest and can vouch for nothing (review round 5). The model turns each such
+ * value into a step of the calling lane, which is why these are ordinary entries here: the
+ * same rule decides them, and a caller that swaps `pnpm gate swift-runner-ios` for anything
+ * else changes this digest.
+ *
+ * An input counts as executed if the action interpolates it into any `run:` block — no
+ * attempt is made to work out whether the value lands in command position, because that is
+ * the shell-context reconstruction this design refuses to do. So the digest also covers
+ * data-ish neighbours (a platform name, a device name, a timeout), and one entry per call
+ * site is the price. A new caller of the same action is a new entry, which is the point:
+ * copying a call is a fact to review, not something the list already covers.
+ */
+const EXECUTED_INPUTS: readonly Unrouted[] = [
+  ...steps('android.yml', 'Android fixture APK restore, staged without installing', [
+    [
+      'c2bc6863c083',
+      'Restore fixture APK → setup-fixture-app (platform, wait-for-artifact-seconds, require-artifact)',
+    ],
+  ]),
+
+  ...steps(
+    'ci.yml',
+    'macOS runner build for the Swift unit-test surface, gated and carrying the unit-test opt-in',
+    [
+      [
+        'ea808cb7887b',
+        'Restore and compile Swift runner unit-test surface → setup-apple-runner-build (build-command, xcuitest-platform, xcuitest-destination)',
+      ],
+    ],
+  ),
+
+  ...steps('conformance-differential.yml', 'iOS runner build, simulator boot and fixture app', [
+    [
+      '28d1645e76e6',
+      'Restore and build iOS XCTest runner → setup-apple-runner-build (build-command, xcuitest-platform, xcuitest-destination)',
+    ],
+    [
+      '1901b9e89afd',
+      'Boot simulator → boot-ios-test-simulator (runtime-version, preferred-device-name, boot-timeout-seconds)',
+    ],
+    [
+      'f3c6fc4398e1',
+      'Setup fixture app → setup-fixture-app (platform, wait-for-artifact-seconds, require-artifact)',
+    ],
+  ]),
+
+  ...steps('ios.yml', 'iOS runner build, simulator boot and fixture app', [
+    [
+      '28d1645e76e6',
+      'Restore and build iOS XCTest runner → setup-apple-runner-build (build-command, xcuitest-platform, xcuitest-destination)',
+    ],
+    [
+      '1901b9e89afd',
+      'Boot iOS test simulator → boot-ios-test-simulator (runtime-version, preferred-device-name, boot-timeout-seconds)',
+    ],
+    [
+      '9699d88529c4',
+      'Fetch current fixture app → setup-fixture-app (platform, wait-for-artifact-seconds, require-artifact)',
+    ],
+  ]),
+
+  ...steps('macos.yml', 'macOS runner build for the replay lane', [
+    [
+      '7d2447a2c51b',
+      'Restore and build macOS XCTest runner → setup-apple-runner-build (build-command, xcuitest-platform, xcuitest-destination)',
+    ],
+  ]),
+
+  ...steps('perf-nightly.yml', 'iOS runner build and simulator boot for the benchmark lane', [
+    [
+      '28d1645e76e6',
+      'Restore and build iOS XCTest runner → setup-apple-runner-build (build-command, xcuitest-platform, xcuitest-destination)',
+    ],
+    [
+      '1901b9e89afd',
+      'Boot iOS test simulator → boot-ios-test-simulator (runtime-version, preferred-device-name, boot-timeout-seconds)',
+    ],
+  ]),
+
+  ...steps('replays-nightly.yml', 'Apple runner builds, simulator boot and fixture apps', [
+    [
+      '054dcdc23b3f',
+      'Restore Android fixture APK → setup-fixture-app (platform, wait-for-artifact-seconds, require-artifact)',
+    ],
+    [
+      '28d1645e76e6',
+      'Restore and build iOS XCTest runner → setup-apple-runner-build (build-command, xcuitest-platform, xcuitest-destination)',
+    ],
+    [
+      '1901b9e89afd',
+      'Boot iOS test simulator → boot-ios-test-simulator (runtime-version, preferred-device-name, boot-timeout-seconds)',
+    ],
+    [
+      'f3c6fc4398e1',
+      'Fetch current fixture app → setup-fixture-app (platform, wait-for-artifact-seconds, require-artifact)',
+    ],
+    [
+      '7d2447a2c51b',
+      'Restore and build macOS XCTest runner → setup-apple-runner-build (build-command, xcuitest-platform, xcuitest-destination)',
+    ],
+  ]),
+];
+
 export const NON_GATE_STEPS: readonly Unrouted[] = [
   ...steps(
     '.github/actions/setup-node-pnpm/action.yml',
@@ -287,6 +395,8 @@ export const NON_GATE_STEPS: readonly Unrouted[] = [
     ['bd6dcf8e0dda', 'Build the Android Release apk'],
     ['6153d35b3227', 'Stage the binary for upload'],
   ]),
+
+  ...EXECUTED_INPUTS,
 ];
 
 /**

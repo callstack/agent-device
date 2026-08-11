@@ -12,6 +12,7 @@ const HEADINGS: Readonly<Record<string, string>> = {
   owned: 'Registered checks no lane runs',
   bypass: 'Project code run outside `pnpm gate`',
   'lane-env': 'Lane environments that are not inventoried',
+  surface: 'Execution surfaces the manifest does not model',
   'path-coverage': 'Paths whose selected checks no triggered lane runs',
   inert: 'Declarations that no longer apply',
   registered: 'Suites and projects no registered check covers',

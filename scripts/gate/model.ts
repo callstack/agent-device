@@ -60,19 +60,23 @@ export type Lane = {
    */
   readonly env: Readonly<Record<string, string>>;
   readonly envDigest: string;
+  /** Execution surfaces this file uses that the model does not read. Always empty today. */
+  readonly unsupported: readonly string[];
 };
 
 /**
- * `run` is the step's shell block — the thing the no-bypass rule is asserted over.
- * `inputs` are the string values it hands to an action, scanned for gate invocations
- * but not themselves shell (a composite action's own `run:` is a lane step too).
+ * One shell block a lane executes — the unit the no-bypass rule is asserted over.
+ *
+ * A step is not always a `run:` block. A composite action that runs
+ * `${{ inputs.build-command }}` executes whatever its CALLER passed, so the caller's
+ * value is a step of the calling lane too (`inputSurface`). Modelling both as the
+ * same thing is what keeps one construction rule sufficient.
  */
 export type LaneStep = {
   readonly name: string;
   /** The file declaring the step: a workflow, or the composite action it came from. */
   readonly source: string;
-  readonly run?: string;
-  readonly inputs: readonly string[];
+  readonly run: string;
   /**
    * Everything besides `run` that changes what the step executes. `env` matters because
    * `NODE_OPTIONS=--import ./x.ts` runs code without appearing in any command; `shell`
@@ -118,7 +122,11 @@ export type Model = {
 
 const ENV_PREFIX = /^(?:[A-Z_][A-Z0-9_]*=(?:"[^"]*"|'[^']*'|\S*)\s+)+/;
 
-/** `a && b`, `a; b`, and `a | b` all run both sides; newlines and `\` continuations join first. */
+/**
+ * `a && b`, `a; b`, and `a | b` all run both sides; newlines and `\` continuations join
+ * first. Env prefixes are LEFT ON: `NODE_OPTIONS=--import ./x.ts pnpm gate lint` runs
+ * code, so a caller deciding whether a segment is a bare gate invocation has to see it.
+ */
 export function commandSegments(body: string): string[] {
   return body
     .replace(/\\\n/g, ' ')
@@ -126,7 +134,7 @@ export function commandSegments(body: string): string[] {
     .map(stripComment)
     .join('\n')
     .split(/&&|\|\||[;\n|]/)
-    .map((segment) => segment.trim().replace(ENV_PREFIX, ''))
+    .map((segment) => segment.trim())
     .filter(Boolean);
 }
 
@@ -224,11 +232,14 @@ export function scriptUnits(
 }
 
 function segmentUnits(
-  segment: string,
+  raw: string,
   script: string,
   model: Pick<Model, 'scripts' | 'vitestProjects' | 'opaque'>,
   seen: ReadonlySet<string>,
 ): Unit[] {
+  // What a segment RUNS is behind its env prefix; what it EXECUTES WITH is the prefix
+  // itself. Units care about the former, the no-bypass rule about the latter.
+  const segment = raw.replace(ENV_PREFIX, '');
   const nested = invokedScript(segment, model.scripts);
   if (nested) return scriptUnits(nested, model, seen);
   const parts = tokens(segment);
@@ -275,11 +286,13 @@ function stepExtras(step: RawStep): Record<string, string> {
   return extras;
 }
 
-/** String values a step hands to an action — scanned for gate invocations, not shell. */
-function stepInputs(step: RawStep): string[] {
-  return Object.values(step.with ?? {}).filter(
-    (value): value is string => typeof value === 'string',
-  );
+function sealed(
+  name: string,
+  source: string,
+  run: string,
+  extras: Record<string, string>,
+): LaneStep {
+  return { name, source, run, extras, digest: stepDigest(run, extras) };
 }
 
 function laneLabel(workflowName: string, jobName: string): string {
@@ -291,64 +304,110 @@ function triggerPaths(on: Record<string, { paths?: string[]; 'paths-ignore'?: st
   return { paths: pr.paths ?? [], pathsIgnore: pr['paths-ignore'] ?? [] };
 }
 
-/**
- * Steps of a local composite action a job `uses:`. A gate invoked from inside one
- * still belongs to the calling lane — the Android helper packaging is only reachable
- * that way — and its commands are held to the same no-bypass rule.
- */
-function compositeSteps(
-  uses: string,
+type ActionDoc = {
+  inputs?: Record<string, { default?: string }>;
+  runs?: { steps?: RawStep[] };
+};
+
+/** A local composite action, by the `uses:` path that names it. */
+function readAction(
+  uses: string | undefined,
   root: string,
-  depth = 0,
-): { step: RawStep; source: string }[] {
-  if (!uses.startsWith('./') || depth > 3) return [];
+): { doc: ActionDoc; source: string } | null {
+  if (uses === undefined || !uses.startsWith('./')) return null;
   const source = `${uses.slice(2)}/action.yml`;
   const file = path.join(root, source);
-  if (!fs.existsSync(file)) return [];
-  const doc = parse(fs.readFileSync(file, 'utf8')) as { runs?: { steps?: RawStep[] } };
-  return (doc.runs?.steps ?? []).flatMap((step) => [
-    { step, source },
-    ...(step.uses ? compositeSteps(step.uses, root, depth + 1) : []),
-  ]);
+  if (!fs.existsSync(file)) return null;
+  return { doc: parse(fs.readFileSync(file, 'utf8')) as ActionDoc, source };
 }
+
+const INPUT_REFERENCE = /\$\{\{\s*inputs\.([\w-]+)/g;
+
+/**
+ * Inputs the action interpolates into a `run:` block — directly, or by forwarding the
+ * value to another action that does. Those inputs are shell, so their VALUES are shell.
+ *
+ * Deliberately not "is the value in command position?": that is the shell-context
+ * reconstruction this design exists to avoid. Any interpolation into a run block counts,
+ * which sweeps in data-ish inputs (a device name, a timeout) and costs a few inventory
+ * entries. That is the cheap direction to be wrong in.
+ */
+function executedInputs(doc: ActionDoc, root: string, depth = 0): string[] {
+  if (depth > 3) return [];
+  const texts = (doc.runs?.steps ?? []).flatMap((step) => {
+    if (typeof step.run === 'string') return [step.run];
+    const nested = readAction(step.uses, root);
+    if (!nested) return [];
+    return executedInputs(nested.doc, root, depth + 1).map((name) =>
+      String(step.with?.[name] ?? ''),
+    );
+  });
+  return [
+    ...new Set(
+      texts.flatMap((text) =>
+        [...text.matchAll(INPUT_REFERENCE)].map((match) => match[1] as string),
+      ),
+    ),
+  ];
+}
+
+/**
+ * What a `uses:` step contributes to the lane's executable surface: the values it supplies
+ * for inputs the action executes, in the action's declared order so a reordered `with:`
+ * block does not move the digest. An input the caller omits falls back to the action's
+ * default, because that is what will run.
+ */
+function inputSurface(step: RawStep, source: string, root: string, jobId: string): LaneStep[] {
+  const action = readAction(step.uses, root);
+  if (!action) return [];
+  const executed = new Set(executedInputs(action.doc, root));
+  const supplied = Object.entries(action.doc.inputs ?? {})
+    .filter(([name]) => executed.has(name))
+    .map(([name, spec]) => [name, String(step.with?.[name] ?? spec.default ?? '')] as const)
+    .filter(([, value]) => value.trim() !== '');
+  if (supplied.length === 0) return [];
+  const called = path.basename(step.uses ?? '');
+  const label = `${step.name ?? jobId} → ${called} (${supplied.map(([name]) => name).join(', ')})`;
+  return [sealed(label, source, supplied.map(([, value]) => value).join('\n'), {})];
+}
+
+type Job = {
+  name?: string;
+  env?: Record<string, unknown>;
+  steps?: RawStep[];
+  defaults?: unknown;
+  uses?: string;
+};
 
 type WorkflowDoc = {
   name?: string;
   env?: Record<string, unknown>;
+  defaults?: unknown;
   // `on:` is YAML 1.1 truthy; the parser hands it back under `true`.
   on?: Record<string, never>;
   true?: Record<string, never>;
-  jobs?: Record<string, { name?: string; env?: Record<string, unknown>; steps?: RawStep[] }>;
+  jobs?: Record<string, Job>;
 };
 
 /**
- * A job's own steps plus the steps of every local composite action it uses.
+ * Every shell block a job reaches: its own `run:` steps, the `run:` steps of every local
+ * composite action it uses, and the executable inputs it passes to those actions.
  *
- * Nothing is filtered out. An earlier version dropped steps carrying
- * `working-directory`, which made a bypass placed in one invisible.
+ * Nothing is filtered out. An earlier version dropped steps carrying `working-directory`,
+ * which made a bypass placed in one invisible.
  */
-function laneSteps(
-  job: { name?: string; steps?: RawStep[] },
-  jobId: string,
-  root: string,
-  workflow: string,
-): LaneStep[] {
-  return (job.steps ?? [])
-    .flatMap((step) => [
-      { step, source: workflow },
-      ...(step.uses ? compositeSteps(step.uses, root) : []),
-    ])
-    .map(({ step, source }) => {
-      const extras = stepExtras(step);
-      return {
-        name: step.name ?? jobId,
-        source,
-        ...(typeof step.run === 'string' ? { run: step.run } : {}),
-        inputs: stepInputs(step),
-        extras,
-        digest: typeof step.run === 'string' ? stepDigest(step.run, extras) : '',
-      };
-    });
+function laneSteps(job: Job, jobId: string, root: string, source: string, depth = 0): LaneStep[] {
+  if (depth > 3) return [];
+  return (job.steps ?? []).flatMap((step) => {
+    const action = readAction(step.uses, root);
+    return [
+      ...(typeof step.run === 'string'
+        ? [sealed(step.name ?? jobId, source, step.run, stepExtras(step))]
+        : []),
+      ...inputSurface(step, source, root, jobId),
+      ...(action ? laneSteps(action.doc.runs ?? {}, jobId, root, action.source, depth + 1) : []),
+    ];
+  });
 }
 
 function laneInvocations(
@@ -357,20 +416,27 @@ function laneInvocations(
 ): { gates: CheckId[]; verbatim: string[] } {
   const gates = new Set<CheckId>();
   const verbatim = new Set<string>();
-  for (const command of steps.flatMap((step) => [
-    ...(step.run ? [step.run] : []),
-    ...step.inputs,
-  ])) {
-    for (const match of command.matchAll(GATE_INVOCATION)) gates.add(match[1] as CheckId);
-    for (const name of verbatimScripts(command, scripts)) verbatim.add(name);
+  for (const { run } of steps) {
+    for (const match of run.matchAll(GATE_INVOCATION)) gates.add(match[1] as CheckId);
+    for (const name of verbatimScripts(run, scripts)) verbatim.add(name);
   }
   return { gates: [...gates], verbatim: [...verbatim] };
 }
 
-function inheritedEnv(
-  doc: WorkflowDoc,
-  job: { env?: Record<string, unknown> },
-): Record<string, string> {
+/**
+ * Execution surfaces the model does not read, reported rather than ignored. None are used
+ * today; `defaults.run` would change the shell of every step in a lane, and a
+ * reusable-workflow job runs steps declared in a file this loader never opens.
+ */
+function unsupported(doc: WorkflowDoc, job: Job): string[] {
+  return [
+    ...(doc.defaults ? ['workflow-level `defaults:`'] : []),
+    ...(job.defaults ? ['job-level `defaults:`'] : []),
+    ...(job.uses ? [`\`uses: ${job.uses}\` (reusable workflow)`] : []),
+  ];
+}
+
+function inheritedEnv(doc: WorkflowDoc, job: Job): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries({ ...doc.env, ...job.env })) env[key] = String(value);
   return env;
@@ -379,7 +445,7 @@ function inheritedEnv(
 function workflowLanes(
   file: string,
   doc: WorkflowDoc,
-  actionRoot: string,
+  root: string,
   scripts: Readonly<Record<string, string>>,
 ): Lane[] {
   const on = (doc.on ?? doc.true ?? {}) as Record<
@@ -389,7 +455,7 @@ function workflowLanes(
   const qualifying = 'pull_request' in on || 'schedule' in on;
   const { paths, pathsIgnore } = triggerPaths(on);
   return Object.entries(doc.jobs ?? {}).map(([jobId, job]) => {
-    const steps = laneSteps(job, jobId, actionRoot, file);
+    const steps = laneSteps(job, jobId, root, file);
     const env = inheritedEnv(doc, job);
     return {
       workflow: file,
@@ -401,15 +467,18 @@ function workflowLanes(
       pathsIgnore,
       env,
       envDigest: Object.keys(env).length === 0 ? '' : stepDigest('', env),
+      unsupported: unsupported(doc, job),
     };
   });
 }
 
-function loadLanes(
-  dir = '.github/workflows',
+/** `root` is where `./.github/actions/…` resolves from — separate so tests can load a
+ *  planted workflow against the real actions. */
+export function loadLanes(
+  dir: string,
+  root: string,
   scripts: Readonly<Record<string, string>> = {},
 ): Lane[] {
-  const actionRoot = path.resolve(dir, '..', '..');
   return fs
     .readdirSync(dir)
     .filter((entry) => entry.endsWith('.yml'))
@@ -418,7 +487,7 @@ function loadLanes(
       workflowLanes(
         file,
         parse(fs.readFileSync(path.join(dir, file), 'utf8')) as WorkflowDoc,
-        actionRoot,
+        root,
         scripts,
       ),
     );
@@ -548,7 +617,7 @@ export function loadModel(
       .filter((target): target is string => typeof target === 'string')
       .map((target) => target.replace(/^\.\/dist\//, '').replace(/\.js$/, '.ts')),
     vitestProjects: [...config.matchAll(/name:\s*'([^']+)'/g)].map((match) => match[1] as string),
-    lanes: loadLanes(path.join(repoRoot, '.github/workflows'), pkg.scripts),
+    lanes: loadLanes(path.join(repoRoot, '.github/workflows'), repoRoot, pkg.scripts),
     trackedFiles: new Set(trackedFiles),
     opaque,
   };

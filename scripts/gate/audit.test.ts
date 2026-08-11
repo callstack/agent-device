@@ -9,11 +9,21 @@
 
 import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { audit } from './audit.ts';
 import { LANE_ENVIRONMENTS, NON_GATE_STEPS } from './declarations.ts';
-import { categories, covered, loadModel, stepDigest, type Lane, type Model } from './model.ts';
+import {
+  categories,
+  covered,
+  loadLanes,
+  loadModel,
+  stepDigest,
+  type Lane,
+  type Model,
+} from './model.ts';
 import { CHECK_CATALOG } from '../check-affected/checks.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
@@ -44,7 +54,6 @@ function plantCommand(run: string, extras: Record<string, string> = {}): Model {
     name: 'Planted',
     source: 'ci.yml',
     run,
-    inputs: [],
     extras,
     digest: stepDigest(run, extras),
   };
@@ -81,6 +90,88 @@ function editStep(
 
 const bypassesFor = (run: string, extras: Record<string, string> = {}) =>
   audit(plantCommand(run, extras)).filter((failure) => failure.assertion === 'bypass');
+
+/**
+ * Load a planted workflow with the REAL loader, resolving `./.github/actions/…` against the
+ * real tree. The composite action under test is the one CI uses, so these cases exercise
+ * parse, resolution and audit together rather than a hand-built lane.
+ */
+function plantedWorkflow(yaml: string): Model {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-lane-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'planted.yml'), yaml);
+    const lanes = loadLanes(dir, repoRoot, base.scripts);
+    return mutate((model) => ({ lanes: [...model.lanes, ...lanes] }));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+const applyRunnerCall = (command: string) => `name: Planted
+on:
+  pull_request:
+jobs:
+  planted:
+    name: Planted Apple Lane
+    runs-on: macos-15
+    steps:
+      - name: Build the Apple runner
+        uses: ./.github/actions/setup-apple-runner-build
+        with:
+          derived-path: /tmp/derived
+          cache-key-prefix: planted
+          build-command: ${command}
+`;
+
+test('a caller cannot smuggle code through an input a composite action executes', () => {
+  // Review round 5: `setup-apple-runner-build` runs `${{ inputs.build-command }}`, so its
+  // own step digest is CONSTANT and vouches for nothing — the command lives at the call
+  // site. Both models below reach a byte-identical action; only the `with:` value differs.
+  assert.deepEqual(
+    messages(plantedWorkflow(applyRunnerCall('pnpm gate swift-runner-ios'))),
+    [],
+    'a call site whose executable input is a gate needs no declaration',
+  );
+
+  const smuggled = audit(
+    plantedWorkflow(applyRunnerCall(`node -e 'import("./scripts/layering/check.ts")'`)),
+  ).filter((failure) => failure.assertion === 'bypass');
+  assert.equal(smuggled.length, 1, 'and project code in the same value is a bypass');
+  assert.match(smuggled[0]?.message ?? '', /build-command/);
+});
+
+test('an execution surface the model does not read is rejected rather than ignored', () => {
+  // Neither shape is used today. `defaults.run` retargets the shell of every step in a
+  // lane, and a reusable-workflow job runs steps from a file the loader never opens, so
+  // both would make the no-bypass rule quietly incomplete.
+  const surfaces = (yaml: string) =>
+    audit(plantedWorkflow(yaml)).filter((failure) => failure.assertion === 'surface');
+
+  const found = surfaces(`name: Planted
+on:
+  pull_request:
+defaults:
+  run:
+    shell: bash -lc {0}
+jobs:
+  planted:
+    runs-on: ubuntu-latest
+    steps:
+      - run: pnpm gate layering
+`);
+  assert.equal(found.length, 1);
+  assert.match(found[0]?.message ?? '', /defaults:/);
+
+  const reusable = surfaces(`name: Planted
+on:
+  pull_request:
+jobs:
+  planted:
+    uses: ./.github/workflows/ci.yml
+`);
+  assert.equal(reusable.length, 1);
+  assert.match(reusable[0]?.message ?? '', /reusable workflow/);
+});
 
 test('the live tree is green — every planted failure below is a real difference', () => {
   assert.deepEqual(messages(base), []);
@@ -175,6 +266,8 @@ test('a qualifying lane accepts nothing but a gate invocation or a listed step',
     'echo bm9kZSBzY3JpcHRzL2xheWVyaW5nL2NoZWNrLnRz | base64 -d | sh',
     "bash <<'EOS'\nnode scripts/layering/check.ts\nEOS",
     'printf "node scripts/layering/check.ts" > /tmp/x.sh && sh /tmp/x.sh',
+    // An env prefix is a `env:` block spelled in the shell, and injects the same way.
+    'NODE_OPTIONS=--import ./scripts/layering/check.ts pnpm gate layering',
   ];
   for (const run of evasions) {
     assert.equal(bypassesFor(run).length, 1, `must be rejected: ${run}`);
@@ -307,9 +400,7 @@ test('an entry goes inert when the step it describes stops existing', () => {
     })),
   }));
   assert.ok(
-    messages(deleted).some((message) =>
-      /matches no `run:` step a qualifying lane reaches/.test(message),
-    ),
+    messages(deleted).some((message) => /matches no shell a qualifying lane reaches/.test(message)),
     'a deleted step orphans its entry',
   );
 

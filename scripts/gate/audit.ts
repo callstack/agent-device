@@ -69,12 +69,14 @@ function gateSegment(segment: string): { id: string } | null {
  * declares no extras. Extras (`env`, `shell`, `working-directory`) change what runs
  * without appearing in a command — `NODE_OPTIONS=--import ./x.ts` is a bypass with an
  * empty command line — so a gate step carrying any of them is fingerprinted instead.
+ * An inline `VAR=… pnpm gate x` is the same thing spelled in the shell, and is rejected
+ * the same way: `commandSegments` keeps the prefix, and the grammar starts at `pnpm`.
  */
 function plainGateStep(step: {
-  run?: string;
+  run: string;
   extras: Readonly<Record<string, string>>;
 }): string[] | null {
-  if (step.run === undefined || Object.keys(step.extras).length > 0) return null;
+  if (Object.keys(step.extras).length > 0) return null;
   const segments = commandSegments(stripExpressions(step.run));
   if (segments.length === 0) return null;
   const ids: string[] = [];
@@ -98,12 +100,16 @@ function plainGateStep(step: {
 //    editing the body behind a listed name. A name is mutable metadata; the digest binds
 //    `run` plus every execution-affecting key, so changing any of them makes the entry stop
 //    matching — the step becomes unlisted (bypass) and the entry becomes inert, at once.
+//
+//    Round 5 found the same hole one level out: a composite action whose step is
+//    `run: ${{ inputs.build-command }}` has a CONSTANT digest, so a caller could put
+//    anything in the `with:` value and nothing here would move. The answer is not another
+//    rule — such a value is a step of the calling lane (model.ts `inputSurface`), so it
+//    arrives here and this rule already decides it.
 function bypass(model: Model, declared: readonly Unrouted[]): Failure[] {
   const seen = new Map<string, Model['lanes'][number]['steps'][number]>();
   for (const lane of model.lanes.filter((entry) => entry.qualifying)) {
-    for (const step of lane.steps) {
-      if (step.run !== undefined) seen.set(`${step.source}\u0000${step.digest}`, step);
-    }
+    for (const step of lane.steps) seen.set(`${step.source}\u0000${step.digest}`, step);
   }
   return [...seen.values()].flatMap((step) => {
     const ids = plainGateStep(step);
@@ -129,7 +135,7 @@ function bypass(model: Model, declared: readonly Unrouted[]): Failure[] {
     return [
       fail(
         'bypass',
-        `${step.source} / ${step.name}: a \`run:\` step a qualifying lane reaches must be ` +
+        `${step.source} / ${step.name}: shell a qualifying lane reaches must be ` +
           `\`pnpm gate <id>\` with no env/shell/working-directory, or inventoried — ${detail}.`,
       ),
     ];
@@ -158,6 +164,25 @@ function laneEnvironments(model: Model, declared: readonly LaneEnvironment[]): F
         ),
       ];
     });
+}
+
+// 3c. Execution surfaces the model does not read are rejected rather than ignored.
+//     `defaults.run` retargets the shell of every step in a lane, and a reusable-workflow
+//     job runs steps from a file this loader never opens — either would make the
+//     construction rule quietly incomplete. Neither is used today, which is when a
+//     fail-closed rule is cheap to add.
+function laneSurfaces(model: Model): Failure[] {
+  return model.lanes
+    .filter((lane) => lane.qualifying)
+    .flatMap((lane) =>
+      lane.unsupported.map((surface) =>
+        fail(
+          'surface',
+          `${lane.workflow} / ${lane.label}: ${surface} is an execution surface the gate ` +
+            `manifest does not model. Model it before using it, or the no-bypass rule is blind.`,
+        ),
+      ),
+    );
 }
 
 function inertEnvironment(entry: LaneEnvironment, model: Model): Failure[] {
@@ -211,7 +236,7 @@ function inertStep(entry: Unrouted, qualifying: readonly Lane[]): Failure[] {
     fail(
       'inert',
       `NON_GATE_STEPS ${entry.workflow} / "${entry.step}" (digest ${entry.digest}) matches no ` +
-        `\`run:\` step a qualifying lane reaches; the step was edited, renamed away or deleted.`,
+        `shell a qualifying lane reaches; the step was edited, renamed away or deleted.`,
     ),
   ];
 }
@@ -294,6 +319,7 @@ export function audit(model: Model, declared: readonly Unrouted[] = NON_GATE_STE
     ...unowned(model),
     ...bypass(model, declared),
     ...laneEnvironments(model, LANE_ENVIRONMENTS),
+    ...laneSurfaces(model),
     ...LANE_ENVIRONMENTS.flatMap((entry) => inertEnvironment(entry, model)),
     ...pathCoverage(model),
     ...inert(model, declared),

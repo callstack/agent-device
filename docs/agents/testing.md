@@ -216,8 +216,13 @@ strings, and four suites (`check:tmpdir-leaks`, its model tests, `test:fixture-c
 
 `pnpm check:gate-manifest` (`scripts/gate/`) answers it with one rule and one primitive.
 
-The rule: **every `run:` step a qualifying lane reaches is either `pnpm gate <check-id>`
-or listed in `NON_GATE_STEPS`.** Nothing inspects what a command does. That is deliberate
+The rule: **every shell block a qualifying lane reaches is either `pnpm gate <check-id>`
+or listed in `NON_GATE_STEPS`.** A shell block is a `run:` step — in a workflow or in a local
+composite action — or a value passed to an action input that the action interpolates into a
+`run:`. That second kind matters because `setup-apple-runner-build` runs
+`${{ inputs.build-command }}`: its own step digest is constant, so the command is really written
+at the call site, and the caller's value is held to the rule instead. Nothing inspects what a
+command does. That is deliberate
 and was learned the hard way: a content-based classifier was defeated by `pnpm exec`, then
 by `pnpm exec --` and `npx --yes`, then by `node -e 'import("./scripts/…")'` — and after
 those, `eval`, heredocs and base64 remain. "Does this text run project code?" is not
@@ -225,14 +230,19 @@ answerable from text, so the question is not asked. A step is allowed because of
 shape; everything else is written down by a human, which is the only boundary an unknown
 spelling cannot walk through.
 
-The price is a long inventory (74 steps today, keyed on the file that declares them, so a
-composite action shared by eight lanes is listed once). That is the census of everything
-CI does outside the runner, and it fails in both directions — an unlisted step fails as a
-bypass, a listed step that is renamed or deleted fails as inert. Every gate is a `CheckId`
-in the registry (`scripts/check-affected/checks.ts`) — the same universe the affected-selector
-uses — so the workflow→check mapping is a token scan over `run:` blocks and action inputs rather
-than an interpretation of shell. That is what makes a new gate impossible to hide: an unregistered
-one cannot be wired into a lane, because project code run outside the runner fails the manifest.
+The price is a long inventory (104 entries today, keyed on the file that declares them, so a
+composite action shared by eight lanes is listed once — but an executed input is listed per call
+site, because a new caller of the same action is a new command to review). That is the census of
+everything CI does outside the runner, and it fails in both directions — an unlisted step fails as
+a bypass, a listed step whose body is edited fails as both, since entries bind the step's digest
+(`run` plus `env`/`shell`/`working-directory`) rather than its name. Lane-level `env:` is
+fingerprinted the same way in `LANE_ENVIRONMENTS`, and the two execution surfaces the loader does
+not read — `defaults.run` and reusable-workflow jobs — fail closed rather than being ignored.
+Every gate is a `CheckId` in the registry (`scripts/check-affected/checks.ts`) — the same universe
+the affected-selector uses — so the workflow→check mapping is a token scan for `pnpm gate <id>`
+rather than an interpretation of shell. That is what makes a new gate impossible to hide: an
+unregistered one cannot be wired into a lane, because project code run outside the runner fails
+the manifest.
 
 The primitive: `covered(check, path)` — some `pull_request`/`schedule` lane runs every *unit* of
 the check, and (when a path is given) a change to that path starts the lane. Units are Vitest
@@ -253,10 +263,10 @@ matching a live step fails as inert. That polarity is the point — the predeces
 list made a *deleted* entry quieter, which is the one direction a ledger must never have.
 
 Worth knowing before you edit the selector: the category universe is not parsed out of
-`scripts/check-affected/model.ts` any more. The manifest *runs* the selector on a representative
-path per category (`PATH_SAMPLES`) and asserts against what it really returns, so there is no
-static reader to defeat. Samples must be tracked files that still classify — a sample naming a
-path no PR can touch fails rather than resolving by prefix and reading green.
+`scripts/check-affected/model.ts` any more, and it is not listed by hand either. The manifest runs
+the real selector over every tracked file and keeps the first path that produces each rule, so a
+category cannot name a path no PR can touch — the hand-written predecessor had eight such samples,
+which resolved by prefix and read green.
 
 The gate is deterministic, offline, and needs no GitHub token — it runs from a clean checkout in
 the `Affected-check Selector` job. Branch-protection required-contexts drift is the one part

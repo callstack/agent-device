@@ -464,8 +464,9 @@ when landing it, satisfy the gate where one exists.
   occur inside its declared owner. Encapsulation of the one shared mutable object, enforced
   per-field. This covers `SessionState`; other shared state has no equivalent gate today.
 - **A gate that stops running is worse than no gate.** Gate: the gate manifest
-  (`scripts/gate/`, #1429). every `run:` step a qualifying lane reaches is either `pnpm gate <check-id>` or
-  inventoried in `scripts/gate/declarations.ts`, so the workflow→check mapping is a shape check
+  (`scripts/gate/`, #1429). every shell block a qualifying lane reaches — a `run:` step, or a value
+  passed to an action input the action executes — is either `pnpm gate <check-id>` or inventoried in
+  `scripts/gate/declarations.ts`, so the workflow→check mapping is a shape check
   rather than an interpretation of shell, and a gate that is not in the registry
   (`scripts/check-affected/checks.ts`) cannot run at all — the failure
   mode is a red build, not an invisible one. `check:gate-manifest` fails when a registered check
