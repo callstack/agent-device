@@ -163,6 +163,32 @@ function interpolatedInputs(doc: ActionDoc): { step: string; input: string }[] {
  * `gate: swift-runner-ios`, and the action runs `pnpm gate "$INPUT_GATE"`. The id is data
  * the audit validates against the registry, so seven call-site digests become nothing.
  */
+export type GateActionBody = { readonly run: string; readonly boundTo: string | null };
+
+/**
+ * The one run step a gate-valued action performs, and the input its variable is bound to,
+ * so audit.ts can prove the action honours its GATE_ACTIONS contract instead of trusting it.
+ */
+export function gateActionBody(doc: ActionDoc, input: string): GateActionBody | undefined {
+  const variable = `INPUT_${input.toUpperCase().replace(/-/g, '_')}`;
+  const wanted = `pnpm gate "$${variable}"`;
+  // SOME step must be exactly the gate invocation with the variable bound to this input.
+  // Other steps may read the same value for non-executing purposes — the cache-key hash
+  // does — and those are ordinary baseline entries whose digests move if they change.
+  for (const step of doc.runs?.steps ?? []) {
+    if (typeof step.run !== 'string' || step.run.trim() !== wanted) continue;
+    const bound = /^\$\{\{\s*inputs\.([\w-]+)\s*\}\}$/.exec(
+      String(step.env?.[variable] ?? '').trim(),
+    );
+    return { run: step.run.trim(), boundTo: bound ? (bound[1] as string) : null };
+  }
+  const runs = (doc.runs?.steps ?? []).filter((step) => typeof step.run === 'string');
+  return {
+    run: runs.map((step) => String(step.run).trim().split('\n')[0]).join(' | '),
+    boundTo: null,
+  };
+}
+
 function gateInput(step: RawStep, source: string): CheckId | null {
   const input = GATE_ACTIONS[source];
   if (input === undefined) return null;

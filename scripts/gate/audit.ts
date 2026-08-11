@@ -8,7 +8,12 @@
 
 import { CHECK_CATALOG } from '../check-affected/checks.ts';
 import { loadBaseline, reasonFor, type BaselineEntry } from './baseline.ts';
-import { ALLOWED_ENV, EXTERNAL_ACTIONS, type ExternalAction } from './declarations.ts';
+import {
+  ALLOWED_ENV,
+  EXTERNAL_ACTIONS,
+  GATE_ACTIONS,
+  type ExternalAction,
+} from './declarations.ts';
 import { categories, checkUnits, covered, scriptUnits, type Model } from './model.ts';
 import { commandSegments, stripExpressions } from './shell.ts';
 import type { Lane } from './workflows.ts';
@@ -179,6 +184,30 @@ function gateIds(model: Model): Failure[] {
           fail('gate', `${lane.workflow} / ${lane.label}: "${id}" names no registered check.`),
         ),
     );
+}
+
+// 3a-ii. A gate-valued action must be PROVEN to run the gate, not trusted to.
+//
+//     Listing an action in GATE_ACTIONS credits its callers' lanes with whatever id they
+//     pass. Without this, the credit rests on the declaration alone: replace the action's
+//     body with a no-op, regenerate the baseline, and every caller still counts as running
+//     its gate. So the body is checked for the one shape that can honour the contract —
+//     `pnpm gate "$INPUT_X"`, with `INPUT_X` bound to that input and nothing else run.
+function gateActionBodies(model: Model, actions: Readonly<Record<string, string>>): Failure[] {
+  return Object.entries(actions).flatMap(([source, input]) => {
+    const proof = model.gateActionBodies[source];
+    const variable = `INPUT_${input.toUpperCase().replace(/-/g, '_')}`;
+    if (proof?.run === `pnpm gate "$${variable}"` && proof.boundTo === input) return [];
+    return [
+      fail(
+        'gate',
+        `GATE_ACTIONS lists ${source} as running \`${input}\`, but its body does not invoke ` +
+          `\`pnpm gate "$${variable}"\` with \`${variable}: \${{ inputs.${input} }}\` — it runs ` +
+          `${proof === undefined ? 'no single run step' : `\`${proof.run}\``}. A caller's gate ` +
+          `credit would rest on this declaration alone.`,
+      ),
+    ];
+  });
 }
 
 // 3b. Environment is checked by NAME, not by digest.
@@ -392,6 +421,7 @@ export function audit(
     ...unowned(model),
     ...bypass(model, declared),
     ...gateIds(model),
+    ...gateActionBodies(model, GATE_ACTIONS),
     ...environment(model, allowedEnv),
     ...laneSurfaces(model),
     ...externalActions(model, externals),

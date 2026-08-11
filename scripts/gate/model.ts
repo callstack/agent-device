@@ -19,11 +19,18 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { parse } from 'yaml';
 import { CHECK_CATALOG, type CheckSpec } from '../check-affected/checks.ts';
 import { selectChecks, type CheckId } from '../check-affected/model.ts';
-import { OPAQUE_RUNNERS } from './declarations.ts';
+import { GATE_ACTIONS, OPAQUE_RUNNERS } from './declarations.ts';
 import { ENV_PREFIX, commandSegments } from './shell.ts';
-import { loadLanes, triggersOnPath, type Lane } from './workflows.ts';
+import {
+  gateActionBody,
+  loadLanes,
+  triggersOnPath,
+  type GateActionBody,
+  type Lane,
+} from './workflows.ts';
 
 /**
  * What a lane runs, at the granularity ownership is decided on. Scripts are too
@@ -46,6 +53,8 @@ export type Model = {
   readonly packageEntryFiles: readonly string[];
   /** Threaded rather than imported so the audit can re-run with a declaration removed. */
   readonly opaque: Readonly<Record<string, readonly string[]>>;
+  /** The single run step of each action GATE_ACTIONS names, for proving it runs the gate. */
+  readonly gateActionBodies: Readonly<Record<string, GateActionBody>>;
 };
 
 // --- Units -------------------------------------------------------------------
@@ -273,5 +282,13 @@ export function loadModel(
     lanes: loadLanes(path.join(repoRoot, '.github/workflows'), repoRoot, pkg.scripts),
     trackedFiles: new Set(trackedFiles),
     opaque,
+    gateActionBodies: Object.fromEntries(
+      Object.entries(GATE_ACTIONS).flatMap(([source, input]) => {
+        const file = path.join(repoRoot, source);
+        if (!fs.existsSync(file)) return [];
+        const body = gateActionBody(parse(fs.readFileSync(file, 'utf8')), input);
+        return body ? [[source, body] as const] : [];
+      }),
+    ),
   };
 }
