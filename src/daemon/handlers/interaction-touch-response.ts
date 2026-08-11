@@ -1,3 +1,4 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
 import type {
   FillCommandResult,
   GestureReferenceFrame,
@@ -7,8 +8,22 @@ import type {
   ResolutionDisclosure,
   SettleObservation,
 } from '@agent-device/contracts/interaction';
+import { isApplePlatform } from '@agent-device/kernel/device';
+import {
+  transformInteractionResponseData,
+  type InteractionResponseDataTransformCommand,
+} from '../../core/interaction-response-data-transform.ts';
+import { normalizeAppleRunnerResultForResponse } from '../../platforms/apple/core/runner/runner-result-response-normalization.ts';
 import { successText } from '../../utils/success-text.ts';
+import { issueSettleRefs } from '../session-snapshot.ts';
 import type { RecordedTargetCapture } from '../session-target-evidence.ts';
+import type { SessionState } from '../types.ts';
+import type { InteractionHandlerParams } from './interaction-common.ts';
+import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
+import {
+  readSnapshotNodesReferenceFrame,
+  resolveDirectTouchReferenceFrameSafely,
+} from './interaction-touch-reference-frame.ts';
 import { interactionResultExtra } from './interaction-touch-targets.ts';
 
 /**
@@ -333,4 +348,102 @@ function buildTouchTargetMessage(
     return `Clicked ${button} ${label}${pointSuffix}`;
   }
   return `Tapped ${label}${pointSuffix}`;
+}
+
+/** What `press`/`click`/`longpress` resolve to; `fill` carries its own result. */
+export type TargetedTouchResult = PressCommandResult | LongPressCommandResult;
+
+export async function buildTargetedTouchResponsePayloads(params: {
+  params: InteractionHandlerParams & {
+    captureSnapshotForSession: CaptureSnapshotForSession;
+  };
+  session: SessionState;
+  result: TargetedTouchResult;
+  staleRefsWarning: string | undefined;
+  publicData?: Record<string, unknown>;
+  extra: Record<string, unknown>;
+}): Promise<InteractionResponsePayloads> {
+  const { params: handlerParams, session, result, publicData, extra } = params;
+  const referenceFrame =
+    result.kind === 'point'
+      ? await resolveDirectTouchReferenceFrameSafely({
+          session,
+          flags: handlerParams.req.flags,
+          sessionStore: handlerParams.sessionStore,
+          contextFromFlags: handlerParams.contextFromFlags,
+          captureSnapshotForSession: handlerParams.captureSnapshotForSession,
+        })
+      : readSnapshotNodesReferenceFrame(session.snapshot?.nodes ?? []);
+  return buildInteractionResponseData({
+    source: { kind: 'runtime', result, publicData },
+    referenceFrame,
+    extra,
+    staleRefsWarning: params.staleRefsWarning,
+    settleRefsGeneration: issueSettleRefs(session, result.settle),
+  });
+}
+
+export function transformTouchResponseData(params: {
+  session: SessionState;
+  command?: InteractionResponseDataTransformCommand;
+  flags: CommandFlags | undefined;
+  data: Record<string, unknown> | undefined;
+}): Record<string, unknown> | undefined {
+  const base = isApplePlatform(params.session.device.platform)
+    ? normalizeAppleRunnerResultForResponse(params.data)
+    : params.data;
+  if (!params.command) return base;
+  return transformInteractionResponseData({
+    command: params.command,
+    input: params.flags as Record<string, unknown> | undefined,
+    data: base,
+  });
+}
+
+export function readInteractionResponseDataTransformCommand(
+  requestCommand: string,
+  dispatchCommand: 'press' | 'fill',
+): InteractionResponseDataTransformCommand {
+  if (requestCommand === 'click' || requestCommand === 'press' || requestCommand === 'fill') {
+    return requestCommand;
+  }
+  return dispatchCommand;
+}
+
+/** The response fields disclosing the Maestro coordinate fallback's policy and outcome. */
+export type MaestroFallbackResponseFields = {
+  maestroNonHittableCoordinateFallbackAllowed?: true;
+  maestroNonHittableCoordinateFallbackUsed?: boolean;
+  maestroFallbackReason?: 'non-hittable-coordinate';
+};
+
+export type MaestroFallbackDisclosure = {
+  /**
+   * The runner EXECUTED the coordinate fallback. Separate from the response
+   * fields because it also selects the dispatch path the response builder
+   * discloses a resolution for (see {@link suppressesResolutionDisclosure}).
+   */
+  used: boolean;
+  extra: MaestroFallbackResponseFields;
+};
+
+export function maestroFallbackDisclosure(
+  allowed: boolean,
+  data: Record<string, unknown> | undefined,
+): MaestroFallbackDisclosure {
+  if (!allowed) return { used: false, extra: {} };
+  const used = data?.maestroNonHittableCoordinateFallbackUsed === true;
+  return {
+    used,
+    extra: {
+      maestroNonHittableCoordinateFallbackAllowed: true,
+      maestroNonHittableCoordinateFallbackUsed: used,
+      ...(used ? { maestroFallbackReason: 'non-hittable-coordinate' as const } : {}),
+    },
+  };
+}
+
+/** The coordinate a lazy outcome retry re-dispatches against (`finalizeTouchInteraction`). */
+export function pointPositionals(point: { x: number; y: number }): string[] {
+  return [String(point.x), String(point.y)];
 }
