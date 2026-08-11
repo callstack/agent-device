@@ -6,11 +6,11 @@ import {
   narrowDeviceBinding,
   providerRuntimeOwner,
   runtimeOwnerKey,
-  runtimeUse,
   sameRuntimeOwner,
   type BoundDeviceRuntime,
   type DeviceBinding,
-} from './facades/platform.ts';
+} from './platform-runtime.ts';
+import { runtimeUse } from './platform-runtime-use.ts';
 
 type TestOperations = {
   inspect: (input: Readonly<{ depth: number }>) => Promise<Readonly<{ nodes: number }>>;

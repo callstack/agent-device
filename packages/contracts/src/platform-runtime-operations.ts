@@ -11,12 +11,12 @@ import type {
   DeviceReadinessRuntimeHost,
   DeviceReadinessRuntimeOperations,
 } from './device-readiness-runtime.ts';
-import {
-  runtimeUse,
-  type DeviceRuntimeOwner,
-  type RuntimeOwnerRef,
-  type RuntimePlatformModule,
+import type {
+  DeviceRuntimeOwner,
+  RuntimeOwnerRef,
+  RuntimePlatformModule,
 } from './platform-runtime.ts';
+import { runtimeUse } from './platform-runtime-use.ts';
 
 export type PlatformRuntimeOperations = AppLogRuntimeOperations &
   AppInventoryRuntimeOperations &
@@ -28,8 +28,8 @@ export type PlatformRuntimeOperations = AppLogRuntimeOperations &
 /**
  * The one neutral runtime-use declaration every command domain shares (ADR 0019 §9): no
  * per-domain currying wrappers. Lives here, next to the concrete `PlatformRuntimeOperations`
- * catalog it closes over, so the generic `runtimeUse` primitive in `platform-runtime.ts`
- * never depends on it.
+ * catalog it closes over. The generic `runtimeUse` primitive stays internal to contracts and
+ * never depends on this catalog.
  */
 export const defineUse = runtimeUse<PlatformRuntimeOperations>();
 
