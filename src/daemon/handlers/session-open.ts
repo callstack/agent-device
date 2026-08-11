@@ -1,4 +1,3 @@
-import path from 'node:path';
 import { dispatchCommand, resolveTargetDevice } from '../../core/dispatch.ts';
 import {
   abortAuthoringOnSecondOpen,
@@ -557,10 +556,10 @@ async function acquireLocalDeviceClaim(params: {
   req: DaemonRequest;
   device: DeviceInfo;
   sessionName: string;
-  logPath: string;
+  sessionStore: SessionStore;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
 }): Promise<DeviceClaimAcquireResult | { status: 'not-required' }> {
-  const { req, device, sessionName, logPath, reconcileOrphanedDeviceClaim } = params;
+  const { req, device, sessionName, sessionStore, reconcileOrphanedDeviceClaim } = params;
   if (!isLocalDeviceClaimTarget(req.meta, isActiveProviderDevice(device))) {
     return { status: 'not-required' };
   }
@@ -568,7 +567,7 @@ async function acquireLocalDeviceClaim(params: {
     device,
     session: sessionName,
     workspace: req.meta?.cwd ?? process.cwd(),
-    stateDir: path.dirname(logPath),
+    stateDir: sessionStore.resolveDaemonStateDir(),
     reconcileOrphanedDeviceClaim,
   });
 }
@@ -600,7 +599,7 @@ async function openNewSessionWithDeviceClaim(params: {
     req,
     device,
     sessionName,
-    logPath,
+    sessionStore,
     reconcileOrphanedDeviceClaim,
   });
   if (localClaim.status === 'conflict') {

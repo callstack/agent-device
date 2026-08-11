@@ -24,6 +24,7 @@ import { ensureDeviceReady } from '../device-ready.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { inspectDeviceClaims } from '../device-claim-inspection.ts';
 
 const mockDispatch = vi.mocked(dispatchCommand);
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
@@ -121,6 +122,9 @@ test('open returns and creates the session state directory', async () => {
     expect(fs.existsSync(String(response.data?.sessionStateDir))).toBe(true);
     expect(fs.existsSync(String(response.data?.eventLogPath))).toBe(true);
   }
+  expect(inspectDeviceClaims({ udid: device.id })[0]?.claim?.stateDir).toBe(
+    sessionStore.resolveDaemonStateDir(),
+  );
 });
 
 test('fresh open uses app-aware device selection for advisory locking and dispatch', async () => {
