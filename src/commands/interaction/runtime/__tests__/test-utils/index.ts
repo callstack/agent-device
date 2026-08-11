@@ -406,6 +406,93 @@ export function selectorReadSnapshot(): SnapshotState {
   ]);
 }
 
+/**
+ * Two nodes share the label `Save` but differ in depth and area, so the
+ * engine's visible→deepest→smallest-area tiebreak CAN pick a winner. That is
+ * exactly the tree on which the read rows disagree (#1630): `get text`
+ * disambiguates to the inner node, `is` and `get attrs` fail closed on the
+ * same screen, and `find exists` takes the first match.
+ */
+export function ambiguousSelectorReadSnapshot(): SnapshotState {
+  return makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 400, height: 800 },
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Save',
+      rect: { x: 0, y: 0, width: 300, height: 200 },
+      hittable: true,
+    },
+    {
+      index: 2,
+      depth: 2,
+      parentIndex: 1,
+      type: 'Button',
+      label: 'Save',
+      rect: { x: 10, y: 10, width: 80, height: 24 },
+      hittable: true,
+    },
+  ]);
+}
+
+/**
+ * The tree that separates first-match from uniqueness rows (#1715 review).
+ * Alternative one (`label="Save"`) matches two nodes that are genuinely
+ * indistinguishable — same depth, same area, both on screen — so the engine's
+ * tiebreak DECLINES. Alternative two (`id="save-unique"`) matches exactly one.
+ *
+ * `first-match` therefore answers from alternative one (2 matches), while every
+ * uniqueness row skips the undecidable alternative and answers from alternative
+ * two (1 match). A fixture whose first alternative is merely *tiebreakable*
+ * cannot tell those apart: disambiguation succeeds there and reports the same
+ * count first-match would.
+ */
+export function skippedAlternativeSelectorSnapshot(): SnapshotState {
+  return makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 400, height: 800 },
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Save',
+      rect: { x: 0, y: 40, width: 100, height: 30 },
+      hittable: true,
+    },
+    {
+      index: 2,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Save',
+      rect: { x: 0, y: 120, width: 100, height: 30 },
+      hittable: true,
+    },
+    {
+      index: 3,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Button',
+      identifier: 'save-unique',
+      label: 'Confirm',
+      rect: { x: 0, y: 200, width: 100, height: 30 },
+      hittable: true,
+    },
+  ]);
+}
+
 export function createSelectorDevice(
   snapshot: SnapshotState,
   options: {

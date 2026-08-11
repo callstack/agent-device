@@ -123,7 +123,7 @@ function consumeReplayResumeState(params: {
 /**
  * ADR 0012 decision 6, R2: reject a fresh FULL replay on a session that
  * already carries a repair-run boundary — the session stays repair-armed
- * (`recordSession` remains true), so ANY full re-run re-appends the
+ * (a repair lifecycle keeps recording), so ANY full re-run re-appends the
  * already-recorded prefix (`session-action-recorder.ts` pushes
  * unconditionally), duplicating it in the healed slice. This fires REGARDLESS
  * of whether `--save-script` is passed this invocation (omitting the flag

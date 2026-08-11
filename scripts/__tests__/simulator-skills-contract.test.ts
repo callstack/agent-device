@@ -10,50 +10,65 @@ type Contract = {
   requiredText: string;
 };
 
+type Prohibition = {
+  id: string;
+  forbiddenText: string;
+};
+
 const SKILLS = [
   {
     name: 'iOS Simulator',
     path: join(ROOT, 'skills', 'ios-simulator', 'SKILL.md'),
     contracts: [
       {
+        id: 'human-owned CLI installation',
+        requiredText: 'npm install -g agent-device@latest',
+      },
+      {
+        id: 'immediate app-driving start',
+        requiredText: 'For a normal app-driving task, start immediately.',
+      },
+      { id: 'validation help routing', requiredText: 'agent-device help validate' },
+      {
+        id: 'autonomous mutable install refusal',
+        requiredText: 'Do not run that command autonomously',
+      },
+      {
         id: 'foreground platform open',
         requiredText: 'agent-device open <app-or-bundle-id> --platform ios --foreground',
       },
-      {
-        id: 'initial interactive snapshot',
-        requiredText: '`open` returns the initial interactive snapshot.',
-      },
-      { id: 'current ref or selector', requiredText: 'Use its current refs or a selector.' },
-      { id: 'settled planned actions', requiredText: 'agent-device press @eN --settle' },
-      { id: 'type settle exception', requiredText: '`type` never takes `--settle`;' },
-      {
-        id: 'end-state verification',
-        requiredText: 'Verify the end state with a selector or exact text, then close:',
-      },
-      { id: 'session close', requiredText: 'agent-device close' },
     ] satisfies Contract[],
+    prohibitions: [
+      { id: 'version startup probe', forbiddenText: 'agent-device --version' },
+      { id: 'routine help startup probe', forbiddenText: 'agent-device help manual-qa' },
+    ] satisfies Prohibition[],
   },
   {
     name: 'Android Emulator',
     path: join(ROOT, 'skills', 'android-emulator', 'SKILL.md'),
     contracts: [
       {
+        id: 'human-owned CLI installation',
+        requiredText: 'npm install -g agent-device@latest',
+      },
+      {
+        id: 'immediate app-driving start',
+        requiredText: 'For a normal app-driving task, start immediately.',
+      },
+      { id: 'validation help routing', requiredText: 'agent-device help validate' },
+      {
+        id: 'autonomous mutable install refusal',
+        requiredText: 'Do not run that command autonomously',
+      },
+      {
         id: 'foreground platform open',
         requiredText: 'agent-device open <app-or-package-id> --platform android --foreground',
       },
-      {
-        id: 'initial interactive snapshot',
-        requiredText: '`open` returns the initial interactive snapshot.',
-      },
-      { id: 'current ref or selector', requiredText: 'Use its current refs or a selector.' },
-      { id: 'settled planned actions', requiredText: 'agent-device press @eN --settle' },
-      { id: 'type settle exception', requiredText: '`type` never takes `--settle`;' },
-      {
-        id: 'end-state verification',
-        requiredText: 'Verify the end state with a selector or exact text, then close:',
-      },
-      { id: 'session close', requiredText: 'agent-device close' },
     ] satisfies Contract[],
+    prohibitions: [
+      { id: 'version startup probe', forbiddenText: 'agent-device --version' },
+      { id: 'routine help startup probe', forbiddenText: 'agent-device help manual-qa' },
+    ] satisfies Prohibition[],
   },
 ] as const;
 
@@ -61,11 +76,18 @@ function assertSkillContract(content: string, contract: Contract): void {
   assert.ok(content.includes(contract.requiredText), `missing ${contract.id} guidance`);
 }
 
+function assertSkillProhibition(content: string, prohibition: Prohibition): void {
+  assert.ok(!content.includes(prohibition.forbiddenText), `contains ${prohibition.id} guidance`);
+}
+
 describe('simulator skill contracts', () => {
   for (const skill of SKILLS) {
     test(`${skill.name} keeps its required workflow guidance`, async () => {
       const content = await readFile(skill.path, 'utf8');
       for (const contract of skill.contracts) assertSkillContract(content, contract);
+      for (const prohibition of skill.prohibitions) {
+        assertSkillProhibition(content, prohibition);
+      }
     });
 
     for (const contract of skill.contracts) {
@@ -76,6 +98,17 @@ describe('simulator skill contracts', () => {
         assert.throws(
           () => assertSkillContract(broken, contract),
           new RegExp(`missing ${contract.id} guidance`),
+        );
+      });
+    }
+
+    for (const prohibition of skill.prohibitions) {
+      test(`${skill.name} rejects ${prohibition.id} guidance`, async () => {
+        const content = await readFile(skill.path, 'utf8');
+        const broken = `${content}\n${prohibition.forbiddenText}\n`;
+        assert.throws(
+          () => assertSkillProhibition(broken, prohibition),
+          new RegExp(`contains ${prohibition.id} guidance`),
         );
       });
     }

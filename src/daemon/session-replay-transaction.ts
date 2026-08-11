@@ -58,7 +58,6 @@ export function armRepairStep(
     firstArm: boolean;
   },
 ): void {
-  session.recordSession = true;
   const state = publicationState(session);
   const explicitPath =
     typeof params.saveScript === 'string'

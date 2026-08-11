@@ -1,3 +1,4 @@
+import { isSessionRecording } from '../../session-script-publication-capability.ts';
 /**
  * Shared fixtures for the ADR 0012 decision 6 repair-loop tests. The mock
  * `invoke` in these tests must ACTUALLY record via `sessionStore.recordAction`
@@ -43,7 +44,7 @@ export type RecordingReplayInvokeConfig = {
   failSteps?: ReadonlySet<string>;
   /**
    * Fresh `target-v1` evidence attached to a recorded step, but ONLY when
-   * `session.recordSession` is armed (mirrors `interaction-common.ts`). The
+   * the session is recording (mirrors `interaction-common.ts`). The
    * caller decides which steps carry evidence.
    */
   evidence?: (req: DaemonRequest) => TargetAnnotationV1 | undefined;
@@ -57,7 +58,7 @@ export function makeRecordingReplayInvoke(config: RecordingReplayInvokeConfig): 
       return { ok: false, error: { code: 'COMMAND_FAILED', message: 'not hittable' } };
     }
     const session = resolveInvokeSession(config, req);
-    const evidence = session.recordSession ? config.evidence?.(req) : undefined;
+    const evidence = isSessionRecording(session) ? config.evidence?.(req) : undefined;
     sessionStore.recordAction(session, {
       command: req.command,
       positionals: req.positionals ?? [],

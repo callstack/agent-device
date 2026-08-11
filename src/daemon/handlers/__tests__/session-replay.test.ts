@@ -10,21 +10,32 @@ import { buildNestedReplayFlags, handleSessionReplayCommands } from '../session-
 import { REPLAY_ONLY_TEST_FLAG_REJECTIONS } from '../session-replay-test-policy.ts';
 import { replayCommandFamily } from '../../../commands/replay/index.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import {
+  unavailableBindDevice,
+  unavailableBindExactDevice,
+} from '../../__tests__/test-device-runtime-gateway.ts';
+import { createScreenRecordingAdmissionLedger } from '../../screen-recording-admission-ledger.ts';
+import type { RecordRuntimeHandlerParams } from '../record-runtime.ts';
+import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
+import {
+  localRuntimeOwner,
+  type ScreenRecordingLiveHandle,
+} from '@agent-device/contracts/platform';
 
-const recordTraceMocks = vi.hoisted(() => ({
+const recordRuntimeMocks = vi.hoisted(() => ({
   handleRecordCommand: vi.fn(),
 }));
 
-vi.mock('../record-trace-recording.ts', () => ({
-  handleRecordCommand: recordTraceMocks.handleRecordCommand,
+vi.mock('../record-runtime.ts', () => ({
+  handleRecordCommand: recordRuntimeMocks.handleRecordCommand,
 }));
 
 beforeEach(() => {
   vi.useRealTimers();
-  recordTraceMocks.handleRecordCommand.mockReset();
+  recordRuntimeMocks.handleRecordCommand.mockReset();
 });
 
-type RecordCommandCall = [{ req: DaemonRequest; sessionName: string }];
+type RecordCommandCall = [RecordRuntimeHandlerParams];
 
 type RecordVideoFixture = {
   root: string;
@@ -37,6 +48,8 @@ type RecordVideoFixture = {
 type MockRecordingState = {
   recordingPath: string;
   events: string[];
+  finish: ScreenRecordingLiveHandle['finish'];
+  liveSlotCleared: boolean;
 };
 
 function createRecordVideoFixture(): RecordVideoFixture {
@@ -53,7 +66,7 @@ function createRecordVideoFixture(): RecordVideoFixture {
 }
 
 function installMockRecordingHandler(sessionStore: SessionStore, state: MockRecordingState): void {
-  recordTraceMocks.handleRecordCommand.mockImplementation(
+  recordRuntimeMocks.handleRecordCommand.mockImplementation(
     async (params: { req: DaemonRequest }): Promise<DaemonResponse> =>
       await handleMockRecordCommand({
         req: params.req,
@@ -85,31 +98,56 @@ function startMockRecording(params: {
   state.recordingPath = req.positionals?.[1] ?? '';
   const session = sessionStore.get(req.session);
   if (session) {
-    session.recording = {
-      platform: 'ios',
-      outPath: state.recordingPath,
-      startedAt: Date.now(),
-      showTouches: true,
-      gestureEvents: [],
-      child: { kill: () => true, pid: 123 },
-      wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-    } as NonNullable<typeof session.recording>;
+    const outPath = state.recordingPath;
+    const handle: ScreenRecordingLiveHandle = {
+      inspect: () => ({
+        backend: 'test',
+        outPath,
+        startedAt: Date.now(),
+        scope: 'app',
+        showTouches: false,
+        recordOnlySession: false,
+        gestureEvents: [],
+      }),
+      appendGestureEvents: () => {},
+      setTouchReferenceFrame: () => {},
+      setRunnerSessionId: () => {},
+      invalidate: () => {},
+      finish: state.finish,
+      forceCleanup: async () => ({ status: 'cleaned' }),
+      [Symbol.asyncDispose]: async () => {},
+    };
+    session.screenRecording = {
+      handle,
+      envelope: createDurableResourceEnvelope({
+        resourceKind: 'screen-recording',
+        sessionId: session.name,
+        device: { id: session.device.id, family: 'apple', appleOs: 'ios', kind: 'simulator' },
+        owner: localRuntimeOwner('apple'),
+        fence: { token: `${session.name}-fence`, generation: 1 },
+        lifecycle: 'open',
+        descriptor: { version: 1, body: { recordingId: session.name } },
+        metadata: { phase: 'active' },
+      }),
+    };
     sessionStore.set(req.session, session);
   }
   return { ok: true, data: { recording: 'started', outPath: state.recordingPath } };
 }
 
-function stopMockRecording(params: {
+async function stopMockRecording(params: {
   req: DaemonRequest;
   sessionStore: SessionStore;
   state: MockRecordingState;
-}): DaemonResponse {
+}): Promise<DaemonResponse> {
   const { req, sessionStore, state } = params;
   state.events.push('record:stop');
   const session = sessionStore.get(req.session);
   if (session) {
-    session.recording = undefined;
+    await session.screenRecording?.handle.finish();
+    session.screenRecording = undefined;
     sessionStore.set(req.session, session);
+    state.liveSlotCleared = sessionStore.get(req.session)?.screenRecording === undefined;
   }
   fs.writeFileSync(state.recordingPath, 'video');
   return {
@@ -132,22 +170,44 @@ function stopMockRecording(params: {
 function expectRecordVideoCalls(params: {
   generatedSession: string;
   artifactsDir: string | undefined;
+  admissionLedger: RecordRuntimeHandlerParams['admissionLedger'];
+  requestScope: RecordRuntimeHandlerParams['requestScope'];
+  throwIfCanceled: RecordRuntimeHandlerParams['throwIfCanceled'];
 }): void {
-  const { generatedSession, artifactsDir } = params;
-  const recordCalls = recordTraceMocks.handleRecordCommand.mock.calls as RecordCommandCall[];
-  assert.equal(recordCalls.length, 2);
-
-  const startCall = recordCalls[0]?.[0];
-  const stopCall = recordCalls[1]?.[0];
-  assert.equal(startCall?.sessionName, generatedSession);
-  assert.equal(startCall?.req.session, generatedSession);
-  assert.deepEqual(startCall?.req.positionals, [
+  const { artifactsDir } = params;
+  const [startCall, stopCall] = requireRecordVideoCalls();
+  expectRecordRuntimeCall(startCall, params);
+  assert.deepEqual(startCall.req.positionals, [
     'start',
     path.join(artifactsDir ?? '', 'attempt-1', 'recording.mp4'),
   ]);
-  assert.equal(stopCall?.sessionName, generatedSession);
-  assert.equal(stopCall?.req.session, generatedSession);
-  assert.deepEqual(stopCall?.req.positionals, ['stop']);
+  expectRecordRuntimeCall(stopCall, params);
+  assert.deepEqual(stopCall.req.positionals, ['stop']);
+}
+
+function requireRecordVideoCalls(): [RecordRuntimeHandlerParams, RecordRuntimeHandlerParams] {
+  const calls = recordRuntimeMocks.handleRecordCommand.mock.calls as RecordCommandCall[];
+  assert.equal(calls.length, 2);
+  const startCall = calls[0]?.[0];
+  const stopCall = calls[1]?.[0];
+  if (!startCall || !stopCall) throw new Error('Expected record start and stop calls');
+  return [startCall, stopCall];
+}
+
+function expectRecordRuntimeCall(
+  call: RecordRuntimeHandlerParams,
+  expected: Pick<
+    Parameters<typeof expectRecordVideoCalls>[0],
+    'generatedSession' | 'admissionLedger' | 'requestScope' | 'throwIfCanceled'
+  >,
+): void {
+  assert.equal(call.sessionName, expected.generatedSession);
+  assert.equal(call.req.session, expected.generatedSession);
+  assert.strictEqual(call.bindDevice, unavailableBindDevice);
+  assert.strictEqual(call.bindExactDevice, unavailableBindExactDevice);
+  assert.strictEqual(call.admissionLedger, expected.admissionLedger);
+  assert.strictEqual(call.requestScope, expected.requestScope);
+  assert.strictEqual(call.throwIfCanceled, expected.throwIfCanceled);
 }
 
 test('buildNestedReplayFlags returns parent flags untouched when neither override is set', () => {
@@ -211,10 +271,41 @@ test('buildNestedReplayFlags strips test-only recordVideo before replay actions 
   assert.deepEqual(result, { platform: 'ios' });
 });
 
-test('test normalizes false replay-only booleans while recording each replay attempt', async () => {
+test('test finalizes replay video exactly once when cancellation arrives after start', async () => {
   vi.useFakeTimers({ now: 1_000 });
   const { root, replayPath, sessionStore, nestedRequests, events } = createRecordVideoFixture();
-  installMockRecordingHandler(sessionStore, { recordingPath: '', events });
+  const finish = vi.fn(async () => ({
+    status: 'completed' as const,
+    result: {
+      backend: 'test',
+      outPath: path.join(root, 'capture.mp4'),
+      startedAt: 1,
+      completedAt: 2,
+      scope: 'app' as const,
+      showTouches: false,
+      recordOnlySession: false,
+    },
+  }));
+  const recordingState: MockRecordingState = {
+    recordingPath: '',
+    events,
+    finish,
+    liveSlotCleared: false,
+  };
+  installMockRecordingHandler(sessionStore, recordingState);
+  const screenRecordingAdmissionLedger = createScreenRecordingAdmissionLedger();
+  const requestScope = {
+    signal: new AbortController().signal,
+    diagnostics: { emit: () => {} },
+    progress: { report: () => {} },
+  };
+  const cancellation = new Error('request canceled after recording start');
+  const throwIfCanceled = vi
+    .fn<() => void>()
+    .mockImplementationOnce(() => {})
+    .mockImplementation(() => {
+      throw cancellation;
+    });
 
   const responsePromise = handleSessionReplayCommands({
     req: {
@@ -235,6 +326,12 @@ test('test normalizes false replay-only booleans while recording each replay att
     logPath: path.join(root, 'daemon.log'),
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    bindDevice: unavailableBindDevice,
+    bindExactDevice: unavailableBindExactDevice,
+    screenRecordingAdmissionLedger,
+    requestScope,
+    retainDeviceExecutionLock: async () => {},
+    throwIfCanceled,
     invoke: async (nestedReq) => {
       nestedRequests.push(nestedReq);
       if (nestedReq.command === 'open') {
@@ -260,7 +357,16 @@ test('test normalizes false replay-only booleans while recording each replay att
   const testResult = suite.tests?.[0] ?? {};
   const generatedSession = testResult.session;
   if (typeof generatedSession !== 'string') throw new Error('Expected generated test session');
-  expectRecordVideoCalls({ generatedSession, artifactsDir: testResult.artifactsDir });
+  expectRecordVideoCalls({
+    generatedSession,
+    artifactsDir: testResult.artifactsDir,
+    admissionLedger: screenRecordingAdmissionLedger,
+    requestScope,
+    throwIfCanceled,
+  });
+  assert.equal(throwIfCanceled.mock.calls.length, 1);
+  assert.equal(finish.mock.calls.length, 1);
+  assert.equal(recordingState.liveSlotCleared, true);
   assert.deepEqual(events, ['record:start', 'open:dispatch', 'record:stop']);
   const timingPath = path.join(testResult.artifactsDir ?? '', 'attempt-1', 'replay-timing.ndjson');
   const timingEvents = fs

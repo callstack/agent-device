@@ -107,9 +107,9 @@ fresh session is the only re-arming boundary.
 > naming `open --save-script` as the recovery; a plain `close` still tears the session down
 > without writing. This is distinct from
 > [#1533](https://github.com/callstack/agent-device/issues/1533), which is about an
-> already-ARMED-then-ABORTED session whose flag ingress re-enables `recordSession` and lets a
+> already-ARMED-then-ABORTED session whose flag ingress re-enabled recording and let a
 > *bare* `close` (no `--save-script` on the close itself) publish; that case is resolved by the
-> amendment below.
+> amendments below.
 
 > **Amendment (#1533, shipped).** ABORTED terminality above was enforced only by
 > `abortAuthoringOnSecondOpen` clearing `session.recordSession` — inert by ordering, not by
@@ -121,15 +121,44 @@ fresh session is the only re-arming boundary.
 > message untrue.
 >
 > ABORTED is now terminal by construction. `--save-script` arms recording through one rule owned by
-> the publication projection (`recordSessionAfterSaveScriptFlag`), which answers "not recording"
-> for an ABORTED lifecycle on every surface that handles the flag — the re-open builder, the close
-> finalizer, and the recorded-action ingress — so the flag can no longer contradict the status.
-> Publication authorization is likewise the aggregate's to answer: the writer asks one
-> publication-blocked question covering not-recording, an uncommittable or committed repair, and an
-> ABORTED authoring lifecycle alike, so every path that reaches it (bare `close`, teardown,
-> idle-reap, active publication) refuses. ARMED and PUBLISHED lifecycles and every repair
-> transaction are unchanged; no state name, transition, or entry point in the lifecycle above is
-> added or altered.
+> the publication projection, which answers "not recording" for an ABORTED lifecycle on every
+> surface that handles the flag — the re-open builder, the close finalizer, and the recorded-action
+> ingress — so the flag can no longer contradict the status. Publication authorization is likewise
+> the aggregate's to answer: the writer asks one publication-blocked question covering
+> not-recording, an uncommittable or committed repair, and an ABORTED authoring lifecycle alike, so
+> every path that reaches it (bare `close`, teardown, idle-reap, active publication) refuses. ARMED
+> and PUBLISHED lifecycles and every repair transaction are unchanged; no state name, transition,
+> or entry point in the lifecycle above is added or altered.
+
+> **Amendment (#1533 follow-up, shipped).** The rule above still relied on a stored
+> `SessionState.recordSession` that every writer had to set in step with the lifecycle. Routing the
+> writes through one place made the two agree; it did not make disagreement unrepresentable, and
+> the field remained a second source of truth for a question the aggregate already answered.
+>
+> Recording is now **derived**, not stored. `isRecordingPublication` reads it off the lifecycle —
+> ordinary authoring records only while ARMED; a repair transaction records for its whole lifetime,
+> terminal statuses included — and the field is gone. Three consequences worth stating, because
+> they are what the derivation buys:
+>
+> - No surface can arm recording without moving the lifecycle that authorizes it, so #1533's drift
+>   is unrepresentable rather than guarded against. `buildNextOpenSession` and the close finalizer
+>   make no recording decision at all now.
+> - The writer's publication gate is answered entirely by the aggregate. Its separate ABORTED check
+>   is gone, because a terminal authoring lifecycle is already not recording — no second gate that
+>   could disagree with the first about *authoring*.
+> - Evidence capture and publication authorization now derive from the same aggregate, but they
+>   remain **distinct predicates**, and deliberately so. They coincide for ordinary authoring:
+>   ARMED both records and publishes, ABORTED and PUBLISHED do neither. They do NOT coincide for
+>   repair — `isRecordingPublication` is true for every repair status, `committed` and `aborted`
+>   included, while publication additionally requires `isRepairArmedWriteBlocked` to pass, which
+>   refuses a committed transaction (idempotent no-op) and one that is not yet committable (ADR
+>   0012 decision 6, C2). A repair that captures evidence is therefore not necessarily a repair
+>   that may publish, and collapsing the two would silently republish or commit a prefix.
+>
+> This is behavior-preserving: the derivation reproduces exactly what the flag held at every
+> transition. Whether a *committed* repair should still capture recording-time evidence is a real
+> question this deliberately does not answer — the old flag said yes, and changing that is a
+> behavior change, not a derivation.
 
 This lifecycle is distinct from ADR 0012's repair transaction. `session save-script` rejects a session
 with `saveScriptBoundary` set and directs the caller to finish or abort the repair through its existing

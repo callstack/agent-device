@@ -4,5 +4,5 @@ import { defineAndroidContractEvidence } from '../android-emulator-e2e/contract-
 export const ANDROID_RECORDING_CONTRACT_EVIDENCE = defineAndroidContractEvidence(
   'provider-scenarios/android-recording',
   [C.record],
-  'Provider-backed integration Android recording flow uses scripted ADB provider pull capability',
+  'Provider-backed integration Android record start and stop use the composed scoped runtime',
 );

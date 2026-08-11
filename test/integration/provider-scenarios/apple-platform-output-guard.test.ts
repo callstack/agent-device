@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import type { AppleRunnerProvider } from '../../../src/platforms/apple/core/runner/runner-provider.ts';
-import type { RecordingProvider } from '../../../src/daemon/recording-provider.ts';
+import type { AppleSimulatorScreenRecordingTransport } from '../../../src/platform-runtime-screen-recording-apple-transport.ts';
 import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR, PROVIDER_SCENARIO_MACOS } from './fixtures.ts';
 import {
@@ -331,10 +331,11 @@ function permissiveTool(world: World) {
   });
 }
 
-function permissiveRecording(): RecordingProvider {
+function permissiveRecording(): AppleSimulatorScreenRecordingTransport {
   return {
-    startIosSimulatorRecording: ({ outPath }) =>
-      createProviderIosSimulatorRecordingProcess(outPath),
+    available: true,
+    mode: 'transport-composed',
+    start: ({ outputPath }) => createProviderIosSimulatorRecordingProcess(outputPath),
   };
 }
 
@@ -343,7 +344,7 @@ async function createWorldDaemon(world: World): Promise<ProviderScenarioHarness>
   return await createProviderScenarioHarness({
     appleRunnerProvider: () => permissiveRunner(),
     appleToolProvider: () => permissiveTool(world).provider,
-    recordingProvider: () => permissiveRecording(),
+    appleSimulatorScreenRecordingTransport: () => permissiveRecording(),
     deviceInventoryProvider: async () => [device],
   });
 }

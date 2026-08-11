@@ -50,12 +50,12 @@ function isReapableRepairSession(session: SessionState): boolean {
   return isUncommittedRepairSession(session);
 }
 
-// Recording lifecycle is session-scoped (session.recording), so a recording
+// Recording lifecycle is session-scoped (session.screenRecording), so a recording
 // only ever exists alongside an open session. Kept as an explicit,
 // independently testable guard so a future recording path that outlives its
 // session cannot silently lose this protection.
 export function hasActiveRecording(sessionStore: SessionStore): boolean {
-  return sessionStore.toArray().some((session) => Boolean(session.recording));
+  return sessionStore.toArray().some((session) => Boolean(session.screenRecording));
 }
 
 export function isDaemonIdle(params: {

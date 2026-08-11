@@ -6,29 +6,29 @@ export function refreshRecordingHealth(session: SessionState): void {
   if (!recordingRequiresRunnerHealth(session)) {
     return;
   }
-  const recording = session.recording!;
+  const recording = session.screenRecording!.handle;
+  const state = recording.inspect();
 
   const snapshot = getRunnerSessionSnapshot(session.device.id);
-  if (!recording.runnerSessionId) {
+  if (!state.runnerSessionId) {
     if (snapshot?.alive) {
-      recording.runnerSessionId = snapshot.sessionId;
+      recording.setRunnerSessionId(snapshot.sessionId);
     }
     return;
   }
 
   if (!snapshot?.alive) {
-    recording.invalidatedReason ??= 'iOS runner session exited during recording';
+    recording.invalidate('iOS runner session exited during recording');
     return;
   }
 
-  if (snapshot.sessionId !== recording.runnerSessionId) {
-    recording.invalidatedReason ??= 'iOS runner session restarted during recording';
+  if (snapshot.sessionId !== state.runnerSessionId) {
+    recording.invalidate('iOS runner session restarted during recording');
   }
 }
 
 function recordingRequiresRunnerHealth(session: SessionState): boolean {
-  const recording = session.recording;
+  const recording = session.screenRecording?.handle.inspect();
   if (!recording || !isIosFamily(session.device)) return false;
-  if (recording.platform === 'ios') return false;
-  return recording.showTouches !== false;
+  return recording.backend === 'runner AVAssetWriter' && recording.showTouches !== false;
 }

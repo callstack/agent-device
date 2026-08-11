@@ -42,7 +42,7 @@ const DAEMON_FUNCTION_TRAITS = [
 const UNROUTED_PUBLIC_COMMANDS = new Set<string>([PUBLIC_COMMANDS.installFromSource]);
 
 // Public commands that intentionally carry no legacy capability entry. Most are
-// pure control-plane or always-admitted commands; logs and network are admitted from
+// pure control-plane or always-admitted commands; logs, network, and record are admitted from
 // exact runtime facts and therefore belong to the capability catalog without matrix rows.
 const NO_CAPABILITY_PUBLIC_COMMANDS = new Set<string>([
   PUBLIC_COMMANDS.appState,
@@ -55,6 +55,7 @@ const NO_CAPABILITY_PUBLIC_COMMANDS = new Set<string>([
   PUBLIC_COMMANDS.logs,
   PUBLIC_COMMANDS.network,
   PUBLIC_COMMANDS.prepare,
+  PUBLIC_COMMANDS.record,
   PUBLIC_COMMANDS.replay,
   PUBLIC_COMMANDS.test,
   PUBLIC_COMMANDS.trace,

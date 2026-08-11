@@ -51,7 +51,10 @@ const GATED_KEYS: PlatformGatedProviderResolverKey[] = [
   'linuxToolProvider',
   'webProvider',
 ];
-const UNGATED_KEYS = ['recordingProvider'] as const;
+const UNGATED_KEYS = [
+  'appleRunnerScreenRecordingTransport',
+  'appleSimulatorScreenRecordingTransport',
+] as const;
 
 // --- INDEPENDENT verbatim copy of the former per-descriptor platform gates ---
 function gatedResolversByHand(device: DeviceInfo): Set<PlatformGatedProviderResolverKey> {
@@ -155,7 +158,8 @@ test('withRequestPlatformProviderScope invokes exactly the resolvers the former 
       vegaToolProvider: spy('vegaToolProvider'),
       linuxToolProvider: spy('linuxToolProvider'),
       webProvider: spy('webProvider'),
-      recordingProvider: spy('recordingProvider'),
+      appleRunnerScreenRecordingTransport: spy('appleRunnerScreenRecordingTransport'),
+      appleSimulatorScreenRecordingTransport: spy('appleSimulatorScreenRecordingTransport'),
     };
 
     await withRequestPlatformProviderScope(

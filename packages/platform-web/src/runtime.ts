@@ -8,12 +8,18 @@ import type {
 import { localRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { bindWebScreenRecordingRuntime } from './recording/runtime.ts';
 
 const owner = localRuntimeOwner('web');
 const available = Object.freeze({ available: true } as const);
 const appLogUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
+} as const);
+const recordingUnavailable = Object.freeze({
+  available: false,
+  reason: 'owner-capability-missing',
+  hint: 'record is not supported by this web provider',
 } as const);
 
 export function createWebPlatformRuntime(host: PlatformRuntimeHost): PlatformRuntimeOwner {
@@ -31,7 +37,13 @@ export function createWebPlatformRuntime(host: PlatformRuntimeHost): PlatformRun
         );
       }
       const transport = await host.networkTransports.resolve(request.device);
-      return bindWebRuntime(request.device, request.scope.signal, transport);
+      const recording = await bindWebScreenRecordingRuntime({
+        host,
+        device: request.device,
+        owner,
+        signal: request.scope.signal,
+      });
+      return bindWebRuntime(request.device, request.scope.signal, transport, recording);
     },
     shutdown: async () => undefined,
   });
@@ -41,6 +53,7 @@ function bindWebRuntime(
   device: DeviceInfo,
   signal: AbortSignal,
   transport: Awaited<ReturnType<PlatformRuntimeHost['networkTransports']['resolve']>>,
+  recording: Awaited<ReturnType<typeof bindWebScreenRecordingRuntime>>,
 ): DeviceBinding<PlatformRuntimeOperations> {
   const networkUnavailable = Object.freeze({
     available: false,
@@ -48,17 +61,20 @@ function bindWebRuntime(
     hint: 'network is not supported by this web provider',
   } as const);
   const dump = transport.dump;
-  const operations: DeviceBinding<PlatformRuntimeOperations>['operations'] = dump
-    ? {
-        networkDump: async (input) => {
-          const result = await dump(
-            { maxEntries: input.maxEntries, include: input.include },
-            signal,
-          );
-          return Object.freeze({ source: 'provider' as const, ...result });
-        },
-      }
-    : {};
+  const operations: DeviceBinding<PlatformRuntimeOperations>['operations'] = {
+    ...(dump
+      ? {
+          networkDump: async (input) => {
+            const result = await dump(
+              { maxEntries: input.maxEntries, include: input.include },
+              signal,
+            );
+            return Object.freeze({ source: 'provider' as const, ...result });
+          },
+        }
+      : {}),
+    ...recording.operations,
+  };
   const facts: RuntimeFacts<PlatformRuntimeOperations> = Object.freeze({
     device: {
       family: 'web',
@@ -73,6 +89,9 @@ function bindWebRuntime(
       appLogReattach: appLogUnavailable,
       appLogCleanup: appLogUnavailable,
       networkDump: transport.dump ? available : networkUnavailable,
+      screenRecordingStart: recording.available ? available : recordingUnavailable,
+      screenRecordingReattach: recording.available ? available : recordingUnavailable,
+      screenRecordingCleanup: recording.available ? available : recordingUnavailable,
     },
   });
   return Object.freeze({

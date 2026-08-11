@@ -30,6 +30,9 @@ import {
 } from './session-test-shard-devices.ts';
 import { toReplayTestAttemptOutcome, toReplayTestFinalizeFailure } from './session-test-outcome.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
+import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../request-runtime-binding.ts';
+import type { ScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform';
 import {
   buildReplayTestVideoOpenLifecycle,
   finalizeReplayTestVideoRecording,
@@ -123,6 +126,12 @@ export async function handleSessionReplayCommands(params: {
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
   invoke: DaemonInvokeFn;
+  bindDevice?: BindDeviceRuntime;
+  bindExactDevice?: BindExactDeviceRuntime;
+  screenRecordingAdmissionLedger?: ScreenRecordingAdmissionLedger;
+  requestScope?: PlatformRequestScope;
+  retainDeviceExecutionLock?: (deviceId: string) => Promise<void>;
+  throwIfCanceled?: () => void;
 }): Promise<DaemonResponse | null> {
   const { req, sessionName, logPath, sessionStore, leaseRegistry, invoke } = params;
 
@@ -137,6 +146,13 @@ export async function handleSessionReplayCommands(params: {
   }
 
   if (req.command === 'test') {
+    const replayVideoRuntime = resolveReplayVideoRuntime(params);
+    if (req.flags?.recordVideo === true && replayVideoRuntime === undefined) {
+      return errorResponse(
+        'COMMAND_FAILED',
+        'Screen-recording runtime is not configured for replay video capture',
+      );
+    }
     // `test` shares replay execution below, but replay-only flags must not fan
     // into every nested suite attempt. Keep the raw-daemon defense declarative
     // and aligned with the command grammar; the CLI rejects these earlier.
@@ -191,16 +207,19 @@ export async function handleSessionReplayCommands(params: {
           shard,
         });
 
-        const videoRecordingParams = {
-          req,
-          sessionName: testSessionName,
-          logPath,
-          sessionStore,
-          artifactsDir,
-          tracePath,
-          appendTimingEvent,
-        };
-        const openLifecycle = buildReplayTestVideoOpenLifecycle(videoRecordingParams);
+        const videoRecordingParams = replayVideoRuntime
+          ? {
+              req,
+              sessionName: testSessionName,
+              sessionStore,
+              artifactsDir,
+              appendTimingEvent,
+              ...replayVideoRuntime,
+            }
+          : undefined;
+        const openLifecycle = videoRecordingParams
+          ? buildReplayTestVideoOpenLifecycle(videoRecordingParams)
+          : undefined;
         const replayResponse = await runReplayScriptFile({
           req: {
             ...req,
@@ -227,7 +246,9 @@ export async function handleSessionReplayCommands(params: {
           tracePath,
           onStep,
           invoke: async (nestedReq) => {
-            const startResponse = await startReplayTestVideoRecordingIfReady(videoRecordingParams);
+            const startResponse = videoRecordingParams
+              ? await startReplayTestVideoRecordingIfReady(videoRecordingParams)
+              : undefined;
             if (startResponse && !startResponse.ok) return startResponse;
             const response = captureArtifacts(await invoke(nestedReq));
             return response;
@@ -239,21 +260,21 @@ export async function handleSessionReplayCommands(params: {
         sessionName: testSessionName,
         artifactPaths,
         artifactsDir,
-        tracePath,
         appendTimingEvent,
-      }) =>
-        toReplayTestFinalizeFailure(
+      }) => {
+        if (!replayVideoRuntime) return undefined;
+        return toReplayTestFinalizeFailure(
           await finalizeReplayTestVideoRecording({
             req,
             sessionName: testSessionName,
-            logPath,
             sessionStore,
             artifactsDir,
-            tracePath,
             appendTimingEvent,
             artifactPaths,
+            ...replayVideoRuntime,
           }),
-        ),
+        );
+      },
       discoverSources: buildReplayTestSourceDiscovery(req.flags?.replayBackend),
       resolveShardTargets: buildReplayTestShardTargetResolver(req.flags),
       cleanupSession: async (testSessionName) => {
@@ -280,6 +301,43 @@ export async function handleSessionReplayCommands(params: {
   }
 
   return null;
+}
+
+type ReplayVideoRuntime = Readonly<{
+  bindDevice: BindDeviceRuntime;
+  bindExactDevice: BindExactDeviceRuntime;
+  screenRecordingAdmissionLedger: ScreenRecordingAdmissionLedger;
+  requestScope: PlatformRequestScope;
+  retainDeviceExecutionLock(deviceId: string): Promise<void>;
+  throwIfCanceled(): void;
+}>;
+
+function resolveReplayVideoRuntime(params: {
+  bindDevice?: BindDeviceRuntime;
+  bindExactDevice?: BindExactDeviceRuntime;
+  screenRecordingAdmissionLedger?: ScreenRecordingAdmissionLedger;
+  requestScope?: PlatformRequestScope;
+  retainDeviceExecutionLock?: (deviceId: string) => Promise<void>;
+  throwIfCanceled?: () => void;
+}): ReplayVideoRuntime | undefined {
+  if (
+    !params.bindDevice ||
+    !params.bindExactDevice ||
+    !params.screenRecordingAdmissionLedger ||
+    !params.requestScope ||
+    !params.retainDeviceExecutionLock ||
+    !params.throwIfCanceled
+  ) {
+    return undefined;
+  }
+  return {
+    bindDevice: params.bindDevice,
+    bindExactDevice: params.bindExactDevice,
+    screenRecordingAdmissionLedger: params.screenRecordingAdmissionLedger,
+    requestScope: params.requestScope,
+    retainDeviceExecutionLock: params.retainDeviceExecutionLock,
+    throwIfCanceled: params.throwIfCanceled,
+  };
 }
 
 /**

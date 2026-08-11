@@ -1,3 +1,4 @@
+import { isSessionRecording } from '../../session-script-publication-capability.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, expect, test } from 'vitest';
@@ -100,7 +101,7 @@ test('publishes without close, returns the path/count, and leaves a terminal liv
   expect(fs.readFileSync(outputPath, 'utf8')).not.toContain('\nclose');
   expect(store.get('authoring')).toBe(session);
   expect(session.scriptPublication).toMatchObject({ kind: 'authoring', status: 'published' });
-  expect(session.recordSession).toBe(false);
+  expect(isSessionRecording(session)).toBe(false);
 
   const repeated = handleSessionScriptPublication({
     req: request(),

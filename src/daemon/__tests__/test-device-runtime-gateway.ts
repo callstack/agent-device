@@ -8,7 +8,7 @@ import {
   createRequestHandler as createProductionRequestHandler,
   type RequestRouterDeps,
 } from '../request-router.ts';
-import type { BindDeviceRuntime } from '../request-runtime-binding.ts';
+import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../request-runtime-binding.ts';
 
 export const unavailableDeviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations> =
   Object.freeze({
@@ -33,6 +33,9 @@ export const unavailableDeviceRuntimeGateway: DeviceRuntimeGateway<PlatformRunti
           appLogReattach: unavailable,
           appLogCleanup: unavailable,
           networkDump: unavailable,
+          screenRecordingStart: unavailable,
+          screenRecordingReattach: unavailable,
+          screenRecordingCleanup: unavailable,
         },
       },
       operations: {},
@@ -56,6 +59,22 @@ export const unavailableBindDevice: BindDeviceRuntime = async (device, use) =>
         diagnostics: { emit: () => {} },
         progress: { report: () => {} },
       },
+    }),
+    use,
+  );
+
+export const unavailableBindExactDevice: BindExactDeviceRuntime = async (
+  device,
+  owner,
+  fence,
+  use,
+  scope,
+) =>
+  narrowDeviceBinding(
+    await unavailableDeviceRuntimeGateway.bind({
+      device,
+      intent: { kind: 'exact-owner', owner, fence },
+      scope,
     }),
     use,
   );

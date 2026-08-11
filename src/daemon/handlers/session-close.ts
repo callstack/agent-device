@@ -23,7 +23,6 @@ import {
 } from './session-device-utils.ts';
 import { errorResponse } from './response.ts';
 import { expireRefFrame } from '../ref-frame.ts';
-import { stopSessionRecordingForTeardown } from './record-trace-recording.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
 import { releaseSessionLease } from '../lease-lifecycle.ts';
 import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
@@ -35,6 +34,7 @@ import {
 import { isAuthoringArmedSession } from '../session-script-publication-capability.ts';
 import {
   reportSessionCleanupFailures,
+  finishSessionScreenRecording,
   restoreSessionAndroidIme,
   stopAppleRunnerForClose,
   stopSessionAndroidNativePerfCapture,
@@ -66,7 +66,7 @@ function shouldRetainAppleRunnerAfterClose(req: DaemonRequest, session: SessionS
   return (
     isIosSimulator(session.device) &&
     !req.flags?.shutdown &&
-    !session.recording &&
+    !session.screenRecording &&
     !session.lease &&
     !session.device.simulatorSetPath
   );
@@ -130,7 +130,16 @@ async function stopBestEffortSessionResources(
   attemptCleanup: CleanupRunner,
 ): Promise<void> {
   // Recording overlay finalization needs the Apple runner.
-  await attemptCleanup('recording', () => stopSessionRecordingForTeardown(session));
+  const currentSession = sessionStore.get(session.name) ?? session;
+  if (currentSession.screenRecording) {
+    await attemptCleanup('recording', () =>
+      finishSessionScreenRecording({
+        session: currentSession,
+        sessionName: session.name,
+        sessionStore,
+      }),
+    );
+  }
   await attemptCleanup('app_log', () => stopSessionAppLog({ session, sessionStore }));
   await attemptCleanup('audio_probe', async () => {
     await stopSessionAudioProbe(session, 'session-close');
@@ -295,8 +304,8 @@ async function stopOrRetainAppleRunnerAfterClose(
 //
 // #1533 (aborted-mid-recording) is the adjacent already-armed case: this refusal promises "plain
 // close tears down without writing", and an ABORTED authoring lifecycle keeps that promise —
-// `--save-script` re-arms nothing on any surface (`recordSessionAfterSaveScriptFlag`) and the
-// writer refuses to publish the lifecycle from every path that reaches it.
+// recording is derived from the lifecycle (`isSessionRecording`), so no surface can re-arm it
+// behind the terminal status, and the writer refuses to publish it from every path that reaches it.
 function assertTerminalRecordingCloseAllowed(req: DaemonRequest, session: SessionState): void {
   if (!req.flags?.saveScript) return;
   if (isAuthoringArmedSession(session)) return;

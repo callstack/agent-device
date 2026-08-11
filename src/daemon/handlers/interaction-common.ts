@@ -11,6 +11,7 @@ import type { MultiTargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { inferFillText } from '../action-utils.ts';
 import { recordedInputPlaceholder } from '../../replay/recorded-input.ts';
 import { parameterizeRecordedFillPayload } from '../parameterized-recorded-fill.ts';
+import { isSessionRecording } from '../session-script-publication-capability.ts';
 
 export type ContextFromFlags = (
   flags: CommandFlags | undefined,
@@ -71,9 +72,11 @@ export function finalizeTouchInteraction(params: {
     responseData,
   });
   const targetEvidence =
-    session.recordSession && recordedTarget ? computeTargetEvidence(recordedTarget) : undefined;
+    isSessionRecording(session) && recordedTarget
+      ? computeTargetEvidence(recordedTarget)
+      : undefined;
   const targetEvidences =
-    session.recordSession && recordedTargets
+    isSessionRecording(session) && recordedTargets
       ? computeMultiTargetEvidence(recordedTargets)
       : undefined;
   sessionStore.recordAction(session, {

@@ -9,12 +9,12 @@ import {
   createRequestHandler,
   type RequestRouterDeps,
 } from '../../../src/daemon/request-router.ts';
-import type { RecordingProcess } from '../../../src/daemon/recording-provider.ts';
+import type { AppleSimulatorScreenRecordingProcess } from '../../../src/platform-runtime-screen-recording-apple-transport.ts';
 import { trackDownloadableArtifact } from '../../../src/daemon/artifact-tracking.ts';
 import { LeaseRegistry } from '../../../src/daemon/lease-registry.ts';
 import { SessionStore } from '../../../src/daemon/session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../../../src/daemon/types.ts';
-import type { ExecResult } from '../../../src/utils/exec.ts';
+import { runCmdBackground } from '../../../src/utils/exec.ts';
 import type {
   DeviceInventoryProvider,
   ProviderDeviceInventorySource,
@@ -50,6 +50,7 @@ export type ProviderScenarioHarness = {
   ) => Promise<ProviderScenarioRpcResult>;
   client: () => AgentDeviceClient;
   session: (name?: string) => SessionState | undefined;
+  sessionDir: (name?: string) => string;
   setSession: (name: string, session: SessionState) => void;
   close: () => Promise<void>;
 };
@@ -125,6 +126,7 @@ export async function createProviderScenarioHarness(
       ),
     client: () => createAgentDeviceClient({}, { transport }),
     session: (name = 'default') => sessionStore.get(name),
+    sessionDir: (name = 'default') => sessionStore.resolveSessionDir(name),
     setSession: (name, session) => sessionStore.set(name, session),
     close: async () => {
       await deviceRuntimeGateway.shutdown();
@@ -182,22 +184,23 @@ export function likelyPlayableMp4Container(): Buffer {
 export function createProviderIosSimulatorRecordingProcess(
   outPath: string,
   onSignal?: (signal: NodeJS.Signals | number | undefined) => void,
-): RecordingProcess {
+): AppleSimulatorScreenRecordingProcess {
   fs.writeFileSync(outPath, Buffer.alloc(0));
-  let resolveWait: ((result: ExecResult) => void) | undefined;
-  const wait = new Promise<ExecResult>((resolve) => {
-    resolveWait = resolve;
-  });
+  const background = runCmdBackground(
+    process.execPath,
+    ['-e', 'setInterval(() => {}, 1000)', 'provider-screen-recording'],
+    { allowFailure: true, captureOutput: false },
+  );
   return {
     child: {
+      pid: background.child.pid,
       kill: (signal) => {
         onSignal?.(signal);
         fs.writeFileSync(outPath, likelyPlayableMp4Container());
-        resolveWait?.({ stdout: '', stderr: '', exitCode: 0 });
-        return true;
+        return background.child.kill(signal);
       },
     },
-    wait,
+    wait: background.wait,
   };
 }
 

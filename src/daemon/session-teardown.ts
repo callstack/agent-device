@@ -9,11 +9,11 @@ import { stopAndroidSnapshotHelperSessionForDevice } from '../platforms/android/
 import { restoreAndroidTestIme } from '../platforms/android/ime-lifecycle.ts';
 import { cleanupRetainedMaterializedPathsForSession } from './materialized-path-registry.ts';
 import { stopSessionAudioProbe } from './audio-probe.ts';
-import { stopSessionRecordingForTeardown } from './handlers/record-trace-recording.ts';
 import type { SessionState } from './types.ts';
 import type { SessionStore } from './session-store.ts';
 import { forceCleanupSessionAppLog } from './app-log-session-resource.ts';
 import { resolveAppLogResourcePath } from './app-log-resource-store.ts';
+import { finishLiveScreenRecording } from './screen-recording-session-resource.ts';
 
 export { stopSessionAudioProbe } from './audio-probe.ts';
 
@@ -156,19 +156,21 @@ export function reportSessionCleanupFailures(params: {
 type SessionResourceTeardownRequest = {
   session: SessionState;
   sessionName: string;
+  sessionStore: SessionStore;
   stateDir?: string;
-} & ({ appLog: 'run'; sessionStore: SessionStore } | { appLog: 'already-settled' });
+  appLog: 'run' | 'already-settled';
+};
 
 export async function teardownSessionResources(
   request: SessionResourceTeardownRequest,
 ): Promise<void> {
-  const { session, sessionName, stateDir } = request;
+  const { session, sessionName, sessionStore, stateDir } = request;
   const appLogSteps: SessionCleanupStep[] =
     request.appLog === 'run'
       ? [
           {
             step: 'app_log',
-            run: () => stopSessionAppLog({ session, sessionStore: request.sessionStore }),
+            run: () => stopSessionAppLog({ session, sessionStore }),
           },
         ]
       : [];
@@ -178,7 +180,15 @@ export async function teardownSessionResources(
     // signalling the recorder first prevents a leaked `simctl recordVideo` child
     // (and its 0-byte, slot-holding mp4) when a session is torn down — including
     // on daemon shutdown — without an explicit `record stop`.
-    { step: 'recording', run: () => stopSessionRecordingForTeardown(session) },
+    {
+      step: 'recording',
+      run: () =>
+        finishSessionScreenRecording({
+          session,
+          sessionName,
+          sessionStore,
+        }),
+    },
     ...appLogSteps,
     {
       step: 'audio_probe',
@@ -205,4 +215,18 @@ export async function teardownSessionResources(
     failures,
   });
   if (aggregate) throw aggregate;
+}
+
+export async function finishSessionScreenRecording(params: {
+  session: SessionState;
+  sessionName: string;
+  sessionStore: SessionStore;
+}): Promise<void> {
+  const currentSession = params.sessionStore.get(params.sessionName) ?? params.session;
+  if (!currentSession.screenRecording) return;
+  await finishLiveScreenRecording({
+    session: currentSession,
+    sessionName: params.sessionName,
+    sessionStore: params.sessionStore,
+  });
 }

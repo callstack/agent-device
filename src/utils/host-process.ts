@@ -3,12 +3,18 @@ import { runCmd, runCmdSync } from './exec.ts';
 import { sleep } from './timeouts.ts';
 
 const PS_TIMEOUT_MS = 1_000;
+const HOST_PS_COMMAND = process.platform === 'win32' ? 'ps' : '/bin/ps';
 
 export type HostProcessInfo = {
   pid: number;
   ppid?: number;
   command: string;
 };
+
+export type HostProcessIdentityObservation = Readonly<{
+  state: string;
+  startTime: string;
+}>;
 
 type HostProcessRunCommand = (
   cmd: string,
@@ -62,10 +68,35 @@ export function isProcessZombie(pid: number): boolean {
   return readProcessField(pid, 'state=')?.startsWith('Z') ?? false;
 }
 
+export function readHostProcessIdentityObservations(
+  pids: Iterable<number>,
+): ReadonlyMap<number, HostProcessIdentityObservation> {
+  const observations = new Map<number, HostProcessIdentityObservation>();
+  const selected = uniquePositivePids(pids);
+  if (selected.length === 0) return observations;
+  try {
+    const result = runCmdSync('ps', ['-p', selected.join(','), '-o', 'pid=,state=,lstart='], {
+      allowFailure: true,
+      timeoutMs: PS_TIMEOUT_MS,
+    });
+    if (result.exitCode !== 0) return observations;
+    for (const line of result.stdout.split('\n')) {
+      const match = /^\s*(\d+)\s+(\S+)\s+(.+?)\s*$/.exec(line);
+      if (!match) continue;
+      const pid = Number.parseInt(match[1]!, 10);
+      if (!Number.isInteger(pid) || pid <= 0) continue;
+      observations.set(pid, { state: match[2]!, startTime: match[3]! });
+    }
+  } catch {
+    // A failed ps snapshot is unknown evidence; callers remain fail-closed.
+  }
+  return observations;
+}
+
 function readProcessField(pid: number, field: 'lstart=' | 'command=' | 'state='): string | null {
   if (!Number.isInteger(pid) || pid <= 0) return null;
   try {
-    const result = runCmdSync('ps', ['-p', String(pid), '-o', field], {
+    const result = runCmdSync(HOST_PS_COMMAND, ['-p', String(pid), '-o', field], {
       allowFailure: true,
       timeoutMs: PS_TIMEOUT_MS,
     });
@@ -94,10 +125,14 @@ export function parseHostProcessList(stdout: string): HostProcessInfo[] {
 export async function listHostProcesses(
   options: ListHostProcessesOptions,
 ): Promise<HostProcessInfo[]> {
-  const result = await (options.runCommand ?? runCmd)('ps', ['-ax', '-o', 'pid=,ppid=,command='], {
-    allowFailure: true,
-    timeoutMs: options.timeoutMs,
-  });
+  const result = await (options.runCommand ?? runCmd)(
+    options.runCommand ? 'ps' : HOST_PS_COMMAND,
+    ['-ax', '-o', 'pid=,ppid=,command='],
+    {
+      allowFailure: true,
+      timeoutMs: options.timeoutMs,
+    },
+  );
   if (result.exitCode !== 0) return [];
   return parseHostProcessList(result.stdout);
 }

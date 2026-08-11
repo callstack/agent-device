@@ -266,5 +266,8 @@ function unavailableFacts() {
     appLogReattach: unavailable,
     appLogCleanup: unavailable,
     networkDump: unavailable,
+    screenRecordingStart: unavailable,
+    screenRecordingReattach: unavailable,
+    screenRecordingCleanup: unavailable,
   };
 }

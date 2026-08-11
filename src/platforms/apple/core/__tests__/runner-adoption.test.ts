@@ -143,6 +143,7 @@ test('adoption succeeds for a live, matching, probe-healthy runner', async () =>
   expect(session?.port).toBe(lease.port);
   expect(session?.ready).toBe(true);
   expect(session?.child.pid).toBe(424242);
+  expect(session?.sessionId).toBe(lease.sessionId);
   expect(session?.xctestrunArtifact?.reason).toBe('adopted_from_lease');
   // Adoption transfers ownership: the lease on disk now belongs to us.
   expect(readStaleRunnerLease(simulator.id)).toBeNull();

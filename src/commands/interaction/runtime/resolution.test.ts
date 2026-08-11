@@ -7,7 +7,7 @@ import {
   throwIfOffscreenInteractionTarget,
   tryResolveRefNode,
 } from './resolution.ts';
-import { resolveSelectorChain } from '@agent-device/selectors';
+import { resolveRecordedTarget } from '@agent-device/selectors';
 import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
 import type { Point } from '@agent-device/kernel/snapshot';
 import {
@@ -375,12 +375,12 @@ test('runtime fill #1280: fill is excluded from retargeting — the chain stays 
   assert.deepEqual(result.selectorChain, ['role="edittext" editable=true']);
   // ...and it resolves back to the editable container on the record-time
   // tree — the saved script stays replayable.
-  const resolved = resolveSelectorChain(snapshot.nodes, result.selectorChain!.join(' || '), {
+  const resolved = resolveRecordedTarget(result.selectorChain!.join(' || '), snapshot.nodes, {
     platform: 'android',
     requireRect: true,
-    requireUnique: true,
+    allowDisambiguation: false,
   });
-  assert.equal(resolved?.node.type, 'EditText');
+  assert.equal(resolved.kind === 'resolved' ? resolved.winner.type : undefined, 'EditText');
 });
 
 test('runtime fill surfaces targetHittable and a hint for a non-hittable selector match (Maps pin case, #1037)', async () => {

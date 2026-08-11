@@ -21,7 +21,7 @@ import type { SessionState } from './types.ts';
 import {
   NO_SCRIPT_PUBLICATION,
   commitRepair,
-  isAuthoringAborted,
+  isRecordingPublication,
   isRepairCommittable,
   scriptTargetPath,
 } from './session-script-publication-state.ts';
@@ -91,19 +91,21 @@ function isRepairArmedWriteBlocked(session: SessionState): boolean {
 
 /**
  * The single "may this session publish AT ALL" question, asked once by `write()` before any
- * formatting or filesystem work. Three independent reasons to publish nothing:
+ * formatting or filesystem work, and answered entirely from the publication aggregate:
  *
- * - not recording — the ordinary resting state of a session that never armed;
- * - a repair transaction that is committed or not yet committable (above);
- * - an ABORTED ordinary authoring lifecycle (#1533) — the authoring counterpart of that gate.
+ * - a lifecycle that is not recording publishes nothing. That covers the session that never
+ *   armed, the ABORTED authoring recording whose terminality #1533 turned into a rule, and the
+ *   already-PUBLISHED one whose second write must no-op.
+ * - a repair transaction that is committed or not yet committable (above).
  *
- * The last one is what makes `close`'s refusal ("Retry with plain close; it will tear down the
- * session without writing") true from every path reaching the writer: bare `close`, teardown,
- * idle-reap, active publication.
+ * There is no separate ABORTED check here any more. `isRecordingPublication` answers false for a
+ * terminal authoring lifecycle, so the refusal `close` promises the caller ("Retry with plain
+ * close; it will tear down the session without writing") holds from every path reaching the
+ * writer — bare `close`, teardown, idle-reap, active publication — without a second gate that
+ * could disagree with the first.
  */
 function isPublicationWriteBlocked(session: SessionState): boolean {
-  if (!session.recordSession) return true;
-  if (isAuthoringAborted(session.scriptPublication ?? NO_SCRIPT_PUBLICATION)) return true;
+  if (!isRecordingPublication(session.scriptPublication ?? NO_SCRIPT_PUBLICATION)) return true;
   return isRepairArmedWriteBlocked(session);
 }
 

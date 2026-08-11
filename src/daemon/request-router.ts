@@ -23,10 +23,11 @@ import { errorResponse, noActiveSessionError } from './handlers/response.ts';
 import {
   type AndroidAdbProviderResolver,
   type AppleRunnerProviderResolver,
+  type AppleRunnerScreenRecordingTransportResolver,
   type AppleToolProviderResolver,
   type LinuxToolProviderResolver,
   type RequestPlatformProviderScope,
-  type RecordingProviderResolver,
+  type AppleSimulatorScreenRecordingTransportResolver,
   type VegaToolProviderResolver,
   type WebProviderResolver,
   withRequestPlatformProviderScope,
@@ -61,6 +62,10 @@ import {
   createAppLogAdmissionLedger,
   type AppLogAdmissionLedger,
 } from './app-log-admission-ledger.ts';
+import {
+  createScreenRecordingAdmissionLedger,
+  type ScreenRecordingAdmissionLedger,
+} from './screen-recording-admission-ledger.ts';
 
 // ---------------------------------------------------------------------------
 // Request handler API
@@ -74,14 +79,16 @@ export type RequestRouterDeps = {
   leaseRegistry: LeaseRegistry;
   androidAdbProvider?: AndroidAdbProviderResolver;
   appleRunnerProvider?: AppleRunnerProviderResolver;
+  appleRunnerScreenRecordingTransport?: AppleRunnerScreenRecordingTransportResolver;
   appleToolProvider?: AppleToolProviderResolver;
   linuxToolProvider?: LinuxToolProviderResolver;
   vegaToolProvider?: VegaToolProviderResolver;
   webProvider?: WebProviderResolver;
-  recordingProvider?: RecordingProviderResolver;
+  appleSimulatorScreenRecordingTransport?: AppleSimulatorScreenRecordingTransportResolver;
   deviceInventoryGateways: ComposedDeviceInventoryGateways;
   deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   appLogAdmissionLedger?: AppLogAdmissionLedger;
+  screenRecordingAdmissionLedger?: ScreenRecordingAdmissionLedger;
   providerRuntimeIds?: readonly string[];
   providerRuntimeRequiredIds?: readonly string[];
   leaseLifecycleProvider?: LeaseLifecycleProvider;
@@ -102,14 +109,16 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     token,
     androidAdbProvider,
     appleRunnerProvider,
+    appleRunnerScreenRecordingTransport,
     appleToolProvider,
     linuxToolProvider,
     vegaToolProvider,
     webProvider,
-    recordingProvider,
+    appleSimulatorScreenRecordingTransport,
     deviceInventoryGateways,
     deviceRuntimeGateway,
     appLogAdmissionLedger = createAppLogAdmissionLedger(),
+    screenRecordingAdmissionLedger = createScreenRecordingAdmissionLedger(),
     providerRuntimeIds,
     providerRuntimeRequiredIds,
     leaseLifecycleProvider,
@@ -225,6 +234,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
               providers: {
                 androidAdbProvider,
                 appleRunnerProvider,
+                appleRunnerScreenRecordingTransport,
                 appleToolProvider,
                 linuxToolProvider,
                 vegaToolProvider,
@@ -233,7 +243,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
                   (shouldUseDefaultWebProvider(lockedScope)
                     ? createDefaultWebProvider(stateDir, sessionStore)
                     : undefined),
-                recordingProvider,
+                appleSimulatorScreenRecordingTransport,
               },
             },
             executeLocked,
@@ -265,7 +275,11 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         : undefined,
       androidAdbExecutor: providerScope.androidAdbExecutor,
       bindDevice: lockedScope.bindDevice,
+      bindExactDevice: lockedScope.bindExactDevice,
       appLogAdmissionLedger,
+      screenRecordingAdmissionLedger,
+      requestScope: createPlatformRequestScope(lockedScope.req),
+      retainDeviceExecutionLock: lockedScope.retainDeviceExecutionLock,
       throwIfCanceled: lockedScope.throwIfCanceled,
       contextFromFlags: lockedScope.handlerContextFromFlags,
     });

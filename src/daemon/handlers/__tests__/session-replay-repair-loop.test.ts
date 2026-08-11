@@ -1,3 +1,4 @@
+import { isSessionRecording } from '../../session-script-publication-capability.ts';
 /**
  * ADR 0012 decision 6: `replay --save-script` arming (R1), the repair-run
  * boundary watermark (R6, sticky across `--from` legs, no amputation when
@@ -108,7 +109,7 @@ test('R1/R2/R6: prefix steps get fresh evidence, corrective + resumed steps land
   expect(leg1.ok).toBe(false);
   if (leg1.ok) return;
   const session = sessionStore.get(sessionName)!;
-  expect(session.recordSession).toBe(true);
+  expect(isSessionRecording(session)).toBe(true);
   expect(repairSessionBoundary(session)).toBe(0);
   expect(session.actions.map((a) => a.command)).toEqual(['open', 'click']);
   // R1: the recorded prefix step carries FRESH evidence, never the .ad's own
@@ -194,7 +195,7 @@ test('R2 bypass guard: a PLAIN full replay (no --save-script) on an armed sessio
   );
   const filePath = writeReplayFile(root, ['open "Demo"', 'click id="save"']);
 
-  // Arm the repair run — session stays repair-armed (recordSession +
+  // Arm the repair run — session stays repair-armed (recording +
   // saveScriptBoundary) after it returns.
   const first = await runReplayScriptFile({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
@@ -206,10 +207,10 @@ test('R2 bypass guard: a PLAIN full replay (no --save-script) on an armed sessio
   expect(first.ok).toBe(true);
   const armed = sessionStore.get(sessionName)!;
   expect(repairSessionBoundary(armed)).toBe(0);
-  expect(armed.recordSession).toBe(true);
+  expect(isSessionRecording(armed)).toBe(true);
   const armedActionCount = armed.actions.length;
 
-  // A plain full replay WITHOUT --save-script must NOT bypass R2: recordSession
+  // A plain full replay WITHOUT --save-script must NOT bypass R2: recording
   // is still true, so it would re-append the prefix. Reject it, zero dispatches,
   // healed slice not duplicated.
   const spy: DaemonRequest[] = [];
@@ -333,7 +334,7 @@ test('opt-in: without --save-script, replay neither arms recording nor records e
   expect(data.message).toMatch(/^Replayed 2 steps in \d+\.\ds$/);
 
   const session = sessionStore.get(sessionName)!;
-  expect(session.recordSession).toBeFalsy();
+  expect(isSessionRecording(session)).toBe(false);
   expect(repairSessionBoundary(session)).toBeUndefined();
   expect(scriptTargetPath(session.scriptPublication ?? NO_SCRIPT_PUBLICATION)).toBeUndefined();
   expect(session.actions.every((a) => a.targetEvidence === undefined)).toBe(true);
@@ -362,7 +363,6 @@ test('a thrown/failed dispatch never lands a partial action in session.actions',
 
 test('a --no-record state-fix action never enters session.actions', () => {
   const { sessionStore, sessionName } = setup('agent-device-replay-repair-norecord-', {
-    recordSession: true,
     scriptPublication: repairPublication('armed', { boundary: 0 }),
   });
   const session = sessionStore.get(sessionName)!;
@@ -409,7 +409,7 @@ test('R1 bootstrap: a session created by step 1 (open) arms in time for step 2 t
 
   expect(response.ok).toBe(true);
   const session = sessionStore.get(sessionName)!;
-  expect(session.recordSession).toBe(true);
+  expect(isSessionRecording(session)).toBe(true);
   expect(repairSessionBoundary(session)).toBe(0);
   expect(session.actions[1]?.targetEvidence).toBeDefined();
 });
@@ -436,7 +436,7 @@ test('BLOCKER 4: a minimal [open, terminal close] cold-start script arms the tra
   const session = sessionStore.get(sessionName)!;
   // ARMED-before-step-1 semantics satisfied: the transaction armed even though
   // `open` created the session.
-  expect(session.recordSession).toBe(true);
+  expect(isSessionRecording(session)).toBe(true);
   expect(repairSessionBoundary(session)).toBe(0);
   // The terminal `close` was recognized as lifecycle and SKIPPED (never
   // dispatched), leaving the session alive for finalize.

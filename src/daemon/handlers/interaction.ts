@@ -72,7 +72,7 @@ async function dispatchTypeViaRuntime(
 async function recoverAndroidRecordingDialogForType(
   session: SessionState,
 ): Promise<DaemonResponse | null> {
-  if (session.device.platform === 'android' && session.recording) {
+  if (session.device.platform === 'android' && session.screenRecording) {
     const androidRecoveryResult = await recoverAndroidBlockingSystemDialog({ session });
     if (androidRecoveryResult.status === 'failed') {
       return errorResponse('COMMAND_FAILED', 'Android system dialog blocked the recording session');

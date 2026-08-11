@@ -48,21 +48,3 @@ export type TraceCommandResult =
       outPath: string;
       artifacts: DaemonArtifact[];
     };
-
-/**
- * The daemon-owned recording-backend discriminant (issue #974). A PLATFORM-NEUTRAL
- * string tag naming which recording backend a device resolves to; the daemon maps it
- * back to the concrete {@link RecordingBackend} instance via `RECORDING_BACKENDS_BY_TAG`.
- * The {@link PlatformPlugin.recording} facet returns this tag (type-only in the plugin,
- * exactly like {@link LogBackend} for app-log), so core/platforms never construct the
- * daemon-owned backend objects. `'unsupported'` is the fallthrough for families that
- * carry no recording facet (linux) and any unregistered platform.
- */
-export type RecordingBackendTag =
-  | 'web'
-  | 'android'
-  | 'harmonyos'
-  | 'macos'
-  | 'ios-device'
-  | 'ios-simulator'
-  | 'unsupported';

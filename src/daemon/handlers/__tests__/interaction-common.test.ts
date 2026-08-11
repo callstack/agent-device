@@ -3,6 +3,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import {
   makeIosSession,
   makeAuthoringSession,
+  authoringPublication,
 } from '../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
@@ -135,7 +136,7 @@ test('parameterized fill scrubs concatenated backend values and object keys thro
       hittable: true,
     },
   ];
-  session.recordSession = true;
+  session.scriptPublication = authoringPublication('armed');
   session.snapshot = {
     nodes: attachRefs(nodes),
     createdAt: Date.now(),

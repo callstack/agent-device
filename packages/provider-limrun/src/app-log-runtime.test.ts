@@ -258,5 +258,42 @@ function unusedHost(): PlatformRuntimeHost {
       readProcessMarker: async () => ({ status: 'missing' }),
     },
     networkTransports: { resolve: async () => ({ mode: 'local' }) },
+    screenRecording: unusedScreenRecordingHost(),
+  };
+}
+
+function unusedScreenRecordingHost(): PlatformRuntimeHost['screenRecording'] {
+  return {
+    outputs: { prepare: async () => {} },
+    apple: {
+      availability: async () => ({ available: true }),
+      runRunner: async () => ({}),
+      startSimulator: async () => {
+        throw new Error('unused');
+      },
+      inspectProcess: async () => 'missing',
+      terminateProcess: async () => 'already-missing',
+      inspectRunner: async () => 'missing',
+      retrieveRunnerRecording: async () => {},
+      captureClockAnchor: async () => undefined,
+      isRunnerBundleId: async () => false,
+    },
+    android: {
+      resolve: async () => {
+        throw new Error('unused');
+      },
+    },
+    harmony: {
+      start: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+      stop: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+      findMedia: async () => undefined,
+      stageMedia: async () => false,
+      stagedFileSize: async () => undefined,
+      pull: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+      remove: async () => true,
+      removeMedia: async () => true,
+    },
+    web: { resolve: async () => undefined },
+    finalize: { complete: async () => ({}) },
   };
 }

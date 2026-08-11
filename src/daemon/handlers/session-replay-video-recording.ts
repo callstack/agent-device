@@ -3,7 +3,10 @@ import type { DaemonOpenLifecycle, DaemonRequest, DaemonResponse } from '../type
 import type { SessionStore } from '../session-store.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { sleep } from '../../utils/timeouts.ts';
-import { handleRecordCommand } from './record-trace-recording.ts';
+import { handleRecordCommand } from './record-runtime.ts';
+import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../request-runtime-binding.ts';
+import type { ScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
 import {
   defaultRecordingPath,
@@ -25,20 +28,24 @@ export function buildReplayTestVideoOpenLifecycle(
 type ReplayTestVideoRecordingParams = {
   req: DaemonRequest;
   sessionName: string;
-  logPath: string;
   sessionStore: SessionStore;
   artifactsDir: string | undefined;
-  tracePath: string | undefined;
+  bindDevice: BindDeviceRuntime;
+  bindExactDevice: BindExactDeviceRuntime;
+  screenRecordingAdmissionLedger: ScreenRecordingAdmissionLedger;
+  requestScope: PlatformRequestScope;
+  retainDeviceExecutionLock(deviceId: string): Promise<void>;
+  throwIfCanceled(): void;
   appendTimingEvent: (event: Record<string, unknown>) => void;
 };
 
 export async function startReplayTestVideoRecordingIfReady(
   params: ReplayTestVideoRecordingParams,
 ): Promise<DaemonResponse | undefined> {
-  const { req, sessionName, logPath, sessionStore, artifactsDir, appendTimingEvent } = params;
+  const { req, sessionName, sessionStore, artifactsDir, appendTimingEvent } = params;
   if (req.flags?.recordVideo !== true) return undefined;
   const activeSession = sessionStore.get(sessionName);
-  if (!activeSession || activeSession.recording) return undefined;
+  if (!activeSession || activeSession.screenRecording) return undefined;
 
   const extension = recordingExtensionForPlatform(activeSession.device.platform);
   const videoPath = artifactsDir
@@ -53,6 +60,7 @@ export async function startReplayTestVideoRecordingIfReady(
     phase: 'replay_test_video_recording_start',
     data: { session: sessionName, videoPath },
   });
+  params.throwIfCanceled();
   const startResponse = await handleRecordCommand({
     req: {
       token: req.token,
@@ -64,7 +72,12 @@ export async function startReplayTestVideoRecordingIfReady(
     },
     sessionName,
     sessionStore,
-    logPath,
+    bindDevice: params.bindDevice,
+    bindExactDevice: params.bindExactDevice,
+    admissionLedger: params.screenRecordingAdmissionLedger,
+    requestScope: params.requestScope,
+    retainDeviceExecutionLock: params.retainDeviceExecutionLock,
+    throwIfCanceled: params.throwIfCanceled,
   });
   if (!startResponse.ok) {
     appendVideoTimingEvent(appendTimingEvent, {
@@ -97,9 +110,9 @@ export async function finalizeReplayTestVideoRecording(
     artifactPaths: Set<string>;
   },
 ): Promise<DaemonResponse | undefined> {
-  const { req, sessionName, logPath, sessionStore, artifactPaths, appendTimingEvent } = params;
+  const { req, sessionName, sessionStore, artifactPaths, appendTimingEvent } = params;
   if (req.flags?.recordVideo !== true) return undefined;
-  if (!sessionStore.get(sessionName)?.recording) return undefined;
+  if (!sessionStore.get(sessionName)?.screenRecording) return undefined;
 
   appendVideoTimingEvent(appendTimingEvent, {
     type: 'video_tail_start',
@@ -120,7 +133,12 @@ export async function finalizeReplayTestVideoRecording(
     },
     sessionName,
     sessionStore,
-    logPath,
+    bindDevice: params.bindDevice,
+    bindExactDevice: params.bindExactDevice,
+    admissionLedger: params.screenRecordingAdmissionLedger,
+    requestScope: params.requestScope,
+    retainDeviceExecutionLock: params.retainDeviceExecutionLock,
+    throwIfCanceled: params.throwIfCanceled,
   });
   collectReplayActionArtifactPaths(stopResponse).forEach((entry) => artifactPaths.add(entry));
   appendVideoTimingEvent(appendTimingEvent, {

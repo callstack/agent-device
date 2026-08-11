@@ -21,10 +21,11 @@ vi.mock('../../../platforms/android/ime-lifecycle.ts', () => ({
   activateAndroidTestIme: vi.fn(async () => {}),
   restoreAndroidTestIme: vi.fn(async () => ({ restored: false, reason: 'no-record' })),
 }));
-vi.mock('../../../utils/host-process.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../utils/host-process.ts')>();
-  return { ...actual, readProcessStartTime: vi.fn(() => 'test-process-start') };
-});
+vi.mock('../../../utils/host-process.ts', async (importOriginal) =>
+  (await import('../../../__tests__/test-utils/host-process-mock.ts')).pinOwnProcessStartTime(
+    importOriginal,
+  ),
+);
 
 import { dispatchCommand, resolveTargetDevice } from '../../../core/dispatch.ts';
 import { ensureDeviceReady } from '../../device-ready.ts';

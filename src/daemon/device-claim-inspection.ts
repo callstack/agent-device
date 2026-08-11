@@ -5,7 +5,11 @@ import {
   matchesPlatformSelector,
   type PlatformSelector,
 } from '@agent-device/kernel/device';
-import { classifyOwnerLiveness, type OwnerLiveness } from '../utils/owner-identity.ts';
+import {
+  classifyOwnerLivenessFromObservation,
+  type OwnerLiveness,
+} from '../utils/owner-identity.ts';
+import { readHostProcessIdentityObservations } from '../utils/host-process.ts';
 import { resolveDeviceClaimRoot } from './device-claim-paths.ts';
 import type { DeviceClaim } from './device-claims.ts';
 
@@ -32,11 +36,20 @@ export function inspectDeviceClaims(selectors: DeviceClaimSelectors): InspectedD
   const root = resolveDeviceClaimRoot();
   const listed = readClaimEntries(root);
   if ('claims' in listed) return listed.claims;
-  return listed.entries
+  const parsed = listed.entries
     .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
-    .map((entry) => inspectDeviceClaimFile(path.join(root, entry.name)))
+    .map((entry) => readDeviceClaimFile(path.join(root, entry.name)))
     .filter((entry): entry is InspectedDeviceClaim => entry !== null)
     .filter((entry) => matchesClaimSelectors(entry.claim, selectors));
+  const observations = readHostProcessIdentityObservations(
+    parsed.flatMap((entry) => (entry.claim ? [entry.claim.ownerPid] : [])),
+  );
+  return parsed.map((entry) =>
+    classifyInspectedClaim(
+      entry,
+      entry.claim ? (observations.get(entry.claim.ownerPid) ?? null) : null,
+    ),
+  );
 }
 
 function readClaimEntries(
@@ -81,6 +94,13 @@ function matchesClaimPlatform(claim: DeviceClaim, platform: PlatformSelector | u
 }
 
 export function inspectDeviceClaimFile(filePath: string): InspectedDeviceClaim | null {
+  const entry = readDeviceClaimFile(filePath);
+  if (!entry?.claim) return entry;
+  const observations = readHostProcessIdentityObservations([entry.claim.ownerPid]);
+  return classifyInspectedClaim(entry, observations.get(entry.claim.ownerPid) ?? null);
+}
+
+function readDeviceClaimFile(filePath: string): InspectedDeviceClaim | null {
   const fileName = path.basename(filePath);
   try {
     return inspectClaimContents(fileName, fs.readFileSync(filePath, 'utf8'));
@@ -103,14 +123,28 @@ function inspectClaimContents(fileName: string, contents: string): InspectedDevi
       fileName,
       deviceKey: claim.deviceKey,
       claim,
-      classification: classifyOwnerLiveness({
-        owner: { pid: claim.ownerPid, startTime: claim.ownerStartTime },
-        stateDir: claim.stateDir,
-      }),
+      classification: 'unknown',
     };
   } catch (error) {
     return { fileName, classification: 'inconsistent', error: String(error) };
   }
+}
+
+function classifyInspectedClaim(
+  entry: InspectedDeviceClaim,
+  observation: Parameters<typeof classifyOwnerLivenessFromObservation>[1],
+): InspectedDeviceClaim {
+  if (!entry.claim) return entry;
+  return {
+    ...entry,
+    classification: classifyOwnerLivenessFromObservation(
+      {
+        owner: { pid: entry.claim.ownerPid, startTime: entry.claim.ownerStartTime },
+        stateDir: entry.claim.stateDir,
+      },
+      observation,
+    ),
+  };
 }
 
 function normalizeClaim(value: unknown): DeviceClaim | null {

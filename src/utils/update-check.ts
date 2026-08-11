@@ -41,7 +41,7 @@ export function maybeRunUpgradeNotifier(options: UpgradeNotifierOptions): void {
   if (shouldShowUpgradeNotice(cache, options.currentVersion)) {
     process.stderr.write(
       `Update available: ${PACKAGE_NAME} ${options.currentVersion} -> ${cache.latestVersion}. ` +
-        `Run \`npm install -g ${PACKAGE_NAME}@latest\` to upgrade the CLI and bundled skills.\n`,
+        `Run \`npm install -g ${PACKAGE_NAME}@latest\` to upgrade the CLI.\n`,
     );
     writeUpdateCheckCache(cachePath, {
       ...cache,

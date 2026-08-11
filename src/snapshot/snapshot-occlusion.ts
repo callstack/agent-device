@@ -131,33 +131,44 @@ function findCoveringNode(
 ): RawSnapshotNode | null {
   const cached = scan.coverCache.get(targetPosition);
   if (cached !== undefined) return cached;
-  // Reentrancy guard: `visibleCoverRect` recurses into `findCoveringNode` for
-  // the SAME targetPosition only through a cycle in `overlayPositions`
-  // ordering, which cannot happen (positions strictly increase along any
-  // recursive path — see the `position <= targetPosition` filter below) —
-  // but seed `null` before recursing regardless, so a future edit that
-  // breaks that invariant fails closed (no cover) instead of re-entering.
+  // Reentrancy guard: an additional Android overlay may precede an app target
+  // in the cross-window traversal, while that target may itself be overlay-like.
+  // Seed `null` before following either direction so such a cycle fails closed
+  // instead of re-entering.
   scan.coverCache.set(targetPosition, null);
 
   const targetRect = positiveRect(target.rect);
   if (!targetRect) return finishFindCoveringNode(scan, targetPosition, null);
   const center = centerOfRect(targetRect);
+  const targetIsAdditionalOverlay = options.isAdditionalOverlayNode?.(target) === true;
 
-  // Mutation-lane note: relaxing `<=` to `<` here would only change behavior
-  // if `position === targetPosition` were reachable — a node covering
-  // itself. That case is already excluded one line below regardless: a
-  // self-candidate has `candidateRect === targetRect` (same node, same
-  // object), so `areRectsApproximatelyEqual` in `visibleCoverRect` always
-  // excludes it.
   for (const position of scan.overlayPositions) {
-    if (position <= targetPosition) continue;
-    const candidate = scan.nodes[position];
-    if (candidate && canCoverPoint(scan, position, target, targetRect, center, options)) {
+    if (
+      !canPositionCoverTarget(scan, position, targetPosition, targetIsAdditionalOverlay, options)
+    ) {
+      continue;
+    }
+    const candidate = scan.nodes[position]!;
+    if (canCoverPoint(scan, position, target, targetRect, center, options)) {
       return finishFindCoveringNode(scan, targetPosition, candidate);
     }
   }
 
   return finishFindCoveringNode(scan, targetPosition, null);
+}
+
+function canPositionCoverTarget(
+  scan: OcclusionScan,
+  candidatePosition: number,
+  targetPosition: number,
+  targetIsAdditionalOverlay: boolean,
+  options: SnapshotOcclusionOptions,
+): boolean {
+  const candidate = scan.nodes[candidatePosition];
+  if (!candidate) return false;
+  if (candidatePosition > targetPosition) return true;
+  if (candidatePosition === targetPosition || targetIsAdditionalOverlay) return false;
+  return options.isAdditionalOverlayNode?.(candidate) === true;
 }
 
 function finishFindCoveringNode(

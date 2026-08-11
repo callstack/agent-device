@@ -9,6 +9,7 @@ import { snapshotAndroid } from '../../platforms/android/snapshot.ts';
 import { runAndroidAdb } from '../../platforms/android/adb.ts';
 import { recoverAndroidBlockingSystemDialog } from '../android-system-dialog.ts';
 import { makeAndroidSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
 
 test('android blocking-dialog recovery expires the ref frame before its recovery tap', async () => {
   const dialog = {
@@ -32,7 +33,11 @@ test('android blocking-dialog recovery expires the ref frame before its recovery
   vi.mocked(runAndroidAdb).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' } as never);
 
   const session = makeAndroidSession('anr-recovery');
-  session.recording = { outPath: '/tmp/anr.mp4', startedAt: 0 } as never;
+  session.screenRecording = makeTestScreenRecordingResource(session, {
+    backend: 'adb screenrecord',
+    outPath: '/tmp/anr.mp4',
+    startedAt: 0,
+  });
   expect(session.refFrameState).toBeUndefined(); // active
 
   const result = await recoverAndroidBlockingSystemDialog({ session });

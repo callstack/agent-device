@@ -5,6 +5,7 @@ import { isRequestCanceledError } from '../../../../request/cancel.ts';
 import { RUNNER_COMMAND_TIMEOUT_MS, RUNNER_STARTUP_TIMEOUT_MS } from './runner-transport.ts';
 import {
   type RunnerSession,
+  assertExpectedRunnerSession,
   ensureRunnerSession,
   getRunnerSessionSnapshot,
   invalidateRunnerSession,
@@ -273,6 +274,7 @@ export async function executeRunnerCommand(
       recycleBootBegun = true;
     }
     session = await ensureRunnerSession(device, options);
+    assertExpectedRunnerSession(session, options.expectedRunnerSessionId);
     if (recycleBootBegun) {
       commitRunnerRecycle(recycleKey);
     }
@@ -289,6 +291,7 @@ export async function executeRunnerCommand(
       signal,
     );
   } catch (err) {
+    if (options.expectedRunnerSessionId !== undefined) throw err;
     const appErr = asAppError(err, 'COMMAND_FAILED');
     if (session && !session.ready && isRequestCanceledError(appErr)) {
       await invalidateRunnerSessionBestEffort(session, 'runner_startup_request_canceled');

@@ -773,7 +773,6 @@ test('BLOCKER 2: finalizeRepairTeardown of a COMPLETE transaction whose commit F
   const before = fs.readFileSync(healedPath, 'utf8');
 
   const session = makeSession('default');
-  session.recordSession = true;
   session.scriptPublication = repairPublication('complete', {
     boundary: 0,
     path: healedPath,
@@ -814,7 +813,6 @@ test('BLOCKER 3: finalizeRepairTeardown auto-commit records a terminal close, pr
   const healedPath = path.join(root, 'flow.healed.ad');
 
   const session = makeSession('default');
-  session.recordSession = true;
   session.scriptPublication = repairPublication('complete', { boundary: 0, path: healedPath });
   session.actions = [
     { ts: 1, command: 'open', positionals: ['Demo'], flags: {} },

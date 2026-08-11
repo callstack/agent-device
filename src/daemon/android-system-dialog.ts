@@ -43,7 +43,7 @@ export async function recoverAndroidBlockingSystemDialog(params: {
 }): Promise<AndroidBlockingDialogRecoveryResult> {
   const { session } = params;
 
-  if (session.device.platform !== 'android' || !session.recording) {
+  if (session.device.platform !== 'android' || !session.screenRecording) {
     return { status: 'absent' };
   }
 

@@ -24,6 +24,7 @@ import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { createProviderDeviceRuntimeRequestProviders } from '../../provider-device-runtime.ts';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
+import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
 
 vi.mock('../../platforms/android/snapshot.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../platforms/android/snapshot.ts')>();
@@ -81,7 +82,7 @@ vi.mock('../../utils/exec.ts', async (importOriginal) => {
 });
 
 function makeAndroidSession(name: string): SessionState {
-  return {
+  const session: SessionState = {
     name,
     createdAt: Date.now(),
     appBundleId: 'com.android.settings',
@@ -94,16 +95,14 @@ function makeAndroidSession(name: string): SessionState {
       kind: 'emulator',
       booted: true,
     },
-    recording: {
-      platform: 'android',
-      outPath: '/tmp/demo.mp4',
-      remotePath: '/sdcard/demo.mp4',
-      remotePid: '4242',
-      startedAt: Date.now() - 1_000,
-      showTouches: true,
-      gestureEvents: [],
-    },
   };
+  session.screenRecording = makeTestScreenRecordingResource(session, {
+    backend: 'adb screenrecord',
+    outPath: '/tmp/demo.mp4',
+    startedAt: Date.now() - 1_000,
+    showTouches: true,
+  });
+  return session;
 }
 
 test('generic Android gesture commands dismiss blocking system dialogs during recording', async () => {

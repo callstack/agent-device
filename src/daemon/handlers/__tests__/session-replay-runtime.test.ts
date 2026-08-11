@@ -1,3 +1,4 @@
+import { isSessionRecording } from '../../session-script-publication-capability.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
@@ -380,7 +381,7 @@ test('Maestro YAML rejects .ad repair recording before executing any command', a
   expect(response.error.code).toBe('INVALID_ARGS');
   expect(response.error.message).toMatch(/Maestro YAML.*--save-script.*\.ad scripts/);
   expect(invoke).not.toHaveBeenCalled();
-  expect(sessionStore.get(sessionName)?.recordSession).not.toBe(true);
+  expect(isSessionRecording(sessionStore.get(sessionName))).toBe(false);
 });
 
 test('Maestro YAML cannot append commands to an active .ad repair session', async () => {

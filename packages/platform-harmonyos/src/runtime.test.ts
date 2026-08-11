@@ -32,4 +32,7 @@ test('classifies the HarmonyOS runtime denominator', async () => {
     reason: 'unsupported-platform-leaf',
   });
   expect(facts.operations.appLogInspect).toEqual({ available: true });
+  expect(facts.operations.screenRecordingStart).toEqual({ available: true });
+  expect(facts.operations.screenRecordingReattach).toEqual({ available: true });
+  expect(facts.operations.screenRecordingCleanup).toEqual({ available: true });
 });

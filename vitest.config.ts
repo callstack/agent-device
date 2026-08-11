@@ -70,6 +70,8 @@ export default defineConfig({
             'scripts/__tests__/help-conformance-error-recovery-coverage.test.ts',
             'scripts/__tests__/help-conformance-sample-outputs.test.ts',
             'scripts/__tests__/help-conformance-topic-coverage.test.ts',
+            'scripts/__tests__/agent-setup-startup-contract.test.ts',
+            'scripts/__tests__/npm-skills-exclusion.test.ts',
             'scripts/__tests__/simulator-skills-contract.test.ts',
             // The publishing gate's closure audit against fixture packages: parse-only, and the
             // only place the gate's failure direction is exercised at all (the gate itself needs a

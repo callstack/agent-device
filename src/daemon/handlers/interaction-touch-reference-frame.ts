@@ -17,11 +17,13 @@ async function resolveDirectTouchReferenceFrame(params: {
   captureSnapshotForSession: CaptureSnapshotForSession;
 }): Promise<GestureReferenceFrame | undefined> {
   const { session, flags, sessionStore, contextFromFlags, captureSnapshotForSession } = params;
-  if (!session.recording) {
+  const recording = session.screenRecording?.handle;
+  if (!recording) {
     return undefined;
   }
-  if (session.recording.touchReferenceFrame) {
-    return session.recording.touchReferenceFrame;
+  const currentFrame = recording.inspect().touchReferenceFrame;
+  if (currentFrame) {
+    return currentFrame;
   }
 
   if (session.device.platform === 'android') {
@@ -30,31 +32,21 @@ async function resolveDirectTouchReferenceFrame(params: {
       referenceWidth: size.width,
       referenceHeight: size.height,
     };
-    if (session.recording) {
-      session.recording.touchReferenceFrame = referenceFrame;
-    }
+    recording.setTouchReferenceFrame(referenceFrame);
     return referenceFrame;
   }
 
   const snapshotFrame = getSnapshotReferenceFrame(session.snapshot);
   if (snapshotFrame) {
-    if (session.recording) {
-      session.recording.touchReferenceFrame = snapshotFrame;
-    }
+    recording.setTouchReferenceFrame(snapshotFrame);
     return snapshotFrame;
-  }
-
-  if (!session.recording) {
-    return undefined;
   }
 
   const snapshot = await captureSnapshotForSession(session, flags, sessionStore, contextFromFlags, {
     interactiveOnly: true,
   });
   const referenceFrame = getSnapshotReferenceFrame(snapshot);
-  if (referenceFrame && session.recording) {
-    session.recording.touchReferenceFrame = referenceFrame;
-  }
+  if (referenceFrame) recording.setTouchReferenceFrame(referenceFrame);
   return referenceFrame;
 }
 

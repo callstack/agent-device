@@ -74,6 +74,7 @@ import {
 import { corroborateIosTapFailure, interactionTargetExtra } from './interaction-ios-tap-outcome.ts';
 import { errorResponse, noActiveSessionError, requireCommandSupported } from './response.ts';
 import { publishInteractionAmbiguityCandidates } from './interaction-ambiguity-publication.ts';
+import { isSessionRecording } from '../session-script-publication-capability.ts';
 
 export async function handleTouchInteractionCommands(
   params: InteractionHandlerParams & {
@@ -352,7 +353,7 @@ function readDirectIosSelectorTapTarget(params: {
   const { session, commandLabel, target, flags } = params;
   if (commandLabel !== 'click') return null;
   if (target.kind !== 'selector') return null;
-  if (session.recordSession) return null;
+  if (isSessionRecording(session)) return null;
   if (hasNonDefaultClickOptions(flags)) return null;
   if (commandSupportsVerifyEvidence(commandLabel) && flags?.verify === true) return null;
   if (commandSupportsSettleObservation(commandLabel) && flags?.settle === true) return null;
@@ -876,7 +877,7 @@ async function buildRuntimeIosCorroboratedResponse(params: {
 }): Promise<DaemonResponse | undefined> {
   if (!params.target) return undefined;
   const resolvedTarget = readResolvedInteractionTarget(params.error);
-  if (!resolvedTarget && params.session.recordSession) return undefined;
+  if (!resolvedTarget && isSessionRecording(params.session)) return undefined;
   const corroboration = await corroborateIosTapFailure({
     error: params.error,
     command: params.handlerParams.req.command,

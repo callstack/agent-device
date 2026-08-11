@@ -19,6 +19,11 @@ const appLogUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
 } as const);
+const recordingUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'WebDriver provider runtimes do not expose screen recording.',
+} as const);
 
 export function createWebDriverPlatformRuntimeOwner(
   options: Readonly<{
@@ -58,6 +63,7 @@ function bindWebDriverPlatformRuntime(
   const unavailable = createUnavailablePlatformRuntimeBinding(device, owner, {
     appLog: appLogUnavailable,
     network: appLogUnavailable,
+    screenRecording: recordingUnavailable,
   });
   const facts: RuntimeFacts<PlatformRuntimeOperations> = Object.freeze({
     device: unavailable.facts.device,
@@ -68,6 +74,9 @@ function bindWebDriverPlatformRuntime(
       appLogReattach: appLogUnavailable,
       appLogCleanup: appLogUnavailable,
       networkDump: available,
+      screenRecordingStart: recordingUnavailable,
+      screenRecordingReattach: recordingUnavailable,
+      screenRecordingCleanup: recordingUnavailable,
     },
   });
   const operations: DeviceBinding<PlatformRuntimeOperations>['operations'] = Object.freeze({

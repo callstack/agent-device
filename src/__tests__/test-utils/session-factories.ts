@@ -71,11 +71,16 @@ export function makeMacOsSession(name: string, overrides?: Partial<SessionState>
 // no recording, say) should still build it inline.
 
 /**
- * ADR 0016 ordinary authoring recording: `recordSession` armed, NO repair
- * variant. This is a plain `open --save-script` / `close --save-script`
+ * ADR 0016 ordinary authoring recording: the authoring lifecycle ARMED, NO
+ * repair variant. This is a plain `open --save-script` / `close --save-script`
  * session, and the baseline for every authoring-side handler test (target-v1
  * evidence, parameterized fills, landmark waits) that only needs the session to
  * be recording its actions.
+ *
+ * ARMED is what makes it record. Recording is derived from the publication
+ * lifecycle rather than stored beside it, so a session with no
+ * `scriptPublication` records nothing — which is exactly what production does
+ * for a session that never ran `open --save-script`.
  *
  * "Authoring", not "recording": `session.recording` is the unrelated
  * screen-capture state.
@@ -84,7 +89,7 @@ export function makeAuthoringSession(
   name: string,
   overrides?: Partial<SessionState>,
 ): SessionState {
-  return makeIosSession(name, { recordSession: true, ...overrides });
+  return makeIosSession(name, { scriptPublication: authoringPublication('armed'), ...overrides });
 }
 
 /**

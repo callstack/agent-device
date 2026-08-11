@@ -1,5 +1,10 @@
 import fs from 'node:fs';
-import { isProcessAlive, isProcessZombie, readProcessStartTime } from './host-process.ts';
+import {
+  isProcessAlive,
+  isProcessZombie,
+  readProcessStartTime,
+  type HostProcessIdentityObservation,
+} from './host-process.ts';
 
 export type OwnerIdentity = {
   pid: number;
@@ -37,11 +42,26 @@ export function classifyOwnerLiveness(params: {
   owner: Pick<OwnerIdentity, 'pid' | 'startTime'>;
   stateDir?: string;
 }): OwnerLiveness {
+  return classifyOwnerLivenessFromObservation(params);
+}
+
+export function classifyOwnerLivenessFromObservation(
+  params: {
+    owner: Pick<OwnerIdentity, 'pid' | 'startTime'>;
+    stateDir?: string;
+  },
+  observation?: HostProcessIdentityObservation | null,
+): OwnerLiveness {
   const { owner, stateDir } = params;
   if (!isProcessAlive(owner.pid)) return 'owner-process-dead';
-  if (isProcessZombie(owner.pid)) return 'owner-process-dead';
+  if (observation !== undefined ? observation?.state.startsWith('Z') : isProcessZombie(owner.pid)) {
+    return 'owner-process-dead';
+  }
   if (owner.startTime) {
-    const currentStartTime = readProcessStartTime(owner.pid);
+    const currentStartTime =
+      observation !== undefined
+        ? (observation?.startTime ?? null)
+        : readProcessStartTime(owner.pid);
     if (currentStartTime !== null && currentStartTime !== owner.startTime) {
       return 'owner-process-dead';
     }

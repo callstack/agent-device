@@ -11,9 +11,13 @@ import { contextFromFlags } from '../context.ts';
 import { handleLeaseCommands } from '../handlers/lease.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { runRequestHandlerChain } from '../request-handler-chain.ts';
-import { unavailableBindDevice } from './test-device-runtime-gateway.ts';
+import {
+  unavailableBindDevice,
+  unavailableBindExactDevice,
+} from './test-device-runtime-gateway.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { createScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
 
 const SPECIALIZED_ROUTES = [
   'lease',
@@ -256,6 +260,14 @@ async function runCatalogCommandThroughHandlerChain(
           invoke: async () => ({ ok: true, data: {} }),
           androidAdbExecutor: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
           bindDevice: unavailableBindDevice,
+          bindExactDevice: unavailableBindExactDevice,
+          screenRecordingAdmissionLedger: createScreenRecordingAdmissionLedger(),
+          requestScope: {
+            signal: new AbortController().signal,
+            diagnostics: { emit: () => {} },
+            progress: { report: () => {} },
+          },
+          retainDeviceExecutionLock: async () => {},
           throwIfCanceled: () => {},
           contextFromFlags: (flags, appBundleId, traceLogPath) =>
             contextFromFlags(

@@ -46,6 +46,7 @@ import {
   readSimpleIosSelectorTarget,
   type DirectIosSelectorTarget,
 } from './direct-ios-selector.ts';
+import { isSessionRecording } from './session-script-publication-capability.ts';
 import {
   createSelectorRuntime,
   createSelectorRuntimeForDevice,
@@ -231,7 +232,7 @@ export async function dispatchIsViaRuntime(
   // require the snapshot path — evidence and the post-resolution identity
   // guard are computed from the resolution tree.
   const replayTargetGuard = req.internal?.replayTargetGuard;
-  const recordingSession = params.sessionStore.get(params.sessionName)?.recordSession === true;
+  const recordingSession = isSessionRecording(params.sessionStore.get(params.sessionName));
   if (!replayTargetGuard && !recordingSession) {
     const directResponse = await dispatchDirectIosSelectorIs(
       params,
@@ -283,7 +284,7 @@ export async function dispatchWaitViaRuntime(
   // snapshot polling path — evidence and the identity comparison are computed
   // from the resolution tree the direct runner query never captures.
   const recordedLandmark = req.internal?.replayLandmarkGuard;
-  if (parsed.kind === 'selector' && !recordedLandmark && !session?.recordSession) {
+  if (parsed.kind === 'selector' && !recordedLandmark && !isSessionRecording(session)) {
     const directResponse = await dispatchDirectIosSelectorWait({
       ...params,
       session,
@@ -373,7 +374,7 @@ function readDirectIosGetSelector(
 ): DirectIosSelectorTarget | null {
   // ADR 0012 decision 3: recording requires the snapshot path so target
   // evidence can be computed from the resolution tree.
-  if (!session || session.recordSession) return null;
+  if (!session || isSessionRecording(session)) return null;
   const selector = readSimpleIosSelectorTarget({ session, selectorExpression });
   // get text intentionally disambiguates label/text/value triplets from snapshots; the runner
   // direct query rejects those ambiguous matches before the shared selector resolver can rank them.

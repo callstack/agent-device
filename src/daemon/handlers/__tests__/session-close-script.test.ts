@@ -15,11 +15,17 @@ import {
   finalizeOrdinaryCloseScript,
 } from '../session-close-script.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { flushSessionEventLogWrites } from '../../session-event-log.ts';
 
 const roots: string[] = [];
 
-afterEach(() => {
+afterEach(async () => {
   vi.restoreAllMocks();
+  // Every close path here records an action, and `SessionStore.recordAction` QUEUES the event-log
+  // append rather than writing it (`queueEventLogWrite`). Removing the root while one is still
+  // pending lets the write recreate `<root>/sessions/<name>/` mid-walk, and `rmSync` fails
+  // ENOTEMPTY — observed on CI under parallel load, where the queued write lands late enough.
+  await flushSessionEventLogWrites();
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 
@@ -124,9 +130,7 @@ test('#1533: bare close on an aborted authoring session writes no script', () =>
     'aborted',
     makeIosSession('aborted', {
       appBundleId: 'com.example.app',
-      // Post-`abortAuthoringOnSecondOpen`, then re-armed by the second open's own
-      // `--save-script` flag ingress.
-      recordSession: true,
+      // Post-`abortAuthoringOnSecondOpen`: terminal, and therefore not recording.
       scriptPublication: authoringPublication('aborted'),
       actions: [{ ts: 1, command: 'click', positionals: ['id="save"'], flags: {} }],
     }),
@@ -150,7 +154,6 @@ test('#1533: an ordinary armed authoring session still publishes on bare close',
     'armed',
     makeIosSession('armed', {
       appBundleId: 'com.example.app',
-      recordSession: true,
       scriptPublication: authoringPublication('armed'),
       actions: [{ ts: 1, command: 'click', positionals: ['id="save"'], flags: {} }],
     }),

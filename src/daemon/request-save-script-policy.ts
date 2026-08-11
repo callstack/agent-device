@@ -22,7 +22,7 @@ const UNSUPPORTED_SAVE_SCRIPT_HINT =
 /**
  * #1478 (P4-pre): `flags.saveScript` arms session-script publication the moment
  * a successful handler records the request's action (`recordActionEntry` sets
- * `recordSession` and the target path), so ANY recordable command that reaches
+ * the authoring lifecycle and the target path), so ANY recordable command that reaches
  * a handler with the raw flag set can arm publication and later write a `.ad`
  * artifact — `record stop` writes one immediately through record-only cleanup,
  * `trace` and the interaction commands publish later on close.

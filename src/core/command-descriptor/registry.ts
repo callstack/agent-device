@@ -15,8 +15,10 @@ import type { PostActionObservationSupport } from './post-action-observation.ts'
 import {
   appLogRuntimePlanUses,
   assertCommandPlatformExecution,
+  assertRecordRuntimeExecution,
   inventoryUse,
   networkDumpUse,
+  screenRecordingRuntimePlanUses,
 } from '@agent-device/contracts/platform';
 import type {
   CommandCatalogGroup,
@@ -877,7 +879,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
       allowInvalidRecording: true,
       allowSessionlessDefaultDevice: isRecordingStartRequest,
     },
-    capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_NONE },
+    platformExecution: { kind: 'device-runtime', uses: screenRecordingRuntimePlanUses },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
   },
@@ -1371,6 +1373,7 @@ export const commandDescriptors = RAW_COMMAND_DESCRIPTORS.map((descriptor) => {
       ? descriptor.platformExecution
       : ({ kind: 'legacy' } as const);
   assertCommandPlatformExecution(platformExecution);
+  if (descriptor.name === 'record') assertRecordRuntimeExecution(platformExecution);
   if (!ownerFilesEnabled) {
     return {
       ...descriptor,
