@@ -46,6 +46,7 @@ import type { FlagKey } from './commands/cli-grammar/flag-types.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import { INTERNAL_COMMANDS, isKnownCliCommandName } from './command-catalog.ts';
+import { sendInjectedDaemonRequest } from './cli/injected-daemon-dispatch.ts';
 
 type CliDeps = {
   sendToDaemon: typeof sendToDaemon;
@@ -342,9 +343,10 @@ async function runReactDevtoolsCli(ctx: CliRunContext, deps: CliDeps): Promise<n
     cwd: process.cwd(),
     env: process.env,
     configureDirectPortReverse: async () => {
-      const response = await deps.sendToDaemon(
-        {
-          command: INTERNAL_COMMANDS.runtime,
+      const response = await sendInjectedDaemonRequest({
+        route: 'react-devtools',
+        command: INTERNAL_COMMANDS.runtime,
+        request: {
           positionals: ['port-reverse'],
           flags: {
             ...directRequestFlags,
@@ -355,8 +357,9 @@ async function runReactDevtoolsCli(ctx: CliRunContext, deps: CliDeps): Promise<n
           },
           session: ctx.effectiveFlags.session ?? ctx.sessionName,
         },
-        { authToken: daemonAuthToken },
-      );
+        transport: deps.sendToDaemon,
+        transportOptions: { authToken: daemonAuthToken },
+      });
       if (!response.ok) throwDaemonError(response.error);
     },
   });

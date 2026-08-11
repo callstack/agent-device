@@ -93,6 +93,19 @@ export type DescriptorSessionRouteCommandName =
       : never
     : never;
 
+/**
+ * The literal union of every command the daemon routes. A command that never reaches a
+ * daemon route cannot be the target of a request, so this is the type a caller building
+ * one must name — an unregistered or CLI-only target is a compile error rather than a
+ * string the receiver rejects at runtime.
+ */
+export type DescriptorDaemonRouteCommandName =
+  Extract<(typeof commandDescriptors)[number], { daemon: object }> extends infer Descriptor
+    ? Descriptor extends { name: infer Name extends string }
+      ? Name
+      : never
+    : never;
+
 // ---------------------------------------------------------------------------
 // Daemon request-policy trait bundles — copied VERBATIM from
 // src/daemon/daemon-command-registry.ts (DAEMON_COMMAND_DESCRIPTORS).
