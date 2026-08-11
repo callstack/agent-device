@@ -12,8 +12,8 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
 import { audit } from './audit.ts';
-import { PATH_SAMPLES, UNROUTED } from './declarations.ts';
-import { covered, loadModel, type Lane, type Model } from './model.ts';
+import { UNROUTED } from './declarations.ts';
+import { categories, covered, loadModel, type Lane, type Model } from './model.ts';
 import { CHECK_CATALOG } from '../check-affected/checks.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
@@ -94,19 +94,24 @@ test('per-unit coverage catches a lane deletion that whole-check ownership would
 });
 
 test('a path filter that excludes a category fails, though the check still runs somewhere', () => {
+  // Take the category's path from the derivation rather than naming a file, so the
+  // case keeps exercising the real classification as the tree changes.
+  const category = categories(base).find((entry) => entry.rule === 'own:daemon-wire-compat');
+  assert.ok(category, 'the wire ledger must still be a category');
   const model = mutate((m) => ({
     lanes: mapLane(
       m,
       (lane) => lane.workflow === 'ci.yml',
-      (lane) => ({ ...lane, pathsIgnore: [...lane.pathsIgnore, 'test/wire-compat/**'] }),
+      (lane) => ({ ...lane, pathsIgnore: [...lane.pathsIgnore, category.path] }),
     ),
   }));
   const found = messages(model);
   assert.ok(
     found.every((message) => !/is not run by any/.test(message)),
-    'G2 stays green',
+    'the checks still run somewhere — only this path stops reaching them',
   );
-  assert.ok(found.some((message) => /test\/wire-compat\/surface\.ts/.test(message)));
+  assert.ok(found.some((message) => message.includes(category.path)));
+  assert.ok(found.some((message) => /selects "daemon-wire-compat"/.test(message)));
 });
 
 test('running a registered gate script outside the runner fails as a bypass', () => {
@@ -195,10 +200,15 @@ test('a Vitest project no check runs is reported, and so is a suite script', () 
   );
 });
 
-test('every category sample is a tracked file that still classifies', () => {
-  for (const sample of PATH_SAMPLES) {
-    assert.ok(tracked.includes(sample.path), `${sample.path} (${sample.label}) must be tracked`);
+test('categories are derived from the tracked tree, so no sample can be fictional', () => {
+  const found = categories(base);
+  assert.ok(found.length >= 12, `expected the selector's real categories, got ${found.length}`);
+  for (const category of found) {
+    assert.ok(tracked.includes(category.path), `${category.path} must be a tracked file`);
+    assert.ok(category.checks.length > 0, `${category.rule} must select at least one check`);
   }
-  const fictional = mutate(() => ({ trackedFiles: new Set<string>() }));
-  assert.ok(messages(fictional).some((message) => /is not tracked in git/.test(message)));
+  // The #1420 category in particular has to be present, since ci.yml ignores website/**.
+  const docs = found.find((category) => category.rule === 'own:command-docs');
+  assert.equal(docs?.path, 'website/docs/docs/commands.md');
+  assert.deepEqual(docs?.checks, ['command-docs']);
 });

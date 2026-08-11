@@ -12,7 +12,6 @@ const HEADINGS: Readonly<Record<string, string>> = {
   owned: 'Registered checks no lane runs',
   bypass: 'Project code run outside `pnpm gate`',
   'path-coverage': 'Paths whose selected checks no triggered lane runs',
-  samples: 'Category samples that no longer hold',
   inert: 'Declarations that no longer apply',
   registered: 'Suites and projects no registered check covers',
 };

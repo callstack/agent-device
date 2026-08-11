@@ -68,6 +68,23 @@ const step = (workflow: string, name: string, reason: string): Unrouted => ({
   reason,
 });
 
+// The device lanes drive the built CLI against a real simulator, emulator or attached
+// device. There is no package script behind these: the flags (`--udid`, `--serial`,
+// `--artifacts-dir`) come from the lane's own runtime state. One shared reason rather
+// than eight copies of it — what differs between them is only which lane and step.
+const DEVICE_REASON = 'drives the built CLI against live hardware';
+
+const DEVICE_STEPS: readonly (readonly [workflow: string, step: string])[] = [
+  ['android.yml', 'Run Android smoke checks'],
+  ['ios.yml', 'Preflight iOS runner through public CLI'],
+  ['ios.yml', 'Run iOS Settings replay smoke test'],
+  ['ios.yml', 'Run iOS physical device smoke replay'],
+  ['perf-nightly.yml', 'Preflight iOS runner through public CLI'],
+  ['replays-nightly.yml', 'Run Android full emulator suite'],
+  ['replays-nightly.yml', 'Preflight iOS runner through public CLI'],
+  ['replays-nightly.yml', 'Prove selector drag reaches its destination on iOS'],
+];
+
 export const UNROUTED: readonly Unrouted[] = [
   script('clean:daemon', 'stops a stray daemon between device runs; asserts nothing'),
   script('test-app:install', "installs the Expo fixture app's own dependency graph"),
@@ -78,85 +95,5 @@ export const UNROUTED: readonly Unrouted[] = [
   script('size', 'measures and comments bundle size; the report is advisory'),
   script('build', 'runs at the PR base commit, where `pnpm gate` need not exist yet', 'size.yml'),
 
-  // The device lanes drive the built CLI against a real simulator/emulator. There is
-  // no package script behind these — the flags (`--udid`, `--serial`, `--artifacts-dir`)
-  // are resolved from the lane's own runtime state.
-  step('android.yml', 'Run Android smoke checks', 'drives the CLI against the booted emulator'),
-  step(
-    'ios.yml',
-    'Preflight iOS runner through public CLI',
-    'prepares the runner on the booted simulator',
-  ),
-  step(
-    'ios.yml',
-    'Run iOS Settings replay smoke test',
-    'drives the CLI against the booted simulator',
-  ),
-  step(
-    'ios.yml',
-    'Run iOS physical device smoke replay',
-    'drives the CLI against the attached device',
-  ),
-  step(
-    'perf-nightly.yml',
-    'Preflight iOS runner through public CLI',
-    'prepares the runner on the booted simulator',
-  ),
-  step(
-    'replays-nightly.yml',
-    'Run Android full emulator suite',
-    'drives the CLI against the booted emulator',
-  ),
-  step(
-    'replays-nightly.yml',
-    'Preflight iOS runner through public CLI',
-    'prepares the runner on the booted simulator',
-  ),
-  step(
-    'replays-nightly.yml',
-    'Prove selector drag reaches its destination on iOS',
-    'drives the CLI against the booted simulator',
-  ),
-];
-
-/** A representative changed path per selector category, checked for tracked-ness. */
-export const PATH_SAMPLES: readonly {
-  readonly label: string;
-  readonly path: string;
-  readonly packageEntryFiles?: readonly string[];
-}[] = [
-  { label: 'production source', path: 'src/commands/batch/index.ts' },
-  { label: 'platform source', path: 'src/platforms/android/adb.ts' },
-  { label: 'workspace package source', path: 'packages/kernel/src/errors.ts' },
-  { label: 'platform package source', path: 'packages/platform-android/src/index.ts' },
-  { label: 'node integration test', path: 'test/integration/smoke-cli.test.ts' },
-  {
-    label: 'Swift runner source',
-    path: 'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTapPointPolicy.swift',
-  },
-  {
-    label: 'Android helper source',
-    path: 'android/snapshot-helper/src/main/java/com/callstack/agentdevice/snapshothelper/AccessibilityTreeCapture.java',
-  },
-  {
-    label: 'macOS helper source',
-    path: 'apple/macos-helper/Sources/AgentDeviceMacOSHelper/AudioProbe.swift',
-  },
-  { label: 'MCP registry metadata', path: 'server.json' },
-  { label: 'Expo test app', path: 'examples/test-app/app/(tabs)/audio.tsx' },
-  {
-    label: 'replay-compat corpus',
-    path: 'test/replay-compat/scripts/docs/context-header-conflicting-platform.v0.15.1.ad',
-  },
-  { label: 'replay-compat fixture', path: 'test/replay-compat/corpus.test.ts' },
-  { label: 'daemon wire ledger', path: 'test/wire-compat/surface.ts' },
-  // #1420: ci.yml ignores website/**, so the command-reference gate has to be owned
-  // by a lane that docs changes actually start. Now that `command-docs` is a real
-  // check this is an ordinary category rather than a special case in the checker.
-  { label: 'command reference docs', path: 'website/docs/docs/commands.md' },
-  {
-    label: 'published package entry',
-    path: 'src/sdk/index.ts',
-    packageEntryFiles: ['src/sdk/index.ts'],
-  },
+  ...DEVICE_STEPS.map(([workflow, name]) => step(workflow, name, DEVICE_REASON)),
 ];

@@ -3,13 +3,13 @@
 // All of them are phrased against one primitive — `covered(check, path)` from
 // model.ts — so there is no per-guarantee machinery to keep honest. What used to
 // be six subsystems (shell-command parsing, terminal resolution, catalog wiring,
-// path categories, selector-rule extraction, waiver provenance) is the eight
+// path categories, selector-rule extraction, waiver provenance) is the handful of
 // functions below, because CI can only reach a gate through `pnpm gate <id>`.
 
 import { CHECK_CATALOG } from '../check-affected/checks.ts';
-import { selectChecks } from '../check-affected/model.ts';
-import { PATH_SAMPLES, UNROUTED, type Unrouted } from './declarations.ts';
+import { UNROUTED, type Unrouted } from './declarations.ts';
 import {
+  categories,
   checkUnits,
   commandSegments,
   commandUnits,
@@ -141,61 +141,30 @@ function bypass(model: Model, declared: readonly Unrouted[]): Failure[] {
 }
 
 // 4. Per-path coverage (#1420's class): every check a real selector run activates
-//    for a sample path must be run by a lane that a PR touching only that path
-//    actually starts. G2 can stay green while this fails — that is the point.
+//    for a category's path must be run by a lane that a PR touching only that path
+//    actually starts. Assertion 1 can stay green while this fails — that is the point.
+//
+//    The categories are derived (model.ts), so there is no sample list to go stale and
+//    no way to assert about a path that does not exist.
 function pathCoverage(model: Model): Failure[] {
-  const failures: Failure[] = [];
-  for (const sample of PATH_SAMPLES) {
-    const plan = selectChecks({
-      changedFiles: [sample.path],
-      ...(sample.packageEntryFiles ? { packageEntryFiles: sample.packageEntryFiles } : {}),
-    });
-    // A fail-open sample would demand every check reach every path, which is not
-    // the claim; `samples` below asserts each one still classifies.
-    if (plan.failOpen) continue;
-    for (const id of plan.checks) {
+  return categories(model).flatMap((category) =>
+    category.checks.flatMap((id) => {
       const spec = CHECK_CATALOG.find((entry) => entry.id === id);
-      if (!spec) continue;
-      const result = covered(spec, sample.path, model);
-      if (result.covered) continue;
-      failures.push(
+      if (!spec) return [];
+      const result = covered(spec, category.path, model);
+      if (result.covered) return [];
+      return [
         fail(
           'path-coverage',
-          `a PR touching only ${sample.path} (${sample.label}) selects "${id}", but no lane ` +
-            `that the change starts runs ${result.missing.join(', ')}.`,
-        ),
-      );
-    }
-  }
-  return failures;
-}
-
-// 5. Samples are real files. A fictional path resolves by prefix and reads green
-//    while asserting about a change no PR can make.
-function samples(model: Model): Failure[] {
-  return PATH_SAMPLES.flatMap((sample) => {
-    if (!model.trackedFiles.has(sample.path)) {
-      return [
-        fail('samples', `sample path ${sample.path} (${sample.label}) is not tracked in git.`),
-      ];
-    }
-    const plan = selectChecks({
-      changedFiles: [sample.path],
-      ...(sample.packageEntryFiles ? { packageEntryFiles: sample.packageEntryFiles } : {}),
-    });
-    if (plan.failOpen) {
-      return [
-        fail(
-          'samples',
-          `sample path ${sample.path} (${sample.label}) now fails open; pick a classifying path.`,
+          `a PR touching only ${category.path} (rule ${category.rule}) selects "${id}", but no ` +
+            `lane that the change starts runs ${result.missing.join(', ')}.`,
         ),
       ];
-    }
-    return [];
-  });
+    }),
+  );
 }
 
-// 6. No inert declaration. Every entry must still describe something the tree does,
+// 5. No inert declaration. Every entry must still describe something the tree does,
 //    and an opaque-runner declaration must still change the audit — so deleting the
 //    step a declaration covers is loud rather than silent.
 function inertStep(
@@ -273,7 +242,7 @@ function attestedUnits(model: Model): Set<string> {
   );
 }
 
-// 7. Every suite belongs to a check. A script that runs a Vitest project or a
+// 6. Every suite belongs to a check. A script that runs a Vitest project or a
 //    `node --test` file, and is reachable from no registered check, is a suite
 //    nobody owns — the hole the old suite-universe naming convention left open.
 function unregisteredSuites(model: Model): Failure[] {
@@ -298,7 +267,7 @@ function unregisteredSuites(model: Model): Failure[] {
   });
 }
 
-// 8. Every Vitest project is somebody's suite. A project added to the config with
+// 7. Every Vitest project is somebody's suite. A project added to the config with
 //    no lane running it is dead configuration that reads as coverage.
 function orphanProjects(model: Model): Failure[] {
   const owned = attestedUnits(model);
@@ -312,7 +281,6 @@ export function audit(model: Model, declared: readonly Unrouted[] = UNROUTED): F
     ...unowned(model),
     ...bypass(model, declared),
     ...pathCoverage(model),
-    ...samples(model),
     ...inert(model, declared),
     ...unregisteredSuites(model),
     ...orphanProjects(model),

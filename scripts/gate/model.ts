@@ -1,13 +1,15 @@
 // The gate manifest's model: what each registered check actually runs, and which
 // CI lanes run it.
 //
-// Two derivations, both off real sources, and deliberately no more than that:
+// Three derivations, all off real sources, and deliberately no more than that:
 //
 //   units(script)  — what a package.json script executes, as Vitest projects and
 //                    `node --test` files rather than script names, so a lane that
 //                    runs the whole suite covers a lane that runs part of it.
 //   lanes()        — one entry per workflow job, carrying the CheckIds it invokes
 //                    through `pnpm gate` and the path filter of its workflow.
+//   categories()   — one representative changed path per selector rule, found by
+//                    running the real selector over the tracked tree.
 //
 // Lane→check resolution needs no shell interpretation at all: CI may only reach a
 // gate through `pnpm gate <id>` (audit.ts enforces it), so the mapping is a token
@@ -19,7 +21,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parse } from 'yaml';
 import { CHECK_CATALOG, type CheckSpec } from '../check-affected/checks.ts';
-import type { CheckId } from '../check-affected/model.ts';
+import { selectChecks, type CheckId } from '../check-affected/model.ts';
 import { OPAQUE_RUNNERS } from './declarations.ts';
 
 /**
@@ -59,6 +61,8 @@ export type Model = {
   readonly vitestProjects: readonly string[];
   readonly lanes: readonly Lane[];
   readonly trackedFiles: ReadonlySet<string>;
+  /** Source files behind package.json `exports`, the way `check:affected` supplies them. */
+  readonly packageEntryFiles: readonly string[];
   /** Threaded rather than imported so the audit can re-run with a declaration removed. */
   readonly opaque: Readonly<Record<string, readonly string[]>>;
 };
@@ -413,6 +417,37 @@ export function covered(
   };
 }
 
+export type Category = {
+  readonly rule: string;
+  readonly path: string;
+  readonly checks: readonly CheckId[];
+};
+
+/**
+ * One representative changed path per selector category, discovered by running the
+ * REAL selector across the tracked tree — not listed by hand.
+ *
+ * The hand-written list this replaces had eight entries naming files that did not
+ * exist: the selector classifies by prefix, so a fictional path resolves and the
+ * assertion reads green while describing a change no PR can make. Derivation makes
+ * that unrepresentable, and it needs no upkeep when a rule is added.
+ *
+ * A category is a `rule` the selector actually emits somewhere in the tree, so a rule
+ * whose paths do not exist yet is absent — correctly, since no PR can exercise it
+ * until such a file is added, at which point it becomes a category and is checked.
+ */
+export function categories(model: Model): Category[] {
+  const found = new Map<string, Category>();
+  for (const path of [...model.trackedFiles].sort()) {
+    const plan = selectChecks({ changedFiles: [path], packageEntryFiles: model.packageEntryFiles });
+    if (plan.failOpen) continue;
+    for (const { rule } of plan.reasons) {
+      if (!found.has(rule)) found.set(rule, { rule, path, checks: plan.checks });
+    }
+  }
+  return [...found.values()];
+}
+
 /**
  * The GitHub jobs that run each check, derived rather than declared. `check:affected`
  * prints these as the authority for skipping a check locally, so deriving them is
@@ -429,10 +464,15 @@ export function loadModel(
 ): Model {
   const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as {
     scripts: Record<string, string>;
+    exports?: Record<string, { import?: string }>;
   };
   const config = fs.readFileSync(path.join(repoRoot, 'vitest.config.ts'), 'utf8');
   return {
     scripts: pkg.scripts,
+    packageEntryFiles: Object.values(pkg.exports ?? {})
+      .map((entry) => entry.import)
+      .filter((target): target is string => typeof target === 'string')
+      .map((target) => target.replace(/^\.\/dist\//, '').replace(/\.js$/, '.ts')),
     vitestProjects: [...config.matchAll(/name:\s*'([^']+)'/g)].map((match) => match[1] as string),
     lanes: loadLanes(path.join(repoRoot, '.github/workflows'), pkg.scripts),
     trackedFiles: new Set(trackedFiles),
