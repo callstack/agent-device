@@ -322,7 +322,7 @@ function createAdmissionBinding(
   options: AdmissionRuntimeOptions,
 ): DeviceBinding<PlatformRuntimeOperations> {
   const unavailable = unavailableOperationFact(options.providerMode);
-  const appsFact = options.appsAvailable ? { available: true as const } : unavailable;
+  const appsFact = appsOperationFact(options);
   return {
     device,
     owner:
@@ -372,6 +372,12 @@ function unavailableOperationFact(providerMode: RuntimeProviderMode) {
         ? ('unsupported-provider-mode' as const)
         : ('owner-capability-missing' as const),
   };
+}
+
+function appsOperationFact(options: AdmissionRuntimeOptions) {
+  return options.appsAvailable
+    ? ({ available: true } as const)
+    : unavailableOperationFact(options.providerMode);
 }
 
 const inspectAndroidAppLog: PlatformRuntimeOperations['appLogInspect'] = async () => ({
