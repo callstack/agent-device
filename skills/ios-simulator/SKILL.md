@@ -13,35 +13,18 @@ npm install -g agent-device@latest
 
 Treat installation and upgrades as user-owned setup steps. Do not run that command autonomously or substitute a mutable `npx -y agent-device@latest` invocation.
 
-Before simulator work, confirm the trusted CLI is available:
-
-```bash
-agent-device --version
-```
-
-If that fails, stop and ask the user to install `agent-device` or expose their existing installation on `PATH`.
-
-Read the installed CLI's version-matched routine QA workflow before planning commands:
-
-```bash
-agent-device help manual-qa
-```
-
-Target iOS explicitly when opening an app or bundle id:
+For a normal app-driving task, start immediately. Do not probe first with `--help`, `--version`, `devices`, `appstate`, `snapshot`, or `screenshot`. Target iOS explicitly when opening an app or bundle id:
 
 ```bash
 agent-device open <app-or-bundle-id> --platform ios --foreground
 ```
 
-Also read the validation workflow when the task covers a code change or regression:
+Follow the initial interactive snapshot and corrective error hints. If the shell reports that `agent-device` is unavailable, stop and ask the user to install it or expose their existing installation on `PATH`.
+
+Only when the task is specialized or a command shape is unclear, read the relevant version-matched help topic:
 
 ```bash
-agent-device help validate
-```
-
-Read only the relevant follow-up topic for specialized work; the installed help owns command shapes and platform limits:
-
-```bash
+agent-device help validate        # engineering validation and build freshness
 agent-device help debugging       # screenshots, logs, traces, video, and failures
 agent-device help react-native    # React Native and Expo runtime guidance
 agent-device help react-devtools  # component tree, props/state/hooks, and renders
