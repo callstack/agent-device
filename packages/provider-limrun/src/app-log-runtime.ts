@@ -1,4 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { AppsFilter } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { parseLimrunDeviceId } from './device.ts';
 import type {
@@ -37,6 +38,11 @@ export type LimrunPlatformRuntimeOwnerOptions = Readonly<{
     descriptor: LimrunAppLogDescriptor,
     signal?: AbortSignal,
   ): Promise<LimrunAppLogReconnectOutcome>;
+  listApps(
+    device: DeviceInfo,
+    filter: AppsFilter,
+    signal: AbortSignal,
+  ): Promise<readonly { id: string; name: string }[]>;
 }>;
 
 const available = Object.freeze({ available: true } as const);
@@ -183,6 +189,7 @@ function bindLimrunAppLogs(
     },
     ensureReady: async () => ({ ...device, booted: true }),
     bootTarget: async () => ({ ...device, booted: true }),
+    listApps: async (input) => await options.listApps(input.device, input.filter, signal),
   } satisfies DeviceBinding<PlatformRuntimeOperations>['operations'];
   return Object.freeze({
     device,
@@ -234,6 +241,7 @@ function facts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> {
       ensureReady: available,
       bootTarget: available,
       bootTargetHeadless: headlessUnavailable,
+      listApps: available,
     },
   });
 }

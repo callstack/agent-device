@@ -413,6 +413,7 @@ function createRuntimeHarness(options: { inspectAvailable?: boolean } = {}) {
           ensureReady: { available: true as const },
           bootTarget: { available: true as const },
           bootTargetHeadless: unavailableRecording,
+          listApps: unavailableRecording,
         },
       },
       operations,

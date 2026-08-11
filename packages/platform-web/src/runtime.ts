@@ -25,6 +25,11 @@ const readinessUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
 } as const);
+const appsUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'apps is not supported on web targets.',
+} as const);
 
 export function createWebPlatformRuntime(host: PlatformRuntimeHost): PlatformRuntimeOwner {
   const inspectFacts = async (device: DeviceInfo) => {
@@ -131,6 +136,7 @@ function webRuntimeFacts(
       ensureReady: readinessUnavailable,
       bootTarget: readinessUnavailable,
       bootTargetHeadless: readinessUnavailable,
+      listApps: appsUnavailable,
     },
   });
 }

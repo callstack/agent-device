@@ -329,6 +329,7 @@ function makeGateway(options: { inspectAvailable?: boolean } = {}) {
     ensureReady: vi.fn(async () => device('ready')),
     bootTarget: vi.fn(async () => device('booted')),
     bootTargetHeadless: vi.fn(async () => device('ready-headless')),
+    listApps: vi.fn(async () => []),
   };
   const facts = {
     device: {
@@ -352,6 +353,7 @@ function makeGateway(options: { inspectAvailable?: boolean } = {}) {
       ensureReady: { available: true } as const,
       bootTarget: { available: true } as const,
       bootTargetHeadless: { available: true } as const,
+      listApps: { available: true } as const,
     },
   };
   const bind = vi.fn(

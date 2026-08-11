@@ -64,6 +64,7 @@ test('reconciles the dead owner session resources through their exact runtime ow
         ensureReady: unavailable,
         bootTarget: unavailable,
         bootTargetHeadless: unavailable,
+        listApps: unavailable,
       },
     },
     operations: {

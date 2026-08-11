@@ -187,7 +187,6 @@ test('core commands support iOS simulator, iOS device, and Android', () => {
   assertCommandSupport(
     [
       'app-switcher',
-      'apps',
       'back',
       'boot',
       'click',
@@ -255,7 +254,7 @@ test('viewport resizing is admitted only on web, where a backend exists', () => 
 test('capabilities reject CoreDevice-only commands for XCTest-backed devices', () => {
   // Runtime-backed logs and record admission are proven from exact device facts in
   // their handler/runtime tests, never through this legacy matrix projection.
-  const coreDeviceOnlyCommands = ['apps', 'install', 'install-from-source', 'perf', 'reinstall'];
+  const coreDeviceOnlyCommands = ['install', 'install-from-source', 'perf', 'reinstall'];
   assertCommandSupport(coreDeviceOnlyCommands, [
     { device: iosDevice, expected: true, label: 'on CoreDevice' },
     { device: xctestIosDevice, expected: false, label: 'on XCTest backend' },
@@ -273,7 +272,6 @@ test('macOS supports the Apple runner interaction core but excludes mobile-only 
   assertCommandSupport(
     [
       'alert',
-      'apps',
       'back',
       'click',
       'close',
@@ -309,17 +307,7 @@ test('macOS supports the Apple runner interaction core but excludes mobile-only 
 
 test('tvOS follows iOS capability matrix by device kind', () => {
   assertCommandSupport(
-    [
-      'open',
-      'close',
-      'apps',
-      'screenshot',
-      'trigger-app-event',
-      'logs',
-      'reinstall',
-      'boot',
-      'shutdown',
-    ],
+    ['open', 'close', 'screenshot', 'trigger-app-event', 'logs', 'reinstall', 'boot', 'shutdown'],
     [{ device: tvOsSimulator, expected: true, label: 'on tvOS' }],
   );
   assertCommandSupport(
@@ -386,7 +374,6 @@ test('Linux supports desktop interaction commands and blocks mobile/unsupported 
     [
       'alert',
       'app-switcher',
-      'apps',
       'install',
       'install-from-source',
       'keyboard',
@@ -428,7 +415,6 @@ test('web supports only the initial browser interaction slice', () => {
     [
       'alert',
       'app-switcher',
-      'apps',
       'back',
       'clipboard',
       'diff',

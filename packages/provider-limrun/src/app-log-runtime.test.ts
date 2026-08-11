@@ -28,6 +28,7 @@ test('rejects a cross-platform durable descriptor before provider reconnection',
     ownsDevice: () => true,
     openCurrent: async () => undefined,
     reconnect,
+    listApps: async () => [],
   });
   const binding = await owner.bind({
     device,
@@ -69,6 +70,7 @@ test('rejects cross-session paths before reconnecting or opening a provider read
     ownsDevice: () => true,
     openCurrent,
     reconnect,
+    listApps: async () => [],
   });
   const binding = await owner.bind({ device, intent: { kind: 'ordinary' }, scope });
   const envelope = createLimrunAppLogEnvelope({
@@ -129,6 +131,7 @@ test.each([
     ownsDevice: () => true,
     openCurrent: async () => undefined,
     reconnect,
+    listApps: async () => [],
   });
 
   await expect(
@@ -166,6 +169,7 @@ test('serves provider-owned network from the canonical session app log without l
     ownsDevice: () => true,
     openCurrent: async () => undefined,
     reconnect: async () => ({ status: 'missing' }),
+    listApps: async () => [],
   });
   const binding = await owner.bind({ device, intent: { kind: 'ordinary' }, scope });
   await expect(
@@ -204,6 +208,7 @@ test.each([
     ownsDevice: () => true,
     openCurrent: async () => undefined,
     reconnect: async () => ({ status: 'missing' }),
+    listApps: async () => [],
   });
   const binding = await owner.bind({ device: runtimeDevice, intent: { kind: 'ordinary' }, scope });
   expect(binding.facts.device.providerMode).toBe('provider-runtime');
@@ -211,6 +216,10 @@ test.each([
   expect(binding.facts.operations.ensureReady).toEqual({ available: true });
   expect(binding.facts.operations.bootTarget).toEqual({ available: true });
   expect(binding.facts.operations.bootTargetHeadless).toMatchObject({ available: false });
+  expect(binding.facts.operations.listApps).toEqual({ available: true });
+  await expect(
+    binding.operations.listApps?.({ device: runtimeDevice, filter: 'all' }),
+  ).resolves.toEqual([]);
   await expect(binding.operations.ensureReady?.({})).resolves.toMatchObject({
     id: runtimeDevice.id,
     booted: true,
@@ -269,6 +278,11 @@ function unusedHost(): PlatformRuntimeHost {
       readProcessMarker: async () => ({ status: 'missing' }),
     },
     networkTransports: { resolve: async () => ({ mode: 'local' }) },
+    appInventory: {
+      apple: { listApps: async () => [] },
+      android: { listApps: async () => [] },
+      harmonyos: { listApps: async () => [] },
+    },
     deviceReadiness: {
       applePhysical: { ensureConnected: async () => {} },
       appleAutomation: { keepHot: () => {} },

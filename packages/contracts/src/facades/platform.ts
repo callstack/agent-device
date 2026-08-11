@@ -41,9 +41,9 @@ export {
   narrowDeviceBinding,
   providerRuntimeOwner,
   runtimeOwnerKey,
-  runtimeUse,
   sameRuntimeOwner,
 } from '../platform-runtime.ts';
+export { runtimeUse } from '../platform-runtime.ts';
 export type {
   BoundDeviceRuntime,
   DeviceBinding,
@@ -170,6 +170,13 @@ export type {
   NetworkRuntimePlanInput,
 } from '../network-runtime-plan.ts';
 export { defineUse } from '../platform-runtime-operations.ts';
+export type {
+  AppInventoryRuntimeHost,
+  AppInventoryRuntimeOperations,
+  InstalledAppInfo,
+  ListAppsInput,
+} from '../app-inventory-runtime.ts';
+export { appsRuntimeUse, defineUse } from '../platform-runtime-operations.ts';
 export type {
   PlatformRuntimeHost,
   PlatformRuntimeModule,

@@ -41,7 +41,6 @@ const HARMONYOS_SUPPORTED_COMMANDS = new Set<string>([
   'perf',
   'close',
   'back',
-  'apps',
   'appstate',
   'app-switcher',
   'click',

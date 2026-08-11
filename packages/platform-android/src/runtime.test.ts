@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createAndroidPlatformRuntime } from './runtime.ts';
@@ -16,6 +16,7 @@ test.each([
   ['emulator', device],
   ['device', { ...device, kind: 'device' as const }],
 ])('classifies the Android %s runtime denominator', async (_name, runtimeDevice) => {
+  const listApps = vi.fn(async () => [{ id: 'com.example.app', name: 'Example' }]);
   const host = {
     commands: {
       which: async () => 'tool',
@@ -24,6 +25,11 @@ test.each([
     toolchains: { prepare: async () => {} },
     clock: { now: () => 1, sleep: async () => {} },
     processTransports: { resolve: async () => ({ mode: 'local' as const }) },
+    appInventory: {
+      apple: { listApps: async () => [] },
+      android: { listApps },
+      harmonyos: { listApps: async () => [] },
+    },
     deviceReadiness: {
       applePhysical: { ensureConnected: async () => {} },
       appleAutomation: { keepHot: () => {} },
@@ -60,6 +66,7 @@ test.each([
   const { facts } = binding;
   expect(facts.device.providerMode).toBe('local');
   expect(facts.operations.networkDump).toEqual({ available: true });
+  expect(facts.operations.listApps).toEqual({ available: true });
   expect(facts.operations.screenRecordingStart).toEqual({ available: true });
   expect(facts.operations.screenRecordingReattach).toEqual({ available: true });
   expect(facts.operations.screenRecordingCleanup).toEqual({ available: true });
@@ -71,6 +78,10 @@ test.each([
     id: runtimeDevice.id,
     booted: true,
   });
+  await expect(
+    binding.operations.listApps?.({ device: runtimeDevice, filter: 'all' }),
+  ).resolves.toEqual([{ id: 'com.example.app', name: 'Example' }]);
+  expect(listApps).toHaveBeenCalledWith(runtimeDevice, 'all', expect.any(AbortSignal));
 
   await expect(binding.operations.bootTarget?.({})).resolves.toMatchObject({
     id: runtimeDevice.id,

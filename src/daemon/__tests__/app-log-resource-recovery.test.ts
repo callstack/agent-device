@@ -352,6 +352,7 @@ function makeGateway(
           ensureReady: { available: true as const },
           bootTarget: { available: true as const },
           bootTargetHeadless: unavailableRecording,
+          listApps: unavailableRecording,
         },
       },
       operations,

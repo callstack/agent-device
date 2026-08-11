@@ -52,6 +52,7 @@ test('recovery cleans a recording through its exact runtime owner', async () => 
         ensureReady: unavailable,
         bootTarget: unavailable,
         bootTargetHeadless: unavailable,
+        listApps: unavailable,
       },
     },
     operations: {

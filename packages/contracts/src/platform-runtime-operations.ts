@@ -1,4 +1,8 @@
 import type { AppLogRuntimeHost, AppLogRuntimeOperations } from './app-log-runtime.ts';
+import type {
+  AppInventoryRuntimeHost,
+  AppInventoryRuntimeOperations,
+} from './app-inventory-runtime.ts';
 import type { NetworkRuntimeHost, NetworkRuntimeOperations } from './network-runtime.ts';
 import type { ScreenRecordingRuntimeHost } from './screen-recording-runtime-host.ts';
 import type { ScreenRecordingRuntimeOperations } from './screen-recording-runtime.ts';
@@ -14,6 +18,7 @@ import {
 } from './platform-runtime.ts';
 
 export type PlatformRuntimeOperations = AppLogRuntimeOperations &
+  AppInventoryRuntimeOperations &
   NetworkRuntimeOperations &
   ScreenRecordingRuntimeOperations &
   DeviceReadinessRuntimeOperations;
@@ -30,6 +35,7 @@ export const bootTargetUse = defineUse({ required: ['bootTarget'] });
 export const bootTargetHeadlessUse = defineUse({
   required: ['bootTargetHeadless'],
 });
+export const appsRuntimeUse = defineUse({ required: ['ensureReady', 'listApps'] });
 export const deviceBootRuntimeUses = Object.freeze([bootTargetUse, bootTargetHeadlessUse] as const);
 
 export type DeviceReadinessRuntimePlan =
@@ -67,6 +73,7 @@ export function resolveDeviceReadinessRuntimePlan(
 export type PlatformRuntimeHost = AppLogRuntimeHost &
   NetworkRuntimeHost &
   Readonly<{
+    appInventory: AppInventoryRuntimeHost;
     screenRecording: ScreenRecordingRuntimeHost;
     deviceReadiness: DeviceReadinessRuntimeHost;
   }>;

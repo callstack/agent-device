@@ -379,6 +379,19 @@ async function loadLimrunPlatformRuntime(
     openCurrent: async (device) => runtime.currentAppLogReader(device),
     reconnect: async (descriptor, signal) =>
       await runtime.reconnectAppLogReader(descriptor, signal),
+    listApps: async (device, filter, signal) => {
+      signal.throwIfAborted();
+      const session = runtime.getDeviceSession(device);
+      if (!session) {
+        throw new AppError('DEVICE_NOT_FOUND', 'Limrun app inventory session is unavailable', {
+          deviceId: device.id,
+        });
+      }
+      return (await session.listApps(filter)).map((app) => ({
+        id: app.id,
+        name: app.name ?? app.id,
+      }));
+    },
   });
 }
 

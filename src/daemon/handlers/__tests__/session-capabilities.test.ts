@@ -252,6 +252,7 @@ function createAdmissionBinding(
         ensureReady: unavailable,
         bootTarget: unavailable,
         bootTargetHeadless: unavailable,
+        listApps: unavailable,
       },
     },
     operations: {

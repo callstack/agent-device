@@ -101,7 +101,6 @@ const APPLE_UNSUPPORTED_HINT_BY_DEFAULT: Record<
   string,
   (device: DeviceInfo) => string | undefined
 > = {
-  [PUBLIC_COMMANDS.apps]: coreDeviceOnlyPhysicalOperationHint,
   [PUBLIC_COMMANDS.install]: coreDeviceOnlyPhysicalOperationHint,
   [PUBLIC_COMMANDS.reinstall]: coreDeviceOnlyPhysicalOperationHint,
   [PUBLIC_COMMANDS.installFromSource]: coreDeviceOnlyPhysicalOperationHint,

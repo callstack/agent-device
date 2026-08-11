@@ -57,6 +57,9 @@ test.each([
   const { facts } = binding;
   expect(facts.device.providerMode).toBe('local');
   expect(facts.operations.networkDump).toEqual({ available: true });
+  expect(facts.operations.listApps.available).toBe(
+    device.appleOs !== 'watchos' && device.iosPhysicalDeviceBackend !== 'xctest',
+  );
   for (const operation of ['appLogInspect', 'appLogDoctor', 'appLogStart'] as const) {
     const fact = facts.operations[operation];
     expect(fact.available).toBe(available);
@@ -153,4 +156,31 @@ test('macOS readiness is a no-op while boot remains unavailable', async () => {
   await expect(binding.operations.ensureReady?.({})).resolves.toMatchObject({ booted: true });
   expect(ensureConnected).not.toHaveBeenCalled();
   expect(binding.operations.bootTarget).toBeUndefined();
+});
+
+test('routes Apple app inventory through the injected host facet', async () => {
+  const host = platformRuntimeHostFixture();
+  const listApps = vi.fn(async () => [{ id: 'com.example.app', name: 'Example' }]);
+  const runtime = createApplePlatformRuntime({
+    ...host,
+    appInventory: {
+      ...host.appInventory,
+      apple: { listApps },
+    },
+  });
+  const device = appleDevice();
+  const binding = await runtime.bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+  });
+
+  await expect(binding.operations.listApps?.({ device, filter: 'all' })).resolves.toEqual([
+    { id: 'com.example.app', name: 'Example' },
+  ]);
+  expect(listApps).toHaveBeenCalledWith(device, 'all', expect.any(AbortSignal));
 });

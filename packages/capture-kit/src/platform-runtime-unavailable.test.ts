@@ -36,6 +36,7 @@ test('builds one complete combined unavailable owner without fake operations', a
     'bootTarget',
     'bootTargetHeadless',
     'ensureReady',
+    'listApps',
     'networkDump',
     'screenRecordingCleanup',
     'screenRecordingReattach',

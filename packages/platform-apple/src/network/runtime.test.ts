@@ -122,6 +122,11 @@ function host(options: {
       readProcessMarker: async () => ({ status: 'missing' }),
     },
     networkTransports: { resolve: async () => ({ mode: 'local' }) },
+    appInventory: {
+      apple: { listApps: async () => [] },
+      android: { listApps: async () => [] },
+      harmonyos: { listApps: async () => [] },
+    },
   };
 }
 
@@ -153,6 +158,11 @@ function unusedAppLogHost(): Omit<
       terminate: async () => 'already-missing',
     },
     processTransports: { resolve: async () => ({ mode: 'local' }) },
+    appInventory: {
+      apple: { listApps: async () => [] },
+      android: { listApps: async () => [] },
+      harmonyos: { listApps: async () => [] },
+    },
     clock: { now: () => 1, sleep: async () => {} },
     deviceReadiness: {
       applePhysical: { ensureConnected: async () => {} },

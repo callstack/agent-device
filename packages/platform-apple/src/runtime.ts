@@ -27,6 +27,24 @@ const headlessUnavailable = Object.freeze({
   hint: 'Headless boot is supported only for local Android emulators.',
 } as const);
 
+function appInventoryFacts(device: DeviceInfo) {
+  if (device.appleOs === 'watchos') {
+    return Object.freeze({
+      available: false,
+      reason: 'unsupported-platform-leaf' as const,
+      hint: 'watchOS app inventory is not supported.',
+    });
+  }
+  if (device.kind === 'device' && device.iosPhysicalDeviceBackend === 'xctest') {
+    return Object.freeze({
+      available: false,
+      reason: 'unsupported-device-backend' as const,
+      hint: 'App inventory is available only on CoreDevice-backed physical iOS devices.',
+    });
+  }
+  return available;
+}
+
 export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformRuntimeOwner {
   const appLogs = createAppleAppLogRuntime(host);
   const inspectFacts = async (device: DeviceInfo) => {
@@ -45,6 +63,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         : leafRecordingFacts;
     const readiness = device.appleOs === 'watchos' ? unavailable : available;
     const boot = isMacOs(device) || device.appleOs === 'watchos' ? unavailable : available;
+    const apps = appInventoryFacts(device);
     return Object.freeze({
       device: logs.device,
       operations: {
@@ -56,6 +75,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         ensureReady: readiness,
         bootTarget: boot,
         bootTargetHeadless: headlessUnavailable,
+        listApps: apps,
       },
     });
   };
@@ -93,6 +113,16 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
             ? {
                 bootTarget: async () =>
                   await ensureAppleReady(host, request.device, request.scope.signal),
+              }
+            : {}),
+          ...(facts.operations.listApps.available
+            ? {
+                listApps: async (input: { device: DeviceInfo; filter: 'all' | 'user-installed' }) =>
+                  await host.appInventory.apple.listApps(
+                    input.device,
+                    input.filter,
+                    request.scope.signal,
+                  ),
               }
             : {}),
         }),

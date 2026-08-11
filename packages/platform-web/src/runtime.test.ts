@@ -36,6 +36,7 @@ test('preserves a narrow web provider dump including empty successful entries', 
   expect(binding.facts.operations.ensureReady).toMatchObject({ available: false });
   expect(binding.facts.operations.bootTarget).toMatchObject({ available: false });
   expect(binding.facts.operations.bootTargetHeadless).toMatchObject({ available: false });
+  expect(binding.facts.operations.listApps).toMatchObject({ available: false });
 });
 
 test('keeps a web transport without dumpNetwork unavailable instead of throwing a stub', async () => {
@@ -162,6 +163,11 @@ function host(
       readProcessMarker: async () => ({ status: 'missing' }),
     },
     networkTransports: { resolve: async () => transport },
+    appInventory: {
+      apple: { listApps: async () => [] },
+      android: { listApps: async () => [] },
+      harmonyos: { listApps: async () => [] },
+    },
     deviceReadiness: {
       applePhysical: { ensureConnected: async () => {} },
       appleAutomation: { keepHot: () => {} },

@@ -169,6 +169,7 @@ function makeRecordingGateway(firstStartBlocked: Promise<void>) {
           ensureReady: unavailable,
           bootTarget: unavailable,
           bootTargetHeadless: unavailable,
+          listApps: unavailable,
         },
       },
       operations: {

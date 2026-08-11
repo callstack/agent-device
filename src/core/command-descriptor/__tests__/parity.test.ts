@@ -46,6 +46,7 @@ const UNROUTED_PUBLIC_COMMANDS = new Set<string>([PUBLIC_COMMANDS.installFromSou
 // exact runtime facts and therefore belong to the capability catalog without matrix rows.
 const NO_CAPABILITY_PUBLIC_COMMANDS = new Set<string>([
   PUBLIC_COMMANDS.appState,
+  PUBLIC_COMMANDS.apps,
   PUBLIC_COMMANDS.artifacts,
   PUBLIC_COMMANDS.batch,
   PUBLIC_COMMANDS.boot,

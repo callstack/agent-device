@@ -7,6 +7,7 @@ import type {
   EnsureReadyInput,
 } from '@agent-device/contracts/platform';
 import { localRuntimeOwner } from '@agent-device/contracts/platform';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createAndroidAppLogRuntime } from './logs/runtime.ts';
 import { dumpAndroidNetworkTraffic } from './network/runtime.ts';
 import { bindAndroidScreenRecordingRuntime } from './recording/runtime.ts';
@@ -35,6 +36,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         ensureReady: available,
         bootTarget: available,
         bootTargetHeadless: device.kind === 'emulator' ? available : headlessUnavailable,
+        listApps: available,
       },
     });
   };
@@ -85,6 +87,12 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
                   ),
               }
             : {}),
+          listApps: async (input: { device: DeviceInfo; filter: 'all' | 'user-installed' }) =>
+            await host.appInventory.android.listApps(
+              input.device,
+              input.filter,
+              request.scope.signal,
+            ),
         }),
         [Symbol.asyncDispose]: async () => await logs[Symbol.asyncDispose](),
       }) satisfies DeviceBinding<PlatformRuntimeOperations>;

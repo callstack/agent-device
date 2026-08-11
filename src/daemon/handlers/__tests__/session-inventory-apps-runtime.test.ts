@@ -1,5 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import type { DaemonRequest, DaemonResponse } from '../../types.ts';
+import type { DaemonRequest } from '../../types.ts';
 import { makeSession, makeSessionStore } from './session-test-harness.ts';
 import { handleSessionInventoryCommands } from '../session-inventory.ts';
 import {
@@ -13,32 +13,40 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../../request-runtime-binding.ts';
 
-const HARMONY_DEVICE = {
-  platform: 'harmonyos' as const,
-  id: 'harmony-1',
-  name: 'HarmonyOS test device',
+const MACOS_DEVICE = {
+  platform: 'apple' as const,
+  appleOs: 'macos' as const,
+  id: 'macos-1',
+  name: 'macOS test host',
   kind: 'device' as const,
-  target: 'mobile' as const,
+  target: 'desktop' as const,
   booted: true,
 };
-const available = { available: true } as const;
+
+const appsAvailable = { available: true } as const;
 const unavailable = { available: false, reason: 'owner-capability-missing' } as const;
 
 function runtimeFacts(): RuntimeFacts<PlatformRuntimeOperations> {
   return {
-    device: { family: 'harmonyos', kind: 'device', target: 'mobile', providerMode: 'local' },
+    device: {
+      family: 'apple',
+      appleOs: 'macos',
+      kind: 'device',
+      target: 'desktop',
+      providerMode: 'local',
+    },
     operations: {
       appLogInspect: unavailable,
       appLogDoctor: unavailable,
       appLogStart: unavailable,
       appLogReattach: unavailable,
       appLogCleanup: unavailable,
-      listApps: available,
+      listApps: appsAvailable,
       networkDump: unavailable,
       screenRecordingStart: unavailable,
       screenRecordingReattach: unavailable,
       screenRecordingCleanup: unavailable,
-      ensureReady: available,
+      ensureReady: appsAvailable,
       bootTarget: unavailable,
       bootTargetHeadless: unavailable,
     },
@@ -47,60 +55,56 @@ function runtimeFacts(): RuntimeFacts<PlatformRuntimeOperations> {
 
 const inspectFactsImpl: InspectDeviceRuntimeFacts = async () => runtimeFacts();
 const inspectFacts = vi.fn(inspectFactsImpl);
-const ensureReady = vi.fn(async () => HARMONY_DEVICE);
-const listAppsOperation = vi.fn(async () => [{ id: 'com.example.app', name: 'Example' }]);
+const ensureReady = vi.fn(async () => MACOS_DEVICE);
+const listApps = vi.fn(async () => [{ id: 'com.example.app', name: 'Example' }]);
 let bindCount = 0;
-const bindDeviceImpl: BindDeviceRuntime = async (device, use) =>
-  narrowDeviceBinding(
+const bindDevice: BindDeviceRuntime = async (device, use) => {
+  bindCount += 1;
+  return narrowDeviceBinding(
     {
       device,
-      owner: localRuntimeOwner('harmonyos'),
+      owner: localRuntimeOwner('apple'),
       facts: runtimeFacts(),
       operations: {
         ensureReady,
-        listApps: listAppsOperation,
+        listApps,
       },
       [Symbol.asyncDispose]: async () => {},
     },
     use,
   );
-const bindDevice: BindDeviceRuntime = async (device, use) => {
-  bindCount += 1;
-  return await bindDeviceImpl(device, use);
 };
 
 beforeEach(() => {
   inspectFacts.mockClear();
   ensureReady.mockClear();
-  listAppsOperation.mockClear();
+  listApps.mockClear();
   bindCount = 0;
 });
 
-async function listApps(appsFilter: 'all' | 'user-installed'): Promise<DaemonResponse | null> {
-  const sessionName = `harmony-apps-${appsFilter}`;
+test('macOS apps consumes generic readiness and app inventory through one runtime bind', async () => {
+  const sessionName = 'macos-apps';
   const sessionStore = makeSessionStore();
-  sessionStore.set(sessionName, makeSession(sessionName, HARMONY_DEVICE));
+  sessionStore.set(sessionName, makeSession(sessionName, MACOS_DEVICE));
   const req: DaemonRequest = {
     token: 'test-token',
     session: sessionName,
     command: 'apps',
     positionals: [],
-    flags: { appsFilter },
+    flags: { appsFilter: 'all' },
   };
-  return await handleSessionInventoryCommands({
+
+  const response = await handleSessionInventoryCommands({
     req,
     sessionName,
     sessionStore,
     inspectFacts,
     bindDevice,
   });
-}
 
-test('HarmonyOS apps consumes generic readiness and app inventory through one runtime bind', async () => {
-  const response = await listApps('all');
   expect(response).toEqual({ ok: true, data: { apps: ['Example (com.example.app)'] } });
   expect(inspectFacts).toHaveBeenCalledOnce();
   expect(bindCount).toBe(1);
   expect(ensureReady).toHaveBeenCalledOnce();
-  expect(listAppsOperation).toHaveBeenCalledOnce();
+  expect(listApps).toHaveBeenCalledOnce();
 });

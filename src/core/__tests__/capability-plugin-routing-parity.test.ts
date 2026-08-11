@@ -158,7 +158,6 @@ const HINT_REF: Record<string, (device: DeviceInfo) => string | undefined> = {
     device.platform === 'apple'
       ? 'viewport resizes web targets only (--platform web). Apple screen geometry is fixed by the selected simulator or device type — open a different simulator to test another screen size.'
       : undefined,
-  apps: coreDeviceOnlyPhysicalOperationHint,
   install: coreDeviceOnlyPhysicalOperationHint,
   reinstall: coreDeviceOnlyPhysicalOperationHint,
   'install-from-source': coreDeviceOnlyPhysicalOperationHint,
@@ -192,7 +191,6 @@ const HARMONYOS_SUPPORTED_COMMANDS_REF = new Set([
   'perf',
   'close',
   'back',
-  'apps',
   'appstate',
   'app-switcher',
   'click',
@@ -286,7 +284,6 @@ test('HarmonyOS advertises only the current HDC-backed command subset', () => {
 
   assert.deepEqual(availableCommands, [
     'app-switcher',
-    'apps',
     'appstate',
     'back',
     'click',

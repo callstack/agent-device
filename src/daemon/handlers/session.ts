@@ -307,7 +307,15 @@ const handleSessionInventoryCommandGroup: SessionCommandHandler = async ({
   sessionName,
   sessionStore,
   bindDevice,
-}) => await handleSessionInventoryCommands({ req, sessionName, sessionStore, bindDevice });
+  inspectFacts,
+}) =>
+  await handleSessionInventoryCommands({
+    req,
+    sessionName,
+    sessionStore,
+    bindDevice,
+    inspectFacts,
+  });
 
 const handleSessionStateCommandGroup: SessionCommandHandler = async ({
   req,
@@ -463,8 +471,22 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
   devices: handleSessionInventoryCommandGroup,
   capabilities: handleSessionInventoryCommandGroup,
   apps: handleSessionInventoryCommandGroup,
-  doctor: async ({ req, sessionName, sessionStore, androidAdbExecutor }) =>
-    await handleDoctorCommand({ req, sessionName, sessionStore, androidAdbExecutor }),
+  doctor: async ({
+    req,
+    sessionName,
+    sessionStore,
+    androidAdbExecutor,
+    inspectFacts,
+    bindDevice,
+  }) =>
+    await handleDoctorCommand({
+      req,
+      sessionName,
+      sessionStore,
+      androidAdbExecutor,
+      inspectFacts,
+      bindDevice,
+    }),
   boot: handleSessionStateCommandGroup,
   shutdown: handleSessionStateCommandGroup,
   appstate: handleSessionStateCommandGroup,

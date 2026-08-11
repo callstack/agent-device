@@ -108,6 +108,7 @@ test('Provider-backed integration doctor --app verifies an installed app without
   await withProviderScenarioResource(
     async () =>
       await createProviderScenarioHarness({
+        platformRuntime: true,
         androidAdbProvider: () => adbProvider,
         deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
       }),

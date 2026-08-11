@@ -241,6 +241,7 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
   });
 
   const daemon = await createProviderScenarioHarness({
+    platformRuntime: true,
     appleRunnerProvider: () => appleRunnerProvider,
     appleToolProvider: () => appleTool.provider,
     deviceInventoryProvider: async (request) => {

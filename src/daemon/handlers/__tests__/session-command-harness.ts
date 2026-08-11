@@ -74,6 +74,7 @@ function readinessFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperati
       ensureReady: device.appleOs === 'watchos' ? unavailable : available,
       bootTarget: normalAvailable ? available : unavailable,
       bootTargetHeadless: headlessAvailable ? available : unavailable,
+      listApps: unavailable,
     },
   };
 }
@@ -92,6 +93,7 @@ function readinessBinding(device: DeviceInfo): DeviceBinding<PlatformRuntimeOper
               (await mockEnsureReadyRuntime(input)) ?? { ...device, booted: true },
           }
         : {}),
+      listApps: async () => [],
       ...(device.platform === 'android' && device.kind === 'emulator'
         ? {
             bootTargetHeadless: async (input) =>

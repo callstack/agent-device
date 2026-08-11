@@ -145,6 +145,10 @@ describe('composed platform runtime gateway', () => {
       available: false,
       reason: 'unsupported-provider-mode',
     });
+    expect(binding.facts.operations.listApps).toMatchObject({
+      available: false,
+      reason: 'unsupported-provider-mode',
+    });
     expect(hostLoad).not.toHaveBeenCalled();
     expect(localLoad).not.toHaveBeenCalled();
   });
@@ -306,5 +310,6 @@ function unavailableFacts() {
     ensureReady: unavailable,
     bootTarget: unavailable,
     bootTargetHeadless: unavailable,
+    listApps: unavailable,
   };
 }

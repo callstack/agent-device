@@ -1,25 +1,32 @@
-import {
-  isIosFamily,
-  isMacOs,
-  publicPlatformString,
-  type DeviceInfo,
-} from '@agent-device/kernel/device';
+import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { SessionState } from '../types.ts';
 import { appendDoctorCheck } from './session-doctor-output.ts';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
+import type { InstalledAppInfo } from '@agent-device/contracts/platform';
+
+export type DoctorAppInventory = (
+  filter: 'all' | 'user-installed',
+) => Promise<readonly InstalledAppInfo[]>;
 
 export async function appendAppChecks(
   checks: DoctorCheck[],
-  params: { device: DeviceInfo; session: SessionState | undefined; targetApp?: string },
+  params: {
+    device: DeviceInfo;
+    session: SessionState | undefined;
+    targetApp?: string;
+    listApps?: DoctorAppInventory;
+  },
 ): Promise<void> {
-  const { device, targetApp, session } = params;
+  const { device, targetApp, session, listApps } = params;
   if (!targetApp) {
     return;
   }
 
   try {
-    const resolved = await resolveInstalledAppForDoctor(device, targetApp);
+    const resolved = listApps
+      ? resolveUniqueInstalledAppMatch(targetApp, await listApps('all'))?.id
+      : undefined;
     if (!resolved) {
       appendDoctorCheck(checks, {
         id: 'target-app',
@@ -49,34 +56,9 @@ export async function appendAppChecks(
   }
 }
 
-async function resolveInstalledAppForDoctor(
-  device: DeviceInfo,
-  targetApp: string,
-): Promise<string | undefined> {
-  if (device.platform === 'android') {
-    const { listAndroidApps } = await import('../../platforms/android/app-lifecycle.ts');
-    const apps = await listAndroidApps(device, 'all');
-    const match = resolveUniqueInstalledAppMatch(
-      targetApp,
-      apps.map((app) => ({ id: app.package, name: app.name })),
-    );
-    return match?.id;
-  }
-  if (isIosFamily(device) || isMacOs(device)) {
-    const { listIosApps } = await import('../../platforms/apple/core/apps.ts');
-    const apps = await listIosApps(device, 'all');
-    const match = resolveUniqueInstalledAppMatch(
-      targetApp,
-      apps.map((app) => ({ id: app.bundleId, name: app.name })),
-    );
-    return match?.id;
-  }
-  return undefined;
-}
-
 function resolveUniqueInstalledAppMatch(
   targetApp: string,
-  apps: Array<{ id: string; name: string }>,
+  apps: readonly InstalledAppInfo[],
 ): { id: string; name: string } | undefined {
   const needle = targetApp.trim().toLowerCase();
   const exact = apps.find(

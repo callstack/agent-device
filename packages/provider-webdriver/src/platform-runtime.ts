@@ -29,6 +29,11 @@ const headlessUnavailable = Object.freeze({
   reason: 'unsupported-provider-mode',
   hint: 'Headless boot is unavailable for provider-owned devices.',
 } as const);
+const appsUnavailable = Object.freeze({
+  available: false,
+  reason: 'owner-capability-missing' as const,
+  hint: 'WebDriver provider runtimes do not expose app inventory.',
+});
 
 export function createWebDriverPlatformRuntimeOwner(
   options: Readonly<{
@@ -124,6 +129,7 @@ function webDriverFacts(
       ensureReady: available,
       bootTarget: available,
       bootTargetHeadless: headlessUnavailable,
+      listApps: appsUnavailable,
     },
   });
 }

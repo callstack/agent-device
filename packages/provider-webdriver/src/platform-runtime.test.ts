@@ -81,6 +81,10 @@ test.each([
   expect(binding.facts.operations.ensureReady).toEqual({ available: true });
   expect(binding.facts.operations.bootTarget).toEqual({ available: true });
   expect(binding.facts.operations.bootTargetHeadless).toMatchObject({ available: false });
+  expect(binding.facts.operations.listApps).toMatchObject({
+    available: false,
+    reason: 'owner-capability-missing',
+  });
   await expect(binding.operations.ensureReady?.({})).resolves.toMatchObject({
     id: runtimeDevice.id,
     booted: true,
@@ -146,6 +150,11 @@ function host(run: PlatformRuntimeHost['commands']['run']): PlatformRuntimeHost 
       readProcessMarker: async () => ({ status: 'missing' }),
     },
     networkTransports: { resolve: async () => ({ mode: 'local' }) },
+    appInventory: {
+      apple: { listApps: async () => [] },
+      android: { listApps: async () => [] },
+      harmonyos: { listApps: async () => [] },
+    },
     screenRecording: {
       outputs: { prepare: async () => {} },
       apple: {

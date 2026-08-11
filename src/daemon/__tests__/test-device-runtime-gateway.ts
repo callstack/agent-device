@@ -41,6 +41,7 @@ export const unavailableDeviceRuntimeGateway: DeviceRuntimeGateway<PlatformRunti
           ensureReady: unavailable,
           bootTarget: unavailable,
           bootTargetHeadless: unavailable,
+          listApps: unavailable,
         },
       },
       operations: {},
