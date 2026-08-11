@@ -4,20 +4,15 @@ import { expect, test } from 'vitest';
 import { localRuntimeOwner } from '@agent-device/contracts/platform';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import {
-  listAppLogResourcePaths,
-  readAppLogResourceRecord,
-  resolveAppLogResourcePath,
-  writeAppLogResourceRecord,
-} from '../app-log-resource-store.ts';
+import { appLogResourceStore } from '../app-log-resource-store.ts';
 
 test('app-log resource records publish atomically with owner-only permissions', () => {
-  const resourcePath = resolveAppLogResourcePath(
+  const resourcePath = appLogResourceStore.resolvePath(
     path.join(mkdtempForTestSync('app-log-record-'), 'session'),
   );
-  writeAppLogResourceRecord(resourcePath, envelope('session'));
+  appLogResourceStore.write(resourcePath, envelope('session'));
 
-  expect(readAppLogResourceRecord(resourcePath)).toMatchObject({
+  expect(appLogResourceStore.read(resourcePath)).toMatchObject({
     status: 'decoded',
     envelope: { resourceKind: 'app-log', lifecycle: 'open' },
   });
@@ -29,18 +24,18 @@ test.each([
   ['invalid JSON', '{'],
   ['unsupported schema', JSON.stringify({ ...envelope('session'), envelopeVersion: 999 })],
 ] as const)('app-log resource reader classifies and retains %s', (_name, body) => {
-  const resourcePath = resolveAppLogResourcePath(
+  const resourcePath = appLogResourceStore.resolvePath(
     path.join(mkdtempForTestSync('app-log-unreattachable-'), 'session'),
   );
   fs.mkdirSync(path.dirname(resourcePath), { recursive: true });
   fs.writeFileSync(resourcePath, body);
 
-  expect(readAppLogResourceRecord(resourcePath).status).toBe('unreattachable');
+  expect(appLogResourceStore.read(resourcePath).status).toBe('unreattachable');
   expect(fs.readFileSync(resourcePath, 'utf8')).toBe(body);
 });
 
 test('malformed app-log records preserve the underlying decoder message', () => {
-  const resourcePath = resolveAppLogResourcePath(
+  const resourcePath = appLogResourceStore.resolvePath(
     path.join(mkdtempForTestSync('app-log-malformed-message-'), 'session'),
   );
   fs.mkdirSync(path.dirname(resourcePath), { recursive: true });
@@ -52,7 +47,7 @@ test('malformed app-log records preserve the underlying decoder message', () => 
     expectedMessage = error instanceof Error ? error.message : '';
   }
 
-  expect(readAppLogResourceRecord(resourcePath)).toMatchObject({
+  expect(appLogResourceStore.read(resourcePath)).toMatchObject({
     status: 'unreattachable',
     message: expectedMessage,
   });
@@ -61,13 +56,13 @@ test('malformed app-log records preserve the underlying decoder message', () => 
 test('app-log resource listing is deterministic and ignores unrelated artifacts', () => {
   const sessionsDir = mkdtempForTestSync('app-log-record-list-');
   for (const sessionName of ['zeta', 'alpha']) {
-    const resourcePath = resolveAppLogResourcePath(path.join(sessionsDir, sessionName));
-    writeAppLogResourceRecord(resourcePath, envelope(sessionName));
+    const resourcePath = appLogResourceStore.resolvePath(path.join(sessionsDir, sessionName));
+    appLogResourceStore.write(resourcePath, envelope(sessionName));
   }
   fs.writeFileSync(path.join(sessionsDir, 'unrelated.txt'), 'ignored');
-  expect(listAppLogResourcePaths(sessionsDir)).toEqual([
-    resolveAppLogResourcePath(path.join(sessionsDir, 'alpha')),
-    resolveAppLogResourcePath(path.join(sessionsDir, 'zeta')),
+  expect(appLogResourceStore.list(sessionsDir)).toEqual([
+    appLogResourceStore.resolvePath(path.join(sessionsDir, 'alpha')),
+    appLogResourceStore.resolvePath(path.join(sessionsDir, 'zeta')),
   ]);
 });
 
@@ -76,16 +71,16 @@ test('resource symlinks are retained as unreattachable evidence and never replac
   const outsidePath = path.join(root, 'outside.json');
   const outsideBody = `${JSON.stringify(envelope('outside'))}\n`;
   fs.writeFileSync(outsidePath, outsideBody);
-  const resourcePath = resolveAppLogResourcePath(path.join(root, 'sessions', 'session'));
+  const resourcePath = appLogResourceStore.resolvePath(path.join(root, 'sessions', 'session'));
   fs.mkdirSync(path.dirname(resourcePath), { recursive: true });
   fs.symlinkSync(outsidePath, resourcePath);
 
-  expect(readAppLogResourceRecord(resourcePath)).toMatchObject({
+  expect(appLogResourceStore.read(resourcePath)).toMatchObject({
     status: 'unreattachable',
     reason: 'descriptor-invalid',
     message: expect.stringMatching(/regular file/),
   });
-  expect(() => writeAppLogResourceRecord(resourcePath, envelope('replacement'))).toThrow(
+  expect(() => appLogResourceStore.write(resourcePath, envelope('replacement'))).toThrow(
     /symbolic link/,
   );
   expect(fs.lstatSync(resourcePath).isSymbolicLink()).toBe(true);

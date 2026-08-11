@@ -11,11 +11,7 @@ import { createTestAppLogLiveHandle } from '../../__tests__/test-utils/app-log-l
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { createDeviceClaimReconciler } from '../device-claim-reconciliation.ts';
 import type { DeviceClaim } from '../device-claims.ts';
-import {
-  readAppLogResourceRecord,
-  resolveAppLogResourcePath,
-  writeAppLogResourceRecord,
-} from '../app-log-resource-store.ts';
+import { appLogResourceStore } from '../app-log-resource-store.ts';
 
 const scope = {
   signal: new AbortController().signal,
@@ -26,8 +22,10 @@ const scope = {
 test('reconciles the dead owner session resources through their exact runtime owner', async () => {
   const stateDir = mkdtempForTestSync('device-claim-reconcile-');
   const claim = makeClaim(stateDir);
-  const resourcePath = resolveAppLogResourcePath(path.join(stateDir, 'sessions', claim.session));
-  writeAppLogResourceRecord(
+  const resourcePath = appLogResourceStore.resolvePath(
+    path.join(stateDir, 'sessions', claim.session),
+  );
+  appLogResourceStore.write(
     resourcePath,
     createDurableResourceEnvelope({
       resourceKind: 'app-log',
@@ -89,7 +87,7 @@ test('reconciles the dead owner session resources through their exact runtime ow
     }),
   );
   expect(forceCleanup).toHaveBeenCalledOnce();
-  expect(readAppLogResourceRecord(resourcePath)).toMatchObject({
+  expect(appLogResourceStore.read(resourcePath)).toMatchObject({
     status: 'decoded',
     envelope: { lifecycle: 'completed' },
   });
@@ -98,7 +96,9 @@ test('reconciles the dead owner session resources through their exact runtime ow
 test('unreattachable resource evidence retains the claim without binding', async () => {
   const stateDir = mkdtempForTestSync('device-claim-reconcile-invalid-');
   const claim = makeClaim(stateDir);
-  const resourcePath = resolveAppLogResourcePath(path.join(stateDir, 'sessions', claim.session));
+  const resourcePath = appLogResourceStore.resolvePath(
+    path.join(stateDir, 'sessions', claim.session),
+  );
   fs.mkdirSync(path.dirname(resourcePath), { recursive: true });
   fs.writeFileSync(resourcePath, '{');
   const bind = vi.fn();

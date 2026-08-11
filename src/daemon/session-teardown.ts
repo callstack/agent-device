@@ -12,7 +12,7 @@ import { stopSessionAudioProbe } from './audio-probe.ts';
 import type { SessionState } from './types.ts';
 import type { SessionStore } from './session-store.ts';
 import { forceCleanupSessionAppLog } from './app-log-session-resource.ts';
-import { resolveAppLogResourcePath } from './app-log-resource-store.ts';
+import { appLogResourceStore } from './app-log-resource-store.ts';
 import { finishLiveScreenRecording } from './screen-recording-session-resource.ts';
 
 export { stopSessionAudioProbe } from './audio-probe.ts';
@@ -51,7 +51,7 @@ export async function stopSessionAppLog(params: {
     session,
     sessionName: session.name,
     sessionStore,
-    resourcePath: resolveAppLogResourcePath(sessionStore.resolveSessionDir(session.name)),
+    resourcePath: appLogResourceStore.resolvePath(sessionStore.resolveSessionDir(session.name)),
   });
 }
 

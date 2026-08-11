@@ -16,10 +16,7 @@ import {
   type AppLogAdmissionLedger,
 } from '../../app-log-admission-ledger.ts';
 import { handleSessionCommands } from './session-command-harness.ts';
-import {
-  resolveAppLogResourcePath,
-  readAppLogResourceRecord,
-} from '../../app-log-resource-store.ts';
+import { appLogResourceStore } from '../../app-log-resource-store.ts';
 import type { BindDeviceRuntime } from '../../request-runtime-binding.ts';
 import type { SessionStore } from '../../session-store.ts';
 import {
@@ -314,8 +311,8 @@ async function expectStarted(response: Awaited<ReturnType<typeof runLogs>>) {
 }
 
 function readRecord(sessionStore: SessionStore, sessionName: string) {
-  return readAppLogResourceRecord(
-    resolveAppLogResourcePath(sessionStore.resolveSessionDir(sessionName)),
+  return appLogResourceStore.read(
+    appLogResourceStore.resolvePath(sessionStore.resolveSessionDir(sessionName)),
   );
 }
 

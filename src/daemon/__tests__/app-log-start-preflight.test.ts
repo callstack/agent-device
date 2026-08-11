@@ -7,7 +7,7 @@ import { deviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 import { createNextAppLogFence } from '../app-log-start-preflight.ts';
-import { resolveAppLogResourcePath, writeAppLogResourceRecord } from '../app-log-resource-store.ts';
+import { appLogResourceStore } from '../app-log-resource-store.ts';
 
 const device: DeviceInfo = {
   platform: 'android',
@@ -19,8 +19,10 @@ const device: DeviceInfo = {
 test('nonterminal record from an old session blocks replacement on the same device', () => {
   const ledger = createAppLogAdmissionLedger();
   const sessionStore = makeSessionStore('app-log-start-preflight-cross-session-');
-  const oldResourcePath = resolveAppLogResourcePath(sessionStore.resolveSessionDir('old-session'));
-  writeAppLogResourceRecord(
+  const oldResourcePath = appLogResourceStore.resolvePath(
+    sessionStore.resolveSessionDir('old-session'),
+  );
+  appLogResourceStore.write(
     oldResourcePath,
     createDurableResourceEnvelope({
       resourceKind: 'app-log',
@@ -33,7 +35,7 @@ test('nonterminal record from an old session blocks replacement on the same devi
       descriptor: { version: 1, body: {} },
     }),
   );
-  const newResourcePath = resolveAppLogResourcePath(
+  const newResourcePath = appLogResourceStore.resolvePath(
     sessionStore.resolveSessionDir('replacement-session'),
   );
 
@@ -45,8 +47,12 @@ test('nonterminal record from an old session blocks replacement on the same devi
 test('an undecodable manifest or retained legacy marker blocks all replacement starts', () => {
   const ledger = createAppLogAdmissionLedger({ markerExists: () => true });
   const sessionStore = makeSessionStore('app-log-start-preflight-global-');
-  const resourcePath = resolveAppLogResourcePath(sessionStore.resolveSessionDir('new-session'));
-  const corruptPath = resolveAppLogResourcePath(sessionStore.resolveSessionDir('corrupt-session'));
+  const resourcePath = appLogResourceStore.resolvePath(
+    sessionStore.resolveSessionDir('new-session'),
+  );
+  const corruptPath = appLogResourceStore.resolvePath(
+    sessionStore.resolveSessionDir('corrupt-session'),
+  );
   fs.mkdirSync(path.dirname(corruptPath), { recursive: true });
   fs.writeFileSync(corruptPath, '{');
 
@@ -78,10 +84,12 @@ test('a symlinked manifest blocks replacement globally without touching its exte
     }),
   )}\n`;
   fs.writeFileSync(outsidePath, outsideBody);
-  const symlinkPath = resolveAppLogResourcePath(sessionStore.resolveSessionDir('symlink-session'));
+  const symlinkPath = appLogResourceStore.resolvePath(
+    sessionStore.resolveSessionDir('symlink-session'),
+  );
   fs.mkdirSync(path.dirname(symlinkPath), { recursive: true });
   fs.symlinkSync(outsidePath, symlinkPath);
-  const replacementPath = resolveAppLogResourcePath(
+  const replacementPath = appLogResourceStore.resolvePath(
     sessionStore.resolveSessionDir('replacement-session'),
   );
 

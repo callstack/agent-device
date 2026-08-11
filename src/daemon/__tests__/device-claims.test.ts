@@ -5,9 +5,9 @@ import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import {
   acquireDeviceClaim as acquireProductionDeviceClaim,
-  canonicalLocalDeviceKey,
   clearDeviceClaim,
 } from '../device-claims.ts';
+import { canonicalLocalDeviceKey } from '../device-claim-paths.ts';
 import { inspectDeviceClaims } from '../device-claim-inspection.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';

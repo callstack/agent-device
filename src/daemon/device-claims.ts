@@ -18,8 +18,6 @@ import {
   resolveDeviceClaimRoot,
 } from './device-claim-paths.ts';
 
-export { canonicalLocalDeviceKey } from './device-claim-paths.ts';
-
 const DEVICE_CLAIM_SCHEMA_VERSION = 2;
 const DEVICE_CLAIM_LOCK_TIMEOUT_MS = 30_000;
 

@@ -1,22 +1,9 @@
-import fs from 'node:fs';
-import { AppError } from '@agent-device/kernel/errors';
-import {
-  androidAdbResultError,
-  type AndroidAdbExecutor,
-  type AndroidAdbProcess,
-  type AndroidAdbProvider,
-} from './adb-executor.ts';
+import { androidAdbResultError, type AndroidAdbExecutor } from './adb-executor.ts';
 
 export type AndroidLogcatCaptureOptions = {
   lines?: number;
   timeoutMs?: number;
   signal?: AbortSignal;
-};
-
-export type AndroidLogcatStreamOptions = {
-  pid?: string;
-  signal?: AbortSignal;
-  output?: fs.WriteStream;
 };
 
 export async function captureAndroidLogcatWithAdb(
@@ -36,24 +23,4 @@ export async function captureAndroidLogcatWithAdb(
     throw androidAdbResultError('Failed to capture Android logcat', result);
   }
   return result.stdout;
-}
-
-export function streamAndroidLogcatWithAdb(
-  provider: Pick<AndroidAdbProvider, 'spawn'>,
-  options: AndroidLogcatStreamOptions = {},
-): AndroidAdbProcess {
-  if (!provider.spawn) {
-    throw new AppError('UNSUPPORTED_OPERATION', 'Android ADB provider does not support streams', {
-      capability: 'adb.spawn',
-    });
-  }
-  const args = ['logcat', '-v', 'time'];
-  if (options.pid) {
-    args.push('--pid', options.pid);
-  }
-  const child = provider.spawn(args, { stdio: ['ignore', 'pipe', 'pipe'], signal: options.signal });
-  if (options.output && child.stdout) {
-    child.stdout.pipe(options.output, { end: false });
-  }
-  return child;
 }

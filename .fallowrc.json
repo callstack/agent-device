@@ -38,6 +38,11 @@
     "website/rspress.config.ts"
   ],
   "ignorePatterns": [
+    // Test fixtures: every *.fixtures.ts builds doubles for co-located *.test.ts files
+    // (several import `vi` directly) and none is imported by production source. They sit
+    // beside their subject rather than under __tests__/, so pattern-match them as the test
+    // infrastructure they are instead of listing each fixture symbol as an exemption.
+    "**/*.fixtures.ts",
     "examples/test-app/**",
     "scripts/perf/**",
     "scripts/layering/**",
@@ -74,6 +79,22 @@
       ]
     },
     {
+      "comment": "Dedicated CLI command handlers are reached only through the dynamic `import()` table `dedicatedCliCommandHandlerLoaders` in src/cli/commands/router.ts, which --production analysis cannot follow to a consumer. Same shape as the daemon route-handler entry above; that table is what enumerates this list, so add/remove here whenever a loader is added/removed.",
+      "file": "src/cli/commands/{auth,connection,daemon,device,proxy,replay,screenshot}.ts",
+      "exports": [
+        "authCommand",
+        "connectCommand",
+        "disconnectCommand",
+        "connectionCommand",
+        "daemonCommand",
+        "deviceCommand",
+        "proxyCommand",
+        "replayCommand",
+        "screenshotCommand",
+        "diffCommand"
+      ]
+    },
+    {
       "comment": "Published package surface (see package.json#exports); consumed by SDK users, not internally.",
       "file": "src/sdk/*.ts",
       "exports": ["*"]
@@ -99,9 +120,9 @@
       ]
     },
     {
-      "comment": "Contention retry lane (#1419): the reporter default is loaded by Vitest from a `--reporter=<path>` string, and SUBPROCESS_STUB_TESTS is consumed by vitest.config.ts \u2014 a tool config outside --production analysis.",
-      "file": "scripts/lib/{contention-retry.ts,contention-retry-reporter.ts}",
-      "exports": ["default", "SUBPROCESS_STUB_TESTS"]
+      "comment": "Contention retry lane (#1419): the reporter default is loaded by Vitest from a `--reporter=<path>` string, and SUBPROCESS_STUB_TESTS / resolveVitestMaxWorkers are consumed by vitest.config.ts \u2014 a tool config outside --production analysis.",
+      "file": "scripts/lib/{contention-retry.ts,contention-retry-reporter.ts,vitest-concurrency.ts}",
+      "exports": ["default", "SUBPROCESS_STUB_TESTS", "resolveVitestMaxWorkers"]
     },
     {
       "comment": "Contention retry gate fixtures (#1419): the config default is loaded by the child `vitest run --config` the gate test spawns.",
@@ -124,9 +145,9 @@
       "exports": ["IS_PREDICATE_USAGE_HINT"]
     },
     {
-      "comment": "Help-benchmark conformance seams: helpTopicIds feeds the topic-coverage gate and PRIVATE_AX_RECOVERY_SAMPLE feeds the bench sample producers; both consumers are test-tree files outside --production analysis.",
+      "comment": "Help-benchmark conformance seams: helpTopicIds feeds the topic-coverage gate, and the *_SAMPLE constants feed the bench sample producers (scripts/__tests__/help-conformance-sample-producers.ts); every consumer is a test-tree file outside --production analysis.",
       "file": "{src/cli/parser/cli-help.ts,scripts/help-conformance-sample-outputs.mjs}",
-      "exports": ["helpTopicIds", "PRIVATE_AX_RECOVERY_SAMPLE"]
+      "exports": ["helpTopicIds", "PRIVATE_AX_RECOVERY_SAMPLE", "DEVICE_CLAIM_IN_USE_SAMPLE"]
     },
     {
       "comment": "#1458: getSessionCommandKind's former production consumer (the session.ts if-chain) was replaced by SESSION_COMMAND_HANDLER_IMPLS, which encodes command-kind groupings directly via shared handler references instead of a kind lookup. The accessor and its SessionCommandKind classification remain covered by daemon-command-registry.test.ts, a test-tree file outside --production analysis.",
@@ -134,13 +155,14 @@
       "exports": ["getSessionCommandKind"]
     },
     {
-      "comment": "Workspace-package symbols whose only consumers are test-tree files, which --production analysis does not see. Each import is the package specifier, so the façade entry is load-bearing: parseTargetAnnotationV1Payload/TARGET_ANNOTATION_MAX_FIELD_BYTES from src/daemon/__tests__/session-target-evidence.test.ts, MAESTRO_COMPAT_* from src/cli/parser/__tests__/maestro-support-matrix.test.ts.",
-      "file": "packages/{ad-script,maestro}/src/index.ts",
+      "comment": "Workspace-package symbols whose only consumers are test-tree files, which --production analysis does not see. Each import is the package specifier, so the façade entry is load-bearing: parseTargetAnnotationV1Payload/TARGET_ANNOTATION_MAX_FIELD_BYTES from src/daemon/__tests__/session-target-evidence.test.ts, MAESTRO_COMPAT_* from src/cli/parser/__tests__/maestro-support-matrix.test.ts, createAppLogLiveHandle from src/__tests__/test-utils/app-log-live-handle.ts (its production sibling createAppLogLiveHandleFromFinish wraps it, and scripts/layering/platform-package-policy.test.ts pins the specifier form).",
+      "file": "packages/{ad-script,maestro,capture-kit}/src/index.ts",
       "exports": [
         "parseTargetAnnotationV1Payload",
         "TARGET_ANNOTATION_MAX_FIELD_BYTES",
         "MAESTRO_COMPAT_LIMITATIONS",
-        "MAESTRO_COMPAT_SUPPORTED_CAPABILITIES"
+        "MAESTRO_COMPAT_SUPPORTED_CAPABILITIES",
+        "createAppLogLiveHandle"
       ]
     },
     {

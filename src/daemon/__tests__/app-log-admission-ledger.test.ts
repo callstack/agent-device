@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import { deviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 import { createNextAppLogFence } from '../app-log-start-preflight.ts';
-import { resolveAppLogResourcePath } from '../app-log-resource-store.ts';
+import { appLogResourceStore } from '../app-log-resource-store.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 
 const DEVICE: DeviceInfo = {
@@ -23,7 +23,7 @@ test('an undurable cleanup block is isolated to its daemon-owned admission ledge
   const blockedLedger = createAppLogAdmissionLedger();
   const restartedDaemonLedger = createAppLogAdmissionLedger();
   const sessionStore = makeSessionStore('app-log-admission-ledger-');
-  const resourcePath = resolveAppLogResourcePath(sessionStore.resolveSessionDir('session'));
+  const resourcePath = appLogResourceStore.resolvePath(sessionStore.resolveSessionDir('session'));
 
   blockedLedger.blockUndurableCleanup(DEVICE, 'cleanup could not be confirmed');
 
@@ -40,7 +40,7 @@ test('retained legacy markers fail closed only in the daemon ledger that observe
   const retainingLedger = createAppLogAdmissionLedger({ markerExists: () => true });
   const restartedDaemonLedger = createAppLogAdmissionLedger();
   const sessionStore = makeSessionStore('app-log-admission-legacy-ledger-');
-  const resourcePath = resolveAppLogResourcePath(sessionStore.resolveSessionDir('session'));
+  const resourcePath = appLogResourceStore.resolvePath(sessionStore.resolveSessionDir('session'));
 
   retainingLedger.retainLegacyMarkers([
     { markerPath: '/sessions/legacy/app-log.pid', device: deviceIdentity(DEVICE) },
@@ -62,7 +62,7 @@ test('retained legacy markers fail closed only in the daemon ledger that observe
 test('an unclassified legacy marker does not globally wedge unrelated device admission', () => {
   const ledger = createAppLogAdmissionLedger({ markerExists: () => true });
   const sessionStore = makeSessionStore('app-log-admission-unclassified-legacy-');
-  const resourcePath = resolveAppLogResourcePath(sessionStore.resolveSessionDir('session'));
+  const resourcePath = appLogResourceStore.resolvePath(sessionStore.resolveSessionDir('session'));
 
   ledger.retainLegacyMarkers([{ markerPath: '/sessions/corrupt/app-log.pid' }]);
 
@@ -74,7 +74,7 @@ test('removing a retained legacy marker unblocks the matching device without a d
   let markerExists = true;
   const ledger = createAppLogAdmissionLedger({ markerExists: () => markerExists });
   const sessionStore = makeSessionStore('app-log-admission-removed-marker-');
-  const resourcePath = resolveAppLogResourcePath(sessionStore.resolveSessionDir('session'));
+  const resourcePath = appLogResourceStore.resolvePath(sessionStore.resolveSessionDir('session'));
 
   ledger.retainLegacyMarkers([
     { markerPath: '/sessions/legacy/app-log.pid', device: deviceIdentity(DEVICE) },
@@ -96,7 +96,7 @@ test('undurable cleanup blocks expire within the configured bound and report a d
     onUndurableCleanupExpired: ({ reason }) => expired.push(reason),
   });
   const sessionStore = makeSessionStore('app-log-admission-expiry-');
-  const resourcePath = resolveAppLogResourcePath(sessionStore.resolveSessionDir('session'));
+  const resourcePath = appLogResourceStore.resolvePath(sessionStore.resolveSessionDir('session'));
 
   ledger.blockUndurableCleanup(DEVICE, 'cleanup could not be confirmed');
   expect(() => createNextAppLogFence({ ledger, resourcePath, device: DEVICE })).toThrow(

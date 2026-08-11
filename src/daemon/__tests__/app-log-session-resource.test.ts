@@ -10,7 +10,7 @@ import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 import { adoptStartedSessionAppLog } from '../app-log-session-resource.ts';
 import { createNextAppLogFence } from '../app-log-start-preflight.ts';
-import { readAppLogResourceRecord, resolveAppLogResourcePath } from '../app-log-resource-store.ts';
+import { appLogResourceStore } from '../app-log-resource-store.ts';
 import type { SessionState } from '../types.ts';
 
 test('start persists open recovery truth before adopting the live handle', async () => {
@@ -22,7 +22,7 @@ test('start persists open recovery truth before adopting the live handle', async
     throwIfCanceled: () => {},
   });
   expect(context.sessionStore.get(context.sessionName)?.appLog?.handle).toBe(runtime.handle);
-  expect(readAppLogResourceRecord(context.resourcePath)).toMatchObject({
+  expect(appLogResourceStore.read(context.resourcePath)).toMatchObject({
     status: 'decoded',
     envelope: { lifecycle: 'open', metadata: { phase: 'active' } },
   });
@@ -42,7 +42,7 @@ test('cancellation after native start cleans the pending handle and terminalizes
     }),
   ).rejects.toBe(primary);
   expect(runtime.forceCleanup).toHaveBeenCalledOnce();
-  expect(readAppLogResourceRecord(context.resourcePath)).toMatchObject({
+  expect(appLogResourceStore.read(context.resourcePath)).toMatchObject({
     status: 'decoded',
     envelope: { lifecycle: 'completed' },
   });
@@ -64,7 +64,7 @@ test('rejecting canceled-start cleanup retains cleanup-pending truth and blocks 
       },
     }),
   ).rejects.toBe(primary);
-  expect(readAppLogResourceRecord(context.resourcePath)).toMatchObject({
+  expect(appLogResourceStore.read(context.resourcePath)).toMatchObject({
     status: 'decoded',
     envelope: { lifecycle: 'open', metadata: { phase: 'cleanup-pending' } },
   });
@@ -92,7 +92,7 @@ test('SessionStore failure after transfer disposes the transferred handle and pr
     }),
   ).rejects.toBe(primary);
   expect(runtime.forceCleanup).toHaveBeenCalledOnce();
-  expect(readAppLogResourceRecord(context.resourcePath)).toMatchObject({
+  expect(appLogResourceStore.read(context.resourcePath)).toMatchObject({
     status: 'decoded',
     envelope: { lifecycle: 'completed' },
   });
@@ -121,7 +121,7 @@ test('incoherent start envelope with rejecting cleanup persists a blocking tombs
     details: { reason: 'runtime-contract-invalid' },
   });
   expect(runtime.forceCleanup).toHaveBeenCalledOnce();
-  expect(readAppLogResourceRecord(context.resourcePath)).toMatchObject({
+  expect(appLogResourceStore.read(context.resourcePath)).toMatchObject({
     status: 'decoded',
     envelope: {
       sessionId: context.sessionName,
@@ -207,7 +207,7 @@ test('unwritable tombstone plus rejecting cleanup blocks same-process replacemen
     fs.chmodSync(resourceDir, 0o700);
   }
 
-  expect(readAppLogResourceRecord(context.resourcePath)).toEqual({ status: 'missing' });
+  expect(appLogResourceStore.read(context.resourcePath)).toEqual({ status: 'missing' });
   expect(() =>
     createNextAppLogFence({
       ledger: context.admissionLedger,
@@ -241,7 +241,7 @@ test('lost durable record during failed adoption installs a same-device process 
     }),
   ).rejects.toBe(primary);
 
-  expect(readAppLogResourceRecord(context.resourcePath)).toEqual({ status: 'missing' });
+  expect(appLogResourceStore.read(context.resourcePath)).toEqual({ status: 'missing' });
   expect(() =>
     createNextAppLogFence({
       ledger: context.admissionLedger,
@@ -268,7 +268,7 @@ function makeContext(
     actions: [],
   };
   sessionStore.set(sessionName, session);
-  const resourcePath = resolveAppLogResourcePath(sessionStore.resolveSessionDir(sessionName));
+  const resourcePath = appLogResourceStore.resolvePath(sessionStore.resolveSessionDir(sessionName));
   return {
     admissionLedger: createAppLogAdmissionLedger(),
     session,

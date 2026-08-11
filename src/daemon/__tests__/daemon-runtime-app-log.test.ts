@@ -10,7 +10,7 @@ import {
   recoverAppLogResourcesAfterDaemonLock,
   type AppLogRecoveryDiagnostic,
 } from '../app-log-resource-recovery.ts';
-import { readAppLogResourceRecord, resolveAppLogResourcePath } from '../app-log-resource-store.ts';
+import { appLogResourceStore } from '../app-log-resource-store.ts';
 import {
   flushDaemonStartupDiagnostics,
   teardownDaemonSessionForShutdown,
@@ -105,7 +105,9 @@ test('daemon shutdown settles fenced app-log cleanup before finalization can rel
   });
   session.appLog = { handle, envelope };
   sessionStore.set(session.name, session);
-  const resourcePath = resolveAppLogResourcePath(sessionStore.resolveSessionDir(session.name));
+  const resourcePath = appLogResourceStore.resolvePath(
+    sessionStore.resolveSessionDir(session.name),
+  );
   fs.mkdirSync(sessionStore.resolveSessionDir(session.name), { recursive: true });
   fs.writeFileSync(resourcePath, `${JSON.stringify(envelope)}\n`);
   const beforeDelete = vi.fn(async () => {});
@@ -126,7 +128,7 @@ test('daemon shutdown settles fenced app-log cleanup before finalization can rel
   expect(forceCleanup).toHaveBeenCalledOnce();
   expect(beforeDelete).toHaveBeenCalledOnce();
   expect(sessionStore.get(session.name)).toBeUndefined();
-  expect(readAppLogResourceRecord(resourcePath)).toMatchObject({
+  expect(appLogResourceStore.read(resourcePath)).toMatchObject({
     status: 'decoded',
     envelope: { lifecycle: 'completed' },
   });

@@ -10,7 +10,6 @@ import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 
 // Loaded dynamically by dedicatedCliCommandHandlerLoaders in router.ts.
-// fallow-ignore-next-line unused-export
 export const deviceCommand: ClientCommandHandler = async ({ positionals, flags }) => {
   if (positionals[0] !== 'status' || positionals.length !== 1) {
     throw new AppError('INVALID_ARGS', 'device accepts only: status');

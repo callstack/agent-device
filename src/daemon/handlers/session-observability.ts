@@ -25,7 +25,7 @@ import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 import { appendAppLogMarker, clearAppLogFiles, getAppLogPathMetadata } from '../app-log.ts';
 import type { AppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
-import { resolveAppLogResourcePath } from '../app-log-resource-store.ts';
+import { appLogResourceStore } from '../app-log-resource-store.ts';
 import {
   adoptStartedSessionAppLog,
   clearSessionAppLogFailure,
@@ -531,7 +531,7 @@ async function handleLogsClearRestart(
       session,
       sessionName,
       sessionStore,
-      resourcePath: resolveAppLogResourcePath(sessionStore.resolveSessionDir(sessionName)),
+      resourcePath: appLogResourceStore.resolvePath(sessionStore.resolveSessionDir(sessionName)),
     });
   }
   const logPath = sessionStore.resolveAppLogPath(sessionName);
@@ -563,7 +563,7 @@ async function handleLogsStop(params: LogsHandlerParams): Promise<DaemonResponse
     session,
     sessionName,
     sessionStore,
-    resourcePath: resolveAppLogResourcePath(sessionStore.resolveSessionDir(sessionName)),
+    resourcePath: appLogResourceStore.resolvePath(sessionStore.resolveSessionDir(sessionName)),
   });
   return { ok: true, data: { path: outPath, stopped: true } };
 }
@@ -576,7 +576,7 @@ async function startSessionAppLog(
 ): Promise<DaemonResponse> {
   const { session, sessionName, sessionStore } = params;
   const outputPath = sessionStore.resolveAppLogPath(sessionName);
-  const resourcePath = resolveAppLogResourcePath(sessionStore.resolveSessionDir(sessionName));
+  const resourcePath = appLogResourceStore.resolvePath(sessionStore.resolveSessionDir(sessionName));
   try {
     const fence = createNextAppLogFence({
       ledger: params.appLogAdmissionLedger,

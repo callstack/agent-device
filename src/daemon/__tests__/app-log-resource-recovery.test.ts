@@ -13,11 +13,7 @@ import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { createTestAppLogLiveHandle } from '../../__tests__/test-utils/app-log-live-handle.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { recoverAppLogResourcesAfterDaemonLock } from '../app-log-resource-recovery.ts';
-import {
-  readAppLogResourceRecord,
-  resolveAppLogResourcePath,
-  writeAppLogResourceRecord,
-} from '../app-log-resource-store.ts';
+import { appLogResourceStore } from '../app-log-resource-store.ts';
 
 const scope = {
   signal: new AbortController().signal,
@@ -27,7 +23,7 @@ const scope = {
 
 test('startup recovery retains invalid/schema-mismatched evidence without binding', async () => {
   const sessionsDir = mkdtempForTestSync('app-log-recovery-invalid-');
-  const resourcePath = resolveAppLogResourcePath(path.join(sessionsDir, 'session'));
+  const resourcePath = appLogResourceStore.resolvePath(path.join(sessionsDir, 'session'));
   fs.mkdirSync(path.dirname(resourcePath), { recursive: true });
   fs.writeFileSync(resourcePath, '{');
   const runtime = makeGateway();
@@ -60,7 +56,7 @@ test('startup recovery binds the exact owner/fence and cleans an active handle',
   );
   expect(runtime.forceCleanup).toHaveBeenCalledOnce();
   expect(runtime.bindingDispose).toHaveBeenCalledOnce();
-  expect(readAppLogResourceRecord(resourcePath)).toMatchObject({
+  expect(appLogResourceStore.read(resourcePath)).toMatchObject({
     status: 'decoded',
     envelope: { lifecycle: 'completed' },
   });
@@ -109,7 +105,7 @@ test('uncertain active cleanup persists cleanup-pending for the next exact-owner
   expect(
     await recoverAppLogResourcesAfterDaemonLock({ sessionsDir, gateway: runtime.gateway, scope }),
   ).toEqual({ scanned: 1, recovered: 0, retained: 1 });
-  expect(readAppLogResourceRecord(resourcePath)).toMatchObject({
+  expect(appLogResourceStore.read(resourcePath)).toMatchObject({
     status: 'decoded',
     envelope: { lifecycle: 'open', metadata: { phase: 'cleanup-pending' } },
   });
@@ -144,7 +140,7 @@ test('startup recovery bounds a never-settling owner and retains its durable evi
         error: 'App-log recovery exceeded its 25ms deadline',
       },
     });
-    expect(readAppLogResourceRecord(resourcePath)).toMatchObject({
+    expect(appLogResourceStore.read(resourcePath)).toMatchObject({
       status: 'decoded',
       envelope: { lifecycle: 'open' },
     });
@@ -275,8 +271,8 @@ function makeRecord(options: { physicalSessionId?: string; envelopeSessionId?: s
   const sessionsDir = mkdtempForTestSync('app-log-recovery-');
   const physicalSessionId = options.physicalSessionId ?? 'session';
   const envelopeSessionId = options.envelopeSessionId ?? physicalSessionId;
-  const resourcePath = resolveAppLogResourcePath(path.join(sessionsDir, physicalSessionId));
-  writeAppLogResourceRecord(
+  const resourcePath = appLogResourceStore.resolvePath(path.join(sessionsDir, physicalSessionId));
+  appLogResourceStore.write(
     resourcePath,
     createDurableResourceEnvelope({
       resourceKind: 'app-log',
