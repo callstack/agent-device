@@ -12,7 +12,7 @@ import {
 import {
   createAppleRunnerProviderFromTranscript,
   createRecordingAppleToolProvider,
-  simctlListDevicesHandler,
+  simctlDeviceLifecycleHandler,
 } from './providers.ts';
 import {
   createProviderTranscript,
@@ -111,7 +111,7 @@ async function withDirectSelectorScenario(
 ): Promise<void> {
   const appleRunnerProvider = createAppleRunnerProviderFromTranscript(transcript, 'ios.runner');
   const appleTool = createRecordingAppleToolProvider({
-    simctl: simctlListDevicesHandler('com.apple.CoreSimulator.SimRuntime.iOS-18-0', [
+    simctl: simctlDeviceLifecycleHandler('com.apple.CoreSimulator.SimRuntime.iOS-18-0', [
       { name: PROVIDER_SCENARIO_IOS_SIMULATOR.name, udid: DEVICE_ID },
     ]),
   });

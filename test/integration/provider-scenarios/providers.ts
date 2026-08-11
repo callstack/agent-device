@@ -218,15 +218,28 @@ function simctlListDevicesJson(
   };
 }
 
-export function simctlListDevicesHandler(
+export function simctlDeviceLifecycleHandler(
   runtime: string,
   devices: Array<{ name: string; udid: string; state?: string; isAvailable?: boolean }>,
 ): AppleToolSubcommandExecutor {
   return async (args) => {
-    return (
-      simctlListDevicesResult(args, runtime, devices) ?? { stdout: '', stderr: '', exitCode: 0 }
-    );
+    const result = simctlListDevicesResult(args, runtime, devices);
+    if (result) return result;
+    if (isModeledSimulatorLifecycleCommand(args)) {
+      return { stdout: '', stderr: '', exitCode: 0 };
+    }
+    return unexpectedProviderCall('Apple', ['simctl', ...args]);
   };
+}
+
+function isModeledSimulatorLifecycleCommand(args: readonly string[]): boolean {
+  if (args[0] === 'boot' || args[0] === 'shutdown') return args.length === 2;
+  if (args[0] === 'launch' || args[0] === 'terminate') return args.length === 3;
+  return false;
+}
+
+export function unexpectedProviderCall(platform: string, command: readonly string[]): never {
+  throw new Error(`Unscripted ${platform} provider call: ${command.join(' ')}`);
 }
 
 export function simctlListDevicesResult(

@@ -18,7 +18,7 @@ import {
 import {
   createAppleRunnerProviderFromTranscript,
   createRecordingAppleToolProvider,
-  simctlListDevicesHandler,
+  simctlDeviceLifecycleHandler,
 } from './providers.ts';
 import { createProviderTranscript } from './transcript.ts';
 
@@ -71,7 +71,7 @@ test('Provider-backed integration iOS simulator recording flow uses the focused 
         'ios.runner',
       );
       const appleTool = createRecordingAppleToolProvider({
-        simctl: simctlListDevicesHandler('com.apple.CoreSimulator.SimRuntime.iOS-18-0', [
+        simctl: simctlDeviceLifecycleHandler('com.apple.CoreSimulator.SimRuntime.iOS-18-0', [
           { name: 'iPhone 15', udid: PROVIDER_SCENARIO_IOS_SIMULATOR.id },
         ]),
       });

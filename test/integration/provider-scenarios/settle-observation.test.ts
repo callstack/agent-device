@@ -6,7 +6,7 @@ import { createProviderScenarioHarness, withProviderScenarioResource } from './h
 import {
   createAppleRunnerProviderFromTranscript,
   createRecordingAppleToolProvider,
-  simctlListDevicesHandler,
+  simctlDeviceLifecycleHandler,
 } from './providers.ts';
 import { createProviderTranscript, type ProviderScenarioProviderEntry } from './transcript.ts';
 
@@ -188,7 +188,7 @@ test('Provider-backed integration press --settle returns the settled diff and fr
     'ios.runner',
   );
   const appleTool = createRecordingAppleToolProvider({
-    simctl: simctlListDevicesHandler('com.apple.CoreSimulator.SimRuntime.iOS-18-0', [
+    simctl: simctlDeviceLifecycleHandler('com.apple.CoreSimulator.SimRuntime.iOS-18-0', [
       { name: PROVIDER_SCENARIO_IOS_SIMULATOR.name, udid: DEVICE_ID },
     ]),
   });
@@ -307,7 +307,7 @@ test('Provider-backed integration never-settled press --settle does not issue di
     'ios.runner',
   );
   const appleTool = createRecordingAppleToolProvider({
-    simctl: simctlListDevicesHandler('com.apple.CoreSimulator.SimRuntime.iOS-18-0', [
+    simctl: simctlDeviceLifecycleHandler('com.apple.CoreSimulator.SimRuntime.iOS-18-0', [
       { name: PROVIDER_SCENARIO_IOS_SIMULATOR.name, udid: DEVICE_ID },
     ]),
   });
@@ -372,7 +372,7 @@ test('Provider-backed integration modal-dismiss press --settle attaches the unch
     'ios.runner',
   );
   const appleTool = createRecordingAppleToolProvider({
-    simctl: simctlListDevicesHandler('com.apple.CoreSimulator.SimRuntime.iOS-18-0', [
+    simctl: simctlDeviceLifecycleHandler('com.apple.CoreSimulator.SimRuntime.iOS-18-0', [
       { name: PROVIDER_SCENARIO_IOS_SIMULATOR.name, udid: DEVICE_ID },
     ]),
   });
@@ -704,7 +704,7 @@ test('Provider-backed integration fill --settle summoning the keyboard still att
     'ios.runner',
   );
   const appleTool = createRecordingAppleToolProvider({
-    simctl: simctlListDevicesHandler('com.apple.CoreSimulator.SimRuntime.iOS-18-0', [
+    simctl: simctlDeviceLifecycleHandler('com.apple.CoreSimulator.SimRuntime.iOS-18-0', [
       { name: PROVIDER_SCENARIO_IOS_SIMULATOR.name, udid: DEVICE_ID },
     ]),
   });

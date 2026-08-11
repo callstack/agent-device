@@ -179,6 +179,28 @@ test('retries zero-byte Harmony staging and retains media when finalization fail
   expect(removeMedia).not.toHaveBeenCalled();
 });
 
+test('reports unconfirmed completed-artifact cleanup without clobbering finalizer warnings', async () => {
+  const operations = createHarmonyScreenRecordingOperations({
+    host: harmonyHost({
+      remove: async () => false,
+      removeMedia: async () => false,
+      complete: async () => ({ warning: 'finalizer warning.' }),
+    }),
+    device,
+    owner: localRuntimeOwner('harmonyos'),
+    signal: new AbortController().signal,
+  });
+  const started = await operations.screenRecordingStart(input());
+
+  await expect(started.pendingHandle.transfer().finish()).resolves.toMatchObject({
+    status: 'completed',
+    result: {
+      warning:
+        'finalizer warning. HarmonyOS recording completed, but cleanup was not confirmed for the staging artifact and media-library artifact.',
+    },
+  });
+});
+
 test('compensates finalizer failure without stopping the native recorder twice', async () => {
   const stop = vi.fn(async () => success());
   const removeMedia = vi.fn(async () => true);

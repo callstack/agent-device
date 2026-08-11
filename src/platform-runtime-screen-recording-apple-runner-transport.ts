@@ -75,13 +75,16 @@ async function startLocalAppleRunnerRecording({
   );
   const session = getRunnerSessionSnapshot(device.id);
   if (!session?.alive) {
-    await stopAcquiredRunner(device, appBundleId);
     throw new Error('Apple runner recording did not expose a durable runner session identity');
   }
   try {
     signal?.throwIfAborted();
   } catch (error) {
-    await stopAcquiredRunner(device, appBundleId);
+    await runAppleRunnerCommand(
+      device,
+      { command: 'recordStop', appBundleId },
+      { expectedRunnerSessionId: session.sessionId },
+    ).catch(() => {});
     throw error;
   }
   return freezeRunnerStartResult(session.sessionId, remotePath, result);
@@ -112,11 +115,6 @@ function freezeRunnerStartResult(
       ? { targetAppReadyUptimeMs: timing.targetAppReadyUptimeMs }
       : {}),
   });
-}
-
-async function stopAcquiredRunner(device: DeviceInfo, appBundleId: string): Promise<void> {
-  const { runAppleRunnerCommand } = await import('./platforms/apple/core/runner/runner-client.ts');
-  await runAppleRunnerCommand(device, { command: 'recordStop', appBundleId }, {}).catch(() => {});
 }
 
 const unavailableScopedTransport: AppleRunnerScreenRecordingTransport = Object.freeze({

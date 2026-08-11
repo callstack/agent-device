@@ -6,7 +6,7 @@ import { createProviderScenarioHarness, withProviderScenarioResource } from './h
 import {
   createAppleRunnerProviderFromTranscript,
   createRecordingAppleToolProvider,
-  simctlListDevicesHandler,
+  simctlDeviceLifecycleHandler,
 } from './providers.ts';
 import { createProviderTranscript, type ProviderScenarioProviderEntry } from './transcript.ts';
 
@@ -98,7 +98,7 @@ test('Provider-backed integration iOS @refs reject after a selector press replac
     'ios.runner',
   );
   const appleTool = createRecordingAppleToolProvider({
-    simctl: simctlListDevicesHandler('com.apple.CoreSimulator.SimRuntime.iOS-18-0', [
+    simctl: simctlDeviceLifecycleHandler('com.apple.CoreSimulator.SimRuntime.iOS-18-0', [
       { name: PROVIDER_SCENARIO_IOS_SIMULATOR.name, udid: DEVICE_ID },
     ]),
   });
@@ -161,7 +161,7 @@ test('Provider-backed iOS press rejects a stale ref after navigation', async () 
     'ios.runner',
   );
   const appleTool = createRecordingAppleToolProvider({
-    simctl: simctlListDevicesHandler('com.apple.CoreSimulator.SimRuntime.iOS-18-0', [
+    simctl: simctlDeviceLifecycleHandler('com.apple.CoreSimulator.SimRuntime.iOS-18-0', [
       { name: PROVIDER_SCENARIO_IOS_SIMULATOR.name, udid: DEVICE_ID },
     ]),
   });

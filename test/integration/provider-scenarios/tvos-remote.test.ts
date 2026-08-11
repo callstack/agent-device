@@ -6,7 +6,7 @@ import { createProviderScenarioHarness, withProviderScenarioResource } from './h
 import {
   createAppleRunnerProviderFromTranscript,
   createRecordingAppleToolProvider,
-  simctlListDevicesHandler,
+  simctlDeviceLifecycleHandler,
 } from './providers.ts';
 import { createProviderTranscript } from './transcript.ts';
 
@@ -51,7 +51,7 @@ test('Provider-backed integration tvOS remote flow maps navigation commands to r
     'tvos.runner',
   );
   const appleTool = createRecordingAppleToolProvider({
-    simctl: simctlListDevicesHandler('com.apple.CoreSimulator.SimRuntime.tvOS-18-0', [
+    simctl: simctlDeviceLifecycleHandler('com.apple.CoreSimulator.SimRuntime.tvOS-18-0', [
       { name: 'Apple TV', udid: 'tv-sim-1' },
     ]),
   });

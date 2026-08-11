@@ -154,7 +154,6 @@ async function finishHarmonyRecording(
       `failed to finalize HarmonyOS recording: ${descriptor.fileName} did not produce a non-empty media file`,
     );
   }
-  let completed = false;
   try {
     const pulled = await host.screenRecording.harmony.pull(device, {
       remotePath: descriptor.remotePath,
@@ -167,14 +166,62 @@ async function finishHarmonyRecording(
       gestureEvents: snapshot.gestureEvents,
       targetLabel: 'HarmonyOS recording',
     });
-    completed = true;
-    return createScreenRecordingCompletion(snapshot, finalization, false);
-  } finally {
+    const cleanupWarning = await cleanupCompletedHarmonyArtifacts(
+      host,
+      device,
+      descriptor,
+      mediaUri,
+    );
+    return createScreenRecordingCompletion(
+      snapshot,
+      {
+        ...finalization,
+        ...appendCompletionWarning(finalization.warning, cleanupWarning),
+      },
+      false,
+    );
+  } catch (error) {
     await host.screenRecording.harmony.remove(device, descriptor.remotePath).catch(() => {});
-    if (completed) {
-      await host.screenRecording.harmony.removeMedia(device, mediaUri).catch(() => {});
-    }
+    throw error;
   }
+}
+
+async function cleanupCompletedHarmonyArtifacts(
+  host: HarmonyScreenRecordingOperationHost,
+  device: DeviceInfo,
+  descriptor: HarmonyRecordingDescriptor,
+  mediaUri: string,
+): Promise<string | undefined> {
+  const unconfirmed: string[] = [];
+  if (
+    !(await confirmedRemoval(() =>
+      host.screenRecording.harmony.remove(device, descriptor.remotePath),
+    ))
+  )
+    unconfirmed.push('staging artifact');
+  if (!(await confirmedRemoval(() => host.screenRecording.harmony.removeMedia(device, mediaUri))))
+    unconfirmed.push('media-library artifact');
+  return unconfirmed.length === 0
+    ? undefined
+    : `HarmonyOS recording completed, but cleanup was not confirmed for the ${unconfirmed.join(' and ')}.`;
+}
+
+async function confirmedRemoval(remove: () => Promise<boolean>): Promise<boolean> {
+  try {
+    return await remove();
+  } catch {
+    return false;
+  }
+}
+
+function appendCompletionWarning(
+  existing: string | undefined,
+  cleanup: string | undefined,
+): { warning?: string } {
+  const warning = [existing, cleanup]
+    .filter((value): value is string => value !== undefined)
+    .join(' ');
+  return warning.length === 0 ? {} : { warning };
 }
 
 async function stageHarmonyMedia(
