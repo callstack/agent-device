@@ -30,6 +30,8 @@ export type DurableCaptureRecoverySummary = Readonly<{
   retained: number;
 }>;
 
+export type DurableCaptureRecoveryOutcome = 'ignored' | 'recovered' | 'retained';
+
 export type DurableCaptureRecoveryDiagnostic = Readonly<{
   phase: string;
   resourcePath: string;
@@ -54,9 +56,9 @@ export async function recoverDurableCaptureResourcesAfterDaemonLock<
   C,
 >(params: DurableCaptureRecoveryParams<K, H, C>): Promise<DurableCaptureRecoverySummary> {
   const paths = params.definition.store.list(params.sessionsDir);
-  const outcomes: Array<'ignored' | 'recovered' | 'retained'> = [];
+  const outcomes: DurableCaptureRecoveryOutcome[] = [];
   for (const resourcePath of paths) {
-    outcomes.push(await recoverResourcePath(params, resourcePath));
+    outcomes.push(await recoverDurableCaptureResource(params, resourcePath));
   }
   return {
     scanned: paths.length,
@@ -65,10 +67,14 @@ export async function recoverDurableCaptureResourcesAfterDaemonLock<
   };
 }
 
-async function recoverResourcePath<K extends string, H extends LiveResourceHandle<C>, C>(
+export async function recoverDurableCaptureResource<
+  K extends string,
+  H extends LiveResourceHandle<C>,
+  C,
+>(
   params: DurableCaptureRecoveryParams<K, H, C>,
   resourcePath: string,
-): Promise<'ignored' | 'recovered' | 'retained'> {
+): Promise<DurableCaptureRecoveryOutcome> {
   const candidate = readRecoveryCandidate(params, resourcePath);
   if (candidate.status !== 'recoverable') return candidate.status;
   try {

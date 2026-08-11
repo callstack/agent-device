@@ -58,6 +58,7 @@ import { resolveForegroundOpenRequest } from './session-open-foreground.ts';
 import { errorResponse } from './response.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 import { buildSessionRecoveryHint } from '../session-recovery-hints.ts';
+import { shellQuoteIfNeeded } from '../../utils/shell-quote.ts';
 import {
   isImplicitSessionScopeConflict,
   resolveImplicitSessionScope,
@@ -65,11 +66,14 @@ import {
 } from '../session-routing.ts';
 import { resolveSessionLeaseForRequest } from '../lease-lifecycle.ts';
 import {
-  acquireAdvisoryDeviceClaim,
-  clearAdvisoryDeviceClaim,
+  acquireDeviceClaim,
+  clearDeviceClaim,
   isLocalDeviceClaimTarget,
+  type DeviceClaimAcquireResult,
   type DeviceClaimSessionOwnership,
+  type DeviceClaimReconciler,
 } from '../device-claims.ts';
+import type { InspectedDeviceClaim } from '../device-claim-inspection.ts';
 
 const firstSessionOpenLocks = new Map<string, Promise<unknown>>();
 
@@ -555,18 +559,22 @@ async function acquireLocalDeviceClaim(params: {
   device: DeviceInfo;
   sessionName: string;
   logPath: string;
-}): Promise<{ ownership?: DeviceClaimSessionOwnership }> {
-  const { req, device, sessionName, logPath } = params;
-  if (!isLocalDeviceClaimTarget(req.meta, isActiveProviderDevice(device))) return {};
-  return await acquireAdvisoryDeviceClaim({
+  reconcileOrphanedClaim?: DeviceClaimReconciler;
+}): Promise<DeviceClaimAcquireResult | { status: 'not-required' }> {
+  const { req, device, sessionName, logPath, reconcileOrphanedClaim } = params;
+  if (!isLocalDeviceClaimTarget(req.meta, isActiveProviderDevice(device))) {
+    return { status: 'not-required' };
+  }
+  return await acquireDeviceClaim({
     device,
     session: sessionName,
     workspace: req.meta?.cwd ?? process.cwd(),
     stateDir: path.dirname(logPath),
+    reconcileOrphanedClaim,
   });
 }
 
-async function openNewSessionWithAdvisoryClaim(params: {
+async function openNewSessionWithDeviceClaim(params: {
   req: DaemonRequest;
   sessionName: string;
   logPath: string;
@@ -574,12 +582,32 @@ async function openNewSessionWithAdvisoryClaim(params: {
   device: DeviceInfo;
   surface: SessionSurface;
   openTarget: string | undefined;
+  reconcileOrphanedClaim?: DeviceClaimReconciler;
 }): Promise<DaemonResponse> {
-  const { req, sessionName, logPath, sessionStore, device, surface, openTarget } = params;
+  const {
+    req,
+    sessionName,
+    logPath,
+    sessionStore,
+    device,
+    surface,
+    openTarget,
+    reconcileOrphanedClaim,
+  } = params;
   const conflict = findNewSessionDeviceConflict({ req, device, sessionStore });
   if (conflict) return conflict;
 
-  const localClaim = await acquireLocalDeviceClaim({ req, device, sessionName, logPath });
+  const localClaim = await acquireLocalDeviceClaim({
+    req,
+    device,
+    sessionName,
+    logPath,
+    reconcileOrphanedClaim,
+  });
+  if (localClaim.status === 'conflict') {
+    return buildDeviceClaimConflictError(device, localClaim.conflict);
+  }
+  const deviceClaim = localClaim.status === 'acquired' ? localClaim.ownership : undefined;
   const effects: NewSessionOpenEffects = { mayHaveStarted: false };
   try {
     const details = await prepareOpenCommandDetails({
@@ -598,7 +626,7 @@ async function openNewSessionWithAdvisoryClaim(params: {
       }),
     });
     if (details.type === 'response') {
-      await rollbackNewSessionClaim(localClaim.ownership, effects);
+      await rollbackNewSessionClaim(deviceClaim, effects);
       return details.response;
     }
     // Preparation can boot the device or warm caches, but it cannot establish session
@@ -618,14 +646,60 @@ async function openNewSessionWithAdvisoryClaim(params: {
       appName: details.details.appName,
       runtime: details.details.runtime,
       surface,
-      deviceClaim: localClaim.ownership,
+      deviceClaim,
     });
-    if (!response.ok) await rollbackNewSessionClaim(localClaim.ownership, effects);
+    if (!response.ok) await rollbackNewSessionClaim(deviceClaim, effects);
     return response;
   } catch (error) {
-    await rollbackNewSessionClaim(localClaim.ownership, effects);
+    await rollbackNewSessionClaim(deviceClaim, effects);
     throw error;
   }
+}
+
+function buildDeviceClaimConflictError(
+  device: DeviceInfo,
+  conflict: InspectedDeviceClaim,
+): DaemonResponse {
+  const owner = conflict.claim;
+  const selector = isApplePlatform(device.platform) ? '--udid' : '--serial';
+  const recoveryCommand = [
+    'agent-device device status',
+    `--platform ${shellQuoteIfNeeded(owner?.device.platform ?? String(device.platform))}`,
+    `${selector} ${shellQuoteIfNeeded(device.id)}`,
+    ...(conflict.classification === 'owner-process-dead' ? ['--stale'] : []),
+  ].join(' ');
+  const reason =
+    conflict.classification === 'live'
+      ? 'DEVICE_CLAIM_LIVE_OWNER'
+      : conflict.classification === 'owner-process-dead'
+        ? 'DEVICE_CLAIM_RECOVERY_PENDING'
+        : 'DEVICE_CLAIM_OWNER_UNCERTAIN';
+  return {
+    ok: false,
+    error: {
+      code: 'DEVICE_IN_USE',
+      message: owner
+        ? `${owner.device.platform} device ${device.id} is owned by session "${owner.session}" in workspace "${owner.workspace}".`
+        : `${device.name} has an ownership claim that could not be verified.`,
+      hint: `Inspect the owner with: ${recoveryCommand}`,
+      retriable: false,
+      details: {
+        reason,
+        classification: conflict.classification,
+        deviceKey: conflict.deviceKey,
+        ...(owner
+          ? {
+              owner: {
+                session: owner.session,
+                workspace: owner.workspace,
+                stateDir: owner.stateDir,
+              },
+            }
+          : {}),
+        recovery: { command: recoveryCommand },
+      },
+    },
+  };
 }
 
 async function rollbackNewSessionClaim(
@@ -641,7 +715,7 @@ async function rollbackNewSessionClaim(
     });
     return;
   }
-  await clearAdvisoryDeviceClaim(ownership);
+  await clearDeviceClaim(ownership);
 }
 
 // fallow-ignore-next-line complexity
@@ -650,6 +724,7 @@ export async function handleOpenCommand(params: {
   sessionName: string;
   logPath: string;
   sessionStore: SessionStore;
+  reconcileOrphanedClaim?: DeviceClaimReconciler;
 }): Promise<DaemonResponse> {
   const { sessionName, logPath, sessionStore } = params;
 
@@ -778,7 +853,7 @@ export async function handleOpenCommand(params: {
     firstSessionOpenLocks,
     device.id,
     async () =>
-      await openNewSessionWithAdvisoryClaim({
+      await openNewSessionWithDeviceClaim({
         req,
         sessionName,
         logPath,
@@ -786,6 +861,7 @@ export async function handleOpenCommand(params: {
         device,
         surface: surfaceResult,
         openTarget,
+        reconcileOrphanedClaim: params.reconcileOrphanedClaim,
       }),
   );
 }

@@ -83,7 +83,7 @@ export type SessionInstance = {
   mutations: number;
 };
 
-/** The advisory-claim device key the daemon derives for a resolved device. */
+/** The enforced-claim device key the daemon derives for a resolved device. */
 export function deviceClaimKey(device: DeviceInfo): string {
   return `local:${device.platform}:${device.appleOs ?? 'none'}:${device.id}`;
 }

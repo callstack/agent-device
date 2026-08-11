@@ -44,7 +44,7 @@ import {
   stopSessionAudioProbe,
   type SessionCleanupFailure,
 } from '../session-teardown.ts';
-import { clearAdvisoryDeviceClaim } from '../device-claims.ts';
+import { clearDeviceClaim } from '../device-claims.ts';
 import {
   buildRetriableRepairCloseFailureResponse,
   commitRepairScriptBeforeClose,
@@ -430,7 +430,7 @@ async function runCloseTeardownAndRelease(params: {
       });
     }
   } else {
-    await clearAdvisoryDeviceClaim(session.deviceClaim);
+    await clearDeviceClaim(session.deviceClaim);
   }
   sessionStore.delete(sessionName);
   if (deviceClaimBlockingError) throw deviceClaimBlockingError;

@@ -69,7 +69,7 @@ import { stopAndroidSnapshotHelperSessionForDevice } from '../../../platforms/an
 import { stopIosRunnerSession } from '../../../platforms/apple/core/runner/runner-client.ts';
 import { WEB_DESKTOP_DEVICE } from '../../../__tests__/test-utils/index.ts';
 import { setActiveProviderDeviceRuntimes } from '../../../provider-device-runtime.ts';
-import { acquireAdvisoryDeviceClaim } from '../../device-claims.ts';
+import { acquireDeviceClaim } from '../../device-claims.ts';
 import { inspectDeviceClaims } from '../../device-claim-inspection.ts';
 import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../../utils/diagnostics.ts';
 import {
@@ -1230,7 +1230,7 @@ test('targeted close preserves the platform-close AppError and still runs later 
 });
 
 // #1478-adjacent (device-claim retention observability): a failed platform close deliberately
-// keeps the advisory device claim (handing an unconfirmed device to the next session would be
+// keeps the enforced device claim (handing an unconfirmed device to the next session would be
 // worse), but the session record is still deleted on the very next line. Before this pair of
 // tests, nothing said so — the claim just quietly named a session `session list` no longer
 // reported. These two tests pin both branches of that decision so a future refactor cannot
@@ -1249,13 +1249,13 @@ test('a failed platform close retains the device claim and reports it', async ()
       kind: 'simulator' as const,
       booted: true,
     };
-    const acquired = await acquireAdvisoryDeviceClaim({
+    const acquired = await acquireDeviceClaim({
       device,
       session: sessionName,
       workspace: process.cwd(),
       stateDir: sessionStore.resolveDaemonStateDir(),
     });
-    if (!acquired.ownership) {
+    if (acquired.status !== 'acquired') {
       throw new Error('expected the test session to acquire a device claim');
     }
     const session = makeIosSimulatorRecordingSession(sessionStore, sessionName, { device });
@@ -1345,13 +1345,13 @@ test('a failing best-effort cleanup also retains the device claim and reports it
       kind: 'emulator' as const,
       booted: true,
     };
-    const acquired = await acquireAdvisoryDeviceClaim({
+    const acquired = await acquireDeviceClaim({
       device,
       session: sessionName,
       workspace: process.cwd(),
       stateDir: sessionStore.resolveDaemonStateDir(),
     });
-    if (!acquired.ownership) {
+    if (acquired.status !== 'acquired') {
       throw new Error('expected the test session to acquire a device claim');
     }
     const session = {
@@ -1452,13 +1452,13 @@ test('a successful close clears the device claim', async () => {
       kind: 'emulator' as const,
       booted: true,
     };
-    const acquired = await acquireAdvisoryDeviceClaim({
+    const acquired = await acquireDeviceClaim({
       device,
       session: sessionName,
       workspace: process.cwd(),
       stateDir: sessionStore.resolveDaemonStateDir(),
     });
-    if (!acquired.ownership) {
+    if (acquired.status !== 'acquired') {
       throw new Error('expected the test session to acquire a device claim');
     }
     const session = {

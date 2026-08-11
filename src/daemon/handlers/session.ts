@@ -47,6 +47,7 @@ import { PREPARE_REQUEST_TIMEOUT_MS } from '../../core/command-descriptor/timeou
 import { Deadline } from '../../utils/retry.ts';
 import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
 import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../request-runtime-binding.ts';
+import type { DeviceClaimReconciler } from '../device-claims.ts';
 import type { AppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 import type { ScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform';
@@ -287,6 +288,7 @@ type SessionCommandInput = {
   requestScope?: PlatformRequestScope;
   retainDeviceExecutionLock?: (deviceId: string) => Promise<void>;
   throwIfCanceled?: () => void;
+  reconcileOrphanedDeviceClaim?: DeviceClaimReconciler;
 };
 
 type SessionCommandParams = Omit<SessionCommandInput, 'leaseRegistry'> & {
@@ -489,13 +491,19 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
     await handleReleaseMaterializedPathsCommand({ req }),
   push: handlePushCommand,
   'trigger-app-event': handleTriggerAppEventCommand,
-  open: async ({ req, sessionName, logPath, sessionStore }) =>
+  open: async ({ req, sessionName, logPath, sessionStore, reconcileOrphanedDeviceClaim }) =>
     await composeOpenWithInitialSnapshot({
       req,
       sessionName,
       logPath,
       sessionStore,
-      openResponse: await handleOpenCommand({ req, sessionName, logPath, sessionStore }),
+      openResponse: await handleOpenCommand({
+        req,
+        sessionName,
+        logPath,
+        sessionStore,
+        reconcileOrphanedClaim: reconcileOrphanedDeviceClaim,
+      }),
     }),
   replay: handleSessionReplayCommandGroup,
   test: handleSessionReplayCommandGroup,
@@ -538,6 +546,7 @@ export async function handleSessionCommands(
     requestScope,
     retainDeviceExecutionLock,
     throwIfCanceled,
+    reconcileOrphanedDeviceClaim,
   } = params;
 
   const handler =
@@ -561,6 +570,7 @@ export async function handleSessionCommands(
     requestScope,
     retainDeviceExecutionLock,
     throwIfCanceled,
+    reconcileOrphanedDeviceClaim,
   });
 }
 

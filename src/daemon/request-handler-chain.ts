@@ -10,6 +10,7 @@ import type { LeaseRegistry } from './lease-registry.ts';
 import type { SessionStore } from './session-store.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from './types.ts';
 import type { BindDeviceRuntime, BindExactDeviceRuntime } from './request-runtime-binding.ts';
+import type { DeviceClaimReconciler } from './device-claims.ts';
 import type { AppLogAdmissionLedger } from './app-log-admission-ledger.ts';
 import type { ScreenRecordingAdmissionLedger } from './screen-recording-admission-ledger.ts';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform';
@@ -29,6 +30,7 @@ type RequestHandlerChainParams = {
   androidAdbExecutor?: AndroidAdbExecutor;
   bindDevice: BindDeviceRuntime;
   bindExactDevice: BindExactDeviceRuntime;
+  reconcileOrphanedDeviceClaim?: DeviceClaimReconciler;
   appLogAdmissionLedger?: AppLogAdmissionLedger;
   screenRecordingAdmissionLedger: ScreenRecordingAdmissionLedger;
   requestScope: PlatformRequestScope;
@@ -130,6 +132,7 @@ async function runSessionHandler(
       androidAdbExecutor: params.androidAdbExecutor,
       bindDevice: params.bindDevice,
       bindExactDevice: params.bindExactDevice,
+      reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
       appLogAdmissionLedger: params.appLogAdmissionLedger,
       screenRecordingAdmissionLedger: params.screenRecordingAdmissionLedger,
       requestScope: params.requestScope,

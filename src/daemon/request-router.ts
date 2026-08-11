@@ -58,6 +58,7 @@ import { createAgentBrowserWebProvider } from '../platforms/web/agent-browser-pr
 import { openWebSessionNames } from './web-session-names.ts';
 import { inferFillText } from './action-utils.ts';
 import { createPlatformRequestScope } from './platform-request-scope.ts';
+import { createDeviceClaimReconciler } from './device-claim-reconciliation.ts';
 import {
   createAppLogAdmissionLedger,
   type AppLogAdmissionLedger,
@@ -259,6 +260,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     allowReplayActions: boolean;
   }): Promise<DaemonResponse> {
     const { lockedScope, providerScope, allowReplayActions } = params;
+    const requestScope = createPlatformRequestScope(lockedScope.req);
     const handlerResponse = await runRequestHandlerChain({
       req: lockedScope.req,
       sessionName: lockedScope.sessionName,
@@ -276,9 +278,13 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       androidAdbExecutor: providerScope.androidAdbExecutor,
       bindDevice: lockedScope.bindDevice,
       bindExactDevice: lockedScope.bindExactDevice,
+      reconcileOrphanedDeviceClaim: createDeviceClaimReconciler({
+        gateway: deviceRuntimeGateway,
+        scope: requestScope,
+      }),
       appLogAdmissionLedger,
       screenRecordingAdmissionLedger,
-      requestScope: createPlatformRequestScope(lockedScope.req),
+      requestScope,
       retainDeviceExecutionLock: lockedScope.retainDeviceExecutionLock,
       throwIfCanceled: lockedScope.throwIfCanceled,
       contextFromFlags: lockedScope.handlerContextFromFlags,

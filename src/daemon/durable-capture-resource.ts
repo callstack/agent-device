@@ -16,6 +16,7 @@ import {
 import type { DurableCaptureResourceStore } from './durable-capture-resource-store.ts';
 import { createNextDurableCaptureFence } from './durable-capture-start-preflight.ts';
 import {
+  recoverDurableCaptureResource,
   recoverDurableCaptureResourcesAfterDaemonLock,
   type DurableCaptureRecoveryParams,
 } from './durable-capture-resource-recovery.ts';
@@ -114,6 +115,12 @@ export function createDurableCaptureResource<K extends string, H extends LiveRes
     },
     recoverAll(params: Omit<DurableCaptureRecoveryParams<K, H, C>, 'definition'>) {
       return recoverDurableCaptureResourcesAfterDaemonLock({ definition, ...params });
+    },
+    recoverOne(
+      params: Omit<DurableCaptureRecoveryParams<K, H, C>, 'definition'>,
+      resourcePath: string,
+    ) {
+      return recoverDurableCaptureResource({ definition, ...params }, resourcePath);
     },
   });
 }

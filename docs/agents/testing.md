@@ -339,7 +339,7 @@ device inventory through the production `withDeviceInventoryProvider` seam
 *either* production decision — exempting a command from execution locking, or dropping the `device:`
 key — changes the derived plan and trips the overlap invariant, so the lane is genuinely coupled to
 production lock resolution, not a duplicate of it. **Real:**
-`SessionStore` and `LeaseRegistry`. **Modeled:** the advisory device claim (`InMemoryClaimRegistry`)
+`SessionStore` and `LeaseRegistry`. **Modeled:** the enforced device claim (`InMemoryClaimRegistry`)
 and process "kill" — the production claim is a filesystem/OS lock and real process death, both out of
 scope for this scheduling lane and covered by their own unit tests. The full real-vs-modeled boundary
 is documented at the top of `nightly/concurrency-torture/harness.ts`.

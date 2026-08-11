@@ -53,7 +53,7 @@ test('importing hermetic-env-setup scrubs the ambient daemon connection vars', a
   }
 });
 
-test('importing hermetic-env-setup isolates advisory claims from the host and other workers', async () => {
+test('importing hermetic-env-setup isolates device claims from the host and other workers', async () => {
   process.env.AGENT_DEVICE_CLAIMS_DIR = '/host/device-claims';
   vi.resetModules();
   await import('./hermetic-env-setup.ts');

@@ -1,7 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  DEVICE_TARGETS,
   deviceFieldsFromPublicPlatform,
+  isAppleOs,
+  isPublicPlatform,
   matchesPlatformSelector,
   type PlatformSelector,
 } from '@agent-device/kernel/device';
@@ -10,12 +13,15 @@ import {
   type OwnerLiveness,
 } from '../utils/owner-identity.ts';
 import { readHostProcessIdentityObservations } from '../utils/host-process.ts';
-import { resolveDeviceClaimRoot } from './device-claim-paths.ts';
+import {
+  isCanonicalPersistedLocalDeviceKey,
+  resolveDeviceClaimRoot,
+} from './device-claim-paths.ts';
 import type { DeviceClaim } from './device-claims.ts';
 
 const DEVICE_CLAIM_SCHEMA_VERSION = 1;
 
-export type DeviceClaimClassification = OwnerLiveness | 'inconsistent';
+export type DeviceClaimClassification = OwnerLiveness | 'owner-process-reused' | 'inconsistent';
 
 export type InspectedDeviceClaim = {
   fileName: string;
@@ -135,6 +141,13 @@ function classifyInspectedClaim(
   observation: Parameters<typeof classifyOwnerLivenessFromObservation>[1],
 ): InspectedDeviceClaim {
   if (!entry.claim) return entry;
+  if (
+    observation &&
+    entry.claim.ownerStartTime &&
+    observation.startTime !== entry.claim.ownerStartTime
+  ) {
+    return { ...entry, classification: 'owner-process-reused' };
+  }
   return {
     ...entry,
     classification: classifyOwnerLivenessFromObservation(
@@ -158,22 +171,72 @@ function isClaimObject(value: unknown): value is object {
 }
 
 function isValidClaimRecord(raw: Partial<DeviceClaim>): boolean {
+  if (raw.schemaVersion !== DEVICE_CLAIM_SCHEMA_VERSION || !hasValidClaimIdentity(raw)) {
+    return false;
+  }
   return (
-    raw.schemaVersion === DEVICE_CLAIM_SCHEMA_VERSION &&
+    isCanonicalPersistedLocalDeviceKey(raw.device, raw.deviceKey) &&
+    hasValidClaimOwner(raw) &&
+    hasValidClaimTimestamps(raw)
+  );
+}
+
+function hasValidClaimIdentity(
+  raw: Partial<DeviceClaim>,
+): raw is Partial<DeviceClaim> &
+  Pick<DeviceClaim, 'device' | 'deviceKey' | 'session' | 'workspace' | 'stateDir' | 'ownerToken'> {
+  return (
     isClaimDevice(raw.device) &&
     [raw.deviceKey, raw.session, raw.workspace, raw.stateDir, raw.ownerToken].every(
       isNonEmptyString,
-    ) &&
-    isPositiveInteger(raw.ownerPid) &&
-    isFiniteNumber(raw.createdAtMs) &&
-    isFiniteNumber(raw.updatedAtMs)
+    )
   );
+}
+
+function hasValidClaimOwner(raw: Partial<DeviceClaim>): boolean {
+  return (
+    isPositiveInteger(raw.ownerPid) &&
+    (raw.ownerStartTime === null || isNonEmptyString(raw.ownerStartTime))
+  );
+}
+
+function hasValidClaimTimestamps(raw: Partial<DeviceClaim>): boolean {
+  return isFiniteNumber(raw.createdAtMs) && isFiniteNumber(raw.updatedAtMs);
 }
 
 function isClaimDevice(value: unknown): value is DeviceClaim['device'] {
   if (!isClaimObject(value)) return false;
   const device = value as Partial<DeviceClaim['device']>;
-  return [device.id, device.name, device.platform, device.kind].every(isNonEmptyString);
+  return (
+    [device.id, device.name].every(isNonEmptyString) &&
+    isPublicPlatform(device.platform) &&
+    isClaimDeviceKind(device.kind) &&
+    (device.target === undefined || DEVICE_TARGETS.includes(device.target)) &&
+    isConsistentAppleIdentity(device) &&
+    isConsistentPhysicalIosBackend(device)
+  );
+}
+
+function isClaimDeviceKind(value: unknown): value is DeviceClaim['device']['kind'] {
+  return value === 'simulator' || value === 'emulator' || value === 'device';
+}
+
+function isConsistentAppleIdentity(device: Partial<DeviceClaim['device']>): boolean {
+  if (device.appleOs !== undefined && !isAppleOs(device.appleOs)) return false;
+  if (device.platform === 'macos')
+    return device.appleOs === undefined || device.appleOs === 'macos';
+  if (device.platform === 'ios') return device.appleOs !== 'macos';
+  return device.appleOs === undefined;
+}
+
+function isConsistentPhysicalIosBackend(device: Partial<DeviceClaim['device']>): boolean {
+  if (device.iosPhysicalDeviceBackend === undefined) return true;
+  return (
+    device.platform === 'ios' &&
+    device.kind === 'device' &&
+    (device.iosPhysicalDeviceBackend === 'coredevice' ||
+      device.iosPhysicalDeviceBackend === 'xctest')
+  );
 }
 
 function isNonEmptyString(value: unknown): value is string {

@@ -33,7 +33,7 @@ import { applyRuntimeHintsToApp } from '../../runtime-hints.ts';
 import { resolveAndroidPackageForOpen } from '../session-open-target.ts';
 import { activateAndroidTestIme } from '../../../platforms/android/ime-lifecycle.ts';
 import { clearRequestCanceled, markRequestCanceled } from '../../../request/cancel.ts';
-import { acquireAdvisoryDeviceClaim } from '../../device-claims.ts';
+import { acquireDeviceClaim } from '../../device-claims.ts';
 import { inspectDeviceClaims } from '../../device-claim-inspection.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
 import { SessionStore } from '../../session-store.ts';
@@ -75,7 +75,7 @@ const android: DeviceInfo = {
   booted: true,
 };
 
-test('failed local open before device setup rolls its advisory claim back', async () => {
+test('failed local open before device setup rolls its device claim back', async () => {
   const { store, stateDir } = setup();
   mockResolveTargetDevice.mockResolvedValue(android);
   mockEnsureDeviceReady.mockRejectedValue(new Error('device not ready'));
@@ -97,7 +97,7 @@ test('failed local open before device setup rolls its advisory claim back', asyn
   assert.deepEqual(inspectDeviceClaims({ serial: android.id }), []);
 });
 
-test('failed local open after dispatch retains its advisory claim for recovery', async () => {
+test('failed local open after dispatch retains its device claim for recovery', async () => {
   const { store, stateDir } = setup();
   mockResolveTargetDevice.mockResolvedValue(android);
   mockDispatch.mockRejectedValue(new Error('open failed'));
@@ -119,7 +119,7 @@ test('failed local open after dispatch retains its advisory claim for recovery',
   assert.equal(inspectDeviceClaims({ serial: android.id })[0]?.classification, 'live');
 });
 
-test('failed local runtime-hint setup retains its advisory claim before open dispatch', async () => {
+test('failed local runtime-hint setup retains its device claim before open dispatch', async () => {
   const { store, stateDir } = setup();
   mockResolveTargetDevice.mockResolvedValue(android);
   mockResolveAndroidPackage.mockResolvedValue('com.example.demo');
@@ -147,7 +147,7 @@ test('failed local runtime-hint setup retains its advisory claim before open dis
   assert.equal(store.get('claim-runtime-hint-failure'), undefined);
 });
 
-test('failed local open response rolls its advisory claim back', async () => {
+test('failed local open response rolls its device claim back', async () => {
   const { store, stateDir } = setup();
   mockResolveTargetDevice.mockResolvedValue(android);
 
@@ -169,7 +169,7 @@ test('failed local open response rolls its advisory claim back', async () => {
   assert.deepEqual(inspectDeviceClaims({ serial: android.id }), []);
 });
 
-test('cancellation after local device setup retains the advisory claim for recovery', async () => {
+test('cancellation after local device setup retains the device claim for recovery', async () => {
   const { store, stateDir } = setup();
   const requestId = 'claim-canceled-after-dispatch';
   mockResolveTargetDevice.mockResolvedValue(android);
@@ -201,7 +201,7 @@ test('cancellation after local device setup retains the advisory claim for recov
   }
 });
 
-test('remote open creates no host-local advisory claim', async () => {
+test('remote open creates no host-local device claim', async () => {
   const { store, stateDir } = setup();
   mockResolveTargetDevice.mockResolvedValue(android);
   mockDispatch.mockResolvedValue({});
@@ -224,15 +224,65 @@ test('remote open creates no host-local advisory claim', async () => {
   assert.equal(store.get('remote-open')?.deviceClaim, undefined);
 });
 
-test('local close clears its matching advisory claim after teardown', async () => {
+test('a foreign live claim rejects open before platform preparation or mutation', async () => {
   const { store, stateDir } = setup();
-  const acquired = await acquireAdvisoryDeviceClaim({
+  mockResolveTargetDevice.mockResolvedValue(android);
+  const ownerStateDir = path.join(stateDir, 'foreign-owner');
+  fs.mkdirSync(ownerStateDir);
+  const acquired = await acquireDeviceClaim({
+    device: android,
+    session: 'foreign-session',
+    workspace: '/worktrees/foreign',
+    stateDir: ownerStateDir,
+  });
+  assert.equal(acquired.status, 'acquired');
+  if (acquired.status !== 'acquired') return;
+
+  const response = await handleOpenCommand({
+    req: {
+      command: 'open',
+      token: 'test',
+      session: 'second-session',
+      positionals: ['Demo'],
+      flags: { platform: 'android' },
+      meta: { cwd: '/worktrees/second' },
+    },
+    sessionName: 'second-session',
+    logPath: path.join(stateDir, 'daemon.log'),
+    sessionStore: store,
+  });
+
+  assert.equal(response.ok, false);
+  if (response.ok) return;
+  assert.equal(response.error.code, 'DEVICE_IN_USE');
+  assert.equal(response.error.retriable, false);
+  assert.equal(response.error.details?.reason, 'DEVICE_CLAIM_LIVE_OWNER');
+  assert.deepEqual(response.error.details?.owner, {
+    session: 'foreign-session',
+    workspace: '/worktrees/foreign',
+    stateDir: ownerStateDir,
+  });
+  assert.deepEqual(response.error.details?.recovery, {
+    command: 'agent-device device status --platform android --serial emulator-5554',
+  });
+  assert.equal(mockEnsureDeviceReady.mock.calls.length, 0);
+  assert.equal(mockResolveAndroidPackage.mock.calls.length, 0);
+  assert.equal(mockApplyRuntimeHints.mock.calls.length, 0);
+  assert.equal(vi.mocked(activateAndroidTestIme).mock.calls.length, 0);
+  assert.equal(mockDispatch.mock.calls.length, 0);
+  assert.equal(store.get('second-session'), undefined);
+});
+
+test('local close clears its matching device claim after teardown', async () => {
+  const { store, stateDir } = setup();
+  const acquired = await acquireDeviceClaim({
     device: android,
     session: 'close-claim',
     workspace: process.cwd(),
     stateDir,
   });
-  assert.ok(acquired.ownership);
+  assert.equal(acquired.status, 'acquired');
+  if (acquired.status !== 'acquired') return;
   store.set('close-claim', {
     name: 'close-claim',
     device: android,
@@ -253,15 +303,16 @@ test('local close clears its matching advisory claim after teardown', async () =
   assert.deepEqual(inspectDeviceClaims({ serial: android.id }), []);
 });
 
-test('#1391: a close-time script save failure still clears the advisory claim and deletes the session', async () => {
+test('#1391: a close-time script save failure still clears the device claim and deletes the session', async () => {
   const { store, stateDir } = setup();
-  const acquired = await acquireAdvisoryDeviceClaim({
+  const acquired = await acquireDeviceClaim({
     device: android,
     session: 'close-save-script-failure',
     workspace: process.cwd(),
     stateDir,
   });
-  assert.ok(acquired.ownership);
+  assert.equal(acquired.status, 'acquired');
+  if (acquired.status !== 'acquired') return;
   const targetPath = path.join(stateDir, 'already-published.ad');
   fs.writeFileSync(targetPath, 'pre-existing\n');
   // Retained directly (not just looked up via `store`) so it stays inspectable

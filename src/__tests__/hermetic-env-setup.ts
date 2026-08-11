@@ -1,5 +1,7 @@
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { afterEach } from 'vitest';
 
 // Unit tests must be hermetic with respect to the host's daemon-connection
 // environment. A machine actually running agent-device — including this repo's
@@ -26,13 +28,21 @@ for (const name of AMBIENT_DAEMON_ENV_VARS) {
 }
 
 // Provider-backed scenarios intentionally use local device identities so their
-// request path covers advisory-claim ownership. Each Vitest fork, however,
+// request path covers enforced-claim ownership. Each Vitest fork, however,
 // mocks the same identities (for example `sim-1`). Keeping claims under the
 // host-global default makes unrelated workers poll one process lock and can
 // push otherwise instant scenarios past Vitest's timeout. Scope claims to the
 // worker process: the production claim mechanism still runs, while workers no
 // longer contend for mocked devices or inherit a host's real claims.
-process.env.AGENT_DEVICE_CLAIMS_DIR = path.join(
-  os.tmpdir(),
-  `agent-device-vitest-claims-${process.pid}`,
-);
+const workerClaimsDir = path.join(os.tmpdir(), `agent-device-vitest-claims-${process.pid}`);
+process.env.AGENT_DEVICE_CLAIMS_DIR = workerClaimsDir;
+
+// Test files are module-isolated but share their worker process and therefore
+// its environment. Enforced claims deliberately survive a successful open, so
+// one case would otherwise become a foreign live owner for the next case in
+// that worker. Vitest has no concurrent cases in this repository; clear only
+// the worker-scoped temporary store between cases while preserving enforcement
+// within each case.
+afterEach(() => {
+  fs.rmSync(workerClaimsDir, { recursive: true, force: true });
+});

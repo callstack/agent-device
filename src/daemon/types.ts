@@ -257,7 +257,7 @@ export type SessionState = {
     clientId?: string;
     expiresAt?: number;
   };
-  /** Advisory host-global local-device claim owned by this session, if acquired. */
+  /** Enforced host-global local-device claim owned by this session, if acquired. */
   deviceClaim?: {
     deviceKey: string;
     ownerToken: string;

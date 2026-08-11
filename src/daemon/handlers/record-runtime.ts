@@ -4,7 +4,6 @@ import {
   screenRecordingAdmissionUse,
   screenRecordingStartUse,
   screenRecordingRecoveryUse,
-  type DurableResourceEnvelope,
   type PlatformRequestScope,
   type ScreenRecordingStartInput,
 } from '@agent-device/contracts/platform';
@@ -20,6 +19,7 @@ import {
   finishRecoveredScreenRecording,
   screenRecordingDurableResource,
 } from '../screen-recording-session-resource.ts';
+import { createScreenRecordingRecoveryControl } from '../screen-recording-resource-recovery.ts';
 import { resolveImplicitSessionScope } from '../session-routing.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../request-runtime-binding.ts';
@@ -270,13 +270,7 @@ async function finishRecovered(params: RecordRuntimeHandlerParams, session: Sess
         screenRecordingRecoveryUse,
         recoveryScope,
       );
-      return {
-        reattach: async (candidate: DurableResourceEnvelope<'screen-recording'>) =>
-          await runtime.operations.screenRecordingReattach({ envelope: candidate }),
-        cleanup: async (candidate: DurableResourceEnvelope<'screen-recording'>) =>
-          await runtime.operations.screenRecordingCleanup({ envelope: candidate }),
-        [Symbol.asyncDispose]: async () => {},
-      };
+      return createScreenRecordingRecoveryControl({ runtime, dispose: async () => {} });
     },
   });
 }

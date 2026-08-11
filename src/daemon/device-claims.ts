@@ -6,7 +6,13 @@ import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { acquireProcessLock } from '../utils/process-lock.ts';
 import { ownerIdentityMatches, readCurrentOwnerIdentity } from '../utils/owner-identity.ts';
 import { inspectDeviceClaimFile, type InspectedDeviceClaim } from './device-claim-inspection.ts';
-import { resolveDeviceClaimPath, resolveDeviceClaimRoot } from './device-claim-paths.ts';
+import {
+  canonicalLocalDeviceKey,
+  resolveDeviceClaimPath,
+  resolveDeviceClaimRoot,
+} from './device-claim-paths.ts';
+
+export { canonicalLocalDeviceKey } from './device-claim-paths.ts';
 
 const DEVICE_CLAIM_SCHEMA_VERSION = 1;
 const DEVICE_CLAIM_LOCK_TIMEOUT_MS = 30_000;
@@ -21,6 +27,7 @@ export type DeviceClaim = {
     kind: DeviceInfo['kind'];
     target?: DeviceInfo['target'];
     appleOs?: DeviceInfo['appleOs'];
+    iosPhysicalDeviceBackend?: DeviceInfo['iosPhysicalDeviceBackend'];
   };
   session: string;
   workspace: string;
@@ -32,12 +39,24 @@ export type DeviceClaim = {
   updatedAtMs: number;
 };
 
+export type DeviceClaimReconciliationResult =
+  | { status: 'reconciled' }
+  | { status: 'retained'; reason: string };
+
+export type DeviceClaimReconciler = (
+  claim: DeviceClaim,
+) => Promise<DeviceClaimReconciliationResult>;
+
 export type DeviceClaimSessionOwnership = {
   deviceKey: string;
   ownerToken: string;
   ownerPid: number;
   ownerStartTime: string | null;
 };
+
+export type DeviceClaimAcquireResult =
+  | { status: 'acquired'; ownership: DeviceClaimSessionOwnership }
+  | { status: 'conflict'; conflict: InspectedDeviceClaim };
 
 export function isLocalDeviceClaimTarget(
   meta:
@@ -51,37 +70,18 @@ export function isLocalDeviceClaimTarget(
   return !providerOwned && !meta?.leaseProvider && !meta?.deviceKey;
 }
 
-export function canonicalLocalDeviceKey(device: DeviceInfo): string {
-  const appleOs = device.appleOs ?? 'none';
-  return `local:${device.platform}:${appleOs}:${device.id}`;
-}
-
-export async function acquireAdvisoryDeviceClaim(params: {
+export async function acquireDeviceClaim(params: {
   device: DeviceInfo;
   session: string;
   workspace: string;
   stateDir: string;
-}): Promise<{ ownership?: DeviceClaimSessionOwnership; conflict?: InspectedDeviceClaim }> {
+  reconcileOrphanedClaim?: DeviceClaimReconciler;
+}): Promise<DeviceClaimAcquireResult> {
   const deviceKey = canonicalLocalDeviceKey(params.device);
   return await withDeviceClaimLock(deviceKey, async () => {
     const owner = readCurrentOwnerIdentity();
-    const existing = inspectDeviceClaimFile(resolveDeviceClaimPath(deviceKey));
-    if (existing) {
-      if (existing.claim && isCurrentClaimOwner(existing.claim, params, owner)) {
-        return { ownership: ownershipFromClaim(existing.claim) };
-      }
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'device_claim_advisory_conflict',
-        data: {
-          deviceKey,
-          classification: existing.classification,
-          ownerSession: existing.claim?.session,
-          ownerStateDir: existing.claim?.stateDir,
-        },
-      });
-      return { conflict: existing };
-    }
+    const existingResult = await resolveExistingClaim({ deviceKey, owner, params });
+    if (existingResult) return existingResult;
     const now = Date.now();
     const claim: DeviceClaim = {
       schemaVersion: DEVICE_CLAIM_SCHEMA_VERSION,
@@ -93,6 +93,9 @@ export async function acquireAdvisoryDeviceClaim(params: {
         kind: params.device.kind,
         ...(params.device.target ? { target: params.device.target } : {}),
         ...(params.device.appleOs ? { appleOs: params.device.appleOs } : {}),
+        ...(params.device.iosPhysicalDeviceBackend
+          ? { iosPhysicalDeviceBackend: params.device.iosPhysicalDeviceBackend }
+          : {}),
       },
       session: params.session,
       workspace: params.workspace,
@@ -104,16 +107,56 @@ export async function acquireAdvisoryDeviceClaim(params: {
       updatedAtMs: now,
     };
     writeClaim(claim);
-    return { ownership: ownershipFromClaim(claim) };
+    return { status: 'acquired', ownership: ownershipFromClaim(claim) };
   });
+}
+
+async function resolveExistingClaim(params: {
+  deviceKey: string;
+  owner: ReturnType<typeof readCurrentOwnerIdentity>;
+  params: Parameters<typeof acquireDeviceClaim>[0];
+}): Promise<DeviceClaimAcquireResult | undefined> {
+  const existing = inspectDeviceClaimFile(resolveDeviceClaimPath(params.deviceKey));
+  if (!existing) return undefined;
+  if (existing.claim && isCurrentClaimOwner(existing.claim, params.params, params.owner)) {
+    return { status: 'acquired', ownership: ownershipFromClaim(existing.claim) };
+  }
+  if (
+    existing.classification !== 'owner-process-dead' ||
+    !existing.claim ||
+    !params.params.reconcileOrphanedClaim
+  ) {
+    emitClaimConflict(params.deviceKey, existing);
+    return { status: 'conflict', conflict: existing };
+  }
+  return await reconcileExistingOrphan(
+    params.deviceKey,
+    existing,
+    existing.claim,
+    params.params.reconcileOrphanedClaim,
+  );
+}
+
+async function reconcileExistingOrphan(
+  deviceKey: string,
+  existing: InspectedDeviceClaim,
+  claim: DeviceClaim,
+  reconcile: DeviceClaimReconciler,
+): Promise<DeviceClaimAcquireResult | undefined> {
+  const reconciliation = await reconcile(claim);
+  if (reconciliation.status === 'retained') {
+    emitClaimConflict(deviceKey, existing, reconciliation.reason);
+    return { status: 'conflict', conflict: existing };
+  }
+  if (unlinkMatchingOrphanedClaim(claim)) return undefined;
+  const current = inspectDeviceClaimFile(resolveDeviceClaimPath(deviceKey)) ?? existing;
+  emitClaimConflict(deviceKey, current, 'owner-identity-changed');
+  return { status: 'conflict', conflict: current };
 }
 
 function isCurrentClaimOwner(
   claim: DeviceClaim,
-  params: Pick<
-    Parameters<typeof acquireAdvisoryDeviceClaim>[0],
-    'session' | 'workspace' | 'stateDir'
-  >,
+  params: Pick<Parameters<typeof acquireDeviceClaim>[0], 'session' | 'workspace' | 'stateDir'>,
   owner: ReturnType<typeof readCurrentOwnerIdentity>,
 ): boolean {
   return (
@@ -124,7 +167,7 @@ function isCurrentClaimOwner(
   );
 }
 
-export async function clearAdvisoryDeviceClaim(
+export async function clearDeviceClaim(
   ownership: DeviceClaimSessionOwnership | undefined,
 ): Promise<void> {
   if (!ownership) return;
@@ -150,30 +193,33 @@ export async function clearAdvisoryDeviceClaim(
 }
 
 /**
- * Deletes claim files whose owning process is provably gone.
+ * Reconciles claims whose owning process is provably gone and clears only
+ * claims whose attributable durable resources reached a safe terminal state.
  *
  * Claims are released on session close and daemon shutdown, but a process that
- * dies abruptly leaves its file behind forever and nothing else reaps them.
+ * dies abruptly leaves its file behind for proof-oriented recovery.
  *
  * The liveness check is repeated under the per-device lock immediately before
- * unlinking: claim paths are derived from the device key, so a concurrent
- * daemon can prune the same dead claim and a new session can write its live
- * successor to that exact path while this scan is still running. Deleting on
- * the first read would take the successor with it.
+ * reconciliation: claim paths are derived from the device key, so a concurrent
+ * daemon can replace the same dead claim while this scan is still running.
+ * Acting on the first read could clear the successor.
  *
  * Deliberately narrower than the CLI's stale filter: `owner-state-dir-gone`
  * describes a LIVE process whose state dir vanished, and deleting that claim
  * could hand its device to a second session.
  */
-export async function pruneDeadDeviceClaims(): Promise<{ pruned: number }> {
+export async function reconcileOrphanedDeviceClaims(
+  reconcile: DeviceClaimReconciler,
+): Promise<{ reconciled: number; retained: number }> {
   const root = resolveDeviceClaimRoot();
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(root, { withFileTypes: true });
   } catch {
-    return { pruned: 0 };
+    return { reconciled: 0, retained: 0 };
   }
-  let pruned = 0;
+  let reconciled = 0;
+  let retained = 0;
   for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
     const filePath = path.join(root, entry.name);
@@ -187,15 +233,52 @@ export async function pruneDeadDeviceClaims(): Promise<{ pruned: number }> {
       const current = inspectDeviceClaimFile(filePath);
       if (current?.classification !== 'owner-process-dead') return;
       if (current.claim?.ownerToken !== ownerToken) return;
-      try {
-        fs.unlinkSync(filePath);
-        pruned += 1;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      const result = await reconcile(current.claim);
+      if (result.status === 'retained') {
+        retained += 1;
+        return;
       }
+      if (unlinkMatchingOrphanedClaim(current.claim)) reconciled += 1;
+      else retained += 1;
     });
   }
-  return { pruned };
+  return { reconciled, retained };
+}
+
+function emitClaimConflict(
+  deviceKey: string,
+  existing: InspectedDeviceClaim,
+  reconciliationReason?: string,
+): void {
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'device_claim_conflict',
+    data: {
+      deviceKey,
+      classification: existing.classification,
+      ownerSession: existing.claim?.session,
+      ownerStateDir: existing.claim?.stateDir,
+      ...(reconciliationReason ? { reconciliationReason } : {}),
+    },
+  });
+}
+
+function unlinkMatchingOrphanedClaim(claim: DeviceClaim): boolean {
+  const claimPath = resolveDeviceClaimPath(claim.deviceKey);
+  const current = inspectDeviceClaimFile(claimPath);
+  if (
+    current?.classification !== 'owner-process-dead' ||
+    current.claim?.ownerToken !== claim.ownerToken
+  ) {
+    return false;
+  }
+  try {
+    fs.unlinkSync(claimPath);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    return true;
+  }
 }
 
 function writeClaim(claim: DeviceClaim): void {

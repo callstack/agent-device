@@ -1,4 +1,4 @@
-// In-memory model of the advisory host-global device claim (`src/daemon/device-claims.ts`).
+// In-memory model of the enforced host-global device claim (`src/daemon/device-claims.ts`).
 //
 // The production claim is a filesystem lock file guarded by a process lock, keyed
 // by `canonicalLocalDeviceKey`. That is real I/O and a real OS lock — neither is
@@ -6,14 +6,14 @@
 // (#1416 out-of-scope). This model preserves the *invariants* the harness asserts:
 //   - at most one live claim per device key;
 //   - a claim is released only by its owner (ownerToken match), mirroring
-//     `clearAdvisoryDeviceClaim`'s token/identity guard;
+//     `clearDeviceClaim`'s token/identity guard;
 //   - a dead owner's claim must be reclaimable (owner-death reap).
 // Mutual exclusion of the acquire/clear critical sections is provided by the
 // scheduler mutex in the harness, not here, so this stays a plain synchronous map.
 
 import crypto from 'node:crypto';
 
-export type AdvisoryClaimOwnership = {
+export type ClaimOwnership = {
   deviceKey: string;
   ownerToken: string;
   session: string;
@@ -26,14 +26,14 @@ type ClaimRecord = {
 };
 
 export type ClaimAcquireResult =
-  | { ownership: AdvisoryClaimOwnership; conflict?: undefined }
+  | { ownership: ClaimOwnership; conflict?: undefined }
   | { ownership?: undefined; conflict: { session: string } };
 
 export class InMemoryClaimRegistry {
   private readonly claims = new Map<string, ClaimRecord>();
 
   /**
-   * Mirrors `acquireAdvisoryDeviceClaim`: re-acquiring your own claim is
+   * Mirrors `acquireDeviceClaim`: re-acquiring your own claim is
    * idempotent, a foreign live claim is reported as a conflict, and a free key
    * is claimed with a fresh owner token.
    */
@@ -50,8 +50,8 @@ export class InMemoryClaimRegistry {
     return { ownership: { deviceKey, ownerToken: record.ownerToken, session } };
   }
 
-  /** Mirrors `clearAdvisoryDeviceClaim`: only the token owner may clear. */
-  clear(ownership: AdvisoryClaimOwnership | undefined): void {
+  /** Mirrors `clearDeviceClaim`: only the token owner may clear. */
+  clear(ownership: ClaimOwnership | undefined): void {
     if (!ownership) return;
     const existing = this.claims.get(ownership.deviceKey);
     if (!existing || existing.ownerToken !== ownership.ownerToken) return;

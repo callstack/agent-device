@@ -3,7 +3,7 @@
 // N logical clients drive randomized-but-seeded programs of
 // open / mutate / close / takeover / kill against the REAL invariant-bearing
 // daemon modules — `SessionStore` and `LeaseRegistry` — plus an in-memory model
-// of the advisory device claim. All concurrency is routed through the
+// of the enforced device claim. All concurrency is routed through the
 // `DeterministicScheduler`, so a seed fully determines the interleaving and any
 // failure replays exactly (see docs/agents/testing.md).
 //
@@ -17,7 +17,7 @@
 //     be reproduced from a seed. Reverting the router's same-device
 //     serialization therefore changes the derived plan and trips the overlap
 //     invariant. `withKeyedLock` reentrancy/cleanup stay covered by unit tests.
-//   - MODELED: the advisory device claim (`InMemoryClaimRegistry`) and process
+//   - MODELED: the enforced device claim (`InMemoryClaimRegistry`) and process
 //     "kill"; the production claim is a filesystem/OS lock and real process
 //     death, both out of scope for this scheduling-torture lane.
 

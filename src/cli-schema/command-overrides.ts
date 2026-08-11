@@ -46,9 +46,9 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
   },
   device: {
     text: {
-      summary: 'Inspect local advisory device ownership without daemon side effects',
+      summary: 'Inspect enforced local device ownership without daemon side effects',
       description:
-        'Inspect advisory host-local device ownership claims without starting or contacting a daemon. --stale only inspects proven-stale claims; it does not reclaim claims or clean platform resources.',
+        'Inspect enforced host-local device ownership claims without starting or contacting a daemon. --stale only inspects proven-stale claims; automatic reclamation occurs during open or daemon startup after exact-owner resource reconciliation.',
     },
     usageOverride:
       'device status [--platform <platform>] [--udid <udid>] [--serial <serial>] [--stale]',

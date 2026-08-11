@@ -22,7 +22,12 @@ import { closeDaemonServers } from './server-shutdown.ts';
 import type { DaemonInvokeFn, SessionState } from '../types.ts';
 import { createDaemonIdleReap } from './daemon-idle-reap.ts';
 import { finalizeDaemonSessionLease } from './daemon-session-lease-finalizer.ts';
-import { clearAdvisoryDeviceClaim, pruneDeadDeviceClaims } from '../device-claims.ts';
+import {
+  clearDeviceClaim,
+  reconcileOrphanedDeviceClaims,
+  type DeviceClaimReconciler,
+} from '../device-claims.ts';
+import { createDeviceClaimReconciler } from '../device-claim-reconciliation.ts';
 import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
@@ -296,7 +301,7 @@ export async function startDaemonRuntime(
         });
       },
       afterSuccessfulTeardown: async (sessionToFinalize) =>
-        await clearAdvisoryDeviceClaim(sessionToFinalize.deviceClaim),
+        await clearDeviceClaim(sessionToFinalize.deviceClaim),
     });
 
   const teardownDaemonSessions = async (): Promise<void> => {
@@ -438,8 +443,14 @@ export async function startDaemonRuntime(
     publishDaemonInfo(socketPort, httpPort);
     await flushDaemonStartupDiagnostics(logPath, startupAppLogDiagnostics);
     // After publication: publishDaemonInfo truncates daemon.log, so anything
-    // written before it is lost — including the prune's own diagnostic.
-    await pruneDeviceClaimsForDaemonStartup(logPath);
+    // written before it is lost — including reconciliation diagnostics.
+    await reconcileDeviceClaimsForDaemonStartup(
+      logPath,
+      createDeviceClaimReconciler({
+        gateway: deviceRuntimeGateway,
+        scope: createDaemonRecoveryPlatformScope(),
+      }),
+    );
     // Arms the initial idle-reap timer: a daemon that starts and never
     // receives a request must still be able to reap itself.
     idleReap.noteActivity();
@@ -547,22 +558,25 @@ export async function startDaemonRuntime(
   };
 }
 
-async function pruneDeviceClaimsForDaemonStartup(logPath: string): Promise<void> {
+async function reconcileDeviceClaimsForDaemonStartup(
+  logPath: string,
+  reconcile: DeviceClaimReconciler,
+): Promise<void> {
   // Startup runs outside any diagnostics scope, where emitDiagnostic is a no-op,
-  // so the prune has to open one of its own for its events to be recorded.
+  // so reconciliation has to open one of its own for its events to be recorded.
   await withDiagnosticsScope(
     { command: 'daemon', session: 'daemon', logPath, debug: true },
     async () => {
       try {
-        const { pruned } = await pruneDeadDeviceClaims();
-        if (pruned > 0) {
-          emitDiagnostic({ phase: 'device_claim_prune', data: { pruned } });
+        const summary = await reconcileOrphanedDeviceClaims(reconcile);
+        if (summary.reconciled > 0 || summary.retained > 0) {
+          emitDiagnostic({ phase: 'device_claim_reconcile', data: summary });
           flushDiagnosticsToSessionFile({ force: true });
         }
       } catch (error) {
         emitDiagnostic({
           level: 'warn',
-          phase: 'device_claim_prune_failed',
+          phase: 'device_claim_reconcile_failed',
           data: { error: error instanceof Error ? error.message : String(error) },
         });
         flushDiagnosticsToSessionFile({ force: true });

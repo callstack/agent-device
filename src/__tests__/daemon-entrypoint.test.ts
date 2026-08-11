@@ -296,11 +296,11 @@ test('daemon entrypoint publishes HTTP metadata and cleans up on shutdown', asyn
   }
 });
 
-test('daemon runtime records the startup device-claim prune in daemon.log', async () => {
-  // Regression: the prune ran before publishDaemonInfo, which truncates
+test('daemon runtime records startup device-claim reconciliation in daemon.log', async () => {
+  // Regression: reconciliation ran before publishDaemonInfo, which truncates
   // daemon.log — so the event was written and then wiped, leaving nothing in
   // the log users are told to inspect. Asserted against a real runtime start
-  // rather than the prune in isolation, since the ordering is the bug.
+  // rather than reconciliation in isolation, since the ordering is the bug.
   const stateDir = mkdtempForTestSync('agent-device-daemon-prune-log-');
   const claimsDir = mkdtempForTestSync('agent-device-daemon-prune-claims-');
   const paths = resolveDaemonPaths(stateDir);
@@ -345,11 +345,11 @@ test('daemon runtime records the startup device-claim prune in daemon.log', asyn
     });
 
     assert.notEqual(runtime, null);
-    assert.deepEqual(fs.readdirSync(claimsDir), [], 'the dead claim should be pruned');
+    assert.deepEqual(fs.readdirSync(claimsDir), [], 'the dead claim should be reconciled');
 
     const log = fs.readFileSync(paths.logPath, 'utf8');
-    assert.match(log, /"phase":"device_claim_prune"/);
-    assert.match(log, /"pruned":1/);
+    assert.match(log, /"phase":"device_claim_reconcile"/);
+    assert.match(log, /"reconciled":1/);
 
     await runtime?.shutdown();
     assert.equal(exitCode, 0);
