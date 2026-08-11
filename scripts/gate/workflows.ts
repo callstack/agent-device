@@ -12,8 +12,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parse } from 'yaml';
 import type { CheckId } from '../check-affected/model.ts';
-import { EXTERNAL_ACTIONS, GATE_ACTIONS, type ExternalAction } from './declarations.ts';
+import {
+  EXTERNAL_ACTIONS,
+  GATE_ACTIONS,
+  GATE_CONDITIONS,
+  type ExternalAction,
+} from './declarations.ts';
 import { commandSegments } from './shell.ts';
+
+/** A `pnpm gate <id>` a lane reaches, and every `if:` standing between the lane and it. */
+export type GateSighting = {
+  readonly id: CheckId;
+  readonly conditions: readonly string[];
+};
 
 export type Lane = {
   readonly workflow: string;
@@ -21,7 +32,14 @@ export type Lane = {
   readonly label: string;
   /** Lanes that gate the way in: `pull_request` or `schedule`. Release and dispatch do not. */
   readonly qualifying: boolean;
+  /** Gates this lane earns OWNERSHIP credit for: reached, and reached unconditionally. */
   readonly gates: readonly CheckId[];
+  /**
+   * Every gate reached, credited or not. `gates` is this filtered by `creditsUnder`; the
+   * difference is what audit.ts reports, so a gate hidden behind an undeclared condition is
+   * a finding in its own right rather than only a downstream unowned check.
+   */
+  readonly gateSightings: readonly GateSighting[];
   /**
    * Scripts a lane runs by repeating the script's body verbatim instead of through
    * pnpm. Derived by comparing against package.json, never declared: ci.yml's Node
@@ -175,7 +193,12 @@ function interpolatedInputs(doc: ActionDoc): { step: string; input: string }[] {
  * `gate: swift-runner-ios`, and the action runs `pnpm gate "$INPUT_GATE"`. The id is data
  * the audit validates against the registry, so seven call-site digests become nothing.
  */
-export type GateActionBody = { readonly run: string; readonly boundTo: string | null };
+export type GateActionBody = {
+  readonly run: string;
+  readonly boundTo: string | null;
+  /** The `if:` guarding the invocation, which decides whether callers earn credit for it. */
+  readonly condition: string | null;
+};
 
 /**
  * The one run step a gate-valued action performs, and the input its variable is bound to,
@@ -192,20 +215,45 @@ export function gateActionBody(doc: ActionDoc, input: string): GateActionBody | 
     const bound = /^\$\{\{\s*inputs\.([\w-]+)\s*\}\}$/.exec(
       String(step.env?.[variable] ?? '').trim(),
     );
-    return { run: step.run.trim(), boundTo: bound ? (bound[1] as string) : null };
+    return {
+      run: step.run.trim(),
+      boundTo: bound ? (bound[1] as string) : null,
+      condition: step.if === undefined ? null : String(step.if),
+    };
   }
   const runs = (doc.runs?.steps ?? []).filter((step) => typeof step.run === 'string');
   return {
     run: runs.map((step) => String(step.run).trim().split('\n')[0]).join(' | '),
     boundTo: null,
+    condition: null,
   };
 }
 
-function gateInput(step: RawStep, source: string): CheckId | null {
+/**
+ * Does a step guarded by this condition count as running?
+ *
+ * Absent is yes. Anything else must be declared — see `GATE_CONDITIONS`. Undeclared is no,
+ * so a condition nobody has ruled on cannot quietly keep a gate's credit alive.
+ */
+export function creditsUnder(condition: string | null | undefined): boolean {
+  if (condition === null || condition === undefined) return true;
+  return GATE_CONDITIONS[condition]?.credits === true;
+}
+
+/**
+ * The gate id a `uses:` step names, for an action declared to run exactly one gate, carrying
+ * the `if:` on the action's own gate step. The caller's `if:` is added by the caller, which
+ * applies it to everything the action reaches rather than to this sighting alone.
+ */
+function gateInput(step: RawStep, source: string, body?: GateActionBody): GateSighting | null {
   const input = GATE_ACTIONS[source];
   if (input === undefined) return null;
   const value = step.with?.[input];
-  return typeof value === 'string' && value.trim() !== '' ? (value.trim() as CheckId) : null;
+  if (typeof value !== 'string' || value.trim() === '') return null;
+  return {
+    id: value.trim() as CheckId,
+    conditions: body?.condition === null || body?.condition === undefined ? [] : [body.condition],
+  };
 }
 
 /**
@@ -258,7 +306,7 @@ type WorkflowDoc = {
 type Surface = {
   readonly steps: readonly LaneStep[];
   readonly externals: readonly string[];
-  readonly gates: readonly CheckId[];
+  readonly gates: readonly GateSighting[];
   readonly envKeys: readonly string[];
   readonly leaks: readonly string[];
 };
@@ -291,13 +339,25 @@ function usedActionSurface(
       externals,
       enterAction(local.source, chain),
     );
-    const gate = gateInput(step, local.source);
+    const declaredInput = GATE_ACTIONS[local.source];
+    const gate = gateInput(
+      step,
+      local.source,
+      declaredInput === undefined ? undefined : gateActionBody(local.doc, declaredInput),
+    );
     const leaks = interpolatedInputs(local.doc).map(
       (leak) => `${local.source} / ${leak.step}: \`inputs.${leak.input}\``,
     );
+    // A conditional `uses:` guards everything the action reaches. The nested steps keep
+    // their own `if:` in their digests; this is the caller's, which no digest can carry
+    // because a `uses:` step runs no shell of its own.
+    const guard = step.if === undefined ? [] : [String(step.if)];
     return {
       ...nested,
-      gates: [...(gate ? [gate] : []), ...nested.gates],
+      gates: [...(gate ? [gate] : []), ...nested.gates].map((sighting) => ({
+        ...sighting,
+        conditions: [...guard, ...sighting.conditions],
+      })),
       leaks: [...leaks, ...nested.leaks],
     };
   }
@@ -357,14 +417,19 @@ function jobSurface(
 function laneInvocations(
   steps: readonly LaneStep[],
   scripts: Readonly<Record<string, string>>,
-): { gates: CheckId[]; verbatim: string[] } {
-  const gates = new Set<CheckId>();
+): { gates: GateSighting[]; verbatim: string[] } {
+  const gates: GateSighting[] = [];
   const verbatim = new Set<string>();
-  for (const { run } of steps) {
-    for (const match of run.matchAll(GATE_INVOCATION)) gates.add(match[1] as CheckId);
-    for (const name of verbatimScripts(run, scripts)) verbatim.add(name);
+  for (const { run, extras } of steps) {
+    const conditions = extras['if'] === undefined ? [] : [extras['if']];
+    for (const match of run.matchAll(GATE_INVOCATION))
+      gates.push({ id: match[1] as CheckId, conditions });
+    // Verbatim credit is ownership too, and is filtered the same way: a lane that inlines
+    // a script's body behind an undeclared `if:` has not shown that it runs it.
+    if (creditsUnder(extras['if']))
+      for (const name of verbatimScripts(run, scripts)) verbatim.add(name);
   }
-  return { gates: [...gates], verbatim: [...verbatim] };
+  return { gates, verbatim: [...verbatim] };
 }
 
 /**
@@ -401,7 +466,14 @@ function workflowLanes(
       workflow: file,
       label: laneLabel(doc.name ?? file, job.name ?? jobId),
       qualifying,
-      gates: [...new Set([...scanned.gates, ...surface.gates])],
+      gates: [
+        ...new Set(
+          [...scanned.gates, ...surface.gates]
+            .filter((sighting) => sighting.conditions.every(creditsUnder))
+            .map((sighting) => sighting.id),
+        ),
+      ],
+      gateSightings: [...scanned.gates, ...surface.gates],
       verbatim: scanned.verbatim,
       steps: surface.steps,
       paths,

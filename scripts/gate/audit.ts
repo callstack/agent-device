@@ -12,6 +12,8 @@ import {
   ALLOWED_ENV,
   EXTERNAL_ACTIONS,
   GATE_ACTIONS,
+  GATE_CONDITIONS,
+  UNPROVABLE_OWNERS,
   type ExternalAction,
 } from './declarations.ts';
 import { categories, checkUnits, covered, scriptUnits, type Model } from './model.ts';
@@ -28,6 +30,7 @@ const HEADINGS: Readonly<Record<string, string>> = {
   external: 'Third-party actions with no declaration',
   surface: 'Execution surfaces the manifest does not model',
   'path-coverage': 'Paths whose selected checks no triggered lane runs',
+  condition: 'Gate steps behind an `if:` nobody has ruled on',
   inert: 'Declarations that no longer apply',
   registered: 'Suites and projects no registered check covers',
 };
@@ -66,10 +69,13 @@ function fail(assertion: string, message: string): Failure {
 }
 
 // 1. Every registered check is run by some qualifying lane, unit by unit.
-function unowned(model: Model): Failure[] {
+function unowned(
+  model: Model,
+  unprovable: Readonly<Record<string, string>> = UNPROVABLE_OWNERS,
+): Failure[] {
   return CHECK_CATALOG.flatMap((spec) => {
     const result = covered(spec, null, model);
-    if (result.covered) return [];
+    if (result.covered || spec.id in unprovable) return [];
     const missing = result.missing.length > 0 ? result.missing.join(', ') : '(no units resolved)';
     return [
       fail(
@@ -183,6 +189,35 @@ function gateIds(model: Model): Failure[] {
         .map((id) =>
           fail('gate', `${lane.workflow} / ${lane.label}: "${id}" names no registered check.`),
         ),
+    );
+}
+
+// 3a-iii. A conditional gate step must have its condition ruled on.
+//
+//     Ownership means the gate RUNS, and `if:` decides that. Round 9 put `if:` in the step
+//     digest, which makes an unapproved edit fail against the old baseline — but the baseline
+//     is GENERATED, so `--update` records the new digest and `if: false` credits a gate that
+//     cannot run. Where credit is decided therefore cannot be a generated file. It is
+//     `GATE_CONDITIONS`, hand-written, and an undeclared condition earns nothing.
+//
+//     Reported here as well as through the resulting unowned check, because "this condition
+//     is not ruled on" names the fix and "check x is unowned" does not.
+function gateConditions(model: Model): Failure[] {
+  return model.lanes
+    .filter((lane) => lane.qualifying)
+    .flatMap((lane) =>
+      lane.gateSightings.flatMap((sighting) =>
+        [...new Set(sighting.conditions)]
+          .filter((condition) => !(condition in GATE_CONDITIONS))
+          .map((condition) =>
+            fail(
+              'condition',
+              `${lane.workflow} / ${lane.label}: \`pnpm gate ${sighting.id}\` is guarded by ` +
+                `\`if: ${condition}\`, which GATE_CONDITIONS does not rule on, so the lane earns ` +
+                `no credit for it. Declare the condition with whether it counts as running.`,
+            ),
+          ),
+      ),
     );
 }
 
@@ -355,9 +390,45 @@ function inertOpaque(model: Model): Failure[] {
   });
 }
 
+function seenConditions(model: Model): Set<string> {
+  return new Set(
+    model.lanes
+      .filter((lane) => lane.qualifying)
+      .flatMap((lane) => lane.gateSightings)
+      .flatMap((sighting) => sighting.conditions),
+  );
+}
+
+function inertConditions(model: Model): Failure[] {
+  const seen = seenConditions(model);
+  return [
+    ...Object.keys(GATE_CONDITIONS)
+      .filter((condition) => !seen.has(condition))
+      .map((condition) =>
+        fail('inert', `gate-condition declaration \`${condition}\` guards no gate step.`),
+      ),
+    ...Object.keys(UNPROVABLE_OWNERS)
+      .filter((id) => {
+        const spec = CHECK_CATALOG.find((entry) => entry.id === id);
+        return spec === undefined || covered(spec, null, model).covered;
+      })
+      .map((id) =>
+        fail(
+          'inert',
+          `unprovable-owner declaration "${id}" is not needed; the check is either unregistered ` +
+            `or provably owned. Delete it.`,
+        ),
+      ),
+  ];
+}
+
 function inert(model: Model, declared: readonly BaselineEntry[]): Failure[] {
   const qualifying = model.lanes.filter((lane) => lane.qualifying);
-  return [...declared.flatMap((entry) => inertStep(entry, qualifying)), ...inertOpaque(model)];
+  return [
+    ...declared.flatMap((entry) => inertStep(entry, qualifying)),
+    ...inertOpaque(model),
+    ...inertConditions(model),
+  ];
 }
 
 /** Compared as a set, not a count: removing a waiver can trade one failure for another. */
@@ -421,6 +492,7 @@ export function audit(
     ...unowned(model),
     ...bypass(model, declared),
     ...gateIds(model),
+    ...gateConditions(model),
     ...gateActionBodies(model, GATE_ACTIONS),
     ...environment(model, allowedEnv),
     ...laneSurfaces(model),

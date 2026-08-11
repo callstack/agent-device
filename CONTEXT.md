@@ -469,8 +469,10 @@ when landing it, satisfy the gate where one exists.
   generated baseline (`scripts/gate/baseline.json`). The construction is narrowed so most of that
   cannot arise: a local action may not interpolate an input into a `run:` block, an action that
   builds through a gate takes the gate ID rather than a command, and environment is checked against
-  an allowlist by name instead of by digest. The workflow→check mapping is a shape check
-  rather than an interpretation of shell, and a gate that is not in the registry
+  an allowlist by name instead of by digest. A lane earns credit for a gate only if the step
+  runs, so an `if:` guarding one is ruled on in `GATE_CONDITIONS` and undeclared earns nothing —
+  hand-written precisely because `--update` regenerates the baseline. The workflow→check mapping
+  is a shape check rather than an interpretation of shell, and a gate that is not in the registry
   (`scripts/check-affected/checks.ts`) cannot run at all — the failure
   mode is a red build, not an invisible one. `check:gate-manifest` fails when a registered check
   is run by no `pull_request`/`schedule` lane, when a path category's selected checks are not run

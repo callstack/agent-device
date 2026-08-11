@@ -237,8 +237,18 @@ clever. Three seams that used to accept arbitrary commands no longer can:
   `NODE_OPTIONS`, `BASH_ENV`, `PERL5OPT`, `LD_PRELOAD` and `PATH` cannot arrive by accident,
   while ordinary device configuration needs no waiver at all.
 
+A gate step earns its lane ownership credit only if it **runs**, so an `if:` on one — or on
+the `uses:` that reaches it — must be ruled on in `GATE_CONDITIONS`, with whether it counts.
+Undeclared earns nothing, which is why `if: false` unowns whatever it guarded. This
+deliberately does not live in the baseline: that file is generated, so `--update` would
+record the new digest and hand the credit back. Six conditions guard the 19 conditional gate
+steps in the tree. A check whose owner genuinely cannot be proved from the tree —
+`replay-ios-device`, which needs a repository variable naming an attached device — is named in
+`UNPROVABLE_OWNERS` with its reason, and reported separately from the wired count rather than
+folded into it.
+
 The residue — everything CI genuinely runs outside the runner — is a generated baseline
-(`scripts/gate/baseline.json`, 81 entries of file + step + digest), refreshed with
+(`scripts/gate/baseline.json`, 90 entries of file + step + digest), refreshed with
 `pnpm check:gate-manifest --update` so a reviewer reads the diff. The prose lives once per
 declaring file in `REASONS`. It fails in both directions: an unrecorded step fails as a
 bypass, and an entry matching no live step fails as inert. Two execution surfaces the loader

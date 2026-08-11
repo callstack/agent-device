@@ -84,6 +84,87 @@ export const GATE_ACTIONS: Readonly<Record<string, string>> = {
 };
 
 /**
+ * What an `if:` on a gate step means for ownership, declared per exact condition.
+ *
+ * A lane earns credit for `pnpm gate x` because that step RUNS. A conditional step may not,
+ * and no amount of digesting fixes that: adding `if:` to the digest (round 9) makes an
+ * unapproved edit fail against the old baseline, but `--update` then records the new digest
+ * and `if: false` credits a gate that cannot run. The baseline is generated, so it cannot be
+ * where this is decided. This list is hand-written, which is exactly why `--update` cannot
+ * launder it.
+ *
+ * Undeclared means no credit, so `if: false` — or any other condition nobody has ruled on —
+ * unowns whatever it guarded, which is the loud direction. `credits: false` says the same
+ * thing deliberately, for conditions that exist and should not count.
+ *
+ * Six conditions guard the 19 conditional gate steps in the tree; the other 51 are
+ * unconditional and need nothing here.
+ */
+export type GateCondition = { readonly credits: boolean; readonly reason: string };
+
+export const GATE_CONDITIONS: Readonly<Record<string, GateCondition>> = {
+  'always()': {
+    credits: true,
+    reason: 'runs whatever the lane did before it; that is the whole meaning of the function',
+  },
+  "always() && github.event_name == 'pull_request'": {
+    credits: true,
+    reason:
+      'a lane qualifies by being triggered by `pull_request`, and this runs on exactly that ' +
+      'event, so the check runs on every PR the manifest reasons about',
+  },
+  "steps.restore-runner-build.outputs.cache-hit != 'true'": {
+    credits: true,
+    reason:
+      'the Apple runner build. Its cache key is a content hash of everything the gate ' +
+      'compiles — `apple/runner/**`, the build script, the runner sources, the action file ' +
+      'itself, package.json and the lockfile — so a hit means this exact gate already ' +
+      'succeeded on this exact input and its output is what is restored. A miss runs it. ' +
+      'The claim is that skipping is equivalent, not that the step always executes.',
+  },
+  "inputs.package-helpers == 'true' && steps.android-helpers-cache.outputs.cache-hit != 'true'": {
+    credits: true,
+    reason:
+      'the Android helper packaging gate, content-keyed like the Apple build above. The ' +
+      'extra conjunct is a caller opt-in: a lane passing `package-helpers: false` does not ' +
+      'run it, and this declaration does not evaluate that value. Ownership therefore rests ' +
+      'on the three lanes that pass `true`, and would need revisiting if they stopped.',
+  },
+  'failure()': {
+    credits: false,
+    reason:
+      'the mutation lanes’ envelope recorders, which run only after the lane has already ' +
+      'failed and end in `|| true`. Real error-path steps, but a check owned only by one ' +
+      'would never run on a green PR. Denying credit costs nothing today: every id they ' +
+      'name is also invoked unconditionally in the same workflow.',
+  },
+  "env.IOS_UDID != ''": {
+    credits: false,
+    reason:
+      'the physical-device replay suite, which runs only when the `IOS_UDID` repository ' +
+      'variable names an attached device. Nothing in this tree says whether it is set, so ' +
+      'ownership of `replay-ios-device` cannot be proved from the tree and is declared as a ' +
+      'known gap below rather than assumed.',
+  },
+};
+
+/**
+ * Checks no lane can be PROVEN to run, with the reason ownership is unprovable rather than
+ * absent. Distinct from a waiver: nothing here is excused from needing an owner, it is
+ * recorded that the owner exists outside what the tree can show.
+ *
+ * Fails in both directions like the rest: an entry whose check turns out to be owned by a
+ * qualifying lane is inert and must be deleted.
+ */
+export const UNPROVABLE_OWNERS: Readonly<Record<string, string>> = {
+  'replay-ios-device': [
+    "Replay Nightly / iOS Replay Suite runs it, guarded by `env.IOS_UDID != ''`.",
+    'Whether that repository variable is set is configuration this tree cannot read, so the',
+    'lane is wired but the run is not provable here. Tracking: #1429.',
+  ].join(' '),
+};
+
+/**
  * Environment variables CI is allowed to set, as exact names or `PREFIX_` namespaces.
  *
  * An ALLOWLIST, not a denylist, and that is the point: `NODE_OPTIONS`, `BASH_ENV`,

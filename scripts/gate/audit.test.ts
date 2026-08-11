@@ -16,11 +16,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { audit, formatFailures } from './audit.ts';
-import { loadBaseline } from './baseline.ts';
-import { ALLOWED_ENV, EXTERNAL_ACTIONS } from './declarations.ts';
+import { audit, formatFailures, plainGateStep } from './audit.ts';
+import { census, loadBaseline } from './baseline.ts';
+import { ALLOWED_ENV, EXTERNAL_ACTIONS, GATE_CONDITIONS } from './declarations.ts';
 import { loadModel, type Model } from './model.ts';
-import { loadLanes, stepDigest, type Lane } from './workflows.ts';
+import { creditsUnder, loadLanes, stepDigest, type Lane } from './workflows.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 const tracked = execFileSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'utf8' })
@@ -181,7 +181,9 @@ jobs:
         if: false
         run: pnpm gate layering
 `),
-    ['bypass'],
+    // `bypass` against the shipped baseline, `condition` regardless of it — round 10 is that
+    // only the second survives `--update`.
+    ['bypass', 'condition'],
   ],
   [
     'r6: an undeclared third-party action',
@@ -303,7 +305,10 @@ test('a gate-valued action must be proven to run its gate, not trusted to', () =
     audit(
       {
         ...base,
-        gateActionBodies: { ...base.gateActionBodies, [GATE_ACTION]: { run, boundTo: 'gate' } },
+        gateActionBodies: {
+          ...base.gateActionBodies,
+          [GATE_ACTION]: { run, boundTo: 'gate', condition: null },
+        },
       },
       baseline,
     ).filter((failure) => failure.assertion === 'gate');
@@ -312,6 +317,121 @@ test('a gate-valued action must be proven to run its gate, not trusted to', () =
   const noop = withBody('true');
   assert.equal(noop.length, 1, 'a no-op body must not credit its callers');
   assert.match(noop[0]?.message ?? '', /does not invoke/);
+});
+
+test('r10: regenerating the baseline cannot make `if: false` credit a gate', () => {
+  // Round 9 put `if:` in the step digest, so an unapproved `if: false` fails as `bypass`
+  // against the OLD baseline. Round 10's point is that this is not enough: the baseline is
+  // GENERATED, and `--update` records the new digest. What must survive regeneration is
+  // ownership, so this asserts `covered()` and not just the pre-update finding.
+  const disabled = plantWorkflow(
+    workflow(
+      '      - name: Run the parser fuzzer\n        if: false\n        run: pnpm gate fuzz-parsers\n',
+    ),
+  );
+  // Drop the real owner, so the only lane offering the gate is the disabled one.
+  const soleOwner: Model = {
+    ...disabled,
+    lanes: disabled.lanes.filter((lane) => !lane.gates.includes('fuzz-parsers')),
+  };
+  const regenerated = census(soleOwner.lanes, (step) => plainGateStep(step) !== null);
+  const found = audit(soleOwner, regenerated);
+
+  assert.deepEqual(
+    found.filter((failure) => failure.assertion === 'bypass'),
+    [],
+    'the regenerated baseline accepts the step — which is exactly why credit cannot rest on it',
+  );
+  assert.ok(
+    found.some((f) => f.assertion === 'owned' && /"fuzz-parsers"/.test(f.message)),
+    'a gate behind `if: false` must leave its check unowned even after regeneration',
+  );
+  assert.ok(
+    found.some((f) => f.assertion === 'condition' && /if: false/.test(f.message)),
+    'and the condition itself must be named, since "unowned" does not say how to fix it',
+  );
+});
+
+test('r10: a condition declared as not counting earns no credit either', () => {
+  // `failure()` is declared, so it raises no `condition` finding — but it runs only after
+  // the lane has already failed, so it must not own anything. Undeclared and declared-false
+  // differ in how loudly they report, never in what they credit.
+  const onlyOnFailure = plantWorkflow(
+    workflow(
+      '      - name: Record an envelope\n        if: failure()\n        run: pnpm gate fuzz-parsers\n',
+    ),
+  );
+  const soleOwner: Model = {
+    ...onlyOnFailure,
+    lanes: onlyOnFailure.lanes.filter(
+      (lane) => !lane.gates.includes('fuzz-parsers') || lane.workflow === 'planted.yml',
+    ),
+  };
+  const found = audit(
+    soleOwner,
+    census(soleOwner.lanes, (step) => plainGateStep(step) !== null),
+  );
+  assert.deepEqual(
+    found.filter((f) => f.assertion === 'condition'),
+    [],
+    '`failure()` is declared, so it is not an unruled condition',
+  );
+  assert.ok(
+    found.some((f) => f.assertion === 'owned' && /"fuzz-parsers"/.test(f.message)),
+    'a declared non-crediting condition must still leave the check unowned',
+  );
+});
+
+test('r10: a conditional `uses:` cannot credit the gate the action would have run', () => {
+  // The caller's `if:` guards everything the action reaches, and a `uses:` step runs no
+  // shell of its own, so no digest can carry it. It has to reach the sighting directly.
+  const planted = plantWorkflow(
+    workflow(`      - uses: ./.github/actions/setup-apple-runner-build
+        if: false
+        with:
+          derived-path: /tmp/derived
+          cache-key-prefix: planted
+          gate: swift-runner-ios
+`),
+  );
+  const lane = planted.lanes.find((candidate) => candidate.workflow === 'planted.yml');
+  assert.ok(lane, 'the planted lane loaded');
+  assert.deepEqual(lane.gates, [], 'a disabled `uses:` earns nothing');
+  assert.deepEqual(
+    lane.gateSightings.map((sighting) => sighting.conditions),
+    [['false', "steps.restore-runner-build.outputs.cache-hit != 'true'"]],
+    'both guards reach the sighting: the caller`s and the one inside the action',
+  );
+});
+
+test('every declared gate condition that credits is load-bearing', () => {
+  // `gates` is `gateSightings` filtered by `creditsUnder`, so recomputing it here is the
+  // real rule, not a copy — the identity case asserts exactly that before anything is denied.
+  const denying = (denied: string | null): Model => ({
+    ...base,
+    lanes: base.lanes.map((lane) => ({
+      ...lane,
+      gates: [
+        ...new Set(
+          lane.gateSightings
+            .filter((s) => s.conditions.every((c) => c !== denied && creditsUnder(c)))
+            .map((s) => s.id),
+        ),
+      ],
+    })),
+  });
+  assert.deepEqual(
+    denying(null).lanes.map((lane) => [...lane.gates].sort()),
+    base.lanes.map((lane) => [...lane.gates].sort()),
+    'recomputing credit from sightings reproduces what the loader stored',
+  );
+  for (const [condition, { credits }] of Object.entries(GATE_CONDITIONS)) {
+    if (!credits) continue;
+    assert.ok(
+      audit(denying(condition), baseline).length > 0,
+      `GATE_CONDITIONS \`${condition}\` credits nothing that needs it; it is inert`,
+    );
+  }
 });
 
 test('a baseline entry describing no live step is inert', () => {
