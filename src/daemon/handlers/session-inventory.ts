@@ -26,6 +26,7 @@ import {
   networkAdmissionUse,
   screenRecordingAdmissionUse,
 } from '@agent-device/contracts/platform';
+import type { BoundDeviceRuntime } from '@agent-device/contracts/platform';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 
 export async function handleSessionInventoryCommands(params: {
@@ -231,33 +232,12 @@ async function handleAppsInventory(params: {
   const { device } = resolution;
   const appsFilter = assertResolvedAppsFilter(req.flags?.appsFilter);
 
-  if (!inspectFacts) {
-    throw new AppError('COMMAND_FAILED', 'Device runtime facts inspection is unavailable.', {
-      reason: 'runtime-gateway-missing',
-    });
-  }
-  const facts = await inspectFacts(device);
-  const unavailable = [facts.operations.ensureReady, facts.operations.listApps].find(
-    (fact) => !fact.available,
-  );
-  if (unavailable && !unavailable.available) {
-    return errorResponse(
-      'UNSUPPORTED_OPERATION',
-      'apps is not supported on this device',
-      undefined,
-      unavailable.hint ? { hint: unavailable.hint } : undefined,
-    );
-  }
-  if (!bindDevice) {
-    throw new AppError('COMMAND_FAILED', 'Device runtime binding is unavailable.', {
-      reason: 'runtime-gateway-missing',
-    });
-  }
-
   const resolvedAndroidSerialAllowlist = resolveAndroidSerialAllowlist(
     req.flags?.androidDeviceAllowlist,
   );
-  const runtime = await bindDevice(device, appsRuntimeUse);
+  const runtimeResolution = await resolveAppsRuntime({ device, inspectFacts, bindDevice });
+  if ('response' in runtimeResolution) return runtimeResolution.response;
+  const runtime = runtimeResolution.runtime;
   const readyDevice = await runtime.operations.ensureReady({
     serial: req.flags?.serial,
     androidSerialAllowlist: resolvedAndroidSerialAllowlist
@@ -266,6 +246,38 @@ async function handleAppsInventory(params: {
   });
   const apps = await runtime.operations.listApps({ device: readyDevice, filter: appsFilter });
   return appsInventoryResponse(apps);
+}
+
+async function resolveAppsRuntime(params: {
+  device: DeviceInfo;
+  inspectFacts: InspectDeviceRuntimeFacts | undefined;
+  bindDevice: BindDeviceRuntime | undefined;
+}): Promise<{ response: DaemonResponse } | { runtime: BoundDeviceRuntime<typeof appsRuntimeUse> }> {
+  if (!params.inspectFacts) {
+    throw new AppError('COMMAND_FAILED', 'Device runtime facts inspection is unavailable.', {
+      reason: 'runtime-gateway-missing',
+    });
+  }
+  const facts = await params.inspectFacts(params.device);
+  const unavailable = [facts.operations.ensureReady, facts.operations.listApps].find(
+    (fact) => !fact.available,
+  );
+  if (unavailable && !unavailable.available) {
+    return {
+      response: errorResponse(
+        'UNSUPPORTED_OPERATION',
+        'apps is not supported on this device',
+        undefined,
+        unavailable.hint ? { hint: unavailable.hint } : undefined,
+      ),
+    };
+  }
+  if (!params.bindDevice) {
+    throw new AppError('COMMAND_FAILED', 'Device runtime binding is unavailable.', {
+      reason: 'runtime-gateway-missing',
+    });
+  }
+  return { runtime: await params.bindDevice(params.device, appsRuntimeUse) };
 }
 
 function appsInventoryResponse(apps: readonly { id: string; name: string }[]): DaemonResponse {
