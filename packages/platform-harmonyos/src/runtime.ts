@@ -11,6 +11,7 @@ import {
   createHarmonyScreenRecordingOperations,
   harmonyScreenRecordingFacts,
 } from './recording/runtime.ts';
+import { readHarmonyAppState } from './app-state.ts';
 
 const owner = localRuntimeOwner('harmonyos');
 const available = Object.freeze({ available: true } as const);
@@ -62,7 +63,11 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
           ...(facts.operations.appState.available
             ? {
                 appState: async () =>
-                  await host.appState.harmonyos.appState(request.device, request.scope.signal),
+                  await readHarmonyAppState(
+                    host.appState.harmonyos,
+                    request.device,
+                    request.scope.signal,
+                  ),
               }
             : {}),
           ensureReady: async () => ({ ...request.device, booted: true }),

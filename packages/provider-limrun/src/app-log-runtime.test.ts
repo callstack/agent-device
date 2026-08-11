@@ -298,8 +298,8 @@ function unusedHost(): PlatformRuntimeHost {
       harmonyos: { listApps: async () => [] },
     },
     appState: {
-      android: { appState: async () => ({}) },
-      harmonyos: { appState: async () => ({}) },
+      android: { run: async () => ({ stdout: '' }) },
+      harmonyos: { run: async () => ({ stdout: '' }) },
     },
     deviceReadiness: {
       applePhysical: { ensureConnected: async () => {} },

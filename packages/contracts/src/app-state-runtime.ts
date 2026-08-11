@@ -6,15 +6,33 @@ export type AppStateRuntimeResult = Readonly<{
   activity?: string;
 }>;
 
+export type AppStateRuntimeCommand = Readonly<{
+  args: readonly string[];
+  allowFailure?: boolean;
+  timeoutMs?: number;
+}>;
+
+export type AppStateRuntimeCommandResult = Readonly<{
+  stdout: string;
+}>;
+
 export type AppStateRuntimeOperations = Readonly<{
   appState(): Promise<AppStateRuntimeResult>;
 }>;
 
 export type AppStateRuntimeHost = Readonly<{
   android: Readonly<{
-    appState(device: DeviceInfo, signal: AbortSignal): Promise<AppStateRuntimeResult>;
+    run(
+      device: DeviceInfo,
+      command: AppStateRuntimeCommand,
+      signal: AbortSignal,
+    ): Promise<AppStateRuntimeCommandResult>;
   }>;
   harmonyos: Readonly<{
-    appState(device: DeviceInfo, signal: AbortSignal): Promise<AppStateRuntimeResult>;
+    run(
+      device: DeviceInfo,
+      command: AppStateRuntimeCommand,
+      signal: AbortSignal,
+    ): Promise<AppStateRuntimeCommandResult>;
   }>;
 }>;

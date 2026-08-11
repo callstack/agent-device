@@ -25,8 +25,7 @@ test.each([
 ])('classifies the Android %s runtime denominator', async (_name, runtimeDevice) => {
   const listApps = vi.fn(async () => [{ id: 'com.example.app', name: 'Example' }]);
   const appState = vi.fn(async () => ({
-    package: 'com.example.app',
-    activity: '.MainActivity',
+    stdout: 'mCurrentFocus=Window{1 u0 com.example.app/.MainActivity}',
   }));
   const host = {
     commands: {
@@ -42,8 +41,8 @@ test.each([
       harmonyos: { listApps: async () => [] },
     },
     appState: {
-      android: { appState },
-      harmonyos: { appState: async () => ({}) },
+      android: { run: appState },
+      harmonyos: { run: async () => ({ stdout: '' }) },
     },
     deviceReadiness: {
       applePhysical: { ensureConnected: async () => {} },
@@ -107,7 +106,11 @@ test.each([
     package: 'com.example.app',
     activity: '.MainActivity',
   });
-  expect(appState).toHaveBeenCalledWith(runtimeDevice, expect.any(AbortSignal));
+  expect(appState).toHaveBeenCalledWith(
+    runtimeDevice,
+    { args: ['shell', 'dumpsys', 'window', 'windows'], allowFailure: true },
+    expect.any(AbortSignal),
+  );
 
   if (runtimeDevice.kind === 'emulator') {
     await expect(binding.operations.bootTargetHeadless?.({})).resolves.toMatchObject({
@@ -124,8 +127,8 @@ test('rejects the non-discovered Android simulator cell for appstate', async () 
   const host = {
     processTransports: { resolve: async () => ({ mode: 'local' as const }) },
     appState: {
-      android: { appState: async () => ({}) },
-      harmonyos: { appState: async () => ({}) },
+      android: { run: async () => ({ stdout: '' }) },
+      harmonyos: { run: async () => ({ stdout: '' }) },
     },
     deviceReadiness: { android: { ensureReady: async (selected: DeviceInfo) => selected } },
     screenRecording: {

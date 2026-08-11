@@ -205,6 +205,8 @@ export {
 } from '../platform-runtime-operations.ts';
 export type { DeviceReadinessRuntimePlan } from '../platform-runtime-operations.ts';
 export type {
+  AppStateRuntimeCommand,
+  AppStateRuntimeCommandResult,
   AppStateRuntimeHost,
   AppStateRuntimeOperations,
   AppStateRuntimeResult,

@@ -12,6 +12,7 @@ import { createAndroidAppLogRuntime } from './logs/runtime.ts';
 import { dumpAndroidNetworkTraffic } from './network/runtime.ts';
 import { bindAndroidScreenRecordingRuntime } from './recording/runtime.ts';
 import { ensureAndroidReady } from './readiness/runtime.ts';
+import { readAndroidAppState } from './app-state.ts';
 
 const owner = localRuntimeOwner('android');
 const available = Object.freeze({ available: true } as const);
@@ -68,7 +69,11 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           ...(facts.operations.appState.available
             ? {
                 appState: async () =>
-                  await host.appState.android.appState(request.device, request.scope.signal),
+                  await readAndroidAppState(
+                    host.appState.android,
+                    request.device,
+                    request.scope.signal,
+                  ),
               }
             : {}),
           networkDump: async (input: NetworkDumpInput) =>

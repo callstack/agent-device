@@ -116,8 +116,8 @@ function host(run: PlatformRuntimeHost['commands']['run']): PlatformRuntimeHost 
       androidEmulator: { discover: async () => [], launch: () => 1, terminate: async () => {} },
     },
     appState: {
-      android: { appState: async () => ({}) },
-      harmonyos: { appState: async () => ({}) },
+      android: { run: async () => ({ stdout: '' }) },
+      harmonyos: { run: async () => ({ stdout: '' }) },
     },
     appleTools: {
       isXcrunAvailable: async () => false,

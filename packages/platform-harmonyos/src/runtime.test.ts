@@ -26,9 +26,12 @@ test.each([
     processTransports: { resolve: async () => ({ mode: 'local' as const }) },
     appInventory: { harmonyos: { listApps } },
     appState: {
-      android: { appState: async () => ({}) },
+      android: { run: async () => ({ stdout: '' }) },
       harmonyos: {
-        appState: async () => ({ package: 'com.example.harmony', activity: 'MainAbility' }),
+        run: async () => ({
+          stdout:
+            'Mission ID #76  mission name #[#com.example.harmony:entry:MainAbility]\nstate #FOREGROUND',
+        }),
       },
     },
   } as unknown as PlatformRuntimeHost;
@@ -73,8 +76,8 @@ test('rejects the non-discovered HarmonyOS simulator cell for appstate', async (
   const host = {
     processTransports: { resolve: async () => ({ mode: 'local' as const }) },
     appState: {
-      android: { appState: async () => ({}) },
-      harmonyos: { appState: async () => ({}) },
+      android: { run: async () => ({ stdout: '' }) },
+      harmonyos: { run: async () => ({ stdout: '' }) },
     },
   } as unknown as PlatformRuntimeHost;
   const binding = await createHarmonyPlatformRuntime(host).bind({

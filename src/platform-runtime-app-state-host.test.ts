@@ -1,55 +1,98 @@
-import { expect, test, vi } from 'vitest';
+import { expect, beforeEach, test, vi } from 'vitest';
 
-const loads = vi.hoisted(() => ({ android: 0, harmonyos: 0 }));
+const executors = vi.hoisted(() => ({
+  android: vi.fn(),
+  harmonyos: vi.fn(),
+}));
 
-vi.mock('./platforms/android/app-lifecycle.ts', () => {
-  loads.android += 1;
-  return {
-    getAndroidAppState: async () => ({
-      package: 'com.example.android',
-      activity: '.MainActivity',
-    }),
-  };
-});
+vi.mock('./platforms/android/adb.ts', () => ({
+  runAndroidAdb: executors.android,
+}));
 
-vi.mock('./platforms/harmonyos/app-lifecycle.ts', () => {
-  loads.harmonyos += 1;
-  return {
-    getHarmonyAppState: async () => ({
-      package: 'com.example.harmony',
-      activity: 'MainAbility',
-    }),
-  };
-});
+vi.mock('./platforms/harmonyos/hdc.ts', () => ({
+  runHarmonyHdc: executors.harmonyos,
+}));
 
 import { createAppStateRuntimeHost } from './platform-runtime-app-state-host.ts';
 
-test('keeps foreground-state implementations lazy until the selected leaf executes', async () => {
+const android = {
+  platform: 'android' as const,
+  id: 'emulator-5554',
+  name: 'Pixel',
+  kind: 'emulator' as const,
+};
+const harmony = {
+  platform: 'harmonyos' as const,
+  id: 'harmony-1',
+  name: 'Harmony',
+  kind: 'device' as const,
+};
+
+beforeEach(() => {
+  executors.android.mockReset();
+  executors.harmonyos.mockReset();
+  executors.android.mockResolvedValue({
+    stdout: 'mCurrentFocus=Window{1 u0 com.example.android/.MainActivity}',
+  });
+  executors.harmonyos.mockResolvedValue({
+    stdout:
+      'Mission ID #76  mission name #[#com.example.harmony:entry:MainAbility]\nstate #FOREGROUND',
+  });
+});
+
+test('keeps only focused cancellable command bridges in the root host', async () => {
   const host = createAppStateRuntimeHost();
   const signal = new AbortController().signal;
-  const android = {
-    platform: 'android' as const,
-    id: 'emulator-5554',
-    name: 'Pixel',
-    kind: 'emulator' as const,
-  };
-  const harmony = {
-    platform: 'harmonyos' as const,
-    id: 'harmony-1',
-    name: 'Harmony',
-    kind: 'device' as const,
-  };
 
-  expect(loads).toEqual({ android: 0, harmonyos: 0 });
-  await expect(host.android.appState(android, signal)).resolves.toEqual({
-    package: 'com.example.android',
-    activity: '.MainActivity',
+  await expect(
+    host.android.run(android, { args: ['shell', 'dumpsys', 'window'], allowFailure: true }, signal),
+  ).resolves.toEqual({
+    stdout: 'mCurrentFocus=Window{1 u0 com.example.android/.MainActivity}',
   });
-  expect(loads).toEqual({ android: 1, harmonyos: 0 });
+  expect(executors.android).toHaveBeenCalledWith(
+    android,
+    ['shell', 'dumpsys', 'window'],
+    expect.objectContaining({ allowFailure: true, signal }),
+  );
 
-  await expect(host.harmonyos.appState(harmony, signal)).resolves.toEqual({
-    package: 'com.example.harmony',
-    activity: 'MainAbility',
+  await expect(
+    host.harmonyos.run(harmony, { args: ['shell', 'aa', 'dump', '-l'], timeoutMs: 15_000 }, signal),
+  ).resolves.toEqual({
+    stdout:
+      'Mission ID #76  mission name #[#com.example.harmony:entry:MainAbility]\nstate #FOREGROUND',
   });
-  expect(loads).toEqual({ android: 1, harmonyos: 1 });
+  expect(executors.harmonyos).toHaveBeenCalledWith(
+    harmony,
+    ['shell', 'aa', 'dump', '-l'],
+    expect.objectContaining({ timeoutMs: 15_000, signal }),
+  );
+});
+
+test('forwards an in-flight abort to the underlying Android executor', async () => {
+  const controller = new AbortController();
+  let observedSignal: AbortSignal | undefined;
+  executors.android.mockImplementationOnce(
+    async (_device, _args, options: { signal?: AbortSignal }) => {
+      observedSignal = options.signal;
+      await new Promise<never>((_resolve, reject) => {
+        options.signal?.addEventListener(
+          'abort',
+          () => reject(options.signal?.reason ?? new DOMException('Aborted', 'AbortError')),
+          { once: true },
+        );
+      });
+    },
+  );
+
+  const pending = createAppStateRuntimeHost().android.run(
+    android,
+    { args: ['shell', 'dumpsys', 'window'], allowFailure: true },
+    controller.signal,
+  );
+  await vi.waitFor(() => expect(executors.android).toHaveBeenCalledTimes(1));
+
+  controller.abort();
+
+  await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+  expect(observedSignal).toBe(controller.signal);
 });
