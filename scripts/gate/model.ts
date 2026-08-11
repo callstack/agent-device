@@ -11,11 +11,11 @@
 //   categories()   — one representative changed path per selector rule, found by
 //                    running the real selector over the tracked tree.
 //
-// Lane→check resolution needs no shell interpretation at all: CI may only reach a
-// gate through `pnpm gate <id>` (audit.ts enforces it), so the mapping is a token
-// scan over `run:` blocks and action inputs. That constraint is what removes the
-// interpretation framework this file replaces — a gate that is not registered
-// cannot be invoked, instead of being invisible until someone declares it.
+// Lane→check resolution needs no shell interpretation at all. audit.ts enforces the
+// construction rule — every `run:` block in a qualifying lane is either a `pnpm gate`
+// invocation or an inventoried exception — so finding what a lane runs is a scan for
+// `pnpm gate <id>`, not an attempt to understand arbitrary shell. That is what removes
+// the interpretation framework this file replaces.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -54,7 +54,23 @@ export type Lane = {
   readonly pathsIgnore: readonly string[];
 };
 
-export type LaneStep = { readonly name: string; readonly commands: readonly string[] };
+/**
+ * `run` is the step's shell block — the thing the no-bypass rule is asserted over.
+ * `inputs` are the string values it hands to an action, scanned for gate invocations
+ * but not themselves shell (a composite action's own `run:` is a lane step too).
+ */
+export type LaneStep = {
+  readonly name: string;
+  /** The file declaring the step: a workflow, or the composite action it came from. */
+  readonly source: string;
+  readonly run?: string;
+  readonly inputs: readonly string[];
+};
+
+/** GitHub evaluates `${{ … }}` before the shell sees it, so it is not shell syntax. */
+export function stripExpressions(text: string): string {
+  return text.replace(/\$\{\{[^}]*\}\}/g, '<expr>');
+}
 
 export type Model = {
   readonly scripts: Readonly<Record<string, string>>;
@@ -96,10 +112,7 @@ function tokens(segment: string): string[] {
 }
 
 /** `pnpm x`, `pnpm run x`, `pnpm --silent x` — the invoked script, or null. */
-export function invokedScript(
-  segment: string,
-  scripts: Readonly<Record<string, string>>,
-): string | null {
+function invokedScript(segment: string, scripts: Readonly<Record<string, string>>): string | null {
   const parts = tokens(segment);
   if (parts[0] !== 'pnpm') return null;
   for (const part of parts.slice(1)) {
@@ -220,12 +233,11 @@ type RawStep = {
   'working-directory'?: string;
 };
 
-/** Commands a step contributes: its own `run:`, plus string inputs it hands to an action. */
-function stepCommands(step: RawStep): string[] {
-  const inputs = Object.values(step.with ?? {}).filter(
+/** String values a step hands to an action — scanned for gate invocations, not shell. */
+function stepInputs(step: RawStep): string[] {
+  return Object.values(step.with ?? {}).filter(
     (value): value is string => typeof value === 'string',
   );
-  return [step.run, ...inputs].filter((value): value is string => typeof value === 'string');
 }
 
 function laneLabel(workflowName: string, jobName: string): string {
@@ -242,13 +254,18 @@ function triggerPaths(on: Record<string, { paths?: string[]; 'paths-ignore'?: st
  * still belongs to the calling lane — the Android helper packaging is only reachable
  * that way — and its commands are held to the same no-bypass rule.
  */
-function compositeSteps(uses: string, root: string, depth = 0): RawStep[] {
+function compositeSteps(
+  uses: string,
+  root: string,
+  depth = 0,
+): { step: RawStep; source: string }[] {
   if (!uses.startsWith('./') || depth > 3) return [];
-  const file = path.join(root, uses.slice(2), 'action.yml');
+  const source = `${uses.slice(2)}/action.yml`;
+  const file = path.join(root, source);
   if (!fs.existsSync(file)) return [];
   const doc = parse(fs.readFileSync(file, 'utf8')) as { runs?: { steps?: RawStep[] } };
   return (doc.runs?.steps ?? []).flatMap((step) => [
-    step,
+    { step, source },
     ...(step.uses ? compositeSteps(step.uses, root, depth + 1) : []),
   ]);
 }
@@ -266,13 +283,22 @@ function laneSteps(
   job: { name?: string; steps?: RawStep[] },
   jobId: string,
   root: string,
+  workflow: string,
 ): LaneStep[] {
   return (
     (job.steps ?? [])
-      .flatMap((step) => [step, ...(step.uses ? compositeSteps(step.uses, root) : [])])
+      .flatMap((step) => [
+        { step, source: workflow },
+        ...(step.uses ? compositeSteps(step.uses, root) : []),
+      ])
       // The website build runs its own package's scripts, not this one's.
-      .filter((step) => !step['working-directory'])
-      .map((step) => ({ name: step.name ?? jobId, commands: stepCommands(step) }))
+      .filter(({ step }) => !step['working-directory'])
+      .map(({ step, source }) => ({
+        name: step.name ?? jobId,
+        source,
+        ...(typeof step.run === 'string' ? { run: step.run } : {}),
+        inputs: stepInputs(step),
+      }))
   );
 }
 
@@ -282,7 +308,10 @@ function laneInvocations(
 ): { gates: CheckId[]; verbatim: string[] } {
   const gates = new Set<CheckId>();
   const verbatim = new Set<string>();
-  for (const command of steps.flatMap((step) => step.commands)) {
+  for (const command of steps.flatMap((step) => [
+    ...(step.run ? [step.run] : []),
+    ...step.inputs,
+  ])) {
     for (const match of command.matchAll(GATE_INVOCATION)) gates.add(match[1] as CheckId);
     for (const name of verbatimScripts(command, scripts)) verbatim.add(name);
   }
@@ -302,7 +331,7 @@ function workflowLanes(
   const qualifying = 'pull_request' in on || 'schedule' in on;
   const { paths, pathsIgnore } = triggerPaths(on);
   return Object.entries(doc.jobs ?? {}).map(([jobId, job]) => {
-    const steps = laneSteps(job, jobId, actionRoot);
+    const steps = laneSteps(job, jobId, actionRoot, file);
     return {
       workflow: file,
       label: laneLabel(doc.name ?? file, job.name ?? jobId),
@@ -350,22 +379,6 @@ function triggersOnPath(lane: Lane, file: string): boolean {
   if (lane.pathsIgnore.some((pattern) => matchesGlob(pattern, file))) return false;
   if (lane.paths.length > 0) return lane.paths.some((pattern) => matchesGlob(pattern, file));
   return true;
-}
-
-/**
- * The units an arbitrary lane command runs, for commands that invoke a test runner
- * directly. A device lane re-running an already-owned integration file under a live
- * emulator is not a bypass — the suite has an owner, and this says so without a
- * declaration.
- */
-export function commandUnits(command: string, model: Model): Unit[] {
-  const units: Unit[] = [];
-  for (const segment of commandSegments(command)) {
-    const parts = segment.split(/\s+/).filter(Boolean);
-    if (parts.includes('vitest')) units.push(...vitestUnits(parts, model.vitestProjects));
-    else if (parts.includes('--test')) units.push(...nodeTestUnits(parts));
-  }
-  return units;
 }
 
 /** Scripts whose body this command repeats verbatim, whitespace-normalized. */

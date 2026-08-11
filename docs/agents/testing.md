@@ -216,10 +216,19 @@ strings, and four suites (`check:tmpdir-leaks`, its model tests, `test:fixture-c
 
 `pnpm check:gate-manifest` (`scripts/gate/`) answers it with one rule and one primitive.
 
-The rule: **CI may invoke a gate only through `pnpm gate <check-id>`.** Command wrappers
-are normalized before that is decided — `pnpm exec`, `pnpm dlx` and `npx` in front of a
-command classify the same as the command alone, since otherwise wrapping one would be
-enough to slip an unregistered gate past the rule. Every gate is a `CheckId`
+The rule: **every `run:` step a qualifying lane reaches is either `pnpm gate <check-id>`
+or listed in `NON_GATE_STEPS`.** Nothing inspects what a command does. That is deliberate
+and was learned the hard way: a content-based classifier was defeated by `pnpm exec`, then
+by `pnpm exec --` and `npx --yes`, then by `node -e 'import("./scripts/…")'` — and after
+those, `eval`, heredocs and base64 remain. "Does this text run project code?" is not
+answerable from text, so the question is not asked. A step is allowed because of its
+shape; everything else is written down by a human, which is the only boundary an unknown
+spelling cannot walk through.
+
+The price is a long inventory (74 steps today, keyed on the file that declares them, so a
+composite action shared by eight lanes is listed once). That is the census of everything
+CI does outside the runner, and it fails in both directions — an unlisted step fails as a
+bypass, a listed step that is renamed or deleted fails as inert. Every gate is a `CheckId`
 in the registry (`scripts/check-affected/checks.ts`) — the same universe the affected-selector
 uses — so the workflow→check mapping is a token scan over `run:` blocks and action inputs rather
 than an interpretation of shell. That is what makes a new gate impossible to hide: an unregistered

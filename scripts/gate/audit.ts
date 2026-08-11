@@ -7,16 +7,14 @@
 // functions below, because CI can only reach a gate through `pnpm gate <id>`.
 
 import { CHECK_CATALOG } from '../check-affected/checks.ts';
-import { UNROUTED, type Unrouted } from './declarations.ts';
+import { NON_GATE_STEPS, type Unrouted } from './declarations.ts';
 import {
   categories,
   checkUnits,
   commandSegments,
-  commandUnits,
   covered,
-  invokedScript,
   scriptUnits,
-  unitCovers,
+  stripExpressions,
   type Lane,
   type Model,
 } from './model.ts';
@@ -45,112 +43,79 @@ function unowned(model: Model): Failure[] {
   });
 }
 
-function isGateInvocation(segment: string): boolean {
-  return /(?:^|\s)pnpm\s+(?:--\S+\s+)*gate\s+/.test(segment);
-}
-
-/** A command that repeats a script's body verbatim is credited, not bypassed. */
-function isVerbatim(segment: string, lane: Lane, model: Model): boolean {
-  const normalized = segment.replace(/\s+/g, ' ');
-  return lane.verbatim.some((name) => model.scripts[name]?.replace(/\s+/g, ' ') === normalized);
-}
-
 /**
- * Whether a segment runs this project's own code — decided on the TOKENS it contains,
- * never on which token is in executable position.
- *
- * Position-based classification has to reconstruct wrapper syntax, and loses to the
- * next spelling every time: `pnpm exec`, then `pnpm --silent exec`, then
- * `pnpm exec --`, then `npx --yes`. There is no closed set to enumerate. A token scan
- * has no grammar to get wrong — a command that names a tracked repo file, a test
- * runner, or a package script IS project code however it is invoked, wrapped, or
- * prefixed. Anything it over-reports is inventoried once in UNROUTED, which fails
- * loudly when it stops applying; anything a position parser under-reports is silent.
+ * A step whose shell is nothing but gate invocations. `${{ … }}` is stripped first
+ * (GitHub evaluates it before the shell); a trailing `true` is allowed so a
+ * `pnpm gate x || true` envelope recorder still reads as a gate step.
  */
-function runsProjectCode(segment: string, model: Model): boolean {
-  if (isGateInvocation(segment) || invokedScript(segment, model.scripts) !== null) return true;
-  return segment.split(/\s+/).some((token) => {
-    if (token === 'vitest' || token === '--test') return true;
-    const candidate = token.replace(/^["']|["']$/g, '').replace(/^\.\//, '');
-    // A path to runnable code in this repo. Data files (`package.json`) and directories
-    // are excluded: naming one is not executing anything, and `echo "package.json …"`
-    // would otherwise read as a gate.
-    return (
-      candidate.includes('/') &&
-      EXECUTABLE_FILE.test(candidate) &&
-      model.trackedFiles.has(candidate)
-    );
+function isGateStep(run: string): boolean {
+  const segments = commandSegments(stripExpressions(run));
+  return (
+    segments.length > 0 &&
+    segments.every((segment) => GATE_CALL.test(segment) || segment === 'true')
+  );
+}
+
+const GATE_CALL = /^pnpm(?:\s+--\S+)*\s+gate\s+([a-z0-9:-]+)/;
+
+function gateIds(run: string): string[] {
+  return commandSegments(stripExpressions(run)).flatMap((segment) => {
+    const id = GATE_CALL.exec(segment)?.[1];
+    return id ? [id] : [];
   });
 }
 
-const EXECUTABLE_FILE = /\.(?:[cm]?[jt]s|sh|bash|py)$/;
-
-function projectCommands(lane: Lane, model: Model): { step: string; command: string }[] {
-  return lane.steps.flatMap((step) =>
-    step.commands
-      .flatMap(commandSegments)
-      .filter((segment) => !isVerbatim(segment, lane, model))
-      .filter((segment) => runsProjectCode(segment, model))
-      .map((command) => ({ step: step.name, command })),
-  );
+function isUnrouted(entry: Unrouted, step: { source: string; name: string }): boolean {
+  return entry.workflow === step.source && entry.step === step.name;
 }
 
-function isUnrouted(entry: Unrouted, lane: Lane, step: string, script: string | null): boolean {
-  if (entry.kind === 'step') return entry.workflow === lane.workflow && entry.step === step;
-  return (
-    entry.script === script && (entry.workflow === undefined || entry.workflow === lane.workflow)
-  );
-}
-
-// 3. No bypass: a qualifying lane may run project code only through `pnpm gate`, as
-//    a suite some check already owns, or as a declared exception. This is what makes
-//    an unregistered gate impossible rather than merely undeclared.
-function classify(
-  lane: Lane,
-  step: string,
-  command: string,
-  model: Model,
-  owned: ReadonlySet<string>,
-  declared: readonly Unrouted[],
-): Failure | null {
-  if (isGateInvocation(command)) {
-    const id = /gate\s+([a-z0-9:-]+)/.exec(command)?.[1] ?? '';
-    if (REGISTERED.has(id)) return null;
-    return fail(
-      'bypass',
-      `${lane.workflow} / ${step}: \`pnpm gate ${id}\` names no registered check.`,
-    );
-  }
-  // Re-running a suite a check already owns (a device lane replaying an owned
-  // integration file under a live emulator) hides nothing.
-  const units = commandUnits(command, model);
-  if (
-    units.length > 0 &&
-    units.every((unit) => [...owned].some((have) => unitCovers(have, unit)))
-  ) {
-    return null;
-  }
-  const script = invokedScript(command, model.scripts);
-  if (declared.some((entry) => isUnrouted(entry, lane, step, script))) return null;
-  const hint = script
-    ? `Run it as \`pnpm gate <id>\` (script "${script}" must belong to a registered check)`
-    : 'Register the gate it runs, or declare the step in UNROUTED';
-  return fail(
-    'bypass',
-    `${lane.workflow} / ${step}: project code outside the runner — \`${command}\`. ${hint}.`,
-  );
-}
-
+// 3. No bypass — asserted as a CONSTRUCTION rule, not by analysing what a command does.
+//
+//    Every `run:` block in a qualifying lane must be either a `pnpm gate <id>`
+//    invocation or an inventoried exception. Nothing inspects the command's content.
+//
+//    Three review rounds established why. Content analysis was defeated by `pnpm exec`,
+//    then by `pnpm exec --` and `npx --yes`, then by
+//    `node -e 'import("./scripts/layering/check.ts")'`. Each fix bought exactly the next
+//    spelling, because "does this text run project code?" is not decidable from text:
+//    `-e`, `eval`, a heredoc and base64 are all available. So the question is no longer
+//    asked. A step is allowed because of its SHAPE, and anything else is listed by a
+//    human — which is the only boundary an unknown spelling cannot walk through.
 function bypass(model: Model, declared: readonly Unrouted[]): Failure[] {
-  const owned = new Set(CHECK_CATALOG.flatMap((spec) => checkUnits(spec, model)));
-  return model.lanes
-    .filter((lane) => lane.qualifying)
-    .flatMap((lane) =>
-      projectCommands(lane, model).flatMap(({ step, command }) => {
-        const failure = classify(lane, step, command, model, owned, declared);
-        return failure ? [failure] : [];
-      }),
-    );
+  // Keyed on the DECLARING file, so a composite action shared by eight lanes is
+  // inventoried once rather than once per caller.
+  const seen = new Map<string, { source: string; name: string; run: string }>();
+  for (const lane of model.lanes.filter((entry) => entry.qualifying)) {
+    for (const step of lane.steps) {
+      if (step.run !== undefined) {
+        seen.set(`${step.source}\u0000${step.name}`, {
+          source: step.source,
+          name: step.name,
+          run: step.run,
+        });
+      }
+    }
+  }
+  return [...seen.values()].flatMap((step) => {
+    if (isGateStep(step.run)) {
+      return gateIds(step.run)
+        .filter((id) => !REGISTERED.has(id))
+        .map((id) =>
+          fail(
+            'bypass',
+            `${step.source} / ${step.name}: \`pnpm gate ${id}\` names no registered check.`,
+          ),
+        );
+    }
+    if (declared.some((entry) => isUnrouted(entry, step))) return [];
+    return [
+      fail(
+        'bypass',
+        `${step.source} / ${step.name}: a \`run:\` step reached by a qualifying lane must be ` +
+          `\`pnpm gate <id>\` or listed in NON_GATE_STEPS.`,
+      ),
+    ];
+  });
 }
 
 // 4. Per-path coverage (#1420's class): every check a real selector run activates
@@ -177,38 +142,25 @@ function pathCoverage(model: Model): Failure[] {
   );
 }
 
-// 5. No inert declaration. Every entry must still describe something the tree does,
-//    and an opaque-runner declaration must still change the audit — so deleting the
-//    step a declaration covers is loud rather than silent.
-function inertStep(
-  entry: Extract<Unrouted, { kind: 'step' }>,
-  qualifying: readonly Lane[],
-): Failure[] {
-  const matches = qualifying
-    .filter((lane) => lane.workflow === entry.workflow)
-    .flatMap((lane) => lane.steps.filter((step) => step.name === entry.step));
-  if (matches.length === 1) return [];
+// 4. No inert declaration. Every listed step must still exist, exactly once, in a
+//    qualifying lane — so deleting or renaming the step it covers is loud rather than
+//    silent, and the inventory cannot accumulate entries for steps that are long gone.
+function inertStep(entry: Unrouted, qualifying: readonly Lane[]): Failure[] {
+  const matches = new Set(
+    qualifying
+      .flatMap((lane) => lane.steps)
+      .filter(
+        (step) =>
+          step.run !== undefined && step.source === entry.workflow && step.name === entry.step,
+      )
+      .map((step) => step.run),
+  );
+  if (matches.size === 1) return [];
   const detail =
-    matches.length === 0 ? 'matches no step; remove it' : `matches ${matches.length} steps`;
-  return [fail('inert', `UNROUTED step ${entry.workflow} / "${entry.step}" ${detail}.`)];
-}
-
-function inertScript(
-  entry: Extract<Unrouted, { kind: 'script' }>,
-  qualifying: readonly Lane[],
-  model: Model,
-): Failure[] {
-  const used = qualifying
-    .filter((lane) => entry.workflow === undefined || lane.workflow === entry.workflow)
-    .flatMap((lane) => projectCommands(lane, model))
-    .some(({ command }) => invokedScript(command, model.scripts) === entry.script);
-  if (used) return [];
-  return [
-    fail(
-      'inert',
-      `UNROUTED script "${entry.script}" is run by no qualifying lane outside the runner; remove it.`,
-    ),
-  ];
+    matches.size === 0
+      ? 'matches no `run:` step a qualifying lane reaches; remove it'
+      : `matches ${matches.size} distinct steps`;
+  return [fail('inert', `NON_GATE_STEPS ${entry.workflow} / "${entry.step}" ${detail}.`)];
 }
 
 function inertOpaque(model: Model): Failure[] {
@@ -230,12 +182,7 @@ function inertOpaque(model: Model): Failure[] {
 
 function inert(model: Model, declared: readonly Unrouted[]): Failure[] {
   const qualifying = model.lanes.filter((lane) => lane.qualifying);
-  return [
-    ...declared.flatMap((entry) =>
-      entry.kind === 'step' ? inertStep(entry, qualifying) : inertScript(entry, qualifying, model),
-    ),
-    ...inertOpaque(model),
-  ];
+  return [...declared.flatMap((entry) => inertStep(entry, qualifying)), ...inertOpaque(model)];
 }
 
 /** Compared as a set, not a count: removing a waiver can trade one failure for another. */
@@ -289,7 +236,7 @@ function orphanProjects(model: Model): Failure[] {
     .map((name) => fail('registered', `Vitest project "${name}" is run by no registered check.`));
 }
 
-export function audit(model: Model, declared: readonly Unrouted[] = UNROUTED): Failure[] {
+export function audit(model: Model, declared: readonly Unrouted[] = NON_GATE_STEPS): Failure[] {
   return [
     ...unowned(model),
     ...bypass(model, declared),

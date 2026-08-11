@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
 import { audit } from './audit.ts';
-import { UNROUTED } from './declarations.ts';
+import { NON_GATE_STEPS } from './declarations.ts';
 import { categories, covered, loadModel, type Lane, type Model } from './model.ts';
 import { CHECK_CATALOG } from '../check-affected/checks.ts';
 
@@ -26,7 +26,7 @@ function mutate(change: (model: Model) => Partial<Model>): Model {
   return { ...base, ...change(base) };
 }
 
-function messages(model: Model, declared = UNROUTED): string[] {
+function messages(model: Model, declared = NON_GATE_STEPS): string[] {
   return audit(model, declared).map((failure) => failure.message);
 }
 
@@ -38,16 +38,22 @@ function mapLane(
   return model.lanes.map((lane) => (match(lane) ? change(lane) : lane));
 }
 
-/** Plant one command as a new step in a qualifying lane. */
-function plantCommand(command: string): Model {
+/** Plant one `run:` step into a qualifying lane. */
+function plantCommand(run: string): Model {
   return mutate((m) => ({
     lanes: mapLane(
       m,
       (lane) => lane.label === 'Layering Guard',
-      (lane) => ({ ...lane, steps: [...lane.steps, { name: 'Planted', commands: [command] }] }),
+      (lane) => ({
+        ...lane,
+        steps: [...lane.steps, { name: 'Planted', source: 'ci.yml', run, inputs: [] }],
+      }),
     ),
   }));
 }
+
+const bypassesFor = (run: string) =>
+  audit(plantCommand(run)).filter((failure) => failure.assertion === 'bypass');
 
 test('the live tree is green — every planted failure below is a real difference', () => {
   assert.deepEqual(messages(base), []);
@@ -125,92 +131,47 @@ test('a path filter that excludes a category fails, though the check still runs 
   assert.ok(found.some((message) => /selects "daemon-wire-compat"/.test(message)));
 });
 
-test('running a registered gate script outside the runner fails as a bypass', () => {
-  const model = mutate((m) => ({
-    lanes: mapLane(
-      m,
-      (lane) => lane.label === 'Layering Guard',
-      (lane) => ({
-        ...lane,
-        steps: [...lane.steps, { name: 'Inlined', commands: ['pnpm check:layering'] }],
-      }),
-    ),
-  }));
-  const found = messages(model);
-  assert.equal(found.length, 1);
-  assert.match(found[0] ?? '', /project code outside the runner/);
-  assert.match(found[0] ?? '', /pnpm gate <id>/);
-});
-
-test('no invocation spelling can hide project code from the bypass rule', () => {
-  // Reported twice on #1714: classification read the executable POSITION, so first
-  // `pnpm exec`, then `pnpm exec --` and `npx --yes`, slipped an unregistered gate
-  // past it. Position parsing has no closed set of wrappers to enumerate, so the
-  // classifier now scans TOKENS — the assertion is that every spelling below, and
-  // any other, resolves to the same verdict as the bare command.
-  const bare = 'node --experimental-strip-types scripts/gate/check.ts';
-  const spellings = [
-    bare,
-    `pnpm exec ${bare}`,
-    `pnpm exec -- ${bare}`,
-    `pnpm --silent exec ${bare}`,
-    `pnpm --silent exec -- ${bare}`,
-    `pnpm --dir . exec -- ${bare}`,
-    `pnpm dlx ${bare}`,
-    `npx ${bare}`,
-    `npx --yes ${bare}`,
-    `npx --yes --quiet ${bare}`,
-    `env FOO=1 ${bare}`,
-    `sudo ${bare}`,
-    `time ${bare}`,
-    `bash -c "${bare}"`,
-    `xargs -I{} ${bare}`,
+test('a qualifying lane accepts nothing but a gate invocation or a listed step', () => {
+  // The rule is about SHAPE, so this is one property, not a list of spellings. Three
+  // review rounds killed the content-analysis version: `pnpm exec`, then `pnpm exec --`
+  // and `npx --yes`, then `node -e 'import(…)'`. Each of the cases below defeated some
+  // predicate over command text; none of them can defeat "it is not `pnpm gate`".
+  const evasions = [
+    'pnpm check:layering',
+    'node --experimental-strip-types scripts/gate/check.ts',
+    'pnpm exec -- node scripts/gate/check.ts',
+    'npx --yes node scripts/gate/check.ts',
+    `node -e 'await import("./scripts/layering/check.ts").then(({ main }) => process.exit(main()))'`,
+    `node -e 'require("./scripts/layering/check.ts")'`,
+    `node -e "import('./scr' + 'ipts/layering/check.ts')"`,
+    `eval "$(echo 'node scripts/layering/check.ts')"`,
+    'echo bm9kZSBzY3JpcHRzL2xheWVyaW5nL2NoZWNrLnRz | base64 -d | sh',
+    "bash <<'EOS'\nnode scripts/layering/check.ts\nEOS",
+    'printf "node scripts/layering/check.ts" > /tmp/x.sh && sh /tmp/x.sh',
   ];
-  for (const command of spellings) {
-    const found = audit(plantCommand(command)).filter((f) => f.assertion === 'bypass');
-    assert.equal(found.length, 1, `must be exactly one bypass: ${command}`);
+  for (const run of evasions) {
+    assert.equal(bypassesFor(run).length, 1, `must be rejected: ${run}`);
   }
 });
 
-test('a test runner in a lane is project code, whatever it is pointed at', () => {
-  // Reaching a suite no check owns must fail even without a scripts/ path in the
-  // command — a `--test` file or a Vitest project is a gate by itself.
-  for (const command of [
-    'pnpm exec vitest run --project not-a-real-project',
-    'node --test test/integration/does-not-exist.test.ts',
+test('the gate shape is accepted, including the forms real lanes use', () => {
+  for (const run of [
+    'pnpm gate layering',
+    'pnpm gate fallow --base origin/main',
+    'pnpm --silent gate mutation-affected --list-affected',
+    // GitHub evaluates `${{ … }}` before the shell, so it is not shell syntax.
+    'pnpm gate mutation --modules ${{ matrix.module }}',
+    // A failure-path envelope recorder still only invokes a gate.
+    'pnpm gate mutation --fail-envelope "lane died" || true',
   ]) {
-    const found = audit(plantCommand(command)).filter((failure) => failure.assertion === 'bypass');
-    assert.equal(found.length, 1, `must be a bypass: ${command}`);
+    assert.deepEqual(bypassesFor(run), [], `must be accepted: ${run}`);
   }
 });
 
-test('re-running a suite a registered check already owns stays allowed', () => {
-  // The deliberate escape the device lanes rely on: replaying an owned integration
-  // file under a live emulator hides nothing, because the suite has an owner.
-  for (const command of [
-    'pnpm exec vitest run --project unit-core',
-    'node --test test/integration/smoke-cli.test.ts',
-  ]) {
-    assert.deepEqual(messages(plantCommand(command)), [], `must stay allowed: ${command}`);
-  }
-});
-
-test('`pnpm gate` naming an unregistered check fails rather than resolving to nothing', () => {
-  const model = mutate((m) => ({
-    lanes: mapLane(
-      m,
-      (lane) => lane.label === 'Layering Guard',
-      (lane) => ({
-        ...lane,
-        steps: [...lane.steps, { name: 'Typo', commands: ['pnpm gate laering'] }],
-      }),
-    ),
-  }));
-  assert.ok(
-    messages(model).some((message) =>
-      /`pnpm gate laering` names no registered check/.test(message),
-    ),
-  );
+test('`pnpm gate` naming an unregistered check is rejected even though the shape is right', () => {
+  const found = bypassesFor('pnpm gate laering');
+  assert.equal(found.length, 1);
+  assert.match(found[0]?.message ?? '', /`pnpm gate laering` names no registered check/);
 });
 
 test('a declaration that stops applying is reported inert, in both shapes', () => {
@@ -226,13 +187,27 @@ test('a declaration that stops applying is reported inert, in both shapes', () =
       }),
     ),
   }));
-  assert.ok(messages(renamed).some((message) => /matches no step/.test(message)));
+  // Renaming the step both orphans the entry AND leaves the renamed step unlisted,
+  // so the inventory cannot drift in either direction.
+  const found = messages(renamed);
+  assert.ok(
+    found.some((message) => /matches no `run:` step/.test(message)),
+    'entry goes inert',
+  );
+  assert.ok(
+    found.some((message) => /Renamed: a `run:` step/.test(message)),
+    'renamed step is unlisted',
+  );
 
   const extra = [
-    ...UNROUTED,
-    { kind: 'script' as const, script: 'test:unit', reason: 'never invoked raw' },
+    ...NON_GATE_STEPS,
+    { workflow: 'ci.yml', step: 'No Such Step', reason: 'never existed' },
   ];
-  assert.ok(messages(base, extra).some((message) => /UNROUTED script "test:unit"/.test(message)));
+  assert.ok(
+    messages(base, extra).some((message) =>
+      /NON_GATE_STEPS ci\.yml \/ "No Such Step"/.test(message),
+    ),
+  );
 });
 
 test('removing the opaque-runner declaration changes the audit, so it is not inert', () => {

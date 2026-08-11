@@ -11,7 +11,6 @@ import path from 'node:path';
 import test from 'node:test';
 import {
   commandSegments,
-  commandUnits,
   loadModel,
   matchesGlob,
   scriptUnits,
@@ -99,14 +98,6 @@ test('a command repeating a script body verbatim credits that script', () => {
   const body = model.scripts['check:package'] as string;
   assert.deepEqual(verbatimScripts(body, model.scripts), ['check:package']);
   assert.deepEqual(verbatimScripts('node scripts/something-else.ts', model.scripts), []);
-});
-
-test('commandUnits reads a runner invoked directly, so an owned suite is recognised', () => {
-  const units = commandUnits(
-    'node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-cli.test.ts',
-    model,
-  );
-  assert.deepEqual(units, ['node-test:test/integration/smoke-cli.test.ts']);
 });
 
 test('path filters use GitHub glob semantics', () => {

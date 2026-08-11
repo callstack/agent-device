@@ -464,9 +464,10 @@ when landing it, satisfy the gate where one exists.
   occur inside its declared owner. Encapsulation of the one shared mutable object, enforced
   per-field. This covers `SessionState`; other shared state has no equivalent gate today.
 - **A gate that stops running is worse than no gate.** Gate: the gate manifest
-  (`scripts/gate/`, #1429). CI may invoke a gate only through `pnpm gate <check-id>`, so the
-  workflow→check mapping is a token scan rather than an interpretation of shell, and a gate that
-  is not in the registry (`scripts/check-affected/checks.ts`) cannot run at all — the failure
+  (`scripts/gate/`, #1429). every `run:` step a qualifying lane reaches is either `pnpm gate <check-id>` or
+  inventoried in `scripts/gate/declarations.ts`, so the workflow→check mapping is a shape check
+  rather than an interpretation of shell, and a gate that is not in the registry
+  (`scripts/check-affected/checks.ts`) cannot run at all — the failure
   mode is a red build, not an invisible one. `check:gate-manifest` fails when a registered check
   is run by no `pull_request`/`schedule` lane, when a path category's selected checks are not run
   by a lane that a change to that path starts, when a lane runs project code outside the runner,
