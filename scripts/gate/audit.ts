@@ -13,6 +13,7 @@ import {
   EXTERNAL_ACTIONS,
   GATE_ACTIONS,
   GATE_CONDITIONS,
+  REASONS,
   UNPROVABLE_OWNERS,
   type ExternalAction,
 } from './declarations.ts';
@@ -30,6 +31,7 @@ const HEADINGS: Readonly<Record<string, string>> = {
   external: 'Third-party actions with no declaration',
   surface: 'Execution surfaces the manifest does not model',
   'path-coverage': 'Paths whose selected checks no triggered lane runs',
+  census: 'Files running shell outside the runner that nobody has described',
   condition: 'Gate steps behind an `if:` nobody has ruled on',
   inert: 'Declarations that no longer apply',
   registered: 'Suites and projects no registered check covers',
@@ -390,6 +392,50 @@ function inertOpaque(model: Model): Failure[] {
   });
 }
 
+// 4b. Every file in the baseline is DESCRIBED, and described with the right arity.
+//
+//     Rounds 8, 9 and 10 all asked for per-edge ownership of the baseline, and the objection
+//     was right: with reasons keyed per file and nothing checking how many steps each file
+//     was allowed, `--update` blessed a new step in an already-described file — and an
+//     entirely new file with no description at all. Both reproduce on this branch: adding
+//     `run: node -e 'import("./scripts/layering/check.ts")'` to ios.yml, then regenerating,
+//     printed `ok`.
+//
+//     The count is hand-written, which is the whole point — `--update` regenerates the
+//     digests but cannot raise the number that admits them.
+function censusFiles(declared: readonly BaselineEntry[]): Failure[] {
+  const counted = new Map<string, number>();
+  for (const entry of declared) counted.set(entry.source, (counted.get(entry.source) ?? 0) + 1);
+  const undeclared = [...counted.entries()]
+    .filter(([source]) => !(source in REASONS))
+    .map(([source, count]) =>
+      fail(
+        'census',
+        `${source} has ${count} step(s) in the baseline but no REASONS entry: nothing says why ` +
+          `this file runs shell outside the runner. Add one with \`steps: ${count}\`.`,
+      ),
+    );
+  const miscounted = [...counted.entries()].flatMap(([source, count]) => {
+    const declaredFile = REASONS[source];
+    if (declaredFile === undefined || declaredFile.steps === count) return [];
+    const verb = count > declaredFile.steps ? 'added' : 'removed';
+    return [
+      fail(
+        'census',
+        `${source} declares ${declaredFile.steps} non-gate step(s) and the baseline has ` +
+          `${count}: a step was ${verb}. Confirm it belongs outside \`pnpm gate\`, update the ` +
+          `reason if it no longer describes the file, and set \`steps: ${count}\`.`,
+      ),
+    ];
+  });
+  const dead = Object.keys(REASONS)
+    .filter((source) => !counted.has(source))
+    .map((source) =>
+      fail('inert', `REASONS entry "${source}" describes no step any qualifying lane reaches.`),
+    );
+  return [...undeclared, ...miscounted, ...dead];
+}
+
 function seenConditions(model: Model): Set<string> {
   return new Set(
     model.lanes
@@ -498,6 +544,7 @@ export function audit(
     ...laneSurfaces(model),
     ...externalActions(model, externals),
     ...pathCoverage(model),
+    ...censusFiles(declared),
     ...inert(model, declared),
     ...unregisteredSuites(model),
     ...orphanProjects(model),

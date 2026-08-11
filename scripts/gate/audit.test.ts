@@ -434,6 +434,47 @@ test('every declared gate condition that credits is load-bearing', () => {
   }
 });
 
+// Rounds 8, 9 and 10 each asked for per-edge ownership of the generated baseline. The
+// concrete defect behind that objection — never stated in the reviews, found by reproducing
+// it — is that reasons were keyed per FILE with no arity, so `--update` blessed both a new
+// step in an already-described file and an entirely new undescribed file. Both printed `ok`.
+const regenerate = (model: Model) => census(model.lanes, (step) => plainGateStep(step) !== null);
+
+test('r8-10: `--update` cannot bless a new step in an already-described file', () => {
+  const added = plantStep(`node -e 'import("./scripts/layering/check.ts")'`);
+  const found = audit(added, regenerate(added));
+  assert.deepEqual(
+    found.filter((f) => f.assertion === 'bypass'),
+    [],
+    'regeneration silences the bypass — which is why the count has to be hand-written',
+  );
+  const census_ = found.filter((f) => f.assertion === 'census');
+  assert.equal(census_.length, 1);
+  assert.match(census_[0]?.message ?? '', /ci\.yml declares 7 non-gate step\(s\).*has 8/s);
+});
+
+test('r8-10: `--update` cannot bless a file nobody has described', () => {
+  const planted = plantWorkflow(
+    workflow(`      - name: Do something\n        run: node -e 'import("./x.ts")'\n`),
+  );
+  const found = audit(planted, regenerate(planted)).filter((f) => f.assertion === 'census');
+  assert.equal(found.length, 1);
+  assert.match(found[0]?.message ?? '', /planted\.yml has 1 step\(s\).*no REASONS entry/s);
+});
+
+test('r8-10: a REASONS entry describing no live step is inert', () => {
+  // The other direction, and it was live on this branch: `macos.yml` still carried a reason
+  // after round 7 moved its build step into the Apple runner action.
+  const without: Model = {
+    ...base,
+    lanes: base.lanes.filter((lane) => lane.workflow !== 'size.yml'),
+  };
+  const found = audit(without, regenerate(without)).filter(
+    (f) => f.assertion === 'inert' && /REASONS entry "size\.yml"/.test(f.message),
+  );
+  assert.equal(found.length, 1, 'a reason describing nothing must be deleted');
+});
+
 test('a baseline entry describing no live step is inert', () => {
   const invented = [
     ...baseline,

@@ -33,42 +33,114 @@ export const OPAQUE_RUNNERS: Readonly<Record<string, readonly string[]>> = {
 };
 
 /**
- * Why each file runs shell outside `pnpm gate`, once per declaring file.
+ * Why each file runs shell outside `pnpm gate`, and HOW MANY such steps it is allowed.
  *
  * The step identities and digests live in the generated `baseline.json`; this is the part a
  * human writes. One reason per file rather than per step: "what is this workflow doing
  * outside the runner" is the question a reviewer actually asks, and answering it 109 times
  * produced prose nobody read.
+ *
+ * `steps` is what stops that from being an unowned census. Review rounds 8–10 asked three
+ * times for per-edge ownership, and the objection was right for a reason none of us stated
+ * concretely: because the reason was keyed per FILE and nothing checked arity, `--update`
+ * would bless a brand-new step in an already-described file, and an entirely new file with no
+ * description at all. Both were reproduced on this branch —
+ * `run: node -e 'import("./scripts/layering/check.ts")'` added to `ios.yml`, regenerated, and
+ * the audit still printed `ok`.
+ *
+ * Pinning the count is what makes `--update` unable to launder an addition: the number lives
+ * here, in a hand-written file, so a new step fails until a human raises it and re-reads the
+ * reason it is being admitted under. It fails in both directions — a deleted step drops the
+ * count, and a file with no live steps is an inert declaration.
+ *
+ * It is deliberately NOT per-entry prose. The same review asked for the census to be compact
+ * data rather than 685 lines of declarations, and per-edge reasons for 90 entries is that
+ * file again. Arity is the cheapest thing that makes an unclassified step fail closed.
  */
-export const REASONS: Readonly<Record<string, string>> = {
-  '.github/actions/boot-ios-test-simulator/action.yml': 'boots and settles the iOS simulator',
-  '.github/actions/setup-android-replay-host/action.yml':
-    'Android SDK, KVM and emulator-host setup',
-  '.github/actions/setup-fixture-app/action.yml':
-    'fixture-app cache lookup, download and staging for the device lanes',
-  '.github/actions/setup-node-pnpm/action.yml':
-    'toolchain setup: pins pnpm to packageManager and installs dependencies',
-  '.github/actions/setup-test-app-dependencies/action.yml': 'Expo test-app dependency setup',
-  'android.yml': 'Android fixture APK restore, staged without installing',
-  'ci.yml':
-    'macOS runner build for the Swift unit-test surface, gated and carrying the unit-test opt-in',
-  'conformance-differential.yml': 'iOS runner build, simulator boot and fixture app',
-  'conformance-regenerate.yml': 'regeneration diff assertion and the fixture-seal verification',
-  'ios.yml': 'iOS runner build, simulator boot and fixture app',
-  'linux.yml': 'Linux desktop session setup (Xvfb, D-Bus, AT-SPI) and the replay smoke',
-  'macos.yml': 'macOS runner build for the replay lane',
-  'mutation-affected.yml':
-    'shard-matrix derivation and the failure-path envelope recorders (#1430)',
-  'mutation-weekly.yml': 'shard-matrix derivation and the failure-path envelope recorders (#1430)',
-  'perf-nightly.yml': 'iOS runner build and simulator boot for the benchmark lane',
-  'pr-preview-cleanup.yml':
-    'website preview teardown: the same call with the same values, from the cleanup lane',
-  'pr-preview.yml':
-    'website preview deploy: the values pr-preview-action interpolates into its own `run:` blocks',
-  'replays-nightly.yml': 'the nightly Android replay sweep, run inside the emulator action',
-  'size.yml':
-    'bundle-size measurement, which reports rather than gates, and runs at the PR base commit',
-  'test-app-build-cache.yml': 'Expo release app build and artifact staging',
+export type NonGateFile = { readonly steps: number; readonly reason: string };
+
+export const REASONS: Readonly<Record<string, NonGateFile>> = {
+  '.github/actions/boot-ios-test-simulator/action.yml': {
+    steps: 1,
+    reason: 'boots and settles the iOS simulator',
+  },
+  '.github/actions/build-docs/action.yml': {
+    steps: 1,
+    reason: 'builds the docs site the website preview lane publishes',
+  },
+  '.github/actions/setup-android-replay-host/action.yml': {
+    steps: 6,
+    reason: 'Android SDK, KVM and emulator-host setup',
+  },
+  '.github/actions/setup-apple-runner-build/action.yml': {
+    steps: 4,
+    reason:
+      'Xcode and source-hash cache identity, plus the build itself — which IS `pnpm gate ' +
+      '"$INPUT_GATE"`, and is listed here rather than shape-approved only because its ' +
+      '`if:` makes it conditional (see GATE_CONDITIONS)',
+  },
+  '.github/actions/setup-fixture-app/action.yml': {
+    steps: 9,
+    reason: 'fixture-app cache lookup, download and staging for the device lanes',
+  },
+  '.github/actions/setup-node-pnpm/action.yml': {
+    steps: 3,
+    reason: 'toolchain setup: pins pnpm to packageManager and installs dependencies',
+  },
+  '.github/actions/setup-test-app-dependencies/action.yml': {
+    steps: 2,
+    reason: 'Expo test-app dependency setup',
+  },
+  'android.yml': { steps: 3, reason: 'Android fixture APK restore, staged without installing' },
+  'ci.yml': {
+    steps: 7,
+    reason:
+      'macOS runner build for the Swift unit-test surface, gated and carrying the unit-test opt-in',
+  },
+  'conformance-differential.yml': {
+    steps: 3,
+    reason: 'iOS runner build, simulator boot and fixture app',
+  },
+  'conformance-regenerate.yml': {
+    steps: 2,
+    reason: 'regeneration diff assertion and the fixture-seal verification',
+  },
+  'ios.yml': { steps: 9, reason: 'iOS runner build, simulator boot and fixture app' },
+  'linux.yml': {
+    steps: 5,
+    reason: 'Linux desktop session setup (Xvfb, D-Bus, AT-SPI) and the replay smoke',
+  },
+  'mutation-affected.yml': {
+    steps: 6,
+    reason: 'shard-matrix derivation and the failure-path envelope recorders (#1430)',
+  },
+  'mutation-weekly.yml': {
+    steps: 5,
+    reason: 'shard-matrix derivation and the failure-path envelope recorders (#1430)',
+  },
+  'perf-nightly.yml': {
+    steps: 3,
+    reason: 'iOS runner build and simulator boot for the benchmark lane',
+  },
+  'pr-preview-cleanup.yml': {
+    steps: 1,
+    reason: 'website preview teardown: the same call with the same values, from the cleanup lane',
+  },
+  'pr-preview.yml': {
+    steps: 1,
+    reason:
+      'website preview deploy: the values pr-preview-action interpolates into its own `run:` blocks',
+  },
+  'replays-nightly.yml': {
+    steps: 9,
+    reason: 'the nightly Android replay sweep, run inside the emulator action',
+  },
+  'size.yml': {
+    steps: 5,
+    reason:
+      'bundle-size measurement, which reports rather than gates, and runs at the PR base commit',
+  },
+  'test-app-build-cache.yml': { steps: 5, reason: 'Expo release app build and artifact staging' },
 };
 
 /**

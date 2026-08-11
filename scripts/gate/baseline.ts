@@ -32,7 +32,7 @@ export function loadBaseline(file = FILE): BaselineEntry[] {
 
 /** Why the steps in a given file run outside the runner, for a reviewer reading the diff. */
 export function reasonFor(source: string): string {
-  return REASONS[source] ?? '(no reason recorded — add one to REASONS)';
+  return REASONS[source]?.reason ?? '(no reason recorded — add one to REASONS)';
 }
 
 const key = (entry: BaselineEntry) => JSON.stringify([entry.source, entry.digest]);
