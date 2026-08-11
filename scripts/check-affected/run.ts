@@ -10,6 +10,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runCmdStreaming, runCmdSync } from '../../src/utils/exec.ts';
 import { parseScriptArgs } from '../lib/cli-args.ts';
+import { runEntrypoint } from '../lib/cli-entrypoint.ts';
 import { DEFAULT_VITEST_MAX_WORKERS } from '../lib/vitest-concurrency.ts';
 import {
   assertCatalogComplete,
@@ -285,11 +286,5 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-  main().then(
-    (code) => process.exit(code),
-    (error: unknown) => {
-      process.stderr.write(`check:affected: ${error instanceof Error ? error.message : error}\n`);
-      process.exit(1);
-    },
-  );
+  runEntrypoint('check:affected', () => main());
 }

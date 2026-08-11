@@ -35,7 +35,10 @@ test('the weekly sweep shards exactly the registry matrix', () => {
 
 test('the weekly sweep merges the shards into one ratcheted verdict', () => {
   const yaml = workflow('mutation-weekly.yml');
-  assert.match(yaml, /pnpm mutation:check --report-dir/);
+  // Invoked through the canonical runner (#1429): `pnpm gate <check-id>` is the
+  // only way a lane may reach a gate, so the assertion names the check, not the
+  // package script behind it.
+  assert.match(yaml, /pnpm gate mutation-check --report-dir/);
   assert.match(yaml, /GITHUB_STEP_SUMMARY|\$GITHUB_STEP_SUMMARY/);
   // A dead shard must not be merged into a verdict that looks like a sweep.
   assert.match(
@@ -84,7 +87,7 @@ test('every kernel path a PR can touch selects the affected mutation job', () =>
     paths.includes('packages/*/src/**/*.test.ts'),
     'the PR lane must trigger on every packages/*/src test too — target-annotation-serde is owned by one',
   );
-  assert.match(workflow('mutation-affected.yml'), /mutation:affected --list-affected/);
+  assert.match(workflow('mutation-affected.yml'), /gate mutation-affected --list-affected/);
   // The lane's own sources fail open into it too: a ratchet or baseline edit must
   // prove itself against real mutants, not against a stale report.
   for (const own of ['scripts/mutation/**', 'stryker.config.json', 'mutation-baselines/**']) {

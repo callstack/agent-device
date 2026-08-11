@@ -59,7 +59,10 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   ),
   gate('swift-runner-ios', 'Swift runner build (iOS)', 'build:xcuitest:ios', false),
   gate('swift-runner-macos', 'Swift runner build (macOS)', 'build:xcuitest:macos', false),
-  gate('android-helpers', 'Android helper builds', 'build:android-snapshot-helper', false),
+  // `build:android`, not `build:android-snapshot-helper`: the Android lane needs both
+  // helpers packaged into `android/*/dist` (what the replay host verifies), where the
+  // build script writes only the snapshot helper into `.tmp/`.
+  gate('android-helpers', 'Android helper builds (snapshot + IME)', 'build:android', false),
   gate('macos-helper', 'macOS helper build', 'build:macos-helper', false),
   gate('web-smoke', 'Live web platform smoke', 'test:smoke:web', false),
   // Needs full history and tags, so it runs in its own fetch-depth: 0 job rather

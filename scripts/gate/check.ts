@@ -17,7 +17,17 @@ const HEADINGS: Readonly<Record<string, string>> = {
   registered: 'Suites and projects no registered check covers',
 };
 
-export function main(): number {
+function report(failures: readonly { assertion: string; message: string }[]): void {
+  for (const [assertion, heading] of Object.entries(HEADINGS)) {
+    const group = failures.filter((failure) => failure.assertion === assertion);
+    if (group.length === 0) continue;
+    process.stderr.write(`\n${heading}:\n`);
+    for (const failure of group) process.stderr.write(`  - ${failure.message}\n`);
+  }
+  process.stderr.write(`\ngate manifest: ${failures.length} failure(s).\n`);
+}
+
+function main(): number {
   const repoRoot = runCmdSync('git', ['rev-parse', '--show-toplevel']).stdout.trim();
   const tracked = runCmdSync('git', ['ls-files'], { cwd: repoRoot })
     .stdout.split('\n')
@@ -32,13 +42,7 @@ export function main(): number {
     );
     return 0;
   }
-  for (const assertion of Object.keys(HEADINGS)) {
-    const group = failures.filter((failure) => failure.assertion === assertion);
-    if (group.length === 0) continue;
-    process.stderr.write(`\n${HEADINGS[assertion]}:\n`);
-    for (const failure of group) process.stderr.write(`  - ${failure.message}\n`);
-  }
-  process.stderr.write(`\ngate manifest: ${failures.length} failure(s).\n`);
+  report(failures);
   return 1;
 }
 

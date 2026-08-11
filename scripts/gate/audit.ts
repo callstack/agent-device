@@ -6,16 +6,16 @@
 // path categories, selector-rule extraction, waiver provenance) is the eight
 // functions below, because CI can only reach a gate through `pnpm gate <id>`.
 
-import { CHECK_CATALOG, type CheckSpec } from '../check-affected/checks.ts';
+import { CHECK_CATALOG } from '../check-affected/checks.ts';
 import { selectChecks } from '../check-affected/model.ts';
 import { PATH_SAMPLES, UNROUTED, type Unrouted } from './declarations.ts';
 import {
+  checkUnits,
   commandSegments,
   commandUnits,
   covered,
   invokedScript,
   scriptUnits,
-  triggersOnPath,
   unitCovers,
   type Lane,
   type Model,
@@ -49,39 +49,37 @@ function isGateInvocation(segment: string): boolean {
   return /(?:^|\s)pnpm\s+(?:--\S+\s+)*gate\s+/.test(segment);
 }
 
+/** A command that repeats a script's body verbatim is credited, not bypassed. */
+function isVerbatim(segment: string, lane: Lane, model: Model): boolean {
+  const normalized = segment.replace(/\s+/g, ' ');
+  return lane.verbatim.some((name) => model.scripts[name]?.replace(/\s+/g, ' ') === normalized);
+}
+
 /**
- * Commands that run this project's own code, as opposed to shell, SDK and CLI
- * setup. Deliberately narrow: `cp scripts/size-report.mjs …` and
+ * Whether a segment runs this project's own code, as opposed to shell, SDK and
+ * CLI setup. Deliberately narrow: `cp scripts/size-report.mjs …` and
  * `git diff -- scripts/…` name a path under scripts/ without executing anything.
  */
+function runsProjectCode(segment: string, model: Model): boolean {
+  const [executable = ''] = segment.split(/\s+/);
+  const executesFile =
+    /^(?:node|sh|bash)$/.test(executable) &&
+    /(?:^|\s)\.?\/?(?:scripts\/\S+|src\/bin\.ts)/.test(segment);
+  return (
+    isGateInvocation(segment) || invokedScript(segment, model.scripts) !== null || executesFile
+  );
+}
+
 function projectCommands(lane: Lane, model: Model): { step: string; command: string }[] {
-  const found: { step: string; command: string }[] = [];
-  for (const step of lane.steps) {
-    for (const command of step.commands) {
-      for (const segment of commandSegments(command)) {
-        // A recorder that cannot fail the lane gates nothing.
-        if (/\|\|\s*true\s*$/.test(segment)) continue;
-        // Repeating a script's body verbatim is credited by the model, not bypassed.
-        if (
-          lane.verbatim.some(
-            (name) => model.scripts[name]?.replace(/\s+/g, ' ') === segment.replace(/\s+/g, ' '),
-          )
-        ) {
-          continue;
-        }
-        const [executable = ''] = segment.split(/\s+/);
-        const runsProjectFile =
-          /^(?:node|sh|bash)$/.test(executable) &&
-          /(?:^|\s)\.?\/?(?:scripts\/\S+|src\/bin\.ts)/.test(segment);
-        const isProject =
-          isGateInvocation(segment) ||
-          invokedScript(segment, model.scripts) !== null ||
-          runsProjectFile;
-        if (isProject) found.push({ step: step.name, command: segment });
-      }
-    }
-  }
-  return found;
+  return lane.steps.flatMap((step) =>
+    step.commands
+      .flatMap(commandSegments)
+      // A recorder that cannot fail the lane gates nothing.
+      .filter((segment) => !/\|\|\s*true\s*$/.test(segment))
+      .filter((segment) => !isVerbatim(segment, lane, model))
+      .filter((segment) => runsProjectCode(segment, model))
+      .map((command) => ({ step: step.name, command })),
+  );
 }
 
 function isUnrouted(entry: Unrouted, lane: Lane, step: string, script: string | null): boolean {
@@ -94,46 +92,52 @@ function isUnrouted(entry: Unrouted, lane: Lane, step: string, script: string | 
 // 3. No bypass: a qualifying lane may run project code only through `pnpm gate`, as
 //    a suite some check already owns, or as a declared exception. This is what makes
 //    an unregistered gate impossible rather than merely undeclared.
-function bypass(model: Model, declared: readonly Unrouted[]): Failure[] {
-  const owned = new Set(CHECK_CATALOG.flatMap((spec) => unitsOf(spec, model)));
-  const failures: Failure[] = [];
-  for (const lane of model.lanes) {
-    if (!lane.qualifying) continue;
-    for (const { step, command } of projectCommands(lane, model)) {
-      if (isGateInvocation(command)) {
-        const id = /gate\s+([a-z0-9:-]+)/.exec(command)?.[1] ?? '';
-        if (!REGISTERED.has(id)) {
-          failures.push(
-            fail(
-              'bypass',
-              `${lane.workflow} / ${step}: \`pnpm gate ${id}\` names no registered check.`,
-            ),
-          );
-        }
-        continue;
-      }
-      // Re-running a suite a check already owns (a device lane replaying an owned
-      // integration file under a live emulator) hides nothing.
-      const units = commandUnits(command, model);
-      if (
-        units.length > 0 &&
-        units.every((unit) => [...owned].some((have) => unitCovers(have, unit)))
-      )
-        continue;
-      const script = invokedScript(command, model.scripts);
-      if (declared.some((entry) => isUnrouted(entry, lane, step, script))) continue;
-      const hint = script
-        ? `Run it as \`pnpm gate <id>\` (script "${script}" must belong to a registered check)`
-        : 'Register the gate it runs, or declare the step in UNROUTED';
-      failures.push(
-        fail(
-          'bypass',
-          `${lane.workflow} / ${step}: project code outside the runner — \`${command}\`. ${hint}.`,
-        ),
-      );
-    }
+function classify(
+  lane: Lane,
+  step: string,
+  command: string,
+  model: Model,
+  owned: ReadonlySet<string>,
+  declared: readonly Unrouted[],
+): Failure | null {
+  if (isGateInvocation(command)) {
+    const id = /gate\s+([a-z0-9:-]+)/.exec(command)?.[1] ?? '';
+    if (REGISTERED.has(id)) return null;
+    return fail(
+      'bypass',
+      `${lane.workflow} / ${step}: \`pnpm gate ${id}\` names no registered check.`,
+    );
   }
-  return failures;
+  // Re-running a suite a check already owns (a device lane replaying an owned
+  // integration file under a live emulator) hides nothing.
+  const units = commandUnits(command, model);
+  if (
+    units.length > 0 &&
+    units.every((unit) => [...owned].some((have) => unitCovers(have, unit)))
+  ) {
+    return null;
+  }
+  const script = invokedScript(command, model.scripts);
+  if (declared.some((entry) => isUnrouted(entry, lane, step, script))) return null;
+  const hint = script
+    ? `Run it as \`pnpm gate <id>\` (script "${script}" must belong to a registered check)`
+    : 'Register the gate it runs, or declare the step in UNROUTED';
+  return fail(
+    'bypass',
+    `${lane.workflow} / ${step}: project code outside the runner — \`${command}\`. ${hint}.`,
+  );
+}
+
+function bypass(model: Model, declared: readonly Unrouted[]): Failure[] {
+  const owned = new Set(CHECK_CATALOG.flatMap((spec) => checkUnits(spec, model)));
+  return model.lanes
+    .filter((lane) => lane.qualifying)
+    .flatMap((lane) =>
+      projectCommands(lane, model).flatMap(({ step, command }) => {
+        const failure = classify(lane, step, command, model, owned, declared);
+        return failure ? [failure] : [];
+      }),
+    );
 }
 
 // 4. Per-path coverage (#1420's class): every check a real selector run activates
@@ -194,65 +198,62 @@ function samples(model: Model): Failure[] {
 // 6. No inert declaration. Every entry must still describe something the tree does,
 //    and an opaque-runner declaration must still change the audit — so deleting the
 //    step a declaration covers is loud rather than silent.
-function inert(model: Model, declared: readonly Unrouted[]): Failure[] {
-  const failures: Failure[] = [];
-  const qualifying = model.lanes.filter((lane) => lane.qualifying);
-  for (const entry of declared) {
-    if (entry.kind === 'step') {
-      const matches = qualifying
-        .filter((lane) => lane.workflow === entry.workflow)
-        .flatMap((lane) => lane.steps.filter((step) => step.name === entry.step));
-      if (matches.length === 0) {
-        failures.push(
-          fail(
-            'inert',
-            `UNROUTED step ${entry.workflow} / "${entry.step}" matches no step; remove it.`,
-          ),
-        );
-      }
-      if (matches.length > 1) {
-        failures.push(
-          fail(
-            'inert',
-            `UNROUTED step ${entry.workflow} / "${entry.step}" matches ${matches.length} steps.`,
-          ),
-        );
-      }
-      continue;
-    }
-    const used = qualifying
-      .filter((lane) => entry.workflow === undefined || lane.workflow === entry.workflow)
-      .flatMap((lane) => projectCommands(lane, model))
-      .some(({ command }) => invokedScript(command, model.scripts) === entry.script);
-    if (!used) {
-      failures.push(
-        fail(
-          'inert',
-          `UNROUTED script "${entry.script}" is run by no qualifying lane outside the runner; remove it.`,
-        ),
-      );
-    }
-  }
-  for (const script of Object.keys(model.opaque)) {
+function inertStep(
+  entry: Extract<Unrouted, { kind: 'step' }>,
+  qualifying: readonly Lane[],
+): Failure[] {
+  const matches = qualifying
+    .filter((lane) => lane.workflow === entry.workflow)
+    .flatMap((lane) => lane.steps.filter((step) => step.name === entry.step));
+  if (matches.length === 1) return [];
+  const detail =
+    matches.length === 0 ? 'matches no step; remove it' : `matches ${matches.length} steps`;
+  return [fail('inert', `UNROUTED step ${entry.workflow} / "${entry.step}" ${detail}.`)];
+}
+
+function inertScript(
+  entry: Extract<Unrouted, { kind: 'script' }>,
+  qualifying: readonly Lane[],
+  model: Model,
+): Failure[] {
+  const used = qualifying
+    .filter((lane) => entry.workflow === undefined || lane.workflow === entry.workflow)
+    .flatMap((lane) => projectCommands(lane, model))
+    .some(({ command }) => invokedScript(command, model.scripts) === entry.script);
+  if (used) return [];
+  return [
+    fail(
+      'inert',
+      `UNROUTED script "${entry.script}" is run by no qualifying lane outside the runner; remove it.`,
+    ),
+  ];
+}
+
+function inertOpaque(model: Model): Failure[] {
+  return Object.keys(model.opaque).flatMap((script) => {
     if (!(script in model.scripts)) {
-      failures.push(
-        fail('inert', `opaque-runner declaration "${script}" is not a package.json script.`),
-      );
-      continue;
+      return [fail('inert', `opaque-runner declaration "${script}" is not a package.json script.`)];
     }
     const without = { ...model.opaque };
     delete without[script];
-    const reduced = { ...model, opaque: without };
-    if (summarize(unowned(reduced)) === summarize(unowned(model))) {
-      failures.push(
-        fail(
-          'inert',
-          `opaque-runner declaration "${script}" changes nothing; the units it names are covered anyway.`,
-        ),
-      );
-    }
-  }
-  return failures;
+    if (summarize(unowned({ ...model, opaque: without })) !== summarize(unowned(model))) return [];
+    return [
+      fail(
+        'inert',
+        `opaque-runner declaration "${script}" changes nothing; the units it names are covered anyway.`,
+      ),
+    ];
+  });
+}
+
+function inert(model: Model, declared: readonly Unrouted[]): Failure[] {
+  const qualifying = model.lanes.filter((lane) => lane.qualifying);
+  return [
+    ...declared.flatMap((entry) =>
+      entry.kind === 'step' ? inertStep(entry, qualifying) : inertScript(entry, qualifying, model),
+    ),
+    ...inertOpaque(model),
+  ];
 }
 
 /** Compared as a set, not a count: removing a waiver can trade one failure for another. */
@@ -267,7 +268,7 @@ function summarize(failures: readonly Failure[]): string {
 function attestedUnits(model: Model): Set<string> {
   return new Set(
     CHECK_CATALOG.filter((spec) => spec.kind.type !== 'vitest-related').flatMap((spec) =>
-      unitsOf(spec, model),
+      checkUnits(spec, model),
     ),
   );
 }
@@ -297,12 +298,6 @@ function unregisteredSuites(model: Model): Failure[] {
   });
 }
 
-function unitsOf(spec: CheckSpec, model: Model): string[] {
-  return spec.kind.type === 'vitest-related'
-    ? model.vitestProjects.map((name) => `vitest:${name}`)
-    : scriptUnits(spec.kind.script, model);
-}
-
 // 8. Every Vitest project is somebody's suite. A project added to the config with
 //    no lane running it is dead configuration that reads as coverage.
 function orphanProjects(model: Model): Failure[] {
@@ -323,5 +318,3 @@ export function audit(model: Model, declared: readonly Unrouted[] = UNROUTED): F
     ...orphanProjects(model),
   ];
 }
-
-export { triggersOnPath };

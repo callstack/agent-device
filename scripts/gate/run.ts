@@ -12,6 +12,7 @@ import { pathToFileURL } from 'node:url';
 import fs from 'node:fs';
 import path from 'node:path';
 import { runCmdStreaming, runCmdSync } from '../../src/utils/exec.ts';
+import { runEntrypoint } from '../lib/cli-entrypoint.ts';
 import { CHECK_CATALOG, resolveCommand } from '../check-affected/checks.ts';
 
 const USAGE = 'Usage: pnpm gate <check-id> [args…]\n';
@@ -59,11 +60,5 @@ async function main(argv: readonly string[]): Promise<number> {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-  main(process.argv.slice(2)).then(
-    (code) => process.exit(code),
-    (error: unknown) => {
-      process.stderr.write(`gate: ${error instanceof Error ? error.message : error}\n`);
-      process.exit(1);
-    },
-  );
+  runEntrypoint('gate', () => main(process.argv.slice(2)));
 }

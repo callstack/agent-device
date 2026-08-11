@@ -81,13 +81,8 @@ export function commandSegments(body: string): string[] {
 
 /** `echo done # && pnpm test:unit` must not credit test:unit. Quotes protect a literal `#`. */
 function stripComment(line: string): string {
-  let quote: string | null = null;
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    if (quote) {
-      if (char === quote) quote = null;
-    } else if (char === '"' || char === "'") quote = char;
-    else if (char === '#' && (i === 0 || /\s/.test(line[i - 1] ?? ''))) return line.slice(0, i);
+  for (const match of line.matchAll(/"[^"]*"|'[^']*'|(?:^|\s)#/g)) {
+    if (match[0].endsWith('#')) return line.slice(0, match.index);
   }
   return line;
 }
@@ -125,27 +120,29 @@ function expandGlob(pattern: string): string[] {
     .sort();
 }
 
-function vitestUnits(parts: readonly string[], projects: readonly string[]): Unit[] {
+/** `--project x`, `--project=x`, and positional file arguments. */
+function vitestArgs(parts: readonly string[]): { named: string[]; files: string[] } {
   const named: string[] = [];
   const files: string[] = [];
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i] ?? '';
     if (part === '--project') named.push(parts[++i] ?? '');
     else if (part.startsWith('--project=')) named.push(part.slice('--project='.length));
-    else if (
-      !part.startsWith('-') &&
-      /[./]/.test(part) &&
-      !/^(?:pnpm|exec|vitest|run)$/.test(part)
-    ) {
+    else if (!part.startsWith('-') && /[./]/.test(part) && !RUNNER_TOKENS.test(part))
       files.push(part);
-    }
   }
+  return { named, files };
+}
+
+const RUNNER_TOKENS = /^(?:pnpm|exec|vitest|run)$/;
+
+function vitestUnits(parts: readonly string[], projects: readonly string[]): Unit[] {
+  const { named, files } = vitestArgs(parts);
   // A bare run spans every project; a filtered run covers only the files it names,
   // so a docs-only lane running one unit-core file cannot claim the whole project.
   const selected = named.length > 0 ? named : projects;
-  return selected.map((project) =>
-    files.length > 0 ? `vitest:${project}@${files.join(',')}` : `vitest:${project}`,
-  );
+  const suffix = files.length > 0 ? `@${files.join(',')}` : '';
+  return selected.map((project) => `vitest:${project}${suffix}`);
 }
 
 function nodeTestUnits(parts: readonly string[]): Unit[] {
@@ -171,21 +168,25 @@ export function scriptUnits(
   const body = model.scripts[script];
   if (body === undefined || seen.has(script)) return [];
   const next = new Set([...seen, script]);
-  const units = new Set<Unit>();
-  for (const segment of commandSegments(body)) {
-    const nested = invokedScript(segment, model.scripts);
-    if (nested) {
-      for (const unit of scriptUnits(nested, model, next)) units.add(unit);
-      continue;
-    }
-    const parts = tokens(segment);
-    if (parts.includes('vitest')) {
-      for (const unit of vitestUnits(parts, model.vitestProjects)) units.add(unit);
-    } else if (parts.includes('--test')) {
-      for (const unit of nodeTestUnits(parts)) units.add(unit);
-    } else units.add(`script:${script}`);
-  }
-  return [...units];
+  return [
+    ...new Set(
+      commandSegments(body).flatMap((segment) => segmentUnits(segment, script, model, next)),
+    ),
+  ];
+}
+
+function segmentUnits(
+  segment: string,
+  script: string,
+  model: Pick<Model, 'scripts' | 'vitestProjects' | 'opaque'>,
+  seen: ReadonlySet<string>,
+): Unit[] {
+  const nested = invokedScript(segment, model.scripts);
+  if (nested) return scriptUnits(nested, model, seen);
+  const parts = tokens(segment);
+  if (parts.includes('vitest')) return vitestUnits(parts, model.vitestProjects);
+  if (parts.includes('--test')) return nodeTestUnits(parts);
+  return [`script:${script}`];
 }
 
 /** A lane running `have` satisfies a need for `want`. Whole projects cover their files. */
@@ -248,56 +249,85 @@ function compositeSteps(uses: string, root: string, depth = 0): RawStep[] {
   ]);
 }
 
-export function loadLanes(
+type WorkflowDoc = {
+  name?: string;
+  // `on:` is YAML 1.1 truthy; the parser hands it back under `true`.
+  on?: Record<string, never>;
+  true?: Record<string, never>;
+  jobs?: Record<string, { name?: string; steps?: RawStep[] }>;
+};
+
+/** A job's own steps plus the steps of every local composite action it uses. */
+function laneSteps(
+  job: { name?: string; steps?: RawStep[] },
+  jobId: string,
+  root: string,
+): LaneStep[] {
+  return (
+    (job.steps ?? [])
+      .flatMap((step) => [step, ...(step.uses ? compositeSteps(step.uses, root) : [])])
+      // The website build runs its own package's scripts, not this one's.
+      .filter((step) => !step['working-directory'])
+      .map((step) => ({ name: step.name ?? jobId, commands: stepCommands(step) }))
+  );
+}
+
+function laneInvocations(
+  steps: readonly LaneStep[],
+  scripts: Readonly<Record<string, string>>,
+): { gates: CheckId[]; verbatim: string[] } {
+  const gates = new Set<CheckId>();
+  const verbatim = new Set<string>();
+  for (const command of steps.flatMap((step) => step.commands)) {
+    for (const match of command.matchAll(GATE_INVOCATION)) gates.add(match[1] as CheckId);
+    for (const name of verbatimScripts(command, scripts)) verbatim.add(name);
+  }
+  return { gates: [...gates], verbatim: [...verbatim] };
+}
+
+function workflowLanes(
+  file: string,
+  doc: WorkflowDoc,
+  actionRoot: string,
+  scripts: Readonly<Record<string, string>>,
+): Lane[] {
+  const on = (doc.on ?? doc.true ?? {}) as Record<
+    string,
+    { paths?: string[]; 'paths-ignore'?: string[] }
+  >;
+  const qualifying = 'pull_request' in on || 'schedule' in on;
+  const { paths, pathsIgnore } = triggerPaths(on);
+  return Object.entries(doc.jobs ?? {}).map(([jobId, job]) => {
+    const steps = laneSteps(job, jobId, actionRoot);
+    return {
+      workflow: file,
+      label: laneLabel(doc.name ?? file, job.name ?? jobId),
+      qualifying,
+      ...laneInvocations(steps, scripts),
+      steps,
+      paths,
+      pathsIgnore,
+    };
+  });
+}
+
+function loadLanes(
   dir = '.github/workflows',
   scripts: Readonly<Record<string, string>> = {},
 ): Lane[] {
-  const lanes: Lane[] = [];
-  for (const file of fs
+  const actionRoot = path.resolve(dir, '..', '..');
+  return fs
     .readdirSync(dir)
     .filter((entry) => entry.endsWith('.yml'))
-    .sort()) {
-    const doc = parse(fs.readFileSync(path.join(dir, file), 'utf8')) as {
-      name?: string;
-      // `on:` is YAML 1.1 truthy; the parser hands it back under `true`.
-      on?: Record<string, never>;
-      true?: Record<string, never>;
-      jobs?: Record<string, { name?: string; steps?: RawStep[] }>;
-    };
-    const on = (doc.on ?? doc.true ?? {}) as Record<
-      string,
-      { paths?: string[]; 'paths-ignore'?: string[] }
-    >;
-    const qualifying = 'pull_request' in on || 'schedule' in on;
-    const { paths, pathsIgnore } = triggerPaths(on);
-    const actionRoot = path.resolve(dir, '..', '..');
-    for (const [jobId, job] of Object.entries(doc.jobs ?? {})) {
-      const steps: LaneStep[] = (job.steps ?? [])
-        .flatMap((step) => [step, ...(step.uses ? compositeSteps(step.uses, actionRoot) : [])])
-        // The website build runs its own package's scripts, not this one's.
-        .filter((step) => !step['working-directory'])
-        .map((step) => ({ name: step.name ?? jobId, commands: stepCommands(step) }));
-      const gates = new Set<CheckId>();
-      const verbatim = new Set<string>();
-      for (const step of steps) {
-        for (const command of step.commands) {
-          for (const match of command.matchAll(GATE_INVOCATION)) gates.add(match[1] as CheckId);
-          for (const name of verbatimScripts(command, scripts)) verbatim.add(name);
-        }
-      }
-      lanes.push({
-        workflow: file,
-        label: laneLabel(doc.name ?? file, job.name ?? jobId),
-        qualifying,
-        gates: [...gates],
-        verbatim: [...verbatim],
-        steps,
-        paths,
-        pathsIgnore,
-      });
-    }
-  }
-  return lanes;
+    .sort()
+    .flatMap((file) =>
+      workflowLanes(
+        file,
+        parse(fs.readFileSync(path.join(dir, file), 'utf8')) as WorkflowDoc,
+        actionRoot,
+        scripts,
+      ),
+    );
 }
 
 // --- Coverage ----------------------------------------------------------------
@@ -312,7 +342,7 @@ export function matchesGlob(pattern: string, file: string): boolean {
 }
 
 /** Whether a change to `file` alone starts this lane's workflow. */
-export function triggersOnPath(lane: Lane, file: string): boolean {
+function triggersOnPath(lane: Lane, file: string): boolean {
   if (lane.pathsIgnore.some((pattern) => matchesGlob(pattern, file))) return false;
   if (lane.paths.length > 0) return lane.paths.some((pattern) => matchesGlob(pattern, file));
   return true;
@@ -345,7 +375,7 @@ export function verbatimScripts(
     .map(([name]) => name);
 }
 
-export function laneUnits(lane: Lane, model: Model): Unit[] {
+function laneUnits(lane: Lane, model: Model): Unit[] {
   const fromGates = lane.gates.flatMap((id) => {
     const spec = CHECK_CATALOG.find((entry) => entry.id === id);
     return spec ? checkUnits(spec, model) : [];
