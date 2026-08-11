@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { localRuntimeOwner } from '@agent-device/contracts/platform';
 import { androidRecordingDevice, recordingHost, recordingInput } from './fixtures.ts';
 import { bindAndroidScreenRecordingRuntime } from './runtime.ts';
@@ -129,6 +129,36 @@ test('cleans verified dead evidence so a later start is admitted', async () => {
     envelope: expect.any(Object),
   });
   expect(starts).toBe(2);
+});
+
+test('retains evidence when the recorder presence probe is uncertain', async () => {
+  vi.useFakeTimers();
+  try {
+    let manifest = '';
+    const runtime = await start({
+      writeManifest: async ({ contents }: { contents: string }) => {
+        manifest = contents;
+      },
+      readManifest: async () =>
+        manifest ? { status: 'read' as const, contents: manifest } : { status: 'missing' as const },
+      inspect: async () => 'uncertain' as const,
+      stop: async () => 'uncertain' as const,
+    });
+    const started = await runtime.screenRecordingStart(recordingInput());
+    const cleanup = runtime.screenRecordingCleanup({ envelope: started.envelope });
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    await expect(cleanup).resolves.toMatchObject({
+      status: 'cleanup-pending',
+      reason: 'transport-failed',
+    });
+    expect(manifest).not.toBe('');
+    await expect(runtime.screenRecordingStart(recordingInput())).rejects.toThrow(
+      'native recovery evidence already exists',
+    );
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('rejects a tampered output path before native recovery side effects', async () => {

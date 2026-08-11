@@ -48,7 +48,15 @@ export async function startInitialTransaction(params: {
     try {
       chunk = await startChunkAt(transport, remotePath, input, signal);
     } catch (error) {
-      if (signal.aborted) throw signal.reason;
+      if (signal.aborted) {
+        // `startChunkAt` has already rolled back the child and its artifact. Retire the
+        // pre-launch marker as well when that cleanup is confirmed; if the manifest removal
+        // itself is unavailable, leave the marker for fenced recovery instead of authorizing a
+        // replacement from an unproven state. The cancellation remains the primary outcome.
+        if (!(error instanceof AndroidScreenRecordingStartRollbackUnconfirmed))
+          await removeNativeManifest(transport, manifestPath).catch(() => {});
+        throw signal.reason;
+      }
       await removeFailedCandidateManifest(transport, manifestPath, error);
       last = error;
       continue;

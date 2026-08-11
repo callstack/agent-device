@@ -223,3 +223,77 @@ test('preserves cancellation before and after child acquisition without retries'
   expect(calls).toEqual(['start', 'signal:42:undefined', 'remove']);
   expect(disposals).toBe(0);
 });
+
+test('cancellation after child acquisition retires pending native evidence after rollback', async () => {
+  const controller = new AbortController();
+  const reason = new Error('recording canceled after native acquisition');
+  const calls: string[] = [];
+  let manifest = '';
+  const runtime = await start(
+    {
+      start: async () => {
+        calls.push('start');
+        controller.abort(reason);
+        return recordingProcess('42');
+      },
+      writeManifest: async ({ contents }: { contents: string }) => {
+        manifest = contents;
+      },
+      readManifest: async () =>
+        manifest ? { status: 'read' as const, contents: manifest } : { status: 'missing' as const },
+      removeManifest: async () => {
+        calls.push('remove-manifest');
+        manifest = '';
+        return true;
+      },
+      stop: async ({ pid }: { pid: string }) => {
+        calls.push(`signal:${pid}`);
+        return 'already-missing' as const;
+      },
+      remove: async () => {
+        calls.push('remove-artifact');
+        return true;
+      },
+    },
+    controller.signal,
+  );
+
+  await expect(runtime.screenRecordingStart(recordingInput())).rejects.toBe(reason);
+  expect(calls).toEqual(['start', 'signal:42', 'remove-artifact', 'remove-manifest']);
+  expect(manifest).toBe('');
+});
+
+test('cancellation retains pending native evidence when rollback is unconfirmed', async () => {
+  const controller = new AbortController();
+  const reason = new Error('recording canceled with uncertain native cleanup');
+  const calls: string[] = [];
+  let manifest = '';
+  const runtime = await start(
+    {
+      start: async () => {
+        calls.push('start');
+        controller.abort(reason);
+        return recordingProcess('42');
+      },
+      writeManifest: async ({ contents }: { contents: string }) => {
+        manifest = contents;
+      },
+      readManifest: async () =>
+        manifest ? { status: 'read' as const, contents: manifest } : { status: 'missing' as const },
+      removeManifest: async () => {
+        calls.push('remove-manifest');
+        manifest = '';
+        return true;
+      },
+      stop: async ({ pid }: { pid: string }) => {
+        calls.push(`signal:${pid}`);
+        return 'ownership-lost' as const;
+      },
+    },
+    controller.signal,
+  );
+
+  await expect(runtime.screenRecordingStart(recordingInput())).rejects.toBe(reason);
+  expect(calls).toEqual(['start', 'signal:42']);
+  expect(manifest).not.toBe('');
+});
