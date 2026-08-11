@@ -2,6 +2,7 @@ import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import path from 'node:path';
 import { PassThrough, Readable } from 'node:stream';
 import type { IncomingMessage } from 'node:http';
 import { AppError } from '@agent-device/kernel/errors';
@@ -10,6 +11,8 @@ import {
   finalizeResumableUpload,
   receiveResumableUploadChunk,
 } from '../resumable-upload.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { runCmdSync } from '../../utils/exec.ts';
 
 test('finalizing an unknown upload reports expiry with a recovery hint', async () => {
   const error = await finalizeResumableUpload('missing-upload-id').then(
@@ -50,6 +53,40 @@ test('oversized ranged chunks roll back atomically and can be retried and finali
     assert.equal(fs.readFileSync(finalized.artifactPath, 'utf8'), 'ABCDE');
   } finally {
     fs.rmSync(finalized.tempDir, { recursive: true, force: true });
+  }
+});
+
+test('finalize extracts a gzip-compressed app bundle upload', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-resumable-gzip-');
+  const appDir = path.join(tempRoot, 'Sample.app');
+  const archivePath = path.join(tempRoot, 'Sample.tar.gz');
+  try {
+    fs.mkdirSync(appDir, { recursive: true });
+    fs.writeFileSync(path.join(appDir, 'payload.txt'), 'payload');
+    runCmdSync('tar', ['czf', archivePath, '-C', tempRoot, 'Sample.app'], {
+      env: { ...process.env, COPYFILE_DISABLE: '1' },
+    });
+    const archive = fs.readFileSync(archivePath);
+    const uploadId = beginResumableUpload({
+      ...uploadOptions(archive),
+      fileName: 'Sample.app',
+      artifactType: 'app-bundle',
+      platform: 'ios',
+      contentType: 'application/gzip',
+    }).uploadId;
+    await receiveResumableUploadChunk({ uploadId, req: request(archive) });
+
+    const finalized = await finalizeResumableUpload(uploadId);
+    try {
+      assert.equal(
+        fs.readFileSync(path.join(finalized.artifactPath, 'payload.txt'), 'utf8'),
+        'payload',
+      );
+    } finally {
+      fs.rmSync(finalized.tempDir, { recursive: true, force: true });
+    }
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
   }
 });
 
