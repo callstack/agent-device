@@ -110,8 +110,10 @@ test('doctor preserves the legacy unsupported HarmonyOS target-app check', async
   const inspectFacts: InspectDeviceRuntimeFacts = vi.fn(async () => runtimeFacts());
   const ensureReady = vi.fn(async () => ({ ...harmonyDevice, booted: true }));
   const listApps = vi.fn(async () => [{ id: 'com.example.application', name: 'application' }]);
-  const bindDevice: BindDeviceRuntime = vi.fn(async (device, use) =>
-    narrowDeviceBinding(
+  const bindCount = vi.fn();
+  const bindDevice: BindDeviceRuntime = async (device, use) => {
+    bindCount();
+    return narrowDeviceBinding(
       {
         device,
         owner: localRuntimeOwner('harmonyos'),
@@ -120,8 +122,8 @@ test('doctor preserves the legacy unsupported HarmonyOS target-app check', async
         [Symbol.asyncDispose]: async () => {},
       },
       use,
-    ),
-  );
+    );
+  };
   const sessionName = 'doctor-harmony-app-runtime';
   const sessionStore = makeSessionStore('agent-device-doctor-harmony-');
   sessionStore.set(sessionName, {
@@ -158,7 +160,7 @@ test('doctor preserves the legacy unsupported HarmonyOS target-app check', async
     ]),
   );
   expect(inspectFacts).not.toHaveBeenCalled();
-  expect(bindDevice).not.toHaveBeenCalled();
+  expect(bindCount).not.toHaveBeenCalled();
   expect(ensureReady).not.toHaveBeenCalled();
   expect(listApps).not.toHaveBeenCalled();
 });
