@@ -10,6 +10,7 @@ import type {
 } from '../../core/command-descriptor/types.ts';
 import type { DaemonRequest } from '../types.ts';
 import type { DaemonPaths } from '../config.ts';
+import type { PlatformSelector } from '@agent-device/kernel/device';
 import {
   removeDaemonInfo,
   removeDaemonLock,
@@ -22,6 +23,17 @@ const IOS_RUNNER_XCODEBUILD_KILL_PATTERNS = [
   'xcodebuild .*AgentDeviceRunner\\.env\\.session-',
   'xcodebuild build-for-testing .*apple/runner/AgentDeviceRunner/AgentDeviceRunner\\.xcodeproj',
 ];
+
+// `--platform` selectors that name (or alias) an Apple device. The client
+// only ever knows what this exact request declared — there is no session
+// lookup at this layer (src/daemon/client/ stays import-free of
+// src/platforms) — so an undeclared platform fails safe toward "could be
+// Apple" rather than toward "definitely not Apple".
+const APPLE_PLATFORM_SELECTORS: ReadonlySet<PlatformSelector> = new Set(['apple', 'ios', 'macos']);
+
+function mayInvolveAppleDevice(platform: PlatformSelector | undefined): boolean {
+  return platform === undefined || APPLE_PLATFORM_SELECTORS.has(platform);
+}
 
 type BoundedTimeoutPolicy = CommandTimeoutPolicy & { envelopeMs: number };
 type FlagTimeoutBudget = Extract<CommandTimeoutBudget, { source: 'flag' }>;
@@ -98,8 +110,10 @@ export function handleRequestTimeout(
   command: string | undefined,
   remote: boolean,
   timeoutMs: number,
+  platform: PlatformSelector | undefined,
 ): AppError {
-  const cleanup = remote ? { terminated: 0 } : cleanupTimedOutIosRunnerBuilds();
+  const mayInvolveApple = mayInvolveAppleDevice(platform);
+  const cleanup = remote || !mayInvolveApple ? { terminated: 0 } : cleanupTimedOutIosRunnerBuilds();
   const resetDaemon = !remote && shouldResetDaemonAfterRequestTimeout(command);
   const daemonReset = resetDaemon
     ? resetDaemonAfterTimeout(info, statePaths)
@@ -122,7 +136,7 @@ export function handleRequestTimeout(
   return new AppError('COMMAND_FAILED', 'Daemon request timed out', {
     timeoutMs,
     requestId,
-    hint: resolveRequestTimeoutHint({ remote, resetDaemon, command }),
+    hint: resolveRequestTimeoutHint({ remote, resetDaemon, command, mayInvolveApple }),
   });
 }
 
@@ -135,23 +149,32 @@ export function shouldResetDaemonAfterRequestTimeout(command: string | undefined
   return resolveCommandTimeoutPolicy(command).onTimeout === 'reset-daemon';
 }
 
-function resolveRequestTimeoutHint(params: {
+// Exported for direct hint-matrix testing: handleRequestTimeout also triggers
+// real pkill/process-kill side effects, so its wording is verified through
+// this pure sub-function rather than the full timeout path.
+export function resolveRequestTimeoutHint(params: {
   remote: boolean;
   resetDaemon: boolean;
   command: string | undefined;
+  mayInvolveApple: boolean;
 }): string {
-  const { remote, resetDaemon, command } = params;
+  const { remote, resetDaemon, command, mayInvolveApple } = params;
   if (remote) {
     return 'Retry with --debug and verify the remote daemon URL, auth token, and remote host logs.';
   }
   if (!resetDaemon) {
     const iosPrepareHint =
-      command === PUBLIC_COMMANDS.snapshot
+      mayInvolveApple && command === PUBLIC_COMMANDS.snapshot
         ? ' If this was the first Apple-platform snapshot on the device, run agent-device prepare ios-runner with the same --platform before snapshot/test so runner startup is handled explicitly.'
         : '';
-    return `Retry with --debug and check daemon diagnostics logs. The timed-out ${command ?? 'request'} request was canceled and Apple runner work was aborted when detected; the daemon was kept alive so the session can still be closed or inspected.${iosPrepareHint}`;
+    const appleCleanupNote = mayInvolveApple
+      ? ' and Apple runner work was aborted when detected'
+      : '';
+    return `Retry with --debug and check daemon diagnostics logs. The timed-out ${command ?? 'request'} request was canceled${appleCleanupNote}; the daemon was kept alive so the session can still be closed or inspected.${iosPrepareHint}`;
   }
-  return 'Retry with --debug and check daemon diagnostics logs. Timed-out Apple runner xcodebuild processes were terminated when detected.';
+  return mayInvolveApple
+    ? 'Retry with --debug and check daemon diagnostics logs. Timed-out Apple runner xcodebuild processes were terminated when detected.'
+    : 'Retry with --debug and check daemon diagnostics logs. The daemon was reset after the timeout.';
 }
 
 function cleanupTimedOutIosRunnerBuilds(): { terminated: number; error?: string } {

@@ -322,6 +322,7 @@ async function sendSocketRequest(
                 req.command,
                 false,
                 timeoutMs,
+                req.flags?.platform,
               ),
             );
           }, timeoutMs)
@@ -436,6 +437,7 @@ async function sendHttpRequest(
                 req.command,
                 remote,
                 timeoutMs,
+                req.flags?.platform,
               ),
             );
           }, timeoutMs)

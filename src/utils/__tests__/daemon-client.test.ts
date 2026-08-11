@@ -23,6 +23,7 @@ import { canConnectSocket } from '../../daemon/client/daemon-client-transport.ts
 import { DAEMON_RPC_PROTOCOL_VERSION } from '../../daemon/http-health.ts';
 import {
   resolveDaemonRequestTimeoutMs,
+  resolveRequestTimeoutHint,
   shouldResetDaemonAfterRequestTimeout,
 } from '../../daemon/client/daemon-client-timeout.ts';
 import { resolveDaemonPaths } from '../../daemon/config.ts';
@@ -249,6 +250,88 @@ test('read-only polling command timeouts preserve the daemon like snapshot', () 
   // timeouts preserve the daemon too (#1105); non-capture commands still reset.
   assert.equal(shouldResetDaemonAfterRequestTimeout('press'), false);
   assert.equal(shouldResetDaemonAfterRequestTimeout('open'), true);
+});
+
+test('request timeout hint stops asserting Apple runner specifics for a known non-Apple platform', () => {
+  // Before this change, handleRequestTimeout ran the Apple-runner pkill
+  // cleanup and emitted Apple-specific hint wording for EVERY local timeout,
+  // regardless of the request's --platform. That was misleading for
+  // Android/web/Harmony sessions, which never had any Apple runner work to
+  // abort. The hint now only claims Apple-runner cleanup happened when the
+  // request's declared platform could actually be Apple (known-Apple, or
+  // genuinely undeclared — fail-safe toward keeping the claim).
+
+  // Known-Apple and undeclared (fail-safe) platforms both resolve to
+  // mayInvolveApple: true and keep the exact historical wording — nothing
+  // regresses for the common case.
+  assert.equal(
+    resolveRequestTimeoutHint({
+      remote: false,
+      resetDaemon: false,
+      command: 'press',
+      mayInvolveApple: true,
+    }),
+    'Retry with --debug and check daemon diagnostics logs. The timed-out press request was canceled and Apple runner work was aborted when detected; the daemon was kept alive so the session can still be closed or inspected.',
+  );
+  assert.equal(
+    resolveRequestTimeoutHint({
+      remote: false,
+      resetDaemon: true,
+      command: 'open',
+      mayInvolveApple: true,
+    }),
+    'Retry with --debug and check daemon diagnostics logs. Timed-out Apple runner xcodebuild processes were terminated when detected.',
+  );
+  assert.equal(
+    resolveRequestTimeoutHint({
+      remote: false,
+      resetDaemon: false,
+      command: 'snapshot',
+      mayInvolveApple: true,
+    }),
+    'Retry with --debug and check daemon diagnostics logs. The timed-out snapshot request was canceled and Apple runner work was aborted when detected; the daemon was kept alive so the session can still be closed or inspected. If this was the first Apple-platform snapshot on the device, run agent-device prepare ios-runner with the same --platform before snapshot/test so runner startup is handled explicitly.',
+  );
+
+  // Known non-Apple platform: no Apple-runner claim in any branch, and the
+  // Apple-only iOS-prepare follow-up drops entirely.
+  assert.equal(
+    resolveRequestTimeoutHint({
+      remote: false,
+      resetDaemon: false,
+      command: 'press',
+      mayInvolveApple: false,
+    }),
+    'Retry with --debug and check daemon diagnostics logs. The timed-out press request was canceled; the daemon was kept alive so the session can still be closed or inspected.',
+  );
+  assert.equal(
+    resolveRequestTimeoutHint({
+      remote: false,
+      resetDaemon: true,
+      command: 'open',
+      mayInvolveApple: false,
+    }),
+    'Retry with --debug and check daemon diagnostics logs. The daemon was reset after the timeout.',
+  );
+  assert.equal(
+    resolveRequestTimeoutHint({
+      remote: false,
+      resetDaemon: false,
+      command: 'snapshot',
+      mayInvolveApple: false,
+    }),
+    'Retry with --debug and check daemon diagnostics logs. The timed-out snapshot request was canceled; the daemon was kept alive so the session can still be closed or inspected.',
+  );
+
+  // Remote requests were never Apple-specific and stay platform-independent.
+  assert.equal(
+    resolveRequestTimeoutHint({
+      remote: true,
+      resetDaemon: false,
+      command: 'press',
+      mayInvolveApple: false,
+    }),
+    'Retry with --debug and verify the remote daemon URL, auth token, and remote host logs.',
+  );
 });
 
 test('wait request timeout extends past the user-supplied wait budget', () => {
