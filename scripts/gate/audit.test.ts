@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
 import { audit } from './audit.ts';
-import { NON_GATE_STEPS } from './declarations.ts';
+import { LANE_ENVIRONMENTS, NON_GATE_STEPS } from './declarations.ts';
 import { categories, covered, loadModel, stepDigest, type Lane, type Model } from './model.ts';
 import { CHECK_CATALOG } from '../check-affected/checks.ts';
 
@@ -224,6 +224,46 @@ test('a gate invocation cannot carry a payload or an injecting environment', () 
   );
   // `$VAR` expands to a value rather than running a program, so it stays allowed.
   assert.deepEqual(bypassesFor('pnpm gate fallow --base "$FALLOW_BASE"'), []);
+});
+
+test('a lane cannot inject through its inherited environment', () => {
+  // Found while confirming round 4 rather than reported: workflow- and job-level `env:`
+  // reaches every step, so `NODE_OPTIONS` there injects into a plain gate step while the
+  // step itself stays byte-identical. Ten lanes carry job-level env today.
+  const injected = mutate((m) => ({
+    lanes: m.lanes.map((lane) =>
+      lane.label === 'Layering Guard'
+        ? {
+            ...lane,
+            env: { NODE_OPTIONS: '--import ./scripts/layering/check.ts' },
+            envDigest: 'injected000',
+          }
+        : lane,
+    ),
+  }));
+  assert.ok(
+    audit(injected).some((failure) => failure.assertion === 'lane-env'),
+    'an uninventoried lane environment must fail',
+  );
+
+  const edited = mutate((m) => ({
+    lanes: m.lanes.map((lane) =>
+      lane.workflow === 'ios.yml' ? { ...lane, envDigest: 'tampered0000' } : lane,
+    ),
+  }));
+  const found = audit(edited);
+  assert.ok(
+    found.some((failure) => failure.assertion === 'lane-env'),
+    'an edited env is unlisted',
+  );
+  assert.ok(
+    found.some((failure) => /LANE_ENVIRONMENTS ios\.yml/.test(failure.message)),
+    'and its old entry goes inert',
+  );
+
+  // Non-vacuity: the live tree really does have lanes carrying env, so this is not
+  // asserting about a shape the repo never uses.
+  assert.ok(LANE_ENVIRONMENTS.length >= 10);
 });
 
 test('a step is not hidden by working-directory', () => {

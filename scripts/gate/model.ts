@@ -53,6 +53,13 @@ export type Lane = {
   readonly steps: readonly LaneStep[];
   readonly paths: readonly string[];
   readonly pathsIgnore: readonly string[];
+  /**
+   * Workflow- and job-level `env:`, which every step in the lane inherits. Modelled at
+   * the lane rather than folded into each step's digest: one `NODE_OPTIONS` here injects
+   * into every step at once, so it is one fact about the lane, not N facts about steps.
+   */
+  readonly env: Readonly<Record<string, string>>;
+  readonly envDigest: string;
 };
 
 /**
@@ -307,10 +314,11 @@ function compositeSteps(
 
 type WorkflowDoc = {
   name?: string;
+  env?: Record<string, unknown>;
   // `on:` is YAML 1.1 truthy; the parser hands it back under `true`.
   on?: Record<string, never>;
   true?: Record<string, never>;
-  jobs?: Record<string, { name?: string; steps?: RawStep[] }>;
+  jobs?: Record<string, { name?: string; env?: Record<string, unknown>; steps?: RawStep[] }>;
 };
 
 /**
@@ -359,6 +367,15 @@ function laneInvocations(
   return { gates: [...gates], verbatim: [...verbatim] };
 }
 
+function inheritedEnv(
+  doc: WorkflowDoc,
+  job: { env?: Record<string, unknown> },
+): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries({ ...doc.env, ...job.env })) env[key] = String(value);
+  return env;
+}
+
 function workflowLanes(
   file: string,
   doc: WorkflowDoc,
@@ -373,6 +390,7 @@ function workflowLanes(
   const { paths, pathsIgnore } = triggerPaths(on);
   return Object.entries(doc.jobs ?? {}).map(([jobId, job]) => {
     const steps = laneSteps(job, jobId, actionRoot, file);
+    const env = inheritedEnv(doc, job);
     return {
       workflow: file,
       label: laneLabel(doc.name ?? file, job.name ?? jobId),
@@ -381,6 +399,8 @@ function workflowLanes(
       steps,
       paths,
       pathsIgnore,
+      env,
+      envDigest: Object.keys(env).length === 0 ? '' : stepDigest('', env),
     };
   });
 }

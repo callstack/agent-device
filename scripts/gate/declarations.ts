@@ -288,3 +288,94 @@ export const NON_GATE_STEPS: readonly Unrouted[] = [
     ['6153d35b3227', 'Stage the binary for upload'],
   ]),
 ];
+
+/**
+ * Workflow- and job-level `env:` a qualifying lane inherits. Every step in the lane sees
+ * it, so one `NODE_OPTIONS=--import ./x.ts` here would inject into every gate step at
+ * once — which is why the lane's environment is fingerprinted like a step body.
+ */
+export type LaneEnvironment = {
+  readonly workflow: string;
+  readonly job: string;
+  readonly digest: string;
+  readonly reason: string;
+};
+
+export const LANE_ENVIRONMENTS: readonly LaneEnvironment[] = [
+  {
+    workflow: 'ci.yml',
+    job: 'Web Platform Smoke',
+    digest: '891c2cae5eb2',
+    reason: 'opts the web platform smoke into its live-browser mode (AGENT_DEVICE_WEB_E2E)',
+  },
+  {
+    workflow: 'concurrency-torture-nightly.yml',
+    job: 'Concurrency Torture Nightly / Session/lease/lock torture sweep',
+    digest: 'c9ae66e1a918',
+    reason:
+      'sweep size, seed and envelope path for the torture lane (TORTURE_ENVELOPE, TORTURE_RUNS, TORTURE_SEED_START)',
+  },
+  {
+    workflow: 'conformance-differential.yml',
+    job: 'Conformance Differential / iOS Conformance Differential',
+    digest: '6a253505c017',
+    reason:
+      'simulator identity, CLI path and Maestro analytics opt-out (AGENT_DEVICE_CLI, AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH, AGENT_DEVICE_STATE_DIR, DIFFERENTIAL_ONLY, IOS_RUNTIME_VERSION, MAESTRO_CLI_NO_ANALYTICS)',
+  },
+  {
+    workflow: 'ios.yml',
+    job: 'iOS / Smoke Tests',
+    digest: 'd92263e1990d',
+    reason:
+      'simulator runtime, derived-data and state paths, and the app event URL template (AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE, AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS, AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH, AGENT_DEVICE_STATE_DIR, AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS, IOS_RUNTIME_VERSION)',
+  },
+  {
+    workflow: 'linux.yml',
+    job: 'Linux / Smoke Tests',
+    digest: 'e0f4b71e0be8',
+    reason:
+      'the Xvfb/AT-SPI desktop session the replay smoke needs (DISPLAY, GSETTINGS_BACKEND, GTK_A11Y, GTK_MODULES, NO_AT_BRIDGE, XDG_SESSION_TYPE)',
+  },
+  {
+    workflow: 'macos.yml',
+    job: 'macOS / Smoke Tests',
+    digest: '6946ade697b3',
+    reason:
+      'derived-data and daemon state paths for the macOS runner (AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH, AGENT_DEVICE_STATE_DIR)',
+  },
+  {
+    workflow: 'perf-nightly.yml',
+    job: 'Perf Nightly / iOS Command Perf',
+    digest: '5b24d473c591',
+    reason:
+      'benchmark round count, CLI path and device identity (AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS, AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH, AGENT_DEVICE_PERF_CLI, AGENT_DEVICE_STATE_DIR, IOS_RUNTIME_VERSION, PERF_ROUNDS)',
+  },
+  {
+    workflow: 'perf-nightly.yml',
+    job: 'Perf Nightly / Android Command Perf',
+    digest: '4fce57762d05',
+    reason:
+      'benchmark round count, CLI path and device identity (AGENT_DEVICE_PERF_CLI, PERF_ROUNDS)',
+  },
+  {
+    workflow: 'replays-nightly.yml',
+    job: 'Replay Nightly / Android Full Emulator Suite',
+    digest: '823688085eb9',
+    reason:
+      'device identity and state paths for the nightly replay suites (AGENT_DEVICE_STATE_DIR)',
+  },
+  {
+    workflow: 'replays-nightly.yml',
+    job: 'Replay Nightly / iOS Replay Suite',
+    digest: '5aa7701df728',
+    reason:
+      'device identity and state paths for the nightly replay suites (AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE, AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS, AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH, AGENT_DEVICE_STATE_DIR, IOS_RUNTIME_VERSION)',
+  },
+  {
+    workflow: 'replays-nightly.yml',
+    job: 'Replay Nightly / macOS Replay Suite',
+    digest: '6946ade697b3',
+    reason:
+      'device identity and state paths for the nightly replay suites (AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH, AGENT_DEVICE_STATE_DIR)',
+  },
+];

@@ -7,7 +7,12 @@
 // functions below, because CI can only reach a gate through `pnpm gate <id>`.
 
 import { CHECK_CATALOG } from '../check-affected/checks.ts';
-import { NON_GATE_STEPS, type Unrouted } from './declarations.ts';
+import {
+  LANE_ENVIRONMENTS,
+  NON_GATE_STEPS,
+  type LaneEnvironment,
+  type Unrouted,
+} from './declarations.ts';
 import {
   categories,
   checkUnits,
@@ -131,6 +136,45 @@ function bypass(model: Model, declared: readonly Unrouted[]): Failure[] {
   });
 }
 
+// 3b. A lane's inherited environment is fingerprinted too. `env` at workflow or job
+//     level reaches every step, so `NODE_OPTIONS=--import ./x.ts` there would inject
+//     into a plain gate step while the step itself stayed byte-identical.
+function laneEnvironments(model: Model, declared: readonly LaneEnvironment[]): Failure[] {
+  return model.lanes
+    .filter((lane) => lane.qualifying && lane.envDigest !== '')
+    .flatMap((lane) => {
+      if (
+        declared.some(
+          (entry) => entry.workflow === lane.workflow && entry.digest === lane.envDigest,
+        )
+      ) {
+        return [];
+      }
+      return [
+        fail(
+          'lane-env',
+          `${lane.workflow} / ${lane.label}: the lane's inherited env is not in LANE_ENVIRONMENTS ` +
+            `(digest ${lane.envDigest}): ${Object.keys(lane.env).sort().join(', ')}.`,
+        ),
+      ];
+    });
+}
+
+function inertEnvironment(entry: LaneEnvironment, model: Model): Failure[] {
+  const live = model.lanes.some(
+    (lane) =>
+      lane.qualifying && lane.workflow === entry.workflow && lane.envDigest === entry.digest,
+  );
+  if (live) return [];
+  return [
+    fail(
+      'inert',
+      `LANE_ENVIRONMENTS ${entry.workflow} / "${entry.job}" (digest ${entry.digest}) matches no ` +
+        `qualifying lane; the environment was edited or the job removed.`,
+    ),
+  ];
+}
+
 // 4. Per-path coverage (#1420's class): every check a real selector run activates
 //    for a category's path must be run by a lane that a PR touching only that path
 //    actually starts. Assertion 1 can stay green while this fails — that is the point.
@@ -249,6 +293,8 @@ export function audit(model: Model, declared: readonly Unrouted[] = NON_GATE_STE
   return [
     ...unowned(model),
     ...bypass(model, declared),
+    ...laneEnvironments(model, LANE_ENVIRONMENTS),
+    ...LANE_ENVIRONMENTS.flatMap((entry) => inertEnvironment(entry, model)),
     ...pathCoverage(model),
     ...inert(model, declared),
     ...unregisteredSuites(model),
