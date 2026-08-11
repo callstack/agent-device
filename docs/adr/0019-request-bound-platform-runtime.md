@@ -632,8 +632,8 @@ removed against package bytes added; net growth is exceptional and each contribu
 named and justified individually. Contract modules stay vocabulary-thin under the existing
 capture-kit rule; per-unit type inflation is size growth and is reviewed as such.
 
-The appstate request-scoped unit is an explicit reviewed exception to that default: its current
-production delta is +6,279 bytes (+2,265 in root `src/`, +4,014 in workspace packages). The growth
+The appstate request-scoped unit is an explicit reviewed exception to that default: its prior
+reviewed production delta was +6,279 bytes (+2,265 in root `src/`, +4,014 in workspace packages). The growth
 is unavoidable because appstate had no reusable runtime-owned contract: the unit adds the typed
 `ensureReady`/`appState` fact and operation surface, honest local and provider facts for the full
 denominator, sessionless admission/response parity, and the neutral unavailable-runtime owner
@@ -645,12 +645,14 @@ Android, inventory projection, and descriptor/facade/gateway wiring) and records
 size metrics against `44c298d7f` and the immediate stack base.
 
 The final corrected-base replay is reported separately in the unit review: against
-`3ed473400ebb8f29405912856e0bcfdff2b836fc`, the hardened head measures +6,705 production bytes
-(+2,677 root, +4,028 packages). The +426 difference from the prior reviewed figure is the
-required Apple session-owned projection/parity hardening, the Android-unknown and Harmony-emulator
-denominator evidence, and relocation of the unavailable-runtime helper out of durable capture;
-the final lint-required import consolidation removes a further 91 bytes. This is not an
-unreviewed allowance or a durable-tier expansion.
+`3ed473400ebb8f29405912856e0bcfdff2b836fc`, the hardened head measures +6,595 production bytes
+(+2,677 root, +3,918 packages). The +316 difference from the prior reviewed figure reflects
+the required Apple session-owned projection/parity hardening, the Android-unknown and
+Harmony-emulator denominator evidence, and relocation of the unavailable-runtime helper out of
+durable capture, offset by removing the stale facade export and the two stale Linux/Vega
+capture-kit dependency edges identified by fallow. The earlier lint-required import consolidation
+removed 91 bytes before this final fallow cleanup. This is not an unreviewed allowance or a
+durable-tier expansion.
 
 A command surface that is deprecated and scheduled for removal at the next major is never
 migrated. It stays on its legacy execution shape until the major deletes it, and the deletion — not
