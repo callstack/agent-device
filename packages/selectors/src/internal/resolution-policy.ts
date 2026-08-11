@@ -32,9 +32,8 @@ import type { SelectorResolutionOptions } from './public-resolution-types.ts';
  * companion structural table, `src/core/selector-pipeline-policy.ts` (#1656),
  * whose rows each name one row of this matrix. They live there rather than
  * here because this package is deliberately blind to snapshot occlusion
- * annotations, backend visibility probes, and the wait clock; a column here
- * would be a claim nothing in this package could enforce, which is exactly the
- * unverifiable-column failure the #1649 review caught.
+ * annotations, backend visibility probes, and the wait clock: a column here
+ * would be a claim nothing in this package could enforce (#1649 review).
  */
 
 export type KnobBackedSelectorAmbiguity = 'disambiguate' | 'fail-closed' | 'first-match';

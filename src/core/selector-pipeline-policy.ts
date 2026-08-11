@@ -16,18 +16,14 @@ import {
  * A caller names ONE row here and gets its whole pipeline shape: which
  * ambiguity contract resolves the selector (`resolution`, the matrix row), and
  * which structural stages run around that resolution — occlusion, off-screen,
- * hittable-ancestor promotion, and the poll budget. Those four stages used to
- * be per-caller pipeline code, so "`is` never consults occlusion" was true only
- * as an ABSENCE of code: nothing declared it and nothing could fail if a later
- * edit added it. Here it is a value, and the stage runners below are the only
- * door to each stage, so the value decides.
+ * hittable-ancestor promotion, and the poll budget. The runners below are the
+ * only door to each stage, so a row that skips one still says so as a value:
+ * making `is` consult occlusion means editing this table, not adding a call.
  *
- * Rule of this table, inherited from the #1649 review: a row may only declare
- * what these runners enforce. Every field is read by the runner named in its
- * doc comment, and every row — including the ones whose stages are skips — is
- * driven through those runners in selector-pipeline-policy.test.ts, so flipping
- * any cell changes an assertion. Do not add a column until its runner exists;
- * an unconsumed column reads as truth while being free to drift.
+ * A row may only declare what these runners enforce (#1649 review). Every row,
+ * skips included, is driven through every runner in
+ * selector-pipeline-policy.test.ts, so flipping any cell changes an assertion —
+ * add a column only once a runner reads it.
  */
 
 /**
@@ -83,9 +79,9 @@ export type SelectorPollBudget = {
 
 /**
  * Consumed by `selectorPollBudget`, which `createWaitPolling` derives its
- * deadline and sleep from. `'none'` is a real answer, not an omission: a row
- * that resolves against one capture has no polling contract, and asking for
- * its budget is a bug rather than a defaulting opportunity.
+ * deadline and sleep from. `'none'` is an answer, not an omission: a row that
+ * resolves against one capture has no polling contract, so asking for its
+ * budget is a caller bug — never a place to default one in.
  */
 export type SelectorPollStage = SelectorPollBudget | 'none';
 
@@ -203,13 +199,13 @@ export function selectorPipelineCandidates(
 
 /**
  * Stage 2, post-resolution: promotion, then the occlusion verdict on what
- * promotion produced — the order every acting caller ran by hand.
+ * promotion produced.
  *
- * `occluded` carries the node to NAME in the refusal, which is the promotion
- * input when the match itself is covered (promotion declines to retarget away
- * from a covered node) and the promotion output otherwise. The refusal shape
- * stays with the caller: the same verdict is a thrown interaction error, a
- * daemon response, or a diagnosis, and those are not interchangeable.
+ * `occluded` carries the node to NAME in the refusal — the promotion input
+ * when the match itself is covered (promotion declines to retarget away from a
+ * covered node), the promotion output otherwise. The refusal SHAPE stays with
+ * the caller: this verdict becomes a thrown interaction error, a daemon
+ * response, or a diagnosis, and those are not interchangeable.
  */
 export type SelectorPipelineTarget =
   | { kind: 'target'; node: SnapshotNode }

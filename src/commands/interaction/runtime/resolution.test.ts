@@ -603,9 +603,10 @@ test('throwIfOffscreenInteractionTarget: off-screen + backend confirms -> return
 });
 
 test('throwIfOffscreenInteractionTarget: a row whose off-screen stage is ignore returns the node untouched', async () => {
-  // #1656: reads and waits answer about the tree as captured, so the same
-  // node the acting rows refuse below passes through here — and the iOS
-  // rescue hook is never consulted, which is why it would throw if it were.
+  // #1656: reads and waits answer about the tree as captured, so the node the
+  // acting rows refuse below passes through here. The rescue hook throws on
+  // contact, so a row that started refusing would fail loudly rather than
+  // quietly spending an iOS round trip.
   const device = createInteractionDevice(makeSnapshotState([]), {
     confirmOffscreenTargetVisible: async () => {
       throw new Error('an observation row must not spend the rescue round trip');

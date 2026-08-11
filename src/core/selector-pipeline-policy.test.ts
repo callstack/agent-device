@@ -13,12 +13,9 @@ import {
 } from './selector-pipeline-policy.ts';
 
 /**
- * #1656: the structural stages are routed through the runners below, so this
- * file is what makes the table's cells load-bearing. Every row is driven
- * through every runner — including the rows whose answer is "skip this stage",
- * which is the half that used to be invisible: `is` not consulting occlusion
- * was an absence of code, and an absence cannot fail. Flip any cell in the
- * table and an assertion here changes.
+ * #1656: every row is driven through every runner — including the rows whose
+ * answer is "skip this stage", since a skip nothing exercises is a claim that
+ * cannot fail. Flip any cell in the table and an assertion here changes.
  *
  * Which stages a given CALLER runs is a separate question, pinned by the
  * caller-level suites (resolution.test.ts, find handler tests, selector-read

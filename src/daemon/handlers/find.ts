@@ -77,11 +77,9 @@ type ResolvedMatch = {
   nodes: SnapshotState['nodes'];
   actionFlags: Record<string, unknown>;
   /**
-   * The occlusion verdict the `findAct` row produced for this match, carried
-   * rather than raised: `find click`/`fill` re-enter the interaction leaf,
-   * which refuses covered targets in the acting row's own error shape, so only
-   * the focus/type seam — which dispatches to the device directly — surfaces
-   * it here.
+   * Set when find's row refuses this match as covered. Only the focus/type
+   * seam surfaces it: click/fill re-enter the interaction leaf, which owns
+   * that refusal's shape and raises it against the same node.
    */
   occludedNode?: SnapshotState['nodes'][number];
 };
@@ -288,9 +286,8 @@ function resolveFindMatch(params: {
 }): FindMatchResult {
   const { nodes, locator, query, selectorExpression, flags, platform } = params;
   const pipeline = SELECTOR_PIPELINE_POLICIES.findAct;
-  // The occlusion stage of find's row: it declares `refuse`, so covered nodes
-  // stay candidates here (find ranks and reports them) and are refused later,
-  // at the target. Acting rows exclude them from candidacy instead.
+  // The occlusion stage of find's row: `refuse` keeps covered nodes as
+  // candidates here — find ranks and reports them — and refuses at the target.
   const searchableNodes = selectorPipelineCandidates(
     pipeline,
     nodes.filter((node) => !isRootInteractionContainer(node, nodes[0])),

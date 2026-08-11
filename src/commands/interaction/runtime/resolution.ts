@@ -142,9 +142,9 @@ type ResolveInteractionTargetParams = {
   requireInteractive: boolean;
   /**
    * The structural pipeline this action runs (#1656): occlusion, off-screen,
-   * and hittable-ancestor promotion are the row's decisions, not per-call-site
-   * booleans. `promotedTarget` for tap-shaped actions, `resolvedTarget` for the
-   * actions that must keep the element they resolved.
+   * and hittable-ancestor promotion are the row's decisions. `promotedTarget`
+   * for tap-shaped actions, `resolvedTarget` for the actions that must keep
+   * the element they resolved.
    */
   pipeline: ActingPipelinePolicy;
   /**
@@ -937,9 +937,8 @@ export async function preflightNativeRefInteraction(
     fallbackLabel: target.fallbackLabel ?? '',
   });
   if (!resolved) return {};
-  // `resolvedTarget`, whatever the command: this row's `none` promotion is what
-  // makes "the preflight never changes which element the backend acts on" a
-  // declared property rather than an omission at this call site.
+  // `resolvedTarget` whatever the command: its `none` promotion is what holds
+  // ADR 0011's "the preflight never changes which element the backend acts on".
   const pipeline = SELECTOR_PIPELINE_POLICIES.resolvedTarget;
   const node = resolveInteractionPipelineTarget(pipeline, nodes, resolved.node, {
     action,

@@ -49,9 +49,8 @@ type WaitFailurePolling = {
 
 /**
  * The poll stage of the caller's selector-pipeline row (#1656): the deadline
- * and the inter-poll delay come from the row, not from module constants, so a
- * caller cannot invent a budget and a row that resolves against a single
- * capture cannot be polled at all.
+ * and the inter-poll delay come from the row, so a caller cannot invent a
+ * budget and a row that resolves against a single capture cannot be polled.
  */
 export function createWaitPolling(
   runtime: WaitPollingRuntime,
