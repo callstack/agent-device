@@ -31,8 +31,8 @@ const listAppsOperation: PlatformRuntimeOperations['listApps'] = vi.fn(async ({ 
       ]
     : [{ id: 'com.example.application', name: 'application' }],
 );
-const ensureReady = vi.fn(async (device: typeof HARMONY_DEVICE) => ({
-  ...device,
+const ensureReady = vi.fn(async () => ({
+  ...HARMONY_DEVICE,
   booted: true,
 }));
 
