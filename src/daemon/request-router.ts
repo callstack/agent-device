@@ -275,7 +275,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       invokeReplayAction: allowReplayActions
         ? createReplayScopedActionInvoker(lockedScope, providerScope)
         : undefined,
-      androidAdbExecutor: providerScope.androidAdbExecutor,
+      providerScope,
       bindDevice: lockedScope.bindDevice,
       bindExactDevice: lockedScope.bindExactDevice,
       reconcileOrphanedDeviceClaim: createDeviceClaimReconciler({

@@ -45,6 +45,7 @@ function makeChainParams(req: DaemonRequest) {
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
     invoke: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
+    providerScope: {},
     bindDevice: unavailableBindDevice,
     bindExactDevice: unavailableBindExactDevice,
     reconcileOrphanedDeviceClaim: async () => ({

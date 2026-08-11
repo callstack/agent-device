@@ -258,7 +258,9 @@ async function runCatalogCommandThroughHandlerChain(
           sessionStore,
           leaseRegistry,
           invoke: async () => ({ ok: true, data: {} }),
-          androidAdbExecutor: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+          providerScope: {
+            androidAdbExecutor: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+          },
           bindDevice: unavailableBindDevice,
           bindExactDevice: unavailableBindExactDevice,
           reconcileOrphanedDeviceClaim: async () => ({

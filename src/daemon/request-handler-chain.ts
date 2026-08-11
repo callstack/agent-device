@@ -1,6 +1,5 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
-import type { AndroidAdbExecutor } from '../platforms/android/adb-executor.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { getDaemonCommandRoute } from './daemon-command-registry.ts';
 import * as genericRequestHandlerModule from './request-generic-dispatch.ts';
@@ -14,6 +13,7 @@ import type { DeviceClaimReconciler } from './device-claims.ts';
 import type { AppLogAdmissionLedger } from './app-log-admission-ledger.ts';
 import type { ScreenRecordingAdmissionLedger } from './screen-recording-admission-ledger.ts';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform';
+import type { RequestPlatformProviderScope } from './request-platform-providers.ts';
 
 type RequestHandlerChainParams = {
   req: DaemonRequest;
@@ -27,7 +27,13 @@ type RequestHandlerChainParams = {
   cloudArtifactProvider?: CloudArtifactProvider;
   invoke: DaemonInvokeFn;
   invokeReplayAction?: DaemonInvokeFn;
-  androidAdbExecutor?: AndroidAdbExecutor;
+  /**
+   * Per-request platform-provider injections resolved by the generic
+   * `withRequestPlatformProviderScope` mechanism. Route handlers pick their own
+   * platform-specific field back out of this neutral scope instead of the chain
+   * carrying one named slot per platform (e.g. `androidAdbExecutor`).
+   */
+  providerScope: RequestPlatformProviderScope;
   bindDevice: BindDeviceRuntime;
   bindExactDevice: BindExactDeviceRuntime;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
@@ -129,7 +135,7 @@ async function runSessionHandler(
       leaseLifecycleProvider: params.leaseLifecycleProvider,
       invoke: params.invoke,
       invokeReplayAction: params.invokeReplayAction,
-      androidAdbExecutor: params.androidAdbExecutor,
+      androidAdbExecutor: params.providerScope.androidAdbExecutor,
       bindDevice: params.bindDevice,
       bindExactDevice: params.bindExactDevice,
       reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
