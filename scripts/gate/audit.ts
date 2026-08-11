@@ -55,18 +55,38 @@ function isVerbatim(segment: string, lane: Lane, model: Model): boolean {
   return lane.verbatim.some((name) => model.scripts[name]?.replace(/\s+/g, ' ') === normalized);
 }
 
+const PACKAGE_MANAGERS = new Set(['pnpm', 'npm', 'yarn']);
+
+/**
+ * Strip command wrappers before classifying. `pnpm exec node scripts/x.ts` runs
+ * exactly what `node scripts/x.ts` runs, so the two must classify identically —
+ * otherwise wrapping a command is by itself enough to slip an unregistered gate
+ * past the no-bypass rule, which is the one invariant this file exists to hold.
+ */
+function unwrap(segment: string): string {
+  const parts = segment.split(/\s+/).filter(Boolean);
+  if (parts[0] === 'npx') return parts.slice(1).join(' ');
+  if (!PACKAGE_MANAGERS.has(parts[0] ?? '')) return segment;
+  // Scan for the keyword rather than matching a flag grammar, so `pnpm --dir x exec y`
+  // and `pnpm --silent exec y` unwrap the same way.
+  const at = parts.findIndex((part) => part === 'exec' || part === 'dlx');
+  return at === -1 ? segment : parts.slice(at + 1).join(' ');
+}
+
 /**
  * Whether a segment runs this project's own code, as opposed to shell, SDK and
- * CLI setup. Deliberately narrow: `cp scripts/size-report.mjs …` and
+ * CLI setup. Deliberately narrow on paths: `cp scripts/size-report.mjs …` and
  * `git diff -- scripts/…` name a path under scripts/ without executing anything.
  */
 function runsProjectCode(segment: string, model: Model): boolean {
-  const [executable = ''] = segment.split(/\s+/);
-  const executesFile =
-    /^(?:node|sh|bash)$/.test(executable) &&
-    /(?:^|\s)\.?\/?(?:scripts\/\S+|src\/bin\.ts)/.test(segment);
+  if (isGateInvocation(segment) || invokedScript(segment, model.scripts) !== null) return true;
+  const inner = unwrap(segment);
+  const [executable = ''] = inner.split(/\s+/);
+  // A test runner is project code whatever it is pointed at.
+  if (executable === 'vitest' || /(?:^|\s)--test(?:\s|$)/.test(inner)) return true;
   return (
-    isGateInvocation(segment) || invokedScript(segment, model.scripts) !== null || executesFile
+    /^(?:node|sh|bash)$/.test(executable) &&
+    /(?:^|\s)\.?\/?(?:scripts\/\S+|src\/bin\.ts)/.test(inner)
   );
 }
 

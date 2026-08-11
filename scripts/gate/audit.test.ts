@@ -38,6 +38,17 @@ function mapLane(
   return model.lanes.map((lane) => (match(lane) ? change(lane) : lane));
 }
 
+/** Plant one command as a new step in a qualifying lane. */
+function plantCommand(command: string): Model {
+  return mutate((m) => ({
+    lanes: mapLane(
+      m,
+      (lane) => lane.label === 'Layering Guard',
+      (lane) => ({ ...lane, steps: [...lane.steps, { name: 'Planted', commands: [command] }] }),
+    ),
+  }));
+}
+
 test('the live tree is green — every planted failure below is a real difference', () => {
   assert.deepEqual(messages(base), []);
 });
@@ -129,6 +140,50 @@ test('running a registered gate script outside the runner fails as a bypass', ()
   assert.equal(found.length, 1);
   assert.match(found[0] ?? '', /project code outside the runner/);
   assert.match(found[0] ?? '', /pnpm gate <id>/);
+});
+
+test('wrapping a command cannot change how it classifies', () => {
+  // Reported on #1714: `runsProjectCode` read only the first token, so `pnpm exec`
+  // in front of an unregistered gate dropped it before the bypass check ever ran.
+  // The paired form is the assertion — a wrapper is not a classification.
+  const bare = 'node --experimental-strip-types scripts/gate/check.ts';
+  const wrapped = [
+    `pnpm exec ${bare}`,
+    `pnpm --silent exec ${bare}`,
+    `pnpm --dir . exec ${bare}`,
+    `pnpm dlx ${bare}`,
+    `npx ${bare}`,
+  ];
+  const bypassesFor = (command: string) =>
+    audit(plantCommand(command)).filter((failure) => failure.assertion === 'bypass');
+
+  assert.equal(bypassesFor(bare).length, 1, 'the bare command must be a bypass');
+  for (const command of wrapped) {
+    assert.equal(bypassesFor(command).length, 1, `wrapping must not hide it: ${command}`);
+  }
+});
+
+test('a test runner in a lane is project code, whatever it is pointed at', () => {
+  // Reaching a suite no check owns must fail even without a scripts/ path in the
+  // command — a `--test` file or a Vitest project is a gate by itself.
+  for (const command of [
+    'pnpm exec vitest run --project not-a-real-project',
+    'node --test test/integration/does-not-exist.test.ts',
+  ]) {
+    const found = audit(plantCommand(command)).filter((failure) => failure.assertion === 'bypass');
+    assert.equal(found.length, 1, `must be a bypass: ${command}`);
+  }
+});
+
+test('re-running a suite a registered check already owns stays allowed', () => {
+  // The deliberate escape the device lanes rely on: replaying an owned integration
+  // file under a live emulator hides nothing, because the suite has an owner.
+  for (const command of [
+    'pnpm exec vitest run --project unit-core',
+    'node --test test/integration/smoke-cli.test.ts',
+  ]) {
+    assert.deepEqual(messages(plantCommand(command)), [], `must stay allowed: ${command}`);
+  }
 });
 
 test('`pnpm gate` naming an unregistered check fails rather than resolving to nothing', () => {

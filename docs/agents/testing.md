@@ -216,7 +216,10 @@ strings, and four suites (`check:tmpdir-leaks`, its model tests, `test:fixture-c
 
 `pnpm check:gate-manifest` (`scripts/gate/`) answers it with one rule and one primitive.
 
-The rule: **CI may invoke a gate only through `pnpm gate <check-id>`.** Every gate is a `CheckId`
+The rule: **CI may invoke a gate only through `pnpm gate <check-id>`.** Command wrappers
+are normalized before that is decided — `pnpm exec`, `pnpm dlx` and `npx` in front of a
+command classify the same as the command alone, since otherwise wrapping one would be
+enough to slip an unregistered gate past the rule. Every gate is a `CheckId`
 in the registry (`scripts/check-affected/checks.ts`) — the same universe the affected-selector
 uses — so the workflow→check mapping is a token scan over `run:` blocks and action inputs rather
 than an interpretation of shell. That is what makes a new gate impossible to hide: an unregistered
