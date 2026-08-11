@@ -38,11 +38,6 @@
     "website/rspress.config.ts"
   ],
   "ignorePatterns": [
-    // Test fixtures: every *.fixtures.ts builds doubles for co-located *.test.ts files
-    // (several import `vi` directly) and none is imported by production source. They sit
-    // beside their subject rather than under __tests__/, so pattern-match them as the test
-    // infrastructure they are instead of listing each fixture symbol as an exemption.
-    "**/*.fixtures.ts",
     "examples/test-app/**",
     "scripts/perf/**",
     "scripts/layering/**",
@@ -93,6 +88,11 @@
         "screenshotCommand",
         "diffCommand"
       ]
+    },
+    {
+      "comment": "Test fixtures: every *.fixtures.ts builds doubles for co-located *.test.ts files (several import `vi` directly) and none is imported by production source, so --production analysis sees no consumer for any of them. Scoped to unused-exports rather than ignorePatterns so fixtures stay inside every other Fallow rule (health, dead-code, cycles); `*` rather than today's three symbols because the property being asserted is per-file, not per-symbol.",
+      "file": "**/*.fixtures.ts",
+      "exports": ["*"]
     },
     {
       "comment": "Published package surface (see package.json#exports); consumed by SDK users, not internally.",
