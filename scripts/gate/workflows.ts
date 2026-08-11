@@ -69,14 +69,26 @@ type RawStep = {
   name?: string;
   run?: string;
   uses?: string;
+  if?: unknown;
   shell?: string;
   env?: Record<string, unknown>;
   with?: Record<string, unknown>;
   'working-directory'?: string;
 };
 
+/**
+ * Everything besides `run` that decides what a step does — including WHETHER it does it.
+ *
+ * `if:` belongs here and was missing: without it, `if: false` on `run: pnpm gate layering`
+ * left the digest byte-identical, so the step was still waved through by shape and its lane
+ * still credited with the gate. A one-word edit silently disabled a gate, which is the exact
+ * failure #1429 exists to prevent. With `if:` in the identity, a conditional gate step is no
+ * longer approved by shape at all — it has to be written into the baseline, where the
+ * condition is visible and any change to it moves the digest.
+ */
 function stepExtras(step: RawStep): Record<string, string> {
   const extras: Record<string, string> = {};
+  if (step.if !== undefined) extras['if'] = String(step.if);
   if (step.shell) extras['shell'] = step.shell;
   if (step['working-directory']) extras['working-directory'] = step['working-directory'];
   return extras;

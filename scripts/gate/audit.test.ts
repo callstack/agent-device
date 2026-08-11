@@ -89,6 +89,8 @@ jobs:
     steps:
 ${steps}`;
 
+const GATE_ACTION = '.github/actions/setup-apple-runner-build/action.yml';
+
 const kinds = (model: Model) => [...new Set(audit(model, baseline).map((f) => f.assertion))].sort();
 
 test('the live tree is green — every planted failure below is a real difference', () => {
@@ -165,6 +167,21 @@ runs:
 `,
       }),
     ['bypass', 'surface'],
+  ],
+  [
+    'r9: `if: false` cannot silently disable a gate step',
+    () =>
+      plantWorkflow(`name: Planted
+on:
+  pull_request:
+jobs:
+  planted:
+    steps:
+      - name: Run the layering gate
+        if: false
+        run: pnpm gate layering
+`),
+    ['bypass'],
   ],
   [
     'r6: an undeclared third-party action',
@@ -276,6 +293,25 @@ test('editing the body behind a listed step is rejected, and its entry goes iner
   const found = audit(edited, baseline);
   assert.ok(found.some((f) => f.assertion === 'bypass'));
   assert.ok(found.some((f) => f.assertion === 'inert'));
+});
+
+test('a gate-valued action must be proven to run its gate, not trusted to', () => {
+  // Round 8: listing an action in GATE_ACTIONS credited every caller with whatever id it
+  // passed. Swapping the body for a no-op left the credit intact. The commit that fixed it
+  // proved non-vacuity by hand; this is that proof, checked in.
+  const withBody = (run: string) =>
+    audit(
+      {
+        ...base,
+        gateActionBodies: { ...base.gateActionBodies, [GATE_ACTION]: { run, boundTo: 'gate' } },
+      },
+      baseline,
+    ).filter((failure) => failure.assertion === 'gate');
+
+  assert.deepEqual(withBody('pnpm gate "$INPUT_GATE"'), [], 'the real body satisfies the contract');
+  const noop = withBody('true');
+  assert.equal(noop.length, 1, 'a no-op body must not credit its callers');
+  assert.match(noop[0]?.message ?? '', /does not invoke/);
 });
 
 test('a baseline entry describing no live step is inert', () => {
