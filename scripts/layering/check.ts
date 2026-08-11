@@ -661,7 +661,6 @@ export function main(): number {
     ...checkContractsImplementationAuthority(sources),
     ...checkNetworkRuntimeCutover(sources),
     ...checkRecordRuntimeCutover(sources),
-    ...checkContractsImplementationAuthority(sources),
     ...checkBackEdges(edges),
     ...checkTypeInversions(edges),
     ...checkSessionStateOwnership(sources),
