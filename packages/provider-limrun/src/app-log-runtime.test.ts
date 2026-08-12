@@ -1,4 +1,9 @@
-import type { PlatformRequestScope, PlatformRuntimeHost } from '@agent-device/contracts/platform';
+import {
+  appStateUse,
+  narrowDeviceBinding,
+  type PlatformRequestScope,
+  type PlatformRuntimeHost,
+} from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test, vi } from 'vitest';
 import { createLimrunAppLogEnvelope } from './app-log-descriptor.ts';
@@ -145,6 +150,23 @@ test('keeps exact-owner app-log recovery available without a process-local sessi
   });
 
   expect(binding.operations.appLogReattach).toEqual(expect.any(Function));
+  expect(binding.operations.appState).toBeUndefined();
+  expect(binding.operations.ensureReady).toBeUndefined();
+  expect(binding.facts.operations.appLogInspect).toMatchObject({
+    available: false,
+    reason: 'unsupported-provider-mode',
+  });
+  expect(binding.facts.operations.appLogReattach).toEqual({ available: true });
+  expect(binding.facts.operations.appLogCleanup).toEqual({ available: true });
+  expect(binding.facts.operations.appState).toMatchObject({
+    available: false,
+    reason: 'unsupported-provider-mode',
+  });
+  expect(binding.facts.operations.ensureReady).toMatchObject({
+    available: false,
+    reason: 'unsupported-provider-mode',
+  });
+  expect(() => narrowDeviceBinding(binding, appStateUse)).toThrow();
   await expect(binding.operations.appLogReattach?.({ envelope })).resolves.toEqual({
     status: 'missing',
   });

@@ -99,14 +99,21 @@ export function createLimrunPlatformRuntimeOwner(
           'Limrun app logs require an iOS simulator or Android emulator device identity',
         );
       }
-      if (request.intent.kind !== 'exact-owner' && !options.hasLiveSession(request.device)) {
+      const hasMatchingLiveSession = hasLiveSession(request.device);
+      if (request.intent.kind !== 'exact-owner' && !hasMatchingLiveSession) {
         throw new AppError(
           'UNSUPPORTED_OPERATION',
           'Limrun provider session is no longer live for the selected device',
           { reason: 'provider-session-unavailable' },
         );
       }
-      return bindLimrunAppLogs(options, owner, request.device, request.scope.signal);
+      return bindLimrunAppLogs(
+        options,
+        owner,
+        request.device,
+        request.scope.signal,
+        !hasMatchingLiveSession,
+      );
     },
     shutdown: async () => undefined,
   });
@@ -117,6 +124,7 @@ function bindLimrunAppLogs(
   owner: ReturnType<typeof providerRuntimeOwner>,
   device: DeviceInfo,
   signal: AbortSignal,
+  recoveryOnly: boolean,
 ): DeviceBinding<PlatformRuntimeOperations> {
   const recovery = createAppLogRecoveryOperations({
     codec: limrunAppLogDescriptorCodec,
@@ -231,8 +239,12 @@ function bindLimrunAppLogs(
   return Object.freeze({
     device,
     owner,
-    facts: facts(device),
-    operations: Object.freeze(operations),
+    facts: recoveryOnly ? recoveryFacts(device) : facts(device),
+    operations: Object.freeze(
+      recoveryOnly
+        ? { appLogReattach: recovery.appLogReattach, appLogCleanup: recovery.appLogCleanup }
+        : operations,
+    ),
     [Symbol.asyncDispose]: async () => undefined,
   });
 }
@@ -287,6 +299,29 @@ function facts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> {
       bootTarget: available,
       bootTargetHeadless: headlessUnavailable,
       listApps: available,
+    },
+  });
+}
+
+function recoveryFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> {
+  const normalFacts = facts(device);
+  return Object.freeze({
+    device: normalFacts.device,
+    operations: {
+      ...normalFacts.operations,
+      appLogInspect: liveSessionUnavailable,
+      appLogDoctor: liveSessionUnavailable,
+      appLogStart: liveSessionUnavailable,
+      appLogReattach: available,
+      appLogCleanup: available,
+      appState: liveSessionUnavailable,
+      networkDump: liveSessionUnavailable,
+      screenRecordingStart: liveSessionUnavailable,
+      screenRecordingReattach: liveSessionUnavailable,
+      screenRecordingCleanup: liveSessionUnavailable,
+      ensureReady: liveSessionUnavailable,
+      bootTarget: liveSessionUnavailable,
+      bootTargetHeadless: liveSessionUnavailable,
     },
   });
 }
