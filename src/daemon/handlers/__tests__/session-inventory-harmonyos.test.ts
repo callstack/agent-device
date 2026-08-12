@@ -45,6 +45,7 @@ function runtimeFacts(): RuntimeFacts<PlatformRuntimeOperations> {
       appLogStart: available,
       appLogReattach: available,
       appLogCleanup: available,
+      appState: unavailable,
       listApps: { available: true },
       networkDump: unavailable,
       screenRecordingStart: unavailable,

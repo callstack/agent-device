@@ -234,7 +234,6 @@ function bindLimrunAppLogs(
           appState: async () => await options.getAppState(device, signal),
         }
       : {}),
-    listApps: async (input) => await options.listApps(input.device, input.filter, signal),
   } satisfies DeviceBinding<PlatformRuntimeOperations>['operations'];
   return Object.freeze({
     device,

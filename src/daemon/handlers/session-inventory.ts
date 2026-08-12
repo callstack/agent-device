@@ -4,6 +4,7 @@ import { assertResolvedAppsFilter } from '@agent-device/contracts/device';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import {
   isApplePlatform,
+  isIosFamily,
   isMacOs,
   matchesPlatformSelector,
   publicPlatformString,
@@ -193,8 +194,14 @@ async function capabilitiesInventoryResponse(params: {
   const session = params.sessionStore.get(params.sessionName);
   const sessionOwnedAppStateAvailable =
     session !== undefined &&
-    isApplePlatform(device.platform) &&
-    selectorTargetsSessionDevice(params.req.flags, session);
+    (isIosFamily(device) || isMacOs(device)) &&
+    selectorTargetsSessionDevice(params.req.flags, session) &&
+    (session.appName !== undefined ||
+      session.appBundleId !== undefined ||
+      (isMacOs(device) &&
+        session.surface !== undefined &&
+        session.surface !== 'app' &&
+        session.surface !== 'frontmost-app'));
   const facts =
     sessionOwnedAppStateAvailable || params.inspectFacts === undefined
       ? undefined

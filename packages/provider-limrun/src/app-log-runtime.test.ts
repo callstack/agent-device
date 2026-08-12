@@ -123,6 +123,7 @@ test('keeps exact-owner app-log recovery available without a process-local sessi
     hasLiveSession: () => false,
     openCurrent,
     reconnect,
+    listApps: async () => [],
     getAppState: async () => ({ package: 'com.example.app', activity: '.MainActivity' }),
   });
   const binding = await owner.bind({
@@ -338,6 +339,7 @@ test('fails closed for a stale Android identity before exposing facts or binding
     hasLiveSession: () => false,
     openCurrent: async () => undefined,
     reconnect: async () => ({ status: 'missing' }),
+    listApps: async () => [],
     getAppState,
   });
 
