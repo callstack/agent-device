@@ -120,20 +120,6 @@ jobs:
         # rather than in its own job so the two can never be green independently.
         run: pnpm gate depgraph
 
-      # The TMPDIR redirection both test lanes rely on (#1593/#1595). Its own tests ran
-      # in no CI job at all until the #1429 gate manifest found them unowned.
-      #
-      # Deliberately NOT in the Coverage job next to `check:tmpdir-leaks`, where the
-      # subject matter would put it: vitest-tmpdir-global-setup.test.ts proves the
-      # lifecycle by spawning a real nested `vitest run`, and the Coverage lane already
-      # loses runs to `[vitest-pool]: Worker forks emitted error` when a fork is slow to
-      # terminate (observed on main at 18291ba8, unrelated to this gate). Starting a
-      # nested Vitest seconds before the full instrumented suite is a contention risk
-      # with nothing to gain — the manifest proves ownership per unit of work, so any
-      # lane satisfies it.
-      - name: Check the tmpdir redirection model
-        run: pnpm gate tmpdir-leaks-model
-
       # Tests for the TMPDIR redirection itself, hidden the same way as the check above.
       #
       # Deliberately NOT in Coverage next to `check:tmpdir-leaks`, where the subject matter
@@ -143,7 +129,7 @@ jobs:
       # Starting a nested Vitest seconds before the full instrumented suite is a contention
       # risk with nothing to gain.
       - name: Check the tmpdir redirection model
-        run: pnpm check:tmpdir-leaks:test
+        run: pnpm gate tmpdir-leaks-model
 
   affected-selector:
     name: Affected-check Selector
@@ -326,22 +312,12 @@ jobs:
         env:
           OUTPUT_ECONOMY_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: pnpm gate unit-ci
-
-      # A run whose globalTeardown never fired (crash, OOM, timeout kill) leaves
-      # its tmpdir behind. `check:unit` runs this locally after the suite; until
-      # #1429 nothing ran it in CI, which is the environment where those kills
-      # actually happen. Runs even on failure — a killed run is exactly the case
-      # worth reporting.
-      - name: Check for leaked test tmpdirs
-        if: always()
-        run: pnpm gate tmpdir-leaks
-
       # The TMPDIR redirection both test lanes depend on (#1593/#1595). The check is a real
       # package script that no workflow ran: it is reachable only through `check:unit`, an
       # aggregate CI never invokes, so a leak regression could not fail a PR. Placed here
       # because this is the lane whose instrumented suite would leak a run directory.
       - name: Check for leaked temp directories
-        run: pnpm check:tmpdir-leaks
+        run: pnpm gate tmpdir-leaks
 
       - name: Upload contention-retry envelope
         if: always()
@@ -434,17 +410,10 @@ jobs:
       # failing `gh`.
       - name: Setup-fixture-app cache-failure fallback
         run: pnpm gate fixture-fallback
-
-      # The trust rules that decide whether a cached fixture APK/app may be
-      # reused at all — same subject as the fallback smoke above, and parse-only.
-      # Ran in no CI job until the #1429 gate manifest found it unowned.
-      - name: Check trusted fixture-artifact selection
-        run: pnpm gate fixture-cache
-
       # The trusted-artifact contract the device lanes rely on to decide a cached fixture
       # app is the one this commit expects. A real test file that no workflow ran.
       - name: Check the trusted fixture-artifact contract
-        run: pnpm test:fixture-cache
+        run: pnpm gate fixture-cache
 
   web-smoke:
     name: Web Platform Smoke
