@@ -12,7 +12,7 @@ import { recordRuntimeDaemonMechanicsViolations } from './record-runtime-mechani
  * every row, and `cutoverRowDefects` rejects a row that leaves its claims unstated.
  *
  * Rule ids are per row: the layering report groups violations under R20 boot,
- * R19 apps, R17 devices, R14 logs, R15 network, R16 record.
+ * R21 apps, R17 devices, R14 logs, R15 network, R16 record.
  */
 export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
   {
@@ -42,7 +42,7 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
     },
   },
   {
-    rule: 'R19 apps-runtime-cutover',
+    rule: 'R21 apps-runtime-cutover',
     command: 'apps',
     subject: 'app inventory',
     tier: 'request-scoped',
@@ -65,6 +65,10 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
     singularExecution: {
       routes: ['handleAppsInventory'],
       operations: ['ensureReady', 'listApps'],
+      operationOwners: {
+        ensureReady: ['ensureAppsRuntimeReady'],
+        listApps: ['listAppsFromRuntime'],
+      },
     },
   },
   {
