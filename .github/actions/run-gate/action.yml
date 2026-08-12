@@ -1,0 +1,37 @@
+name: Run registered gate
+description: Run one CHECK_CATALOG entry named structurally by the workflow
+inputs:
+  gate:
+    description: Registered CHECK_CATALOG id
+    required: true
+  args:
+    description: Optional arguments, one per line
+    required: false
+    default: ''
+outputs:
+  result:
+    description: Last stdout line, for gates that produce a matrix or scalar
+    value: ${{ steps.run.outputs.result }}
+runs:
+  using: composite
+  steps:
+    - id: run
+      shell: bash
+      env:
+        INPUT_GATE: ${{ inputs.gate }}
+        INPUT_ARGS: ${{ inputs.args }}
+      run: |
+        set -euo pipefail
+        args=()
+        while IFS= read -r arg; do
+          if [ -n "$arg" ]; then
+            args+=("$arg")
+          fi
+        done <<< "$INPUT_ARGS"
+        output_file="$(mktemp)"
+        pnpm gate "$INPUT_GATE" "${args[@]}" | tee "$output_file"
+        {
+          echo 'result<<__GATE_OUTPUT__'
+          tail -n 1 "$output_file"
+          echo '__GATE_OUTPUT__'
+        } >> "$GITHUB_OUTPUT"

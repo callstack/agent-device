@@ -16,17 +16,10 @@ const repoRoot = path.dirname(fileURLToPath(import.meta.url));
 // which Stryker copies into the sandbox — keeps resolution inside the mutated
 // tree. Entries come from the shared exports-map reader, never a wildcard, so
 // this cannot resolve package internals the boundary forbids (R11).
-// Longest specifier first. Vite matches a STRING alias by prefix and takes the first hit,
-// so a bare `@agent-device/selectors` entry ahead of `@agent-device/selectors/engine`
-// captures the subpath and rewrites it to `…/src/index.ts/engine`. Node then reports
-// `Cannot find package '@agent-device/selectors/engine'` from inside the sandbox, the dry
-// run fails, and every shard aborts before a single mutant runs.
-const workspaceAliases = [...workspaceSpecifierTargets(repoRoot)]
-  .sort(([a], [b]) => b.length - a.length)
-  .map(([find, target]) => ({
-    find,
-    replacement: path.join(repoRoot, target),
-  }));
+const workspaceAliases = [...workspaceSpecifierTargets(repoRoot)].map(([find, target]) => ({
+  find,
+  replacement: path.join(repoRoot, target),
+}));
 
 // Test scope for the decision-kernel mutation lane (issue #1415).
 //

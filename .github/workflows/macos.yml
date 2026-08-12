@@ -46,10 +46,18 @@ jobs:
           xcuitest-destination: platform=macOS,arch=arm64
 
       - name: Build macOS helper
-        run: pnpm gate macos-helper
+        uses: ./.github/actions/run-gate
+        with: { gate: macos-helper }
 
       - name: Run macOS integration test
-        run: pnpm gate replay-macos --retries 2 --report-junit test/artifacts/replays-macos.junit.xml
+        uses: ./.github/actions/run-gate
+        with:
+          gate: replay-macos
+          args: |
+            --retries
+            2
+            --report-junit
+            test/artifacts/replays-macos.junit.xml
 
       - name: Upload macOS artifacts
         if: always()

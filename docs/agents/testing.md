@@ -205,19 +205,20 @@ Lists are bounded (`--limit`, default 10) and always disclose what they hid; `--
 unbounded. The query is read-only, runs in well under a second, and adds no CI work — its model is
 covered by `pnpm depgraph:test` (the existing `Layering Guard` job).
 
-## Gate manifest: proving the gates still run
+## Gate manifest: proving every check has a CI owner
 
-Every gate above answers "is the code right?". None of them can answer "is this gate still
-running?" — and a check that silently stops executing looks exactly like a green build. Two
+Every gate above answers "is the code right?". None of them can answer "does CI still own this
+check?" — and a check that silently loses its owner looks exactly like a green build. Two
 suites had already stopped: `check:tmpdir-leaks` and `test:fixture-cache` were real package
 scripts that no workflow ran, reachable only through the `check:unit` aggregate CI never
 invokes.
 
-`CHECK_CATALOG` (`scripts/check-affected/checks.ts`) is the registry of every check, and
-`pnpm gate <id>` is the only way CI runs one. `pnpm check:gate-manifest` (`scripts/gate/`)
+`CHECK_CATALOG` (`scripts/check-affected/checks.ts`) is the registry of every check. CI ownership
+is declared only by `uses: ./.github/actions/run-gate` with a literal `gate:` input; the action
+then dispatches `pnpm gate <id>`. `pnpm check:gate-manifest` (`scripts/gate/`)
 then asserts, against the real workflows:
 
-- **owned** — every registered check is run by some `pull_request`/`schedule` lane, compared
+- **owned** — every registered check is declared by some `pull_request`/`schedule` lane, compared
   per *unit* (a Vitest project, a `node --test` file) rather than per script name, so a lane
   running the whole suite covers one running part of it.
 - **path coverage** — for each category the *real* selector emits over the tracked tree, every
@@ -227,21 +228,19 @@ then asserts, against the real workflows:
 - **registered** — every Vitest project and every suite script belongs to some check, so a new
   suite cannot arrive unowned.
 
-Plus the wiring that keeps those honest: a gate id must name a registered check, an `if:` on a
-gate step must be ruled on in `GATE_CONDITIONS` (undeclared earns no credit, so `if: false`
-unowns what it guards), an action declared to run a gate is proven to, and a job whose steps
-the loader cannot open fails closed.
+Plus the wiring that keeps those honest: a structural gate id must name a registered check, the
+canonical action is tested against its `pnpm gate` implementation, local composite actions are
+followed transitively, and a job whose steps the loader cannot open fails closed.
 
-What it deliberately does **not** do is prove CI runs project code *only* through `pnpm gate`.
-Whether a shell block executes project code is not decidable from its text — `pnpm exec`,
-`node -e`, indirect variable expansion — and #1714 spent twelve review rounds and ~2,400 lines
-on that invariant without it finding a single defect. Shell this model does not recognise
-simply earns no ownership credit, so the failure direction is a check reported unowned, never
-a check waved through.
+What it deliberately does **not** do is infer execution from `run:` text or prove a conditional
+step executes on every run. Raw shell can still run project code, but it cannot declare ownership;
+`echo`, function bodies, command substitution, and `|| true` are therefore irrelevant to the
+manifest. The check proves the smaller structural claim that every registered gate has an explicit
+CI owner and every affected path can reach one.
 
-Everything the manifest cannot derive lives in `scripts/gate/declarations.ts`, and every entry
-fails in both directions: adding a wrong one is caught by the assertion it feeds, and one that
-stops mattering is reported as inert.
+The three facts the manifest cannot derive live together in `scripts/gate/declarations.ts`: one
+coverage wrapper, one reporting-only `test:*` script, and the Android replay owner hidden inside a
+third-party action's `script:` input.
 
 ## Mutation ratchet over decision kernels
 

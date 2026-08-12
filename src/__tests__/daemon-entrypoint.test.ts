@@ -294,13 +294,7 @@ test('daemon entrypoint publishes HTTP metadata and cleans up on shutdown', asyn
     await daemon.wait.catch(() => {});
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
-  // The only test here that spawns a real daemon PROCESS rather than an in-process runtime,
-  // so it is the only one whose wall time tracks host load. ~1.1s standalone, but Stryker's
-  // dry run starts four concurrent runners over this module's 667 related files and pushes
-  // it past Vitest's 5s default — which aborts the whole sweep before a single mutant runs
-  // (`ConfigError: There were failed tests in the initial test run`) and uploads an empty
-  // envelope instead of a report. Nothing here is slow; the limit was.
-}, 30_000);
+});
 
 test('daemon runtime records startup device-claim reconciliation in daemon.log', async () => {
   // Regression: reconciliation ran before publishDaemonInfo, which truncates

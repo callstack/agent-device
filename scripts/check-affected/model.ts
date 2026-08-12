@@ -24,10 +24,9 @@ import { WIRE_SURFACE_FILES } from '../../test/wire-compat/surface.ts';
 // The canonical gate universe. Every gate CI runs is one of these — including the
 // ones that drive their own runner (fuzz, mutation, the Maestro differential) and
 // the command-reference docs gate, which used to be reachable only as a workflow
-// job nothing in this repo could name. `pnpm gate <id>` is the only way a CI lane
-// may invoke one, so a gate that is not listed here cannot silently start (or stop)
-// running: `check:gate-manifest` fails when a registered check is run by no lane. Work a
-// lane performs outside the runner earns no credit rather than failing in its own right.
+// job nothing in this repo could name. The run-gate action is the only way a CI lane
+// declares ownership, so `check:gate-manifest` fails when a registered check has no lane.
+// Raw shell earns no ownership credit.
 export type CheckId =
   | 'format'
   | 'lint'

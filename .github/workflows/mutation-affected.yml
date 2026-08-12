@@ -54,7 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
-      modules: ${{ steps.select.outputs.modules }}
+      modules: ${{ steps.select.outputs.result }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -65,15 +65,18 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Ratchet self-test
-        run: pnpm gate mutation-model
+        uses: ./.github/actions/run-gate
+        with: { gate: mutation-model }
 
       - id: select
         name: Derive the affected shard matrix
-        run: |
-          modules=$(pnpm --silent gate mutation-affected --list-affected \
-            --base "origin/${{ github.event.pull_request.base.ref }}" | tail -n1)
-          echo "modules=$modules" >> "$GITHUB_OUTPUT"
-          echo "Affected mutation shards: $modules" >> "$GITHUB_STEP_SUMMARY"
+        uses: ./.github/actions/run-gate
+        with:
+          gate: mutation-affected
+          args: |
+            --list-affected
+            --base
+            origin/${{ github.event.pull_request.base.ref }}
 
       # The self-test and the derivation run before any mutant, so a failure here
       # would leave the lane with no envelope at all (#1430).
@@ -109,9 +112,14 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Run mutants for ${{ matrix.name }}
-        run: |
-          pnpm gate mutation --modules ${{ matrix.module }} \
-            ${{ matrix.shard && format('--shard {0}', matrix.shard) || '' }}
+        uses: ./.github/actions/run-gate
+        with:
+          gate: mutation
+          args: |
+            --modules
+            ${{ matrix.module }}
+            ${{ matrix.shard && '--shard' || '' }}
+            ${{ matrix.shard || '' }}
 
       - name: Record a failed shard envelope
         if: failure()

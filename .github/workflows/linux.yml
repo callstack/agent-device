@@ -102,11 +102,17 @@ jobs:
           xdotool version
 
       - name: Run Linux replay smoke test
-        run: |
-          pnpm clean:daemon
-          pnpm gate replay-linux \
-            --retries 2 \
-            --report-junit test/artifacts/replays-linux.junit.xml
+        run: pnpm clean:daemon
+
+      - name: Execute Linux replay smoke test
+        uses: ./.github/actions/run-gate
+        with:
+          gate: replay-linux
+          args: |
+            --retries
+            2
+            --report-junit
+            test/artifacts/replays-linux.junit.xml
 
       - name: Upload Linux artifacts
         if: always()

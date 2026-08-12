@@ -54,7 +54,8 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Run concurrency torture sweep
-        run: pnpm gate concurrency-torture
+        uses: ./.github/actions/run-gate
+        with: { gate: concurrency-torture }
 
       - name: Upload torture lane envelope
         if: always()

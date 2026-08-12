@@ -67,9 +67,9 @@ runs:
 
     - name: Package npm-bundled Android helpers
       if: inputs.package-helpers == 'true' && steps.android-helpers-cache.outputs.cache-hit != 'true'
-      run: |
-        pnpm gate android-helpers
-      shell: bash
+      uses: ./.github/actions/run-gate
+      with:
+        gate: android-helpers
 
     - name: Verify packaged Android helpers
       if: inputs.package-helpers == 'true'

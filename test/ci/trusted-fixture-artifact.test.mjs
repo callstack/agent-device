@@ -42,10 +42,7 @@ test('producer, consumers, upload, and concurrency use the canonical platform-sc
     'utf8',
   );
 
-  // The platform still arrives first and DEST second; it is passed through `env:` rather
-  // than interpolated, because an action may no longer splice an input into a shell body.
-  assert.match(fetchStep.run, /"\$INPUT_PLATFORM" "\$DEST"/);
-  assert.equal(fetchStep.env.INPUT_PLATFORM, '${{ inputs.platform }}');
+  assert.match(fetchStep.run, /"\$\{\{ inputs\.platform \}\}" "\$DEST"/);
   assert.match(fetchArtifact, /resolve-artifact-name\.sh" "\$PLATFORM"/);
   assert.match(fetchArtifact, /find "\$REPOSITORY" "\$NAME" "\$EXPECTED_HEAD_SHA"/);
   assert.match(androidBuildToolsStep.run, /build-tools;36\.0\.0/);

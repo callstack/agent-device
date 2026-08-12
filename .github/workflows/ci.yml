@@ -85,10 +85,12 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Run oxlint
-        run: pnpm gate lint
+        uses: ./.github/actions/run-gate
+        with: { gate: lint }
 
       - name: Check formatting
-        run: pnpm gate format
+        uses: ./.github/actions/run-gate
+        with: { gate: format }
 
   layering-guard:
     name: Layering Guard
@@ -111,14 +113,16 @@ jobs:
         # Generalizes the former inline commands/-import grep into a structured
         # import-direction lint over the resolved graph. See scripts/layering/check.ts
         # and CONTEXT.md (Architecture: folder DAG + layering lint).
-        run: pnpm gate layering
+        uses: ./.github/actions/run-gate
+        with: { gate: layering }
 
       - name: Check the depgraph report agrees with the gate
         # scripts/depgraph reads the same model as the gate, so its inversion count must
         # reproduce TYPE_INVERSION_BASELINE. Free two-sources check: if the tree changes
         # and only one side is updated, this fails and names the difference. Runs here
         # rather than in its own job so the two can never be green independently.
-        run: pnpm gate depgraph
+        uses: ./.github/actions/run-gate
+        with: { gate: depgraph }
 
       # Tests for the TMPDIR redirection itself, hidden the same way as the check above.
       #
@@ -129,7 +133,8 @@ jobs:
       # Starting a nested Vitest seconds before the full instrumented suite is a contention
       # risk with nothing to gain.
       - name: Check the tmpdir redirection model
-        run: pnpm gate tmpdir-leaks-model
+        uses: ./.github/actions/run-gate
+        with: { gate: tmpdir-leaks-model }
 
   affected-selector:
     name: Affected-check Selector
@@ -150,7 +155,8 @@ jobs:
       # The selector is fail-open and advisory (GitHub CI stays authoritative),
       # so the gate only guards the derivation model.
       - name: Check affected-selector model
-        run: pnpm gate affected-selector
+        uses: ./.github/actions/run-gate
+        with: { gate: affected-selector }
 
       # The gate-of-gates (#1429). It shares this job because it validates the
       # same artifact the selector is built on — CHECK_CATALOG's `ciJobs` — and
@@ -158,10 +164,12 @@ jobs:
       # gate sitting in its own job, green on its own. Deterministic and
       # network-free: every input is a file in the checkout.
       - name: Check the gate manifest model
-        run: pnpm gate gate-manifest-model
+        uses: ./.github/actions/run-gate
+        with: { gate: gate-manifest-model }
 
       - name: Check every gate is owned, wired, and reachable
-        run: pnpm gate gate-manifest
+        uses: ./.github/actions/run-gate
+        with: { gate: gate-manifest }
 
   maestro-conformance:
     name: Maestro Conformance Oracle
@@ -183,7 +191,8 @@ jobs:
       # device-backed layer 3 runs on the scheduled conformance-differential
       # workflow. See scripts/maestro-conformance/README.md.
       - name: Verify Maestro conformance fixtures
-        run: pnpm gate maestro-conformance
+        uses: ./.github/actions/run-gate
+        with: { gate: maestro-conformance }
 
   packaged-cli-node-22-12:
     name: Packaged CLI Node 22.12
@@ -197,9 +206,12 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Build CLI
-        run: |
-          pnpm gate build
-          pnpm gate bundle-owner-files
+        uses: ./.github/actions/run-gate
+        with: { gate: build }
+
+      - name: Verify emitted chunk ownership
+        uses: ./.github/actions/run-gate
+        with: { gate: bundle-owner-files }
 
       # The build runs on the default toolchain Node and the package is verified on the minimum
       # supported Node, so this job covers what a user on `engines.node` floor actually installs.
@@ -233,10 +245,16 @@ jobs:
       - name: Run Fallow audit
         env:
           FALLOW_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-        run: pnpm gate fallow --base "$FALLOW_BASE"
+        uses: ./.github/actions/run-gate
+        with:
+          gate: fallow
+          args: |
+            --base
+            ${{ env.FALLOW_BASE }}
 
       - name: Check for production-unused exports
-        run: pnpm gate production-exports
+        uses: ./.github/actions/run-gate
+        with: { gate: production-exports }
 
   replay-compat-provenance:
     # The frozen replay-compat corpus (#1417) claims each entry was published by
@@ -256,7 +274,8 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Verify corpus entries against their released blobs
-        run: pnpm gate replay-compat
+        uses: ./.github/actions/run-gate
+        with: { gate: replay-compat }
 
   released-surface-compat:
     # The daemon RPC wire ledger (#1432) is compared against the ledger as it
@@ -277,10 +296,12 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Verify the wire-compat rules
-        run: pnpm gate wire-compat-model
+        uses: ./.github/actions/run-gate
+        with: { gate: wire-compat-model }
 
       - name: Compare the daemon RPC wire surface against the last released tag
-        run: pnpm gate daemon-wire-compat
+        uses: ./.github/actions/run-gate
+        with: { gate: daemon-wire-compat }
 
   coverage:
     # Runs the full unit + provider-integration suites under coverage with
@@ -298,12 +319,14 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Test changed-line coverage gate
-        run: pnpm gate coverage-model
+        uses: ./.github/actions/run-gate
+        with: { gate: coverage-model }
 
       # The retry list is an enumerated set of owned waivers, so an expired entry
       # must fail before the suite runs rather than quietly keeping its retry.
       - name: Check contention retry policy
-        run: pnpm gate contention-retry
+        uses: ./.github/actions/run-gate
+        with: { gate: contention-retry }
 
       # Wrapped in the single-retry policy (#1419): a timeout-shaped failure in
       # an enumerated contention-flaky file reruns that file once and reports it
@@ -311,13 +334,15 @@ jobs:
       - name: Run coverage
         env:
           OUTPUT_ECONOMY_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-        run: pnpm gate unit-ci
+        uses: ./.github/actions/run-gate
+        with: { gate: unit-ci }
       # The TMPDIR redirection both test lanes depend on (#1593/#1595). The check is a real
       # package script that no workflow ran: it is reachable only through `check:unit`, an
       # aggregate CI never invokes, so a leak regression could not fail a PR. Placed here
       # because this is the lane whose instrumented suite would leak a run directory.
       - name: Check for leaked temp directories
-        run: pnpm gate tmpdir-leaks
+        uses: ./.github/actions/run-gate
+        with: { gate: tmpdir-leaks }
 
       - name: Upload contention-retry envelope
         if: always()
@@ -335,7 +360,12 @@ jobs:
         if: always() && github.event_name == 'pull_request'
         env:
           AGENT_DEVICE_COVERAGE_WAIVER: ${{ contains(github.event.pull_request.labels.*.name, 'coverage-waiver') }}
-        run: pnpm gate coverage --base "${{ github.event.pull_request.base.sha }}"
+        uses: ./.github/actions/run-gate
+        with:
+          gate: coverage
+          args: |
+            --base
+            ${{ github.event.pull_request.base.sha }}
 
   typecheck:
     name: Typecheck
@@ -349,14 +379,16 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Run typecheck
-        run: pnpm gate typecheck
+        uses: ./.github/actions/run-gate
+        with: { gate: typecheck }
 
       # CHECK_CATALOG has always claimed this job mirrors the `mcp-metadata`
       # check; until #1429 checked the claim, no PR job ran it at all, so
       # server.json/smithery.yaml drift only surfaced at publish time (where
       # publish-mcp-registry.yml duplicates the same command). Parse-only.
       - name: Check MCP registry metadata is in sync
-        run: pnpm gate mcp-metadata
+        uses: ./.github/actions/run-gate
+        with: { gate: mcp-metadata }
 
   freerange:
     name: FreeRange
@@ -373,7 +405,8 @@ jobs:
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
 
       - name: Check numeric ranges
-        run: pnpm gate freerange
+        uses: ./.github/actions/run-gate
+        with: { gate: freerange }
 
   integration:
     name: Integration Tests
@@ -387,9 +420,11 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Run integration tests
-        run: |
-          pnpm clean:daemon
-          pnpm gate integration-node
+        run: pnpm clean:daemon
+
+      - name: Execute integration tests
+        uses: ./.github/actions/run-gate
+        with: { gate: integration-node }
 
       - name: Run seeded concurrency torture lane (fast PR sweep)
         # #1416's nightly torture lane lives under test/integration/nightly/, out
@@ -397,23 +432,28 @@ jobs:
         # sweep (TORTURE_RUNS default 128 seeds, ~sub-second) — not an accidental
         # glob inclusion. The Concurrency Torture Nightly workflow sweeps a much
         # larger seed range on schedule.
-        run: pnpm gate concurrency-torture
+        uses: ./.github/actions/run-gate
+        with: { gate: concurrency-torture }
 
       - name: Run provider-backed integration tests
-        run: pnpm gate provider-integration
+        uses: ./.github/actions/run-gate
+        with: { gate: provider-integration }
 
       - name: Check Provider-backed integration architecture progress
-        run: pnpm gate integration-progress
+        uses: ./.github/actions/run-gate
+        with: { gate: integration-progress }
 
       # A build-cache lookup outage must degrade setup-fixture-app to an inline
       # build, not fail the caller. This drives that step's real shell against a
       # failing `gh`.
       - name: Setup-fixture-app cache-failure fallback
-        run: pnpm gate fixture-fallback
+        uses: ./.github/actions/run-gate
+        with: { gate: fixture-fallback }
       # The trusted-artifact contract the device lanes rely on to decide a cached fixture
       # app is the one this commit expects. A real test file that no workflow ran.
       - name: Check the trusted fixture-artifact contract
-        run: pnpm gate fixture-cache
+        uses: ./.github/actions/run-gate
+        with: { gate: fixture-cache }
 
   web-smoke:
     name: Web Platform Smoke
@@ -431,9 +471,11 @@ jobs:
           node-version: '24.13'
 
       - name: Run live web smoke
-        run: |
-          pnpm clean:daemon
-          pnpm gate web-smoke
+        run: pnpm clean:daemon
+
+      - name: Execute live web smoke
+        uses: ./.github/actions/run-gate
+        with: { gate: web-smoke }
 
       - name: Upload web smoke artifacts
         if: always()

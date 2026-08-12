@@ -42,7 +42,13 @@ jobs:
       # A lane whose classifier or watchdog regressed would pass forever. This runs the
       # broken-on-purpose targets first and fails unless each violation is caught.
       - name: Self-check the harness
-        run: pnpm gate fuzz-parsers --self-check --artifact-dir .tmp/fuzz/self-check
+        uses: ./.github/actions/run-gate
+        with:
+          gate: fuzz-parsers
+          args: |
+            --self-check
+            --artifact-dir
+            .tmp/fuzz/self-check
 
       # Runs even when the self-check fails, so the lane always produces a fuzz envelope too
       # (a step that never runs writes no envelope, and monitoring cannot tell that apart from
@@ -52,11 +58,16 @@ jobs:
         env:
           FUZZ_ITERATIONS: ${{ github.event.inputs.fuzz-iterations || '50000' }}
           FUZZ_SEED: ${{ github.event.inputs.fuzz-seed || github.run_number }}
-        run: |
-          pnpm gate fuzz-parsers \
-            --iterations "$FUZZ_ITERATIONS" \
-            --seed "$FUZZ_SEED" \
-            --artifact-dir .tmp/fuzz/run
+        uses: ./.github/actions/run-gate
+        with:
+          gate: fuzz-parsers
+          args: |
+            --iterations
+            ${{ env.FUZZ_ITERATIONS }}
+            --seed
+            ${{ env.FUZZ_SEED }}
+            --artifact-dir
+            .tmp/fuzz/run
 
       # Uploaded on pass as well as failure: each subdirectory of .tmp/fuzz holds a
       # run-envelope.json on #1430's shared lane contract (scripts/lib/lane-envelope.ts) —
@@ -200,7 +211,18 @@ jobs:
           pnpm clean:daemon
 
       - name: Run iOS simulator replay suite
-        run: pnpm gate replay-ios --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --retries 2 --artifacts-dir test/artifacts/replays-ios-simulator --report-junit test/artifacts/replays-ios-simulator.junit.xml
+        uses: ./.github/actions/run-gate
+        with:
+          gate: replay-ios
+          args: |
+            --udid
+            ${{ steps.ios-simulator.outputs.simulator-udid }}
+            --retries
+            2
+            --artifacts-dir
+            test/artifacts/replays-ios-simulator
+            --report-junit
+            test/artifacts/replays-ios-simulator.junit.xml
 
       - name: Fetch current fixture app
         id: fixture-app
@@ -234,7 +256,18 @@ jobs:
         if: env.IOS_UDID != ''
         env:
           IOS_UDID: ${{ vars.IOS_UDID }}
-        run: pnpm gate replay-ios-device --udid "$IOS_UDID" --retries 2 --artifacts-dir test/artifacts/replays-ios-device --report-junit test/artifacts/replays-ios-device.junit.xml
+        uses: ./.github/actions/run-gate
+        with:
+          gate: replay-ios-device
+          args: |
+            --udid
+            ${{ env.IOS_UDID }}
+            --retries
+            2
+            --artifacts-dir
+            test/artifacts/replays-ios-device
+            --report-junit
+            test/artifacts/replays-ios-device.junit.xml
 
       - name: Upload iOS artifacts
         if: always()
@@ -268,10 +301,18 @@ jobs:
           xcuitest-destination: platform=macOS,arch=arm64
 
       - name: Build macOS helper
-        run: pnpm gate macos-helper
+        uses: ./.github/actions/run-gate
+        with: { gate: macos-helper }
 
       - name: Run macOS replay suite
-        run: pnpm gate replay-macos --retries 2 --report-junit test/artifacts/replays-macos.junit.xml
+        uses: ./.github/actions/run-gate
+        with:
+          gate: replay-macos
+          args: |
+            --retries
+            2
+            --report-junit
+            test/artifacts/replays-macos.junit.xml
 
       - name: Upload macOS artifacts
         if: always()

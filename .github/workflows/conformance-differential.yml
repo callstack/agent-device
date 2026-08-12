@@ -125,12 +125,32 @@ jobs:
       # assert engine-side invariants (e.g. the settle loop latches instead of
       # burning its budget) — outcome parity alone cannot see that.
       - name: Run differential
-        run: |
-          pnpm gate maestro-differential \
-            --platform ios \
-            --out-dir "${{ github.workspace }}/.tmp/conformance-differential" \
-            --trace-root "${{ github.workspace }}/.agent-device" \
-            ${DIFFERENTIAL_ONLY:+--only "$DIFFERENTIAL_ONLY"}
+        if: env.DIFFERENTIAL_ONLY == ''
+        uses: ./.github/actions/run-gate
+        with:
+          gate: maestro-differential
+          args: |
+            --platform
+            ios
+            --out-dir
+            ${{ github.workspace }}/.tmp/conformance-differential
+            --trace-root
+            ${{ github.workspace }}/.agent-device
+
+      - name: Run filtered differential
+        if: env.DIFFERENTIAL_ONLY != ''
+        uses: ./.github/actions/run-gate
+        with:
+          gate: maestro-differential
+          args: |
+            --platform
+            ios
+            --out-dir
+            ${{ github.workspace }}/.tmp/conformance-differential
+            --trace-root
+            ${{ github.workspace }}/.agent-device
+            --only
+            ${{ env.DIFFERENTIAL_ONLY }}
 
       # Keep the trace, not just the verdict: the engine-side invariants are
       # computed FROM replay-timing.ndjson, so without it a report saying

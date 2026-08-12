@@ -1,10 +1,8 @@
 // `pnpm gate <check-id> [args…]` — the only way CI may run a gate.
 //
-// Every gating step in .github/workflows goes through here, which is what makes
-// the workflow→check mapping a token scan instead of a shell interpreter, and
-// the single spelling `check:gate-manifest` reads to decide what a lane runs. It does not
-// prevent a lane from running project code some other way — such a step simply earns no
-// ownership credit, so the check it would have satisfied reports unowned.
+// The run-gate action calls this with a structural id. The manifest reads that YAML field,
+// never this command's surrounding shell. Raw workflow shell may still invoke this CLI, but
+// doing so declares no ownership.
 //
 // Extra arguments are forwarded verbatim, so lane-specific flags (`--base`,
 // `--udid`, `--report-junit`) stay in the workflow where they belong.

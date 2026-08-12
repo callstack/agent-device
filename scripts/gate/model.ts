@@ -1,45 +1,14 @@
-// The gate manifest's model: what each registered check actually runs, and which
-// CI lanes run it.
-//
-// Three derivations, all off real sources, and deliberately no more than that:
-//
-//   units(script)  — what a package.json script executes, as Vitest projects and
-//                    `node --test` files rather than script names, so a lane that
-//                    runs the whole suite covers a lane that runs part of it.
-//   lanes()        — one entry per workflow job (workflows.ts), carrying the CheckIds
-//                    it invokes through `pnpm gate` and the path filter of its workflow.
-//   categories()   — one representative changed path per selector rule, found by
-//                    running the real selector over the tracked tree.
-//
-// Lane→check resolution needs no shell interpretation at all: finding what a lane runs is
-// a scan for `pnpm gate <id>`. Shell the scan does not recognise earns no credit, so the
-// failure direction is an unowned check rather than a false pass.
+// Derive script units, structural workflow owners, and real selector path categories.
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { parse } from 'yaml';
 import { CHECK_CATALOG, type CheckSpec } from '../check-affected/checks.ts';
 import { selectChecks, type CheckId } from '../check-affected/model.ts';
-import { GATE_ACTIONS, OPAQUE_RUNNERS } from './declarations.ts';
+import { OPAQUE_RUNNERS } from './declarations.ts';
 import { ENV_PREFIX, commandSegments } from './shell.ts';
-import {
-  gateActionBody,
-  loadLanes,
-  triggersOnPath,
-  type GateActionBody,
-  type Lane,
-} from './workflows.ts';
+import { loadLanes, triggersOnPath, type Lane } from './workflows.ts';
 
-/**
- * What a lane runs, at the granularity ownership is decided on. Scripts are too
- * coarse: CI's Coverage lane runs `test:coverage:ci`, not `test:unit`, and only
- * project-level units make the first cover the second.
- *
- *   `vitest:<project>`         a whole Vitest project
- *   `vitest:<project>@<file>`  one file of it — covered BY the bare project, never the reverse
- *   `node-test:<file>`         one `node --test` file, globs expanded against the tree
- *   `script:<name>`            any other leaf, identified by the script that runs it
- */
+// Units distinguish whole Vitest projects, filtered files, node:test files, and scripts.
 export type Unit = string;
 
 export type Model = {
@@ -47,12 +16,8 @@ export type Model = {
   readonly vitestProjects: readonly string[];
   readonly lanes: readonly Lane[];
   readonly trackedFiles: ReadonlySet<string>;
-  /** Source files behind package.json `exports`, the way `check:affected` supplies them. */
   readonly packageEntryFiles: readonly string[];
-  /** Threaded rather than imported so the audit can re-run with a declaration removed. */
   readonly opaque: Readonly<Record<string, readonly string[]>>;
-  /** The single run step of each action GATE_ACTIONS names, for proving it runs the gate. */
-  readonly gateActionBodies: Readonly<Record<string, GateActionBody>>;
 };
 
 // --- Units -------------------------------------------------------------------
@@ -87,7 +52,6 @@ function expandGlob(pattern: string): string[] {
     .sort();
 }
 
-/** `--project x`, `--project=x`, and positional file arguments. */
 function vitestArgs(parts: readonly string[]): {
   named: string[];
   files: string[];
@@ -108,8 +72,6 @@ const RUNNER_TOKENS = /^(?:pnpm|exec|vitest|run)$/;
 
 function vitestUnits(parts: readonly string[], projects: readonly string[]): Unit[] {
   const { named, files } = vitestArgs(parts);
-  // A bare run spans every project; a filtered run covers only the files it names,
-  // so a docs-only lane running one unit-core file cannot claim the whole project.
   const selected = named.length > 0 ? named : projects;
   const suffix = files.length > 0 ? `@${files.join(',')}` : '';
   return selected.map((project) => `vitest:${project}${suffix}`);
@@ -123,11 +85,6 @@ function nodeTestUnits(parts: readonly string[]): Unit[] {
   return targets.map((file) => `node-test:${file}`);
 }
 
-/**
- * The units a package.json script executes. Aggregates (`pnpm a && pnpm b`) expand
- * transitively; anything else is identified by the script that runs it, so a renamed
- * script surfaces as an unowned unit rather than as a silently satisfied claim.
- */
 export function scriptUnits(
   script: string,
   model: Pick<Model, 'scripts' | 'vitestProjects' | 'opaque'>,
@@ -151,8 +108,6 @@ function segmentUnits(
   model: Pick<Model, 'scripts' | 'vitestProjects' | 'opaque'>,
   seen: ReadonlySet<string>,
 ): Unit[] {
-  // What a segment RUNS is behind its env prefix (`VAR=1 pnpm test:x`), which is what
-  // units are about.
   const segment = raw.replace(ENV_PREFIX, '');
   const nested = invokedScript(segment, model.scripts);
   if (nested) return scriptUnits(nested, model, seen);
@@ -187,11 +142,6 @@ function laneUnits(lane: Lane, model: Model): Unit[] {
   return [...fromGates, ...lane.verbatim.flatMap((name) => scriptUnits(name, model))];
 }
 
-/**
- * The one decision every assertion is phrased against: is every unit of `spec` run
- * by a qualifying lane that a change to `file` would start? `file` of null asks the
- * weaker question — that the check runs at all.
- */
 export function covered(
   spec: CheckSpec,
   file: string | null,
@@ -223,19 +173,7 @@ export type Category = {
   readonly checks: readonly CheckId[];
 };
 
-/**
- * One representative changed path per selector category, discovered by running the
- * REAL selector across the tracked tree — not listed by hand.
- *
- * Derived rather than declared because the selector classifies by PREFIX: a hand-written
- * sample naming a file that does not exist still resolves, so the assertion reads green
- * while describing a change no PR can make. Derivation also needs no upkeep when a rule
- * is added.
- *
- * A category is a `rule` the selector actually emits somewhere in the tree, so a rule
- * whose paths do not exist yet is absent — correctly, since no PR can exercise it
- * until such a file is added, at which point it becomes a category and is checked.
- */
+// One real tracked path per selector rule; fictional hand-written samples are impossible.
 export function categories(model: Model): Category[] {
   const found = new Map<string, Category>();
   for (const path of [...model.trackedFiles].sort()) {
@@ -251,11 +189,6 @@ export function categories(model: Model): Category[] {
   return [...found.values()];
 }
 
-/**
- * The GitHub jobs that run each check, derived rather than declared. `check:affected`
- * prints these as the authority for skipping a check locally, so deriving them is
- * what keeps that claim from going stale (it was a hand-maintained `ciJobs` field).
- */
 export function owningLanes(model: Model): Map<CheckId, string[]> {
   return new Map(CHECK_CATALOG.map((spec) => [spec.id, covered(spec, null, model).lanes]));
 }
@@ -280,13 +213,5 @@ export function loadModel(
     lanes: loadLanes(path.join(repoRoot, '.github/workflows'), repoRoot, pkg.scripts),
     trackedFiles: new Set(trackedFiles),
     opaque,
-    gateActionBodies: Object.fromEntries(
-      Object.entries(GATE_ACTIONS).flatMap(([source, input]) => {
-        const file = path.join(repoRoot, source);
-        if (!fs.existsSync(file)) return [];
-        const body = gateActionBody(parse(fs.readFileSync(file, 'utf8')), input);
-        return body ? [[source, body] as const] : [];
-      }),
-    ),
   };
 }

@@ -76,10 +76,10 @@ runs:
 
     - name: Build Apple runner artifacts on cache miss
       if: steps.restore-runner-build.outputs.cache-hit != 'true'
-      run: pnpm gate "$INPUT_GATE"
-      shell: bash
+      uses: ./.github/actions/run-gate
+      with:
+        gate: ${{ inputs.gate }}
       env:
-        INPUT_GATE: ${{ inputs.gate }}
         AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ inputs.derived-path }}
         AGENT_DEVICE_XCUITEST_PLATFORM: ${{ inputs.xcuitest-platform }}
         AGENT_DEVICE_XCUITEST_DESTINATION: ${{ inputs.xcuitest-destination }}

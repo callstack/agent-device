@@ -62,9 +62,14 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Run mutants for ${{ matrix.name }}
-        run: |
-          pnpm gate mutation --modules ${{ matrix.module }} \
-            ${{ matrix.shard && format('--shard {0}', matrix.shard) || '' }}
+        uses: ./.github/actions/run-gate
+        with:
+          gate: mutation
+          args: |
+            --modules
+            ${{ matrix.module }}
+            ${{ matrix.shard && '--shard' || '' }}
+            ${{ matrix.shard || '' }}
 
       # A shard can die before Stryker writes anything (install, config, crash);
       # without this the artifact is absent and "shard failed" is indistinguishable
@@ -99,7 +104,8 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Ratchet self-test
-        run: pnpm gate mutation-model
+        uses: ./.github/actions/run-gate
+        with: { gate: mutation-model }
 
       - name: Download shard reports
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -110,8 +116,18 @@ jobs:
       # run.ts writes the markdown verdict to $GITHUB_STEP_SUMMARY when the
       # runner exports it, so the summary and the artifact carry the same numbers.
       - name: Ratchet the merged sweep and propose the next baseline
+        uses: ./.github/actions/run-gate
+        with:
+          gate: mutation-check
+          args: |
+            --report-dir
+            .tmp/mutation/shards
+            --expect-shards
+            10
+            --update
+
+      - name: Stage the proposed baseline artifact
         run: |
-          pnpm gate mutation-check --report-dir .tmp/mutation/shards --expect-shards 10 --update
           cp mutation-baselines/decision-kernels.json .tmp/mutation/proposed-baseline.json
           git checkout -- mutation-baselines/decision-kernels.json
 

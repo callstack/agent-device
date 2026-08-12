@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { parse } from 'yaml';
 import { loadModel } from './model.ts';
 import { loadLanes, matchesGlob, verbatimScripts } from './workflows.ts';
 
@@ -18,6 +19,19 @@ const tracked = execFileSync('git', ['ls-files'], {
   .split('\n')
   .filter(Boolean);
 const model = loadModel(repoRoot, tracked);
+
+test('the canonical action binds its structural gate input to pnpm gate', () => {
+  const action = parse(
+    fs.readFileSync(path.join(repoRoot, '.github/actions/run-gate/action.yml'), 'utf8'),
+  ) as {
+    inputs: { gate: { required: boolean } };
+    runs: { steps: { env?: Record<string, string>; run?: string }[] };
+  };
+  assert.equal(action.inputs.gate.required, true);
+  const runner = action.runs.steps.at(-1);
+  assert.equal(runner?.env?.INPUT_GATE, '${{ inputs.gate }}');
+  assert.match(runner?.run ?? '', /pnpm gate "\$INPUT_GATE"/);
+});
 
 /** Write a workflow (and optionally a tree of actions) and load it with the real loader. */
 function planted(files: Record<string, string>): ReturnType<typeof loadLanes> {
@@ -113,7 +127,9 @@ jobs:
     '.github/actions/e/action.yml': `runs:
   using: composite
   steps:
-    - run: pnpm gate layering
+    - uses: ./.github/actions/run-gate
+      with:
+        gate: layering
 `,
   });
   assert.deepEqual(

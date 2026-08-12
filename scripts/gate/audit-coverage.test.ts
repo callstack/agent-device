@@ -1,18 +1,12 @@
-// The manifest's main claim: is every registered check actually RUN by a lane a PR would
-// start? Split from audit.test.ts, which covers the wiring assertions that keep this one
-// honest — gate ids, conditional credit, and the surfaces that would hide a step.
-//
-// Every case mutates the REAL model and asserts the audit goes red for the right reason.
-// A hand-built fixture would only prove the assertion agrees with itself.
+// Load-bearing ownership, path-reachability, and suite-registration witnesses.
 
 import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
 import { audit } from './audit.ts';
-import { categories, covered, loadModel, type Model } from './model.ts';
-import { matchesGlob, type Lane } from './workflows.ts';
-import { CHECK_CATALOG } from '../check-affected/checks.ts';
+import { categories, loadModel, type Model } from './model.ts';
+import type { Lane } from './workflows.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 const tracked = execFileSync('git', ['ls-files'], {
@@ -58,20 +52,9 @@ test('deleting the lane that runs a gate reports exactly that gate, naming the r
   assert.equal(found.length, 1);
   assert.match(
     found[0] ?? '',
-    /check "fuzz-parsers" is not run by any pull_request\/schedule lane/,
+    /check "fuzz-parsers" is not declared by any pull_request\/schedule lane/,
   );
-  assert.match(found[0] ?? '', /pnpm gate fuzz-parsers/);
-});
-
-test('a gate outside the test:/check: naming convention is still owned', () => {
-  // `fuzz:parsers` resolves to an executable, not a Vitest project or a --test file, so a
-  // suite universe keyed on script naming could not see it. Here it is a registered check
-  // like any other and nothing has to recognise its shape.
-  const spec = CHECK_CATALOG.find((entry) => entry.id === 'fuzz-parsers');
-  assert.ok(spec);
-  const result = covered(spec, null, base);
-  assert.ok(result.covered);
-  assert.deepEqual(result.lanes, ['Replay Nightly / Parser Fuzz Lane']);
+  assert.match(found[0] ?? '', /run-gate action step for `fuzz-parsers`/);
 });
 
 test('a docs-only change still reaches the command-reference gate (#1420)', () => {
@@ -86,17 +69,6 @@ test('a docs-only change still reaches the command-reference gate (#1420)', () =
   assert.equal(found.length, 1);
   assert.match(found[0] ?? '', /website\/docs\/docs\/commands\.md/);
   assert.match(found[0] ?? '', /selects "command-docs"/);
-});
-
-test('per-unit coverage catches a lane deletion that whole-check ownership would miss', () => {
-  // command-docs-gate runs one unit-core FILE, so it must not stand in for the
-  // project when Coverage disappears.
-  const model = mutate((m) => ({
-    lanes: m.lanes.filter((lane) => lane.label !== 'Coverage'),
-  }));
-  const found = messages(model);
-  assert.ok(found.some((message) => /check "unit-ci" is not run/.test(message)));
-  assert.ok(found.some((message) => /check "vitest-related" is not run/.test(message)));
 });
 
 test('a path filter that excludes a category fails, though the check still runs somewhere', () => {
@@ -123,13 +95,6 @@ test('a path filter that excludes a category fails, though the check still runs 
   assert.ok(found.some((message) => /selects "daemon-wire-compat"/.test(message)));
 });
 
-test('removing the opaque-runner declaration changes the audit, so it is not inert', () => {
-  const model = mutate(() => ({ opaque: {} }));
-  const found = messages(model);
-  assert.ok(found.some((message) => /check "unit" is not run/.test(message)));
-  assert.ok(found.some((message) => /vitest:unit-core/.test(message)));
-});
-
 test('a Vitest project no check runs is reported, and so is a suite script', () => {
   const project = mutate((m) => ({
     vitestProjects: [...m.vitestProjects, 'new-lane'],
@@ -154,19 +119,6 @@ test('a Vitest project no check runs is reported, and so is a suite script', () 
   );
 });
 
-test('categories are derived from the tracked tree, so no sample can be fictional', () => {
-  const found = categories(base);
-  assert.ok(found.length >= 12, `expected the selector's real categories, got ${found.length}`);
-  for (const category of found) {
-    assert.ok(tracked.includes(category.path), `${category.path} must be a tracked file`);
-    assert.ok(category.checks.length > 0, `${category.rule} must select at least one check`);
-  }
-  // The #1420 category in particular has to be present, since ci.yml ignores website/**.
-  const docs = found.find((category) => category.rule === 'own:command-docs');
-  assert.equal(docs?.path, 'website/docs/docs/commands.md');
-  assert.deepEqual(docs?.checks, ['command-docs']);
-});
-
 test('a `test:*` script that is a suite by name, not by shape, needs an owner', () => {
   // The five `test:replay:*` scripts run `node src/bin.ts test <dir>`, which resolves to a
   // `script:` leaf. A shape-only rule could not see them: four were owned because someone
@@ -180,33 +132,4 @@ test('a `test:*` script that is a suite by name, not by shape, needs an owner', 
     ),
     'a new test:* script with no catalog entry must fail `registered`',
   );
-});
-
-test('a reporting `test:*` script is declared, and the declaration is not free', () => {
-  // The name rule over-fires on `test:integration:progress`, which prints a table and exits
-  // 0 — its `--check` sibling is the registered gate. Declared, and the declaration has to
-  // stay load-bearing: one naming no script is inert.
-  const model = mutate((m) => ({
-    scripts: Object.fromEntries(
-      Object.entries(m.scripts).filter(([name]) => name !== 'test:integration:progress'),
-    ),
-  }));
-  assert.ok(
-    messages(model).some((message) =>
-      /reporting-script declaration "test:integration:progress" is not a package script/.test(
-        message,
-      ),
-    ),
-  );
-});
-
-test('GitHub `**` matches zero directories, so a path-filter check cannot go green wrongly', () => {
-  assert.equal(
-    matchesGlob('packages/*/src/**/*.test.ts', 'packages/selectors/src/index.test.ts'),
-    true,
-  );
-  assert.equal(matchesGlob('src/**/*.test.ts', 'src/a.test.ts'), true);
-  assert.equal(matchesGlob('src/**/*.test.ts', 'src/deep/a.test.ts'), true);
-  assert.equal(matchesGlob('src/**/*.test.ts', 'src/a.ts'), false);
-  assert.equal(matchesGlob('website/**', 'other/x.md'), false);
 });

@@ -2,9 +2,8 @@
 //
 // One entry per gate, and one universe — the affected-selector's vocabulary and
 // the set of gates CI runs are the same list, because CI may only invoke a gate
-// through `pnpm gate <id>` (scripts/gate/run.ts). That is what lets the gate
-// manifest derive the workflow→check mapping with a token scan instead of an
-// interpreter, and what makes an unregistered gate impossible to wire up.
+// through the structural run-gate action. That lets the manifest derive the
+// workflow→check mapping from YAML fields without interpreting shell.
 //
 // The jobs that run a check are NOT recorded here. They are derived from the
 // workflows by scripts/gate/model.ts, so the "GitHub-authoritative" claim an
