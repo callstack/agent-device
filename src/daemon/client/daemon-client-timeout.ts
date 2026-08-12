@@ -24,15 +24,20 @@ const IOS_RUNNER_XCODEBUILD_KILL_PATTERNS = [
   'xcodebuild build-for-testing .*apple/runner/AgentDeviceRunner/AgentDeviceRunner\\.xcodeproj',
 ];
 
-// `--platform` selectors that name (or alias) an Apple device. The client
-// only ever knows what this exact request declared — there is no session
-// lookup at this layer (src/daemon/client/ stays import-free of
-// src/platforms) — so an undeclared platform fails safe toward "could be
-// Apple" rather than toward "definitely not Apple".
-const APPLE_PLATFORM_SELECTORS: ReadonlySet<PlatformSelector> = new Set(['apple', 'ios', 'macos']);
+// `--platform` selectors that AFFIRMATIVELY name (or alias) an Apple device.
+// This is deliberately narrower than "not proven non-Apple": the client's
+// declared platform is not authoritative for session-bound execution (see
+// the eligibility note on `handleRequestTimeout` below), so an undeclared or
+// declared-non-Apple platform is not evidence of anything — it only counts
+// as Apple evidence when it says so outright.
+const AFFIRMATIVE_APPLE_PLATFORM_SELECTORS: ReadonlySet<PlatformSelector> = new Set([
+  'apple',
+  'ios',
+  'macos',
+]);
 
-function mayInvolveAppleDevice(platform: PlatformSelector | undefined): boolean {
-  return platform === undefined || APPLE_PLATFORM_SELECTORS.has(platform);
+function isAffirmativelyApplePlatform(platform: PlatformSelector | undefined): boolean {
+  return platform !== undefined && AFFIRMATIVE_APPLE_PLATFORM_SELECTORS.has(platform);
 }
 
 type BoundedTimeoutPolicy = CommandTimeoutPolicy & { envelopeMs: number };
@@ -112,12 +117,30 @@ export function handleRequestTimeout(
   timeoutMs: number,
   platform: PlatformSelector | undefined,
 ): AppError {
-  const mayInvolveApple = mayInvolveAppleDevice(platform);
-  const cleanup = remote || !mayInvolveApple ? { terminated: 0 } : cleanupTimedOutIosRunnerBuilds();
+  // Cleanup eligibility stays UNCONDITIONAL for every local (non-remote)
+  // timeout, on purpose: the request's declared --platform is not
+  // authoritative for session-bound execution. An existing session's real
+  // device platform can silently override a conflicting declared selector
+  // (`applyStripLockPolicy` in request-lock-policy.ts, reached via
+  // --session-lock strip), and the common session-bound request omits
+  // --platform entirely — so there is no client-visible signal that proves
+  // a request cannot touch an Apple runner. The pkill patterns are
+  // Apple-process-name-specific, so sweeping them on a non-Apple host or
+  // session matches nothing and costs a few no-op subprocess spawns, never
+  // a wrong skip.
+  const cleanup = remote ? { terminated: 0 } : cleanupTimedOutIosRunnerBuilds();
   const resetDaemon = !remote && shouldResetDaemonAfterRequestTimeout(command);
   const daemonReset = resetDaemon
     ? resetDaemonAfterTimeout(info, statePaths)
     : { forcedKill: false };
+  // The HINT, unlike cleanup, may only name Apple-runner involvement on
+  // evidence this call site actually has: an explicitly declared Apple
+  // platform selector, or the cleanup itself having terminated a matching
+  // process (proof positive regardless of what --platform claimed). Any
+  // other combination — undeclared platform, declared non-Apple platform,
+  // zero processes terminated — gets platform-neutral wording instead of
+  // asserting Apple specifics the client cannot back up.
+  const appleCleanupEvidence = isAffirmativelyApplePlatform(platform) || cleanup.terminated > 0;
   emitDiagnostic({
     level: 'error',
     phase: 'daemon_request_timeout',
@@ -136,7 +159,7 @@ export function handleRequestTimeout(
   return new AppError('COMMAND_FAILED', 'Daemon request timed out', {
     timeoutMs,
     requestId,
-    hint: resolveRequestTimeoutHint({ remote, resetDaemon, command, mayInvolveApple }),
+    hint: resolveRequestTimeoutHint({ remote, resetDaemon, command, appleCleanupEvidence }),
   });
 }
 
@@ -151,28 +174,32 @@ export function shouldResetDaemonAfterRequestTimeout(command: string | undefined
 
 // Exported for direct hint-matrix testing: handleRequestTimeout also triggers
 // real pkill/process-kill side effects, so its wording is verified through
-// this pure sub-function rather than the full timeout path.
+// this pure sub-function rather than the full timeout path (see also the
+// production-seam route tests in
+// src/daemon/client/__tests__/daemon-client-timeout-route.test.ts, which
+// prove the cleanup-eligibility side of this contract that a pure formatter
+// test cannot).
 export function resolveRequestTimeoutHint(params: {
   remote: boolean;
   resetDaemon: boolean;
   command: string | undefined;
-  mayInvolveApple: boolean;
+  appleCleanupEvidence: boolean;
 }): string {
-  const { remote, resetDaemon, command, mayInvolveApple } = params;
+  const { remote, resetDaemon, command, appleCleanupEvidence } = params;
   if (remote) {
     return 'Retry with --debug and verify the remote daemon URL, auth token, and remote host logs.';
   }
   if (!resetDaemon) {
     const iosPrepareHint =
-      mayInvolveApple && command === PUBLIC_COMMANDS.snapshot
+      appleCleanupEvidence && command === PUBLIC_COMMANDS.snapshot
         ? ' If this was the first Apple-platform snapshot on the device, run agent-device prepare ios-runner with the same --platform before snapshot/test so runner startup is handled explicitly.'
         : '';
-    const appleCleanupNote = mayInvolveApple
+    const appleCleanupNote = appleCleanupEvidence
       ? ' and Apple runner work was aborted when detected'
       : '';
     return `Retry with --debug and check daemon diagnostics logs. The timed-out ${command ?? 'request'} request was canceled${appleCleanupNote}; the daemon was kept alive so the session can still be closed or inspected.${iosPrepareHint}`;
   }
-  return mayInvolveApple
+  return appleCleanupEvidence
     ? 'Retry with --debug and check daemon diagnostics logs. Timed-out Apple runner xcodebuild processes were terminated when detected.'
     : 'Retry with --debug and check daemon diagnostics logs. The daemon was reset after the timeout.';
 }

@@ -252,24 +252,30 @@ test('read-only polling command timeouts preserve the daemon like snapshot', () 
   assert.equal(shouldResetDaemonAfterRequestTimeout('open'), true);
 });
 
-test('request timeout hint stops asserting Apple runner specifics for a known non-Apple platform', () => {
-  // Before this change, handleRequestTimeout ran the Apple-runner pkill
-  // cleanup and emitted Apple-specific hint wording for EVERY local timeout,
-  // regardless of the request's --platform. That was misleading for
-  // Android/web/Harmony sessions, which never had any Apple runner work to
-  // abort. The hint now only claims Apple-runner cleanup happened when the
-  // request's declared platform could actually be Apple (known-Apple, or
-  // genuinely undeclared — fail-safe toward keeping the claim).
+test('request timeout hint only names Apple runner cleanup on actual evidence', () => {
+  // Before this change, handleRequestTimeout emitted Apple-specific hint
+  // wording for EVERY local timeout, regardless of the request's
+  // --platform. That was misleading for Android/web/Harmony sessions, which
+  // never had any Apple runner work to abort.
+  //
+  // The fix is evidence-based, not platform-guess-based:
+  // `appleCleanupEvidence` is true only when the request declared an
+  // AFFIRMATIVELY Apple platform (apple/ios/macos) or the pkill cleanup
+  // itself terminated a matching process — never from an undeclared or
+  // declared-non-Apple platform alone. (Why not trust the declared platform
+  // directly: it is not authoritative for session-bound execution — see
+  // `handleRequestTimeout`'s comment and the production-seam coverage in
+  // daemon-client-timeout-route.test.ts for the cleanup-eligibility half of
+  // this contract that this pure formatter test cannot prove.)
 
-  // Known-Apple and undeclared (fail-safe) platforms both resolve to
-  // mayInvolveApple: true and keep the exact historical wording — nothing
-  // regresses for the common case.
+  // appleCleanupEvidence: true keeps the exact historical wording — nothing
+  // regresses for the true-Apple case.
   assert.equal(
     resolveRequestTimeoutHint({
       remote: false,
       resetDaemon: false,
       command: 'press',
-      mayInvolveApple: true,
+      appleCleanupEvidence: true,
     }),
     'Retry with --debug and check daemon diagnostics logs. The timed-out press request was canceled and Apple runner work was aborted when detected; the daemon was kept alive so the session can still be closed or inspected.',
   );
@@ -278,7 +284,7 @@ test('request timeout hint stops asserting Apple runner specifics for a known no
       remote: false,
       resetDaemon: true,
       command: 'open',
-      mayInvolveApple: true,
+      appleCleanupEvidence: true,
     }),
     'Retry with --debug and check daemon diagnostics logs. Timed-out Apple runner xcodebuild processes were terminated when detected.',
   );
@@ -287,19 +293,22 @@ test('request timeout hint stops asserting Apple runner specifics for a known no
       remote: false,
       resetDaemon: false,
       command: 'snapshot',
-      mayInvolveApple: true,
+      appleCleanupEvidence: true,
     }),
     'Retry with --debug and check daemon diagnostics logs. The timed-out snapshot request was canceled and Apple runner work was aborted when detected; the daemon was kept alive so the session can still be closed or inspected. If this was the first Apple-platform snapshot on the device, run agent-device prepare ios-runner with the same --platform before snapshot/test so runner startup is handled explicitly.',
   );
 
-  // Known non-Apple platform: no Apple-runner claim in any branch, and the
-  // Apple-only iOS-prepare follow-up drops entirely.
+  // appleCleanupEvidence: false — no Apple-runner claim in any branch, and
+  // the Apple-only iOS-prepare follow-up drops entirely. This is the
+  // motivating fix: it fires equally whether the platform was declared
+  // non-Apple OR left undeclared (the common session-bound case), because
+  // neither is Apple evidence on its own.
   assert.equal(
     resolveRequestTimeoutHint({
       remote: false,
       resetDaemon: false,
       command: 'press',
-      mayInvolveApple: false,
+      appleCleanupEvidence: false,
     }),
     'Retry with --debug and check daemon diagnostics logs. The timed-out press request was canceled; the daemon was kept alive so the session can still be closed or inspected.',
   );
@@ -308,7 +317,7 @@ test('request timeout hint stops asserting Apple runner specifics for a known no
       remote: false,
       resetDaemon: true,
       command: 'open',
-      mayInvolveApple: false,
+      appleCleanupEvidence: false,
     }),
     'Retry with --debug and check daemon diagnostics logs. The daemon was reset after the timeout.',
   );
@@ -317,18 +326,18 @@ test('request timeout hint stops asserting Apple runner specifics for a known no
       remote: false,
       resetDaemon: false,
       command: 'snapshot',
-      mayInvolveApple: false,
+      appleCleanupEvidence: false,
     }),
     'Retry with --debug and check daemon diagnostics logs. The timed-out snapshot request was canceled; the daemon was kept alive so the session can still be closed or inspected.',
   );
 
-  // Remote requests were never Apple-specific and stay platform-independent.
+  // Remote requests were never Apple-specific and stay evidence-independent.
   assert.equal(
     resolveRequestTimeoutHint({
       remote: true,
       resetDaemon: false,
       command: 'press',
-      mayInvolveApple: false,
+      appleCleanupEvidence: false,
     }),
     'Retry with --debug and verify the remote daemon URL, auth token, and remote host logs.',
   );
