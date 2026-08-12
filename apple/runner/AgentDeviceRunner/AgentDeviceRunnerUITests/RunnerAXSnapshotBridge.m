@@ -63,6 +63,9 @@ static atomic_int RunnerAXCustomActionReadsInFlight = 0;
 /// staying put, so it is recorded rather than inferred.
 static atomic_long RunnerAXCustomActionReadDispatches = 0;
 
+/// Total single-flight admission refusals.
+static atomic_long RunnerAXCustomActionReadBlocked = 0;
+
 /// Output caps. The element budget bounds how many elements we read; these
 /// bound what any ONE element can put in the response, so a pathological app
 /// cannot spend the whole snapshot on one node's action list.
@@ -514,17 +517,15 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
   if (![axClient respondsToSelector:selector]) {
     return nil;
   }
-  // Single flight. An abandoned read still owns the serial queue, so
-  // dispatching here would only queue work behind it — and repeating the
-  // capture would keep queueing more. Refuse without dispatching instead.
-  if (atomic_load(&RunnerAXCustomActionReadsInFlight) > 0) {
-    NSLog(@"AGENT_DEVICE_RUNNER_PRIVATE_AX_CUSTOM_ACTIONS_READ_BLOCKED");
+  int expectedReadsInFlight = 0;
+  if (!atomic_compare_exchange_strong(
+        &RunnerAXCustomActionReadsInFlight, &expectedReadsInFlight, 1)) {
+    atomic_fetch_add(&RunnerAXCustomActionReadBlocked, 1);
     return nil;
   }
   // The AX call is a synchronous XPC round trip with no timeout of its own, so
   // it runs off-thread behind a bounded wait. On timeout the result box is
   // never read, so a late-returning wedged call cannot race this thread.
-  atomic_fetch_add(&RunnerAXCustomActionReadsInFlight, 1);
   atomic_fetch_add(&RunnerAXCustomActionReadDispatches, 1);
   NSMutableArray *box = [NSMutableArray array];
   dispatch_semaphore_t finished = dispatch_semaphore_create(0);
@@ -543,7 +544,7 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
     }
     // Clear in-flight BEFORE signalling, so a waiter that wakes on this signal
     // never observes its own completed read as still outstanding.
-    atomic_fetch_sub(&RunnerAXCustomActionReadsInFlight, 1);
+    atomic_store(&RunnerAXCustomActionReadsInFlight, 0);
     dispatch_semaphore_signal(finished);
   });
   long waited = dispatch_semaphore_wait(
@@ -620,6 +621,11 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
 + (NSInteger)customActionReadDispatchCount
 {
   return (NSInteger)atomic_load(&RunnerAXCustomActionReadDispatches);
+}
+
++ (NSInteger)customActionReadBlockedCount
+{
+  return (NSInteger)atomic_load(&RunnerAXCustomActionReadBlocked);
 }
 
 + (nullable id)accessibilityClient

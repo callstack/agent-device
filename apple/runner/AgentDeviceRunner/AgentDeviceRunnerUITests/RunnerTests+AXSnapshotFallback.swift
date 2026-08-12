@@ -587,6 +587,7 @@ extension RunnerTests {
     let hung = HungAXClientForTesting()
     let element = NSObject()
     let dispatchesBefore = RunnerAXSnapshotBridge.customActionReadDispatchCount()
+    let blockedBefore = RunnerAXSnapshotBridge.customActionReadBlockedCount()
     defer { hung.release() }
 
     // 1. First read wedges. The caller is freed by the deadline, but the call is
@@ -603,22 +604,17 @@ extension RunnerTests {
       RunnerAXSnapshotBridge.customActionReadDispatchCount(), dispatchesBefore + 1)
 
     // 2. Repeats do NOT accumulate: no new dispatch, still exactly one in
-    //    flight, and they return immediately instead of paying the deadline.
+    //    flight, and every repeat is refused by single-flight admission.
     for _ in 0..<5 {
-      let started = Date()
       XCTAssertNil(
         RunnerAXSnapshotBridge.customActionNames(
           forElement: element, axClient: hung, completed: &completed))
       XCTAssertFalse(completed.boolValue)
-      // The refusal is an atomic check with no AX wait. XCTest's wall-clock
-      // sample can still include runner scheduling and diagnostic-log delivery
-      // under CI contention, so allow the 1s AX read deadline plus 0.5s of
-      // harness slack while keeping the no-work assertions below exact.
-      XCTAssertLessThan(-started.timeIntervalSinceNow, 1.5)
     }
     XCTAssertEqual(RunnerAXSnapshotBridge.customActionReadsInFlight(), 1)
     XCTAssertEqual(
       RunnerAXSnapshotBridge.customActionReadDispatchCount(), dispatchesBefore + 1)
+    XCTAssertEqual(RunnerAXSnapshotBridge.customActionReadBlockedCount(), blockedBefore + 5)
 
     // 3. A capture in that state discloses the skip rather than presenting the
     //    unread elements as action-free — and spends no read budget doing it.

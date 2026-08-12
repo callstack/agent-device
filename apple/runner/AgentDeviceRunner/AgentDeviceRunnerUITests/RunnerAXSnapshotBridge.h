@@ -97,6 +97,9 @@ FOUNDATION_EXPORT NSString *const RunnerAXSnapshotCustomActionsBlockedKey;
 /// adds no work", which is only observable as this counter standing still.
 + (NSInteger)customActionReadDispatchCount;
 
+/// Total reads refused by single-flight admission.
++ (NSInteger)customActionReadBlockedCount;
+
 /// The shared AX client (`XCUIDevice.accessibilityInterface`), or nil when the
 /// private interface is unavailable.
 + (nullable id)accessibilityClient;
