@@ -321,6 +321,7 @@ function recoveryFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperatio
       ensureReady: liveSessionUnavailable,
       bootTarget: liveSessionUnavailable,
       bootTargetHeadless: liveSessionUnavailable,
+      listApps: liveSessionUnavailable,
     },
   });
 }

@@ -1,5 +1,6 @@
 import {
   appStateUse,
+  appsRuntimeUse,
   bootTargetUse,
   narrowDeviceBinding,
   type PlatformRequestScope,
@@ -154,6 +155,7 @@ test('keeps exact-owner app-log recovery available without a process-local sessi
   expect(binding.operations.appLogReattach).toEqual(expect.any(Function));
   expect(binding.operations.appState).toBeUndefined();
   expect(binding.operations.ensureReady).toBeUndefined();
+  expect(binding.operations.listApps).toBeUndefined();
   expect(binding.facts.operations.appLogInspect).toMatchObject({
     available: false,
     reason: 'unsupported-provider-mode',
@@ -168,8 +170,13 @@ test('keeps exact-owner app-log recovery available without a process-local sessi
     available: false,
     reason: 'unsupported-provider-mode',
   });
+  expect(binding.facts.operations.listApps).toMatchObject({
+    available: false,
+    reason: 'unsupported-provider-mode',
+  });
   expect(() => narrowDeviceBinding(binding, appStateUse)).toThrow();
   expect(() => narrowDeviceBinding(binding, bootTargetUse)).toThrow();
+  expect(() => narrowDeviceBinding(binding, appsRuntimeUse)).toThrow();
   await expect(binding.operations.appLogReattach?.({ envelope })).resolves.toEqual({
     status: 'missing',
   });
