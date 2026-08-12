@@ -84,22 +84,25 @@ export function AutomationLabScreen(props: {
     };
   }, []);
 
+  useEffect(() => {
+    if (alertResult !== 'opened') return;
+
+    // The opened canary is committed before this effect; the smoke step separately waits for native presentation.
+    Alert.alert('Automation confirmation', 'Choose either result to update the visible canary.', [
+      {
+        style: 'cancel',
+        text: 'Cancel',
+        onPress: () => setAlertResult('cancelled'),
+      },
+      {
+        text: 'OK',
+        onPress: () => setAlertResult('accepted'),
+      },
+    ]);
+  }, [alertResult]);
+
   function showAutomationAlert() {
     setAlertResult('opened');
-    setTimeout(() => {
-      // The opened canary proves JS ran; the smoke step separately waits for native presentation.
-      Alert.alert('Automation confirmation', 'Choose either result to update the visible canary.', [
-        {
-          style: 'cancel',
-          text: 'Cancel',
-          onPress: () => setAlertResult('cancelled'),
-        },
-        {
-          text: 'OK',
-          onPress: () => setAlertResult('accepted'),
-        },
-      ]);
-    });
   }
 
   async function requestMicrophonePermission() {
