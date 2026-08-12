@@ -52,6 +52,8 @@ export {
 
 export { withNoColor } from './color.ts';
 
+export { mkdtempForTest } from './tmp-dir.ts';
+
 export { likelyPlayableWebmContainer } from './video-fixtures.ts';
 
 export {
