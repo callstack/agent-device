@@ -17,7 +17,7 @@ import { recordRuntimeDaemonMechanicsViolations } from './record-runtime-mechani
  */
 export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
   {
-    rule: 'R19 appstate-runtime-cutover',
+    rule: 'R21 appstate-runtime-cutover',
     command: 'appstate',
     subject: 'foreground app state',
     tier: 'request-scoped',
@@ -30,6 +30,10 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
     singularExecution: {
       routes: ['handleSessionStateCommands'],
       operations: ['ensureReady', 'appState'],
+      operationOwners: {
+        ensureReady: ['handleAppStateCommand'],
+        appState: ['handleAppStateCommand'],
+      },
     },
     extensions: [appStateLegacySessionHandlerViolations],
   },
