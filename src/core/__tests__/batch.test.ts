@@ -58,6 +58,23 @@ function batchRequest(commands: string[], responseLevel?: ResponseLevel): BatchR
   };
 }
 
+test('batch preserves typed error recovery signals from a failing step', async () => {
+  const response = await runBatch(batchRequest(['open']), 'session', async () => ({
+    ok: false,
+    error: {
+      code: 'DEVICE_IN_USE',
+      message: 'device busy',
+      retriable: true,
+      supportedOn: 'android, web',
+    },
+  }));
+
+  assert.equal(response.ok, false);
+  if (response.ok) return;
+  assert.equal(response.error.retriable, true);
+  assert.equal(response.error.supportedOn, 'android, web');
+});
+
 test('batch elides intermediate steps to digest, final step keeps requested level (full)', async () => {
   const seen: (ResponseLevel | undefined)[] = [];
   const response = await runBatch(
