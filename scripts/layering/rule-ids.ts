@@ -54,15 +54,12 @@ export function duplicateRuleIds(declarations: readonly RuleDeclaration[]): stri
 }
 
 /**
- * Collisions that predate this gate: `main` reuses R11 and R13 for two rules
- * each, which #1750 is renaming to R17/R18. Transitional, and each entry
- * expires on contact — see `ruleIdCollisionFailures`. Empty is the end state,
- * and the gate gets there on its own.
+ * Empty, which is the end state: the R11 and R13 collisions this list was opened
+ * for are gone (contracts-implementation-authority moved to R18, device-inventory-cutover
+ * to R17), so their allowances expired and were deleted with them. Every id now names
+ * exactly one rule, and an entry here would admit a collision nobody is fixing.
  */
-export const KNOWN_RULE_ID_COLLISIONS: readonly string[] = [
-  'R11 names contracts-implementation-authority and package-boundaries',
-  'R13 names device-inventory-cutover and platform-package-substrate',
-];
+export const KNOWN_RULE_ID_COLLISIONS: readonly string[] = [];
 
 /**
  * Both halves of the transition, because an allowance that outlives the thing
