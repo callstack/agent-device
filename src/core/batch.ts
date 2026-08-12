@@ -105,8 +105,12 @@ export async function runBatch(
             hint: stepResponse.error.hint,
             diagnosticId: stepResponse.error.diagnosticId,
             logPath: stepResponse.error.logPath,
-            retriable: stepResponse.error.retriable,
-            supportedOn: stepResponse.error.supportedOn,
+            ...(stepResponse.error.retriable === undefined
+              ? {}
+              : { retriable: stepResponse.error.retriable }),
+            ...(stepResponse.error.supportedOn === undefined
+              ? {}
+              : { supportedOn: stepResponse.error.supportedOn }),
             details: {
               ...(stepResponse.error.details ?? {}),
               step: stepResponse.step,
