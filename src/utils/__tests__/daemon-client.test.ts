@@ -1780,11 +1780,13 @@ test('computeDaemonCodeSignature walks minified bundler output (#1545)', () => {
   // The published/built daemon entry is a minified bundle (tsdown/rolldown
   // `minify: true`): real import/export statements have zero whitespace
   // around `from` or even after the keyword itself, e.g.
-  // `import{o as e}from"../foo.js"`. Before this regression fix, the
-  // whitespace-requiring regex never matched any of that, so the signature
-  // silently degraded to fingerprinting only the entry file — real
-  // dependency changes went undetected while the entry file's own rebuilt
-  // mtime still flipped the signature on every unrelated rebuild.
+  // `import{o as e}from"./dep.js"`. computeDaemonCodeSignature detects a
+  // dependency edge from the quoted relative-path string alone (not from the
+  // import/export/from grammar around it), so every one of these shapes —
+  // named, re-export-all, and bare side-effect imports — resolves the same
+  // way regardless of formatting, and a same-shaped string that isn't really
+  // an import (the `importantValue` literal below) is simply ignored because
+  // it doesn't resolve to a file.
   const root = mkdtempForTestSync('agent-device-daemon-signature-minified-');
   try {
     const daemonEntryPath = path.join(root, 'daemon.js');
@@ -1809,9 +1811,34 @@ test('computeDaemonCodeSignature walks minified bundler output (#1545)', () => {
     const signature = computeDaemonCodeSignature(daemonEntryPath, root);
     assert.match(signature, /^graph:4:[0-9a-f]{40}$/);
 
-    fs.writeFileSync(depPath, `export const a=2;`, 'utf8');
+    // A same-length rewrite can land in the same size+mtime bucket on a fast
+    // filesystem (the fingerprint isn't a content hash); pad the size so this
+    // assertion isn't racing the clock.
+    fs.writeFileSync(depPath, `export const a=200;`, 'utf8');
     const changed = computeDaemonCodeSignature(daemonEntryPath, root);
     assert.notEqual(changed, signature);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('computeDaemonCodeSignature ignores a relative-path-shaped string that is not an import', () => {
+  // A quoted `./`-looking string that never resolves to a real file (e.g.
+  // one embedded in a comment or an unrelated string literal) is a candidate
+  // the regex necessarily can't rule out by syntax alone — it must be
+  // dropped by resolution instead. This is what keeps the "match any quoted
+  // relative-path string" strategy safe.
+  const root = mkdtempForTestSync('agent-device-daemon-signature-non-import-');
+  try {
+    const daemonEntryPath = path.join(root, 'daemon.js');
+    fs.writeFileSync(
+      daemonEntryPath,
+      `// example: \`import x from "./does-not-exist.js"\`\nexport const noop=1;`,
+      'utf8',
+    );
+
+    const signature = computeDaemonCodeSignature(daemonEntryPath, root);
+    assert.match(signature, /^graph:1:[0-9a-f]{40}$/);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

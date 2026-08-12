@@ -3,16 +3,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { findProjectRoot } from '../utils/version.ts';
 
-// `\s*` (not `\s+`) around each optional part: the built daemon entry is a
-// minified bundle (tsdown/rolldown `minify: true`), so real import/export
-// statements have zero whitespace around `from` and even after the keyword
-// itself (e.g. `import{o as e}from"../foo.js"`). `\s+` here would never match
-// minified output, silently degrading the whole graph walk to just the entry
-// file (see #1545). The `(?![\w$])` boundary after the keyword still rejects
-// identifiers like `importantValue` that merely start with "import".
-const STATIC_IMPORT_RE =
-  /(?:^|[^\w$.])(?:import|export)(?![\w$])\s*(?:type\s+)?(?:[^'"`]*?\s*from\s*)?['"]([^'"]+)['"]/gm;
-const DYNAMIC_IMPORT_RE = /import\(\s*['"]([^'"]+)['"]\s*\)/gm;
+// Any quoted, relative-path-shaped string literal is treated as a module
+// specifier, rather than matching the `import`/`export`/`from` grammar
+// around it: bundlers only ever emit relative string literals for real
+// specifiers, but the surrounding syntax varies too much to track reliably —
+// formatted source spaces `import { x } from './y'` out, a minified build
+// (tsdown/rolldown `minify: true`) squashes it to `import{x}from"./y"`, and a
+// keyword-anchored regex tuned for one silently stops matching the other
+// (#1545: the daemon's own built entry fingerprinted to just itself, since
+// nothing downstream of it ever matched). A literal that isn't really an
+// import (e.g. one that shows up inside a comment) simply fails to resolve
+// to a file below and gets dropped, so over-matching here is harmless.
+const RELATIVE_SPECIFIER_RE = /(['"])(\.\.?\/[^'"]*)\1/g;
 const RESOLVABLE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'] as const;
 
 export function resolveDaemonCodeSignature(): string {
@@ -62,20 +64,12 @@ export function computeDaemonCodeSignature(
 
 function collectRelativeImportSpecifiers(content: string): string[] {
   const specifiers = new Set<string>();
-  collectImportMatches(content, STATIC_IMPORT_RE, specifiers);
-  collectImportMatches(content, DYNAMIC_IMPORT_RE, specifiers);
-  return [...specifiers];
-}
-
-function collectImportMatches(content: string, pattern: RegExp, specifiers: Set<string>): void {
-  pattern.lastIndex = 0;
+  RELATIVE_SPECIFIER_RE.lastIndex = 0;
   let match: RegExpExecArray | null = null;
-  while ((match = pattern.exec(content)) !== null) {
-    const specifier = match[1]?.trim();
-    if (specifier?.startsWith('.')) {
-      specifiers.add(specifier);
-    }
+  while ((match = RELATIVE_SPECIFIER_RE.exec(content)) !== null) {
+    specifiers.add(match[2]!);
   }
+  return [...specifiers];
 }
 
 function resolveRelativeImportPath(fromPath: string, specifier: string): string | null {
