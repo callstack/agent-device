@@ -179,13 +179,15 @@ function readHeader(
 }
 
 function parseSourceUrl(raw: string): URL {
+  let parsed: URL;
   try {
-    const parsed = new URL(raw);
-    if (parsed.username || parsed.password) {
-      throw new AppError('INVALID_ARGS', 'Source URL credentials are not allowed');
-    }
-    return parsed;
+    parsed = new URL(raw);
   } catch {
     throw new AppError('INVALID_ARGS', 'Invalid source URL');
   }
+
+  if (parsed.username || parsed.password) {
+    throw new AppError('INVALID_ARGS', 'Source URL credentials are not allowed');
+  }
+  return parsed;
 }
