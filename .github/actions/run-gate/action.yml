@@ -22,14 +22,15 @@ runs:
         INPUT_ARGS: ${{ inputs.args }}
       run: |
         set -euo pipefail
-        args=()
+        command=(pnpm gate "$INPUT_GATE")
         while IFS= read -r arg; do
           if [ -n "$arg" ]; then
-            args+=("$arg")
+            command+=("$arg")
           fi
         done <<< "$INPUT_ARGS"
         output_file="$(mktemp)"
-        pnpm gate "$INPUT_GATE" "${args[@]}" | tee "$output_file"
+        trap 'rm -f "$output_file"' EXIT
+        "${command[@]}" | tee "$output_file"
         {
           echo 'result<<__GATE_OUTPUT__'
           tail -n 1 "$output_file"

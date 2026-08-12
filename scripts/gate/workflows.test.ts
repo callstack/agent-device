@@ -20,7 +20,7 @@ const tracked = execFileSync('git', ['ls-files'], {
   .filter(Boolean);
 const model = loadModel(repoRoot, tracked);
 
-test('the canonical action binds its structural gate input to pnpm gate', () => {
+test('the canonical action binds and runs a structural gate without optional arguments', () => {
   const action = parse(
     fs.readFileSync(path.join(repoRoot, '.github/actions/run-gate/action.yml'), 'utf8'),
   ) as {
@@ -31,6 +31,26 @@ test('the canonical action binds its structural gate input to pnpm gate', () => 
   const runner = action.runs.steps.at(-1);
   assert.equal(runner?.env?.INPUT_GATE, '${{ inputs.gate }}');
   assert.match(runner?.run ?? '', /pnpm gate "\$INPUT_GATE"/);
+
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'run-gate-'));
+  try {
+    const mockPnpm = path.join(root, 'pnpm');
+    fs.writeFileSync(mockPnpm, '#!/bin/bash\nprintf "%s\\n" "$@"\n');
+    fs.chmodSync(mockPnpm, 0o755);
+    const stdout = execFileSync('/bin/bash', ['-c', runner?.run ?? ''], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        PATH: `${root}:${process.env.PATH ?? ''}`,
+        INPUT_GATE: 'layering',
+        INPUT_ARGS: '',
+        GITHUB_OUTPUT: path.join(root, 'output'),
+      },
+    });
+    assert.equal(stdout, 'gate\nlayering\n');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 /** Write a workflow (and optionally a tree of actions) and load it with the real loader. */
