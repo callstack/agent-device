@@ -1776,6 +1776,47 @@ test('computeDaemonCodeSignature fingerprints the daemon runtime import graph', 
   }
 });
 
+test('computeDaemonCodeSignature walks minified bundler output (#1545)', () => {
+  // The published/built daemon entry is a minified bundle (tsdown/rolldown
+  // `minify: true`): real import/export statements have zero whitespace
+  // around `from` or even after the keyword itself, e.g.
+  // `import{o as e}from"../foo.js"`. Before this regression fix, the
+  // whitespace-requiring regex never matched any of that, so the signature
+  // silently degraded to fingerprinting only the entry file — real
+  // dependency changes went undetected while the entry file's own rebuilt
+  // mtime still flipped the signature on every unrelated rebuild.
+  const root = mkdtempForTestSync('agent-device-daemon-signature-minified-');
+  try {
+    const daemonEntryPath = path.join(root, 'daemon.js');
+    const depPath = path.join(root, 'dep.js');
+    const reExportPath = path.join(root, 're-export.js');
+    const sideEffectPath = path.join(root, 'side-effect.js');
+    fs.writeFileSync(
+      daemonEntryPath,
+      [
+        `import{a as x}from"./dep.js";`,
+        `export*from"./re-export.js";`,
+        `import"./side-effect.js";`,
+        `const importantValue="not-an-import";`,
+        `export{x};`,
+      ].join(''),
+      'utf8',
+    );
+    fs.writeFileSync(depPath, `export const a=1;`, 'utf8');
+    fs.writeFileSync(reExportPath, `export const b=1;`, 'utf8');
+    fs.writeFileSync(sideEffectPath, `globalThis.sideEffect=1;`, 'utf8');
+
+    const signature = computeDaemonCodeSignature(daemonEntryPath, root);
+    assert.match(signature, /^graph:4:[0-9a-f]{40}$/);
+
+    fs.writeFileSync(depPath, `export const a=2;`, 'utf8');
+    const changed = computeDaemonCodeSignature(daemonEntryPath, root);
+    assert.notEqual(changed, signature);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('stopDaemonProcessForTakeover terminates a matching daemon process', async (t) => {
   const root = mkdtempForTestSync('agent-device-daemon-test-');
   const daemonDir = path.join(root, 'agent-device', 'dist', 'src', 'internal');

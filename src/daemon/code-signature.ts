@@ -3,8 +3,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { findProjectRoot } from '../utils/version.ts';
 
+// `\s*` (not `\s+`) around each optional part: the built daemon entry is a
+// minified bundle (tsdown/rolldown `minify: true`), so real import/export
+// statements have zero whitespace around `from` and even after the keyword
+// itself (e.g. `import{o as e}from"../foo.js"`). `\s+` here would never match
+// minified output, silently degrading the whole graph walk to just the entry
+// file (see #1545). The `(?![\w$])` boundary after the keyword still rejects
+// identifiers like `importantValue` that merely start with "import".
 const STATIC_IMPORT_RE =
-  /(?:^|[^\w$.])(?:import|export)\s+(?:type\s+)?(?:[^'"`]*?\s+from\s+)?['"]([^'"]+)['"]/gm;
+  /(?:^|[^\w$.])(?:import|export)(?![\w$])\s*(?:type\s+)?(?:[^'"`]*?\s*from\s*)?['"]([^'"]+)['"]/gm;
 const DYNAMIC_IMPORT_RE = /import\(\s*['"]([^'"]+)['"]\s*\)/gm;
 const RESOLVABLE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'] as const;
 
