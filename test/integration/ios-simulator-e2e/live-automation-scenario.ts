@@ -148,9 +148,14 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
   await assertWaitText(context, 'Long presses: 1');
   verifyCommand(context, C.longPress, '800ms hold increments the long-press counter');
 
-  await runStep(context, 'scroll native alert canary into view', ['scroll', 'down', '1']);
+  await assertElementTextAfterScrolling(
+    context,
+    'id="automation-open-alert"',
+    'Open automation alert',
+  );
   await runStep(context, 'open native alert', ['click', 'id="automation-open-alert"']);
-  const alert = await runStep(context, 'wait for native alert', ['alert', 'wait', '5000']);
+  await assertWaitText(context, 'Alert result: opened');
+  const alert = await runStep(context, 'wait for native alert', ['alert', 'wait', '10000']);
   assertJsonContains(alert, 'Automation confirmation', 'alert wait should return fixture alert');
   await runStep(context, 'inspect native alert', ['alert', 'get']);
   await runStep(context, 'dismiss native alert', ['alert', 'dismiss']);

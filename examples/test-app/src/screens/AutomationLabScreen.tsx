@@ -85,17 +85,20 @@ export function AutomationLabScreen(props: {
   }, []);
 
   function showAutomationAlert() {
-    Alert.alert('Automation confirmation', 'Choose either result to update the visible canary.', [
-      {
-        style: 'cancel',
-        text: 'Cancel',
-        onPress: () => setAlertResult('cancelled'),
-      },
-      {
-        text: 'OK',
-        onPress: () => setAlertResult('accepted'),
-      },
-    ]);
+    setAlertResult('opened');
+    requestAnimationFrame(() => {
+      Alert.alert('Automation confirmation', 'Choose either result to update the visible canary.', [
+        {
+          style: 'cancel',
+          text: 'Cancel',
+          onPress: () => setAlertResult('cancelled'),
+        },
+        {
+          text: 'OK',
+          onPress: () => setAlertResult('accepted'),
+        },
+      ]);
+    });
   }
 
   async function requestMicrophonePermission() {
