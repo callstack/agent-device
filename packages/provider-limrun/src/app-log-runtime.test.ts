@@ -1,5 +1,6 @@
 import {
   appStateUse,
+  bootTargetUse,
   narrowDeviceBinding,
   type PlatformRequestScope,
   type PlatformRuntimeHost,
@@ -168,6 +169,7 @@ test('keeps exact-owner app-log recovery available without a process-local sessi
     reason: 'unsupported-provider-mode',
   });
   expect(() => narrowDeviceBinding(binding, appStateUse)).toThrow();
+  expect(() => narrowDeviceBinding(binding, bootTargetUse)).toThrow();
   await expect(binding.operations.appLogReattach?.({ envelope })).resolves.toEqual({
     status: 'missing',
   });
