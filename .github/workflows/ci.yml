@@ -116,6 +116,17 @@ jobs:
         # rather than in its own job so the two can never be green independently.
         run: pnpm depgraph:test
 
+      # Tests for the TMPDIR redirection itself, hidden the same way as the check above.
+      #
+      # Deliberately NOT in Coverage next to `check:tmpdir-leaks`, where the subject matter
+      # would put it: vitest-tmpdir-global-setup.test.ts proves the lifecycle by spawning a
+      # real nested `vitest run`, and the Coverage lane already loses runs to
+      # `[vitest-pool]: Worker forks emitted error` when a fork is slow to terminate.
+      # Starting a nested Vitest seconds before the full instrumented suite is a contention
+      # risk with nothing to gain.
+      - name: Check the tmpdir redirection model
+        run: pnpm check:tmpdir-leaks:test
+
   affected-selector:
     name: Affected-check Selector
     runs-on: ubuntu-latest
@@ -287,6 +298,13 @@ jobs:
           OUTPUT_ECONOMY_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: pnpm test:coverage:ci
 
+      # The TMPDIR redirection both test lanes depend on (#1593/#1595). The check is a real
+      # package script that no workflow ran: it is reachable only through `check:unit`, an
+      # aggregate CI never invokes, so a leak regression could not fail a PR. Placed here
+      # because this is the lane whose instrumented suite would leak a run directory.
+      - name: Check for leaked temp directories
+        run: pnpm check:tmpdir-leaks
+
       - name: Upload contention-retry envelope
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -371,6 +389,11 @@ jobs:
       # failing `gh`.
       - name: Setup-fixture-app cache-failure fallback
         run: sh ./test/scripts/setup-fixture-app-fallback-smoke.sh
+
+      # The trusted-artifact contract the device lanes rely on to decide a cached fixture
+      # app is the one this commit expects. A real test file that no workflow ran.
+      - name: Check the trusted fixture-artifact contract
+        run: pnpm test:fixture-cache
 
   web-smoke:
     name: Web Platform Smoke
