@@ -1,8 +1,8 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
-import { workspaceSpecifierTargets } from './scripts/layering/package-boundaries.ts';
 import { readTestScope, threadHostileTestFiles } from './scripts/mutation/test-scope.ts';
+import { workspaceSourceAliases } from './scripts/mutation/workspace-aliases.ts';
 import { SUBPROCESS_STUB_TESTS } from './vitest.config.ts';
 
 const repoRoot = path.dirname(fileURLToPath(import.meta.url));
@@ -16,10 +16,7 @@ const repoRoot = path.dirname(fileURLToPath(import.meta.url));
 // which Stryker copies into the sandbox — keeps resolution inside the mutated
 // tree. Entries come from the shared exports-map reader, never a wildcard, so
 // this cannot resolve package internals the boundary forbids (R11).
-const workspaceAliases = [...workspaceSpecifierTargets(repoRoot)].map(([find, target]) => ({
-  find,
-  replacement: path.join(repoRoot, target),
-}));
+const workspaceAliases = workspaceSourceAliases(repoRoot);
 
 // Test scope for the decision-kernel mutation lane (issue #1415).
 //
