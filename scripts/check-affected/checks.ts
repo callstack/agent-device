@@ -93,7 +93,10 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   gate('wire-compat-model', 'Wire-compat rules model', 'check:daemon-wire-compat:test'),
   gate('production-exports', 'Production-unused exports', 'check:production-exports'),
   gate('bundle-owner-files', 'Bundle owner-file manifest', 'check:bundle-owner-files'),
-  gate('freerange', 'Numeric range audit', 'check:freerange'),
+  // Not locally runnable: `@chenglou/freerange`'s bin is `fr.ts`, so the CI job installs Bun
+  // for it and `pnpm check` never runs this gate. Left default, fail-open would have made
+  // every `scripts/**`/`.github/**`/`package.json` edit require Bun on the pre-push path.
+  gate('freerange', 'Numeric range audit', 'check:freerange', false),
   gate('fixture-cache', 'Trusted fixture-artifact selection', 'test:fixture-cache'),
   gate('fixture-fallback', 'Fixture-app cache-failure fallback', 'test:fixture-fallback'),
   gate('command-docs', 'Command reference doc coverage', 'check:command-docs'),
@@ -133,6 +136,7 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   gate('replay-ios-device', 'iOS physical device replay suite', 'test:replay:ios-device', false),
   gate('replay-macos', 'macOS replay suite', 'test:replay:macos', false),
   gate('replay-linux', 'Linux replay suite', 'test:replay:linux', false),
+  gate('replay-android', 'Android replay suite', 'test:replay:android', false),
 ];
 
 export function getCheckSpec(id: CheckId): CheckSpec {

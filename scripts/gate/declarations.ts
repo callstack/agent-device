@@ -107,6 +107,25 @@ export const GATE_CONDITIONS: Readonly<Record<string, GateCondition>> = {
 };
 
 /**
+ * `test:*` scripts that REPORT rather than assert, so they are not suites needing an owner.
+ *
+ * The `registered` assertion treats a `test:*` script as a suite by name, because the
+ * `test:replay:*` scripts run `node src/bin.ts test <dir>` and no shape rule can see them.
+ * That name rule over-fires on a reporter. Listing one is deliberate friction: a genuinely
+ * unowned suite must not be silenced by adding a line here without a reason.
+ *
+ * Fails in both directions — an entry naming no script, or one whose script does gate, is
+ * reported as inert.
+ */
+export const REPORTING_SCRIPTS: Readonly<Record<string, string>> = {
+  'test:integration:progress': [
+    'Prints the provider-backed integration status table and exits 0. The assertion lives in',
+    'its `--check` sibling, `test:integration:progress:check`, which IS the registered',
+    '`integration-progress` gate. Running the reporter in CI would gate nothing.',
+  ].join(' '),
+};
+
+/**
  * Checks no lane can be PROVEN to run, with the reason ownership is unprovable rather than
  * absent. Distinct from a waiver: nothing here is excused from needing an owner, it is
  * recorded that the owner exists outside what the tree can show.
@@ -115,6 +134,13 @@ export const GATE_CONDITIONS: Readonly<Record<string, GateCondition>> = {
  * qualifying lane is inert and must be deleted.
  */
 export const UNPROVABLE_OWNERS: Readonly<Record<string, string>> = {
+  'replay-android': [
+    'Replay Nightly / Android Replay Suite runs `pnpm gate replay-android`, but inside the',
+    '`script:` input of `reactivecircus/android-emulator-runner` — shell handed to a',
+    'third-party action, which this loader does not read. The suite executes; the manifest',
+    'cannot see it. Routing the emulator lane through steps it can read is the open item',
+    'named in #1429.',
+  ].join(' '),
   'replay-ios-device': [
     "Replay Nightly / iOS Replay Suite runs it, guarded by `env.IOS_UDID != ''`.",
     'Whether that repository variable is set is configuration this tree cannot read, so the',

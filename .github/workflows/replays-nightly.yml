@@ -146,8 +146,7 @@ jobs:
             FULL_FINISHED_AT="$(date +%s)"
             echo "Android setup before emulator: $((BOOT_FINISHED_AT - ${{ steps.android-setup.outputs.seconds }}))s"
             echo "Android full scenario wall time: $((FULL_FINISHED_AT - FULL_STARTED_AT))s"
-            node --experimental-strip-types src/bin.ts test test/integration/replays/android/01-settings.ad --retries 2 --artifacts-dir test/artifacts/replays-android-settings --report-junit test/artifacts/replays-android-settings.junit.xml
-            node --experimental-strip-types src/bin.ts test test/integration/replays/android/02-deep-navigation.ad test/integration/replays/android/03-scroll-discovery.ad test/integration/replays/android/04-text-input-keyboard.ad test/integration/replays/android/05-app-lifecycle.ad test/integration/replays/android/06-swipe-gestures.ad --artifacts-dir test/artifacts/replays-android --report-junit test/artifacts/replays-android.junit.xml
+            pnpm gate replay-android --retries 2 --artifacts-dir test/artifacts/replays-android --report-junit test/artifacts/replays-android.junit.xml
 
       - name: Upload Android artifacts
         if: always()

@@ -3,15 +3,17 @@
 // All of them are phrased against one primitive — `covered(check, path)` from model.ts —
 // so there is no per-guarantee machinery to keep honest.
 //
-// The scope is deliberately "is this gate still running?", and nothing wider. It does NOT
-// try to prove that a lane runs project code ONLY through `pnpm gate`: deciding whether a
-// shell block executes project code is not decidable from its text, and the attempt cost
-// #1714 twelve review rounds and ~2,400 lines without finding a defect. Shell this model
-// does not recognise simply earns no ownership credit, so the failure direction is a check
-// reported unowned, never a check waved through.
+// The scope is "is this gate still running?", and nothing wider: shell this model does not
+// recognise earns no ownership credit, so the failure direction is a check reported unowned,
+// never a check waved through.
 
 import { CHECK_CATALOG } from '../check-affected/checks.ts';
-import { GATE_ACTIONS, GATE_CONDITIONS, UNPROVABLE_OWNERS } from './declarations.ts';
+import {
+  GATE_ACTIONS,
+  GATE_CONDITIONS,
+  REPORTING_SCRIPTS,
+  UNPROVABLE_OWNERS,
+} from './declarations.ts';
 import { categories, checkUnits, covered, scriptUnits, type Model } from './model.ts';
 
 export type Failure = { readonly assertion: string; readonly message: string };
@@ -213,6 +215,18 @@ function inertOpaque(model: Model): Failure[] {
   });
 }
 
+function inertReporting(model: Model): Failure[] {
+  return Object.keys(REPORTING_SCRIPTS).flatMap((script) => {
+    if (!(script in model.scripts)) {
+      return [fail('inert', `reporting-script declaration "${script}" is not a package script.`)];
+    }
+    const covered = attestedUnits(model).has(`script:${script}`);
+    return covered
+      ? [fail('inert', `reporting-script "${script}" is covered by a check; delete the entry.`)]
+      : [];
+  });
+}
+
 function inertConditions(model: Model): Failure[] {
   const seen = new Set(
     model.lanes
@@ -253,16 +267,33 @@ function attestedUnits(model: Model): Set<string> {
   );
 }
 
-// 8. Every suite belongs to a check. A script that runs a Vitest project or a
-//    `node --test` file, and is reachable from no registered check, is a suite
-//    nobody owns — which is how the two defects on `main` stayed invisible.
+/**
+ * Is this unit a test suite that needs an owner?
+ *
+ * A Vitest project and a `node --test` file are recognised by shape. A `script:` leaf is
+ * anything else the resolver could not decompose, so shape says nothing — but a `test:*`
+ * script is a suite by NAME whatever it runs underneath.
+ *
+ * That last clause is not cosmetic. The five `test:replay:*` scripts run
+ * `node src/bin.ts test <dir>`, which resolves to a `script:` leaf, so a shape-only test
+ * could not see them: four were owned because someone hand-registered them, and
+ * `test:replay:android` was neither registered nor reported while the nightly ran the same
+ * six `.ad` files by inlining them. A real suite with no owner and a green manifest is the
+ * exact defect this file exists to make impossible.
+ */
+function isSuite(unit: string, script: string): boolean {
+  if (unit.startsWith('vitest:') || unit.startsWith('node-test:')) return true;
+  if (script in REPORTING_SCRIPTS) return false;
+  return unit === `script:${script}` && script.startsWith('test:');
+}
+
+// 8. Every suite belongs to a check. A suite reachable from no registered check is one
+//    nobody owns — which is how the defects on `main` stayed invisible.
 function unregisteredSuites(model: Model): Failure[] {
   const owned = attestedUnits(model);
   return Object.keys(model.scripts).flatMap((script) => {
     const units = scriptUnits(script, model);
-    const suites = units.filter(
-      (unit) => unit.startsWith('vitest:') || unit.startsWith('node-test:'),
-    );
+    const suites = units.filter((unit) => isSuite(unit, script));
     if (suites.length === 0) return [];
     const orphans = suites.filter(
       (unit) => ![...owned].some((have) => have === unit || unit.startsWith(`${have}@`)),
@@ -298,6 +329,7 @@ export function audit(model: Model): Failure[] {
     ...unregisteredSuites(model),
     ...orphanProjects(model),
     ...inertOpaque(model),
+    ...inertReporting(model),
     ...inertConditions(model),
   ];
 }

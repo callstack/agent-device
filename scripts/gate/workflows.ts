@@ -49,10 +49,8 @@ export type Lane = {
 /**
  * One shell block a lane reaches, with EVERY `if:` standing between the lane and it.
  *
- * A list rather than one condition: an earlier revision stored the caller's guard with
- * `guard[0] ?? step.condition`, so a crediting outer condition (`always()`) REPLACED an
- * inner `if: false` and credited a gate that cannot execute. Every guard has to hold, so
- * every guard has to be kept.
+ * A list, not one condition: every guard between the lane and the step has to hold, so a
+ * crediting outer `always()` must not be able to replace an inner `if: false`.
  */
 export type LaneStep = {
   readonly run: string;
@@ -73,16 +71,11 @@ const GATE_CAPTURE = /^[A-Za-z_][A-Za-z0-9_]*=\$\((.*)$/;
  * Shell that decides whether later commands run, or that quotes text as data. A body
  * containing any of it earns NO gate credit at all.
  *
- * #1429 requires that reachability is not inferred "from a command name merely appearing in
- * workflow text", and a substring scan does exactly that: `false && pnpm gate x`, a gate
- * inside `if false; then … fi`, and a gate named in a heredoc or an `echo` all credited a
- * gate that never runs. This tree has a live instance — conformance-regenerate.yml's
- * "Fail if regeneration changed anything" step names `pnpm gate maestro-regenerate` inside
- * an error message telling a human to run it.
- *
- * Deciding reachability inside a shell script is not decidable, so this does not try:
- * anything with structure is simply not credited, and the check reports unowned until a
- * human wires it as a plain step. Over-conservative in the safe direction.
+ * #1429 forbids inferring reachability "from a command name merely appearing in workflow
+ * text". Reachability inside a script is not decidable, so this does not try: a body with
+ * structure earns nothing and the check reports unowned until someone wires it as a plain
+ * step. Live instance — conformance-regenerate.yml names `pnpm gate maestro-regenerate`
+ * inside an error message telling a human to run it.
  */
 const SHELL_STRUCTURE =
   /(?:^|[\s;&|(])(?:if|then|elif|else|fi|case|esac|while|until|for|do|done|function|eval|exec|source|trap|exit)(?:\s|$)|<</m;
@@ -383,13 +376,29 @@ export function loadLanes(
     );
 }
 
-/** GitHub's filter glob: `**` spans separators, `*` stops at one. */
+/**
+ * GitHub's filter glob: `*` stops at a separator, `**` spans them — and matches ZERO
+ * directories as well as many, so `src/**\/*.test.ts` matches `src/a.test.ts`. Joining the
+ * `**` splits with a plain `.*` left the surrounding slashes mandatory and missed that case.
+ */
 export function matchesGlob(pattern: string, file: string): boolean {
-  const source = pattern
-    .split('**')
-    .map((part) => part.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*'))
-    .join('.*');
-  return new RegExp(`^${source}$`).test(file);
+  const escape = (part: string) =>
+    part.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*');
+  // Longest form first: `/**/` must win over the `/**` and `**` that sit inside it.
+  return new RegExp(
+    `^${pattern
+      .split(/(\/\*\*\/|\/\*\*|\*\*\/|\*\*)/)
+      .map((part) => {
+        // `**` matches zero directories as well as many, so the slash beside it is optional
+        // WITH it — that is the whole difference from joining the splits with a plain `.*`.
+        if (part === '/**/') return '/(?:.*/)?';
+        if (part === '**/') return '(?:.*/)?';
+        if (part === '/**') return '(?:/.*)?';
+        if (part === '**') return '.*';
+        return escape(part);
+      })
+      .join('')}$`,
+  ).test(file);
 }
 
 /** Whether a change to `file` alone starts this lane's workflow. */

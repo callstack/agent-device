@@ -11,7 +11,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { audit } from './audit.ts';
 import { categories, covered, loadModel, type Model } from './model.ts';
-import type { Lane } from './workflows.ts';
+import { matchesGlob, type Lane } from './workflows.ts';
 import { CHECK_CATALOG } from '../check-affected/checks.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
@@ -165,4 +165,48 @@ test('categories are derived from the tracked tree, so no sample can be fictiona
   const docs = found.find((category) => category.rule === 'own:command-docs');
   assert.equal(docs?.path, 'website/docs/docs/commands.md');
   assert.deepEqual(docs?.checks, ['command-docs']);
+});
+
+test('a `test:*` script that is a suite by name, not by shape, needs an owner', () => {
+  // The five `test:replay:*` scripts run `node src/bin.ts test <dir>`, which resolves to a
+  // `script:` leaf. A shape-only rule could not see them: four were owned because someone
+  // hand-registered them, and `test:replay:android` was neither registered nor reported.
+  const model = mutate((m) => ({
+    scripts: { ...m.scripts, 'test:replay:freebsd': 'node src/bin.ts test test/replays/freebsd' },
+  }));
+  assert.ok(
+    messages(model).some((message) =>
+      /package script "test:replay:freebsd" runs script:test:replay:freebsd/.test(message),
+    ),
+    'a new test:* script with no catalog entry must fail `registered`',
+  );
+});
+
+test('a reporting `test:*` script is declared, and the declaration is not free', () => {
+  // The name rule over-fires on `test:integration:progress`, which prints a table and exits
+  // 0 — its `--check` sibling is the registered gate. Declared, and the declaration has to
+  // stay load-bearing: one naming no script is inert.
+  const model = mutate((m) => ({
+    scripts: Object.fromEntries(
+      Object.entries(m.scripts).filter(([name]) => name !== 'test:integration:progress'),
+    ),
+  }));
+  assert.ok(
+    messages(model).some((message) =>
+      /reporting-script declaration "test:integration:progress" is not a package script/.test(
+        message,
+      ),
+    ),
+  );
+});
+
+test('GitHub `**` matches zero directories, so a path-filter check cannot go green wrongly', () => {
+  assert.equal(
+    matchesGlob('packages/*/src/**/*.test.ts', 'packages/selectors/src/index.test.ts'),
+    true,
+  );
+  assert.equal(matchesGlob('src/**/*.test.ts', 'src/a.test.ts'), true);
+  assert.equal(matchesGlob('src/**/*.test.ts', 'src/deep/a.test.ts'), true);
+  assert.equal(matchesGlob('src/**/*.test.ts', 'src/a.ts'), false);
+  assert.equal(matchesGlob('website/**', 'other/x.md'), false);
 });
