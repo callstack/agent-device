@@ -75,6 +75,21 @@ test('batch preserves typed error recovery signals from a failing step', async (
   assert.equal(response.error.supportedOn, 'android, web');
 });
 
+test('batch keeps unknown typed error recovery signals absent', async () => {
+  const response = await runBatch(batchRequest(['open']), 'session', async () => ({
+    ok: false,
+    error: {
+      code: 'INVALID_ARGS',
+      message: 'bad args',
+    },
+  }));
+
+  assert.equal(response.ok, false);
+  if (response.ok) return;
+  assert.equal('retriable' in response.error, false);
+  assert.equal('supportedOn' in response.error, false);
+});
+
 test('batch elides intermediate steps to digest, final step keeps requested level (full)', async () => {
   const seen: (ResponseLevel | undefined)[] = [];
   const response = await runBatch(
