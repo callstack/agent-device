@@ -71,6 +71,7 @@ test('download errors do not disclose URL credentials or query values', async ()
       headers: { authorization: 'private-header' },
       signal: new AbortController().signal,
     }).catch((caught: unknown) => caught);
+    assert.match((error as Error).message, /credentials are not allowed/i);
     const serialized = JSON.stringify(error);
     for (const secret of ['private-user', 'private-pass', 'private-query', 'private-header']) {
       assert.equal(serialized.includes(secret), false, secret);
