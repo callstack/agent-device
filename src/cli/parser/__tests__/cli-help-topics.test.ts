@@ -287,7 +287,7 @@ test('usageForCommand resolves web help topic', async () => {
   const help = await usageForCommand('web');
   if (help === null) throw new Error('Expected web help text');
   assert.match(help, /^agent-device \S+ — web/);
-  assert.match(help, /agent-device uses a managed, pinned agent-browser backend/);
+  assert.match(help, /Browser mechanics come from a managed, pinned agent-browser backend/);
   assert.match(help, /agent-device owns command\/session\/replay integration/);
   assert.match(help, /agent-browser owns browser launch, page control, screenshots/);
   assert.match(

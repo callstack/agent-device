@@ -291,7 +291,7 @@ Vega OS:
   vega virtual-device stop
   Use a component ID from the app package or Vega SDK tooling; agent-device app inventory is not yet supported.
   Use --serial VirtualDevice for explicit VVD selection.
-  agent-device does not boot the VVD implicitly.
+  The VVD is never booted implicitly; start it with vega virtual-device start.
   Snapshot, screenshot, selectors, install, touch/text/gesture, logs, and performance commands remain unsupported until their Vega backends are implemented.
 
 Buttons:
@@ -838,6 +838,7 @@ Open and inspect:
   agent-device snapshot -i --platform macos
 
 Surfaces:
+  --surface is an open flag; the session keeps it, so later commands do not repeat it.
   --surface app            normal app session
   --surface frontmost-app  inspect whichever app is frontmost
   --surface desktop        desktop-wide surface
@@ -845,7 +846,7 @@ Surfaces:
 
 Menu bar app example:
   agent-device open "Agent Device Tester Menu" --platform macos --surface menubar
-  agent-device snapshot -i --platform macos --surface menubar
+  agent-device snapshot -i --platform macos
 
 Context menu example:
   agent-device click @e66 --button secondary --platform macos
@@ -865,7 +866,7 @@ Rules:
 Use --platform web only for the minimal browser command loop exposed through agent-device.
 
 Dependency:
-  agent-device uses a managed, pinned agent-browser backend for browser mechanics. agent-device owns command/session/replay integration, selectors/refs at the command surface, and artifact routing; agent-browser owns browser launch, page control, screenshots, and browser-specific behavior.
+  Browser mechanics come from a managed, pinned agent-browser backend. agent-device owns command/session/replay integration, selectors/refs at the command surface, and artifact routing; agent-browser owns browser launch, page control, screenshots, and browser-specific behavior.
   Use --platform web when a browser step belongs inside an agent-device session, replay, batch, MCP, or typed-client flow. Use agent-browser directly for standalone web automation.
   Before first use, set up and verify the managed backend:
     agent-device web setup
