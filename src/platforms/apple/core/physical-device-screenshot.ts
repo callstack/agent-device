@@ -25,10 +25,13 @@ export async function captureCoreDeviceScreenshot(
 ): Promise<void> {
   if (!options.preferRunner) {
     try {
-      await runIosDevicectl(['device', 'screenshot', '--device', device.id, outPath], {
-        action: 'capture iOS screenshot',
-        deviceId: device.id,
-      });
+      await runIosDevicectl(
+        ['device', 'capture', 'screenshot', '--device', device.id, '--destination', outPath],
+        {
+          action: 'capture iOS screenshot',
+          deviceId: device.id,
+        },
+      );
       return;
     } catch (error) {
       if (!shouldFallbackToRunnerForIosScreenshot(error)) throw error;
