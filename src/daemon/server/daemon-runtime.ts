@@ -107,11 +107,16 @@ export async function teardownDaemonSessionForShutdown(params: {
   afterSuccessfulTeardown?: (session: SessionState) => Promise<void>;
 }): Promise<void> {
   const { session, sessionStore, stateDir, stderr, beforeDelete, afterSuccessfulTeardown } = params;
+  const sessionName = sessionStore.resolveStoredSessionName(session);
   const timeoutMs = resolveDaemonSessionTeardownTimeoutMs(session);
   // The ownership-fenced app-log side effect must settle while this process
   // still owns the daemon lock. It is intentionally outside the generic
   // teardown race so lock release and runtime shutdown cannot overtake it.
-  const appLogTeardownSucceeded = await stopSessionAppLog({ session, sessionStore }).then(
+  const appLogTeardownSucceeded = await stopSessionAppLog({
+    session,
+    sessionName,
+    sessionStore,
+  }).then(
     () => true,
     (error) => {
       stderr.write(
@@ -122,11 +127,11 @@ export async function teardownDaemonSessionForShutdown(params: {
       return false;
     },
   );
-  const sessionAfterAppLog = sessionStore.get(session.name) ?? session;
+  const sessionAfterAppLog = sessionStore.get(sessionName) ?? session;
   const teardown = teardownSessionResources({
     appLog: 'already-settled',
     session: sessionAfterAppLog,
-    sessionName: session.name,
+    sessionName,
     sessionStore,
     stateDir,
   }).then(
@@ -154,7 +159,7 @@ export async function teardownDaemonSessionForShutdown(params: {
   sessionStore.finalizeRepairTeardown(session);
   await beforeDelete?.(session);
   if (teardownSucceeded) await afterSuccessfulTeardown?.(session);
-  sessionStore.delete(session.name);
+  sessionStore.delete(sessionName);
 }
 
 export type DaemonRuntimeOptions = {

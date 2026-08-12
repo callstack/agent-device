@@ -127,3 +127,38 @@ test('daemon shutdown awaits durable recording finalization inside its extended 
   expect(stderrChunks.join('')).not.toMatch(/timed out/);
   expect(sessionStore.get(session.name)).toBeUndefined();
 });
+
+test('daemon shutdown resolves durable recording resources through the effective session key', async () => {
+  const root = mkdtempForTestSync('agent-device-shutdown-effective-session-');
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const effectiveSessionName = 'cwd:0123456789abcdef:default';
+  const session = makeRecordingSession({
+    name: effectiveSessionName,
+    sessionStore,
+    finish: async () => ({
+      status: 'completed' as const,
+      result: {
+        backend: 'simctl recordVideo',
+        outPath: path.join(root, 'recording.mp4'),
+        startedAt: 1,
+        completedAt: 2,
+        scope: 'app' as const,
+        showTouches: false,
+        recordOnlySession: false,
+      },
+    }),
+  });
+  session.name = 'default';
+  sessionStore.set(effectiveSessionName, session);
+  const stderrChunks: string[] = [];
+
+  await teardownDaemonSessionForShutdown({
+    session,
+    sessionStore,
+    stateDir: root,
+    stderr: { write: (chunk) => stderrChunks.push(chunk) },
+  });
+
+  expect(stderrChunks.join('')).not.toMatch(/resource record is missing/);
+  expect(sessionStore.get(effectiveSessionName)).toBeUndefined();
+});

@@ -43,15 +43,16 @@ export async function stopAppleRunnerForClose(session: SessionState): Promise<vo
 
 export async function stopSessionAppLog(params: {
   session: SessionState;
+  sessionName: string;
   sessionStore: SessionStore;
 }): Promise<void> {
-  const { session, sessionStore } = params;
+  const { session, sessionName, sessionStore } = params;
   if (!session.appLog) return;
   await forceCleanupSessionAppLog({
     session,
-    sessionName: session.name,
+    sessionName,
     sessionStore,
-    resourcePath: appLogResourceStore.resolvePath(sessionStore.resolveSessionDir(session.name)),
+    resourcePath: appLogResourceStore.resolvePath(sessionStore.resolveSessionDir(sessionName)),
   });
 }
 
@@ -170,7 +171,7 @@ export async function teardownSessionResources(
       ? [
           {
             step: 'app_log',
-            run: () => stopSessionAppLog({ session, sessionStore }),
+            run: () => stopSessionAppLog({ session, sessionName, sessionStore }),
           },
         ]
       : [];

@@ -309,7 +309,11 @@ export class SessionStore {
     return expandSessionPath(filePath, cwd);
   }
 
-  private resolveStoredSessionName(session: SessionState): string {
+  /**
+   * Resolve the map key for a live session object. SessionState.name is the
+   * public session name, while the map key may include cwd/tenant isolation.
+   */
+  resolveStoredSessionName(session: SessionState): string {
     for (const [name, value] of this.sessions) {
       if (value === session) return name;
     }

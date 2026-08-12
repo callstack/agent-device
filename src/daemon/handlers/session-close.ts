@@ -107,7 +107,7 @@ async function runSessionCloseTeardown(params: {
     }
   };
   const retainAppleRunner = shouldRetainAppleRunnerAfterClose(req, session);
-  await stopBestEffortSessionResources(session, sessionStore, attemptCleanup);
+  await stopBestEffortSessionResources(session, sessionName, sessionStore, attemptCleanup);
   const platformCloseError = repairArmed
     ? undefined
     : await dispatchTargetedPlatformClose({ req, session, logPath });
@@ -126,21 +126,22 @@ type CleanupRunner = (step: string, run: () => Promise<void>) => Promise<void>;
 
 async function stopBestEffortSessionResources(
   session: SessionState,
+  sessionName: string,
   sessionStore: SessionStore,
   attemptCleanup: CleanupRunner,
 ): Promise<void> {
   // Recording overlay finalization needs the Apple runner.
-  const currentSession = sessionStore.get(session.name) ?? session;
+  const currentSession = sessionStore.get(sessionName) ?? session;
   if (currentSession.screenRecording) {
     await attemptCleanup('recording', () =>
       finishSessionScreenRecording({
         session: currentSession,
-        sessionName: session.name,
+        sessionName,
         sessionStore,
       }),
     );
   }
-  await attemptCleanup('app_log', () => stopSessionAppLog({ session, sessionStore }));
+  await attemptCleanup('app_log', () => stopSessionAppLog({ session, sessionName, sessionStore }));
   await attemptCleanup('audio_probe', async () => {
     await stopSessionAudioProbe(session, 'session-close');
   });

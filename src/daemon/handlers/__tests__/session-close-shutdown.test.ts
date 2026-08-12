@@ -543,6 +543,33 @@ test('close finalizes an active iOS simulator recording before deleting the sess
   );
 });
 
+test('close resolves a recording resource through the effective session key', async () => {
+  const sessionStore = makeSessionStore();
+  const effectiveSessionName = 'cwd:0123456789abcdef:default';
+  const session = makeIosSimulatorRecordingSession(sessionStore, effectiveSessionName);
+  session.name = 'default';
+  const finish = recordingFinishMock(session);
+  sessionStore.set(effectiveSessionName, session);
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: 'default',
+      command: 'close',
+      positionals: [],
+      flags: {},
+    },
+    sessionName: effectiveSessionName,
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(finish).toHaveBeenCalledOnce();
+  expect(sessionStore.get(effectiveSessionName)).toBeUndefined();
+});
+
 test('close surfaces a recording finalization failure through the cleanup-failure channel', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-recording-close-failure-session';
