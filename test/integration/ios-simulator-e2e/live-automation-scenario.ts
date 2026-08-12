@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { DEFAULT_ALERT_TIMEOUT_MS } from '@agent-device/contracts/interaction';
+
 import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
 import {
   assertElementText,
@@ -13,6 +15,7 @@ import { clearStateLaunchUrlMaestroFlow } from './live-fixtures.ts';
 import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live-harness.ts';
 
 const C = PUBLIC_COMMANDS;
+const ALERT_WAIT_TIMEOUT = String(DEFAULT_ALERT_TIMEOUT_MS);
 const FIXTURE_HOME_TITLE = 'Agent Device Tester';
 const AUTOMATION_DEEP_LINK =
   'agent-device-test-app:///automation?event=cold.start&payload=%7B%22source%22%3A%22deep-link%22%7D';
@@ -31,6 +34,22 @@ async function observeFixtureHome(context: LiveContext) {
     `home snapshot nodes should expose ${FIXTURE_HOME_TITLE}: ${JSON.stringify(snapshot.json)}`,
   );
   return snapshot;
+}
+
+async function assertAutomationAlertTriggerVisible(context: LiveContext): Promise<void> {
+  const visible = await runStep(context, 'assert automation-open-alert is visible', [
+    'is',
+    'visible',
+    'id="automation-open-alert"',
+  ]);
+  assert.equal(visible.json?.data?.pass, true, JSON.stringify(visible.json));
+}
+
+async function openNativeAlert(context: LiveContext, step: string): Promise<void> {
+  await assertAutomationAlertTriggerVisible(context);
+  await runStep(context, step, ['click', 'id="automation-open-alert"']);
+  // The canary proves JS ran and the state update is observable; alert wait proves native presentation.
+  await assertWaitText(context, 'Alert result: opened');
 }
 
 export async function assertAutomationInput(context: LiveContext): Promise<void> {
@@ -153,15 +172,28 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
     'id="automation-open-alert"',
     'Open automation alert',
   );
-  await runStep(context, 'open native alert', ['click', 'id="automation-open-alert"']);
-  await assertWaitText(context, 'Alert result: opened');
-  const alert = await runStep(context, 'wait for native alert', ['alert', 'wait', '10000']);
+  await openNativeAlert(context, 'open native alert');
+  const alert = await runStep(context, 'wait for native alert', [
+    'alert',
+    'wait',
+    ALERT_WAIT_TIMEOUT,
+  ]);
   assertJsonContains(alert, 'Automation confirmation', 'alert wait should return fixture alert');
   await runStep(context, 'inspect native alert', ['alert', 'get']);
   await runStep(context, 'dismiss native alert', ['alert', 'dismiss']);
   await assertWaitText(context, 'Alert result: cancelled');
 
-  await runStep(context, 'reopen native alert', ['click', 'id="automation-open-alert"']);
+  await openNativeAlert(context, 'reopen native alert');
+  const reopenedAlert = await runStep(context, 'wait for reopened native alert', [
+    'alert',
+    'wait',
+    ALERT_WAIT_TIMEOUT,
+  ]);
+  assertJsonContains(
+    reopenedAlert,
+    'Automation confirmation',
+    'alert wait should return the reopened fixture alert',
+  );
   await runStep(context, 'accept native alert', ['alert', 'accept']);
   await assertWaitText(context, 'Alert result: accepted');
   verifyCommand(context, C.alert, 'alert wait/get/dismiss/accept produce both fixture outcomes');

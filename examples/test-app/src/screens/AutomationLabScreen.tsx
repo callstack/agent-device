@@ -86,7 +86,8 @@ export function AutomationLabScreen(props: {
 
   function showAutomationAlert() {
     setAlertResult('opened');
-    requestAnimationFrame(() => {
+    setTimeout(() => {
+      // The opened canary proves JS ran; the smoke step separately waits for native presentation.
       Alert.alert('Automation confirmation', 'Choose either result to update the visible canary.', [
         {
           style: 'cancel',
