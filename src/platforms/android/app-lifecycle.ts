@@ -46,6 +46,14 @@ const ANDROID_CLOSE_FOCUS_POLL_MS = 50;
 const ANDROID_CLOSE_PROCESS_TIMEOUT_MS = 2_000;
 const ANDROID_CLOSE_PROCESS_POLL_MS = 50;
 const ANDROID_CLOSE_PROCESS_GONE_STABLE_MS = 150;
+const ANDROID_FOREGROUND_COMMANDS = [
+  ['shell', 'dumpsys', 'window', 'windows'],
+  ['shell', 'dumpsys', 'window'],
+  ['shell', 'dumpsys', 'activity', 'activities'],
+  ['shell', 'dumpsys', 'activity'],
+] as const;
+const ANDROID_FOCUS_LINE =
+  /(?:(mCurrentFocus=Window\{)|(mFocusedApp=AppWindowToken\{)|(mResumedActivity:)|(ResumedActivity:))(.*)$/gm;
 
 type AndroidAppResolution = { type: 'intent' | 'package'; value: string };
 
@@ -201,8 +209,12 @@ export function inferAndroidAppName(packageName: string): string {
 }
 
 export async function getAndroidAppState(device: DeviceInfo): Promise<AppStateRuntimeResult> {
-  const { readAndroidAppState } = await import('../../platform-runtime.ts');
-  return await readAndroidAppState(device, new AbortController().signal);
+  for (const args of ANDROID_FOREGROUND_COMMANDS) {
+    const result = await runAndroidAdb(device, [...args], { allowFailure: true });
+    const state = parseLegacyAndroidForegroundApp(result.stdout ?? '');
+    if (state) return state;
+  }
+  return {};
 }
 
 export async function getAndroidBlockingDialogFocus(
@@ -645,6 +657,19 @@ async function waitForAndroidPackageNotForeground(
 async function readAndroidForegroundApp(device: DeviceInfo): Promise<AppStateRuntimeResult | null> {
   const foreground = await getAndroidAppState(device);
   return foreground.package ? foreground : null;
+}
+
+function parseLegacyAndroidForegroundApp(text: string): AppStateRuntimeResult | null {
+  for (const match of text.matchAll(ANDROID_FOCUS_LINE)) {
+    const segment = match[5];
+    const component = segment?.match(
+      /\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\/([A-Za-z0-9_.$]+)/,
+    );
+    if (component?.[1] && component[2]) {
+      return { package: component[1], activity: component[2] };
+    }
+  }
+  return null;
 }
 
 async function waitForAndroidPackageProcessGone(

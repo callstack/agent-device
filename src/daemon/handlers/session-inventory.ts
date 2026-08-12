@@ -192,27 +192,15 @@ async function capabilitiesInventoryResponse(params: {
   if ('response' in resolution) return resolution.response;
   const { device } = resolution;
   const session = params.sessionStore.get(params.sessionName);
-  const sessionOwnedAppStateAvailable =
-    session !== undefined &&
-    (isIosFamily(device) || isMacOs(device)) &&
-    selectorTargetsSessionDevice(params.req.flags, session) &&
-    (session.appName !== undefined ||
-      session.appBundleId !== undefined ||
-      (isMacOs(device) &&
-        session.surface !== undefined &&
-        session.surface !== 'app' &&
-        session.surface !== 'frontmost-app'));
+  const sessionOwnedAppStateAvailable = isSessionOwnedAppStateAvailable(
+    device,
+    session,
+    params.req.flags,
+  );
   const facts =
     sessionOwnedAppStateAvailable || params.inspectFacts === undefined
       ? undefined
       : await inspectRuntimeFacts(device, params.inspectFacts);
-  const appsAvailable =
-    facts?.operations.ensureReady.available === true &&
-    facts.operations.listApps.available === true;
-  const appStateAvailable =
-    sessionOwnedAppStateAvailable === true ||
-    (facts?.operations.ensureReady.available === true &&
-      facts.operations.appState.available === true);
   const [logsAvailable, networkAvailable, recordingAvailable] = params.bindDevice
     ? await Promise.all([
         params
@@ -231,20 +219,81 @@ async function capabilitiesInventoryResponse(params: {
     data: {
       device: publicDeviceInfo(device),
       availableCommands: listCapabilityCommands().filter((command) =>
-        command === 'logs'
-          ? logsAvailable
-          : command === 'network'
-            ? networkAvailable
-            : command === 'record'
-              ? recordingAvailable
-              : command === 'apps'
-                ? appsAvailable
-                : command === 'appstate'
-                  ? appStateAvailable
-                  : isCommandSupportedOnDevice(command, device),
+        isCapabilityCommandAvailable(command, device, {
+          apps: hasRuntimeOperation(facts, 'listApps'),
+          appstate: sessionOwnedAppStateAvailable || hasRuntimeOperation(facts, 'appState'),
+          logs: logsAvailable,
+          network: networkAvailable,
+          record: recordingAvailable,
+        }),
       ),
     },
   };
+}
+
+type CapabilityAvailability = Readonly<{
+  apps: boolean;
+  appstate: boolean;
+  logs: boolean;
+  network: boolean;
+  record: boolean;
+}>;
+
+type RuntimeFacts = Awaited<ReturnType<InspectDeviceRuntimeFacts>>;
+
+function isSessionOwnedAppStateAvailable(
+  device: DeviceInfo,
+  session: ReturnType<SessionStore['get']>,
+  flags: DaemonRequest['flags'],
+): boolean {
+  if (!session) return false;
+  if (!isIosFamily(device) && !isMacOs(device)) return false;
+  if (!selectorTargetsSessionDevice(flags, session)) return false;
+  return hasSessionAppIdentity(session) || hasMacSessionSurface(device, session);
+}
+
+function hasSessionAppIdentity(session: NonNullable<ReturnType<SessionStore['get']>>): boolean {
+  return Boolean(session.appName || session.appBundleId);
+}
+
+function hasMacSessionSurface(
+  device: DeviceInfo,
+  session: NonNullable<ReturnType<SessionStore['get']>>,
+): boolean {
+  return Boolean(
+    isMacOs(device) &&
+    session.surface !== undefined &&
+    session.surface !== 'app' &&
+    session.surface !== 'frontmost-app',
+  );
+}
+
+function hasRuntimeOperation(
+  facts: RuntimeFacts | undefined,
+  operation: 'listApps' | 'appState',
+): boolean {
+  return facts?.operations.ensureReady.available === true && facts.operations[operation].available;
+}
+
+function isCapabilityCommandAvailable(
+  command: string,
+  device: DeviceInfo,
+  availability: CapabilityAvailability,
+): boolean {
+  switch (command) {
+    case 'logs':
+      return availability.logs;
+    case 'network':
+      return availability.network;
+    case 'record':
+      return availability.record;
+    case 'apps':
+      return availability.apps;
+    case 'appstate':
+      return availability.appstate;
+    default:
+      return isCommandSupportedOnDevice(command, device);
+  }
 }
 
 async function handleAppsInventory(params: {

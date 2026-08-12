@@ -42,14 +42,6 @@ import { createComposedPlatformRuntimeGateway } from './platform-runtime-gateway
 import type { PlatformRuntimeProviderRegistration } from './platform-runtime-gateway.ts';
 import { createComposedDeviceInventoryGateways } from './platform-runtime-device-inventory.ts';
 
-export async function readAndroidAppState(
-  device: Parameters<AppStateRuntimeHost['android']['run']>[0],
-  signal: AbortSignal,
-): Promise<AppStateRuntimeResult> {
-  const { createAppStateRuntimeHost } = await import('./platform-runtime-app-state-host.ts');
-  return await readAndroidAppStateWithHost(createAppStateRuntimeHost().android, device, signal);
-}
-
 export async function readAndroidAppStateWithHost(
   host: AppStateRuntimeHost['android'],
   device: Parameters<AppStateRuntimeHost['android']['run']>[0],
