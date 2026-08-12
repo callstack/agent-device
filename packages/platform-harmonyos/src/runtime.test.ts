@@ -61,9 +61,9 @@ test.each([
   expect(facts.operations.bootTargetHeadless).toMatchObject({ available: false });
   expect(facts.operations.listApps).toEqual({ available: true });
   await expect(binding.operations.ensureReady?.({})).resolves.toMatchObject({ booted: true });
-  await expect(binding.operations.listApps?.({ device: runtimeDevice, filter: 'all' })).resolves.toEqual([
-    { id: 'com.example.application', name: 'application' },
-  ]);
+  await expect(
+    binding.operations.listApps?.({ device: runtimeDevice, filter: 'all' }),
+  ).resolves.toEqual([{ id: 'com.example.application', name: 'application' }]);
   expect(listApps).toHaveBeenCalledWith(runtimeDevice, 'all', expect.any(AbortSignal));
   await expect(binding.operations.appState?.()).resolves.toEqual({
     package: 'com.example.harmony',
