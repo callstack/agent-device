@@ -2,9 +2,24 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
   classifyAndroidInputOwnership,
+  isAndroidInputMethodNode,
   parseAndroidInputMethodPackage,
   readAndroidActiveInputMethodPackage,
 } from '@agent-device/contracts/platform';
+
+test('classifies raw snapshot nodes through the node-shaped IME predicate', () => {
+  assert.equal(
+    isAndroidInputMethodNode({
+      bundleId: 'com.google.android.inputmethod.latin',
+      identifier: 'com.google.android.inputmethod.latin:id/key',
+    }),
+    true,
+  );
+  assert.equal(
+    isAndroidInputMethodNode({ bundleId: 'com.example.app', identifier: 'save' }),
+    false,
+  );
+});
 
 test('classifies active input method package as IME-owned', () => {
   assert.deepEqual(

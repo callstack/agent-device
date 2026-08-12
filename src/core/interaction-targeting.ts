@@ -124,19 +124,7 @@ export function isRootInteractionContainer(
   );
 }
 
-/**
- * The retarget itself. Runtime callers reach it through the promotion stage of
- * `selector-pipeline-policy.ts`, which is what decides whether a given caller
- * promotes at all; this stays exported for that runner and for focused tests.
- */
-export function resolveActionableTouchNode(
-  nodes: SnapshotNode[],
-  node: SnapshotNode,
-): SnapshotNode {
-  return resolveActionableTouchResolution(nodes, node).node;
-}
-
-/** @internal Exposed for focused policy tests; runtime callers should use resolveActionableTouchNode. */
+/** @internal Exposed for focused policy tests. */
 export function resolveActionableTouchResolution(
   nodes: SnapshotNode[],
   node: SnapshotNode,

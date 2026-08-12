@@ -239,11 +239,7 @@ function collectAndroidSettleChrome(
   appBundleId: string | undefined,
 ): SettleChrome {
   const byIndex = new Map(nodes.map((node) => [node.index, node]));
-  const imeIndexes = new Set(
-    nodes
-      .filter(isAndroidInputMethodNode)
-      .map((node) => node.index),
-  );
+  const imeIndexes = new Set(nodes.filter(isAndroidInputMethodNode).map((node) => node.index));
   const imeContainerIndexes = new Set(
     [...imeIndexes].filter((index) => {
       const parentIndex = byIndex.get(index)?.parentIndex;

@@ -4,6 +4,7 @@ import type { RawSnapshotNode, Rect, SnapshotNode } from '@agent-device/kernel/s
 import {
   buildSnapshotNodeMap,
   extractNodeText,
+  findNearestAncestor,
   findNearestScrollableAncestor,
   findSnapshotAncestor,
   isFillableType,
@@ -28,8 +29,6 @@ test('snapshot text semantics normalize roles, identify fillable controls, and e
   assert.equal(isFillableType('android.widget.EditText', 'android'), true);
   assert.equal(
     extractNodeText({
-      index: 0,
-      ref: '@e0',
       label: '  ',
       value: '  Enter name  ',
       identifier: 'name',
@@ -66,6 +65,19 @@ test('findSnapshotAncestor terminates on a parent-linkage cycle without resolvin
   );
 
   assert.equal(ancestor, null);
+});
+
+test('findNearestAncestor adapts a predicate to the shared tree walk', () => {
+  const nodes: SnapshotNode[] = [
+    { ref: 'e10', index: 10, type: 'Window' },
+    { ref: 'e30', index: 30, parentIndex: 20, type: 'Text' },
+    { ref: 'e20', index: 20, parentIndex: 10, type: 'Cell' },
+  ];
+
+  assert.equal(
+    findNearestAncestor(nodes, nodes[1]!, (ancestor) => ancestor.type === 'Window')?.index,
+    10,
+  );
 });
 
 test('snapshot tree and scroll semantics identify nodes through their stable indexes', () => {

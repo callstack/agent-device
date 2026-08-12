@@ -1,5 +1,9 @@
 export { isScrollableNodeLike, isScrollableType } from '../snapshot-scroll.ts';
-export { buildSnapshotNodeMap, findNearestAncestor, findSnapshotAncestor } from '../snapshot-tree.ts';
+export {
+  buildSnapshotNodeMap,
+  findNearestAncestor,
+  findSnapshotAncestor,
+} from '../snapshot-tree.ts';
 export {
   findNearestScrollableAncestor,
   isNodeVisibleInEffectiveViewport,
@@ -10,4 +14,9 @@ export {
   resolveEffectiveViewportRect,
   resolveViewportRect,
 } from '../snapshot-visibility.ts';
-export { extractNodeText, isFillableType, isMeaningfulLabel, normalizeType } from '../snapshot-text.ts';
+export {
+  extractNodeText,
+  isFillableType,
+  isMeaningfulLabel,
+  normalizeType,
+} from '../snapshot-text.ts';

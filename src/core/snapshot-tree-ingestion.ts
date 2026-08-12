@@ -1,5 +1,9 @@
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { extractNodeText, isMeaningfulLabel, normalizeType } from '@agent-device/contracts/snapshot';
+import {
+  extractNodeText,
+  isMeaningfulLabel,
+  normalizeType,
+} from '@agent-device/contracts/snapshot';
 
 export function normalizeSnapshotTree(nodes: RawSnapshotNode[]): RawSnapshotNode[] {
   const originalToNormalizedIndex = new Map<number, number>();
