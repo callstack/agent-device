@@ -26,6 +26,7 @@ import {
   type CapturedSnapshotQuality,
 } from './snapshot-quality-latch.ts';
 import { createDaemonRuntimePolicy } from './runtime-policy.ts';
+import { captureSparseFallbackScreenshot } from './sparse-fallback-screenshot.ts';
 import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
 import { getRequestSignal } from '../request/cancel.ts';
 import { isInteractiveObservation } from './session-action-recorder.ts';
@@ -53,19 +54,29 @@ export async function dispatchSnapshotViaRuntime(params: {
         customActions: req.flags?.snapshotCustomActions,
         forceFull: req.flags?.snapshotForceFull,
       });
-      // #1076 versioned refs: the snapshot response is a ref-issuing response,
-      // so it carries the stored tree's generation ONCE (`refsGeneration`) —
-      // the node tree itself stays plain `e12` refs (token economy). The
-      // capture above already stored the next session via setRecord, so the
-      // store holds the generation these refs were minted from.
-      const refsGeneration = publishedSnapshotGeneration(req, params.sessionStore.get(sessionName));
+      const session = params.sessionStore.get(sessionName);
+      const refsGeneration = publishedSnapshotGeneration(req, session);
       // ADR 0014: retain provenance in the immutable operational/ref-frame tree;
       // project only the published copy so settle and replay keep the full evidence.
       const publicNodes = stripAndroidSystemChromeProvenance(result.nodes);
       const publicResult =
         publicNodes === result.nodes ? result : { ...result, nodes: publicNodes };
+      const fallbackScreenshot = await captureSparseFallbackScreenshot({
+        req,
+        session,
+        sessionName,
+        logPath: params.logPath,
+        verdict: result.snapshotQuality,
+      });
+      const published = fallbackScreenshot
+        ? {
+            ...publicResult,
+            fallbackScreenshotPath: fallbackScreenshot.path,
+            artifacts: [fallbackScreenshot.artifact],
+          }
+        : publicResult;
       return {
-        data: refsGeneration === undefined ? publicResult : { ...publicResult, refsGeneration },
+        data: refsGeneration === undefined ? published : { ...published, refsGeneration },
         record: {
           kind: 'snapshot',
           nodes: result.nodes.length,

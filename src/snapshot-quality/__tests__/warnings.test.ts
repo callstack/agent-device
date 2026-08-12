@@ -68,7 +68,25 @@ test('renderSnapshotQualityWarnings rejects semantic targets from a sparse tree'
 
   assert.deepEqual(warnings, [
     'No snapshot backend could read this screen (snapshot returned no semantic controls or content). Its refs and selectors are invalid. Use screenshot as visual truth and coordinate taps; retry snapshot after navigating.',
+    'This screen publishes no accessibility content at all; assistive technologies see the same empty tree, so it is worth flagging as an app accessibility bug rather than only an automation limitation.',
   ]);
+});
+
+test('sparse warnings blame the app only when the backends reached the screen', () => {
+  for (const reasonCode of ['ax-rejected', 'budget', 'no-nodes', 'capture-failed'] as const) {
+    const warnings = renderSnapshotQualityWarnings(
+      { state: 'sparse', backend: 'tree', reason: 'capture gave up', reasonCode },
+      [],
+    );
+
+    assert.deepEqual(
+      warnings,
+      [
+        'No snapshot backend could read this screen (capture gave up). Its refs and selectors are invalid. Use screenshot as visual truth and coordinate taps; retry snapshot after navigating.',
+      ],
+      `${reasonCode} is a limit of this tool, not an app accessibility defect`,
+    );
+  }
 });
 
 const pinned = {

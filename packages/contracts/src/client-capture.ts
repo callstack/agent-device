@@ -43,6 +43,11 @@ export type CaptureSnapshotResult = {
   visibility?: SnapshotVisibility;
   unchanged?: SnapshotUnchanged;
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
+  /**
+   * Screenshot captured automatically when the semantic snapshot was sparse.
+   * Remote clients receive a materialized local path through the daemon artifact channel.
+   */
+  fallbackScreenshotPath?: string;
   identifiers: AgentDeviceIdentifiers;
   /**
    * ADR 0014: the response-level ref-frame epoch the plain node refs were minted

@@ -115,6 +115,76 @@ test('finalizeDaemonResponse registers downloadable artifact type', () => {
   ]);
 });
 
+test('finalizeDaemonResponse registers an unexpected output artifact without a client path', () => {
+  const req: DaemonRequest = {
+    token: 'token',
+    session: 'default',
+    command: 'snapshot',
+    positionals: [],
+    meta: { tenantId: 'tenant-a' },
+  };
+  const response: DaemonResponse = {
+    ok: true,
+    data: {
+      fallbackScreenshotPath: '/tmp/snapshot-fallback.png',
+      artifacts: [
+        {
+          field: 'fallbackScreenshotPath',
+          artifactType: 'screenshot',
+          path: '/tmp/snapshot-fallback.png',
+          fileName: 'snapshot-fallback.png',
+        },
+      ],
+    },
+  };
+
+  const finalized = finalizeDaemonResponse(req, response, () => 'artifact-id');
+
+  expect(finalized).toEqual({
+    ok: true,
+    data: {
+      fallbackScreenshotPath: '/tmp/snapshot-fallback.png',
+      artifacts: [
+        {
+          field: 'fallbackScreenshotPath',
+          artifactType: 'screenshot',
+          artifactId: 'artifact-id',
+          fileName: 'snapshot-fallback.png',
+          localPath: undefined,
+        },
+      ],
+    },
+  });
+});
+
+test('finalizeDaemonResponse leaves unrelated local-path artifacts unregistered', () => {
+  const req: DaemonRequest = {
+    token: 'token',
+    session: 'default',
+    command: 'record',
+    positionals: ['stop'],
+  };
+  const response: DaemonResponse = {
+    ok: true,
+    data: {
+      artifacts: [
+        {
+          field: 'recordingPath',
+          artifactType: 'screen-recording',
+          path: '/tmp/recording.mp4',
+          fileName: 'recording.mp4',
+        },
+      ],
+    },
+  };
+
+  const finalized = finalizeDaemonResponse(req, response, () => {
+    throw new Error('local-only artifact must not be registered');
+  });
+
+  expect(finalized).toEqual(response);
+});
+
 test('finalizeDaemonResponse keeps screenshot path fallback as screenshot artifact type', () => {
   const req: DaemonRequest = {
     token: 'token',

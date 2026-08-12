@@ -51,6 +51,34 @@ test('digest tolerates missing/empty node trees', () => {
   expect(digest).toMatchObject({ nodeCount: 0, refs: [], truncated: true });
 });
 
+test('snapshot digest keeps sparse fallback screenshot retrieval data', () => {
+  const artifacts = [
+    {
+      field: 'fallbackScreenshotPath',
+      artifactType: 'screenshot',
+      path: '/tmp/snapshot-fallback.png',
+      fileName: 'snapshot-fallback.png',
+    },
+  ];
+  const digest = snapshotView!(
+    {
+      nodes: [],
+      truncated: false,
+      snapshotQuality: { state: 'sparse', backend: 'private-ax' },
+      warnings: ['Use screenshot as visual truth.'],
+      fallbackScreenshotPath: '/tmp/snapshot-fallback.png',
+      artifacts,
+    },
+    'digest',
+  );
+
+  expect(digest).toMatchObject({
+    fallbackScreenshotPath: '/tmp/snapshot-fallback.png',
+    warnings: ['Use screenshot as visual truth.'],
+    artifacts,
+  });
+});
+
 const overlayRef = (ref: string, label: string | undefined) => ({
   ref,
   ...(label !== undefined ? { label } : {}),

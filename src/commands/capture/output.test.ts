@@ -76,3 +76,21 @@ test('distinct labels across the chain are all preserved', () => {
   assert.equal(jsonNodes[0]!.label, 'Map');
   assert.equal(jsonNodes[1]!.label, 'Anthropic HQ');
 });
+
+test('snapshot output presents the materialized fallback screenshot path', () => {
+  const result = {
+    ...buildResult([]),
+    fallbackScreenshotPath: '/client/artifacts/snapshot-fallback.png',
+  };
+
+  const output = snapshotCliOutput({ result });
+
+  assert.equal(
+    (output.jsonData as Record<string, unknown>).fallbackScreenshotPath,
+    '/client/artifacts/snapshot-fallback.png',
+  );
+  assert.match(
+    output.text ?? '',
+    /Captured a screenshot of this screen automatically as visual truth: \/client\/artifacts\/snapshot-fallback\.png/,
+  );
+});

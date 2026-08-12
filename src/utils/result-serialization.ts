@@ -192,6 +192,9 @@ export function serializeSnapshotResult(result: CaptureSnapshotResult): Record<s
     ...publicSnapshotCaptureAnnotations(snapshotResultAnnotations(result)),
     ...(result.unchanged ? { unchanged: result.unchanged } : {}),
     ...(result.snapshotDiagnostics ? { snapshotDiagnostics: result.snapshotDiagnostics } : {}),
+    ...(result.fallbackScreenshotPath
+      ? { fallbackScreenshotPath: result.fallbackScreenshotPath }
+      : {}),
     // ADR 0014: a ref-issuing snapshot retains its response-level generation so
     // JSON callers can pair a plain `@e12` with `~s<refsGeneration>` before a mutation.
     ...(result.refsGeneration !== undefined ? { refsGeneration: result.refsGeneration } : {}),

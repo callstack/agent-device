@@ -128,8 +128,8 @@ function collectPendingArtifacts(req: DaemonRequest, data: DaemonResponseData): 
       artifact &&
       typeof artifact.field === 'string' &&
       typeof artifact.path === 'string' &&
-      typeof artifact.localPath === 'string' &&
-      artifact.localPath.length > 0,
+      ((typeof artifact.localPath === 'string' && artifact.localPath.length > 0) ||
+        (artifact.field === 'fallbackScreenshotPath' && artifact.artifactType === 'screenshot')),
     ),
   );
 }

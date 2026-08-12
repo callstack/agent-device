@@ -74,9 +74,22 @@ function stateWarning(verdict: SnapshotQualityVerdict): string[] {
       'No snapshot backend could read this screen' +
         (verdict.reason ? ` (${verdict.reason})` : '') +
         '. Its refs and selectors are invalid. Use screenshot as visual truth and coordinate taps; retry snapshot after navigating.',
+      ...appAccessibilityDefectWarning(verdict),
     ];
   }
   return [];
+}
+
+/**
+ * Only `sparse-tree` is evidence about the app: every backend reached the screen and it
+ * published no semantic content. Other sparse reasons describe capture limits and must
+ * not be presented as an application accessibility defect.
+ */
+function appAccessibilityDefectWarning(verdict: SnapshotQualityVerdict): string[] {
+  if (verdict.reasonCode !== 'sparse-tree') return [];
+  return [
+    'This screen publishes no accessibility content at all; assistive technologies see the same empty tree, so it is worth flagging as an app accessibility bug rather than only an automation limitation.',
+  ];
 }
 
 function depthWarning(verdict: SnapshotQualityVerdict): string[] {

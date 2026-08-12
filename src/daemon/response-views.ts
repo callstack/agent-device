@@ -16,7 +16,8 @@ const DIGEST_REF_LIMIT = 12;
 /**
  * Token-cheap snapshot digest: the node count plus the first N actionable refs
  * (hittable and not occluded) with a label, and the cheap top-level signals
- * (`truncated`, `visibility`, `snapshotQuality`). The full node tree — the
+ * (`truncated`, `visibility`, `snapshotQuality`) plus any fallback screenshot
+ * retrieval handle. The full node tree — the
  * dominant token sink — is dropped. `full` returns today's shape unchanged
  * (nothing richer is computed yet).
  */
@@ -33,6 +34,11 @@ function snapshotView(data: DaemonResponseData, level: ResponseLevel): DaemonRes
     truncated: data.truncated,
     ...(data.visibility !== undefined ? { visibility: data.visibility } : {}),
     ...(data.snapshotQuality !== undefined ? { snapshotQuality: data.snapshotQuality } : {}),
+    ...(data.warnings !== undefined ? { warnings: data.warnings } : {}),
+    ...(data.fallbackScreenshotPath !== undefined
+      ? { fallbackScreenshotPath: data.fallbackScreenshotPath }
+      : {}),
+    ...(data.artifacts !== undefined ? { artifacts: data.artifacts } : {}),
     // #1076 versioned refs: the one-number generation is the pinning signal for
     // the refs above — cheap, and dropping it would strand auto-pinning clients.
     ...(data.refsGeneration !== undefined ? { refsGeneration: data.refsGeneration } : {}),

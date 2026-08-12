@@ -493,7 +493,7 @@ function buildSnapshotNotices(
   options: SnapshotTextOptions,
   helperPresentation: AndroidHelperPresentationInput = { nodes, filteredCount: 0 },
 ): string[] {
-  const notices = readSnapshotWarnings(data);
+  const notices = [...readSnapshotWarnings(data), ...fallbackScreenshotNotices(data)];
   // The structured snapshot quality verdict already carries a sharper version of this hint.
   if (shouldRenderLegacySparseSnapshotHint(data)) {
     const sparseSnapshotHint = formatSparseSnapshotHint(nodes, options);
@@ -509,6 +509,13 @@ function buildSnapshotNotices(
     notices.push('Warning: possible repeated nav subtree detected.');
   }
   return notices;
+}
+
+function fallbackScreenshotNotices(data: Record<string, unknown>): string[] {
+  const fallbackPath = data.fallbackScreenshotPath;
+  return typeof fallbackPath === 'string' && fallbackPath.length > 0
+    ? [`Captured a screenshot of this screen automatically as visual truth: ${fallbackPath}`]
+    : [];
 }
 
 function shouldRenderLegacySparseSnapshotHint(data: Record<string, unknown>): boolean {

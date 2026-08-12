@@ -520,7 +520,9 @@ the observable freshness and failure semantics below before any runtime refactor
   stabilization is active.
 - Sparse snapshot quality verdicts are observable failures. Sparse captures must not replace
   `session.snapshot`, and selector routes should report the sparse verdict instead of treating a
-  root-only or sparse tree as an empty UI.
+  root-only or sparse tree as an empty UI. The user-facing `snapshot` dispatch publishes a fallback
+  screenshot through the response artifact channel (`fallbackScreenshotPath`); internal observations
+  never do, so a polling wait cannot turn an unreadable screen into one screenshot per poll.
 - iOS sparse and AX failures are not proof of empty UI. Regular visible snapshots can recover through
   the capture plan; raw and strict paths preserve failure. `runnerFatal` invalidates the cached target
   and must never refresh healthy mutation recency.
