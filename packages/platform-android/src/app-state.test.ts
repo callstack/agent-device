@@ -22,3 +22,9 @@ test('keeps window-focus precedence when multiple markers are present', () => {
 test('returns no app for output without a recognized focus marker', () => {
   expect(parseAndroidForegroundApp('mCurrentFocus=Window{1 u0 StatusBar}')).toBeNull();
 });
+
+test('scans repeated uncontrolled focus text without regular-expression backtracking', () => {
+  expect(
+    parseAndroidForegroundApp(`ResumedActivity:${'ResumedActivity:a'.repeat(20_000)}`),
+  ).toBeNull();
+});

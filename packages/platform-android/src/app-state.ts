@@ -21,8 +21,12 @@ const ACTIVITY_COMMANDS = [
   ['shell', 'dumpsys', 'activity', 'activities'],
   ['shell', 'dumpsys', 'activity'],
 ] as const;
-const ANDROID_FOCUS_LINE =
-  /(?:(mCurrentFocus=Window\{)|(mFocusedApp=AppWindowToken\{)|(mResumedActivity:)|(ResumedActivity:))(.*)$/gm;
+const ANDROID_FOCUS_MARKERS = [
+  'mCurrentFocus=Window{',
+  'mFocusedApp=AppWindowToken{',
+  'mResumedActivity:',
+  'ResumedActivity:',
+] as const;
 
 export async function readAndroidAppState(
   host: AndroidAppStateHost,
@@ -38,26 +42,16 @@ export async function readAndroidAppState(
 }
 
 export function parseAndroidForegroundApp(text: string): AppStateRuntimeResult | null {
-  const matches = Array.from(text.matchAll(ANDROID_FOCUS_LINE));
-  matches.sort(
-    (left, right) =>
-      focusMarkerRank(left) - focusMarkerRank(right) ||
-      (left.index ?? Number.POSITIVE_INFINITY) - (right.index ?? Number.POSITIVE_INFINITY),
-  );
-  for (const match of matches) {
-    const segment = match[5];
-    if (!segment) continue;
-    const parsed = parseAndroidComponentFromSegment(segment);
-    if (parsed) return parsed;
+  const lines = text.split('\n');
+  for (const marker of ANDROID_FOCUS_MARKERS) {
+    for (const line of lines) {
+      const markerIndex = line.indexOf(marker);
+      if (markerIndex === -1) continue;
+      const parsed = parseAndroidComponentFromSegment(line.slice(markerIndex + marker.length));
+      if (parsed) return parsed;
+    }
   }
   return null;
-}
-
-function focusMarkerRank(match: RegExpMatchArray): number {
-  if (match[1]) return 0;
-  if (match[2]) return 1;
-  if (match[3]) return 2;
-  return 3;
 }
 
 async function readAndroidFocus(
