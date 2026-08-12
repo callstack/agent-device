@@ -3,7 +3,7 @@ import type { LayeringViolation } from './model.ts';
 
 export type ContractsProductionSource = Readonly<{ path: string; source: string }>;
 
-const RULE = 'R11 contracts-implementation-authority';
+const RULE = 'R18 contracts-implementation-authority';
 const FORBIDDEN_HOST_MODULES = /^(?:node:)?(?:child_process|fs|timers)(?:\/|$)/;
 const FORBIDDEN_TIMER_CALLS = new Set([
   'clearImmediate',

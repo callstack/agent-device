@@ -1,7 +1,7 @@
 import { parseSync } from 'oxc-parser';
 import type { LayeringViolation } from './model.ts';
 
-const RULE = 'R13 device-inventory-cutover';
+const RULE = 'R17 device-inventory-cutover';
 const HANDLER_FILE = 'src/daemon/handlers/session-inventory.ts';
 const INVENTORY_IMPORT_SOURCES = new Set([
   '../../core/device-inventory-context.ts',
@@ -253,5 +253,5 @@ export function checkDeviceInventoryCutover(
 }
 
 export function deviceInventoryCutoverSummary(): string {
-  return 'the devices command has one gateway-owned inventory route and no legacy route';
+  return 'R17 holds the devices command to one gateway-owned inventory route with no legacy route';
 }

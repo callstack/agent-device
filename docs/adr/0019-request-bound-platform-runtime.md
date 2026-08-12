@@ -111,7 +111,7 @@ only that composition module may import a concrete platform package; reusable ty
 through type-only platform imports. Platform packages may import contracts, kernel/domain packages,
 and explicitly injected host capabilities; they may not import daemon requests or responses, mutable
 session state, command catalogs/grammar, root implementation files, sibling platform packages, or raw
-process primitives outside the shared host-command port. R11 applies these rules to static, type-only,
+process primitives outside the shared host-command port. R13 applies these rules to static, type-only,
 dynamic, and re-export edges; package-owned tests may import their own public façade. Contracts may
 depend on kernel vocabulary but never on concrete platform packages or daemon implementation types.
 

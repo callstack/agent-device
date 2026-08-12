@@ -33,10 +33,12 @@
 //     owner" shape as R7's SessionState ownership, applied to bin.ts's `--help` fast path.
 //   - Over PLATFORM PACKAGE COMPOSITION: six private metadata façades meet at the exact root
 //     composition file; premature implementation loading and forbidden cross-boundary edges fail (R13).
-//   - Over the DEVICES COMMAND CUTOVER: the handler calls the neutral inventory gateway and no
-//     superseded inventory module, import, or identifier remains in production (R13).
 //   - Over COMMAND-ATOMIC RUNTIME CUTOVERS: retired logs, network, and record routes/admission cannot
 //     coexist with their operation-fact-derived descriptor and handler paths (R14-R16).
+//   - Over the DEVICES COMMAND CUTOVER: the handler calls the neutral inventory gateway and no
+//     superseded inventory module, import, or identifier remains in production (R17).
+//   - Over CONTRACTS PRODUCTION SOURCE: contracts owns vocabulary only — host, process, and timer
+//     mechanics belong in capture-kit or an adapter (R18).
 // Only `(root)` is unranked among src/ zones (see `UNRANKED_ZONES` in model.ts):
 // it holds entrypoints and composition roots. Extracted workspace package zones
 // are classified separately and held behind R11 instead of the src folder spine.
