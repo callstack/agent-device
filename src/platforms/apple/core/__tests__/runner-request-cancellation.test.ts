@@ -66,13 +66,21 @@ vi.mock('../tool-provider.ts', async () => {
   };
 });
 
-vi.mock('../runner/runner-transport.ts', async () => {
-  const actual = await vi.importActual<typeof import('../runner/runner-transport.ts')>(
-    '../runner/runner-transport.ts',
-  );
+vi.mock('../runner/runner-io.ts', async () => {
+  const actual =
+    await vi.importActual<typeof import('../runner/runner-io.ts')>('../runner/runner-io.ts');
   return {
     ...actual,
     getFreePort: mockGetFreePort,
+  };
+});
+
+vi.mock('../runner/runner-startup-transport.ts', async () => {
+  const actual = await vi.importActual<typeof import('../runner/runner-startup-transport.ts')>(
+    '../runner/runner-startup-transport.ts',
+  );
+  return {
+    ...actual,
     waitForRunner: mockWaitForRunner,
   };
 });

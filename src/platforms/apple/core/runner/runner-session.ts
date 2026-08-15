@@ -16,14 +16,13 @@ import { buildSimctlArgsForDevice } from '../simctl.ts';
 import { runAppleToolCommand, runXcrun } from '../tool-provider.ts';
 import { resolveRunnerDestination } from '../apple-runner-platform.ts';
 import { resolveRunnerMaxConcurrentDestinationsFlag } from './runner-cache-metadata.ts';
+import { getFreePort, logChunk } from './runner-io.ts';
 import {
   waitForRunner,
-  sendRunnerCommandOnce,
-  getFreePort,
-  logChunk,
   RUNNER_STARTUP_TIMEOUT_MS,
   RUNNER_DESTINATION_TIMEOUT_SECONDS,
-} from './runner-transport.ts';
+} from './runner-startup-transport.ts';
+import { sendRunnerCommandOnce } from './runner-transport.ts';
 import {
   acquireXcodebuildSimulatorSetRedirect,
   ensureXctestrunArtifact,

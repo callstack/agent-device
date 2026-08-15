@@ -6,7 +6,8 @@ import {
   signalPidsBestEffort,
 } from '../../../../utils/host-process.ts';
 import type { ExecBackgroundResult } from '../../../../utils/exec.ts';
-import { cleanupTempFile, waitForRunner } from './runner-transport.ts';
+import { cleanupTempFile } from './runner-io.ts';
+import { waitForRunner } from './runner-startup-transport.ts';
 import { withRunnerCommandId, type RunnerCommand } from './runner-contract.ts';
 import {
   cleanupOwnedRunnerLease,

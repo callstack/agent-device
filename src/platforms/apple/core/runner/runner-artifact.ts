@@ -10,7 +10,7 @@ import { isRequestCanceledError } from '../../../../request/cancel.ts';
 import { emitRequestProgress } from '../../../../request/progress.ts';
 import { findProjectRoot } from '../../../../utils/version.ts';
 import { resolveRunnerBuildFailureHint } from './runner-contract.ts';
-import { logChunk } from './runner-transport.ts';
+import { logChunk } from './runner-io.ts';
 import { acquireXcodebuildSimulatorSetRedirect } from './runner-device-set.ts';
 import {
   acquireRunnerXctestrunCacheLock,

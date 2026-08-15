@@ -33,8 +33,8 @@ vi.mock('../../../../utils/host-process.ts', async (importOriginal) => {
   };
 });
 
-vi.mock('../runner/runner-transport.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../runner/runner-transport.ts')>();
+vi.mock('../runner/runner-io.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../runner/runner-io.ts')>();
   return { ...actual, cleanupTempFile: mockCleanupTempFile };
 });
 

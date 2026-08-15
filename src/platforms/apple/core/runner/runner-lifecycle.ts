@@ -2,7 +2,8 @@ import { AppError, asAppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '../../../../utils/diagnostics.ts';
 import { isRequestCanceledError } from '../../../../request/cancel.ts';
-import { RUNNER_COMMAND_TIMEOUT_MS, RUNNER_STARTUP_TIMEOUT_MS } from './runner-transport.ts';
+import { RUNNER_STARTUP_TIMEOUT_MS } from './runner-startup-transport.ts';
+import { RUNNER_COMMAND_TIMEOUT_MS } from './runner-transport.ts';
 import {
   type RunnerSession,
   assertExpectedRunnerSession,
