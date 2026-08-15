@@ -276,6 +276,49 @@ test('sendRunnerCommandOnce keeps the usbmux verdict for xctest devices that hav
   assert.equal(mockRunCmd.mock.calls.length, 0);
 });
 
+test('waitForRunner preserves xcodebuild diagnostics when the runner exits during the final probe', async () => {
+  const session: RunnerSession = {
+    sessionId: 'starting-device-session',
+    device: xctestIosDevice,
+    deviceId: xctestIosDevice.id,
+    port: 8100,
+    xctestrunPath: '/tmp/runner.xctestrun',
+    jsonPath: '/tmp/runner.json',
+    testPromise: Promise.resolve({
+      exitCode: 65,
+      stdout: '',
+      stderr:
+        'The application could not be launched because the Developer App Certificate is not trusted.',
+    }),
+    child: { pid: 1234, exitCode: null } as ExecBackgroundResult['child'],
+    ready: false,
+  };
+  mockUsbmuxPostCommand.mockImplementation(async () => {
+    (session.child as { exitCode: number | null }).exitCode = 65;
+    throw new Error('ECONNREFUSED');
+  });
+
+  await assert.rejects(
+    () =>
+      waitForRunner(xctestIosDevice, 8100, { command: 'uptime' }, '/tmp/runner.log', 100, session),
+    (error: unknown) => {
+      const appError = error as AppError;
+      assert.equal(appError.message, 'Runner did not accept connection (xcodebuild exited early)');
+      assert.equal(
+        (appError.details?.xcodebuild as { exitCode?: number } | undefined)?.exitCode,
+        65,
+      );
+      assert.match(
+        String((appError.details?.xcodebuild as { stderr?: string } | undefined)?.stderr),
+        /Developer App Certificate is not trusted/,
+      );
+      return true;
+    },
+  );
+
+  assert.equal(mockUsbmuxPostCommand.mock.calls.length, 1);
+});
+
 test('waitForRunner reports the usbmux verdict for xctest devices without retrying', async () => {
   // Regression: an XCTest device has no tunnel, so retrying cannot attach a
   // cable. Before this was terminal, readiness preflight and read-only

@@ -108,6 +108,9 @@ export async function waitForRunner(
     return new Response(simResponse.body, { status: simResponse.status });
   }
 
+  if (session?.child.exitCode !== null && session?.child.exitCode !== undefined) {
+    throw await buildRunnerEarlyExitError({ session, port, logPath });
+  }
   throw buildRunnerConnectError({ port, endpoints: route.endpoints, logPath, lastError });
 }
 
