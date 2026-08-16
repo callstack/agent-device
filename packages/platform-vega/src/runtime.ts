@@ -82,6 +82,7 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
   return createUnavailablePlatformRuntimeFacts(device, vegaOwner, {
     appLog: unsupportedPlatformLeaf,
     network: unsupportedPlatformLeaf,
+    snapshot: unsupportedPlatformLeaf,
     readiness: unsupportedPlatformLeaf,
     lifecycle: applicationLifecycleOperationFacts({
       resolveOpenTarget: openTarget,

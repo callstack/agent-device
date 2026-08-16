@@ -21,8 +21,9 @@ const unavailableShutdownOperationFacts = Object.freeze({
   shutdownTarget: unavailable,
 });
 
-export const unavailableDeploymentAndShutdownOperationFacts = Object.freeze({
+export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.freeze({
   ...unavailableDeploymentOperationFacts,
+  captureSnapshot: unavailable,
   ...unavailableShutdownOperationFacts,
 });
 

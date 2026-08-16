@@ -21,6 +21,11 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   };
 });
 
+vi.mock('../snapshot-interactor-capture.ts', async () => {
+  const fixture = await import('../../__tests__/legacy-snapshot-capture-fixture.ts');
+  return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
+});
+
 import { dispatchCommand } from '../../../core/dispatch.ts';
 
 const mockDispatch = vi.mocked(dispatchCommand);

@@ -130,6 +130,11 @@ test.each([
     expect(binding.facts.operations.bootTargetHeadless).toMatchObject({ available: false });
     expect(binding.facts.operations.appState).toMatchObject({ available: false });
     expect(binding.facts.operations.listApps).toMatchObject({ available: false });
+    expect(binding.facts.operations.captureSnapshot).toMatchObject({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+    });
+    expect(binding.operations.captureSnapshot).toBeUndefined();
     expectLifecycleFacts(binding, legacy);
   },
 );

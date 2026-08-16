@@ -14,6 +14,7 @@ import {
 import { dispatchSnapshotDiffViaRuntime, dispatchSnapshotViaRuntime } from '../snapshot-runtime.ts';
 import { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../types.ts';
+import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
 
 const dispatchCommandMock = vi.hoisted(() => vi.fn());
 
@@ -23,6 +24,11 @@ vi.mock('../../core/dispatch.ts', async (importOriginal) => {
     ...actual,
     dispatchCommand: dispatchCommandMock,
   };
+});
+
+vi.mock('../handlers/snapshot-interactor-capture.ts', async () => {
+  const fixture = await import('./legacy-snapshot-capture-fixture.ts');
+  return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });
 
 const FULL_WARNING = recoveredSnapshotQualityWarning('private-ax');
@@ -183,6 +189,7 @@ async function dispatchPublicSnapshot(input: ReturnType<typeof scenario>) {
     sessionName: input.sessionName,
     logPath: input.logPath,
     sessionStore: input.sessionStore,
+    ...snapshotRuntimeFixture(),
   });
 }
 
@@ -215,6 +222,7 @@ test('an internally armed penalty warns once on the first public deferred snapsh
     sessionName: input.sessionName,
     logPath: input.logPath,
     sessionStore: input.sessionStore,
+    ...snapshotRuntimeFixture(),
   });
   expect(responseWarnings(internal)).not.toContain(FULL_WARNING);
   expect(storedLatch(input)).toBeUndefined();

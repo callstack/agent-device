@@ -11,6 +11,7 @@ import {
   sourceExecutedUsingDeclarationViolations,
 } from './runtime-command-cutover-extensions.ts';
 import { recordRuntimeDaemonMechanicsViolations } from './record-runtime-mechanics-policy.ts';
+import { retiredDispatchProjectionViolations } from './runtime-command-cutover-descriptor.ts';
 
 /**
  * One row per migrated command (ADR 0019 §8). A new command unit adds a row here; the
@@ -23,7 +24,7 @@ import { recordRuntimeDaemonMechanicsViolations } from './record-runtime-mechani
  *
  * A row id is a report heading, so it must be unique across every stack that adds rows here.
  * `cutoverTableDefects` rejects a duplicate; lifecycle starts at R28 after the accepted
- * shutdown and install/deploy allocations.
+ * shutdown, install/deploy, and application-lifecycle allocations. Snapshot starts at R32.
  */
 export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
   {
@@ -438,7 +439,31 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
     singularExecution: { routeProof: runtimeLifecycleRouteBindingViolations },
     lifecycleProof: applicationLifecycleDurableResourceViolations,
   },
+  {
+    rule: 'R32 snapshot-runtime-cutover',
+    command: 'snapshot',
+    subject: 'snapshot capture',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      routeNames: ['handleSnapshotCommand'],
+    },
+    runtimeTypeNames: ['SnapshotRuntimeOperations'],
+    operations: { names: ['captureSnapshot'] },
+    singularExecution: {
+      routes: ['handleSnapshotCommands'],
+      operations: ['captureSnapshot'],
+      operationOwners: { captureSnapshot: ['dispatchSnapshotViaRuntime'] },
+    },
+    extensions: [snapshotRetiredDispatchProjectionProof],
+  },
 ];
+
+function snapshotRetiredDispatchProjectionProof(
+  sources: ReadonlyMap<string, string>,
+): UnruledViolation[] {
+  return retiredDispatchProjectionViolations(sources, 'snapshot');
+}
 
 /** The record mechanics policy predates the row model and reports `path: message`. */
 function recordDaemonMechanicsProof(sources: ReadonlyMap<string, string>): UnruledViolation[] {

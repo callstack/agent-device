@@ -13,7 +13,6 @@ import { handleInteractionCommands } from '../interaction.ts';
 import { buildSnapshotState } from '../snapshot-capture.ts';
 import {
   contextFromFlags,
-  createEmulateCaptureSnapshotForSession,
   makeSession,
   makeStaleRefSession,
   makeVisibleButtonSnapshot,
@@ -35,6 +34,11 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   };
 });
 
+vi.mock('../snapshot-interactor-capture.ts', async () => {
+  const fixture = await import('../../__tests__/legacy-snapshot-capture-fixture.ts');
+  return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
+});
+
 vi.mock('../../../platforms/android/app-lifecycle.ts', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('../../../platforms/android/app-lifecycle.ts')>();
@@ -42,18 +46,6 @@ vi.mock('../../../platforms/android/app-lifecycle.ts', async (importOriginal) =>
     ...actual,
     getAndroidAppState: vi.fn(async () => ({})),
     getAndroidBlockingDialogFocus: vi.fn(async () => null),
-  };
-});
-
-vi.mock('../interaction-snapshot.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../interaction-snapshot.ts')>();
-  return {
-    ...actual,
-    captureSnapshotForSession: vi.fn(async () => ({
-      nodes: [],
-      createdAt: 0,
-      backend: 'xctest' as const,
-    })),
   };
 });
 
@@ -74,9 +66,6 @@ import {
 } from '../../../platforms/android/app-lifecycle.ts';
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
 const mockGetAndroidBlockingDialogFocus = vi.mocked(getAndroidBlockingDialogFocus);
-import { captureSnapshotForSession } from '../interaction-snapshot.ts';
-const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotForSession);
-
 beforeEach(() => {
   mockDispatch.mockReset();
   mockDispatch.mockResolvedValue({});
@@ -84,10 +73,6 @@ beforeEach(() => {
   mockGetAndroidAppState.mockResolvedValue({});
   mockGetAndroidBlockingDialogFocus.mockReset();
   mockGetAndroidBlockingDialogFocus.mockResolvedValue(null);
-  mockCaptureSnapshotForSession.mockReset();
-  mockCaptureSnapshotForSession.mockImplementation(
-    createEmulateCaptureSnapshotForSession(mockDispatch),
-  );
   mockRunAppleRunnerCommand.mockReset();
   mockRunAppleRunnerCommand.mockResolvedValue({});
 });

@@ -4,6 +4,7 @@ import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import { makeIosSession, mkdtempForTest } from '../../__tests__/test-utils/index.ts';
 import { SessionStore } from '../session-store.ts';
 import { dispatchSnapshotViaRuntime } from '../snapshot-runtime.ts';
+import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
 
 const dispatchCommandMock = vi.hoisted(() => vi.fn());
 
@@ -49,6 +50,7 @@ function seed(
 }
 
 async function dispatch(input: Awaited<ReturnType<typeof scenario>>, internalObservation = false) {
+  const runtime = snapshotRuntimeFixture();
   const response = await dispatchSnapshotViaRuntime({
     req: {
       command: 'snapshot',
@@ -60,6 +62,7 @@ async function dispatch(input: Awaited<ReturnType<typeof scenario>>, internalObs
     sessionName: input.sessionName,
     logPath: input.logPath,
     sessionStore: input.sessionStore,
+    ...runtime,
   });
   if (!response.ok) throw new Error('expected ok response');
   return response.data ?? {};

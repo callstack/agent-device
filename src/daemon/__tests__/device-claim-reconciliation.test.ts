@@ -9,7 +9,7 @@ import {
   type PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform';
 import { createTestAppLogLiveHandle } from '../../__tests__/test-utils/app-log-live-handle.ts';
-import { unavailableDeploymentAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';
+import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { createDeviceClaimReconciler } from '../device-claim-reconciliation.ts';
 import type { DeviceClaim } from '../device-claims.ts';
@@ -68,7 +68,7 @@ test('reconciles the dead owner session resources through their exact runtime ow
         bootTarget: unavailable,
         bootTargetHeadless: unavailable,
         listApps: unavailable,
-        ...unavailableDeploymentAndShutdownOperationFacts,
+        ...unavailableDeploymentSnapshotAndShutdownOperationFacts,
         ...applicationLifecycleOperationFacts({
           resolveOpenTarget: unavailable,
           prepareApplicationOpen: unavailable,

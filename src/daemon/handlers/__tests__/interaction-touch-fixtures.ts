@@ -6,9 +6,7 @@ import {
   makeMacOsSession as makeBaseMacOsSession,
 } from '../../../__tests__/test-utils/session-factories.ts';
 import { makeTestScreenRecordingResource } from '../../../__tests__/test-utils/screen-recording-live-handle.ts';
-import type { dispatchCommand } from '../../../core/dispatch.ts';
 import { activateCompleteRefFrame } from '../../ref-frame.ts';
-import { setSessionSnapshot } from '../../session-snapshot.ts';
 import type { SessionStore } from '../../session-store.ts';
 import type { SessionState } from '../../types.ts';
 import { handleInteractionCommands } from '../interaction.ts';
@@ -71,47 +69,6 @@ export const contextFromFlags = (flags: CommandFlags | undefined) => ({
   doubleTap: flags?.doubleTap,
   clickButton: flags?.clickButton,
 });
-
-/**
- * Mirrors the real `captureSnapshotForSession` over the calling file's mocked
- * dispatch: session snapshot writes go through `setSessionSnapshot` so the
- * generation advances (#1076 versioned refs).
- */
-export function createEmulateCaptureSnapshotForSession(
-  mockDispatch: (...args: Parameters<typeof dispatchCommand>) => Promise<unknown>,
-) {
-  return async function emulateCaptureSnapshotForSession(
-    session: SessionState,
-    flags: CommandFlags | undefined,
-    sessionStore: SessionStore,
-    contextFromCallerFlags: (
-      flags: CommandFlags | undefined,
-      appBundleId?: string,
-      traceLogPath?: string,
-    ) => Record<string, unknown>,
-    options: {
-      interactiveOnly: boolean;
-      androidFreshnessMode?: 'ref-refresh';
-      includeRects?: boolean;
-    },
-  ) {
-    const effectiveFlags = {
-      ...(flags ?? {}),
-      snapshotInteractiveOnly: options.interactiveOnly,
-    };
-    const snapshotData = (await mockDispatch(
-      session.device,
-      'snapshot',
-      [],
-      effectiveFlags.out,
-      contextFromCallerFlags(effectiveFlags, session.appBundleId, session.trace?.outPath),
-    )) as { nodes?: never[]; truncated?: boolean; backend?: SnapshotBackend };
-    const snapshot = buildSnapshotState(snapshotData ?? {}, effectiveFlags);
-    setSessionSnapshot(session, snapshot);
-    sessionStore.set(session.name, session);
-    return snapshot;
-  };
-}
 
 // --- Stale @ref warnings (#1076) ---
 

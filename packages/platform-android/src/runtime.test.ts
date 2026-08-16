@@ -93,6 +93,8 @@ test.each([
   expect(facts.operations.ensureReady).toEqual({ available: true });
   expect(facts.operations.bootTarget).toEqual({ available: true });
   expect(facts.operations.bootTargetHeadless.available).toBe(runtimeDevice.kind === 'emulator');
+  expect(facts.operations.captureSnapshot).toEqual({ available: true });
+  expect(binding.operations.captureSnapshot).toBeTypeOf('function');
 
   await expect(binding.operations.ensureReady?.({})).resolves.toMatchObject({
     id: runtimeDevice.id,
@@ -259,6 +261,10 @@ test.each([
     expect(facts.operations.ensureReady).toEqual({ available: true });
     expect(facts.operations.bootTarget).toEqual({ available: true });
     expect(facts.operations.bootTargetHeadless.available).toBe(runtimeDevice.kind === 'emulator');
+    expect(facts.operations.captureSnapshot.available).toBe(runtimeDevice.kind !== 'simulator');
+    expect(binding.operations.captureSnapshot).toBeTypeOf(
+      runtimeDevice.kind === 'simulator' ? 'undefined' : 'function',
+    );
     expectLifecycleFacts(binding, legacy);
   },
 );

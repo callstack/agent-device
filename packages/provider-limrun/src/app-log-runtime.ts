@@ -21,6 +21,7 @@ import {
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
+  bindProviderSnapshotInteractor,
   createUnavailablePlatformRuntimeFacts,
   providerRuntimeOwner,
   sameRuntimeOwner,
@@ -334,6 +335,11 @@ function bindLimrunAppLogs(
       }),
       runtimeFacts.operations,
     ),
+    ...bindProviderSnapshotInteractor({
+      device,
+      signal,
+      resolveInteractor: (runner) => options.getInteractor(device, runner),
+    }),
     ...createLimrunAppDeploymentOperations(
       deploymentOptions(options),
       device,
@@ -405,6 +411,7 @@ function facts(
       screenRecordingStart: recordingUnavailable,
       screenRecordingReattach: recordingUnavailable,
       screenRecordingCleanup: recordingUnavailable,
+      captureSnapshot: available,
       ensureReady: available,
       bootTarget: available,
       bootTargetHeadless: headlessUnavailable,
@@ -438,6 +445,7 @@ function recoveryFacts(
       screenRecordingStart: liveSessionUnavailable,
       screenRecordingReattach: liveSessionUnavailable,
       screenRecordingCleanup: liveSessionUnavailable,
+      captureSnapshot: liveSessionUnavailable,
       ensureReady: liveSessionUnavailable,
       bootTarget: liveSessionUnavailable,
       bootTargetHeadless: liveSessionUnavailable,

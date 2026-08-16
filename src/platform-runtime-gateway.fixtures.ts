@@ -17,7 +17,7 @@ import {
 } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
-import { unavailableDeploymentAndShutdownOperationFacts } from './__tests__/test-utils/runtime-operation-facts.ts';
+import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from './__tests__/test-utils/runtime-operation-facts.ts';
 import {
   createComposedPlatformRuntimeGateway,
   type PlatformRuntimeProviderRegistration,
@@ -132,7 +132,7 @@ function binding(options: {
 function unavailableFacts() {
   const unavailable = { available: false, reason: 'unsupported-provider-mode' } as const;
   return {
-    ...unavailableDeploymentAndShutdownOperationFacts,
+    ...unavailableDeploymentSnapshotAndShutdownOperationFacts,
     appLogInspect: unavailable,
     appLogDoctor: unavailable,
     appLogStart: unavailable,

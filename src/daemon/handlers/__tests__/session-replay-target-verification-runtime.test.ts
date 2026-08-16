@@ -3,7 +3,7 @@
  * `verifyReplayActionTarget` for every annotated resolved-target action
  * BEFORE dispatching it, and never send the device action on a non-verified
  * outcome. Mirrors the mocking pattern of `session-replay-runtime.test.ts`
- * (mock `dispatchCommand` for the pre-action snapshot capture, mock `invoke`
+ * (adapt mocked `dispatchCommand` through the narrow snapshot interactor seam, mock `invoke`
  * for the actual action dispatch).
  */
 import { test, expect, vi, beforeEach } from 'vitest';
@@ -13,6 +13,10 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
   return { ...actual, dispatchCommand: vi.fn(async () => ({})), resolveTargetDevice: vi.fn() };
 });
+
+vi.mock('../snapshot-interactor-capture.ts', () => ({
+  captureSnapshotWithInteractor: vi.fn(),
+}));
 
 // #1385's pre-dispatch launch-race retry (captureDivergenceObservation's
 // `retryLaunchRace`) awaits a real `sleep` between attempts; stub it to a
@@ -35,12 +39,17 @@ import {
   baseReplayRequest as baseReq,
   writeReplayFile,
 } from './session-replay-runtime.fixtures.ts';
+import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
+import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
 
 const mockDispatchCommand = vi.mocked(dispatchCommand);
+const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);
 
 beforeEach(() => {
   mockDispatchCommand.mockReset();
   mockDispatchCommand.mockResolvedValue({});
+  mockCaptureSnapshotWithInteractor.mockReset();
+  mockCaptureSnapshotWithInteractor.mockImplementation(captureSnapshotThroughLegacyDispatchFixture);
 });
 
 const SAVE_ANNOTATION =

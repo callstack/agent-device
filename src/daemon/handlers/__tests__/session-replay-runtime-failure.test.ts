@@ -5,6 +5,9 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
   return { ...actual, dispatchCommand: vi.fn(async () => ({})), resolveTargetDevice: vi.fn() };
 });
+vi.mock('../snapshot-interactor-capture.ts', () => ({
+  captureSnapshotWithInteractor: vi.fn(),
+}));
 import fs from 'node:fs';
 import path from 'node:path';
 import { runReplayScriptSource } from '../session-replay-runtime.ts';
@@ -14,16 +17,21 @@ import { dispatchCommand } from '../../../core/dispatch.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { formatReplayDivergenceReport } from '@agent-device/contracts/divergence';
 import { maestroScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
+import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
+import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,
 } from './session-replay-runtime.fixtures.ts';
 
 const mockDispatchCommand = vi.mocked(dispatchCommand);
+const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);
 
 beforeEach(() => {
   mockDispatchCommand.mockReset();
   mockDispatchCommand.mockResolvedValue({});
+  mockCaptureSnapshotWithInteractor.mockReset();
+  mockCaptureSnapshotWithInteractor.mockImplementation(captureSnapshotThroughLegacyDispatchFixture);
 });
 test('a failing replay step returns REPLAY_DIVERGENCE with cause preserved and correct step provenance', async () => {
   const root = mkdtempForTestSync('agent-device-replay-divergence-');
@@ -33,7 +41,8 @@ test('a failing replay step returns REPLAY_DIVERGENCE with cause preserved and c
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
 
   // The post-failure screen digest capture (and the suggestions re-resolution
-  // capture) both go through dispatchCommand('snapshot', ...); with no real
+  // capture) both reach the narrow snapshot seam, adapted here to the legacy
+  // dispatch mock; with no real
   // device backend in a unit test, this throws, so screen must degrade to
   // 'unavailable' rather than masking the original replay cause.
   mockDispatchCommand.mockImplementation(async (_device, command) => {

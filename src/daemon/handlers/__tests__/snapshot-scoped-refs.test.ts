@@ -1,10 +1,11 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import { handleSnapshotCommands } from '../snapshot.ts';
+import { handleSnapshotCommands as handleProductionSnapshotCommands } from '../snapshot.ts';
 import type { RawSnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import { makeAndroidSession } from '../../../__tests__/test-utils/index.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { expireRefFrame } from '../../ref-frame.ts';
+import { snapshotRuntimeFixture } from '../../__tests__/snapshot-runtime-fixture.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -103,7 +104,8 @@ function requestScopedSnapshot(
   sessionStore: ReturnType<typeof makeSessionStore>,
   snapshotScope: string,
 ) {
-  return handleSnapshotCommands({
+  const runtime = snapshotRuntimeFixture();
+  return handleProductionSnapshotCommands({
     req: {
       token: 't',
       session: sessionName,
@@ -114,6 +116,7 @@ function requestScopedSnapshot(
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
+    ...runtime,
   });
 }
 

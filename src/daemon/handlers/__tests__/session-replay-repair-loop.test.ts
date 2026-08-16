@@ -17,11 +17,15 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
   return { ...actual, dispatchCommand: vi.fn(async () => ({})), resolveTargetDevice: vi.fn() };
 });
+vi.mock('../snapshot-interactor-capture.ts', () => ({
+  captureSnapshotWithInteractor: vi.fn(),
+}));
 
 import path from 'node:path';
 import { runReplayScriptSource } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
+import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
 import {
   makeIosSession,
   repairPublication,
@@ -34,6 +38,7 @@ import {
   writeReplayFile,
 } from './session-replay-runtime.fixtures.ts';
 import { freshEvidence, makeRecordingReplayInvoke } from './session-replay-repair.fixtures.ts';
+import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 
 /** Repair-transaction status, or `undefined` outside a repair publication. */
 function sessionRepairStatus(session: SessionState | undefined) {
@@ -43,9 +48,12 @@ function sessionRepairStatus(session: SessionState | undefined) {
 }
 
 const mockDispatchCommand = vi.mocked(dispatchCommand);
+const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);
 
 beforeEach(() => {
   mockDispatchCommand.mockReset();
+  mockCaptureSnapshotWithInteractor.mockReset();
+  mockCaptureSnapshotWithInteractor.mockImplementation(captureSnapshotThroughLegacyDispatchFixture);
   // Matches every annotated step's recorded identity (id="save") — the
   // target-binding verification a couple of these scripts trigger.
   mockDispatchCommand.mockResolvedValue({

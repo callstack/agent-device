@@ -12,7 +12,7 @@ import {
   type PlatformRuntimeOperations,
   type RuntimeFacts,
 } from '@agent-device/contracts/platform';
-import { unavailableDeploymentAndShutdownOperationFacts } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
+import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
 import { handleDoctorCommand } from '../session-doctor.ts';
 
 vi.mock('../session-doctor-device.ts', async (importOriginal) => {
@@ -108,7 +108,7 @@ test('doctor preserves the legacy unsupported HarmonyOS target-app check', async
       ensureReady: available,
       bootTarget: unavailable,
       bootTargetHeadless: unavailable,
-      ...unavailableDeploymentAndShutdownOperationFacts,
+      ...unavailableDeploymentSnapshotAndShutdownOperationFacts,
       ...applicationLifecycleOperationFacts({
         resolveOpenTarget: unavailable,
         prepareApplicationOpen: unavailable,

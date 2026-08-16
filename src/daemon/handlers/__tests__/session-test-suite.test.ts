@@ -3,20 +3,16 @@ import { test, expect, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 // ADR 0012 migration step 2: every replay step failure now attempts a
-// post-failure screen digest capture + suggestion re-resolution via
-// dispatchCommand('snapshot', ...). This file's fixtures don't model a real
+// post-failure screen digest capture + suggestion re-resolution through the
+// narrow snapshot interactor seam. This file's fixtures don't model a real
 // device runner, so without a mock those calls fall through to the real
 // (slow/hanging) runner dispatch path. Reject fast so failure-path tests keep
 // exercising `divergence.screen: unavailable` deterministically.
-vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return {
-    ...actual,
-    dispatchCommand: vi.fn(async () => {
-      throw new Error('no device runner available in this test');
-    }),
-  };
-});
+vi.mock('../snapshot-interactor-capture.ts', () => ({
+  captureSnapshotWithInteractor: vi.fn(async () => {
+    throw new Error('no device runner available in this test');
+  }),
+}));
 
 import fs from 'node:fs';
 import os from 'node:os';

@@ -1,5 +1,6 @@
 import type {
   DeviceBinding,
+  CaptureSnapshotInput,
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
   PlatformRuntimeOwner,
@@ -40,6 +41,10 @@ const closeTargetKindUnavailable = unavailableLinuxRuntimeFact(
   'unsupported-device-kind',
   'close is supported only for the Linux desktop device.',
 );
+const snapshotKindUnavailable = unavailableLinuxRuntimeFact(
+  'unsupported-device-kind',
+  'snapshot is supported only for the Linux desktop device.',
+);
 export function createLinuxPlatformRuntime(host: PlatformRuntimeHost): PlatformRuntimeOwner {
   return Object.freeze({
     owner: linuxOwner,
@@ -65,9 +70,19 @@ export function createLinuxPlatformRuntime(host: PlatformRuntimeHost): PlatformR
         device: request.device,
         owner: linuxOwner,
         facts,
-        operations: Object.freeze(
-          availableApplicationLifecycleOperations(lifecycle, facts.operations),
-        ),
+        operations: Object.freeze({
+          ...availableApplicationLifecycleOperations(lifecycle, facts.operations),
+          ...(facts.operations.captureSnapshot.available
+            ? {
+                captureSnapshot: async (input: CaptureSnapshotInput) =>
+                  await host.snapshot.linux.captureSurface(
+                    request.device,
+                    input.options,
+                    request.scope.signal,
+                  ),
+              }
+            : {}),
+        }),
         [Symbol.asyncDispose]: async () => undefined,
       }) satisfies DeviceBinding<PlatformRuntimeOperations>;
     },
@@ -78,9 +93,10 @@ export function createLinuxPlatformRuntime(host: PlatformRuntimeHost): PlatformR
 function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> {
   const openTarget = device.kind === 'device' ? supported : openTargetKindUnavailable;
   const closeTarget = device.kind === 'device' ? supported : closeTargetKindUnavailable;
-  return createUnavailablePlatformRuntimeFacts(device, linuxOwner, {
+  const unavailable = createUnavailablePlatformRuntimeFacts(device, linuxOwner, {
     appLog: unsupportedPlatformLeaf,
     network: unsupportedPlatformLeaf,
+    snapshot: snapshotKindUnavailable,
     readiness: unsupportedPlatformLeaf,
     lifecycle: applicationLifecycleOperationFacts({
       resolveOpenTarget: openTarget,
@@ -93,6 +109,13 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
       prepareAppleRunner: appleRunnerUnavailable,
       configureProviderPortReverse: providerPortReverseUnavailable,
     }),
+  });
+  return Object.freeze({
+    device: unavailable.device,
+    operations: {
+      ...unavailable.operations,
+      captureSnapshot: device.kind === 'device' ? supported : snapshotKindUnavailable,
+    },
   });
 }
 

@@ -10,6 +10,11 @@ vi.mock('../../core/dispatch.ts', async (importOriginal) => {
   return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
 });
 
+vi.mock('../handlers/snapshot-interactor-capture.ts', async () => {
+  const fixture = await import('./legacy-snapshot-capture-fixture.ts');
+  return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
+});
+
 vi.mock('../../platforms/android/app-lifecycle.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../platforms/android/app-lifecycle.ts')>();
   return {

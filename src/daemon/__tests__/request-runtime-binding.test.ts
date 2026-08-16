@@ -11,7 +11,7 @@ import {
   type PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { unavailableDeploymentAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';
+import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { acquireDurableCaptureRecoveryAuthorityBeforeDeadline } from '../durable-capture-recovery-authority.ts';
 import { createRequestRuntimeBindings } from '../request-runtime-binding.ts';
@@ -387,7 +387,7 @@ function makeGateway(options: { inspectAvailable?: boolean } = {}) {
       bootTarget: { available: true } as const,
       bootTargetHeadless: { available: true } as const,
       listApps: { available: true } as const,
-      ...unavailableDeploymentAndShutdownOperationFacts,
+      ...unavailableDeploymentSnapshotAndShutdownOperationFacts,
       ...applicationLifecycleOperationFacts({
         resolveOpenTarget: unavailableLifecycle,
         prepareApplicationOpen: unavailableLifecycle,

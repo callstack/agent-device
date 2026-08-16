@@ -173,7 +173,7 @@ export type SnapshotResult = Omit<BackendSnapshotResult, 'backend' | 'nodes'> & 
   nodes?: RawSnapshotNode[];
   backend: Extract<
     SnapshotBackend,
-    'android' | 'harmonyos-arkui' | 'xctest' | 'linux-atspi' | 'web'
+    'android' | 'harmonyos-arkui' | 'xctest' | 'linux-atspi' | 'macos-helper' | 'web'
   >;
 };
 

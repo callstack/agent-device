@@ -11,7 +11,7 @@ import {
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
-import { unavailableDeploymentAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';
+import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
@@ -173,7 +173,7 @@ function makeRecordingGateway(firstStartBlocked: Promise<void>) {
           bootTarget: unavailable,
           bootTargetHeadless: unavailable,
           listApps: unavailable,
-          ...unavailableDeploymentAndShutdownOperationFacts,
+          ...unavailableDeploymentSnapshotAndShutdownOperationFacts,
           ...applicationLifecycleOperationFacts({
             resolveOpenTarget: unavailable,
             prepareApplicationOpen: unavailable,

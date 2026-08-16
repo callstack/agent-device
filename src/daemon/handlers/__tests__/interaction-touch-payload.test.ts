@@ -4,7 +4,6 @@ import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts
 import { handleInteractionCommands } from '../interaction.ts';
 import {
   contextFromFlags,
-  createEmulateCaptureSnapshotForSession,
   installTestScreenRecording,
   makeAndroidSession,
   makeSession,
@@ -39,17 +38,9 @@ vi.mock('../../../platforms/android/app-lifecycle.ts', async (importOriginal) =>
   };
 });
 
-vi.mock('../interaction-snapshot.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../interaction-snapshot.ts')>();
-  return {
-    ...actual,
-    captureSnapshotForSession: vi.fn(async () => ({
-      nodes: [],
-      createdAt: 0,
-      backend: 'xctest' as const,
-    })),
-  };
-});
+vi.mock('../snapshot-interactor-capture.ts', () => ({
+  captureSnapshotWithInteractor: vi.fn(),
+}));
 
 vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
   const actual =
@@ -63,13 +54,14 @@ import {
   getAndroidBlockingDialogFocus,
 } from '../../../platforms/android/app-lifecycle.ts';
 import { getAndroidScreenSize } from '../../../platforms/android/input-actions.ts';
-import { captureSnapshotForSession } from '../interaction-snapshot.ts';
+import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
+import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 
 const mockDispatch = vi.mocked(dispatchCommand);
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
 const mockGetAndroidBlockingDialogFocus = vi.mocked(getAndroidBlockingDialogFocus);
 const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
-const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotForSession);
+const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotWithInteractor);
 
 beforeEach(() => {
   mockDispatch.mockReset();
@@ -81,9 +73,7 @@ beforeEach(() => {
   mockGetAndroidScreenSize.mockReset();
   mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
   mockCaptureSnapshotForSession.mockReset();
-  mockCaptureSnapshotForSession.mockImplementation(
-    createEmulateCaptureSnapshotForSession(mockDispatch),
-  );
+  mockCaptureSnapshotForSession.mockImplementation(captureSnapshotThroughLegacyDispatchFixture);
   mockRunAppleRunnerCommand.mockReset();
   mockRunAppleRunnerCommand.mockResolvedValue({});
 });
@@ -179,7 +169,6 @@ test('press coordinates on iOS recording captures a full snapshot for the touch 
         hittable: true,
       },
     ]),
-    createdAt: Date.now(),
     backend: 'xctest',
   });
 
@@ -197,7 +186,8 @@ test('press coordinates on iOS recording captures a full snapshot for the touch 
   });
 
   expect(response?.ok).toBe(true);
-  expect(mockCaptureSnapshotForSession.mock.calls[0]?.[4]).toEqual({
+  expect(mockCaptureSnapshotForSession).toHaveBeenCalledTimes(1);
+  expect(mockCaptureSnapshotForSession.mock.calls[0]?.[0].options).toMatchObject({
     interactiveOnly: true,
   });
   const event = sessionStore.get(sessionName)?.screenRecording?.handle.inspect().gestureEvents[0];

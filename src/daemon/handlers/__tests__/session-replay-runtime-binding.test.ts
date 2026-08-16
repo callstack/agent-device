@@ -3,8 +3,10 @@ import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { resolveTargetDevice } from '../../../core/dispatch.ts';
+import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { SessionStore } from '../../session-store.ts';
 import { runReplayScriptSource } from '../session-replay-runtime.ts';
+import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
 import { baseReplayRequest as baseReq } from './session-replay-runtime.fixtures.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
@@ -13,11 +15,18 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   return { ...actual, dispatchCommand: vi.fn(async () => ({})), resolveTargetDevice: vi.fn() };
 });
 
+vi.mock('../snapshot-interactor-capture.ts', () => ({
+  captureSnapshotWithInteractor: vi.fn(),
+}));
+
 const mockResolveTargetDevice = vi.mocked(resolveTargetDevice);
+const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);
 
 beforeEach(() => {
   mockResolveTargetDevice.mockReset();
   mockResolveTargetDevice.mockResolvedValue(makeIosSession('resolved').device);
+  mockCaptureSnapshotWithInteractor.mockReset();
+  mockCaptureSnapshotWithInteractor.mockImplementation(captureSnapshotThroughLegacyDispatchFixture);
 });
 
 test('typed Maestro does not resolve a device before an explicit-platform flow needs one', async () => {

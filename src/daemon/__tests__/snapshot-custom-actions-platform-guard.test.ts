@@ -15,6 +15,31 @@ import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import type { SessionState } from '../types.ts';
+import {
+  captureSnapshotUse,
+  type DeviceRuntimeGateway,
+  type PlatformRuntimeOperations,
+} from '@agent-device/contracts/platform';
+import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
+
+function snapshotDeviceRuntimeGateway(): DeviceRuntimeGateway<PlatformRuntimeOperations> {
+  const runtime = snapshotRuntimeFixture();
+  return {
+    inspectFacts: runtime.inspectFacts,
+    bind: async ({ device }) => {
+      const [facts, binding] = await Promise.all([
+        runtime.inspectFacts(device),
+        runtime.bindDevice(device, captureSnapshotUse),
+      ]);
+      return {
+        ...binding,
+        facts,
+        [Symbol.asyncDispose]: async () => {},
+      };
+    },
+    shutdown: async () => {},
+  };
+}
 
 function handlerForDevice(device: DeviceInfo) {
   const sessionStore = makeSessionStore('agent-device-custom-actions-guard-');
@@ -29,6 +54,7 @@ function handlerForDevice(device: DeviceInfo) {
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
+    deviceRuntimeGateway: snapshotDeviceRuntimeGateway(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 }

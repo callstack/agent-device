@@ -67,6 +67,7 @@ const NO_CAPABILITY_PUBLIC_COMMANDS = new Set<string>([
   PUBLIC_COMMANDS.reinstall,
   PUBLIC_COMMANDS.replay,
   PUBLIC_COMMANDS.shutdown,
+  PUBLIC_COMMANDS.snapshot,
   PUBLIC_COMMANDS.test,
   PUBLIC_COMMANDS.trace,
 ]);
@@ -307,7 +308,11 @@ test('capability-checked command list is built from descriptor capabilities', ()
     .sort();
   const expectedNames = new Set<string>(expected);
 
-  assert.ok(expectedNames.has(PUBLIC_COMMANDS.snapshot), 'snapshot remains capability-checked');
+  assert.equal(
+    expectedNames.has(PUBLIC_COMMANDS.snapshot),
+    false,
+    'snapshot admission comes from exact device-runtime facts',
+  );
   assert.ok(expectedNames.has(PUBLIC_COMMANDS.gesture), 'gesture remains capability-checked');
   assert.equal(
     expectedNames.has(PUBLIC_COMMANDS.capabilities),

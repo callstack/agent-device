@@ -9,6 +9,7 @@ import type {
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
+  bindLocalSnapshotInteractor,
   localRuntimeOwner,
 } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -65,6 +66,11 @@ const shutdownKindUnavailable = Object.freeze({
   reason: 'unsupported-device-kind',
   hint: 'shutdown is supported only for Apple simulators and Android emulators.',
 } as const);
+const snapshotKindUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'snapshot is supported only for Android emulators and devices.',
+} as const);
 
 function androidLifecycleFacts(device: DeviceInfo) {
   const openTarget = androidOpenTargetFact(device);
@@ -114,6 +120,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         screenRecordingStart: available,
         screenRecordingReattach: available,
         screenRecordingCleanup: available,
+        captureSnapshot: device.kind === 'simulator' ? snapshotKindUnavailable : available,
         ensureReady: available,
         bootTarget: available,
         bootTargetHeadless: device.kind === 'emulator' ? available : headlessUnavailable,
@@ -160,6 +167,13 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           networkDump: async (input: NetworkDumpInput) =>
             await dumpAndroidNetworkTraffic(host, request.device, input, request.scope.signal),
           ...recording,
+          ...(facts.operations.captureSnapshot.available
+            ? bindLocalSnapshotInteractor({
+                device: request.device,
+                signal: request.scope.signal,
+                resolveInteractor: host.localInteractors.resolve,
+              })
+            : {}),
           ensureReady: async (input: EnsureReadyInput) =>
             await ensureAndroidReady(
               host,

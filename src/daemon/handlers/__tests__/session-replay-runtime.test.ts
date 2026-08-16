@@ -7,11 +7,17 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   return { ...actual, dispatchCommand: vi.fn(async () => ({})), resolveTargetDevice: vi.fn() };
 });
 
+vi.mock('../snapshot-interactor-capture.ts', () => ({
+  captureSnapshotWithInteractor: vi.fn(),
+}));
+
 import fs from 'node:fs';
 import path from 'node:path';
 import { runReplayScriptSource } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
+import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
+import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
 import {
   makeIosSession,
   makeRepairArmedSession,
@@ -22,10 +28,13 @@ import {
 } from './session-replay-runtime.fixtures.ts';
 
 const mockDispatchCommand = vi.mocked(dispatchCommand);
+const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);
 
 beforeEach(() => {
   mockDispatchCommand.mockReset();
   mockDispatchCommand.mockResolvedValue({});
+  mockCaptureSnapshotWithInteractor.mockReset();
+  mockCaptureSnapshotWithInteractor.mockImplementation(captureSnapshotThroughLegacyDispatchFixture);
 });
 test('a successful replay prints one line with the step count and wall time', async () => {
   const root = mkdtempForTestSync('agent-device-replay-success-message-');

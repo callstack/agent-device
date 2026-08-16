@@ -213,7 +213,7 @@ test('Provider-backed integration web desktop flow uses semantic web provider ca
 
       assertFlatToolCall(semanticCalls, ['web', 'open', WEB_URL, '']);
       assertFlatToolCall(semanticCalls, ['web', 'recordStart', recordingPath]);
-      assertFlatToolCall(semanticCalls, ['web', 'snapshot', 'true', '']);
+      assertFlatToolCall(semanticCalls, ['web', 'snapshot', 'true', 'app']);
       assertFlatToolCall(semanticCalls, ['web', 'hoverRef', '@e4']);
       assertFlatToolCall(semanticCalls, ['web', 'clickRef', '@e4']);
       assertFlatToolCall(semanticCalls, ['web', 'fillRef', '@e3', 'qa@example.test', '1']);

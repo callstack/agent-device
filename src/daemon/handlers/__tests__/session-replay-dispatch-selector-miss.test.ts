@@ -26,12 +26,16 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
   return { ...actual, dispatchCommand: vi.fn(async () => ({})), resolveTargetDevice: vi.fn() };
 });
+vi.mock('../snapshot-interactor-capture.ts', () => ({
+  captureSnapshotWithInteractor: vi.fn(),
+}));
 
 import path from 'node:path';
 import { runReplayScriptSource } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { dispatchCommand } from '../../../core/dispatch.ts';
+import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import {
   baseReplayRequest as baseReq,
@@ -41,12 +45,16 @@ import {
   bottomTabsRealCaptureFixture,
   recordArticleEvidence,
 } from './session-replay-target-classification-fixtures.ts';
+import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 
 const mockDispatchCommand = vi.mocked(dispatchCommand);
+const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);
 
 beforeEach(() => {
   mockDispatchCommand.mockReset();
   mockDispatchCommand.mockResolvedValue({});
+  mockCaptureSnapshotWithInteractor.mockReset();
+  mockCaptureSnapshotWithInteractor.mockImplementation(captureSnapshotThroughLegacyDispatchFixture);
 });
 
 function setupSession(root: string): { sessionStore: SessionStore; sessionName: string } {

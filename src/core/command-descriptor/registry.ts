@@ -25,6 +25,7 @@ import {
   readySendPushNotificationUse,
   openApplicationRuntimePlanUses,
   closeApplicationRuntimePlanUses,
+  captureSnapshotUse,
   prepareAppleRunnerRuntimeUse,
   runtimeCommandRuntimePlanUses,
   screenRecordingRuntimePlanUses,
@@ -911,13 +912,11 @@ export const RAW_COMMAND_DESCRIPTORS = [
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
     daemon: { route: 'snapshot', refFrameEffect: 'preserve' },
-    dispatch: {},
-    capability: ALL_DEVICE_COMMAND_CAPABILITY,
     // First Apple snapshot on a device can sit behind runner startup; --timeout
     // widens the envelope, and a timeout must not tear down the daemon.
     timeoutPolicy: { ...PRESERVE_DAEMON_TIMEOUT_POLICY, budget: { source: 'flag' } },
     batchable: true,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    platformExecution: { kind: 'device-runtime', use: captureSnapshotUse },
   },
   {
     name: 'diff',

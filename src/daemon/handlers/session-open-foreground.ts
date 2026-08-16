@@ -2,6 +2,7 @@ import { normalizeError, type NormalizedError } from '@agent-device/kernel/error
 import { dispatchSnapshotViaRuntime } from '../snapshot-runtime.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { errorResponse } from './response.ts';
 
 export type ForegroundOpenResolution =
@@ -101,6 +102,8 @@ export async function composeOpenWithInitialSnapshot(params: {
   logPath: string;
   sessionStore: SessionStore;
   openResponse: DaemonResponse;
+  inspectFacts: InspectDeviceRuntimeFacts;
+  bindDevice: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
   const { req, sessionName, logPath, sessionStore, openResponse } = params;
   if (!openResponse.ok || req.flags?.foreground !== true) return openResponse;
@@ -119,6 +122,8 @@ export async function composeOpenWithInitialSnapshot(params: {
       sessionName,
       logPath,
       sessionStore,
+      inspectFacts: params.inspectFacts,
+      bindDevice: params.bindDevice,
     });
     if (!snapshotResponse.ok) {
       return openWithInitialSnapshotFailure(openResponse.data, snapshotResponse.error);

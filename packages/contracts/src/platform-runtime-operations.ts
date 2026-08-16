@@ -12,6 +12,7 @@ import type { AppStateRuntimeHost, AppStateRuntimeOperations } from './app-state
 import type { NetworkRuntimeHost, NetworkRuntimeOperations } from './network-runtime.ts';
 import type { ScreenRecordingRuntimeHost } from './screen-recording-runtime-host.ts';
 import type { ScreenRecordingRuntimeOperations } from './screen-recording-runtime.ts';
+import type { SnapshotRuntimeHost, SnapshotRuntimeOperations } from './snapshot-runtime.ts';
 import type {
   DeviceReadinessRuntimeHost,
   DeviceReadinessRuntimeOperations,
@@ -41,6 +42,7 @@ export type PlatformRuntimeOperations = AppLogRuntimeOperations &
   AppStateRuntimeOperations &
   NetworkRuntimeOperations &
   ScreenRecordingRuntimeOperations &
+  SnapshotRuntimeOperations &
   DeviceReadinessRuntimeOperations &
   DeviceShutdownRuntimeOperations &
   ApplicationLifecycleRuntimeOperations;
@@ -58,6 +60,7 @@ export const bootTargetHeadlessUse = defineUse({
   required: ['bootTargetHeadless'],
 });
 export const appsRuntimeUse = defineUse({ required: ['ensureReady', 'listApps'] });
+export const captureSnapshotUse = defineUse({ required: ['captureSnapshot'] });
 export const deviceBootRuntimeUses = Object.freeze([bootTargetUse, bootTargetHeadlessUse] as const);
 
 export type DeviceReadinessRuntimePlan =
@@ -111,6 +114,7 @@ export type PlatformRuntimeHost = AppLogRuntimeHost &
       ): Promise<import('./platform-runtime-host.ts').HostTemporaryTextFile>;
     }>;
     screenRecording: ScreenRecordingRuntimeHost;
+    snapshot: SnapshotRuntimeHost;
     deviceReadiness: DeviceReadinessRuntimeHost;
     deviceShutdown: DeviceShutdownRuntimeHost;
     localInteractors: LocalApplicationInteractorHost;

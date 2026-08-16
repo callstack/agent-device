@@ -21,11 +21,36 @@ vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) 
 
 import { dispatchCommand } from '../../core/dispatch.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
+import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
 import type { SessionState } from '../types.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import {
+  captureSnapshotUse,
+  type DeviceRuntimeGateway,
+  type PlatformRuntimeOperations,
+} from '@agent-device/contracts/platform';
 
 const mockDispatch = vi.mocked(dispatchCommand);
+
+function snapshotDeviceRuntimeGateway(): DeviceRuntimeGateway<PlatformRuntimeOperations> {
+  const runtime = snapshotRuntimeFixture();
+  return {
+    inspectFacts: runtime.inspectFacts,
+    bind: async ({ device }) => {
+      const [facts, binding] = await Promise.all([
+        runtime.inspectFacts(device),
+        runtime.bindDevice(device, captureSnapshotUse),
+      ]);
+      return {
+        ...binding,
+        facts,
+        [Symbol.asyncDispose]: async () => {},
+      };
+    },
+    shutdown: async () => {},
+  };
+}
 
 function makeIosSession(name: string): SessionState {
   return {
@@ -146,6 +171,7 @@ test('fresh named sessions with matching explicit serial bind and serialize on t
     deviceInventoryGateways: createTestDeviceInventoryGatewaysFromProvider(async () => [
       makeAndroidSession('inventory').device,
     ]),
+    deviceRuntimeGateway: snapshotDeviceRuntimeGateway(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -224,6 +250,7 @@ test('fresh named sessions with the same name serialize first binding before rej
       firstDevice,
       secondDevice,
     ]),
+    deviceRuntimeGateway: snapshotDeviceRuntimeGateway(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -295,6 +322,7 @@ test('fresh named sessions with only lock platform default serialize on the sele
     deviceInventoryGateways: createTestDeviceInventoryGatewaysFromProvider(async () => [
       makeAndroidSession('inventory').device,
     ]),
+    deviceRuntimeGateway: snapshotDeviceRuntimeGateway(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 

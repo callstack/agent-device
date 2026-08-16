@@ -3,11 +3,7 @@ import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { expireRefFrame } from '../../ref-frame.ts';
 import { handleInteractionCommands } from '../interaction.ts';
-import {
-  contextFromFlags,
-  createEmulateCaptureSnapshotForSession,
-  makeAndroidSession,
-} from './interaction-touch-fixtures.ts';
+import { contextFromFlags, makeAndroidSession } from './interaction-touch-fixtures.ts';
 
 // The Android device state a dispatch has to survive: an escape to launcher or
 // Settings fails the press, a permission prompt warns instead, and
@@ -48,17 +44,9 @@ vi.mock('../../../platforms/android/app-lifecycle.ts', async (importOriginal) =>
   };
 });
 
-vi.mock('../interaction-snapshot.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../interaction-snapshot.ts')>();
-  return {
-    ...actual,
-    captureSnapshotForSession: vi.fn(async () => ({
-      nodes: [],
-      createdAt: 0,
-      backend: 'xctest' as const,
-    })),
-  };
-});
+vi.mock('../snapshot-interactor-capture.ts', () => ({
+  captureSnapshotWithInteractor: vi.fn(),
+}));
 
 vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
   const actual =
@@ -80,13 +68,14 @@ import {
   getAndroidBlockingDialogFocus,
 } from '../../../platforms/android/app-lifecycle.ts';
 import { getAndroidScreenSize } from '../../../platforms/android/input-actions.ts';
-import { captureSnapshotForSession } from '../interaction-snapshot.ts';
+import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
+import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 
 const mockDispatch = vi.mocked(dispatchCommand);
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
 const mockGetAndroidBlockingDialogFocus = vi.mocked(getAndroidBlockingDialogFocus);
 const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
-const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotForSession);
+const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotWithInteractor);
 
 beforeEach(() => {
   mockDispatch.mockReset();
@@ -98,9 +87,7 @@ beforeEach(() => {
   mockGetAndroidScreenSize.mockReset();
   mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
   mockCaptureSnapshotForSession.mockReset();
-  mockCaptureSnapshotForSession.mockImplementation(
-    createEmulateCaptureSnapshotForSession(mockDispatch),
-  );
+  mockCaptureSnapshotForSession.mockImplementation(captureSnapshotThroughLegacyDispatchFixture);
   mockRunAppleRunnerCommand.mockReset();
   mockRunAppleRunnerCommand.mockResolvedValue({});
   androidDialogReadiness.spy.mockReset();

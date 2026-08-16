@@ -6,12 +6,18 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   return { ...actual, dispatchCommand: vi.fn(async () => ({})), resolveTargetDevice: vi.fn() };
 });
 
+vi.mock('../snapshot-interactor-capture.ts', () => ({
+  captureSnapshotWithInteractor: vi.fn(),
+}));
+
 import fs from 'node:fs';
 import path from 'node:path';
 import { runReplayScriptSource } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import { createReplayCoordinator } from '../../session-replay-coordinator.ts';
 import { dispatchCommand, resolveTargetDevice } from '../../../core/dispatch.ts';
+import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
+import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
 import {
   makeAndroidSession,
   makeIosSession,
@@ -23,12 +29,15 @@ import {
 
 const mockDispatchCommand = vi.mocked(dispatchCommand);
 const mockResolveTargetDevice = vi.mocked(resolveTargetDevice);
+const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);
 
 beforeEach(() => {
   mockDispatchCommand.mockReset();
   mockDispatchCommand.mockResolvedValue({});
   mockResolveTargetDevice.mockReset();
   mockResolveTargetDevice.mockResolvedValue(makeIosSession('resolved').device);
+  mockCaptureSnapshotWithInteractor.mockReset();
+  mockCaptureSnapshotWithInteractor.mockImplementation(captureSnapshotThroughLegacyDispatchFixture);
 });
 test('resume skips steps 1..from-1 without invoking them and executes only from the reported step', async () => {
   const root = mkdtempForTestSync('agent-device-replay-resume-skip-');

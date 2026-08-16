@@ -29,12 +29,17 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
   return { ...actual, dispatchCommand: vi.fn(async () => ({})), resolveTargetDevice: vi.fn() };
 });
+vi.mock('../snapshot-interactor-capture.ts', () => ({
+  captureSnapshotWithInteractor: vi.fn(),
+}));
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { runReplayScriptSource } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
+import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
+import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { repairSessionBoundary } from '../../session-replay-transaction.ts';
 import type { SessionState } from '../../types.ts';
@@ -57,9 +62,12 @@ function sessionRepairStatus(session: SessionState | undefined) {
 }
 
 const mockDispatchCommand = vi.mocked(dispatchCommand);
+const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);
 
 beforeEach(() => {
   mockDispatchCommand.mockReset();
+  mockCaptureSnapshotWithInteractor.mockReset();
+  mockCaptureSnapshotWithInteractor.mockImplementation(captureSnapshotThroughLegacyDispatchFixture);
   // The recorded container ("article", under a real nested ancestry chain)
   // stays present throughout — this is what routes the divergence to
   // `record-and-heal` rather than the `manual` fail-safe.

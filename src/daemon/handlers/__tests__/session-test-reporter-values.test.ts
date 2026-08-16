@@ -8,20 +8,16 @@
 // registry and pin what a reporter sees. They document today's behavior; they do not
 // propose behavior.
 
-// The same reason session-test-suite.test.ts mocks it: ADR 0012 attempts a post-failure
-// screen digest via dispatchCommand('snapshot', ...), and these fixtures model no runner.
+// ADR 0012 attempts a post-failure screen digest through the narrow snapshot interactor seam;
+// these fixtures model no runner, so reject that leaf capture deterministically.
 import { expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return {
-    ...actual,
-    dispatchCommand: vi.fn(async () => {
-      throw new Error('no device runner available in this test');
-    }),
-  };
-});
+vi.mock('../snapshot-interactor-capture.ts', () => ({
+  captureSnapshotWithInteractor: vi.fn(async () => {
+    throw new Error('no device runner available in this test');
+  }),
+}));
 
 import fs from 'node:fs';
 import os from 'node:os';

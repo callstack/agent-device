@@ -8,6 +8,7 @@ import type {
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
+  bindLocalSnapshotInteractor,
   localRuntimeOwner,
   sameRuntimeOwner,
 } from '@agent-device/contracts/platform';
@@ -153,6 +154,13 @@ function bindWebRuntime(
         }
       : {}),
     ...recording.operations,
+    ...(facts.operations.captureSnapshot.available
+      ? bindLocalSnapshotInteractor({
+          device,
+          signal,
+          resolveInteractor: host.localInteractors.resolve,
+        })
+      : {}),
     ...availableApplicationLifecycleOperations(
       bindWebApplicationLifecycle({ host: host.localInteractors, device, signal }),
       facts.operations,
@@ -195,6 +203,7 @@ function webRuntimeFacts(
       screenRecordingStart: recordingAvailable ? available : recordingUnavailable,
       screenRecordingReattach: recordingAvailable ? available : recordingUnavailable,
       screenRecordingCleanup: recordingAvailable ? available : recordingUnavailable,
+      captureSnapshot: device.kind === 'device' ? available : openTargetKindUnavailable,
       ensureReady: readinessUnavailable,
       bootTarget: readinessUnavailable,
       bootTargetHeadless: readinessUnavailable,

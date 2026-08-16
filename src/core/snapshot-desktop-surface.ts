@@ -1,0 +1,82 @@
+import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotOptions, SnapshotResult } from '@agent-device/contracts/interaction';
+import { findNodeByLabel } from './snapshot-node-lookup.ts';
+
+const INTERACTIVE_ROLE_TOKENS = [
+  'button',
+  'menu',
+  'textfield',
+  'searchfield',
+  'checkbox',
+  'radio',
+  'switch',
+] as const;
+
+/** Applies the legacy desktop-surface projection once for both runtime hosts and legacy capture. */
+export function shapeDesktopSurfaceSnapshot(
+  data: SnapshotResult,
+  options: Pick<SnapshotOptions, 'depth' | 'interactiveOnly' | 'scope'>,
+): SnapshotResult {
+  let nodes = data.nodes ?? [];
+  if (options.scope) nodes = scopeSnapshotNodes(nodes, options.scope);
+  if (options.interactiveOnly) nodes = filterInteractiveSnapshotNodes(nodes);
+  if (typeof options.depth === 'number') nodes = filterSnapshotNodesByDepth(nodes, options.depth);
+  return { ...data, nodes };
+}
+
+export function scopeSnapshotNodes(nodes: RawSnapshotNode[], scope: string): RawSnapshotNode[] {
+  const scopedNodes = attachRefs(nodes);
+  const match = findNodeByLabel(scopedNodes, scope);
+  if (!match) return [];
+  const startIndex = nodes.findIndex((node) => node.index === match.index);
+  if (startIndex === -1) return [];
+  const startDepth = nodes[startIndex]?.depth ?? 0;
+  const slice: RawSnapshotNode[] = [];
+  for (let index = startIndex; index < nodes.length; index += 1) {
+    const node = nodes[index];
+    if (!node) continue;
+    const depth = node.depth ?? 0;
+    if (index > startIndex && depth <= startDepth) break;
+    slice.push(node);
+  }
+  return reindexSnapshotNodes(slice, startDepth);
+}
+
+function filterInteractiveSnapshotNodes(nodes: RawSnapshotNode[]): RawSnapshotNode[] {
+  if (nodes.length === 0) return nodes;
+  const byIndex = new Map(nodes.map((node) => [node.index, node]));
+  const keepIndexes = new Set<number>();
+  for (const node of nodes) {
+    if (!isInteractiveSnapshotNode(node)) continue;
+    let current: RawSnapshotNode | undefined = node;
+    while (current) {
+      if (keepIndexes.has(current.index)) break;
+      keepIndexes.add(current.index);
+      current =
+        typeof current.parentIndex === 'number' ? byIndex.get(current.parentIndex) : undefined;
+    }
+  }
+  if (keepIndexes.size === 0) return nodes;
+  return reindexSnapshotNodes(nodes.filter((node) => keepIndexes.has(node.index)));
+}
+
+function filterSnapshotNodesByDepth(nodes: RawSnapshotNode[], maxDepth: number): RawSnapshotNode[] {
+  return reindexSnapshotNodes(nodes.filter((node) => (node.depth ?? 0) <= maxDepth));
+}
+
+function reindexSnapshotNodes(nodes: RawSnapshotNode[], depthOffset = 0): RawSnapshotNode[] {
+  const indexMap = new Map<number, number>();
+  for (const [index, node] of nodes.entries()) indexMap.set(node.index, index);
+  return nodes.map((node, index) => ({
+    ...node,
+    index,
+    depth: Math.max(0, (node.depth ?? 0) - depthOffset),
+    parentIndex: typeof node.parentIndex === 'number' ? indexMap.get(node.parentIndex) : undefined,
+  }));
+}
+
+function isInteractiveSnapshotNode(node: RawSnapshotNode): boolean {
+  if ([node.focused, node.hittable, node.rect].some(Boolean)) return true;
+  const role = `${node.type ?? ''} ${node.role ?? ''} ${node.subrole ?? ''}`.toLowerCase();
+  return INTERACTIVE_ROLE_TOKENS.some((token) => role.includes(token));
+}

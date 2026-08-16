@@ -10,7 +10,7 @@ import {
   type RuntimeOperationUnavailability,
   type ScreenRecordingLiveHandle,
 } from '@agent-device/contracts/platform';
-import { unavailableDeploymentAndShutdownOperationFacts } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
+import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { createScreenRecordingAdmissionLedger } from '../../screen-recording-admission-ledger.ts';
@@ -200,7 +200,7 @@ function makeRuntime(session: SessionState, options: RuntimeOptions = {}) {
         bootTarget: unavailable,
         bootTargetHeadless: unavailable,
         listApps: unavailable,
-        ...unavailableDeploymentAndShutdownOperationFacts,
+        ...unavailableDeploymentSnapshotAndShutdownOperationFacts,
         ...applicationLifecycleOperationFacts({
           resolveOpenTarget: unavailable,
           prepareApplicationOpen: unavailable,

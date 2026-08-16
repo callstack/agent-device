@@ -48,6 +48,9 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
   return { ...actual, dispatchCommand: vi.fn(async () => ({})), resolveTargetDevice: vi.fn() };
 });
+vi.mock('../snapshot-interactor-capture.ts', () => ({
+  captureSnapshotWithInteractor: vi.fn(),
+}));
 import fs from 'node:fs';
 import path from 'node:path';
 import { runReplayScriptSource } from '../session-replay-runtime.ts';
@@ -55,6 +58,7 @@ import { handleCloseCommand as handleProductionCloseCommand } from '../session-c
 import { SessionStore } from '../../session-store.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
+import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
 import {
   makeIosSession,
   authoringPublication,
@@ -69,8 +73,10 @@ import {
   bindLifecycleRuntime,
   inspectLifecycleRuntimeFacts,
 } from './application-lifecycle-runtime-harness.ts';
+import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 
 const mockDispatchCommand = vi.mocked(dispatchCommand);
+const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);
 
 function handleCloseCommand(
   params: Omit<Parameters<typeof handleProductionCloseCommand>[0], 'inspectFacts' | 'bindDevice'>,
@@ -84,6 +90,8 @@ function handleCloseCommand(
 
 beforeEach(() => {
   mockDispatchCommand.mockReset();
+  mockCaptureSnapshotWithInteractor.mockReset();
+  mockCaptureSnapshotWithInteractor.mockImplementation(captureSnapshotThroughLegacyDispatchFixture);
   // The "current" app state: "save" was renamed to "save-v2" (why the click
   // on `id="save"` diverges as a `selector-miss`) — nested under a "Toolbar"
   // container so the recorded ancestry (below) has a real, present container

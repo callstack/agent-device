@@ -180,6 +180,12 @@ test.each([
     expect(facts.operations.ensureReady).toMatchObject({ available: true });
     expect(facts.operations.bootTarget).toMatchObject({ available: false });
     expect(facts.operations.bootTargetHeadless).toMatchObject({ available: false });
+    expect(facts.operations.captureSnapshot.available).toBe(
+      runtimeDevice.kind === 'emulator' || runtimeDevice.kind === 'device',
+    );
+    expect(binding.operations.captureSnapshot).toBeTypeOf(
+      runtimeDevice.kind === 'simulator' ? 'undefined' : 'function',
+    );
     expectLegacyLifecycleCell(binding, legacy);
   },
 );

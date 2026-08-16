@@ -1,48 +1,41 @@
-import { beforeEach, test, vi } from 'vitest';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import { buildRuntimeCaptureInput } from '../../daemon/snapshot-runtime-binding.ts';
 
-vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../platforms/apple/core/runner/runner-client.ts')>();
-  return { ...actual, runAppleRunnerCommand: vi.fn() };
-});
-
-import { dispatchCommand } from '../dispatch.ts';
-import { runAppleRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
-import { IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
-
-const mockRunAppleRunnerCommand = vi.mocked(runAppleRunnerCommand);
-
-beforeEach(() => {
-  vi.resetAllMocks();
-  mockRunAppleRunnerCommand.mockResolvedValue({
-    nodes: [{ index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } }],
-  });
-});
-
-// #1634 P2: proves the whole daemon-side wire — dispatch context ->
-// handleSnapshotCommand -> interactor -> emitted RunnerCommand. Removing the
-// forwarding at any of those hops turns this red; the daemon corroboration
-// test (mocked dispatch) and the Swift plan-gate test cover the layers on
-// either side of it.
-test('dispatch snapshot forwards snapshotPreferredBackend to the runner command', async () => {
-  await dispatchCommand(IOS_SIMULATOR, 'snapshot', [], undefined, {
-    snapshotPreferredBackend: 'private-ax',
-  });
-
-  const call = mockRunAppleRunnerCommand.mock.calls.find(
-    ([, command]) => command.command === 'snapshot',
+// #1634 P2: the daemon maps the CLI preference into the request-scoped runtime
+// operation. The contract binding test owns the adjacent operation -> interactor
+// hop, and the Swift plan gate owns the emitted runner command.
+test('snapshot runtime input forwards snapshotPreferredBackend', () => {
+  const input = buildRuntimeCaptureInput(
+    {
+      req: {
+        command: 'snapshot',
+        positionals: [],
+        session: 'snapshot-preferred-backend',
+        token: 'test-token',
+        flags: { snapshotPreferredBackend: 'private-ax' },
+      },
+      logPath: '/tmp/snapshot-preferred-backend.log',
+    },
+    undefined,
+    undefined,
   );
-  assert.ok(call, 'expected a snapshot runner command');
-  assert.equal(call[1].preferredBackend, 'private-ax');
+  assert.equal(input.options?.preferredBackend, 'private-ax');
 });
 
-test('dispatch snapshot without a pin emits no preferredBackend', async () => {
-  await dispatchCommand(IOS_SIMULATOR, 'snapshot', [], undefined, {});
-
-  const call = mockRunAppleRunnerCommand.mock.calls.find(
-    ([, command]) => command.command === 'snapshot',
+test('snapshot runtime input without a pin leaves preferredBackend absent', () => {
+  const input = buildRuntimeCaptureInput(
+    {
+      req: {
+        command: 'snapshot',
+        positionals: [],
+        session: 'snapshot-default-backend',
+        token: 'test-token',
+      },
+      logPath: '/tmp/snapshot-default-backend.log',
+    },
+    undefined,
+    undefined,
   );
-  assert.ok(call, 'expected a snapshot runner command');
-  assert.equal(call[1].preferredBackend, undefined);
+  assert.equal(input.options?.preferredBackend, undefined);
 });

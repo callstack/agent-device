@@ -350,6 +350,7 @@ function sourceRuntimeFacts(
       appLogCleanup: unavailable,
       appState: unavailable,
       listApps: unavailable,
+      captureSnapshot: unavailable,
       deployApp: unavailable,
       materializeAppSource: materializationAvailable ? { available: true } : unavailable,
       deployMaterializedApp: materializationAvailable ? { available: true } : unavailable,

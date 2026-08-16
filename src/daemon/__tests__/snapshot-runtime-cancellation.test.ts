@@ -7,6 +7,7 @@ import {
   registerRequestAbort,
 } from '../../request/cancel.ts';
 import { dispatchSnapshotDiffViaRuntime, dispatchSnapshotViaRuntime } from '../snapshot-runtime.ts';
+import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
 
 const dispatchCommandMock = vi.hoisted(() => vi.fn());
 
@@ -17,6 +18,23 @@ vi.mock('../../core/dispatch.ts', async (importOriginal) => {
     dispatchCommand: dispatchCommandMock,
   };
 });
+
+vi.mock('../handlers/snapshot-interactor-capture.ts', () => ({
+  captureSnapshotWithInteractor: vi.fn(
+    async ({ device, runnerContext, options }) =>
+      await dispatchCommandMock(device, 'snapshot', [], undefined, {
+        ...runnerContext,
+        ...options,
+        snapshotInteractiveOnly: options.interactiveOnly,
+        snapshotPreferredBackend: options.preferredBackend,
+        snapshotDepth: options.depth,
+        snapshotScope: options.scope,
+        snapshotRaw: options.raw,
+        snapshotCustomActions: options.customActions,
+        snapshotIncludeHiddenContentHints: options.includeHiddenContentHints,
+      }),
+  ),
+}));
 
 type Deferred = {
   promise: Promise<void>;
@@ -71,7 +89,7 @@ for (const command of ['snapshot', 'diff snapshot'] as const) {
       };
       const running =
         command === 'snapshot'
-          ? dispatchSnapshotViaRuntime(input)
+          ? dispatchSnapshotViaRuntime({ ...input, ...snapshotRuntimeFixture(requestId) })
           : dispatchSnapshotDiffViaRuntime(input);
       await dispatchEntered.promise;
       markRequestCanceled(requestId);

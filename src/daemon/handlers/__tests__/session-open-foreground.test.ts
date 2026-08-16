@@ -11,6 +11,9 @@ import {
   resolveForegroundOpenRequest,
 } from '../session-open-foreground.ts';
 
+const inspectFacts = vi.fn();
+const bindDevice = vi.fn();
+
 function baseRequest(overrides: Partial<DaemonRequest> = {}): DaemonRequest {
   return {
     token: 't',
@@ -24,6 +27,8 @@ function baseRequest(overrides: Partial<DaemonRequest> = {}): DaemonRequest {
 
 beforeEach(() => {
   dispatchSnapshotViaRuntime.mockReset();
+  inspectFacts.mockReset();
+  bindDevice.mockReset();
 });
 
 // --- resolveForegroundOpenRequest ---
@@ -141,6 +146,8 @@ test('passes a failed open response through untouched', async () => {
     logPath: '/tmp/daemon.log',
     sessionStore: {} as never,
     openResponse: failedOpenResponse,
+    inspectFacts,
+    bindDevice,
   });
 
   expect(result).toBe(failedOpenResponse);
@@ -154,6 +161,8 @@ test('leaves a successful open response untouched when --foreground was not requ
     logPath: '/tmp/daemon.log',
     sessionStore: {} as never,
     openResponse: okOpenResponse,
+    inspectFacts,
+    bindDevice,
   });
 
   expect(result).toBe(okOpenResponse);
@@ -170,6 +179,8 @@ test('attaches the initial INTERACTIVE snapshot by delegating to the existing sn
     logPath: '/tmp/daemon.log',
     sessionStore: {} as never,
     openResponse: okOpenResponse,
+    inspectFacts,
+    bindDevice,
   });
 
   // #1670 P1: the composed dispatch must BE the `snapshot -i` path — the CLI
@@ -184,6 +195,8 @@ test('attaches the initial INTERACTIVE snapshot by delegating to the existing sn
     sessionName: 'default',
     logPath: '/tmp/daemon.log',
     sessionStore: {},
+    inspectFacts,
+    bindDevice,
   });
   expect(result).toEqual({
     ok: true,
@@ -215,6 +228,8 @@ test('a snapshot-capture failure never masks the successful open', async () => {
     logPath: '/tmp/daemon.log',
     sessionStore: {} as never,
     openResponse: { ok: true, data: { session: 'default', warnings: ['pre-existing warning'] } },
+    inspectFacts,
+    bindDevice,
   });
 
   expect(result.ok).toBe(true);
@@ -255,6 +270,8 @@ test('a THROWN snapshot-capture failure never masks the successful open either',
     logPath: '/tmp/daemon.log',
     sessionStore: {} as never,
     openResponse: { ok: true, data: { session: 'default' } },
+    inspectFacts,
+    bindDevice,
   });
 
   expect(result.ok).toBe(true);

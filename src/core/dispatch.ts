@@ -187,7 +187,6 @@ const DISPATCH_HANDLERS: Record<DispatchCommand, DispatchHandler> = {
     handleTvRemoteCommand(device, interactor, positionals, context),
   settings: ({ device, interactor, positionals, context }) =>
     handleSettingsCommand(device, interactor, positionals, context),
-  snapshot: ({ interactor, context }) => handleSnapshotCommand(interactor, context),
   read: ({ device, positionals, context }) => handleReadCommand(device, positionals, context),
 };
 
@@ -633,26 +632,6 @@ function buildSettingsDiagnosticPayload(
     };
   }
   return { setting, state, appBundleId, platform: device.platform };
-}
-
-async function handleSnapshotCommand(
-  interactor: Interactor,
-  context: DispatchContext | undefined,
-): Promise<Record<string, unknown>> {
-  const snapshotContext = context ?? {};
-  return await interactor.snapshot({
-    appBundleId: snapshotContext.appBundleId,
-    signal: snapshotContext.signal,
-    interactiveOnly: snapshotContext.snapshotInteractiveOnly,
-    preferredBackend: snapshotContext.snapshotPreferredBackend,
-    depth: snapshotContext.snapshotDepth,
-    scope: snapshotContext.snapshotScope,
-    raw: snapshotContext.snapshotRaw,
-    customActions: snapshotContext.snapshotCustomActions,
-    includeRects: snapshotContext.snapshotIncludeRects,
-    includeHiddenContentHints: snapshotContext.snapshotIncludeHiddenContentHints,
-    surface: snapshotContext.surface,
-  });
 }
 
 function readResultMessage(result: Record<string, unknown>): string | undefined {

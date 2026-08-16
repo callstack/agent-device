@@ -10,6 +10,7 @@ import { requireSessionOrExplicitSelector, resolveCommandDevice } from './sessio
 import { errorResponse, requireCommandSupported } from './response.ts';
 import { recordSessionAction } from './handler-utils.ts';
 import { handleRuntimeCommand } from './session-runtime-command.ts';
+import { requireRuntimeBinding, requireRuntimeFacts } from './session-runtime-admission.ts';
 import { handleOpenCommand } from './session-open.ts';
 import { composeOpenWithInitialSnapshot } from './session-open-foreground.ts';
 import {
@@ -380,22 +381,27 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
     inspectFacts,
     bindDevice,
     reconcileOrphanedDeviceClaim,
-  }) =>
-    await composeOpenWithInitialSnapshot({
+  }) => {
+    const openResponse = await handleOpenCommand({
       req,
       sessionName,
       logPath,
       sessionStore,
-      openResponse: await handleOpenCommand({
-        req,
-        sessionName,
-        logPath,
-        sessionStore,
-        inspectFacts,
-        bindDevice,
-        reconcileOrphanedDeviceClaim,
-      }),
-    }),
+      inspectFacts,
+      bindDevice,
+      reconcileOrphanedDeviceClaim,
+    });
+    if (!openResponse.ok || req.flags?.foreground !== true) return openResponse;
+    return await composeOpenWithInitialSnapshot({
+      req,
+      sessionName,
+      logPath,
+      sessionStore,
+      inspectFacts: requireRuntimeFacts(inspectFacts),
+      bindDevice: requireRuntimeBinding(bindDevice),
+      openResponse,
+    });
+  },
   replay: handleSessionReplayCommandGroup,
   test: handleSessionReplayCommandGroup,
   batch: async ({ req, sessionName, invoke }) => await runBatchCommands(req, sessionName, invoke),

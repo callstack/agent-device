@@ -10,7 +10,7 @@ import {
 import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { createTestAppLogLiveHandle } from '../../__tests__/test-utils/app-log-live-handle.ts';
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
-import { unavailableDeploymentAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';
+import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
@@ -153,7 +153,7 @@ function makeGateway(disposeError?: Error) {
         bootTarget: { available: true as const },
         bootTargetHeadless: unavailableRecording,
         listApps: unavailableRecording,
-        ...unavailableDeploymentAndShutdownOperationFacts,
+        ...unavailableDeploymentSnapshotAndShutdownOperationFacts,
         ...applicationLifecycleOperationFacts({
           resolveOpenTarget: unavailableRecording,
           prepareApplicationOpen: unavailableRecording,

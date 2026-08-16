@@ -16,11 +16,15 @@ import {
   type SnapshotBackend,
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
-import { dispatchCommand } from '../../core/dispatch.ts';
 import { runMacOsSnapshotAction } from '../../platforms/apple/os/macos/helper.ts';
 import { snapshotLinux } from '../../platforms/linux/snapshot.ts';
 import { annotateCoveredSnapshotNodes } from '../../snapshot/snapshot-occlusion.ts';
-import { findNodeByLabel, resolveRefLabel } from '../../core/snapshot-node-lookup.ts';
+import { resolveRefLabel } from '../../core/snapshot-node-lookup.ts';
+import {
+  scopeSnapshotNodes,
+  shapeDesktopSurfaceSnapshot,
+} from '../../core/snapshot-desktop-surface.ts';
+import { captureSnapshotWithInteractor } from './snapshot-interactor-capture.ts';
 import { normalizeSnapshotTree, pruneGroupNodes } from '../../core/snapshot-tree-ingestion.ts';
 import {
   clearAndroidSnapshotFreshness,
@@ -42,6 +46,12 @@ type CaptureSnapshotParams = {
   snapshotScope?: string;
   androidFreshnessMode?: AndroidFreshnessMode;
   signal?: AbortSignal;
+  /**
+   * Request-bound platform capture. Migrated callers inject the selected
+   * runtime operation; legacy consumers keep the existing interactor path
+   * until their own command descriptor cuts over.
+   */
+  captureData?: () => Promise<SnapshotData>;
 };
 
 type SnapshotData = {
@@ -83,15 +93,16 @@ export async function captureSnapshot(
 }
 
 export async function captureSnapshotData(params: CaptureSnapshotParams): Promise<SnapshotData> {
-  const { device, session, flags, outPath, logPath, snapshotScope } = params;
+  if (params.captureData) return await params.captureData();
+  const { device, session, flags, logPath, snapshotScope } = params;
   if (device.platform === 'linux') {
     const linuxResult = await snapshotLinux(session?.surface, params.signal);
     return shapeDesktopSurfaceSnapshot(
       { nodes: linuxResult.nodes, truncated: linuxResult.truncated, backend: 'linux-atspi' },
       {
-        snapshotDepth: flags?.snapshotDepth,
-        snapshotInteractiveOnly: flags?.snapshotInteractiveOnly,
-        snapshotScope,
+        depth: flags?.snapshotDepth,
+        interactiveOnly: flags?.snapshotInteractiveOnly,
+        scope: snapshotScope,
       },
     );
   }
@@ -101,21 +112,45 @@ export async function captureSnapshotData(params: CaptureSnapshotParams): Promis
       signal: params.signal,
     });
     return shapeDesktopSurfaceSnapshot(helperSnapshot, {
-      snapshotDepth: flags?.snapshotDepth,
-      snapshotInteractiveOnly: flags?.snapshotInteractiveOnly,
-      snapshotScope,
+      depth: flags?.snapshotDepth,
+      interactiveOnly: flags?.snapshotInteractiveOnly,
+      scope: snapshotScope,
     });
   }
-  return (await dispatchCommand(device, 'snapshot', [], outPath, {
-    ...contextFromFlags(
-      logPath,
-      { ...flags, snapshotScope },
-      session?.appBundleId,
-      session?.trace?.outPath,
-    ),
-    snapshotIncludeRects: params.includeRects,
-    signal: params.signal,
-  })) as SnapshotData;
+  const context = contextFromFlags(
+    logPath,
+    { ...flags, snapshotScope },
+    session?.appBundleId,
+    session?.trace?.outPath,
+  );
+  return await captureSnapshotWithInteractor({
+    device,
+    runnerContext: {
+      requestId: context.requestId,
+      signal: params.signal,
+      appBundleId: context.appBundleId,
+      verbose: context.verbose,
+      logPath: context.logPath,
+      traceLogPath: context.traceLogPath,
+      iosXctestrunFile: context.iosXctestrunFile,
+      iosXctestDerivedDataPath: context.iosXctestDerivedDataPath,
+      iosXctestEnvDir: context.iosXctestEnvDir,
+      runnerLeaseContext: context.runnerLeaseContext,
+    },
+    options: {
+      appBundleId: context.appBundleId,
+      signal: params.signal,
+      interactiveOnly: context.snapshotInteractiveOnly,
+      preferredBackend: context.snapshotPreferredBackend,
+      depth: context.snapshotDepth,
+      scope: context.snapshotScope,
+      raw: context.snapshotRaw,
+      customActions: context.snapshotCustomActions,
+      includeRects: params.includeRects,
+      includeHiddenContentHints: context.snapshotIncludeHiddenContentHints,
+      surface: session?.surface,
+    },
+  });
 }
 
 async function captureSnapshotAttempt(params: CaptureSnapshotParams): Promise<SnapshotAttempt> {
@@ -219,109 +254,6 @@ function isAndroidComparisonSafeSnapshot(
     flags?.snapshotInteractiveOnly !== true &&
     typeof flags?.snapshotDepth !== 'number' &&
     !flags?.snapshotScope
-  );
-}
-
-function shapeDesktopSurfaceSnapshot(
-  data: SnapshotData,
-  options: {
-    snapshotDepth?: number;
-    snapshotInteractiveOnly?: boolean;
-    snapshotScope?: string;
-  },
-): SnapshotData {
-  let nodes = data.nodes ?? [];
-  if (options.snapshotScope) {
-    nodes = scopeSnapshotNodes(nodes, options.snapshotScope);
-  }
-  if (options.snapshotInteractiveOnly) {
-    nodes = filterInteractiveSnapshotNodes(nodes);
-  }
-  if (typeof options.snapshotDepth === 'number') {
-    nodes = filterSnapshotNodesByDepth(nodes, options.snapshotDepth);
-  }
-  return { ...data, nodes };
-}
-
-function scopeSnapshotNodes(nodes: RawSnapshotNode[], scope: string): RawSnapshotNode[] {
-  const scopedNodes = attachRefs(nodes);
-  const match = findNodeByLabel(scopedNodes, scope);
-  if (!match) {
-    return [];
-  }
-  const startIndex = nodes.findIndex((node) => node.index === match.index);
-  if (startIndex === -1) {
-    return [];
-  }
-  const startDepth = nodes[startIndex]?.depth ?? 0;
-  const slice: RawSnapshotNode[] = [];
-  for (let index = startIndex; index < nodes.length; index += 1) {
-    const node = nodes[index];
-    if (!node) continue;
-    const depth = node.depth ?? 0;
-    if (index > startIndex && depth <= startDepth) {
-      break;
-    }
-    slice.push(node);
-  }
-  return reindexSnapshotNodes(slice, startDepth);
-}
-
-function filterInteractiveSnapshotNodes(nodes: RawSnapshotNode[]): RawSnapshotNode[] {
-  if (nodes.length === 0) {
-    return nodes;
-  }
-  const byIndex = new Map<number, RawSnapshotNode>();
-  for (const node of nodes) {
-    byIndex.set(node.index, node);
-  }
-  const keepIndexes = new Set<number>();
-  for (const node of nodes) {
-    if (!isInteractiveSnapshotNode(node)) continue;
-    let current: RawSnapshotNode | undefined = node;
-    while (current) {
-      if (keepIndexes.has(current.index)) break;
-      keepIndexes.add(current.index);
-      current =
-        typeof current.parentIndex === 'number' ? byIndex.get(current.parentIndex) : undefined;
-    }
-  }
-  if (keepIndexes.size === 0) {
-    return nodes;
-  }
-  return reindexSnapshotNodes(nodes.filter((node) => keepIndexes.has(node.index)));
-}
-
-function filterSnapshotNodesByDepth(nodes: RawSnapshotNode[], maxDepth: number): RawSnapshotNode[] {
-  return reindexSnapshotNodes(nodes.filter((node) => (node.depth ?? 0) <= maxDepth));
-}
-
-function reindexSnapshotNodes(nodes: RawSnapshotNode[], depthOffset = 0): RawSnapshotNode[] {
-  const indexMap = new Map<number, number>();
-  for (const [index, node] of nodes.entries()) {
-    indexMap.set(node.index, index);
-  }
-  return nodes.map((node, index) => ({
-    ...node,
-    index,
-    depth: Math.max(0, (node.depth ?? 0) - depthOffset),
-    parentIndex: typeof node.parentIndex === 'number' ? indexMap.get(node.parentIndex) : undefined,
-  }));
-}
-
-function isInteractiveSnapshotNode(node: RawSnapshotNode): boolean {
-  if (node.focused) return true;
-  if (node.hittable) return true;
-  if (node.rect) return true;
-  const role = `${node.type ?? ''} ${node.role ?? ''} ${node.subrole ?? ''}`.toLowerCase();
-  return (
-    role.includes('button') ||
-    role.includes('menu') ||
-    role.includes('textfield') ||
-    role.includes('searchfield') ||
-    role.includes('checkbox') ||
-    role.includes('radio') ||
-    role.includes('switch')
   );
 }
 

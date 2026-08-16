@@ -166,6 +166,8 @@ async function runSnapshotHandler(
       sessionName: params.sessionName,
       logPath: params.logPath,
       sessionStore: params.sessionStore,
+      inspectFacts: params.inspectFacts,
+      bindDevice: params.bindDevice,
     }),
   );
 }

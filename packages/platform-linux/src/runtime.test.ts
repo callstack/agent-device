@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import type {
   DeviceBinding,
   PlatformRuntimeHost,
@@ -76,7 +76,12 @@ test.each([
 >)(
   'classifies the Linux $name lifecycle denominator against the legacy dispatch cell',
   async ({ device, legacy }) => {
-    const binding = await createLinuxPlatformRuntime(lifecycleHost()).bind({
+    const captureSurface = vi.fn(async () => ({
+      backend: 'linux-atspi' as const,
+      nodes: [],
+      truncated: false,
+    }));
+    const binding = await createLinuxPlatformRuntime(lifecycleHost(captureSurface)).bind({
       device,
       intent: { kind: 'ordinary' },
       scope: {
@@ -94,13 +99,37 @@ test.each([
     expect(binding.facts.operations.bootTargetHeadless).toMatchObject({ available: false });
     expect(binding.facts.operations.appState).toMatchObject({ available: false });
     expect(binding.facts.operations.listApps).toMatchObject({ available: false });
+    expect(binding.facts.operations.captureSnapshot.available).toBe(device.kind === 'device');
+    expect(binding.operations.captureSnapshot).toBeTypeOf(
+      device.kind === 'device' ? 'function' : 'undefined',
+    );
+    if (device.kind === 'device') {
+      await binding.operations.captureSnapshot?.({
+        options: { interactiveOnly: true, depth: 2, scope: 'Settings', surface: 'desktop' },
+      });
+      expect(captureSurface).toHaveBeenCalledWith(
+        device,
+        { interactiveOnly: true, depth: 2, scope: 'Settings', surface: 'desktop' },
+        expect.any(AbortSignal),
+      );
+    }
     expectLifecycleFacts(binding, legacy);
   },
 );
 
-function lifecycleHost(): PlatformRuntimeHost {
+function lifecycleHost(
+  captureSurface = async () => ({
+    backend: 'linux-atspi' as const,
+    nodes: [],
+    truncated: false,
+  }),
+): PlatformRuntimeHost {
   return {
     localInteractors: { resolve: async () => ({}) },
+    snapshot: {
+      apple: { captureSurface: async () => ({ backend: 'macos-helper', nodes: [] }) },
+      linux: { captureSurface },
+    },
   } as unknown as PlatformRuntimeHost;
 }
 

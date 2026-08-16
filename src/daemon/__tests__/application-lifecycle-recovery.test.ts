@@ -11,7 +11,7 @@ import {
   type RuntimeFacts,
 } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { unavailableDeploymentAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';
+import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';
 import type { SessionState } from '../types.ts';
 import { finalizeDaemonSessionApplicationLifecycle } from '../application-lifecycle-recovery.ts';
 
@@ -86,7 +86,7 @@ function lifecycleFacts(
       bootTarget: unavailable,
       bootTargetHeadless: unavailable,
       listApps: unavailable,
-      ...unavailableDeploymentAndShutdownOperationFacts,
+      ...unavailableDeploymentSnapshotAndShutdownOperationFacts,
       ...applicationLifecycleOperationFacts({
         resolveOpenTarget: unavailable,
         prepareApplicationOpen: unavailable,

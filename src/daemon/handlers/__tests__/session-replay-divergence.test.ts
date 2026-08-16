@@ -6,6 +6,9 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
   return { ...actual, dispatchCommand: vi.fn(async () => ({})), resolveTargetDevice: vi.fn() };
 });
+vi.mock('../snapshot-interactor-capture.ts', () => ({
+  captureSnapshotWithInteractor: vi.fn(),
+}));
 
 // Stub the Android freshness-retry delay to a no-op so the capture-parity test
 // exercises the retry BRANCH without a real wall-clock wait (repo guidance:
@@ -21,6 +24,7 @@ vi.mock('../../../utils/timeouts.ts', async (importOriginal) => {
 });
 
 import { dispatchCommand } from '../../../core/dispatch.ts';
+import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -38,11 +42,15 @@ import {
   buildReplayFailureDivergence,
   captureDivergenceObservation,
 } from '../session-replay-divergence.ts';
+import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 
 const mockDispatchCommand = vi.mocked(dispatchCommand);
+const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);
 beforeEach(() => {
   mockDispatchCommand.mockReset();
   mockDispatchCommand.mockResolvedValue({});
+  mockCaptureSnapshotWithInteractor.mockReset();
+  mockCaptureSnapshotWithInteractor.mockImplementation(captureSnapshotThroughLegacyDispatchFixture);
 });
 
 test('buildReplayFailureDivergence dedupes suggestions using the strongest basis', async () => {

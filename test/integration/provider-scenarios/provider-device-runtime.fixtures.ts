@@ -15,6 +15,7 @@ import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
   bindProviderApplicationLifecycleInteractor,
+  bindProviderSnapshotInteractor,
   invokeApplicationClose,
   invokeApplicationOpen,
   providerRuntimeOwner,
@@ -29,7 +30,7 @@ import {
   type PlatformRuntimeProviderModule,
   type RuntimeFacts,
 } from '@agent-device/contracts/platform';
-import { unavailableDeploymentAndShutdownOperationFacts } from '../../../src/__tests__/test-utils/runtime-operation-facts.ts';
+import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../src/__tests__/test-utils/runtime-operation-facts.ts';
 import type { DaemonRequest } from '../../../src/daemon/types.ts';
 import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -145,6 +146,11 @@ async function bindProviderScenarioPlatformRuntime(
         providerScenarioApplicationLifecycle(runtime, request.device, request.scope.signal),
         facts.operations,
       ),
+      ...bindProviderSnapshotInteractor({
+        device: request.device,
+        signal: request.scope.signal,
+        resolveInteractor: (runner) => runtime.getInteractor(request.device, runner),
+      }),
       deployApp: async (input: AppDeploymentInput): Promise<AppDeploymentResult> => {
         const result = await runtime.installApp?.(request.device, input.app, input.appPath);
         if (result) return result;
@@ -228,7 +234,8 @@ function providerScenarioRuntimeFacts(
       bootTarget: fakeProviderUnavailable,
       bootTargetHeadless: fakeProviderUnavailable,
       listApps: fakeProviderUnavailable,
-      ...unavailableDeploymentAndShutdownOperationFacts,
+      ...unavailableDeploymentSnapshotAndShutdownOperationFacts,
+      captureSnapshot: fakeProviderAvailable,
       deployApp: runtime.installApp ? fakeProviderAvailable : fakeProviderUnavailable,
       ...applicationLifecycleOperationFacts({
         resolveOpenTarget: fakeProviderAvailable,

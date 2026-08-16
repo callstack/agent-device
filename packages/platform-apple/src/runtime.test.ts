@@ -98,7 +98,58 @@ test.each([
     device.appleOs !== 'macos' && device.appleOs !== 'watchos',
   );
   expect(facts.operations.bootTargetHeadless.available).toBe(false);
+  expectAppleSnapshotAvailability(binding, device);
 });
+
+function expectAppleSnapshotAvailability(
+  binding: DeviceBinding<PlatformRuntimeOperations>,
+  device: DeviceInfo,
+): void {
+  const available = device.appleOs !== 'watchos';
+  expect(binding.facts.operations.captureSnapshot.available).toBe(available);
+  expect(binding.operations.captureSnapshot).toBeTypeOf(available ? 'function' : 'undefined');
+}
+
+test.each(['frontmost-app', 'desktop', 'menubar'] as const)(
+  'routes the macOS %s surface through the exact Apple surface host',
+  async (surface) => {
+    const host = platformRuntimeHostFixture();
+    const captureSurface = vi.fn(async () => ({
+      backend: 'macos-helper' as const,
+      nodes: [],
+      truncated: false,
+    }));
+    const resolve = vi.fn(async () => ({}) as never);
+    const binding = await createApplePlatformRuntime({
+      ...host,
+      localInteractors: { resolve },
+      snapshot: {
+        ...host.snapshot,
+        apple: { captureSurface },
+      },
+    }).bind({
+      device: leaves.macos,
+      intent: { kind: 'ordinary' },
+      scope: {
+        signal: new AbortController().signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+    });
+
+    await expect(
+      binding.operations.captureSnapshot?.({
+        options: { surface, appBundleId: 'com.example.app', depth: 3 },
+      }),
+    ).resolves.toMatchObject({ backend: 'macos-helper' });
+    expect(captureSurface).toHaveBeenCalledWith(
+      leaves.macos,
+      { surface, appBundleId: 'com.example.app', depth: 3 },
+      expect.any(AbortSignal),
+    );
+    expect(resolve).not.toHaveBeenCalled();
+  },
+);
 
 test('readiness and boot keep the Apple automation helper warm inside the platform runtime', async () => {
   const host = platformRuntimeHostFixture();
@@ -348,4 +399,8 @@ function expectLegacyLifecycleFactCell(
       expect(facts.operations[name].available).toBe(legacy[facet]);
     }
   }
+  const snapshotAvailable =
+    facts.device.appleOs !== 'watchos' &&
+    (facts.device.kind === 'simulator' || facts.device.kind === 'device');
+  expect(facts.operations.captureSnapshot.available).toBe(snapshotAvailable);
 }

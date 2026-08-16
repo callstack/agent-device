@@ -22,6 +22,7 @@ import {
   snapshot,
   snapshotPayload,
 } from './interaction-ios-tap-outcome-fixtures.ts';
+import { snapshotRuntimeFixture } from '../../__tests__/snapshot-runtime-fixture.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -29,6 +30,11 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
     ...actual,
     dispatchCommand: vi.fn(async () => ({})),
   };
+});
+
+vi.mock('../snapshot-interactor-capture.ts', async () => {
+  const fixture = await import('../../__tests__/legacy-snapshot-capture-fixture.ts');
+  return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });
 
 const mockDispatch = vi.mocked(dispatchCommand);
@@ -567,6 +573,7 @@ test('a corroborated runtime coordinate tap does not schedule a no-change retry'
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
+    ...snapshotRuntimeFixture(),
   });
 
   expect(snapshotResponse?.ok).toBe(true);

@@ -62,6 +62,7 @@ function createAdmissionFacts(
       appLogReattach: unavailable,
       appLogCleanup: unavailable,
       appState: unavailable,
+      captureSnapshot: unavailable,
       deployApp: options.deployAvailable ? available : unavailable,
       materializeAppSource: options.sourceAvailable ? available : unavailable,
       deployMaterializedApp: options.sourceAvailable ? available : unavailable,

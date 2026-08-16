@@ -132,6 +132,7 @@ function readinessFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperati
       appLogStart: unavailable,
       appLogReattach: unavailable,
       appLogCleanup: unavailable,
+      captureSnapshot: unavailable,
       deployApp: operationAvailability(deployment.deploy),
       materializeAppSource: operationAvailability(deployment.source),
       deployMaterializedApp: operationAvailability(deployment.source),

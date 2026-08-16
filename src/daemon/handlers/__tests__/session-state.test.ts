@@ -3,7 +3,7 @@ import { test, expect, vi } from 'vitest';
 import { handleSessionStateCommands } from '../session-state.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { withTestDeviceInventory } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
-import { unavailableDeploymentAndShutdownOperationFacts } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
+import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
 import {
   appStateUse,
   applicationLifecycleOperationFacts,
@@ -185,7 +185,7 @@ test('appstate rejects a missing readiness fact even when appState is available'
       },
       bootTarget: { available: false, reason: 'unsupported-device-kind' },
       bootTargetHeadless: { available: false, reason: 'unsupported-device-kind' },
-      ...unavailableDeploymentAndShutdownOperationFacts,
+      ...unavailableDeploymentSnapshotAndShutdownOperationFacts,
       ...applicationLifecycleOperationFacts({
         resolveOpenTarget: { available: false, reason: 'unsupported-device-kind' },
         prepareApplicationOpen: { available: false, reason: 'unsupported-device-kind' },
@@ -261,7 +261,7 @@ test('sessionless Android appstate inspects once, binds once, and preserves oper
       ensureReady: available,
       bootTarget: available,
       bootTargetHeadless: unavailable,
-      ...unavailableDeploymentAndShutdownOperationFacts,
+      ...unavailableDeploymentSnapshotAndShutdownOperationFacts,
       ...applicationLifecycleOperationFacts({
         resolveOpenTarget: unavailable,
         prepareApplicationOpen: unavailable,

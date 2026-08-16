@@ -7,6 +7,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { resetAndroidSnapshotHelperInstallCache } from '../../platforms/android/snapshot-helper-install.ts';
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../../__tests__/test-utils/index.ts';
 import type { AndroidAdbProvider } from '../../platforms/android/adb-executor.ts';
+import { createPlatformRuntimeGateway } from '../../platform-runtime.ts';
 
 function makeAndroidSessionStore(name: string): SessionStore {
   const sessionStore = new SessionStore(`/tmp/${name}`);
@@ -27,6 +28,13 @@ function makeAndroidSessionStore(name: string): SessionStore {
 }
 
 function makeHandler(sessionStore: SessionStore, androidAdbProvider: () => AndroidAdbProvider) {
+  const deviceRuntimeGateway = createPlatformRuntimeGateway({
+    sessionsDir: '/tmp/agent-device-snapshot-helper-runtime',
+    resolveSessionArtifacts: (sessionId) => ({
+      outputPath: `/tmp/agent-device-snapshot-helper-runtime/${sessionId}/app.log`,
+      pidPath: `/tmp/agent-device-snapshot-helper-runtime/${sessionId}/app-log.pid`,
+    }),
+  });
   return createRequestHandler({
     logPath: '/tmp/daemon.log',
     token: 'token',
@@ -34,6 +42,7 @@ function makeHandler(sessionStore: SessionStore, androidAdbProvider: () => Andro
     leaseRegistry: new LeaseRegistry(),
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     androidAdbProvider,
+    deviceRuntimeGateway,
     trackDownloadableArtifact: () => 'artifact-id',
   });
 }

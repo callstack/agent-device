@@ -274,6 +274,8 @@ test.each([
   expect(binding.facts.operations.bootTarget).toEqual({ available: true });
   expect(binding.facts.operations.bootTargetHeadless).toMatchObject({ available: false });
   expect(binding.facts.operations.listApps).toEqual({ available: true });
+  expect(binding.facts.operations.captureSnapshot).toEqual({ available: true });
+  expect(binding.operations.captureSnapshot).toBeTypeOf('function');
   await expect(
     binding.operations.listApps?.({ device: runtimeDevice, filter: 'all' }),
   ).resolves.toEqual([]);
@@ -321,6 +323,10 @@ test('fails closed for a stale Android identity before exposing facts or binding
     reason: 'owner-capability-missing',
   });
   expect(facts.operations.appState).toMatchObject({
+    available: false,
+    reason: 'owner-capability-missing',
+  });
+  expect(facts.operations.captureSnapshot).toMatchObject({
     available: false,
     reason: 'owner-capability-missing',
   });

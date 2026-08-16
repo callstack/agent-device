@@ -6,23 +6,28 @@ import { handleSettingsCommand, parseSettingsArgs } from './snapshot-settings.ts
 import { dispatchSnapshotDiffViaRuntime, dispatchSnapshotViaRuntime } from '../snapshot-runtime.ts';
 import { dispatchWaitViaRuntime } from '../selector-runtime.ts';
 import { resolveSessionDevice, withSessionlessRunnerCleanup } from './snapshot-session.ts';
+import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 
 type SnapshotCommandParams = {
   req: DaemonRequest;
   sessionName: string;
   logPath: string;
   sessionStore: SessionStore;
+  inspectFacts?: InspectDeviceRuntimeFacts;
+  bindDevice?: BindDeviceRuntime;
 };
 
 type SnapshotCommandHandler = (params: SnapshotCommandParams) => Promise<DaemonResponse>;
 
 const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
-  snapshot: async ({ req, sessionName, logPath, sessionStore }) =>
+  snapshot: async ({ req, sessionName, logPath, sessionStore, inspectFacts, bindDevice }) =>
     await dispatchSnapshotViaRuntime({
       req,
       sessionName,
       logPath,
       sessionStore,
+      inspectFacts,
+      bindDevice,
     }),
   diff: async ({ req, sessionName, logPath, sessionStore }) => {
     if (req.positionals?.[0] !== 'snapshot') {

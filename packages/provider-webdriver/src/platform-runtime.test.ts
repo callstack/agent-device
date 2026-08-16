@@ -2,6 +2,7 @@ import { expect, test, vi } from 'vitest';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { Interactor } from '@agent-device/contracts/interaction';
 import { createWebDriverPlatformRuntimeOwner } from './platform-runtime.ts';
 
 const device: DeviceInfo = {
@@ -210,6 +211,78 @@ test.each([
     expect(materializeAndroid).toHaveBeenCalledTimes(runtimeDevice.platform === 'android' ? 1 : 0);
   },
 );
+
+test('captures through only the active exact WebDriver interactor', async () => {
+  const snapshot = vi.fn(async () => ({ backend: 'android' as const, nodes: [] }));
+  const getInteractor = vi.fn(() => ({ snapshot }) as unknown as Interactor);
+  const owner = createWebDriverPlatformRuntimeOwner({
+    host: host(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
+    owner: providerRuntimeOwner('browserstack', 'android'),
+    ownsDevice: () => true,
+    snapshotAvailable: true,
+    getInteractor,
+  });
+  const binding = await owner.bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+  });
+
+  expect(binding.facts.operations.captureSnapshot).toEqual({ available: true });
+  await expect(
+    binding.operations.captureSnapshot?.({ options: { interactiveOnly: true } }),
+  ).resolves.toEqual({ backend: 'android', nodes: [] });
+  expect(getInteractor).toHaveBeenCalledWith(device, expect.any(Object));
+  expect(snapshot).toHaveBeenCalledWith({
+    interactiveOnly: true,
+    signal: expect.any(AbortSignal),
+  });
+});
+
+test.each([
+  ['inactive session', { isSessionActive: () => false, snapshotAvailable: true }],
+  ['unsupported capability', { isSessionActive: () => true, snapshotAvailable: false }],
+] as const)('fails closed for an %s snapshot owner cell', async (_name, state) => {
+  const getInteractor = vi.fn(() => ({}) as unknown as Interactor);
+  const owner = createWebDriverPlatformRuntimeOwner({
+    host: host(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
+    owner: providerRuntimeOwner('browserstack', 'android'),
+    ownsDevice: () => true,
+    ...state,
+    getInteractor,
+  });
+  const facts = await owner.inspectFacts(device);
+  expect(facts.operations.captureSnapshot.available).toBe(false);
+  if (state.isSessionActive()) {
+    const binding = await owner.bind({
+      device,
+      intent: { kind: 'ordinary' },
+      scope: {
+        signal: new AbortController().signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+    });
+    expect(binding.operations.captureSnapshot).toBeUndefined();
+  } else {
+    await expect(
+      owner.bind({
+        device,
+        intent: { kind: 'ordinary' },
+        scope: {
+          signal: new AbortController().signal,
+          diagnostics: { emit: () => {} },
+          progress: { report: () => {} },
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'UNSUPPORTED_OPERATION' });
+  }
+  expect(getInteractor).not.toHaveBeenCalled();
+});
 
 function host(run: PlatformRuntimeHost['commands']['run']): PlatformRuntimeHost {
   // This suite reaches direct network and the explicitly replaced materializer only.
