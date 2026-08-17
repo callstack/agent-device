@@ -19,10 +19,6 @@ export const { assertElementText, assertWaitText, capturePng } = createLiveDevic
   LiveContext
 >(runStep, verifyCommand, PUBLIC_COMMANDS.wait);
 
-// The whole budget goes to the first capture of each attempt, so it has to cover one snapshot of
-// the current surface — 1s did not on a loaded simulator, and every sibling wait in these scenarios
-// already budgets 2.5s or more.
-const SCROLL_SEARCH_WAIT_MS = 2500;
 const SCROLL_SEARCH_ATTEMPTS = 4;
 // A stalled capture says nothing about where the element is, so it must not consume the scroll
 // budget outright; a couple of retries absorb a slow runner without masking a real absence.
@@ -33,36 +29,58 @@ export async function assertElementTextAfterScrolling(
   selector: string,
   expected: string,
 ): Promise<void> {
+  await searchForVisibleElement(
+    selector,
+    (attempt) =>
+      runStep(
+        context,
+        `check ${selector} visibility after scroll (attempt ${attempt})`,
+        ['is', 'visible', selector],
+        { allowFailure: true },
+      ),
+    (attempt) =>
+      runStep(context, `scroll toward ${selector} after attempt ${attempt}`, [
+        'scroll',
+        'down',
+        '0.75',
+      ]).then(() => undefined),
+  );
+  await assertElementText(context, selector, expected);
+}
+
+/**
+ * Searches by semantic visibility rather than selector existence. An offscreen node can exist in
+ * the accessibility tree, so a successful `wait <selector>` is not sufficient evidence to skip
+ * scrolling. The callbacks keep this live-device policy deterministic and unit-testable without a
+ * simulator.
+ */
+export async function searchForVisibleElement(
+  selector: string,
+  probeVisibility: (attempt: number) => Promise<CliJsonResult>,
+  scrollAfterAttempt: (attempt: number) => Promise<void>,
+): Promise<void> {
   let stallRetriesLeft = SCROLL_SEARCH_STALL_RETRIES;
   let lastFailure: CliJsonResult | undefined;
 
   for (let attempt = 1; attempt <= SCROLL_SEARCH_ATTEMPTS; ) {
-    const visible = await runStep(
-      context,
-      `wait for ${selector} after scroll (attempt ${attempt})`,
-      ['wait', selector, String(SCROLL_SEARCH_WAIT_MS)],
-      { allowFailure: true },
-    );
-    if (visible.status === 0) {
-      await assertElementText(context, selector, expected);
-      return;
-    }
-    lastFailure = visible;
+    const probe = await probeVisibility(attempt);
+    if (probe.status === 0) return;
+    lastFailure = probe;
 
     // The snapshot never came back, so the surface was never read. Scrolling here would move the
     // surface for a reason unrelated to visibility and spend an attempt on no evidence.
-    if (visible.json?.error?.details?.captureStalled === true && stallRetriesLeft > 0) {
+    if (probe.json?.error?.details?.captureStalled === true && stallRetriesLeft > 0) {
       stallRetriesLeft -= 1;
       continue;
     }
 
     attempt += 1;
     if (attempt <= SCROLL_SEARCH_ATTEMPTS) {
-      await runStep(context, `scroll toward ${selector}`, ['scroll', 'down', '0.75']);
+      await scrollAfterAttempt(attempt - 1);
     }
   }
   assert.fail(
-    `${selector} did not become visible after scrolling\nlast wait: ${JSON.stringify(lastFailure?.json ?? null)}`,
+    `${selector} did not become visible after scrolling\nlast visibility probe: ${JSON.stringify(lastFailure?.json ?? null)}`,
   );
 }
 
