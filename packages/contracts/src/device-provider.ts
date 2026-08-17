@@ -25,19 +25,12 @@ export type DeviceLease = {
 export type LeaseLifecycleContext = {
   flags?: Readonly<Record<string, unknown>>;
   cwd?: string;
-  /**
-   * Request-bound cancellation: aborted once the requester is gone (explicit
-   * cancel or client disconnect). For allocation it is an OWNERSHIP signal, not
-   * an interrupt — a provider whose remote allocation has already committed
-   * finishes it and releases the result rather than abandoning a billed
-   * resource nobody holds the id of.
-   */
+  /** Request-bound cancellation (explicit cancel or client disconnect). */
   signal?: AbortSignal;
   /**
-   * Epoch-ms deadline by which `allocate` must have settled. The daemon derives
-   * it from the same budget as the client's `lease_allocate` request envelope,
-   * so a provider that fits its remote phases within it is never abandoned by
-   * a client that stopped waiting first.
+   * Epoch-ms deadline by which `allocate` must have settled; derived from the
+   * same budget as the client's `lease_allocate` envelope, so a provider that
+   * fits its remote phases within it is never abandoned by a client first.
    */
   deadline?: number;
 };

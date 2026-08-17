@@ -4,11 +4,7 @@ import type {
 } from '@agent-device/contracts/observability';
 import type { DeviceLease, LeaseLifecycleContext } from '@agent-device/contracts/device';
 import { deviceFieldsFromPublicPlatform, type DeviceInfo } from '@agent-device/kernel/device';
-import {
-  AppError,
-  createRequestCanceledError,
-  type AppErrorDetails,
-} from '@agent-device/kernel/errors';
+import { AppError } from '@agent-device/kernel/errors';
 import { unavailableCloudArtifactsResult } from './artifact-results.ts';
 import {
   createCloudWebDriverCapabilities,
@@ -47,8 +43,6 @@ type CloudWebDriverCloseResult = Readonly<{
   warnings: CloudWebDriverReleaseWarning[];
 }>;
 type LeaseResult = Record<string, unknown> | undefined;
-/** The half of a provider session that exists once the WebDriver session does, registered or not. */
-type ProviderSessionHandle = Pick<WebDriverProviderSession, 'client' | 'prepared'>;
 
 /**
  * Owns WebDriver session lifecycle and stale-owner retention. Deployment decisions stay in the
@@ -97,7 +91,7 @@ export class WebDriverSessionManager {
       headers: prepared.headers,
       requestPolicy: this.options.requestPolicy,
     });
-    const session = await this.createOwnedSession({ client, prepared }, lease, req);
+    const session = await this.createSessionWithPreparedCleanup(client, prepared, lease, req);
     const device = this.deviceForLease(lease, prepared);
     const providerSessionId = prepared.providerSessionId ?? session.sessionId;
     const capabilities = createCloudWebDriverCapabilities({
@@ -172,66 +166,23 @@ export class WebDriverSessionManager {
     this.ownedDeviceIds.clear();
   }
 
-  /**
-   * Creates the WebDriver session and settles who owns it. `POST /session` is
-   * non-idempotent with an indeterminate outcome once abandoned (see
-   * `WebDriverClient.createSession`), so the request's cancellation is treated
-   * as ownership evidence rather than an interrupt: a requester that left
-   * before creation started gets nothing created; one that left while the
-   * provider was allocating gets the finished session released, because by
-   * then its id is in hand and nothing else will ever release it (#1774).
-   */
-  private async createOwnedSession(
-    handle: ProviderSessionHandle,
-    lease: DeviceLease,
-    req: LeaseLifecycleContext | undefined,
-  ): Promise<WebDriverSession> {
-    if (req?.signal?.aborted) {
-      const canceled = createRequestCanceledError(
-        canceledAllocationEvidence(this.options.provider, lease),
-      );
-      await releaseOnFailure(canceled, () => handle.prepared.cleanup?.());
-      throw canceled;
-    }
-    const session = await this.createSessionOrCleanup(handle, lease, req);
-    if (req?.signal?.aborted) {
-      throw await this.releaseCanceledSession(handle, lease, session);
-    }
-    return session;
-  }
-
-  private async createSessionOrCleanup(
-    handle: ProviderSessionHandle,
+  private async createSessionWithPreparedCleanup(
+    client: WebDriverClient,
+    prepared: CloudWebDriverPreparedSession,
     lease: DeviceLease,
     req: LeaseLifecycleContext | undefined,
   ): Promise<WebDriverSession> {
     try {
-      return await handle.client.createSession(handle.prepared.webdriverCapabilities, {
+      return await client.createSession(prepared.webdriverCapabilities, {
         deadline: req?.deadline,
       });
     } catch (error) {
       const failure = isWebDriverRequestTimeout(error)
-        ? sessionCreateTimeoutError(error, this.options.provider, lease, handle.prepared)
+        ? sessionCreateTimeoutError(error, this.options.provider, lease, prepared)
         : error;
-      await releaseOnFailure(failure, () => handle.prepared.cleanup?.());
+      await releaseOnFailure(failure, () => prepared.cleanup?.());
       throw failure;
     }
-  }
-
-  private async releaseCanceledSession(
-    handle: ProviderSessionHandle,
-    lease: DeviceLease,
-    session: WebDriverSession,
-  ): Promise<AppError> {
-    const close = await this.closeSession(handle);
-    return createRequestCanceledError({
-      ...canceledAllocationEvidence(this.options.provider, lease),
-      releasedWebDriverSessionId: session.sessionId,
-      ...(handle.prepared.providerSessionId
-        ? { releasedProviderSessionId: handle.prepared.providerSessionId }
-        : {}),
-      ...(close.warnings.length > 0 ? { warnings: close.warnings } : {}),
-    });
   }
 
   private async prepareSession(
@@ -279,7 +230,9 @@ export class WebDriverSessionManager {
     };
   }
 
-  private async closeSession(session: ProviderSessionHandle): Promise<CloudWebDriverCloseResult> {
+  private async closeSession(
+    session: WebDriverProviderSession,
+  ): Promise<CloudWebDriverCloseResult> {
     const warnings: CloudWebDriverReleaseWarning[] = [];
     let cleanup: Record<string, unknown> | undefined;
     try {
@@ -334,11 +287,10 @@ export function buildCloudWebDriverBaseCapabilities(
 }
 
 /**
- * The transport gave up on `POST /session`; the provider may still finish it.
- * Nothing here can learn that session's id, so the error carries what the
- * provider dashboard can be searched by instead — the lease the capabilities
- * were labelled with — rather than guessing at REST cleanup of a session this
- * process never owned.
+ * The transport gave up on `POST /session`; the provider may still finish it,
+ * and nothing here can learn that session's id — so the error names the lease
+ * the capabilities were labelled with, which the provider dashboard can be
+ * searched by.
  */
 function sessionCreateTimeoutError(
   timeout: AppError,
@@ -361,12 +313,4 @@ function sessionCreateTimeoutError(
     },
     timeout,
   );
-}
-
-function canceledAllocationEvidence(provider: string, lease: DeviceLease): AppErrorDetails {
-  return {
-    provider,
-    leaseId: lease.leaseId,
-    hint: 'The lease request was canceled (explicit cancel or client disconnect) while the provider session was being created; the session it produced, if any, was released instead of registered.',
-  };
 }

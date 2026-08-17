@@ -78,19 +78,11 @@ export class WebDriverClient {
   }
 
   /**
-   * `POST /session` is the one non-idempotent request in the protocol, and its
-   * outcome after a client-side abort is indeterminate: a hub that has already
-   * started allocating a device finishes the session whether or not anyone is
-   * still listening. So it runs under its own budget with NO retries and NO
-   * request-bound cancellation — a retry after a timed-out attempt is a second
-   * billed session, and aborting the request would lose the id of the first
-   * (#1774). Callers that stop wanting the session while it is being created
-   * release it once they hold the id (see WebDriverSessionManager).
-   *
-   * `deadline` (epoch ms) is the operation this creation belongs to; it can
-   * only SHORTEN the client's own budget, never extend it, so a daemon request
-   * that spent most of its allocation window on provider preparation does not
-   * start a device allocation it cannot wait out.
+   * `POST /session` is non-idempotent and its outcome after a client-side abort
+   * is indeterminate (the hub finishes allocating whether or not anyone is
+   * listening), so it takes no cancellation signal and never retries: a retry
+   * is a second billed session, an abort loses the id of the first (#1774).
+   * `deadline` (epoch ms) can only shorten the create budget, never extend it.
    */
   async createSession(
     capabilities: Record<string, unknown>,

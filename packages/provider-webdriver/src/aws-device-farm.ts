@@ -216,12 +216,8 @@ export function createAwsDeviceFarmPrepareSession(
       interactionMode: options.interactionMode,
       configuration: options.configuration,
     });
-    // From here the ARN is OURS: a billed remote-access session that nothing
-    // else will ever stop. Whatever ends the startup wait short of RUNNING —
-    // startup timeout, allocation deadline, or the requester leaving — must
-    // stop it before the failure surfaces, or it keeps billing until AWS reaps
-    // it (the same ownership rule as the WebDriver session in
-    // WebDriverSessionManager, one phase earlier).
+    // The ARN is a billed session from here on; any failure short of RUNNING
+    // must stop it before surfacing, or it bills until AWS reaps it.
     let running: AwsDeviceFarmRemoteAccessSession;
     let endpoint: string | undefined;
     try {
@@ -299,8 +295,6 @@ async function waitForRunningRemoteAccessSession(
   const timeoutMs = options.startupTimeoutMs ?? 120_000;
   const pollIntervalMs = options.pollIntervalMs ?? 5_000;
   const startedAt = Date.now();
-  // The startup wait fits inside the lease-allocation deadline, so a client
-  // that stops waiting at that deadline never abandons a still-polling daemon.
   const deadline = Math.min(startedAt + timeoutMs, req?.deadline ?? Infinity);
   const signal = req?.signal;
   let last = await options.client.getRemoteAccessSession(arn);

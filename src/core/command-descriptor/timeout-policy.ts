@@ -17,13 +17,10 @@ export const INSTALL_REQUEST_TIMEOUT_MS = 180_000;
 export const REQUEST_TIMEOUT_BUDGET_MARGIN_MS = 30_000;
 
 /**
- * How long the daemon lets a lease lifecycle provider allocate one lease. Cloud
- * providers spend most of it waiting on remote device allocation (BrowserStack
- * iOS real devices take 45–90s to create a session; AWS Device Farm remote
- * access takes ~2 minutes to reach RUNNING before the session is even created).
- * The provider receives it as `LeaseLifecycleContext.deadline` and bounds its
- * remote phases within it; the client's `lease_allocate` envelope is derived
- * from it below, so the two cannot drift apart (#1774).
+ * How long a lease lifecycle provider may spend allocating one lease (cloud
+ * device allocation: BrowserStack iOS ~45–90s, AWS remote access ~2 min to
+ * RUNNING). Handed to providers as `LeaseLifecycleContext.deadline`; the
+ * client's `lease_allocate` envelope derives from it so they cannot drift.
  */
 export const LEASE_ALLOCATION_BUDGET_MS = 300_000;
 

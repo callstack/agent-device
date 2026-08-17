@@ -4,6 +4,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { isRequestCanceledError, type AppError } from '@agent-device/kernel/errors';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { getDaemonCommandRoute, type DaemonCommandRoute } from '../daemon-command-registry.ts';
 import { cleanupDownloadableArtifact, trackDownloadableArtifact } from '../artifact-tracking.ts';
@@ -294,6 +295,117 @@ test('lease allocation hands the provider the request-bound signal and a deadlin
     clearRequestAbortRegistration(registration);
   }
 });
+
+// #1774: the classic leak. The requester vanishes WHILE the provider is
+// allocating; the provider still returns a real, billed session. The daemon
+// owns the request, so it releases that lease immediately — provider AND
+// registry — and answers with a canceled error carrying the release evidence.
+test('a lease allocated for a requester that left is released, not registered', async () => {
+  const leaseRegistry = new LeaseRegistry();
+  const sessionStore = makeSessionStore('agent-device-lease-gone-');
+  const requestId = 'lease-alloc-gone';
+  const registration = registerRequestAbort(requestId);
+  const released: string[] = [];
+
+  try {
+    await assert.rejects(
+      () =>
+        handleLeaseCommands({
+          req: leaseAllocateRequest(requestId),
+          sessionName: 'catalog-test',
+          sessionStore,
+          leaseRegistry,
+          leaseLifecycleProvider: {
+            allocate: async (lease) => {
+              // The client disconnects mid-allocation; the provider finishes anyway.
+              markRequestCanceled(requestId);
+              return { providerSessionId: `bs-${lease.leaseId}` };
+            },
+            release: async (lease) => {
+              released.push(lease.leaseId);
+              return { providerSessionId: `bs-${lease.leaseId}` };
+            },
+          },
+        }),
+      (error: unknown) => {
+        assert.ok(isRequestCanceledError(error));
+        const details = (error as AppError).details ?? {};
+        assert.equal(details.released, true);
+        assert.match(String(details.providerSessionId), /^bs-/);
+        return true;
+      },
+    );
+    assert.equal(released.length, 1, 'the provider must be asked to release the lease');
+    assert.equal(
+      leaseRegistry.getLease({ tenantId: 'tenant-a', runId: 'run-a', leaseId: released[0]! }),
+      undefined,
+    );
+  } finally {
+    clearRequestAbortRegistration(registration);
+  }
+});
+
+// A release that could not delete the provider session must NOT be reported as
+// released: the billed session may still be running, and the operator needs the
+// identifiers to stop it by hand.
+test('a failed provider release after cancellation is reported as unreleased with recovery evidence', async () => {
+  const leaseRegistry = new LeaseRegistry();
+  const sessionStore = makeSessionStore('agent-device-lease-gone-unreleased-');
+  const requestId = 'lease-alloc-gone-delete-failed';
+  const registration = registerRequestAbort(requestId);
+
+  try {
+    await assert.rejects(
+      () =>
+        handleLeaseCommands({
+          req: leaseAllocateRequest(requestId),
+          sessionName: 'catalog-test',
+          sessionStore,
+          leaseRegistry,
+          leaseLifecycleProvider: {
+            allocate: async () => {
+              markRequestCanceled(requestId);
+              return { providerSessionId: 'bs-live' };
+            },
+            release: async () => ({
+              providerSessionId: 'bs-live',
+              warnings: [{ code: 'WEBDRIVER_SESSION_DELETE_FAILED', message: 'HTTP 502' }],
+            }),
+          },
+        }),
+      (error: unknown) => {
+        assert.ok(isRequestCanceledError(error));
+        const details = (error as AppError).details ?? {};
+        assert.equal(details.released, false);
+        assert.equal(details.providerSessionId, 'bs-live');
+        assert.match(String(details.hint), /could NOT be confirmed released/);
+        assert.match(String(details.hint), /bs-live/);
+        assert.deepEqual(details.warnings, [
+          { code: 'WEBDRIVER_SESSION_DELETE_FAILED', message: 'HTTP 502' },
+        ]);
+        return true;
+      },
+    );
+  } finally {
+    clearRequestAbortRegistration(registration);
+  }
+});
+
+function leaseAllocateRequest(requestId: string): DaemonRequest {
+  return {
+    command: INTERNAL_COMMANDS.leaseAllocate,
+    token: 'test-token',
+    session: 'catalog-test',
+    meta: {
+      requestId,
+      tenantId: 'tenant-a',
+      runId: 'run-a',
+      leaseBackend: 'android-instance',
+      leaseProvider: 'fake-provider',
+    },
+    positionals: [],
+  };
+}
 
 function catalogCommandsForRoute(route: Exclude<DaemonCommandRoute, 'generic'>): string[] {
   return [...Object.values(PUBLIC_COMMANDS), ...Object.values(INTERNAL_COMMANDS)].filter(

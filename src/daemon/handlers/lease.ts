@@ -1,4 +1,8 @@
-import type { LeaseLifecycleContext, LeaseLifecycleProvider } from '@agent-device/contracts/device';
+import type {
+  DeviceLease,
+  LeaseLifecycleContext,
+  LeaseLifecycleProvider,
+} from '@agent-device/contracts/device';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type {
   AgentArtifactsResult,
@@ -17,9 +21,9 @@ import {
   leaseScopeToHeartbeatRequest,
   leaseScopeToReleaseRequest,
 } from '../../core/lease-scope.ts';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { LEASE_ALLOCATION_BUDGET_MS } from '../../core/command-descriptor/timeout-policy.ts';
-import { getRequestSignal } from '../../request/cancel.ts';
+import { getRequestSignal, isRequestCanceled } from '../../request/cancel.ts';
 import { listDownloadableArtifacts } from '../artifact-tracking.ts';
 
 type LeaseHandlerArgs = {
@@ -67,25 +71,17 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
       try {
         providerData = await leaseLifecycleProvider?.allocate?.(lease, {
           ...leaseLifecycleContext(req),
-          // Same source every sibling handler uses — aborts on explicit cancel
-          // or client disconnect. For allocation it is ownership evidence, not
-          // an interrupt (see LeaseLifecycleContext.signal).
           signal: getRequestSignal(req.meta?.requestId),
           deadline: Date.now() + LEASE_ALLOCATION_BUDGET_MS,
         });
       } catch (error) {
-        leaseRegistry.releaseLease(
-          leaseScopeToReleaseRequest({
-            leaseId: lease.leaseId,
-            tenantId: lease.tenantId,
-            runId: lease.runId,
-            leaseBackend: lease.backend,
-            leaseProvider: lease.leaseProvider,
-            deviceKey: lease.deviceKey,
-            clientId: lease.clientId,
-          }),
-        );
+        releaseRegistryLease(leaseRegistry, lease);
         throw error;
+      }
+      if (isRequestCanceled(req.meta?.requestId)) {
+        // The requester left while the provider was allocating; the lease it
+        // produced is real (and billed) and nobody will ever release it.
+        throw await releaseAllocationForGoneRequester(lease, leaseLifecycleProvider, leaseRegistry);
       }
       return {
         ok: true,
@@ -118,6 +114,78 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     default:
       return null;
   }
+}
+
+function releaseRegistryLease(leaseRegistry: LeaseRegistry, lease: DeviceLease): void {
+  leaseRegistry.releaseLease(
+    leaseScopeToReleaseRequest({
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: lease.backend,
+      leaseProvider: lease.leaseProvider,
+      deviceKey: lease.deviceKey,
+      clientId: lease.clientId,
+    }),
+  );
+}
+
+/**
+ * Releases a lease that finished allocating after its requester was gone, and
+ * turns the outcome into the canceled-request error the (absent) requester
+ * would have received. Release evidence is only claimed on a clean release: a
+ * provider that could not delete its session (`warnings`) is reported as such,
+ * with the identifiers an operator needs to stop it by hand.
+ */
+async function releaseAllocationForGoneRequester(
+  lease: DeviceLease,
+  leaseLifecycleProvider: LeaseLifecycleProvider | undefined,
+  leaseRegistry: LeaseRegistry,
+): Promise<AppError> {
+  const outcome = await releaseProviderLease(lease, leaseLifecycleProvider);
+  releaseRegistryLease(leaseRegistry, lease);
+  return canceledAllocationError(lease, outcome);
+}
+
+type ProviderReleaseOutcome = {
+  providerSessionId?: unknown;
+  warnings: unknown[];
+  releaseError?: string;
+};
+
+async function releaseProviderLease(
+  lease: DeviceLease,
+  leaseLifecycleProvider: LeaseLifecycleProvider | undefined,
+): Promise<ProviderReleaseOutcome> {
+  try {
+    const released = await leaseLifecycleProvider?.release?.(lease);
+    return {
+      providerSessionId: released?.providerSessionId,
+      warnings: Array.isArray(released?.warnings) ? released.warnings : [],
+    };
+  } catch (error) {
+    return { warnings: [], releaseError: errorMessage(error) };
+  }
+}
+
+function canceledAllocationError(lease: DeviceLease, outcome: ProviderReleaseOutcome): AppError {
+  const { providerSessionId, warnings, releaseError } = outcome;
+  const released = releaseError === undefined && warnings.length === 0;
+  return createRequestCanceledError({
+    leaseId: lease.leaseId,
+    leaseProvider: lease.leaseProvider,
+    providerSessionId,
+    ...(warnings.length > 0 ? { warnings } : {}),
+    ...(releaseError !== undefined ? { releaseError } : {}),
+    released,
+    hint: released
+      ? 'The lease request was canceled while the provider was still allocating; the session it produced was released.'
+      : `The lease request was canceled while the provider was still allocating, and the session it produced could NOT be confirmed released — it may still be running and billing. Stop provider session ${String(providerSessionId ?? '(unknown)')} for lease ${lease.leaseId} by hand.`,
+  });
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function leaseLifecycleContext(req: DaemonRequest): LeaseLifecycleContext {

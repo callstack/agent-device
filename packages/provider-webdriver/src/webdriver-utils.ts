@@ -7,13 +7,7 @@ export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/**
- * Best-effort release of a billed provider resource once its allocation has
- * already failed. The primary failure is what the caller wants to see, so a
- * failure to release only rides along as `details.cleanupError` rather than
- * masking it — and cleanup runs to completion regardless, since the resource
- * bills until it is stopped (#1774).
- */
+/** Best-effort release after a failure; a failed release rides along as `cleanupError`, never masks the primary. */
 export async function releaseOnFailure(
   primaryError: unknown,
   release: () => Promise<unknown> | undefined,

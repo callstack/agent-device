@@ -24,11 +24,7 @@ export type WebDriverRequestPolicy = {
 /** Machine-readable `details.reason` of a request the transport gave up waiting on. */
 const WEBDRIVER_REQUEST_TIMEOUT_REASON = 'webdriver_request_timeout';
 
-/**
- * A request the transport stopped waiting on. Its outcome is INDETERMINATE:
- * the server may still complete it — which is why a non-idempotent caller must
- * neither retry it nor assume nothing was created.
- */
+/** A request the transport stopped waiting on; the server may still complete it. */
 export function isWebDriverRequestTimeout(error: unknown): error is AppError {
   return error instanceof AppError && error.details?.reason === WEBDRIVER_REQUEST_TIMEOUT_REASON;
 }

@@ -319,15 +319,10 @@ const INSTALL_TIMEOUT_POLICY: CommandTimeoutPolicy = {
   envelopeMs: INSTALL_REQUEST_TIMEOUT_MS,
 };
 
-// Lease-route commands act on cloud provider sessions the daemon owns on the
-// caller's behalf — billed until the daemon releases them. A client that stops
-// waiting on one must leave the daemon alive: resetting it would SIGKILL a
-// process mid-`POST /session` (allocate) or mid-`DELETE` (release) and orphan
-// the session in flight, along with every other provider session that daemon
-// held (#1774). Allocation additionally carries its own envelope: the request
-// either finishes and is released for the gone requester (see
-// `LeaseLifecycleContext.signal`) or fails under the daemon's budget with
-// typed evidence.
+// Lease-route commands act on billed cloud sessions the daemon owns; resetting
+// the daemon on a client timeout would SIGKILL it mid-create/mid-release and
+// orphan them all (#1774). Allocation also gets an envelope sized for remote
+// device allocation (see LEASE_ALLOCATION_BUDGET_MS).
 const LEASE_TIMEOUT_POLICY: CommandTimeoutPolicy = {
   ...DEFAULT_TIMEOUT_POLICY,
   onTimeout: 'preserve-daemon',
