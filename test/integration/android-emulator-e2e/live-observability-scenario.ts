@@ -65,7 +65,9 @@ async function assertLogs(context: LiveContext): Promise<void> {
 
 async function assertTraceAndRecording(context: LiveContext): Promise<void> {
   const tracePath = path.join(context.artifactDir, 'fixture.adtrace');
-  await runStep(context, 'reveal Android quick actions before trace', ['scroll', 'down', '0.7']);
+  // 0.7 of a viewport scrolls the quick actions off the top on the pixel_7 profile the
+  // nightly lane pins; half a viewport puts the whole card on screen.
+  await runStep(context, 'reveal Android quick actions before trace', ['scroll', 'down', '0.5']);
   await runStep(context, 'start Android interaction trace', ['trace', 'start', tracePath]);
   await runStep(context, 'trace Android visible mutation', ['press', 'id="home-open-catalog"']);
   await runStep(context, 'stop Android interaction trace', ['trace', 'stop', tracePath]);
@@ -104,6 +106,9 @@ async function assertBatchAndEvents(context: LiveContext): Promise<void> {
   await runStep(context, 'return to Android fixture home before batch', ['click', 'label="Home"']);
   await runStep(context, 'restore Android fixture home title before batch', ['scroll', 'top']);
   await assertWaitText(context, 'Agent Device Tester');
+  // The release notice sits below the gesture lab card on the pixel_7 profile, and Android
+  // snapshots only carry on-screen nodes, so both batch targets are revealed first.
+  await runStep(context, 'reveal Android release notice before batch', ['scroll', 'down', '0.3']);
   const batch = await runStep(context, 'run Android nested semantic read batch', [
     'batch',
     '--steps',
@@ -114,7 +119,7 @@ async function assertBatchAndEvents(context: LiveContext): Promise<void> {
       },
       {
         command: 'is',
-        input: { predicate: 'visible', selector: 'id="home-title"' },
+        input: { predicate: 'visible', selector: 'id="release-notice"' },
       },
     ]),
   ]);
@@ -135,7 +140,9 @@ async function assertBatchAndEvents(context: LiveContext): Promise<void> {
     const result = await runStep(
       context,
       cursor === undefined ? 'read Android event timeline' : `read Android events from ${cursor}`,
-      cursor === undefined ? ['events', '4'] : ['events', '4', cursor],
+      // Each page read appends its own request events, so a page smaller than that tail
+      // never catches up with a full-tier session's timeline.
+      cursor === undefined ? ['events', '50'] : ['events', '50', cursor],
     );
     return (result.json?.data ?? {}) as EventTimelinePage;
   });
