@@ -52,6 +52,7 @@ export async function captureSelectorSnapshot(
     includeRects?: boolean;
     interactiveOnly?: boolean;
     includeHiddenContentHints?: boolean;
+    preferredBackend?: 'private-ax';
   } = {
     updateSession: true,
   },
@@ -68,6 +69,9 @@ export async function captureSelectorSnapshot(
     scope: captureOptions.scope ?? options.scope,
     raw: options.raw,
     includeRects: captureOptions.includeRects,
+    ...(captureOptions.preferredBackend
+      ? { preferredBackend: captureOptions.preferredBackend }
+      : {}),
     ...(captureOptions.includeHiddenContentHints !== undefined
       ? { includeHiddenContentHints: captureOptions.includeHiddenContentHints }
       : {}),
