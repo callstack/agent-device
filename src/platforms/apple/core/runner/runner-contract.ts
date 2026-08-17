@@ -1,3 +1,4 @@
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import crypto from 'node:crypto';
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import type {
@@ -6,12 +7,7 @@ import type {
   GesturePlan,
   ScrollDirection,
 } from '@agent-device/contracts/interaction';
-import { AppError } from '@agent-device/kernel/errors';
-import {
-  createRequestCanceledError,
-  getRequestSignal,
-  isRequestCanceled,
-} from '../../../../request/cancel.ts';
+import { getRequestSignal, isRequestCanceled } from '../../../../request/cancel.ts';
 import {
   bootFailureHint,
   classifyBootFailure,

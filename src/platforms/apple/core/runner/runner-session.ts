@@ -1,4 +1,4 @@
-import { AppError, toAppErrorCode } from '@agent-device/kernel/errors';
+import { AppError, toAppErrorCode, createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
   runCmdBackground,
   type ExecResult,
@@ -10,7 +10,6 @@ import { isIosFamily, isApplePlatform, type DeviceInfo } from '@agent-device/ker
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/platform';
 import type { AppleRunnerLifecycleOptions } from './runner-provider.ts';
 import { emitRequestProgress } from '../../../../request/progress.ts';
-import { createRequestCanceledError } from '../../../../request/cancel.ts';
 import { emitDiagnostic, withDiagnosticTimer } from '../../../../utils/diagnostics.ts';
 import { buildSimctlArgsForDevice } from '../simctl.ts';
 import { runAppleToolCommand, runXcrun } from '../tool-provider.ts';

@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from './diagnostics.ts';
 
 type RetryPolicy = {
@@ -84,7 +84,7 @@ export async function retryWithPolicy<T>(
   let lastError: unknown;
   for (let attempt = 1; attempt <= merged.maxAttempts; attempt += 1) {
     if (options.signal?.aborted) {
-      throw new AppError('COMMAND_FAILED', 'request canceled', { reason: 'request_canceled' });
+      throw createRequestCanceledError();
     }
     if (options.deadline?.isExpired() && attempt > 1) break;
     try {

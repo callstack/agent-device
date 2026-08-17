@@ -1,6 +1,10 @@
 import dns from 'node:dns/promises';
 import net from 'node:net';
-import { AppError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  isRequestCanceledError,
+} from '@agent-device/kernel/errors';
 import ipaddr from 'ipaddr.js';
 
 export async function approveDownloadSourceUrl(
@@ -26,7 +30,7 @@ export async function approveDownloadSourceUrl(
   try {
     resolved = await lookupWithSignal(hostname, signal);
   } catch (error) {
-    if (error instanceof AppError && error.details?.reason === 'request_canceled') throw error;
+    if (isRequestCanceledError(error)) throw error;
     throw new AppError(
       'INVALID_ARGS',
       `Source URL host could not be resolved: ${hostname}`,
@@ -62,7 +66,7 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
 }
 
 function canceledError(cause: unknown): AppError {
-  return new AppError('COMMAND_FAILED', 'request canceled', { reason: 'request_canceled' }, cause);
+  return createRequestCanceledError(undefined, cause);
 }
 
 export function isBlockedSourceHostname(hostname: string): boolean {

@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import {} from '@agent-device/kernel/errors';
 import type { Point, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 
 export function stripUndefined<T extends Record<string, unknown>>(value: T): T {
@@ -44,11 +44,4 @@ export function extractNodeText(node: SnapshotNode): string {
       .find((candidate) => typeof candidate === 'string' && candidate.length > 0)
       ?.trim() ?? ''
   );
-}
-
-export function createRequestCanceledError(): AppError {
-  return new AppError('COMMAND_FAILED', 'request canceled', {
-    reason: 'request_canceled',
-    hint: 'The request was canceled intentionally (explicit cancel or client disconnect) — no retry is needed unless the cancellation was unintended.',
-  });
 }

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { createRequestCanceledError } from './shared.ts';
+import { createRequestCanceledError } from '@agent-device/kernel/errors';
 import type { MaestroProgram } from './program-ir.ts';
 import { parseMaestroProgram } from './program-ir-parser.ts';
 

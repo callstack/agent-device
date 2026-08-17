@@ -1,11 +1,11 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { AppError } from '@agent-device/kernel/errors';
 import {
+  AppError,
   createRequestCanceledError,
   isRequestCanceledError,
-  resolveRequestTrackingId,
-} from './cancel.ts';
+} from '@agent-device/kernel/errors';
+import { resolveRequestTrackingId } from './cancel.ts';
 
 test('resolveRequestTrackingId generates unique ids for fallback seeds', () => {
   const first = resolveRequestTrackingId(undefined, 42);
@@ -21,6 +21,23 @@ test('createRequestCanceledError includes stable cancellation reason marker', ()
   assert.equal(err.message, 'request canceled');
   assert.equal(err.details?.reason, 'request_canceled');
   assert.match(String(err.details?.hint), /canceled intentionally/);
+});
+
+// The factory is the ONE way to build a canceled error (#1774 consolidated the
+// hand-rolled copies): callers may add evidence or a sharper hint, but cannot
+// build one the predicate misses, and the cause survives for diagnostics.
+test('createRequestCanceledError carries caller evidence but never loses its reason', () => {
+  const cause = new Error('socket closed');
+  const err = createRequestCanceledError(
+    { releasedSessionId: 'wd-1', hint: 'released it', reason: 'something_else' },
+    cause,
+  );
+  assert.equal(err.details?.reason, 'request_canceled');
+  assert.equal(err.details?.releasedSessionId, 'wd-1');
+  assert.equal(err.details?.hint, 'released it');
+  assert.equal(err.cause, cause);
+  assert.equal(isRequestCanceledError(err), true);
+  assert.equal(isRequestCanceledError(new AppError('UNKNOWN', 'request canceled')), false);
 });
 
 test('isRequestCanceledError accepts structured and legacy cancellation errors', () => {

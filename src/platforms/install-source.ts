@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { expandUserHomePath } from '../utils/path-resolution.ts';
 import { ArchiveBudget } from '../utils/archive-safety.ts';
 import { resolveInstallableCandidate } from './install-source-archive.ts';
@@ -127,7 +127,7 @@ async function downloadToTempFile(
 ): Promise<string> {
   const requestSignal = options?.signal;
   if (requestSignal?.aborted) {
-    throw new AppError('COMMAND_FAILED', 'request canceled', { reason: 'request_canceled' });
+    throw createRequestCanceledError();
   }
   const timeoutMs = options?.downloadTimeoutMs ?? DEFAULT_SOURCE_DOWNLOAD_TIMEOUT_MS;
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
@@ -146,12 +146,7 @@ function classifyDownloadError(
   timeoutMs: number,
 ): unknown {
   if (requestSignal?.aborted) {
-    return new AppError(
-      'COMMAND_FAILED',
-      'request canceled',
-      { reason: 'request_canceled' },
-      error,
-    );
+    return createRequestCanceledError(undefined, error);
   }
   if (timeoutSignal.aborted) {
     return new AppError(

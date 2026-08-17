@@ -8,7 +8,7 @@ import { resolveWaitBudgetMs } from '../wait-positionals.ts';
 import {
   DEFAULT_TIMEOUT_POLICY,
   INSTALL_REQUEST_TIMEOUT_MS,
-  LEASE_ALLOCATE_TIMEOUT_POLICY,
+  LEASE_ALLOCATE_REQUEST_TIMEOUT_MS,
   PREPARE_REQUEST_TIMEOUT_MS,
 } from './timeout-policy.ts';
 import { resolvePostActionObservationSupport } from './post-action-observation.ts';
@@ -317,6 +317,20 @@ const PRESERVE_DAEMON_TIMEOUT_POLICY: CommandTimeoutPolicy = {
 const INSTALL_TIMEOUT_POLICY: CommandTimeoutPolicy = {
   ...DEFAULT_TIMEOUT_POLICY,
   envelopeMs: INSTALL_REQUEST_TIMEOUT_MS,
+};
+
+// Lease allocation against a cloud provider is remote work the daemon owns on
+// the caller's behalf: the provider session it creates is billed until the
+// daemon releases it. A client that stops waiting must leave the daemon alive —
+// the allocation either finishes and is released for the gone requester (see
+// `LeaseLifecycleContext.signal`) or fails under the daemon's own budget with
+// typed evidence. Resetting the daemon here would SIGKILL it mid-`POST /session`
+// and orphan the billed session it was about to own, along with every other
+// provider session that daemon held (#1774).
+const LEASE_ALLOCATE_TIMEOUT_POLICY: CommandTimeoutPolicy = {
+  ...DEFAULT_TIMEOUT_POLICY,
+  envelopeMs: LEASE_ALLOCATE_REQUEST_TIMEOUT_MS,
+  onTimeout: 'preserve-daemon',
 };
 
 const DEFAULT_SETTLE_TIMEOUT_MS = 10_000;

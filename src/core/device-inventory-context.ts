@@ -1,3 +1,4 @@
+import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import {
   type DeviceInventoryDiscovery,
@@ -6,9 +7,7 @@ import {
   type ProviderAwareDeviceInventoryGateway,
 } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { isRequestCanceledError } from '../request/cancel.ts';
 
 const DEVICE_INVENTORY_CONTEXT_UNAVAILABLE_REASON = 'device_inventory_context_unavailable';
 

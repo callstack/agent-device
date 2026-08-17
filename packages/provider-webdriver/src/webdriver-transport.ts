@@ -22,7 +22,7 @@ export type WebDriverRequestPolicy = {
 };
 
 /** Machine-readable `details.reason` of a request the transport gave up waiting on. */
-export const WEBDRIVER_REQUEST_TIMEOUT_REASON = 'webdriver_request_timeout';
+const WEBDRIVER_REQUEST_TIMEOUT_REASON = 'webdriver_request_timeout';
 
 /**
  * A request the transport stopped waiting on. Its outcome is INDETERMINATE:
@@ -137,7 +137,7 @@ export class WebDriverTransport {
     timeoutMs: number,
     requestSignal?: AbortSignal,
   ): Promise<unknown> {
-    const { status, text } = await this.fetchWebDriver(
+    const { ok, status, text } = await this.fetchWebDriver(
       method,
       path,
       body,
@@ -145,9 +145,7 @@ export class WebDriverTransport {
       requestSignal,
     );
     const payload = text ? parseJsonResponse(text) : {};
-    if (status < 200 || status >= 300) {
-      throw webdriverError(status, payload);
-    }
+    if (!ok) throw webdriverError(status, payload);
     return readWebDriverValue(payload);
   }
 
@@ -157,7 +155,7 @@ export class WebDriverTransport {
     body: unknown,
     timeoutMs: number,
     requestSignal?: AbortSignal,
-  ): Promise<{ status: number; text: string }> {
+  ): Promise<Pick<Response, 'ok' | 'status'> & { text: string }> {
     const timeoutSignal = AbortSignal.timeout(timeoutMs);
     const signal = requestSignal ? AbortSignal.any([requestSignal, timeoutSignal]) : timeoutSignal;
     try {
@@ -167,7 +165,7 @@ export class WebDriverTransport {
         body: body === undefined ? undefined : JSON.stringify(body),
         signal,
       });
-      return { status: response.status, text: await response.text() };
+      return { ok: response.ok, status: response.status, text: await response.text() };
     } catch (error) {
       // The caller's own cancellation keeps its reason; only the transport's
       // deadline becomes a typed timeout, so callers key on `details.reason`

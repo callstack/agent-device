@@ -1,7 +1,6 @@
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import net, { type Socket } from 'node:net';
-import { AppError } from '@agent-device/kernel/errors';
 import { escapeXmlTextAndAttribute, parseXmlDocumentSync, type XmlNode } from '@agent-device/xml';
-import { createRequestCanceledError } from '../../../../request/cancel.ts';
 import { Deadline } from '../../../../utils/retry.ts';
 
 const USBMUX_HEADER_BYTES = 16;

@@ -66,16 +66,6 @@ export type W3CActionSequence = {
   actions: W3CPointerAction[];
 };
 
-export type WebDriverCreateSessionOptions = {
-  /**
-   * Epoch-ms deadline of the operation this creation belongs to. It can only
-   * shorten the client's own session-creation budget, never extend it, so a
-   * daemon request that has spent most of its allocation budget on provider
-   * preparation does not start a device allocation it cannot wait out.
-   */
-  deadline?: number;
-};
-
 export class WebDriverClient {
   private readonly transport: WebDriverTransport;
   private readonly sessionCreateTimeoutMs: number;
@@ -96,10 +86,15 @@ export class WebDriverClient {
    * billed session, and aborting the request would lose the id of the first
    * (#1774). Callers that stop wanting the session while it is being created
    * release it once they hold the id (see WebDriverSessionManager).
+   *
+   * `deadline` (epoch ms) is the operation this creation belongs to; it can
+   * only SHORTEN the client's own budget, never extend it, so a daemon request
+   * that spent most of its allocation window on provider preparation does not
+   * start a device allocation it cannot wait out.
    */
   async createSession(
     capabilities: Record<string, unknown>,
-    options?: WebDriverCreateSessionOptions,
+    options?: { deadline?: number },
   ): Promise<WebDriverSession> {
     const value = await this.requestValue(
       'POST',
@@ -403,16 +398,16 @@ function readW3CElementId(value: unknown): string | undefined {
  */
 function requestBudget(deadline: number | undefined): WebDriverRequestOverrides {
   if (deadline === undefined) return { retryAttempts: 0 };
-  return { retryAttempts: 0, timeoutMs: Math.max(0, deadline - Date.now()) };
+  return { retryAttempts: 0, timeoutMs: remainingMs(deadline) };
 }
 
-/**
- * A phase budget capped by the operation deadline it runs under, if any. Zero
- * once the deadline has passed, for the same reason as `requestBudget`.
- */
+/** A phase's own budget, capped by the operation deadline it runs under, if any. */
 function budgetWithin(budgetMs: number, deadline: number | undefined): number {
-  if (deadline === undefined) return budgetMs;
-  return Math.max(0, Math.min(budgetMs, deadline - Date.now()));
+  return deadline === undefined ? budgetMs : Math.min(budgetMs, remainingMs(deadline));
+}
+
+function remainingMs(deadline: number): number {
+  return Math.max(0, deadline - Date.now());
 }
 
 /** Nothing is focused right now — an expected state, not a driver defect. */

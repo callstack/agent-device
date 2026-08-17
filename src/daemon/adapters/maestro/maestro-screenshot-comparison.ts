@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { MAESTRO_RUNTIME_ADAPTER_POLICY } from '@agent-device/maestro';
-import { createRequestCanceledError, isRequestCanceledError } from '../../../request/cancel.ts';
+import { createRequestCanceledError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '../../../utils/diagnostics.ts';
 import { computePngRgbDifferenceAsync } from '../../../utils/png-worker-client.ts';
 import type { PngRgbDifferenceResult } from '../../../utils/png-rgb-difference.ts';

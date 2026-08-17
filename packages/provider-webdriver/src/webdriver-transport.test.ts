@@ -1,11 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  WEBDRIVER_REQUEST_TIMEOUT_REASON,
-  WebDriverTransport,
-  isWebDriverRequestTimeout,
-} from './webdriver-transport.ts';
+import { WebDriverTransport, isWebDriverRequestTimeout } from './webdriver-transport.ts';
 
 const realFetch = globalThis.fetch;
 
@@ -32,7 +28,6 @@ test('a transport-deadline abort surfaces as a typed timeout, not a DOMException
   await assert.rejects(transport.requestValue('POST', '/session', {}), (error: unknown) => {
     assert.ok(error instanceof AppError);
     assert.ok(isWebDriverRequestTimeout(error));
-    assert.equal(error.details?.reason, WEBDRIVER_REQUEST_TIMEOUT_REASON);
     assert.equal(error.details?.timeoutMs, 30);
     assert.equal(error.details?.method, 'POST');
     assert.equal(error.details?.path, '/session');

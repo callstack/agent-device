@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawn, spawnSync, type ChildProcess, type StdioOptions } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { emitDiagnostic, getDiagnosticsMeta, updateDiagnosticsScope } from './diagnostics.ts';
 import { parseBooleanLiteral } from './source-value.ts';
 
@@ -567,12 +567,7 @@ function createStdinError(
 }
 
 function createCommandCanceledError(executable: string, cmd: string, args: string[]): AppError {
-  return new AppError('COMMAND_FAILED', 'request canceled', {
-    cmd,
-    args,
-    executable,
-    reason: 'request_canceled',
-  });
+  return createRequestCanceledError({ cmd, args, executable });
 }
 
 function createTimeoutError(

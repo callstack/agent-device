@@ -1,11 +1,7 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 
 const canceledRequestIds = new Set<string>();
 const requestAbortControllers = new Map<string, AbortController>();
-const REQUEST_CANCELED_REASON = 'request_canceled';
-const REQUEST_CANCELED_MESSAGE = 'request canceled';
-const REQUEST_CANCELED_HINT =
-  'The request was canceled intentionally (explicit cancel or client disconnect) — no retry is needed unless the cancellation was unintended.';
 
 export type RequestAbortRegistration = {
   requestId: string;
@@ -114,22 +110,8 @@ export function getRequestSignal(requestId: string | undefined): AbortSignal | u
   return requestAbortControllers.get(requestId)?.signal;
 }
 
-export function createRequestCanceledError(): AppError {
-  return new AppError('COMMAND_FAILED', REQUEST_CANCELED_MESSAGE, {
-    reason: REQUEST_CANCELED_REASON,
-    hint: REQUEST_CANCELED_HINT,
-  });
-}
-
 export function throwIfRequestCanceled(requestId: string | undefined): void {
   if (isRequestCanceled(requestId)) {
     throw createRequestCanceledError();
   }
-}
-
-export function isRequestCanceledError(error: unknown): boolean {
-  if (!(error instanceof AppError)) return false;
-  if (error.code !== 'COMMAND_FAILED') return false;
-  if (error.details?.reason === REQUEST_CANCELED_REASON) return true;
-  return error.message === REQUEST_CANCELED_MESSAGE;
 }

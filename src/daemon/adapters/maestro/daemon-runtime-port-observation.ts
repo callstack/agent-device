@@ -1,3 +1,4 @@
+import { createRequestCanceledError, AppError } from '@agent-device/kernel/errors';
 import { createHash } from 'node:crypto';
 import {
   literalFromMaestroRegex,
@@ -16,12 +17,10 @@ import {
   type MaestroTargetQuery,
 } from '@agent-device/maestro';
 import { attachRefs } from '@agent-device/kernel/snapshot';
-import { createRequestCanceledError } from '../../../request/cancel.ts';
 import {
   getSnapshotReferenceFrame,
   type TouchReferenceFrame,
 } from '../../touch-reference-frame.ts';
-import { AppError } from '@agent-device/kernel/errors';
 import { isPositiveFiniteRect, rectContains } from '@agent-device/kernel/rect';
 import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';
 import { buildIosInteractiveSnapshotPresentation } from '../../snapshot-presentation/ios/index.ts';

@@ -1,3 +1,8 @@
+import {
+  createRequestCanceledError,
+  isRequestCanceledError,
+  AppError,
+} from '@agent-device/kernel/errors';
 import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import { beforeEach, test, onTestFinished, vi } from 'vitest';
 import assert from 'node:assert/strict';
@@ -42,12 +47,10 @@ vi.mock('../../../../utils/host-process.ts', async (importOriginal) => {
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { withRequestProgressSink } from '../../../../request/progress.ts';
-import { createRequestCanceledError, isRequestCanceledError } from '../../../../request/cancel.ts';
 import {
   flushDiagnosticsToSessionFile,
   withDiagnosticsScope,
 } from '../../../../utils/diagnostics.ts';
-import { AppError } from '@agent-device/kernel/errors';
 import { isReadOnlyRunnerCommand } from '../runner/runner-command-traits.ts';
 import {
   isRetryableRunnerError,

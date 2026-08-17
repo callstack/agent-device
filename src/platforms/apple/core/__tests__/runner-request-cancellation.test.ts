@@ -101,12 +101,11 @@ vi.mock('../runner/runner-xctestrun.ts', async () => {
 
 import {
   clearRequestCanceled,
-  createRequestCanceledError,
   getRequestSignal,
-  isRequestCanceledError,
   markRequestCanceled,
   registerRequestAbort,
 } from '../../../../request/cancel.ts';
+import { createRequestCanceledError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import { abortAllIosRunnerSessions, getRunnerSessionSnapshot } from '../runner/runner-session.ts';
 import { setRunnerLeaseOwnerStateDir, type RunnerLease } from '../runner/runner-lease.ts';
 import { executeRunnerCommand, prepareLocalIosRunner } from '../runner/runner-lifecycle.ts';

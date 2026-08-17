@@ -12,7 +12,8 @@ import {
   armAuthoringOnOpen,
   isAuthoringArmedSession,
 } from '../session-script-publication-capability.ts';
-import { createRequestCanceledError, isRequestCanceled } from '../../request/cancel.ts';
+import { isRequestCanceled } from '../../request/cancel.ts';
+import { createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
   resolveSessionRequestLogPath,
   resolveSessionRunnerLogPath,

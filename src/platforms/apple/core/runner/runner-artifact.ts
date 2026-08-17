@@ -1,12 +1,11 @@
+import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import { AppError } from '@agent-device/kernel/errors';
 import { runCmdStreaming, type ExecBackgroundResult } from '../../../../utils/exec.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { withKeyedLock } from '../../../../utils/keyed-lock.ts';
-import { isRequestCanceledError } from '../../../../request/cancel.ts';
 import { emitRequestProgress } from '../../../../request/progress.ts';
 import { findProjectRoot } from '../../../../utils/version.ts';
 import { resolveRunnerBuildFailureHint } from './runner-contract.ts';

@@ -4,7 +4,11 @@ import type {
 } from '@agent-device/contracts/observability';
 import type { DeviceLease, LeaseLifecycleContext } from '@agent-device/contracts/device';
 import { deviceFieldsFromPublicPlatform, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  type AppErrorDetails,
+} from '@agent-device/kernel/errors';
 import { unavailableCloudArtifactsResult } from './artifact-results.ts';
 import {
   createCloudWebDriverCapabilities,
@@ -182,7 +186,9 @@ export class WebDriverSessionManager {
     req: LeaseLifecycleContext | undefined,
   ): Promise<WebDriverSession> {
     if (req?.signal?.aborted) {
-      const canceled = requestCanceledError(this.options.provider, lease, {});
+      const canceled = createRequestCanceledError(
+        canceledAllocationEvidence(this.options.provider, lease),
+      );
       await cleanupAfterCreateSessionFailure(handle.prepared, canceled);
       throw canceled;
     }
@@ -217,7 +223,8 @@ export class WebDriverSessionManager {
     session: WebDriverSession,
   ): Promise<AppError> {
     const close = await this.closeSession(handle);
-    return requestCanceledError(this.options.provider, lease, {
+    return createRequestCanceledError({
+      ...canceledAllocationEvidence(this.options.provider, lease),
       releasedWebDriverSessionId: session.sessionId,
       ...(handle.prepared.providerSessionId
         ? { releasedProviderSessionId: handle.prepared.providerSessionId }
@@ -375,16 +382,10 @@ function sessionCreateTimeoutError(
   );
 }
 
-function requestCanceledError(
-  provider: string,
-  lease: DeviceLease,
-  released: Record<string, unknown>,
-): AppError {
-  return new AppError('COMMAND_FAILED', 'request canceled', {
-    reason: 'request_canceled',
+function canceledAllocationEvidence(provider: string, lease: DeviceLease): AppErrorDetails {
+  return {
     provider,
     leaseId: lease.leaseId,
-    ...released,
     hint: 'The lease request was canceled (explicit cancel or client disconnect) while the provider session was being created; the session it produced, if any, was released instead of registered.',
-  });
+  };
 }

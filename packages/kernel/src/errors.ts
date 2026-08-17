@@ -128,6 +128,40 @@ export function throwDaemonError(error: DaemonError): never {
   });
 }
 
+/**
+ * `details.reason` of a request its requester abandoned — an explicit cancel or
+ * a client disconnect. One definition, so every layer that must let a
+ * cancellation through untouched (retry loops, provider adapters, runner
+ * transports) dispatches on the same typed reason.
+ */
+export const REQUEST_CANCELED_REASON = 'request_canceled';
+const REQUEST_CANCELED_MESSAGE = 'request canceled';
+const REQUEST_CANCELED_HINT =
+  'The request was canceled intentionally (explicit cancel or client disconnect) — no retry is needed unless the cancellation was unintended.';
+
+/**
+ * The canceled-request error. `details` may add evidence (what was released,
+ * which command was interrupted) or override the hint; the reason itself is
+ * not overridable, so a caller cannot build one this predicate misses.
+ */
+export function createRequestCanceledError(details?: AppErrorDetails, cause?: unknown): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    REQUEST_CANCELED_MESSAGE,
+    { hint: REQUEST_CANCELED_HINT, ...details, reason: REQUEST_CANCELED_REASON },
+    cause,
+  );
+}
+
+export function isRequestCanceledError(error: unknown): boolean {
+  if (!(error instanceof AppError)) return false;
+  if (error.code !== 'COMMAND_FAILED') return false;
+  if (error.details?.reason === REQUEST_CANCELED_REASON) return true;
+  // Owned debt: canceled errors that crossed a wire without their details keep
+  // the message; do not add new message sniffs beside it.
+  return error.message === REQUEST_CANCELED_MESSAGE;
+}
+
 export function asAppError(err: unknown, fallbackCode: AppErrorCode = 'UNKNOWN'): AppError {
   if (err instanceof AppError) return err;
   if (err instanceof Error) {

@@ -1,5 +1,4 @@
-import { createRequestCanceledError } from '../../../../request/cancel.ts';
-import { AppError } from '@agent-device/kernel/errors';
+import { createRequestCanceledError, AppError } from '@agent-device/kernel/errors';
 import { Deadline } from '../../../../utils/retry.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { resolveIosPhysicalDeviceControl } from '../physical-device-control.ts';
