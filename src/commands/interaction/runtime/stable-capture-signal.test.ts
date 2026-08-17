@@ -52,12 +52,52 @@ function snapshot(jitter: number, hiddenY: number) {
   );
 }
 
-test('private-ax stability ignores offscreen churn and boundary-crossing one-pixel jitter', () => {
+test('private-ax stability ignores offscreen churn', () => {
   assert.equal(
     stableCaptureSignalsEqual(
       stableCaptureSignal(snapshot(0, 900)),
-      stableCaptureSignal(snapshot(1, 980)),
+      stableCaptureSignal(snapshot(0, 980)),
     ),
     true,
+  );
+});
+
+test('private-ax stability tolerates one-pixel geometry jitter', () => {
+  assert.equal(
+    stableCaptureSignalsEqual(
+      stableCaptureSignal(snapshot(0, 900)),
+      stableCaptureSignal(snapshot(1, 900)),
+    ),
+    true,
+  );
+});
+
+test('regular snapshot stability preserves rounded geometry tolerance', () => {
+  const left = snapshot(0, 900);
+  const right = snapshot(0.6, 900);
+  left.snapshotQuality = { state: 'healthy', backend: 'tree' };
+  right.snapshotQuality = { state: 'healthy', backend: 'tree' };
+  assert.equal(
+    stableCaptureSignalsEqual(stableCaptureSignal(left), stableCaptureSignal(right)),
+    true,
+  );
+});
+
+test('a semantic identity change is never stable', () => {
+  const changed = snapshot(0, 900);
+  changed.nodes[2]!.label = 'Settings';
+  assert.equal(
+    stableCaptureSignalsEqual(stableCaptureSignal(snapshot(0, 900)), stableCaptureSignal(changed)),
+    false,
+  );
+});
+
+test('geometry movement beyond the stability tolerance is never stable', () => {
+  assert.equal(
+    stableCaptureSignalsEqual(
+      stableCaptureSignal(snapshot(0, 900)),
+      stableCaptureSignal(snapshot(3, 900)),
+    ),
+    false,
   );
 });

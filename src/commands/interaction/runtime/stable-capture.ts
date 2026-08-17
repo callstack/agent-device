@@ -12,6 +12,7 @@ import {
   stableCaptureSignalsEqual,
   type StableCaptureSignal,
 } from './stable-capture-signal.ts';
+import { preferredSnapshotBackendForVerdict } from '../../../snapshot-quality/verdict.ts';
 
 /**
  * The quiet-window stable-capture loop shared by `wait stable` and the
@@ -62,13 +63,13 @@ export async function runStableCaptureLoop(
   let deadlineMs = start + timeoutMs;
   let privateAxRecoveryBudgetReset = false;
   const session = await runtime.sessions.get(options.session ?? 'default');
-  let preferredBackend = preferredStableCaptureBackend(session?.snapshot?.snapshotQuality);
+  let preferredBackend = preferredSnapshotBackendForVerdict(session?.snapshot?.snapshotQuality);
   // Cadence derives from the quiet window (never slower than the default
   // poll): a caller asking for a 50ms quiet window should not be forced onto a
   // 300ms grid — and tests inject the budget instead of waiting real time.
   const pollMs = Math.min(STABLE_POLL_INTERVAL_MS, Math.max(STABLE_MIN_POLL_MS, quietMs));
   let captures = 0;
-  let lastDigest: StableCaptureSignal | undefined;
+  let lastSignal: StableCaptureSignal | undefined;
   let lastNodeCount = 0;
   let lastCapture: CapturedSnapshot | undefined;
   let quietSinceMs = start;
@@ -91,23 +92,22 @@ export async function runStableCaptureLoop(
     }
     captures += 1;
     lastCapture = capture;
-    const digest = stableCaptureSignal(capture.snapshot);
-    preferredBackend = preferredStableCaptureBackend(
-      capture.snapshot.snapshotQuality,
-      preferredBackend,
-    );
+    const signal = stableCaptureSignal(capture.snapshot);
+    preferredBackend ??= preferredSnapshotBackendForVerdict(capture.snapshot.snapshotQuality);
     const nowMs = now(runtime);
-    if (
-      shouldResetPrivateAxRecoveryBudget(
-        params.resetBudgetOnPrivateAxRecovery,
-        privateAxRecoveryBudgetReset,
-        capture.snapshot.snapshotQuality,
-      )
-    ) {
+    const recoveredDeadlineMs = extendedDeadlineAfterPrivateAxRecovery({
+      resetRequested: params.resetBudgetOnPrivateAxRecovery,
+      alreadyReset: privateAxRecoveryBudgetReset,
+      verdict: capture.snapshot.snapshotQuality,
+      nowMs,
+      timeoutMs,
+      deadlineMs,
+    });
+    if (recoveredDeadlineMs !== undefined) {
       privateAxRecoveryBudgetReset = true;
-      deadlineMs = Math.max(deadlineMs, nowMs + timeoutMs);
+      deadlineMs = recoveredDeadlineMs;
       quietSinceMs = nowMs;
-      lastDigest = digest;
+      lastSignal = signal;
       lastNodeCount = capture.snapshot.nodes.length;
       const recoveryDelayMs = stableCaptureDelayMs({
         nowMs,
@@ -120,8 +120,8 @@ export async function runStableCaptureLoop(
       await sleep(runtime, recoveryDelayMs);
       continue;
     }
-    if (!stableCaptureSignalsEqual(lastDigest, digest)) {
-      lastDigest = digest;
+    if (!stableCaptureSignalsEqual(lastSignal, signal)) {
+      lastSignal = signal;
       lastNodeCount = capture.snapshot.nodes.length;
       quietSinceMs = nowMs;
     } else if (captures >= 2 && nowMs - quietSinceMs >= quietMs) {
@@ -156,6 +156,24 @@ function isPrivateAxRecovery(verdict: SnapshotQualityVerdict | undefined): boole
     verdict.backend === 'private-ax' &&
     verdict.reasonCode !== 'deferred'
   );
+}
+
+function extendedDeadlineAfterPrivateAxRecovery(params: {
+  resetRequested: boolean | undefined;
+  alreadyReset: boolean;
+  verdict: SnapshotQualityVerdict | undefined;
+  nowMs: number;
+  timeoutMs: number;
+  deadlineMs: number;
+}): number | undefined {
+  if (
+    params.resetRequested !== true ||
+    params.alreadyReset ||
+    !isPrivateAxRecovery(params.verdict)
+  ) {
+    return undefined;
+  }
+  return Math.max(params.deadlineMs, params.nowMs + params.timeoutMs);
 }
 
 /**
@@ -194,21 +212,6 @@ function stableCaptureDelayMs(params: {
     return remainingBudgetMs >= QUIET_DEADLINE_EPSILON_MS ? remainingBudgetMs : 0;
   }
   return Math.min(cadenceMs, lastUsefulWakeMs);
-}
-
-function preferredStableCaptureBackend(
-  verdict: SnapshotQualityVerdict | undefined,
-  current?: 'private-ax',
-): 'private-ax' | undefined {
-  return current ?? (verdict?.backend === 'private-ax' ? 'private-ax' : undefined);
-}
-
-function shouldResetPrivateAxRecoveryBudget(
-  resetRequested: boolean | undefined,
-  alreadyReset: boolean,
-  verdict: SnapshotQualityVerdict | undefined,
-): boolean {
-  return resetRequested === true && !alreadyReset && isPrivateAxRecovery(verdict);
 }
 
 // Intentionally does not update the session snapshot: the stable loop captures

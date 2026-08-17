@@ -8,15 +8,7 @@ extension RunnerTests {
     var hints: [Int: (above: Bool, below: Bool)] = [:]
     appendPrivateAXNode(rawRoot, to: &nodes, hints: &hints, options: options, viewport: viewport,
       depth: 0, parentIndex: nil, insideMatchedScope: false, scrollContext: nil)
-    guard !hints.isEmpty else { return nodes }
-    return nodes.map { node in
-      guard let hint = hints[node.index] else { return node }
-      return SnapshotNode(index: node.index, type: node.type, label: node.label,
-        identifier: node.identifier, value: node.value, rect: node.rect, enabled: node.enabled,
-        focused: node.focused, selected: node.selected, hittable: node.hittable, depth: node.depth,
-        parentIndex: node.parentIndex, hiddenContentAbove: hint.above ? true : node.hiddenContentAbove,
-        hiddenContentBelow: hint.below ? true : node.hiddenContentBelow, actions: node.actions)
-    }
+    return applyHiddenContentHints(hints, to: nodes)
   }
 
   private func appendPrivateAXNode(_ raw: [String: Any], to nodes: inout [SnapshotNode],
@@ -31,57 +23,56 @@ extension RunnerTests {
     let value = privateAXPresentationString(raw["value"])
     let rawType = privateAXPresentationInt(raw["type"]) ?? 0
     let enabled = privateAXPresentationBool(raw["enabled"]) ?? true
+    let children = raw["children"] as? [[String: Any]] ?? []
+    let elementType = flatSnapshotElementType(rawElementType: rawType)
     let hasFrame = !rect.isNull && !rect.isEmpty
-    let visible = (!hasFrame || isVisibleInViewport(rect, viewport))
-      && (!hasFrame || scrollContext.map { isVisibleInViewport(rect, $0.rect) } ?? true)
+    let onScreen = hasFrame
+      && isVisibleInRegularSnapshot(
+        rect,
+        viewport: viewport,
+        scrollContainerAnchor: scrollContext
+      )
+    let presentationVisible = !hasFrame || onScreen
     let decision = flatSnapshotFilterDecision(
       FlatSnapshotFilterNode(isRoot: parentIndex == nil, label: label, identifier: identifier,
-        valueText: value.isEmpty ? nil : value, visible: visible),
-      options: options, insideMatchedScope: insideMatchedScope)
-    let include = decision.include && (parentIndex == nil || visible)
+        valueText: value.isEmpty ? nil : value, visible: presentationVisible),
+      options: options, visibilityPolicy: .viewportProjected,
+      insideMatchedScope: insideMatchedScope)
+    let include = decision.include
 
-    if !include, !visible, let scrollContext, hasFrame {
-      var hint = hints[scrollContext.index] ?? (above: false, below: false)
-      if rect.maxY <= scrollContext.rect.minY { hint.above = true }
-      if rect.minY >= scrollContext.rect.maxY { hint.below = true }
-      hints[scrollContext.index] = hint
+    if !presentationVisible, let scrollContext {
+      rememberHiddenContentHint(for: rect, relativeTo: scrollContext, hints: &hints)
     }
 
     let currentIndex: Int?
     if include {
       currentIndex = nodes.count
-      let typeName = flatSnapshotElementType(rawElementType: rawType).map(elementTypeName)
-        ?? "Element(\(rawType))"
+      let typeName = elementType.map(elementTypeName) ?? "Element(\(rawType))"
       nodes.append(SnapshotNode(index: nodes.count, type: typeName,
         label: label.isEmpty ? nil : label, identifier: identifier.isEmpty ? nil : identifier,
         value: value.isEmpty ? nil : value, rect: snapshotRect(from: rect), enabled: enabled,
         focused: privateAXPresentationBool(raw["focused"]) == true ? true : nil,
         selected: privateAXPresentationBool(raw["selected"]) == true ? true : nil,
-        hittable: hasFrame && visible && enabled && privateAXInteractiveCandidate(rawElementType: rawType),
+        hittable: onScreen && enabled && privateAXInteractiveCandidate(rawElementType: rawType),
         depth: depth, parentIndex: parentIndex, hiddenContentAbove: nil, hiddenContentBelow: nil,
         actions: raw["actions"] as? [String]))
     } else { currentIndex = parentIndex }
 
     let nextScrollContext: (index: Int, rect: CGRect)?
-    if include, hasFrame, let type = flatSnapshotElementType(rawElementType: rawType),
-      Self.scrollContainerTypes.contains(type), let currentIndex {
-      nextScrollContext = (currentIndex, rect)
+    if include, let elementType, let currentIndex {
+      nextScrollContext = scrollContainerAnchor(
+        for: elementType,
+        hasChildren: !children.isEmpty,
+        visible: onScreen,
+        frame: rect,
+        nodeIndex: currentIndex
+      ) ?? scrollContext
     } else { nextScrollContext = scrollContext }
-    for child in raw["children"] as? [[String: Any]] ?? [] {
+    for child in children {
       appendPrivateAXNode(child, to: &nodes, hints: &hints, options: options, viewport: viewport,
         depth: depth + 1, parentIndex: currentIndex,
         insideMatchedScope: decision.insideMatchedScope, scrollContext: nextScrollContext)
     }
-  }
-
-  func appendPrivateAXNode(_ raw: [String: Any], to nodes: inout [SnapshotNode],
-    options: SnapshotOptions, viewport: CGRect, depth: Int, parentIndex: Int?,
-    insideMatchedScope: Bool)
-  {
-    var hints: [Int: (above: Bool, below: Bool)] = [:]
-    appendPrivateAXNode(raw, to: &nodes, hints: &hints, options: options, viewport: viewport,
-      depth: depth, parentIndex: parentIndex, insideMatchedScope: insideMatchedScope,
-      scrollContext: nil)
   }
 
   private func privateAXPresentationString(_ value: Any?) -> String {
@@ -106,13 +97,16 @@ extension RunnerTests {
     let root: [String: Any] = ["type": Int(XCUIElement.ElementType.application.rawValue),
       "label": "Element", "frame": frame(0, 0, 402, 874), "children": [[
         "type": Int(XCUIElement.ElementType.scrollView.rawValue), "frame": frame(0, 96, 402, 700),
+        "actions": ["Scroll down"],
         "children": [["type": Int(XCUIElement.ElementType.button.rawValue), "label": "Profile picture", "frame": frame(16, 120, 44, 44)],
           ["type": Int(XCUIElement.ElementType.button.rawValue), "label": "Theme", "frame": frame(16, 900, 360, 44)]]]]]
     let nodes = privateAXPresentation(rawRoot: root,
       options: SnapshotOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
       viewport: CGRect(x: 0, y: 0, width: 402, height: 874))
     XCTAssertEqual(nodes.compactMap(\.label), ["Element", "Profile picture"])
-    XCTAssertEqual(nodes.first { $0.type == "ScrollView" }?.hiddenContentBelow, true)
+    let scrollView = nodes.first { $0.type == "ScrollView" }
+    XCTAssertEqual(scrollView?.hiddenContentBelow, true)
+    XCTAssertEqual(scrollView?.actions, ["Scroll down"])
   }
 
   func testPrivateAXGeometrylessSemanticsAreNeverActionableOrScrollContexts() {
@@ -123,7 +117,7 @@ extension RunnerTests {
         "label": "Settings semantics", "frame": zero, "children": [[
           "type": Int(XCUIElement.ElementType.button.rawValue), "label": "Theme", "frame": zero]]]]]
     let nodes = privateAXPresentation(rawRoot: root,
-      options: SnapshotOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
+      options: SnapshotOptions(interactiveOnly: true, depth: nil, scope: nil, raw: false),
       viewport: CGRect(x: 0, y: 0, width: 402, height: 874))
     XCTAssertEqual(nodes.compactMap(\.label), ["Element", "Settings semantics", "Theme"])
     XCTAssertEqual(nodes.filter { $0.index != 0 }.map(\.hittable), [false, false])

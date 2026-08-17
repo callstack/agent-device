@@ -1163,7 +1163,7 @@ extension RunnerTests {
     return rect.intersects(viewport)
   }
 
-  private func isVisibleInRegularSnapshot(
+  func isVisibleInRegularSnapshot(
     _ rect: CGRect,
     viewport: CGRect,
     scrollContainerAnchor: (index: Int, rect: CGRect)?
@@ -1195,12 +1195,32 @@ extension RunnerTests {
     visible: Bool,
     nodeIndex: Int?
   ) -> (index: Int, rect: CGRect)? {
-    guard let nodeIndex else { return nil }
-    if !isScrollableContainer(snapshot, visible: visible) { return nil }
-    return (nodeIndex, snapshot.frame)
+    return scrollContainerAnchor(
+      for: snapshot.elementType,
+      hasChildren: !snapshot.children.isEmpty,
+      visible: visible,
+      frame: snapshot.frame,
+      nodeIndex: nodeIndex
+    )
   }
 
-  private func rememberHiddenContentHint(
+  func scrollContainerAnchor(
+    for elementType: XCUIElement.ElementType,
+    hasChildren: Bool,
+    visible: Bool,
+    frame: CGRect,
+    nodeIndex: Int?
+  ) -> (index: Int, rect: CGRect)? {
+    guard let nodeIndex else { return nil }
+    if !isScrollableContainer(
+      elementType: elementType,
+      hasChildren: hasChildren,
+      visible: visible
+    ) { return nil }
+    return (nodeIndex, frame)
+  }
+
+  func rememberHiddenContentHint(
     for frame: CGRect,
     relativeTo scrollContainerAnchor: (index: Int, rect: CGRect),
     hints: inout [Int: (above: Bool, below: Bool)]
@@ -1217,7 +1237,7 @@ extension RunnerTests {
     hints[scrollContainerAnchor.index] = hint
   }
 
-  private func applyHiddenContentHints(
+  func applyHiddenContentHints(
     _ hints: [Int: (above: Bool, below: Bool)],
     to nodes: [SnapshotNode]
   ) -> [SnapshotNode] {
@@ -1240,7 +1260,8 @@ extension RunnerTests {
         depth: node.depth,
         parentIndex: node.parentIndex,
         hiddenContentAbove: hiddenContentAbove,
-        hiddenContentBelow: hiddenContentBelow
+        hiddenContentBelow: hiddenContentBelow,
+        actions: node.actions
       )
     }
   }
@@ -1504,7 +1525,12 @@ extension RunnerTests {
         valueText: valueText,
         visible: visible
       )
-      if !flatSnapshotFilterDecision(filterNode, options: options, insideMatchedScope: false).include {
+      if !flatSnapshotFilterDecision(
+        filterNode,
+        options: options,
+        visibilityPolicy: .interactiveOnly,
+        insideMatchedScope: false
+      ).include {
         return
       }
 
@@ -1533,8 +1559,18 @@ extension RunnerTests {
   }
 
   private func isScrollableContainer(_ snapshot: XCUIElementSnapshot, visible: Bool) -> Bool {
-    if !visible { return false }
-    if !Self.scrollContainerTypes.contains(snapshot.elementType) { return false }
-    return !snapshot.children.isEmpty
+    return isScrollableContainer(
+      elementType: snapshot.elementType,
+      hasChildren: !snapshot.children.isEmpty,
+      visible: visible
+    )
+  }
+
+  private func isScrollableContainer(
+    elementType: XCUIElement.ElementType,
+    hasChildren: Bool,
+    visible: Bool
+  ) -> Bool {
+    return visible && hasChildren && Self.scrollContainerTypes.contains(elementType)
   }
 }

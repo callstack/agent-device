@@ -1,8 +1,11 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { InteractionTarget } from '@agent-device/contracts/interaction';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotQualityVerdict, SnapshotState } from '@agent-device/kernel/snapshot';
 import { asAppError } from '@agent-device/kernel/errors';
-import { isSparseSnapshotQualityVerdict } from '../../snapshot-quality/verdict.ts';
+import {
+  isSparseSnapshotQualityVerdict,
+  preferredSnapshotBackendForVerdict,
+} from '../../snapshot-quality/verdict.ts';
 import { summarizeAxEvidence } from '../../utils/ax-digest.ts';
 import { getRequestSignal } from '../../request/cancel.ts';
 import { isLocalIosRunnerSession } from '../direct-ios-selector.ts';
@@ -58,7 +61,7 @@ export async function corroborateIosTapFailure(
 
   const after = await captureCorroborationSnapshot(
     params,
-    baseline.snapshot.snapshotQuality?.backend,
+    baseline.snapshot.snapshotQuality,
     baseline.presentation,
   );
   if (!after || !hasMatchingPresentation(baseline.snapshot, after, params.command)) {
@@ -113,10 +116,11 @@ function readCorroborationBaseline(
 
 async function captureCorroborationSnapshot(
   params: IosTapCorroborationParams,
-  baselineBackend: string | undefined,
+  baselineVerdict: SnapshotQualityVerdict | undefined,
   presentation: SnapshotPresentation | undefined,
 ): Promise<SnapshotState | undefined> {
   try {
+    const preferredBackend = preferredSnapshotBackendForVerdict(baselineVerdict);
     return await params.captureSnapshotForSession(
       params.session,
       matchingCaptureFlags(params.flags, presentation),
@@ -128,7 +132,7 @@ async function captureCorroborationSnapshot(
         // screens are exactly where the capture plan flips between XCTest and
         // private-AX (the penalty boundary) — pin the probe to the baseline's
         // backend instead of failing closed on the mismatch.
-        ...(baselineBackend === 'private-ax' ? { preferredBackend: 'private-ax' as const } : {}),
+        ...(preferredBackend ? { preferredBackend } : {}),
         signal: getRequestSignal(params.requestId),
       },
     );

@@ -634,15 +634,10 @@ extension RunnerTests {
         ],
       ],
     ]
-    var nodes: [SnapshotNode] = []
-    appendPrivateAXNode(
-      tree,
-      to: &nodes,
+    let nodes = privateAXPresentation(
+      rawRoot: tree,
       options: SnapshotOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
-      viewport: CGRect(x: 0, y: 0, width: 390, height: 844),
-      depth: 0,
-      parentIndex: nil,
-      insideMatchedScope: false
+      viewport: CGRect(x: 0, y: 0, width: 390, height: 844)
     )
 
     let card = nodes.first { $0.label == "feedItem-by-whiskers.test" }
@@ -664,15 +659,10 @@ extension RunnerTests {
         ["type": 9, "label": "unrelated sibling", "children": []],
       ],
     ]
-    var nodes: [SnapshotNode] = []
-    appendPrivateAXNode(
-      tree,
-      to: &nodes,
+    let nodes = privateAXPresentation(
+      rawRoot: tree,
       options: SnapshotOptions(interactiveOnly: false, depth: nil, scope: "homeScreen", raw: false),
-      viewport: .infinite,
-      depth: 0,
-      parentIndex: nil,
-      insideMatchedScope: false
+      viewport: .infinite
     )
 
     let labels = nodes.compactMap { $0.label ?? $0.identifier }
@@ -746,15 +736,10 @@ extension RunnerTests {
         ]
       ],
     ]
-    var nodes: [SnapshotNode] = []
-    appendPrivateAXNode(
-      tree,
-      to: &nodes,
+    let nodes = privateAXPresentation(
+      rawRoot: tree,
       options: SnapshotOptions(interactiveOnly: true, depth: nil, scope: nil, raw: false),
-      viewport: CGRect(x: 0, y: 0, width: 390, height: 844),
-      depth: 0,
-      parentIndex: nil,
-      insideMatchedScope: false
+      viewport: CGRect(x: 0, y: 0, width: 390, height: 844)
     )
 
     let labels = nodes.compactMap { $0.label }

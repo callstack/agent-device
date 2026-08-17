@@ -73,6 +73,7 @@ function createInteractionBackend(
         params.contextFromFlags,
         {
           interactiveOnly: options?.interactiveOnly === true,
+          preferredBackend: options?.preferredBackend,
           includeRects: options?.includeRects === true,
           signal: context.signal,
         },

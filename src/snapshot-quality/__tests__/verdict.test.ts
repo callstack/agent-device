@@ -1,7 +1,11 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 
-import { isSparseSnapshotQualityVerdict, readSnapshotQualityVerdict } from '../verdict.ts';
+import {
+  isSparseSnapshotQualityVerdict,
+  preferredSnapshotBackendForVerdict,
+  readSnapshotQualityVerdict,
+} from '../verdict.ts';
 
 test('readSnapshotQualityVerdict accepts a well-formed verdict', () => {
   const verdict = readSnapshotQualityVerdict({
@@ -48,4 +52,16 @@ test('isSparseSnapshotQualityVerdict identifies sparse captures', () => {
   assert.equal(isSparseSnapshotQualityVerdict({ state: 'sparse', backend: 'private-ax' }), true);
   assert.equal(isSparseSnapshotQualityVerdict({ state: 'healthy', backend: 'tree' }), false);
   assert.equal(isSparseSnapshotQualityVerdict(undefined), false);
+});
+
+test('preferredSnapshotBackendForVerdict pins only private-ax captures', () => {
+  assert.equal(
+    preferredSnapshotBackendForVerdict({ state: 'recovered', backend: 'private-ax' }),
+    'private-ax',
+  );
+  assert.equal(
+    preferredSnapshotBackendForVerdict({ state: 'healthy', backend: 'tree' }),
+    undefined,
+  );
+  assert.equal(preferredSnapshotBackendForVerdict(undefined), undefined);
 });

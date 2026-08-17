@@ -1,9 +1,4 @@
-import type { CommandFlags } from '@agent-device/contracts/command';
-import type {
-  AgentDeviceBackend,
-  BackendSnapshotOptions,
-  BackendSnapshotResult,
-} from '../backend.ts';
+import type { AgentDeviceBackend, BackendSnapshotResult } from '../backend.ts';
 import { resolveTargetDevice } from '../core/dispatch.ts';
 import { createAgentDevice } from '../runtime.ts';
 import { isMacOs, isApplePlatform, publicPlatformString } from '@agent-device/kernel/device';
@@ -24,6 +19,7 @@ import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { createSelectorCaptureRuntime } from './selector-capture-runtime.ts';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';
 import { getRequestSignal } from '../request/cancel.ts';
+import { snapshotOptionsToFlags } from '../backend-snapshot-options.ts';
 
 export type SelectorRuntimeParams = {
   req: DaemonRequest;
@@ -47,17 +43,6 @@ type AppleRunnerFindTextTarget = {
   appBundleId: string;
   traceLogPath?: string;
 };
-
-type SnapshotFlagOverrides = Partial<
-  Pick<
-    CommandFlags,
-    | 'snapshotInteractiveOnly'
-    | 'snapshotScope'
-    | 'snapshotDepth'
-    | 'snapshotRaw'
-    | 'snapshotIncludeHiddenContentHints'
-  >
->;
 
 export function createSelectorRuntimeForDevice(params: SelectorRuntimeDeviceParams) {
   return createAgentDevice({
@@ -122,7 +107,7 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
     captureSnapshot: async (context, options): Promise<BackendSnapshotResult> => {
       const flags = {
         ...req.flags,
-        ...snapshotFlagOverrides(options),
+        ...snapshotOptionsToFlags(options),
       };
       const includeRects = options?.includeRects === true;
       const snapshotScope = options?.scope ?? req.flags?.snapshotScope;
@@ -160,19 +145,6 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
       found: await findText(params, text, context.signal),
     }),
   };
-}
-
-function snapshotFlagOverrides(options: BackendSnapshotOptions | undefined): SnapshotFlagOverrides {
-  const { interactiveOnly, scope, depth, raw, includeHiddenContentHints } = options ?? {};
-  const flags: SnapshotFlagOverrides = {};
-  if (interactiveOnly !== undefined) flags.snapshotInteractiveOnly = interactiveOnly;
-  if (scope !== undefined) flags.snapshotScope = scope;
-  if (depth !== undefined) flags.snapshotDepth = depth;
-  if (raw !== undefined) flags.snapshotRaw = raw;
-  if (includeHiddenContentHints !== undefined) {
-    flags.snapshotIncludeHiddenContentHints = includeHiddenContentHints;
-  }
-  return flags;
 }
 
 async function findText(
