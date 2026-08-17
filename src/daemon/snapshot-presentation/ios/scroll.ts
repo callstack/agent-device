@@ -56,10 +56,19 @@ function applyScrollIndicatorReplacement(
   indicator: RawSnapshotNode,
   directions: { above: boolean; below: boolean },
 ): void {
+  const presentedContainer = context.replacements.get(container.index) ?? container;
   mergeReplacement(context.replacements, container, {
-    rect: deriveScrollableViewportRect(container.rect, indicator.rect) ?? container.rect,
-    hiddenContentAbove: mergeHiddenContentFlag(container.hiddenContentAbove, directions.above),
-    hiddenContentBelow: mergeHiddenContentFlag(container.hiddenContentBelow, directions.below),
+    rect:
+      deriveScrollableViewportRect(presentedContainer.rect, indicator.rect) ??
+      presentedContainer.rect,
+    hiddenContentAbove: mergeHiddenContentFlag(
+      presentedContainer.hiddenContentAbove,
+      directions.above,
+    ),
+    hiddenContentBelow: mergeHiddenContentFlag(
+      presentedContainer.hiddenContentBelow,
+      directions.below,
+    ),
   });
 }
 

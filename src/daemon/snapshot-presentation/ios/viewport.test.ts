@@ -69,3 +69,35 @@ test('reprojects private-ax visibility after semantic rules tighten a scroll vie
     ['Visible'],
   );
 });
+
+test('a bottomed scroll indicator preserves viewport-derived hidden content below', () => {
+  const presented = presentIosInteractiveSnapshot([
+    { index: 0, depth: 0, type: 'Application' },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Table',
+      rect: { x: 0, y: 100, width: 300, height: 400 },
+    },
+    {
+      index: 2,
+      depth: 2,
+      parentIndex: 1,
+      type: 'Cell',
+      label: 'Offscreen',
+      rect: { x: 0, y: 700, width: 300, height: 40 },
+    },
+    {
+      index: 3,
+      depth: 2,
+      parentIndex: 1,
+      type: 'Other',
+      label: 'Vertical scroll bar, 2 pages',
+      value: '100%',
+      rect: { x: 296, y: 100, width: 4, height: 350 },
+    },
+  ]);
+
+  assert.equal(presented.find((node) => node.type === 'Table')?.hiddenContentBelow, true);
+});
