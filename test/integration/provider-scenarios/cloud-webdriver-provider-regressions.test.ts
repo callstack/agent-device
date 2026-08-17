@@ -46,7 +46,11 @@ test('AWS Device Farm endpoint selection skips live-control WebSocket URLs', asy
   });
 });
 
-test('WebDriver session creation retries transient provider failures', async () => {
+// #1774: `POST /session` is never retried, even on a retriable-looking 5xx —
+// the outcome of a failed create is indeterminate on a cloud grid, and a second
+// attempt is a second billed device session. The transient failure surfaces to
+// the caller, who decides whether to allocate again.
+test('WebDriver session creation is not retried on transient provider failures', async () => {
   await withProviderScenarioResource(ProviderRegressionServer.start, async (server) => {
     server.sessionFailuresRemaining = 1;
     const runtime = providerRuntimeFor(
@@ -62,14 +66,13 @@ test('WebDriver session creation retries transient provider failures', async () 
     );
     const lease = providerRegressionLease(CLOUD_WEBDRIVER_PROVIDERS.browserStack);
     try {
-      const allocation = await runtime.leaseLifecycle.allocate?.(
-        lease,
-        browserStackRegressionContext(),
+      await assert.rejects(
+        () => runtime.leaseLifecycle.allocate!(lease, browserStackRegressionContext()),
+        /transient provider failure/,
       );
-      assert.equal(allocation?.providerSessionId, 'wd-regression');
-      assert.equal(server.calls.filter((call) => call.path === '/wd/hub/session').length, 2);
+      assert.equal(server.calls.filter((call) => call.path === '/wd/hub/session').length, 1);
+      assert.equal(await runtime.leaseLifecycle.release?.(lease), undefined);
     } finally {
-      await runtime.leaseLifecycle.release?.(lease);
       await runtime.shutdown();
     }
   });

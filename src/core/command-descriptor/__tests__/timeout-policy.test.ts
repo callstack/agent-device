@@ -70,6 +70,9 @@ test('daemon-preserving timeout commands are a bounded, reviewed set', () => {
   // destroyed healthy app sessions.
   // scroll/back joined in #1638: `--settle` gives them the same post-action
   // capture loop, so a wedged bridge is now their dominant hang mode too.
+  // lease_allocate joined in #1774: allocation creates a BILLED provider
+  // session the daemon owns, so a client-side timeout must not SIGKILL the
+  // daemon mid-create and orphan it (and every other provider session held).
   const preserving = commandDescriptors
     .filter((descriptor) => descriptor.timeoutPolicy.onTimeout === 'preserve-daemon')
     .map((descriptor) => descriptor.name);
@@ -81,6 +84,7 @@ test('daemon-preserving timeout commands are a bounded, reviewed set', () => {
     'get',
     'hover',
     'is',
+    'lease_allocate',
     'longpress',
     'press',
     'scroll',
@@ -133,6 +137,8 @@ test('request envelopes deviating from the default are bounded, reviewed sets', 
     reinstall: 180_000,
     install_source: 180_000,
     longpress: 210_000,
+    // #1774: base allocation budget (300s) + client/daemon race margin (30s).
+    lease_allocate: 330_000,
     test: 'unbounded',
   };
   for (const descriptor of commandDescriptors) {

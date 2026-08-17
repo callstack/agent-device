@@ -18,6 +18,7 @@ import {
   leaseScopeToReleaseRequest,
 } from '../../core/lease-scope.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import { LEASE_ALLOCATION_BUDGET_MS } from '../../core/command-descriptor/timeout-policy.ts';
 import { listDownloadableArtifacts } from '../artifact-tracking.ts';
 
 type LeaseHandlerArgs = {
@@ -29,6 +30,8 @@ type LeaseHandlerArgs = {
   providerRuntimeRequiredIds?: readonly string[];
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
+  /** Request-bound cancellation, handed to the provider as ownership evidence for allocation. */
+  requestSignal: AbortSignal;
 };
 
 export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<DaemonResponse | null> {
@@ -41,6 +44,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     providerRuntimeRequiredIds,
     leaseLifecycleProvider,
     cloudArtifactProvider,
+    requestSignal,
   } = args;
   const leaseScope = resolveLeaseScope(req);
   switch (req.command) {
@@ -63,7 +67,11 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
       const lease = leaseRegistry.allocateLease(leaseScopeToAllocateRequest(leaseScope));
       let providerData: Record<string, unknown> | undefined;
       try {
-        providerData = await leaseLifecycleProvider?.allocate?.(lease, leaseLifecycleContext(req));
+        providerData = await leaseLifecycleProvider?.allocate?.(lease, {
+          ...leaseLifecycleContext(req),
+          signal: requestSignal,
+          deadline: Date.now() + LEASE_ALLOCATION_BUDGET_MS,
+        });
       } catch (error) {
         leaseRegistry.releaseLease(
           leaseScopeToReleaseRequest({

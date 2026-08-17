@@ -4,6 +4,7 @@ import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { isAgentDeviceDaemonProcess } from '../daemon-process.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { resolveCommandTimeoutPolicy } from '../../core/command-descriptor/registry.ts';
+import { REQUEST_TIMEOUT_BUDGET_MARGIN_MS } from '../../core/command-descriptor/timeout-policy.ts';
 import type {
   CommandTimeoutBudget,
   CommandTimeoutPolicy,
@@ -235,8 +236,3 @@ function resetDaemonAfterTimeout(info: DaemonInfo, paths: DaemonPaths): { forced
   }
   return { forcedKill };
 }
-
-// Margin over a user-supplied budget so the daemon-side timeout result (with
-// diagnostics) wins the race against the client envelope. Never shrinks the
-// envelope below the command's declared base.
-const REQUEST_TIMEOUT_BUDGET_MARGIN_MS = 30_000;

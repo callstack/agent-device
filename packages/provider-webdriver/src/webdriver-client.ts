@@ -9,6 +9,14 @@ import {
 
 export type { WebDriverAuth, WebDriverRequestPolicy } from './webdriver-transport.ts';
 
+/**
+ * Default budget for `POST /session`. Cloud providers allocate a physical
+ * device inside that one request — BrowserStack iOS real devices routinely
+ * take 45–90s (#1774) — so it is far above the per-request default that
+ * suits a settled session's round trips.
+ */
+const DEFAULT_SESSION_CREATE_TIMEOUT_MS = 180_000;
+
 export type WebDriverClientOptions = {
   clientVersion: string;
   endpoint: string | URL;
@@ -58,18 +66,50 @@ export type W3CActionSequence = {
   actions: W3CPointerAction[];
 };
 
+export type WebDriverCreateSessionOptions = {
+  /**
+   * Epoch-ms deadline of the operation this creation belongs to. It can only
+   * shorten the client's own session-creation budget, never extend it, so a
+   * daemon request that has spent most of its allocation budget on provider
+   * preparation does not start a device allocation it cannot wait out.
+   */
+  deadline?: number;
+};
+
 export class WebDriverClient {
   private readonly transport: WebDriverTransport;
+  private readonly sessionCreateTimeoutMs: number;
   private sessionId: string | undefined;
 
   constructor(options: WebDriverClientOptions) {
     this.transport = new WebDriverTransport(options);
+    this.sessionCreateTimeoutMs =
+      options.requestPolicy?.sessionCreateTimeoutMs ?? DEFAULT_SESSION_CREATE_TIMEOUT_MS;
   }
 
-  async createSession(capabilities: Record<string, unknown>): Promise<WebDriverSession> {
-    const value = await this.requestValue('POST', '/session', {
-      capabilities: normalizeCapabilities(capabilities),
-    });
+  /**
+   * `POST /session` is the one non-idempotent request in the protocol, and its
+   * outcome after a client-side abort is indeterminate: a hub that has already
+   * started allocating a device finishes the session whether or not anyone is
+   * still listening. So it runs under its own budget with NO retries and NO
+   * request-bound cancellation — a retry after a timed-out attempt is a second
+   * billed session, and aborting the request would lose the id of the first
+   * (#1774). Callers that stop wanting the session while it is being created
+   * release it once they hold the id (see WebDriverSessionManager).
+   */
+  async createSession(
+    capabilities: Record<string, unknown>,
+    options?: WebDriverCreateSessionOptions,
+  ): Promise<WebDriverSession> {
+    const value = await this.requestValue(
+      'POST',
+      '/session',
+      { capabilities: normalizeCapabilities(capabilities) },
+      {
+        retryAttempts: 0,
+        timeoutMs: budgetWithin(this.sessionCreateTimeoutMs, options?.deadline),
+      },
+    );
     const session = readSession(value);
     this.sessionId = session.sessionId;
     return session;
@@ -364,6 +404,15 @@ function readW3CElementId(value: unknown): string | undefined {
 function requestBudget(deadline: number | undefined): WebDriverRequestOverrides {
   if (deadline === undefined) return { retryAttempts: 0 };
   return { retryAttempts: 0, timeoutMs: Math.max(0, deadline - Date.now()) };
+}
+
+/**
+ * A phase budget capped by the operation deadline it runs under, if any. Zero
+ * once the deadline has passed, for the same reason as `requestBudget`.
+ */
+function budgetWithin(budgetMs: number, deadline: number | undefined): number {
+  if (deadline === undefined) return budgetMs;
+  return Math.max(0, Math.min(budgetMs, deadline - Date.now()));
 }
 
 /** Nothing is focused right now — an expected state, not a driver defect. */

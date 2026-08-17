@@ -10,7 +10,8 @@ import {
   createCloudWebDriverCapabilities,
   type CloudWebDriverProviderCapabilities,
 } from './capabilities.ts';
-import { WebDriverClient } from './webdriver-client.ts';
+import { WebDriverClient, type WebDriverSession } from './webdriver-client.ts';
+import { isWebDriverRequestTimeout } from './webdriver-transport.ts';
 import { createWebDriverInteractor } from './webdriver-interactor.ts';
 import { snapshotBackendForPlatform } from './runtime-helpers.ts';
 import type {
@@ -41,6 +42,8 @@ type CloudWebDriverCloseResult = Readonly<{
   warnings: CloudWebDriverReleaseWarning[];
 }>;
 type LeaseResult = Record<string, unknown> | undefined;
+/** The half of a provider session that exists once the WebDriver session does, registered or not. */
+type ProviderSessionHandle = Pick<WebDriverProviderSession, 'client' | 'prepared'>;
 
 /**
  * Owns WebDriver session lifecycle and stale-owner retention. Deployment decisions stay in the
@@ -89,7 +92,7 @@ export class WebDriverSessionManager {
       headers: prepared.headers,
       requestPolicy: this.options.requestPolicy,
     });
-    const session = await this.createSessionWithPreparedCleanup(client, prepared);
+    const session = await this.createOwnedSession({ client, prepared }, lease, req);
     const device = this.deviceForLease(lease, prepared);
     const providerSessionId = prepared.providerSessionId ?? session.sessionId;
     const capabilities = createCloudWebDriverCapabilities({
@@ -164,16 +167,63 @@ export class WebDriverSessionManager {
     this.ownedDeviceIds.clear();
   }
 
-  private async createSessionWithPreparedCleanup(
-    client: WebDriverClient,
-    prepared: CloudWebDriverPreparedSession,
-  ): Promise<Awaited<ReturnType<WebDriverClient['createSession']>>> {
-    try {
-      return await client.createSession(prepared.webdriverCapabilities);
-    } catch (error) {
-      await cleanupAfterCreateSessionFailure(prepared, error);
-      throw error;
+  /**
+   * Creates the WebDriver session and settles who owns it. `POST /session` is
+   * non-idempotent with an indeterminate outcome once abandoned (see
+   * `WebDriverClient.createSession`), so the request's cancellation is treated
+   * as ownership evidence rather than an interrupt: a requester that left
+   * before creation started gets nothing created; one that left while the
+   * provider was allocating gets the finished session released, because by
+   * then its id is in hand and nothing else will ever release it (#1774).
+   */
+  private async createOwnedSession(
+    handle: ProviderSessionHandle,
+    lease: DeviceLease,
+    req: LeaseLifecycleContext | undefined,
+  ): Promise<WebDriverSession> {
+    if (req?.signal?.aborted) {
+      const canceled = requestCanceledError(this.options.provider, lease, {});
+      await cleanupAfterCreateSessionFailure(handle.prepared, canceled);
+      throw canceled;
     }
+    const session = await this.createSessionOrCleanup(handle, lease, req);
+    if (req?.signal?.aborted) {
+      throw await this.releaseCanceledSession(handle, lease, session);
+    }
+    return session;
+  }
+
+  private async createSessionOrCleanup(
+    handle: ProviderSessionHandle,
+    lease: DeviceLease,
+    req: LeaseLifecycleContext | undefined,
+  ): Promise<WebDriverSession> {
+    try {
+      return await handle.client.createSession(handle.prepared.webdriverCapabilities, {
+        deadline: req?.deadline,
+      });
+    } catch (error) {
+      const failure = isWebDriverRequestTimeout(error)
+        ? sessionCreateTimeoutError(error, this.options.provider, lease, handle.prepared)
+        : error;
+      await cleanupAfterCreateSessionFailure(handle.prepared, failure);
+      throw failure;
+    }
+  }
+
+  private async releaseCanceledSession(
+    handle: ProviderSessionHandle,
+    lease: DeviceLease,
+    session: WebDriverSession,
+  ): Promise<AppError> {
+    const close = await this.closeSession(handle);
+    return requestCanceledError(this.options.provider, lease, {
+      releasedWebDriverSessionId: session.sessionId,
+      ...(handle.prepared.providerSessionId
+        ? { releasedProviderSessionId: handle.prepared.providerSessionId }
+        : {}),
+      ...(close.warnings.length > 0 ? { warnings: close.warnings } : {}),
+    });
   }
 
   private async prepareSession(
@@ -221,9 +271,7 @@ export class WebDriverSessionManager {
     };
   }
 
-  private async closeSession(
-    session: WebDriverProviderSession,
-  ): Promise<CloudWebDriverCloseResult> {
+  private async closeSession(session: ProviderSessionHandle): Promise<CloudWebDriverCloseResult> {
     const warnings: CloudWebDriverReleaseWarning[] = [];
     let cleanup: Record<string, unknown> | undefined;
     try {
@@ -295,4 +343,48 @@ async function cleanupAfterCreateSessionFailure(
       };
     }
   }
+}
+
+/**
+ * The transport gave up on `POST /session`; the provider may still finish it.
+ * Nothing here can learn that session's id, so the error carries what the
+ * provider dashboard can be searched by instead — the lease the capabilities
+ * were labelled with — rather than guessing at REST cleanup of a session this
+ * process never owned.
+ */
+function sessionCreateTimeoutError(
+  timeout: AppError,
+  provider: string,
+  lease: DeviceLease,
+  prepared: CloudWebDriverPreparedSession,
+): AppError {
+  const timeoutMs = timeout.details?.timeoutMs;
+  return new AppError(
+    'COMMAND_FAILED',
+    `${provider} did not create the WebDriver session within ${String(timeoutMs)}ms.`,
+    {
+      reason: 'provider_session_create_timeout',
+      provider,
+      leaseId: lease.leaseId,
+      runId: lease.runId,
+      timeoutMs,
+      ...(prepared.providerSessionId ? { providerSessionId: prepared.providerSessionId } : {}),
+      hint: `${provider} may still finish creating the session after agent-device stopped waiting, and that session would keep billing until the provider reaps it. Before retrying, check ${provider} for a running session created for lease ${lease.leaseId} (run ${lease.runId}) and stop it.`,
+    },
+    timeout,
+  );
+}
+
+function requestCanceledError(
+  provider: string,
+  lease: DeviceLease,
+  released: Record<string, unknown>,
+): AppError {
+  return new AppError('COMMAND_FAILED', 'request canceled', {
+    reason: 'request_canceled',
+    provider,
+    leaseId: lease.leaseId,
+    ...released,
+    hint: 'The lease request was canceled (explicit cancel or client disconnect) while the provider session was being created; the session it produced, if any, was released instead of registered.',
+  });
 }

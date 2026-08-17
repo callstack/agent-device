@@ -68,8 +68,9 @@ test('is_keyboard_shown honors a caller timeout shorter than the client default'
       }),
   );
 
-  await assert.rejects(client.isKeyboardShown(50), (error: Error) => {
-    assert.match(`${error.name} ${error.message}`, /timeout|abort/i);
+  await assert.rejects(client.isKeyboardShown(50), (error: AppError) => {
+    assert.equal(error.details?.reason, 'webdriver_request_timeout');
+    assert.equal(error.details?.timeoutMs, 50);
     return true;
   });
 });
@@ -103,6 +104,96 @@ test('installApp aborts an in-flight provider request when its binding is cancel
     settleRequest?.();
     await pending.catch(() => undefined);
   }
+});
+
+// #1774: `POST /session` is the one non-idempotent request, and a retry after a
+// failed create is a second billed device session. A 5xx that the transport
+// would retry on any other route must reach the caller unretried here.
+test('createSession does not retry a transient create failure', async () => {
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return new Response(JSON.stringify({ value: { message: 'grid busy' } }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+  const client = new WebDriverClient({
+    clientVersion: '0.0.0-test',
+    endpoint: 'http://cloud-webdriver.test/wd/hub/',
+    // A retry-enabled policy would double a normal request; createSession must
+    // still refuse to retry regardless of the client's retry budget.
+    requestPolicy: { timeoutMs: 30_000, retryAttempts: 3 },
+  });
+
+  await assert.rejects(client.createSession({ platformName: 'iOS' }), /grid busy/);
+  assert.equal(calls, 1);
+});
+
+// The device-allocation phase routinely runs 45–90s on cloud iOS real devices,
+// far past the per-request default that suits a settled session's round trips.
+// A create that answers after the default 30s window must still land (#1774).
+test('createSession waits on its own budget, not the per-request default', async () => {
+  let sessionRequestTimeoutMs: number | undefined;
+  globalThis.fetch = async (input, init) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (url.endsWith('/session')) {
+      const startedAt = Date.now();
+      init?.signal?.addEventListener('abort', () => {
+        sessionRequestTimeoutMs = Date.now() - startedAt;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      return new Response(JSON.stringify({ value: { sessionId: 'wd-slow', capabilities: {} } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    throw new Error(`unexpected ${url}`);
+  };
+  const client = new WebDriverClient({
+    clientVersion: '0.0.0-test',
+    endpoint: 'http://cloud-webdriver.test/wd/hub/',
+    // A create bound by this 20ms default would abort before the 60ms answer;
+    // the dedicated session-create budget is what keeps it alive.
+    requestPolicy: { timeoutMs: 20, retryAttempts: 0, sessionCreateTimeoutMs: 5_000 },
+  });
+
+  const session = await client.createSession({ platformName: 'iOS' });
+  assert.equal(session.sessionId, 'wd-slow');
+  assert.equal(sessionRequestTimeoutMs, undefined, 'the create request must not have been aborted');
+});
+
+// The operation deadline (the daemon's remaining lease-allocation budget) can
+// only SHORTEN the create budget: a request that already spent most of its
+// allocation window on provider preparation must not start a 180s device
+// allocation it cannot wait out (#1774).
+test('createSession is bounded by the operation deadline when it is shorter', async () => {
+  globalThis.fetch = async (input, init) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (url.endsWith('/session')) {
+      return await new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason as Error));
+      });
+    }
+    throw new Error(`unexpected ${url}`);
+  };
+  const client = new WebDriverClient({
+    clientVersion: '0.0.0-test',
+    endpoint: 'http://cloud-webdriver.test/wd/hub/',
+    requestPolicy: { timeoutMs: 30_000, retryAttempts: 0, sessionCreateTimeoutMs: 180_000 },
+  });
+
+  await assert.rejects(
+    client.createSession({ platformName: 'iOS' }, { deadline: Date.now() + 40 }),
+    (error: AppError) => {
+      assert.equal(error.details?.reason, 'webdriver_request_timeout');
+      assert.ok(
+        typeof error.details?.timeoutMs === 'number' && error.details.timeoutMs <= 40,
+        `create should be bounded by the ~40ms deadline, got ${String(error.details?.timeoutMs)}`,
+      );
+      return true;
+    },
+  );
 });
 
 // The focused element is the only signal that can say WHICH field took focus,

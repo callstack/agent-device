@@ -93,6 +93,7 @@ test('lease handler executes commands owned by the lease route', async () => {
       sessionName: 'catalog-test',
       sessionStore,
       leaseRegistry,
+      requestSignal: new AbortController().signal,
     });
 
     assert.notEqual(response, null, `${command} should be handled by lease handler`);
@@ -120,6 +121,7 @@ test('lease handler preserves device-aware lease fields', async () => {
     sessionName: 'catalog-test',
     sessionStore,
     leaseRegistry,
+    requestSignal: new AbortController().signal,
   });
 
   assert.equal(allocateResponse?.ok, true);
@@ -147,6 +149,7 @@ test('lease handler preserves device-aware lease fields', async () => {
     sessionName: 'catalog-test',
     sessionStore,
     leaseRegistry,
+    requestSignal: new AbortController().signal,
   });
 
   assert.equal(heartbeatResponse?.ok, true);
@@ -167,6 +170,7 @@ test('lease artifacts lists daemon inventory for proxy lease scopes', async () =
       sessionName: 'catalog-test',
       sessionStore,
       leaseRegistry,
+      requestSignal: new AbortController().signal,
     });
 
     assertProxyLeaseArtifactInventory(response, tracked.artifactId);
@@ -197,6 +201,7 @@ test('lease release calls provider hook using the released lease without heartbe
     sessionName: 'catalog-test',
     sessionStore,
     leaseRegistry,
+    requestSignal: new AbortController().signal,
   });
   assert.equal(allocateResponse?.ok, true);
   const lease = readLeaseResponse(allocateResponse);
@@ -225,6 +230,7 @@ test('lease release calls provider hook using the released lease without heartbe
         return { provider: releasedLease.leaseProvider };
       },
     },
+    requestSignal: new AbortController().signal,
   });
 
   assert.equal(releaseResponse?.ok, true);
@@ -233,6 +239,54 @@ test('lease release calls provider hook using the released lease without heartbe
     released: true,
     provider: { provider: 'fake-provider' },
   });
+});
+
+// #1774: allocation hands the provider the request's cancellation signal and a
+// deadline so a cloud provider can bound its remote device-creation phase and,
+// on client disconnect, release the billed session it produced instead of
+// orphaning it. If the daemon dropped either, the provider would have no way to
+// know the requester is gone.
+test('lease allocation passes the request signal and a deadline to the provider', async () => {
+  const leaseRegistry = new LeaseRegistry();
+  const sessionStore = makeSessionStore('agent-device-lease-ownership-');
+  const requestSignal = new AbortController().signal;
+  const before = Date.now();
+  let observed: { signal?: AbortSignal; deadline?: number } | undefined;
+
+  const response = await handleLeaseCommands({
+    req: {
+      command: INTERNAL_COMMANDS.leaseAllocate,
+      token: 'test-token',
+      session: 'catalog-test',
+      meta: {
+        tenantId: 'tenant-a',
+        runId: 'run-a',
+        leaseBackend: 'android-instance',
+        leaseProvider: 'fake-provider',
+      },
+      positionals: [],
+    },
+    sessionName: 'catalog-test',
+    sessionStore,
+    leaseRegistry,
+    leaseLifecycleProvider: {
+      allocate: async (_lease, context) => {
+        observed = { signal: context?.signal, deadline: context?.deadline };
+        return { provider: 'fake-provider' };
+      },
+    },
+    requestSignal,
+  });
+  const after = Date.now();
+
+  assert.equal(response?.ok, true);
+  assert.equal(observed?.signal, requestSignal);
+  assert.ok(
+    typeof observed?.deadline === 'number' &&
+      observed.deadline > before &&
+      observed.deadline > after,
+    `allocation deadline must be a future instant, got ${String(observed?.deadline)}`,
+  );
 });
 
 function catalogCommandsForRoute(route: Exclude<DaemonCommandRoute, 'generic'>): string[] {

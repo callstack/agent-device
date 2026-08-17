@@ -11,6 +11,25 @@ export const PREPARE_REQUEST_TIMEOUT_MS = 240_000;
 // envelope does not abort a still-progressing device install first.
 export const INSTALL_REQUEST_TIMEOUT_MS = 180_000;
 
+// Margin over a daemon-side budget so the daemon's own timeout result (with
+// diagnostics) wins the race against the client envelope. Never shrinks the
+// envelope below the command's declared base.
+export const REQUEST_TIMEOUT_BUDGET_MARGIN_MS = 30_000;
+
+/**
+ * How long the daemon lets a lease lifecycle provider allocate one lease. Cloud
+ * providers spend most of it waiting on remote device allocation (BrowserStack
+ * iOS real devices take 45–90s to create a session; AWS Device Farm remote
+ * access takes ~2 minutes to reach RUNNING before the session is even created).
+ * The provider receives it as `LeaseLifecycleContext.deadline` and bounds its
+ * remote phases within it; the client's `lease_allocate` envelope is derived
+ * from it below, so the two cannot drift apart (#1774).
+ */
+export const LEASE_ALLOCATION_BUDGET_MS = 300_000;
+
+const LEASE_ALLOCATE_REQUEST_TIMEOUT_MS =
+  LEASE_ALLOCATION_BUDGET_MS + REQUEST_TIMEOUT_BUDGET_MARGIN_MS;
+
 /**
  * The timeout policy most commands share: standard envelope, no user-supplied
  * budget, and a daemon reset on timeout (a hung request usually means daemon
@@ -24,4 +43,20 @@ export const DEFAULT_TIMEOUT_POLICY: CommandTimeoutPolicy = {
   budget: { source: 'none' },
   envelopeMs: DAEMON_REQUEST_TIMEOUT_MS,
   onTimeout: 'reset-daemon',
+};
+
+/**
+ * Lease allocation against a cloud provider is remote work the daemon owns on
+ * the caller's behalf: the provider session it creates is billed until the
+ * daemon releases it. A client that stops waiting must therefore leave the
+ * daemon alive — the allocation either finishes and is released for the gone
+ * requester (see `LeaseLifecycleContext.signal`) or fails under the daemon's
+ * own budget with typed evidence. Resetting the daemon here would SIGKILL a
+ * process mid-`POST /session` and orphan the billed session it was about to
+ * own, along with every other provider session that daemon held.
+ */
+export const LEASE_ALLOCATE_TIMEOUT_POLICY: CommandTimeoutPolicy = {
+  budget: { source: 'none' },
+  envelopeMs: LEASE_ALLOCATE_REQUEST_TIMEOUT_MS,
+  onTimeout: 'preserve-daemon',
 };

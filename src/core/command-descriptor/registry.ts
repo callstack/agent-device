@@ -8,6 +8,7 @@ import { resolveWaitBudgetMs } from '../wait-positionals.ts';
 import {
   DEFAULT_TIMEOUT_POLICY,
   INSTALL_REQUEST_TIMEOUT_MS,
+  LEASE_ALLOCATE_TIMEOUT_POLICY,
   PREPARE_REQUEST_TIMEOUT_MS,
 } from './timeout-policy.ts';
 import { resolvePostActionObservationSupport } from './post-action-observation.ts';
@@ -397,7 +398,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     catalog: { group: 'internal', key: 'leaseAllocate' },
     recordsSessionAction: false,
     daemon: { route: 'lease', refFrameEffect: 'preserve', ...ADMISSION_AND_LOCK_EXEMPT },
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    timeoutPolicy: LEASE_ALLOCATE_TIMEOUT_POLICY,
     batchable: false,
     platformExecution: NO_PLATFORM_EXECUTION,
   },
