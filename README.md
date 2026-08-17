@@ -19,7 +19,7 @@
 
 Let your coding agent verify its changes in the running app. `agent-device` lets agents inspect, control, debug, and verify apps on iOS, Android, and HarmonyOS (simulators, emulators, and physical devices), plus tvOS, Android TV, Amazon Vega OS TV (Vega Virtual Device), web, macOS, and Linux. Agents read token-efficient accessibility snapshots instead of reasoning over screenshots alone, act through refs and selectors, and save evidence for review. It also coordinates device access across parallel agent worktrees and connects to remote device clouds.
 
-Works with Claude Code, Codex, Cursor, Windsurf, Cline, Goose, and any agent that can run a CLI or connect over MCP. Build your own agents and QA tools on the same runtime with the Node.js client and the [AI SDK](https://oss.callstack.com/agent-device/docs/ai-sdk) and [Eve](https://oss.callstack.com/agent-device/docs/eve) guides. Developers at [Expensify](https://www.callstack.com/blog/how-expensify-uses-agent-device-for-mobile-bug-evidence-and-profiling), [Shopify](https://x.com/mustafa01ali/status/2036577353178943826), and [others](#who-uses-agent-device) use it to verify their apps.
+Works with Claude Code, Codex, Cursor, Windsurf, Cline, Goose, and any agent that can run a CLI or connect over MCP, or as the runtime under agents you build with the [AI SDK](https://oss.callstack.com/agent-device/docs/ai-sdk) or [Eve](https://oss.callstack.com/agent-device/docs/eve). Developers at [Expensify](https://www.callstack.com/blog/how-expensify-uses-agent-device-for-mobile-bug-evidence-and-profiling), [Shopify](https://x.com/mustafa01ali/status/2036577353178943826), and [others](#who-uses-agent-device) use it to verify their apps.
 
 ## Quick start
 
@@ -31,9 +31,7 @@ agent-device doctor
 agent-device help workflow
 ```
 
-Run `agent-device doctor` yourself before handing the CLI to an agent. The installed CLI help defines current behavior. `agent-device help workflow` links to guides for debugging, replay, React Native profiling, and other tasks.
-
-From here, pick how your agent uses it: the CLI in a terminal, MCP tools in an agent client, or the typed client in Node.js code.
+Run `doctor` yourself before handing the CLI to an agent; `help workflow` links to the guides for debugging, replay, and profiling, and the installed help always matches the installed version.
 
 ### Drive an app from the CLI
 
@@ -63,15 +61,13 @@ agent-device screenshot ./contact-form.png
 agent-device close
 ```
 
-Use refs only from the latest output. Do not assume an earlier `@eN` still identifies the same element. After a command with `--settle` (`scroll` and `back` support it too), use the refs in its diff. Take another snapshot only if the diff omits what you need.
-
-Snapshots use the app's accessibility tree. Clear labels, roles, and test IDs make agent runs more reliable. Use screenshots and videos as evidence or when accessibility data is poor. Use refs and selectors for actions and assertions when you can.
+Refs are only valid from the latest output: after a `--settle` command, use the refs in its diff, and take a new snapshot only if the diff omits what you need. Snapshots come from the app's accessibility tree, so clear labels, roles, and test IDs make agent runs more reliable; use screenshots and video as evidence or when accessibility data is poor.
 
 ![agent-device demo showing Codex using agent-device to create a new contact in the iOS Contacts app from a simple prompt](./website/docs/public/agent-device-contacts.gif)
 
 ### Add MCP tools to your agent
 
-`agent-device mcp` starts the official stdio MCP server. It exposes structured tools for the installed commands, backed by the same execution path as the CLI. Add it to Cursor, Claude Code, Windsurf, or another MCP client:
+`agent-device mcp` starts the official stdio MCP server, exposing the installed commands as structured tools over the same execution path as the CLI:
 
 ```json
 {
@@ -88,7 +84,7 @@ See [AI Agent Setup](https://oss.callstack.com/agent-device/docs/agent-setup) fo
 
 ### Script it from Node.js
 
-`createAgentDeviceClient()` gives Node.js code typed access to the same commands. Expose its methods as model tools in your own agent (the [AI SDK](https://oss.callstack.com/agent-device/docs/ai-sdk) and [Eve](https://oss.callstack.com/agent-device/docs/eve) guides show how) or call them from orchestration code:
+`createAgentDeviceClient()` gives Node.js code typed access to the same commands, as model tools in your own agent or from orchestration code:
 
 ```ts
 import { createAgentDeviceClient } from 'agent-device';
@@ -103,7 +99,7 @@ if (button) await client.interactions.press({ ref: button.ref });
 await client.sessions.close();
 ```
 
-See the [Node.js API](https://oss.callstack.com/agent-device/docs/client-api) and the [runnable examples](https://github.com/callstack/agent-device/tree/main/examples/sdk) for typed error handling, batching, and the other public entry points.
+See the [Node.js API](https://oss.callstack.com/agent-device/docs/client-api), the [runnable examples](https://github.com/callstack/agent-device/tree/main/examples/sdk), and the [AI SDK](https://oss.callstack.com/agent-device/docs/ai-sdk) and [Eve](https://oss.callstack.com/agent-device/docs/eve) integration guides.
 
 ## What agents can do
 
@@ -128,9 +124,9 @@ With the CLI installed, prompts like these work end to end:
 
 ## Next steps
 
-- **Set up your agent**: run the CLI from Cursor, Codex, Claude Code, Windsurf, or another agent terminal. See [AI Agent Setup](https://oss.callstack.com/agent-device/docs/agent-setup) for skills, rules, MCP tools, and setup for each client.
-- **Try the sample app**: clone the repo and run the bundled Expo test app. [Quick Start](https://oss.callstack.com/agent-device/docs/quick-start) covers a guided run with screenshots, replay, and performance data.
-- **Build repeatable tests**: use [Replay & E2E](https://oss.callstack.com/agent-device/docs/replay-e2e) to repeat tests. Use [Debugging & Profiling](https://oss.callstack.com/agent-device/docs/debugging-profiling) to find bugs.
+- [AI Agent Setup](https://oss.callstack.com/agent-device/docs/agent-setup): skills, project rules, and per-client setup for Cursor, Codex, Claude Code, Windsurf, and others.
+- [Quick Start](https://oss.callstack.com/agent-device/docs/quick-start): a guided run on the bundled Expo test app with screenshots, replay, and performance data.
+- [Replay & E2E](https://oss.callstack.com/agent-device/docs/replay-e2e) and [Debugging & Profiling](https://oss.callstack.com/agent-device/docs/debugging-profiling): repeatable tests and bug hunting.
 
 ## Where to run agent-device
 
@@ -172,7 +168,7 @@ The MCP server is one entry point to the same runtime used by the CLI and typed 
 
 ### Can I build my own agent or QA product on agent-device?
 
-Yes. The CLI, MCP server, and typed Node.js client are public surfaces over one runtime, so an agent you build gets the same sessions, selectors, evidence, replay, and device-cloud routing as a coding agent using the CLI. Start from the [Node.js API](https://oss.callstack.com/agent-device/docs/client-api), [AI SDK](https://oss.callstack.com/agent-device/docs/ai-sdk), or [Eve](https://oss.callstack.com/agent-device/docs/eve) guides.
+Yes. The typed Node.js client is a public surface over that same runtime, so an agent you build inherits everything above. Start from the [Node.js API](https://oss.callstack.com/agent-device/docs/client-api), [AI SDK](https://oss.callstack.com/agent-device/docs/ai-sdk), or [Eve](https://oss.callstack.com/agent-device/docs/eve) guides.
 
 ### How is it different from Appium, Detox, or Maestro?
 
@@ -180,7 +176,7 @@ With `agent-device`, an agent reads app state and chooses each command at run ti
 
 ### Can agent-device run in CI?
 
-Yes. Record a run as an `.ad` script, replay it locally or in CI, and save screenshots, logs, and other artifacts for review. See [Replay & E2E](https://oss.callstack.com/agent-device/docs/replay-e2e) or start with the [EAS workflow template](https://github.com/callstackincubator/eas-agent-device/blob/main/.eas/workflows/agent-qa-mobile.yml).
+Yes. Record a run as an `.ad` script, replay it in CI, and keep the screenshots and logs as artifacts; the [EAS workflow template](https://github.com/callstackincubator/eas-agent-device/blob/main/.eas/workflows/agent-qa-mobile.yml) is a working example.
 
 ## Articles and videos
 
