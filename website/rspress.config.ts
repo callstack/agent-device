@@ -7,7 +7,7 @@ export default withCallstackPreset(
     docs: {
       title: 'agent-device',
       description:
-        'Agent-native CLI for AI mobile testing, React Native QA, Expo app verification, simulator and emulator automation, app observability, and replayable device workflows.',
+        'Mobile app automation and verification for AI coding agents: CLI, MCP server, and Node.js API for mobile testing, React Native QA, Expo app verification, simulator and emulator automation, and replayable device workflows.',
       editUrl: 'https://github.com/callstack/agent-device/edit/main/website',
       rootUrl: 'https://oss.callstack.com/agent-device',
       rootDir: 'docs',

@@ -251,5 +251,9 @@ connect errors, retry policy, or command typing, start in
   help/metadata, README or `website/docs/**` when user-facing, and a help-conformance bench case
   (`scripts/help-conformance-*.mjs`) when command-planning guidance changes.
 - State in the final summary whether docs/skills were updated, and why not if they weren't.
+- README altitude: the intro is a category line, the job pitch with the platform list, and the
+  works-with/proof line — nothing else. Per-platform transports, tool names, vendor lists, and
+  support caveats go in "How it works" and `website/docs/**`. A new platform adds its name to the
+  intro list and its backend to "How it works", nothing more.
 
 When guidance conflicts, Hard Rules win, then scope, then testing, then style.
