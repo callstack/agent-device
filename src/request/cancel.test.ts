@@ -5,7 +5,12 @@ import {
   createRequestCanceledError,
   isRequestCanceledError,
 } from '@agent-device/kernel/errors';
-import { resolveRequestTrackingId } from './cancel.ts';
+import {
+  clearRequestAbortRegistration,
+  markRequestCanceled,
+  registerRequestAbort,
+  resolveRequestTrackingId,
+} from './cancel.ts';
 
 test('resolveRequestTrackingId generates unique ids for fallback seeds', () => {
   const first = resolveRequestTrackingId(undefined, 42);
@@ -44,4 +49,24 @@ test('isRequestCanceledError accepts structured and legacy cancellation errors',
   assert.equal(isRequestCanceledError(createRequestCanceledError()), true);
   assert.equal(isRequestCanceledError(new AppError('COMMAND_FAILED', 'request canceled')), true);
   assert.equal(isRequestCanceledError(new AppError('COMMAND_FAILED', 'different message')), false);
+});
+
+// A canceled request's signal carries the typed error as its reason, so every
+// `signal.throwIfAborted()`, aborted fetch, and `throw signal.reason` downstream
+// reports a canceled request rather than a bare DOMException that normalizes to
+// UNKNOWN — without each site having to know the factory exists.
+test('a canceled request aborts its signal with the typed canceled error', () => {
+  const registration = registerRequestAbort('req-typed-abort');
+  try {
+    markRequestCanceled('req-typed-abort');
+    const signal = registration!.controller.signal;
+    assert.equal(signal.aborted, true);
+    assert.equal(isRequestCanceledError(signal.reason), true);
+    assert.throws(
+      () => signal.throwIfAborted(),
+      (error: unknown) => isRequestCanceledError(error),
+    );
+  } finally {
+    clearRequestAbortRegistration(registration);
+  }
 });

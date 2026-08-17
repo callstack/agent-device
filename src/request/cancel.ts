@@ -74,7 +74,11 @@ export function markRequestCanceled(requestId: string | undefined): void {
   if (!requestId) return;
   evictOldestSetEntries(canceledRequestIds);
   canceledRequestIds.add(requestId);
-  requestAbortControllers.get(requestId)?.abort();
+  // Abort WITH the typed error as the reason: every `signal.throwIfAborted()`,
+  // fetch, and `throw signal.reason` downstream then surfaces the canceled
+  // request as such, instead of a bare DOMException that normalizes to UNKNOWN.
+  // No call site has to remember the factory — the signal carries it.
+  requestAbortControllers.get(requestId)?.abort(createRequestCanceledError());
 }
 
 export function clearRequestCanceled(

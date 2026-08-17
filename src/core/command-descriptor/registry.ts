@@ -319,18 +319,22 @@ const INSTALL_TIMEOUT_POLICY: CommandTimeoutPolicy = {
   envelopeMs: INSTALL_REQUEST_TIMEOUT_MS,
 };
 
-// Lease allocation against a cloud provider is remote work the daemon owns on
-// the caller's behalf: the provider session it creates is billed until the
-// daemon releases it. A client that stops waiting must leave the daemon alive —
-// the allocation either finishes and is released for the gone requester (see
-// `LeaseLifecycleContext.signal`) or fails under the daemon's own budget with
-// typed evidence. Resetting the daemon here would SIGKILL it mid-`POST /session`
-// and orphan the billed session it was about to own, along with every other
-// provider session that daemon held (#1774).
-const LEASE_ALLOCATE_TIMEOUT_POLICY: CommandTimeoutPolicy = {
+// Lease-route commands act on cloud provider sessions the daemon owns on the
+// caller's behalf — billed until the daemon releases them. A client that stops
+// waiting on one must leave the daemon alive: resetting it would SIGKILL a
+// process mid-`POST /session` (allocate) or mid-`DELETE` (release) and orphan
+// the session in flight, along with every other provider session that daemon
+// held (#1774). Allocation additionally carries its own envelope: the request
+// either finishes and is released for the gone requester (see
+// `LeaseLifecycleContext.signal`) or fails under the daemon's budget with
+// typed evidence.
+const LEASE_TIMEOUT_POLICY: CommandTimeoutPolicy = {
   ...DEFAULT_TIMEOUT_POLICY,
-  envelopeMs: LEASE_ALLOCATE_REQUEST_TIMEOUT_MS,
   onTimeout: 'preserve-daemon',
+};
+const LEASE_ALLOCATE_TIMEOUT_POLICY: CommandTimeoutPolicy = {
+  ...LEASE_TIMEOUT_POLICY,
+  envelopeMs: LEASE_ALLOCATE_REQUEST_TIMEOUT_MS,
 };
 
 const DEFAULT_SETTLE_TIMEOUT_MS = 10_000;
@@ -423,7 +427,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     catalog: { group: 'internal', key: 'leaseHeartbeat' },
     recordsSessionAction: false,
     daemon: { route: 'lease', refFrameEffect: 'preserve', ...ADMISSION_AND_LOCK_EXEMPT },
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    timeoutPolicy: LEASE_TIMEOUT_POLICY,
     batchable: false,
     platformExecution: NO_PLATFORM_EXECUTION,
   },
@@ -434,7 +438,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     catalog: { group: 'internal', key: 'leaseRelease' },
     recordsSessionAction: false,
     daemon: { route: 'lease', refFrameEffect: 'preserve', ...ADMISSION_AND_LOCK_EXEMPT },
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    timeoutPolicy: LEASE_TIMEOUT_POLICY,
     batchable: false,
     platformExecution: NO_PLATFORM_EXECUTION,
   },

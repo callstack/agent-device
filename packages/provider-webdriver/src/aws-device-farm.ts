@@ -15,7 +15,11 @@ import type {
   CloudWebDriverRuntimeOptions,
   CloudWebDriverPrepareSession,
 } from './runtime.ts';
-import type { DeviceLease, ProviderDeviceRuntime } from '@agent-device/contracts/device';
+import type {
+  DeviceLease,
+  LeaseLifecycleContext,
+  ProviderDeviceRuntime,
+} from '@agent-device/contracts/device';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { AppError } from '@agent-device/kernel/errors';
 import type { RunHostCommand } from './dependencies.ts';
@@ -203,7 +207,7 @@ export function createAwsDeviceFarmPrepareSession(
       'client' | 'platform' | 'deviceName' | 'clientVersion'
     >,
 ): CloudWebDriverPrepareSession {
-  return async ({ lease, base }) => {
+  return async ({ lease, req, base }) => {
     const remoteAccess = await options.client.createRemoteAccessSession({
       projectArn: options.projectArn,
       deviceArn: options.deviceArn,
@@ -212,13 +216,27 @@ export function createAwsDeviceFarmPrepareSession(
       interactionMode: options.interactionMode,
       configuration: options.configuration,
     });
-    const running = await waitForRunningRemoteAccessSession(remoteAccess.arn, options);
-    const endpoint = selectAwsDeviceFarmWebDriverEndpoint(running);
-    if (!endpoint) {
-      throw new AppError('COMMAND_FAILED', 'AWS Device Farm did not expose a WebDriver endpoint.', {
-        sessionArn: running.arn,
-        status: running.status,
-      });
+    // From here the ARN is OURS: a billed remote-access session that nothing
+    // else will ever stop. Whatever ends the startup wait short of RUNNING —
+    // startup timeout, allocation deadline, or the requester leaving — must
+    // stop it before the failure surfaces, or it keeps billing until AWS reaps
+    // it (the same ownership rule as the WebDriver session in
+    // WebDriverSessionManager, one phase earlier).
+    let running: AwsDeviceFarmRemoteAccessSession;
+    let endpoint: string | undefined;
+    try {
+      running = await waitForRunningRemoteAccessSession(remoteAccess.arn, options, req);
+      endpoint = selectAwsDeviceFarmWebDriverEndpoint(running);
+      if (!endpoint) {
+        throw new AppError(
+          'COMMAND_FAILED',
+          'AWS Device Farm did not expose a WebDriver endpoint.',
+          { sessionArn: running.arn, status: running.status },
+        );
+      }
+    } catch (error) {
+      await stopRemoteAccessSessionAfterFailure(options.client, remoteAccess.arn, error);
+      throw error;
     }
     const deviceName = running.device?.name ?? options.deviceName;
     const configured =
@@ -276,29 +294,58 @@ async function waitForRunningRemoteAccessSession(
     pollIntervalMs?: number;
     startupTimeoutMs?: number;
   },
+  req: LeaseLifecycleContext | undefined,
 ): Promise<AwsDeviceFarmRemoteAccessSession> {
   const timeoutMs = options.startupTimeoutMs ?? 120_000;
   const pollIntervalMs = options.pollIntervalMs ?? 5_000;
   const startedAt = Date.now();
+  // The startup wait fits inside the lease-allocation deadline, so a client
+  // that stops waiting at that deadline never abandons a still-polling daemon.
+  const deadline = Math.min(startedAt + timeoutMs, req?.deadline ?? Infinity);
+  const signal = req?.signal;
   let last = await options.client.getRemoteAccessSession(arn);
-  while (Date.now() - startedAt < timeoutMs) {
+  while (Date.now() < deadline) {
+    signal?.throwIfAborted();
     if (last.status === 'RUNNING') return last;
-    if (last.status === 'ERRORED' || last.status === 'STOPPED' || last.status === 'COMPLETED') {
-      throw new AppError('COMMAND_FAILED', 'AWS Device Farm remote access session did not start.', {
-        sessionArn: arn,
-        status: last.status,
-        result: last.result,
-      });
-    }
-    await sleep(pollIntervalMs);
+    throwIfRemoteAccessSessionEnded(last);
+    // Wake early on cancellation; the typed reason is rethrown at the loop top.
+    await sleep(pollIntervalMs, undefined, { signal }).catch(() => signal?.throwIfAborted());
     last = await options.client.getRemoteAccessSession(arn);
   }
   throw new AppError('COMMAND_FAILED', 'Timed out waiting for AWS Device Farm remote access.', {
     sessionArn: arn,
     status: last.status,
     result: last.result,
-    timeoutMs,
+    timeoutMs: deadline - startedAt,
   });
+}
+
+const ENDED_REMOTE_ACCESS_STATUSES = new Set(['ERRORED', 'STOPPED', 'COMPLETED']);
+
+function throwIfRemoteAccessSessionEnded(session: AwsDeviceFarmRemoteAccessSession): void {
+  if (!session.status || !ENDED_REMOTE_ACCESS_STATUSES.has(session.status)) return;
+  throw new AppError('COMMAND_FAILED', 'AWS Device Farm remote access session did not start.', {
+    sessionArn: session.arn,
+    status: session.status,
+    result: session.result,
+  });
+}
+
+async function stopRemoteAccessSessionAfterFailure(
+  client: AwsDeviceFarmClient,
+  arn: string,
+  primaryError: unknown,
+): Promise<void> {
+  try {
+    await client.stopRemoteAccessSession(arn);
+  } catch (cleanupError) {
+    if (primaryError instanceof AppError) {
+      primaryError.details = {
+        ...primaryError.details,
+        cleanupError: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+      };
+    }
+  }
 }
 
 async function runAwsJson(

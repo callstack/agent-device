@@ -119,6 +119,10 @@ export function createCloudWebDriverProviderDefinitions(
               username,
               accessKey,
               uploadEndpoint: env.BROWSERSTACK_APP_UPLOAD_ENDPOINT,
+              // A local IPA/APK upload can run long (130 MB is routine); an
+              // upload is not a billed resource, so the request's cancellation
+              // may simply abort it — unlike the session creation that follows.
+              signal: request.signal,
             });
             return {
               ...base,
@@ -252,6 +256,7 @@ async function resolveBrowserStackAppReference(options: {
   username: string;
   accessKey: string;
   uploadEndpoint?: string;
+  signal?: AbortSignal;
 }): Promise<string> {
   if (isProviderAppReference(options.app)) return options.app;
   const appPath = path.resolve(options.cwd ?? process.cwd(), options.app);
@@ -262,12 +267,16 @@ async function resolveBrowserStackAppReference(options: {
       { providerApp: options.app },
     );
   }
-  return await uploadBrowserStackApp(appPath, {
-    clientVersion: options.clientVersion,
-    username: options.username,
-    accessKey: options.accessKey,
-    endpoint: options.uploadEndpoint,
-  });
+  return await uploadBrowserStackApp(
+    appPath,
+    {
+      clientVersion: options.clientVersion,
+      username: options.username,
+      accessKey: options.accessKey,
+      endpoint: options.uploadEndpoint,
+    },
+    options.signal,
+  );
 }
 
 function isProviderAppReference(value: string): boolean {
