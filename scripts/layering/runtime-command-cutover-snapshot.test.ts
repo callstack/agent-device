@@ -52,3 +52,54 @@ test('R32 snapshot rejects a provider-mode branch in daemon admission', () => {
     ],
   );
 });
+
+test('R32 snapshot rejects device-owner policy through chained aliases', () => {
+  assert.deepEqual(
+    violationsFor(`
+      const identity = device;
+      const owner = identity;
+      if (owner.platform === 'apple') return plan;
+    `),
+    [
+      'src/daemon/snapshot-runtime-binding.ts: snapshot admission reads device-owner identity instead of selected operation facts',
+    ],
+  );
+});
+
+test('R32 snapshot rejects destructured provider-owner policy', () => {
+  assert.deepEqual(
+    violationsFor(`
+      const { providerMode } = facts.device;
+      if (providerMode === 'provider-runtime') return plan;
+    `),
+    [
+      'src/daemon/snapshot-runtime-binding.ts: snapshot admission reads device-owner identity instead of selected operation facts',
+    ],
+  );
+});
+
+test('R32 snapshot rejects nested device-leaf destructuring from admission params', () => {
+  assert.deepEqual(
+    violationsFor(`
+      const { device: selectedDevice } = params;
+      const { kind } = selectedDevice;
+      if (kind === 'simulator') return plan;
+    `),
+    [
+      'src/daemon/snapshot-runtime-binding.ts: snapshot admission reads device-owner identity instead of selected operation facts',
+    ],
+  );
+});
+
+test('R32 snapshot rejects device-owner policy through an assigned alias', () => {
+  assert.deepEqual(
+    violationsFor(`
+      let identity;
+      identity = device;
+      if (identity.kind === 'simulator') return plan;
+    `),
+    [
+      'src/daemon/snapshot-runtime-binding.ts: snapshot admission reads device-owner identity instead of selected operation facts',
+    ],
+  );
+});
