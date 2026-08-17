@@ -113,6 +113,8 @@ const DRIVEN_COMMANDS: Record<string, DriveSpec> = {
   [PUBLIC_COMMANDS.click]: () => one(['10', '10']),
   [PUBLIC_COMMANDS.fill]: () => one(['label=General', 'hello']),
   [PUBLIC_COMMANDS.longPress]: () => one(['10', '10']),
+  // Web-only: reaches the capability refusal on Apple; the error must not leak either.
+  [PUBLIC_COMMANDS.hover]: () => one(['10', '10']),
   [PUBLIC_COMMANDS.press]: () => one(['10', '10']),
   [PUBLIC_COMMANDS.type]: () => one(['hello']),
   [PUBLIC_COMMANDS.back]: () => one(),
