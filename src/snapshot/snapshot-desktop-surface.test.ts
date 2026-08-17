@@ -6,10 +6,10 @@ const { runMacOsSnapshotAction, snapshotLinux } = vi.hoisted(() => ({
   snapshotLinux: vi.fn(),
 }));
 
-vi.mock('./platforms/apple/os/macos/helper.ts', () => ({ runMacOsSnapshotAction }));
-vi.mock('./platforms/linux/snapshot.ts', () => ({ snapshotLinux }));
+vi.mock('../platforms/apple/os/macos/helper.ts', () => ({ runMacOsSnapshotAction }));
+vi.mock('../platforms/linux/snapshot.ts', () => ({ snapshotLinux }));
 
-import { createSnapshotRuntimeHost } from './platform-runtime-snapshot-host.ts';
+import { createSnapshotRuntimeHost } from './snapshot-desktop-surface.ts';
 
 const macosDevice = {
   id: 'desktop',
@@ -35,6 +35,7 @@ test('Apple snapshot host preserves non-app macOS surface capture and menubar id
   runMacOsSnapshotAction.mockResolvedValue({
     nodes: [{ index: 0, depth: 0, type: 'MenuBar', label: 'System menu' }],
     truncated: false,
+    backend: 'macos-helper',
   });
   const signal = new AbortController().signal;
 

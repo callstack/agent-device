@@ -1,5 +1,5 @@
 import { parseSync } from 'oxc-parser';
-import { propertyName, visitAst } from './cutover-policy-ast.ts';
+import { memberPath, visitAst } from './cutover-policy-ast.ts';
 import { countNamedCalls, lineOf, namedFunction } from './runtime-command-cutover-ast.ts';
 import type { UnruledViolation } from './runtime-command-cutover-model.ts';
 
@@ -76,20 +76,6 @@ export function snapshotPlatformPolicyBranchViolations(
     });
   }
   return violations;
-}
-
-function memberPath(node: unknown): string[] | undefined {
-  if (node === null || typeof node !== 'object') return undefined;
-  const record = node as AstNode;
-  if (record['type'] === 'Identifier') {
-    const name = record['name'];
-    return typeof name === 'string' ? [name] : undefined;
-  }
-  if (record['type'] === 'ChainExpression') return memberPath(record['expression']);
-  if (record['type'] !== 'MemberExpression' || record['computed'] === true) return undefined;
-  const object = memberPath(record['object']);
-  const name = propertyName(record['property']);
-  return object && name ? [...object, name] : undefined;
 }
 
 function samePath(actual: readonly string[], expected: readonly string[]): boolean {

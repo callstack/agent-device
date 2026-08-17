@@ -1,6 +1,56 @@
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { SnapshotOptions, SnapshotResult } from '@agent-device/contracts/interaction';
+import type { CaptureSnapshotInput, SnapshotRuntimeHost } from '@agent-device/contracts/platform';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { findNodeByLabel } from './snapshot-node-label.ts';
+
+type SnapshotSurfaceOptions = NonNullable<CaptureSnapshotInput['options']>;
+
+export function createSnapshotRuntimeHost(): SnapshotRuntimeHost {
+  return Object.freeze({ captureSurface });
+}
+
+export async function captureLinuxSurfaceSnapshot(
+  options: CaptureSnapshotInput['options'],
+  signal?: AbortSignal,
+) {
+  const { snapshotLinux } = await import('../platforms/linux/snapshot.ts');
+  const result = await snapshotLinux(options?.surface, signal);
+  return shapeDesktopSurfaceSnapshot(
+    { nodes: result.nodes, truncated: result.truncated, backend: 'linux-atspi' },
+    options ?? {},
+  );
+}
+
+export async function captureMacOsSurfaceSnapshot(
+  options: SnapshotSurfaceOptions,
+  signal?: AbortSignal,
+) {
+  const surface = options.surface;
+  if (!surface || surface === 'app') {
+    throw new TypeError('Apple surface capture requires a non-app macOS surface');
+  }
+  const { runMacOsSnapshotAction } = await import('../platforms/apple/os/macos/helper.ts');
+  const result = await runMacOsSnapshotAction(surface, {
+    bundleId: surface === 'menubar' ? options.appBundleId : undefined,
+    signal,
+  });
+  return shapeDesktopSurfaceSnapshot(result, options);
+}
+
+const captureSurface: SnapshotRuntimeHost['captureSurface'] = async (device, options, signal) => {
+  if (device.platform === 'linux') {
+    return await captureLinuxSurfaceSnapshot(options, signal);
+  }
+  requireMacOsSurfaceDevice(device);
+  return await captureMacOsSurfaceSnapshot(options ?? {}, signal);
+};
+
+function requireMacOsSurfaceDevice(device: DeviceInfo): void {
+  if (device.platform !== 'apple' || device.appleOs !== 'macos') {
+    throw new TypeError('Apple surface capture requires a non-app macOS surface');
+  }
+}
 
 const INTERACTIVE_ROLE_TOKENS = [
   'button',
@@ -13,7 +63,7 @@ const INTERACTIVE_ROLE_TOKENS = [
 ] as const;
 
 /** Applies the legacy desktop-surface projection once for both runtime hosts and legacy capture. */
-export function shapeDesktopSurfaceSnapshot(
+function shapeDesktopSurfaceSnapshot(
   data: SnapshotResult,
   options: Pick<SnapshotOptions, 'depth' | 'interactiveOnly' | 'scope'>,
 ): SnapshotResult {

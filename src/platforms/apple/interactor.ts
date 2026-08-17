@@ -10,7 +10,7 @@ import {
 import { captureScreenshotViaRunner } from './core/screenshot.ts';
 import { iosRunnerOverrides, resolveAppleBackRunnerCommand } from './interactions.ts';
 import { appleRemotePressCommand } from './os/tvos/remote.ts';
-import { runMacOsScreenshotAction, runMacOsSnapshotAction } from './os/macos/helper.ts';
+import { runMacOsScreenshotAction } from './os/macos/helper.ts';
 import { runAppleRunnerCommand } from './core/runner/runner-client.ts';
 import {
   withAppleRunnerProvider,
@@ -32,7 +32,7 @@ import type {
   SnapshotOptions,
 } from '@agent-device/contracts/interaction';
 import { readSnapshotQualityVerdict } from '../../snapshot-quality/verdict.ts';
-import { shapeDesktopSurfaceSnapshot } from '../../snapshot/snapshot-desktop-surface.ts';
+import { captureMacOsSurfaceSnapshot } from '../../snapshot/snapshot-desktop-surface.ts';
 
 export function createAppleInteractor(
   device: DeviceInfo,
@@ -151,22 +151,9 @@ async function captureAppleSnapshot(
   runnerOpts: RunnerCallOptions,
 ) {
   if (isMacOs(device) && options?.surface && options.surface !== 'app') {
-    return await captureMacOsSurfaceSnapshot(options.surface, options);
+    return await captureMacOsSurfaceSnapshot(options, options.signal);
   }
   return await captureAppleRunnerSnapshot(device, options, runnerOpts);
-}
-
-async function captureMacOsSurfaceSnapshot(
-  surface: Exclude<NonNullable<SnapshotOptions['surface']>, 'app'>,
-  options: SnapshotOptions,
-) {
-  return shapeDesktopSurfaceSnapshot(
-    await runMacOsSnapshotAction(surface, {
-      bundleId: surface === 'menubar' ? options.appBundleId : undefined,
-      signal: options.signal,
-    }),
-    options,
-  );
 }
 
 async function captureAppleRunnerSnapshot(

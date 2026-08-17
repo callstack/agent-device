@@ -27,7 +27,7 @@ import { createAppleApplicationTools } from './platform-runtime-apple-applicatio
 import { createAndroidApplicationTools } from './platform-runtime-android-application-tools.ts';
 import { createLocalApplicationInteractorHost } from './platform-runtime-local-application-interactors.ts';
 import { createApplicationResourceLifecycle } from './platform-runtime-application-resources.ts';
-import { createSnapshotRuntimeHost } from './platform-runtime-snapshot-host.ts';
+import { createSnapshotRuntimeHost } from './snapshot/snapshot-desktop-surface.ts';
 
 export function createPlatformRuntimeHost(options: {
   sessionsDir: string;

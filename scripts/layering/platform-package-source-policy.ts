@@ -1,4 +1,5 @@
 import { parseSync } from 'oxc-parser';
+import { memberPath } from './cutover-policy-ast.ts';
 import { parseImports, type LayeringViolation } from './model.ts';
 
 const RULE = 'R13 platform-package-substrate';
@@ -36,21 +37,6 @@ function rootIdentifier(node: unknown): string | undefined {
   if (record['type'] === 'MemberExpression') return rootIdentifier(record['object']);
   if (record['type'] === 'ChainExpression') return rootIdentifier(record['expression']);
   return undefined;
-}
-
-function memberPath(node: unknown): string[] | undefined {
-  if (node === null || typeof node !== 'object') return undefined;
-  const record = node as Record<string, unknown>;
-  if (record['type'] === 'Identifier') {
-    const name = record['name'];
-    return typeof name === 'string' ? [name] : undefined;
-  }
-  if (record['type'] === 'ChainExpression') return memberPath(record['expression']);
-  if (record['type'] !== 'MemberExpression' || record['computed'] === true) return undefined;
-  const object = memberPath(record['object']);
-  const property = record['property'] as Record<string, unknown> | undefined;
-  const name = property?.['type'] === 'Identifier' ? property['name'] : undefined;
-  return object && typeof name === 'string' ? [...object, name] : undefined;
 }
 
 function literalString(node: unknown): string | undefined {
