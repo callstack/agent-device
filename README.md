@@ -13,7 +13,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-black.svg)](LICENSE)
 [![Glama MCP server](https://glama.ai/mcp/servers/callstack/agent-device/badges/score.svg)](https://glama.ai/mcp/servers/callstack/agent-device)
 
-**Mobile app automation and verification for AI coding agents.** Inspect, control, debug, and test apps through the CLI, built-in MCP server, or typed Node.js API.
+**Mobile app automation and verification for AI coding agents.** Give coding agents a live app feedback loop through a CLI, built-in MCP server, or typed Node.js API.
 
 <!-- Intro rule: category line, job pitch with the platform list, works-with/proof line, nothing else. Per-platform transports, tool names, vendor lists, and support caveats belong in "How it works" and website/docs, never here. Every name in the proof line must link to public evidence. -->
 
@@ -139,7 +139,7 @@ The same session and evidence model works at every step: the agent explores the 
 | Path | Best for | Start with |
 | --- | --- | --- |
 | Local | Trying commands and debugging apps on simulators, emulators, physical devices, macOS, and Linux. | Follow the Quick Start. |
-| CI/CD | Automated pull request and merge validation with replay scripts and captured artifacts. | Try the [EAS workflow template](https://github.com/callstackincubator/eas-agent-device/blob/main/.eas/workflows/agent-qa-mobile.yml). GitHub Actions template coming soon. |
+| CI/CD | Automated pull request and merge validation with replay scripts and captured artifacts. | Try the [EAS workflow template](https://github.com/callstackincubator/eas-agent-device/blob/main/.eas/workflows/agent-qa-mobile.yml). |
 | Cloud / remote | Linux runners, managed devices, and remote jobs. | Set up a [remote proxy](https://oss.callstack.com/agent-device/docs/remote-proxy), connect a [device cloud](https://oss.callstack.com/agent-device/docs/device-clouds) (BrowserStack, AWS Device Farm, Limrun), or [contact Callstack](mailto:hello@callstack.com) for team QA. |
 
 ## How it works
@@ -165,6 +165,10 @@ Yes. `agent-device mcp` starts the official stdio MCP server. The Quick start ab
 ### Does it work with React Native, Expo, Flutter, and native apps?
 
 Yes. `agent-device` supports native iOS and Android apps, plus React Native, Expo, and Flutter apps on supported targets. The commands and evidence vary by target.
+
+### How is it different from mobile MCP servers?
+
+The MCP server is one entry point to the same runtime used by the CLI and typed Node.js API. Sessions, device ownership, selectors, evidence, replay, CI workflows, and cloud routing stay consistent across all three.
 
 ### How is it different from Appium, Detox, or Maestro?
 
