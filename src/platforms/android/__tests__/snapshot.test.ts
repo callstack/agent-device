@@ -1068,7 +1068,15 @@ test('snapshotAndroid emits helper failure diagnostics', async () => {
   const diagnostics = await captureDiagnostics(
     { session: 'snapshot-failure', requestId: 'req-2', command: 'snapshot', debug: true },
     async () => {
-      await assert.rejects(() => snapshotAndroid(device, { helperAdb, helperArtifact }));
+      await assert.rejects(
+        () => snapshotAndroid(device, { helperAdb, helperArtifact }),
+        (error: unknown) => {
+          assert(error instanceof AppError);
+          assert.equal(error.code, 'COMMAND_FAILED');
+          assert.match(error.message, /helper unavailable/);
+          return true;
+        },
+      );
       return flushDiagnosticsToSessionFile({ force: true });
     },
   );
@@ -1339,7 +1347,15 @@ test('snapshotAndroid re-probes helper install after helper capture failure', as
     helperArtifact,
   };
 
-  await assert.rejects(() => snapshotAndroid(device, helperOptions));
+  await assert.rejects(
+    () => snapshotAndroid(device, helperOptions),
+    (error: unknown) => {
+      assert(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.match(error.message, /instrumentation failed/);
+      return true;
+    },
+  );
   const helper = await snapshotAndroid(device, helperOptions);
 
   assert.equal(helper.androidSnapshot.backend, 'android-helper');

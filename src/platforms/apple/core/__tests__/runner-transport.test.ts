@@ -51,15 +51,20 @@ afterEach(() => {
 });
 
 test('sendRunnerCommandOnce does not retry or simulator fallback after request failure', async () => {
+  // fetchWithTimeout does not wrap fetch() failures into an AppError, so this test's
+  // real subject is the no-retry/no-fallback behavior around an opaque transport
+  // failure — assert identity of the propagated error, not any particular code.
+  const fetchError = new Error('request timed out after reaching runner');
   vi.stubGlobal(
     'fetch',
     vi.fn(async () => {
-      throw new Error('request timed out after reaching runner');
+      throw fetchError;
     }),
   );
 
-  await assert.rejects(() =>
-    sendRunnerCommandOnce(iosSimulator, 8100, { command: 'tap', x: 120, y: 240 }, 5_000),
+  await assert.rejects(
+    () => sendRunnerCommandOnce(iosSimulator, 8100, { command: 'tap', x: 120, y: 240 }, 5_000),
+    (error: unknown) => error === fetchError,
   );
 
   assert.equal(vi.mocked(fetch).mock.calls.length, 1);

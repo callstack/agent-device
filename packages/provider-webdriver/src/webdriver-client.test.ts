@@ -226,7 +226,14 @@ test('activeElement bounds its two sequential requests by one shared budget', as
     });
   });
 
-  await assert.rejects(client.activeElement(budgetMs));
+  // Not an AppError: this is the raw AbortSignal.timeout() rejection the transport
+  // re-throws unwrapped once the combined signal is already aborted (see
+  // shouldRetryWebDriverRequest in webdriver-transport.ts) — assert the timeout's
+  // own reason instead of any failure.
+  await assert.rejects(
+    client.activeElement(budgetMs),
+    (error: unknown) => error instanceof Error && error.name === 'TimeoutError',
+  );
 
   assert.ok(rectRequestBudgetMs !== undefined, 'the rect request should have been made');
   // It must get what the first call left (~120ms), never a fresh 200ms.

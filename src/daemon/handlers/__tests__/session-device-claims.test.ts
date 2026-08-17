@@ -124,21 +124,26 @@ test('failed local open before device setup rolls its device claim back', async 
   // now, so this is where a pre-device-effect failure surfaces.
   const stoppedAvd = { ...android, id: 'pixel-avd', booted: false };
   mockResolveTargetDevice.mockResolvedValue(stoppedAvd);
-  mockDiscoverReadyAndroidEmulators.mockRejectedValue(new Error('device not ready'));
+  // The point of this test is claim-rollback behavior around an opaque pre-device-effect
+  // failure, not any particular error shape, so assert identity of the propagated error.
+  const rejectionError = new Error('device not ready');
+  mockDiscoverReadyAndroidEmulators.mockRejectedValue(rejectionError);
 
-  await assert.rejects(async () =>
-    handleOpenCommand({
-      req: {
-        command: 'open',
-        token: 'test',
-        session: 'claim-rollback',
-        positionals: ['Demo'],
-        flags: { platform: 'android' },
-      },
-      sessionName: 'claim-rollback',
-      logPath: path.join(stateDir, 'daemon.log'),
-      sessionStore: store,
-    }),
+  await assert.rejects(
+    async () =>
+      handleOpenCommand({
+        req: {
+          command: 'open',
+          token: 'test',
+          session: 'claim-rollback',
+          positionals: ['Demo'],
+          flags: { platform: 'android' },
+        },
+        sessionName: 'claim-rollback',
+        logPath: path.join(stateDir, 'daemon.log'),
+        sessionStore: store,
+      }),
+    (error: unknown) => error === rejectionError,
   );
   assert.deepEqual(inspectDeviceClaims({ serial: stoppedAvd.id }), []);
 });
@@ -146,21 +151,26 @@ test('failed local open before device setup rolls its device claim back', async 
 test('failed local open after dispatch retains its device claim for recovery', async () => {
   const { store, stateDir } = setup();
   mockResolveTargetDevice.mockResolvedValue(android);
-  mockDispatch.mockRejectedValue(new Error('open failed'));
+  // The point of this test is claim-retention behavior around an opaque post-dispatch
+  // failure, not any particular error shape, so assert identity of the propagated error.
+  const rejectionError = new Error('open failed');
+  mockDispatch.mockRejectedValue(rejectionError);
 
-  await assert.rejects(async () =>
-    handleOpenCommand({
-      req: {
-        command: 'open',
-        token: 'test',
-        session: 'claim-dispatch-failure',
-        positionals: ['Demo'],
-        flags: { platform: 'android' },
-      },
-      sessionName: 'claim-dispatch-failure',
-      logPath: path.join(stateDir, 'daemon.log'),
-      sessionStore: store,
-    }),
+  await assert.rejects(
+    async () =>
+      handleOpenCommand({
+        req: {
+          command: 'open',
+          token: 'test',
+          session: 'claim-dispatch-failure',
+          positionals: ['Demo'],
+          flags: { platform: 'android' },
+        },
+        sessionName: 'claim-dispatch-failure',
+        logPath: path.join(stateDir, 'daemon.log'),
+        sessionStore: store,
+      }),
+    (error: unknown) => error === rejectionError,
   );
   assert.equal(inspectDeviceClaims({ serial: android.id })[0]?.classification, 'live');
 });
@@ -169,22 +179,27 @@ test('failed local runtime-hint setup retains its device claim before open dispa
   const { store, stateDir } = setup();
   mockResolveTargetDevice.mockResolvedValue(android);
   mockResolveAndroidPackage.mockResolvedValue('com.example.demo');
-  mockApplyRuntimeHints.mockRejectedValue(new Error('runtime hints changed before failure'));
+  // The point of this test is claim-retention behavior around an opaque pre-dispatch
+  // failure, not any particular error shape, so assert identity of the propagated error.
+  const rejectionError = new Error('runtime hints changed before failure');
+  mockApplyRuntimeHints.mockRejectedValue(rejectionError);
 
-  await assert.rejects(async () =>
-    handleOpenCommand({
-      req: {
-        command: 'open',
-        token: 'test',
-        session: 'claim-runtime-hint-failure',
-        positionals: ['Demo'],
-        flags: { platform: 'android' },
-        runtime: { metroHost: '10.0.0.10', metroPort: 8081 },
-      },
-      sessionName: 'claim-runtime-hint-failure',
-      logPath: path.join(stateDir, 'daemon.log'),
-      sessionStore: store,
-    }),
+  await assert.rejects(
+    async () =>
+      handleOpenCommand({
+        req: {
+          command: 'open',
+          token: 'test',
+          session: 'claim-runtime-hint-failure',
+          positionals: ['Demo'],
+          flags: { platform: 'android' },
+          runtime: { metroHost: '10.0.0.10', metroPort: 8081 },
+        },
+        sessionName: 'claim-runtime-hint-failure',
+        logPath: path.join(stateDir, 'daemon.log'),
+        sessionStore: store,
+      }),
+    (error: unknown) => error === rejectionError,
   );
 
   assert.equal(mockApplyRuntimeHints.mock.calls.length, 1);

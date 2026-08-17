@@ -37,7 +37,7 @@ export { withFakeAdb, type FakeAdbResponse } from './fake-adb.ts';
 
 export { withFakeAppleTool, type FakeAppleToolResponse } from './fake-apple-tool.ts';
 
-export { assertRejectsAppError } from './app-error.ts';
+export { assertRejectsAppError, assertThrowsAppError } from './app-error.ts';
 
 export {
   COMPACT_VIEWPORTS,

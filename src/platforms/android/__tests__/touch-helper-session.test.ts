@@ -534,6 +534,12 @@ test('a malformed session gesture response stops the session and does not fall b
       { serial: device.id },
       async () => await executeAndroidTouchHelperPlan(device, lowerAndroidTouchPlan(flingPlan())),
     ),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.match(error.message, /wrong protocol/);
+      return true;
+    },
   );
 
   assert.equal(instrumentCalled, false);

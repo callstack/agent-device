@@ -21,3 +21,23 @@ export async function assertRejectsAppError(
     return true;
   });
 }
+
+/**
+ * Synchronous sibling of {@link assertRejectsAppError}: asserts that `fn`
+ * throws an {@link AppError} carrying `code` and, when given, a message
+ * matching `message`.
+ */
+export function assertThrowsAppError(
+  fn: () => unknown,
+  expected: { code: string; message?: RegExp },
+): void {
+  assert.throws(fn, (error: unknown) => {
+    assert.ok(
+      error instanceof AppError,
+      `expected AppError, got ${error?.constructor?.name ?? typeof error}: ${String(error)}`,
+    );
+    assert.equal(error.code, expected.code);
+    if (expected.message) assert.match(error.message, expected.message);
+    return true;
+  });
+}

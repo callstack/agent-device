@@ -106,7 +106,10 @@ test('setAndroidSetting fingerprint does not use adb emu command on physical dev
   await withFakeAdb(
     () => ({ stderr: 'unknown command', exitCode: 1 }),
     async ({ calls, device }) => {
-      await assert.rejects(() => setAndroidSetting(device, 'fingerprint', 'match'));
+      await assertRejectsAppError(() => setAndroidSetting(device, 'fingerprint', 'match'), {
+        code: 'UNSUPPORTED_OPERATION',
+        message: /Android fingerprint simulation is not supported/,
+      });
       const emuCalls = calls.filter((args) => args[0] === 'emu');
       assert.deepEqual(emuCalls, []);
     },

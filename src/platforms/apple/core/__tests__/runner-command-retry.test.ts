@@ -469,8 +469,17 @@ test('mutating commands do not restart or replay after command send failure', as
     .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'fetch failed'))
     .mockResolvedValueOnce({ lifecycleState: 'notAccepted' });
 
-  await assert.rejects(() =>
-    runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
+  await assert.rejects(
+    () => runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
+    (error: unknown) => {
+      // An unknown lifecycle state after a lost transport response synthesizes a new
+      // COMMAND_FAILED error, keeping the original transport error as its details/cause.
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.recovery, 'lifecycle_state_not_recoverable');
+      assert.equal(error.details?.transportError, 'fetch failed');
+      return true;
+    },
   );
 
   assert.equal(mockEnsureRunnerSession.mock.calls.length, 1);
@@ -524,8 +533,17 @@ test('mutating commands keep invalidating when status cannot find the command', 
       lifecycleState: 'notAccepted',
     });
 
-  await assert.rejects(() =>
-    runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
+  await assert.rejects(
+    () => runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
+    (error: unknown) => {
+      // An unknown lifecycle state after a lost transport response synthesizes a new
+      // COMMAND_FAILED error, keeping the original transport error as its details/cause.
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.recovery, 'lifecycle_state_not_recoverable');
+      assert.equal(error.details?.transportError, 'fetch failed');
+      return true;
+    },
   );
 
   assert.deepEqual(mockInvalidateRunnerSession.mock.calls, [
@@ -547,8 +565,15 @@ test('mutating commands keep invalidating when status recovery probe fails', asy
     .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'fetch failed'))
     .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'status probe failed'));
 
-  await assert.rejects(() =>
-    runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
+  await assert.rejects(
+    () => runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
+    (error: unknown) => {
+      // A failed status probe re-throws the original transport error, not the probe's own.
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.message, 'fetch failed');
+      return true;
+    },
   );
 
   assert.deepEqual(mockInvalidateRunnerSession.mock.calls, [
@@ -759,8 +784,17 @@ test('mutating commands keep conservative invalidation for skipped-preflight fai
     )
     .mockResolvedValueOnce({ lifecycleState: 'paused' });
 
-  await assert.rejects(() =>
-    runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
+  await assert.rejects(
+    () => runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
+    (error: unknown) => {
+      // An unknown lifecycle state after a lost transport response synthesizes a new
+      // COMMAND_FAILED error, keeping the original transport error as its details/cause.
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.recovery, 'lifecycle_state_not_recoverable');
+      assert.equal(error.details?.transportError, 'fetch failed');
+      return true;
+    },
   );
 
   assert.deepEqual(mockInvalidateRunnerSession.mock.calls, [
@@ -878,8 +912,18 @@ test('mutating commands invalidate the retry session without replaying again', a
     .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'fetch failed'))
     .mockResolvedValueOnce({ lifecycleState: 'notAccepted' });
 
-  await assert.rejects(() =>
-    runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
+  await assert.rejects(
+    () => runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
+    (error: unknown) => {
+      // An unknown lifecycle state after a lost transport response synthesizes a new
+      // COMMAND_FAILED error; its details carry the retry's transport error (from the
+      // fresh session), not the original connect failure that triggered the retry.
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.recovery, 'lifecycle_state_not_recoverable');
+      assert.equal(error.details?.transportError, 'fetch failed');
+      return true;
+    },
   );
 
   assert.equal(mockEnsureRunnerSession.mock.calls.length, 2);
@@ -1013,11 +1057,19 @@ test('sequence invalidates the session when the status probe fails', async () =>
     .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'fetch failed'))
     .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'status probe failed'));
 
-  await assert.rejects(() =>
-    runAppleRunnerCommand(IOS_SIMULATOR, {
-      command: 'sequence',
-      steps: [{ kind: 'tap', x: 1, y: 2 }],
-    }),
+  await assert.rejects(
+    () =>
+      runAppleRunnerCommand(IOS_SIMULATOR, {
+        command: 'sequence',
+        steps: [{ kind: 'tap', x: 1, y: 2 }],
+      }),
+    (error: unknown) => {
+      // A failed status probe re-throws the original transport error, not the probe's own.
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.message, 'fetch failed');
+      return true;
+    },
   );
 
   assert.deepEqual(mockInvalidateRunnerSession.mock.calls, [

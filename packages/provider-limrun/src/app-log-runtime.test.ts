@@ -150,9 +150,15 @@ test('keeps exact-owner app-log recovery available without a process-local sessi
     available: false,
     reason: 'owner-capability-missing',
   });
-  expect(() => narrowDeviceBinding(binding, appStateUse)).toThrow();
-  expect(() => narrowDeviceBinding(binding, bootTargetUse)).toThrow();
-  expect(() => narrowDeviceBinding(binding, appsRuntimeUse)).toThrow();
+  expect(() => narrowDeviceBinding(binding, appStateUse)).toThrow(
+    expect.objectContaining({ code: 'UNSUPPORTED_OPERATION' }),
+  );
+  expect(() => narrowDeviceBinding(binding, bootTargetUse)).toThrow(
+    expect.objectContaining({ code: 'UNSUPPORTED_OPERATION' }),
+  );
+  expect(() => narrowDeviceBinding(binding, appsRuntimeUse)).toThrow(
+    expect.objectContaining({ code: 'UNSUPPORTED_OPERATION' }),
+  );
   await expect(binding.operations.appLogReattach?.({ envelope })).resolves.toEqual({
     status: 'missing',
   });

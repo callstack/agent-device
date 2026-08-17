@@ -32,11 +32,16 @@ test.each(['metadata', 'mark', 'clear'] as const)(
     fs.writeFileSync(outsidePath, 'outside');
     fs.symlinkSync(outsidePath, outPath);
 
+    // `mark` runs through ensureAppLogPath's own symlink guard ("must not be a symbolic
+    // link"); `metadata` and `clear` go straight to the shared verified-file open path,
+    // whose identity check reports the path as simply not a regular file.
+    const expectedMessage =
+      operation === 'mark' ? /must not be a symbolic link/ : /must be a regular file/;
     expect(() => {
       if (operation === 'metadata') getAppLogPathMetadata(outPath);
       else if (operation === 'mark') appendAppLogMarker(outPath, 'checkpoint');
       else clearAppLogFiles(outPath);
-    }).toThrow();
+    }).toThrow(expectedMessage);
     expect(fs.readFileSync(outsidePath, 'utf8')).toBe('outside');
     expect(fs.lstatSync(outPath).isSymbolicLink()).toBe(true);
   },
