@@ -162,6 +162,11 @@ export function isRequestCanceledError(error: unknown): boolean {
   return error.message === REQUEST_CANCELED_MESSAGE;
 }
 
+/** The message of whatever was thrown, for diagnostics that must not themselves throw. */
+export function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export function asAppError(err: unknown, fallbackCode: AppErrorCode = 'UNKNOWN'): AppError {
   if (err instanceof AppError) return err;
   if (err instanceof Error) {

@@ -4,7 +4,7 @@ import type {
 } from '@agent-device/contracts/observability';
 import type { DeviceLease, LeaseLifecycleContext } from '@agent-device/contracts/device';
 import { deviceFieldsFromPublicPlatform, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import { unavailableCloudArtifactsResult } from './artifact-results.ts';
 import {
   createCloudWebDriverCapabilities,
@@ -14,7 +14,7 @@ import { WebDriverClient, type WebDriverSession } from './webdriver-client.ts';
 import { isWebDriverRequestTimeout } from './webdriver-transport.ts';
 import { createWebDriverInteractor } from './webdriver-interactor.ts';
 import { snapshotBackendForPlatform } from './runtime-helpers.ts';
-import { errorMessage, releaseOnFailure } from './webdriver-utils.ts';
+import { releaseOnFailure } from './webdriver-utils.ts';
 import type {
   CloudWebDriverBaseSession,
   CloudWebDriverPlatform,

@@ -46,7 +46,8 @@ export type WebDriverTransportOptions = {
   endpoint: string | URL;
   auth?: WebDriverAuth;
   headers?: Record<string, string>;
-  requestPolicy?: WebDriverRequestPolicy;
+  /** Session creation is the client's phase; the transport sees only per-request policy. */
+  requestPolicy?: Omit<WebDriverRequestPolicy, 'sessionCreateTimeoutMs'>;
 };
 
 type WebDriverResponse = {
@@ -61,7 +62,7 @@ type ResolvedWebDriverRequestOverrides = {
 };
 
 type ResolvedWebDriverRequestPolicy = Required<
-  Pick<WebDriverRequestPolicy, 'timeoutMs' | 'retryAttempts' | 'retryDelayMs'>
+  NonNullable<WebDriverTransportOptions['requestPolicy']>
 >;
 
 /** Focused HTTP/retry policy for one WebDriver endpoint; session semantics stay in WebDriverClient. */

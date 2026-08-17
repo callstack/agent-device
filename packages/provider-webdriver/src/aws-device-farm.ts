@@ -24,7 +24,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { AppError } from '@agent-device/kernel/errors';
 import type { RunHostCommand } from './dependencies.ts';
 import { CLOUD_WEBDRIVER_PROVIDERS } from './providers.ts';
-import { resolveLeaseValue, type LeaseValue } from './webdriver-utils.ts';
+import { releaseOnFailure, resolveLeaseValue, type LeaseValue } from './webdriver-utils.ts';
 
 const AWS_DEVICE_FARM_PROVIDER = CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm;
 export const AWS_DEVICE_FARM_CAPABILITY_OVERRIDES = {
@@ -231,7 +231,7 @@ export function createAwsDeviceFarmPrepareSession(
         );
       }
     } catch (error) {
-      await stopRemoteAccessSessionAfterFailure(options.client, remoteAccess.arn, error);
+      await releaseOnFailure(error, () => options.client.stopRemoteAccessSession(remoteAccess.arn));
       throw error;
     }
     const deviceName = running.device?.name ?? options.deviceName;
@@ -325,23 +325,6 @@ function throwIfRemoteAccessSessionEnded(session: AwsDeviceFarmRemoteAccessSessi
     status: session.status,
     result: session.result,
   });
-}
-
-async function stopRemoteAccessSessionAfterFailure(
-  client: AwsDeviceFarmClient,
-  arn: string,
-  primaryError: unknown,
-): Promise<void> {
-  try {
-    await client.stopRemoteAccessSession(arn);
-  } catch (cleanupError) {
-    if (primaryError instanceof AppError) {
-      primaryError.details = {
-        ...primaryError.details,
-        cleanupError: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
-      };
-    }
-  }
 }
 
 async function runAwsJson(

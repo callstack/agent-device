@@ -331,6 +331,7 @@ test('a lease allocated for a requester that left is released, not registered', 
         assert.ok(isRequestCanceledError(error));
         const details = (error as AppError).details ?? {};
         assert.equal(details.released, true);
+        assert.equal(details.providerReleased, true);
         assert.match(String(details.providerSessionId), /^bs-/);
         return true;
       },
@@ -376,7 +377,8 @@ test('a failed provider release after cancellation is reported as unreleased wit
       (error: unknown) => {
         assert.ok(isRequestCanceledError(error));
         const details = (error as AppError).details ?? {};
-        assert.equal(details.released, false);
+        assert.equal(details.released, true, 'the daemon lease record is gone either way');
+        assert.equal(details.providerReleased, false);
         assert.equal(details.providerSessionId, 'bs-live');
         assert.match(String(details.hint), /could NOT be confirmed released/);
         assert.match(String(details.hint), /bs-live/);

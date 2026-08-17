@@ -1,11 +1,7 @@
 import type { DeviceLease } from '@agent-device/contracts/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, errorMessage } from '@agent-device/kernel/errors';
 
 export type LeaseValue<T> = T | ((lease: DeviceLease) => T);
-
-export function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 /** Best-effort release after a failure; a failed release rides along as `cleanupError`, never masks the primary. */
 export async function releaseOnFailure(
