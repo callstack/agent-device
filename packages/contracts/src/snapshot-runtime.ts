@@ -6,6 +6,7 @@ import type {
   SnapshotOptions,
   SnapshotResult,
 } from './interactor-types.ts';
+import type { RuntimeOperationFact } from './platform-runtime.ts';
 
 export type { SnapshotResult } from './interactor-types.ts';
 
@@ -20,24 +21,38 @@ export type CaptureSnapshotInput = Readonly<{
 
 export type SnapshotRuntimeOperations = Readonly<{
   captureSnapshot(input: CaptureSnapshotInput): Promise<SnapshotResult>;
+  captureSnapshotWithCustomActions(input: CaptureSnapshotInput): Promise<SnapshotResult>;
+  captureSnapshotWithoutActiveApp(input: CaptureSnapshotInput): Promise<SnapshotResult>;
 }>;
+
+export type SnapshotRuntimeOperationFacts = Readonly<{
+  captureSnapshot: RuntimeOperationFact;
+  captureSnapshotWithCustomActions: RuntimeOperationFact;
+  captureSnapshotWithoutActiveApp: RuntimeOperationFact;
+}>;
+
+/** Builds the exhaustive owner claims for the three composable snapshot requirements. */
+export function snapshotRuntimeOperationFacts(
+  input: Readonly<{
+    capture: RuntimeOperationFact;
+    customActions: RuntimeOperationFact;
+    withoutActiveApp: RuntimeOperationFact;
+  }>,
+): SnapshotRuntimeOperationFacts {
+  return Object.freeze({
+    captureSnapshot: input.capture,
+    captureSnapshotWithCustomActions: input.customActions,
+    captureSnapshotWithoutActiveApp: input.withoutActiveApp,
+  });
+}
 
 /** Existing desktop-surface mechanics injected without exposing daemon/session ownership. */
 export type SnapshotRuntimeHost = Readonly<{
-  apple: Readonly<{
-    captureSurface(
-      device: DeviceInfo,
-      options: CaptureSnapshotInput['options'],
-      signal: AbortSignal,
-    ): Promise<SnapshotResult>;
-  }>;
-  linux: Readonly<{
-    captureSurface(
-      device: DeviceInfo,
-      options: CaptureSnapshotInput['options'],
-      signal: AbortSignal,
-    ): Promise<SnapshotResult>;
-  }>;
+  captureSurface(
+    device: DeviceInfo,
+    options: CaptureSnapshotInput['options'],
+    signal: AbortSignal,
+  ): Promise<SnapshotResult>;
 }>;
 
 export type LocalSnapshotInteractorResolver = (
@@ -65,26 +80,29 @@ type SnapshotInteractorBindingParams =
 function bindSnapshotInteractor(
   params: SnapshotInteractorBindingParams,
 ): SnapshotRuntimeOperations {
+  const captureSnapshot = async (input: CaptureSnapshotInput) => {
+    const runner: RunnerContext = {
+      ...input.execution,
+      appBundleId: input.options?.appBundleId,
+      signal: params.signal,
+    };
+    const interactor =
+      params.ownership === 'local'
+        ? await params.resolveInteractor(params.device, runner)
+        : params.resolveInteractor(runner);
+    if (!interactor) {
+      throw new AppError(
+        'UNSUPPORTED_OPERATION',
+        'Provider-owned snapshot operation has no bound provider interactor.',
+        { reason: 'provider-runtime-interactor-missing', deviceId: params.device.id },
+      );
+    }
+    return await interactor.snapshot({ ...input.options, signal: params.signal });
+  };
   return Object.freeze({
-    captureSnapshot: async (input) => {
-      const runner: RunnerContext = {
-        ...input.execution,
-        appBundleId: input.options?.appBundleId,
-        signal: params.signal,
-      };
-      const interactor =
-        params.ownership === 'local'
-          ? await params.resolveInteractor(params.device, runner)
-          : params.resolveInteractor(runner);
-      if (!interactor) {
-        throw new AppError(
-          'UNSUPPORTED_OPERATION',
-          'Provider-owned snapshot operation has no bound provider interactor.',
-          { reason: 'provider-runtime-interactor-missing', deviceId: params.device.id },
-        );
-      }
-      return await interactor.snapshot({ ...input.options, signal: params.signal });
-    },
+    captureSnapshot,
+    captureSnapshotWithCustomActions: captureSnapshot,
+    captureSnapshotWithoutActiveApp: captureSnapshot,
   });
 }
 

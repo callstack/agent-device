@@ -233,6 +233,8 @@ test('captures through only the active exact WebDriver interactor', async () => 
   });
 
   expect(binding.facts.operations.captureSnapshot).toEqual({ available: true });
+  expect(binding.facts.operations.captureSnapshotWithCustomActions.available).toBe(false);
+  expect(binding.facts.operations.captureSnapshotWithoutActiveApp).toEqual({ available: true });
   await expect(
     binding.operations.captureSnapshot?.({ options: { interactiveOnly: true } }),
   ).resolves.toEqual({ backend: 'android', nodes: [] });
@@ -257,6 +259,8 @@ test.each([
   });
   const facts = await owner.inspectFacts(device);
   expect(facts.operations.captureSnapshot.available).toBe(false);
+  expect(facts.operations.captureSnapshotWithCustomActions.available).toBe(false);
+  expect(facts.operations.captureSnapshotWithoutActiveApp.available).toBe(false);
   if (state.isSessionActive()) {
     const binding = await owner.bind({
       device,

@@ -5,6 +5,7 @@ import { rowFor, sources, summariesFor } from './runtime-command-cutover-fixture
 import { cutoverTableDefects } from './runtime-command-cutover-model.ts';
 import { MIGRATED_COMMAND_CUTOVERS } from './runtime-command-cutover-table.ts';
 import { commandDescriptors } from '../../src/core/command-descriptor/registry.ts';
+import { snapshotPlatformPolicyBranchViolations } from './runtime-command-cutover-extensions.ts';
 
 test('R20 boot rejects the superseded root readiness adapter', () => {
   assert.deepEqual(
@@ -61,15 +62,25 @@ test('R32 snapshot rejects legacy admission and dispatcher projection', () => {
       [
         'src/daemon/snapshot-runtime.ts',
         `
+          function selectActiveAppSnapshot() { runtime.operations.captureSnapshot(input); }
+          function selectCustomActionsSnapshot() {
+            runtime.operations.captureSnapshotWithCustomActions(input);
+          }
+          function selectSnapshotWithoutActiveApp() {
+            runtime.operations.captureSnapshotWithoutActiveApp(input);
+          }
           function dispatchSnapshotViaRuntime() {
             requireCommandSupported('snapshot', device);
-            runtime.operations.captureSnapshot(input);
           }
           function handleSnapshotCommands() {
             dispatchSnapshotViaRuntime(request);
           }
           handleSnapshotCommands(request);
         `,
+      ],
+      [
+        'src/daemon/snapshot-runtime-binding.ts',
+        'export function inspectSnapshotCaptureAdmission() {}',
       ],
       ['src/core/dispatch.ts', 'function handleSnapshotCommand() { return legacy.snapshot(); }'],
       [
@@ -87,6 +98,29 @@ test('R32 snapshot rejects legacy admission and dispatcher projection', () => {
       'src/core/capabilities.ts: static platform command set retains snapshot admission',
       'src/core/capabilities.ts: static platform command set retains snapshot admission',
       'src/core/command-descriptor/registry.ts: snapshot command still projects into the retired legacy dispatcher',
+    ],
+  );
+});
+
+test('R32 snapshot rejects platform and provider policy reconstructed in daemon admission', () => {
+  assert.deepEqual(
+    snapshotPlatformPolicyBranchViolations(
+      new Map([
+        [
+          'src/daemon/snapshot-runtime-binding.ts',
+          `
+            import { isIosFamily, isIosSimulator } from '@agent-device/kernel/device';
+            function inspectSnapshotCaptureAdmission(device, providerOwned) {
+              return isIosFamily(device) && isIosSimulator(device) && providerOwned;
+            }
+          `,
+        ],
+      ]),
+    ).map(({ file, message }) => `${file}: ${message}`),
+    [
+      'src/daemon/snapshot-runtime-binding.ts: snapshot admission reconstructs owner policy through isIosFamily',
+      'src/daemon/snapshot-runtime-binding.ts: snapshot admission reconstructs owner policy through isIosSimulator',
+      'src/daemon/snapshot-runtime-binding.ts: snapshot admission reconstructs owner policy through providerOwned',
     ],
   );
 });

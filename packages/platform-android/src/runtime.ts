@@ -11,6 +11,7 @@ import {
   availableApplicationLifecycleOperations,
   bindLocalSnapshotInteractor,
   localRuntimeOwner,
+  snapshotRuntimeOperationFacts,
 } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createAndroidAppLogRuntime } from './logs/runtime.ts';
@@ -71,6 +72,11 @@ const snapshotKindUnavailable = Object.freeze({
   reason: 'unsupported-device-kind',
   hint: 'snapshot is supported only for Android emulators and devices.',
 } as const);
+const snapshotCustomActionsUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'Re-run without --actions, or target an iOS simulator.',
+} as const);
 
 function androidLifecycleFacts(device: DeviceInfo) {
   const openTarget = androidOpenTargetFact(device);
@@ -120,7 +126,11 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         screenRecordingStart: available,
         screenRecordingReattach: available,
         screenRecordingCleanup: available,
-        captureSnapshot: device.kind === 'simulator' ? snapshotKindUnavailable : available,
+        ...snapshotRuntimeOperationFacts({
+          capture: device.kind === 'simulator' ? snapshotKindUnavailable : available,
+          customActions: snapshotCustomActionsUnavailable,
+          withoutActiveApp: device.kind === 'simulator' ? snapshotKindUnavailable : available,
+        }),
         ensureReady: available,
         bootTarget: available,
         bootTargetHeadless: device.kind === 'emulator' ? available : headlessUnavailable,

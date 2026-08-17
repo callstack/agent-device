@@ -65,6 +65,9 @@ test.each([
   expect(facts.operations.bootTarget).toMatchObject({ available: false });
   expect(facts.operations.bootTargetHeadless).toMatchObject({ available: false });
   expect(facts.operations.listApps).toEqual({ available: true });
+  expect(facts.operations.captureSnapshot).toEqual({ available: true });
+  expect(facts.operations.captureSnapshotWithCustomActions.available).toBe(false);
+  expect(facts.operations.captureSnapshotWithoutActiveApp).toEqual({ available: true });
   await expect(binding.operations.ensureReady?.({})).resolves.toMatchObject({ booted: true });
   await expect(
     binding.operations.listApps?.({ device: runtimeDevice, filter: 'all' }),

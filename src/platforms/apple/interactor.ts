@@ -10,7 +10,7 @@ import {
 import { captureScreenshotViaRunner } from './core/screenshot.ts';
 import { iosRunnerOverrides, resolveAppleBackRunnerCommand } from './interactions.ts';
 import { appleRemotePressCommand } from './os/tvos/remote.ts';
-import { runMacOsScreenshotAction } from './os/macos/helper.ts';
+import { runMacOsScreenshotAction, runMacOsSnapshotAction } from './os/macos/helper.ts';
 import { runAppleRunnerCommand } from './core/runner/runner-client.ts';
 import {
   withAppleRunnerProvider,
@@ -29,8 +29,10 @@ import type {
   RunnerCallOptions,
   RunnerContext,
   ScreenshotOptions,
+  SnapshotOptions,
 } from '@agent-device/contracts/interaction';
 import { readSnapshotQualityVerdict } from '../../snapshot-quality/verdict.ts';
+import { shapeDesktopSurfaceSnapshot } from '../../snapshot/snapshot-desktop-surface.ts';
 
 export function createAppleInteractor(
   device: DeviceInfo,
@@ -61,41 +63,7 @@ export function createAppleInteractor(
     openDevice: () => openIosDevice(device),
     close: (app) => closeIosApp(device, app, runnerOpts),
     screenshot: (outPath, options) => runAppleScreenshot(device, outPath, options, runnerOpts),
-    snapshot: async (options) => {
-      const result = readAppleSnapshotResult(
-        await withDiagnosticTimer(
-          'snapshot_capture',
-          async () =>
-            await runAppleRunnerCommand(
-              device,
-              {
-                command: 'snapshot',
-                appBundleId: options?.appBundleId,
-                interactiveOnly: options?.interactiveOnly,
-                preferredBackend: options?.preferredBackend,
-                customActions: options?.customActions,
-                depth: options?.depth,
-                scope: options?.scope,
-                raw: options?.raw,
-              },
-              mergeRunnerCallSignal(runnerOpts, options?.signal),
-            ),
-          { backend: 'xctest' },
-        ),
-      );
-      const nodes = result.nodes ?? [];
-      if (nodes.length === 0 && device.kind === 'simulator') {
-        throw new AppError('COMMAND_FAILED', 'XCTest snapshot returned 0 nodes on iOS simulator.');
-      }
-      return {
-        nodes,
-        truncated: result.truncated ?? false,
-        backend: 'xctest',
-        ...(result.quality ? { quality: result.quality } : {}),
-        // Legacy runners without a quality verdict still surface their message text.
-        ...(!result.quality && result.message ? { warnings: [result.message] } : {}),
-      };
-    },
+    snapshot: async (options) => await captureAppleSnapshot(device, options, runnerOpts),
     back: async (mode) => {
       if (isTvOsDevice(device)) {
         // tvOS focus-only navigation: the Menu button pops focus, not a coordinate tap.
@@ -175,6 +143,70 @@ export function createAppleInteractor(
   };
   if (!runnerProvider) return interactor;
   return withInjectedAppleRunnerTransport(device, runnerContext, interactor, runnerProvider);
+}
+
+async function captureAppleSnapshot(
+  device: DeviceInfo,
+  options: SnapshotOptions | undefined,
+  runnerOpts: RunnerCallOptions,
+) {
+  if (isMacOs(device) && options?.surface && options.surface !== 'app') {
+    return await captureMacOsSurfaceSnapshot(options.surface, options);
+  }
+  return await captureAppleRunnerSnapshot(device, options, runnerOpts);
+}
+
+async function captureMacOsSurfaceSnapshot(
+  surface: Exclude<NonNullable<SnapshotOptions['surface']>, 'app'>,
+  options: SnapshotOptions,
+) {
+  return shapeDesktopSurfaceSnapshot(
+    await runMacOsSnapshotAction(surface, {
+      bundleId: surface === 'menubar' ? options.appBundleId : undefined,
+      signal: options.signal,
+    }),
+    options,
+  );
+}
+
+async function captureAppleRunnerSnapshot(
+  device: DeviceInfo,
+  options: SnapshotOptions | undefined,
+  runnerOpts: RunnerCallOptions,
+) {
+  const result = readAppleSnapshotResult(
+    await withDiagnosticTimer(
+      'snapshot_capture',
+      async () =>
+        await runAppleRunnerCommand(
+          device,
+          {
+            command: 'snapshot',
+            appBundleId: options?.appBundleId,
+            interactiveOnly: options?.interactiveOnly,
+            preferredBackend: options?.preferredBackend,
+            customActions: options?.customActions,
+            depth: options?.depth,
+            scope: options?.scope,
+            raw: options?.raw,
+          },
+          mergeRunnerCallSignal(runnerOpts, options?.signal),
+        ),
+      { backend: 'xctest' },
+    ),
+  );
+  const nodes = result.nodes ?? [];
+  if (nodes.length === 0 && device.kind === 'simulator') {
+    throw new AppError('COMMAND_FAILED', 'XCTest snapshot returned 0 nodes on iOS simulator.');
+  }
+  return {
+    nodes,
+    truncated: result.truncated ?? false,
+    backend: 'xctest' as const,
+    ...(result.quality ? { quality: result.quality } : {}),
+    // Legacy runners without a quality verdict still surface their message text.
+    ...(!result.quality && result.message ? { warnings: [result.message] } : {}),
+  };
 }
 
 function mergeRunnerCallSignal(

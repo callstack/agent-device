@@ -1,6 +1,6 @@
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { SnapshotOptions, SnapshotResult } from '@agent-device/contracts/interaction';
-import { findNodeByLabel } from './snapshot-node-lookup.ts';
+import { findNodeByLabel } from './snapshot-node-label.ts';
 
 const INTERACTIVE_ROLE_TOKENS = [
   'button',

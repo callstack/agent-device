@@ -29,6 +29,12 @@ const APP_STATE_LEGACY_IMPORT_SOURCES = new Set([
   '../../platforms/harmonyos/app-lifecycle.ts',
 ]);
 const APP_STATE_LEGACY_CALLS = new Set(['getAndroidAppState', 'getHarmonyAppState']);
+const SNAPSHOT_RUNTIME_BINDING_FILE = 'src/daemon/snapshot-runtime-binding.ts';
+const SNAPSHOT_PLATFORM_POLICY_IDENTIFIERS = new Set([
+  'isIosFamily',
+  'isIosSimulator',
+  'providerOwned',
+]);
 
 /**
  * `devices` proves its single inventory route by binding identity, not by name: the
@@ -185,6 +191,39 @@ export function appStateLegacySessionHandlerViolations(
         message: 'appstate handler calls a legacy platform app-state backend',
       });
     }
+  });
+  return violations;
+}
+
+/** Snapshot admission consumes owner facts; it must not reconstruct platform/provider policy. */
+export function snapshotPlatformPolicyBranchViolations(
+  sources: ReadonlyMap<string, string>,
+): UnruledViolation[] {
+  const source = sources.get(SNAPSHOT_RUNTIME_BINDING_FILE);
+  if (source === undefined) {
+    return [
+      {
+        file: SNAPSHOT_RUNTIME_BINDING_FILE,
+        line: 1,
+        message: 'snapshot facts-first admission module is missing',
+      },
+    ];
+  }
+  const violations: UnruledViolation[] = [];
+  const seen = new Set<string>();
+  const program = parseSync(SNAPSHOT_RUNTIME_BINDING_FILE, source).program as AstNode;
+  visitAst(program, (node) => {
+    if (node['type'] !== 'Identifier') return;
+    const name = identifierName(node);
+    if (name === undefined || !SNAPSHOT_PLATFORM_POLICY_IDENTIFIERS.has(name) || seen.has(name)) {
+      return;
+    }
+    seen.add(name);
+    violations.push({
+      file: SNAPSHOT_RUNTIME_BINDING_FILE,
+      line: lineOf(source, node),
+      message: `snapshot admission reconstructs owner policy through ${name}`,
+    });
   });
   return violations;
 }

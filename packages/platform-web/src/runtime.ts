@@ -10,6 +10,7 @@ import {
   availableApplicationLifecycleOperations,
   bindLocalSnapshotInteractor,
   localRuntimeOwner,
+  snapshotRuntimeOperationFacts,
   sameRuntimeOwner,
 } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -27,6 +28,11 @@ const recordingUnavailable = Object.freeze({
   available: false,
   reason: 'owner-capability-missing',
   hint: 'record is not supported by this web provider',
+} as const);
+const snapshotCustomActionsUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'Re-run without --actions, or target an iOS simulator.',
 } as const);
 const readinessUnavailable = Object.freeze({
   available: false,
@@ -203,7 +209,11 @@ function webRuntimeFacts(
       screenRecordingStart: recordingAvailable ? available : recordingUnavailable,
       screenRecordingReattach: recordingAvailable ? available : recordingUnavailable,
       screenRecordingCleanup: recordingAvailable ? available : recordingUnavailable,
-      captureSnapshot: device.kind === 'device' ? available : openTargetKindUnavailable,
+      ...snapshotRuntimeOperationFacts({
+        capture: device.kind === 'device' ? available : openTargetKindUnavailable,
+        customActions: snapshotCustomActionsUnavailable,
+        withoutActiveApp: device.kind === 'device' ? available : openTargetKindUnavailable,
+      }),
       ensureReady: readinessUnavailable,
       bootTarget: readinessUnavailable,
       bootTargetHeadless: readinessUnavailable,

@@ -39,9 +39,11 @@ import {
   bindSnapshotCaptureRuntime,
   buildRuntimeCaptureInput,
   inspectSnapshotCaptureAdmission,
-  requireSnapshotCustomActionsSupported,
-  requireSnapshotIosAppSession,
 } from './snapshot-runtime-binding.ts';
+import {
+  requireLegacyDiffCustomActionsSupported,
+  requireLegacyDiffIosAppSession,
+} from './snapshot-diff-legacy-admission.ts';
 
 export async function dispatchSnapshotViaRuntime(params: {
   req: DaemonRequest;
@@ -51,25 +53,20 @@ export async function dispatchSnapshotViaRuntime(params: {
   inspectFacts?: InspectDeviceRuntimeFacts;
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
-  const { req } = params;
-  const admission = await inspectSnapshotCaptureAdmission(params);
-  if (!admission.admitted) return admission.response;
-  const { session, device } = admission;
+  const { req, sessionName, sessionStore } = params;
+  const { session, device } = await resolveSessionDevice(sessionStore, sessionName, req.flags);
 
   const resolvedScope = resolveSnapshotScope(req.flags?.snapshotScope, session);
   if (!resolvedScope.ok) return resolvedScope;
-  const customActionsGuard = requireSnapshotCustomActionsSupported(req, device);
-  if (customActionsGuard) return customActionsGuard;
-
-  const iosAppSessionGuard = await requireSnapshotIosAppSession({
-    command: 'snapshot',
+  const admission = await inspectSnapshotCaptureAdmission({
+    req,
     session,
     device,
-    providerOwned: admission.providerOwned,
+    inspectFacts: params.inspectFacts,
   });
-  if (iosAppSessionGuard) return iosAppSessionGuard;
-
-  const runtime = await bindSnapshotCaptureRuntime(params.bindDevice, device);
+  if (!admission.admitted) return admission.response;
+  const { plan } = admission;
+  const runtime = await bindSnapshotCaptureRuntime(params.bindDevice, device, plan);
   return await withSessionlessRunnerCleanup(
     session,
     device,
@@ -81,7 +78,7 @@ export async function dispatchSnapshotViaRuntime(params: {
         device,
         snapshotScope: resolvedScope.scope,
         captureSnapshotData: async () =>
-          await runtime.operations.captureSnapshot(
+          await runtime.captureSnapshot(
             buildRuntimeCaptureInput(params, session, resolvedScope.scope),
           ),
         execute: async ({
@@ -162,10 +159,9 @@ export async function dispatchSnapshotDiffViaRuntime(params: {
   if (unsupported) return unsupported;
   const resolvedScope = resolveSnapshotScope(req.flags?.snapshotScope, session);
   if (!resolvedScope.ok) return resolvedScope;
-  const customActionsGuard = requireSnapshotCustomActionsSupported(req, device);
+  const customActionsGuard = requireLegacyDiffCustomActionsSupported(req, device);
   if (customActionsGuard) return customActionsGuard;
-  const iosAppSessionGuard = await requireSnapshotIosAppSession({
-    command: 'diff',
+  const iosAppSessionGuard = await requireLegacyDiffIosAppSession({
     session,
     device,
     providerOwned: isActiveProviderDevice(device),

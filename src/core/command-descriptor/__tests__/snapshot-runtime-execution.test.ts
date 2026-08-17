@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { captureSnapshotUse } from '@agent-device/contracts/platform';
+import { snapshotRuntimePlanUses } from '@agent-device/contracts/platform';
 import { expect, test } from 'vitest';
 import { commandDescriptors } from '../registry.ts';
 
@@ -12,19 +12,21 @@ const snapshotRuntimeBindingSource = readFileSync(
   'utf8',
 );
 
-test('snapshot descriptor declares one required capture operation with no legacy projection', () => {
+test('snapshot descriptor declares its complete planned capture uses with no legacy projection', () => {
   const snapshot = commandDescriptors.find(({ name }) => name === 'snapshot');
 
   expect(snapshot).not.toHaveProperty('capability');
   expect(snapshot).not.toHaveProperty('dispatch');
   expect(snapshot?.platformExecution).toEqual({
     kind: 'device-runtime',
-    use: captureSnapshotUse,
+    uses: snapshotRuntimePlanUses,
   });
-  expect(captureSnapshotUse).toEqual({
-    required: ['captureSnapshot'],
-    preferred: [],
-  });
+  expect(snapshotRuntimePlanUses.map(({ required }) => required)).toEqual([
+    ['captureSnapshot'],
+    ['captureSnapshot', 'captureSnapshotWithCustomActions'],
+    ['captureSnapshot', 'captureSnapshotWithoutActiveApp'],
+    ['captureSnapshot', 'captureSnapshotWithCustomActions', 'captureSnapshotWithoutActiveApp'],
+  ]);
 });
 
 test('snapshot public route inspects facts and binds the declared use exactly once', () => {
@@ -33,18 +35,19 @@ test('snapshot public route inspects facts and binds the declared use exactly on
     snapshotRuntimeSource.indexOf('function publishedSnapshotGeneration'),
   );
 
-  expect(publicRoute.match(/inspectSnapshotCaptureAdmission\(params\)/g)).toHaveLength(1);
+  expect(publicRoute.match(/inspectSnapshotCaptureAdmission\(\{/g)).toHaveLength(1);
   expect(
-    publicRoute.match(/bindSnapshotCaptureRuntime\(params\.bindDevice, device\)/g),
+    publicRoute.match(/bindSnapshotCaptureRuntime\(params\.bindDevice, device, plan\)/g),
   ).toHaveLength(1);
   expect(
     snapshotRuntimeBindingSource.match(/requireRuntimeFacts\(params\.inspectFacts\)\(device\)/g),
   ).toHaveLength(1);
   expect(
-    snapshotRuntimeBindingSource.match(
-      /requireRuntimeBinding\(bindDevice\)\(device, captureSnapshotUse\)/g,
-    ),
+    snapshotRuntimeBindingSource.match(/const bind = requireRuntimeBinding\(bindDevice\)/g),
   ).toHaveLength(1);
-  expect(publicRoute.match(/runtime\.operations\.captureSnapshot\(/g)).toHaveLength(1);
+  expect(publicRoute.match(/runtime\.captureSnapshot\(/g)).toHaveLength(1);
   expect(publicRoute).not.toContain("requireCommandSupported('snapshot'");
+  for (const policyName of ['isIosFamily', 'isIosSimulator', 'providerOwned']) {
+    expect(snapshotRuntimeBindingSource).not.toContain(policyName);
+  }
 });

@@ -17,6 +17,7 @@ import { snapshotCliOutput } from '../../../commands/capture/output.ts';
 import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import { snapshotRuntimeFixture } from '../../__tests__/snapshot-runtime-fixture.ts';
+import type { BindDeviceRuntime } from '../../request-runtime-binding.ts';
 
 const dispatchCommandMock = vi.hoisted(() => vi.fn(async (..._args: unknown[]) => ({})));
 
@@ -414,6 +415,12 @@ test('snapshot on iOS rejects sessions without a tracked app', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim-no-app';
   sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
+  const runtime = snapshotRuntimeFixture();
+  let bindCount = 0;
+  const bindDevice: BindDeviceRuntime = async (device, use) => {
+    bindCount += 1;
+    return await runtime.bindDevice(device, use);
+  };
 
   const response = await handleSnapshotCommands({
     req: {
@@ -426,6 +433,8 @@ test('snapshot on iOS rejects sessions without a tracked app', async () => {
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
+    inspectFacts: runtime.inspectFacts,
+    bindDevice,
   });
 
   expect(response?.ok).toBe(false);
@@ -436,6 +445,7 @@ test('snapshot on iOS rejects sessions without a tracked app', async () => {
     expect(response.error.details?.hint).toBeUndefined();
   }
   expect(mockDispatch).not.toHaveBeenCalled();
+  expect(bindCount).toBe(0);
 });
 
 test('snapshot on iOS without a tracked app carries the detected open command as its hint', async () => {
@@ -485,6 +495,12 @@ test('snapshot on provider-backed iOS runs without a tracked app', async () => {
     truncated: false,
     backend: 'xctest',
   });
+  const runtime = snapshotRuntimeFixture();
+  let bindCount = 0;
+  const bindDevice: BindDeviceRuntime = async (device, use) => {
+    bindCount += 1;
+    return await runtime.bindDevice(device, use);
+  };
 
   const response = await handleSnapshotCommands({
     req: {
@@ -497,6 +513,8 @@ test('snapshot on provider-backed iOS runs without a tracked app', async () => {
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
+    inspectFacts: runtime.inspectFacts,
+    bindDevice,
   });
 
   expect(response?.ok).toBe(true);
@@ -505,6 +523,7 @@ test('snapshot on provider-backed iOS runs without a tracked app', async () => {
   // simctl and can only ever see local simulators — for a hosted device it is a
   // guaranteed-useless spawn on what is now a success path.
   expect(mockBuildIosOpenCommandHint).not.toHaveBeenCalled();
+  expect(bindCount).toBe(1);
 });
 
 test('diff on local iOS still requires a tracked app', async () => {

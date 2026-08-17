@@ -38,7 +38,7 @@ test('Apple snapshot host preserves non-app macOS surface capture and menubar id
   });
   const signal = new AbortController().signal;
 
-  const result = await createSnapshotRuntimeHost().apple.captureSurface(
+  const result = await createSnapshotRuntimeHost().captureSurface(
     macosDevice,
     { surface: 'menubar', appBundleId: 'com.example.app' },
     signal,
@@ -67,7 +67,7 @@ test('Linux snapshot host preserves interactive ancestor projection before depth
   });
   const signal = new AbortController().signal;
 
-  const result = await createSnapshotRuntimeHost().linux.captureSurface(
+  const result = await createSnapshotRuntimeHost().captureSurface(
     linuxDevice,
     { surface: 'desktop', interactiveOnly: true, depth: 1 },
     signal,

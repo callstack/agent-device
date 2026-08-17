@@ -61,6 +61,75 @@ export const bootTargetHeadlessUse = defineUse({
 });
 export const appsRuntimeUse = defineUse({ required: ['ensureReady', 'listApps'] });
 export const captureSnapshotUse = defineUse({ required: ['captureSnapshot'] });
+const captureSnapshotWithCustomActionsUse = defineUse({
+  required: ['captureSnapshot', 'captureSnapshotWithCustomActions'],
+});
+const captureSnapshotWithoutActiveAppUse = defineUse({
+  required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp'],
+});
+const captureSnapshotWithCustomActionsWithoutActiveAppUse = defineUse({
+  required: [
+    'captureSnapshot',
+    'captureSnapshotWithCustomActions',
+    'captureSnapshotWithoutActiveApp',
+  ],
+});
+
+export const snapshotRuntimePlanUses = Object.freeze([
+  captureSnapshotUse,
+  captureSnapshotWithCustomActionsUse,
+  captureSnapshotWithoutActiveAppUse,
+  captureSnapshotWithCustomActionsWithoutActiveAppUse,
+] as const);
+
+export type SnapshotRuntimePlan =
+  | Readonly<{
+      kind: 'active-app';
+      operation: 'captureSnapshot';
+      use: typeof captureSnapshotUse;
+    }>
+  | Readonly<{
+      kind: 'custom-actions-active-app';
+      operation: 'captureSnapshotWithCustomActions';
+      use: typeof captureSnapshotWithCustomActionsUse;
+    }>
+  | Readonly<{
+      kind: 'custom-actions-without-active-app';
+      operation: 'captureSnapshotWithCustomActions';
+      use: typeof captureSnapshotWithCustomActionsWithoutActiveAppUse;
+    }>
+  | Readonly<{
+      kind: 'without-active-app';
+      operation: 'captureSnapshotWithoutActiveApp';
+      use: typeof captureSnapshotWithoutActiveAppUse;
+    }>;
+
+/** Selects one owner-fact-backed capture plan from normalized command/session intent. */
+export function resolveSnapshotRuntimePlan(input: {
+  customActions: boolean;
+  hasActiveApp: boolean;
+}): SnapshotRuntimePlan {
+  if (input.customActions) {
+    return input.hasActiveApp
+      ? Object.freeze({
+          kind: 'custom-actions-active-app',
+          operation: 'captureSnapshotWithCustomActions',
+          use: captureSnapshotWithCustomActionsUse,
+        })
+      : Object.freeze({
+          kind: 'custom-actions-without-active-app',
+          operation: 'captureSnapshotWithCustomActions',
+          use: captureSnapshotWithCustomActionsWithoutActiveAppUse,
+        });
+  }
+  return input.hasActiveApp
+    ? Object.freeze({ kind: 'active-app', operation: 'captureSnapshot', use: captureSnapshotUse })
+    : Object.freeze({
+        kind: 'without-active-app',
+        operation: 'captureSnapshotWithoutActiveApp',
+        use: captureSnapshotWithoutActiveAppUse,
+      });
+}
 export const deviceBootRuntimeUses = Object.freeze([bootTargetUse, bootTargetHeadlessUse] as const);
 
 export type DeviceReadinessRuntimePlan =

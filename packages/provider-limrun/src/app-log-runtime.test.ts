@@ -275,6 +275,10 @@ test.each([
   expect(binding.facts.operations.bootTargetHeadless).toMatchObject({ available: false });
   expect(binding.facts.operations.listApps).toEqual({ available: true });
   expect(binding.facts.operations.captureSnapshot).toEqual({ available: true });
+  expect(binding.facts.operations.captureSnapshotWithCustomActions.available).toBe(
+    runtimeDevice.platform === 'apple',
+  );
+  expect(binding.facts.operations.captureSnapshotWithoutActiveApp).toEqual({ available: true });
   expect(binding.operations.captureSnapshot).toBeTypeOf('function');
   await expect(
     binding.operations.listApps?.({ device: runtimeDevice, filter: 'all' }),
@@ -330,6 +334,8 @@ test('fails closed for a stale Android identity before exposing facts or binding
     available: false,
     reason: 'owner-capability-missing',
   });
+  expect(facts.operations.captureSnapshotWithCustomActions).toMatchObject({ available: false });
+  expect(facts.operations.captureSnapshotWithoutActiveApp).toMatchObject({ available: false });
   await expect(
     owner.bind({ device: staleDevice, intent: { kind: 'ordinary' }, scope }),
   ).rejects.toMatchObject({

@@ -9,6 +9,7 @@ import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
   localRuntimeOwner,
+  snapshotRuntimeOperationFacts,
 } from '@agent-device/contracts/platform';
 import {
   isIosFamily,
@@ -89,6 +90,16 @@ const shutdownKindUnavailable = Object.freeze({
 const snapshotKindUnavailable = unsupportedAppleDeviceKind(
   'snapshot is supported only for Apple simulators and devices.',
 );
+const snapshotCustomActionsUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'Re-run without --actions, or target an iOS simulator.',
+} as const);
+const snapshotActiveAppRequired = Object.freeze({
+  available: false,
+  reason: 'owner-capability-missing',
+  hint: 'Open the app under test before capturing its snapshot.',
+} as const);
 
 function unsupportedAppleDeviceKind(hint: string) {
   return Object.freeze({ available: false, reason: 'unsupported-device-kind', hint } as const);
@@ -194,7 +205,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         screenRecordingStart: recordingFacts,
         screenRecordingReattach: recordingFacts,
         screenRecordingCleanup: recordingFacts,
-        captureSnapshot: appleSnapshotFact(device),
+        ...appleSnapshotFacts(device),
         ensureReady: readiness,
         bootTarget: boot,
         bootTargetHeadless: headlessUnavailable,
@@ -291,4 +302,16 @@ function appleSnapshotFact(device: DeviceInfo) {
   return device.kind === 'simulator' || device.kind === 'device'
     ? available
     : snapshotKindUnavailable;
+}
+
+function appleSnapshotFacts(device: DeviceInfo) {
+  const capture = appleSnapshotFact(device);
+  return snapshotRuntimeOperationFacts({
+    capture,
+    customActions:
+      capture.available && isIosFamily(device) && device.kind === 'simulator'
+        ? available
+        : snapshotCustomActionsUnavailable,
+    withoutActiveApp: isIosFamily(device) ? snapshotActiveAppRequired : capture,
+  });
 }

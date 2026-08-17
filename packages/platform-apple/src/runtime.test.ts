@@ -107,6 +107,12 @@ function expectAppleSnapshotAvailability(
 ): void {
   const available = device.appleOs !== 'watchos';
   expect(binding.facts.operations.captureSnapshot.available).toBe(available);
+  expect(binding.facts.operations.captureSnapshotWithCustomActions.available).toBe(
+    device.appleOs !== 'macos' && device.appleOs !== 'watchos' && device.kind === 'simulator',
+  );
+  expect(binding.facts.operations.captureSnapshotWithoutActiveApp.available).toBe(
+    device.appleOs === 'macos',
+  );
   expect(binding.operations.captureSnapshot).toBeTypeOf(available ? 'function' : 'undefined');
 }
 
@@ -123,10 +129,7 @@ test.each(['frontmost-app', 'desktop', 'menubar'] as const)(
     const binding = await createApplePlatformRuntime({
       ...host,
       localInteractors: { resolve },
-      snapshot: {
-        ...host.snapshot,
-        apple: { captureSurface },
-      },
+      snapshot: { captureSurface },
     }).bind({
       device: leaves.macos,
       intent: { kind: 'ordinary' },

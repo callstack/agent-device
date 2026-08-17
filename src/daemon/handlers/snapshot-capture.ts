@@ -4,7 +4,7 @@ import {
   snapshotCaptureAnnotationsFrom,
   type SnapshotCaptureAnnotations,
 } from '@agent-device/contracts/capture';
-import { isMacOs, publicPlatformString } from '@agent-device/kernel/device';
+import { publicPlatformString } from '@agent-device/kernel/device';
 import { isAndroidInputMethodNode } from '@agent-device/contracts/platform';
 import {
   attachRefs,
@@ -16,14 +16,9 @@ import {
   type SnapshotBackend,
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
-import { runMacOsSnapshotAction } from '../../platforms/apple/os/macos/helper.ts';
-import { snapshotLinux } from '../../platforms/linux/snapshot.ts';
 import { annotateCoveredSnapshotNodes } from '../../snapshot/snapshot-occlusion.ts';
 import { resolveRefLabel } from '../../core/snapshot-node-lookup.ts';
-import {
-  scopeSnapshotNodes,
-  shapeDesktopSurfaceSnapshot,
-} from '../../core/snapshot-desktop-surface.ts';
+import { scopeSnapshotNodes } from '../../snapshot/snapshot-desktop-surface.ts';
 import { captureSnapshotWithInteractor } from './snapshot-interactor-capture.ts';
 import { normalizeSnapshotTree, pruneGroupNodes } from '../../core/snapshot-tree-ingestion.ts';
 import {
@@ -95,28 +90,6 @@ export async function captureSnapshot(
 export async function captureSnapshotData(params: CaptureSnapshotParams): Promise<SnapshotData> {
   if (params.captureData) return await params.captureData();
   const { device, session, flags, logPath, snapshotScope } = params;
-  if (device.platform === 'linux') {
-    const linuxResult = await snapshotLinux(session?.surface, params.signal);
-    return shapeDesktopSurfaceSnapshot(
-      { nodes: linuxResult.nodes, truncated: linuxResult.truncated, backend: 'linux-atspi' },
-      {
-        depth: flags?.snapshotDepth,
-        interactiveOnly: flags?.snapshotInteractiveOnly,
-        scope: snapshotScope,
-      },
-    );
-  }
-  if (isMacOs(device) && session?.surface && session.surface !== 'app') {
-    const helperSnapshot = await runMacOsSnapshotAction(session.surface, {
-      bundleId: session.surface === 'menubar' ? session.appBundleId : undefined,
-      signal: params.signal,
-    });
-    return shapeDesktopSurfaceSnapshot(helperSnapshot, {
-      depth: flags?.snapshotDepth,
-      interactiveOnly: flags?.snapshotInteractiveOnly,
-      scope: snapshotScope,
-    });
-  }
   const context = contextFromFlags(
     logPath,
     { ...flags, snapshotScope },

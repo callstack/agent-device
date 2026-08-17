@@ -20,6 +20,7 @@ import {
 import { singlePointerPlanEndpoints } from '@agent-device/contracts/interaction';
 import { screenshotLinux } from '../../platforms/linux/screenshot.ts';
 import { snapshotLinux } from '../../platforms/linux/snapshot.ts';
+import { shapeDesktopSurfaceSnapshot } from '../../snapshot/snapshot-desktop-surface.ts';
 import type { Interactor } from '@agent-device/contracts/interaction';
 
 export function createLinuxInteractor(): Interactor {
@@ -51,11 +52,14 @@ export function createLinuxInteractor(): Interactor {
         async () => await snapshotLinux(options?.surface, options?.signal),
         { backend: 'linux-atspi' },
       );
-      return {
-        nodes: result.nodes ?? [],
-        truncated: result.truncated ?? false,
-        backend: 'linux-atspi',
-      };
+      return shapeDesktopSurfaceSnapshot(
+        {
+          nodes: result.nodes ?? [],
+          truncated: result.truncated ?? false,
+          backend: 'linux-atspi',
+        },
+        options ?? {},
+      );
     },
     back: () => backLinux(),
     home: () => homeLinux(),

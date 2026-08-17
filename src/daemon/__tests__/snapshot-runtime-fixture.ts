@@ -2,12 +2,13 @@ import {
   localRuntimeOwner,
   narrowDeviceBinding,
   providerRuntimeOwner,
+  snapshotRuntimeOperationFacts,
   type CaptureSnapshotInput,
   type PlatformRuntimeOperations,
   type RuntimeFacts,
   type SnapshotResult,
 } from '@agent-device/contracts/platform';
-import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
+import { deviceShape, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { dispatchCommand, type DispatchContext } from '../../core/dispatch.ts';
 import { getRequestSignal } from '../../request/cancel.ts';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
@@ -25,6 +26,8 @@ export function snapshotRuntimeFixture(requestId?: string): Readonly<{
   const bindDevice: BindDeviceRuntime = async (device, use) => {
     const facts = await snapshotFacts(device);
     const providerOwned = facts.device.providerMode === 'provider-runtime';
+    const captureSnapshot = async (input: CaptureSnapshotInput) =>
+      await dispatchFixtureSnapshot(device, input, requestSignal);
     return narrowDeviceBinding(
       {
         device,
@@ -33,8 +36,9 @@ export function snapshotRuntimeFixture(requestId?: string): Readonly<{
           : localRuntimeOwner(device.platform),
         facts,
         operations: {
-          captureSnapshot: async (input) =>
-            await dispatchFixtureSnapshot(device, input, requestSignal),
+          captureSnapshot,
+          captureSnapshotWithCustomActions: captureSnapshot,
+          captureSnapshotWithoutActiveApp: captureSnapshot,
         },
         [Symbol.asyncDispose]: async () => {},
       },
@@ -47,14 +51,31 @@ export function snapshotRuntimeFixture(requestId?: string): Readonly<{
 
 async function snapshotFacts(device: DeviceInfo): Promise<RuntimeFacts<PlatformRuntimeOperations>> {
   const base = await unavailableDeviceRuntimeGateway.inspectFacts(device);
+  const providerOwned = isActiveProviderDevice(device);
+  const available = { available: true } as const;
+  const customActionsUnavailable = {
+    available: false,
+    reason: 'unsupported-platform-leaf',
+    hint: 'Re-run without --actions, or target an iOS simulator.',
+  } as const;
+  const activeAppRequired = {
+    available: false,
+    reason: 'owner-capability-missing',
+    hint: 'Local Apple snapshot capture requires an active app session.',
+  } as const;
   return {
     device: {
       ...deviceShape(device),
-      providerMode: isActiveProviderDevice(device) ? 'provider-runtime' : 'local',
+      providerMode: providerOwned ? 'provider-runtime' : 'local',
     },
     operations: {
       ...base.operations,
-      captureSnapshot: { available: true },
+      ...snapshotRuntimeOperationFacts({
+        capture: available,
+        customActions:
+          isIosFamily(device) && device.kind === 'simulator' ? available : customActionsUnavailable,
+        withoutActiveApp: providerOwned || !isIosFamily(device) ? available : activeAppRequired,
+      }),
     },
   };
 }

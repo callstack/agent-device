@@ -10,6 +10,7 @@ import type {
   RuntimeOperationUnavailability,
   RuntimeOwnerRef,
 } from './platform-runtime.ts';
+import { snapshotRuntimeOperationFacts } from './snapshot-runtime.ts';
 
 /**
  * A runtime-contract helper for provider ownership gaps. It never assigns lifecycle semantics:
@@ -93,7 +94,11 @@ export function createUnavailablePlatformRuntimeFacts(
       screenRecordingStart: screenRecording,
       screenRecordingReattach: screenRecording,
       screenRecordingCleanup: screenRecording,
-      captureSnapshot: snapshot,
+      ...snapshotRuntimeOperationFacts({
+        capture: snapshot,
+        customActions: snapshot,
+        withoutActiveApp: snapshot,
+      }),
       ensureReady: readiness,
       bootTarget: readiness,
       bootTargetHeadless: readiness,

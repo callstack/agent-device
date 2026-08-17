@@ -8,6 +8,7 @@ import {
   openLifecycleRouteBindingViolations,
   prepareLifecycleRouteBindingViolations,
   runtimeLifecycleRouteBindingViolations,
+  snapshotPlatformPolicyBranchViolations,
   sourceExecutedUsingDeclarationViolations,
 } from './runtime-command-cutover-extensions.ts';
 import { recordRuntimeDaemonMechanicsViolations } from './record-runtime-mechanics-policy.ts';
@@ -449,13 +450,27 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
       routeNames: ['handleSnapshotCommand'],
     },
     runtimeTypeNames: ['SnapshotRuntimeOperations'],
-    operations: { names: ['captureSnapshot'] },
+    operations: {
+      names: [
+        'captureSnapshot',
+        'captureSnapshotWithCustomActions',
+        'captureSnapshotWithoutActiveApp',
+      ],
+    },
     singularExecution: {
       routes: ['handleSnapshotCommands'],
-      operations: ['captureSnapshot'],
-      operationOwners: { captureSnapshot: ['dispatchSnapshotViaRuntime'] },
+      operations: [
+        'captureSnapshot',
+        'captureSnapshotWithCustomActions',
+        'captureSnapshotWithoutActiveApp',
+      ],
+      operationOwners: {
+        captureSnapshot: ['selectActiveAppSnapshot'],
+        captureSnapshotWithCustomActions: ['selectCustomActionsSnapshot'],
+        captureSnapshotWithoutActiveApp: ['selectSnapshotWithoutActiveApp'],
+      },
     },
-    extensions: [snapshotRetiredDispatchProjectionProof],
+    extensions: [snapshotRetiredDispatchProjectionProof, snapshotPlatformPolicyBranchViolations],
   },
 ];
 

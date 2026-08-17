@@ -100,6 +100,10 @@ test.each([
     expect(binding.facts.operations.appState).toMatchObject({ available: false });
     expect(binding.facts.operations.listApps).toMatchObject({ available: false });
     expect(binding.facts.operations.captureSnapshot.available).toBe(device.kind === 'device');
+    expect(binding.facts.operations.captureSnapshotWithCustomActions.available).toBe(false);
+    expect(binding.facts.operations.captureSnapshotWithoutActiveApp.available).toBe(
+      device.kind === 'device',
+    );
     expect(binding.operations.captureSnapshot).toBeTypeOf(
       device.kind === 'device' ? 'function' : 'undefined',
     );
@@ -126,10 +130,7 @@ function lifecycleHost(
 ): PlatformRuntimeHost {
   return {
     localInteractors: { resolve: async () => ({}) },
-    snapshot: {
-      apple: { captureSurface: async () => ({ backend: 'macos-helper', nodes: [] }) },
-      linux: { captureSurface },
-    },
+    snapshot: { captureSurface },
   } as unknown as PlatformRuntimeHost;
 }
 

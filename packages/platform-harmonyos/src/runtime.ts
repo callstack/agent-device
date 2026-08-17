@@ -9,6 +9,7 @@ import {
   availableApplicationLifecycleOperations,
   bindLocalSnapshotInteractor,
   localRuntimeOwner,
+  snapshotRuntimeOperationFacts,
 } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createHarmonyAppLogRuntime } from './logs/runtime.ts';
@@ -61,6 +62,11 @@ const snapshotKindUnavailable = Object.freeze({
   reason: 'unsupported-device-kind',
   hint: 'snapshot is supported only for HarmonyOS emulators and devices.',
 } as const);
+const snapshotCustomActionsUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'Re-run without --actions, or target an iOS simulator.',
+} as const);
 
 function harmonyLifecycleFacts(device: DeviceInfo) {
   const openTarget = harmonyOpenTargetFact(device);
@@ -106,10 +112,17 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         screenRecordingStart: recordingFacts,
         screenRecordingReattach: recordingFacts,
         screenRecordingCleanup: recordingFacts,
-        captureSnapshot:
-          device.kind === 'emulator' || device.kind === 'device'
-            ? available
-            : snapshotKindUnavailable,
+        ...snapshotRuntimeOperationFacts({
+          capture:
+            device.kind === 'emulator' || device.kind === 'device'
+              ? available
+              : snapshotKindUnavailable,
+          customActions: snapshotCustomActionsUnavailable,
+          withoutActiveApp:
+            device.kind === 'emulator' || device.kind === 'device'
+              ? available
+              : snapshotKindUnavailable,
+        }),
         ensureReady: available,
         bootTarget: unavailable,
         bootTargetHeadless: unavailable,

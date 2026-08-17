@@ -13,6 +13,7 @@ import {
   createUnavailablePlatformRuntimeFacts,
   localRuntimeOwner,
   sameRuntimeOwner,
+  snapshotRuntimeOperationFacts,
 } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -45,6 +46,10 @@ const snapshotKindUnavailable = unavailableLinuxRuntimeFact(
   'unsupported-device-kind',
   'snapshot is supported only for the Linux desktop device.',
 );
+const snapshotCustomActionsUnavailable = unavailableLinuxRuntimeFact(
+  'unsupported-platform-leaf',
+  'Re-run without --actions, or target an iOS simulator.',
+);
 export function createLinuxPlatformRuntime(host: PlatformRuntimeHost): PlatformRuntimeOwner {
   return Object.freeze({
     owner: linuxOwner,
@@ -73,14 +78,7 @@ export function createLinuxPlatformRuntime(host: PlatformRuntimeHost): PlatformR
         operations: Object.freeze({
           ...availableApplicationLifecycleOperations(lifecycle, facts.operations),
           ...(facts.operations.captureSnapshot.available
-            ? {
-                captureSnapshot: async (input: CaptureSnapshotInput) =>
-                  await host.snapshot.linux.captureSurface(
-                    request.device,
-                    input.options,
-                    request.scope.signal,
-                  ),
-              }
+            ? linuxSnapshotOperations(host, request)
             : {}),
         }),
         [Symbol.asyncDispose]: async () => undefined,
@@ -114,8 +112,25 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
     device: unavailable.device,
     operations: {
       ...unavailable.operations,
-      captureSnapshot: device.kind === 'device' ? supported : snapshotKindUnavailable,
+      ...snapshotRuntimeOperationFacts({
+        capture: device.kind === 'device' ? supported : snapshotKindUnavailable,
+        customActions: snapshotCustomActionsUnavailable,
+        withoutActiveApp: device.kind === 'device' ? supported : snapshotKindUnavailable,
+      }),
     },
+  });
+}
+
+function linuxSnapshotOperations(
+  host: PlatformRuntimeHost,
+  request: Parameters<PlatformRuntimeOwner['bind']>[0],
+) {
+  const captureSnapshot = async (input: CaptureSnapshotInput) =>
+    await host.snapshot.captureSurface(request.device, input.options, request.scope.signal);
+  return Object.freeze({
+    captureSnapshot,
+    captureSnapshotWithCustomActions: captureSnapshot,
+    captureSnapshotWithoutActiveApp: captureSnapshot,
   });
 }
 

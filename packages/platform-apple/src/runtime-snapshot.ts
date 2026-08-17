@@ -16,22 +16,24 @@ export function bindAppleSnapshotRuntime(
     signal: request.signal,
     resolveInteractor: host.localInteractors.resolve,
   });
+  const captureSnapshot = async (input: CaptureSnapshotInput) => {
+    if (
+      isMacOs(request.device) &&
+      input.options?.surface !== undefined &&
+      input.options.surface !== 'app'
+    ) {
+      return await host.snapshot.captureSurface(request.device, input.options, request.signal);
+    }
+    return await appSnapshot.captureSnapshot(input);
+  };
   return Object.freeze({
-    captureSnapshot: async (input: CaptureSnapshotInput) => {
-      if (
-        isMacOs(request.device) &&
-        input.options?.surface !== undefined &&
-        input.options.surface !== 'app'
-      ) {
-        return await host.snapshot.apple.captureSurface(
-          request.device,
-          input.options,
-          request.signal,
-        );
-      }
-      return await appSnapshot.captureSnapshot(input);
-    },
+    captureSnapshot,
+    captureSnapshotWithCustomActions: captureSnapshot,
+    captureSnapshotWithoutActiveApp: captureSnapshot,
   });
 }
 
-type SnapshotRuntimeOperation = Pick<PlatformRuntimeOperations, 'captureSnapshot'>;
+type SnapshotRuntimeOperation = Pick<
+  PlatformRuntimeOperations,
+  'captureSnapshot' | 'captureSnapshotWithCustomActions' | 'captureSnapshotWithoutActiveApp'
+>;

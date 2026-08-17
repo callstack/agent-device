@@ -1,5 +1,6 @@
 import {
   applicationLifecycleOperationFacts,
+  snapshotRuntimeOperationFacts,
   type RuntimeOperationFact,
 } from '@agent-device/contracts/platform';
 
@@ -23,7 +24,11 @@ const unavailableShutdownOperationFacts = Object.freeze({
 
 export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.freeze({
   ...unavailableDeploymentOperationFacts,
-  captureSnapshot: unavailable,
+  ...snapshotRuntimeOperationFacts({
+    capture: unavailable,
+    customActions: unavailable,
+    withoutActiveApp: unavailable,
+  }),
   ...unavailableShutdownOperationFacts,
 });
 

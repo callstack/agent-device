@@ -25,7 +25,7 @@ import {
   readySendPushNotificationUse,
   openApplicationRuntimePlanUses,
   closeApplicationRuntimePlanUses,
-  captureSnapshotUse,
+  snapshotRuntimePlanUses,
   prepareAppleRunnerRuntimeUse,
   runtimeCommandRuntimePlanUses,
   screenRecordingRuntimePlanUses,
@@ -916,7 +916,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     // widens the envelope, and a timeout must not tear down the daemon.
     timeoutPolicy: { ...PRESERVE_DAEMON_TIMEOUT_POLICY, budget: { source: 'flag' } },
     batchable: true,
-    platformExecution: { kind: 'device-runtime', use: captureSnapshotUse },
+    platformExecution: { kind: 'device-runtime', uses: snapshotRuntimePlanUses },
   },
   {
     name: 'diff',

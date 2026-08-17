@@ -4,7 +4,9 @@ import { localRuntimeOwner, providerRuntimeOwner } from './platform-runtime.ts';
 import {
   bootTargetHeadlessUse,
   bootTargetUse,
+  captureSnapshotUse,
   resolveDeviceReadinessRuntimePlan,
+  resolveSnapshotRuntimePlan,
   type PlatformRuntimeProviderModule,
 } from './platform-runtime-operations.ts';
 
@@ -44,6 +46,47 @@ test.each([
   'normalizes headless=%s into the literal readiness plan %s',
   (headless, kind, operation, use) => {
     assert.deepEqual(resolveDeviceReadinessRuntimePlan({ headless }), {
+      kind,
+      operation,
+      use,
+    });
+  },
+);
+
+test.each([
+  [false, true, 'active-app', 'captureSnapshot', captureSnapshotUse],
+  [
+    true,
+    true,
+    'custom-actions-active-app',
+    'captureSnapshotWithCustomActions',
+    { required: ['captureSnapshot', 'captureSnapshotWithCustomActions'], preferred: [] },
+  ],
+  [
+    false,
+    false,
+    'without-active-app',
+    'captureSnapshotWithoutActiveApp',
+    { required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp'], preferred: [] },
+  ],
+  [
+    true,
+    false,
+    'custom-actions-without-active-app',
+    'captureSnapshotWithCustomActions',
+    {
+      required: [
+        'captureSnapshot',
+        'captureSnapshotWithCustomActions',
+        'captureSnapshotWithoutActiveApp',
+      ],
+      preferred: [],
+    },
+  ],
+] as const)(
+  'normalizes snapshot customActions=%s activeApp=%s into %s',
+  (customActions, hasActiveApp, kind, operation, use) => {
+    assert.deepEqual(resolveSnapshotRuntimePlan({ customActions, hasActiveApp }), {
       kind,
       operation,
       use,

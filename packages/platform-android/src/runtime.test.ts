@@ -94,6 +94,8 @@ test.each([
   expect(facts.operations.bootTarget).toEqual({ available: true });
   expect(facts.operations.bootTargetHeadless.available).toBe(runtimeDevice.kind === 'emulator');
   expect(facts.operations.captureSnapshot).toEqual({ available: true });
+  expect(facts.operations.captureSnapshotWithCustomActions.available).toBe(false);
+  expect(facts.operations.captureSnapshotWithoutActiveApp).toEqual({ available: true });
   expect(binding.operations.captureSnapshot).toBeTypeOf('function');
 
   await expect(binding.operations.ensureReady?.({})).resolves.toMatchObject({

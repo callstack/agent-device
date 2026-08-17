@@ -26,7 +26,7 @@ import type { SessionState } from '../types.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import {
-  captureSnapshotUse,
+  snapshotRuntimePlanUses,
   type DeviceRuntimeGateway,
   type PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform';
@@ -40,7 +40,7 @@ function snapshotDeviceRuntimeGateway(): DeviceRuntimeGateway<PlatformRuntimeOpe
     bind: async ({ device }) => {
       const [facts, binding] = await Promise.all([
         runtime.inspectFacts(device),
-        runtime.bindDevice(device, captureSnapshotUse),
+        runtime.bindDevice(device, snapshotRuntimePlanUses[2]),
       ]);
       return {
         ...binding,

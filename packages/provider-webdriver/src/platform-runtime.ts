@@ -4,6 +4,7 @@ import {
   bindProviderSnapshotInteractor,
   createUnavailablePlatformRuntimeFacts,
   sameRuntimeOwner,
+  snapshotRuntimeOperationFacts,
   type AppDeploymentInput,
   type DeployMaterializedAppInput,
   type DeviceBinding,
@@ -66,6 +67,11 @@ const snapshotUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
   hint: 'This WebDriver provider runtime does not expose snapshot capture for this device.',
+} as const);
+const snapshotCustomActionsUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'WebDriver provider runtimes do not expose iOS simulator custom snapshot actions.',
 } as const);
 
 const appStateUnavailable = Object.freeze({
@@ -280,7 +286,11 @@ function webDriverFacts(
         screenRecordingStart: inactiveSession,
         screenRecordingReattach: inactiveSession,
         screenRecordingCleanup: inactiveSession,
-        captureSnapshot: inactiveSession,
+        ...snapshotRuntimeOperationFacts({
+          capture: inactiveSession,
+          customActions: inactiveSession,
+          withoutActiveApp: inactiveSession,
+        }),
         ensureReady: inactiveSession,
         bootTarget: inactiveSession,
         bootTargetHeadless: inactiveSession,
@@ -325,12 +335,21 @@ function webDriverFacts(
       screenRecordingStart: recordingUnavailable,
       screenRecordingReattach: recordingUnavailable,
       screenRecordingCleanup: recordingUnavailable,
-      captureSnapshot:
-        options.snapshotAvailable !== false &&
-        options.getInteractor !== undefined &&
-        webDriverSnapshotDevice(device)
-          ? available
-          : snapshotUnavailable,
+      ...snapshotRuntimeOperationFacts({
+        capture:
+          options.snapshotAvailable !== false &&
+          options.getInteractor !== undefined &&
+          webDriverSnapshotDevice(device)
+            ? available
+            : snapshotUnavailable,
+        customActions: snapshotCustomActionsUnavailable,
+        withoutActiveApp:
+          options.snapshotAvailable !== false &&
+          options.getInteractor !== undefined &&
+          webDriverSnapshotDevice(device)
+            ? available
+            : snapshotUnavailable,
+      }),
       ensureReady: available,
       bootTarget: available,
       bootTargetHeadless: headlessUnavailable,

@@ -1,17 +1,8 @@
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { extractNodeText, isMeaningfulLabel } from '@agent-device/contracts/snapshot';
+import { findNodeByLabel } from '../snapshot/snapshot-node-label.ts';
 
-export function findNodeByLabel(nodes: SnapshotState['nodes'], label: string) {
-  const query = label.toLowerCase();
-  return (
-    nodes.find((node) => {
-      const labelValue = (node.label ?? '').toLowerCase();
-      const valueValue = (node.value ?? '').toLowerCase();
-      const idValue = (node.identifier ?? '').toLowerCase();
-      return labelValue.includes(query) || valueValue.includes(query) || idValue.includes(query);
-    }) ?? null
-  );
-}
+export { findNodeByLabel };
 
 export function resolveRefLabel(
   node: SnapshotState['nodes'][number],
