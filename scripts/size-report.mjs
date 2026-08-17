@@ -6,6 +6,9 @@ import { performance } from 'node:perf_hooks';
 import { gzipSync } from 'node:zlib';
 
 const COMMENT_MARKER = '<!-- agent-device-size-report -->';
+const GITHUB_REQUEST_ATTEMPTS = 4;
+const GITHUB_RETRY_BASE_MS = 1000;
+class TransientGitHubError extends Error {}
 const VALUE_ARGS = new Map([
   ['--cwd', 'cwd'],
   ['--json', 'json'],
@@ -25,7 +28,7 @@ const args = parseArgs(process.argv.slice(2));
 const cwd = path.resolve(args.cwd ?? process.cwd());
 
 if (args.postComment) {
-  await postGitHubComment(args.postComment, args.pr);
+  await postGitHubCommentBestEffort(args.postComment, args.pr);
   process.exit(0);
 }
 
@@ -361,6 +364,25 @@ function writeFile(filePath, contents) {
   fs.writeFileSync(filePath, contents);
 }
 
+// The PR comment is a convenience surface: the same markdown is already in the
+// job summary. A GitHub outage (5xx / 429 / network error) must not fail the
+// job, but a real misconfiguration (bad token, missing permissions) still does.
+async function postGitHubCommentBestEffort(markdownPath, explicitPrNumber) {
+  try {
+    await postGitHubComment(markdownPath, explicitPrNumber);
+  } catch (error) {
+    if (!(error instanceof TransientGitHubError)) throw error;
+    const message = `Skipping PR size comment after transient GitHub failure: ${error.message}`;
+    process.stdout.write(`::warning::${message}\n`);
+    appendStepSummary(`> ⚠️ ${message} The size report above is authoritative.\n`);
+  }
+}
+
+function appendStepSummary(text) {
+  const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+  if (summaryPath) fs.appendFileSync(summaryPath, text);
+}
+
 async function postGitHubComment(markdownPath, explicitPrNumber) {
   const config = readGitHubCommentConfig(explicitPrNumber);
   const body = fs.readFileSync(markdownPath, 'utf8');
@@ -407,21 +429,21 @@ function buildCommentsUrl(repository, prNumber) {
 }
 
 async function listGitHubComments(commentsUrl, headers) {
-  const response = await fetch(`${commentsUrl}?per_page=100`, { headers });
-  if (!response.ok) {
-    throw new Error(`Failed to list PR comments: ${response.status} ${await response.text()}`);
-  }
+  const response = await githubRequest(
+    `${commentsUrl}?per_page=100`,
+    { headers },
+    'list PR comments',
+  );
   return await response.json();
 }
 
 async function writeGitHubComment(commentsUrl, headers, body, existingUrl) {
   const target = commentWriteTarget(commentsUrl, existingUrl);
-  const response = await fetch(target.url, {
-    method: target.method,
-    headers,
-    body: JSON.stringify({ body }),
-  });
-  await assertGitHubWriteResponse(response, target.action);
+  await githubRequest(
+    target.url,
+    { method: target.method, headers, body: JSON.stringify({ body }) },
+    `${target.action} PR comment`,
+  );
 }
 
 function commentWriteTarget(commentsUrl, existingUrl) {
@@ -431,8 +453,38 @@ function commentWriteTarget(commentsUrl, existingUrl) {
   return { url: commentsUrl, method: 'POST', action: 'create' };
 }
 
-async function assertGitHubWriteResponse(response, action) {
-  if (!response.ok) {
-    throw new Error(`Failed to ${action} PR comment: ${response.status} ${await response.text()}`);
+// Retries 5xx / 429 / network errors with exponential backoff; any other
+// non-OK status is a configuration problem and throws a plain (fatal) Error.
+async function githubRequest(url, init, action) {
+  let failure = '';
+  for (let attempt = 1; attempt <= GITHUB_REQUEST_ATTEMPTS; attempt += 1) {
+    const result = await attemptGitHubRequest(url, init, action);
+    if (result.response) return result.response;
+    failure = result.failure;
+    if (attempt < GITHUB_REQUEST_ATTEMPTS) {
+      const delayMs = GITHUB_RETRY_BASE_MS * 2 ** (attempt - 1);
+      process.stderr.write(`${failure} (retrying in ${delayMs}ms)\n`);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
   }
+  throw new TransientGitHubError(`${failure} after ${GITHUB_REQUEST_ATTEMPTS} attempts`);
+}
+
+// Resolves to { response } on success or { failure } on a transient failure;
+// throws a plain Error on a non-transient one.
+async function attemptGitHubRequest(url, init, action) {
+  let response;
+  try {
+    response = await fetch(url, init);
+  } catch (error) {
+    return { failure: `Failed to ${action}: ${error?.message ?? error}` };
+  }
+  if (response.ok) return { response };
+  const failure = `Failed to ${action}: ${response.status} ${await response.text()}`;
+  if (isTransientGitHubStatus(response.status)) return { failure };
+  throw new Error(failure);
+}
+
+function isTransientGitHubStatus(status) {
+  return status === 429 || status >= 500;
 }
