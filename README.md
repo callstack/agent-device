@@ -90,13 +90,14 @@ See [AI Agent Setup](https://oss.callstack.com/agent-device/docs/agent-setup) fo
 import { createAgentDeviceClient } from 'agent-device';
 
 const client = createAgentDeviceClient({ session: 'qa-run' });
-await client.apps.open({ app: 'com.apple.Preferences', platform: 'ios' });
-
-const snapshot = await client.capture.snapshot({ interactiveOnly: true });
-const button = snapshot.nodes.find((node) => node.role === 'button');
-if (button) await client.interactions.press({ ref: button.ref });
-
-await client.sessions.close();
+try {
+  await client.apps.open({ app: 'com.apple.Preferences', platform: 'ios' });
+  const snapshot = await client.capture.snapshot({ interactiveOnly: true });
+  const button = snapshot.nodes.find((node) => node.role === 'button');
+  if (button) await client.interactions.press({ ref: button.ref });
+} finally {
+  await client.sessions.close();
+}
 ```
 
 See the [Node.js API](https://oss.callstack.com/agent-device/docs/client-api), the [runnable examples](https://github.com/callstack/agent-device/tree/main/examples/sdk), and the [AI SDK](https://oss.callstack.com/agent-device/docs/ai-sdk) and [Eve](https://oss.callstack.com/agent-device/docs/eve) integration guides.
