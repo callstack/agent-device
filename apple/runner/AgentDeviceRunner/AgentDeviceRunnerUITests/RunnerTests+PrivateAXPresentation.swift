@@ -1,6 +1,8 @@
 import XCTest
 
 extension RunnerTests {
+  private static let privateAXProjectionTolerance: CGFloat = 1
+
   func privateAXPresentation(rawRoot: [String: Any], options: SnapshotOptions, viewport: CGRect)
     -> [SnapshotNode]
   {
@@ -24,15 +26,21 @@ extension RunnerTests {
     let rawType = privateAXPresentationInt(raw["type"]) ?? 0
     let enabled = privateAXPresentationBool(raw["enabled"]) ?? true
     let children = raw["children"] as? [[String: Any]] ?? []
+    let hasSemanticContent = [label, identifier, value].contains(where: { !$0.isEmpty })
     let elementType = flatSnapshotElementType(rawElementType: rawType)
     let hasFrame = !rect.isNull && !rect.isEmpty
+    let negligibleDecoration = parentIndex != nil
+      && !hasSemanticContent
+      && (!hasFrame
+        || rect.width <= Self.privateAXProjectionTolerance
+        || rect.height <= Self.privateAXProjectionTolerance)
     let onScreen = hasFrame
       && isVisibleInRegularSnapshot(
         rect,
         viewport: viewport,
         scrollContainerAnchor: scrollContext
       )
-    let presentationVisible = !hasFrame || onScreen
+    let presentationVisible = !negligibleDecoration && (!hasFrame || onScreen)
     let decision = flatSnapshotFilterDecision(
       FlatSnapshotFilterNode(isRoot: parentIndex == nil, label: label, identifier: identifier,
         valueText: value.isEmpty ? nil : value, visible: presentationVisible),
@@ -115,12 +123,14 @@ extension RunnerTests {
       "label": "Element", "frame": ["x": 0, "y": 0, "width": 402, "height": 874],
       "children": [["type": Int(XCUIElement.ElementType.scrollView.rawValue),
         "label": "Settings semantics", "frame": zero, "children": [[
-          "type": Int(XCUIElement.ElementType.button.rawValue), "label": "Theme", "frame": zero]]]]]
+          "type": Int(XCUIElement.ElementType.button.rawValue), "label": "Theme", "frame": zero],
+        ["type": Int(XCUIElement.ElementType.other.rawValue), "frame": zero]]]]]
     let nodes = privateAXPresentation(rawRoot: root,
       options: SnapshotOptions(interactiveOnly: true, depth: nil, scope: nil, raw: false),
       viewport: CGRect(x: 0, y: 0, width: 402, height: 874))
     XCTAssertEqual(nodes.compactMap(\.label), ["Element", "Settings semantics", "Theme"])
     XCTAssertEqual(nodes.filter { $0.index != 0 }.map(\.hittable), [false, false])
+    XCTAssertFalse(nodes.contains { $0.type == "Other" })
     XCTAssertTrue(nodes.allSatisfy { $0.hiddenContentAbove == nil && $0.hiddenContentBelow == nil })
   }
 }

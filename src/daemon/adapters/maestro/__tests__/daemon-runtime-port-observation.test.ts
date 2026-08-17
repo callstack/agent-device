@@ -13,6 +13,7 @@ import {
   waitForTypedSnapshotStability,
 } from '../daemon-runtime-port-observation.ts';
 import { makeBaseRequest, makeDependencies, makeSnapshot } from './daemon-runtime-port-fixtures.ts';
+import { elementSettingsNodes } from '../../../../snapshot/ios-scroll-visibility.fixtures.ts';
 
 test('replaces pre-mutation evidence with the stable post-mutation snapshot', async () => {
   const requests: DaemonRequest[] = [];
@@ -127,6 +128,25 @@ test('computes expensive target evidence only for the command policies that cons
   expect(ordinary).not.toHaveProperty('dispatchSelector');
   expect(atomicRetry.surfaceSignature).toMatch(/^[a-f0-9]{64}$/);
   expect(atomicRetry.dispatchSelector).toEqual({ key: 'id', value: 'continue' });
+});
+
+test('uses iOS capture provenance when resolving Maestro targets', () => {
+  const treeSnapshot = makeSnapshot(elementSettingsNodes());
+  treeSnapshot.backend = 'xctest';
+  treeSnapshot.snapshotQuality = { state: 'healthy', backend: 'tree' };
+  const privateAxSnapshot = makeSnapshot(elementSettingsNodes());
+  privateAxSnapshot.backend = 'xctest';
+  privateAxSnapshot.snapshotQuality = { state: 'recovered', backend: 'private-ax' };
+  const query = { selector: { text: 'Theme' }, purpose: 'tap' as const, timeoutMs: 0 };
+  const context = { generation: 0, env: {} };
+
+  expect(
+    resolveTypedMaestroTarget({ query, context, snapshot: treeSnapshot, platform: 'ios' }).matched,
+  ).toBe(true);
+  expect(
+    resolveTypedMaestroTarget({ query, context, snapshot: privateAxSnapshot, platform: 'ios' })
+      .matched,
+  ).toBe(false);
 });
 
 test('compares snapshots before sleeping and captures once beyond a zero settle budget', async () => {

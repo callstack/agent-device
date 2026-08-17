@@ -212,3 +212,54 @@ test('iOS target resolution preserves distinct nested controls matched by one ex
     resolveMaestroTargetFromSnapshot(snapshot, { selector: { text: 'Save.*' }, index: 1 }, 'ios'),
   ).toMatchObject({ ok: true, node: { index: 1 }, matches: 2 });
 });
+
+test('iOS target resolution keeps raw geometry bound to the canonical source node', () => {
+  const interactionSnapshot = makeSnapshot([
+    {
+      index: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 393, height: 852 },
+    },
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Save',
+      rect: { x: 0, y: 100, width: 80, height: 48 },
+    },
+    {
+      index: 2,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Save',
+      rect: { x: 200, y: 100, width: 80, height: 48 },
+    },
+  ]);
+  const canonicalSnapshot = makeSnapshot([
+    interactionSnapshot.nodes[0]!,
+    { ...interactionSnapshot.nodes[2]!, index: 1 },
+  ]);
+
+  expect(
+    resolveMaestroTargetFromSnapshot(
+      canonicalSnapshot,
+      { selector: { text: 'Save' }, allowAtomicSelectorDispatch: true },
+      'ios',
+      {
+        interactiveBounds: true,
+        interaction: {
+          snapshot: interactionSnapshot,
+          sourceIndexes: new Map([
+            [0, 0],
+            [1, 2],
+          ]),
+        },
+      },
+    ),
+  ).toMatchObject({
+    ok: true,
+    node: { index: 1 },
+    rect: { x: 200, y: 100, width: 80, height: 48 },
+    dispatchCandidates: 2,
+  });
+});

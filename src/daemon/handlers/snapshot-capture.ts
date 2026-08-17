@@ -169,8 +169,9 @@ export function buildSnapshotState(
     flags?.snapshotScope && data?.backend !== 'macos-helper'
       ? scopeSnapshotNodes(normalizedNodes, flags.snapshotScope)
       : normalizedNodes;
+  const snapshotQuality = snapshotCaptureAnnotationsFrom(data).quality;
   const presentableNodes = shouldPresentIosInteractiveSnapshot(data?.backend, flags)
-    ? presentIosInteractiveSnapshot(scopedNodes)
+    ? presentIosInteractiveSnapshot(scopedNodes, snapshotQuality?.backend)
     : scopedNodes;
   const nodes = attachRefs(
     snapshotRaw
@@ -180,7 +181,6 @@ export function buildSnapshotState(
             data?.backend === 'android' ? isAndroidInputMethodNode : undefined,
         }),
   );
-  const snapshotQuality = snapshotCaptureAnnotationsFrom(data).quality;
   return {
     nodes,
     truncated: data?.truncated,

@@ -3,6 +3,8 @@ import type { MaestroSelector } from './program-ir.ts';
 import type { MaestroPlatform } from './runtime-target-policy.ts';
 import { rankMaestroCandidates, selectMaestroSnapshotMatch } from './runtime-target-ranking.ts';
 import { pointInsideRect, stripUndefined } from './shared.ts';
+import { isDescendantOfSnapshotNode } from './snapshot-policy.ts';
+import { buildSnapshotNodeMap } from '@agent-device/contracts/snapshot';
 
 export type MaestroTargetQuery = {
   selector: MaestroSelector;
@@ -37,8 +39,10 @@ export function resolveMaestroTargetFromSnapshot(
   platform: MaestroPlatform,
   options: {
     interactiveBounds?: boolean;
-    interactiveRects?: ReadonlyMap<number, Rect>;
-    canonicalSnapshot?: SnapshotState;
+    interaction?: {
+      snapshot: SnapshotState;
+      sourceIndexes: ReadonlyMap<number, number>;
+    };
   } = {},
 ): MaestroTargetResolution {
   const candidates = rankMaestroCandidates(snapshot, query.selector, platform, query.childOf);
@@ -55,10 +59,12 @@ export function resolveMaestroTargetFromSnapshot(
   if (!target) {
     return failedTargetResolution(query, matches, rankedMatches, evidence);
   }
+  const interactionCandidates = resolveInteractionCandidates(target.node, query, platform, options);
+  const interactionTarget = interactionCandidates
+    ? selectMaestroSnapshotMatch(interactionCandidates.mapped, undefined)
+    : undefined;
   const rect =
-    options.interactiveBounds === true
-      ? (options.interactiveRects?.get(target.node.index) ?? target.rect)
-      : target.rect;
+    options.interactiveBounds === true ? (interactionTarget?.rect ?? target.rect) : target.rect;
   return {
     ok: true,
     node: target.node,
@@ -66,9 +72,39 @@ export function resolveMaestroTargetFromSnapshot(
     matches: rankedMatches.length,
     dispatchCandidates:
       platform === 'ios' && query.allowAtomicSelectorDispatch && !query.childOf
-        ? countCanonicalDispatchCandidates(query, { ...target, rect }, options.canonicalSnapshot)
+        ? countInteractionDispatchCandidates(target, interactionCandidates)
         : 0,
     evidence,
+  };
+}
+
+function resolveInteractionCandidates(
+  canonicalTarget: SnapshotNode,
+  query: MaestroTargetQuery,
+  platform: MaestroPlatform,
+  options: {
+    interaction?: {
+      snapshot: SnapshotState;
+      sourceIndexes: ReadonlyMap<number, number>;
+    };
+  },
+): { all: SnapshotNode[]; mapped: SnapshotNode[] } | undefined {
+  const interaction = options.interaction;
+  if (!interaction) return undefined;
+  const { snapshot, sourceIndexes } = interaction;
+  const sourceIndex = sourceIndexes.get(canonicalTarget.index);
+  if (sourceIndex === undefined) return undefined;
+  const source = snapshot.nodes.find((node) => node.index === sourceIndex);
+  if (!source) return undefined;
+  const byIndex = buildSnapshotNodeMap(snapshot.nodes);
+  const all = rankMaestroCandidates(snapshot, query.selector, platform, query.childOf).ranked;
+  return {
+    all,
+    mapped: all.filter(
+      (candidate) =>
+        candidate.index === source.index ||
+        isDescendantOfSnapshotNode(snapshot.nodes, candidate, source, byIndex),
+    ),
   };
 }
 
@@ -89,22 +125,16 @@ function failedTargetResolution(
   return { ok: false, message: `Maestro selector did not match${index}.`, evidence };
 }
 
-function countCanonicalDispatchCandidates(
-  query: MaestroTargetQuery,
+function countInteractionDispatchCandidates(
   target: { node: SnapshotNode; rect: Rect },
-  canonicalSnapshot: SnapshotState | undefined,
+  interactionCandidates: { all: SnapshotNode[]; mapped: SnapshotNode[] } | undefined,
 ): number {
-  if (!canonicalSnapshot) return 0;
-  const canonicalRankedMatches = rankMaestroCandidates(
-    canonicalSnapshot,
-    query.selector,
-    'ios',
-  ).ranked;
-  if (canonicalRankedMatches.length !== 1) return canonicalRankedMatches.length;
-  const canonicalTarget = selectMaestroSnapshotMatch(canonicalRankedMatches, undefined);
-  return canonicalTarget &&
-    canonicalTarget.node.hittable !== false &&
-    haveSameTapPoint(canonicalTarget.rect, target.rect)
+  if (!interactionCandidates) return 0;
+  if (interactionCandidates.all.length !== 1) return interactionCandidates.all.length;
+  const interactionTarget = selectMaestroSnapshotMatch(interactionCandidates.mapped, undefined);
+  return interactionTarget &&
+    interactionTarget.node.hittable !== false &&
+    haveSameTapPoint(interactionTarget.rect, target.rect)
     ? 1
     : 0;
 }

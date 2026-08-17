@@ -103,23 +103,22 @@ function resolveTargetFromSnapshot(params: {
   const frame = getSnapshotReferenceFrame(params.snapshot);
   const presentation =
     params.platform === 'ios'
-      ? buildIosInteractiveSnapshotPresentation(params.snapshot.nodes)
+      ? buildIosInteractiveSnapshotPresentation(
+          params.snapshot.nodes,
+          params.snapshot.snapshotQuality?.backend,
+        )
       : undefined;
+  const canonicalSnapshot = presentation
+    ? { ...params.snapshot, nodes: attachRefs(presentation.nodes) }
+    : params.snapshot;
   const resolution = resolveMaestroTargetFromSnapshot(
-    params.snapshot,
+    canonicalSnapshot,
     params.query,
     params.platform,
     {
       interactiveBounds: params.mode === 'tap',
-      interactiveRects: presentation
-        ? new Map(
-            [...presentation.sourceNodes].flatMap(([index, node]) =>
-              node.rect ? [[index, node.rect] as const] : [],
-            ),
-          )
-        : undefined,
-      canonicalSnapshot: presentation
-        ? { ...params.snapshot, nodes: attachRefs(presentation.nodes) }
+      interaction: presentation
+        ? { snapshot: params.snapshot, sourceIndexes: presentation.sourceIndexes }
         : undefined,
     },
   );

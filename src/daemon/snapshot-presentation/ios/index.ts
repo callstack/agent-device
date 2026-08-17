@@ -1,8 +1,9 @@
-import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode, SnapshotCaptureBackend } from '@agent-device/kernel/snapshot';
 import { collectIosImplicitScrollableActions } from './actions.ts';
 import { collectIosPresentationNoiseSuppression } from './noise.ts';
 import { collectIosRowPresentation } from './rows.ts';
 import { collectIosWebSemanticPresentation } from './web.ts';
+import { collectIosViewportPresentation } from './viewport.ts';
 import {
   reindexSnapshotNodesWithSuppressedParents,
   type SnapshotTreeRuleContext,
@@ -18,22 +19,42 @@ const IOS_PRESENTATION_RULES: Array<
   collectIosPresentationNoiseSuppression,
 ];
 
-export function presentIosInteractiveSnapshot(nodes: RawSnapshotNode[]): RawSnapshotNode[] {
-  return buildIosInteractiveSnapshotPresentation(nodes).nodes;
+export function presentIosInteractiveSnapshot(
+  nodes: RawSnapshotNode[],
+  captureBackend?: SnapshotCaptureBackend,
+): RawSnapshotNode[] {
+  return buildIosInteractiveSnapshotPresentation(nodes, captureBackend).nodes;
 }
 
 export type IosInteractiveSnapshotPresentation = {
   nodes: RawSnapshotNode[];
-  sourceNodes: ReadonlyMap<number, RawSnapshotNode>;
+  sourceIndexes: ReadonlyMap<number, number>;
 };
 
 export function buildIosInteractiveSnapshotPresentation(
   nodes: RawSnapshotNode[],
+  captureBackend?: SnapshotCaptureBackend,
 ): IosInteractiveSnapshotPresentation {
   if (nodes.length === 0) {
-    return { nodes, sourceNodes: new Map() };
+    return { nodes, sourceIndexes: new Map() };
   }
 
+  const sourceIndexes = new Map(nodes.map((node) => [node.index, node.index]));
+  const semanticPresentation = applyIosPresentationPass(nodes, sourceIndexes, captureBackend, true);
+  return applyIosPresentationPass(
+    semanticPresentation.nodes,
+    semanticPresentation.sourceIndexes,
+    captureBackend,
+    false,
+  );
+}
+
+function applyIosPresentationPass(
+  nodes: RawSnapshotNode[],
+  sourceIndexes: ReadonlyMap<number, number>,
+  captureBackend: SnapshotCaptureBackend | undefined,
+  includeSemanticRules: boolean,
+): IosInteractiveSnapshotPresentation {
   const replacements = new Map<number, RawSnapshotNode>();
   const semanticRepresentativeIndexes = new Set<number>();
   const sourceNodesByIndex = new Map(nodes.map((node) => [node.index, node]));
@@ -45,28 +66,32 @@ export function buildIosInteractiveSnapshotPresentation(
     suppressedIndexes,
   };
 
-  for (const rule of IOS_PRESENTATION_RULES) {
-    rule(nodes, ruleContext);
+  collectIosViewportPresentation(nodes, ruleContext, captureBackend);
+  if (includeSemanticRules) {
+    for (const rule of IOS_PRESENTATION_RULES) {
+      rule(nodes, ruleContext);
+    }
   }
 
   if (suppressedIndexes.size === 0 && replacements.size === 0) {
-    return { nodes, sourceNodes: sourceNodesByIndex };
+    return { nodes, sourceIndexes };
   }
 
   const presentedSourceNodes = nodes
     .filter((node) => !suppressedIndexes.has(node.index))
     .map((node) => replacements.get(node.index) ?? node);
-  const sourceNodes = new Map(presentedSourceNodes.map((node) => [node.index, node]));
-  for (const sourceIndex of suppressedIndexes) {
-    const replacement = replacements.get(sourceIndex);
-    if (replacement) sourceNodes.set(sourceIndex, replacement);
-  }
+  const presentedNodes = reindexSnapshotNodesWithSuppressedParents(
+    presentedSourceNodes,
+    suppressedIndexes,
+    nodes,
+  );
   return {
-    nodes: reindexSnapshotNodesWithSuppressedParents(
-      presentedSourceNodes,
-      suppressedIndexes,
-      nodes,
+    nodes: presentedNodes,
+    sourceIndexes: new Map(
+      presentedNodes.map((node, position) => [
+        node.index,
+        sourceIndexes.get(presentedSourceNodes[position]!.index)!,
+      ]),
     ),
-    sourceNodes,
   };
 }
