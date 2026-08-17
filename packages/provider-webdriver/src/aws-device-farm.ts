@@ -292,10 +292,12 @@ async function waitForRunningRemoteAccessSession(
   },
   req: LeaseLifecycleContext | undefined,
 ): Promise<AwsDeviceFarmRemoteAccessSession> {
-  const timeoutMs = options.startupTimeoutMs ?? 120_000;
   const pollIntervalMs = options.pollIntervalMs ?? 5_000;
   const startedAt = Date.now();
-  const deadline = Math.min(startedAt + timeoutMs, req?.deadline ?? Infinity);
+  // The daemon's allocation deadline is the bound when present (real-device
+  // startup routinely needs the whole ~2 min); the standalone default only
+  // applies when no allocation budget was supplied.
+  const deadline = req?.deadline ?? startedAt + (options.startupTimeoutMs ?? 120_000);
   const signal = req?.signal;
   let last = await options.client.getRemoteAccessSession(arn);
   while (Date.now() < deadline) {
