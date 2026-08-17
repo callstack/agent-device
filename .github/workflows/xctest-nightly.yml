@@ -1,14 +1,18 @@
 name: XCTest Nightly
 
-# The full iOS runner XCTest suite (#1781 A7). The PR lane (ios.yml) runs 37 of the 153
-# `RunnerTests` methods through a hand-written `-only-testing:` list; before this lane the
-# other 116 ran nowhere at all. This one drops the filter and runs the test plan whole.
+# The full iOS runner XCTest suite (#1781 A7). The target declares 154 addressable methods;
+# the PR lane (ios.yml) names 37 of them in a hand-written `-only-testing:` list, so 117 ran
+# nowhere at all. This lane drops that filter and runs the test plan whole, skipping only
+# `testCommand` — which is the runner's server entry point rather than a test (see the step
+# below) — for 116 methods that nothing else executes.
 #
 # Under the lane rule in #1781:
 #
-#   - Catches: regressions in the ~116 runner-semantics tests the PR list leaves out —
+#   - Catches: regressions in the 116 runner-semantics tests the PR list leaves out —
 #     selector matching, snapshot traversal, command journal, sequence execution, tv remote,
-#     keyboard, scroll/gesture policy. Nothing else executes them.
+#     keyboard, scroll/gesture policy. Nothing else executes them. Two of the 154
+#     (`…OnTvOS`) are behind `#if os(tvOS)` and so never execute on this lane's destination;
+#     the honest iOS-reachable figure is 151.
 #   - Evidence: the list has never been re-derived since it was written by hand; the tests it
 #     omits have been dark for their whole life, so their current state is unmeasured. The
 #     first red night is the evidence this lane exists to produce.
@@ -22,6 +26,11 @@ name: XCTest Nightly
 # Scheduled + manual only. It is deliberately NOT a PR gate: ios.yml is already over half of
 # this repo's CI spend (#1781 A9), and adding 116 tests to it would make that worse for a set
 # of tests whose flakiness on a shared runner is unknown.
+#
+# Note on `concurrency` below: it is keyed on `github.ref`, so a manual dispatch on the same
+# ref cancels an in-flight scheduled run. That is the intended trade — an operator asking for
+# a run wants the fresh one — but it means "dispatch while the nightly is running" loses the
+# nightly's result rather than queueing behind it.
 
 on:
   schedule:
@@ -87,7 +96,21 @@ jobs:
           preferred-device-name: iPhone 17 Pro
 
       # Same command as ios.yml's targeted step minus every `-only-testing:` flag, so the
-      # xctestrun's own test plan decides what runs.
+      # xctestrun's own test plan decides what runs — with one exception.
+      #
+      # `RunnerTests/testCommand` is not a test. It is the runner's server entry point: it
+      # opens an NWListener and blocks in `XCTWaiter.wait(timeout: 24 * 60 * 60)` until a
+      # client closes the session, which is exactly how production drives it
+      # (src/platforms/apple/core/runner/runner-session.ts always passes it as the sole
+      # `-only-testing:`). It compiles unconditionally — the `#if AGENT_DEVICE_RUNNER_UNIT_TESTS`
+      # block ends well above it — so an unfiltered run reaches it in alphabetical order and
+      # hangs the job until `timeout-minutes`. Its one escape hatch,
+      # AGENT_DEVICE_RUNNER_NOOP_STARTUP, is an environment variable, and the comment above
+      # the flag records that env plumbing into a simulator test process is not dependable;
+      # `-skip-testing:` is the lever that works from here.
+      #
+      # A typo in that identifier silently re-arms the hang, so
+      # `pnpm check:xctest-selection` validates `-skip-testing:` exactly like `-only-testing:`.
       - name: Run the full iOS runner XCTest suite
         run: |
           set -euo pipefail
@@ -97,50 +120,42 @@ jobs:
           xcodebuild test-without-building \
             -xctestrun "$XCTESTRUN_PATH" \
             -destination "platform=iOS Simulator,id=${{ steps.ios-simulator.outputs.simulator-udid }}" \
+            -skip-testing:AgentDeviceRunnerUITests/RunnerTests/testCommand \
             -resultBundlePath "$RESULT_BUNDLE_PATH"
 
-      # Runs even when the suite failed: a failing run is exactly when the per-test breakdown
-      # is worth having, and this step never changes the job's verdict on its own.
-      - name: Summarize the run
+      # Best-effort and never the job's verdict on its own; the step below is what asserts.
+      # `--compact` first because a red night's summary is the large one, and the job summary
+      # has a 1 MiB cap — the plain form is the fallback if an Xcode version rejects the flag.
+      - name: Extract the test-results summary
         if: always()
         run: |
           set -uo pipefail
-          {
-            echo '### iOS runner full XCTest suite'
-            if [ -d "$RESULT_BUNDLE_PATH" ] &&
-              xcrun xcresulttool get test-results summary --path "$RESULT_BUNDLE_PATH" \
-                > "$RESULT_SUMMARY_PATH" 2>/dev/null; then
-              echo '```json'
-              cat "$RESULT_SUMMARY_PATH"
-              echo '```'
-            else
-              echo 'No result bundle summary was produced; see the run log and the uploaded bundle.'
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
+          [ -d "$RESULT_BUNDLE_PATH" ] || exit 0
+          xcrun xcresulttool get test-results summary --path "$RESULT_BUNDLE_PATH" --compact \
+            > "$RESULT_SUMMARY_PATH" 2>/dev/null ||
+            xcrun xcresulttool get test-results summary --path "$RESULT_BUNDLE_PATH" \
+              > "$RESULT_SUMMARY_PATH" 2>/dev/null ||
+            rm -f "$RESULT_SUMMARY_PATH"
+          exit 0
 
-      # The lane's own liveness check. `xcodebuild` exits 0 when a selection matches nothing,
-      # so "green" and "ran no tests" are the same log tail; a build variant without the
-      # unit-test compile flag, an empty test plan, or a renamed target would all read as a
-      # healthy night. Asserting the run executed tests is what tells those apart.
-      - name: Assert the suite actually ran tests
+      # Reports the run AND is the lane's own liveness check. `xcodebuild` exits 0 when a
+      # selection matches nothing, so "green" and "ran no tests" are the same log tail: a
+      # build variant without the unit-test compile flag, an empty test plan, or a renamed
+      # target would all read as a healthy night. Asserting the run executed tests is what
+      # tells those apart. The failure list is capped so a badly red night cannot blow the
+      # 1 MiB job-summary limit and lose the headline with it.
+      - name: Report the run and assert it executed tests
         if: always()
         run: |
           set -euo pipefail
-          if [ ! -f "$RESULT_SUMMARY_PATH" ]; then
-            echo 'No test-results summary was produced, so nothing here can show a test ran.'
+          if [ ! -s "$RESULT_SUMMARY_PATH" ]; then
+            echo 'No usable test-results summary was produced, so nothing here can show a test ran.'
             echo 'The suite step above failed before or during the run; read its log first.'
+            echo '### iOS runner full XCTest suite' >> "$GITHUB_STEP_SUMMARY"
+            echo 'No result-bundle summary; see the run log and the uploaded bundle.' >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
-          TOTAL="$(RESULT_SUMMARY_PATH="$RESULT_SUMMARY_PATH" node -e '
-            const summary = JSON.parse(require("node:fs").readFileSync(process.env.RESULT_SUMMARY_PATH, "utf8"));
-            process.stdout.write(String(summary.totalTestCount ?? 0));
-          ')"
-          echo "Executed $TOTAL test(s)."
-          if [ "$TOTAL" -lt 1 ]; then
-            echo 'The full-suite lane executed no tests, which xcodebuild reports as success.'
-            echo 'Check AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS, the xctestrun test plan, and the target name.'
-            exit 1
-          fi
+          node --experimental-strip-types scripts/xctest-run-summary.ts
 
       - name: Upload result bundle
         if: always()

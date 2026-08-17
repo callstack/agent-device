@@ -80,6 +80,9 @@ export default defineConfig({
             // Parses ios.yml and the runner's Swift sources: no Xcode, no simulator, and
             // the check it guards is what keeps the PR lane's `-only-testing:` list honest.
             'scripts/__tests__/xctest-selection.test.ts',
+            // The nightly XCTest lane's reporter/liveness check, which otherwise only ever
+            // executes on a macOS runner at 04:30.
+            'scripts/__tests__/xctest-run-summary.test.ts',
             // The Fallow fixture policy is executable configuration: unused exports are exempt,
             // but fixture modules remain visible to the other analysis families.
             'scripts/__tests__/fallow-fixture-policy.test.ts',

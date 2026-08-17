@@ -82,6 +82,24 @@ test('Swift runner change selects both XCUITest platform builds', () => {
   assert.ok(ids(['src/platforms/apple/core/runner/Support.swift']).includes('swift-runner-ios'));
 });
 
+test('a runner XCTest source also selects the PR test-list check', () => {
+  // Distinct from the rule above, which owns Swift *anywhere*: renaming a method under
+  // AgentDeviceRunnerUITests/ silently shrinks ios.yml's hand-written `-only-testing:` list
+  // (#1781 A7), and the platform builds cannot see that — they compile fine either way.
+  assert.deepEqual(
+    ids(['apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Alert.swift']),
+    ['swift-runner-ios', 'swift-runner-macos', 'xctest-selection'],
+  );
+  // The bug the file filter used to have: membership is the directory, not the name.
+  assert.ok(
+    ids([
+      'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTapPointPolicy.swift',
+    ]).includes('xctest-selection'),
+  );
+  // Swift elsewhere in the runner still selects only the builds.
+  assert.ok(!ids(['apple/runner/Sources/Runner/Main.swift']).includes('xctest-selection'));
+});
+
 test('Android helper change selects the android-helpers build', () => {
   assert.deepEqual(ids(['android/snapshot-helper/src/Main.kt']), ['android-helpers']);
   assert.deepEqual(ids(['android/ime-helper/AndroidManifest.xml']), ['android-helpers']);
