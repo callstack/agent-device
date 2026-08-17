@@ -50,6 +50,13 @@ export function snapshotPlatformPolicyBranchViolations(
         if (readsDeviceOwnerIdentity(path)) addOwnerIdentityViolation(node);
       }
     }
+    if (
+      node.type === 'CallExpression' &&
+      !isAllowedDeviceIdentitySink(node) &&
+      callConsumesDeviceIdentity(node, aliases)
+    ) {
+      addOwnerIdentityViolation(node);
+    }
     if (node.type !== 'MemberExpression' && node.type !== 'ChainExpression') return;
     const path = canonicalMemberPath(node, aliases);
     if (path === undefined) return;
@@ -183,6 +190,10 @@ function boundPatternAliases(
   for (const property of value.properties) {
     if (property === null || typeof property !== 'object') continue;
     const entry = property as AstNode;
+    if (entry.type === 'RestElement') {
+      aliases.push(...boundPatternAliases(entry.argument, canonicalizePath(path)));
+      continue;
+    }
     if (entry.type !== 'Property') continue;
     const name = propertyName(entry.key);
     if (name === undefined) continue;
@@ -191,6 +202,46 @@ function boundPatternAliases(
   return aliases;
 }
 
+function callConsumesDeviceIdentity(
+  call: AstNode,
+  aliases: ReadonlyMap<string, readonly string[]>,
+): boolean {
+  if (!Array.isArray(call.arguments)) return false;
+  return call.arguments.some((argument) => expressionCarriesDeviceIdentity(argument, aliases));
+}
+
+function expressionCarriesDeviceIdentity(
+  node: unknown,
+  aliases: ReadonlyMap<string, readonly string[]>,
+): boolean {
+  const value = unwrapExpression(node);
+  if (value === undefined) return false;
+  const path = canonicalMemberPath(value, aliases);
+  if (path !== undefined && isDeviceIdentityPath(path)) return true;
+  if (value.type === 'SpreadElement') {
+    return expressionCarriesDeviceIdentity(value.argument, aliases);
+  }
+  if (value.type === 'ObjectExpression' && Array.isArray(value.properties)) {
+    return value.properties.some((property) => {
+      if (property === null || typeof property !== 'object') return false;
+      const entry = property as AstNode;
+      return entry.type === 'SpreadElement'
+        ? expressionCarriesDeviceIdentity(entry.argument, aliases)
+        : entry.type === 'Property' && expressionCarriesDeviceIdentity(entry.value, aliases);
+    });
+  }
+  if (value.type === 'ArrayExpression' && Array.isArray(value.elements)) {
+    return value.elements.some((element) => expressionCarriesDeviceIdentity(element, aliases));
+  }
+  return false;
+}
+
+function isAllowedDeviceIdentitySink(call: AstNode): boolean {
+  const callee = unwrapExpression(call.callee);
+  const factory = callee?.type === 'CallExpression' ? unwrapExpression(callee.callee) : undefined;
+  if (factory?.type === 'Identifier' && factory.name === 'requireRuntimeFacts') return true;
+  return callee?.type === 'Identifier' && callee.name === 'snapshotPlanUnavailableResponse';
+}
 function boundPatternPaths(
   pattern: unknown,
   path: readonly string[] | undefined,
@@ -203,6 +254,10 @@ function readsDeviceOwnerIdentity(path: readonly string[]): boolean {
     (path[0] === 'device' && path.length > 1) ||
     (path[0] === 'facts' && path[1] === 'device' && path.length > 2)
   );
+}
+
+function isDeviceIdentityPath(path: readonly string[]): boolean {
+  return path[0] === 'device' || (path[0] === 'facts' && path[1] === 'device');
 }
 
 function containsNamedCall(node: unknown, name: string): boolean {

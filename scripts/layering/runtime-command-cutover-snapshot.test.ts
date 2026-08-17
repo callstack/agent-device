@@ -103,3 +103,21 @@ test('R32 snapshot rejects device-owner policy through an assigned alias', () =>
     ],
   );
 });
+
+test('R32 snapshot rejects device-owner policy delegated to a renamed helper', () => {
+  assert.deepEqual(violationsFor('if (supportsIosSimulator(device)) return plan;'), [
+    'src/daemon/snapshot-runtime-binding.ts: snapshot admission reads device-owner identity instead of selected operation facts',
+  ]);
+});
+
+test('R32 snapshot rejects device-owner policy through object-rest identity', () => {
+  assert.deepEqual(
+    violationsFor(`
+      const { ...identity } = device;
+      if (identity.platform === 'apple') return plan;
+    `),
+    [
+      'src/daemon/snapshot-runtime-binding.ts: snapshot admission reads device-owner identity instead of selected operation facts',
+    ],
+  );
+});
