@@ -19,7 +19,7 @@
 
 Let your coding agent verify its changes in the running app. `agent-device` lets agents inspect, control, debug, and verify apps on iOS, Android, and HarmonyOS (simulators, emulators, and physical devices), plus tvOS, Android TV, Amazon Vega OS TV (Vega Virtual Device), web, macOS, and Linux. Agents read token-efficient accessibility snapshots instead of reasoning over screenshots alone, act through refs and selectors, and save evidence for review. It also coordinates device access across parallel agent worktrees and connects to remote device clouds.
 
-Works with Claude Code, Codex, Cursor, Windsurf, Cline, Goose, and any agent that can run a CLI or connect over MCP. Developers at [Expensify](https://www.callstack.com/blog/how-expensify-uses-agent-device-for-mobile-bug-evidence-and-profiling), [Shopify](https://x.com/mustafa01ali/status/2036577353178943826), and [others](#who-uses-agent-device) use it to verify their apps.
+Works with Claude Code, Codex, Cursor, Windsurf, Cline, Goose, and any agent that can run a CLI or connect over MCP. Build your own agents and QA tools on the same runtime with the Node.js client and the [AI SDK](https://oss.callstack.com/agent-device/docs/ai-sdk) and [Eve](https://oss.callstack.com/agent-device/docs/eve) guides. Developers at [Expensify](https://www.callstack.com/blog/how-expensify-uses-agent-device-for-mobile-bug-evidence-and-profiling), [Shopify](https://x.com/mustafa01ali/status/2036577353178943826), and [others](#who-uses-agent-device) use it to verify their apps.
 
 ## Quick start
 
@@ -88,7 +88,7 @@ See [AI Agent Setup](https://oss.callstack.com/agent-device/docs/agent-setup) fo
 
 ### Script it from Node.js
 
-`createAgentDeviceClient()` gives Node.js code typed access to the same commands. Expose its methods as model tools or call them from orchestration code:
+`createAgentDeviceClient()` gives Node.js code typed access to the same commands. Expose its methods as model tools in your own agent (the [AI SDK](https://oss.callstack.com/agent-device/docs/ai-sdk) and [Eve](https://oss.callstack.com/agent-device/docs/eve) guides show how) or call them from orchestration code:
 
 ```ts
 import { createAgentDeviceClient } from 'agent-device';
@@ -169,6 +169,10 @@ Yes. `agent-device` supports native iOS and Android apps, plus React Native, Exp
 ### How is it different from mobile MCP servers?
 
 The MCP server is one entry point to the same runtime used by the CLI and typed Node.js API. Sessions, device ownership, selectors, evidence, replay, CI workflows, and cloud routing stay consistent across all three.
+
+### Can I build my own agent or QA product on agent-device?
+
+Yes. The CLI, MCP server, and typed Node.js client are public surfaces over one runtime, so an agent you build gets the same sessions, selectors, evidence, replay, and device-cloud routing as a coding agent using the CLI. Start from the [Node.js API](https://oss.callstack.com/agent-device/docs/client-api), [AI SDK](https://oss.callstack.com/agent-device/docs/ai-sdk), or [Eve](https://oss.callstack.com/agent-device/docs/eve) guides.
 
 ### How is it different from Appium, Detox, or Maestro?
 
