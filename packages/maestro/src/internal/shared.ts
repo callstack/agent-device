@@ -1,4 +1,3 @@
-import {} from '@agent-device/kernel/errors';
 import type { Point, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 
 export function stripUndefined<T extends Record<string, unknown>>(value: T): T {

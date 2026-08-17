@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { afterEach, test, vi } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import {
   AppError,
@@ -14,6 +14,10 @@ import {
 import { buildCloudWebDriverBaseCapabilities } from './runtime.ts';
 
 const ARN = 'arn:aws:devicefarm:us-west-2:1:session/pending';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 // Once `create-remote-access-session` answers, the ARN is a billed session that
 // nothing else will stop. Every way the startup wait can end short of RUNNING
@@ -75,6 +79,40 @@ test('the allocation deadline caps the startup wait below its own default', asyn
   assert.deepEqual(client.stopped, [ARN]);
 });
 
+// Live iOS real devices needed ~128s to reach RUNNING while the daemon's 300s
+// allocation budget still had room, and the standalone 120s default cut them
+// off. When the daemon supplies a deadline it is THE bound; the default only
+// applies without one. Time is a virtual clock advanced 10s per poll, so this is
+// deterministic and fails on the old `min(default, deadline)` logic (which
+// throws at 120s, before the 150s RUNNING).
+test('the allocation deadline lets startup run past the standalone 120s default', async () => {
+  const startedAt = 1_700_000_000_000;
+  let virtualNow = startedAt;
+  vi.spyOn(Date, 'now').mockImplementation(() => virtualNow);
+  const client = fakeClient({ status: 'PENDING' }, () => {
+    virtualNow += 10_000;
+    if (virtualNow - startedAt >= 150_000) {
+      client.session.status = 'RUNNING';
+      client.session.endpoints = { appium: 'https://appium.example/wd/hub' };
+    }
+  });
+  const prepare = createAwsDeviceFarmPrepareSession({
+    ...baseOptions(client),
+    // The standalone default; a daemon-supplied deadline must override it.
+    startupTimeoutMs: 120_000,
+    pollIntervalMs: 1,
+  });
+
+  const prepared = await prepare({
+    lease: makeLease(),
+    req: { deadline: startedAt + 300_000 },
+    base: baseSession(),
+  });
+  assert.equal(prepared.providerSessionId, ARN);
+  assert.ok(virtualNow - startedAt >= 150_000, 'RUNNING must have been observed after 120s');
+  assert.deepEqual(client.stopped, []);
+});
+
 test('a session that reaches RUNNING is handed on and not stopped', async () => {
   const client = fakeClient({
     status: 'RUNNING',
@@ -91,10 +129,11 @@ test('a session that reaches RUNNING is handed on and not stopped', async () => 
 function fakeClient(
   session: Partial<AwsDeviceFarmRemoteAccessSession>,
   onPoll?: () => void,
-): AwsDeviceFarmClient & { stopped: string[] } {
+): AwsDeviceFarmClient & { stopped: string[]; session: Partial<AwsDeviceFarmRemoteAccessSession> } {
   const stopped: string[] = [];
   return {
     stopped,
+    session,
     createRemoteAccessSession: async () => ({ arn: ARN, status: 'PENDING' }),
     getRemoteAccessSession: async (arn) => {
       onPoll?.();
