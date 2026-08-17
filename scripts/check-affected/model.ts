@@ -67,6 +67,7 @@ export type CheckId =
   | 'fixture-cache'
   | 'fixture-fallback'
   | 'command-docs'
+  | 'xctest-selection'
   // Gates that drive their own runner — declared nowhere, registered here.
   | 'maestro-conformance'
   | 'maestro-differential'
@@ -126,6 +127,7 @@ export const ALL_CHECKS: readonly CheckId[] = [
   'fixture-cache',
   'fixture-fallback',
   'command-docs',
+  'xctest-selection',
   'maestro-conformance',
   'maestro-differential',
   'maestro-regenerate',
@@ -452,6 +454,15 @@ const BUILD_OWNERSHIP: ReadonlyArray<{
     rule: 'own:swift',
     detail: 'Swift runner sources require the macOS XCUITest build',
     owns: (file) => file.startsWith('apple/runner/') || file.endsWith('.swift'),
+  },
+  // The PR lane names each runner XCTest method it runs, so renaming or deleting one
+  // silently shrinks that lane. Selected here so the drift shows up on the change that
+  // causes it rather than on the next nightly.
+  {
+    check: 'xctest-selection',
+    rule: 'own:xctest-selection',
+    detail: "the PR lane's hand-written `-only-testing:` list names these methods",
+    owns: (file) => file.startsWith('apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/'),
   },
   {
     check: 'android-helpers',

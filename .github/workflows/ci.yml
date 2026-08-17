@@ -171,6 +171,15 @@ jobs:
         uses: ./.github/actions/run-gate
         with: { gate: gate-manifest }
 
+      # Same family as the manifest above — a CI selection that has stopped selecting what
+      # it claims. ios.yml runs 37 of the 153 runner XCTest methods through a hand-written
+      # `-only-testing:` list, and xcodebuild treats an identifier that matches nothing as
+      # an empty selection rather than an error, so a rename drops a test with no signal.
+      # Parse-only, no Xcode; the other 116 methods run in xctest-nightly.yml (#1781 A7).
+      - name: Check the PR XCTest selection still names real tests
+        uses: ./.github/actions/run-gate
+        with: { gate: xctest-selection }
+
   maestro-conformance:
     name: Maestro Conformance Oracle
     runs-on: ubuntu-latest

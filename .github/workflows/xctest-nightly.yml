@@ -1,0 +1,151 @@
+name: XCTest Nightly
+
+# The full iOS runner XCTest suite (#1781 A7). The PR lane (ios.yml) runs 37 of the 153
+# `RunnerTests` methods through a hand-written `-only-testing:` list; before this lane the
+# other 116 ran nowhere at all. This one drops the filter and runs the test plan whole.
+#
+# Under the lane rule in #1781:
+#
+#   - Catches: regressions in the ~116 runner-semantics tests the PR list leaves out —
+#     selector matching, snapshot traversal, command journal, sequence execution, tv remote,
+#     keyboard, scroll/gesture policy. Nothing else executes them.
+#   - Evidence: the list has never been re-derived since it was written by hand; the tests it
+#     omits have been dark for their whole life, so their current state is unmeasured. The
+#     first red night is the evidence this lane exists to produce.
+#   - Cost: one macOS job per night. The Apple runner build is shared with ios.yml's cache
+#     (identical inputs and build variant), so a night that follows a green ios.yml run pays
+#     only the boot + full-suite time on top of a cache restore. Adds nothing to any PR.
+#   - Kill criterion: when A7's classification lands — pure Swift decision tests moved to a
+#     fast unit target, stale tests deleted, the rest kept on the simulator — this lane goes
+#     if the surviving set is small enough to run on every PR.
+#
+# Scheduled + manual only. It is deliberately NOT a PR gate: ios.yml is already over half of
+# this repo's CI spend (#1781 A9), and adding 116 tests to it would make that worse for a set
+# of tests whose flakiness on a shared runner is unknown.
+
+on:
+  schedule:
+    - cron: '30 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  full-suite:
+    name: iOS Runner Full XCTest Suite
+    runs-on: macos-26
+    # Generous on purpose: the PR lane's 37 tests are a few minutes inside an 80-minute job
+    # that also runs replays and E2E, and this lane's total is unmeasured until it has run.
+    timeout-minutes: 120
+    env:
+      # Must match ios.yml. The runtime version rides in the derived-data cache key, and
+      # AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS is BOTH an input to the cache's build-variant
+      # hash and the `-D AGENT_DEVICE_RUNNER_UNIT_TESTS` compile flag that makes the RunnerTests
+      # methods exist at all. Dropping it would build a different variant (cache miss) whose
+      # bundle contains no tests, and `xcodebuild` reports running zero tests as success — the
+      # "silent 0-test green" this lane would then be. The test-count assertion below is the
+      # backstop for exactly that.
+      IOS_RUNTIME_VERSION: '26.2'
+      AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS: '1'
+      AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ github.workspace }}/.tmp/ios-runner-derived
+      RESULT_BUNDLE_PATH: ${{ github.workspace }}/.tmp/xctest-nightly/RunnerTests.xcresult
+      RESULT_SUMMARY_PATH: ${{ github.workspace }}/.tmp/xctest-nightly/test-results-summary.json
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+        with:
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            examples/test-app/pnpm-lock.yaml
+
+      # Byte-identical inputs to ios.yml's step, so both lanes restore the same cache entry
+      # and only the first one to run on a commit pays for the build.
+      - name: Restore and build iOS XCTest runner
+        uses: ./.github/actions/setup-apple-runner-build
+        with:
+          derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}
+          cache-key-prefix: ios-runner-prebuilt
+          cache-key-suffix: -ios-${{ env.IOS_RUNTIME_VERSION }}
+          gate: swift-runner-ios
+          xcuitest-platform: ios
+          xcuitest-destination: generic/platform=iOS Simulator
+
+      - name: Boot iOS test simulator
+        id: ios-simulator
+        uses: ./.github/actions/boot-ios-test-simulator
+        with:
+          runtime-version: ${{ env.IOS_RUNTIME_VERSION }}
+          preferred-device-name: iPhone 17 Pro
+
+      # Same command as ios.yml's targeted step minus every `-only-testing:` flag, so the
+      # xctestrun's own test plan decides what runs.
+      - name: Run the full iOS runner XCTest suite
+        run: |
+          set -euo pipefail
+          XCTESTRUN_PATH="$(find "$AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH/Build/Products" -maxdepth 1 -name '*.xctestrun' -print -quit)"
+          test -n "$XCTESTRUN_PATH"
+          mkdir -p "$(dirname "$RESULT_BUNDLE_PATH")"
+          xcodebuild test-without-building \
+            -xctestrun "$XCTESTRUN_PATH" \
+            -destination "platform=iOS Simulator,id=${{ steps.ios-simulator.outputs.simulator-udid }}" \
+            -resultBundlePath "$RESULT_BUNDLE_PATH"
+
+      # Runs even when the suite failed: a failing run is exactly when the per-test breakdown
+      # is worth having, and this step never changes the job's verdict on its own.
+      - name: Summarize the run
+        if: always()
+        run: |
+          set -uo pipefail
+          {
+            echo '### iOS runner full XCTest suite'
+            if [ -d "$RESULT_BUNDLE_PATH" ] &&
+              xcrun xcresulttool get test-results summary --path "$RESULT_BUNDLE_PATH" \
+                > "$RESULT_SUMMARY_PATH" 2>/dev/null; then
+              echo '```json'
+              cat "$RESULT_SUMMARY_PATH"
+              echo '```'
+            else
+              echo 'No result bundle summary was produced; see the run log and the uploaded bundle.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The lane's own liveness check. `xcodebuild` exits 0 when a selection matches nothing,
+      # so "green" and "ran no tests" are the same log tail; a build variant without the
+      # unit-test compile flag, an empty test plan, or a renamed target would all read as a
+      # healthy night. Asserting the run executed tests is what tells those apart.
+      - name: Assert the suite actually ran tests
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ ! -f "$RESULT_SUMMARY_PATH" ]; then
+            echo 'No test-results summary was produced, so nothing here can show a test ran.'
+            echo 'The suite step above failed before or during the run; read its log first.'
+            exit 1
+          fi
+          TOTAL="$(RESULT_SUMMARY_PATH="$RESULT_SUMMARY_PATH" node -e '
+            const summary = JSON.parse(require("node:fs").readFileSync(process.env.RESULT_SUMMARY_PATH, "utf8"));
+            process.stdout.write(String(summary.totalTestCount ?? 0));
+          ')"
+          echo "Executed $TOTAL test(s)."
+          if [ "$TOTAL" -lt 1 ]; then
+            echo 'The full-suite lane executed no tests, which xcodebuild reports as success.'
+            echo 'Check AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS, the xctestrun test plan, and the target name.'
+            exit 1
+          fi
+
+      - name: Upload result bundle
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: xctest-nightly-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .tmp/xctest-nightly
+          if-no-files-found: warn

@@ -99,6 +99,12 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   gate('fixture-cache', 'Trusted fixture-artifact selection', 'test:fixture-cache'),
   gate('fixture-fallback', 'Fixture-app cache-failure fallback', 'test:fixture-fallback'),
   gate('command-docs', 'Command reference doc coverage', 'check:command-docs'),
+  // Parses ios.yml and the Swift sources; no Xcode, no simulator, so it runs anywhere.
+  gate(
+    'xctest-selection',
+    'PR XCTest `-only-testing:` list names tests that exist',
+    'check:xctest-selection',
+  ),
 
   // --- Gates that drive their own runner -------------------------------------
   // The ones no naming convention could find: an executable terminal for
