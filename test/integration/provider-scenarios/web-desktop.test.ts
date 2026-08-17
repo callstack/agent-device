@@ -83,6 +83,27 @@ test('Provider-backed integration web desktop flow uses semantic web provider ca
           expectData: { text: 'Ready' },
         },
         {
+          // #1783: hover @ref on web rides the provider element handle
+          // (hoverRef), never a coordinate — web ref frames carry no rects.
+          name: 'hover submit ref',
+          command: 'hover',
+          positionals: ['@e4'],
+          expectData: { ref: 'e4', gesture: 'hover' },
+          assert: (response) => {
+            const data = response.json?.result?.data;
+            assert.equal(data?.x, undefined);
+            assert.equal(data?.y, undefined);
+            assert.equal(data?.message, 'Hovered @e4');
+          },
+        },
+        {
+          // ADR 0014: the ref hover above expired the frame; re-observe
+          // before the next ref mutation.
+          name: 're-observe before the ref click',
+          command: 'snapshot',
+          flags: { snapshotInteractiveOnly: true },
+        },
+        {
           name: 'click submit ref',
           command: 'click',
           positionals: ['@e4'],
@@ -152,6 +173,16 @@ test('Provider-backed integration web desktop flow uses semantic web provider ca
       assert.ok(
         actions.some(
           (action) =>
+            action.command === 'hover' &&
+            action.positionals.join(' ') === '@e4' &&
+            action.result?.x === undefined &&
+            action.result?.y === undefined,
+        ),
+        'Expected ref hover action to be recorded on the session without fabricated coordinates',
+      );
+      assert.ok(
+        actions.some(
+          (action) =>
             action.command === 'click' &&
             action.positionals.join(' ') === '@e4' &&
             action.result?.x === undefined &&
@@ -183,6 +214,7 @@ test('Provider-backed integration web desktop flow uses semantic web provider ca
       assertFlatToolCall(semanticCalls, ['web', 'open', WEB_URL, '']);
       assertFlatToolCall(semanticCalls, ['web', 'recordStart', recordingPath]);
       assertFlatToolCall(semanticCalls, ['web', 'snapshot', 'true', '']);
+      assertFlatToolCall(semanticCalls, ['web', 'hoverRef', '@e4']);
       assertFlatToolCall(semanticCalls, ['web', 'clickRef', '@e4']);
       assertFlatToolCall(semanticCalls, ['web', 'fillRef', '@e3', 'qa@example.test', '1']);
       assertFlatToolCall(semanticCalls, ['web', 'type', ' ok', '0']);

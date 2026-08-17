@@ -83,6 +83,12 @@ export async function createWebDesktopWorld(): Promise<WebDesktopWorld> {
         state.statusText = 'Submitted';
       }
     },
+    hover: async (x, y) => {
+      semanticCalls.push(['web', 'hover', String(x), String(y)]);
+    },
+    hoverRef: async (ref) => {
+      semanticCalls.push(['web', 'hoverRef', ref]);
+    },
     fill: async (x, y, text, options) => {
       semanticCalls.push([
         'web',
