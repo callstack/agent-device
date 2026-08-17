@@ -2,6 +2,7 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { WEB_DESKTOP_DEVICE } from '../../../__tests__/test-utils/device-fixtures.ts';
+import { withWebProvider, type WebProvider } from '../../../platforms/web/provider.ts';
 import { handleInteractionCommands } from '../interaction.ts';
 import {
   contextFromFlags,
@@ -229,19 +230,66 @@ test('longpress @ref resolves the target and dispatches coordinate longpress', a
 });
 
 // #1783: hover is the pointer-only member of the targeted-touch family. It rides
-// the same admission/resolution path as press/longpress but dispatches the
-// core `hover` verb, and only web admits it.
-test('hover @ref resolves the target and dispatches coordinate hover on web', async () => {
+// the same admission path as press/longpress, and only web admits it. On web
+// the session's ref frame is minted WITHOUT rects (snapshot -i does not fetch
+// boxes), so `hover @ref` cannot resolve to coordinates: like `click @ref` it
+// must take the provider-native route (`hoverRef`, ADR 0011 native-ref path).
+// This test therefore stores a rect-less web frame and a scoped provider — the
+// production shape — and asserts no coordinate dispatch happens.
+test('hover @ref on web dispatches through the provider hoverRef route, not coordinates', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'hover-ref';
   const session = makeSession(sessionName);
   session.device = WEB_DESKTOP_DEVICE;
   session.snapshot = {
+    nodes: attachRefs([{ index: 0, role: 'link', label: 'Second message', enabled: true }]),
+    createdAt: Date.now(),
+    backend: 'web',
+  };
+  sessionStore.set(sessionName, session);
+  const hoveredRefs: string[] = [];
+  const provider = makeWebProvider({
+    hoverRef: async (ref) => {
+      hoveredRefs.push(ref);
+    },
+  });
+
+  const response = await withWebProvider(provider, async () =>
+    handleInteractionCommands({
+      req: {
+        token: 't',
+        session: sessionName,
+        command: 'hover',
+        positionals: ['@e1'],
+        flags: {},
+      },
+      sessionName,
+      sessionStore,
+      contextFromFlags,
+    }),
+  );
+
+  expect(response).toMatchObject({
+    ok: true,
+    data: { ref: 'e1', gesture: 'hover', message: expect.stringMatching(/Hovered @e1/) },
+  });
+  expect(hoveredRefs).toEqual(['@e1']);
+  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(sessionStore.get(sessionName)?.actions[0]?.command).toBe('hover');
+});
+
+test('hover selector on web resolves the target and dispatches coordinate hover', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'hover-selector';
+  const session = makeSession(sessionName);
+  session.device = WEB_DESKTOP_DEVICE;
+  sessionStore.set(sessionName, session);
+  mockCaptureSnapshotForSession.mockResolvedValue({
     nodes: attachRefs([
       {
         index: 0,
-        role: 'listitem',
-        label: 'Last message',
+        role: 'link',
+        label: 'Second message',
         rect: { x: 10, y: 20, width: 100, height: 40 },
         enabled: true,
         hittable: true,
@@ -249,15 +297,14 @@ test('hover @ref resolves the target and dispatches coordinate hover on web', as
     ]),
     createdAt: Date.now(),
     backend: 'web',
-  };
-  sessionStore.set(sessionName, session);
+  });
 
   const response = await handleInteractionCommands({
     req: {
       token: 't',
       session: sessionName,
       command: 'hover',
-      positionals: ['@e1'],
+      positionals: ['label="Second message"'],
       flags: {},
     },
     sessionName,
@@ -267,12 +314,11 @@ test('hover @ref resolves the target and dispatches coordinate hover on web', as
 
   expect(response).toMatchObject({
     ok: true,
-    data: { x: 60, y: 40, gesture: 'hover', message: expect.stringMatching(/Hovered @e1/) },
+    data: { x: 60, y: 40, gesture: 'hover', message: expect.stringMatching(/Hovered label/) },
   });
   expect(mockDispatch.mock.calls).toEqual([
     [expect.anything(), 'hover', ['60', '40'], undefined, expect.anything()],
   ]);
-  expect(sessionStore.get(sessionName)?.actions[0]?.command).toBe('hover');
 });
 
 test('hover is refused by capability on touch platforms before any dispatch', async () => {
@@ -302,3 +348,18 @@ test('hover is refused by capability on touch platforms before any dispatch', as
   });
   expect(mockDispatch).not.toHaveBeenCalled();
 });
+
+function makeWebProvider(overrides: Partial<WebProvider>): WebProvider {
+  return {
+    open: async () => {},
+    close: async () => {},
+    snapshot: async () => ({ nodes: [] }),
+    screenshot: async () => {},
+    setViewport: async () => {},
+    click: async () => {},
+    fill: async () => {},
+    typeText: async () => {},
+    scroll: async () => {},
+    ...overrides,
+  };
+}

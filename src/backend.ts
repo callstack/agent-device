@@ -500,6 +500,10 @@ export type AgentDeviceBackend = {
     options?: BackendLongPressOptions,
   ): Promise<BackendActionResult>;
   hover?(context: BackendCommandContext, point: Point): Promise<BackendActionResult>;
+  hoverTarget?(
+    context: BackendCommandContext,
+    target: BackendRefTarget,
+  ): Promise<BackendActionResult>;
   scroll?(
     context: BackendCommandContext,
     target: BackendScrollTarget,

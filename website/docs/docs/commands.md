@@ -145,7 +145,7 @@ agent-device close --platform web
 - The managed install respects `--state-dir` and `AGENT_DEVICE_STATE_DIR`.
 - Web automation requires Node 24+.
 - Supported through `agent-device`: URL open, snapshot refs, `get text/attrs`, `is visible/exists/text`, `find text/selector`, click/press, hover, fill/type, wait, `network dump`, `audio probe`, screenshot, close, and replay scripts composed from those commands.
-- `hover <@ref|selector|x y>` moves the pointer without pressing so hover-gated UI (row toolbars, menus) appears. Add `--settle` to read what it revealed instead of taking another snapshot.
+- `hover <@ref|selector|x y>` moves the pointer without pressing so hover-gated UI (row toolbars, menus) appears. Add `--settle` to read what it revealed instead of taking another snapshot. `hover @ref` hovers the browser's own element handle; like `click @ref --settle`, the `--settle` diff needs a selector or coordinate target on web because web refs carry no geometry.
 - `audio probe start [durationSeconds] [bucketMs]` samples HTML media elements into compact RMS/peak dBFS buckets while the page keeps running. The first timing positional is seconds; the second is milliseconds.
 - URL-backed web media may be routed through the probe `AudioContext` while observed. Use `audio probe status` to poll partial buckets and `audio probe stop` to end the probe early.
 - Out of scope for `agent-device` web support: tab/window/devtools control, network routing/interception/HAR, cookies/storage, downloads/uploads, arbitrary page scripting, multi-page orchestration, and raw browser diagnostics. Use `agent-browser` directly for those browser-specific workflows.

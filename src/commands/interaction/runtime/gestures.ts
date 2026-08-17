@@ -42,6 +42,7 @@ import {
 import {
   assertSupportedInteractionSurface,
   captureInteractionSnapshot,
+  dispatchNativeRefInteraction,
   resolveInteractionTarget,
   type ExpectedResolvedTarget,
   type InteractionTarget,
@@ -232,6 +233,10 @@ export const hoverCommand: RuntimeCommand<HoverCommandOptions, HoverCommandResul
   options,
 ): Promise<HoverCommandResult> => {
   const observation = planPostActionObservation(options);
+  const nativeRefHover = observation.needsPreActionBaseline
+    ? null
+    : await maybeHoverRefTarget(runtime, options);
+  if (nativeRefHover) return nativeRefHover;
   // Hover keeps the element it resolved (no hittable-ancestor promotion): the
   // pointer only has to enter the matched node's box for its hover state to
   // raise, and promoting could move it onto a sibling-owned region.
@@ -260,6 +265,30 @@ export const hoverCommand: RuntimeCommand<HoverCommandOptions, HoverCommandResul
     observation,
   );
 };
+
+/**
+ * ADR 0011 `native-ref` path for hover: on web the ref IS the provider's own
+ * element handle (`hoverRef`), and the session's ref frame carries no rects,
+ * so a coordinate hover could not resolve it. Mirrors `maybeTapRefTarget`:
+ * the shared preflight guards run against the stored node, a guarded replay
+ * dispatch takes the runtime path, and `--settle` (which needs a pre-action
+ * baseline) is routed by the caller before reaching here.
+ */
+async function maybeHoverRefTarget(
+  runtime: AgentDeviceRuntime,
+  options: HoverCommandOptions,
+): Promise<HoverCommandResult | null> {
+  if (options.target.kind !== 'ref' || !runtime.backend.hoverTarget) return null;
+  if (options.expectedResolvedTarget) return null;
+  const { hoverTarget } = runtime.backend;
+  return await dispatchNativeRefInteraction(
+    runtime,
+    options,
+    options.target,
+    'hover',
+    async (context, refTarget) => await hoverTarget(context, refTarget),
+  );
+}
 
 export const dragCommand: RuntimeCommand<DragCommandOptions, DragCommandResult> = async (
   runtime,

@@ -72,6 +72,9 @@ export function createAgentBrowserWebProvider(
     async hover(x, y) {
       await movePointer(runJson, x, y);
     },
+    async hoverRef(ref) {
+      await runJson(['hover', browserRefSelector(ref)]);
+    },
     async clickRef(ref) {
       await runJson(['click', browserRefSelector(ref)]);
     },

@@ -47,11 +47,11 @@ test('Android emulator coverage exhaustively classifies the public catalog', () 
 test('Android coverage report summary accounts for every manifest classification', () => {
   const summary = ANDROID_EMULATOR_COVERAGE_CLASSIFICATION_SUMMARY;
   assert.deepEqual(summary, {
-    capabilityDenial: 2,
+    capabilityDenial: 3,
     contract: 10,
     gap: 0,
     live: 41,
-    total: 53,
+    total: 54,
   });
   assert.equal(
     summary.live + summary.contract + summary.gap + summary.capabilityDenial,

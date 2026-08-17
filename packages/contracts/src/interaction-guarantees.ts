@@ -361,13 +361,13 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
   },
   'native-ref': {
     // WEB-ONLY in production: apple/android backends never define
-    // tapTarget/fillTarget - the sole wiring is the web provider's clickRef
-    // (a stable DOM-handle click). Verified 2026-07-04 while designing the
-    // #1088 retirement experiment, which this finding dissolved: there is no
-    // iOS runner round trip to retire.
+    // tapTarget/fillTarget/hoverTarget - the sole wiring is the web provider's
+    // clickRef/fillRef/hoverRef (stable DOM-handle actions). Verified
+    // 2026-07-04 while designing the #1088 retirement experiment, which this
+    // finding dissolved: there is no iOS runner round trip to retire.
     description:
-      'click @ref / fill @ref dispatch to backend.tapTarget/fillTarget (web provider clickRef only; no mobile backend implements these) without runtime resolution when no non-default options are set. A zero-round-trip preflight (preflightNativeRefInteraction) runs the shared guards against the stored session snapshot node first; no snapshot / no usable rect makes the preflight a no-op.',
-    commands: ['click', 'fill'],
+      'click @ref / fill @ref / hover @ref dispatch to backend.tapTarget/fillTarget/hoverTarget (web provider clickRef/fillRef/hoverRef only; no mobile backend implements these) without runtime resolution when no non-default options are set. A zero-round-trip preflight (preflightNativeRefInteraction) runs the shared guards against the stored session snapshot node first; no snapshot / no usable rect makes the preflight a no-op.',
+    commands: ['click', 'fill', 'hover'],
     guarantees: {
       disambiguation: {
         kind: 'inapplicable',

@@ -27,8 +27,7 @@ import {
   type PostActionObservationOptions,
 } from './post-action-observation.ts';
 import {
-  EXACT_REF_RESOLUTION,
-  preflightNativeRefInteraction,
+  dispatchNativeRefInteraction,
   resolveInteractionTarget,
   type ExpectedResolvedTarget,
   type InteractionTarget,
@@ -267,20 +266,14 @@ async function maybeTapRefTarget(
   // against the stored session snapshot node before the backend call (a
   // backend fast path can silently "succeed", so errors must be raised here).
   // No snapshot / no usable rect → no-op; never adds a capture round trip.
-  const preflight = await preflightNativeRefInteraction(runtime, options, options.target, action);
-  const backendResult = await runtime.backend.tapTarget(toBackendContext(runtime, options), {
-    kind: 'ref',
-    ref: options.target.ref,
-    ...(options.target.fallbackLabel ? { fallbackLabel: options.target.fallbackLabel } : {}),
-  });
-  const formattedBackendResult = toBackendResult(backendResult);
-  return {
-    kind: 'ref',
-    target: { kind: 'ref', ref: options.target.ref },
-    resolution: EXACT_REF_RESOLUTION,
-    ...preflight,
-    ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
-  };
+  const { tapTarget } = runtime.backend;
+  return await dispatchNativeRefInteraction(
+    runtime,
+    options,
+    options.target,
+    action,
+    async (context, refTarget) => await tapTarget(context, refTarget),
+  );
 }
 
 async function maybeFillRefTarget(
@@ -291,26 +284,16 @@ async function maybeFillRefTarget(
   // ADR 0012 step 4: guarded replay actions take the runtime path — see maybeTapRefTarget.
   if (options.expectedResolvedTarget) return null;
   // ADR 0011 native-ref preflight — see maybeTapRefTarget.
-  const preflight = await preflightNativeRefInteraction(runtime, options, options.target, 'fill');
-  const backendResult = await runtime.backend.fillTarget(
-    toBackendContext(runtime, options),
-    {
-      kind: 'ref',
-      ref: options.target.ref,
-      ...(options.target.fallbackLabel ? { fallbackLabel: options.target.fallbackLabel } : {}),
-    },
-    options.text,
-    { delayMs: options.delayMs },
+  const { fillTarget } = runtime.backend;
+  const dispatched = await dispatchNativeRefInteraction(
+    runtime,
+    options,
+    options.target,
+    'fill',
+    async (context, refTarget) =>
+      await fillTarget(context, refTarget, options.text, { delayMs: options.delayMs }),
   );
-  const formattedBackendResult = toBackendResult(backendResult);
-  return {
-    kind: 'ref',
-    target: { kind: 'ref', ref: options.target.ref },
-    text: options.text,
-    resolution: EXACT_REF_RESOLUTION,
-    ...preflight,
-    ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
-  };
+  return { ...dispatched, text: options.text };
 }
 
 function hasNonDefaultTapOptions(options: PressCommandOptions): boolean {

@@ -168,6 +168,13 @@ function createInteractionBackend(
         ),
       );
     },
+    hoverTarget: webProvider?.hoverRef
+      ? async (_context, target): Promise<BackendActionResult> => {
+          expireRefFrame(session);
+          await webProvider.hoverRef?.(target.ref);
+          return { ref: stripAtPrefix(target.ref) };
+        }
+      : undefined,
     hover: async (_context, point): Promise<BackendActionResult> => {
       expireRefFrame(session);
       return toBackendActionResult(
@@ -208,7 +215,7 @@ function createInteractionBackend(
 function resolveNativeWebInteractionProvider(session: SessionState): WebProvider | undefined {
   if (session.device.platform !== 'web') return undefined;
   const provider = resolveWebProvider();
-  return provider.clickRef || provider.fillRef ? provider : undefined;
+  return provider.clickRef || provider.fillRef || provider.hoverRef ? provider : undefined;
 }
 
 function toBackendActionResult(data: unknown): BackendActionResult {

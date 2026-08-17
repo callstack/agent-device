@@ -900,7 +900,7 @@ First-slice loop:
 
 Supported in agent-device web sessions:
   open <url>, snapshot -i, get text/attrs, is visible/exists/text, find text/selector, click/press @ref or selector, hover @ref or selector, fill/type @ref or selector, wait text/selector, network dump, audio probe, screenshot, record start/stop with WebM output, close, and replay scripts made from those commands.
-  hover moves the pointer without pressing so hover-gated UI (row toolbars, menus) appears; use --settle to read what it revealed, then act on the fresh refs. Web only: touch platforms have no hover state, so hover-gated flows there need a different entry point.
+  hover moves the pointer without pressing so hover-gated UI (row toolbars, menus) appears; use --settle to read what it revealed, then act on the fresh refs. hover @ref hovers the browser element handle directly; pair --settle with a selector or coordinates (web refs carry no geometry, as with click @ref --settle). Web only: touch platforms have no hover state, so hover-gated flows there need a different entry point.
 
 Out of scope for agent-device web support:
   Browser runtime debugging, tabs/windows/devtools control, network routing/interception/HAR, storage/cookie management, arbitrary page scripting, downloads/uploads, multi-page orchestration, and agent-browser-specific diagnostics. Use agent-browser directly for those browser-specific workflows.

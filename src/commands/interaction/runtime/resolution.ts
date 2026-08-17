@@ -48,7 +48,13 @@ import type {
   ResolutionDisclosure,
   ResolvedInteractionTarget,
 } from '@agent-device/contracts/interaction';
+import type {
+  BackendActionResult,
+  BackendCommandContext,
+  BackendRefTarget,
+} from '../../../backend.ts';
 import { now, toBackendContext } from '../../runtime-common.ts';
+import { toBackendResult } from '../../runtime-types.ts';
 import { resolveInteractionTouchPoint } from '../../../core/interaction-touch-point.ts';
 import {
   localIdentitiesEqual,
@@ -453,7 +459,12 @@ function assertReplayTargetResolution(
 const RESOLUTION_DIAGNOSTIC_STRING_BYTE_CAP = 256;
 const MAX_RESOLUTION_ALTERNATIVES = 5;
 
-/** A successful `@ref` lookup names exactly one node; label recovery discloses label-fallback instead. */
+/**
+ * A successful `@ref` lookup names exactly one node; label recovery discloses label-fallback instead.
+ * Exported as an ADR 0011 registry anchor: interaction-guarantees.ts cites it as a `via`
+ * symbol and the gate test imports it dynamically, which fallow cannot trace statically.
+ */
+// fallow-ignore-next-line unused-export
 export const EXACT_REF_RESOLUTION: ResolutionDisclosure = {
   source: 'ref',
   phase: 'pre-action',
@@ -925,7 +936,12 @@ function scrollRevealClause(direction: OffscreenScrollDirection | null): string 
  * a would-be off-screen refusal may spend one extra iOS runner round trip
  * (#1542's double-check) before erroring — cost only on the path that was
  * about to fail anyway.
+ *
+ * Exported as an ADR 0011 registry anchor (interaction-guarantees.ts `via`
+ * symbol, imported dynamically by the gate test); production callers reach
+ * it through `dispatchNativeRefInteraction`.
  */
+// fallow-ignore-next-line unused-export
 export async function preflightNativeRefInteraction(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
@@ -969,6 +985,42 @@ export async function preflightNativeRefInteraction(
     // evidence source for the fast path, at zero extra capture cost.
     node: visibleNode,
     preActionNodes: nodes,
+  };
+}
+
+/**
+ * ADR 0011 native-ref dispatch, shared by click/fill/hover @ref: run the
+ * preflight guards against the stored node, hand the ref to the backend as
+ * its own element handle, and return the exact-ref result envelope. Callers
+ * decide WHEN the path applies (backend capability, no non-default options,
+ * no replay guard, no settle baseline); this owns only the dispatch itself so
+ * the three commands cannot drift on preflight or disclosure.
+ */
+export async function dispatchNativeRefInteraction(
+  runtime: AgentDeviceRuntime,
+  options: CommandContext,
+  target: Extract<InteractionTarget, { kind: 'ref' }>,
+  action: InteractionAction,
+  dispatch: (
+    context: BackendCommandContext,
+    refTarget: BackendRefTarget,
+  ) => Promise<BackendActionResult>,
+): Promise<
+  Extract<ResolvedInteractionTarget, { kind: 'ref' }> & { backendResult?: Record<string, unknown> }
+> {
+  const preflight = await preflightNativeRefInteraction(runtime, options, target, action);
+  const backendResult = await dispatch(toBackendContext(runtime, options), {
+    kind: 'ref',
+    ref: target.ref,
+    ...(target.fallbackLabel ? { fallbackLabel: target.fallbackLabel } : {}),
+  });
+  const formattedBackendResult = toBackendResult(backendResult);
+  return {
+    kind: 'ref',
+    target: { kind: 'ref', ref: target.ref },
+    resolution: EXACT_REF_RESOLUTION,
+    ...preflight,
+    ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
   };
 }
 
