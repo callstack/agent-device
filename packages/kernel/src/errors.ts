@@ -134,7 +134,7 @@ export function throwDaemonError(error: DaemonError): never {
  * cancellation through untouched (retry loops, provider adapters, runner
  * transports) dispatches on the same typed reason.
  */
-export const REQUEST_CANCELED_REASON = 'request_canceled';
+const REQUEST_CANCELED_REASON = 'request_canceled';
 const REQUEST_CANCELED_MESSAGE = 'request canceled';
 const REQUEST_CANCELED_HINT =
   'The request was canceled intentionally (explicit cancel or client disconnect) — no retry is needed unless the cancellation was unintended.';
