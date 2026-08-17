@@ -8,9 +8,9 @@ import {
   openLifecycleRouteBindingViolations,
   prepareLifecycleRouteBindingViolations,
   runtimeLifecycleRouteBindingViolations,
-  snapshotPlatformPolicyBranchViolations,
   sourceExecutedUsingDeclarationViolations,
 } from './runtime-command-cutover-extensions.ts';
+import { snapshotPlatformPolicyBranchViolations } from './runtime-command-cutover-snapshot.ts';
 import { recordRuntimeDaemonMechanicsViolations } from './record-runtime-mechanics-policy.ts';
 import { retiredDispatchProjectionViolations } from './runtime-command-cutover-descriptor.ts';
 
