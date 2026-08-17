@@ -16,9 +16,11 @@ name: XCTest Nightly
 #   - Evidence: the list has never been re-derived since it was written by hand; the tests it
 #     omits have been dark for their whole life, so their current state is unmeasured. The
 #     first red night is the evidence this lane exists to produce.
-#   - Cost: one macOS job per night. The Apple runner build is shared with ios.yml's cache
-#     (identical inputs and build variant), so a night that follows a green ios.yml run pays
-#     only the boot + full-suite time on top of a cache restore. Adds nothing to any PR.
+#   - Cost: this is a public repository, so nothing here is billed. The real cost is one macOS
+#     concurrency slot per night. The Apple runner build shares ios.yml's cache (identical
+#     inputs and build variant), but scheduled runs only see DEFAULT-BRANCH caches, so the hit
+#     depends on ios.yml's `push: main` run having populated the cache at the same source
+#     hash — on a miss this lane also pays a full runner build. Adds nothing to any PR.
 #   - Kill criterion: when A7's classification lands — pure Swift decision tests moved to a
 #     fast unit target, stale tests deleted, the rest kept on the simulator — this lane goes
 #     if the surviving set is small enough to run on every PR.
@@ -49,8 +51,10 @@ jobs:
   full-suite:
     name: iOS Runner Full XCTest Suite
     runs-on: macos-26
-    # Generous on purpose: the PR lane's 37 tests are a few minutes inside an 80-minute job
-    # that also runs replays and E2E, and this lane's total is unmeasured until it has run.
+    # Provisional, and deliberately generous: this lane's wall time is unmeasured until it has
+    # run once, and two of the tests it newly reaches carry intentional 15s/6s waits. Tighten
+    # to roughly twice the first measured duration — a ceiling this loose turns a wedged run
+    # into two hours of held slot before anyone hears about it.
     timeout-minutes: 120
     env:
       # Must match ios.yml. The runtime version rides in the derived-data cache key, and
