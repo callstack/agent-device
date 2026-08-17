@@ -13,24 +13,13 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-black.svg)](LICENSE)
 [![Glama MCP server](https://glama.ai/mcp/servers/callstack/agent-device/badges/score.svg)](https://glama.ai/mcp/servers/callstack/agent-device)
 
-**Mobile app automation, testing, and verification for AI coding agents.** Available as a CLI, an official MCP server, and a typed Node.js API.
+**Mobile app automation and verification for AI coding agents.** Inspect, control, debug, and test apps through the CLI, built-in MCP server, or typed Node.js API.
 
-<!-- Intro rule: category line, job pitch with the platform list, works-with/proof line, nothing else. Per-platform transports, tool names, vendor lists, and support caveats belong in "How it works" and website/docs, never here. -->
+<!-- Intro rule: category line, job pitch with the platform list, works-with/proof line, nothing else. Per-platform transports, tool names, vendor lists, and support caveats belong in "How it works" and website/docs, never here. Every name in the proof line must link to public evidence. -->
 
 Let your coding agent verify its changes in the running app. `agent-device` lets agents inspect, control, debug, and verify apps on iOS, Android, and HarmonyOS (simulators, emulators, and physical devices), plus tvOS, Android TV, Amazon Vega OS TV (Vega Virtual Device), web, macOS, and Linux. Agents read token-efficient accessibility snapshots instead of reasoning over screenshots alone, act through refs and selectors, and save evidence for review. It also coordinates device access across parallel agent worktrees and connects to remote device clouds.
 
-Works with Claude Code, Codex, Cursor, Windsurf, Cline, Goose, and any agent that can run a CLI or connect over MCP. Teams at JPMorgan Chase, Expensify, Shopify, and [others](#who-uses-agent-device) use it to verify their apps.
-
-## What agents can do
-
-- **Inspect app state** through accessibility snapshots, refs, selectors, and React Native component trees.
-- **Act on visible UI** by tapping or pressing elements, filling fields, scrolling, making gestures, waiting, asserting state, and handling alerts.
-- **Diagnose failures** with screenshots, video, logs, traces, network data, performance samples, crash details, and React profiles.
-- **Repeat workflows** by saving working steps as `.ad` scripts for local use or CI. Export strict Maestro YAML when needed.
-
-See [Commands](https://oss.callstack.com/agent-device/docs/commands) for the commands and evidence each target supports.
-
-![Diagram of the agentic development loop: humans assign tasks, agents write and review code, agent-device verifies mobile apps, pull requests receive evidence, and bugs or performance issues lead to fixes](./website/docs/public/agentic-development-loop.svg)
+Works with Claude Code, Codex, Cursor, Windsurf, Cline, Goose, and any agent that can run a CLI or connect over MCP. Developers at [Expensify](https://www.callstack.com/blog/how-expensify-uses-agent-device-for-mobile-bug-evidence-and-profiling), [Shopify](https://x.com/mustafa01ali/status/2036577353178943826), and [others](#who-uses-agent-device) use it to verify their apps.
 
 ## Quick start
 
@@ -115,6 +104,17 @@ await client.sessions.close();
 ```
 
 See the [Node.js API](https://oss.callstack.com/agent-device/docs/client-api) and the [runnable examples](https://github.com/callstack/agent-device/tree/main/examples/sdk) for typed error handling, batching, and the other public entry points.
+
+## What agents can do
+
+- **Inspect app state** through accessibility snapshots, refs, selectors, and React Native component trees.
+- **Act on visible UI** by tapping or pressing elements, filling fields, scrolling, making gestures, waiting, asserting state, and handling alerts.
+- **Diagnose failures** with screenshots, video, logs, traces, network data, performance samples, crash details, and React profiles.
+- **Repeat workflows** by saving working steps as `.ad` scripts for local use or CI. Export strict Maestro YAML when needed.
+
+See [Commands](https://oss.callstack.com/agent-device/docs/commands) for the commands and evidence each target supports.
+
+![Diagram of the agentic development loop: humans assign tasks, agents write and review code, agent-device verifies mobile apps, pull requests receive evidence, and bugs or performance issues lead to fixes](./website/docs/public/agentic-development-loop.svg)
 
 ## What to ask your agent
 
