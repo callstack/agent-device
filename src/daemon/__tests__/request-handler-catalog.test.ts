@@ -331,7 +331,7 @@ test('a lease allocated for a requester that left is released, not registered', 
         assert.ok(isRequestCanceledError(error));
         const details = (error as AppError).details ?? {};
         assert.equal(details.released, true);
-        assert.equal(details.providerReleased, true);
+        assert.equal(details.registryReleased, true);
         assert.match(String(details.providerSessionId), /^bs-/);
         return true;
       },
@@ -377,14 +377,55 @@ test('a failed provider release after cancellation is reported as unreleased wit
       (error: unknown) => {
         assert.ok(isRequestCanceledError(error));
         const details = (error as AppError).details ?? {};
-        assert.equal(details.released, true, 'the daemon lease record is gone either way');
-        assert.equal(details.providerReleased, false);
+        // `released` is the operator's answer: the billed session is NOT confirmed
+        // gone. Daemon bookkeeping is a separate, unambiguous key.
+        assert.equal(details.released, false);
+        assert.equal(details.registryReleased, true);
         assert.equal(details.providerSessionId, 'bs-live');
         assert.match(String(details.hint), /could NOT be confirmed released/);
         assert.match(String(details.hint), /bs-live/);
         assert.deepEqual(details.warnings, [
           { code: 'WEBDRIVER_SESSION_DELETE_FAILED', message: 'HTTP 502' },
         ]);
+        return true;
+      },
+    );
+  } finally {
+    clearRequestAbortRegistration(registration);
+  }
+});
+
+test('a throwing provider release after cancellation is reported as unreleased, not raised', async () => {
+  const leaseRegistry = new LeaseRegistry();
+  const sessionStore = makeSessionStore('agent-device-lease-gone-throw-');
+  const requestId = 'lease-alloc-gone-release-threw';
+  const registration = registerRequestAbort(requestId);
+
+  try {
+    await assert.rejects(
+      () =>
+        handleLeaseCommands({
+          req: leaseAllocateRequest(requestId),
+          sessionName: 'catalog-test',
+          sessionStore,
+          leaseRegistry,
+          leaseLifecycleProvider: {
+            allocate: async () => {
+              markRequestCanceled(requestId);
+              return { providerSessionId: 'bs-live' };
+            },
+            release: async () => {
+              throw new Error('hub unreachable');
+            },
+          },
+        }),
+      (error: unknown) => {
+        assert.ok(isRequestCanceledError(error), 'nobody is left to receive the release failure');
+        const details = (error as AppError).details ?? {};
+        assert.equal(details.released, false);
+        assert.equal(details.registryReleased, true);
+        assert.equal(details.releaseError, 'hub unreachable');
+        assert.match(String(details.hint), /could NOT be confirmed released/);
         return true;
       },
     );
