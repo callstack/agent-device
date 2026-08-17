@@ -12,6 +12,11 @@ import { handleLeaseCommands } from '../handlers/lease.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { runRequestHandlerChain } from '../request-handler-chain.ts';
 import {
+  clearRequestAbortRegistration,
+  markRequestCanceled,
+  registerRequestAbort,
+} from '../../request/cancel.ts';
+import {
   unavailableBindDevice,
   unavailableBindExactDevice,
   unavailableInspectFacts,
@@ -93,7 +98,6 @@ test('lease handler executes commands owned by the lease route', async () => {
       sessionName: 'catalog-test',
       sessionStore,
       leaseRegistry,
-      requestSignal: new AbortController().signal,
     });
 
     assert.notEqual(response, null, `${command} should be handled by lease handler`);
@@ -121,7 +125,6 @@ test('lease handler preserves device-aware lease fields', async () => {
     sessionName: 'catalog-test',
     sessionStore,
     leaseRegistry,
-    requestSignal: new AbortController().signal,
   });
 
   assert.equal(allocateResponse?.ok, true);
@@ -149,7 +152,6 @@ test('lease handler preserves device-aware lease fields', async () => {
     sessionName: 'catalog-test',
     sessionStore,
     leaseRegistry,
-    requestSignal: new AbortController().signal,
   });
 
   assert.equal(heartbeatResponse?.ok, true);
@@ -170,7 +172,6 @@ test('lease artifacts lists daemon inventory for proxy lease scopes', async () =
       sessionName: 'catalog-test',
       sessionStore,
       leaseRegistry,
-      requestSignal: new AbortController().signal,
     });
 
     assertProxyLeaseArtifactInventory(response, tracked.artifactId);
@@ -201,7 +202,6 @@ test('lease release calls provider hook using the released lease without heartbe
     sessionName: 'catalog-test',
     sessionStore,
     leaseRegistry,
-    requestSignal: new AbortController().signal,
   });
   assert.equal(allocateResponse?.ok, true);
   const lease = readLeaseResponse(allocateResponse);
@@ -230,7 +230,6 @@ test('lease release calls provider hook using the released lease without heartbe
         return { provider: releasedLease.leaseProvider };
       },
     },
-    requestSignal: new AbortController().signal,
   });
 
   assert.equal(releaseResponse?.ok, true);
@@ -246,47 +245,54 @@ test('lease release calls provider hook using the released lease without heartbe
 // on client disconnect, release the billed session it produced instead of
 // orphaning it. If the daemon dropped either, the provider would have no way to
 // know the requester is gone.
-test('lease allocation passes the request signal and a deadline to the provider', async () => {
+test('lease allocation hands the provider the request-bound signal and a deadline', async () => {
   const leaseRegistry = new LeaseRegistry();
   const sessionStore = makeSessionStore('agent-device-lease-ownership-');
-  const requestSignal = new AbortController().signal;
+  // The signal must be the one bound to THIS request id (aborted on cancel or
+  // client disconnect), so the provider can release a session it produced for a
+  // requester that left — not an inert placeholder.
+  const requestId = 'lease-alloc-cancel-req';
+  const registration = registerRequestAbort(requestId);
   const before = Date.now();
   let observed: { signal?: AbortSignal; deadline?: number } | undefined;
 
-  const response = await handleLeaseCommands({
-    req: {
-      command: INTERNAL_COMMANDS.leaseAllocate,
-      token: 'test-token',
-      session: 'catalog-test',
-      meta: {
-        tenantId: 'tenant-a',
-        runId: 'run-a',
-        leaseBackend: 'android-instance',
-        leaseProvider: 'fake-provider',
+  try {
+    const response = await handleLeaseCommands({
+      req: {
+        command: INTERNAL_COMMANDS.leaseAllocate,
+        token: 'test-token',
+        session: 'catalog-test',
+        meta: {
+          requestId,
+          tenantId: 'tenant-a',
+          runId: 'run-a',
+          leaseBackend: 'android-instance',
+          leaseProvider: 'fake-provider',
+        },
+        positionals: [],
       },
-      positionals: [],
-    },
-    sessionName: 'catalog-test',
-    sessionStore,
-    leaseRegistry,
-    leaseLifecycleProvider: {
-      allocate: async (_lease, context) => {
-        observed = { signal: context?.signal, deadline: context?.deadline };
-        return { provider: 'fake-provider' };
+      sessionName: 'catalog-test',
+      sessionStore,
+      leaseRegistry,
+      leaseLifecycleProvider: {
+        allocate: async (_lease, context) => {
+          observed = { signal: context?.signal, deadline: context?.deadline };
+          return { provider: 'fake-provider' };
+        },
       },
-    },
-    requestSignal,
-  });
-  const after = Date.now();
+    });
 
-  assert.equal(response?.ok, true);
-  assert.equal(observed?.signal, requestSignal);
-  assert.ok(
-    typeof observed?.deadline === 'number' &&
-      observed.deadline > before &&
-      observed.deadline > after,
-    `allocation deadline must be a future instant, got ${String(observed?.deadline)}`,
-  );
+    assert.equal(response?.ok, true);
+    assert.equal(observed?.signal?.aborted, false);
+    markRequestCanceled(requestId);
+    assert.equal(observed?.signal?.aborted, true, 'the provider signal must track this request');
+    assert.ok(
+      typeof observed?.deadline === 'number' && observed.deadline > before,
+      `allocation deadline must be a future instant, got ${String(observed?.deadline)}`,
+    );
+  } finally {
+    clearRequestAbortRegistration(registration);
+  }
 });
 
 function catalogCommandsForRoute(route: Exclude<DaemonCommandRoute, 'generic'>): string[] {

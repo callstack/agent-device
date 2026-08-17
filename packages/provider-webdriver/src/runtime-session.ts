@@ -18,6 +18,7 @@ import { WebDriverClient, type WebDriverSession } from './webdriver-client.ts';
 import { isWebDriverRequestTimeout } from './webdriver-transport.ts';
 import { createWebDriverInteractor } from './webdriver-interactor.ts';
 import { snapshotBackendForPlatform } from './runtime-helpers.ts';
+import { errorMessage, releaseOnFailure } from './webdriver-utils.ts';
 import type {
   CloudWebDriverBaseSession,
   CloudWebDriverPlatform,
@@ -189,7 +190,7 @@ export class WebDriverSessionManager {
       const canceled = createRequestCanceledError(
         canceledAllocationEvidence(this.options.provider, lease),
       );
-      await cleanupAfterCreateSessionFailure(handle.prepared, canceled);
+      await releaseOnFailure(canceled, () => handle.prepared.cleanup?.());
       throw canceled;
     }
     const session = await this.createSessionOrCleanup(handle, lease, req);
@@ -212,7 +213,7 @@ export class WebDriverSessionManager {
       const failure = isWebDriverRequestTimeout(error)
         ? sessionCreateTimeoutError(error, this.options.provider, lease, handle.prepared)
         : error;
-      await cleanupAfterCreateSessionFailure(handle.prepared, failure);
+      await releaseOnFailure(failure, () => handle.prepared.cleanup?.());
       throw failure;
     }
   }
@@ -330,26 +331,6 @@ export function buildCloudWebDriverBaseCapabilities(
     'appium:deviceName': deviceName,
     ...configured,
   };
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-async function cleanupAfterCreateSessionFailure(
-  prepared: CloudWebDriverPreparedSession,
-  primaryError: unknown,
-): Promise<void> {
-  try {
-    await prepared.cleanup?.();
-  } catch (cleanupError) {
-    if (primaryError instanceof AppError) {
-      primaryError.details = {
-        ...primaryError.details,
-        cleanupError: errorMessage(cleanupError),
-      };
-    }
-  }
 }
 
 /**

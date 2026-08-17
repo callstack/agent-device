@@ -19,6 +19,7 @@ import {
 } from '../../core/lease-scope.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { LEASE_ALLOCATION_BUDGET_MS } from '../../core/command-descriptor/timeout-policy.ts';
+import { getRequestSignal } from '../../request/cancel.ts';
 import { listDownloadableArtifacts } from '../artifact-tracking.ts';
 
 type LeaseHandlerArgs = {
@@ -30,8 +31,6 @@ type LeaseHandlerArgs = {
   providerRuntimeRequiredIds?: readonly string[];
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
-  /** Request-bound cancellation, handed to the provider as ownership evidence for allocation. */
-  requestSignal: AbortSignal;
 };
 
 export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<DaemonResponse | null> {
@@ -44,7 +43,6 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     providerRuntimeRequiredIds,
     leaseLifecycleProvider,
     cloudArtifactProvider,
-    requestSignal,
   } = args;
   const leaseScope = resolveLeaseScope(req);
   switch (req.command) {
@@ -69,7 +67,10 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
       try {
         providerData = await leaseLifecycleProvider?.allocate?.(lease, {
           ...leaseLifecycleContext(req),
-          signal: requestSignal,
+          // Same source every sibling handler uses — aborts on explicit cancel
+          // or client disconnect. For allocation it is ownership evidence, not
+          // an interrupt (see LeaseLifecycleContext.signal).
+          signal: getRequestSignal(req.meta?.requestId),
           deadline: Date.now() + LEASE_ALLOCATION_BUDGET_MS,
         });
       } catch (error) {

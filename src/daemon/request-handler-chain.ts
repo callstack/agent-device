@@ -120,7 +120,6 @@ async function runLeaseHandler(
       providerRuntimeRequiredIds: params.providerRuntimeRequiredIds,
       leaseLifecycleProvider: params.leaseLifecycleProvider,
       cloudArtifactProvider: params.cloudArtifactProvider,
-      requestSignal: params.requestScope.signal,
     }),
   );
 }

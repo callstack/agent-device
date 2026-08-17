@@ -161,7 +161,11 @@ export class WebDriverTransport {
     try {
       const response = await fetch(new URL(trimLeadingSlash(path), this.endpoint), {
         method,
-        headers: this.requestHeaders(body),
+        headers: {
+          Accept: 'application/json',
+          ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+          ...this.headers,
+        },
         body: body === undefined ? undefined : JSON.stringify(body),
         signal,
       });
@@ -175,14 +179,6 @@ export class WebDriverTransport {
       }
       throw error;
     }
-  }
-
-  private requestHeaders(body: unknown): Record<string, string> {
-    return {
-      Accept: 'application/json',
-      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
-      ...this.headers,
-    };
   }
 }
 
