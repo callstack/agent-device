@@ -6,8 +6,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { CHECK_CATALOG } from '../check-affected/checks.ts';
 import { audit, formatFailures } from './audit.ts';
-import { loadModel, type Model } from './model.ts';
+import { MANUAL_ONLY_OWNERS } from './declarations.ts';
+import { covered, loadModel, type Model } from './model.ts';
 import { loadLanes } from './workflows.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
@@ -66,6 +68,22 @@ jobs:
   assert.ok(
     audit(model).some((failure) => /runs steps this loader never opens/.test(failure.message)),
   );
+});
+
+// The exemption is what keeps the tree green while these lanes are parked, so nothing else
+// would notice it going stale: a re-scheduled lane would silently keep its "nothing runs this"
+// declaration, and the next parked check would be waved through under a name that no longer
+// describes it.
+test('every manual-only declaration names a registered check no qualifying lane owns', () => {
+  for (const id of Object.keys(MANUAL_ONLY_OWNERS)) {
+    const spec = CHECK_CATALOG.find((entry) => entry.id === id);
+    assert.ok(spec, `manual-only declaration "${id}" names no registered check`);
+    assert.equal(
+      covered(spec, null, base).covered,
+      false,
+      `"${id}" is owned by a pull_request/schedule lane again — drop its MANUAL_ONLY_OWNERS entry`,
+    );
+  }
 });
 
 test('unknown assertion kinds remain visible in the report', () => {

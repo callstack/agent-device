@@ -421,8 +421,14 @@ The iOS lane combines three evidence layers instead of treating a catalog mentio
 
 - pull requests run a short JSON-asserting fixture smoke against the real built CLI, daemon, XCTest
   runner, and simulator;
-- the scheduled/manual nightly workflow adds device lifecycle, system UI, recording/trace, and
-  fixture replay scenarios without putting those slower operations on the pull-request merge gate;
+- `Replay Manual` (`.github/workflows/replays-manual.yml`) adds device lifecycle, system UI,
+  recording/trace, and fixture replay scenarios without putting those slower operations on the
+  pull-request merge gate. It is **`workflow_dispatch` only** since #1781 A1 — the suite failed
+  every scheduled run from 2026-07-24 on — so `replay-ios`, `replay-ios-device`, and
+  `replay-android` run when someone dispatches the workflow and at no other time. That gap is
+  declared in `scripts/gate/declarations.ts` (`MANUAL_ONLY_OWNERS`) and printed by
+  `pnpm check:gate-manifest` on every run; put the jobs back on a schedule once a dispatch run is
+  green and delete their entries;
 - command-contract, workflow-live, and capability-denial rows explicitly own functionality that
   requires remote sources, unavailable host permissions, or CI setup outside the app session.
 
@@ -471,7 +477,7 @@ AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE='agent-device-test-app:///automation?eve
 node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-ios-simulator-coverage.test.ts test/integration/smoke-ios-simulator.test.ts
 ```
 
-Use `AGENT_DEVICE_IOS_E2E_TIER=full` for the nightly subset. Step history, coverage reports,
+Use `AGENT_DEVICE_IOS_E2E_TIER=full` for the `Replay Manual` subset. Step history, coverage reports,
 screenshots, recordings, traces, and failure context are written below
 `test/artifacts/ios-simulator/` and uploaded by the existing shared artifact action. The six
 Settings replays remain additive OS-chrome coverage and are not modified by this suite.

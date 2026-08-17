@@ -88,6 +88,22 @@ test('lanes carry the workflow spelling the catalog used, and only real triggers
   assert.equal(deploy?.qualifying, false, 'a push-only lane gates nothing on the way in');
 });
 
+test('a workflow_dispatch-only lane owns nothing, however many gates it declares', () => {
+  const [lane] = planted({
+    '.github/workflows/planted.yml': `name: Planted
+on:
+  workflow_dispatch:
+jobs:
+  planted:
+    steps:
+      - uses: ./.github/actions/run-gate
+        with:
+          gate: replay-ios`,
+  });
+  assert.deepEqual(lane?.gates, ['replay-ios'], 'the gate is still read');
+  assert.equal(lane?.qualifying, false, 'but nothing dispatches itself, so it owns nothing');
+});
+
 test('a gate invoked from inside a composite action belongs to the calling lane', () => {
   const android = model.lanes.find((lane) => lane.label === 'Android / Smoke Tests');
   assert.ok(

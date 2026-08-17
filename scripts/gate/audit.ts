@@ -1,7 +1,7 @@
 // Structural owners, path reachability, and suite registration over the derived model.
 
 import { CHECK_CATALOG } from '../check-affected/checks.ts';
-import { REPORTING_SCRIPTS, UNPROVABLE_OWNERS } from './declarations.ts';
+import { MANUAL_ONLY_OWNERS, REPORTING_SCRIPTS, UNPROVABLE_OWNERS } from './declarations.ts';
 import { categories, checkUnits, covered, scriptUnits, type Model } from './model.ts';
 
 export type Failure = { readonly assertion: string; readonly message: string };
@@ -37,14 +37,17 @@ function fail(assertion: string, message: string): Failure {
   return { assertion, message };
 }
 
-// Every registered check is declared by some qualifying lane, unit by unit.
+// Every registered check is declared by some qualifying lane, unit by unit. The two declared
+// exemptions differ in kind: UNPROVABLE_OWNERS says "it runs, this loader cannot see it",
+// MANUAL_ONLY_OWNERS says "nothing runs it automatically" — and check.ts reports the latter by
+// name so the gap is read as a gap.
 function unowned(
   model: Model,
-  unprovable: Readonly<Record<string, string>> = UNPROVABLE_OWNERS,
+  exempt: Readonly<Record<string, string>> = { ...UNPROVABLE_OWNERS, ...MANUAL_ONLY_OWNERS },
 ): Failure[] {
   return CHECK_CATALOG.flatMap((spec) => {
     const result = covered(spec, null, model);
-    if (result.covered || spec.id in unprovable) return [];
+    if (result.covered || spec.id in exempt) return [];
     const missing = result.missing.length > 0 ? result.missing.join(', ') : '(no units resolved)';
     return [
       fail(
