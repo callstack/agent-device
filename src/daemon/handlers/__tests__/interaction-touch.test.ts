@@ -1,6 +1,7 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
+import { WEB_DESKTOP_DEVICE } from '../../../__tests__/test-utils/device-fixtures.ts';
 import { handleInteractionCommands } from '../interaction.ts';
 import {
   contextFromFlags,
@@ -11,7 +12,7 @@ import {
 } from './interaction-touch-fixtures.ts';
 
 // Router ownership: one representative per touch command proves
-// handleTouchInteractionCommands claims press/click/longpress/fill.
+// handleTouchInteractionCommands claims press/click/longpress/hover/fill.
 
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
@@ -225,4 +226,79 @@ test('longpress @ref resolves the target and dispatches coordinate longpress', a
   expect(mockDispatch.mock.calls[0]?.[1]).toBe('longpress');
   expect(mockDispatch.mock.calls[0]?.[2]).toEqual(['60', '40', '800']);
   expect(sessionStore.get(sessionName)?.actions[0]?.command).toBe('longpress');
+});
+
+// #1783: hover is the pointer-only member of the targeted-touch family. It rides
+// the same admission/resolution path as press/longpress but dispatches the
+// core `hover` verb, and only web admits it.
+test('hover @ref resolves the target and dispatches coordinate hover on web', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'hover-ref';
+  const session = makeSession(sessionName);
+  session.device = WEB_DESKTOP_DEVICE;
+  session.snapshot = {
+    nodes: attachRefs([
+      {
+        index: 0,
+        role: 'listitem',
+        label: 'Last message',
+        rect: { x: 10, y: 20, width: 100, height: 40 },
+        enabled: true,
+        hittable: true,
+      },
+    ]),
+    createdAt: Date.now(),
+    backend: 'web',
+  };
+  sessionStore.set(sessionName, session);
+
+  const response = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'hover',
+      positionals: ['@e1'],
+      flags: {},
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+  });
+
+  expect(response).toMatchObject({
+    ok: true,
+    data: { x: 60, y: 40, gesture: 'hover', message: expect.stringMatching(/Hovered @e1/) },
+  });
+  expect(mockDispatch.mock.calls).toEqual([
+    [expect.anything(), 'hover', ['60', '40'], undefined, expect.anything()],
+  ]);
+  expect(sessionStore.get(sessionName)?.actions[0]?.command).toBe('hover');
+});
+
+test('hover is refused by capability on touch platforms before any dispatch', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'hover-ios';
+  sessionStore.set(sessionName, makeSession(sessionName));
+
+  const response = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'hover',
+      positionals: ['100', '200'],
+      flags: {},
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+  });
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: {
+      code: 'UNSUPPORTED_OPERATION',
+      message: expect.stringMatching(/--platform web/),
+    },
+  });
+  expect(mockDispatch).not.toHaveBeenCalled();
 });

@@ -21,6 +21,7 @@ Start:
 
 Loop:
   press|click|fill|longpress <target> ... --settle
+  hover <target> --settle (web only; reveals hover-gated UI)
   scroll <direction|top|bottom> [amount] --settle; back --settle
     acts, waits for quiet, and prints the UI diff. Continue from that diff.
     Run snapshot -i only when the diff lacks the next target or did not settle.
@@ -37,7 +38,7 @@ Targets:
     Then screenshot, press <x> <y>, and re-snapshot on the changed screen.
 
 Rules:
-  --settle is only for press/click/fill/longpress/scroll/back; never open,
+  --settle is only for press/click/fill/longpress/hover/scroll/back; never open,
     snapshot, or close. type never accepts --settle.
   fill <target> <text> --settle replaces; type <text> appends after focus.
   Late network/debounce result: wait text "Expected", not snapshot polling.

@@ -24,12 +24,18 @@ import {
 import { errorResponse, noActiveSessionError, requireCommandSupported } from './response.ts';
 
 /**
- * Whether a targeted `press`/`click`/`longpress` may act, and on what: macOS
+ * Whether a targeted `press`/`click`/`longpress`/`hover` may act, and on what: macOS
  * surface and capability policy, click-option validation, target parsing, and
  * `@ref` staleness plus mutation admission (ADR 0014). Nothing here dispatches.
  */
 
-export type TargetedTouchCommand = 'press' | 'click' | 'longpress';
+export type TargetedTouchCommand = 'press' | 'click' | 'longpress' | 'hover';
+
+/** The family members that take `--button`; longpress and hover have no button. */
+const CLICK_BUTTON_COMMANDS: ReadonlySet<TargetedTouchCommand> = new Set(['press', 'click']);
+
+const HOVER_UNSUPPORTED_MESSAGE =
+  'hover is not supported on this device: hover is a pointer state that only web targets have (--platform web). Touch platforms have no hover; use longpress for hold gestures.';
 
 export type TargetedTouchParams = InteractionHandlerParams & {
   captureSnapshotForSession: CaptureSnapshotForSession;
@@ -102,13 +108,17 @@ function targetedTouchPolicyResponse(
   commandLabel: TargetedTouchCommand,
   flags: CommandFlags | undefined,
 ): DaemonResponse | undefined {
-  const capabilityCommand = command === 'longpress' ? 'longpress' : 'press';
+  const capabilityCommand = command === 'click' ? 'press' : command;
   const unsupportedSurfaceResponse = unsupportedMacOsDesktopSurfaceInteraction(
     session,
     commandLabel,
   );
   if (unsupportedSurfaceResponse) return unsupportedSurfaceResponse;
-  const unsupported = requireCommandSupported(capabilityCommand, session.device);
+  const unsupported = requireCommandSupported(
+    capabilityCommand,
+    session.device,
+    command === 'hover' ? { message: HOVER_UNSUPPORTED_MESSAGE } : undefined,
+  );
   if (unsupported) return unsupported;
   const invalidSettleFlags = settleFlagGuardResponse(command, flags);
   if (invalidSettleFlags) return invalidSettleFlags;
@@ -122,7 +132,7 @@ function clickButtonValidationResponse(
   flags: CommandFlags | undefined,
 ): DaemonResponse | undefined {
   const clickButton = resolveClickButton(flags);
-  if (command === 'longpress' || clickButton === 'primary') return undefined;
+  if (!CLICK_BUTTON_COMMANDS.has(command) || clickButton === 'primary') return undefined;
   const validationError = getClickButtonValidationError({
     commandLabel,
     platform: publicPlatformString(session.device),
@@ -184,7 +194,7 @@ async function admitTargetedTouchRef(
   const { req } = params;
   if (parsedTarget.target.kind !== 'ref') return {};
   const invalidRefFlagsResponse = params.refSnapshotFlagGuardResponse(
-    command === 'longpress' ? 'longpress' : 'press',
+    command === 'click' ? 'press' : command,
     req.flags,
   );
   if (invalidRefFlagsResponse) return { response: invalidRefFlagsResponse };

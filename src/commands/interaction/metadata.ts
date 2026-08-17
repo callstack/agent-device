@@ -62,6 +62,8 @@ const interactionCommandDescriptions = {
   fill: 'Replace text in a UI input selected by snapshot ref, selector, or coordinates. Prefer refs or selectors after snapshot; use recordAs to keep sensitive text out of a recorded replay while sending it to the live app.',
   longpress:
     'Hold a UI target by snapshot ref, selector, or coordinates to open a context menu or perform another hold gesture. Set durationMs when the default hold duration is unsuitable.',
+  hover:
+    'Move the pointer over a UI target by snapshot ref, selector, or coordinates without pressing, to reveal hover-gated UI such as row toolbars or menus. Web only; touch platforms have no hover state. Use settle to observe what the hover revealed without a follow-up snapshot.',
   swipe: 'Quick coordinate fling with optional repeat pattern.',
   focus:
     'Move input focus to explicit screen coordinates without entering text. Prefer semantic interactions when a snapshot ref or selector is available; use type or fill after focus.',
@@ -107,6 +109,12 @@ const longPressFields = {
   durationMs: integerField('Long press duration in milliseconds.', { min: 0 }),
   ...selectorSnapshotFields(),
   ...postActionObservationFields('longpress'),
+};
+
+const hoverFields = {
+  target: requiredField(interactionTargetField()),
+  ...selectorSnapshotFields(),
+  ...postActionObservationFields('hover'),
 };
 
 const swipeFields = {
@@ -207,6 +215,7 @@ export type ClickInput = InferCommandInput<typeof clickFields>;
 export type PressInput = InferCommandInput<typeof pressFields>;
 export type FillInput = InferCommandInput<typeof fillFields>;
 export type LongPressInput = InferCommandInput<typeof longPressFields>;
+export type HoverInput = InferCommandInput<typeof hoverFields>;
 export type GetInput = InferCommandInput<typeof getFields>;
 
 export type PanInput = CommonCommandInput & PanGesturePayload;
@@ -246,6 +255,7 @@ export const interactionCommandMetadata = [
     readInput: (input) => readFieldInput(input, fillFields),
   }),
   defineInteractionCommandMetadata('longpress', longPressFields),
+  defineInteractionCommandMetadata('hover', hoverFields),
   defineInteractionCommandMetadata('swipe', swipeFields),
   defineInteractionCommandMetadata('focus', focusFields),
   defineInteractionCommandMetadata('type', typeFields),

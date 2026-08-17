@@ -396,6 +396,12 @@ export const COMMAND_OUTPUT_SCHEMAS = {
       gesture: constSchema('longpress'),
     },
   }),
+  hover: interactionResponseDataSchema({
+    properties: {
+      settle: settleObservationSchema,
+      gesture: constSchema('hover'),
+    },
+  }),
   find: objectSchema(
     {
       ref: stringSchema('Snapshot ref without the @ prefix when the find action returns one.'),

@@ -65,7 +65,9 @@ function buildPointTouchMessage(
   extra: Record<string, unknown> | undefined,
   pointSuffix: string,
 ): string {
-  return extra?.gesture === 'longpress' ? `Long pressed${pointSuffix}` : `Tapped${pointSuffix}`;
+  if (extra?.gesture === 'longpress') return `Long pressed${pointSuffix}`;
+  if (extra?.gesture === 'hover') return `Hovered${pointSuffix}`;
+  return `Tapped${pointSuffix}`;
 }
 
 function buildTouchTargetMessage(
@@ -76,6 +78,9 @@ function buildTouchTargetMessage(
   const button = typeof extra.button === 'string' ? extra.button : undefined;
   if (extra.gesture === 'longpress') {
     return `Long pressed ${label}${pointSuffix}`;
+  }
+  if (extra.gesture === 'hover') {
+    return `Hovered ${label}${pointSuffix}`;
   }
   if (button && button !== 'primary') {
     return `Clicked ${button} ${label}${pointSuffix}`;

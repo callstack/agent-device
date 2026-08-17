@@ -1,5 +1,6 @@
 import type {
   DragGestureInput,
+  HoverCommandResult,
   LongPressCommandResult,
   ResolutionDisclosure,
   ScrollDirection,
@@ -113,6 +114,14 @@ export type LongPressCommandOptions = CommandContext & {
 
 export type { LongPressCommandResult };
 
+export type HoverCommandOptions = CommandContext & {
+  target: InteractionTarget;
+  /** ADR 0012 step 4: replay-only post-resolution guard; see resolution.ts. */
+  expectedResolvedTarget?: ExpectedResolvedTarget;
+} & SettlePostActionObservationOptions;
+
+export type { HoverCommandResult };
+
 export type GestureDirection = ScrollDirection;
 // The input vocabulary lives in contracts/scroll-gesture.ts beside the other scroll vocabularies,
 // so the public API can declare `ScrollOptions` without depending on this command runtime.
@@ -213,6 +222,40 @@ export const longPressCommand: RuntimeCommand<
       ...(durationMs !== undefined ? { durationMs } : {}),
       ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
       ...successText(`Long pressed (${point.x}, ${point.y})`),
+    },
+    observation,
+  );
+};
+
+export const hoverCommand: RuntimeCommand<HoverCommandOptions, HoverCommandResult> = async (
+  runtime,
+  options,
+): Promise<HoverCommandResult> => {
+  const observation = planPostActionObservation(options);
+  // Hover keeps the element it resolved (no hittable-ancestor promotion): the
+  // pointer only has to enter the matched node's box for its hover state to
+  // raise, and promoting could move it onto a sibling-owned region.
+  const resolved = await resolveInteractionTarget(runtime, options, {
+    action: 'hover',
+    requireInteractive: false,
+    pipeline: SELECTOR_PIPELINE_POLICIES.resolvedTarget,
+    captureEvidenceBaseline: observation.needsPreActionBaseline,
+    expectedResolvedTarget: options.expectedResolvedTarget,
+  });
+  if (!runtime.backend.hover) {
+    throw new AppError('UNSUPPORTED_OPERATION', 'hover is not supported by this backend');
+  }
+  const point = requireResolvedPoint(resolved);
+  const backendResult = await runtime.backend.hover(toBackendContext(runtime, options), point);
+  const formattedBackendResult = toBackendResult(backendResult);
+  return await applyPostActionObservation(
+    runtime,
+    options,
+    resolved,
+    {
+      ...resolved,
+      ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
+      ...successText(`Hovered (${point.x}, ${point.y})`),
     },
     observation,
   );

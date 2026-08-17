@@ -46,6 +46,7 @@ test('agent-browser provider maps supported operations to session-scoped JSON co
       await provider.setViewport(1280, 900);
       await provider.click(10.4, 20.6);
       await provider.clickRef?.('@e3');
+      await provider.hover?.(30.2, 40.7);
       await provider.fill(11, 22, 'Ada');
       await provider.fillRef?.('@e2', 'Grace');
       await provider.typeText('hello');
@@ -70,6 +71,8 @@ test('agent-browser provider maps supported operations to session-scoped JSON co
         ['mouse', 'down', '--json', '--session', 'web-session'],
         ['mouse', 'up', '--json', '--session', 'web-session'],
         ['click', '@e3', '--json', '--session', 'web-session'],
+        // hover is a bare pointer move: no button transition follows (#1783).
+        ['mouse', 'move', '30', '41', '--json', '--session', 'web-session'],
         ['mouse', 'move', '11', '22', '--json', '--session', 'web-session'],
         ['mouse', 'down', '--json', '--session', 'web-session'],
         ['mouse', 'up', '--json', '--session', 'web-session'],

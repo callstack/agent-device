@@ -84,6 +84,7 @@ export const interactionCliOutputFormatters = {
   press: resultOutput(tapCliOutput),
   fill: messageWithSettleOutput,
   longpress: messageWithSettleOutput,
+  hover: messageWithSettleOutput,
   scroll: messageWithSettleOutput,
   get: ({ input, result }) =>
     getCliOutput({

@@ -19,6 +19,8 @@ export async function handleTouchInteractionCommands(
       return await dispatchTargetedTouchViaRuntime(params, 'click');
     case 'longpress':
       return await dispatchTargetedTouchViaRuntime(params, 'longpress');
+    case 'hover':
+      return await dispatchTargetedTouchViaRuntime(params, 'hover');
     case 'fill':
       return await dispatchFillViaRuntime(params);
     default:

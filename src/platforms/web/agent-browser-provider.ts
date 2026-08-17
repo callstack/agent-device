@@ -69,6 +69,9 @@ export function createAgentBrowserWebProvider(
     async click(x, y) {
       await clickCoordinates(runJson, x, y);
     },
+    async hover(x, y) {
+      await movePointer(runJson, x, y);
+    },
     async clickRef(ref) {
       await runJson(['click', browserRefSelector(ref)]);
     },
@@ -164,9 +167,17 @@ async function clickCoordinates(
   x: number,
   y: number,
 ): Promise<void> {
-  await runJson(['mouse', 'move', String(Math.round(x)), String(Math.round(y))]);
+  await movePointer(runJson, x, y);
   await runJson(['mouse', 'down']);
   await runJson(['mouse', 'up']);
+}
+
+async function movePointer(
+  runJson: (args: string[]) => Promise<unknown>,
+  x: number,
+  y: number,
+): Promise<void> {
+  await runJson(['mouse', 'move', String(Math.round(x)), String(Math.round(y))]);
 }
 
 async function captureAgentBrowserSnapshot(

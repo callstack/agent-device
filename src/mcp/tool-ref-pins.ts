@@ -100,6 +100,7 @@ const TARGET_REF_TOOLS: ReadonlySet<CommandName> = new Set([
   'click',
   'fill',
   'longpress',
+  'hover',
   'get',
 ] as const);
 

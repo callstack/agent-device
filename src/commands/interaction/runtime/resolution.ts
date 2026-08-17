@@ -125,6 +125,7 @@ export type InteractionAction =
   | 'fill'
   | 'focus'
   | 'longPress'
+  | 'hover'
   | 'scroll'
   | 'swipe'
   | 'pinch'
@@ -657,6 +658,8 @@ function interactionVerb(action: InteractionAction): string {
       return 'be focused';
     case 'longPress':
       return 'be long-pressed';
+    case 'hover':
+      return 'be hovered';
     default:
       return 'be tapped';
   }

@@ -423,6 +423,7 @@ test('targetIdentityVerification pins exactly the evidence-carrying command set 
       ['fill', 'pre-dispatch'],
       ['gesture', 'pre-dispatch'],
       ['get', 'pre-dispatch'],
+      ['hover', 'pre-dispatch'],
       ['is', 'pre-dispatch'],
       ['longpress', 'pre-dispatch'],
       ['press', 'pre-dispatch'],

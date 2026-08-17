@@ -195,6 +195,12 @@ export type Interactor = {
   tapElementSelector?(selector: ElementSelectorTapOptions): Promise<Record<string, unknown> | void>;
   doubleTap(x: number, y: number): Promise<Record<string, unknown> | void>;
   longPress(x: number, y: number, durationMs?: number): Promise<Record<string, unknown> | void>;
+  /**
+   * Move the pointer to a point without pressing. Only pointer-driven
+   * platforms (web today) implement it; touch platforms have no hover state
+   * and leave it undefined, which the `hover` command reports as unsupported.
+   */
+  hover?(x: number, y: number): Promise<Record<string, unknown> | void>;
   focus(x: number, y: number): Promise<Record<string, unknown> | void>;
   type(text: string, delayMs?: number): Promise<TypeTextBackendResult | void>;
   fillElementSelector?(

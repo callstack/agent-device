@@ -79,6 +79,7 @@ test('daemon-preserving timeout commands are a bounded, reviewed set', () => {
     'fill',
     'find',
     'get',
+    'hover',
     'is',
     'longpress',
     'press',

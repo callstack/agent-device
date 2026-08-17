@@ -64,6 +64,11 @@ export type LongPressOptions = DeviceCommandBaseOptions &
     durationMs?: number;
   };
 
+export type HoverOptions = DeviceCommandBaseOptions &
+  SelectorSnapshotCommandOptions &
+  InteractionTarget &
+  SettleCommandOptions;
+
 export type SwipeOptions = DeviceCommandBaseOptions & {
   from: { x: number; y: number };
   to: { x: number; y: number };

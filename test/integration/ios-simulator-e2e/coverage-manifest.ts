@@ -195,6 +195,14 @@ export const IOS_SIMULATOR_E2E_COVERAGE = {
     'smoke:form-input',
     'AX-independent first-responder typing appends and is read back from a focused fixture field',
   ),
+  [C.hover]: {
+    assertion: 'iOS simulator capability model rejects hover, a pointer-only web contract',
+    level: 'capability-denial',
+    owner: {
+      path: 'test/integration/smoke-ios-simulator-coverage.test.ts',
+      test: 'capability classifications match executable simulator behavior',
+    },
+  },
   [C.viewport]: {
     assertion: 'iOS simulator capability model rejects viewport resizing, a web-only contract',
     level: 'capability-denial',

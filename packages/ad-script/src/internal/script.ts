@@ -463,10 +463,11 @@ function parseReplayScriptLine(line: string): SessionAction | null {
     return action;
   }
 
-  // wait @ref [timeout] and longpress @ref [durationMs] flow through this
-  // generic branch: strip recorded generation pins like the branches above.
+  // wait @ref [timeout], longpress @ref [durationMs], and hover @ref flow
+  // through this generic branch: strip recorded generation pins like the
+  // branches above.
   action.positionals =
-    command === 'wait' || command === 'longpress'
+    command === 'wait' || command === 'longpress' || command === 'hover'
       ? args.map((token) => stripRecordedRefGeneration(token))
       : args;
   return action;

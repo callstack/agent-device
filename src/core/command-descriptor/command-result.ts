@@ -18,6 +18,7 @@ import type {
   FindCommandResponseData,
   HomeCommandResult,
   KeyboardCommandResult,
+  HoverCommandResponseData,
   LongPressCommandResponseData,
   OrientationCommandResult,
   PressCommandResponseData,
@@ -52,6 +53,7 @@ export interface CommandResultMap {
   click: ClickCommandResponseData;
   fill: FillCommandResponseData;
   longpress: LongPressCommandResponseData;
+  hover: HoverCommandResponseData;
   find: FindCommandResponseData;
   boot: BootCommandResult;
   shutdown: ShutdownCommandResult;

@@ -357,6 +357,7 @@ const REPLAY_SCRIPT_LINE_PLANS = {
       .map(([target, button]) => `press ${target} --button ${button}`),
   ),
   longpress: scriptTargetArb.map((target) => `longpress ${target}`),
+  hover: scriptTargetArb.map((target) => `hover ${target}`),
   wait: fc
     .tuple(scriptTargetArb, fc.integer({ min: 100, max: 5000 }))
     .map(([target, timeout]) => `wait ${target} ${timeout}`),

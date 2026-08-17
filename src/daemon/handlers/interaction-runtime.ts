@@ -168,6 +168,18 @@ function createInteractionBackend(
         ),
       );
     },
+    hover: async (_context, point): Promise<BackendActionResult> => {
+      expireRefFrame(session);
+      return toBackendActionResult(
+        await dispatchCommand(
+          session.device,
+          'hover',
+          [String(point.x), String(point.y)],
+          req.flags?.out,
+          params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
+        ),
+      );
+    },
     performGesture: async (_context, plan): Promise<BackendActionResult> => {
       expireRefFrame(session);
       return toBackendActionResult(

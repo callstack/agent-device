@@ -14,6 +14,7 @@ const SETTLE_OBSERVATION_COMMANDS = [
   PUBLIC_COMMANDS.click,
   PUBLIC_COMMANDS.fill,
   PUBLIC_COMMANDS.longPress,
+  PUBLIC_COMMANDS.hover,
   PUBLIC_COMMANDS.press,
   PUBLIC_COMMANDS.scroll,
   PUBLIC_COMMANDS.back,
@@ -33,6 +34,10 @@ test('post-action observation descriptor traits are the source for settle comman
   assert.equal(resolveCommandPostActionObservationSupport('fill'), 'settle-and-verify');
   assert.equal(resolveCommandPostActionObservationSupport('longpress'), 'settle');
   assert.equal(commandSupportsVerifyEvidence('longpress'), false);
+  // #1783: hover reveals UI instead of activating a target, so the settled
+  // diff is the observation and there is no --verify digest.
+  assert.equal(resolveCommandPostActionObservationSupport('hover'), 'settle');
+  assert.equal(commandSupportsVerifyEvidence('hover'), false);
   // #1638: the generic-route pair resolves no element, so there is nothing to
   // digest into --verify evidence — the settled diff IS the observation.
   assert.equal(resolveCommandPostActionObservationSupport('scroll'), 'settle');

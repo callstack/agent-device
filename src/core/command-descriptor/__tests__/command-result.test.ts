@@ -139,6 +139,7 @@ test('CommandResultMap is seeded only from already-existing contract result type
     | 'click'
     | 'fill'
     | 'longpress'
+    | 'hover'
     | 'find'
     | 'boot'
     | 'shutdown'

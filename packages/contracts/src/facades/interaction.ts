@@ -85,6 +85,8 @@ export type {
   FillCommandResponseData,
   FillCommandResult,
   FindCommandResponseData,
+  HoverCommandResponseData,
+  HoverCommandResult,
   InteractionEvidence,
   InteractionTarget,
   LongPressCommandResponseData,

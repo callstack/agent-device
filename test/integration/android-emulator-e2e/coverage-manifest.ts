@@ -195,6 +195,10 @@ export const ANDROID_EMULATOR_E2E_COVERAGE = {
     level: 'capability-denial',
   },
   [C.type]: live('smoke:form-input', 'typed suffix is read back from focused Android field'),
+  [C.hover]: {
+    assertion: 'Android emulator capability model rejects hover, a pointer-only web contract',
+    level: 'capability-denial',
+  },
   [C.viewport]: {
     assertion: 'Android emulator capability model rejects standalone viewport control',
     level: 'capability-denial',

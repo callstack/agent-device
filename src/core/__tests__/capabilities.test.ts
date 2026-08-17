@@ -206,6 +206,24 @@ test('viewport resizing is admitted only on web, where a backend exists', () => 
   assert.equal(unsupportedHintForDevice('viewport', webDevice), undefined);
 });
 
+// #1783: hover is a pointer state, so it is admitted exactly where a pointer
+// exists (the web backend's mouse move) and denied on every touch platform.
+test('hover is admitted only on web, where a pointer backend exists', () => {
+  assertCommandSupport(
+    ['hover'],
+    [
+      { device: webDevice, expected: true, label: 'on web' },
+      { device: iosSimulator, expected: false, label: 'on iOS simulator' },
+      { device: iosDevice, expected: false, label: 'on iOS device' },
+      { device: macOsDevice, expected: false, label: 'on macOS' },
+      { device: tvOsSimulator, expected: false, label: 'on tvOS simulator' },
+      { device: androidDevice, expected: false, label: 'on Android device' },
+      { device: androidEmulator, expected: false, label: 'on Android emulator' },
+      { device: linuxDevice, expected: false, label: 'on linux' },
+    ],
+  );
+});
+
 test('capabilities reject CoreDevice-only commands for XCTest-backed devices', () => {
   // Runtime-backed logs and record admission are proven from exact device facts in
   // their handler/runtime tests, never through this legacy matrix projection.
@@ -336,6 +354,7 @@ test('web supports only the initial browser interaction slice', () => {
       'focus',
       'find',
       'get',
+      'hover',
       'is',
       'press',
       'record',

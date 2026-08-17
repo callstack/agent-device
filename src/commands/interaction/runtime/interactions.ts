@@ -34,10 +34,12 @@ import {
   type InteractionTarget,
 } from './resolution.ts';
 
-export { focusCommand, longPressCommand, scrollCommand } from './gestures.ts';
+export { focusCommand, hoverCommand, longPressCommand, scrollCommand } from './gestures.ts';
 export type {
   FocusCommandOptions,
   FocusCommandResult,
+  HoverCommandOptions,
+  HoverCommandResult,
   LongPressCommandOptions,
   LongPressCommandResult,
   ScrollCommandOptions,

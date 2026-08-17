@@ -592,6 +592,13 @@ test('writeSessionLog optimizes selector chains and scopes fallback snapshots', 
       durationMs: 800,
     },
   });
+  // #1783: hover @ref publishes as a portable selector line like click/longpress.
+  fixture.store.recordAction(fixture.session, {
+    command: 'hover',
+    positionals: ['@e4~s12'],
+    flags: { platform: 'web', settle: true },
+    result: { selectorChain: ['text="Second message"', 'role=link'] },
+  });
   fixture.store.recordAction(fixture.session, {
     command: 'fill',
     positionals: ['@e2', 'hello world'],
@@ -604,6 +611,7 @@ test('writeSessionLog optimizes selector chains and scopes fallback snapshots', 
   assertScriptMatches(script, [
     /click "text=\\"Continue\\" \|\| role=button" --count 2/,
     /longpress "label=\\"Last message\\" \|\| role=\\"statictext\\"" 800/,
+    /hover "text=\\"Second message\\" \|\| role=link"\n/,
     /snapshot -i -s "Email"/,
     /fill @e2 "Email" "hello world" --delay-ms 5/,
   ]);

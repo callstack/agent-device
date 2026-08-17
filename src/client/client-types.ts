@@ -92,6 +92,7 @@ import type {
   FlingOptions,
   FocusOptions,
   GetOptions,
+  HoverOptions,
   IsOptions,
   KeyboardCommandOptions,
   Lease,
@@ -271,6 +272,7 @@ export type AgentDeviceClient = {
     click: (options: ClickOptions) => Promise<CommandResult<'click'>>;
     press: (options: PressOptions) => Promise<CommandResult<'press'>>;
     longPress: (options: LongPressOptions) => Promise<CommandResult<'longpress'>>;
+    hover: (options: HoverOptions) => Promise<CommandResult<'hover'>>;
     swipe: (options: SwipeOptions) => Promise<CommandRequestResult>;
     pan: (options: PanOptions) => Promise<CommandRequestResult>;
     drag: (options: DragOptions) => Promise<CommandRequestResult>;

@@ -11,6 +11,9 @@ const POST_ACTION_OBSERVATION_BY_COMMAND = {
   press: 'settle-and-verify',
   fill: 'settle-and-verify',
   longpress: 'settle',
+  // Hover reveals UI (toolbars, menus) rather than activating a target, so the
+  // settled diff is the observation; nothing to re-digest into --verify.
+  hover: 'settle',
   scroll: 'settle',
   back: 'settle',
 } as const satisfies Record<string, PostActionObservationSupport>;

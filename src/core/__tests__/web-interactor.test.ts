@@ -30,6 +30,9 @@ test('web interactor delegates first-slice operations to the scoped provider', a
     async click(x, y) {
       calls.push(`click:${x}:${y}`);
     },
+    async hover(x, y) {
+      calls.push(`hover:${x}:${y}`);
+    },
     async fill(x, y, text, options) {
       calls.push(`fill:${x}:${y}:${text}:${options?.delayMs ?? 0}`);
     },
@@ -46,6 +49,7 @@ test('web interactor delegates first-slice operations to the scoped provider', a
     await interactor.open('app-shell', { url: 'https://example.test/deep' });
     await interactor.close('app-shell');
     await interactor.tap(10, 20);
+    await interactor.hover?.(30, 40);
     await interactor.focus(11, 21);
     await interactor.fill(12, 22, 'hello', 5);
     await interactor.type('world', 6);
@@ -60,6 +64,7 @@ test('web interactor delegates first-slice operations to the scoped provider', a
     'open:https://example.test/deep:https://example.test/deep',
     'close:app-shell',
     'click:10:20',
+    'hover:30:40',
     'click:11:21',
     'fill:12:22:hello:5',
     'type:world:6',
@@ -71,6 +76,17 @@ test('web interactor delegates first-slice operations to the scoped provider', a
   assert.equal(snapshot.backend, 'web');
   assert.equal(snapshot.truncated, true);
   assert.deepEqual(snapshot.nodes, [{ index: 0, role: 'button', label: 'Submit' }]);
+});
+
+test('web interactor reports hover unsupported when the provider lacks it', async () => {
+  const interactor = createWebInteractor();
+  await assert.rejects(
+    () => withWebProvider(makeWebProvider(), async () => await interactor.hover?.(1, 2)),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'UNSUPPORTED_OPERATION' &&
+      error.message === 'hover is not supported by this web provider',
+  );
 });
 
 test('web interactor reports unsupported operations explicitly', async () => {

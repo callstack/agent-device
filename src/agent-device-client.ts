@@ -404,6 +404,7 @@ export function createAgentDeviceClient(
       click: async (options) => await executeCommand('click', options),
       press: async (options) => await executeCommand('press', options),
       longPress: async (options) => await executeCommand('longpress', options),
+      hover: async (options) => await executeCommand('hover', options),
       swipe: async (options) => await executeCommand('swipe', options),
       pan: async (options) => await executeCommand('gesture', panGestureInput(options)),
       drag: async (options) => await executeCommand('gesture', dragGestureInput(options)),

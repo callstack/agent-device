@@ -2,6 +2,7 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import type {
   FillCommandResult,
   GestureReferenceFrame,
+  HoverCommandResult,
   LongPressCommandResult,
   PressCommandResult,
   RecordingTargetOverride,
@@ -38,7 +39,11 @@ import { interactionResultExtra } from './interaction-touch-targets.ts';
  * module.
  */
 
-type InteractionRuntimeResult = PressCommandResult | FillCommandResult | LongPressCommandResult;
+type InteractionRuntimeResult =
+  | PressCommandResult
+  | FillCommandResult
+  | LongPressCommandResult
+  | HoverCommandResult;
 
 type InteractionResponseSourceBase = {
   publicData?: Record<string, unknown>;
@@ -275,7 +280,7 @@ function composeResponseWarning(
 }
 
 /** What `press`/`click`/`longpress` resolve to; `fill` carries its own result. */
-export type TargetedTouchResult = PressCommandResult | LongPressCommandResult;
+export type TargetedTouchResult = PressCommandResult | LongPressCommandResult | HoverCommandResult;
 
 export async function buildTargetedTouchResponsePayloads(params: {
   params: InteractionHandlerParams & {

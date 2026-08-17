@@ -27,6 +27,8 @@ export function buildActionSummary(action: SessionAction): string {
       return `Tapped ${readActionTargetLabel(action) ?? 'target'}`;
     case PUBLIC_COMMANDS.longPress:
       return `Long pressed ${readActionTargetLabel(action) ?? 'target'}`;
+    case PUBLIC_COMMANDS.hover:
+      return `Hovered ${readActionTargetLabel(action) ?? 'target'}`;
     case PUBLIC_COMMANDS.fill:
       return `Filled ${readActionTargetLabel(action) ?? 'target'}`;
     case PUBLIC_COMMANDS.type:
@@ -107,6 +109,7 @@ function isTargetActionCommand(command: string): boolean {
     command === PUBLIC_COMMANDS.click ||
     command === PUBLIC_COMMANDS.press ||
     command === PUBLIC_COMMANDS.longPress ||
+    command === PUBLIC_COMMANDS.hover ||
     command === PUBLIC_COMMANDS.focus ||
     command === PUBLIC_COMMANDS.fill
   );
@@ -293,6 +296,7 @@ const SAFE_ACTION_FLAG_SPECS: Record<string, SafeFlagSpec> = {
   [PUBLIC_COMMANDS.click]: touchSafeFlagSpec(),
   [PUBLIC_COMMANDS.press]: touchSafeFlagSpec(),
   [PUBLIC_COMMANDS.longPress]: touchSafeFlagSpec(),
+  [PUBLIC_COMMANDS.hover]: touchSafeFlagSpec(),
   [PUBLIC_COMMANDS.fill]: textEntrySafeFlagSpec(),
   [PUBLIC_COMMANDS.type]: textEntrySafeFlagSpec(),
   [PUBLIC_COMMANDS.scroll]: {

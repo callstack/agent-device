@@ -371,6 +371,15 @@ export type LongPressCommandResponseData =
   | (TouchResponseRef & TouchLongPressExtras)
   | (TouchResponseSelector & TouchLongPressExtras);
 
+type TouchHoverExtras = {
+  gesture: 'hover';
+};
+
+export type HoverCommandResponseData =
+  | (TouchResponsePoint & TouchHoverExtras)
+  | (TouchResponseRef & TouchHoverExtras)
+  | (TouchResponseSelector & TouchHoverExtras);
+
 /**
  * Internal runtime result for press/click. The daemon response layer turns
  * this into `PressCommandResponseData` via `buildInteractionResponseData`.
@@ -402,6 +411,17 @@ export type FillCommandResult = ResolvedInteractionTarget & {
  */
 export type LongPressCommandResult = ResolvedInteractionTarget & {
   durationMs?: number;
+  backendResult?: Record<string, unknown>;
+  message?: string;
+  warning?: string;
+  settle?: SettleObservation;
+};
+
+/**
+ * Internal runtime result for hover. The daemon response layer turns this
+ * into `HoverCommandResponseData` via `buildInteractionResponseData`.
+ */
+export type HoverCommandResult = ResolvedInteractionTarget & {
   backendResult?: Record<string, unknown>;
   message?: string;
   warning?: string;

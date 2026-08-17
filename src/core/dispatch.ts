@@ -18,6 +18,7 @@ import type { DispatchContext } from './dispatch-context.ts';
 import {
   handleFillCommand,
   handleFocusCommand,
+  handleHoverCommand,
   handleLongPressCommand,
   handlePressCommand,
   handleReadCommand,
@@ -148,6 +149,7 @@ const DISPATCH_HANDLERS: Record<DispatchCommand, DispatchHandler> = {
   press: ({ device, interactor, positionals, context }) =>
     handlePressCommand(device, interactor, positionals, context),
   longpress: ({ interactor, positionals }) => handleLongPressCommand(interactor, positionals),
+  hover: ({ interactor, positionals }) => handleHoverCommand(interactor, positionals),
   focus: ({ interactor, positionals }) => handleFocusCommand(interactor, positionals),
   type: ({ interactor, positionals, context }) =>
     handleTypeCommand(interactor, positionals, context),

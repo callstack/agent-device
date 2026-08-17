@@ -1016,6 +1016,28 @@ export const RAW_COMMAND_DESCRIPTORS = [
     platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
   {
+    name: 'hover',
+    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
+    targetIdentityVerification: 'pre-dispatch',
+    catalog: { group: 'public' },
+    recordsSessionAction: true,
+    recordingEffect: 'mutates-app',
+    daemon: {
+      route: 'interaction',
+      refFrameEffect: 'may-invalidate',
+    },
+    dispatch: {},
+    // Hover is a pointer-only state (#1783): the web provider moves the mouse
+    // without pressing. Touch platforms have no hover, so no device bucket
+    // admits it; `WEB_INTERACTION_COMMANDS` in src/core/capabilities.ts adds the
+    // web bucket, the same way `viewport` is web-only.
+    capability: { apple: {}, android: {}, linux: LINUX_NONE },
+    timeoutPolicy: postActionObservationTimeoutPolicy('hover', PRESERVE_DAEMON_TIMEOUT_POLICY),
+    postActionObservation: postActionObservation('hover'),
+    batchable: true,
+    platformExecution: LEGACY_PLATFORM_EXECUTION,
+  },
+  {
     name: 'press',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     targetIdentityVerification: 'pre-dispatch',

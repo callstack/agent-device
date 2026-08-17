@@ -68,7 +68,15 @@ const WEB_QUERY_COMMANDS = [
   'snapshot',
   'wait',
 ] as const;
-const WEB_INTERACTION_COMMANDS = ['click', 'fill', 'focus', 'press', 'scroll', 'type'] as const;
+const WEB_INTERACTION_COMMANDS = [
+  'click',
+  'fill',
+  'focus',
+  'hover',
+  'press',
+  'scroll',
+  'type',
+] as const;
 const WEB_SETTING_COMMANDS = ['viewport'] as const;
 const WEB_SUPPORTED_COMMANDS = new Set<string>([
   ...WEB_QUERY_COMMANDS,

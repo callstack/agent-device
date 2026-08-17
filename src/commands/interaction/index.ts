@@ -6,6 +6,7 @@ import type {
   FlingOptions,
   FocusOptions,
   GetOptions,
+  HoverOptions,
   IsOptions,
   LongPressOptions,
   PanOptions,
@@ -39,6 +40,7 @@ import {
   type FillInput,
   type FlingInput,
   type GetInput,
+  type HoverInput,
   type LongPressInput,
   type PanInput,
   type PinchInput,
@@ -94,6 +96,12 @@ const interactionCliSchemas = {
     positionalArgs: ['targetOrX', 'yOrDurationMs?', 'durationMs?'],
     allowsExtraPositionals: true,
     allowedFlags: [...postActionObservationCliFlags('longpress'), ...SELECTOR_SNAPSHOT_FLAGS],
+  },
+  hover: {
+    usageOverride: 'hover <x y|@ref|selector>',
+    positionalArgs: ['targetOrX', 'y?'],
+    allowsExtraPositionals: true,
+    allowedFlags: [...postActionObservationCliFlags('hover'), ...SELECTOR_SNAPSHOT_FLAGS],
   },
   swipe: {
     positionalArgs: ['x1', 'y1', 'x2', 'y2'],
@@ -153,6 +161,10 @@ const fillCommandDefinition = defineExecutableCommand(metadata('fill'), (client,
 
 const longPressCommandDefinition = defineExecutableCommand(metadata('longpress'), (client, input) =>
   client.interactions.longPress(toLongPressOptions(input)),
+);
+
+const hoverCommandDefinition = defineExecutableCommand(metadata('hover'), (client, input) =>
+  client.interactions.hover(toHoverOptions(input)),
 );
 
 const swipeCommandDefinition = defineExecutableCommand(metadata('swipe'), (client, input) =>
@@ -257,6 +269,21 @@ const longPressCommandFacet = defineCommandFacet({
   cliReader: interactionCliReaders.longpress,
   daemonWriter: interactionDaemonWriters.longpress,
   cliOutputFormatter: interactionCliOutputFormatters.longpress,
+});
+
+const hoverCommandFacet = defineCommandFacet({
+  name: 'hover',
+  text: {
+    summary: 'Hover the pointer over a UI target (web only)',
+    cliDetail:
+      'The pointer stays where hover left it: read the revealed UI (--settle or snapshot -i) and act on it before another click or hover moves the pointer away.',
+  },
+  metadata: metadata('hover'),
+  definition: hoverCommandDefinition,
+  cliSchema: interactionCliSchemas.hover,
+  cliReader: interactionCliReaders.hover,
+  daemonWriter: interactionDaemonWriters.hover,
+  cliOutputFormatter: interactionCliOutputFormatters.hover,
 });
 
 const swipeCommandFacet = defineCommandFacet({
@@ -369,6 +396,7 @@ export const interactionCommandFamily = defineCommandFamilyFromFacets({
     pressCommandFacet,
     fillCommandFacet,
     longPressCommandFacet,
+    hoverCommandFacet,
     swipeCommandFacet,
     focusCommandFacet,
     typeCommandFacet,
@@ -430,6 +458,15 @@ function toLongPressOptions(input: LongPressInput): LongPressOptions {
     ...toClientInteractionTarget(input.target),
     ...toSelectorSnapshotOptions(input),
     durationMs: input.durationMs,
+    ...toSettleOptions(input),
+  };
+}
+
+function toHoverOptions(input: HoverInput): HoverOptions {
+  return {
+    ...commonToClientOptions(input),
+    ...toClientInteractionTarget(input.target),
+    ...toSelectorSnapshotOptions(input),
     ...toSettleOptions(input),
   };
 }

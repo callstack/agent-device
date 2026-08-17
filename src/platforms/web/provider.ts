@@ -54,6 +54,8 @@ export type WebProvider = {
   setViewport(width: number, height: number): Promise<void>;
   click(x: number, y: number): Promise<void>;
   clickRef?(ref: string): Promise<void>;
+  /** Move the pointer to a point without pressing, raising the page's hover state. */
+  hover?(x: number, y: number): Promise<void>;
   fill(x: number, y: number, text: string, options?: { delayMs?: number }): Promise<void>;
   fillRef?(ref: string, text: string, options?: { delayMs?: number }): Promise<void>;
   typeText(text: string, options?: { delayMs?: number }): Promise<void>;

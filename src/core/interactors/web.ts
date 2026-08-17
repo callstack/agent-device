@@ -12,6 +12,13 @@ export function createWebInteractor(): Interactor {
     openDevice: () => provider().open('about:blank'),
     close: (target) => provider().close(target),
     tap: (x, y) => provider().click(x, y),
+    hover: async (x, y) => {
+      const hover = provider().hover;
+      if (!hover) {
+        throw new AppError('UNSUPPORTED_OPERATION', 'hover is not supported by this web provider');
+      }
+      await hover(x, y);
+    },
     focus: (x, y) => provider().click(x, y),
     type: (text, delayMs) => provider().typeText(text, { delayMs }),
     fill: (x, y, text, delayMs) => provider().fill(x, y, text, { delayMs }),

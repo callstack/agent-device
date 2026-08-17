@@ -271,5 +271,6 @@ export const RESPONSE_VIEWS: Record<string, ResponseView> = {
   click: interactionDigestView,
   fill: interactionDigestView,
   longpress: interactionDigestView,
+  hover: interactionDigestView,
   network: networkView,
 };

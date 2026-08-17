@@ -64,6 +64,12 @@ export const interactionCliReaders = {
       durationMs: decoded.durationMs,
     };
   },
+  hover: (positionals, flags) => ({
+    ...commonInputFromFlags(flags),
+    ...selectorSnapshotInputFromFlags(flags),
+    ...settleInputFromFlags(flags),
+    target: targetInputFromClientTarget(readInteractionTargetFromPositionals(positionals)),
+  }),
   swipe: (positionals, flags) => ({
     ...commonInputFromFlags(flags),
     ...swipePayloadFromPositionals(positionals, {
@@ -127,6 +133,9 @@ export const interactionDaemonWriters = {
   ),
   longpress: direct(PUBLIC_COMMANDS.longPress, (input) =>
     longPressPositionals(input as LongPressOptions),
+  ),
+  hover: direct(PUBLIC_COMMANDS.hover, (input) =>
+    interactionTargetPositionals(input as InteractionTarget),
   ),
   swipe: (input) => {
     assertNoRemovedSwipeInput(input);

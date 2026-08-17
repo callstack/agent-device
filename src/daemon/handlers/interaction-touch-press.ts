@@ -26,7 +26,7 @@ import { dispatchRuntimeInteraction } from './interaction-touch-runtime.ts';
 import { formatTouchTargetLabel } from './interaction-touch-targets.ts';
 
 /**
- * How an admitted targeted `press`/`click`/`longpress` executes: the direct-iOS
+ * How an admitted targeted `press`/`click`/`longpress`/`hover` executes: the direct-iOS
  * attempt, then the shared runtime dispatch it delegates to with the options
  * and payload projection this command family owns.
  */
@@ -75,7 +75,9 @@ function buildTargetedRuntimeOptions(
   const targetedExtra =
     command === 'longpress'
       ? { ...(durationMs !== undefined ? { durationMs } : {}), gesture: 'longpress' }
-      : resultButtonTag;
+      : command === 'hover'
+        ? { gesture: 'hover' }
+        : resultButtonTag;
   return {
     androidFreshnessBaseline: admitted.androidFreshnessBaseline,
     refContext: admitted.refContext,
@@ -106,7 +108,7 @@ function buildTargetedRuntimeOptions(
         staleRefsWarning,
         publicData: transformTouchResponseData({
           session,
-          command: command === 'longpress' ? undefined : command,
+          command: command === 'longpress' || command === 'hover' ? undefined : command,
           flags: req.flags,
           data: result.backendResult,
         }),
@@ -116,7 +118,9 @@ function buildTargetedRuntimeOptions(
                 ...(resultDurationMs !== undefined ? { durationMs: resultDurationMs } : {}),
                 gesture: 'longpress',
               }
-            : resultButtonTag,
+            : command === 'hover'
+              ? { gesture: 'hover' }
+              : resultButtonTag,
       });
     },
   };
@@ -137,20 +141,43 @@ async function runTargetedTouchInteraction(params: {
 }): Promise<TargetedTouchResult> {
   const { runtime, command, target, sessionName, requestId, flags, expectedResolvedTarget } =
     params;
-  const settle = readSettleRequest(flags);
-  if (command === 'longpress') {
-    return await runtime.interactions.longPress(target, {
-      session: sessionName,
-      requestId,
-      durationMs: params.durationMs,
-      settle,
-      expectedResolvedTarget,
-    });
-  }
-
-  const options = {
+  const shared = {
     session: sessionName,
     requestId,
+    settle: readSettleRequest(flags),
+    expectedResolvedTarget,
+  };
+  switch (command) {
+    case 'longpress':
+      return await runtime.interactions.longPress(target, {
+        ...shared,
+        durationMs: params.durationMs,
+      });
+    case 'hover':
+      return await runtime.interactions.hover(target, shared);
+    case 'click':
+      return await runtime.interactions.click(target, pressRuntimeOptions(params, shared));
+    case 'press':
+      return await runtime.interactions.press(target, pressRuntimeOptions(params, shared));
+  }
+}
+
+function pressRuntimeOptions(
+  params: {
+    clickButton: ReturnType<typeof resolveClickButton>;
+    flags: CommandFlags | undefined;
+    preresolvedTarget?: PreresolvedInteractionTarget;
+  },
+  shared: {
+    session: string;
+    requestId: string | undefined;
+    settle: ReturnType<typeof readSettleRequest>;
+    expectedResolvedTarget?: ReplayTargetGuardDenotation;
+  },
+) {
+  const { flags } = params;
+  return {
+    ...shared,
     button: params.clickButton,
     count: flags?.count,
     intervalMs: flags?.intervalMs,
@@ -158,16 +185,11 @@ async function runTargetedTouchInteraction(params: {
     jitterPx: flags?.jitterPx,
     doubleTap: flags?.doubleTap,
     verify: flags?.verify,
-    settle,
-    expectedResolvedTarget,
     // Only click/press take it: `find` dispatches click and fill, never
-    // longpress, so declaring it on the longPress options above would be an
+    // longpress or hover, so declaring it on their options would be an
     // unconsumed claim (#1649 review).
     preresolvedTarget: params.preresolvedTarget,
   };
-  return command === 'click'
-    ? await runtime.interactions.click(target, options)
-    : await runtime.interactions.press(target, options);
 }
 
 function readLongPressResultDuration(result: TargetedTouchResult): number | undefined {

@@ -380,7 +380,9 @@ function assertNoUnresolvedDragEndpoint(drag: { source: string; destination: str
 function optimizeSelectorChainAction(action: SessionAction): SessionAction | undefined {
   const selectorExpr = readSelectorChainExpression(action);
   if (!selectorExpr || !isSelectorTargetingCommand(action.command)) return undefined;
-  if (isClickLikeCommand(action.command)) return { ...action, positionals: [selectorExpr] };
+  if (isClickLikeCommand(action.command) || action.command === 'hover') {
+    return { ...action, positionals: [selectorExpr] };
+  }
   if (action.command === 'longpress') return optimizeLongPressAction(action, selectorExpr);
   if (action.command === 'fill') return optimizeFillAction(action, selectorExpr);
   return optimizeGetAction(action, selectorExpr);

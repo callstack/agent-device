@@ -199,7 +199,7 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
 export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPathContract> = {
   'runtime-selector': {
     description: 'Daemon tree capture, selector chain resolution, guarded coordinate tap.',
-    commands: ['press', 'click', 'fill', 'longpress'],
+    commands: ['press', 'click', 'fill', 'longpress', 'hover'],
     guarantees: {
       ...RUNTIME_TREE_SHARED_GUARANTEES,
       disambiguation: {
@@ -221,7 +221,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
   'runtime-ref': {
     description:
       'Session snapshot ref lookup, guarded coordinate tap. #1654: when the caller already resolved the node (a mutating `find`), the lookup is replaced by that node and every guarantee below is enforced against it — the guards are unchanged, only the lookup is skipped.',
-    commands: ['press', 'click', 'fill', 'longpress'],
+    commands: ['press', 'click', 'fill', 'longpress', 'hover'],
     guarantees: {
       ...RUNTIME_TREE_SHARED_GUARANTEES,
       disambiguation: {
@@ -428,7 +428,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
   },
   coordinate: {
     description: 'Raw x/y tap. Semantics are intentionally minimal.',
-    commands: ['press', 'click', 'fill', 'longpress'],
+    commands: ['press', 'click', 'fill', 'longpress', 'hover'],
     guarantees: {
       disambiguation: {
         kind: 'inapplicable',

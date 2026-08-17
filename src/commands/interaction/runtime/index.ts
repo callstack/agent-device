@@ -4,6 +4,7 @@ import {
   clickCommand,
   fillCommand,
   focusCommand,
+  hoverCommand,
   longPressCommand,
   pressCommand,
   scrollCommand,
@@ -13,6 +14,8 @@ import {
   type FillCommandResult,
   type FocusCommandOptions,
   type FocusCommandResult,
+  type HoverCommandOptions,
+  type HoverCommandResult,
   type InteractionTarget,
   type LongPressCommandOptions,
   type LongPressCommandResult,
@@ -78,6 +81,7 @@ export type InteractionCommands = {
   typeText: RuntimeCommand<TypeTextCommandOptions, TypeTextCommandResult>;
   focus: RuntimeCommand<FocusCommandOptions, FocusCommandResult>;
   longPress: RuntimeCommand<LongPressCommandOptions, LongPressCommandResult>;
+  hover: RuntimeCommand<HoverCommandOptions, HoverCommandResult>;
   scroll: RuntimeCommand<ScrollCommandOptions, ScrollCommandResult>;
   gesture: RuntimeCommand<GestureCommandOptions, GestureCommandResult>;
   /**
@@ -142,6 +146,10 @@ export type BoundInteractionCommands = {
     target: InteractionTarget,
     options?: Omit<LongPressCommandOptions, 'target'>,
   ) => Promise<LongPressCommandResult>;
+  hover: (
+    target: InteractionTarget,
+    options?: Omit<HoverCommandOptions, 'target'>,
+  ) => Promise<HoverCommandResult>;
   scroll: BoundRuntimeCommand<ScrollCommandOptions, ScrollCommandResult>;
   gesture: BoundRuntimeCommand<GestureCommandOptions, GestureCommandResult>;
   settleObservation: BoundRuntimeCommand<SettleObservationCommandOptions, SettleObservation>;
@@ -166,6 +174,7 @@ export const interactionCommands: InteractionCommands = {
   typeText: typeTextCommand,
   focus: focusCommand,
   longPress: longPressCommand,
+  hover: hoverCommand,
   scroll: scrollCommand,
   gesture: gestureCommand,
   settleObservation: settleObservationCommand,
@@ -197,6 +206,7 @@ export function bindInteractionCommands(runtime: AgentDeviceRuntime): BoundInter
     focus: (target, options = {}) => interactionCommands.focus(runtime, { ...options, target }),
     longPress: (target, options = {}) =>
       interactionCommands.longPress(runtime, { ...options, target }),
+    hover: (target, options = {}) => interactionCommands.hover(runtime, { ...options, target }),
     scroll: (options) => interactionCommands.scroll(runtime, options),
     gesture: (options) => interactionCommands.gesture(runtime, options),
     settleObservation: (options) => interactionCommands.settleObservation(runtime, options),

@@ -57,6 +57,22 @@ export async function handleLongPressCommand(
   return { x, y, durationMs, ...successText(`Long pressed (${x}, ${y})`) };
 }
 
+export async function handleHoverCommand(
+  interactor: Interactor,
+  positionals: string[],
+): Promise<Record<string, unknown>> {
+  const { x, y } = readPoint(positionals, 'hover requires x y', {
+    hint: 'Direct platform hover requires coordinates. In an open daemon session, use agent-device hover @ref|selector; otherwise run snapshot -i, use the target rect center as x y, then retry hover x y.',
+  });
+  if (!interactor.hover) {
+    throw new AppError('UNSUPPORTED_OPERATION', 'hover is not supported on this platform', {
+      hint: 'hover raises pointer hover state and is available on web targets only. On touch platforms use longpress for hold gestures.',
+    });
+  }
+  await interactor.hover(x, y);
+  return { x, y, ...successText(`Hovered (${x}, ${y})`) };
+}
+
 export async function handleFocusCommand(
   interactor: Interactor,
   positionals: string[],
