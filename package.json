@@ -65,6 +65,10 @@
     "./finders": {
       "types": "./dist/src/finders.d.ts",
       "import": "./dist/src/finders.js"
+    },
+    "./ai-sdk": {
+      "types": "./dist/src/ai-sdk.d.ts",
+      "import": "./dist/src/ai-sdk.js"
     }
   },
   "engines": {
@@ -256,10 +260,18 @@
     "yaml": "^2.9.0",
     "yauzl": "^3.4.0"
   },
+  "peerDependencies": {
+    "ai": "^6.0.0 || ^7.0.0"
+  },
+  "peerDependenciesMeta": {
+    "ai": {
+      "optional": true
+    }
+  },
   "devDependencies": {
-    "@agent-device/capture-kit": "workspace:*",
     "@agent-device/ad-replay": "workspace:*",
     "@agent-device/ad-script": "workspace:*",
+    "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
     "@agent-device/kernel": "workspace:*",
     "@agent-device/maestro": "workspace:*",
@@ -278,11 +290,13 @@
     "@chenglou/freerange": "^0.0.1",
     "@stryker-mutator/core": "9.6.1",
     "@stryker-mutator/vitest-runner": "9.6.1",
+    "@types/json-schema": "^7.0.15",
     "@types/node": "^22.19.21",
     "@types/pngjs": "^6.0.5",
     "@types/tar-stream": "^3.1.4",
     "@types/yauzl": "^2.10.3",
     "@vitest/coverage-v8": "4.1.8",
+    "ai": "^7.0.66",
     "fallow": "^2.95.0",
     "fast-check": "^4.9.0",
     "oxc-parser": "^0.138.0",

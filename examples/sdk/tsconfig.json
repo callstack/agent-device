@@ -11,7 +11,8 @@
       "agent-device/install-source": ["../../src/sdk/install-source.ts"],
       "agent-device/android-adb": ["../../src/sdk/android-adb.ts"],
       "agent-device/contracts": ["../../src/sdk/contracts.ts"],
-      "agent-device/finders": ["../../src/sdk/finders.ts"]
+      "agent-device/finders": ["../../src/sdk/finders.ts"],
+      "agent-device/ai-sdk": ["../../src/ai-sdk/index.ts"]
     }
   },
   // Scoped to this directory only: these examples import `agent-device/...`

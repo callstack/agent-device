@@ -75,6 +75,24 @@ export type CommandTimeoutPolicy = {
 
 export type CommandCatalogGroup = 'public' | 'internal' | 'local-cli' | 'dispatch-alias';
 
+/**
+ * Which default tool set a framework adapter (`agent-device/ai-sdk`, the
+ * planned `@agent-device/eve` package) includes a public command in.
+ *  - `'core'`     — the small, curated perceive/act loop a typical tool-calling
+ *                   agent needs by default: launch, observe, interact, read,
+ *                   verify, wait, navigate, and system-dialog handling.
+ *  - `'extended'` — everything else public: device/session management,
+ *                   observability, recording/replay, and specialized or
+ *                   destructive commands. Still available with an explicit
+ *                   opt-in (e.g. `set: 'all'`), just excluded from the default
+ *                   tool set so a model isn't handed dozens of rarely-needed
+ *                   tools up front.
+ * Declared per public command so the classification lives beside the rest of
+ * that command's descriptor facets instead of a separate hand-maintained list
+ * in the adapter code; `resolveCommandFrameworkTier` reads it back.
+ */
+export type CommandFrameworkTier = 'core' | 'extended';
+
 export type CommandCatalogFacet = {
   /**
    * The command catalog group. This is explicit on every descriptor so new
@@ -144,6 +162,8 @@ export type TargetIdentityVerification = 'pre-dispatch' | 'post-resolution';
  *                   command traits.
  *  - `catalog` — command identity projection metadata. Every descriptor
  *                   declares its catalog group explicitly.
+ *  - `frameworkTier` — which default tool set a framework adapter includes a
+ *                   public command in (see {@link CommandFrameworkTier}).
  *  - `dispatch` — whether src/core/dispatch.ts accepts this command name as a
  *                   platform dispatch target.
  *
@@ -162,6 +182,8 @@ type CommandDescriptorBase = {
   postActionObservation?: PostActionObservationSupport;
   responseDataTransform?: CommandResponseDataTransform;
   catalog: CommandCatalogFacet;
+  /** Required iff `catalog.group === 'public'`; see {@link CommandFrameworkTier}. */
+  frameworkTier?: CommandFrameworkTier;
   dispatch?: CommandDispatchFacet;
   /** Internal-only ADR 0019 cutover discriminant; public projections must ignore it. */
   platformExecution: CommandPlatformExecution;

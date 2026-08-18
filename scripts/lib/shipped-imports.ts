@@ -49,6 +49,16 @@ import { walkFiles } from './walk-files.ts';
 
 export type PackedManifest = {
   dependencies?: Record<string, string>;
+  /**
+   * A peer dependency (e.g. `ai` for `agent-device/ai-sdk`) is resolved from
+   * the consumer's own install, not ours — but it is still a truthful answer
+   * to "how does a shipped import of this package resolve," so it counts
+   * toward the forward half of the audit below. Whether it is optional
+   * doesn't change that: an *optional* peer only changes whether npm errors
+   * when it's absent, not whether declaring it is the correct fix for an
+   * import the shipped files actually make.
+   */
+  peerDependencies?: Record<string, string>;
 };
 
 /** Every file extension the package ships that Node can resolve a specifier from. */
@@ -237,17 +247,18 @@ export function auditDependencyClosure(
   installedRoot: string,
   manifest: PackedManifest,
 ): Map<string, string[]> {
-  const declared = new Set(Object.keys(manifest.dependencies ?? {}));
+  const dependencies = new Set(Object.keys(manifest.dependencies ?? {}));
+  const declared = new Set([...dependencies, ...Object.keys(manifest.peerDependencies ?? {})]);
   const importedBy = shippedImports(installedRoot);
   const problems = [
     ...mismatch(
-      'Imported but not declared in "dependencies" (a published install cannot resolve these):',
+      'Imported but not declared in "dependencies" or "peerDependencies" (a published install cannot resolve these):',
       [...importedBy].filter(([name]) => !declared.has(name)).flatMap(([, sites]) => sites),
       'Declare the package, or add it to `deps.alwaysBundle` in tsdown.config.ts.',
     ),
     ...mismatch(
       'Declared in "dependencies" but never imported (every user installs these for nothing):',
-      [...declared].filter((name) => !importedBy.has(name)),
+      [...dependencies].filter((name) => !importedBy.has(name)),
       'Remove the dependency, or stop bundling it in tsdown.config.ts.',
     ),
   ];

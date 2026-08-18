@@ -26,7 +26,11 @@ afterEach(() => {
 });
 
 /** Lays out a fake installed package: shipped files plus the `dependencies` the manifest declares. */
-function fixturePackage(files: Record<string, string>, dependencies: string[] = []): () => void {
+function fixturePackage(
+  files: Record<string, string>,
+  dependencies: string[] = [],
+  peerDependencies: string[] = [],
+): () => void {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-closure-fixture-'));
   tempRoots.push(root);
   for (const [relative, source] of Object.entries(files)) {
@@ -36,6 +40,7 @@ function fixturePackage(files: Record<string, string>, dependencies: string[] = 
   }
   const manifest: PackedManifest = {
     dependencies: Object.fromEntries(dependencies.map((name) => [name, '1.0.0'])),
+    peerDependencies: Object.fromEntries(peerDependencies.map((name) => [name, '1.0.0'])),
   };
   return () => void auditDependencyClosure(root, manifest);
 }
@@ -90,6 +95,31 @@ for (const [form, template] of Object.entries(LAZY_FORMS)) {
     audit();
   });
 }
+
+// agent-device/ai-sdk imports the optional peer `ai`, resolved from the consumer's own
+// install rather than ours — the audit must accept `peerDependencies` as a valid answer to
+// "how does this import resolve," the same way it accepts `dependencies`.
+test('an import satisfied only by a peerDependency satisfies the closure audit', () => {
+  const audit = fixturePackage({ 'dist/ai-sdk.js': "import { tool } from 'ai';" }, [], ['ai']);
+  audit();
+});
+
+test('an import satisfied by neither dependencies nor peerDependencies still fails the closure audit', () => {
+  const audit = fixturePackage({ 'dist/ai-sdk.js': "import { tool } from 'ai';" });
+  assert.throws(audit, (error: Error) => {
+    assert.match(
+      error.message,
+      /Imported but not declared in "dependencies" or "peerDependencies"/,
+    );
+    assert.match(error.message, /ai in dist\/ai-sdk\.js/);
+    return true;
+  });
+});
+
+test('a peerDependency does not exempt a declared dependency from the "never imported" check', () => {
+  const audit = fixturePackage({ 'dist/cli.js': 'export const x = 1;' }, ['pngjs'], ['ai']);
+  assert.throws(audit, /Declared in "dependencies" but never imported[\s\S]*- pngjs/);
+});
 
 test('a subpath import is attributed to the package that must be declared', () => {
   const audit = fixturePackage({ 'dist/cli.js': 'await import(`@limrun/api/client`);' }, [

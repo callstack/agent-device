@@ -19,6 +19,7 @@ import {
   commandDescriptors,
   listDescriptorCatalogCommandNames,
   listMcpExposedCommandNames,
+  resolveCommandFrameworkTier,
   resolveCommandRecordsSessionAction,
   resolveCommandRecordingEffect,
   resolveTargetIdentityVerification,
@@ -405,6 +406,50 @@ test('recordingEffect resolves request-sensitive observation and mutation subcom
     }),
     'mutates-app',
   );
+});
+
+test('frameworkTier is declared iff a command is public, and never elsewhere', () => {
+  for (const descriptor of RAW_COMMAND_DESCRIPTORS) {
+    const isPublic = descriptor.catalog.group === 'public';
+    assert.equal(
+      'frameworkTier' in descriptor,
+      isPublic,
+      `${descriptor.name} declares frameworkTier iff it is a public command`,
+    );
+  }
+});
+
+// Pins the default tool set framework adapters (agent-device/ai-sdk,
+// @agent-device/eve) build from `set: 'core'`: the perceive/act loop a
+// typical tool-calling agent needs without being handed dozens of
+// device-management, observability, or recording tools up front. A new public
+// command lands in 'extended' unless this test is updated deliberately —
+// widening 'core' should be a reviewed decision, not a silent side effect of
+// adding a command.
+test("frameworkTier pins exactly the 'core' command set", () => {
+  const core = commandDescriptors
+    .filter((descriptor) => resolveCommandFrameworkTier(descriptor.name) === 'core')
+    .map((descriptor) => descriptor.name)
+    .sort();
+
+  assert.deepEqual(core, [
+    'alert',
+    'back',
+    'click',
+    'close',
+    'fill',
+    'find',
+    'get',
+    'is',
+    'open',
+    'press',
+    'screenshot',
+    'scroll',
+    'snapshot',
+    'swipe',
+    'type',
+    'wait',
+  ]);
 });
 
 test('targetIdentityVerification pins exactly the evidence-carrying command set (ADR 0012 / #1349)', () => {

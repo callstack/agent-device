@@ -34,6 +34,7 @@ import { readDeclaredPlatformExecution } from './platform-execution-entry.ts';
 import type {
   CommandCatalogGroup,
   CommandDescriptor,
+  CommandFrameworkTier,
   RecordingEffect,
   CommandResponseDataTransform,
   CommandTimeoutPolicy,
@@ -390,6 +391,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'artifacts',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/artifacts.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: false,
     daemon: { route: 'lease', refFrameEffect: 'preserve', ...ADMISSION_AND_LOCK_EXEMPT },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
@@ -435,6 +437,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'devices',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/device.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: false,
     daemon: {
       route: 'session',
@@ -451,6 +454,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'capabilities',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/device.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: false,
     daemon: {
       route: 'session',
@@ -468,6 +472,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'doctor',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/doctor.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: false,
     daemon: {
       route: 'session',
@@ -485,6 +490,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'apps',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/app.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: false,
     daemon: {
       route: 'session',
@@ -501,6 +507,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'boot',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/device.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: false,
     daemon: { route: 'session', refFrameEffect: 'may-invalidate', sessionKind: 'state' },
     platformExecution: { kind: 'device-runtime', uses: deviceBootRuntimeUses },
@@ -511,6 +518,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'shutdown',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/device.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: false,
     daemon: { route: 'session', refFrameEffect: 'may-invalidate', sessionKind: 'state' },
     platformExecution: { kind: 'device-runtime', use: shutdownTargetUse },
@@ -521,6 +529,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'appstate',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public', key: 'appState' },
+    frameworkTier: 'extended',
     recordsSessionAction: false,
     daemon: { route: 'session', refFrameEffect: 'preserve', sessionKind: 'state' },
     platformExecution: { kind: 'device-runtime', uses: appStateRuntimeUses },
@@ -531,6 +540,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'perf',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/perf/index.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
     daemon: { route: 'session', refFrameEffect: 'preserve', sessionKind: 'observability' },
@@ -543,6 +553,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'logs',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/observability/index.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: false,
     daemon: { route: 'session', refFrameEffect: 'preserve', sessionKind: 'observability' },
     platformExecution: { kind: 'device-runtime', uses: appLogRuntimePlanUses },
@@ -553,6 +564,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'events',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/observability/index.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: false,
     daemon: {
       route: 'session',
@@ -569,6 +581,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'network',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/observability/index.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: false,
     daemon: { route: 'session', refFrameEffect: 'preserve', sessionKind: 'observability' },
     platformExecution: { kind: 'device-runtime', use: networkDumpUse },
@@ -579,6 +592,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'audio',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/observability/index.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: false,
     daemon: { route: 'session', refFrameEffect: 'preserve', sessionKind: 'observability' },
     capability: {
@@ -594,6 +608,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'replay',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/replay/index.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: false,
     daemon: {
       route: 'session',
@@ -611,6 +626,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'test',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/replay/index.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: false,
     daemon: {
       route: 'session',
@@ -645,6 +661,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'clipboard',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
     daemon: { route: 'session', refFrameEffect: 'preserve' },
@@ -662,6 +679,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'keyboard',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: true,
     recordingEffect: keyboardRecordingEffect,
     daemon: {
@@ -683,6 +701,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'install',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/install.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     daemon: { route: 'session', refFrameEffect: 'may-invalidate' },
@@ -694,6 +713,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'reinstall',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/install.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     daemon: { route: 'session', refFrameEffect: 'may-invalidate' },
@@ -730,6 +750,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'push',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/push.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     daemon: { route: 'session', refFrameEffect: 'may-invalidate' },
@@ -741,6 +762,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'trigger-app-event',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/push.ts'] as const } : {}),
     catalog: { group: 'public', key: 'triggerAppEvent' },
+    frameworkTier: 'extended',
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     daemon: { route: 'session', refFrameEffect: 'may-invalidate' },
@@ -754,6 +776,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'open',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/app.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'core',
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     daemon: {
@@ -770,6 +793,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'prepare',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/prepare.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: false,
     daemon: { route: 'session', refFrameEffect: 'preserve' },
     // Runner warm-up builds are the longest fixed envelope; --timeout overrides.
@@ -786,6 +810,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'batch',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/batch/index.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: false,
     daemon: { route: 'session', refFrameEffect: 'delegated' },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
@@ -796,6 +821,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'close',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/app.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'core',
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     daemon: {
@@ -814,6 +840,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'snapshot',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/snapshot.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'core',
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
     daemon: { route: 'snapshot', refFrameEffect: 'preserve' },
@@ -829,6 +856,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'diff',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/diff.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
     daemon: { route: 'snapshot', refFrameEffect: 'preserve' },
@@ -841,6 +869,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'wait',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/wait.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'core',
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
     // #1349: a wait's landmark may legitimately be absent when the step
@@ -861,6 +890,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'alert',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/alert.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'core',
     recordsSessionAction: true,
     recordingEffect: alertRecordingEffect,
     daemon: { route: 'snapshot', refFrameEffect: alertRefFrameEffect },
@@ -877,6 +907,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'settings',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/settings.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     daemon: { route: 'snapshot', refFrameEffect: 'may-invalidate' },
@@ -896,6 +927,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'react-native',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/react-native/index.ts'] as const } : {}),
     catalog: { group: 'public', key: 'reactNative' },
+    frameworkTier: 'extended',
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     daemon: { route: 'reactNative', refFrameEffect: 'may-invalidate' },
@@ -908,6 +940,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'record',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/recording/index.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
     daemon: {
@@ -924,6 +957,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'trace',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/recording/index.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
     daemon: { route: 'recordTrace', refFrameEffect: 'preserve' },
@@ -935,6 +969,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'find',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'core',
     recordsSessionAction: true,
     recordingEffect: findRecordingEffect,
     daemon: { route: 'find', refFrameEffect: 'may-invalidate' },
@@ -956,6 +991,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     targetIdentityVerification: 'pre-dispatch',
     catalog: { group: 'public' },
+    frameworkTier: 'core',
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     daemon: {
@@ -975,6 +1011,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     targetIdentityVerification: 'pre-dispatch',
     catalog: { group: 'public' },
+    frameworkTier: 'core',
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     daemon: {
@@ -995,6 +1032,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     targetIdentityVerification: 'pre-dispatch',
     catalog: { group: 'public', key: 'longPress' },
+    frameworkTier: 'extended',
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     daemon: {
@@ -1020,6 +1058,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     targetIdentityVerification: 'pre-dispatch',
     catalog: { group: 'public' },
+    frameworkTier: 'core',
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     daemon: {
@@ -1039,6 +1078,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'type',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'core',
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     daemon: {
@@ -1057,6 +1097,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     targetIdentityVerification: 'pre-dispatch',
     catalog: { group: 'public' },
+    frameworkTier: 'core',
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
     daemon: { route: 'interaction', refFrameEffect: 'preserve' },
@@ -1080,6 +1121,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     targetIdentityVerification: 'pre-dispatch',
     catalog: { group: 'public' },
+    frameworkTier: 'core',
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
     daemon: { route: 'interaction', refFrameEffect: 'preserve' },
@@ -1094,6 +1136,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'back',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'core',
     ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS,
     capability: {
       ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS.capability,
@@ -1107,6 +1150,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'gesture',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     targetIdentityVerification: 'pre-dispatch',
@@ -1124,6 +1168,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'home',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS,
     capability: {
       ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS.capability,
@@ -1135,6 +1180,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'tv-remote',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public', key: 'tvRemote' },
+    frameworkTier: 'extended',
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     daemon: {
@@ -1157,6 +1203,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'orientation',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     daemon: {
@@ -1178,6 +1225,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'scroll',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'core',
     ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS,
     timeoutPolicy: postActionObservationTimeoutPolicy('scroll', DEFAULT_TIMEOUT_POLICY),
     postActionObservation: postActionObservation('scroll'),
@@ -1187,6 +1235,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'swipe',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'core',
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     daemon: {
@@ -1203,6 +1252,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'focus',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS,
     platformExecution: LEGACY_PLATFORM_EXECUTION,
   },
@@ -1210,6 +1260,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'screenshot',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/screenshot.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'core',
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
     daemon: { route: 'generic', refFrameEffect: 'preserve' },
@@ -1223,6 +1274,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'viewport',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/viewport.ts'] as const } : {}),
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     daemon: { route: 'generic', refFrameEffect: 'may-invalidate' },
@@ -1243,6 +1295,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'app-switcher',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public', key: 'appSwitcher' },
+    frameworkTier: 'extended',
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     // ADR 0014: app-switcher previously reached the generic daemon leaf via the
@@ -1265,6 +1318,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'install-from-source',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/install.ts'] as const } : {}),
     catalog: { group: 'public', key: 'installFromSource' },
+    frameworkTier: 'extended',
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     platformExecution: { kind: 'device-runtime', use: readyMaterializeAndDeployAppUse },
@@ -1575,6 +1629,20 @@ export function resolveCommandResponseDataTransform(
 export function resolveCommandRecordsSessionAction(command: string | undefined): boolean {
   if (command === undefined) return false;
   return COMMAND_DESCRIPTOR_BY_NAME.get(command)?.recordsSessionAction ?? false;
+}
+
+/**
+ * The declared {@link CommandFrameworkTier} for a public command, or
+ * `undefined` for a command that never declares one (every non-public
+ * command, by construction — see the parity test). Framework adapters
+ * (`agent-device/ai-sdk`, `@agent-device/eve`) read this to build their
+ * default tool set instead of hand-listing tool names.
+ */
+export function resolveCommandFrameworkTier(
+  command: string | undefined,
+): CommandFrameworkTier | undefined {
+  if (command === undefined) return undefined;
+  return COMMAND_DESCRIPTOR_BY_NAME.get(command)?.frameworkTier;
 }
 
 /**

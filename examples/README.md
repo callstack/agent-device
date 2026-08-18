@@ -10,8 +10,9 @@ fenced TypeScript code block in the doc itself against the real `agent-device/*`
 ## sdk/
 
 Standalone scripts under [`sdk/`](./sdk) exercise the published `agent-device` export map —
-`agent-device`, `agent-device/metro`, `agent-device/contracts`, and `agent-device/batch` — the same
-way a Node consumer or the agent-device-cloud bridge would. Each file:
+`agent-device`, `agent-device/metro`, `agent-device/contracts`, `agent-device/batch`, and
+`agent-device/ai-sdk` — the same way a Node consumer or the agent-device-cloud bridge would. Each
+file:
 
 - has a top comment stating what it demonstrates and its prerequisites (daemon running,
   device/simulator available);
@@ -30,6 +31,7 @@ way a Node consumer or the agent-device-cloud bridge would. Each file:
 | [`metro-runtime.ts`](./sdk/metro-runtime.ts) | `agent-device/metro` | `normalizeBaseUrl`, `resolveRuntimeTransport` |
 | [`contracts-result.ts`](./sdk/contracts-result.ts) | `agent-device/contracts` | typed result consumption via `centerOfRect` |
 | [`batch-orchestration.ts`](./sdk/batch-orchestration.ts) | `agent-device/batch` | `runBatch` for a custom transport |
+| [`ai-sdk-tools.ts`](./sdk/ai-sdk-tools.ts) | `agent-device/ai-sdk` | `createAgentDeviceTools` driven by a `ToolLoopAgent` |
 
 ## test-app/
 

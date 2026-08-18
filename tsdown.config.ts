@@ -67,6 +67,7 @@ export default defineConfig({
     contracts: 'src/sdk/contracts.ts',
     selectors: 'src/sdk/selectors.ts',
     finders: 'src/sdk/finders.ts',
+    'ai-sdk': 'src/ai-sdk/index.ts',
     'internal/bin': 'src/bin.ts',
     'internal/companion-tunnel': 'src/client/companion-tunnel.ts',
     'internal/daemon': 'src/daemon.ts',
