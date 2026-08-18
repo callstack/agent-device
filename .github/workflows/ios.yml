@@ -6,6 +6,12 @@ on:
       - 'docs/**'
       - 'website/**'
       - 'README.md'
+      - 'AGENTS.md'
+      - 'CHANGELOG.md'
+      - 'CONTEXT.md'
+      - 'CONTRIBUTING.md'
+      - 'LICENSE'
+      - 'SECURITY.md'
       - '.github/actions/build-docs/action.yml'
       - '.github/workflows/deploy.yml'
       - '.github/workflows/pr-preview.yml'
@@ -113,6 +119,11 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXDepthLimitedRequiresEveryFrontierResolved \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testDeepExtensionCountsMissedFrontiers \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPreferredPrivateAXBackendPlansAsPenalized \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXRegularPresentationProjectsToViewportAndKeepsScrollHint \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXPresentationKeepsOffscreenSubtreeExcludedWhenChildFramesAreClamped \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXGeometrylessSemanticsAreNeverActionableOrScrollContexts \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXScopeSelectsSubtreeNotMatchingLabels \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXInteractiveFiltersLoginLikeHiddenDrawer \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testDecodedPreferredBackendReachesOptionsAndApplicablePlan \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSparsePayloadReasonMatrix \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledNeedsEnoughSamples \

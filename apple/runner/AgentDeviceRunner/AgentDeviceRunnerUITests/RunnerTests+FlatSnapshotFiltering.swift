@@ -18,10 +18,16 @@ struct FlatSnapshotFilterDecision {
   let insideMatchedScope: Bool
 }
 
+enum FlatSnapshotVisibilityPolicy {
+  case interactiveOnly
+  case viewportProjected
+}
+
 extension RunnerTests {
   func flatSnapshotFilterDecision(
     _ node: FlatSnapshotFilterNode,
     options: SnapshotOptions,
+    visibilityPolicy: FlatSnapshotVisibilityPolicy,
     insideMatchedScope: Bool
   ) -> FlatSnapshotFilterDecision {
     let scope = options.scope?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -39,7 +45,9 @@ extension RunnerTests {
       include = true
     } else if scopeActive && !nowInsideScope {
       include = false
-    } else if options.interactiveOnly && !node.visible {
+    } else if !node.visible
+      && (options.interactiveOnly || visibilityPolicy == .viewportProjected)
+    {
       include = false
     } else {
       include = true
@@ -87,11 +95,19 @@ extension RunnerTests {
       valueText: nil,
       visible: true
     )
+    let hiddenRoot = FlatSnapshotFilterNode(
+      isRoot: true,
+      label: "App",
+      identifier: "",
+      valueText: nil,
+      visible: false
+    )
 
     XCTAssertTrue(
       flatSnapshotFilterDecision(
         visibleContent,
         options: SnapshotOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
+        visibilityPolicy: .interactiveOnly,
         insideMatchedScope: false
       ).include
     )
@@ -99,6 +115,31 @@ extension RunnerTests {
       flatSnapshotFilterDecision(
         hiddenInteractive,
         options: SnapshotOptions(interactiveOnly: true, depth: nil, scope: nil, raw: false),
+        visibilityPolicy: .interactiveOnly,
+        insideMatchedScope: false
+      ).include
+    )
+    XCTAssertFalse(
+      flatSnapshotFilterDecision(
+        hiddenInteractive,
+        options: SnapshotOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
+        visibilityPolicy: .viewportProjected,
+        insideMatchedScope: false
+      ).include
+    )
+    XCTAssertTrue(
+      flatSnapshotFilterDecision(
+        hiddenInteractive,
+        options: SnapshotOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
+        visibilityPolicy: .interactiveOnly,
+        insideMatchedScope: false
+      ).include
+    )
+    XCTAssertTrue(
+      flatSnapshotFilterDecision(
+        hiddenRoot,
+        options: SnapshotOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
+        visibilityPolicy: .viewportProjected,
         insideMatchedScope: false
       ).include
     )
@@ -106,13 +147,7 @@ extension RunnerTests {
       flatSnapshotFilterDecision(
         decorative,
         options: SnapshotOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
-        insideMatchedScope: false
-      ).include
-    )
-    XCTAssertTrue(
-      flatSnapshotFilterDecision(
-        decorative,
-        options: SnapshotOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
+        visibilityPolicy: .interactiveOnly,
         insideMatchedScope: false
       ).include
     )
@@ -138,6 +173,7 @@ extension RunnerTests {
     let rootDecision = flatSnapshotFilterDecision(
       scopeRoot,
       options: options,
+      visibilityPolicy: .interactiveOnly,
       insideMatchedScope: false
     )
     XCTAssertTrue(rootDecision.include)
@@ -147,6 +183,7 @@ extension RunnerTests {
       flatSnapshotFilterDecision(
         unmatchedDescendant,
         options: options,
+        visibilityPolicy: .interactiveOnly,
         insideMatchedScope: rootDecision.insideMatchedScope
       ).include
     )
@@ -154,6 +191,7 @@ extension RunnerTests {
       flatSnapshotFilterDecision(
         unmatchedDescendant,
         options: options,
+        visibilityPolicy: .interactiveOnly,
         insideMatchedScope: false
       ).include
     )

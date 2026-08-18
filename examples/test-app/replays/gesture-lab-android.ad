@@ -1,5 +1,7 @@
-# Coordinates target the CI emulator profile: pixel_7, 1080x2400 @ 420 dpi
-# (gesture card spans y=754-1329 there). Another size/density moves the card
+# Coordinates target the CI emulator profile: pixel_7, 1080x2400 @ 420 dpi, where the gesture
+# targets span y=949-1525 (the two-pointer target is the left half, x=91-540). Multi-pointer
+# gestures start at the target's center: a start near an edge puts the second pointer outside
+# the view, which reads as "the gesture did nothing". Another size/density moves the targets
 # and the canary waits below fail honestly rather than silently passing.
 context platform=android kind=emulator timeout=60000
 
@@ -12,10 +14,10 @@ wait "Gesture lab" 30000
 wait "gesture canary ready" 5000
 wait "two-pointer pan activations 0" 5000
 
-gesture pan 220 1040 180 0 500
+gesture pan 300 1237 180 0 500
 wait "two-pointer pan activations 0" 5000
 
-gesture pan 220 1040 180 0 500 --pointer-count 2
+gesture pan 300 1237 180 0 500 --pointer-count 2
 wait "two-pointer pan activations 1" 5000
 
 gesture fling right 700 1040 300
@@ -29,7 +31,7 @@ react-native dismiss-overlay
 wait "gesture canary ready" 5000
 wait "pan changed no, pinch changed no, rotate changed no" 30000
 
-gesture pinch 1.5 540 1040
+gesture pinch 1.5 540 1237
 wait "pan changed no, pinch changed yes, rotate changed no" 5000
 
 open "${APP_TARGET}" --relaunch --launch-url "${APP_URL}"
@@ -37,7 +39,7 @@ react-native dismiss-overlay
 wait "gesture canary ready" 5000
 wait "pan changed no, pinch changed no, rotate changed no" 30000
 
-gesture rotate 35 540 1040
+gesture rotate 35 540 1237
 wait "pan changed no, pinch changed no, rotate changed yes" 5000
 
 open "${APP_TARGET}" --relaunch --launch-url "${APP_URL}"
@@ -45,7 +47,7 @@ react-native dismiss-overlay
 wait "gesture canary ready" 5000
 wait "pan changed no, pinch changed no, rotate changed no" 30000
 
-gesture transform 540 1040 60 0 1.75 30 600
+gesture transform 540 1237 60 0 1.75 30 600
 wait "pan changed yes, pinch changed yes, rotate changed yes" 5000
 
 close

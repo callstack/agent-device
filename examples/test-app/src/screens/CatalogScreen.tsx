@@ -62,6 +62,10 @@ export function CatalogScreen(props: CatalogScreenProps) {
       onScroll={updateScrollState}
       scrollEventThrottle={16}
       showsVerticalScrollIndicator={false}
+      // Pins the scroll-state line (child index 1) so every state it reports stays on screen.
+      // Android accessibility snapshots carry on-screen nodes only, so a canary that scrolls
+      // away can only ever be read as "top" — the state it holds before anything scrolls.
+      stickyHeaderIndices={[1]}
     >
       <ScreenTitle
         badge={`${props.products.length} results`}

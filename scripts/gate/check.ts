@@ -10,7 +10,7 @@
 import { pathToFileURL } from 'node:url';
 import { runCmdSync } from '../../src/utils/exec.ts';
 import { audit, formatFailures } from './audit.ts';
-import { UNPROVABLE_OWNERS } from './declarations.ts';
+import { MANUAL_ONLY_OWNERS, UNPROVABLE_OWNERS } from './declarations.ts';
 import { loadModel } from './model.ts';
 
 function main(): number {
@@ -25,10 +25,14 @@ function main(): number {
     // Unprovable owners are reported rather than folded into the count: a check whose lane
     // this tree cannot show running should not read the same as one it can.
     const unprovable = Object.keys(UNPROVABLE_OWNERS).length;
+    // Manual-only checks are named, not counted: "3 manual-only" reads like a tally, while the
+    // ids read like the list of things nothing runs until someone dispatches them.
+    const manual = Object.keys(MANUAL_ONLY_OWNERS).sort();
     process.stdout.write(
       `gate manifest: ok — ${new Set(gates).size} checks wired across ` +
         `${model.lanes.filter((lane) => lane.gates.length > 0).length} lanes` +
-        `${unprovable > 0 ? `, ${unprovable} declared unprovable` : ''}.\n`,
+        `${unprovable > 0 ? `, ${unprovable} declared unprovable` : ''}` +
+        `${manual.length > 0 ? `, manual-only: ${manual.join(', ')}` : ''}.\n`,
     );
     return 0;
   }

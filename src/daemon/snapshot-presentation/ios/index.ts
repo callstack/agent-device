@@ -24,16 +24,17 @@ export function presentIosInteractiveSnapshot(nodes: RawSnapshotNode[]): RawSnap
 
 export type IosInteractiveSnapshotPresentation = {
   nodes: RawSnapshotNode[];
-  sourceNodes: ReadonlyMap<number, RawSnapshotNode>;
+  sourceIndexes: ReadonlyMap<number, number>;
 };
 
 export function buildIosInteractiveSnapshotPresentation(
   nodes: RawSnapshotNode[],
 ): IosInteractiveSnapshotPresentation {
   if (nodes.length === 0) {
-    return { nodes, sourceNodes: new Map() };
+    return { nodes, sourceIndexes: new Map() };
   }
 
+  const sourceIndexes = new Map(nodes.map((node) => [node.index, node.index]));
   const replacements = new Map<number, RawSnapshotNode>();
   const semanticRepresentativeIndexes = new Set<number>();
   const sourceNodesByIndex = new Map(nodes.map((node) => [node.index, node]));
@@ -50,23 +51,24 @@ export function buildIosInteractiveSnapshotPresentation(
   }
 
   if (suppressedIndexes.size === 0 && replacements.size === 0) {
-    return { nodes, sourceNodes: sourceNodesByIndex };
+    return { nodes, sourceIndexes };
   }
 
   const presentedSourceNodes = nodes
     .filter((node) => !suppressedIndexes.has(node.index))
     .map((node) => replacements.get(node.index) ?? node);
-  const sourceNodes = new Map(presentedSourceNodes.map((node) => [node.index, node]));
-  for (const sourceIndex of suppressedIndexes) {
-    const replacement = replacements.get(sourceIndex);
-    if (replacement) sourceNodes.set(sourceIndex, replacement);
-  }
+  const presentedNodes = reindexSnapshotNodesWithSuppressedParents(
+    presentedSourceNodes,
+    suppressedIndexes,
+    nodes,
+  );
   return {
-    nodes: reindexSnapshotNodesWithSuppressedParents(
-      presentedSourceNodes,
-      suppressedIndexes,
-      nodes,
+    nodes: presentedNodes,
+    sourceIndexes: new Map(
+      presentedNodes.map((node, position) => [
+        node.index,
+        sourceIndexes.get(presentedSourceNodes[position]!.index)!,
+      ]),
     ),
-    sourceNodes,
   };
 }

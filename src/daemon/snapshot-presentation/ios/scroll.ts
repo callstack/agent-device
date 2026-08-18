@@ -6,7 +6,7 @@ import {
 import {
   findNearestScrollableContainer,
   isScrollableSnapshotType,
-  mergeReplacement,
+  updateReplacement,
   type SnapshotTreeRuleContext,
 } from '../tree.ts';
 
@@ -56,11 +56,11 @@ function applyScrollIndicatorReplacement(
   indicator: RawSnapshotNode,
   directions: { above: boolean; below: boolean },
 ): void {
-  mergeReplacement(context.replacements, container, {
-    rect: deriveScrollableViewportRect(container.rect, indicator.rect) ?? container.rect,
-    hiddenContentAbove: mergeHiddenContentFlag(container.hiddenContentAbove, directions.above),
-    hiddenContentBelow: mergeHiddenContentFlag(container.hiddenContentBelow, directions.below),
-  });
+  updateReplacement(context.replacements, container, (current) => ({
+    rect: deriveScrollableViewportRect(current.rect, indicator.rect) ?? current.rect,
+    hiddenContentAbove: mergeHiddenContentFlag(current.hiddenContentAbove, directions.above),
+    hiddenContentBelow: mergeHiddenContentFlag(current.hiddenContentBelow, directions.below),
+  }));
 }
 
 function mergeHiddenContentFlag(

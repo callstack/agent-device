@@ -14,7 +14,7 @@ import {
 import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live-harness.ts';
 
 const C = PUBLIC_COMMANDS;
-const ANDROID_TEST_IME_PACKAGE = 'com.callstack.agentdevice.imehelper';
+export const ANDROID_TEST_IME_PACKAGE = 'com.callstack.agentdevice.imehelper';
 const ANDROID_TEST_IME_SERVICE = `${ANDROID_TEST_IME_PACKAGE}/.TestInputMethodService`;
 const KEYBOARD_VISIBILITY_TIMEOUT_MS = 10_000;
 const KEYBOARD_VISIBILITY_POLL_MS = 250;

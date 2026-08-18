@@ -208,6 +208,40 @@ test('private-ax recovery resets the settle budget once', async () => {
   assert.equal(captures, 4);
 });
 
+test('press --settle pins an already-established private-ax observation backend', async () => {
+  const established = welcomeSnapshot();
+  established.snapshotQuality = {
+    state: 'recovered',
+    backend: 'private-ax',
+    reasonCode: 'deferred',
+    reason: 'penalty',
+  };
+  const preferredBackends: Array<string | undefined> = [];
+  const device = createAgentDevice({
+    backend: {
+      platform: 'ios',
+      captureSnapshot: async (_context, options) => {
+        preferredBackends.push(options?.preferredBackend);
+        return { snapshot: established };
+      },
+      tap: async () => ({ ok: true }),
+      fill: async () => ({ ok: true }),
+      longPress: async () => ({ ok: true }),
+      typeText: async () => {},
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default', snapshot: established }]),
+    policy: localCommandPolicy(),
+    clock: createFakeClock(),
+  });
+  await device.interactions.press(selector('label=Next'), {
+    session: 'default',
+    settle: { quietMs: 500, timeoutMs: 2_000 },
+  });
+  assert.equal(preferredBackends[0], undefined);
+  assert.deepEqual(new Set(preferredBackends.slice(1)), new Set(['private-ax']));
+});
+
 test('penalty-deferred private-ax captures do not reset the settle budget', async () => {
   // Same shape as the reset test above, but the verdict says the circuit breaker PRE-selected
   // private AX ('deferred'): the capture paid no grind, so the loop keeps its original budget

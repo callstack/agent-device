@@ -1,4 +1,4 @@
-import type { SnapshotNode, SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
+import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { now, sleep } from '../../runtime-common.ts';
 import {
@@ -7,6 +7,12 @@ import {
   type SelectorSnapshotOptions,
 } from './selector-read-shared.ts';
 import { runWithinWaitDeadline } from './wait-deadline.ts';
+import {
+  stableCaptureSignal,
+  stableCaptureSignalsEqual,
+  type StableCaptureSignal,
+} from './stable-capture-signal.ts';
+import { preferredSnapshotBackendForVerdict } from '../../../snapshot-quality/verdict.ts';
 
 /**
  * The quiet-window stable-capture loop shared by `wait stable` and the
@@ -56,12 +62,14 @@ export async function runStableCaptureLoop(
   const start = now(runtime);
   let deadlineMs = start + timeoutMs;
   let privateAxRecoveryBudgetReset = false;
+  const session = await runtime.sessions.get(options.session ?? 'default');
+  let preferredBackend = preferredSnapshotBackendForVerdict(session?.snapshot?.snapshotQuality);
   // Cadence derives from the quiet window (never slower than the default
   // poll): a caller asking for a 50ms quiet window should not be forced onto a
   // 300ms grid — and tests inject the budget instead of waiting real time.
   const pollMs = Math.min(STABLE_POLL_INTERVAL_MS, Math.max(STABLE_MIN_POLL_MS, quietMs));
   let captures = 0;
-  let lastDigest: string | undefined;
+  let lastSignal: StableCaptureSignal | undefined;
   let lastNodeCount = 0;
   let lastCapture: CapturedSnapshot | undefined;
   let quietSinceMs = start;
@@ -70,6 +78,7 @@ export async function runStableCaptureLoop(
       runtime,
       options,
       deadlineMs - now(runtime),
+      preferredBackend,
     );
     if (!capture) {
       return {
@@ -83,17 +92,22 @@ export async function runStableCaptureLoop(
     }
     captures += 1;
     lastCapture = capture;
-    const digest = digestSnapshotNodes(capture.snapshot.nodes);
+    const signal = stableCaptureSignal(capture.snapshot);
+    preferredBackend ??= preferredSnapshotBackendForVerdict(capture.snapshot.snapshotQuality);
     const nowMs = now(runtime);
-    if (
-      params.resetBudgetOnPrivateAxRecovery === true &&
-      !privateAxRecoveryBudgetReset &&
-      isPrivateAxRecovery(capture.snapshot.snapshotQuality)
-    ) {
+    const recoveredDeadlineMs = extendedDeadlineAfterPrivateAxRecovery({
+      resetRequested: params.resetBudgetOnPrivateAxRecovery,
+      alreadyReset: privateAxRecoveryBudgetReset,
+      verdict: capture.snapshot.snapshotQuality,
+      nowMs,
+      timeoutMs,
+      deadlineMs,
+    });
+    if (recoveredDeadlineMs !== undefined) {
       privateAxRecoveryBudgetReset = true;
-      deadlineMs = Math.max(deadlineMs, nowMs + timeoutMs);
+      deadlineMs = recoveredDeadlineMs;
       quietSinceMs = nowMs;
-      lastDigest = digest;
+      lastSignal = signal;
       lastNodeCount = capture.snapshot.nodes.length;
       const recoveryDelayMs = stableCaptureDelayMs({
         nowMs,
@@ -106,8 +120,8 @@ export async function runStableCaptureLoop(
       await sleep(runtime, recoveryDelayMs);
       continue;
     }
-    if (digest !== lastDigest) {
-      lastDigest = digest;
+    if (!stableCaptureSignalsEqual(lastSignal, signal)) {
+      lastSignal = signal;
       lastNodeCount = capture.snapshot.nodes.length;
       quietSinceMs = nowMs;
     } else if (captures >= 2 && nowMs - quietSinceMs >= quietMs) {
@@ -142,6 +156,24 @@ function isPrivateAxRecovery(verdict: SnapshotQualityVerdict | undefined): boole
     verdict.backend === 'private-ax' &&
     verdict.reasonCode !== 'deferred'
   );
+}
+
+function extendedDeadlineAfterPrivateAxRecovery(params: {
+  resetRequested: boolean | undefined;
+  alreadyReset: boolean;
+  verdict: SnapshotQualityVerdict | undefined;
+  nowMs: number;
+  timeoutMs: number;
+  deadlineMs: number;
+}): number | undefined {
+  if (
+    params.resetRequested !== true ||
+    params.alreadyReset ||
+    !isPrivateAxRecovery(params.verdict)
+  ) {
+    return undefined;
+  }
+  return Math.max(params.deadlineMs, params.nowMs + params.timeoutMs);
 }
 
 /**
@@ -197,6 +229,7 @@ async function captureStableSignalWithinDeadline(
   runtime: AgentDeviceRuntime,
   options: CommandContext & SelectorSnapshotOptions,
   remainingMs: number,
+  preferredBackend?: 'private-ax',
 ): Promise<CapturedSnapshot | undefined> {
   const result = await runWithinWaitDeadline(runtime, options, remainingMs, async (signal) => {
     return await captureSelectorSnapshot(
@@ -205,19 +238,9 @@ async function captureStableSignalWithinDeadline(
       {
         updateSession: false,
         interactiveOnly: true,
+        preferredBackend,
       },
     );
   });
   return result.timedOut ? undefined : result.value;
-}
-
-function digestSnapshotNodes(nodes: SnapshotNode[]): string {
-  return nodes.map(digestSnapshotNode).join('|');
-}
-
-function digestSnapshotNode(node: SnapshotNode): string {
-  const rect = node.rect
-    ? `${Math.round(node.rect.x)},${Math.round(node.rect.y)},${Math.round(node.rect.width)},${Math.round(node.rect.height)}`
-    : '';
-  return `${node.type ?? ''}#${node.label ?? ''}#${node.identifier ?? ''}#${rect}`;
 }

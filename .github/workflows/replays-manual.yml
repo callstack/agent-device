@@ -1,0 +1,197 @@
+name: Replay Manual
+
+# Parked here by #1781 A1. Both suites failed every scheduled run from 2026-07-24 on — the
+# Android suite inside full-tier scenarios that had never executed end to end, the iOS suite
+# on varying steps — so on a schedule they only produced noise. Manual dispatch keeps them
+# runnable while they are being repaired; `pnpm check:gate-manifest` reports the checks they
+# declare as manual-only (scripts/gate/declarations.ts) so the missing owner stays visible.
+# Move these jobs back into replays-nightly.yml once a dispatch run is green.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  manual-android:
+    name: Android Full Emulator Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      AGENT_DEVICE_STATE_DIR: ${{ github.workspace }}/.tmp/android-e2e-state
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Setup Android replay host
+        id: android-replay-host
+        uses: ./.github/actions/setup-android-replay-host
+        with:
+          package-helpers: 'true'
+
+      - name: Restore Android fixture APK
+        id: fixture-app
+        uses: ./.github/actions/setup-fixture-app
+        with:
+          platform: android
+          install: 'false'
+          require-artifact: 'true'
+
+      - name: Mark Android emulator setup complete
+        id: android-setup
+        run: echo "seconds=$(date +%s)" >> "$GITHUB_OUTPUT"
+
+      - name: Run Android full emulator suite
+        uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
+        with:
+          api-level: 36
+          arch: x86_64
+          profile: pixel_7
+          target: google_apis_playstore
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
+          script: |
+            # android-emulator-runner executes this with /usr/bin/sh, which is dash on
+            # ubuntu runners and rejects `-o pipefail`. The serial assignment below is
+            # validated by the `test -n` guard instead.
+            set -eu
+            ANDROID_SERIAL="$(adb devices | awk 'NR > 1 && $2 == "device" { print $1; exit }')"
+            test -n "$ANDROID_SERIAL"
+            BOOT_FINISHED_AT="$(date +%s)"
+            pnpm gate build
+            pnpm clean:daemon
+            adb -s "$ANDROID_SERIAL" install -r "${{ steps.fixture-app.outputs.apk-path }}"
+            node --experimental-strip-types src/bin.ts replay examples/test-app/replays/drag-android.ad --platform android --serial "$ANDROID_SERIAL" --session nightly-android-target-drag --json
+            pnpm clean:daemon
+            FULL_STARTED_AT="$(date +%s)"
+            AGENT_DEVICE_ANDROID_E2E=1 AGENT_DEVICE_ANDROID_E2E_TIER=full AGENT_DEVICE_ANDROID_SERIAL="$ANDROID_SERIAL" AGENT_DEVICE_FIXTURE_APP_PATH="${{ steps.fixture-app.outputs.apk-path }}" AGENT_DEVICE_FIXTURE_APP_ID="${{ steps.fixture-app.outputs.app-id }}" node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-android-emulator.test.ts
+            FULL_FINISHED_AT="$(date +%s)"
+            echo "Android setup before emulator: $((BOOT_FINISHED_AT - ${{ steps.android-setup.outputs.seconds }}))s"
+            echo "Android full scenario wall time: $((FULL_FINISHED_AT - FULL_STARTED_AT))s"
+            pnpm gate replay-android --retries 2 --artifacts-dir test/artifacts/replays-android --report-junit test/artifacts/replays-android.junit.xml
+
+      - name: Upload Android artifacts
+        if: always()
+        uses: ./.github/actions/upload-agent-device-artifacts
+        with:
+          artifact-name: replay-nightly-android-artifacts
+          agent-state-dir: ${{ env.AGENT_DEVICE_STATE_DIR }}
+
+  manual-ios:
+    name: iOS Replay Suite
+    runs-on: macos-26
+    timeout-minutes: 80
+    env:
+      IOS_RUNTIME_VERSION: '26.2'
+      AGENT_DEVICE_STATE_DIR: ${{ github.workspace }}/.tmp/agent-device-state
+      AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ github.workspace }}/.tmp/ios-runner-derived
+      AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS: '420000'
+      AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE: agent-device-test-app:///automation?event={event}&payload={payload}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+        with:
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            examples/test-app/pnpm-lock.yaml
+
+      - name: Restore and build iOS XCTest runner
+        uses: ./.github/actions/setup-apple-runner-build
+        with:
+          derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}
+          cache-key-prefix: ios-runner-prebuilt
+          cache-key-suffix: -ios-${{ env.IOS_RUNTIME_VERSION }}
+          gate: swift-runner-ios
+          xcuitest-platform: ios
+          xcuitest-destination: generic/platform=iOS Simulator
+
+      - name: Boot iOS test simulator
+        id: ios-simulator
+        uses: ./.github/actions/boot-ios-test-simulator
+        with:
+          runtime-version: ${{ env.IOS_RUNTIME_VERSION }}
+          preferred-device-name: iPhone 17 Pro
+
+      - name: Preflight iOS runner through public CLI
+        run: |
+          pnpm clean:daemon
+          node --experimental-strip-types src/bin.ts prepare ios-runner --platform ios --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --timeout "$AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS" --json
+          pnpm clean:daemon
+
+      - name: Run iOS simulator replay suite
+        uses: ./.github/actions/run-gate
+        with:
+          gate: replay-ios
+          args: |
+            --udid
+            ${{ steps.ios-simulator.outputs.simulator-udid }}
+            --retries
+            2
+            --artifacts-dir
+            test/artifacts/replays-ios-simulator
+            --report-junit
+            test/artifacts/replays-ios-simulator.junit.xml
+
+      - name: Fetch current fixture app
+        id: fixture-app
+        uses: ./.github/actions/setup-fixture-app
+        with:
+          install: 'false'
+
+      - name: Report fixture cache source
+        run: |
+          echo "Fixture app source: ${{ steps.fixture-app.outputs.source }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Prove selector drag reaches its destination on iOS
+        run: |
+          xcrun simctl install "${{ steps.ios-simulator.outputs.simulator-udid }}" "${{ steps.fixture-app.outputs.app-path }}"
+          pnpm clean:daemon
+          node --experimental-strip-types src/bin.ts replay examples/test-app/replays/drag.ad --platform ios --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --session nightly-ios-target-drag --json
+          pnpm clean:daemon
+
+      - name: Run full fixture-backed iOS simulator E2E
+        env:
+          AGENT_DEVICE_FIXTURE_APP_ID: ${{ steps.fixture-app.outputs.app-id }}
+          AGENT_DEVICE_FIXTURE_APP_PATH: ${{ steps.fixture-app.outputs.app-path }}
+          AGENT_DEVICE_IOS_E2E: '1'
+          AGENT_DEVICE_IOS_E2E_TIER: full
+          AGENT_DEVICE_IOS_UDID: ${{ steps.ios-simulator.outputs.simulator-udid }}
+        run: |
+          pnpm gate build
+          node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-ios-simulator-coverage.test.ts test/integration/smoke-ios-simulator.test.ts
+
+      - name: Run iOS physical device replay suite
+        if: env.IOS_UDID != ''
+        env:
+          IOS_UDID: ${{ vars.IOS_UDID }}
+        uses: ./.github/actions/run-gate
+        with:
+          gate: replay-ios-device
+          args: |
+            --udid
+            ${{ env.IOS_UDID }}
+            --retries
+            2
+            --artifacts-dir
+            test/artifacts/replays-ios-device
+            --report-junit
+            test/artifacts/replays-ios-device.junit.xml
+
+      - name: Upload iOS artifacts
+        if: always()
+        uses: ./.github/actions/upload-agent-device-artifacts
+        with:
+          artifact-name: replay-nightly-ios-artifacts
+          agent-state-dir: ${{ env.AGENT_DEVICE_STATE_DIR }}
+          runner-derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}

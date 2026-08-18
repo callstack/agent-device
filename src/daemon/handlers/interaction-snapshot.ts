@@ -6,6 +6,7 @@ import type { ContextFromFlags } from './interaction-common.ts';
 import { captureSnapshot } from './snapshot-capture.ts';
 import { setSessionSnapshot } from '../session-snapshot.ts';
 import { isSparseSnapshotQualityVerdict } from '../../snapshot-quality/verdict.ts';
+import { snapshotOptionsToFlags } from '../../backend-snapshot-options.ts';
 
 export type CaptureSnapshotForSession = (
   session: SessionState,
@@ -36,8 +37,7 @@ export async function captureSnapshotForSession(
 ): Promise<SnapshotState> {
   const effectiveFlags = {
     ...(flags ?? {}),
-    snapshotInteractiveOnly: options.interactiveOnly,
-    ...(options.preferredBackend ? { snapshotPreferredBackend: options.preferredBackend } : {}),
+    ...snapshotOptionsToFlags(options),
   };
   const dispatchContext = contextFromFlags(
     effectiveFlags,

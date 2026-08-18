@@ -175,15 +175,10 @@ extension RunnerTests {
 
       let rootFrame = privateAXRect(root["frame"])
       let viewport = privateAXSnapshotViewport(app: app, rootFrame: rootFrame)
-      var nodes: [SnapshotNode] = []
-      appendPrivateAXNode(
-        root,
-        to: &nodes,
+      let nodes = privateAXPresentation(
+        rawRoot: root,
         options: options,
-        viewport: viewport,
-        depth: 0,
-        parentIndex: nil,
-        insideMatchedScope: false
+        viewport: viewport
       )
       if nodes.count <= 1 {
         NSLog("AGENT_DEVICE_RUNNER_PRIVATE_AX_SNAPSHOT_SPARSE=%ld", nodes.count)
@@ -250,110 +245,7 @@ extension RunnerTests {
     }
   }
 
-  private func appendPrivateAXNode(
-    _ rawNode: [String: Any],
-    to nodes: inout [SnapshotNode],
-    options: SnapshotOptions,
-    viewport: CGRect,
-    depth: Int,
-    parentIndex: Int?,
-    insideMatchedScope: Bool
-  ) {
-    if let limit = options.depth, depth > limit { return }
-
-    let rect = privateAXRect(rawNode["frame"])
-    let label = privateAXString(rawNode["label"])
-    let identifier = privateAXString(rawNode["identifier"])
-    let value = privateAXString(rawNode["value"])
-    let rawType = privateAXInt(rawNode["type"]) ?? 0
-    let typeName = elementTypeName(rawElementType: rawType)
-    let enabled = privateAXBool(rawNode["enabled"]) ?? true
-    let visible = isVisibleInViewport(rect, viewport)
-    let interactiveCandidate = privateAXInteractiveCandidate(rawElementType: rawType)
-    let filterDecision = flatSnapshotFilterDecision(
-      FlatSnapshotFilterNode(
-        isRoot: parentIndex == nil,
-        label: label,
-        identifier: identifier,
-        valueText: value.isEmpty ? nil : value,
-        visible: visible
-      ),
-      options: options,
-      insideMatchedScope: insideMatchedScope
-    )
-    let include = filterDecision.include
-    let nowInsideScope = filterDecision.insideMatchedScope
-
-    let currentIndex: Int?
-    if include {
-      currentIndex = nodes.count
-      nodes.append(
-        SnapshotNode(
-          index: nodes.count,
-          type: typeName,
-          label: label.isEmpty ? nil : label,
-          identifier: identifier.isEmpty ? nil : identifier,
-          value: value.isEmpty ? nil : value,
-          rect: snapshotRect(from: rect),
-          enabled: enabled,
-          focused: privateAXBool(rawNode["focused"]) == true ? true : nil,
-          selected: privateAXBool(rawNode["selected"]) == true ? true : nil,
-          hittable: visible && enabled && interactiveCandidate,
-          depth: depth,
-          parentIndex: parentIndex,
-          hiddenContentAbove: nil,
-          hiddenContentBelow: nil,
-          actions: rawNode["actions"] as? [String]
-        )
-      )
-    } else {
-      currentIndex = parentIndex
-    }
-
-    guard let children = rawNode["children"] as? [[String: Any]] else {
-      return
-    }
-    for child in children {
-      appendPrivateAXNode(
-        child,
-        to: &nodes,
-        options: options,
-        viewport: viewport,
-        depth: depth + 1,
-        parentIndex: currentIndex,
-        insideMatchedScope: nowInsideScope
-      )
-    }
-  }
-
-  private func elementTypeName(rawElementType: Int) -> String {
-    if let type = flatSnapshotElementType(rawElementType: rawElementType) {
-      return elementTypeName(type)
-    }
-    return "Element(\(rawElementType))"
-  }
-
-  private func privateAXString(_ value: Any?) -> String {
-    guard let value else { return "" }
-    if let string = value as? String {
-      return string.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-    return String(describing: value).trimmingCharacters(in: .whitespacesAndNewlines)
-  }
-
-  private func privateAXInt(_ value: Any?) -> Int? {
-    if let value = value as? Int { return value }
-    if let value = value as? NSNumber { return value.intValue }
-    return nil
-  }
-
-  private func privateAXBool(_ value: Any?) -> Bool? {
-    if let value = value as? Bool { return value }
-    if let value = value as? NSNumber { return value.boolValue }
-    return nil
-  }
-
-  private func privateAXRect(_ value: Any?) -> CGRect {
+  func privateAXRect(_ value: Any?) -> CGRect {
     guard let frame = value as? [String: Any] else {
       return .zero
     }
@@ -742,15 +634,10 @@ extension RunnerTests {
         ],
       ],
     ]
-    var nodes: [SnapshotNode] = []
-    appendPrivateAXNode(
-      tree,
-      to: &nodes,
+    let nodes = privateAXPresentation(
+      rawRoot: tree,
       options: SnapshotOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
-      viewport: CGRect(x: 0, y: 0, width: 390, height: 844),
-      depth: 0,
-      parentIndex: nil,
-      insideMatchedScope: false
+      viewport: CGRect(x: 0, y: 0, width: 390, height: 844)
     )
 
     let card = nodes.first { $0.label == "feedItem-by-whiskers.test" }
@@ -772,15 +659,10 @@ extension RunnerTests {
         ["type": 9, "label": "unrelated sibling", "children": []],
       ],
     ]
-    var nodes: [SnapshotNode] = []
-    appendPrivateAXNode(
-      tree,
-      to: &nodes,
+    let nodes = privateAXPresentation(
+      rawRoot: tree,
       options: SnapshotOptions(interactiveOnly: false, depth: nil, scope: "homeScreen", raw: false),
-      viewport: .infinite,
-      depth: 0,
-      parentIndex: nil,
-      insideMatchedScope: false
+      viewport: .infinite
     )
 
     let labels = nodes.compactMap { $0.label ?? $0.identifier }
@@ -854,15 +736,10 @@ extension RunnerTests {
         ]
       ],
     ]
-    var nodes: [SnapshotNode] = []
-    appendPrivateAXNode(
-      tree,
-      to: &nodes,
+    let nodes = privateAXPresentation(
+      rawRoot: tree,
       options: SnapshotOptions(interactiveOnly: true, depth: nil, scope: nil, raw: false),
-      viewport: CGRect(x: 0, y: 0, width: 390, height: 844),
-      depth: 0,
-      parentIndex: nil,
-      insideMatchedScope: false
+      viewport: CGRect(x: 0, y: 0, width: 390, height: 844)
     )
 
     let labels = nodes.compactMap { $0.label }

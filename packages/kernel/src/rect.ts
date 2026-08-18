@@ -27,7 +27,7 @@ export function containsPoint(rect: Rect, x: number, y: number): boolean {
   return x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height;
 }
 
-export function pickLargestRect(rects: Rect[]): Rect | null {
+export function pickLargestRect(rects: readonly Rect[]): Rect | null {
   let best: Rect | null = null;
   let bestArea = -1;
   for (const rect of rects) {

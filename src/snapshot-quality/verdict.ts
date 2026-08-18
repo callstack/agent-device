@@ -85,3 +85,9 @@ export function isSparseSnapshotQualityVerdict(
 ): verdict is SnapshotQualityVerdict {
   return verdict?.state === 'sparse';
 }
+
+export function preferredSnapshotBackendForVerdict(
+  verdict: SnapshotQualityVerdict | undefined,
+): 'private-ax' | undefined {
+  return verdict?.backend === 'private-ax' ? 'private-ax' : undefined;
+}
