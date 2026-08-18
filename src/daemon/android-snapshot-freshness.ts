@@ -80,17 +80,21 @@ export function isNavigationSensitiveAction(command: string): boolean {
   return command === 'press' || command === 'click' || command === 'back' || command === 'open';
 }
 
+/**
+ * Route signature of an Android snapshot, from the fields the Android backend actually carries.
+ * The helper serializes no `role`, `selected`, `checked` or `long-clickable` (declared residue,
+ * #1832), so a signature keying on them would compare constants and claim discrimination it does
+ * not have.
+ */
 export function buildSnapshotSignatures(nodes: SnapshotState['nodes']): string[] {
   return nodes.map((node) =>
     [
       node.depth ?? 0,
       node.type ?? '',
-      node.role ?? '',
       node.label ?? '',
       node.value ?? '',
       node.identifier ?? '',
       node.enabled === false ? 'disabled' : 'enabled',
-      node.selected === true ? 'selected' : 'unselected',
       node.hittable === true ? 'hittable' : 'not-hittable',
     ].join('|'),
   );

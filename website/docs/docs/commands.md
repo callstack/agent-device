@@ -337,7 +337,11 @@ agent-device get attrs @e1
   alongside the app root; `androidSnapshot.captureMode` and `androidSnapshot.windowCount` describe
   the capture. On API 23 the helper cannot report `drawing-order`, so covered same-window surfaces
   (for example a React Native screen left under the foreground one) are not pruned;
-  `androidSnapshot.occlusionScanUnavailable: true` discloses that capture shape.
+  `androidSnapshot.occlusionScanUnavailable: true` discloses that capture shape. Android
+  `--raw` is the acquired tree: it keeps nodes Android marks invisible, stale application windows,
+  and covered same-window surfaces that the default and `-i` views hide, so use it to see what a
+  pruned surface contained. The helper does not report `checked`/`selected` state, and it caps
+  captures at 5000 nodes before any `--scope` applies (`truncated: true`).
 - `--scope <text|@ref>` returns the subtree of the first node in document order whose label, value,
   or identifier contains the scope text (case-insensitive) and whose subtree still has content in
   the requested projection, re-rooted at depth 0; no match returns an empty snapshot rather than the

@@ -241,6 +241,21 @@ task touches:
   typed `WebView` root and WebKit's `Other -> StaticText` wrapper pairs. It keeps raw diagnostics
   unchanged, presents ordinary wrapper text as `StaticText`, and presents wrappers carrying WebKit's
   numeric HTML heading level as `Heading`.
+- Android snapshot projections (#1832 C3): the parsed helper tree is the acquired tree and is never
+  mutated. `--raw` presents it whole (normalization only). The regular projection additionally hides
+  what `collectAndroidHiddenNodes` classifies — nodes Android marks invisible to users, stale
+  application windows, and same-window surfaces a higher drawing-order sibling covers — and the
+  interactive projection applies membership on top. `interactive ⊆ regular ⊆ raw` holds by
+  construction; hidden-content hints and the scope root are derived per projection.
+- Android declared residues (#1832): fidelity limits of the helper acquisition that no presentation
+  can repair, disclosed rather than papered over. (1) API 23 helper trees carry no `drawing-order`,
+  so the covered-surface rule cannot run — `androidSnapshot.occlusionScanUnavailable`. (2) The
+  helper serializes no `checked`/`checkable`/`selected`/`long-clickable`, so toggle and selection
+  state is invisible and nothing on Android may key on those fields (the freshness route signature
+  does not). (3) The helper caps at 5000 nodes before any projection, so a scoped target past the
+  cap vanishes with only the generic `truncated`. (4) Accessibility-cache reset differs by API level
+  (`clearCache()` on 34+, `setServiceInfo` re-apply below), an undisclosed acquisition-freshness
+  difference.
 - AX-unavailable target invalidation: iOS/macOS runner behavior where a root accessibility snapshot
   failure such as `kAXErrorIllegalArgument` marks the cached `XCUIApplication` target handle suspect.
   The runner fails closed for degraded interactive snapshots, clears the cached target, and lets the

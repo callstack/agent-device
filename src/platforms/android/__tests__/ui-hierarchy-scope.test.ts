@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildSnapshotState } from '../../../daemon/handlers/snapshot-capture.ts';
+import { buildSnapshotState } from '../../../daemon/snapshot-state.ts';
 import { parseUiHierarchy } from './ui-hierarchy-fixtures.ts';
 
 // Android's scope leg of the golden table (#1832 C2). Android resolves `--scope` exactly once,

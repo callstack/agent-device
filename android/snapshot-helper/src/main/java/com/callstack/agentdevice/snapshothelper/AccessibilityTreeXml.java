@@ -121,6 +121,9 @@ final class AccessibilityTreeXml {
     }
   }
 
+  // Declared residue (agent-device #1832): checked / checkable / selected / long-clickable are not
+  // serialized, so toggle and selection state is invisible to agents. Adding them is a helper
+  // protocol change (new attributes + host parser + fields on the wire node), tracked there.
   private static void appendDrawingOrderAttribute(StringBuilder xml, AccessibilityNodeInfo node) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
       appendAttribute(xml, "drawing-order", Integer.toString(node.getDrawingOrder()));

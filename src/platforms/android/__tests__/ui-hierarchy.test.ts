@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { buildSnapshotState } from '../../../daemon/handlers/snapshot-capture.ts';
+import { buildSnapshotState } from '../../../daemon/snapshot-state.ts';
 import { isNodeVisibleOnScreen } from '@agent-device/contracts/snapshot';
 import { androidUiNodes } from '../ui-hierarchy.ts';
 import { parseUiHierarchy } from './ui-hierarchy-fixtures.ts';
@@ -176,7 +176,7 @@ test('parseUiHierarchy discards stale inactive Android application windows', () 
   </node>
 </hierarchy>`;
 
-  const result = parseUiHierarchy(xml, 800, { raw: true });
+  const result = parseUiHierarchy(xml, 800, {});
   assert.equal(
     result.nodes.some((node) => node.label === 'Foreground article'),
     true,
@@ -197,7 +197,7 @@ test('parseUiHierarchy keeps the active Android application overlay window', () 
   </node>
 </hierarchy>`;
 
-  const result = parseUiHierarchy(xml, 800, { raw: true });
+  const result = parseUiHierarchy(xml, 800, {});
   assert.equal(
     result.nodes.some((node) => node.label === 'Covered content'),
     false,
@@ -218,7 +218,7 @@ test('parseUiHierarchy keeps only the top active Android application window', ()
   </node>
 </hierarchy>`;
 
-  const result = parseUiHierarchy(xml, 800, { raw: true });
+  const result = parseUiHierarchy(xml, 800, {});
   assert.equal(
     result.nodes.some((node) => node.label === 'Active stale content'),
     false,
@@ -278,8 +278,8 @@ test('parseUiHierarchy reads an omitted clickable attribute the same as clickabl
   </node>
 </hierarchy>`;
 
-  const omitted = parseUiHierarchy(tree(''), 800, { raw: true });
-  const explicitFalse = parseUiHierarchy(tree('clickable="false"'), 800, { raw: true });
+  const omitted = parseUiHierarchy(tree(''), 800, {});
+  const explicitFalse = parseUiHierarchy(tree('clickable="false"'), 800, {});
 
   assert.deepEqual(
     explicitFalse.nodes.map((node) => [node.label, node.hittable]),
@@ -298,19 +298,51 @@ test('parseUiHierarchy reads an omitted clickable attribute the same as clickabl
   }
 });
 
-test('parseUiHierarchy prunes Android nodes that are not visible to the user in raw snapshots', () => {
+test('parseUiHierarchy hides Android nodes that are not visible to the user in regular snapshots', () => {
   const xml = `<hierarchy>
   <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" enabled="true" visible-to-user="true">
     <node class="android.widget.Button" text="Hidden drawer action" bounds="[10,80][200,120]" clickable="true" enabled="true" visible-to-user="false"/>
   </node>
 </hierarchy>`;
 
-  const result = parseUiHierarchy(xml, 800, { raw: true });
-  assert.equal(result.nodes[0]!.visibleToUser, true);
+  const result = parseUiHierarchy(xml, 800, {});
   assert.equal(
     result.nodes.some((node) => node.label === 'Hidden drawer action'),
     false,
   );
+});
+
+test('raw Android snapshots are the acquired tree: invisible, stale-window and covered subtrees stay (C3)', () => {
+  // The three regular-projection pruners are membership, not acquisition. `--raw` keeps every node
+  // the helper serialized (normalization only), so `interactive ⊆ regular ⊆ raw` holds by
+  // construction and pruned content is recoverable for diagnosis.
+  const xml = `<hierarchy>
+  <node window-index="0" window-type="1" window-layer="10" window-active="false" window-focused="false" class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="0">
+    <node class="android.widget.Button" text="Stale window action" bounds="[0,0][390,60]" clickable="true" visible-to-user="true" drawing-order="1"/>
+  </node>
+  <node window-index="1" window-type="1" window-layer="20" window-active="true" window-focused="true" class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="0">
+    <node class="android.view.ViewGroup" bounds="[0,0][390,844]" clickable="true" visible-to-user="true" drawing-order="2">
+      <node class="android.widget.Button" text="Foreground action" bounds="[24,420][366,480]" clickable="true" visible-to-user="true" drawing-order="1"/>
+    </node>
+    <node class="android.view.ViewGroup" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="1">
+      <node class="android.widget.Button" text="Covered drawer action" bounds="[0,220][280,280]" clickable="true" visible-to-user="true" drawing-order="1"/>
+    </node>
+    <node class="android.widget.Button" text="Invisible action" bounds="[10,80][200,120]" clickable="true" visible-to-user="false" drawing-order="3"/>
+  </node>
+</hierarchy>`;
+  const labels = (options: Parameters<typeof parseUiHierarchy>[2]) =>
+    parseUiHierarchy(xml, 800, options)
+      .nodes.map((node) => node.label)
+      .filter((label): label is string => Boolean(label));
+
+  assert.deepEqual(labels({ raw: true }), [
+    'Stale window action',
+    'Foreground action',
+    'Covered drawer action',
+    'Invisible action',
+  ]);
+  assert.deepEqual(labels({}), ['Foreground action']);
+  assert.deepEqual(labels({ interactiveOnly: true }), ['Foreground action']);
 });
 
 test('parseUiHierarchy prunes descendants of Android nodes that are not visible to the user', () => {
@@ -322,7 +354,7 @@ test('parseUiHierarchy prunes descendants of Android nodes that are not visible 
   </node>
 </hierarchy>`;
 
-  const result = parseUiHierarchy(xml, 800, { raw: true });
+  const result = parseUiHierarchy(xml, 800, {});
   assert.equal(
     result.nodes.some((node) => node.label === 'Hidden drawer action'),
     false,
@@ -350,7 +382,7 @@ test('parseUiHierarchy prunes lower drawing-order subtrees covered by a foregrou
   </node>
 </hierarchy>`;
 
-  const result = parseUiHierarchy(xml, 800, { raw: true });
+  const result = parseUiHierarchy(xml, 800, {});
   assert.equal(
     result.nodes.some((node) => node.label === 'Foreground action'),
     true,
@@ -376,7 +408,7 @@ test('parseUiHierarchy keeps app content under a full-screen overlay holding one
   </node>
 </hierarchy>`;
 
-  const result = parseUiHierarchy(xml, 800, { raw: true });
+  const result = parseUiHierarchy(xml, 800, {});
   assert.deepEqual(
     result.nodes.filter((node) => node.label).map((node) => node.label),
     ['Editor', 'Save', 'dokit_contentview_id_DokitFrameLayout[1]', 'DoKit'],
@@ -395,7 +427,7 @@ test('parseUiHierarchy keeps app content beside an empty labelled full-screen pl
   </node>
 </hierarchy>`;
 
-  const result = parseUiHierarchy(xml, 800, { raw: true });
+  const result = parseUiHierarchy(xml, 800, {});
   assert.equal(
     result.nodes.some((node) => node.label === 'Toolbar action'),
     true,
@@ -420,7 +452,7 @@ test('parseUiHierarchy keeps app content under an overlay whose only controls si
   </node>
 </hierarchy>`;
 
-  const result = parseUiHierarchy(xml, 800, { raw: true });
+  const result = parseUiHierarchy(xml, 800, {});
   assert.deepEqual(
     result.nodes.filter((node) => node.label).map((node) => node.label),
     ['Editor', 'Save', 'Debug menu', 'Frame stats'],
@@ -443,7 +475,7 @@ test('parseUiHierarchy keeps app content under a focusable full-screen overlay h
   </node>
 </hierarchy>`;
 
-  const result = parseUiHierarchy(xml, 800, { raw: true });
+  const result = parseUiHierarchy(xml, 800, {});
   assert.deepEqual(
     result.nodes.filter((node) => node.label).map((node) => node.label),
     ['Your phone number', '208 379 7171', 'Attach'],
@@ -466,7 +498,7 @@ test('parseUiHierarchy counts identifier-only markers toward what a covered sibl
   </node>
 </hierarchy>`;
 
-  const result = parseUiHierarchy(xml, 800, { raw: true });
+  const result = parseUiHierarchy(xml, 800, {});
   assert.equal(
     result.nodes.some((node) => node.identifier === 'home-body'),
     true,
@@ -488,7 +520,7 @@ test('parseUiHierarchy compares presented footprints so a sparse overlay never c
   </node>
 </hierarchy>`;
 
-  const result = parseUiHierarchy(xml, 800, { raw: true });
+  const result = parseUiHierarchy(xml, 800, {});
   assert.deepEqual(
     result.nodes.filter((node) => node.label).map((node) => node.label),
     ['Top action', 'Bottom action', 'Badge'],
@@ -505,7 +537,7 @@ test('parseUiHierarchy keeps visible identifier-only markers beside covering con
   </node>
 </hierarchy>`;
 
-  const result = parseUiHierarchy(xml, 800, { raw: true });
+  const result = parseUiHierarchy(xml, 800, {});
   assert.equal(
     result.nodes.some((node) => node.identifier === 'post-auth-screen'),
     true,
@@ -528,7 +560,7 @@ test('parseUiHierarchy keeps visible side-by-side drawer and content subtrees', 
   </node>
 </hierarchy>`;
 
-  const result = parseUiHierarchy(xml, 800, { raw: true });
+  const result = parseUiHierarchy(xml, 800, {});
   assert.equal(
     result.nodes.some((node) => node.label === 'Visible drawer action'),
     true,
@@ -551,7 +583,7 @@ test('parseUiHierarchy keeps lower siblings when drawing-order metadata is unava
   </node>
 </hierarchy>`;
 
-  const result = parseUiHierarchy(xml, 800, { raw: true });
+  const result = parseUiHierarchy(xml, 800, {});
   assert.equal(
     result.nodes.some((node) => node.label === 'Foreground action'),
     true,
@@ -574,7 +606,7 @@ test('parseUiHierarchy keeps overlapping siblings when drawing-order ties', () =
   </node>
 </hierarchy>`;
 
-  const result = parseUiHierarchy(xml, 800, { raw: true });
+  const result = parseUiHierarchy(xml, 800, {});
   assert.equal(
     result.nodes.some((node) => node.label === 'First tied action'),
     true,
@@ -597,7 +629,7 @@ test('parseUiHierarchy keeps lower siblings below the covered-area threshold', (
   </node>
 </hierarchy>`;
 
-  const result = parseUiHierarchy(xml, 800, { raw: true });
+  const result = parseUiHierarchy(xml, 800, {});
   assert.equal(
     result.nodes.some((node) => node.label === 'Partial overlay action'),
     true,
@@ -618,7 +650,7 @@ test('parseUiHierarchy keeps lower siblings covered only by non-agent-visible ov
   </node>
 </hierarchy>`;
 
-  const result = parseUiHierarchy(xml, 800, { raw: true });
+  const result = parseUiHierarchy(xml, 800, {});
   assert.equal(
     result.nodes.some((node) => node.label === 'Still visible action'),
     true,
@@ -638,7 +670,7 @@ test('parseUiHierarchy keeps React Native content under a transparent Expo tools
   </node>
 </hierarchy>`;
 
-  const result = parseUiHierarchy(xml, 800, { raw: true });
+  const result = parseUiHierarchy(xml, 800, {});
   assert.equal(
     result.nodes.some((node) => node.label === 'Agent Device Tester'),
     true,
@@ -666,7 +698,7 @@ test('parseUiHierarchy keeps app content under a childless focusable full-screen
   </node>
 </hierarchy>`;
 
-  const result = parseUiHierarchy(xml, 800, { raw: true });
+  const result = parseUiHierarchy(xml, 800, {});
   assert.equal(
     result.nodes.some((node) => node.label === 'Your phone number'),
     true,
@@ -686,7 +718,7 @@ test('parseUiHierarchy keeps an overlapped text leaf drawn inside a composite wi
   </node>
 </hierarchy>`;
 
-  const result = parseUiHierarchy(xml, 800, { raw: true });
+  const result = parseUiHierarchy(xml, 800, {});
   assert.equal(
     result.nodes.some((node) => node.label === '+'),
     true,
@@ -708,7 +740,7 @@ test('parseUiHierarchy still condemns a clickable leaf covered by a foreground s
   </node>
 </hierarchy>`;
 
-  const result = parseUiHierarchy(xml, 800, { raw: true });
+  const result = parseUiHierarchy(xml, 800, {});
   assert.equal(
     result.nodes.some((node) => node.label === 'Modal action'),
     true,
@@ -723,7 +755,7 @@ test('parseUiHierarchy ignores attribute-name prefix spoofing', () => {
   const xml =
     "<hierarchy><node class='android.widget.TextView' hint-text='Spoofed' text='Actual' bounds='[10,20][110,60]'/></hierarchy>";
 
-  const result = parseUiHierarchy(xml, 800, { raw: true });
+  const result = parseUiHierarchy(xml, 800, {});
   assert.equal(result.nodes.length, 1);
   assert.equal(result.nodes[0]!.value, 'Actual');
 });

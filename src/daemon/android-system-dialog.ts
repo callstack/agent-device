@@ -8,9 +8,9 @@ import { snapshotAndroid } from '../platforms/android/snapshot.ts';
 import { runAndroidAdb } from '../platforms/android/adb.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { centerOfRect, attachRefs, type SnapshotNode } from '@agent-device/kernel/snapshot';
+import { centerOfRect, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import { sleep } from '../utils/timeouts.ts';
-import { pruneGroupNodes } from '../core/snapshot-tree-ingestion.ts';
+import { buildSnapshotState } from './snapshot-state.ts';
 import { expireRefFrame } from './ref-frame.ts';
 import type { SessionState } from './types.ts';
 
@@ -261,11 +261,16 @@ function formatAndroidBlockingDialogFocus(focus: AndroidBlockingDialogFocus): st
   return focus.package ? `${focus.focusedWindow} (package ${focus.package})` : focus.focusedWindow;
 }
 
+/**
+ * Blocking-dialog detection reads the SAME presentation an agent's `snapshot` would see: one
+ * daemon presentation (normalize, group prune, occlusion annotation, refs) rather than a hand-rolled
+ * subset that could disagree with it about which button is on top (#1832, the #1784 pattern).
+ */
 async function readAndroidSnapshotNodes(session: SessionState): Promise<SnapshotNode[]> {
   const rawSnapshot = await snapshotAndroid(session.device, {
     interactiveOnly: false,
   });
-  return attachRefs(pruneGroupNodes(rawSnapshot.nodes));
+  return buildSnapshotState({ nodes: rawSnapshot.nodes, backend: 'android' }, undefined).nodes;
 }
 
 async function tapAndroidDialogButton(

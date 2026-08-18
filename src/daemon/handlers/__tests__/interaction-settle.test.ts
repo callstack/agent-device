@@ -4,7 +4,7 @@ import { handleInteractionCommands } from '../interaction.ts';
 import type { SessionStore } from '../../session-store.ts';
 import type { SessionState } from '../../types.ts';
 import type { SnapshotBackend } from '@agent-device/kernel/snapshot';
-import { buildSnapshotState } from '../snapshot-capture.ts';
+import { buildSnapshotState } from '../../snapshot-state.ts';
 import { setSessionSnapshot } from '../../session-snapshot.ts';
 import { activateCompleteRefFrame } from '../../ref-frame.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';

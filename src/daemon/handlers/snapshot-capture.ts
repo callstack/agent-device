@@ -5,29 +5,22 @@ import {
   type SnapshotCaptureAnnotations,
 } from '@agent-device/contracts/capture';
 import { isIosFamily, publicPlatformString } from '@agent-device/kernel/device';
-import { isAndroidInputMethodNode } from '@agent-device/contracts/platform';
 import {
-  attachRefs,
-  buildSnapshotPresentationKey,
   findNodeByRef,
   normalizeRef,
-  snapshotPresentationOptionsFromFlags,
   type RawSnapshotNode,
   type SnapshotBackend,
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
-import { annotateCoveredSnapshotNodes } from '../../snapshot/snapshot-occlusion.ts';
 import { resolveRefLabel } from '../../core/snapshot-node-lookup.ts';
-import { scopeSnapshotNodes } from '../../snapshot/snapshot-desktop-surface.ts';
 import { captureSnapshotWithInteractor } from './snapshot-interactor-capture.ts';
-import { normalizeSnapshotTree, pruneGroupNodes } from '../../core/snapshot-tree-ingestion.ts';
+import { buildSnapshotState } from '../snapshot-state.ts';
 import {
   clearAndroidSnapshotFreshness,
   type AndroidFreshnessMode,
 } from '../android-snapshot-freshness.ts';
 import { contextFromFlags } from '../context.ts';
 import { resolveDeferredInteractionOutcome } from '../deferred-interaction-outcome.ts';
-import { presentIosInteractiveSnapshot } from '../snapshot-presentation/ios/index.ts';
 import type { SessionState } from '../types.ts';
 import { errorResponse, type DaemonFailureResponse } from './response.ts';
 
@@ -164,51 +157,6 @@ function resolveSnapshotStateFlags(
   };
 }
 
-export function buildSnapshotState(
-  data: {
-    nodes?: RawSnapshotNode[];
-    truncated?: boolean;
-    backend?: SnapshotBackend;
-    quality?: unknown;
-  },
-  flags:
-    | (Pick<CommandFlags, 'snapshotDepth' | 'snapshotInteractiveOnly' | 'snapshotRaw'> &
-        Partial<Pick<CommandFlags, 'snapshotScope'>>)
-    | undefined,
-): SnapshotState {
-  const rawNodes = data?.nodes ?? [];
-  const snapshotRaw = flags?.snapshotRaw;
-  const normalizedNodes = normalizeSnapshotTree(snapshotRaw ? rawNodes : pruneGroupNodes(rawNodes));
-  const presentableNodes = shouldPresentIosInteractiveSnapshot(data?.backend, flags)
-    ? presentIosInteractiveSnapshot(normalizedNodes)
-    : normalizedNodes;
-  const scopedNodes =
-    flags?.snapshotScope && backendScopesAfterWire(data?.backend)
-      ? scopeSnapshotNodes(presentableNodes, flags.snapshotScope)
-      : presentableNodes;
-  const snapshotQuality = snapshotCaptureAnnotationsFrom(data).quality;
-  const nodes = attachRefs(
-    snapshotRaw
-      ? scopedNodes
-      : annotateCoveredSnapshotNodes(scopedNodes, {
-          isAdditionalOverlayNode:
-            data?.backend === 'android' ? isAndroidInputMethodNode : undefined,
-        }),
-  );
-  return {
-    nodes,
-    truncated: data?.truncated,
-    createdAt: Date.now(),
-    backend: data?.backend,
-    ...(snapshotQuality ? { snapshotQuality } : {}),
-    presentationKey: buildSnapshotPresentationKey(snapshotPresentationOptionsFromFlags(flags)),
-    // Only broad Android snapshots become freshness baselines. If the user asked for a scoped
-    // or filtered view, preserve that output contract but avoid pretending it is safe for
-    // route-level comparisons on the next capture.
-    comparisonSafe: isAndroidComparisonSafeSnapshot(data?.backend, flags),
-  };
-}
-
 function snapshotCaptureFlagsForBackend(
   device: SessionState['device'],
   flags: CommandFlags | undefined,
@@ -222,43 +170,6 @@ function snapshotCaptureFlagsForBackend(
     return flags;
   }
   return { ...flags, snapshotScope: undefined };
-}
-
-/**
- * Scope resolves once per snapshot. Android resolves it inside its projection (the platform
- * matcher implements the shared scope specification, `@agent-device/contracts/snapshot`), and the
- * macOS helper scopes at capture; a second pass here would re-match inside an already-scoped tree
- * and hand the two layers different no-match semantics (#1832 C2).
- */
-function backendScopesAfterWire(backend: SnapshotBackend | undefined): boolean {
-  return backend !== 'macos-helper' && backend !== 'android';
-}
-
-function shouldPresentIosInteractiveSnapshot(
-  backend: SnapshotBackend | undefined,
-  flags:
-    | (Pick<CommandFlags, 'snapshotDepth' | 'snapshotInteractiveOnly' | 'snapshotRaw'> &
-        Partial<Pick<CommandFlags, 'snapshotScope'>>)
-    | undefined,
-): boolean {
-  return (
-    backend === 'xctest' && flags?.snapshotInteractiveOnly === true && flags.snapshotRaw !== true
-  );
-}
-
-function isAndroidComparisonSafeSnapshot(
-  backend: SnapshotBackend | undefined,
-  flags:
-    | (Pick<CommandFlags, 'snapshotDepth' | 'snapshotInteractiveOnly' | 'snapshotRaw'> &
-        Partial<Pick<CommandFlags, 'snapshotScope'>>)
-    | undefined,
-): boolean {
-  return (
-    backend === 'android' &&
-    flags?.snapshotInteractiveOnly !== true &&
-    typeof flags?.snapshotDepth !== 'number' &&
-    !flags?.snapshotScope
-  );
 }
 
 export function resolveSnapshotScope(

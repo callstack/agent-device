@@ -1632,11 +1632,11 @@ test('snapshotAndroid preserves bottomed-out hidden-above hints in interactive s
   assert.equal(scrollArea?.hiddenContentBelow, undefined);
 });
 
-test('buildUiHierarchySnapshot preserves hidden content hints from Android tree nodes', () => {
+test('buildUiHierarchySnapshot derives hidden content hints from can-scroll-* on the presented node', () => {
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <hierarchy rotation="0">
   <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" clickable="false" focusable="false">
-    <node class="android.widget.ScrollView" content-desc="Messages" bounds="[0,100][390,500]" clickable="false" focusable="false">
+    <node class="android.widget.ScrollView" content-desc="Messages" bounds="[0,100][390,500]" scrollable="true" can-scroll-forward="true" can-scroll-backward="true" clickable="false" focusable="false">
       <node class="android.view.ViewGroup" bounds="[0,100][390,500]" clickable="false" focusable="false">
         <node class="android.widget.Button" text="Visible message" bounds="[0,120][390,180]" clickable="true" focusable="true" />
       </node>
@@ -1647,8 +1647,6 @@ test('buildUiHierarchySnapshot preserves hidden content hints from Android tree 
   const tree = parseUiHierarchyTree(xml);
   const scrollNode = tree.children[0]?.children[0];
   assert.ok(scrollNode);
-  scrollNode.hiddenContentAbove = true;
-  scrollNode.hiddenContentBelow = true;
 
   const result = buildUiHierarchySnapshot(tree, 800, { interactiveOnly: true });
   const scrollArea = result.nodes.find((node) => node.label === 'Messages');

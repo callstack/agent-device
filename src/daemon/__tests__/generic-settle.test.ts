@@ -7,7 +7,7 @@ import { activateCompleteRefFrame } from '../ref-frame.ts';
 import { setSessionSnapshot } from '../session-snapshot.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
-import { buildSnapshotState } from '../handlers/snapshot-capture.ts';
+import { buildSnapshotState } from '../snapshot-state.ts';
 
 // #1638 `--settle` on the GENERIC daemon route (scroll/back): the settled diff,
 // its refs, and the ref-frame/generation dance are the same contract the touch

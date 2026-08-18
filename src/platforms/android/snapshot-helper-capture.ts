@@ -118,6 +118,9 @@ export function resolveAndroidSnapshotHelperCaptureOptions(
       timeoutMs + ANDROID_SNAPSHOT_HELPER_COMMAND_OVERHEAD_MS,
     ),
     maxDepth: withDefault(options.maxDepth, 128),
+    // Declared residue (#1832): the helper caps the acquired tree device-side, BEFORE any projection
+    // or scope resolution runs, so a scoped target past the cap vanishes with only the generic
+    // `truncated` disclosure. Android acquisition is scope-blind (C2), so no hint can narrow it.
     maxNodes: withDefault(options.maxNodes, 5_000),
     packageName,
     runner: withDefault(options.instrumentationRunner, `${packageName}/.SnapshotInstrumentation`),

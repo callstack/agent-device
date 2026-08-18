@@ -10,7 +10,7 @@ import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts
 import { expireRefFrame } from '../../ref-frame.ts';
 import { setSessionSnapshot, STALE_SNAPSHOT_REFS_WARNING } from '../../session-snapshot.ts';
 import { handleInteractionCommands } from '../interaction.ts';
-import { buildSnapshotState } from '../snapshot-capture.ts';
+import { buildSnapshotState } from '../../snapshot-state.ts';
 import {
   contextFromFlags,
   makeSession,
