@@ -12,6 +12,10 @@ export function normalizeToolError(error: unknown): NormalizedError {
 
 export function formatToolErrorText(normalized: NormalizedError): string {
   const lines = [`Error (${normalized.code}): ${normalized.message}`];
+  if (normalized.cause) {
+    const code = normalized.cause.code ? `${normalized.cause.code} ` : '';
+    lines.push(`Cause: ${code}${normalized.cause.message}`);
+  }
   if (normalized.hint) lines.push(`Hint: ${normalized.hint}`);
   // #1597: printed unconditionally, same as the CLI text path
   // (src/utils/output.ts printHumanError) — an MCP-connected agent must see

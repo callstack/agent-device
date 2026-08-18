@@ -37,6 +37,10 @@ export function printHumanError(
 ): void {
   const normalized = err instanceof AppError ? normalizeError(err) : err;
   process.stderr.write(`Error (${normalized.code}): ${normalized.message}\n`);
+  if (normalized.cause) {
+    const code = normalized.cause.code ? `${normalized.cause.code} ` : '';
+    process.stderr.write(`Cause: ${code}${normalized.cause.message}\n`);
+  }
   if (normalized.hint) {
     process.stderr.write(`Hint: ${normalized.hint}\n`);
   }

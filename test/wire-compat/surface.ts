@@ -234,7 +234,13 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'DaemonArtifactType',
         'DaemonArtifactKnownType',
       ),
-      ...from(KERNEL_ERRORS, 'DaemonError', 'DiagnosticsRecordRef', 'readDiagnosticsRecordRef'),
+      ...from(
+        KERNEL_ERRORS,
+        'DaemonError',
+        'DiagnosticsRecordRef',
+        'ErrorCause',
+        'readDiagnosticsRecordRef',
+      ),
       // "These are wire values" — the progress module says so itself: the daemon
       // serializes them onto the response stream and the CLI reconstructs them.
       ...from(

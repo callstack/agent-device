@@ -83,6 +83,39 @@ test('download errors do not disclose URL credentials or query values', async ()
   }
 });
 
+test('download identifies the daemon as the requester and preserves the network cause', async () => {
+  const tempRoot = await mkdtempForTest('agent-device-download-network-error-');
+  const lookup = vi
+    .spyOn(dns, 'lookup')
+    .mockImplementation(
+      async () =>
+        [{ address: '93.184.216.34', family: 4 }] as unknown as Awaited<
+          ReturnType<typeof dns.lookup>
+        >,
+    );
+  const transportError = Object.assign(new Error('connect ECONNREFUSED 10.0.0.1:443'), {
+    code: 'ECONNREFUSED',
+  });
+  const requestMock = vi
+    .spyOn(networkTransport, 'requestApprovedUrl')
+    .mockRejectedValue(transportError);
+  try {
+    const error = await downloadInstallSource({
+      tempDir: tempRoot,
+      url: 'https://example.com/app.apk',
+      signal: new AbortController().signal,
+    }).catch((caught: unknown) => caught);
+
+    assert.ok(error instanceof Error);
+    assert.equal(error.message, 'The daemon failed to fetch the app source');
+    assert.equal((error as { cause?: unknown }).cause, transportError);
+  } finally {
+    requestMock.mockRestore();
+    lookup.mockRestore();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('download rejects non-identity content encoding and malformed lengths', async () => {
   const tempRoot = await mkdtempForTest('agent-device-download-metadata-');
   const lookup = vi

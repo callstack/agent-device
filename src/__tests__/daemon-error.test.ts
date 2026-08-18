@@ -52,3 +52,32 @@ test('throwDaemonError preserves details.divergence into the thrown AppError', (
   };
   assert.deepEqual(roundTripped.error.details?.divergence, divergence);
 });
+
+test('daemon error normalization and rehydration preserve a structured transport cause', () => {
+  const transportError = Object.assign(new Error('connect ECONNREFUSED 10.0.0.1:443'), {
+    code: 'ECONNREFUSED',
+  });
+  const wireError = normalizeError(
+    new AppError(
+      'COMMAND_FAILED',
+      'The daemon failed to fetch the app source',
+      undefined,
+      transportError,
+    ),
+  );
+
+  assert.deepEqual(wireError.cause, {
+    code: 'ECONNREFUSED',
+    message: 'connect ECONNREFUSED 10.0.0.1:443',
+  });
+
+  let caught: unknown;
+  try {
+    throwDaemonError(JSON.parse(JSON.stringify(wireError)) as DaemonError);
+  } catch (error) {
+    caught = error;
+  }
+
+  assert.ok(caught instanceof AppError);
+  assert.deepEqual(normalizeError(caught).cause, wireError.cause);
+});

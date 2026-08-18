@@ -278,6 +278,7 @@ function normalizeDaemonError(value: unknown): DaemonError | undefined {
   if (!isRecord(value)) return undefined;
   if (typeof value.code !== 'string' || typeof value.message !== 'string') return undefined;
   const error: DaemonError = { code: value.code, message: value.message };
+  Object.assign(error, normalizeDaemonErrorCause(value.cause));
   for (const field of DAEMON_ERROR_STRING_FIELDS) {
     const candidate = value[field];
     if (typeof candidate === 'string') error[field] = candidate;
@@ -285,6 +286,16 @@ function normalizeDaemonError(value: unknown): DaemonError | undefined {
   if (isRecord(value.details)) error.details = value.details;
   if (typeof value.retriable === 'boolean') error.retriable = value.retriable;
   return error;
+}
+
+function normalizeDaemonErrorCause(value: unknown): Pick<DaemonError, 'cause'> | undefined {
+  if (!isRecord(value) || typeof value.message !== 'string') return undefined;
+  return {
+    cause: {
+      message: value.message,
+      ...(typeof value.code === 'string' ? { code: value.code } : {}),
+    },
+  };
 }
 
 /**

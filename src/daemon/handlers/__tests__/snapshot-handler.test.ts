@@ -2611,10 +2611,10 @@ test('wait sleep bypasses sessionless runner cleanup wrapper', async () => {
   expect(response?.ok).toBe(true);
 });
 
+const returnOk = async () => 'ok';
+
 test('sessionless iOS runner cleanup stops the runner host app', async () => {
-  const result = await withSessionlessRunnerCleanup(undefined, iosSimulatorDevice, async () => {
-    return 'ok';
-  });
+  const result = await withSessionlessRunnerCleanup(undefined, iosSimulatorDevice, returnOk);
 
   expect(result).toBe('ok');
   expect(mockStopIosRunnerSession).toHaveBeenCalledWith(iosSimulatorDevice.id);
@@ -2627,9 +2627,7 @@ test('sessionless iOS runner cleanup stops the runner host app', async () => {
 test('sessionless iOS runner host close is best effort', async () => {
   mockCloseIosApp.mockRejectedValueOnce(new Error('terminate failed'));
 
-  const result = await withSessionlessRunnerCleanup(undefined, iosSimulatorDevice, async () => {
-    return 'ok';
-  });
+  const result = await withSessionlessRunnerCleanup(undefined, iosSimulatorDevice, returnOk);
 
   expect(result).toBe('ok');
   expect(mockStopIosRunnerSession).toHaveBeenCalledWith(iosSimulatorDevice.id);

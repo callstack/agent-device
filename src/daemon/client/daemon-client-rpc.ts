@@ -101,9 +101,11 @@ function toDaemonHttpRpcError(error: {
   data?: Record<string, unknown>;
 }): DaemonError {
   const data = error.data ?? {};
+  const cause = readDaemonErrorCause(data.cause);
   return {
     code: toAppErrorCode(data.code != null ? String(data.code) : undefined, 'COMMAND_FAILED'),
     message: String(data.message ?? error.message ?? 'Daemon RPC request failed'),
+    cause,
     details:
       typeof data.details === 'object' && data.details
         ? (data.details as Record<string, unknown>)
@@ -117,18 +119,33 @@ function toDaemonHttpRpcError(error: {
   };
 }
 
+function readDaemonErrorCause(value: unknown): DaemonError['cause'] {
+  if (!value || typeof value !== 'object') return undefined;
+  const cause = value as Record<string, unknown>;
+  if (typeof cause.message !== 'string') return undefined;
+  return {
+    message: cause.message,
+    ...(typeof cause.code === 'string' ? { code: cause.code } : {}),
+  };
+}
+
 function appErrorFromDaemonError(error: DaemonError, requestId: string | undefined): AppError {
-  return new AppError(toAppErrorCode(error.code, 'COMMAND_FAILED'), error.message, {
-    ...(error.details ?? {}),
-    hint: error.hint,
-    diagnosticId: error.diagnosticId,
-    logPath: error.logPath,
-    logPathUnavailable: error.logPathUnavailable,
-    diagnosticsRecord: error.diagnosticsRecord,
-    retriable: error.retriable,
-    supportedOn: error.supportedOn,
-    requestId,
-  });
+  return new AppError(
+    toAppErrorCode(error.code, 'COMMAND_FAILED'),
+    error.message,
+    {
+      ...(error.details ?? {}),
+      hint: error.hint,
+      diagnosticId: error.diagnosticId,
+      logPath: error.logPath,
+      logPathUnavailable: error.logPathUnavailable,
+      diagnosticsRecord: error.diagnosticsRecord,
+      retriable: error.retriable,
+      supportedOn: error.supportedOn,
+      requestId,
+    },
+    error.cause,
+  );
 }
 
 async function resolveDaemonHttpResult(

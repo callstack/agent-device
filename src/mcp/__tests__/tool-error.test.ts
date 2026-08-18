@@ -38,6 +38,21 @@ test('formatToolErrorText omits the candidates block for non-ambiguous errors', 
   assert.equal(text.includes('Candidates:'), false);
 });
 
+test('formatToolErrorText renders a structured cause', () => {
+  const err = new AppError(
+    'COMMAND_FAILED',
+    'The daemon failed to fetch the app source',
+    undefined,
+    Object.assign(new Error('connect ECONNREFUSED 10.0.0.1:443'), {
+      code: 'ECONNREFUSED',
+    }),
+  );
+
+  const text = formatToolErrorText(normalizeToolError(err));
+
+  assert.match(text, /Cause: ECONNREFUSED connect ECONNREFUSED 10\.0\.0\.1:443/);
+});
+
 // Device-domain AMBIGUOUS_MATCH (findBootedAppleSimulatorWithApp,
 // src/core/dispatch-resolve.ts) keys its list `devices`, so the MCP text path
 // carries the udids the hint asks for — same block as the CLI.

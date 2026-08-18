@@ -30,6 +30,24 @@ test('normalizeError adds default hint and strips diagnostic metadata from detai
   assert.equal(Object.hasOwn(normalized.details ?? {}, 'hint'), false);
 });
 
+test('normalizeError redacts and bounds a structured cause before putting it on the wire', () => {
+  const cause = Object.assign(
+    new Error(
+      `request to https://example.com/app.apk?token=private-token failed: bearer private-token ${'x'.repeat(500)}`,
+    ),
+    { code: 'ECONNRESET' },
+  );
+
+  const normalized = normalizeError(
+    new AppError('COMMAND_FAILED', 'The daemon failed to fetch the app source', undefined, cause),
+  );
+
+  assert.equal(normalized.cause?.code, 'ECONNRESET');
+  assert.equal(normalized.cause?.message.includes('private-token'), false);
+  assert.match(normalized.cause?.message ?? '', /REDACTED/);
+  assert.ok((normalized.cause?.message.length ?? 0) < cause.message.length);
+});
+
 test('normalizeError provides app discovery guidance for app-not-installed errors', () => {
   const normalized = normalizeError(
     new AppError('APP_NOT_INSTALLED', 'No package found matching "chat"'),

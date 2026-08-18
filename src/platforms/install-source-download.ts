@@ -64,7 +64,12 @@ async function requestHop(
     });
   } catch (error) {
     if (error instanceof AppError) throw error;
-    throw new AppError('COMMAND_FAILED', 'App source network request failed', undefined, error);
+    throw new AppError(
+      'COMMAND_FAILED',
+      'The daemon failed to fetch the app source',
+      undefined,
+      error,
+    );
   }
 }
 

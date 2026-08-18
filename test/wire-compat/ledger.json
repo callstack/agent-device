@@ -31,18 +31,19 @@
     "packages/kernel/src/contracts.ts#jsonRpcRequestSchema": "sha256:67e6b8a28b39a3883424a565ae7033c336dc2ea6b193e9b32bb98eb3e18dca7c",
     "packages/kernel/src/device.ts#PLATFORM_SELECTORS": "sha256:36e9da1cc660c0ddfb4cf52521f7f230341ff20e3ebda3405ba7c1799476c42d",
     "packages/kernel/src/device.ts#PlatformSelector": "sha256:61de3f003507ea2f53b396b0146c17670bf674a2db2132e19c462ca6c10cc8fd",
-    "packages/kernel/src/errors.ts#DaemonError": "sha256:af0f0f420277a57338dc59b7b443ec83d371e18768d064b7a265949e6435e976",
+    "packages/kernel/src/errors.ts#DaemonError": "sha256:ae49c9c9c8fb93bb6b31ab865f37cc8b0db6c1b6ff026cc2791425b772c162a6",
     "packages/kernel/src/errors.ts#DiagnosticsRecordRef": "sha256:c5ef4185d01814fbfddcdcf797ce892f6ebfe1fd3c3fa73c7560ce2d3b6fce60",
+    "packages/kernel/src/errors.ts#ErrorCause": "sha256:2f38679b0e9ec997fe8d94b5d5025404fd6ebb21f2c91ed2ab5d4133e578dfc4",
     "packages/kernel/src/errors.ts#NormalizeErrorContext": "sha256:98567378fc456335c8751474152edcf989e676ad0d9f4b54afdd8e6a96b03ae2",
-    "packages/kernel/src/errors.ts#NormalizedError": "sha256:ac2c600668420fe5b3d459f8e677676af83951fbad8ee1c2149092fd48e9d47c",
-    "packages/kernel/src/errors.ts#normalizeError": "sha256:f91f2fa4789075c838be9c42c04046b42d4ebb368eeb1b21194bdb000181e6ce",
+    "packages/kernel/src/errors.ts#NormalizedError": "sha256:dfe0e0066292d29eec7f6defea648dc488a6c0b62c268c3dac8233f8556e4bbb",
+    "packages/kernel/src/errors.ts#normalizeError": "sha256:5d9f906fd326676b4c3095cd6bd675c784cb26f36f4b8344a108cf5f7628f9dc",
     "packages/kernel/src/errors.ts#readDiagnosticsRecordRef": "sha256:3a210f401221c0a15eb75d488450034885c7b73be39f5e93424c72874d14c395",
     "src/commands/cli-grammar/types.ts#DaemonCommandRequest": "sha256:ea3f4118244711f0eaec0e471f62b0de42ca97181c085df165d37b63301a4619",
     "src/core/lease-scope.ts#LeaseRpcCommand": "sha256:714f66efa725a5d0654e492a76daeb4059caad31b79562cfc9133029ea95bfe5",
     "src/daemon/client/daemon-client-progress.ts#ProgressResponseFormat": "sha256:6d7a99ac13fd422671fd86f8fe093efa40ca369f4ae1f97c98d40a7132543637",
     "src/daemon/client/daemon-client-progress.ts#createInvalidDaemonResponseError": "sha256:0af812346b667a23fdfef641b242cd86d07edaa05eb928c4c531628c09a4031b",
     "src/daemon/client/daemon-client-progress.ts#shouldReadDaemonProgressStream": "sha256:6811404f41d8db3fa6fc751332c7186a2399ec7ecbc4e9c547d9cb9f14dbb350",
-    "src/daemon/client/daemon-client-rpc.ts#appErrorFromDaemonError": "sha256:6188ea43d4da42ea1dd8a61ab1f3d4a6e287ec0a0210b65f850dc3030fdcd508",
+    "src/daemon/client/daemon-client-rpc.ts#appErrorFromDaemonError": "sha256:ac4761006c71d93ccba9f8e37cbd4cf48283dbb22737c163dc9c1a878e154eea",
     "src/daemon/client/daemon-client-rpc.ts#buildHttpRpcPayload": "sha256:c12b5945e89defe3ede7d699a5caa9f006e1bb2d47ce9adbc7e7dac5670ab5c0",
     "src/daemon/client/daemon-client-rpc.ts#buildLeaseRpcParams": "sha256:1755f46be8c62e7a8eb409e9a94d61781c96ccbef3306702121aa94264d63267",
     "src/daemon/client/daemon-client-rpc.ts#handleDaemonHttpResponseBody": "sha256:8f1c4bba1918545db6296ad29b95f0baa9f949e7c23bc04d59e261130f14611e",
@@ -51,7 +52,7 @@
     "src/daemon/client/daemon-client-rpc.ts#parseDaemonHttpResponseBody": "sha256:0cbe39dbd09e321ec00854a1626a7d89b6344e59c6faabe2fe02504268b2d886",
     "src/daemon/client/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:83b0312fe88bc3b3497de799e23d8d14455f665b7cf880f4617cd62b181351cd",
     "src/daemon/client/daemon-client-rpc.ts#resolveDaemonHttpResult": "sha256:296f9d376ce67c8cb20209bdf1c59c2423ffcfa35b5565a99e70271263149048",
-    "src/daemon/client/daemon-client-rpc.ts#toDaemonHttpRpcError": "sha256:ceb3286173ff05415ae71fe8dd974d9a2dfe4d33c9144ae219a3ee992b501e0e",
+    "src/daemon/client/daemon-client-rpc.ts#toDaemonHttpRpcError": "sha256:888246763c48670e7da893054d025744654f8715c3b4906312617a2b5028316b",
     "src/daemon/client/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:38fe712390d247de59a74b9dc209fdf407ff5f9b1e32b698ae71ebc57569b66d",
     "src/daemon/client/daemon-client-transport.ts#readDaemonHttpHealth": "sha256:5e75af39e96045ce7faba986c900744cee76cdaa1e0df360ea38f3c020520711",
     "src/daemon/client/daemon-client-transport.ts#readHealthPayload": "sha256:5b15e14319b16aebf32d07336986a7f1f2a6b13cec1823ca9aa7c9f01bf1b0b6",
@@ -174,13 +175,13 @@
   "compatibleChanges": [
     {
       "declaration": "packages/kernel/src/errors.ts#DaemonError",
-      "digest": "sha256:af0f0f420277a57338dc59b7b443ec83d371e18768d064b7a265949e6435e976",
-      "rationale": "#1801 adds two optional error fields: `diagnosticsRecord` (session + request id locating the diagnostics record the daemon already names by path) and `logPathUnavailable` (client-set only). A peer on protocol 2 that does not send them is unchanged, and one that does not read them keeps parsing every field it read before."
+      "digest": "sha256:ae49c9c9c8fb93bb6b31ab865f37cc8b0db6c1b6ff026cc2791425b772c162a6",
+      "rationale": "#1801 and #1862 add optional error fields, most recently the structured `cause`. A peer on protocol 2 that does not send them is unchanged, and one that does not read them keeps parsing every field it read before."
     },
     {
       "declaration": "packages/kernel/src/errors.ts#NormalizedError",
-      "digest": "sha256:ac2c600668420fe5b3d459f8e677676af83951fbad8ee1c2149092fd48e9d47c",
-      "rationale": "#1801 adds the same two optional fields to the normalized error the daemon serializes; both are omitted unless set, so a released client parsing this payload sees the exact bytes it saw before whenever they are absent, and ignores them otherwise."
+      "digest": "sha256:dfe0e0066292d29eec7f6defea648dc488a6c0b62c268c3dac8233f8556e4bbb",
+      "rationale": "#1801 and #1862 add optional fields to the normalized error the daemon serializes, most recently `cause`; they are omitted unless set, and a released client ignores them otherwise."
     },
     {
       "declaration": "src/daemon/client/daemon-client-rpc.ts#handleDaemonHttpResponseBody",
@@ -189,8 +190,8 @@
     },
     {
       "declaration": "src/daemon/client/daemon-client-rpc.ts#toDaemonHttpRpcError",
-      "digest": "sha256:ceb3286173ff05415ae71fe8dd974d9a2dfe4d33c9144ae219a3ee992b501e0e",
-      "rationale": "#1801 client-side only: this now returns the parsed `DaemonError` instead of an `AppError` (construction moved to `appErrorFromDaemonError`) and additionally reads the optional `diagnosticsRecord`. Parsing of every previously read field is unchanged, so a released daemon\u2019s error payload is accepted exactly as before."
+      "digest": "sha256:888246763c48670e7da893054d025744654f8715c3b4906312617a2b5028316b",
+      "rationale": "#1801 and #1862 client-side only: this reads optional daemon error metadata, most recently the structured `cause`. Parsing of every previously read field is unchanged, so a released daemon's error payload is accepted exactly as before."
     },
     {
       "declaration": "src/daemon/downloadable-artifact-http.ts#readArtifactId",
@@ -204,8 +205,13 @@
     },
     {
       "declaration": "packages/kernel/src/errors.ts#normalizeError",
-      "digest": "sha256:f91f2fa4789075c838be9c42c04046b42d4ebb368eeb1b21194bdb000181e6ce",
-      "rationale": "#1801 lifts `diagnosticsRecord` / `logPathUnavailable` from details (and from a new optional context field) onto the normalized error and strips them from `details`, the same treatment `logPath` and `diagnosticId` already had. No previously emitted field changes shape or value."
+      "digest": "sha256:5d9f906fd326676b4c3095cd6bd675c784cb26f36f4b8344a108cf5f7628f9dc",
+      "rationale": "#1801 and #1862 lift optional metadata onto the normalized error, most recently a redacted structured `cause`. No previously emitted field changes shape or value, and peers that do not know the field ignore it."
+    },
+    {
+      "declaration": "src/daemon/client/daemon-client-rpc.ts#appErrorFromDaemonError",
+      "digest": "sha256:ac4761006c71d93ccba9f8e37cbd4cf48283dbb22737c163dc9c1a878e154eea",
+      "rationale": "#1862 client-side only: this rehydrates the new optional structured `cause` when present. Released daemons that omit it follow the unchanged path, and no request field or existing response field is narrowed."
     }
   ]
 }
