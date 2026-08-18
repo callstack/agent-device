@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
 import { setImmediate } from 'node:timers/promises';
 import { test } from 'vitest';
+import { listCliCommandNames } from '../../command-catalog.ts';
 import { helpTopicIds } from '../../cli-schema/cli-help.ts';
 import { listMcpExposedCommandNames } from '../../core/command-descriptor/registry.ts';
 import { handleMcpMessage } from '../router.ts';
-import { HELP_TOOL_NAME, MCP_SERVER_INSTRUCTIONS } from '../server-guide.ts';
+import {
+  HELP_TOOL_NAME,
+  MCP_SERVER_INSTRUCTIONS,
+  terminalOnlyCommandNames,
+} from '../server-guide.ts';
 import { createMcpPayloadQueue, handleMcpPayload } from '../server.ts';
 
 test('MCP exposes every automatable CLI command as a structured direct tool, plus the MCP-only help tool', async () => {
@@ -120,6 +125,27 @@ test('help tool returns the workflow card, a topic guide, a tool reference, or a
   const command = await call({ topic: 'tap' });
   assert.equal(command.isError, false);
   assert.match(command.text, /agent-device press/);
+
+  // `help web` tells the reader to run `agent-device web setup` / `web doctor`; no `web`
+  // MCP tool exists, so an MCP-only client must be told those are shell steps. The
+  // preamble names every CLI-only command — the exact registry difference, not a scan of
+  // the guide's prose — so the claim holds for this guide and every other one.
+  const web = await call({ topic: 'web' });
+  assert.equal(web.isError, false);
+  assert.match(web.text, /agent-device web setup/);
+  const terminalOnlyLine = web.text.split('\n').find((line) => line.startsWith('Terminal-only'));
+  assert.ok(terminalOnlyLine);
+  assert.match(terminalOnlyLine, /\bweb\b/);
+  const listed = terminalOnlyCommandNames();
+  const exposed = new Set<string>(listMcpExposedCommandNames());
+  for (const name of listed) {
+    assert.ok(!exposed.has(name), `${name} is an MCP tool but is listed as terminal-only`);
+    assert.ok(terminalOnlyLine.includes(name), `${name} missing from the terminal-only line`);
+  }
+  assert.deepEqual(
+    listCliCommandNames().filter((name) => !exposed.has(name)),
+    listed,
+  );
 
   const unknown = await call({ topic: 'no-such-topic' });
   assert.equal(unknown.isError, true);

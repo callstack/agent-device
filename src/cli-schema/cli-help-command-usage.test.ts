@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
-import { usageForCommand } from '../args.ts';
+import { usageForCommand } from '../cli/parser/args.ts';
 
 test('usageForCommand documents open --launch-args', async () => {
   const help = await usageForCommand('open');

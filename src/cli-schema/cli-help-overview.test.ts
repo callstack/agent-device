@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { listCliCommandNames } from '../../../command-catalog.ts';
-import { usage, usageForCommand } from '../args.ts';
+import { listCliCommandNames } from '../command-catalog.ts';
+import { usage, usageForCommand } from '../cli/parser/args.ts';
 
 test('root help is a bounded first-success decision card', async () => {
   const help = await usage();

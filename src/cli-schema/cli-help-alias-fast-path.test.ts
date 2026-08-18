@@ -14,12 +14,9 @@
 // fix, it does not).
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { buildCommandUsageText } from '../../../cli-schema/cli-help.ts';
-import {
-  cliAliasesForCommand,
-  normalizeCliCommandAlias,
-} from '../../../commands/cli-command-aliases.ts';
-import { listCliCommandNames } from '../../../command-catalog.ts';
+import { buildCommandUsageText } from './cli-help.ts';
+import { cliAliasesForCommand, normalizeCliCommandAlias } from '../commands/cli-command-aliases.ts';
+import { listCliCommandNames } from '../command-catalog.ts';
 
 test('alias help output matches its canonical command', () => {
   const cases: ReadonlyArray<readonly [string, string]> = [

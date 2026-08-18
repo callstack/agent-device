@@ -1,15 +1,11 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { parseArgs } from '../args.ts';
-import {
-  buildCommandUsageText,
-  buildUsageText,
-  helpTopicIds,
-} from '../../../cli-schema/cli-help.ts';
-import { listCliCommandNames } from '../../../command-catalog.ts';
-import { readInputFromCli } from '../../../commands/cli-grammar.ts';
-import { isCommandName } from '../../../commands/command-metadata.ts';
-import { readVersion } from '../../../utils/version.ts';
+import { parseArgs } from '../cli/parser/args.ts';
+import { buildCommandUsageText, buildUsageText, helpTopicIds } from './cli-help.ts';
+import { listCliCommandNames } from '../command-catalog.ts';
+import { readInputFromCli } from '../commands/cli-grammar.ts';
+import { isCommandName } from '../commands/command-metadata.ts';
+import { readVersion } from '../utils/version.ts';
 
 // Help is the agent-facing contract, and agents copy its example lines verbatim, so an example the
 // CLI schema rejects is a broken command surface — not a docs nit (#1765: `help react-native`

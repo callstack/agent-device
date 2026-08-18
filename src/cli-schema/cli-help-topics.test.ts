@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { usage, usageForCommand } from '../args.ts';
+import { usage, usageForCommand } from '../cli/parser/args.ts';
 
 test('commands topic includes concise command catalog entries', async () => {
   const usageText = await usageForCommand('commands');

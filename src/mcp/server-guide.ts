@@ -1,6 +1,8 @@
 import type { JsonSchema } from '../commands/command-contract.ts';
 import { buildCommandUsageText, buildUsageText, helpTopicIds } from '../cli-schema/cli-help.ts';
+import { listCliCommandNames } from '../command-catalog.ts';
 import { normalizeCliCommandAlias } from '../commands/cli-command-aliases.ts';
+import { listMcpExposedCommandNames } from '../core/command-descriptor/registry.ts';
 import type { ToolResult } from './command-tools.ts';
 
 /**
@@ -53,10 +55,26 @@ export function helpToolDefinition(): {
   };
 }
 
+/**
+ * CLI commands with no MCP tool (`web setup`, `daemon stop`, `connect`, …): the guides
+ * mention them as `agent-device <command>` lines, and an MCP-only client must know those
+ * are shell steps, not tools. Derived from the two registries rather than scanned out of
+ * each guide's prose: `device` and `web` are ordinary words there, so a mention detector
+ * would be a heuristic; the registry difference is exact and holds for every guide.
+ */
+export function terminalOnlyCommandNames(): string[] {
+  const exposed = new Set<string>(listMcpExposedCommandNames());
+  return listCliCommandNames().filter((name) => !exposed.has(name));
+}
+
 // The guides are the CLI's own text: rewriting their prose per surface would fork one
-// source of truth into two. One line up front states the mapping instead.
-const MCP_GUIDE_PREAMBLE =
-  'Reading CLI syntax over MCP: `agent-device <command> <positionals> --flag` is the tool named <command>; positionals are named properties (target, text, direction), flags are camelCase properties (--settle -> settle: true, -i -> interactiveOnly: true).\n';
+// source of truth into two. Two lines up front state the mapping and its exceptions.
+function mcpGuidePreamble(): string {
+  return (
+    'Reading CLI syntax over MCP: `agent-device <command> <positionals> --flag` is the tool named <command>; positionals are named properties (target, text, direction), flags are camelCase properties (--settle -> settle: true, -i -> interactiveOnly: true).\n' +
+    `Terminal-only, no MCP tool exists (run these in a shell, or ask the operator to): ${terminalOnlyCommandNames().join(', ')}.\n`
+  );
+}
 
 export function callHelpTool(input: Record<string, unknown>): ToolResult {
   const topic = input.topic;
@@ -64,13 +82,13 @@ export function callHelpTool(input: Record<string, unknown>): ToolResult {
     return textResult('Expected topic to be a string.', true);
   }
   if (topic === undefined || topic.length === 0) {
-    return textResult(`${MCP_GUIDE_PREAMBLE}\n${buildUsageText()}`);
+    return textResult(`${mcpGuidePreamble()}\n${buildUsageText()}`);
   }
   const text = buildCommandUsageText(normalizeCliCommandAlias(topic));
   if (text === null) {
     return textResult(`Unknown help topic: ${topic}. Available ${HELP_TOPICS_HINT}.`, true);
   }
-  return textResult(`${MCP_GUIDE_PREAMBLE}\n${text}`);
+  return textResult(`${mcpGuidePreamble()}\n${text}`);
 }
 
 function textResult(text: string, isError = false): ToolResult {
