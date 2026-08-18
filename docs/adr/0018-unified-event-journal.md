@@ -199,8 +199,10 @@ statically enumerable, greppable, no dynamic subscription API. Semantics, normat
   stderr fallback), unchanged behavior including the `liveWrittenEventCount` flush watermark;
 - **session event log sink** — consumes the `session-lifecycle` trait kinds and writes today's
   `events.ndjson` v1 entries, reusing the existing presentation builders (`buildActionSummary`,
-  `buildRequestSuccessEventPresentation`) and write queue; receives events from request scopes and
-  teardown scopes alike;
+  `buildRequestSuccessEventPresentation`), write queue, and retention window
+  (`session-event-log-window.ts`, #1788: size-capped rotation to `events.ndjson.1` with the
+  absolute cursor offset kept in a sidecar, so entry bytes and `events` cursors are unchanged by
+  the cap); receives events from request scopes and teardown scopes alike;
 - **replay trace sink** — consumes `replay-trace` trait kinds, maps internal kinds to the legacy
   `type` values, writes the per-attempt file via bound routing context; replaces both existing
   append helpers;

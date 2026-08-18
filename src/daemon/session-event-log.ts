@@ -1,7 +1,6 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import fs from 'node:fs';
 import path from 'node:path';
-import { StringDecoder } from 'node:string_decoder';
 import { PUBLIC_COMMANDS } from '../command-catalog.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { redactDiagnosticData } from '@agent-device/kernel/redaction';
@@ -10,12 +9,18 @@ import { isRecord } from '../utils/parsing.ts';
 import type { DaemonRequest, DaemonResponse } from './types.ts';
 import { buildActionDetails, buildActionSummary } from './session-event-action.ts';
 import { buildRequestSuccessEventPresentation } from './session-event-request.ts';
+import {
+  assertSessionEventLogCursorRetained,
+  readSessionEventLogWindow,
+  resolveSessionEventLogMaxBytes,
+  rotateSessionEventLogIfNeeded,
+  scanSessionEventLogLines,
+} from './session-event-log-window.ts';
 
 const SESSION_EVENT_LOG_FILENAME = 'events.ndjson';
 const EVENT_LOG_VERSION = 1;
 const DEFAULT_EVENT_LIMIT = 100;
 const MAX_EVENT_LIMIT = 500;
-const EVENT_LOG_READ_CHUNK_BYTES = 64 * 1024;
 const pendingEventLogWrites = new Map<string, Promise<void>>();
 const ensuredEventLogDirs = new Set<string>();
 
@@ -82,6 +87,7 @@ function queueEventLogWrite(eventLogPath: string, line: string): void {
     .catch(() => undefined)
     .then(async () => {
       await ensureEventLogDir(eventLogPath);
+      await rotateSessionEventLogIfNeeded(eventLogPath, resolveSessionEventLogMaxBytes());
       await fs.promises.appendFile(eventLogPath, line, 'utf8');
     })
     .catch((error) => {
@@ -182,11 +188,9 @@ export function readSessionEventLog(
 ): SessionEventLogPage {
   const cursor = normalizeCursor(options.cursor);
   const limit = normalizeLimit(options.limit);
-  if (!fs.existsSync(eventLogPath)) {
-    return { path: eventLogPath, cursor: String(cursor), limit, events: [] };
-  }
-
-  const page = readSessionEventLogLines(eventLogPath, cursor, limit);
+  const window = readSessionEventLogWindow(eventLogPath);
+  assertSessionEventLogCursorRetained(cursor, window.droppedLines);
+  const page = readSessionEventLogLines(window.files, window.droppedLines, cursor, limit);
   const events = page.lines.flatMap((line) => {
     const parsed = parseSessionEventLogLine(line);
     return parsed ? [parsed] : [];
@@ -200,72 +204,32 @@ export function readSessionEventLog(
   };
 }
 
+/**
+ * Scan the retained files oldest-first with one absolute line index that
+ * starts at the window offset, so a cursor means the same line before and
+ * after rotation.
+ */
 function readSessionEventLogLines(
-  eventLogPath: string,
+  files: readonly string[],
+  firstLineIndex: number,
   cursor: number,
   limit: number,
 ): { lines: string[]; nextCursor?: number } {
-  const fd = fs.openSync(eventLogPath, 'r');
-  try {
-    const decoder = new StringDecoder('utf8');
-    const buffer = Buffer.allocUnsafe(EVENT_LOG_READ_CHUNK_BYTES);
-    const state = createLineScanState(cursor, limit);
-    let pending = '';
-    let bytesRead = 0;
-    do {
-      bytesRead = fs.readSync(fd, buffer, 0, buffer.length, null);
-      const chunk = decoder.write(buffer.subarray(0, bytesRead));
-      pending = consumeEventLogChunk(`${pending}${chunk}`, state);
-    } while (bytesRead > 0 && state.nextCursor === undefined);
-    const remainder = `${pending}${decoder.end()}`;
-    if (state.nextCursor === undefined && remainder.length > 0) {
-      consumeEventLogLine(remainder, state);
-    }
-    return { lines: state.lines, nextCursor: state.nextCursor };
-  } finally {
-    fs.closeSync(fd);
+  const lines: string[] = [];
+  let lineIndex = firstLineIndex;
+  let nextCursor: number | undefined;
+  for (const file of files) {
+    scanSessionEventLogLines(file, (line) => {
+      if (lineIndex >= cursor + limit) {
+        nextCursor = cursor + limit;
+        return false;
+      }
+      if (lineIndex >= cursor) lines.push(line);
+      lineIndex += 1;
+    });
+    if (nextCursor !== undefined) break;
   }
-}
-
-function createLineScanState(
-  cursor: number,
-  limit: number,
-): {
-  cursor: number;
-  limit: number;
-  lineIndex: number;
-  lines: string[];
-  nextCursor?: number;
-} {
-  return {
-    cursor,
-    limit,
-    lineIndex: 0,
-    lines: [],
-  };
-}
-
-function consumeEventLogChunk(text: string, state: ReturnType<typeof createLineScanState>): string {
-  let start = 0;
-  for (let index = text.indexOf('\n'); index !== -1; index = text.indexOf('\n', start)) {
-    consumeEventLogLine(text.slice(start, index), state);
-    start = index + 1;
-    if (state.nextCursor !== undefined) return '';
-  }
-  return text.slice(start);
-}
-
-function consumeEventLogLine(rawLine: string, state: ReturnType<typeof createLineScanState>): void {
-  const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
-  if (line.trim().length === 0) return;
-  if (state.lineIndex >= state.cursor + state.limit) {
-    state.nextCursor = state.cursor + state.limit;
-    return;
-  }
-  if (state.lineIndex >= state.cursor) {
-    state.lines.push(line);
-  }
-  state.lineIndex += 1;
+  return { lines, ...(nextCursor !== undefined ? { nextCursor } : {}) };
 }
 
 function normalizeCursor(value: string | undefined): number {
