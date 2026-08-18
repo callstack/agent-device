@@ -126,7 +126,11 @@ describe('composed platform runtime gateway', () => {
       providerModules: [{ runtime: registration.runtime, module: providerModule }],
     });
 
-    const bindings = createRequestRuntimeBindings({ gateway: runtimeGateway, scope });
+    const bindings = createRequestRuntimeBindings({
+      gateway: runtimeGateway,
+      scope,
+      admitDeviceClaim: async () => {},
+    });
     try {
       const response = await withTestDeviceInventory(
         { local: async () => [staleDevice] },

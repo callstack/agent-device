@@ -73,6 +73,36 @@ export type CommandTimeoutPolicy = {
   onTimeout: 'preserve-daemon' | 'reset-daemon';
 };
 
+/**
+ * #1320 "Command descriptor policy": what a command may do with the host-global
+ * device claim store. REQUIRED on every descriptor (no default), and read by the
+ * request-execution scope so enforcement is derived from the declaration rather
+ * than from a per-handler call a new author can forget.
+ *
+ *  - `none`                — host/config-only; never binds a device.
+ *  - `observe`             — device inventory/ownership projection; may report a
+ *                            claim, never mutates one.
+ *  - `require-owner`       — session-bound work; trusts the invariant `open`
+ *                            established and does NO claim-store I/O.
+ *  - `transient-exclusive` — sessionless device mutation; acquires a
+ *                            command-scoped claim before device operations reach
+ *                            the handler, refuses a foreign claim, and releases
+ *                            in `finally`. Enforced at the request scope's
+ *                            device binding, so it is available only to ADR 0019
+ *                            `device-runtime` commands.
+ *  - `acquire-session`     — `open`; acquires the session claim before platform
+ *                            preparation or mutation.
+ *  - `release-session`     — `close`; releases the session claim only after
+ *                            teardown reaches a safe terminal state.
+ */
+export type DeviceClaimPolicy =
+  | 'none'
+  | 'observe'
+  | 'require-owner'
+  | 'transient-exclusive'
+  | 'acquire-session'
+  | 'release-session';
+
 export type CommandCatalogGroup = 'public' | 'internal' | 'local-cli' | 'dispatch-alias';
 
 /**
@@ -179,6 +209,12 @@ type CommandDescriptorBase = {
   batchable: boolean;
   mcpExposed: boolean;
   timeoutPolicy: CommandTimeoutPolicy;
+  /**
+   * #1320 device-claim policy. REQUIRED with no default so a new command must
+   * classify itself; `transient-exclusive` is the only value that makes the
+   * request scope touch the host-global claim store.
+   */
+  deviceClaimPolicy: DeviceClaimPolicy;
   postActionObservation?: PostActionObservationSupport;
   responseDataTransform?: CommandResponseDataTransform;
   catalog: CommandCatalogFacet;

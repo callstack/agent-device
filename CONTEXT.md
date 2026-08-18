@@ -63,6 +63,13 @@ task touches:
   cloud bridge, or `limrun`.
 - Runner/process lease: backend helper mutual-exclusion guard for platform runners or tools; it is
   not the remote client ownership boundary.
+- Device claim: host-global exclusive ownership of one local device, held by an open session or by a
+  single sessionless device-mutating command. Local only; remote targets use device leases instead.
+- Device-claim policy: required command-descriptor trait declaring a command's relationship to the
+  claim store (`none`, `observe`, `require-owner`, `transient-exclusive`, `acquire-session`,
+  `release-session`). The request-execution scope enforces it at the device binding seam:
+  `transient-exclusive` takes a command-scoped claim and refuses a foreign one, and every other
+  policy performs no claim-store I/O.
 - iOS physical-device control: Apple-local module selected from discovery evidence. CoreDevice
   devices retain the `devicectl` controller; devices found only by `xctrace` use the XCTest
   controller for readiness, app activation/termination, and cable-bound usbmux runner transport

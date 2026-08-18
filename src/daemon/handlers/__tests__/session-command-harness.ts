@@ -9,6 +9,7 @@ import {
   type AppDeploymentInput,
   type AppDeploymentResult,
   type DeviceBinding,
+  type DeviceRuntimeGateway,
   type DeployMaterializedAppInput,
   type EnsureReadyInput,
   type MaterializeAppSourceInput,
@@ -104,6 +105,17 @@ export function handleSessionCommands(
     }),
   });
 }
+
+/**
+ * The harness bindings as a gateway, so a test can drive the real
+ * `createRequestExecutionScope` seam instead of injecting `bindDevice` directly.
+ */
+export const readinessDeviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations> =
+  Object.freeze({
+    inspectFacts: async (device: DeviceInfo) => readinessFacts(device),
+    bind: async ({ device }) => await readinessBinding(device),
+    shutdown: async () => {},
+  });
 
 function readinessFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> {
   const normalAvailable = supportsReadiness(device);

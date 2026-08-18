@@ -3,6 +3,7 @@ import {
   publicPlatformString,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { shellQuoteIfNeeded } from '../utils/shell-quote.ts';
 import {
   deviceClaimRequiresStaleInspection,
@@ -31,16 +32,21 @@ export function buildDeviceClaimInspectionCommand(
   ].join(' ');
 }
 
-export function buildDeviceClaimConflictError(
+/**
+ * The single construction of the foreign-claim refusal. `open` returns it as a
+ * response; the request-scope binding seam throws it, because a
+ * `transient-exclusive` command must never receive device operations at all.
+ */
+export function deviceClaimConflictError(
   device: DeviceInfo,
   conflict: InspectedDeviceClaim,
-): DaemonResponse {
+): AppError {
   const owner = conflict.claim;
   const recoveryCommand = buildDeviceClaimInspectionCommand(device, conflict);
   const publicPlatform = owner
     ? publicPlatformString({ platform: owner.device.family, appleOs: owner.device.appleOs })
     : publicPlatformString(device);
-  return errorResponse(
+  return new AppError(
     'DEVICE_IN_USE',
     owner
       ? `${publicPlatform} device ${device.id} is owned by session "${owner.session}" in workspace "${owner.workspace}".`
@@ -59,9 +65,19 @@ export function buildDeviceClaimConflictError(
           }
         : {}),
       recovery: { command: recoveryCommand },
+      hint: `Inspect the owner with: ${recoveryCommand}`,
+      retriable: false,
     },
-    { hint: `Inspect the owner with: ${recoveryCommand}`, retriable: false },
   );
+}
+
+export function buildDeviceClaimConflictError(
+  device: DeviceInfo,
+  conflict: InspectedDeviceClaim,
+): DaemonResponse {
+  const error = deviceClaimConflictError(device, conflict);
+  const { hint, retriable, ...details } = error.details ?? {};
+  return errorResponse(error.code, error.message, details, { hint, retriable });
 }
 
 function conflictReason(

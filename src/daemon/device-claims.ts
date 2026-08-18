@@ -55,9 +55,27 @@ export type DeviceClaimAcquireResult =
   | { status: 'acquired'; ownership: DeviceClaimSessionOwnership }
   | { status: 'conflict'; conflict: InspectedDeviceClaim };
 
+/**
+ * A `transient-exclusive` command may find the device already claimed by a
+ * session of the very daemon executing it. That session claim already carries
+ * the exclusion the command needs, so the command adds none of its own.
+ */
+export type TransientDeviceClaimResult =
+  | DeviceClaimAcquireResult
+  | { status: 'covered-by-owned-claim' };
+
 /** Claim policy follows the admitted runtime owner, never request metadata. */
 export function isLocalDeviceClaimTarget(owner: RuntimeOwnerRef): boolean {
   return owner.kind === 'local-family';
+}
+
+/**
+ * The claim `session` recorded for a command-scoped claim. Claim records carry
+ * no separate kind discriminant, so the session field is what tells `device
+ * status` that the owner is a command in flight rather than an open session.
+ */
+function transientDeviceClaimSession(command: string): string {
+  return `transient:${command}`;
 }
 
 export async function acquireDeviceClaim(params: {
@@ -69,37 +87,100 @@ export async function acquireDeviceClaim(params: {
 }): Promise<DeviceClaimAcquireResult> {
   const identity = deviceClaimIdentity(params.device);
   const deviceKey = canonicalLocalDeviceKey(identity);
+  return await withDeviceClaimLock(
+    deviceKey,
+    async () => await claimHeldDevice({ ...params, deviceKey, identity }),
+  );
+}
+
+/**
+ * #1320 `transient-exclusive`: exclusive ownership for the duration of one
+ * sessionless device mutation. Identical to a session claim except that a claim
+ * already held by this daemon process covers the command instead of colliding
+ * with it — the claim file itself, not the in-memory session table, is the
+ * authority for that, so a claim acquired earlier in the same request (`open`'s,
+ * for instance) can never lock the daemon out of its own device.
+ */
+export async function acquireTransientDeviceClaim(params: {
+  device: DeviceInfo;
+  command: string;
+  workspace: string;
+  stateDir: string;
+  reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
+}): Promise<TransientDeviceClaimResult> {
+  const identity = deviceClaimIdentity(params.device);
+  const deviceKey = canonicalLocalDeviceKey(identity);
   return await withDeviceClaimLock(deviceKey, async () => {
-    const owner = readCurrentOwnerIdentity();
-    const existingResult = await resolveExistingClaim({
+    const existing = inspectDeviceClaimFile(resolveDeviceClaimPath(deviceKey));
+    if (
+      existing?.claim &&
+      isClaimOwnedByThisDaemon(existing.claim, params.stateDir, readCurrentOwnerIdentity())
+    ) {
+      return { status: 'covered-by-owned-claim' };
+    }
+    return await claimHeldDevice({
+      device: params.device,
       deviceKey,
-      owner,
-      session: params.session,
+      identity,
+      session: transientDeviceClaimSession(params.command),
       workspace: params.workspace,
       stateDir: params.stateDir,
       reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
     });
-    if (existingResult.status !== 'available') return existingResult;
-    const now = Date.now();
-    const claim: DeviceClaim = {
-      schemaVersion: DEVICE_CLAIM_SCHEMA_VERSION,
-      deviceKey,
-      device: {
-        ...identity,
-        name: params.device.name,
-      },
-      session: params.session,
-      workspace: params.workspace,
-      stateDir: params.stateDir,
-      ownerPid: owner.pid,
-      ownerStartTime: owner.startTime,
-      ownerToken: crypto.randomUUID(),
-      createdAtMs: now,
-      updatedAtMs: now,
-    };
-    writeClaim(claim);
-    return { status: 'acquired', ownership: ownershipFromClaim(claim) };
   });
+}
+
+/** Acquisition body shared by session and transient claims; the caller holds the claim lock. */
+async function claimHeldDevice(params: {
+  device: DeviceInfo;
+  deviceKey: string;
+  identity: DeviceIdentity;
+  session: string;
+  workspace: string;
+  stateDir: string;
+  reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
+}): Promise<DeviceClaimAcquireResult> {
+  const { deviceKey, identity } = params;
+  const owner = readCurrentOwnerIdentity();
+  const existingResult = await resolveExistingClaim({
+    deviceKey,
+    owner,
+    session: params.session,
+    workspace: params.workspace,
+    stateDir: params.stateDir,
+    reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
+  });
+  if (existingResult.status !== 'available') return existingResult;
+  const now = Date.now();
+  const claim: DeviceClaim = {
+    schemaVersion: DEVICE_CLAIM_SCHEMA_VERSION,
+    deviceKey,
+    device: {
+      ...identity,
+      name: params.device.name,
+    },
+    session: params.session,
+    workspace: params.workspace,
+    stateDir: params.stateDir,
+    ownerPid: owner.pid,
+    ownerStartTime: owner.startTime,
+    ownerToken: crypto.randomUUID(),
+    createdAtMs: now,
+    updatedAtMs: now,
+  };
+  writeClaim(claim);
+  return { status: 'acquired', ownership: ownershipFromClaim(claim) };
+}
+
+function isClaimOwnedByThisDaemon(
+  claim: DeviceClaim,
+  stateDir: string,
+  owner: ReturnType<typeof readCurrentOwnerIdentity>,
+): boolean {
+  return (
+    claim.stateDir === stateDir &&
+    ownerIdentityMatches({ pid: claim.ownerPid, startTime: claim.ownerStartTime }, owner)
+  );
 }
 
 function deviceClaimIdentity(device: DeviceInfo): DeviceIdentity {

@@ -35,6 +35,7 @@ import type {
   CommandCatalogGroup,
   CommandDescriptor,
   CommandFrameworkTier,
+  DeviceClaimPolicy,
   RecordingEffect,
   CommandResponseDataTransform,
   CommandTimeoutPolicy,
@@ -239,6 +240,7 @@ const LEGACY_PLATFORM_EXECUTION = { kind: 'legacy' } as const;
 const GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS = {
   recordsSessionAction: true,
   recordingEffect: 'mutates-app',
+  deviceClaimPolicy: 'require-owner',
   daemon: {
     route: 'generic',
     refFrameEffect: 'may-invalidate',
@@ -252,11 +254,42 @@ const GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS = {
   Extract<CommandDescriptor, { recordsSessionAction: true }>,
   | 'recordsSessionAction'
   | 'recordingEffect'
+  | 'deviceClaimPolicy'
   | 'daemon'
   | 'dispatch'
   | 'capability'
   | 'timeoutPolicy'
   | 'batchable'
+>;
+
+// click/fill/press/longpress differ only in their timeout budget and response
+// shaping: same owner file, same pre-dispatch target identity, same interaction
+// route and dialog guard, same device buckets, and the same session-bound claim
+// policy. Sharing that here is what keeps them from drifting apart one field at
+// a time.
+const TARGETED_TOUCH_INTERACTION_TRAITS = {
+  targetIdentityVerification: 'pre-dispatch',
+  catalog: { group: 'public' },
+  recordsSessionAction: true,
+  recordingEffect: 'mutates-app',
+  deviceClaimPolicy: 'require-owner',
+  daemon: {
+    route: 'interaction',
+    refFrameEffect: 'may-invalidate',
+    androidBlockingDialogGuard: true,
+  },
+  dispatch: {},
+  capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
+} as const satisfies Pick<
+  Extract<CommandDescriptor, { recordsSessionAction: true }>,
+  | 'targetIdentityVerification'
+  | 'catalog'
+  | 'recordsSessionAction'
+  | 'recordingEffect'
+  | 'deviceClaimPolicy'
+  | 'daemon'
+  | 'dispatch'
+  | 'capability'
 >;
 
 // ---------------------------------------------------------------------------
@@ -359,6 +392,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   // -- lease (route: lease) --
   {
     name: 'lease_allocate',
+    deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/daemon/handlers/lease.ts'] as const } : {}),
     catalog: { group: 'internal', key: 'leaseAllocate' },
     recordsSessionAction: false,
@@ -369,6 +403,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'lease_heartbeat',
+    deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/daemon/handlers/lease.ts'] as const } : {}),
     catalog: { group: 'internal', key: 'leaseHeartbeat' },
     recordsSessionAction: false,
@@ -379,6 +414,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'lease_release',
+    deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/daemon/handlers/lease.ts'] as const } : {}),
     catalog: { group: 'internal', key: 'leaseRelease' },
     recordsSessionAction: false,
@@ -389,6 +425,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'artifacts',
+    deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/artifacts.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -402,6 +439,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   // -- session (route: session) --
   {
     name: 'session_list',
+    deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled
       ? { ownerFiles: ['src/daemon/handlers/session-inventory.ts'] as const }
       : {}),
@@ -419,6 +457,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'session_save_script',
+    deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled
       ? { ownerFiles: ['src/daemon/handlers/session-script-publication.ts'] as const }
       : {}),
@@ -435,6 +474,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'devices',
+    deviceClaimPolicy: 'observe',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/device.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -452,6 +492,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'capabilities',
+    deviceClaimPolicy: 'observe',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/device.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -470,6 +511,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'doctor',
+    deviceClaimPolicy: 'observe',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/doctor.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -488,6 +530,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'apps',
+    deviceClaimPolicy: 'observe',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/app.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -505,6 +548,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'boot',
+    deviceClaimPolicy: 'transient-exclusive',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/device.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -516,6 +560,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'shutdown',
+    deviceClaimPolicy: 'transient-exclusive',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/device.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -527,6 +572,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'appstate',
+    deviceClaimPolicy: 'observe',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public', key: 'appState' },
     frameworkTier: 'extended',
@@ -538,6 +584,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'perf',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/perf/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -551,6 +598,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'logs',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/observability/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -562,6 +610,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'events',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/observability/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -579,6 +628,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'network',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/observability/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -590,6 +640,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'audio',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/observability/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -606,6 +657,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'replay',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/replay/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -624,6 +676,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'test',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/replay/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -642,6 +695,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'runtime',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled
       ? {
           ownerFiles: [
@@ -659,6 +713,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'clipboard',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -677,6 +732,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'keyboard',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -699,6 +755,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'install',
+    deviceClaimPolicy: 'transient-exclusive',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/install.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -711,6 +768,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'reinstall',
+    deviceClaimPolicy: 'transient-exclusive',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/install.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -723,6 +781,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'install_source',
+    deviceClaimPolicy: 'transient-exclusive',
     ...(ownerFilesEnabled
       ? { ownerFiles: ['src/daemon/handlers/session-app-source-deployment.ts'] as const }
       : {}),
@@ -736,6 +795,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'release_materialized_paths',
+    deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled
       ? { ownerFiles: ['src/daemon/handlers/session-app-source-deployment.ts'] as const }
       : {}),
@@ -748,6 +808,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'push',
+    deviceClaimPolicy: 'transient-exclusive',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/push.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -760,6 +821,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'trigger-app-event',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/push.ts'] as const } : {}),
     catalog: { group: 'public', key: 'triggerAppEvent' },
     frameworkTier: 'extended',
@@ -774,6 +836,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'open',
+    deviceClaimPolicy: 'acquire-session',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/app.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'core',
@@ -791,6 +854,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'prepare',
+    deviceClaimPolicy: 'transient-exclusive',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/prepare.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -808,6 +872,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'batch',
+    deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/batch/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -819,6 +884,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'close',
+    deviceClaimPolicy: 'release-session',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/app.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'core',
@@ -838,6 +904,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   // -- snapshot (route: snapshot) --
   {
     name: 'snapshot',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/snapshot.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'core',
@@ -854,6 +921,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'diff',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/diff.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -867,6 +935,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'wait',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/wait.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'core',
@@ -888,6 +957,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'alert',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/alert.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'core',
@@ -905,6 +975,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'settings',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/settings.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -925,6 +996,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   // -- specialized routes --
   {
     name: 'react-native',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/react-native/index.ts'] as const } : {}),
     catalog: { group: 'public', key: 'reactNative' },
     frameworkTier: 'extended',
@@ -938,6 +1010,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'record',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/recording/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -955,6 +1028,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'trace',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/recording/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -967,6 +1041,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'find',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'core',
@@ -988,6 +1063,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   // stuck Apple runner work.
   {
     name: 'click',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     targetIdentityVerification: 'pre-dispatch',
     catalog: { group: 'public' },
@@ -1009,18 +1085,8 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'fill',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
-    targetIdentityVerification: 'pre-dispatch',
-    catalog: { group: 'public' },
+    ...TARGETED_TOUCH_INTERACTION_TRAITS,
     frameworkTier: 'core',
-    recordsSessionAction: true,
-    recordingEffect: 'mutates-app',
-    daemon: {
-      route: 'interaction',
-      refFrameEffect: 'may-invalidate',
-      androidBlockingDialogGuard: true,
-    },
-    dispatch: {},
-    capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
     timeoutPolicy: postActionObservationTimeoutPolicy('fill', PRESERVE_DAEMON_TIMEOUT_POLICY),
     postActionObservation: postActionObservation('fill'),
     responseDataTransform: FILL_INTERACTION_RESPONSE_DATA_TRANSFORM,
@@ -1030,18 +1096,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'longpress',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
-    targetIdentityVerification: 'pre-dispatch',
+    ...TARGETED_TOUCH_INTERACTION_TRAITS,
     catalog: { group: 'public', key: 'longPress' },
     frameworkTier: 'extended',
-    recordsSessionAction: true,
-    recordingEffect: 'mutates-app',
-    daemon: {
-      route: 'interaction',
-      refFrameEffect: 'may-invalidate',
-      androidBlockingDialogGuard: true,
-    },
-    dispatch: {},
-    capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
     timeoutPolicy: {
       ...SETTLE_FLAG_PRESERVE_DAEMON_TIMEOUT_POLICY,
       // Android's cold path may inspect/install the helper, hand off a running
@@ -1055,6 +1112,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'hover',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     targetIdentityVerification: 'pre-dispatch',
     catalog: { group: 'public' },
@@ -1079,18 +1137,8 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'press',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
-    targetIdentityVerification: 'pre-dispatch',
-    catalog: { group: 'public' },
+    ...TARGETED_TOUCH_INTERACTION_TRAITS,
     frameworkTier: 'core',
-    recordsSessionAction: true,
-    recordingEffect: 'mutates-app',
-    daemon: {
-      route: 'interaction',
-      refFrameEffect: 'may-invalidate',
-      androidBlockingDialogGuard: true,
-    },
-    dispatch: {},
-    capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
     timeoutPolicy: postActionObservationTimeoutPolicy('press', PRESERVE_DAEMON_TIMEOUT_POLICY),
     postActionObservation: postActionObservation('press'),
     responseDataTransform: TOUCH_INTERACTION_RESPONSE_DATA_TRANSFORM,
@@ -1099,6 +1147,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'type',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'core',
@@ -1117,6 +1166,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'get',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     targetIdentityVerification: 'pre-dispatch',
     catalog: { group: 'public' },
@@ -1131,6 +1181,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'read',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/daemon/handlers/interaction.ts'] as const } : {}),
     catalog: { group: 'dispatch-alias' },
     recordsSessionAction: false,
@@ -1141,6 +1192,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'is',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     targetIdentityVerification: 'pre-dispatch',
     catalog: { group: 'public' },
@@ -1171,6 +1223,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'gesture',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -1201,6 +1254,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'tv-remote',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public', key: 'tvRemote' },
     frameworkTier: 'extended',
@@ -1224,6 +1278,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'orientation',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -1256,6 +1311,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'swipe',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'core',
@@ -1281,6 +1337,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'screenshot',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/screenshot.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'core',
@@ -1295,6 +1352,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'viewport',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/viewport.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -1316,6 +1374,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   // -- capability/batch-only commands (no daemon route) --
   {
     name: 'app-switcher',
+    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public', key: 'appSwitcher' },
     frameworkTier: 'extended',
@@ -1339,6 +1398,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'install-from-source',
+    deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/install.ts'] as const } : {}),
     catalog: { group: 'public', key: 'installFromSource' },
     frameworkTier: 'extended',
@@ -1352,6 +1412,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   // -- local client-backed CLI/MCP commands (no daemon route/capability) --
   {
     name: 'debug',
+    deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/debugging/index.ts'] as const } : {}),
     catalog: { group: 'local-cli' },
     recordsSessionAction: false,
@@ -1361,6 +1422,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'daemon',
+    deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/daemon.ts'] as const } : {}),
     catalog: { group: 'local-cli' },
     recordsSessionAction: false,
@@ -1371,6 +1433,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'device',
+    deviceClaimPolicy: 'observe',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/device.ts'] as const } : {}),
     catalog: { group: 'local-cli' },
     recordsSessionAction: false,
@@ -1381,6 +1444,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'metro',
+    deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/metro/index.ts'] as const } : {}),
     catalog: { group: 'local-cli' },
     recordsSessionAction: false,
@@ -1390,6 +1454,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'session',
+    deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/session.ts'] as const } : {}),
     catalog: { group: 'local-cli' },
     recordsSessionAction: false,
@@ -1399,6 +1464,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'cdp',
+    deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/agent-cdp.ts'] as const } : {}),
     catalog: { group: 'local-cli' },
     recordsSessionAction: false,
@@ -1409,6 +1475,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'auth',
+    deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/auth.ts'] as const } : {}),
     catalog: { group: 'local-cli' },
     recordsSessionAction: false,
@@ -1419,6 +1486,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'connect',
+    deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/connection.ts'] as const } : {}),
     catalog: { group: 'local-cli' },
     recordsSessionAction: false,
@@ -1429,6 +1497,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'connection',
+    deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/connection.ts'] as const } : {}),
     catalog: { group: 'local-cli' },
     recordsSessionAction: false,
@@ -1439,6 +1508,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'disconnect',
+    deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/connection.ts'] as const } : {}),
     catalog: { group: 'local-cli' },
     recordsSessionAction: false,
@@ -1449,6 +1519,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'mcp',
+    deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/bin.ts'] as const } : {}),
     catalog: { group: 'local-cli' },
     recordsSessionAction: false,
@@ -1459,6 +1530,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'proxy',
+    deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/proxy.ts'] as const } : {}),
     catalog: { group: 'local-cli' },
     recordsSessionAction: false,
@@ -1469,6 +1541,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'react-devtools',
+    deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/react-devtools.ts'] as const } : {}),
     catalog: { group: 'local-cli', key: 'reactDevtools' },
     recordsSessionAction: false,
@@ -1482,6 +1555,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'web',
+    deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/web.ts'] as const } : {}),
     catalog: { group: 'local-cli' },
     recordsSessionAction: false,
@@ -1607,6 +1681,10 @@ const TIMEOUT_POLICY_BY_COMMAND: ReadonlyMap<string, CommandTimeoutPolicy> = new
   commandDescriptors.map((descriptor) => [descriptor.name, descriptor.timeoutPolicy]),
 );
 
+const DEVICE_CLAIM_POLICY_BY_COMMAND: ReadonlyMap<string, DeviceClaimPolicy> = new Map(
+  commandDescriptors.map((descriptor) => [descriptor.name, descriptor.deviceClaimPolicy]),
+);
+
 const RESPONSE_DATA_TRANSFORM_BY_COMMAND: ReadonlyMap<string, CommandResponseDataTransform> =
   new Map(
     Array.from(COMMAND_DESCRIPTOR_BY_NAME.values()).flatMap((descriptor) =>
@@ -1640,6 +1718,17 @@ export function commandSupportsVerifyEvidence(command: string | undefined): bool
 export function resolveCommandTimeoutPolicy(command: string | undefined): CommandTimeoutPolicy {
   if (command === undefined) return DEFAULT_TIMEOUT_POLICY;
   return TIMEOUT_POLICY_BY_COMMAND.get(command) ?? DEFAULT_TIMEOUT_POLICY;
+}
+
+/**
+ * The declared #1320 device-claim policy for a command. Names outside the
+ * registry (internal probes, unknown commands) resolve to `require-owner`: the
+ * value that performs no claim-store I/O at the binding seam, so an
+ * unregistered name can neither acquire nor be refused a claim.
+ */
+export function resolveCommandDeviceClaimPolicy(command: string | undefined): DeviceClaimPolicy {
+  if (command === undefined) return 'require-owner';
+  return DEVICE_CLAIM_POLICY_BY_COMMAND.get(command) ?? 'require-owner';
 }
 
 export function resolveCommandResponseDataTransform(

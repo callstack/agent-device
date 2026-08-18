@@ -52,7 +52,11 @@ import {
   type BindDeviceRuntime,
   type BindExactDeviceRuntime,
   type InspectDeviceRuntimeFacts,
+  type RequestRuntimeBindings,
 } from './request-runtime-binding.ts';
+import { createDeviceClaimAdmission, type DeviceClaimAdmission } from './device-claim-admission.ts';
+import { createDeviceClaimReconciler } from './device-claim-reconciliation.ts';
+import { resolveCommandDeviceClaimPolicy } from '../core/command-descriptor/registry.ts';
 
 // Production daemon wiring owns one LeaseRegistry per process; scoping locks by registry keeps
 // test and embedded routers isolated without changing process-level serialization there.
@@ -160,13 +164,13 @@ export async function createRequestExecutionScope(params: {
       locks: executionLocks,
       initialKeys: executionLockKeys,
     });
-    const runtimeBindings =
-      params.deviceRuntimeGateway && params.platformRequestScope
-        ? createRequestRuntimeBindings({
-            gateway: params.deviceRuntimeGateway,
-            scope: params.platformRequestScope,
-          })
-        : undefined;
+    const { claimAdmission, runtimeBindings } = createRequestDeviceAccess({
+      command,
+      workspace: scopedReq.meta?.cwd ?? process.cwd(),
+      stateDir: sessionStore.resolveDaemonStateDir(),
+      deviceRuntimeGateway: params.deviceRuntimeGateway,
+      platformRequestScope: params.platformRequestScope,
+    });
 
     const scope: RequestExecutionScope = {
       req: scopedReq,
@@ -233,7 +237,15 @@ export async function createRequestExecutionScope(params: {
         throwIfRequestCanceled(scopedReq.meta?.requestId);
         return await requestExecutionLocks.run(async () => await scope.runAdmitted(task));
       },
-      [Symbol.asyncDispose]: async () => await runtimeBindings?.[Symbol.asyncDispose](),
+      // Claims outlive the bindings they guard: release only once no device
+      // operation from this request can still run.
+      [Symbol.asyncDispose]: async () => {
+        try {
+          await runtimeBindings?.[Symbol.asyncDispose]();
+        } finally {
+          await claimAdmission?.[Symbol.asyncDispose]();
+        }
+      },
     };
     requestScopeFinalizers.set(scope, (response) => {
       if (shouldRecordRequestEvents) {
@@ -268,6 +280,47 @@ export async function createRequestExecutionScope(params: {
     }
     throw error;
   }
+}
+
+/**
+ * The request's device access, gated by the executing command's #1320 claim
+ * policy: bindings hand out device operations only after the claim admission
+ * derived from that policy allows it, so `transient-exclusive` commands hold an
+ * exclusive claim for as long as they can reach a device and every other policy
+ * stays out of the claim store.
+ */
+function createRequestDeviceAccess(params: {
+  command: string;
+  workspace: string;
+  stateDir: string;
+  deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations> | undefined;
+  platformRequestScope: PlatformRequestScope | undefined;
+}): {
+  claimAdmission: DeviceClaimAdmission | undefined;
+  runtimeBindings: RequestRuntimeBindings | undefined;
+} {
+  const { deviceRuntimeGateway, platformRequestScope } = params;
+  if (!deviceRuntimeGateway || !platformRequestScope) {
+    return { claimAdmission: undefined, runtimeBindings: undefined };
+  }
+  const claimAdmission = createDeviceClaimAdmission({
+    policy: resolveCommandDeviceClaimPolicy(params.command),
+    command: params.command,
+    workspace: params.workspace,
+    stateDir: params.stateDir,
+    reconcileOrphanedDeviceClaim: createDeviceClaimReconciler({
+      gateway: deviceRuntimeGateway,
+      scope: platformRequestScope,
+    }),
+  });
+  return {
+    claimAdmission,
+    runtimeBindings: createRequestRuntimeBindings({
+      gateway: deviceRuntimeGateway,
+      scope: platformRequestScope,
+      admitDeviceClaim: claimAdmission.admit,
+    }),
+  };
 }
 
 async function teardownExpiredSession(params: {

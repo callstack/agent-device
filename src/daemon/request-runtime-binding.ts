@@ -50,13 +50,31 @@ export type RequestRuntimeBindings = AsyncDisposable &
     bindExactDevice: BindExactDeviceRuntime;
   }>;
 
-/** Private broad-binding cache; handlers receive only the selected projection. */
+/**
+ * Private broad-binding cache; handlers receive only the selected projection.
+ *
+ * `admitDeviceClaim` is the #1320 claim gate, and it runs as part of creating a
+ * binding, so the per-device cache below is also what makes it run once per
+ * device. Binding performs no device mutation — it composes the operation
+ * catalog — so a binding that has not been admitted is the last state before any
+ * device operation exists, and admitting here covers every handler by
+ * construction. A refusal rejects the cached promise, so a second `bindDevice`
+ * for the same device re-attempts rather than inheriting a rejected binding.
+ */
 export function createRequestRuntimeBindings(params: {
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   scope: PlatformRequestScope;
+  admitDeviceClaim: (device: DeviceInfo, owner: RuntimeOwnerRef) => Promise<void>;
 }): RequestRuntimeBindings {
   const cleanups = new AsyncCleanupStack();
   const bindings = new Map<string, Promise<DeviceBinding<PlatformRuntimeOperations>>>();
+
+  const admitBinding = async (
+    binding: DeviceBinding<PlatformRuntimeOperations>,
+  ): Promise<DeviceBinding<PlatformRuntimeOperations>> => {
+    await params.admitDeviceClaim(binding.device, binding.owner);
+    return binding;
+  };
 
   const bindDevice: BindDeviceRuntime = async (device, use) => {
     const key = deviceIdentityKey(deviceIdentity(device));
@@ -68,23 +86,24 @@ export function createRequestRuntimeBindings(params: {
           intent: { kind: 'ordinary' },
           scope: params.scope,
         })
-        .then((binding) => cleanups.use(binding));
+        .then((binding) => cleanups.use(binding))
+        .then(admitBinding);
       bindings.set(key, bindingPromise);
       void bindingPromise.catch(() => {
         if (bindings.get(key) === bindingPromise) bindings.delete(key);
       });
     }
-    const binding = await bindingPromise;
-    return narrowDeviceBinding(binding, use);
+    return narrowDeviceBinding(await bindingPromise, use);
   };
 
+  // Exact-owner bindings deliberately bypass the cache, so they admit their own.
   const bindExactDevice: BindExactDeviceRuntime = async (device, owner, fence, use, scope) => {
     const published = await params.gateway.bind({
       device,
       intent: { kind: 'exact-owner', owner, fence },
       scope,
     });
-    const binding = await adoptExactBinding(cleanups, published, scope);
+    const binding = await admitBinding(await adoptExactBinding(cleanups, published, scope));
     return narrowDeviceBinding(binding, use);
   };
 

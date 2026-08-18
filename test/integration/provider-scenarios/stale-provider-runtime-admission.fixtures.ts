@@ -46,6 +46,7 @@ function createProviderDeploymentAdmission(params: {
       diagnostics: { emit: () => {} },
       progress: { report: () => {} },
     },
+    admitDeviceClaim: async () => {},
   });
   return {
     bindings,
