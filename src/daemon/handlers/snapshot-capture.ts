@@ -171,7 +171,7 @@ export function buildSnapshotState(
       : normalizedNodes;
   const snapshotQuality = snapshotCaptureAnnotationsFrom(data).quality;
   const presentableNodes = shouldPresentIosInteractiveSnapshot(data?.backend, flags)
-    ? presentIosInteractiveSnapshot(scopedNodes, snapshotQuality?.backend)
+    ? presentIosInteractiveSnapshot(scopedNodes)
     : scopedNodes;
   const nodes = attachRefs(
     snapshotRaw

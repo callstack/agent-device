@@ -9,14 +9,15 @@ extension RunnerTests {
     var nodes: [SnapshotNode] = []
     var hints: [Int: (above: Bool, below: Bool)] = [:]
     appendPrivateAXNode(rawRoot, to: &nodes, hints: &hints, options: options, viewport: viewport,
-      depth: 0, parentIndex: nil, insideMatchedScope: false, scrollContext: nil)
+      depth: 0, parentIndex: nil, insideMatchedScope: false, scrollContext: nil,
+      ancestorOffscreen: false)
     return applyHiddenContentHints(hints, to: nodes)
   }
 
   private func appendPrivateAXNode(_ raw: [String: Any], to nodes: inout [SnapshotNode],
     hints: inout [Int: (above: Bool, below: Bool)], options: SnapshotOptions, viewport: CGRect,
     depth: Int, parentIndex: Int?, insideMatchedScope: Bool,
-    scrollContext: (index: Int, rect: CGRect)?)
+    scrollContext: (index: Int, rect: CGRect)?, ancestorOffscreen: Bool)
   {
     if let limit = options.depth, depth > limit { return }
     let rect = privateAXRect(raw["frame"])
@@ -40,7 +41,8 @@ extension RunnerTests {
         viewport: viewport,
         scrollContainerAnchor: scrollContext
       )
-    let presentationVisible = !negligibleDecoration && (!hasFrame || onScreen)
+    let offscreen = ancestorOffscreen || (hasFrame && !onScreen)
+    let presentationVisible = !offscreen && !negligibleDecoration
     let decision = flatSnapshotFilterDecision(
       FlatSnapshotFilterNode(isRoot: parentIndex == nil, label: label, identifier: identifier,
         valueText: value.isEmpty ? nil : value, visible: presentationVisible),
@@ -48,7 +50,7 @@ extension RunnerTests {
       insideMatchedScope: insideMatchedScope)
     let include = decision.include
 
-    if !presentationVisible, let scrollContext {
+    if !ancestorOffscreen && hasFrame && !onScreen, let scrollContext {
       rememberHiddenContentHint(for: rect, relativeTo: scrollContext, hints: &hints)
     }
 
@@ -79,7 +81,8 @@ extension RunnerTests {
     for child in children {
       appendPrivateAXNode(child, to: &nodes, hints: &hints, options: options, viewport: viewport,
         depth: depth + 1, parentIndex: currentIndex,
-        insideMatchedScope: decision.insideMatchedScope, scrollContext: nextScrollContext)
+        insideMatchedScope: decision.insideMatchedScope, scrollContext: nextScrollContext,
+        ancestorOffscreen: offscreen)
     }
   }
 
@@ -115,6 +118,28 @@ extension RunnerTests {
     let scrollView = nodes.first { $0.type == "ScrollView" }
     XCTAssertEqual(scrollView?.hiddenContentBelow, true)
     XCTAssertEqual(scrollView?.actions, ["Scroll down"])
+  }
+
+  func testPrivateAXPresentationKeepsOffscreenSubtreeExcludedWhenChildFramesAreClamped() {
+    func frame(_ x: Double, _ y: Double, _ width: Double, _ height: Double) -> [String: Any] {
+      ["x": x, "y": y, "width": width, "height": height]
+    }
+    let root: [String: Any] = ["type": Int(XCUIElement.ElementType.application.rawValue),
+      "label": "Element", "frame": frame(0, 0, 402, 874), "children": [[
+        "type": Int(XCUIElement.ElementType.table.rawValue), "frame": frame(0, 96, 402, 700),
+        "children": [["type": Int(XCUIElement.ElementType.cell.rawValue),
+          "label": "Theme", "frame": frame(0, 900, 402, 44), "children": [[
+            "type": Int(XCUIElement.ElementType.staticText.rawValue),
+            "label": "Theme", "frame": frame(16, 96, 120, 44)],
+          ["type": Int(XCUIElement.ElementType.switch.rawValue),
+            "label": "Theme", "frame": frame(340, 96, 46, 44)]]]]]]]
+
+    let nodes = privateAXPresentation(rawRoot: root,
+      options: SnapshotOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
+      viewport: CGRect(x: 0, y: 0, width: 402, height: 874))
+
+    XCTAssertEqual(nodes.compactMap(\.label), ["Element"])
+    XCTAssertEqual(nodes.first { $0.type == "Table" }?.hiddenContentBelow, true)
   }
 
   func testPrivateAXGeometrylessSemanticsAreNeverActionableOrScrollContexts() {

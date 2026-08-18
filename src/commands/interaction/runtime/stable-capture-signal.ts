@@ -4,17 +4,12 @@ import type {
   SnapshotNode,
   SnapshotState,
 } from '@agent-device/kernel/snapshot';
+import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import {
-  isPositiveFiniteRect,
-  isRectVisibleInViewport,
-  pickLargestRect,
-} from '@agent-device/kernel/rect';
-import {
-  isTapPointInsideViewport,
+  buildSnapshotNodeMap,
+  isNodeVisibleOnScreen,
   isViewportRootNode,
-  resolveViewportRect,
 } from '@agent-device/contracts/snapshot';
-import { projectIosScrollVisibility } from '../../../snapshot/ios-scroll-visibility.ts';
 
 const GEOMETRY_TOLERANCE_PX = 1;
 export type StableCaptureSignal = {
@@ -22,77 +17,28 @@ export type StableCaptureSignal = {
   nodes: SignalNode[];
 };
 type SignalNode = { identity: string; rect?: Rect };
-type StableVisibilityContext = {
-  largestRootViewport: Rect | null;
-  nodes: SnapshotNode[];
-  rootViewports: Rect[];
-  hiddenIndexes: ReadonlySet<number>;
-  scrollByNodeIndex: ReadonlyMap<number, Pick<SnapshotNode, 'rect'>>;
-};
 
 export function stableCaptureSignal(
   snapshot: Pick<SnapshotState, 'backend' | 'nodes' | 'snapshotQuality'>,
 ): StableCaptureSignal {
-  // Settle compares a visible semantic projection within one capture backend. Backend trees may
-  // retain offscreen scroll descendants, and letting that internal churn into the signal keeps an
-  // otherwise quiet screen alive for the full budget. The center-on-screen rule also absorbs edge
-  // slivers whose intersection flips by a pixel.
+  const captureBackend = snapshot.snapshotQuality?.backend;
+  // XCTest backends can retain offscreen descendants. Settle compares their visible semantic
+  // projection so internal scroll churn does not restart the quiet window.
   const source =
-    snapshot.backend === 'xctest'
-      ? stableVisibleNodes(
-          snapshot.nodes,
-          projectIosScrollVisibility(snapshot.nodes, snapshot.snapshotQuality?.backend),
-        )
-      : snapshot.nodes;
+    snapshot.backend === 'xctest' ? stableVisibleXCTestNodes(snapshot.nodes) : snapshot.nodes;
   const nodes = source.map(stableCaptureNodeSignal);
   nodes.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
-  return { captureBackend: snapshot.snapshotQuality?.backend, nodes };
+  return { captureBackend, nodes };
 }
 
-function stableVisibleNodes(
-  nodes: SnapshotNode[],
-  projection: ReturnType<typeof projectIosScrollVisibility>,
-): SnapshotNode[] {
-  const rootViewports = nodes.flatMap((node) =>
+function stableVisibleXCTestNodes(nodes: SnapshotNode[]): SnapshotNode[] {
+  const byIndex = buildSnapshotNodeMap(nodes);
+  const viewportRects = nodes.flatMap((node) =>
     isViewportRootNode(node) && isPositiveFiniteRect(node.rect) ? [node.rect] : [],
   );
-  const context: StableVisibilityContext = {
-    largestRootViewport: pickLargestRect(rootViewports),
-    nodes,
-    rootViewports,
-    hiddenIndexes: projection.hiddenIndexes,
-    scrollByNodeIndex: projection.scrollByNodeIndex,
-  };
-  return nodes.filter((node) => isStableVisibleNode(node, context));
-}
-
-function isStableVisibleNode(node: SnapshotNode, context: StableVisibilityContext): boolean {
-  if (context.hiddenIndexes.has(node.index)) return false;
-  if (isViewportRootNode(node)) return true;
-  const rect = node.rect;
-  const semantic = hasStableSemanticIdentity(node);
-  if (!rect) return semantic;
-  if (!isPositiveFiniteRect(rect) || isNegligibleStructure(rect, semantic)) return false;
-  const clippingAncestor = context.scrollByNodeIndex.get(node.index);
-  if (clippingAncestor?.rect && !isRectVisibleInViewport(node.rect!, clippingAncestor.rect)) {
-    return false;
-  }
-  return isTapPointInsideViewport(rect, resolveStableViewport(rect, context));
-}
-
-function isNegligibleStructure(rect: Rect, semantic: boolean): boolean {
-  return !semantic && (rect.width <= GEOMETRY_TOLERANCE_PX || rect.height <= GEOMETRY_TOLERANCE_PX);
-}
-
-function resolveStableViewport(rect: Rect, context: StableVisibilityContext): Rect | null {
-  // Private AX is simulator-only and normally has one app-sized root. Keep the shared multi-window
-  // selection semantics without rescanning the full node tree for every leaf.
-  return (
-    pickLargestRect(
-      context.rootViewports.filter((candidate) => isTapPointInsideViewport(rect, candidate)),
-    ) ??
-    context.largestRootViewport ??
-    resolveViewportRect(context.nodes, rect)
+  return nodes.filter(
+    (node) =>
+      isViewportRootNode(node) || isNodeVisibleOnScreen(node, nodes, byIndex, viewportRects),
   );
 }
 
@@ -122,24 +68,13 @@ export function stableCaptureSignalsEqual(
 
 function stableCaptureNodeSignal(node: SnapshotNode): SignalNode {
   return {
-    identity: `${node.type ?? ''}#${stableSemanticIdentity(node)}`,
+    identity: `${node.type ?? ''}#${node.label ?? ''}#${node.identifier ?? ''}`,
     ...(node.rect
       ? {
           rect: { ...node.rect },
         }
       : {}),
   };
-}
-function stableSemanticIdentity(node: SnapshotNode): string {
-  return stableSemanticParts(node).join('#');
-}
-function hasStableSemanticIdentity(node: SnapshotNode): boolean {
-  return stableSemanticParts(node).some(Boolean);
-}
-function stableSemanticParts(node: SnapshotNode): string[] {
-  return [node.label, node.identifier, node.value].map((value) =>
-    typeof value === 'string' ? value.trim() : String(value ?? '').trim(),
-  );
 }
 function sortKey(node: SignalNode): string {
   const rect = node.rect;

@@ -22,6 +22,11 @@ export type MaestroTargetEvidence = {
   ref?: string;
 };
 
+type MaestroInteractionProjection = {
+  snapshot: SnapshotState;
+  sourceIndexes: ReadonlyMap<number, number>;
+};
+
 export type MaestroTargetResolution =
   | {
       ok: true;
@@ -39,10 +44,7 @@ export function resolveMaestroTargetFromSnapshot(
   platform: MaestroPlatform,
   options: {
     interactiveBounds?: boolean;
-    interaction?: {
-      snapshot: SnapshotState;
-      sourceIndexes: ReadonlyMap<number, number>;
-    };
+    interaction?: MaestroInteractionProjection;
   } = {},
 ): MaestroTargetResolution {
   const candidates = rankMaestroCandidates(snapshot, query.selector, platform, query.childOf);
@@ -83,10 +85,7 @@ function resolveInteractionCandidates(
   query: MaestroTargetQuery,
   platform: MaestroPlatform,
   options: {
-    interaction?: {
-      snapshot: SnapshotState;
-      sourceIndexes: ReadonlyMap<number, number>;
-    };
+    interaction?: MaestroInteractionProjection;
   },
 ): { all: SnapshotNode[]; mapped: SnapshotNode[] } | undefined {
   const interaction = options.interaction;
@@ -94,9 +93,9 @@ function resolveInteractionCandidates(
   const { snapshot, sourceIndexes } = interaction;
   const sourceIndex = sourceIndexes.get(canonicalTarget.index);
   if (sourceIndex === undefined) return undefined;
-  const source = snapshot.nodes.find((node) => node.index === sourceIndex);
-  if (!source) return undefined;
   const byIndex = buildSnapshotNodeMap(snapshot.nodes);
+  const source = byIndex.get(sourceIndex);
+  if (!source) return undefined;
   const all = rankMaestroCandidates(snapshot, query.selector, platform, query.childOf).ranked;
   return {
     all,

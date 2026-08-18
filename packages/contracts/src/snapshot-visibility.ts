@@ -46,20 +46,24 @@ export function isViewportRootNode(node: Pick<SnapshotNode, 'type' | 'role' | 's
  * Application/Window rect containing the target's center, falling back to the
  * largest such rect, then to the largest containing rect of any node.
  */
-export function resolveViewportRect(nodes: RawSnapshotNode[], targetRect: Rect): Rect | null {
+export function resolveViewportRect(
+  nodes: RawSnapshotNode[],
+  targetRect: Rect,
+  precomputedViewportRects?: readonly Rect[],
+): Rect | null {
   const targetCenter = centerOfRect(targetRect);
-  const rects = nodes.flatMap((node) =>
-    hasValidRect(node.rect) ? [{ node, rect: node.rect }] : [],
-  );
-  const viewportRects = rects
-    .filter((entry) => isViewportRootNode(entry.node))
-    .map((entry) => entry.rect);
+  const viewportRects =
+    precomputedViewportRects ??
+    nodes.flatMap((node) =>
+      isViewportRootNode(node) && hasValidRect(node.rect) ? [node.rect] : [],
+    );
   const contains = (rect: Rect) => containsPoint(rect, targetCenter.x, targetCenter.y);
+  const viewport =
+    pickLargestRect(viewportRects.filter(contains)) ?? pickLargestRect(viewportRects);
+  if (viewport) return viewport;
 
-  return (
-    pickLargestRect(viewportRects.filter(contains)) ??
-    pickLargestRect(viewportRects) ??
-    pickLargestRect(rects.map((entry) => entry.rect).filter(contains))
+  return pickLargestRect(
+    nodes.flatMap((node) => (hasValidRect(node.rect) && contains(node.rect) ? [node.rect] : [])),
   );
 }
 
@@ -77,11 +81,12 @@ export function isNodeVisibleInEffectiveViewport(
   node: SnapshotVisibilityNode,
   nodes: SnapshotNode[],
   byIndex: ReadonlyMap<number, SnapshotNode> = buildSnapshotNodeMap(nodes),
+  precomputedViewportRects?: readonly Rect[],
 ): boolean {
   if (!node.rect) {
     return true;
   }
-  const viewport = resolveEffectiveViewportRect(node, nodes, byIndex);
+  const viewport = resolveEffectiveViewportRect(node, nodes, byIndex, precomputedViewportRects);
   if (!viewport) {
     return true;
   }
@@ -101,14 +106,15 @@ export function isNodeVisibleOnScreen(
   node: SnapshotVisibilityNode,
   nodes: SnapshotNode[],
   byIndex: ReadonlyMap<number, SnapshotNode> = buildSnapshotNodeMap(nodes),
+  precomputedViewportRects?: readonly Rect[],
 ): boolean {
   if (!node.rect) {
     return true;
   }
-  if (!isNodeVisibleInEffectiveViewport(node, nodes, byIndex)) {
+  if (!isNodeVisibleInEffectiveViewport(node, nodes, byIndex, precomputedViewportRects)) {
     return false;
   }
-  const rootViewport = resolveViewportRect(nodes, node.rect);
+  const rootViewport = resolveViewportRect(nodes, node.rect, precomputedViewportRects);
   return isTapPointInsideViewport(node.rect, rootViewport);
 }
 
@@ -130,6 +136,7 @@ export function resolveEffectiveViewportRect(
   node: SnapshotVisibilityNode,
   nodes: SnapshotNode[],
   byIndex: ReadonlyMap<number, SnapshotNode> = buildSnapshotNodeMap(nodes),
+  precomputedViewportRects?: readonly Rect[],
 ): Rect | null {
   const clippingAncestorRect = findNearestScrollableAncestor(node, byIndex, (ancestor) =>
     Boolean(ancestor.rect),
@@ -137,7 +144,11 @@ export function resolveEffectiveViewportRect(
   if (clippingAncestorRect) {
     return clippingAncestorRect;
   }
-  return resolveViewportRect(nodes, node.rect ?? { x: 0, y: 0, width: 0, height: 0 });
+  return resolveViewportRect(
+    nodes,
+    node.rect ?? { x: 0, y: 0, width: 0, height: 0 },
+    precomputedViewportRects,
+  );
 }
 
 /** Finds the nearest scrollable ancestor that satisfies the optional predicate. */

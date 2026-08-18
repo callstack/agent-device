@@ -114,6 +114,7 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testDeepExtensionCountsMissedFrontiers \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPreferredPrivateAXBackendPlansAsPenalized \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXRegularPresentationProjectsToViewportAndKeepsScrollHint \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXPresentationKeepsOffscreenSubtreeExcludedWhenChildFramesAreClamped \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXGeometrylessSemanticsAreNeverActionableOrScrollContexts \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXScopeSelectsSubtreeNotMatchingLabels \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXInteractiveFiltersLoginLikeHiddenDrawer \

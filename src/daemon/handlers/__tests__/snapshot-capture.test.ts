@@ -1,7 +1,6 @@
 import { expect, test } from 'vitest';
 import { buildSnapshotState } from '../snapshot-capture.ts';
 import { buildSnapshotVisibility } from '../../../snapshot/snapshot-visibility.ts';
-import { elementSettingsNodes } from '../../../snapshot/ios-scroll-visibility.fixtures.ts';
 
 test('buildSnapshotState handles undefined nodes gracefully', () => {
   const state = buildSnapshotState({ nodes: undefined, truncated: undefined }, undefined);
@@ -95,24 +94,6 @@ test('buildSnapshotState applies iOS interactive presentation for xctest snapsho
     ['CollectionView', undefined, 0],
     ['Cell', 'General', 1],
   ]);
-});
-
-test('buildSnapshotState scopes collapsed-run projection to private-ax capture provenance', () => {
-  const capture = (backend: 'tree' | 'private-ax') =>
-    buildSnapshotState(
-      {
-        nodes: elementSettingsNodes(),
-        backend: 'xctest',
-        quality: { state: 'healthy', backend },
-      },
-      { snapshotInteractiveOnly: true },
-    );
-
-  expect(capture('private-ax').nodes.some((node) => node.label === 'Theme')).toBe(false);
-  expect(
-    capture('private-ax').nodes.some((node) => node.label === 'Pinned flattened heading'),
-  ).toBe(true);
-  expect(capture('tree').nodes.some((node) => node.label === 'Theme')).toBe(true);
 });
 
 test('buildSnapshotState marks content covered by floating overlays as visible but blocked', () => {

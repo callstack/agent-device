@@ -101,6 +101,7 @@ test('resolveViewportRect selects the containing application viewport', () => {
   const nodes = [node({ index: 0, type: 'Application', rect: viewport })];
 
   assert.deepEqual(resolveViewportRect(nodes, target), viewport);
+  assert.deepEqual(resolveViewportRect(nodes, target, [viewport]), viewport);
 });
 
 test('snapshot visibility uses the nearest scrollable viewport before applying the tap-point rule', () => {

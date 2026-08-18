@@ -2,10 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
 import { stableCaptureSignal, stableCaptureSignalsEqual } from './stable-capture-signal.ts';
-import {
-  elementCollapsedScrollEdgeSnapshot,
-  elementSettingsSnapshot,
-} from './stable-capture.fixtures.ts';
+import { elementSettingsSnapshot } from './stable-capture.fixtures.ts';
 
 function snapshot(jitter: number, hiddenY: number) {
   return makeSnapshotState(
@@ -87,21 +84,6 @@ test('regular snapshot stability ignores offscreen scroll-descendant churn', () 
   );
 });
 
-test('private-ax stability ignores an evidenced collapsed run pinned to a scroll edge', () => {
-  const left = stableCaptureSignal(
-    elementCollapsedScrollEdgeSnapshot(['Enable in-app notifications', 'Clear cache']),
-  );
-  const right = stableCaptureSignal(
-    elementCollapsedScrollEdgeSnapshot(['Find your contacts', 'Report bug']),
-  );
-
-  assert.equal(stableCaptureSignalsEqual(left, right), true);
-  assert.equal(
-    left.nodes.some((node) => node.identity.includes('Visible table heading')),
-    true,
-  );
-});
-
 test('capture backend transitions reset otherwise identical visible semantics', () => {
   const tree = snapshot(0, 700);
   const privateAx = snapshot(0, 700);
@@ -126,40 +108,6 @@ test('non-iOS captures retain their backend-owned node projection', () => {
   );
 });
 
-test('stable semantic projection keeps value-only nodes and drops geometryless structure', () => {
-  const state = snapshot(0, 700);
-  state.nodes.push(
-    {
-      index: 10,
-      ref: 'e10',
-      depth: 1,
-      parentIndex: 0,
-      type: 'StaticText',
-      value: 'Selected',
-      hittable: false,
-    },
-    {
-      index: 11,
-      ref: 'e11',
-      depth: 1,
-      parentIndex: 0,
-      type: 'Other',
-      hittable: false,
-    },
-  );
-
-  const signal = stableCaptureSignal(state);
-
-  assert.equal(
-    signal.nodes.some((node) => node.identity.includes('#Selected')),
-    true,
-  );
-  assert.equal(
-    signal.nodes.some((node) => node.identity === 'Other##'),
-    false,
-  );
-});
-
 test('stable semantic projection stays linear on large scroll trees', () => {
   const state = elementSettingsSnapshot(
     Array.from({ length: 256 }, (_, offset) => 900 + offset * 49),
@@ -174,37 +122,45 @@ test('stable semantic projection stays linear on large scroll trees', () => {
 
   const signal = stableCaptureSignal(state);
 
-  assert.equal(signal.nodes.length, 4);
+  assert.equal(signal.nodes.length, 3);
   assert.ok(
     nodeReads <= state.nodes.length * 20,
     `projected ${state.nodes.length} nodes with ${nodeReads} node reads`,
   );
 });
 
-test('stable semantic projection ignores subpixel private-ax decoration churn', () => {
-  const withDecoration = (widths: number[]) => {
-    const state = elementSettingsSnapshot([]);
-    state.snapshotQuality = { state: 'recovered', backend: 'private-ax' };
-    state.nodes.push(
-      ...widths.map((width, offset) => ({
-        index: offset + 3,
-        ref: `e${offset + 3}`,
-        depth: 2,
-        parentIndex: 1,
-        type: 'Other',
-        rect: { x: 0, y: 152, width, height: 1 / 3 },
-        hittable: false,
+test('stable semantic projection stays linear on flat XCTest trees', () => {
+  const state = makeSnapshotState(
+    [
+      {
+        index: 0,
+        depth: 0,
+        type: 'Application',
+        rect: { x: 0, y: 0, width: 402, height: 874 },
+      },
+      ...Array.from({ length: 256 }, (_, offset) => ({
+        index: offset + 1,
+        depth: 1,
+        parentIndex: 0,
+        type: 'Button',
+        label: `Button ${offset}`,
+        rect: { x: 16, y: 900 + offset * 49, width: 360, height: 44 },
       })),
-    );
-    return state;
-  };
+    ],
+    { backend: 'xctest', snapshotQuality: { state: 'healthy', backend: 'tree' } },
+  );
+  let nodeReads = 0;
+  state.nodes = new Proxy(state.nodes, {
+    get(target, property, receiver) {
+      if (typeof property === 'string' && /^\d+$/.test(property)) nodeReads += 1;
+      return Reflect.get(target, property, receiver);
+    },
+  });
 
-  assert.equal(
-    stableCaptureSignalsEqual(
-      stableCaptureSignal(withDecoration([402, 402])),
-      stableCaptureSignal(withDecoration([382])),
-    ),
-    true,
+  assert.equal(stableCaptureSignal(state).nodes.length, 1);
+  assert.ok(
+    nodeReads <= state.nodes.length * 20,
+    `projected ${state.nodes.length} nodes with ${nodeReads} node reads`,
   );
 });
 

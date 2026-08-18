@@ -103,10 +103,7 @@ function resolveTargetFromSnapshot(params: {
   const frame = getSnapshotReferenceFrame(params.snapshot);
   const presentation =
     params.platform === 'ios'
-      ? buildIosInteractiveSnapshotPresentation(
-          params.snapshot.nodes,
-          params.snapshot.snapshotQuality?.backend,
-        )
+      ? buildIosInteractiveSnapshotPresentation(params.snapshot.nodes)
       : undefined;
   const canonicalSnapshot = presentation
     ? { ...params.snapshot, nodes: attachRefs(presentation.nodes) }

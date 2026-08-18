@@ -179,11 +179,23 @@ export function mergeReplacement(
   node: RawSnapshotNode,
   patch: Partial<RawSnapshotNode>,
 ): void {
-  replacements.set(node.index, {
-    ...node,
-    ...replacements.get(node.index),
-    ...patch,
-  });
+  replacements.set(node.index, { ...currentReplacement(replacements, node), ...patch });
+}
+
+export function updateReplacement(
+  replacements: Map<number, RawSnapshotNode>,
+  node: RawSnapshotNode,
+  update: (current: RawSnapshotNode) => Partial<RawSnapshotNode>,
+): void {
+  const current = currentReplacement(replacements, node);
+  replacements.set(node.index, { ...current, ...update(current) });
+}
+
+function currentReplacement(
+  replacements: ReadonlyMap<number, RawSnapshotNode>,
+  node: RawSnapshotNode,
+): RawSnapshotNode {
+  return { ...node, ...replacements.get(node.index) };
 }
 
 export function findLargestViewportRect(nodes: Iterable<RawSnapshotNode>): RawSnapshotNode['rect'] {
