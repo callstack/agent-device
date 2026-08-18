@@ -5,6 +5,7 @@
   "printWidth": 100,
   "sortPackageJson": false,
   "ignorePatterns": [
+    ".claude/**",
     "dist/**",
     "node_modules/**",
     "**/*.md",
