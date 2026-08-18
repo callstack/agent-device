@@ -1,10 +1,10 @@
 import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
-import { centerOfRect } from '@agent-device/kernel/snapshot';
-import { containsPoint, pickLargestRect } from '@agent-device/kernel/rect';
 import {
   findNearestAncestor,
+  isScrollableNodeLike,
   normalizeType,
   isViewportRootNode,
+  resolveViewportRect,
 } from '@agent-device/contracts/snapshot';
 import { isSnapshotNodeInteractionBlocked } from '../snapshot/snapshot-occlusion.ts';
 import {
@@ -229,31 +229,25 @@ function isOverlyBroadAncestor(
 }
 
 function isScrollingContainer(node: SnapshotNode): boolean {
-  const type = normalizeType(node.type ?? '');
-  return (
-    type.includes('scrollview') ||
-    type.includes('scrollarea') ||
-    type.includes('listview') ||
-    type.includes('recyclerview') ||
-    type.includes('collectionview') ||
-    type === 'list' ||
-    type === 'table' ||
-    type === 'collection'
-  );
+  return isScrollableNodeLike(node);
 }
 
 function resolveRootViewportRect(nodes: SnapshotNode[], targetRect: Rect): Rect | null {
-  const targetCenter = centerOfRect(targetRect);
   const viewportRects = nodes
     .filter(isViewportRootNode)
     .map((node) => normalizeRect(node.rect))
     .filter((rect): rect is Rect => rect !== null);
-  if (viewportRects.length === 0) return null;
+  if (viewportRects.length > 0) {
+    return resolveViewportRect(nodes, targetRect, viewportRects);
+  }
+  return hasAndroidClassNameNodes(nodes) ? resolveViewportRect(nodes, targetRect) : null;
+}
 
-  const containingRects = viewportRects.filter((rect) =>
-    containsPoint(rect, targetCenter.x, targetCenter.y),
-  );
-  return pickLargestRect(containingRects.length > 0 ? containingRects : viewportRects);
+function hasAndroidClassNameNodes(nodes: readonly SnapshotNode[]): boolean {
+  return nodes.some((node) => {
+    const type = node.type ?? '';
+    return type.startsWith('android.') || type.startsWith('androidx.');
+  });
 }
 
 function isRectViewportSized(rect: Rect, viewportRect: Rect): boolean {

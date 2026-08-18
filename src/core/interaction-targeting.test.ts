@@ -5,7 +5,6 @@ import {
   distinctRectPairArb,
   makeSnapshotState,
   PROPERTY_RUNS,
-  scrollingContainerTypeArb,
 } from '../__tests__/test-utils/index.ts';
 import {
   classifyActionableTouchCandidates,
@@ -15,6 +14,15 @@ import {
   ELEMENT14_DISTINCT_SUBTREE_NODES,
   EQUIVALENT_WRAPPER_CHAIN_NODES,
 } from './interaction-targeting.fixtures.ts';
+
+const scrollingContainerTypeArb = fc.constantFrom(
+  'ScrollView',
+  'Table',
+  'CollectionView',
+  'android.widget.ListView',
+  'android.widget.GridView',
+  'androidx.recyclerview.widget.RecyclerView',
+);
 
 test('collapses one same-label wrapper chain to its shared actionable node', () => {
   const snapshot = makeSnapshotState(EQUIVALENT_WRAPPER_CHAIN_NODES);
@@ -68,10 +76,11 @@ test('promotes static text inside a hittable row to the row', () => {
 });
 
 test.each([
-  'XCUIElementTypeScrollView',
-  'XCUIElementTypeTable',
-  'XCUIElementTypeCollectionView',
+  'ScrollView',
+  'Table',
+  'CollectionView',
   'android.widget.ListView',
+  'android.widget.GridView',
   'androidx.recyclerview.widget.RecyclerView',
 ])('does not promote a labeled region to its %s container', (containerType) => {
   const snapshot = makeSnapshotState([
@@ -98,6 +107,66 @@ test.each([
 
   assert.equal(resolution.reason, 'overly-broad-ancestor');
   assert.equal(resolution.node.label, 'Second tab');
+});
+
+test('does not promote an Android target to a full-screen content root without a viewport-root node', () => {
+  const snapshot = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'android.widget.FrameLayout',
+      rect: { x: 0, y: 0, width: 1080, height: 2400 },
+      hittable: true,
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'android.widget.TextView',
+      label: 'Settings',
+      rect: { x: 48, y: 300, width: 220, height: 72 },
+      hittable: false,
+    },
+  ]);
+
+  const resolution = resolveActionableTouchResolution(snapshot.nodes, snapshot.nodes[1]!);
+
+  assert.equal(resolution.reason, 'overly-broad-ancestor');
+  assert.equal(resolution.node.label, 'Settings');
+});
+
+test('treats Android GridView as a scroll container during touch retargeting', () => {
+  const snapshot = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 390, height: 844 },
+      hittable: true,
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'android.widget.GridView',
+      rect: { x: 0, y: 120, width: 390, height: 420 },
+      hittable: true,
+    },
+    {
+      index: 2,
+      depth: 2,
+      parentIndex: 1,
+      type: 'android.widget.TextView',
+      label: 'Grid item',
+      rect: { x: 24, y: 180, width: 120, height: 48 },
+      hittable: false,
+    },
+  ]);
+
+  const resolution = resolveActionableTouchResolution(snapshot.nodes, snapshot.nodes[2]!);
+
+  assert.equal(resolution.reason, 'overly-broad-ancestor');
+  assert.equal(resolution.node.label, 'Grid item');
 });
 
 test('never promotes a differently sized or positioned target to a scrolling container', () => {
