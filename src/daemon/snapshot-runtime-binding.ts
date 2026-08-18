@@ -12,9 +12,11 @@ import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-run
 import { SessionStore } from './session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import {
-  inspectRequiredRuntimeUse,
+  admitRuntimePlan,
   requireRuntimeBinding,
   unavailableRuntimeOperationResponse,
+  unwrapAdmittedRuntimePlan,
+  type AdmittedRuntimePlan,
 } from './handlers/session-runtime-admission.ts';
 import { errorResponse } from './handlers/response.ts';
 import { resolveSnapshotScope } from './handlers/snapshot-capture.ts';
@@ -53,11 +55,7 @@ export async function resolveBoundSnapshotCaptureRuntime(
     customActions: req.flags?.snapshotCustomActions === true,
     hasActiveApp: session?.appBundleId !== undefined,
   });
-  const admission = await inspectRequiredRuntimeUse({
-    device,
-    use: plan.use,
-    inspectFacts: params.inspectFacts,
-  });
+  const admission = await admitRuntimePlan({ device, plan, inspectFacts: params.inspectFacts });
   if (!admission.admitted) {
     return {
       ok: false,
@@ -71,7 +69,7 @@ export async function resolveBoundSnapshotCaptureRuntime(
     };
   }
 
-  const runtime = await bindSnapshotCaptureRuntime(params.bindDevice, device, plan);
+  const runtime = await bindSnapshotCaptureRuntime(params.bindDevice, admission);
   const captureInput = buildRuntimeCaptureInput(params, session, resolvedScope.scope);
   return Object.freeze({
     ok: true,
@@ -82,12 +80,17 @@ export async function resolveBoundSnapshotCaptureRuntime(
   });
 }
 
+/**
+ * Binds only an admitted plan, on the device it was admitted for: the token is minted by
+ * `admitRuntimePlan` alone and unwrapped by exact identity, so nothing that was not admitted —
+ * a bare plan, a separate device, a look-alike or Proxy — can reach the capture operations.
+ */
 async function bindSnapshotCaptureRuntime(
   bindDevice: BindDeviceRuntime | undefined,
-  device: SessionState['device'],
-  plan: SnapshotRuntimePlan,
+  admission: AdmittedRuntimePlan<SnapshotRuntimePlan>,
 ): Promise<Readonly<{ captureSnapshot(input: CaptureSnapshotInput): Promise<SnapshotResult> }>> {
   const bind = requireRuntimeBinding(bindDevice);
+  const { device, plan } = unwrapAdmittedRuntimePlan(admission);
   switch (plan.kind) {
     case 'active-app': {
       const runtime = await bind(device, plan.use);

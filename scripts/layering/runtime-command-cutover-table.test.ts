@@ -91,11 +91,7 @@ test('R32 snapshot rejects legacy admission and dispatcher projection', () => {
           }
           function resolveBoundSnapshotCaptureRuntime(params) {
             const plan = resolveSnapshotRuntimePlan(normalizedIntent);
-            inspectRequiredRuntimeUse({
-              device,
-              use: plan.use,
-              inspectFacts: params.inspectFacts,
-            });
+            admitRuntimePlan({ device, plan, inspectFacts: params.inspectFacts });
             return bindSnapshotCaptureRuntime(params.bindDevice, device, plan);
           }
         `,

@@ -10,7 +10,6 @@ import {
   runtimeLifecycleRouteBindingViolations,
   sourceExecutedUsingDeclarationViolations,
 } from './runtime-command-cutover-extensions.ts';
-import { snapshotPlatformPolicyBranchViolations } from './runtime-command-cutover-snapshot.ts';
 import { recordRuntimeDaemonMechanicsViolations } from './record-runtime-mechanics-policy.ts';
 import { retiredDispatchProjectionViolations } from './runtime-command-cutover-descriptor.ts';
 
@@ -471,7 +470,7 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
         captureSnapshotWithoutActiveApp: ['selectSnapshotWithoutActiveApp'],
       },
     },
-    extensions: [snapshotRetiredDispatchProjectionProof, snapshotPlatformPolicyBranchViolations],
+    extensions: [snapshotRetiredDispatchProjectionProof],
   },
   {
     rule: 'R33 diff-runtime-cutover',

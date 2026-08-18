@@ -22,6 +22,7 @@ test('the parametrized gate goes red on a planted row across every generalized c
             "import { resolvePlantedBackend } from './planted-legacy.ts';",
             "requireCommandSupported('planted', device);",
             'const widened = runtime as PlantedRuntimeOperations;',
+            'const forged = { admitted: true, plan } as AdmittedRuntimePlan<PlantedPlan>;',
             "function handlePlantedCommand() { widened.operations['plantedDump']({}); }",
           ].join('\n'),
         ],
@@ -43,6 +44,9 @@ test('the parametrized gate goes red on a planted row across every generalized c
       "src/daemon/planted-handler.ts: production source imports retired planted module './planted-legacy.ts'",
       'src/daemon/planted-handler.ts: legacy planted route resolvePlantedBackend',
       'src/daemon/planted-handler.ts: legacy planted capability admission requireCommandSupported',
+      'src/daemon/planted-handler.ts: widened planted runtime type assertion',
+      // The admission proof is shared across rows: a route that casts its way to an
+      // AdmittedRuntimePlan has manufactured the facts-first admission the binder requires.
       'src/daemon/planted-handler.ts: widened planted runtime type assertion',
       'src/daemon/planted-handler.ts: bracketed planted operation access',
       'src/core/command-descriptor/registry.ts: planted descriptor retains legacy capability admission',

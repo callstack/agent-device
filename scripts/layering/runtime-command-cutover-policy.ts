@@ -13,7 +13,11 @@ import { memberName, propertyName, visitAst, type ProductionSource } from './cut
 
 type AstNode = Record<string, unknown>;
 
-const SHARED_RUNTIME_TYPE_NAME = 'BoundDeviceRuntime';
+// Types no daemon route may manufacture with an assertion: the bound runtime itself, and the
+// admission proof a facts-first binder requires (`AdmittedRuntimePlan`, minted only by
+// `admitRuntimePlan`). Together with the row's own runtime type names they are the
+// manufactured-proof column — a cast to any of them is a route repairing missing proof.
+const SHARED_RUNTIME_TYPE_NAMES = ['BoundDeviceRuntime', 'AdmittedRuntimePlan'] as const;
 
 /**
  * The one parametrized runtime-command-cutover gate (ADR 0019 §8). Every migrated
@@ -372,7 +376,7 @@ function narrowingViolations(
   // An inventory row binds no device runtime, so it has nothing to re-widen.
   if (!file.path.startsWith('src/daemon/') || row.execution !== 'device-runtime') return [];
   const violations: UnruledViolation[] = [];
-  const runtimeTypes = new Set([SHARED_RUNTIME_TYPE_NAME, ...row.runtimeTypeNames]);
+  const runtimeTypes = new Set([...SHARED_RUNTIME_TYPE_NAMES, ...row.runtimeTypeNames]);
   visitAst(program, (node) => {
     if (
       (node['type'] === 'TSAsExpression' || node['type'] === 'TSTypeAssertion') &&
