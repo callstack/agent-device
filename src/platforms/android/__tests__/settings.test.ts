@@ -1,6 +1,10 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { setAndroidSetting } from '../settings.ts';
+import {
+  androidRevokedGrantedPermissionWarning,
+  parseAndroidGrantedRuntimePermissions,
+  setAndroidSetting,
+} from '../settings.ts';
 import {
   ANDROID_EMULATOR,
   assertRejectsAppError,
@@ -175,6 +179,106 @@ test('setAndroidSetting permission reset notifications clears permission flags f
       );
     },
   );
+});
+
+// #1796: Android kills the app when a permission it holds is revoked. The prior grant state is
+// read before `pm revoke`, and a granted -> revoked transition surfaces as a warning + typed field.
+const DUMPSYS_MICROPHONE_GRANTED = [
+  'Packages:',
+  '  Package [com.example.app] (abc):',
+  '    User 0: ceDataInode=0 installed=true',
+  '      runtime permissions:',
+  '        android.permission.RECORD_AUDIO: granted=true, flags=[ USER_SET|USER_SENSITIVE_WHEN_GRANTED]',
+  '        android.permission.CAMERA: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED]',
+].join('\n');
+
+test.each(['deny', 'reset'] as const)(
+  'setAndroidSetting permission %s warns that revoking a granted permission killed the app',
+  async (action) => {
+    await withFakeAdb(
+      (args) =>
+        args.join(' ') === 'shell dumpsys package com.example.app'
+          ? DUMPSYS_MICROPHONE_GRANTED
+          : undefined,
+      async ({ calls, device }) => {
+        const result = await setAndroidSetting(device, 'permission', action, 'com.example.app', {
+          permissionTarget: 'microphone',
+        });
+        const flat = calls.map((args) => args.join(' '));
+        // The state is read BEFORE the revoke: after it, dumpsys would already say false.
+        assert.ok(
+          flat.indexOf('shell dumpsys package com.example.app') <
+            flat.indexOf('shell pm revoke com.example.app android.permission.RECORD_AUDIO'),
+          flat.join('; '),
+        );
+        assert.deepEqual(result, {
+          permission: 'android.permission.RECORD_AUDIO',
+          wasGranted: true,
+          warnings: [
+            androidRevokedGrantedPermissionWarning(
+              'com.example.app',
+              'android.permission.RECORD_AUDIO',
+            ),
+          ],
+        });
+        assert.match(String(result?.warnings), /open com\.example\.app --relaunch/);
+      },
+    );
+  },
+);
+
+test('setAndroidSetting permission deny stays quiet when the permission was not granted', async () => {
+  await withFakeAdb(
+    (args) =>
+      args.join(' ') === 'shell dumpsys package com.example.app'
+        ? DUMPSYS_MICROPHONE_GRANTED
+        : undefined,
+    async ({ device }) => {
+      const result = await setAndroidSetting(device, 'permission', 'deny', 'com.example.app', {
+        permissionTarget: 'camera',
+      });
+      assert.deepEqual(result, { permission: 'android.permission.CAMERA', wasGranted: false });
+    },
+  );
+});
+
+test('setAndroidSetting permission grant does not read grant state', async () => {
+  await withFakeAdb(
+    () => undefined,
+    async ({ calls, device }) => {
+      const result = await setAndroidSetting(device, 'permission', 'grant', 'com.example.app', {
+        permissionTarget: 'camera',
+      });
+      assert.equal(result, undefined);
+      assert.deepEqual(calls, [
+        ['shell', 'pm', 'grant', 'com.example.app', 'android.permission.CAMERA'],
+      ]);
+    },
+  );
+});
+
+test('setAndroidSetting permission reset notifications warns when POST_NOTIFICATIONS was granted', async () => {
+  await withFakeAdb(
+    (args) =>
+      args.join(' ') === 'shell dumpsys package com.example.app'
+        ? '      runtime permissions:\n        android.permission.POST_NOTIFICATIONS: granted=true, flags=[ USER_SET]'
+        : undefined,
+    async ({ device }) => {
+      const result = await setAndroidSetting(device, 'permission', 'reset', 'com.example.app', {
+        permissionTarget: 'notifications',
+      });
+      assert.equal(result?.wasGranted, true);
+      assert.equal(Array.isArray(result?.warnings), true);
+    },
+  );
+});
+
+test('parseAndroidGrantedRuntimePermissions reads only granted=true runtime permissions', () => {
+  assert.deepEqual(
+    [...parseAndroidGrantedRuntimePermissions(DUMPSYS_MICROPHONE_GRANTED)],
+    ['android.permission.RECORD_AUDIO'],
+  );
+  assert.deepEqual([...parseAndroidGrantedRuntimePermissions('')], []);
 });
 
 test('setAndroidSetting permission reset camera clears permission flags for reprompt', async () => {

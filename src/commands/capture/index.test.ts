@@ -4,7 +4,7 @@ import { alertCliReader, alertDaemonWriter } from './alert.ts';
 import { diffCliReader } from './diff.ts';
 import { snapshotCliOutput } from './output.ts';
 import { screenshotCliReader, screenshotDaemonWriter } from './screenshot.ts';
-import { settingsCliReader, settingsDaemonWriter } from './settings.ts';
+import { settingsCliReader, settingsCommandFacet, settingsDaemonWriter } from './settings.ts';
 import { snapshotCliReader } from './snapshot.ts';
 import { waitCliReader, waitDaemonWriter } from './wait.ts';
 
@@ -186,5 +186,27 @@ describe('capture command interface', () => {
       command: 'settings',
       positionals: ['permission', 'grant', 'camera', 'limited'],
     });
+  });
+
+  // #1796: the Android revoke warning rides `warnings`; the human CLI line must show it.
+  test('settings CLI output renders response warnings after the message', () => {
+    const warning = 'Revoking android.permission.CAMERA while it was granted made Android kill …';
+    const output = settingsCommandFacet.cliOutputFormatter!({
+      input: {},
+      result: { setting: 'permission', state: 'reset', message: 'Updated setting: permission' },
+    });
+    expect(output.text).toBe('Updated setting: permission');
+
+    const warned = settingsCommandFacet.cliOutputFormatter!({
+      input: {},
+      result: {
+        setting: 'permission',
+        state: 'reset',
+        message: 'Updated setting: permission',
+        warnings: [warning],
+      },
+    });
+    expect(warned.text).toBe(`Updated setting: permission\nWarning: ${warning}`);
+    expect(warned.data).toMatchObject({ warnings: [warning] });
   });
 });

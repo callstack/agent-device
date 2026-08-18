@@ -142,32 +142,113 @@ export async function setAndroidSetting(
       if (!appPackage) {
         throw new AppError('INVALID_ARGS', 'permission setting requires an active app in session');
       }
-      const action = parsePermissionAction(state);
-      const target = parseAndroidPermissionTarget(
-        options?.permissionTarget,
-        options?.permissionMode,
-      );
-      if (target.kind === 'notifications') {
-        await setAndroidNotificationPermission(device, appPackage, action, target);
-        return;
-      }
-      const pmAction = action === 'grant' ? 'grant' : 'revoke';
-      if (target.type === 'photos') {
-        const permission = await setAndroidPhotoPermission(device, appPackage, pmAction);
-        if (action === 'reset') {
-          await clearAndroidPermissionFlags(device, appPackage, permission);
-        }
-        return;
-      }
-      await runAndroidAdb(device, ['shell', 'pm', pmAction, appPackage, target.value]);
-      if (action === 'reset') {
-        await clearAndroidPermissionFlags(device, appPackage, target.value);
-      }
-      return;
+      return await setAndroidPermission(device, appPackage, state, options);
     }
     default:
       throw new AppError('INVALID_ARGS', `Unsupported setting: ${setting}`);
   }
+}
+
+/**
+ * Android kills the app's process whenever a runtime permission it currently holds is
+ * revoked (`pm revoke` after a grant, foreground or background), so a `deny`/`reset` that
+ * follows a grant leaves the session pointing at a dead app and the next selector fails
+ * against the launcher (#1796). Revoking a permission the app does not hold is harmless.
+ * The prior grant state is read before the revoke so the response can say so.
+ */
+export function androidRevokedGrantedPermissionWarning(
+  appPackage: string,
+  permission: string,
+): string {
+  return (
+    `Revoking ${permission} while it was granted made Android kill ${appPackage}; the app is ` +
+    `no longer running. Relaunch it with open ${appPackage} --relaunch before the next interaction.`
+  );
+}
+
+type AndroidPermissionTarget = ReturnType<typeof parseAndroidPermissionTarget>;
+
+async function setAndroidPermission(
+  device: DeviceInfo,
+  appPackage: string,
+  state: string,
+  options: SettingOptions | undefined,
+): Promise<Record<string, unknown> | void> {
+  const action = parsePermissionAction(state);
+  const target = parseAndroidPermissionTarget(options?.permissionTarget, options?.permissionMode);
+  if (action === 'grant') {
+    await grantAndroidPermission(device, appPackage, target);
+    return;
+  }
+  const grantedBefore = await readAndroidGrantedRuntimePermissions(device, appPackage);
+  const permission = await revokeAndroidPermission(device, appPackage, action, target);
+  const wasGranted = grantedBefore.has(permission);
+  return {
+    permission,
+    wasGranted,
+    ...(wasGranted
+      ? { warnings: [androidRevokedGrantedPermissionWarning(appPackage, permission)] }
+      : {}),
+  };
+}
+
+async function grantAndroidPermission(
+  device: DeviceInfo,
+  appPackage: string,
+  target: AndroidPermissionTarget,
+): Promise<void> {
+  if (target.kind === 'notifications') {
+    await setAndroidNotificationPermission(device, appPackage, 'grant', target);
+  } else if (target.type === 'photos') {
+    await setAndroidPhotoPermission(device, appPackage, 'grant');
+  } else {
+    await runAndroidAdb(device, ['shell', 'pm', 'grant', appPackage, target.value]);
+  }
+}
+
+/** Revokes (and for `reset`, clears the flags of) the target; returns the permission revoked. */
+async function revokeAndroidPermission(
+  device: DeviceInfo,
+  appPackage: string,
+  action: 'deny' | 'reset',
+  target: AndroidPermissionTarget,
+): Promise<string> {
+  if (target.kind === 'notifications') {
+    await setAndroidNotificationPermission(device, appPackage, action, target);
+    return target.permission;
+  }
+  let permission: string;
+  if (target.type === 'photos') {
+    permission = await setAndroidPhotoPermission(device, appPackage, 'revoke');
+  } else {
+    permission = target.value;
+    await runAndroidAdb(device, ['shell', 'pm', 'revoke', appPackage, permission]);
+  }
+  if (action === 'reset') await clearAndroidPermissionFlags(device, appPackage, permission);
+  return permission;
+}
+
+/**
+ * Runtime permissions `dumpsys package <pkg>` reports as `granted=true`. Best-effort: a
+ * failed or unparseable dump reads as "nothing granted", which only costs the warning.
+ */
+async function readAndroidGrantedRuntimePermissions(
+  device: DeviceInfo,
+  appPackage: string,
+): Promise<ReadonlySet<string>> {
+  const result = await runAndroidAdb(device, ['shell', 'dumpsys', 'package', appPackage], {
+    allowFailure: true,
+  });
+  if (result.exitCode !== 0) return new Set();
+  return parseAndroidGrantedRuntimePermissions(result.stdout);
+}
+
+export function parseAndroidGrantedRuntimePermissions(dumpsysOutput: string): ReadonlySet<string> {
+  const granted = new Set<string>();
+  for (const match of dumpsysOutput.matchAll(/^\s*([\w.]+): granted=true\b/gm)) {
+    granted.add(match[1]!);
+  }
+  return granted;
 }
 
 type AndroidFingerprintAction = 'match' | 'nonmatch';

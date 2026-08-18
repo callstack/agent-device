@@ -17,6 +17,7 @@ import {
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
+import { messageWithWarningsOutput } from '../output-common.ts';
 
 const SETTINGS_COMMAND_NAME = 'settings';
 const settingsCommandDescription =
@@ -59,13 +60,15 @@ export const settingsCommandFacet = defineCommandFacet({
   text: {
     summary: 'Change OS settings and app permissions',
     cliDetail:
-      'macOS supports only settings appearance <light|dark|toggle> and settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>; wifi|airplane|location|animations remain unsupported on macOS. Mobile permission actions use the active session app.',
+      'macOS supports only settings appearance <light|dark|toggle> and settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>; wifi|airplane|location|animations remain unsupported on macOS. Mobile permission actions use the active session app. On Android, deny|reset of a permission the app currently holds kills the app process; the response warns, and open <app> --relaunch restores it.',
   },
   metadata: settingsCommandMetadata,
   definition: settingsCommandDefinition,
   cliSchema: settingsCliSchema,
   cliReader: settingsCliReader,
   daemonWriter: settingsDaemonWriter,
+  // Android permission revokes append a relaunch warning (#1796); render it for humans too.
+  cliOutputFormatter: messageWithWarningsOutput,
 });
 
 // fallow-ignore-next-line complexity

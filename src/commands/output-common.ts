@@ -19,6 +19,23 @@ export function messageCliOutput(result: Record<string, unknown>): CliOutput {
 }
 
 /**
+ * `messageCliOutput` plus one `Warning:` line per entry of the response's `warnings`
+ * array — the composable warnings channel (`open`, `debug`, snapshot capture use it too),
+ * so a warning the daemon appended reaches the human CLI reader, not only `--json`.
+ */
+export const messageWithWarningsOutput = resultOutput(
+  (result: Record<string, unknown>): CliOutput => {
+    const output = messageCliOutput(result);
+    const warnings = Array.isArray(result.warnings)
+      ? result.warnings.filter((warning): warning is string => typeof warning === 'string')
+      : [];
+    if (warnings.length === 0) return output;
+    const lines = [output.text, ...warnings.map((warning) => `Warning: ${warning}`)];
+    return { data: output.data, text: lines.filter(Boolean).join('\n') };
+  },
+);
+
+/**
  * ADR 0014: a reusable ref in a PARTIAL result renders in ready-to-copy
  * `@eN~s<refsGeneration>` form so a human CLI caller can paste it into the next
  * mutation without a separate pin step. A mutating result carries no
