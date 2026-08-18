@@ -224,6 +224,11 @@ task touches:
 - Presentation options: the source-of-truth iOS snapshot request policy accepted by
   `SnapshotPresentation`. During the behavior-preserving #1797 migration acquisition still reads
   these options to reproduce current backend-specific decisions.
+- Snapshot eligibility: runner-presentation membership for the regular projection. A root carrier
+  survives for viewport geometry; every other node needs an interactive accessibility type or a
+  non-empty label, identifier, or value. Hittability is not eligibility, and raw membership is
+  exempt. Removing a wrapper reparents surviving descendants and normalizes indexes and depths.
+  Daemon compaction separately owns publication membership and its declared suppressions.
 - Presented node: wire-facing iOS snapshot value constructed only by `SnapshotPresentation`; response
   payload assembly accepts this type rather than backend-owned raw values.
 - Snapshot capture plan: per-strategy ordered chain of iOS snapshot capture backends (recursive tree,

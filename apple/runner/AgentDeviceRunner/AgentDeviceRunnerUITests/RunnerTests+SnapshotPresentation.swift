@@ -2,9 +2,8 @@ import Foundation
 
 /// Backend-owned snapshot output before it crosses the presentation seam.
 ///
-/// Step 1 deliberately carries the fields computed by today's backend-specific implementations.
-/// Later #1797 migration steps move those decisions behind `SnapshotPresentation` without changing
-/// either the acquisition interface or the wire-facing `PresentedNode` type.
+/// The incremental #1797 migration still carries derived fields that later semantic layers move
+/// behind `SnapshotPresentation`. Eligibility is no longer one of those backend-owned decisions.
 struct RawAXNode {
   let index: Int
   let type: String
@@ -57,7 +56,16 @@ struct PresentedNode: Codable {
   let actions: [String]?
 
   fileprivate init(presenting raw: RawAXNode) {
-    index = raw.index
+    self.init(
+      presenting: raw,
+      index: raw.index,
+      depth: raw.depth,
+      parentIndex: raw.parentIndex
+    )
+  }
+
+  fileprivate init(presenting raw: RawAXNode, index: Int, depth: Int, parentIndex: Int?) {
+    self.index = index
     type = raw.type
     label = raw.label
     identifier = raw.identifier
@@ -67,8 +75,8 @@ struct PresentedNode: Codable {
     focused = raw.focused
     selected = raw.selected
     hittable = raw.hittable
-    depth = raw.depth
-    parentIndex = raw.parentIndex
+    self.depth = depth
+    self.parentIndex = parentIndex
     hiddenContentAbove = raw.hiddenContentAbove
     hiddenContentBelow = raw.hiddenContentBelow
     actions = raw.actions
@@ -76,17 +84,40 @@ struct PresentedNode: Codable {
 }
 
 enum SnapshotPresentation {
+  private static let eligibleInteractiveTypes: Set<String> = [
+    "Button",
+    "Cell",
+    "CheckBox",
+    "CollectionView",
+    "Link",
+    "MenuItem",
+    "Picker",
+    "SearchField",
+    "SecureTextField",
+    "SegmentedControl",
+    "Slider",
+    "ScrollView",
+    "Stepper",
+    "Switch",
+    "TabBar",
+    "Table",
+    "TextField",
+    "TextView",
+    "WebView",
+  ]
+
   /// The capture plan's single presentation route for every snapshot backend.
   ///
-  /// Step 2 preserves each backend's current decisions. `options` is deliberately part of the
-  /// stable interface now; later #1797 steps move those decisions behind this seam.
+  /// Eligibility is the first intentional step-3 semantic delta: regular presentation keeps a
+  /// root carrier plus nodes with an interactive type or non-empty semantic content. Raw snapshots
+  /// retain their acquired membership until the dedicated raw-projection migration lands.
   static func present(
     _ acquisition: SnapshotAcquisition,
-    options _: PresentationOptions
+    options: PresentationOptions
   ) -> SnapshotBackendCapture {
     SnapshotBackendCapture(
       payload: DataPayload(
-        nodes: acquisition.nodes.map(PresentedNode.init(presenting:)),
+        nodes: presentedNodes(from: acquisition.nodes, options: options),
         truncated: acquisition.truncated
       ),
       effectiveDepth: acquisition.effectiveDepth,
@@ -99,65 +130,54 @@ enum SnapshotPresentation {
   static func singleElementRead(_ node: RawAXNode) -> PresentedNode {
     PresentedNode(presenting: node)
   }
-}
 
-#if AGENT_DEVICE_RUNNER_UNIT_TESTS
-import XCTest
+  private static func presentedNodes(
+    from rawNodes: [RawAXNode],
+    options: PresentationOptions
+  ) -> [PresentedNode] {
+    if options.raw {
+      return rawNodes.map(PresentedNode.init(presenting:))
+    }
 
-extension RunnerTests {
-  func testSnapshotPresentationPreservesCurrentWireShape() throws {
-    // Non-vacuity: setting PresentedNode.label to nil made this test execute once and fail on the
-    // missing `"label":"Continue"` field before the production mapping was restored.
-    let raw = RawAXNode(
-      index: 3,
-      type: "Button",
-      label: "Continue",
-      identifier: "continue-button",
-      value: "Ready",
-      rect: SnapshotRect(x: 10, y: 20, width: 100, height: 44),
-      enabled: true,
-      focused: true,
-      selected: true,
-      hittable: true,
-      depth: 2,
-      parentIndex: 1,
-      hiddenContentAbove: true,
-      hiddenContentBelow: true,
-      actions: ["Open menu"]
-    )
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = [.sortedKeys]
+    var nodes: [PresentedNode] = []
+    var nearestPresentedNodeByRawIndex: [Int: (index: Int, depth: Int)] = [:]
+    for raw in rawNodes {
+      let presentedParent = raw.parentIndex.flatMap {
+        nearestPresentedNodeByRawIndex[$0]
+      }
+      guard isEligibleForRegularPresentation(raw) else {
+        if let presentedParent {
+          nearestPresentedNodeByRawIndex[raw.index] = presentedParent
+        }
+        continue
+      }
 
-    let capture = SnapshotPresentation.present(
-      SnapshotAcquisition(
-        nodes: [raw],
-        truncated: true,
-        effectiveDepth: 4,
-        customActions: SnapshotCustomActionCoverage(
-          read: 1,
-          candidates: 2,
-          truncated: 0,
-          blocked: false
+      let presentedIndex = nodes.count
+      let presentedDepth = presentedParent.map { $0.depth + 1 } ?? 0
+      nearestPresentedNodeByRawIndex[raw.index] = (presentedIndex, presentedDepth)
+      nodes.append(
+        PresentedNode(
+          presenting: raw,
+          index: presentedIndex,
+          depth: presentedDepth,
+          parentIndex: presentedParent?.index
         )
-      ),
-      options: PresentationOptions(
-        interactiveOnly: true,
-        depth: nil,
-        scope: nil,
-        raw: false
       )
-    )
-    let nodes = try XCTUnwrap(capture.payload.nodes)
-    let encoded = try encoder.encode(nodes)
+    }
+    return nodes
+  }
 
-    XCTAssertEqual(
-      String(decoding: encoded, as: UTF8.self),
-      #"[{"actions":["Open menu"],"depth":2,"enabled":true,"focused":true,"hiddenContentAbove":true,"hiddenContentBelow":true,"hittable":true,"identifier":"continue-button","index":3,"label":"Continue","parentIndex":1,"rect":{"height":44,"width":100,"x":10,"y":20},"selected":true,"type":"Button","value":"Ready"}]"#
-    )
-    XCTAssertEqual(capture.payload.truncated, true)
-    XCTAssertEqual(capture.effectiveDepth, 4)
-    XCTAssertEqual(capture.customActions?.read, 1)
-    XCTAssertEqual(capture.customActions?.candidates, 2)
+  private static func isEligibleForRegularPresentation(_ node: RawAXNode) -> Bool {
+    // The top-level carrier owns viewport geometry and must survive even for query-sweep's
+    // deliberately unlabeled synthetic Application node.
+    if node.parentIndex == nil { return true }
+    return eligibleInteractiveTypes.contains(node.type) || hasSemanticContent(node)
+  }
+
+  private static func hasSemanticContent(_ node: RawAXNode) -> Bool {
+    [node.label, node.identifier, node.value].contains { value in
+      guard let value else { return false }
+      return !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
   }
 }
-#endif

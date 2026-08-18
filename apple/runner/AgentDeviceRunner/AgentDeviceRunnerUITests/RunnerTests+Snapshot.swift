@@ -240,7 +240,7 @@ extension RunnerTests {
           hints: &hiddenContentHintsByNodeIndex
         )
       }
-      let include = shouldInclude(
+      let include = shouldAcquireSnapshotNode(
         snapshot: snapshot,
         label: evaluation.label,
         identifier: evaluation.identifier,
@@ -429,7 +429,7 @@ extension RunnerTests {
       if let limit = options.depth, depth > limit { return }
 
       let evaluation = evaluateSnapshot(snapshot, in: context)
-      let include = shouldInclude(
+      let include = shouldAcquireSnapshotNode(
         snapshot: snapshot,
         label: evaluation.label,
         identifier: evaluation.identifier,
@@ -870,7 +870,9 @@ extension RunnerTests {
 
   // MARK: - Snapshot Filtering
 
-  private func shouldInclude(
+  /// Conservative acquisition gate. Regular capture keeps every node its visibility policy can
+  /// supply; `SnapshotPresentation` alone decides eligibility after the backend returns.
+  private func shouldAcquireSnapshotNode(
     snapshot: XCUIElementSnapshot,
     label: String,
     identifier: String,
@@ -887,21 +889,21 @@ extension RunnerTests {
         return false
       }
     #endif
-    if options.interactiveOnly {
-      if isScrollableContainer(snapshot, visible: visible) { return true }
+    if regularSnapshot {
       #if os(macOS)
-        if !visible && type != .application {
+        if options.interactiveOnly && !visible && type != .application {
           return false
         }
       #endif
+      if type == .application || type == .window { return true }
+      return visible
+    }
+    if options.interactiveOnly {
+      if isScrollableContainer(snapshot, visible: visible) { return true }
       if interactiveTypes.contains(type) { return true }
       if hittable && type != .other { return true }
       if hasContent { return true }
       return false
-    }
-    if regularSnapshot {
-      if type == .application || type == .window { return true }
-      return visible
     }
     return true
   }

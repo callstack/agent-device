@@ -106,6 +106,14 @@ that boundary. Until the remaining migration steps move interpretation into the 
 still reads those options and raw nodes intentionally carry the derived fields produced by the
 existing backends.
 
+The first semantic migration layer makes regular eligibility backend-neutral inside
+`SnapshotPresentation`: the top-level viewport carrier survives, and every other node needs an
+interactive accessibility type or a non-empty label, identifier, or value. Hittability no longer
+admits an otherwise ineligible node. Raw membership remains unchanged. This is runner eligibility,
+not daemon publication membership; backend-blind daemon compaction retains ownership of its declared
+noise suppressions. When eligibility removes a structural wrapper, presentation reparents its
+surviving descendants to the nearest surviving ancestor and normalizes their indexes and depths.
+
 When adding new iOS snapshot behavior, maintainers should first decide which strategy owns it. If a
 change tries to make regular snapshots fast by dropping visible controls behind a node budget, or
 tries to make raw snapshots safe by silently truncating, it is probably crossing strategy
