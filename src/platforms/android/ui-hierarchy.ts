@@ -452,8 +452,10 @@ type AndroidNodeInclusionInfo = {
 };
 
 type AndroidFootprint = {
-  /** Boxes of what the subtree presents: touch/focus targets, scrollables and labelled leaves. */
-  rects: Rect[];
+  /** Boxes of what the subtree paints: touch targets, scrollables and labelled leaves. */
+  paints: Rect[];
+  /** Boxes of what an agent would see of the subtree: `paints` plus labelled/identified nodes. */
+  shows: Rect[];
   hasAgentTarget: boolean;
 };
 
@@ -573,35 +575,60 @@ function hasDescendantOcclusionEvidence(node: AndroidNode, state: AndroidTreePru
 }
 
 /**
- * Where a subtree visibly presents something: the boxes of its touch-consuming surfaces (touch
- * targets, scrollables), focus targets and labelled leaves. A full-screen debug overlay holding one
- * floating icon presents only that icon, so it can only hide what sits under the icon, never the
- * whole app behind it (#1806). The rects are kept apart rather than merged into one bounding box:
- * two controls in opposite corners present two corners, not the screen between them.
+ * What a subtree paints and what it shows. Paint is the boxes of its touch-consuming surfaces
+ * (touch targets, scrollables) and labelled leaves: a full-screen debug overlay
+ * holding one floating icon paints only that icon, so it can only hide what sits under the icon,
+ * never the whole app behind it (#1806). Rects are kept apart rather than merged into one bounding
+ * box: two controls in opposite corners paint two corners, not the screen between them.
+ *
+ * Shows adds every labelled or identified node — a testID marker or a described container paints
+ * nothing, so it never helps a candidate cover, but an agent would still lose it, so it always
+ * counts toward what a covered sibling has.
  */
 function subtreeFootprint(node: AndroidNode, state: AndroidTreePruneState): AndroidFootprint {
   const cached = state.footprintMemo.get(node);
   if (cached !== undefined) return cached;
-  let footprint: AndroidFootprint;
-  if (presentsOwnBox(node) && hasPositiveRect(node)) {
-    // Its box is presented as a whole; whatever it contains lies inside that box.
-    footprint = { rects: [node.rect], hasAgentTarget: isAgentTarget(node) };
-  } else {
-    footprint = { rects: [], hasAgentTarget: isAgentTarget(node) };
-    for (const child of node.children) {
-      if (child.visibleToUser === false) continue;
-      const childFootprint = subtreeFootprint(child, state);
-      footprint.hasAgentTarget ||= childFootprint.hasAgentTarget;
-      footprint.rects.push(...childFootprint.rects);
-    }
-  }
+  const footprint = hasPositiveRect(node)
+    ? footprintWithinBox(node, node.rect, state)
+    : childrenFootprint(node, state);
   state.footprintMemo.set(node, footprint);
   return footprint;
 }
 
-function presentsOwnBox(node: AndroidNode): boolean {
+function footprintWithinBox(
+  node: AndroidNode,
+  ownBox: Rect,
+  state: AndroidTreePruneState,
+): AndroidFootprint {
+  if (paintsOwnBox(node)) {
+    // The whole box is painted; whatever it contains lies inside that box.
+    return { paints: [ownBox], shows: [ownBox], hasAgentTarget: isAgentTarget(node) };
+  }
+  const footprint = childrenFootprint(node, state);
+  if (hasSemanticContent(node)) footprint.shows.push(ownBox);
+  return footprint;
+}
+
+function childrenFootprint(node: AndroidNode, state: AndroidTreePruneState): AndroidFootprint {
+  const footprint: AndroidFootprint = {
+    paints: [],
+    shows: [],
+    hasAgentTarget: isAgentTarget(node),
+  };
+  for (const child of node.children) {
+    if (child.visibleToUser === false) continue;
+    const childFootprint = subtreeFootprint(child, state);
+    footprint.hasAgentTarget ||= childFootprint.hasAgentTarget;
+    footprint.paints.push(...childFootprint.paints);
+    footprint.shows.push(...childFootprint.shows);
+  }
+  return footprint;
+}
+
+/** Focusability is traversal, not paint (#1733); a container's label describes its children. */
+function paintsOwnBox(node: AndroidNode): boolean {
   return (
-    isAgentTarget(node) ||
+    isTouchTarget(node) ||
     node.scrollable === true ||
     (node.children.length === 0 && hasMeaningfulLabel(node))
   );
@@ -704,8 +731,8 @@ function shouldKeepAndroidSibling(
 }
 
 /**
- * Covered means the sibling's presented content lies under the candidate's presented content, by
- * actual overlapped area. Comparing footprints rather than boxes lets two stacked screens with the
+ * Covered means everything an agent would see of the sibling lies under what the candidate paints,
+ * by actual overlapped area. Comparing footprints rather than boxes lets two stacked screens with the
  * same layout margins still register as covered, while a sparse overlay never condemns a rich
  * screen however far apart its controls sit.
  */
@@ -717,8 +744,8 @@ function isCoveredByHigherDrawingOrderSibling(
   if (node.visibleToUser === false || node.drawingOrder === undefined || !hasPositiveRect(node)) {
     return false;
   }
-  const footprint = subtreeFootprint(node, state).rects;
-  const coveredRects = footprint.length > 0 ? footprint : [node.rect];
+  const shows = subtreeFootprint(node, state).shows;
+  const coveredRects = shows.length > 0 ? shows : [node.rect];
   for (const candidate of coveringCandidates) {
     if (candidate.node === node || candidate.drawingOrder <= node.drawingOrder) {
       continue;
@@ -747,7 +774,7 @@ function coveringCandidateOf(
   if (!hasDirectOcclusionEvidence(node) && !hasDescendantOcclusionEvidence(node, state)) {
     return null;
   }
-  const footprint = subtreeFootprint(node, state).rects;
+  const footprint = subtreeFootprint(node, state).paints;
   return footprint.length > 0 ? { node, drawingOrder, footprint } : null;
 }
 

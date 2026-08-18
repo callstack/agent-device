@@ -426,6 +426,29 @@ test('parseUiHierarchy keeps app content under an overlay whose only controls si
   );
 });
 
+test('parseUiHierarchy counts identifier-only markers toward what a covered sibling shows', () => {
+  // A screen container carrying testID markers whose only painted content is one corner icon,
+  // under a clickable header bar. The bar covers the icon, but the agent would also lose the
+  // markers, which sit well outside the bar — so the container is not covered.
+  const xml = `<hierarchy>
+  <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="0">
+    <node class="android.view.ViewGroup" resource-id="home-screen" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="1">
+      <node class="android.widget.ImageView" content-desc="Menu" bounds="[8,8][56,56]" clickable="true" enabled="true" visible-to-user="true" drawing-order="1"/>
+      <node class="android.view.ViewGroup" resource-id="home-body" bounds="[0,120][390,844]" visible-to-user="true" drawing-order="2"/>
+    </node>
+    <node class="android.view.ViewGroup" bounds="[0,0][390,120]" clickable="true" enabled="true" visible-to-user="true" drawing-order="2">
+      <node class="android.widget.TextView" text="Header" bounds="[72,40][300,80]" enabled="true" visible-to-user="true" drawing-order="1"/>
+    </node>
+  </node>
+</hierarchy>`;
+
+  const result = parseUiHierarchy(xml, 800, { raw: true });
+  assert.equal(
+    result.nodes.some((node) => node.identifier === 'home-body'),
+    true,
+  );
+});
+
 test('parseUiHierarchy compares presented footprints so a sparse overlay never condemns a rich sibling', () => {
   // The overlay's only content is a corner badge; the sibling's content spans the screen. Box
   // geometry alone (overlay box ⊇ sibling box) would call this covered.
