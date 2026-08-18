@@ -198,6 +198,12 @@ export function unclassifiedZones(files: readonly string[]): string[] {
   return [...collectZones(files)].filter((zone) => classifyZone(zone) === 'unclassified').sort();
 }
 
+// A relative specifier resolves only within a source root: root `src/`, or a workspace
+// package's own `src/` (#1490 W0 added `packages/*/src/**` to the source set, but a bare
+// `src/`-prefix check left every intra-package relative import — e.g. a facade re-exporting
+// a sibling file — unresolved and invisible to the value-cycle and reverse-reachability graphs).
+const PACKAGE_SRC_PREFIX = /^packages\/[^/]+\/src\//;
+
 function resolveTargetFile(
   fromFile: string,
   spec: string,
@@ -225,7 +231,7 @@ function resolveTargetFile(
   }
   if (!spec.startsWith('.')) return null;
   const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(fromFile), spec));
-  if (!resolved.startsWith('src/')) return null;
+  if (!resolved.startsWith('src/') && !PACKAGE_SRC_PREFIX.test(resolved)) return null;
   const candidates = [
     resolved,
     resolved.replace(/\.js$/, '.ts'),

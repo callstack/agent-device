@@ -111,6 +111,40 @@ test('neutral ownership zones reject value imports into higher layers', () => {
   });
 });
 
+test('a relative import resolves within its own workspace package src/, but not past it', () => {
+  const edges = resolveImportEdges(
+    new Map([
+      ['packages/contracts/src/facades/device.ts', "import '../device.ts';"],
+      ['packages/contracts/src/device.ts', 'export const device = true;'],
+      // A value cycle closed entirely inside one package must be as visible to R4 as
+      // one closed inside src/ — this is what #1781 A9-2 found invisible: `resolved`
+      // landed under `packages/<name>/src/`, so the old `resolved.startsWith('src/')`
+      // check dropped both edges and the reverse-reachability graph stopped at the
+      // package facade.
+      ['packages/contracts/src/cycle-a.ts', "import '../src/cycle-b.ts';"],
+      ['packages/contracts/src/cycle-b.ts', "import '../src/cycle-a.ts';"],
+      // A relative path that climbs out of any package's src/ (landing under a bare
+      // `packages/<name>/` with no `src/` segment) must still be refused by the
+      // model — R11 owns rejecting that import outright, but the graph itself must
+      // not silently resolve a target outside src/ and packages/*/src/.
+      ['packages/contracts/src/escape.ts', "import '../../outside-src.ts';"],
+      ['packages/outside-src.ts', 'export const outsideSrc = true;'],
+    ]),
+  );
+
+  assert.deepEqual(
+    edges.map(({ file, target }) => `${file} -> ${target}`).sort(),
+    [
+      'packages/contracts/src/cycle-a.ts -> packages/contracts/src/cycle-b.ts',
+      'packages/contracts/src/cycle-b.ts -> packages/contracts/src/cycle-a.ts',
+      'packages/contracts/src/facades/device.ts -> packages/contracts/src/device.ts',
+    ],
+  );
+  assert.deepEqual(findValueImportCycles(edges), [
+    ['packages/contracts/src/cycle-a.ts', 'packages/contracts/src/cycle-b.ts', 'packages/contracts/src/cycle-a.ts'],
+  ]);
+});
+
 test('type-only edges are ranked by R6 and ignored by R5, and vice versa', () => {
   const edges = resolveImportEdges(
     new Map([
