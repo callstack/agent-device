@@ -10,6 +10,7 @@
 import fc from 'fast-check';
 import { replayScriptArb } from '../../src/__tests__/test-utils/property-arbitraries.ts';
 import type { FuzzTarget, FuzzTargetName } from './target-types.ts';
+import { cliValidationArb, maestroValidationArb } from './validation-arbitraries.ts';
 
 const SELECTOR_VALUE_HAZARDS = [
   '',
@@ -182,8 +183,20 @@ const STRUCTURED_BASES: Partial<Record<FuzzTargetName, fc.Arbitrary<string>>> = 
   'batch-steps': fc.json({ maxDepth: 3 }),
 };
 
+/**
+ * Validation targets generate their own expectation-carrying envelopes (#1781 B2); splicing
+ * hazards into the envelope JSON would corrupt the envelope, not the payload, so they are
+ * exempt from the corruption/noise mix. Payload-level hostility lives inside their generators.
+ */
+const VALIDATION_ARBITRARIES: Partial<Record<FuzzTargetName, fc.Arbitrary<string>>> = {
+  'cli-validation': cliValidationArb,
+  'maestro-validation': maestroValidationArb,
+};
+
 /** The case distribution for one target: mostly near-miss, some valid, some pure noise. */
 export function arbitraryForTarget(target: FuzzTarget): fc.Arbitrary<string> {
+  const validation = VALIDATION_ARBITRARIES[target.name];
+  if (validation !== undefined) return validation;
   const seeded = fc.constantFrom(...target.seeds);
   const structured = STRUCTURED_BASES[target.name];
   const base = structured === undefined ? seeded : fc.oneof(seeded, structured);

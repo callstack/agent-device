@@ -12,7 +12,7 @@ on:
       fuzz-iterations:
         description: 'Parser fuzz cases per target'
         required: false
-        default: '50000'
+        default: '33000'
       fuzz-seed:
         description: 'Parser fuzz PRNG seed (defaults to the run number)'
         required: false
@@ -26,12 +26,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Parser fuzz lane (#1414): hostile input into parseArgs, selector parsing, .ad replay
-  # scripts, batch --steps JSON, and the Maestro compat parser. One invariant — every
-  # rejection is a typed AppError with a non-empty hint, and no case hangs. Device-free, so
-  # it rides this nightly rather than owning a workflow; the seed varies per run so the lane
-  # keeps exploring, and anything it catches is appended to the checked-in corpus that the
-  # unit lane replays (scripts/fuzz/corpus/regressions.json).
+  # Parser fuzz lane (#1414, validation targets #1781 B2): hostile input into parseArgs,
+  # selector parsing, .ad replay scripts, batch --steps JSON, and the Maestro compat parser,
+  # plus schema-derived CLI/Maestro validation cases that assert a planted outcome (specific
+  # error code, or acceptance) so a silent acceptance is a finding too. Every rejection must
+  # be a typed AppError with a non-empty hint, and no case hangs. Device-free, so it rides
+  # this nightly rather than owning a workflow; the seed varies per run so the lane keeps
+  # exploring, and anything it catches is appended to the checked-in corpus that the unit
+  # lane replays (scripts/fuzz/corpus/regressions.json).
+  #
+  # 33,000 cases/target holds the job's wall-clock at the pre-B2 five-target/50k budget
+  # (~2min measured) now that seven targets share it — the budget is flat, not the depth.
   nightly-parser-fuzz:
     name: Parser Fuzz Lane
     runs-on: ubuntu-latest
@@ -60,7 +65,7 @@ jobs:
       - name: Fuzz parsers
         if: always()
         env:
-          FUZZ_ITERATIONS: ${{ github.event.inputs.fuzz-iterations || '50000' }}
+          FUZZ_ITERATIONS: ${{ github.event.inputs.fuzz-iterations || '33000' }}
           FUZZ_SEED: ${{ github.event.inputs.fuzz-seed || github.run_number }}
         uses: ./.github/actions/run-gate
         with:

@@ -1,30 +1,29 @@
-// The single invariant the parser fuzz lane enforces (#1414).
+// The invariants the parser fuzz lane enforces (#1414, validation targets #1781 B2).
 //
-// Parsers are the front door for agent-authored input, so the contract is not "parses
-// correctly" (nobody can say what a mutated string should mean) but "fails well":
+// Parsers are the front door for agent-authored input. For classic targets the contract is not
+// "parses correctly" (nobody can say what a mutated string should mean) but "fails well":
 //
 //   1. a rejection is an `AppError` — never a bare Error, TypeError, string, or undefined;
 //   2. the normalized error carries a non-empty `hint`, so the caller is told what to do;
 //   3. the case terminates — enforced by the harness watchdog, not by this module, because
 //      synchronous parsers cannot be interrupted from inside their own tick.
+//
+// A validation target (`target.check`) additionally knows what each case SHOULD do, because its
+// generator constructed the case with a planted violation or none: it judges silent acceptances
+// and wrong error codes too (validation-case.ts).
 
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import type { FuzzTarget, FuzzTargetName } from './target-types.ts';
+import type { FuzzFailure, FuzzFailureKind, FuzzTarget } from './target-types.ts';
 
-export type FuzzFailureKind = 'untyped-throw' | 'empty-hint' | 'hang';
-
-export type FuzzFailure = {
-  target: FuzzTargetName;
-  input: string;
-  kind: FuzzFailureKind;
-  detail: string;
-};
+export type { FuzzFailure, FuzzFailureKind };
 
 /**
  * Runs one case and returns the invariant violation it produced, or `null`.
- * Accepting the parse is a pass: the lane judges rejections, not results.
+ * For classic targets, accepting the parse is a pass: they judge rejections, not results.
+ * A validation target owns its whole judgment via `check`.
  */
 export function checkCase(target: FuzzTarget, input: string): FuzzFailure | null {
+  if (target.check) return target.check(input);
   try {
     target.run(input);
     return null;

@@ -378,6 +378,15 @@ pnpm mutation:check                     # score an existing .tmp/mutation/mutati
 invariant: every rejection is a typed `AppError` whose normalized `hint` is non-empty, and no case
 hangs (a worker-thread watchdog attributes a stall to the exact input).
 
+Two **validation targets** (#1781 B2) — `cli-validation` and `maestro-validation` — go further:
+their cases are built from the real command surface (the CLI schema registry, the Maestro command
+shapes) so they tokenize cleanly and die in command validation, and each case carries the outcome
+its generator planted (`scripts/fuzz/validation-case.ts`). The judge then also fails a **silent
+acceptance** of an input built to be invalid (the #1433 excess-positionals class) and a rejection
+with the **wrong `AppError.code`** — not just "some error". Their generator expectations are gated
+at PR time by `scripts/fuzz/validation-arbitraries.test.ts` (unit-core: in-process, no worker), so
+a drifted generator fails in seconds instead of producing phantom nightly findings.
+
 ```sh
 pnpm fuzz:parsers                                  # all targets, 2,000 cases each, seed 1
 pnpm fuzz:parsers --target selector --iterations 50000 --seed 7
@@ -397,7 +406,8 @@ parsers changed". The self-check and fuzz steps write to separate artifact subdi
 run unconditionally; the step summary prints each envelope it finds and never fails on a missing
 file.
 
-Cases come from fast-check arbitraries (`scripts/fuzz/arbitraries.ts`) built on the hazard vocabulary
+Cases come from fast-check arbitraries (`scripts/fuzz/arbitraries.ts`, validation envelopes in
+`scripts/fuzz/validation-arbitraries.ts`) built on the hazard vocabulary
 shared with `src/__tests__/test-utils/property-arbitraries.ts`, so a hazard added for the property
 suite reaches the fuzz lane too — and a counterexample is reported **shrunk**, with fast-check's seed
 and replay path printed alongside the saved artifact.
@@ -407,7 +417,7 @@ A nightly discovery reaches the unit lane by promotion, not hand-editing: the pr
 `scripts/fuzz/corpus/regressions.json`, which `scripts/fuzz/corpus-replay.test.ts` replays on every
 PR — through the same worker watchdog, so a promoted hang case fails against its per-case budget
 instead of wedging the unit job. `scripts/fuzz/harness.test.ts` covers the harness itself — an
-untyped throw, an empty hint, and a wedged worker must each be reported, startup time is never charged against the per-case budget, and
+untyped throw, an empty hint, a wedged worker, a silent acceptance, and a wrong error code must each be reported, startup time is never charged against the per-case budget, and
 every mode writes an envelope — using the broken-on-purpose targets in
 `scripts/fuzz/self-check-targets.ts` (also what `--self-check` runs in CI), so a regressed classifier
 or watchdog cannot pass silently. Adding a parser to the lane means adding a target to

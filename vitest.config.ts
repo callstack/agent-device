@@ -61,6 +61,9 @@ export default defineConfig({
           include: [
             'src/**/*.test.ts',
             'packages/*/src/**/*.test.ts',
+            // The validation fuzz generators' expectation gate (#1781 B2): in-process, no
+            // subprocess or worker, so it rides the fast lane unlike its serialized siblings.
+            'scripts/fuzz/validation-arbitraries.test.ts',
             'scripts/__tests__/help-conformance-bench.test.ts',
             'scripts/__tests__/help-conformance-error-recovery-coverage.test.ts',
             'scripts/__tests__/help-conformance-sample-outputs.test.ts',

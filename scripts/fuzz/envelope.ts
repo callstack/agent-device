@@ -88,6 +88,8 @@ const CASE_GENERATION_INPUTS = [
   'generate.ts',
   'targets.ts',
   'invariant.ts',
+  'validation-arbitraries.ts',
+  'validation-case.ts',
 ] as const;
 
 /** Content hash of `CASE_GENERATION_INPUTS`. */
