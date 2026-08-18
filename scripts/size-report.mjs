@@ -15,6 +15,7 @@ const VALUE_ARGS = new Map([
   ['--json', 'json'],
   ['--markdown', 'markdown'],
   ['--compare', 'compare'],
+  ['--base', 'base'],
   ['--post-comment', 'postComment'],
   ['--pr', 'pr'],
   ['--startup-runs', 'startupRuns'],
@@ -33,16 +34,22 @@ if (args.postComment) {
   process.exit(0);
 }
 
-const report = collectReport(cwd, {
-  startupRuns: parseNonNegativeInteger(args.startupRuns ?? '0', '--startup-runs'),
-});
-const baseReport = args.compare ? JSON.parse(fs.readFileSync(args.compare, 'utf8')) : null;
+if (args.compare && args.base) {
+  throw new Error('--compare and --base are exclusive: one supplies the base report, the other measures it');
+}
+const startupRuns = parseNonNegativeInteger(args.startupRuns ?? '0', '--startup-runs');
+const report = collectReport(cwd, { startupRuns });
+const baseReport = args.compare
+  ? JSON.parse(fs.readFileSync(args.compare, 'utf8'))
+  : args.base
+    ? measureBaseRef(cwd, args.base, { startupRuns })
+    : null;
 
 if (args.json) {
   writeFile(args.json, `${JSON.stringify(report, null, 2)}\n`);
 }
 
-const markdown = formatMarkdown(report, baseReport);
+const markdown = formatMarkdown(report, baseReport, args.base);
 
 if (args.markdown) {
   writeFile(args.markdown, markdown);
@@ -80,6 +87,9 @@ Options:
   --json <path>            Write the raw size report JSON.
   --markdown <path>        Write the markdown report.
   --compare <path>         Compare against a previously written JSON report.
+  --base <ref>             Measure <ref> (e.g. origin/main) in a detached worktree under
+                           .tmp/size-base/ and compare against it: the local one-command
+                           equivalent of the Size workflow's base/PR comparison.
   --startup-runs <count>   Measure startup medians for side-effect-free CLI commands.
   --post-comment <path>    Post or update the markdown report on the current PR.
   --pr <number>            Pull request number for --post-comment.
@@ -142,6 +152,57 @@ function collectReport(root, options) {
       : {}),
     chunks: chunks.slice(0, 20),
   };
+}
+
+// The Size workflow measures the base by checking it out, installing, and building; this is
+// the same recipe in a detached worktree so the working tree is never touched. The worktree
+// is kept under .tmp/size-base/<sha> so a second run against the same base skips the
+// install+build (mirroring the workflow's dist cache); other bases' worktrees are removed.
+function measureBaseRef(root, ref, options) {
+  const sha = execFileSync('git', ['rev-parse', '--verify', `${ref}^{commit}`], {
+    cwd: root,
+    encoding: 'utf8',
+  }).trim();
+  const worktreesRoot = path.join(root, '.tmp', 'size-base');
+  const worktreeDir = path.join(worktreesRoot, sha.slice(0, 12));
+  pruneOtherBaseWorktrees(root, worktreesRoot, worktreeDir);
+  const registered = execFileSync('git', ['worktree', 'list', '--porcelain'], {
+    cwd: root,
+    encoding: 'utf8',
+  }).includes(`worktree ${worktreeDir}\n`);
+  if (!registered) {
+    fs.rmSync(worktreeDir, { recursive: true, force: true });
+    fs.mkdirSync(worktreesRoot, { recursive: true });
+    execFileSync('git', ['worktree', 'add', '--detach', worktreeDir, sha], {
+      cwd: root,
+      stdio: ['ignore', 'ignore', 'inherit'],
+    });
+  }
+  const built = fs.existsSync(path.join(worktreeDir, 'dist', 'src'));
+  if (!built) {
+    process.stderr.write(`[size] measuring base ${sha.slice(0, 9)} (${ref}): install + build in ${worktreeDir}\n`);
+    execFileSync('pnpm', ['install', '--frozen-lockfile', '--prefer-offline'], {
+      cwd: worktreeDir,
+      stdio: ['ignore', 'ignore', 'inherit'],
+    });
+    execFileSync('pnpm', ['build'], { cwd: worktreeDir, stdio: ['ignore', 'ignore', 'inherit'] });
+  }
+  return collectReport(worktreeDir, options);
+}
+
+function pruneOtherBaseWorktrees(root, worktreesRoot, keep) {
+  if (!fs.existsSync(worktreesRoot)) return;
+  for (const entry of fs.readdirSync(worktreesRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const dir = path.join(worktreesRoot, entry.name);
+    if (dir === keep) continue;
+    try {
+      execFileSync('git', ['worktree', 'remove', '--force', dir], { cwd: root, stdio: 'ignore' });
+    } catch {
+      // Not a registered worktree (a half-created or hand-copied directory): plain removal.
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 function prepareGeneratedPackageAssets(root) {
@@ -234,7 +295,7 @@ function countNpmPackEntries(pack) {
   return Array.isArray(pack.files) ? pack.files.length : 0;
 }
 
-function formatMarkdown(report, baseReport) {
+function formatMarkdown(report, baseReport, baseLabel) {
   const rows = [
     metricRow('JS raw', baseReport?.js.rawBytes, report.js.rawBytes),
     metricRow('JS gzip', baseReport?.js.gzipBytes, report.js.gzipBytes),
@@ -250,7 +311,7 @@ function formatMarkdown(report, baseReport) {
   return `${COMMENT_MARKER}
 ## Size Report
 
-| Metric | Base | Current | Diff |
+| Metric | Base${baseLabel ? ` (${baseLabel})` : ''} | Current | Diff |
 |---|---:|---:|---:|
 ${rows.join('\n')}
 

@@ -228,6 +228,21 @@ Lists are bounded (`--limit`, default 10) and always disclose what they hid; `--
 unbounded. The query is read-only, runs in well under a second, and adds no CI work — its model is
 covered by `pnpm depgraph:test` (the existing `Layering Guard` job).
 
+## Shipped size (`pnpm size --base <ref>`)
+
+The Size workflow posts a base/PR comparison on every PR; the same comparison runs locally in one
+command, before the PR exists:
+
+```sh
+pnpm size --base origin/main    # first run: detached worktree + install + build of the base (~1-2 min)
+                                # later runs against the same base: ~3s (the worktree is kept under .tmp/size-base/)
+```
+
+Requires a current `pnpm build` of your own tree. `JS raw`/`JS gzip` are the numbers to quote and to
+budget against (ADR 0019 §8 units state theirs before starting); the `npm tarball`/`npm unpacked`
+rows compare a fresh base checkout against your working tree, which may carry locally built helper
+artifacts CI's fresh checkout does not, so read a tarball delta on GitHub's comment, not here.
+
 ## Gate manifest: proving every check has a CI owner
 
 Every gate above answers "is the code right?". None of them can answer "does CI still own this
