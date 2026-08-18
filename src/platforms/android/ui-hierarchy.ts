@@ -2,7 +2,6 @@ import type { RawSnapshotNode, Rect, SnapshotOptions } from '@agent-device/kerne
 import { parseBounds } from '@agent-device/kernel/bounds';
 import { decodeXmlCharacterReferences } from '@agent-device/xml';
 import { isScrollableType } from '@agent-device/contracts/snapshot';
-import { intersectArea } from '../../utils/screenshot-geometry.ts';
 import {
   type AndroidSystemChromeProvenance,
   isAndroidSystemChromeWindowResourceId,
@@ -453,8 +452,8 @@ type AndroidNodeInclusionInfo = {
 };
 
 type AndroidFootprint = {
-  /** Bounding box of what the subtree presents (agent targets and labelled leaves), if anything. */
-  rect: Rect | null;
+  /** Boxes of what the subtree presents: touch/focus targets, scrollables and labelled leaves. */
+  rects: Rect[];
   hasAgentTarget: boolean;
 };
 
@@ -465,7 +464,7 @@ type AndroidTreePruneState = {
 type AndroidCoveringCandidate = {
   node: AndroidNode;
   drawingOrder: number;
-  footprint: Rect;
+  footprint: Rect[];
 };
 
 const ANDROID_WINDOW_TYPE_APPLICATION = 1;
@@ -574,42 +573,84 @@ function hasDescendantOcclusionEvidence(node: AndroidNode, state: AndroidTreePru
 }
 
 /**
- * Where a subtree visibly presents something: the bounding box of its agent targets and labelled
- * leaves. A full-screen debug overlay holding one floating icon presents only that icon, so it can
- * only hide what sits under the icon, never the whole app behind it (#1806).
+ * Where a subtree visibly presents something: the boxes of its touch-consuming surfaces (touch
+ * targets, scrollables), focus targets and labelled leaves. A full-screen debug overlay holding one
+ * floating icon presents only that icon, so it can only hide what sits under the icon, never the
+ * whole app behind it (#1806). The rects are kept apart rather than merged into one bounding box:
+ * two controls in opposite corners present two corners, not the screen between them.
  */
 function subtreeFootprint(node: AndroidNode, state: AndroidTreePruneState): AndroidFootprint {
   const cached = state.footprintMemo.get(node);
   if (cached !== undefined) return cached;
-  let hasAgentTarget = isAgentTarget(node);
-  let rect: Rect | null =
-    (isAgentTarget(node) || isLabelledLeaf(node)) && hasPositiveRect(node) ? node.rect : null;
-  for (const child of node.children) {
-    if (child.visibleToUser === false) continue;
-    const childFootprint = subtreeFootprint(child, state);
-    hasAgentTarget ||= childFootprint.hasAgentTarget;
-    rect = unionRect(rect, childFootprint.rect);
+  let footprint: AndroidFootprint;
+  if (presentsOwnBox(node) && hasPositiveRect(node)) {
+    // Its box is presented as a whole; whatever it contains lies inside that box.
+    footprint = { rects: [node.rect], hasAgentTarget: isAgentTarget(node) };
+  } else {
+    footprint = { rects: [], hasAgentTarget: isAgentTarget(node) };
+    for (const child of node.children) {
+      if (child.visibleToUser === false) continue;
+      const childFootprint = subtreeFootprint(child, state);
+      footprint.hasAgentTarget ||= childFootprint.hasAgentTarget;
+      footprint.rects.push(...childFootprint.rects);
+    }
   }
-  const footprint = { rect, hasAgentTarget };
   state.footprintMemo.set(node, footprint);
   return footprint;
 }
 
-function isLabelledLeaf(node: AndroidNode): boolean {
-  return node.children.length === 0 && hasMeaningfulLabel(node);
+function presentsOwnBox(node: AndroidNode): boolean {
+  return (
+    isAgentTarget(node) ||
+    node.scrollable === true ||
+    (node.children.length === 0 && hasMeaningfulLabel(node))
+  );
 }
 
-function unionRect(left: Rect | null, right: Rect | null): Rect | null {
-  if (!left) return right;
-  if (!right) return left;
-  const x = Math.min(left.x, right.x);
-  const y = Math.min(left.y, right.y);
-  return {
-    x,
-    y,
-    width: Math.max(left.x + left.width, right.x + right.width) - x,
-    height: Math.max(left.y + left.height, right.y + right.height) - y,
-  };
+/** Fraction of the covered rects' union that lies under the covering rects' union. */
+function unionCoverage(coveringRects: Rect[], coveredRects: Rect[]): number {
+  const xs = compressedEdges([...coveringRects, ...coveredRects], (rect) => [
+    rect.x,
+    rect.x + rect.width,
+  ]);
+  const ys = compressedEdges([...coveringRects, ...coveredRects], (rect) => [
+    rect.y,
+    rect.y + rect.height,
+  ]);
+  const covering = markCells(coveringRects, xs, ys);
+  const covered = markCells(coveredRects, xs, ys);
+  let coveredArea = 0;
+  let overlapArea = 0;
+  for (let column = 0; column < xs.length - 1; column += 1) {
+    const width = xs[column + 1]! - xs[column]!;
+    for (let row = 0; row < ys.length - 1; row += 1) {
+      const cell = column * (ys.length - 1) + row;
+      if (!covered[cell]) continue;
+      const area = width * (ys[row + 1]! - ys[row]!);
+      coveredArea += area;
+      if (covering[cell]) overlapArea += area;
+    }
+  }
+  return coveredArea <= 0 ? 0 : overlapArea / coveredArea;
+}
+
+function compressedEdges(rects: Rect[], edgesOf: (rect: Rect) => [number, number]): number[] {
+  return [...new Set(rects.flatMap(edgesOf))].sort((left, right) => left - right);
+}
+
+function markCells(rects: Rect[], xs: number[], ys: number[]): Uint8Array {
+  const rows = ys.length - 1;
+  const cells = new Uint8Array((xs.length - 1) * rows);
+  for (const rect of rects) {
+    const firstColumn = xs.indexOf(rect.x);
+    const lastColumn = xs.indexOf(rect.x + rect.width);
+    const firstRow = ys.indexOf(rect.y);
+    const lastRow = ys.indexOf(rect.y + rect.height);
+    for (let column = firstColumn; column < lastColumn; column += 1) {
+      cells.fill(1, column * rows + firstRow, column * rows + lastRow);
+    }
+  }
+  return cells;
 }
 
 /**
@@ -663,9 +704,10 @@ function shouldKeepAndroidSibling(
 }
 
 /**
- * Covered means the sibling's presented content lies under the candidate's presented content.
- * Comparing footprints rather than boxes lets two stacked screens with the same layout margins
- * still register as covered, while a sparse overlay never condemns a rich screen.
+ * Covered means the sibling's presented content lies under the candidate's presented content, by
+ * actual overlapped area. Comparing footprints rather than boxes lets two stacked screens with the
+ * same layout margins still register as covered, while a sparse overlay never condemns a rich
+ * screen however far apart its controls sit.
  */
 function isCoveredByHigherDrawingOrderSibling(
   node: AndroidNode,
@@ -675,12 +717,13 @@ function isCoveredByHigherDrawingOrderSibling(
   if (node.visibleToUser === false || node.drawingOrder === undefined || !hasPositiveRect(node)) {
     return false;
   }
-  const coveredRect = subtreeFootprint(node, state).rect ?? node.rect;
+  const footprint = subtreeFootprint(node, state).rects;
+  const coveredRects = footprint.length > 0 ? footprint : [node.rect];
   for (const candidate of coveringCandidates) {
     if (candidate.node === node || candidate.drawingOrder <= node.drawingOrder) {
       continue;
     }
-    if (rectCoverage(candidate.footprint, coveredRect) >= 0.9) {
+    if (unionCoverage(candidate.footprint, coveredRects) >= 0.9) {
       return true;
     }
   }
@@ -704,8 +747,8 @@ function coveringCandidateOf(
   if (!hasDirectOcclusionEvidence(node) && !hasDescendantOcclusionEvidence(node, state)) {
     return null;
   }
-  const footprint = subtreeFootprint(node, state).rect;
-  return footprint ? { node, drawingOrder, footprint } : null;
+  const footprint = subtreeFootprint(node, state).rects;
+  return footprint.length > 0 ? { node, drawingOrder, footprint } : null;
 }
 
 function hasMeaningfulLabel(node: AndroidNode): boolean {
@@ -715,12 +758,6 @@ function hasMeaningfulLabel(node: AndroidNode): boolean {
 
 function hasPositiveRect(node: AndroidNode): node is AndroidNode & { rect: Rect } {
   return Boolean(node.rect && node.rect.width > 0 && node.rect.height > 0);
-}
-
-function rectCoverage(coveringRect: Rect, targetRect: Rect): number {
-  const targetArea = targetRect.width * targetRect.height;
-  if (targetArea <= 0) return 0;
-  return intersectArea(coveringRect, targetRect) / targetArea;
 }
 
 function applyAndroidScrollActionHints(root: AndroidUiHierarchy): void {

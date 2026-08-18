@@ -329,14 +329,16 @@ test('parseUiHierarchy prunes descendants of Android nodes that are not visible 
 });
 
 test('parseUiHierarchy prunes lower drawing-order subtrees covered by a foreground sibling', () => {
-  // A pushed screen (header + full-width rows) drawn above a still-attached drawer surface. The
-  // pushed screen's presented content lies over the drawer's content, so the drawer is covered.
+  // A pushed screen (header, scrollable body, footer) drawn above a still-attached drawer surface.
+  // The pushed screen's presented content lies over the drawer's content, so the drawer is covered.
   const xml = `<hierarchy>
   <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="0">
     <node class="android.view.ViewGroup" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="2">
       <node class="android.widget.Button" content-desc="Back" bounds="[8,40][56,88]" clickable="true" enabled="true" visible-to-user="true" drawing-order="1"/>
       <node class="android.widget.TextView" text="Foreground screen" bounds="[72,44][300,84]" enabled="true" visible-to-user="true" drawing-order="2"/>
-      <node class="android.widget.Button" text="Foreground action" bounds="[0,120][390,180]" clickable="true" enabled="true" visible-to-user="true" drawing-order="3"/>
+      <node class="android.widget.ScrollView" bounds="[0,120][390,780]" scrollable="true" enabled="true" visible-to-user="true" drawing-order="3">
+        <node class="android.widget.Button" text="Foreground action" bounds="[24,140][366,200]" clickable="true" enabled="true" visible-to-user="true" drawing-order="1"/>
+      </node>
       <node class="android.widget.Button" text="Foreground footer" bounds="[0,780][390,844]" clickable="true" enabled="true" visible-to-user="true" drawing-order="4"/>
     </node>
     <node class="android.view.ViewGroup" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="1">
@@ -396,6 +398,31 @@ test('parseUiHierarchy keeps app content beside an empty labelled full-screen pl
   assert.equal(
     result.nodes.some((node) => node.label === 'Toolbar action'),
     true,
+  );
+});
+
+test('parseUiHierarchy keeps app content under an overlay whose only controls sit in opposite corners', () => {
+  // Two floating controls in opposite corners present two corners, not the screen between them.
+  // A bounding box of the presented content would span the viewport and condemn the whole app.
+  const xml = `<hierarchy>
+  <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="0">
+    <node class="android.widget.LinearLayout" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="1">
+      <node class="android.widget.TextView" text="Editor" bounds="[24,60][300,120]" enabled="true" visible-to-user="true" drawing-order="1"/>
+      <node class="android.widget.ScrollView" bounds="[0,140][390,760]" scrollable="true" enabled="true" visible-to-user="true" drawing-order="2">
+        <node class="android.widget.Button" text="Save" bounds="[24,400][366,460]" clickable="true" enabled="true" visible-to-user="true" drawing-order="1"/>
+      </node>
+    </node>
+    <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="2">
+      <node class="android.widget.ImageView" content-desc="Debug menu" bounds="[8,8][56,56]" clickable="true" enabled="true" visible-to-user="true" drawing-order="1"/>
+      <node class="android.widget.ImageView" content-desc="Frame stats" bounds="[334,788][382,836]" clickable="true" enabled="true" visible-to-user="true" drawing-order="2"/>
+    </node>
+  </node>
+</hierarchy>`;
+
+  const result = parseUiHierarchy(xml, 800, { raw: true });
+  assert.deepEqual(
+    result.nodes.filter((node) => node.label).map((node) => node.label),
+    ['Editor', 'Save', 'Debug menu', 'Frame stats'],
   );
 });
 
