@@ -584,6 +584,30 @@ test('snapshotAndroid reports helper-side truncation on the public snapshot resu
   assert.equal(result.androidSnapshot.helperTruncated, true);
 });
 
+test('snapshotAndroid discloses an unavailable occlusion scan when the helper tree carries no drawing-order (API 23)', async () => {
+  const captured: string[] = [];
+  const helperAdb: AndroidAdbExecutor = async (args) => {
+    if (args.includes('--show-versioncode')) return installedHelperProbe;
+    if (args.includes('instrument')) {
+      const xml = captured.shift();
+      if (!xml) throw new Error('unexpected extra capture');
+      return { exitCode: 0, stdout: helperOutput(xml), stderr: '' };
+    }
+    throw new Error(`unexpected helper adb args: ${args.join(' ')}`);
+  };
+  const button = (drawingOrder: string) =>
+    `<node class="android.widget.Button" text="Go" bounds="[0,0][100,40]" clickable="true" visible-to-user="true"${drawingOrder} />`;
+
+  captured.push(`<hierarchy>${button('')}</hierarchy>`);
+  const api23 = await snapshotAndroid(device, { helperAdb, helperArtifact });
+  assert.equal(api23.androidSnapshot.occlusionScanUnavailable, true);
+
+  captured.push(`<hierarchy>${button(' drawing-order="1"')}</hierarchy>`);
+  const api24 = await snapshotAndroid(device, { helperAdb, helperArtifact });
+  assert.equal(api24.androidSnapshot.occlusionScanUnavailable, undefined);
+  assert.equal('occlusionScanUnavailable' in api24.androidSnapshot, false);
+});
+
 test('snapshotAndroid emits helper phase diagnostics', async () => {
   const helperAdb: AndroidAdbExecutor = async (args) => {
     if (args.includes('--show-versioncode')) {

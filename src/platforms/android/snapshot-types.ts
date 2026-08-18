@@ -23,4 +23,6 @@ export type AndroidSnapshotBackendMetadata = {
   nodeCount?: number;
   helperTruncated?: boolean;
   elapsedMs?: number;
+  /** API 23 helper output carries no `drawing-order`; covered same-window surfaces are not pruned. */
+  occlusionScanUnavailable?: boolean;
 };

@@ -1,4 +1,6 @@
 import { beforeEach, expect, test, vi } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 const { runMacOsSnapshotAction, snapshotLinux } = vi.hoisted(() => ({
@@ -9,7 +11,7 @@ const { runMacOsSnapshotAction, snapshotLinux } = vi.hoisted(() => ({
 vi.mock('../platforms/apple/os/macos/helper.ts', () => ({ runMacOsSnapshotAction }));
 vi.mock('../platforms/linux/snapshot.ts', () => ({ snapshotLinux }));
 
-import { createSnapshotRuntimeHost } from './snapshot-desktop-surface.ts';
+import { createSnapshotRuntimeHost, scopeSnapshotNodes } from './snapshot-desktop-surface.ts';
 
 const macosDevice = {
   id: 'desktop',
@@ -89,4 +91,38 @@ test('Linux snapshot host preserves interactive ancestor projection before depth
       },
     ],
   });
+});
+
+// Golden scope-policy leg (#1832 C2): the post-wire pass must agree with
+// contracts/fixtures/snapshot-scope-policy.json — the same table the Android projection and the
+// shared predicate are asserted against. Fixture position rides in `rect.x` so the check is
+// text-independent.
+test('scopeSnapshotNodes agrees with every golden scope-policy table case', () => {
+  const cases = JSON.parse(
+    fs.readFileSync(
+      path.resolve(import.meta.dirname, '../../contracts/fixtures/snapshot-scope-policy.json'),
+      'utf8',
+    ),
+  ) as Array<{
+    name: string;
+    scope: string;
+    nodes: Array<{ depth: number; label?: string; value?: string; identifier?: string }>;
+    expectedSubtreeIndexes: number[];
+  }>;
+  expect(cases.length).toBeGreaterThan(0);
+  for (const fixture of cases) {
+    const parents: number[] = [];
+    const nodes = fixture.nodes.map((node, index) => {
+      parents.length = node.depth;
+      const parentIndex = node.depth > 0 ? parents[node.depth - 1] : undefined;
+      parents[node.depth] = index;
+      return { ...node, index, parentIndex, rect: { x: index, y: 0, width: 1, height: 1 } };
+    });
+    const scoped = scopeSnapshotNodes(nodes, fixture.scope);
+    expect(
+      scoped.map((node) => node.rect?.x),
+      fixture.name,
+    ).toEqual(fixture.expectedSubtreeIndexes);
+    if (scoped.length > 0) expect(scoped[0]?.depth, fixture.name).toBe(0);
+  }
 });

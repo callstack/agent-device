@@ -1,13 +1,7 @@
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import { matchesSnapshotScope } from '@agent-device/contracts/snapshot';
 
+/** First document-order node whose label/value/identifier contains `label` (the scope rule). */
 export function findNodeByLabel(nodes: SnapshotState['nodes'], label: string) {
-  const query = label.toLowerCase();
-  return (
-    nodes.find((node) => {
-      const labelValue = (node.label ?? '').toLowerCase();
-      const valueValue = (node.value ?? '').toLowerCase();
-      const idValue = (node.identifier ?? '').toLowerCase();
-      return labelValue.includes(query) || valueValue.includes(query) || idValue.includes(query);
-    }) ?? null
-  );
+  return nodes.find((node) => matchesSnapshotScope(node, label)) ?? null;
 }

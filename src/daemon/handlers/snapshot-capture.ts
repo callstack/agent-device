@@ -177,7 +177,7 @@ export function buildSnapshotState(
     ? presentIosInteractiveSnapshot(normalizedNodes)
     : normalizedNodes;
   const scopedNodes =
-    flags?.snapshotScope && data?.backend !== 'macos-helper'
+    flags?.snapshotScope && backendScopesAfterWire(data?.backend)
       ? scopeSnapshotNodes(presentableNodes, flags.snapshotScope)
       : presentableNodes;
   const snapshotQuality = snapshotCaptureAnnotationsFrom(data).quality;
@@ -216,6 +216,16 @@ function snapshotCaptureFlagsForBackend(
     return flags;
   }
   return { ...flags, snapshotScope: undefined };
+}
+
+/**
+ * Scope resolves once per snapshot. Android resolves it inside its projection (the platform
+ * matcher implements the shared scope specification, `@agent-device/contracts/snapshot`), and the
+ * macOS helper scopes at capture; a second pass here would re-match inside an already-scoped tree
+ * and hand the two layers different no-match semantics (#1832 C2).
+ */
+function backendScopesAfterWire(backend: SnapshotBackend | undefined): boolean {
+  return backend !== 'macos-helper' && backend !== 'android';
 }
 
 function shouldPresentIosInteractiveSnapshot(

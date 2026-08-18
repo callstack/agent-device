@@ -1,0 +1,90 @@
+[
+  {
+    "name": "first document-order match wins over a shallower later sibling (breadth-first would pick index 3)",
+    "scope": "Settings",
+    "nodes": [
+      { "depth": 0, "type": "FrameLayout" },
+      { "depth": 1, "type": "ViewGroup", "identifier": "content" },
+      { "depth": 2, "type": "TextView", "label": "Settings" },
+      { "depth": 1, "type": "ViewGroup", "identifier": "settings-panel" },
+      { "depth": 2, "type": "Button", "label": "Save" }
+    ],
+    "expectedRootIndex": 2,
+    "expectedSubtreeIndexes": [2]
+  },
+  {
+    "name": "container match keeps its whole subtree",
+    "scope": "settings-panel",
+    "nodes": [
+      { "depth": 0, "type": "FrameLayout" },
+      { "depth": 1, "type": "TextView", "label": "Title" },
+      { "depth": 1, "type": "ViewGroup", "identifier": "settings-panel" },
+      { "depth": 2, "type": "Button", "label": "Save" },
+      { "depth": 3, "type": "TextView", "label": "Save label" },
+      { "depth": 1, "type": "Button", "label": "Cancel" }
+    ],
+    "expectedRootIndex": 2,
+    "expectedSubtreeIndexes": [2, 3, 4]
+  },
+  {
+    "name": "case-insensitive substring over the label",
+    "scope": "sett",
+    "nodes": [
+      { "depth": 0, "type": "FrameLayout" },
+      { "depth": 1, "type": "Button", "label": "Open SETTINGS" }
+    ],
+    "expectedRootIndex": 1,
+    "expectedSubtreeIndexes": [1]
+  },
+  {
+    "name": "value matches (EditText text)",
+    "scope": "hello",
+    "nodes": [
+      { "depth": 0, "type": "FrameLayout" },
+      { "depth": 1, "type": "EditText", "label": "Message", "value": "Hello world" }
+    ],
+    "expectedRootIndex": 1,
+    "expectedSubtreeIndexes": [1]
+  },
+  {
+    "name": "identifier matches (resource-id / testID), including generic android ids",
+    "scope": "id/toolbar",
+    "nodes": [
+      { "depth": 0, "type": "FrameLayout" },
+      { "depth": 1, "type": "Toolbar", "identifier": "com.example:id/toolbar" },
+      { "depth": 2, "type": "TextView", "label": "Inbox" }
+    ],
+    "expectedRootIndex": 1,
+    "expectedSubtreeIndexes": [1, 2]
+  },
+  {
+    "name": "type never matches",
+    "scope": "Button",
+    "nodes": [
+      { "depth": 0, "type": "FrameLayout" },
+      { "depth": 1, "type": "Button", "label": "OK" }
+    ],
+    "expectedRootIndex": null,
+    "expectedSubtreeIndexes": []
+  },
+  {
+    "name": "no match yields an empty snapshot, never the full tree",
+    "scope": "zzzz-no-match-token",
+    "nodes": [
+      { "depth": 0, "type": "FrameLayout", "label": "Root" },
+      { "depth": 1, "type": "Button", "label": "Search" }
+    ],
+    "expectedRootIndex": null,
+    "expectedSubtreeIndexes": []
+  },
+  {
+    "name": "root itself may be the scope root",
+    "scope": "Root",
+    "nodes": [
+      { "depth": 0, "type": "FrameLayout", "label": "Root" },
+      { "depth": 1, "type": "Button", "label": "Search" }
+    ],
+    "expectedRootIndex": 0,
+    "expectedSubtreeIndexes": [0, 1]
+  }
+]

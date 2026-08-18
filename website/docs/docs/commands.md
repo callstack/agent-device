@@ -334,7 +334,12 @@ agent-device get attrs @e1
   source checkout must run `pnpm build:android` before Android verification. The helper serializes
   Android interactive window roots when available, so keyboard and system-overlay nodes can appear
   alongside the app root; `androidSnapshot.captureMode` and `androidSnapshot.windowCount` describe
-  the capture.
+  the capture. On API 23 the helper cannot report `drawing-order`, so covered same-window surfaces
+  (for example a React Native screen left under the foreground one) are not pruned;
+  `androidSnapshot.occlusionScanUnavailable: true` discloses that capture shape.
+- `--scope` resolves once, to the first node in document order whose label, value, or identifier
+  contains the scope text (case-insensitive), and returns that node's subtree; no match returns an
+  empty snapshot rather than the full tree.
 - `--actions` names the custom accessibility affordances an element merged away (iOS
   `UIAccessibilityCustomAction`, React Native `accessibilityActions`), so a card whose reply/options
   controls are not separate elements still lists them. It is iOS-simulator-only and exists for
