@@ -58,11 +58,14 @@ jobs:
   full-suite:
     name: iOS Runner Full XCTest Suite
     runs-on: macos-26
-    # Provisional, and deliberately generous: this lane's wall time is unmeasured until it has
-    # run once, and two of the tests it newly reaches carry intentional 15s/6s waits. Tighten
-    # to roughly twice the first measured duration — a ceiling this loose turns a wedged run
-    # into two hours of held slot before anyone hears about it.
-    timeout-minutes: 120
+    # Measured, not guessed. A full local run of this exact command on matching toolchain
+    # (Xcode 26.2, iOS 26.2 Simulator) executed 154 tests in 120s wall — the suite itself is
+    # ~2 minutes, not the bulk of the job. What dominates the budget is the runner build on a
+    # derived-data cache MISS, plus checkout and simulator boot. ios.yml carries 80 minutes
+    # while doing strictly more than this lane (same build and boot, plus replays, prepare,
+    # and the fixture E2E), so half of that is generous headroom for a cache-miss night and
+    # still caps a wedged run at 45 minutes instead of two hours of held macOS slot.
+    timeout-minutes: 45
     env:
       # Must match ios.yml. The runtime version rides in the derived-data cache key, and
       # AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS is BOTH an input to the cache's build-variant
