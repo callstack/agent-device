@@ -184,6 +184,15 @@ test('a semantic identity change is never stable', () => {
   );
 });
 
+test('a semantic value change is never stable', () => {
+  const changed = snapshot(0, 900);
+  changed.nodes[2]!.value = 'Enabled';
+  assert.equal(
+    stableCaptureSignalsEqual(stableCaptureSignal(snapshot(0, 900)), stableCaptureSignal(changed)),
+    false,
+  );
+});
+
 test('geometry movement beyond the stability tolerance is never stable', () => {
   assert.equal(
     stableCaptureSignalsEqual(

@@ -68,7 +68,7 @@ export function stableCaptureSignalsEqual(
 
 function stableCaptureNodeSignal(node: SnapshotNode): SignalNode {
   return {
-    identity: `${node.type ?? ''}#${node.label ?? ''}#${node.identifier ?? ''}`,
+    identity: `${node.type ?? ''}#${node.label ?? ''}#${node.identifier ?? ''}#${node.value ?? ''}`,
     ...(node.rect
       ? {
           rect: { ...node.rect },
