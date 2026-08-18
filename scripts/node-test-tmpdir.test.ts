@@ -5,8 +5,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { runCmd } from '../src/utils/exec.ts';
-import { TEST_RUN_TMP_PREFIX, TEST_RUN_TMP_ROOT } from './check-tmpdir-leaks-model.ts';
+import { runCmd, runCmdBackground } from '../src/utils/exec.ts';
+import {
+  liveRunDirectoryConsumers,
+  pruneAbandonedRunDirectories,
+  TEST_RUN_TMP_PREFIX,
+  TEST_RUN_TMP_ROOT,
+} from './check-tmpdir-leaks-model.ts';
 
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const WRAPPER = path.join(REPOSITORY_ROOT, 'scripts', 'node-test-tmpdir.ts');
@@ -296,3 +301,110 @@ test('the wrapper prunes a run directory abandoned by an earlier killed run and 
     fs.rmSync(evidenceRoot, { recursive: true, force: true });
   }
 });
+
+test('a run whose owner alone was killed keeps its directory while a child still uses it, and loses it once the child exits', async () => {
+  // The motivating case for consumer-aware pruning: a tool timeout SIGKILLs the wrapper (the
+  // owner pid in the directory name) while something it started — here a detached child the
+  // probe spawned, the shape of a daemon a test brought up — is still running with TMPDIR
+  // pointing into the run directory. Owner-pid liveness alone would prune the directory out
+  // from under that child on the next run.
+  const evidenceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'node-test-tmpdir-orphan-'));
+  const evidencePath = path.join(evidenceRoot, 'evidence.json');
+  const readyPath = path.join(evidenceRoot, 'ready');
+  const probeName = `node-test-tmpdir-probe-orphan-${process.pid}-${crypto.randomUUID()}.test.ts`;
+  const probePath = path.join(REPOSITORY_ROOT, 'scripts', probeName);
+  fs.writeFileSync(
+    probePath,
+    `import fs from 'node:fs';
+import os from 'node:os';
+import { test } from 'node:test';
+import { runCmdDetached } from '../src/utils/exec.ts';
+
+test('probe starts a long-lived detached child that inherits TMPDIR, then waits to be killed', async () => {
+  const childPid = runCmdDetached(process.execPath, ['-e', 'setTimeout(() => {}, 60_000)']);
+  fs.writeFileSync(
+    ${JSON.stringify(evidencePath)},
+    JSON.stringify({ tmpdir: os.tmpdir(), childPid, probePid: process.pid, runnerPid: process.ppid }),
+  );
+  fs.writeFileSync(${JSON.stringify(readyPath)}, '');
+  await new Promise((resolve) => setTimeout(resolve, 60_000));
+});
+`,
+  );
+
+  let evidence:
+    | { tmpdir: string; childPid: number; probePid: number; runnerPid: number }
+    | undefined;
+  const consumersOf = (e: NonNullable<typeof evidence>) => [e.childPid, e.probePid, e.runnerPid];
+  const wrapper = runCmdBackground(
+    process.execPath,
+    ['--experimental-strip-types', WRAPPER, '--experimental-strip-types', '--test', probePath],
+    { cwd: REPOSITORY_ROOT, captureOutput: false, stdio: 'ignore', allowFailure: true },
+  );
+  try {
+    await waitFor(() => fs.existsSync(readyPath), 20_000, 'probe never reported ready');
+    evidence = JSON.parse(fs.readFileSync(evidencePath, 'utf8'));
+    const runDir = evidence!.tmpdir;
+    assert.equal(path.dirname(runDir), TEST_RUN_TMP_ROOT);
+    assert.equal(isAlive(evidence!.childPid), true, 'the detached child must be running');
+
+    // Kill only the owner. Its exit handler cannot run on SIGKILL, so the directory survives it.
+    process.kill(wrapper.child.pid!, 'SIGKILL');
+    await wrapper.wait;
+    assert.equal(fs.existsSync(runDir), true, 'SIGKILL of the owner leaves the directory behind');
+    assert.equal(isAlive(evidence!.childPid), true, 'the detached child outlives its owner');
+
+    // The next run's prune must see the child holding TMPDIR and leave the directory alone.
+    assert.deepEqual(
+      pruneAbandonedRunDirectories(TEST_RUN_TMP_ROOT).filter((name) => runDir.endsWith(name)),
+      [],
+    );
+    assert.equal(fs.existsSync(runDir), true, 'a directory with a live consumer is not pruned');
+    assert.equal(fs.existsSync(path.join(runDir)), true);
+
+    // Once every consumer is gone — the detached child AND the orphaned node --test chain,
+    // which holds the same TMPDIR — it is an ordinary abandoned directory.
+    for (const pid of consumersOf(evidence!)) if (isAlive(pid)) process.kill(pid, 'SIGKILL');
+    await waitFor(
+      () => !liveRunDirectoryConsumers().has(path.basename(runDir)),
+      20_000,
+      'the run directory still shows a live consumer after every child exited',
+    );
+    assert.deepEqual(
+      pruneAbandonedRunDirectories(TEST_RUN_TMP_ROOT).filter((name) => runDir.endsWith(name)),
+      [path.basename(runDir)],
+    );
+    assert.equal(fs.existsSync(runDir), false, 'with no owner and no consumer it is pruned');
+  } finally {
+    for (const pid of evidence ? consumersOf(evidence) : []) {
+      if (isAlive(pid)) process.kill(pid, 'SIGKILL');
+    }
+    if (wrapper.child.exitCode === null && wrapper.child.signalCode === null) {
+      wrapper.child.kill('SIGKILL');
+    }
+    if (evidence) fs.rmSync(evidence.tmpdir, { recursive: true, force: true });
+    fs.rmSync(probePath, { force: true });
+    fs.rmSync(evidenceRoot, { recursive: true, force: true });
+  }
+});
+
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitFor(
+  condition: () => boolean,
+  timeoutMs: number,
+  message: string,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error(message);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}

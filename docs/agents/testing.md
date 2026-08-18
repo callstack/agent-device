@@ -80,11 +80,15 @@ replacement for tests being tidy).
 
 A run killed before its teardown (a tool timeout's SIGKILL, OOM, a cancelled job) leaves its
 `/tmp/agent-device-test-run-<pid>-*` directory behind. The next run on the host prunes every such
-directory whose owning pid is dead (`pruneAbandonedRunDirectories`, called by both the Vitest global
-setup and the `node --test` wrapper) and prints one `[tmpdir] pruned …` line, so `check:tmpdir-leaks`
-after `test:unit` can only ever name the run that just finished. Directories owned by a live pid —
-a concurrent run in another worktree — are never touched. If the check fails, the leak is this
-run's: a teardown that did not execute, not history.
+directory that is genuinely abandoned (`pruneAbandonedRunDirectories`, called by both the Vitest
+global setup and the `node --test` wrapper) and prints one `[tmpdir] pruned …` line, so
+`check:tmpdir-leaks` after `test:unit` can only ever name the run that just finished. Abandoned
+means nobody owns it **and nobody uses it**: the owner pid in the name is dead and no live process
+has a `TMPDIR` inside it (read from `ps -E` on macOS, `/proc/<pid>/environ` on Linux). That second
+half matters because a SIGKILL of the wrapper or Vitest main process leaves its `node --test` chain,
+forked workers, and any daemon a test spawned running with that `TMPDIR` — they keep the directory
+until the last of them exits. A concurrent run in another worktree is live by both tests. If the
+check fails, the leak is this run's: a teardown that did not execute, not history.
 
 Keep tests behavioral. Do not assert shapes or cases TypeScript already proves.
 
