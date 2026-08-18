@@ -1,36 +1,36 @@
 // Markdown rendering for the mutation lane: GitHub job summary and terminal
 // output share one renderer, so the artifact and the console never disagree.
+//
+// The lane reports and never gates (#1457), so the report is the whole product:
+// a per-kernel score table plus the surviving mutants a test-strengthening PR
+// would have to kill.
 
 import { moduleById } from './modules.ts';
-import type { Baseline, ModuleVerdict, Provenance, RatchetResult } from './ratchet.ts';
+import type { ModuleScore } from './score.ts';
 
 const DEFAULT_MAX_SURVIVING_LISTED = 20;
 
-function formatDelta(delta: number | undefined): string {
-  if (delta === undefined) return '—';
-  return delta > 0 ? `+${delta}` : String(delta);
-}
+export type Provenance = { readonly strykerVersion: string; readonly configHash: string };
 
-function renderRow(verdict: ModuleVerdict): string {
-  const module = moduleById(verdict.module);
-  const baseline = verdict.baselineScore === undefined ? '—' : `${verdict.baselineScore}%`;
+function renderRow(score: ModuleScore): string {
+  const module = moduleById(score.module);
   return (
-    `| \`${verdict.module}\` — ${module.label} | ${verdict.score}% | ${baseline} | ` +
-    `${formatDelta(verdict.delta)} | ${verdict.killed}/${verdict.total} | ` +
-    `${verdict.surviving.length} | ${verdict.status} |`
+    `| \`${score.module}\` — ${module.label} | ${score.score}% | ${score.killed} | ` +
+    `${score.survived} | ${score.total} | ${score.timeout} |`
   );
 }
 
-function renderDetail(verdict: ModuleVerdict, maxListed: number): string[] {
-  const lines = ['', `### \`${verdict.module}\` — ${verdict.status}`, '', verdict.detail];
-  if (verdict.surviving.length > 0) {
-    lines.push('', 'Surviving mutants:', '');
-    for (const mutant of verdict.surviving.slice(0, maxListed)) {
-      lines.push(`- \`${mutant.file}:${mutant.line}\` ${mutant.mutator}`);
-    }
-    if (verdict.surviving.length > maxListed) {
-      lines.push(`- …and ${verdict.surviving.length - maxListed} more`);
-    }
+function renderDetail(score: ModuleScore, maxListed: number): string[] {
+  const lines = [
+    '',
+    `### \`${score.module}\` — ${score.survived} surviving mutant(s) at ${score.score}%`,
+    '',
+  ];
+  for (const mutant of score.surviving.slice(0, maxListed)) {
+    lines.push(`- \`${mutant.file}:${mutant.line}\` ${mutant.mutator}`);
+  }
+  if (score.surviving.length > maxListed) {
+    lines.push(`- …and ${score.surviving.length - maxListed} more`);
   }
   return lines;
 }
@@ -41,8 +41,7 @@ export type RenderOptions = {
 };
 
 export function renderReport(
-  result: RatchetResult,
-  baseline: Baseline,
+  scores: readonly ModuleScore[],
   provenance: Provenance,
   options: RenderOptions = {},
 ): string {
@@ -51,31 +50,21 @@ export function renderReport(
     `## ${options.title ?? 'Mutation score — decision kernels'}`,
     '',
     `Stryker \`${provenance.strykerVersion}\` · config \`${provenance.configHash}\` · ` +
-      `gating **${baseline.gating ? 'on' : 'off'}** ` +
-      `(${baseline.stableRuns}/${baseline.requiredStableRuns} stable weekly runs)`,
+      'report only — this lane never fails a build.',
     '',
-    '| Module | Score | Baseline | Δ | Killed/Total | Surviving | Status |',
-    '| --- | --- | --- | --- | --- | --- | --- |',
-    ...result.verdicts.map(renderRow),
+    '| Kernel | Score | Killed | Survived | Total | Timeout |',
+    '| --- | --- | --- | --- | --- | --- |',
+    ...scores.map(renderRow),
   ];
 
-  for (const verdict of [...result.regressions, ...result.drifted]) {
-    lines.push(...renderDetail(verdict, maxListed));
+  for (const score of scores) {
+    if (score.surviving.length > 0) lines.push(...renderDetail(score, maxListed));
   }
 
-  if (result.failed) {
-    lines.push(
-      '',
-      'Mutation ratchet failed: scores may only rise. Kill the surviving mutants listed above, ' +
-        'then re-run `pnpm mutation:run` (full sweep) or `pnpm mutation:check --report <file>` ' +
-        'against an existing Stryker report.',
-    );
-  } else if (result.regressions.length > 0) {
-    lines.push(
-      '',
-      'Scores regressed while the lane is still non-gating — no failure recorded, but the ' +
-        'surviving mutants above are the tests to strengthen before gating turns on.',
-    );
-  }
+  lines.push(
+    '',
+    'A low score names tests worth strengthening (#1474, #1475 were written from this table); ' +
+      'it is an input for a human-authored PR, not a verdict.',
+  );
   return `${lines.join('\n')}\n`;
 }

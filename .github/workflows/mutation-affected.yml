@@ -2,22 +2,19 @@ name: Mutation Affected
 
 # PR-side half of the decision-kernel mutation lane (issue #1415).
 #
-# Graduation, not a flag day: this job runs on every PR that touches a kernel
-# module, but `scripts/mutation/run.ts` only exits non-zero once the committed
-# baseline reports `gating: true` — earned by two consecutive stable weekly
-# sweeps (mutation-weekly.yml). Until then it is a report with the same numbers,
-# so the gate's first failing day is not also its first running day.
+# Advisory only — the lane reports and never gates (#1457). `scripts/mutation/run.ts`
+# exits non-zero on a harness failure, never on a score.
 #
-# Cost control: before graduation an affected run is a report nobody acts on, so
-# `select` returns an empty matrix and no mutants run — except when the diff
-# touches the lane's own tooling, the one case where a pre-graduation run buys
-# something (the gate has to be proven before it can bite).
+# Cost control: the kernel report that pays is the weekly sweep, so `select`
+# returns an empty matrix unless the diff touches the lane's own tooling — the
+# one case a PR-side run buys something, since a harness change has to be proven
+# against real mutants. Selecting on derived kernel ownership instead would run
+# the full ten-shard sweep on 24 of the last 40 merged PRs.
 #
-# Scope is the AFFECTED modules only, and affectedness is DERIVED from the import
-# graph (scripts/mutation/ownership.ts): a kernel source, or any test that reaches
-# one. Reaching a kernel is a superset of killing its mutants, so the `select` job
-# frequently returns several modules — sharded like the weekly sweep so the PR's
-# wall clock is one module, not their sum. The weekly run stays the full sweep.
+# Scope is the AFFECTED modules, derived from the import graph
+# (scripts/mutation/ownership.ts): a kernel source, or any test that reaches one,
+# plus the canary a tooling diff always adds. Selected modules are sharded like
+# the weekly sweep so the PR's wall clock is one module, not their sum.
 
 on:
   pull_request:
@@ -38,7 +35,6 @@ on:
       - 'scripts/mutation/**'
       - 'scripts/lib/**'
       - 'stryker.config.json'
-      - 'mutation-baselines/**'
       - '.github/workflows/mutation-affected.yml'
 
 permissions:
@@ -64,7 +60,7 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
-      - name: Ratchet self-test
+      - name: Harness self-test
         uses: ./.github/actions/run-gate
         with: { gate: mutation-model }
 
@@ -138,7 +134,7 @@ jobs:
             .tmp/mutation/lane-envelope.json
           if-no-files-found: warn
 
-  ratchet:
+  report:
     name: Affected decision-kernel mutants
     needs: [select, mutants]
     if: always() && needs.select.result == 'success'
@@ -162,7 +158,8 @@ jobs:
 
       # No shards means no affected kernel: run.ts reports "nothing to mutate"
       # and still writes the envelope, so the lane is never silently absent.
-      - name: Ratchet the affected modules
+      # Either invocation writes the score table to $GITHUB_STEP_SUMMARY.
+      - name: Score the affected modules
         run: |
           if [ -d .tmp/mutation/shards ]; then
             expected=$(echo '${{ needs.select.outputs.modules }}' | jq length)
@@ -177,7 +174,7 @@ jobs:
         if: failure()
         run: |
           pnpm gate mutation --affected --fail-envelope \
-            "affected ratchet failed before producing a verdict (run ${{ github.run_id }})" || true
+            "affected report failed before producing a score table (run ${{ github.run_id }})" || true
 
       - name: Upload mutation report
         if: always()

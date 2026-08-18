@@ -25,12 +25,12 @@ test('stryker mutate globs mirror the kernel-module registry', () => {
   );
 });
 
-test('stryker owns no pass/fail threshold — the ratchet does', () => {
+test('stryker owns no pass/fail threshold — the lane never gates on a score', () => {
   const thresholds = readConfig().thresholds as { break?: number | null } | undefined;
   assert.equal(
     thresholds?.break ?? null,
     null,
-    "A Stryker `break` threshold would fail runs on an absolute score; gating is the ratchet's job (scripts/mutation/ratchet.ts).",
+    'A Stryker `break` threshold would fail runs on an absolute score; this lane reports scores and never gates on them (#1457).',
   );
 });
 

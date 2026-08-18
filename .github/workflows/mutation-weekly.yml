@@ -8,13 +8,11 @@ name: Mutation Weekly
 # Sharded one job per module: the whole sweep is ~2,150 mutants, and the selector
 # module alone is ~1,280 of them, so a single job would sit near the 30-minute
 # acceptance budget on an ubuntu runner. The shards' JSON reports are merged into
-# one verdict by the ratchet job (`--report-dir`), so the ratchet still sees a
-# full sweep.
+# one score table by the report job (`--report-dir`).
 #
-# The lane reports; it does not commit. The proposed baseline rides in the
-# artifact and applying it is a reviewed `pnpm mutation:baseline` commit — a score
-# can never lower itself. Gating (after two consecutive stable weekly runs) is
-# enforced on PRs by mutation-affected.yml.
+# The lane reports and never gates (#1457): the per-kernel table lands in the job
+# summary and the artifact, and a low score is an input for a human-authored
+# test-strengthening PR (#1474, #1475 were written that way).
 
 on:
   schedule:
@@ -90,8 +88,8 @@ jobs:
             .tmp/mutation/lane-envelope.json
           if-no-files-found: warn
 
-  ratchet:
-    name: Mutation ratchet
+  report:
+    name: Mutation score report
     runs-on: ubuntu-latest
     needs: shard
     if: always()
@@ -103,7 +101,7 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
-      - name: Ratchet self-test
+      - name: Harness self-test
         uses: ./.github/actions/run-gate
         with: { gate: mutation-model }
 
@@ -113,9 +111,11 @@ jobs:
           pattern: mutation-shard-*
           path: .tmp/mutation/shards
 
-      # run.ts writes the markdown verdict to $GITHUB_STEP_SUMMARY when the
+      # run.ts writes the per-kernel score table to $GITHUB_STEP_SUMMARY when the
       # runner exports it, so the summary and the artifact carry the same numbers.
-      - name: Ratchet the merged sweep and propose the next baseline
+      # It exits non-zero only on a harness failure (an incomplete shard set), so
+      # a red lane here always means the sweep did not happen — never a low score.
+      - name: Score the merged sweep
         uses: ./.github/actions/run-gate
         with:
           gate: mutation-check
@@ -124,20 +124,14 @@ jobs:
             .tmp/mutation/shards
             --expect-shards
             10
-            --update
 
-      - name: Stage the proposed baseline artifact
-        run: |
-          cp mutation-baselines/decision-kernels.json .tmp/mutation/proposed-baseline.json
-          git checkout -- mutation-baselines/decision-kernels.json
-
-      # The self-test and the artifact download both run before the ratchet, so a
-      # failure there would otherwise leave the aggregate lane with no envelope.
+      # The self-test and the artifact download both run before the scoring step,
+      # so a failure there would otherwise leave the aggregate lane with no envelope.
       - name: Record a failed lane envelope
         if: failure()
         run: |
           pnpm gate mutation --fail-envelope \
-            "weekly ratchet job failed before producing a verdict (run ${{ github.run_id }})" || true
+            "weekly report job failed before producing a score table (run ${{ github.run_id }})" || true
 
       # Freshness/drift telemetry (#1430): the envelope states commit, Stryker
       # version, config hash, duration and result, so a lane going dark or a tool
@@ -167,5 +161,4 @@ jobs:
           path: |
             .tmp/mutation/shards
             .tmp/mutation/lane-envelope.json
-            .tmp/mutation/proposed-baseline.json
           if-no-files-found: warn

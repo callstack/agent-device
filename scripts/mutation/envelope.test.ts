@@ -41,7 +41,7 @@ test('the envelope carries schema, commit, tool/config provenance, duration and 
   assert.deepEqual(envelope.data, { scope: 'full-sweep' });
 });
 
-test('a failed ratchet is recorded as a failed lane run', () => {
+test('a lane that produced no report is recorded as a failed run', () => {
   const envelope = laneEnvelope({
     lane: 'mutation-decision-kernels',
     commit: 'b'.repeat(40),
@@ -92,7 +92,7 @@ test('a crashed run still writes an envelope naming the stage it died in', () =>
 
 // Shard artifacts carry the envelope next to the report, so merging "every JSON
 // under the shard directory" fed the envelope to the report parser and crashed
-// the ratchet job after the mutants had already run.
+// the reporting job after the mutants had already run.
 test('merging shard reports ignores the envelope sitting beside them', () => {
   const shards = path.join(repoRoot, '.tmp/mutation/envelope-test-shards/shard-a');
   fs.mkdirSync(shards, { recursive: true });
@@ -170,9 +170,9 @@ function readEnvelope(): Envelope {
 }
 
 // A merged shard set is only a sweep if every requested module actually reported.
-// summarizeReport scores an absent module as 0, and while the lane is non-gating a
-// 0 only *reports* a regression — so a dead matrix shard would otherwise be
-// aggregated into a passing "complete" envelope claiming the sweep happened.
+// summarizeReport scores an absent module as 0, so a dead matrix shard would
+// otherwise be published as a 0% kernel in a passing "complete" envelope
+// claiming the sweep happened.
 test('an incomplete shard set fails instead of scoring the missing module as zero', () => {
   const shards = path.join(repoRoot, '.tmp/mutation/partial-shards/shard-kernel-errors');
   fs.mkdirSync(shards, { recursive: true });
@@ -193,12 +193,12 @@ test('an incomplete shard set fails instead of scoring the missing module as zer
   assert.match(result.stderr, /daemon-ref-frame/);
   const envelope = readEnvelope();
   assert.equal(envelope.result, 'fail');
-  assert.equal(envelope.data.stage, 'ratchet');
+  assert.equal(envelope.data.stage, 'score');
   fs.rmSync(path.join(repoRoot, '.tmp/mutation/partial-shards'), { recursive: true, force: true });
 });
 
-// Argument parsing and the provenance/baseline reads used to sit outside the
-// envelope boundary, so the lane could exit without declaring itself at all.
+// Argument parsing and the provenance read used to sit outside the envelope
+// boundary, so the lane could exit without declaring itself at all.
 test('a malformed invocation still writes an envelope', () => {
   fs.rmSync(path.join(repoRoot, '.tmp/mutation/lane-envelope.json'), { force: true });
   const result = runMutation(['--modules', 'not-a-kernel']);
@@ -221,7 +221,7 @@ test('--fail-envelope declares a step that failed before the sweep', () => {
   assert.equal(envelope.data.error, 'self-test failed');
 });
 
-// The workflows run it from `if: failure()`, which also fires when the ratchet
+// The workflows run it from `if: failure()`, which also fires when the sweep
 // itself failed — a generic reason must never displace the specific one.
 test('--fail-envelope keeps a failure the run already reported', () => {
   fs.rmSync(path.join(repoRoot, '.tmp/mutation/lane-envelope.json'), { force: true });
@@ -230,20 +230,18 @@ test('--fail-envelope keeps a failure the run already reported', () => {
   assert.equal(readEnvelope().data.error, 'the real failure');
 });
 
-// A pass is not a verdict worth preserving: the weekly job copies the proposed
-// baseline and restores the committed one *after* the ratchet passed, so a failure
-// there would otherwise publish the failed scheduled job as a passing lane.
+// A pass is not a result worth preserving: the weekly job uploads its artifact
+// *after* the report was rendered, so a failure there would otherwise publish
+// the failed scheduled job as a passing lane.
 test('--fail-envelope downgrades a passing envelope when a later step fails', () => {
   const shards = path.join(repoRoot, '.tmp/mutation/pass-then-fail/shard-kernel-errors');
   fs.mkdirSync(shards, { recursive: true });
-  // A perfect shard so the ratchet passes: the score can only rise from the
-  // committed kernel-errors baseline.
+  // A shard whose only mutant survived — a 0% score. The lane reports scores and
+  // never gates on them (#1457), so this run is still a pass: the sweep happened.
   fs.writeFileSync(
     path.join(shards, 'mutation.json'),
     JSON.stringify({
-      files: {
-        'packages/kernel/src/errors.ts': { mutants: [{ status: 'Killed' }, { status: 'Killed' }] },
-      },
+      files: { 'packages/kernel/src/errors.ts': { mutants: [{ status: 'Survived' }] } },
     }),
   );
   const passing = runMutation([
@@ -252,13 +250,13 @@ test('--fail-envelope downgrades a passing envelope when a later step fails', ()
     '--modules',
     'kernel-errors',
   ]);
-  assert.equal(passing.exitCode, 0, passing.stderr);
+  assert.equal(passing.exitCode, 0, 'a low score must never fail the lane');
   assert.equal(readEnvelope().result, 'pass');
 
-  runMutation(['--fail-envelope', 'the baseline copy step failed']);
+  runMutation(['--fail-envelope', 'the artifact upload step failed']);
   const envelope = readEnvelope();
   assert.equal(envelope.result, 'fail', 'a failed job must not publish a passing envelope');
-  assert.equal(envelope.data.error, 'the baseline copy step failed');
+  assert.equal(envelope.data.error, 'the artifact upload step failed');
   fs.rmSync(path.join(repoRoot, '.tmp/mutation/pass-then-fail'), { recursive: true, force: true });
 });
 

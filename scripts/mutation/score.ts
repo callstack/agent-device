@@ -25,6 +25,9 @@ export type ModuleScore = {
   readonly killed: number;
   readonly survived: number;
   readonly total: number;
+  /** Timeouts, already counted in `killed` — reported so a score propped up by
+   * slow mutants rather than assertions is visible. */
+  readonly timeout: number;
   readonly surviving: readonly SurvivingMutant[];
 };
 
@@ -37,8 +40,8 @@ const SURVIVED_STATUSES = new Set(['Survived', 'NoCoverage']);
 
 /**
  * Merge sharded Stryker reports into one. The weekly sweep runs one shard per
- * kernel module so no single job approaches its time budget; the ratchet still
- * evaluates a single full-sweep report.
+ * kernel module so no single job approaches its time budget; the report is still
+ * rendered from a single full-sweep view.
  */
 export function mergeReports(reports: readonly StrykerReport[]): StrykerReport {
   const files: Record<string, { mutants: StrykerMutant[] }> = {};
@@ -52,7 +55,7 @@ export function mergeReports(reports: readonly StrykerReport[]): StrykerReport {
   return { files };
 }
 
-export function roundScore(value: number): number {
+function roundScore(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
@@ -60,33 +63,35 @@ function compareMutants(a: SurvivingMutant, b: SurvivingMutant): number {
   return a.file.localeCompare(b.file) || a.line - b.line || a.mutator.localeCompare(b.mutator);
 }
 
+type Bucket = { killed: number; survived: number; timeout: number; surviving: SurvivingMutant[] };
+
+function tally(bucket: Bucket, file: string, mutant: StrykerMutant): void {
+  if (KILLED_STATUSES.has(mutant.status)) {
+    bucket.killed += 1;
+    if (mutant.status === 'Timeout') bucket.timeout += 1;
+    return;
+  }
+  if (!SURVIVED_STATUSES.has(mutant.status)) return;
+  bucket.survived += 1;
+  bucket.surviving.push({
+    file: normalizePath(file),
+    line: mutant.location?.start?.line ?? 0,
+    mutator: mutant.mutatorName ?? 'unknown',
+  });
+}
+
 export function summarizeReport(
   report: StrykerReport,
   ids: readonly ModuleId[] = ALL_MODULE_IDS,
 ): ModuleScore[] {
-  const buckets = new Map<
-    ModuleId,
-    { killed: number; survived: number; surviving: SurvivingMutant[] }
-  >();
-  for (const id of ids) buckets.set(id, { killed: 0, survived: 0, surviving: [] });
+  const buckets = new Map<ModuleId, Bucket>();
+  for (const id of ids) buckets.set(id, { killed: 0, survived: 0, timeout: 0, surviving: [] });
 
   for (const [file, entry] of Object.entries(report.files)) {
     const id = moduleForFile(file);
-    if (!id) continue;
-    const bucket = buckets.get(id);
+    const bucket = id ? buckets.get(id) : undefined;
     if (!bucket) continue;
-    for (const mutant of entry.mutants) {
-      if (KILLED_STATUSES.has(mutant.status)) {
-        bucket.killed += 1;
-      } else if (SURVIVED_STATUSES.has(mutant.status)) {
-        bucket.survived += 1;
-        bucket.surviving.push({
-          file: normalizePath(file),
-          line: mutant.location?.start?.line ?? 0,
-          mutator: mutant.mutatorName ?? 'unknown',
-        });
-      }
-    }
+    for (const mutant of entry.mutants) tally(bucket, file, mutant);
   }
 
   return [...buckets].map(([module, bucket]) => {
@@ -97,6 +102,7 @@ export function summarizeReport(
       killed: bucket.killed,
       survived: bucket.survived,
       total,
+      timeout: bucket.timeout,
       surviving: bucket.surviving.sort(compareMutants),
     };
   });

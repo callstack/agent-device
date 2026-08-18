@@ -1,15 +1,15 @@
 // Entrypoint for the decision-kernel mutation lane (issue #1415).
 //
-//   pnpm mutation:run                       full sweep + ratchet check
-//   pnpm mutation:baseline                  full sweep, then record the scores
-//   pnpm mutation:check --report <file>     ratchet an existing Stryker report
+//   pnpm mutation:run                       full sweep, rendered as a report
+//   pnpm mutation:check --report <file>     score an existing Stryker report
 //   pnpm mutation:affected --base origin/main
 //                                           PR lane: mutate only the kernel
 //                                           modules the diff touches
 //
-// The weekly workflow runs the full sweep and writes the rendered report to the
-// job summary plus an artifact; the PR lane runs the affected subset and only
-// fails once the baseline has graduated to `gating: true`.
+// The lane reports and never gates (#1457): a score can only ever be printed,
+// written to the job summary and uploaded as an artifact. The only non-zero exit
+// is a harness failure — a missing report, an incomplete shard set, a bad
+// argument — never a low score.
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -29,15 +29,7 @@ import {
   type ShardSpec,
 } from './modules.ts';
 import { derivedAffectedModules } from './ownership.ts';
-import { renderReport } from './report.ts';
-import {
-  applyRun,
-  emptyBaseline,
-  evaluateRatchet,
-  type Baseline,
-  type Provenance,
-  type RatchetResult,
-} from './ratchet.ts';
+import { renderReport, type Provenance } from './report.ts';
 import { mergeReports, summarizeReport, type ModuleScore, type StrykerReport } from './score.ts';
 import {
   expandMutateFiles,
@@ -49,7 +41,6 @@ import {
 const repoRoot = runCmdSync('git', ['rev-parse', '--show-toplevel']).stdout.trim();
 
 const CONFIG_PATH = 'stryker.config.json';
-const BASELINE_PATH = 'mutation-baselines/decision-kernels.json';
 const DEFAULT_REPORT_PATH = '.tmp/mutation/mutation.json';
 const TEST_SCOPE_PATH = '.tmp/mutation/test-scope.json';
 const ENVELOPE_PATH = '.tmp/mutation/lane-envelope.json';
@@ -66,12 +57,10 @@ const USAGE = `Usage: pnpm mutation:run [options]
                     Fail unless --report-dir holds exactly n shard reports
   --shard <i/n>     Mutate only the i-th of n balanced slices of the module's
                     sources (the big modules exceed one job's budget)
-  --update          Record the run into the baseline (ratchet + graduation)
   --summary <file>  Also write the markdown report to <file>
   --no-run          Alias for --report with the default report path
   --list-affected   Print the PR lane's shard matrix as JSON and exit (empty
-                    until the baseline graduates, unless the diff touches the
-                    lane's own tooling)
+                    unless the diff touches the lane's own tooling)
   --fail-envelope <reason>
                     Write a failed lane envelope for a step that ran before (or
                     instead of) the sweep, e.g. a self-test failure
@@ -83,7 +72,6 @@ type Args = {
   base: string;
   report: string | undefined;
   reportDir: string | undefined;
-  update: boolean;
   summary: string | undefined;
   listAffected: boolean;
   failEnvelope: string | undefined;
@@ -127,7 +115,6 @@ function parseMutationArgs(argv: readonly string[]): Args {
     base: { type: 'string', default: 'origin/main' },
     report: { type: 'string' },
     'report-dir': { type: 'string' },
-    update: { type: 'boolean', default: false },
     summary: { type: 'string' },
     'no-run': { type: 'boolean', default: false },
     'list-affected': { type: 'boolean', default: false },
@@ -141,7 +128,6 @@ function parseMutationArgs(argv: readonly string[]): Args {
     base: values.base ?? 'origin/main',
     report: values.report ?? (values['no-run'] ? DEFAULT_REPORT_PATH : undefined),
     reportDir: values['report-dir'],
-    update: Boolean(values.update),
     summary: values.summary,
     listAffected: Boolean(values['list-affected']),
     failEnvelope: values['fail-envelope'],
@@ -164,18 +150,6 @@ function readProvenance(root: string = repoRoot): Provenance {
     strykerVersion: version,
     configHash: configHash(fs.readFileSync(path.join(root, CONFIG_PATH), 'utf8')),
   };
-}
-
-function readBaseline(root: string = repoRoot): Baseline {
-  const file = path.join(root, BASELINE_PATH);
-  if (!fs.existsSync(file)) return emptyBaseline();
-  return JSON.parse(fs.readFileSync(file, 'utf8')) as Baseline;
-}
-
-function writeBaseline(baseline: Baseline, root: string = repoRoot): void {
-  const file = path.join(root, BASELINE_PATH);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify(baseline, null, 2)}\n`);
 }
 
 function changedFiles(base: string): string[] {
@@ -242,8 +216,8 @@ async function runStryker(
     onStdoutChunk: (chunk) => void process.stdout.write(chunk),
     onStderrChunk: (chunk) => void process.stderr.write(chunk),
   });
-  // Stryker exits non-zero on a low score too; the ratchet — not Stryker's own
-  // thresholds — owns the verdict, so only a missing report is fatal here.
+  // Stryker exits non-zero on a low score too; this lane reports scores rather
+  // than judging them, so only a missing report is fatal here.
   if (!fs.existsSync(absolute)) {
     throw new Error(
       `Stryker produced no report at ${reportPath} (exit ${result.exitCode}). See output above.`,
@@ -267,7 +241,7 @@ function emit(markdown: string, summaryPath: string | undefined): void {
  * failure the freshness monitor must see, so the stage rides in the envelope
  * rather than only in the job log.
  */
-type Stage = 'setup' | 'select' | 'stryker' | 'report' | 'ratchet' | 'complete';
+type Stage = 'setup' | 'select' | 'stryker' | 'report' | 'score' | 'complete';
 
 /**
  * Provenance for a lane that died before it could read any: `unknown` is a
@@ -278,17 +252,15 @@ const UNKNOWN_PROVENANCE: Provenance = { strykerVersion: 'unknown', configHash: 
 type LaneState = {
   stage: Stage;
   provenance: Provenance;
-  baseline: Baseline;
   modules: readonly ModuleId[];
   affected: boolean;
   scores: readonly ModuleScore[];
-  result: RatchetResult | undefined;
   error: string | undefined;
   /**
    * `--fail-envelope` keeps an existing *failure* (its reason is the specific
-   * one) but replaces an existing pass: a post-verdict step can fail after the
-   * ratchet passed, and publishing that job as passing is the bug the envelope
-   * exists to prevent.
+   * one) but replaces an existing pass: a step can fail after the report was
+   * rendered, and publishing that job as passing is the bug the envelope exists
+   * to prevent.
    */
   recoveryOnly: boolean;
 };
@@ -301,6 +273,19 @@ function existingResult(file: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * A module's measurement for the envelope, or explicit nulls when the lane died
+ * before measuring it — an absent field would read as "no mutants", a score.
+ */
+function envelopeModule(id: ModuleId, scores: readonly ModuleScore[]) {
+  const score = scores.find((entry) => entry.module === id);
+  if (!score) {
+    return { id, score: null, killed: null, survived: null, total: null, timeout: null };
+  }
+  const { module: _module, surviving: _surviving, ...measured } = score;
+  return { id, ...measured };
 }
 
 /**
@@ -329,24 +314,14 @@ function writeEnvelope(state: LaneState, startedAtMs: number): void {
     tool: { stryker: state.provenance.strykerVersion },
     configHash: state.provenance.configHash,
     startedAtMs,
-    result: state.stage === 'complete' && !state.result?.failed ? 'pass' : 'fail',
+    // The lane never judges a score, so the result states whether the lane
+    // produced a report at all.
+    result: state.stage === 'complete' ? 'pass' : 'fail',
     data: {
       scope: state.affected ? 'affected' : 'full-sweep',
       stage: state.stage,
       error: state.error ?? null,
-      modules: state.modules.map((id) => {
-        const score = state.scores.find((entry) => entry.module === id);
-        return {
-          id,
-          score: score?.score ?? null,
-          killed: score?.killed ?? null,
-          total: score?.total ?? null,
-          status: state.result?.verdicts.find((verdict) => verdict.module === id)?.status ?? null,
-        };
-      }),
-      gating: state.baseline.gating,
-      stableRuns: state.baseline.stableRuns,
-      requiredStableRuns: state.baseline.requiredStableRuns,
+      modules: state.modules.map((id) => envelopeModule(id, state.scores)),
     },
   });
   fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -393,26 +368,11 @@ async function produceReport(
   return readReport(reportPath ?? DEFAULT_REPORT_PATH);
 }
 
-function recordRun(args: Args, state: LaneState, result: RatchetResult): void {
-  const next = applyRun(state.baseline, state.scores, result, {
-    provenance: state.provenance,
-    now: new Date().toISOString(),
-    // Only the full sweep proves stability; an affected subset says nothing
-    // about the modules it skipped.
-    countsTowardGraduation: !args.affected && state.modules.length === ALL_MODULE_IDS.length,
-  });
-  writeBaseline(next);
-  process.stdout.write(
-    `\nBaseline updated (${BASELINE_PATH}): ${next.stableRuns}/${next.requiredStableRuns} ` +
-      `stable runs, gating ${next.gating ? 'on' : 'off'}.\n`,
-  );
-}
-
 /**
  * A merged shard set must cover every requested module. `summarizeReport` scores
- * a module with no mutants as 0, and while the lane is non-gating a 0 is only
- * *reported* as a regression — so a matrix shard that died would otherwise be
- * aggregated into a `complete`/`pass` envelope claiming the sweep happened.
+ * a module with no mutants as 0, so a matrix shard that died would otherwise be
+ * aggregated into a `complete`/`pass` envelope reporting a 0% kernel as if the
+ * sweep had happened.
  */
 function assertShardsCoverModules(state: LaneState, dir: string): void {
   const missing = state.scores.filter((score) => score.total === 0).map((score) => score.module);
@@ -430,17 +390,15 @@ async function scoreModules(args: Args, state: LaneState): Promise<void> {
     ? readShardedReports(args.reportDir, args.expectShards)
     : await produceReport(state.modules, args.report, args.shard);
 
-  state.stage = 'ratchet';
+  state.stage = 'score';
   state.scores = summarizeReport(report, state.modules);
   if (args.reportDir) assertShardsCoverModules(state, args.reportDir);
 }
 
 async function sweep(args: Args, state: LaneState): Promise<number> {
   state.stage = 'select';
-  // Test attribution is derived from the import graph, not a listed set of test
-  // files: see scripts/mutation/ownership.ts.
-  // Same selection the PR matrix uses, graduation rule included, so the ratchet
-  // job can never run mutants the `select` job decided not to spend.
+  // Same selection the PR matrix uses, so the reporting job can never score
+  // mutants the `select` job decided not to spend.
   if (args.affected) {
     state.modules = [...new Set(affectedMatrix(args.base).map((entry) => entry.module))];
   }
@@ -451,48 +409,43 @@ async function sweep(args: Args, state: LaneState): Promise<number> {
   }
 
   await scoreModules(args, state);
-  const result = evaluateRatchet(state.scores, state.baseline, state.provenance);
-  state.result = result;
 
   const title = args.affected
     ? 'Mutation score — affected decision kernels'
     : 'Mutation score — decision kernels';
-  emit(renderReport(result, state.baseline, state.provenance, { title }), args.summary);
+  emit(renderReport(state.scores, state.provenance, { title }), args.summary);
 
-  if (args.update) recordRun(args, state, result);
   state.stage = 'complete';
-  return result.failed ? 1 : 0;
+  return 0;
 }
 
 /** Sources of the lane itself: a change here must prove itself on real mutants. */
-const LANE_TOOLING = ['scripts/mutation/', 'scripts/lib/', 'stryker.config.json', 'mutation-'];
+const LANE_TOOLING = ['scripts/mutation/', 'scripts/lib/', 'stryker.config.json'];
 
 /**
- * The PR lane's matrix. Before graduation the affected run is a report nobody
- * acts on, so it costs runner minutes for no verdict: it stays empty until the
- * baseline reaches `gating: true`. The exception is a diff that changes the lane
- * itself — that is the one case where the pre-graduation run buys something,
- * because the gate has to be proven before it can bite.
+ * The PR lane's matrix. The kernel report that pays is the weekly sweep, so the
+ * PR lane spends mutants on one thing only: proving the harness still runs end
+ * to end when the harness itself changes. Selecting on derived kernel ownership
+ * instead would run the full ten-shard sweep on 24 of the last 40 merged PRs —
+ * a per-PR full sweep for a report nobody gates on.
  */
 export function affectedMatrixFor(
   changed: readonly string[],
-  gating: boolean,
   root: string = repoRoot,
 ): ShardSpec[] {
   const touchesLane = changed.some((file) =>
     LANE_TOOLING.some((prefix) => normalizePath(file).startsWith(prefix)),
   );
-  if (!gating && !touchesLane) return [];
+  if (!touchesLane) return [];
   const modules = new Set(derivedAffectedModules(changed, root));
   // Lane sources own no kernel, so a tooling-only diff derives nothing: without
-  // the canary the "prove the gate" exception would select zero mutants and
-  // prove nothing.
-  if (touchesLane) modules.add(LANE_CANARY);
+  // the canary the lane would select zero mutants and prove nothing.
+  modules.add(LANE_CANARY);
   return shardMatrix(ALL_MODULE_IDS.filter((id) => modules.has(id)));
 }
 
 function affectedMatrix(base: string): ShardSpec[] {
-  return affectedMatrixFor(changedFiles(base), readBaseline().gating);
+  return affectedMatrixFor(changedFiles(base));
 }
 
 /**
@@ -504,7 +457,6 @@ async function run(argv: readonly string[], state: LaneState): Promise<number> {
   const args = parseMutationArgs(argv);
   state.affected = args.affected;
   state.provenance = readProvenance();
-  state.baseline = readBaseline();
   state.modules = args.modules;
   if (args.failEnvelope) {
     // A step that ran before the sweep failed (the weekly self-test, setup): the
@@ -528,11 +480,9 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
   const state: LaneState = {
     stage: 'setup',
     provenance: UNKNOWN_PROVENANCE,
-    baseline: emptyBaseline(),
     modules: [],
     affected: false,
     scores: [],
-    result: undefined,
     error: undefined,
     recoveryOnly: false,
   };

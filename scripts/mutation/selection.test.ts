@@ -1,7 +1,7 @@
 // Selection is what the PR lane spends money on, so both halves of the rule are
-// asserted end to end through the real CLI: nothing runs before graduation, and
-// the "prove the gate" exception for a lane-tooling diff selects real mutants
-// rather than an empty matrix that proves nothing.
+// asserted end to end through the real CLI: a kernel diff selects nothing (the
+// weekly sweep is the kernel report), and a lane-tooling diff selects real
+// mutants rather than an empty matrix that proves nothing.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -70,23 +70,21 @@ function listAffected(cwd: string): ShardSpec[] {
   return JSON.parse(result.stdout.trim().split('\n').at(-1)!) as ShardSpec[];
 }
 
-test('a lane-tooling diff selects real mutants even before graduation', () => {
-  const dir = worktreeWithCommit('tooling', ['scripts/mutation/ratchet.ts']);
+test('a lane-tooling diff selects real mutants', () => {
+  const dir = worktreeWithCommit('tooling', ['scripts/mutation/run.ts']);
   // The lane's own sources own no kernel, so derivation alone yields nothing:
-  // without the canary this exception would run zero mutants.
+  // without the canary a harness change would run zero mutants.
   assert.deepEqual(listAffected(dir), shardMatrix([LANE_CANARY]));
 });
 
-test('a kernel diff selects nothing until the baseline graduates', () => {
+// The weekly sweep is the kernel report; selecting on derived ownership would
+// run the full ten-shard sweep on most PRs for a report nobody gates on.
+test('a kernel diff selects nothing — only a harness diff spends mutants', () => {
   const dir = worktreeWithCommit('kernel', ['src/utils/scroll-edge-state.ts']);
   assert.deepEqual(listAffected(dir), []);
-  // …and the same diff selects that module once gating is on.
-  assert.deepEqual(
-    affectedMatrixFor(['src/utils/scroll-edge-state.ts'], true),
-    shardMatrix(['scroll-edge-state']),
-  );
+  assert.deepEqual(affectedMatrixFor(['src/utils/scroll-edge-state.ts']), []);
 });
 
-test('a docs-only diff selects nothing even once gating is on', () => {
-  assert.deepEqual(affectedMatrixFor(['docs/agents/testing.md'], true), []);
+test('a docs-only diff selects nothing', () => {
+  assert.deepEqual(affectedMatrixFor(['docs/agents/testing.md']), []);
 });

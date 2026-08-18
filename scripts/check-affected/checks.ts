@@ -128,8 +128,8 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   gate('fuzz-parsers', 'Parser fuzz invariants', 'fuzz:parsers', false),
   gate('mutation', 'Mutation sweep', 'mutation:run', false),
   gate('mutation-affected', 'Affected mutation shard selection', 'mutation:affected', false),
-  gate('mutation-check', 'Mutation ratchet against the baseline', 'mutation:check', false),
-  gate('mutation-model', 'Mutation ratchet self-test', 'mutation:test'),
+  gate('mutation-check', 'Mutation score for an existing report', 'mutation:check', false),
+  gate('mutation-model', 'Mutation harness self-test', 'mutation:test'),
   gate(
     'concurrency-torture',
     'Session/lease/lock torture sweep',

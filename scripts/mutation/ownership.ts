@@ -1,8 +1,8 @@
 // Which kernel module a changed file belongs to, DERIVED — never hand-listed.
 //
-// A mutation score is a statement about the tests that kill the mutants, so the
-// PR lane must re-measure a kernel whenever one of *those* tests changes. An
-// enumerated list of test files cannot state that: it silently omits tests that
+// A mutation score is a statement about the tests that kill the mutants, so a
+// selection is only honest if it follows *those* tests. An enumerated list of
+// test files cannot state that: it silently omits tests that
 // exercise a kernel indirectly (`src/__tests__/daemon-error.test.ts` reaches
 // `normalizeError` through `src/daemon.ts`), and nothing fails when a new test
 // is added. So ownership is computed from the static import graph instead: a test
@@ -11,13 +11,12 @@
 // The derivation is deliberately a superset — reaching a kernel is cheaper to
 // prove than killing its mutants, so an unrelated diff can select a module and
 // pay for a report. False positives cost runner minutes; a false negative would
-// let a weakened test slip past the ratchet, which is the thing the lane exists
-// to catch.
+// leave a kernel whose tests changed unmeasured.
 //
 // Non-test source changes outside the registry are NOT owned: they can only move
 // a score through the tests that reach the kernel, and the weekly full sweep is
-// what re-measures the whole surface. The PR lane's claim is narrower on purpose
-// — kernel sources plus the tests that exercise them.
+// what re-measures the whole surface. The derived claim is narrower on purpose —
+// kernel sources plus the tests that exercise them.
 
 import fs from 'node:fs';
 import path from 'node:path';

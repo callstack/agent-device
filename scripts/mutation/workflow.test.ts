@@ -1,7 +1,7 @@
 // The workflows' YAML cannot read the kernel registry, so these assertions keep
 // the two in step: a module added to KERNEL_MODULES that no weekly shard runs
-// would silently drop out of the sweep, and one no PR path filter selects would
-// silently stop gating once the ratchet graduates.
+// would silently drop out of the sweep, and one no PR path filter selects could
+// never reach the affected lane's `select` job.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -33,15 +33,15 @@ test('the weekly sweep shards exactly the registry matrix', () => {
   );
 });
 
-test('the weekly sweep merges the shards into one ratcheted verdict', () => {
+test('the weekly sweep merges the shards into one score table', () => {
   const yaml = workflow('mutation-weekly.yml');
   assert.match(yaml, /gate: mutation-check[\s\S]*--report-dir/);
   assert.match(yaml, /GITHUB_STEP_SUMMARY|\$GITHUB_STEP_SUMMARY/);
-  // A dead shard must not be merged into a verdict that looks like a sweep.
+  // A dead shard must not be merged into a table that looks like a sweep.
   assert.match(
     yaml,
     new RegExp(`--expect-shards\\s+${shardMatrix().length}\\b`),
-    'the weekly ratchet does not require the full shard set',
+    'the weekly report does not require the full shard set',
   );
 });
 
@@ -85,9 +85,9 @@ test('every kernel path a PR can touch selects the affected mutation job', () =>
     'the PR lane must trigger on every packages/*/src test too — target-annotation-serde is owned by one',
   );
   assert.match(workflow('mutation-affected.yml'), /gate: mutation-affected[\s\S]*--list-affected/);
-  // The lane's own sources fail open into it too: a ratchet or baseline edit must
-  // prove itself against real mutants, not against a stale report.
-  for (const own of ['scripts/mutation/**', 'stryker.config.json', 'mutation-baselines/**']) {
+  // The lane's own sources fail open into it too: a harness edit must prove
+  // itself against real mutants, not against a stale report.
+  for (const own of ['scripts/mutation/**', 'stryker.config.json']) {
     assert.ok(paths.includes(own), `missing path filter ${own}`);
   }
 });

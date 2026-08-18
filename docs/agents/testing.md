@@ -44,7 +44,7 @@ The mapping it encodes, for when you need to run a gate directly or reason about
 | Daemon RPC wire surface (the declarations listed in `test/wire-compat/surface.ts` — JSON-RPC envelope, request/response/error/artifact/progress framing, `/health` payload, HTTP auth headers) | `pnpm exec vitest run --project unit-core test/wire-compat` holds the ledger to its source and prints the digest to paste; `pnpm check:daemon-wire-compat` compares it against the last released tag and requires a `DAEMON_RPC_PROTOCOL_VERSION` bump or a `compatibleChanges` ack for the drift. Read ADR 0006 to decide which; `test/wire-compat/README.md` walks both |
 | Anything in `src/`, `test/` | `pnpm format` (`skills/` is Markdown-only guidance: oxfmt ignores `**/*.md`, and the affected-check selector classifies it docs-only) |
 | Workspace package source (`packages/*/src/**`) | Root format/lint/typecheck plus layering (R11 package-boundaries); Vitest resolves affected tests through the module graph; package manifests/tsconfigs fail open to the full set |
-| A decision kernel or its tests (`packages/kernel/src/errors.ts`, `src/daemon/ref-frame.ts`, `src/commands/interaction/runtime/settle.ts`, `src/utils/scroll-edge-state.ts`, `packages/selectors/src/`) | `pnpm mutation:affected --base origin/main` (minutes; GitHub runs it per PR — see the mutation ratchet section) |
+| A decision kernel or its tests (`packages/kernel/src/errors.ts`, `src/daemon/ref-frame.ts`, `src/commands/interaction/runtime/settle.ts`, `src/utils/scroll-edge-state.ts`, `packages/selectors/src/`) | `pnpm mutation:run --modules <kernel>` (minutes; optional — the lane reports, it never gates, see the mutation section) |
 
 Two traps worth naming:
 
@@ -243,7 +243,7 @@ The three facts the manifest cannot derive live together in `scripts/gate/declar
 coverage wrapper, one reporting-only `test:*` script, and the Android replay owner hidden inside a
 third-party action's `script:` input.
 
-## Mutation ratchet over decision kernels
+## Mutation report over decision kernels
 
 Mutation score is the mechanical answer to "is this test load-bearing or decorative". A full-suite
 sweep is unaffordable, so the scope is an enumerated list of pure decision kernels — modules where a
@@ -252,46 +252,45 @@ surviving mutant means a silently wrong agent-facing decision. The registry
 are asserted against it, and PR-affected selection maps changed files through it. Modules that spawn
 subprocesses or wait real time stay out by construction.
 
+Mutation runs **report-only** on the seven decision kernels — a weekly full sweep plus a per-PR
+affected sweep. It never gates: `scripts/mutation/run.ts` exits non-zero on a harness failure (a
+missing report, an incomplete shard set, a bad argument) and never on a score. A low score is an
+input for a human-authored test-strengthening PR, which is exactly how #1474 and #1475 were written.
+The ratchet, baseline file and graduation rule this lane used to carry were deleted in #1457: in
+three weeks nobody applied a baseline, so the gate half never operated while the report half was
+paying.
+
 ```sh
-pnpm mutation:test                      # ratchet self-test (fast, no Stryker)
+pnpm mutation:test                      # harness self-test (fast, no Stryker)
 pnpm mutation:run --modules selectors   # one module locally (~7 min for selectors)
-pnpm mutation:check                     # ratchet an existing .tmp/mutation/mutation.json
-pnpm mutation:baseline                  # full sweep, then record it (reviewed commit)
+pnpm mutation:check                     # score an existing .tmp/mutation/mutation.json
 ```
 
 - **Weekly full sweep** (`.github/workflows/mutation-weekly.yml`) runs `shardMatrix()` from the
   registry: one job per module, except modules that declare a `shards` count and are sliced with
-  `--shard i/n` (selectors is ~1,280 mutants, well past the 30-minute budget in one job). The ratchet
-  merges the shard reports (`--report-dir`) for one verdict and requires the full set
-  (`--expect-shards`), so a dead shard fails the lane instead of scoring its module as 0. Results are
-  reported as a job summary plus an artifact. It never commits: the proposed baseline rides in the
-  artifact, and applying it is a reviewed `pnpm mutation:baseline` commit, so a score cannot lower
-  itself.
+  `--shard i/n` (selectors is ~1,280 mutants, well past the 30-minute budget in one job). The report
+  job merges the shard reports (`--report-dir`) into one per-kernel table — kernel, score, killed,
+  survived, total, timeouts, plus the surviving mutants — and requires the full set
+  (`--expect-shards`), so a dead shard fails the lane instead of publishing its module as 0%. The
+  table lands in the job summary and the artifact.
 - **PR lane** (`.github/workflows/mutation-affected.yml`) derives the affected shard matrix
-  (`--list-affected`) and merges the shards into one verdict. Before graduation the matrix is empty —
-  a report nobody acts on is not worth the runner minutes — unless the diff touches the lane's own
-  tooling, the one pre-graduation run that buys something: the gate has to be proven before it bites.
-  Lane sources own no kernel, so that exception adds `LANE_CANARY` (`kernel-errors`, the registry's
-  cheapest real sweep) to whatever the diff derives; otherwise it would select zero mutants and prove
-  nothing. `scripts/mutation/selection.test.ts` drives both halves of the rule through the real CLI
-  against a throwaway worktree commit.
-- **Ratchet**: scores may only rise. `mutation-baselines/decision-kernels.json` records the
-  high-water score per module plus the Stryker version and config content hash that produced it, so a
-  score change caused by a tool/config change is reported as provenance drift, never as a
-  test-strength regression.
-- **Graduation, not a flag day**: gating is off until two consecutive comparable weekly sweeps pass
-  (`stableRuns`/`requiredStableRuns` in the baseline); the PR job starts selecting modules — and
-  failing on them — once the committed baseline says `gating: true`. A regression or provenance drift
-  resets the counter.
+  (`--list-affected`) and reports the same table. The matrix is empty unless the diff touches the
+  lane's own tooling: the weekly sweep is the kernel report, and selecting on derived kernel
+  ownership would run the full ten-shard sweep on 24 of the last 40 merged PRs for a report nobody
+  gates on. Lane sources own no kernel, so a tooling diff adds `LANE_CANARY` (`kernel-errors`, the
+  registry's cheapest real sweep) to whatever it derives; otherwise it would select zero mutants and
+  prove nothing. `scripts/mutation/selection.test.ts` drives both halves of the rule through the real
+  CLI against a throwaway worktree commit.
+- **Provenance**: every report and lane envelope carries the Stryker version and the config content
+  hash that produced it, so scores measured across a tool or config change are not read as
+  test-strength change.
 - **Test scope** is derived from Vitest's module graph (`vitest related` over the mutated files), the
   same delegation `pnpm check:affected` uses; see `scripts/mutation/test-scope.ts` for the three
   groups it drops and why dropping them cannot hide a surviving mutant.
 - **Test ownership is derived, never listed** (`scripts/mutation/ownership.ts`): a test owns every
   kernel its imports reach, so `src/__tests__/daemon-error.test.ts` selects `kernel-errors` through
-  `src/daemon.ts` without naming it. A listed set of test files would silently omit exactly those
-  indirect tests and rot as tests are added — weakening one would skip the ratchet. Reaching a kernel
-  is a superset of killing its mutants, so the PR lane over-selects on purpose and shards the
-  selected modules; a false positive costs runner minutes, a false negative costs the gate. Non-kernel
+  `src/daemon.ts` without naming it. Reaching a kernel is a superset of killing its mutants, so the
+  derivation over-selects on purpose; it applies to the modules a lane-tooling diff selects. Non-kernel
   *sources* are not owned: they can only move a score through those tests, and the weekly sweep
   re-measures the whole surface.
 - **Lane envelope** (`scripts/lib/lane-envelope.ts`, issue #1430): every run writes

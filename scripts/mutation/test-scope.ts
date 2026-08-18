@@ -21,7 +21,7 @@
 //     assert over the repo's own registries rather than any decision kernel
 //     and own their CI job.
 //
-// Nothing here weakens the ratchet: a mutant only an excluded test could kill
+// Nothing here inflates the score: a mutant only an excluded test could kill
 // shows up as a survivor — visible work, never a silent pass.
 
 import fs from 'node:fs';
