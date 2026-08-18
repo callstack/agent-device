@@ -1,4 +1,5 @@
 import type { SnapshotNode, SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
+import { isViewportRootNode } from '@agent-device/contracts/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { now, sleep } from '../../runtime-common.ts';
 import {
@@ -108,6 +109,7 @@ export async function runStableCaptureLoop(
     transitionBaseline ??= stableCaptureTransitionBaseline(
       params.broadTransitionBaselineNodes,
       capture.snapshot,
+      runtime.backend.platform,
     );
     const signal = stableCaptureSignal(capture.snapshot);
     requiredQuietMs = stableCaptureTransitionQuietMs({
@@ -180,8 +182,19 @@ export async function runStableCaptureLoop(
 function stableCaptureTransitionBaseline(
   baselineNodes: SnapshotNode[] | undefined,
   snapshot: Parameters<typeof stableCaptureSignal>[0] | undefined,
+  platform: AgentDeviceRuntime['backend']['platform'],
 ): StableCaptureSignal | undefined {
-  return baselineNodes && snapshot?.backend === 'xctest'
+  // SnapshotState.backend is optional at the runtime boundary. The bound iOS backend remains
+  // authoritative when a presented capture omits that provenance; a declared non-XCTest backend
+  // still wins so this confirmation cannot leak onto another capture implementation.
+  const isXCTestCapture =
+    snapshot?.backend === 'xctest' || (snapshot?.backend === undefined && platform === 'ios');
+  // A broad *screen* replacement needs complete viewport projections on both sides. Scoped or
+  // synthetic fragments can have low semantic overlap without representing navigation at all.
+  const hasCompleteViewportProjection =
+    baselineNodes?.some(isViewportRootNode) === true &&
+    snapshot?.nodes.some(isViewportRootNode) === true;
+  return baselineNodes && isXCTestCapture && hasCompleteViewportProjection
     ? stableCaptureSignal({ ...snapshot, nodes: baselineNodes })
     : undefined;
 }

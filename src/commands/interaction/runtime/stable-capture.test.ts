@@ -135,6 +135,49 @@ test('settle confirms against the pre-action tree when the stored snapshot alrea
   );
 });
 
+test('settle confirms an iOS broad replacement when capture omits snapshot backend provenance', async () => {
+  const { runtime } = transitionRuntime({
+    omitSnapshotBackend: true,
+    settledAtMs: 1_200,
+  });
+
+  const outcome = await runStableCaptureLoop(
+    runtime,
+    { session: 'default' },
+    BROAD_TRANSITION_PARAMS,
+  );
+
+  assert.equal(outcome.settled, true);
+  assert.equal(
+    outcome.lastCapture?.snapshot.nodes.some((node) => node.label === 'action file'),
+    false,
+  );
+  assert.ok(
+    outcome.waitedMs >= 1_500,
+    `settled backend-less transition after ${outcome.waitedMs}ms`,
+  );
+});
+
+test('settle keeps the default quiet window for a partial projection with low overlap', async () => {
+  const { runtime } = transitionRuntime({ settledAtMs: 1_200 });
+
+  const outcome = await runStableCaptureLoop(
+    runtime,
+    { session: 'default' },
+    {
+      ...BROAD_TRANSITION_PARAMS,
+      broadTransitionBaselineNodes: elementThreadsNoticeSnapshot.nodes.slice(1),
+    },
+  );
+
+  assert.equal(outcome.settled, true);
+  assert.equal(
+    outcome.lastCapture?.snapshot.nodes.some((node) => node.label === 'action file'),
+    true,
+  );
+  assert.ok(outcome.waitedMs < 800, `partial projection settled after ${outcome.waitedMs}ms`);
+});
+
 test('settle honors an explicitly shorter quiet window across a broad replacement', async () => {
   const { runtime } = transitionRuntime();
 
@@ -197,6 +240,7 @@ function transitionRuntime(
   options: {
     captureBackend?: 'tree' | 'private-ax';
     firstCaptureKeepsBaseline?: boolean;
+    omitSnapshotBackend?: boolean;
     settledAtMs?: number;
     sessionSnapshot?: SnapshotState;
   } = {},
@@ -218,12 +262,17 @@ function transitionRuntime(
         const keepsBaseline = options.firstCaptureKeepsBaseline === true && captures === 0;
         captures += 1;
         return {
-          snapshot: keepsBaseline
-            ? elementThreadsNoticeSnapshot
-            : withCaptureBackend(
-                elapsedMs < settledAtMs ? elementTransientRoomSnapshot : elementSettledRoomSnapshot,
-                captureBackend,
-              ),
+          snapshot: withoutSnapshotBackend(
+            keepsBaseline
+              ? elementThreadsNoticeSnapshot
+              : withCaptureBackend(
+                  elapsedMs < settledAtMs
+                    ? elementTransientRoomSnapshot
+                    : elementSettledRoomSnapshot,
+                  captureBackend,
+                ),
+            options.omitSnapshotBackend === true,
+          ),
         };
       },
     } satisfies AgentDeviceBackend,
@@ -235,6 +284,12 @@ function transitionRuntime(
     clock,
   });
   return { runtime };
+}
+
+function withoutSnapshotBackend(snapshot: SnapshotState, omit: boolean): SnapshotState {
+  if (!omit) return snapshot;
+  const { backend: _backend, ...backendless } = snapshot;
+  return backendless;
 }
 
 function withCaptureBackend(
