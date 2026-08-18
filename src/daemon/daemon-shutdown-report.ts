@@ -9,21 +9,45 @@ export type ProviderReleaseRecord = {
   provider?: string;
 };
 
+/**
+ * #1320: what happened to one session's device claim during graceful teardown.
+ * `released` means the claim was cleared after the session reached a safe
+ * terminal state; `orphaned` means teardown left it in place, so the exiting
+ * daemon's dead owner identity is what later proves it reclaimable.
+ */
+export type DeviceClaimRecord = {
+  deviceKey: string;
+  session: string;
+  platform: string;
+  deviceId: string;
+};
+
 export type DaemonShutdownReport = {
   providerReleases: {
     released: ProviderReleaseRecord[];
     pending: ProviderReleaseRecord[];
   };
+  claims: {
+    released: DeviceClaimRecord[];
+    orphaned: DeviceClaimRecord[];
+  };
 };
 
 export function writeDaemonShutdownReport(
   stateDir: string,
-  providerReleases: { released: readonly DeviceLease[]; pending: readonly DeviceLease[] },
+  outcome: {
+    providerReleases: { released: readonly DeviceLease[]; pending: readonly DeviceLease[] };
+    claims: { released: readonly DeviceClaimRecord[]; orphaned: readonly DeviceClaimRecord[] };
+  },
 ): void {
   const report: DaemonShutdownReport = {
     providerReleases: {
-      released: providerReleases.released.map(toProviderReleaseRecord),
-      pending: providerReleases.pending.map(toProviderReleaseRecord),
+      released: outcome.providerReleases.released.map(toProviderReleaseRecord),
+      pending: outcome.providerReleases.pending.map(toProviderReleaseRecord),
+    },
+    claims: {
+      released: [...outcome.claims.released],
+      orphaned: [...outcome.claims.orphaned],
     },
   };
   const filePath = shutdownReportPath(stateDir);
@@ -42,7 +66,10 @@ export function writeDaemonShutdownReport(
 export function readDaemonShutdownReport(stateDir: string): DaemonShutdownReport | null {
   try {
     const parsed = JSON.parse(fs.readFileSync(shutdownReportPath(stateDir), 'utf8')) as unknown;
-    return isDaemonShutdownReport(parsed) ? parsed : null;
+    if (!isProviderReleaseReport(parsed)) return null;
+    // A report left behind by a daemon that predates claim reporting still
+    // describes its provider releases honestly; it just knows nothing of claims.
+    return { ...parsed, claims: readClaimSection(parsed) };
   } catch {
     return null;
   }
@@ -65,7 +92,9 @@ function toProviderReleaseRecord(lease: DeviceLease): ProviderReleaseRecord {
   };
 }
 
-function isDaemonShutdownReport(value: unknown): value is DaemonShutdownReport {
+function isProviderReleaseReport(
+  value: unknown,
+): value is Omit<DaemonShutdownReport, 'claims'> & { claims?: unknown } {
   if (!value || typeof value !== 'object') return false;
   const releases = (value as { providerReleases?: unknown }).providerReleases;
   if (!releases || typeof releases !== 'object') return false;
@@ -75,6 +104,31 @@ function isDaemonShutdownReport(value: unknown): value is DaemonShutdownReport {
     Array.isArray(records.pending) &&
     records.released.every(isProviderReleaseRecord) &&
     records.pending.every(isProviderReleaseRecord)
+  );
+}
+
+function readClaimSection(value: { claims?: unknown }): DaemonShutdownReport['claims'] {
+  const claims = value.claims;
+  if (!claims || typeof claims !== 'object') return { released: [], orphaned: [] };
+  const records = claims as { released?: unknown; orphaned?: unknown };
+  return {
+    released: readClaimRecords(records.released),
+    orphaned: readClaimRecords(records.orphaned),
+  };
+}
+
+function readClaimRecords(value: unknown): DeviceClaimRecord[] {
+  return Array.isArray(value) ? value.filter(isDeviceClaimRecord) : [];
+}
+
+function isDeviceClaimRecord(value: unknown): value is DeviceClaimRecord {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Partial<Record<keyof DeviceClaimRecord, unknown>>;
+  return (
+    typeof record.deviceKey === 'string' &&
+    typeof record.session === 'string' &&
+    typeof record.platform === 'string' &&
+    typeof record.deviceId === 'string'
   );
 }
 

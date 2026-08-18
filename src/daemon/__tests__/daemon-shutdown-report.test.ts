@@ -9,7 +9,14 @@ import {
 import { LeaseRegistry } from '../lease-registry.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
-test('round-trips provider release records without persisting lease credentials', () => {
+const claim = {
+  deviceKey: 'local:android:none:emulator-5554',
+  session: 'default',
+  platform: 'android',
+  deviceId: 'emulator-5554',
+};
+
+test('round-trips provider release and device claim records without lease credentials', () => {
   const stateDir = mkdtempForTestSync('agent-device-shutdown-report-');
   const lease = new LeaseRegistry().allocateLease({
     tenantId: 'tenant-a',
@@ -18,13 +25,36 @@ test('round-trips provider release records without persisting lease credentials'
   });
 
   try {
-    writeDaemonShutdownReport(stateDir, { released: [lease], pending: [lease] });
+    writeDaemonShutdownReport(stateDir, {
+      providerReleases: { released: [lease], pending: [lease] },
+      claims: { released: [claim], orphaned: [] },
+    });
 
     expect(readDaemonShutdownReport(stateDir)).toEqual({
       providerReleases: {
         released: [{ leaseId: lease.leaseId, provider: 'limrun' }],
         pending: [{ leaseId: lease.leaseId, provider: 'limrun' }],
       },
+      claims: { released: [claim], orphaned: [] },
+    });
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('a report written before claim reporting still reads its provider releases', () => {
+  const stateDir = mkdtempForTestSync('agent-device-shutdown-report-');
+  const reportPath = path.join(stateDir, 'daemon-shutdown.json');
+
+  try {
+    fs.writeFileSync(
+      reportPath,
+      JSON.stringify({ providerReleases: { released: [], pending: [] } }),
+    );
+
+    expect(readDaemonShutdownReport(stateDir)).toEqual({
+      providerReleases: { released: [], pending: [] },
+      claims: { released: [], orphaned: [] },
     });
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });

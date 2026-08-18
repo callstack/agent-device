@@ -41,7 +41,12 @@ function mergeShutdownReport(
 ): DaemonStopResult {
   if (stopped.mode !== 'graceful' || report) {
     return report
-      ? { ...stopped, providerReleases: { status: 'completed', ...report.providerReleases } }
+      ? {
+          ...stopped,
+          providerReleases: { status: 'completed', ...report.providerReleases },
+          claimsReleased: report.claims.released,
+          claimsOrphaned: report.claims.orphaned,
+        }
       : stopped;
   }
   return {

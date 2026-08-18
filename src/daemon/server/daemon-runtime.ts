@@ -24,12 +24,9 @@ import { closeDaemonServers } from './server-shutdown.ts';
 import type { DaemonInvokeFn, SessionState } from '../types.ts';
 import { createDaemonIdleReap } from './daemon-idle-reap.ts';
 import { finalizeDaemonSessionLease } from './daemon-session-lease-finalizer.ts';
-import {
-  clearDeviceClaim,
-  reconcileOrphanedDeviceClaims,
-  type DeviceClaimReconciler,
-} from '../device-claims.ts';
+import { reconcileOrphanedDeviceClaims, type DeviceClaimReconciler } from '../device-claims.ts';
 import { createDeviceClaimReconciler } from '../device-claim-reconciliation.ts';
+import { createDaemonShutdownClaimLedger } from './daemon-shutdown-claims.ts';
 import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
@@ -323,30 +320,36 @@ export async function startDaemonRuntime(
     );
   };
 
-  const teardownDaemonSession = async (session: SessionState): Promise<void> =>
-    await teardownDaemonSessionForShutdown({
-      session,
-      sessionStore,
-      stderr,
-      finalizeApplicationLifecycle: async (sessionToFinalize) =>
-        await finalizeDaemonSessionApplicationLifecycle({
-          gateway: deviceRuntimeGateway,
-          scope: createDaemonRecoveryPlatformScope(),
-          session: sessionToFinalize,
-          stateDir: baseDir,
-          runtimeHints: runtimeHintValues(sessionStore.getRuntimeHints(sessionToFinalize.name)),
-        }),
-      beforeDelete: async (sessionToFinalize) => {
-        await finalizeDaemonSessionLease({
-          session: sessionToFinalize,
-          leaseRegistry,
-          expiredProviderLeaseReleaser,
-          timeoutMs: DAEMON_SESSION_LEASE_RELEASE_TIMEOUT_MS,
-        });
-      },
-      afterSuccessfulTeardown: async (sessionToFinalize) =>
-        await clearDeviceClaim(sessionToFinalize.deviceClaim),
-    });
+  const shutdownClaimLedger = createDaemonShutdownClaimLedger();
+
+  const teardownDaemonSession = async (session: SessionState): Promise<void> => {
+    try {
+      await teardownDaemonSessionForShutdown({
+        session,
+        sessionStore,
+        stderr,
+        finalizeApplicationLifecycle: async (sessionToFinalize) =>
+          await finalizeDaemonSessionApplicationLifecycle({
+            gateway: deviceRuntimeGateway,
+            scope: createDaemonRecoveryPlatformScope(),
+            session: sessionToFinalize,
+            stateDir: baseDir,
+            runtimeHints: runtimeHintValues(sessionStore.getRuntimeHints(sessionToFinalize.name)),
+          }),
+        beforeDelete: async (sessionToFinalize) => {
+          await finalizeDaemonSessionLease({
+            session: sessionToFinalize,
+            leaseRegistry,
+            expiredProviderLeaseReleaser,
+            timeoutMs: DAEMON_SESSION_LEASE_RELEASE_TIMEOUT_MS,
+          });
+        },
+        afterSuccessfulTeardown: shutdownClaimLedger.releaseClaim,
+      });
+    } finally {
+      shutdownClaimLedger.finalize(session);
+    }
+  };
 
   const teardownDaemonSessions = async (): Promise<void> => {
     const sessionsToStop = sessionStore.toArray();
@@ -545,13 +548,18 @@ export async function startDaemonRuntime(
     const providerReleaseDrain = await expiredProviderLeaseReleaser.drain(
       DAEMON_PROVIDER_RELEASE_DRAIN_TIMEOUT_MS,
     );
-    writeDaemonShutdownReport(baseDir, providerReleaseDrain);
+    writeDaemonShutdownReport(baseDir, {
+      providerReleases: providerReleaseDrain,
+      claims: shutdownClaimLedger.claims,
+    });
     emitDiagnostic({
       level: providerReleaseDrain.pending.length === 0 ? 'info' : 'warn',
       phase: 'daemon_shutdown_provider_release_drain',
       data: {
         releasedLeaseIds: providerReleaseDrain.released.map((lease) => lease.leaseId),
         pendingLeaseIds: providerReleaseDrain.pending.map((lease) => lease.leaseId),
+        releasedDeviceKeys: shutdownClaimLedger.claims.released.map((claim) => claim.deviceKey),
+        orphanedDeviceKeys: shutdownClaimLedger.claims.orphaned.map((claim) => claim.deviceKey),
       },
     });
     expiredProviderLeaseReleaser.shutdown();

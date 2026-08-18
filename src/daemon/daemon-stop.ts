@@ -4,7 +4,7 @@ import { isAgentDeviceDaemonProcess, trySignalProcess } from './daemon-process.t
 import { isProcessAlive, waitForProcessExit } from '../utils/host-process.ts';
 import { sleep } from '../utils/timeouts.ts';
 import type { DaemonPaths } from './config.ts';
-import type { ProviderReleaseRecord } from './daemon-shutdown-report.ts';
+import type { DeviceClaimRecord, ProviderReleaseRecord } from './daemon-shutdown-report.ts';
 
 const DAEMON_STOP_GRACE_TIMEOUT_MS = 10_000;
 const DAEMON_STOP_KILL_TIMEOUT_MS = 2_000;
@@ -19,8 +19,13 @@ export type DaemonStopResult = {
   stopped: boolean;
   mode: 'graceful' | 'forced' | 'not-running';
   cleanupConfidence: 'known' | 'unknown';
-  claimsReleased: [];
-  claimsOrphaned: [];
+  /**
+   * #1320 claim results. Only a graceful stop can carry values: they come from
+   * the shutdown report the exiting daemon wrote, so a forced kill or a daemon
+   * that was not running reports none rather than claiming certainty.
+   */
+  claimsReleased: DeviceClaimRecord[];
+  claimsOrphaned: DeviceClaimRecord[];
   providerReleases: {
     status: 'completed' | 'unknown';
     released: ProviderReleaseRecord[];
