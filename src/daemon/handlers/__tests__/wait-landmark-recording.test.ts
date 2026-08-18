@@ -161,3 +161,18 @@ test('a replayed wait with a landmark guard refuses at the deadline when only im
   expect(response.error.details?.reason).toBe(WAIT_LANDMARK_MISMATCH_REASON);
   expect(response.error.details?.matchCount).toBe(1);
 });
+
+// #1800: this seam is what BOTH a live CLI wait and a replayed `.ad` wait step
+// dispatch through, so the selector-shaped-text rejection has to happen here,
+// before any device/session work — not just in the CLI-only reader.
+test('a selector-shaped positional list that fails to parse as a selector is rejected before dispatch', async () => {
+  const { response } = await runWait({
+    req: waitReq({ positionals: ['open', 'label="Open"', '25000'] }),
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('INVALID_ARGS');
+  expect(response.error.message).toContain('label="Open"');
+  expect(mockDispatch).not.toHaveBeenCalled();
+});

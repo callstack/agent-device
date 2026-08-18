@@ -113,6 +113,9 @@ function readWaitOptionsFromPositionals(
       ...readTimeoutOption(parsed.timeoutMs),
     };
   }
+  if (parsed.kind === 'invalid') {
+    throw new AppError('INVALID_ARGS', parsed.message);
+  }
   return {
     ...base,
     selector: parsed.selectorExpression,

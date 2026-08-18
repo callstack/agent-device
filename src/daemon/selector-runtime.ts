@@ -275,6 +275,7 @@ export async function dispatchWaitViaRuntime(
   const { req, sessionName, sessionStore } = params;
   const parsed = parseWaitPositionals(req.positionals ?? []);
   if (!parsed) return errorResponse('INVALID_ARGS', 'wait requires a duration or text');
+  if (parsed.kind === 'invalid') return errorResponse('INVALID_ARGS', parsed.message);
   const { session, device } = await resolveSessionDevice(sessionStore, sessionName, req.flags);
   if (parsed.kind !== 'sleep') {
     const unsupported = requireCommandSupported('wait', device);
@@ -620,7 +621,9 @@ function parseGetTarget(req: DaemonRequest):
 }
 
 function toWaitTarget(
-  parsed: WaitParsed,
+  // 'invalid' is rejected by the caller before this point; excluding it here makes the
+  // kind-by-kind narrowing below exhaustive without a runtime fallback branch (#1800).
+  parsed: Exclude<WaitParsed, { kind: 'invalid' }>,
   session: SessionState | undefined,
   recordedLandmark?: TargetAnnotationV1,
 ) {
