@@ -14,6 +14,7 @@ const {
   mockRunAppleToolCommand,
   mockRunXcrun,
   mockSignalPidsBestEffort,
+  mockSignalProcessGroupBestEffort,
 } = vi.hoisted(() => ({
   mockCleanupTempFile: vi.fn(),
   mockIsProcessAlive: vi.fn(),
@@ -21,6 +22,7 @@ const {
   mockRunAppleToolCommand: vi.fn(),
   mockRunXcrun: vi.fn(),
   mockSignalPidsBestEffort: vi.fn(),
+  mockSignalProcessGroupBestEffort: vi.fn(),
 }));
 
 vi.mock('../../../../utils/host-process.ts', async (importOriginal) => {
@@ -30,6 +32,7 @@ vi.mock('../../../../utils/host-process.ts', async (importOriginal) => {
     isProcessAlive: mockIsProcessAlive,
     isProcessGroupAlive: mockIsProcessGroupAlive,
     signalPidsBestEffort: mockSignalPidsBestEffort,
+    signalProcessGroupBestEffort: mockSignalProcessGroupBestEffort,
   };
 });
 
@@ -51,7 +54,6 @@ import { abortRunnerSessionsAndPrepProcesses } from '../runner/runner-disposal.t
 
 beforeEach(() => {
   vi.useFakeTimers();
-  vi.spyOn(process, 'kill').mockImplementation(() => true);
   mockIsProcessAlive.mockReturnValue(true);
   mockIsProcessGroupAlive.mockReturnValue(false);
   mockRunAppleToolCommand.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
@@ -144,9 +146,8 @@ function makeRunnerSession(
 }
 
 function runnerSignals(session: RunnerSession): NodeJS.Signals[] {
-  return vi
-    .mocked(process.kill)
-    .mock.calls.filter(([pid]) => pid === -(session.child.pid ?? 0))
+  return mockSignalProcessGroupBestEffort.mock.calls
+    .filter(([pid]) => pid === session.child.pid)
     .map(([, signal]) => signal as NodeJS.Signals);
 }
 

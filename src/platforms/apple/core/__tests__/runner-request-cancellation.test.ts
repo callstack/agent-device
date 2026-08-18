@@ -18,6 +18,8 @@ const {
   mockRunAppleToolCommand,
   mockRunCmdBackground,
   mockRunXcrun,
+  mockSignalPidsBestEffort,
+  mockSignalProcessGroupBestEffort,
   mockWaitForRunner,
   mockRedirectRelease,
 } = vi.hoisted(() => ({
@@ -32,6 +34,9 @@ const {
   mockRunAppleToolCommand: vi.fn(),
   mockRunCmdBackground: vi.fn(),
   mockRunXcrun: vi.fn(),
+  // Runner child pids here are fabricated (4141..4444); see runner-session.test.ts.
+  mockSignalPidsBestEffort: vi.fn(),
+  mockSignalProcessGroupBestEffort: vi.fn(),
   mockWaitForRunner: vi.fn(),
   mockRedirectRelease: vi.fn(),
 }));
@@ -54,6 +59,8 @@ vi.mock('../../../../utils/host-process.ts', async () => {
     ...actual,
     isProcessAlive: mockIsProcessAlive,
     isProcessGroupAlive: mockIsProcessGroupAlive,
+    signalPidsBestEffort: mockSignalPidsBestEffort,
+    signalProcessGroupBestEffort: mockSignalProcessGroupBestEffort,
   };
 });
 

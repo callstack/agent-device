@@ -9,6 +9,7 @@ import {
   readProcessCommand,
   readProcessStartTime,
   signalPidsBestEffort,
+  signalProcessGroupBestEffort,
   stopPidsWithEscalation,
   uniquePositivePids,
 } from '../host-process.ts';
@@ -117,6 +118,40 @@ test('best-effort signaling ignores invalid, current, and failed pids', () => {
       { pid: 101, signal: 'SIGTERM' },
       { pid: 202, signal: 'SIGTERM' },
     ]);
+  } finally {
+    killSpy.mockRestore();
+  }
+});
+
+test('group signaling addresses the negative pid and reports delivery', () => {
+  const calls: Array<{ pid: number; signal: string | number | undefined }> = [];
+  const killSpy = vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+    calls.push({ pid: Number(pid), signal });
+    return true;
+  });
+
+  try {
+    assert.equal(signalProcessGroupBestEffort(101, 'SIGKILL'), true);
+    assert.deepEqual(calls, [{ pid: -101, signal: 'SIGKILL' }]);
+  } finally {
+    killSpy.mockRestore();
+  }
+});
+
+test('group signaling reports a vanished group and never signals an invalid pid', () => {
+  const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => {
+    const error = new Error('not found') as NodeJS.ErrnoException;
+    error.code = 'ESRCH';
+    throw error;
+  });
+
+  try {
+    assert.equal(signalProcessGroupBestEffort(101, 'SIGTERM'), false);
+    assert.equal(signalProcessGroupBestEffort(0, 'SIGTERM'), false);
+    assert.equal(signalProcessGroupBestEffort(-1, 'SIGTERM'), false);
+    // A zero or negative pid would address the caller's own group, or every
+    // process the user owns, so it must not reach process.kill at all.
+    assert.equal(killSpy.mock.calls.length, 1);
   } finally {
     killSpy.mockRestore();
   }

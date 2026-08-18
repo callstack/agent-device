@@ -1,6 +1,5 @@
 import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import assert from 'node:assert/strict';
-import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
@@ -8,10 +7,14 @@ import { IOS_DEVICE, IOS_SIMULATOR } from '../../../../__tests__/test-utils/inde
 import { withRequestProgressSink } from '../../../../request/progress.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
-  flushDiagnosticsToSessionFile,
-  withDiagnosticsScope,
-} from '../../../../utils/diagnostics.ts';
-import type { RunnerSession } from '../runner/runner-session-types.ts';
+  assertRunnerCommand,
+  captureDiagnostics,
+  makeBackgroundRunner,
+  makeRunnerLease,
+  makeRunnerSession,
+  runnerError,
+  runnerResponse,
+} from './runner-session-fixtures.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 const {
@@ -30,6 +33,8 @@ const {
   mockRunCmdBackground,
   mockRunXcrun,
   mockSendRunnerCommandOnce,
+  mockSignalPidsBestEffort,
+  mockSignalProcessGroupBestEffort,
   mockWaitForRunner,
   mockRedirectRelease,
 } = vi.hoisted(() => ({
@@ -53,6 +58,11 @@ const {
   mockRunCmdBackground: vi.fn(),
   mockRunXcrun: vi.fn(),
   mockSendRunnerCommandOnce: vi.fn(),
+  // The runner child pid below is fabricated (4242), so the signal writes are
+  // mocked next to the liveness reads: a real signal to a made-up pid can hit a
+  // sibling vitest fork (#1824), and the shared setup refuses it outright.
+  mockSignalPidsBestEffort: vi.fn(),
+  mockSignalProcessGroupBestEffort: vi.fn(),
   mockWaitForRunner: vi.fn(),
   mockRedirectRelease: vi.fn(),
 }));
@@ -77,6 +87,8 @@ vi.mock('../../../../utils/host-process.ts', async () => {
     isProcessGroupAlive: mockIsProcessGroupAlive,
     readProcessCommand: mockReadProcessCommand,
     readProcessStartTime: mockReadProcessStartTime,
+    signalPidsBestEffort: mockSignalPidsBestEffort,
+    signalProcessGroupBestEffort: mockSignalProcessGroupBestEffort,
   };
 });
 
@@ -1987,97 +1999,3 @@ test('runner session invalidates when the runner reports abandoned main-thread w
 
   assert.equal(getRunnerSessionSnapshot(device.id), null);
 });
-
-function makeRunnerSession(overrides: Partial<RunnerSession> = {}): RunnerSession {
-  return {
-    sessionId: `session-${overrides.port ?? 8100}`,
-    device: IOS_SIMULATOR,
-    deviceId: IOS_SIMULATOR.id,
-    port: 8100,
-    xctestrunPath: '/tmp/runner.xctestrun',
-    jsonPath: '/tmp/runner.json',
-    testPromise: Promise.resolve({ exitCode: 0, stdout: '', stderr: '' }),
-    child: { pid: 1234, exitCode: null },
-    ready: true,
-    ...overrides,
-  } as RunnerSession;
-}
-
-function makeRunnerLease(
-  overrides: Partial<RunnerLease> & { deviceId: string; ownerToken?: string | undefined },
-): RunnerLease {
-  const ownerToken = overrides.ownerToken ?? `owner-${process.pid}-test`;
-  const lease: RunnerLease = {
-    schemaVersion: 1,
-    deviceId: overrides.deviceId,
-    ownerToken,
-    ownerPid: process.pid,
-    ownerStartTime: RUNNER_OWNER_START_TIME,
-    sessionId: `session-${overrides.deviceId}`,
-    runnerPid: 4242,
-    port: 8123,
-    xctestrunPath: `/tmp/AgentDeviceRunner.env.session-${overrides.deviceId}-${ownerToken}-8123.xctestrun`,
-    jsonPath: `/tmp/AgentDeviceRunner.env.session-${overrides.deviceId}-${ownerToken}-8123.json`,
-    createdAtMs: Date.now(),
-  };
-  return { ...lease, ...overrides, ownerToken };
-}
-
-function makeBackgroundRunner(pid: number) {
-  return {
-    child: {
-      pid,
-      exitCode: null,
-      stdout: new EventEmitter(),
-      stderr: new EventEmitter(),
-    },
-    wait: Promise.resolve({ exitCode: 0, stdout: '', stderr: '' }),
-  };
-}
-
-function runnerResponse(data: Record<string, unknown>): Response {
-  return new Response(JSON.stringify({ ok: true, data }));
-}
-
-function runnerError(error: { code: string; message: string }): Response {
-  return new Response(JSON.stringify({ ok: false, error }));
-}
-
-async function captureDiagnostics(callback: () => Promise<void>): Promise<string> {
-  const previousHome = process.env.HOME;
-  process.env.HOME = mkdtempForTestSync('agent-device-runner-diag-');
-  try {
-    return await withDiagnosticsScope(
-      { session: 'runner-session-test', requestId: 'request-1', command: 'tap' },
-      async () => {
-        await callback();
-        const diagnosticsPath = flushDiagnosticsToSessionFile({ force: true })?.path;
-        assert.ok(diagnosticsPath);
-        return fs.readFileSync(diagnosticsPath, 'utf8');
-      },
-    );
-  } finally {
-    process.env.HOME = previousHome;
-  }
-}
-
-function assertRunnerCommand(
-  actual: unknown,
-  expected: Record<string, unknown>,
-  options: { commandId?: boolean } = {},
-): asserts actual is Record<string, unknown> {
-  assert.equal(typeof actual, 'object');
-  assert.notEqual(actual, null);
-  const command = actual as Record<string, unknown>;
-  const commandId = command.commandId;
-  if (options.commandId === false) {
-    assert.equal(commandId, undefined);
-    assert.deepEqual(command, expected);
-    return;
-  }
-  if (typeof commandId !== 'string') {
-    assert.fail('expected runner commandId');
-  }
-  assert.match(commandId, /^runner-/);
-  assert.deepEqual({ ...command, commandId: undefined }, { ...expected, commandId: undefined });
-}

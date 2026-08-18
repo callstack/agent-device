@@ -4,6 +4,7 @@ import {
   isProcessAlive,
   isProcessGroupAlive,
   signalPidsBestEffort,
+  signalProcessGroupBestEffort,
 } from '../../../../utils/host-process.ts';
 import type { ExecBackgroundResult } from '../../../../utils/exec.ts';
 import { cleanupTempFile } from './runner-io.ts';
@@ -246,9 +247,7 @@ async function killRunnerProcessTree(
   signal: 'SIGINT' | 'SIGTERM' | 'SIGKILL',
 ): Promise<void> {
   if (!pid || pid <= 0) return;
-  try {
-    process.kill(-pid, signal);
-  } catch {}
+  signalProcessGroupBestEffort(pid, signal);
   signalPidsBestEffort([pid], signal);
   const pkillSignal = signal === 'SIGINT' ? 'INT' : signal === 'SIGTERM' ? 'TERM' : 'KILL';
   try {

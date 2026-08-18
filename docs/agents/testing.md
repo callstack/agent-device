@@ -100,6 +100,16 @@ the runtime seam existed; retiring `dispatchCommand('snapshot')` surfaced them o
 time. Do not add to that set, and when a command migrates (`docs/agents/adr-0019-unit.md`), its
 tests move to the runtime seam in the same PR.
 
+Signals are hermetic too. A vitest worker may signal only itself and the processes it spawned;
+`src/__tests__/hermetic-signal-setup.ts` refuses every other `process.kill` (signal 0, the liveness
+probe, stays free) and fails the sending test by name. The refused pid is one the test made up
+(`child: { pid: 4242 }`), and on a real host that number can belong to anyone — on CI it periodically
+belonged to a sibling fork, which died mid-file with no test attributed ("Worker exited
+unexpectedly", #1824). If a test drives a real kill path against a fabricated pid, mock the signal
+writes where it already mocks the liveness reads: `signalPidsBestEffort` and
+`signalProcessGroupBestEffort` in `src/utils/host-process.ts` (or `vi.spyOn(process, 'kill')`).
+Killing a daemon or Metro fixture the test itself spawned is fine — that pid is the worker's own.
+
 Keep tests behavioral. Do not assert shapes or cases TypeScript already proves.
 
 A test added as a regression pin must be shown to fail without the change it pins — vacuity is the

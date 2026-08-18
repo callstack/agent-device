@@ -181,6 +181,23 @@ export function signalPidsBestEffort(
   return signaled;
 }
 
+/**
+ * Signals the process group led by `pid` (the tree a detached child spawned),
+ * best-effort. Lives beside `signalPidsBestEffort` so a runner-tree kill has one
+ * seam for both writes, and a unit test that mocks this module's liveness reads
+ * mocks the signal writes in the same place instead of delivering a real signal
+ * to a fabricated pid (#1824).
+ */
+export function signalProcessGroupBestEffort(pid: number, signal: NodeJS.Signals): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(-pid, signal);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function waitForProcessExit(pid: number, timeoutMs: number): Promise<boolean> {
   if (!isProcessAlive(pid)) return true;
   const start = Date.now();
