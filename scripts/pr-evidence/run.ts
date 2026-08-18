@@ -32,6 +32,7 @@ import {
   type EvidenceInputs,
   type GitFacts,
 } from './model.ts';
+import { withWorktrees } from './worktrees.ts';
 
 const USAGE =
   'Usage: pnpm pr:evidence [--base <ref>] [--coverage] [--size] [--json]\n' +
@@ -111,17 +112,6 @@ async function collectDepgraph(cwd: string, out: string): Promise<DepgraphFacts>
   return depgraphFacts(JSON.parse(fs.readFileSync(out, 'utf8')));
 }
 
-/** A pristine checkout of one commit; removed by the caller's scratch cleanup. */
-function addWorktree(scratch: string, name: string, commit: string): string {
-  const worktree = path.join(scratch, name);
-  git(['worktree', 'add', '--detach', worktree, commit]);
-  return worktree;
-}
-
-function removeWorktree(worktree: string): void {
-  git(['worktree', 'remove', '--force', worktree]);
-}
-
 async function collectCoverage(base: string): Promise<EvidenceInputs['coverage']> {
   if (!fs.existsSync(path.join(repoRoot, 'coverage', 'lcov.info'))) {
     return { kind: 'skipped', reason: 'no coverage/lcov.info — run pnpm test:coverage first' };
@@ -172,35 +162,38 @@ async function main(argv: readonly string[]): Promise<number> {
   // os.tmpdir() always exists; a repo-local scratch would have to be created first and is one
   // more thing a fresh checkout can lack.
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-pr-evidence-'));
-  const worktrees: string[] = [];
-  try {
-    const headTree = addWorktree(scratch, 'head', gitFacts.head);
-    const baseTree = addWorktree(scratch, 'base', gitFacts.base);
-    worktrees.push(headTree, baseTree);
-    const [affected, layering, head, base] = await Promise.all([
-      collectAffected(gitFacts.base, gitFacts.head),
-      collectLayering(headTree),
-      collectDepgraph(headTree, path.join(scratch, 'depgraph-head.json')),
-      collectDepgraph(baseTree, path.join(scratch, 'depgraph-base.json')),
-    ]);
-    const inputs: EvidenceInputs = {
-      generatedAt: new Date().toISOString(),
-      repository: REPOSITORY,
-      git: gitFacts,
-      affected,
-      layering,
-      depgraph: { head, base },
-      coverage: await optional(values.coverage, '--coverage', () => collectCoverage(gitFacts.base)),
-      size: await optional(values.size, '--size', () => collectSize(gitFacts.base)),
-    };
-    process.stdout.write(
-      values.json ? `${JSON.stringify(inputs, null, 2)}\n` : renderEvidence(inputs),
-    );
-    return 0;
-  } finally {
-    for (const worktree of worktrees) removeWorktree(worktree);
-    fs.rmSync(scratch, { recursive: true, force: true });
-  }
+  return await withWorktrees(
+    repoRoot,
+    scratch,
+    [
+      { name: 'head', commit: gitFacts.head },
+      { name: 'base', commit: gitFacts.base },
+    ],
+    async ([headTree, baseTree]) => {
+      const [affected, layering, head, base] = await Promise.all([
+        collectAffected(gitFacts.base, gitFacts.head),
+        collectLayering(headTree),
+        collectDepgraph(headTree, path.join(scratch, 'depgraph-head.json')),
+        collectDepgraph(baseTree, path.join(scratch, 'depgraph-base.json')),
+      ]);
+      const inputs: EvidenceInputs = {
+        generatedAt: new Date().toISOString(),
+        repository: REPOSITORY,
+        git: gitFacts,
+        affected,
+        layering,
+        depgraph: { head, base },
+        coverage: await optional(values.coverage, '--coverage', () =>
+          collectCoverage(gitFacts.base),
+        ),
+        size: await optional(values.size, '--size', () => collectSize(gitFacts.base)),
+      };
+      process.stdout.write(
+        values.json ? `${JSON.stringify(inputs, null, 2)}\n` : renderEvidence(inputs),
+      );
+      return 0;
+    },
+  );
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {

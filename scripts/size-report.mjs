@@ -2,10 +2,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { gzipSync } from 'node:zlib';
 
 const COMMENT_MARKER = '<!-- agent-device-size-report -->';
+// This run's identity as a base-worktree lock owner: pid for liveness, nonce against pid reuse.
+const LOCK_IDENTITY = `${process.pid}:${crypto.randomUUID()}`;
 const GITHUB_REQUEST_ATTEMPTS = 4;
 // Overridable so the regression tests do not sleep through real backoff.
 const GITHUB_RETRY_BASE_MS = Number(process.env.SIZE_REPORT_RETRY_BASE_MS ?? 1000);
@@ -206,51 +209,86 @@ function baseLockPath(worktreeDir) {
   return `${worktreeDir}.lock`;
 }
 
-// O_EXCL create is the atomic step; the pid inside is what makes a leftover lock recognizable
-// as stale (its owner died) rather than a permanent wedge.
+// The lock is a symlink whose *target* is the owner identity (`<pid>:<nonce>`): one syscall
+// creates it with its identity in place (no empty-file window for another run to misread as
+// stale) and fails EEXIST while held. A stale lock (its pid is dead) is taken over by
+// compare-then-unlink on that identity — the unlink is skipped if the link no longer names the
+// identity that was judged stale — and every acquisition verifies the link names this run
+// before returning. Release unlinks only a link that still names this run.
 function acquireBaseLock(worktreeDir, sha) {
   const lockPath = baseLockPath(worktreeDir);
-  for (;;) {
-    const release = tryCreateLock(lockPath);
-    if (release) return release;
-    if (isLockHeldByLiveProcess(lockPath)) {
-      throw new Error(
-        `another \`size --base\` (pid ${lockOwnerPid(lockPath)}) is building base ${sha.slice(0, 9)} in ${worktreeDir}; wait for it or measure a different base`,
-      );
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    if (tryCreateLock(lockPath) && readLockIdentity(lockPath) === LOCK_IDENTITY) {
+      return () => releaseLock(lockPath);
     }
-    fs.rmSync(lockPath, { force: true }); // stale: its owner is gone
+    clearStaleLockOrThrow(lockPath, worktreeDir, sha);
   }
+  throw new Error(`could not acquire ${lockPath} after repeated stale-lock takeovers`);
 }
 
-function isLockHeldByLiveProcess(lockPath) {
-  const owner = lockOwnerPid(lockPath);
-  return owner !== undefined && isProcessAlive(owner);
+/** Held by a live process → throw; stale (dead owner) → compare-then-unlink; garbage → remove. */
+function clearStaleLockOrThrow(lockPath, worktreeDir, sha) {
+  const holder = readLockIdentity(lockPath);
+  if (holder === undefined) {
+    removeIfNotSymlink(lockPath); // a regular file or directory here is not a lock of this scheme
+    return; // or it vanished between our create and read: the caller retries
+  }
+  if (isProcessAlive(pidOfIdentity(holder))) {
+    throw new Error(
+      `another \`size --base\` (pid ${pidOfIdentity(holder)}) is using base ${sha.slice(0, 9)} in ${worktreeDir}; wait for it or measure a different base`,
+    );
+  }
+  unlinkIfIdentity(lockPath, holder); // stale: its owner is gone; the caller retries the create
 }
 
-/** Returns the release function on success, or undefined when the lock already exists. */
 function tryCreateLock(lockPath) {
-  let fd;
   try {
-    fd = fs.openSync(lockPath, 'wx');
+    fs.symlinkSync(LOCK_IDENTITY, lockPath);
+    return true;
   } catch (error) {
-    if (error.code === 'EEXIST') return undefined;
+    if (error.code === 'EEXIST') return false;
     throw error;
   }
-  fs.writeSync(fd, `${process.pid}\n`);
-  fs.closeSync(fd);
-  return () => fs.rmSync(lockPath, { force: true });
 }
 
-function lockOwnerPid(lockPath) {
+function releaseLock(lockPath) {
+  unlinkIfIdentity(lockPath, LOCK_IDENTITY);
+}
+
+/** Compare-then-unlink: never remove a lock that has since come to name someone else. */
+function unlinkIfIdentity(lockPath, identity) {
+  if (readLockIdentity(lockPath) !== identity) return;
   try {
-    const pid = Number(fs.readFileSync(lockPath, 'utf8').trim());
-    return Number.isInteger(pid) && pid > 0 ? pid : undefined;
+    fs.unlinkSync(lockPath);
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+}
+
+function removeIfNotSymlink(lockPath) {
+  try {
+    if (!fs.lstatSync(lockPath).isSymbolicLink())
+      fs.rmSync(lockPath, { recursive: true, force: true });
+  } catch {
+    // already gone
+  }
+}
+
+function readLockIdentity(lockPath) {
+  try {
+    return fs.readlinkSync(lockPath);
   } catch {
     return undefined;
   }
 }
 
+function pidOfIdentity(identity) {
+  const pid = Number(identity.split(':')[0]);
+  return Number.isInteger(pid) && pid > 0 ? pid : undefined;
+}
+
 function isProcessAlive(pid) {
+  if (pid === undefined) return false;
   try {
     process.kill(pid, 0);
     return true;
@@ -275,8 +313,10 @@ function ensureBaseWorktree(root, worktreeDir, sha) {
   });
 }
 
-// Cache eviction of idle entries only: a worktree whose lock is held by a live pid is in use
-// by another run and is left alone.
+// Cache eviction of idle entries only, and only while holding the victim's own lock: a
+// worktree whose lock is held by a live pid is in use by another run and is left alone, and a
+// run that wants the victim after this check finds it locked (fails fast) rather than finding
+// it half-removed.
 function pruneOtherBaseWorktrees(root, worktreesRoot, keep) {
   const others = fs
     .readdirSync(worktreesRoot, { withFileTypes: true })
@@ -284,9 +324,17 @@ function pruneOtherBaseWorktrees(root, worktreesRoot, keep) {
     .map((entry) => path.join(worktreesRoot, entry.name))
     .filter((dir) => dir !== keep);
   for (const dir of others) {
-    if (isLockHeldByLiveProcess(baseLockPath(dir))) continue;
-    removeWorktree(root, dir);
-    fs.rmSync(baseLockPath(dir), { force: true });
+    let releaseVictim;
+    try {
+      releaseVictim = acquireBaseLock(dir, path.basename(dir));
+    } catch {
+      continue; // in use by a live run: not ours to evict
+    }
+    try {
+      removeWorktree(root, dir);
+    } finally {
+      releaseVictim();
+    }
   }
 }
 
