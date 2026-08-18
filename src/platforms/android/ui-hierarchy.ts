@@ -1,7 +1,8 @@
 import type { RawSnapshotNode, Rect, SnapshotOptions } from '@agent-device/kernel/snapshot';
 import { parseBounds } from '@agent-device/kernel/bounds';
 import { decodeXmlCharacterReferences } from '@agent-device/xml';
-import { isScrollableType, matchesSnapshotScope } from '@agent-device/contracts/snapshot';
+import { isScrollableType } from '@agent-device/contracts/snapshot';
+import { scopePresentedAndroidSnapshot } from './ui-hierarchy-scope.ts';
 import {
   type AndroidSystemChromeProvenance,
   isAndroidSystemChromeWindowResourceId,
@@ -90,20 +91,6 @@ function readAndroidUiNodeMetadata(node: string): AndroidUiNodeMetadata {
   };
 }
 
-export function parseUiHierarchy(
-  xml: string,
-  maxNodes: number | undefined,
-  options: SnapshotOptions,
-): { nodes: RawSnapshotNode[]; truncated?: boolean; analysis: AndroidSnapshotAnalysis } {
-  const tree = parseUiHierarchyTree(xml);
-  const { sourceNodes: _sourceNodes, ...snapshot } = buildUiHierarchySnapshot(
-    tree,
-    maxNodes,
-    options,
-  );
-  return snapshot;
-}
-
 export type AndroidBuiltSnapshot = {
   nodes: AndroidRawSnapshotNode[];
   sourceNodes: AndroidUiHierarchy[];
@@ -127,28 +114,29 @@ export function buildUiHierarchySnapshot(
   maxNodes: number | undefined,
   options: SnapshotOptions,
 ): AndroidBuiltSnapshot {
+  const requestedDepth = options.depth ?? Number.POSITIVE_INFINITY;
   const state: AndroidSnapshotBuildState = {
     nodes: [],
     sourceNodes: [],
     ...(maxNodes !== undefined ? { maxNodes } : {}),
-    maxDepth: options.depth ?? Number.POSITIVE_INFINITY,
+    // Under --scope, depth is relative to the scope root, which is only known once the tree is
+    // presented: walk unbounded and cut after scoping.
+    maxDepth: options.scope ? Number.POSITIVE_INFINITY : requestedDepth,
     options,
     analysis: analyzeAndroidTree(tree),
     interactiveDescendantMemo: new Map(),
     truncated: false,
   };
-  const roots = resolveScopedRoots(tree, options.scope);
 
-  for (const root of roots) {
+  for (const root of tree.children) {
     walkUiHierarchyNode(state, root, 0);
     if (state.truncated) break;
   }
 
-  const snapshot = {
-    nodes: state.nodes,
-    sourceNodes: state.sourceNodes,
-    analysis: state.analysis,
-  };
+  const { nodes, sourceNodes } = options.scope
+    ? scopePresentedAndroidSnapshot(state, options.scope, requestedDepth)
+    : state;
+  const snapshot = { nodes, sourceNodes, analysis: state.analysis };
   return state.truncated ? { ...snapshot, truncated: true } : snapshot;
 }
 
@@ -469,22 +457,6 @@ type AndroidCoveringCandidate = {
 };
 
 const ANDROID_WINDOW_TYPE_APPLICATION = 1;
-
-/**
- * Whether the acquired tree carries `drawing-order` (helper output on API 24+). `undefined` for
- * an empty tree: nothing was acquired, so nothing is disclosed. Read on the PARSED tree, before any
- * projection, because the answer must not depend on what membership later keeps.
- */
-export function androidTreeCarriesDrawingOrder(root: AndroidUiHierarchy): boolean | undefined {
-  const stack = [...root.children];
-  if (stack.length === 0) return undefined;
-  while (stack.length > 0) {
-    const node = stack.pop() as AndroidNode;
-    if (node.drawingOrder !== undefined) return true;
-    stack.push(...node.children);
-  }
-  return false;
-}
 
 export function parseUiHierarchyTree(xml: string): AndroidUiHierarchy {
   const root: AndroidUiHierarchy = {
@@ -986,30 +958,6 @@ function isGenericAndroidId(value: string): boolean {
   const trimmed = value.trim();
   if (!trimmed) return false;
   return /^[\w.]+:id\/[\w.-]+$/i.test(trimmed);
-}
-
-function resolveScopedRoots(tree: AndroidUiHierarchy, scope: string | undefined): AndroidNode[] {
-  if (!scope) return tree.children;
-  const scopedRoot = findScopeNode(tree, scope);
-  return scopedRoot ? [scopedRoot] : [];
-}
-
-/**
- * The scope root under the shared scope specification (`@agent-device/contracts/snapshot`
- * `matchesSnapshotScope`): first match in document order. This is the ONLY scope pass an Android
- * snapshot goes through — the daemon's post-wire `scopeSnapshotNodes` skips the android backend —
- * so a miss here is the agent-visible empty snapshot, never a silent fallback to the full tree.
- */
-function findScopeNode(root: AndroidNode, scope: string): AndroidNode | null {
-  const stack: AndroidNode[] = [...root.children].reverse();
-  while (stack.length > 0) {
-    const node = stack.pop() as AndroidNode;
-    if (matchesSnapshotScope(node, scope)) return node;
-    for (let index = node.children.length - 1; index >= 0; index -= 1) {
-      stack.push(node.children[index] as AndroidNode);
-    }
-  }
-  return null;
 }
 
 function analyzeAndroidTree(root: AndroidNode): AndroidSnapshotAnalysis {

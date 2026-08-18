@@ -17,7 +17,6 @@ import {
 } from '@agent-device/kernel/snapshot';
 import { deriveMobileSnapshotHiddenContentHints } from '../../snapshot/mobile-snapshot-semantics.ts';
 import {
-  androidTreeCarriesDrawingOrder,
   buildUiHierarchySnapshot,
   parseUiHierarchyTree,
   type AndroidBuiltSnapshot,
@@ -126,6 +125,22 @@ function withOcclusionScanDisclosure(
   return androidTreeCarriesDrawingOrder(tree) === false
     ? { ...metadata, occlusionScanUnavailable: true }
     : metadata;
+}
+
+/**
+ * Whether the acquired tree carries `drawing-order` (helper output on API 24+). `undefined` for
+ * an empty tree: nothing was acquired, so nothing is disclosed. Read on the PARSED tree, before any
+ * projection, because the answer must not depend on what membership later keeps.
+ */
+function androidTreeCarriesDrawingOrder(root: AndroidUiHierarchy): boolean | undefined {
+  const stack = [...root.children];
+  if (stack.length === 0) return undefined;
+  while (stack.length > 0) {
+    const node = stack.pop()!;
+    if (node.drawingOrder !== undefined) return true;
+    stack.push(...node.children);
+  }
+  return false;
 }
 
 function mergeAndroidSnapshotTruncation(

@@ -1,8 +1,8 @@
-import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { SnapshotOptions, SnapshotResult } from '@agent-device/contracts/interaction';
 import type { CaptureSnapshotInput, SnapshotRuntimeHost } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { findNodeByLabel } from './snapshot-node-label.ts';
+import { findSnapshotScopeRange, reindexSnapshotNodes } from '@agent-device/contracts/snapshot';
 
 type SnapshotSurfaceOptions = NonNullable<CaptureSnapshotInput['options']>;
 
@@ -74,22 +74,12 @@ function shapeDesktopSurfaceSnapshot(
   return { ...data, nodes };
 }
 
+/** The shared scope specification applied post-wire (`@agent-device/contracts/snapshot`). */
 export function scopeSnapshotNodes(nodes: RawSnapshotNode[], scope: string): RawSnapshotNode[] {
-  const scopedNodes = attachRefs(nodes);
-  const match = findNodeByLabel(scopedNodes, scope);
-  if (!match) return [];
-  const startIndex = nodes.findIndex((node) => node.index === match.index);
-  if (startIndex === -1) return [];
-  const startDepth = nodes[startIndex]?.depth ?? 0;
-  const slice: RawSnapshotNode[] = [];
-  for (let index = startIndex; index < nodes.length; index += 1) {
-    const node = nodes[index];
-    if (!node) continue;
-    const depth = node.depth ?? 0;
-    if (index > startIndex && depth <= startDepth) break;
-    slice.push(node);
-  }
-  return reindexSnapshotNodes(slice, startDepth);
+  const range = findSnapshotScopeRange(nodes, scope);
+  if (!range) return [];
+  const slice = nodes.slice(range.start, range.end);
+  return reindexSnapshotNodes(slice, slice[0]?.depth ?? 0);
 }
 
 function filterInteractiveSnapshotNodes(nodes: RawSnapshotNode[]): RawSnapshotNode[] {
@@ -112,17 +102,6 @@ function filterInteractiveSnapshotNodes(nodes: RawSnapshotNode[]): RawSnapshotNo
 
 function filterSnapshotNodesByDepth(nodes: RawSnapshotNode[], maxDepth: number): RawSnapshotNode[] {
   return reindexSnapshotNodes(nodes.filter((node) => (node.depth ?? 0) <= maxDepth));
-}
-
-function reindexSnapshotNodes(nodes: RawSnapshotNode[], depthOffset = 0): RawSnapshotNode[] {
-  const indexMap = new Map<number, number>();
-  for (const [index, node] of nodes.entries()) indexMap.set(node.index, index);
-  return nodes.map((node, index) => ({
-    ...node,
-    index,
-    depth: Math.max(0, (node.depth ?? 0) - depthOffset),
-    parentIndex: typeof node.parentIndex === 'number' ? indexMap.get(node.parentIndex) : undefined,
-  }));
 }
 
 function isInteractiveSnapshotNode(node: RawSnapshotNode): boolean {
