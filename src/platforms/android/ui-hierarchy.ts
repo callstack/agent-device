@@ -134,7 +134,7 @@ export function buildUiHierarchySnapshot(
   }
 
   const { nodes, sourceNodes } = options.scope
-    ? scopePresentedAndroidSnapshot(state, options.scope, requestedDepth)
+    ? scopePresentedAndroidSnapshot(state, tree.children, options.scope, requestedDepth)
     : state;
   const snapshot = { nodes, sourceNodes, analysis: state.analysis };
   return state.truncated ? { ...snapshot, truncated: true } : snapshot;

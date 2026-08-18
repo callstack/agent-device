@@ -4,14 +4,17 @@
  *
  * - a node matches when its label, value, or identifier contains the scope text,
  *   case-insensitively;
- * - matching runs over the PRESENTED tree of the requested projection (after membership), in
- *   document (pre-)order; the scope root is the first match;
- * - the scoped snapshot is that root's subtree, re-rooted at depth 0 and reindexed;
+ * - the scope root is the first match in document (pre-)order whose subtree contributes at least
+ *   one node to the requested projection — so a decorative match membership drops does not empty
+ *   the snapshot, and a container membership drops still scopes to the content inside it;
+ * - the scoped snapshot is that root's presented subtree, re-rooted at depth 0 and reindexed;
  * - no match yields an EMPTY snapshot — never the full tree.
  *
  * The golden table `contracts/fixtures/snapshot-scope-policy.json` pins the rule; every runtime
  * that resolves scope (Android projection, the daemon's post-wire pass, the Swift runner twin) is
- * asserted against the same table so drift turns CI red on whichever side changed.
+ * asserted against the same table so drift turns CI red on whichever side changed. The
+ * contributes-content clause is vacuous for a runtime that only ever sees presented nodes (the
+ * post-wire pass): there, a match always contributes itself.
  */
 export type SnapshotScopeCandidate = {
   label?: string | null;

@@ -62,8 +62,10 @@ test('the Android projection agrees with every golden scope-policy table case', 
   const cases = JSON.parse(fs.readFileSync(TABLE_PATH, 'utf8')) as ScopePolicyCase[];
   assert.ok(cases.length > 0);
   for (const fixture of cases) {
-    // Both projections that keep every node: raw, and regular over a tree of labelled/identified
-    // views (so membership is not what the row is measuring).
+    // Raw and regular both keep every rendered node, so each leg measures the scope RULE. There is
+    // no -i leg here on purpose: bare TextViews carry no action, so -i would drop the whole fixture
+    // and the leg would measure membership instead. The scope/membership interplay is pinned by the
+    // two projection tests below, on shapes where -i keeps real content.
     for (const projection of [{ raw: true }, {}]) {
       const result = parseUiHierarchy(scopePolicyXml(fixture.nodes), undefined, {
         ...projection,
@@ -80,17 +82,35 @@ test('the Android projection agrees with every golden scope-policy table case', 
 });
 
 test('a scoped Android snapshot is not re-scoped after the wire', () => {
-  // The projection already re-rooted at "Panel"; a post-wire pass with the same scope would look
-  // for "Panel" again inside a tree whose root is the panel's first CHILD if membership dropped the
-  // container. Android's presented nodes must pass through buildSnapshotState unchanged.
-  const nodes = [
-    { index: 0, depth: 0, type: 'android.widget.Button', label: 'Save', hittable: true },
-    { index: 1, depth: 0, type: 'android.widget.Button', label: 'Cancel', hittable: true },
-  ];
-  const state = buildSnapshotState({ nodes, backend: 'android' }, { snapshotScope: 'Panel' });
+  // The projection already re-rooted at the panel and handed the daemon a real scoped tree: a root
+  // at depth 0 with its children below. A second pass with the same scope text would re-match
+  // inside it (or empty it, since the panel node itself may have been dropped by membership).
+  const nodes = parseUiHierarchy(
+    `<hierarchy>
+  <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true">
+    <node class="android.widget.ScrollView" resource-id="panel" bounds="[0,0][390,400]" visible-to-user="true">
+      <node class="android.widget.Button" text="Save" bounds="[0,0][390,60]" clickable="true" visible-to-user="true"/>
+      <node class="android.widget.Button" text="Cancel" bounds="[0,60][390,120]" clickable="true" visible-to-user="true"/>
+    </node>
+  </node>
+</hierarchy>`,
+    undefined,
+    { interactiveOnly: true, scope: 'panel' },
+  ).nodes;
   assert.deepEqual(
-    state.nodes.map((node) => node.label),
-    ['Save', 'Cancel'],
+    nodes.map((node) => [node.depth, node.identifier ?? node.label]),
+    [
+      [0, 'panel'],
+      [1, 'Save'],
+      [1, 'Cancel'],
+    ],
+    'projection output: scoped root at depth 0, its children below it',
+  );
+
+  const state = buildSnapshotState({ nodes, backend: 'android' }, { snapshotScope: 'panel' });
+  assert.deepEqual(
+    state.nodes.map((node) => node.label ?? node.identifier),
+    ['panel', 'Save', 'Cancel'],
   );
 });
 
@@ -104,36 +124,6 @@ test('an Android scope with no match yields an empty snapshot in every projectio
     const result = parseUiHierarchy(xml, undefined, { ...options, scope: 'zzzz-no-match-token' });
     assert.deepEqual(result.nodes, [], JSON.stringify(options));
   }
-});
-
-test('scope resolves over the presented tree: an acquired match that membership drops does not empty the snapshot', () => {
-  // -i drops the plain "Settings" heading (no target, no actionable ancestor); the first PRESENTED
-  // match is the panel whose testID contains the text, so the scoped -i snapshot is the panel.
-  const xml = `<hierarchy>
-  <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true">
-    <node class="android.widget.TextView" text="Settings" bounds="[0,0][390,60]" visible-to-user="true"/>
-    <node class="android.widget.ScrollView" resource-id="settings-panel" bounds="[0,60][390,400]" visible-to-user="true">
-      <node class="android.widget.Button" text="Wi-Fi" bounds="[0,60][390,120]" clickable="true" visible-to-user="true"/>
-    </node>
-  </node>
-</hierarchy>`;
-  const interactive = parseUiHierarchy(xml, undefined, {
-    interactiveOnly: true,
-    scope: 'settings',
-  });
-  assert.deepEqual(
-    interactive.nodes.map((node) => [node.depth, node.identifier ?? node.label]),
-    [
-      [0, 'settings-panel'],
-      [1, 'Wi-Fi'],
-    ],
-  );
-  const regular = parseUiHierarchy(xml, undefined, { scope: 'settings' });
-  assert.deepEqual(
-    regular.nodes.map((node) => node.label),
-    ['Settings'],
-    'regular projection presents the heading, so document order picks it first',
-  );
 });
 
 test('scope keeps the ancestor context above the scope root (scoped -i ⊆ unscoped -i)', () => {
@@ -173,5 +163,65 @@ test('--depth under --scope counts from the scope root', () => {
       [0, undefined, 'panel'],
       [1, 0, 'Level 1'],
     ],
+  );
+});
+
+test('a matched container membership drops still scopes to its presented content (#1846 review P1)', () => {
+  // `id/panel` is a structural ViewGroup: -i drops the container itself but keeps the button inside
+  // it. Requiring a presented ROOT would answer "no nodes" to a scope whose content plainly exists.
+  const xml = `<hierarchy>
+  <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true">
+    <node class="android.view.ViewGroup" resource-id="panel" bounds="[0,0][390,400]" visible-to-user="true">
+      <node class="android.widget.Button" text="Save" bounds="[0,0][390,60]" clickable="true" visible-to-user="true"/>
+    </node>
+  </node>
+</hierarchy>`;
+
+  const scoped = parseUiHierarchy(xml, undefined, { interactiveOnly: true, scope: 'panel' });
+  assert.deepEqual(
+    scoped.nodes.map((node) => [node.depth, node.parentIndex, node.label]),
+    [[0, undefined, 'Save']],
+    "the retained child is re-rooted at depth 0, not left at the dropped container's depth",
+  );
+  assert.deepEqual(
+    parseUiHierarchy(xml, undefined, { interactiveOnly: true }).nodes.map((node) => node.label),
+    ['Save'],
+    'scoped -i stays a subset of unscoped -i',
+  );
+
+  // The depth the response prints is the depth --depth filters on: a node shown at depth 0 cannot
+  // vanish at --depth 0.
+  assert.deepEqual(
+    parseUiHierarchy(xml, undefined, { interactiveOnly: true, scope: 'panel', depth: 0 }).nodes.map(
+      (node) => node.label,
+    ),
+    ['Save'],
+  );
+});
+
+test('a match whose subtree presents nothing is skipped for the next candidate', () => {
+  // The decorative heading matches "settings" first in document order but contributes no -i node;
+  // the scroll panel below it does.
+  const xml = `<hierarchy>
+  <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true">
+    <node class="android.widget.TextView" text="Settings" bounds="[0,0][390,60]" visible-to-user="true"/>
+    <node class="android.widget.ScrollView" resource-id="settings-panel" bounds="[0,60][390,400]" visible-to-user="true">
+      <node class="android.widget.Button" text="Wi-Fi" bounds="[0,60][390,120]" clickable="true" visible-to-user="true"/>
+    </node>
+  </node>
+</hierarchy>`;
+  assert.deepEqual(
+    parseUiHierarchy(xml, undefined, { interactiveOnly: true, scope: 'settings' }).nodes.map(
+      (node) => [node.depth, node.identifier ?? node.label],
+    ),
+    [
+      [0, 'settings-panel'],
+      [1, 'Wi-Fi'],
+    ],
+  );
+  // Regular presents the heading, so document order picks it — and it is the whole snapshot.
+  assert.deepEqual(
+    parseUiHierarchy(xml, undefined, { scope: 'settings' }).nodes.map((node) => node.label),
+    ['Settings'],
   );
 });

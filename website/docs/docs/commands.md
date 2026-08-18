@@ -337,12 +337,14 @@ agent-device get attrs @e1
   the capture. On API 23 the helper cannot report `drawing-order`, so covered same-window surfaces
   (for example a React Native screen left under the foreground one) are not pruned;
   `androidSnapshot.occlusionScanUnavailable: true` discloses that capture shape.
-- `--scope <text|@ref>` returns the subtree of the first node in document order of the presented
-  tree whose label, value, or identifier contains the scope text (case-insensitive), re-rooted at
-  depth 0; no match returns an empty snapshot rather than the full tree. `@ref` scopes by that
-  element's label from the last snapshot. Android resolves scope inside its projection; on iOS the
-  runner first narrows capture by label/identifier and the daemon applies the rule to the presented
-  tree.
+- `--scope <text|@ref>` returns the subtree of the first node in document order whose label, value,
+  or identifier contains the scope text (case-insensitive) and whose subtree still has content in
+  the requested projection, re-rooted at depth 0; no match returns an empty snapshot rather than the
+  full tree. Under `-i` that means scoping to a layout container returns the actionable elements
+  inside it, even when the container itself is filtered out. `--depth` then counts from the scope
+  root. `@ref` scopes by that element's label from the last snapshot. Android resolves scope inside
+  its projection; on iOS the runner first narrows capture by label/identifier and the daemon applies
+  the rule to the presented tree.
 - `--actions` names the custom accessibility affordances an element merged away (iOS
   `UIAccessibilityCustomAction`, React Native `accessibilityActions`), so a card whose reply/options
   controls are not separate elements still lists them. It is iOS-simulator-only and exists for
