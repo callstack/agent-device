@@ -178,7 +178,7 @@ jobs:
         with: { gate: gate-manifest }
 
       # Same family as the manifest above — a CI selection that has stopped selecting what
-      # it claims. ios.yml runs 37 of the 154 runner XCTest methods through a hand-written
+      # it claims. ios.yml runs a hand-written subset of the runner XCTest methods through an
       # `-only-testing:` list, and xcodebuild treats an identifier that matches nothing as
       # an empty selection rather than an error, so a rename drops a test with no signal —
       # in both directions, since a typo in xctest-nightly.yml's `-skip-testing:` entry
