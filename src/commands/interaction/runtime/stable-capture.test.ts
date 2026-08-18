@@ -192,14 +192,14 @@ test('settle honors an explicitly shorter quiet window across a broad replacemen
   assert.ok(outcome.waitedMs < 800, `short quiet window settled after ${outcome.waitedMs}ms`);
 });
 
-test('settle keeps the default quiet window for an overlapping local mutation', async () => {
+test('settle keeps the default quiet window for a backend-less overlapping local mutation', async () => {
   const localMutation = {
     ...elementSettledRoomSnapshot,
     nodes: elementSettledRoomSnapshot.nodes.map((node) =>
       node.label === 'Upload' ? { ...node, label: 'Add attachment' } : node,
     ),
   };
-  const { runtime } = staticSnapshotRuntime(localMutation);
+  const { runtime } = staticSnapshotRuntime(withoutSnapshotBackend(localMutation, true));
 
   const outcome = await runStableCaptureLoop(
     runtime,
