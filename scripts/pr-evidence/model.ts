@@ -10,7 +10,7 @@ export type GitFacts = Readonly<{
   base: string;
   baseRef: string;
   baseShort: string;
-  /** Uncommitted changes exist: the block describes the tree, not the head. */
+  /** Uncommitted or untracked changes exist; everything measured here is the head, not them. */
   dirty: boolean;
   changedFiles: readonly string[];
 }>;
@@ -125,7 +125,9 @@ export function renderEvidence(inputs: EvidenceInputs): string {
   const lines = [
     `<!-- pr-evidence base=${git.base} head=${git.head} -->`,
     `**Evidence** gathered ${inputs.generatedAt} at \`${git.headShort}\` (\`${git.branch}\`) against \`${git.baseRef}\` @ \`${git.baseShort}\`` +
-      (git.dirty ? ' — **working tree dirty: describes the tree, not the head**' : ''),
+      (git.dirty
+        ? ' — **working tree has uncommitted/untracked changes: none of them are in this block**'
+        : ''),
     bullet(`Changed: ${git.changedFiles.length} files (${areas || 'none'})`),
     bullet(`Affected gates (\`check:affected\`): ${affectedLine}`),
     bullet(

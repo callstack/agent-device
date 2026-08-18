@@ -157,51 +157,137 @@ function collectReport(root, options) {
 }
 
 // The Size workflow measures the base by checking it out, installing, and building; this is
-// the same recipe in a detached worktree so the working tree is never touched. The worktree
-// is kept under .tmp/size-base/<sha> so a second run against the same base skips the
-// install+build (mirroring the workflow's dist cache); other bases' worktrees are removed.
+// the same recipe in a detached worktree so the working tree is never touched. Cache semantics
+// are per SHA and non-destructive toward anything in use:
+//   - .tmp/size-base/<sha12>/ is the worktree; a second run against the same base finds the
+//     completeness stamp and skips install+build (mirroring the workflow's dist cache);
+//   - .tmp/size-base/<sha12>.lock (pid inside, created O_EXCL) is held from before the worktree
+//     is created until the base report has been read, so a concurrent run against the same base
+//     fails fast instead of reading a half-built dist, and a run against another base never
+//     removes a worktree whose lock is held by a live pid; a lock whose pid is dead is stale;
+//   - dist/.size-base-complete is written after a successful build, so an interrupted build is
+//     rebuilt rather than trusted because dist/src happens to exist.
 function measureBaseRef(root, ref, options) {
   const sha = execFileSync('git', ['rev-parse', '--verify', `${ref}^{commit}`], {
     cwd: root,
     encoding: 'utf8',
   }).trim();
-  const worktreesRoot = path.join(root, '.tmp', 'size-base');
+  fs.mkdirSync(path.join(root, '.tmp', 'size-base'), { recursive: true });
+  // Canonical: git lists worktrees by real path (/tmp is /private/tmp on macOS), and the
+  // registration check below compares against that listing.
+  const worktreesRoot = fs.realpathSync(path.join(root, '.tmp', 'size-base'));
   const worktreeDir = path.join(worktreesRoot, sha.slice(0, 12));
-  pruneOtherBaseWorktrees(root, worktreesRoot, worktreeDir);
+  const release = acquireBaseLock(worktreeDir, sha);
+  try {
+    pruneOtherBaseWorktrees(root, worktreesRoot, worktreeDir);
+    ensureBaseWorktree(root, worktreeDir, sha);
+    if (!fs.existsSync(baseCompletionStamp(worktreeDir))) {
+      process.stderr.write(
+        `[size] measuring base ${sha.slice(0, 9)} (${ref}): install + build in ${worktreeDir}\n`,
+      );
+      execFileSync('pnpm', ['install', '--frozen-lockfile', '--prefer-offline'], {
+        cwd: worktreeDir,
+        stdio: ['ignore', 'ignore', 'inherit'],
+      });
+      execFileSync('pnpm', ['build'], { cwd: worktreeDir, stdio: ['ignore', 'ignore', 'inherit'] });
+      fs.writeFileSync(baseCompletionStamp(worktreeDir), `${sha}\n`);
+    }
+    return collectReport(worktreeDir, options);
+  } finally {
+    release();
+  }
+}
+
+function baseCompletionStamp(worktreeDir) {
+  return path.join(worktreeDir, 'dist', '.size-base-complete');
+}
+
+function baseLockPath(worktreeDir) {
+  return `${worktreeDir}.lock`;
+}
+
+// O_EXCL create is the atomic step; the pid inside is what makes a leftover lock recognizable
+// as stale (its owner died) rather than a permanent wedge.
+function acquireBaseLock(worktreeDir, sha) {
+  const lockPath = baseLockPath(worktreeDir);
+  for (;;) {
+    const release = tryCreateLock(lockPath);
+    if (release) return release;
+    if (isLockHeldByLiveProcess(lockPath)) {
+      throw new Error(
+        `another \`size --base\` (pid ${lockOwnerPid(lockPath)}) is building base ${sha.slice(0, 9)} in ${worktreeDir}; wait for it or measure a different base`,
+      );
+    }
+    fs.rmSync(lockPath, { force: true }); // stale: its owner is gone
+  }
+}
+
+function isLockHeldByLiveProcess(lockPath) {
+  const owner = lockOwnerPid(lockPath);
+  return owner !== undefined && isProcessAlive(owner);
+}
+
+/** Returns the release function on success, or undefined when the lock already exists. */
+function tryCreateLock(lockPath) {
+  let fd;
+  try {
+    fd = fs.openSync(lockPath, 'wx');
+  } catch (error) {
+    if (error.code === 'EEXIST') return undefined;
+    throw error;
+  }
+  fs.writeSync(fd, `${process.pid}\n`);
+  fs.closeSync(fd);
+  return () => fs.rmSync(lockPath, { force: true });
+}
+
+function lockOwnerPid(lockPath) {
+  try {
+    const pid = Number(fs.readFileSync(lockPath, 'utf8').trim());
+    return Number.isInteger(pid) && pid > 0 ? pid : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isProcessAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === 'EPERM';
+  }
+}
+
+function ensureBaseWorktree(root, worktreeDir, sha) {
   const registered = execFileSync('git', ['worktree', 'list', '--porcelain'], {
     cwd: root,
     encoding: 'utf8',
   }).includes(`worktree ${worktreeDir}\n`);
-  if (!registered) {
-    fs.rmSync(worktreeDir, { recursive: true, force: true });
-    fs.mkdirSync(worktreesRoot, { recursive: true });
-    execFileSync('git', ['worktree', 'add', '--detach', worktreeDir, sha], {
-      cwd: root,
-      stdio: ['ignore', 'ignore', 'inherit'],
-    });
-  }
-  const built = fs.existsSync(path.join(worktreeDir, 'dist', 'src'));
-  if (!built) {
-    process.stderr.write(
-      `[size] measuring base ${sha.slice(0, 9)} (${ref}): install + build in ${worktreeDir}\n`,
-    );
-    execFileSync('pnpm', ['install', '--frozen-lockfile', '--prefer-offline'], {
-      cwd: worktreeDir,
-      stdio: ['ignore', 'ignore', 'inherit'],
-    });
-    execFileSync('pnpm', ['build'], { cwd: worktreeDir, stdio: ['ignore', 'ignore', 'inherit'] });
-  }
-  return collectReport(worktreeDir, options);
+  if (registered && fs.existsSync(worktreeDir)) return;
+  // Registered but gone (hand-deleted), or present but unregistered (hand-copied): start clean.
+  fs.rmSync(worktreeDir, { recursive: true, force: true });
+  execFileSync('git', ['worktree', 'prune'], { cwd: root, stdio: 'ignore' });
+  execFileSync('git', ['worktree', 'add', '--detach', worktreeDir, sha], {
+    cwd: root,
+    stdio: ['ignore', 'ignore', 'pipe'],
+    encoding: 'utf8',
+  });
 }
 
+// Cache eviction of idle entries only: a worktree whose lock is held by a live pid is in use
+// by another run and is left alone.
 function pruneOtherBaseWorktrees(root, worktreesRoot, keep) {
-  if (!fs.existsSync(worktreesRoot)) return;
   const others = fs
     .readdirSync(worktreesRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => path.join(worktreesRoot, entry.name))
     .filter((dir) => dir !== keep);
-  for (const dir of others) removeWorktree(root, dir);
+  for (const dir of others) {
+    if (isLockHeldByLiveProcess(baseLockPath(dir))) continue;
+    removeWorktree(root, dir);
+    fs.rmSync(baseLockPath(dir), { force: true });
+  }
 }
 
 function removeWorktree(root, dir) {

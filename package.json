@@ -118,7 +118,7 @@
     "maestro:conformance:differential": "node --experimental-strip-types packages/maestro/test/conformance/differential/run.ts",
     "size": "node scripts/size-report.mjs",
     "pr:evidence": "node --experimental-strip-types scripts/pr-evidence/run.ts",
-    "pr:evidence:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/pr-evidence/model.test.ts",
+    "pr:evidence:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/pr-evidence/model.test.ts scripts/pr-evidence/run.test.ts",
     "perf": "node --experimental-strip-types scripts/perf/run.ts",
     "mutation:run": "node --experimental-strip-types scripts/mutation/run.ts",
     "mutation:check": "node --experimental-strip-types scripts/mutation/run.ts --no-run",

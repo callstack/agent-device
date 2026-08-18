@@ -78,6 +78,9 @@ export default defineConfig({
             // The Bundle Size lane's PR-comment path: spawns the real script against a
             // stubbed fetch, so it needs no network; pins retry/reconcile/fatal outcomes.
             'scripts/__tests__/size-report-post-comment.test.ts',
+            // `--base` orchestration (per-SHA worktree, lock, completion stamp, eviction) against
+            // a throwaway git repo with pnpm/npm shimmed on PATH: git + node only.
+            'scripts/__tests__/size-report-base.test.ts',
             // Parses CI configuration only, so this action guard needs no device or subprocess lane.
             'test/ci/upload-agent-device-artifacts.test.ts',
             // #1781 A9: pins the root-doc paths-ignore entries directly against the

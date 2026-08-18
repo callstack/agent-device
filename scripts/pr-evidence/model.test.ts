@@ -141,7 +141,10 @@ test('a dirty tree is called out and a fail-open plan is summarized, not enumera
       depgraph: { ...inputs().depgraph, base: undefined },
     }),
   );
-  assert.match(block, /working tree dirty: describes the tree, not the head/);
+  assert.match(
+    block,
+    /working tree has uncommitted\/untracked changes: none of them are in this block/,
+  );
   assert.match(
     block,
     /fail-open \(workflow-tooling\): full set, 1 local \+ 1 GitHub-authoritative/,

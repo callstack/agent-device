@@ -235,8 +235,14 @@ command, before the PR exists:
 
 ```sh
 pnpm size --base origin/main    # first run: detached worktree + install + build of the base (~1-2 min)
-                                # later runs against the same base: ~3s (the worktree is kept under .tmp/size-base/)
+                                # later runs against the same base: ~3s (the worktree is kept under .tmp/size-base/<sha>)
 ```
+
+The cache is per SHA and never destructive toward a run in progress: a `.lock` (pid inside) is held
+from before the worktree exists until the base report is read, a concurrent run against the same
+base fails fast rather than reading a half-built `dist`, another base's run evicts only worktrees
+whose lock is absent or whose owner is dead, and a build that was interrupted before its
+`dist/.size-base-complete` stamp is rebuilt.
 
 Requires a current `pnpm build` of your own tree. `JS raw`/`JS gzip` are the numbers to quote and to
 budget against (ADR 0019 §8 units state theirs before starting); the `npm tarball`/`npm unpacked`

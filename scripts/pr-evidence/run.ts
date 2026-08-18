@@ -2,16 +2,22 @@
 //
 // One paste-ready evidence block for a PR body, stamped with the exact base and head, composed
 // from the tools the repo already has: the affected selector (`check:affected --json`), the
-// layering guard, the depgraph report (head, and base through a throwaway worktree so the
-// dependency-edge delta is real), and — behind flags, because they need a build or a coverage
-// run — the changed-line coverage gate and `pnpm size --base`. It measures nothing itself and
-// claims nothing about CI: the last line is the link to the head's checks.
+// layering guard, the depgraph report, and — behind flags, because they need a build or a
+// coverage run — the changed-line coverage gate and `pnpm size --base`. It measures nothing
+// itself and claims nothing about CI: the last line is the link to the head's checks.
+//
+// Everything labelled "at <head>" is measured from a throwaway `git worktree` of that exact
+// commit, and the base likewise, so an untracked or uncommitted file in the working tree can
+// change nothing the block reports as HEAD's; the working tree only contributes the "dirty"
+// flag. The worktrees need no install: the scripts analyze whichever repository their cwd is
+// in, while their imports resolve from this checkout.
 //
 // The default tier finishes in ~20s (the layering guard is most of it). `--coverage` reads the
 // existing coverage/lcov.info (run `pnpm test:coverage` first); `--size` runs the base worktree
 // build the first time (~1-2 min) and ~3s afterwards.
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runCmd, runCmdSync } from '../../src/utils/exec.ts';
@@ -46,7 +52,8 @@ function collectGitFacts(baseRef: string): GitFacts {
   const head = git(['rev-parse', 'HEAD']);
   const base = git(['merge-base', baseRef, 'HEAD']);
   const branch = git(['rev-parse', '--abbrev-ref', 'HEAD']);
-  const dirty = git(['status', '--porcelain', '--untracked-files=no']).length > 0;
+  // Untracked files count: they are exactly what a pristine-worktree measurement leaves out.
+  const dirty = git(['status', '--porcelain']).length > 0;
   const changedFiles = git(['diff', '--name-only', '--no-renames', `${base}..HEAD`])
     .split('\n')
     .filter(Boolean);
@@ -62,7 +69,9 @@ function collectGitFacts(baseRef: string): GitFacts {
   };
 }
 
-async function collectAffected(base: string): Promise<AffectedPlan> {
+// The head SHA, not the literal `HEAD`: the selector folds working-tree changes into a plan for
+// `HEAD`, and this block describes the commit.
+async function collectAffected(base: string, head: string): Promise<AffectedPlan> {
   const result = await runCmd(
     process.execPath,
     [
@@ -71,7 +80,7 @@ async function collectAffected(base: string): Promise<AffectedPlan> {
       '--base',
       base,
       '--head',
-      'HEAD',
+      head,
       '--json',
     ],
     { cwd: repoRoot, timeoutMs: 120_000 },
@@ -84,18 +93,15 @@ async function collectAffected(base: string): Promise<AffectedPlan> {
   };
 }
 
-async function collectLayering() {
+async function collectLayering(cwd: string) {
   const result = await runCmd(
     process.execPath,
     ['--experimental-strip-types', path.join(scripts, 'layering', 'check.ts')],
-    { cwd: repoRoot, timeoutMs: 300_000, allowFailure: true },
+    { cwd, timeoutMs: 300_000, allowFailure: true },
   );
   return parseLayeringReport(`${result.stdout}\n${result.stderr}`, result.exitCode);
 }
 
-// The depgraph script analyzes whichever repository its cwd is inside, while its imports resolve
-// from this checkout, so a bare `git worktree add` (no install) of the base is enough for the
-// base numbers to come from the same instrument as the head numbers.
 async function collectDepgraph(cwd: string, out: string): Promise<DepgraphFacts> {
   await runCmd(
     process.execPath,
@@ -105,14 +111,15 @@ async function collectDepgraph(cwd: string, out: string): Promise<DepgraphFacts>
   return depgraphFacts(JSON.parse(fs.readFileSync(out, 'utf8')));
 }
 
-async function collectBaseDepgraph(base: string, scratch: string): Promise<DepgraphFacts> {
-  const worktree = path.join(scratch, 'base');
-  git(['worktree', 'add', '--detach', worktree, base]);
-  try {
-    return await collectDepgraph(worktree, path.join(scratch, 'depgraph-base.json'));
-  } finally {
-    git(['worktree', 'remove', '--force', worktree]);
-  }
+/** A pristine checkout of one commit; removed by the caller's scratch cleanup. */
+function addWorktree(scratch: string, name: string, commit: string): string {
+  const worktree = path.join(scratch, name);
+  git(['worktree', 'add', '--detach', worktree, commit]);
+  return worktree;
+}
+
+function removeWorktree(worktree: string): void {
+  git(['worktree', 'remove', '--force', worktree]);
 }
 
 async function collectCoverage(base: string): Promise<EvidenceInputs['coverage']> {
@@ -162,13 +169,19 @@ async function main(argv: readonly string[]): Promise<number> {
   });
   const baseRef = values.base ?? 'origin/main';
   const gitFacts = collectGitFacts(baseRef);
-  const scratch = fs.mkdtempSync(path.join(repoRoot, '.tmp', 'pr-evidence-'));
+  // os.tmpdir() always exists; a repo-local scratch would have to be created first and is one
+  // more thing a fresh checkout can lack.
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-pr-evidence-'));
+  const worktrees: string[] = [];
   try {
+    const headTree = addWorktree(scratch, 'head', gitFacts.head);
+    const baseTree = addWorktree(scratch, 'base', gitFacts.base);
+    worktrees.push(headTree, baseTree);
     const [affected, layering, head, base] = await Promise.all([
-      collectAffected(gitFacts.base),
-      collectLayering(),
-      collectDepgraph(repoRoot, path.join(scratch, 'depgraph-head.json')),
-      collectBaseDepgraph(gitFacts.base, scratch),
+      collectAffected(gitFacts.base, gitFacts.head),
+      collectLayering(headTree),
+      collectDepgraph(headTree, path.join(scratch, 'depgraph-head.json')),
+      collectDepgraph(baseTree, path.join(scratch, 'depgraph-base.json')),
     ]);
     const inputs: EvidenceInputs = {
       generatedAt: new Date().toISOString(),
@@ -185,6 +198,7 @@ async function main(argv: readonly string[]): Promise<number> {
     );
     return 0;
   } finally {
+    for (const worktree of worktrees) removeWorktree(worktree);
     fs.rmSync(scratch, { recursive: true, force: true });
   }
 }
