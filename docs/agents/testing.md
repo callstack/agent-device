@@ -78,6 +78,14 @@ cleanup for a directory they created — that's the global teardown's job, and p
 already existed for other reasons should stay (it's the fallback global sweep that's new, not a
 replacement for tests being tidy).
 
+A run killed before its teardown (a tool timeout's SIGKILL, OOM, a cancelled job) leaves its
+`/tmp/agent-device-test-run-<pid>-*` directory behind. The next run on the host prunes every such
+directory whose owning pid is dead (`pruneAbandonedRunDirectories`, called by both the Vitest global
+setup and the `node --test` wrapper) and prints one `[tmpdir] pruned …` line, so `check:tmpdir-leaks`
+after `test:unit` can only ever name the run that just finished. Directories owned by a live pid —
+a concurrent run in another worktree — are never touched. If the check fails, the leak is this
+run's: a teardown that did not execute, not history.
+
 Keep tests behavioral. Do not assert shapes or cases TypeScript already proves.
 
 A test added as a regression pin must be shown to fail without the change it pins — vacuity is the

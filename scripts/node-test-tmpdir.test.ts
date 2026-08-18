@@ -6,7 +6,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { runCmd } from '../src/utils/exec.ts';
-import { TEST_RUN_TMP_PREFIX, TEST_RUN_TMP_ROOT } from './vitest-tmpdir-global-setup.ts';
+import { TEST_RUN_TMP_PREFIX, TEST_RUN_TMP_ROOT } from './check-tmpdir-leaks-model.ts';
 
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const WRAPPER = path.join(REPOSITORY_ROOT, 'scripts', 'node-test-tmpdir.ts');
@@ -249,4 +249,50 @@ test('every node --test package.json script routes through scripts/node-test-tmp
       `directory again: ${unwrapped.join(', ')}. Route them through the wrapper, or add to ` +
       `NODE_TEST_WRAPPER_BYPASS_ALLOWLIST above with a reason if one must legitimately bypass it.`,
   );
+});
+
+// INT32_MAX exceeds every platform's pid range (Linux pid_max caps at 2^22,
+// macOS at 99999), so kill(pid, 0) is ESRCH by construction — an owner that
+// is dead and can never be reused mid-test, unlike a freshly exited child's pid.
+const NEVER_A_PID = 2_147_483_647;
+
+test('the wrapper prunes a run directory abandoned by an earlier killed run and keeps a live one', async () => {
+  const stamp = crypto.randomUUID();
+  const abandoned = path.join(
+    TEST_RUN_TMP_ROOT,
+    `${TEST_RUN_TMP_PREFIX}${NEVER_A_PID}-planted-${stamp}`,
+  );
+  const live = path.join(
+    TEST_RUN_TMP_ROOT,
+    `${TEST_RUN_TMP_PREFIX}${process.pid}-planted-${stamp}`,
+  );
+  const evidenceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'node-test-tmpdir-prune-'));
+  const probePath = writeProbe(path.join(evidenceRoot, 'child-tmpdir.txt'));
+  fs.mkdirSync(path.join(abandoned, 'nested'), { recursive: true });
+  fs.writeFileSync(path.join(abandoned, 'nested', 'leftover.txt'), 'from a killed run');
+  fs.mkdirSync(live);
+
+  try {
+    const result = await runCmd(
+      process.execPath,
+      ['--experimental-strip-types', WRAPPER, '--experimental-strip-types', '--test', probePath],
+      { cwd: REPOSITORY_ROOT, timeoutMs: 30_000 },
+    );
+    assert.equal(result.exitCode, 0, `probe run failed:\n${result.stdout}\n${result.stderr}`);
+    assert.equal(
+      fs.existsSync(abandoned),
+      false,
+      'the wrapper must prune the abandoned run directory',
+    );
+    assert.equal(
+      fs.existsSync(live),
+      true,
+      'the wrapper must never touch a live owner’s run directory',
+    );
+  } finally {
+    fs.rmSync(abandoned, { recursive: true, force: true });
+    fs.rmSync(live, { recursive: true, force: true });
+    fs.rmSync(probePath, { force: true });
+    fs.rmSync(evidenceRoot, { recursive: true, force: true });
+  }
 });

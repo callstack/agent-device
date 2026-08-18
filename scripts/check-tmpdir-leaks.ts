@@ -9,11 +9,12 @@
 // Covers both redirection mechanisms sharing this root/prefix: Vitest's
 // globalSetup/globalTeardown (scripts/vitest-tmpdir-global-setup.ts) and the
 // node --test wrapper (scripts/node-test-tmpdir.ts, #1595) that every
-// `node --test` package.json script now runs through.
+// `node --test` package.json script now runs through. Both prune what an
+// earlier killed run left behind before creating their own directory, so a
+// failure here names the run that just finished — never a historical one.
 
 import path from 'node:path';
-import { findLeakedRunDirectories } from './check-tmpdir-leaks-model.ts';
-import { TEST_RUN_TMP_ROOT } from './vitest-tmpdir-global-setup.ts';
+import { TEST_RUN_TMP_ROOT, findLeakedRunDirectories } from './check-tmpdir-leaks-model.ts';
 
 const leaks = findLeakedRunDirectories(TEST_RUN_TMP_ROOT);
 

@@ -3,7 +3,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { findLeakedRunDirectories } from './check-tmpdir-leaks-model.ts';
+import {
+  findLeakedRunDirectories,
+  pruneAbandonedRunDirectories,
+} from './check-tmpdir-leaks-model.ts';
 
 function withScratchRoot(fn: (root: string) => void): void {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'check-tmpdir-leaks-model-test-'));
@@ -66,5 +69,41 @@ test('non-matching directories and files are ignored', () => {
     fs.writeFileSync(path.join(root, 'agent-device-test-run-4242-loose-file'), '');
     const leaks = findLeakedRunDirectories(root, () => false);
     assert.deepEqual(leaks, []);
+  });
+});
+
+test('pruning removes only abandoned directories and returns their names', () => {
+  withScratchRoot((root) => {
+    fs.mkdirSync(path.join(root, 'agent-device-test-run-1111-aaaaaa')); // alive
+    fs.mkdirSync(path.join(root, 'agent-device-test-run-3333-cccccc', 'nested'), {
+      recursive: true,
+    }); // exited, non-empty
+    fs.mkdirSync(path.join(root, 'agent-device-test-run-not-a-pid')); // no owner
+    fs.mkdirSync(path.join(root, 'unrelated-directory'));
+    const pruned = pruneAbandonedRunDirectories(root, (pid) => pid === 1111);
+    assert.deepEqual(pruned.sort(), [
+      'agent-device-test-run-3333-cccccc',
+      'agent-device-test-run-not-a-pid',
+    ]);
+    assert.deepEqual(fs.readdirSync(root).sort(), [
+      'agent-device-test-run-1111-aaaaaa',
+      'unrelated-directory',
+    ]);
+    // Once pruned, the post-run check has nothing historical left to report.
+    assert.deepEqual(
+      findLeakedRunDirectories(root, (pid) => pid === 1111),
+      [],
+    );
+  });
+});
+
+test('pruning nothing is a no-op that reports nothing', () => {
+  withScratchRoot((root) => {
+    fs.mkdirSync(path.join(root, 'agent-device-test-run-1111-aaaaaa'));
+    assert.deepEqual(
+      pruneAbandonedRunDirectories(root, () => true),
+      [],
+    );
+    assert.deepEqual(fs.readdirSync(root), ['agent-device-test-run-1111-aaaaaa']);
   });
 });

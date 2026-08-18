@@ -20,14 +20,20 @@
 // process forwards to a still-running child (Ctrl-C locally, or a CI job
 // cancellation): the signal handlers below call `process.exit()`, which
 // triggers 'exit' synchronously before the process actually terminates.
-// Only a SIGKILL against this wrapper itself bypasses all of that — the same
-// residual case check-tmpdir-leaks-model.ts already tolerates via its
-// pid-liveness check, since it shares this directory's root and prefix.
+// Only a SIGKILL against this wrapper itself bypasses all of that; the next
+// run on the host prunes what such a kill left behind (see
+// pruneAbandonedRunDirectories), since both lanes share this directory's root
+// and prefix.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { runCmdBackground } from '../src/utils/exec.ts';
-import { TEST_RUN_TMP_PREFIX, TEST_RUN_TMP_ROOT } from './vitest-tmpdir-global-setup.ts';
+import {
+  TEST_RUN_TMP_PREFIX,
+  TEST_RUN_TMP_ROOT,
+  pruneAbandonedRunDirectories,
+  reportPrunedRunDirectories,
+} from './check-tmpdir-leaks-model.ts';
 
 const forwardedArgs = process.argv.slice(2);
 if (forwardedArgs.length === 0) {
@@ -36,6 +42,7 @@ if (forwardedArgs.length === 0) {
   );
 }
 
+reportPrunedRunDirectories(pruneAbandonedRunDirectories(TEST_RUN_TMP_ROOT));
 const testRunTmpDir = fs.mkdtempSync(
   path.join(TEST_RUN_TMP_ROOT, `${TEST_RUN_TMP_PREFIX}${process.pid}-`),
 );

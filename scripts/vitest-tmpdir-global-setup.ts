@@ -1,6 +1,12 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import {
+  TEST_RUN_TMP_PREFIX,
+  TEST_RUN_TMP_ROOT,
+  pruneAbandonedRunDirectories,
+  reportPrunedRunDirectories,
+} from './check-tmpdir-leaks-model.ts';
 
 // os.tmpdir() reads TMPDIR on every call, so redirecting it here covers every
 // mkdtemp call site — test and production — without touching any of them.
@@ -12,17 +18,8 @@ import path from 'node:path';
 // first; it proved unreliable (some workers were torn down before running
 // it), which is why this is a single run-level hook instead.
 //
-// Rooted at /tmp rather than nested inside the current os.tmpdir(): macOS's
-// per-user TMPDIR (/var/folders/.../T/) is already close to the 104-byte
-// sun_path limit AF_UNIX sockets need, and tests that bind real sockets
-// (e.g. runner-usbmux.test.ts) started hitting EINVAL once nested one level
-// deeper. /tmp is short enough to leave headroom for those.
-//
-// check-tmpdir-leaks.ts imports these two rather than recomputing them, so
-// the two can't drift onto different directories (os.tmpdir() != /tmp on
-// macOS, where TMPDIR is a deep per-user path).
-export const TEST_RUN_TMP_ROOT = '/tmp';
-export const TEST_RUN_TMP_PREFIX = 'agent-device-test-run-';
+// The root/prefix live in check-tmpdir-leaks-model.ts, next to the liveness
+// classification this setup and the post-run leak check both rely on.
 
 let testRunTmpDir: string;
 let previousTmpDir: string | undefined;
@@ -45,6 +42,7 @@ export function setup(): void {
       'agent-device-swift-cache',
     );
   }
+  reportPrunedRunDirectories(pruneAbandonedRunDirectories(TEST_RUN_TMP_ROOT));
   // The pid is embedded so check-tmpdir-leaks.ts can tell a directory that's
   // still in active use (its vitest process is alive — a concurrent run in
   // another worktree, say) apart from one actually abandoned by a killed
