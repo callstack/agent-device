@@ -285,7 +285,6 @@ test('hover selector on web resolves the target and dispatches coordinate hover'
         hittable: true,
       },
     ]),
-    createdAt: Date.now(),
     backend: 'web',
   });
 

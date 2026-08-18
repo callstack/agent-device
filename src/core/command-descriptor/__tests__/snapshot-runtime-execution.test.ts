@@ -35,12 +35,13 @@ test('snapshot public route inspects facts and binds the declared use exactly on
     snapshotRuntimeSource.indexOf('function publishedSnapshotGeneration'),
   );
 
-  expect(publicRoute.match(/inspectSnapshotCaptureAdmission\(\{/g)).toHaveLength(1);
+  expect(publicRoute.match(/resolveSnapshotRuntimePlan\(\{/g)).toHaveLength(1);
+  expect(publicRoute.match(/inspectRequiredRuntimeUse\(\{/g)).toHaveLength(1);
   expect(
     publicRoute.match(/bindSnapshotCaptureRuntime\(params\.bindDevice, device, plan\)/g),
   ).toHaveLength(1);
   expect(
-    snapshotRuntimeBindingSource.match(/requireRuntimeFacts\(params\.inspectFacts\)\(device\)/g),
+    publicRoute.match(/use: plan\.use,[\s\S]*inspectFacts: params\.inspectFacts/g),
   ).toHaveLength(1);
   expect(
     snapshotRuntimeBindingSource.match(/const bind = requireRuntimeBinding\(bindDevice\)/g),

@@ -1,300 +1,87 @@
 import { parseSync } from 'oxc-parser';
-import { propertyName, visitAst } from './cutover-policy-ast.ts';
+import { memberPath, propertyName, visitAst } from './cutover-policy-ast.ts';
 import { countNamedCalls, lineOf, namedFunction } from './runtime-command-cutover-ast.ts';
 import type { UnruledViolation } from './runtime-command-cutover-model.ts';
 
 type AstNode = Record<string, unknown>;
 
-const SNAPSHOT_RUNTIME_BINDING_FILE = 'src/daemon/snapshot-runtime-binding.ts';
-const SNAPSHOT_ADMISSION_FUNCTION = 'inspectSnapshotCaptureAdmission';
+const SNAPSHOT_ROUTE_FILE = 'src/daemon/snapshot-runtime.ts';
+const SNAPSHOT_BINDING_FILE = 'src/daemon/snapshot-runtime-binding.ts';
 
-/** Snapshot admission consumes the selected plan and operation facts, never device-owner identity. */
+/** R32 admits only through the shared facts-first seam selected by the normalized runtime plan. */
 export function snapshotPlatformPolicyBranchViolations(
   sources: ReadonlyMap<string, string>,
 ): UnruledViolation[] {
-  const source = sources.get(SNAPSHOT_RUNTIME_BINDING_FILE);
-  if (source === undefined) {
-    return [
-      {
-        file: SNAPSHOT_RUNTIME_BINDING_FILE,
-        line: 1,
-        message: 'snapshot facts-first admission module is missing',
-      },
-    ];
-  }
-  const program = parseSync(SNAPSHOT_RUNTIME_BINDING_FILE, source).program as AstNode;
-  const admission = namedFunction(program, SNAPSHOT_ADMISSION_FUNCTION);
-  if (admission === undefined) {
-    return [
-      {
-        file: SNAPSHOT_RUNTIME_BINDING_FILE,
-        line: 1,
-        message: `snapshot admission must be owned by ${SNAPSHOT_ADMISSION_FUNCTION}`,
-      },
-    ];
-  }
+  const source = sources.get(SNAPSHOT_ROUTE_FILE);
+  if (source === undefined) return [violation(1, 'snapshot runtime route is missing')];
 
-  const aliases = snapshotAdmissionAliases(admission);
+  const program = parseSync(SNAPSHOT_ROUTE_FILE, source).program as AstNode;
+  const route = namedFunction(program, 'dispatchSnapshotViaRuntime');
+  if (route === undefined) return [violation(1, 'snapshot public runtime route is missing')];
+
   const violations: UnruledViolation[] = [];
-  const seenLines = new Set<number>();
-  let readsRequiredOperations = false;
-  let readsOperationFacts = false;
-  let admitsAvailableFacts = false;
-  visitAst(admission, (node) => {
-    const binding = aliasBinding(node);
-    if (binding !== undefined) {
-      for (const path of boundPatternPaths(
-        binding.pattern,
-        initializerPath(binding.value, aliases),
-      )) {
-        if (readsDeviceOwnerIdentity(path)) addOwnerIdentityViolation(node);
-      }
-    }
-    if (
-      node.type === 'CallExpression' &&
-      !isAllowedDeviceIdentitySink(node) &&
-      callConsumesDeviceIdentity(node, aliases)
-    ) {
-      addOwnerIdentityViolation(node);
-    }
-    if (node.type !== 'MemberExpression' && node.type !== 'ChainExpression') return;
-    const path = canonicalMemberPath(node, aliases);
-    if (path === undefined) return;
-    if (samePath(path, ['plan', 'use', 'required'])) readsRequiredOperations = true;
-    if (samePath(path, ['facts', 'operations'])) readsOperationFacts = true;
-    if (path[0] === 'facts' && path[1] === 'operations' && path[path.length - 1] === 'available') {
-      admitsAvailableFacts = true;
-    }
-
-    if (readsDeviceOwnerIdentity(path)) addOwnerIdentityViolation(node);
-  });
-
-  function addOwnerIdentityViolation(node: AstNode): void {
-    const line = lineOf(source, node);
-    if (seenLines.has(line)) return;
-    seenLines.add(line);
-    violations.push({
-      file: SNAPSHOT_RUNTIME_BINDING_FILE,
-      line,
-      message: 'snapshot admission reads device-owner identity instead of selected operation facts',
-    });
+  if (countNamedCalls(route, 'resolveSnapshotRuntimePlan') !== 1) {
+    violations.push(
+      violation(lineOf(source, route), 'snapshot route must select exactly one normalized plan'),
+    );
   }
 
-  if (countNamedCalls(admission, 'resolveSnapshotRuntimePlan') !== 1) {
-    violations.push({
-      file: SNAPSHOT_RUNTIME_BINDING_FILE,
-      line: lineOf(source, admission),
-      message: 'snapshot admission must select exactly one normalized runtime plan',
-    });
+  const admissions = namedCalls(route, 'inspectRequiredRuntimeUse');
+  if (admissions.length !== 1 || !hasExactAdmissionInput(admissions[0])) {
+    violations.push(
+      violation(
+        lineOf(source, admissions[0] ?? route),
+        'snapshot route must admit exactly once through inspectRequiredRuntimeUse(device, plan.use, inspectFacts)',
+      ),
+    );
   }
-  if (!readsRequiredOperations || !readsOperationFacts || !admitsAvailableFacts) {
+
+  const bindingSource = sources.get(SNAPSHOT_BINDING_FILE) ?? '';
+  if (bindingSource.includes('inspectSnapshotCaptureAdmission')) {
     violations.push({
-      file: SNAPSHOT_RUNTIME_BINDING_FILE,
-      line: lineOf(source, admission),
-      message: 'snapshot admission must admit every selected operation through owner facts',
+      file: SNAPSHOT_BINDING_FILE,
+      line: 1,
+      message: 'snapshot admission must not be reimplemented beside the shared facts seam',
     });
   }
   return violations;
 }
 
-function snapshotAdmissionAliases(admission: AstNode): ReadonlyMap<string, readonly string[]> {
-  const aliases = new Map<string, readonly string[]>();
-  const params = admission.params;
-  if (Array.isArray(params)) {
-    const canonicalParams = [['params'], ['device'], ['session']] as const;
-    for (const [index, parameter] of params.entries()) {
-      if (index >= canonicalParams.length || !isIdentifier(parameter)) continue;
-      aliases.set(parameter.name, canonicalParams[index]);
-    }
-  }
-
-  const bindings: AstNode[] = [];
-  visitAst(admission, (node) => {
-    if (aliasBinding(node) !== undefined) bindings.push(node);
-  });
-  // Every acyclic alias chain stabilizes within this bound; malformed cycles cannot hang the gate.
-  for (let pass = 0; pass <= bindings.length; pass += 1) {
-    let changed = false;
-    for (const node of bindings) {
-      const binding = aliasBinding(node)!;
-      const path = initializerPath(binding.value, aliases);
-      for (const [name, aliasPath] of boundPatternAliases(binding.pattern, path)) {
-        if (samePath(aliases.get(name) ?? [], aliasPath)) continue;
-        aliases.set(name, aliasPath);
-        changed = true;
-      }
-    }
-    if (!changed) break;
-  }
-  return aliases;
-}
-
-function aliasBinding(node: AstNode): Readonly<{ pattern: unknown; value: unknown }> | undefined {
-  if (node.type === 'VariableDeclarator') return { pattern: node.id, value: node.init };
-  if (node.type === 'AssignmentExpression' && node.operator === '=') {
-    return { pattern: node.left, value: node.right };
-  }
-  return undefined;
-}
-
-function initializerPath(
-  node: unknown,
-  aliases: ReadonlyMap<string, readonly string[]>,
-): readonly string[] | undefined {
-  const value = unwrapExpression(node);
-  if (value === undefined) return undefined;
-  if (value.type === 'CallExpression') {
-    if (containsNamedCall(value, 'requireRuntimeFacts')) return ['facts'];
-    if (containsNamedCall(value, 'resolveSnapshotRuntimePlan')) return ['plan'];
-  }
-  return canonicalMemberPath(value, aliases);
-}
-
-function canonicalMemberPath(
-  node: unknown,
-  aliases: ReadonlyMap<string, readonly string[]>,
-): readonly string[] | undefined {
-  const value = unwrapExpression(node);
-  if (value === undefined) return undefined;
-  if (value.type === 'Identifier') {
-    const name = typeof value.name === 'string' ? value.name : undefined;
-    return name === undefined ? undefined : (aliases.get(name) ?? [name]);
-  }
-  if (value.type !== 'MemberExpression') return undefined;
-  const object = canonicalMemberPath(value.object, aliases);
-  const name = propertyName(value.property);
-  return object === undefined || name === undefined
-    ? undefined
-    : canonicalizePath([...object, name]);
-}
-
-function canonicalizePath(path: readonly string[]): readonly string[] {
-  if (path[0] === 'params' && path[1] === 'device') return ['device', ...path.slice(2)];
-  if (path[0] === 'params' && path[1] === 'session') return ['session', ...path.slice(2)];
-  if (path[0] === 'session' && path[1] === 'device') return ['device', ...path.slice(2)];
-  return path;
-}
-
-function boundPatternAliases(
-  pattern: unknown,
-  path: readonly string[] | undefined,
-): ReadonlyArray<readonly [string, readonly string[]]> {
-  if (path === undefined || pattern === null || typeof pattern !== 'object') return [];
-  const value = pattern as AstNode;
-  if (value.type === 'Identifier' && typeof value.name === 'string') {
-    return [[value.name, canonicalizePath(path)]];
-  }
-  if (value.type === 'AssignmentPattern') return boundPatternAliases(value.left, path);
-  if (value.type !== 'ObjectPattern' || !Array.isArray(value.properties)) return [];
-  const aliases: Array<readonly [string, readonly string[]]> = [];
-  for (const property of value.properties) {
-    if (property === null || typeof property !== 'object') continue;
-    const entry = property as AstNode;
-    if (entry.type === 'RestElement') {
-      aliases.push(...boundPatternAliases(entry.argument, canonicalizePath(path)));
-      continue;
-    }
-    if (entry.type !== 'Property') continue;
-    const name = propertyName(entry.key);
-    if (name === undefined) continue;
-    aliases.push(...boundPatternAliases(entry.value, canonicalizePath([...path, name])));
-  }
-  return aliases;
-}
-
-function callConsumesDeviceIdentity(
-  call: AstNode,
-  aliases: ReadonlyMap<string, readonly string[]>,
-): boolean {
-  if (!Array.isArray(call.arguments)) return false;
-  return call.arguments.some((argument) => expressionCarriesDeviceIdentity(argument, aliases));
-}
-
-function expressionCarriesDeviceIdentity(
-  node: unknown,
-  aliases: ReadonlyMap<string, readonly string[]>,
-): boolean {
-  const value = unwrapExpression(node);
-  if (value === undefined) return false;
-  const path = canonicalMemberPath(value, aliases);
-  if (path !== undefined && isDeviceIdentityPath(path)) return true;
-  if (value.type === 'SpreadElement') {
-    return expressionCarriesDeviceIdentity(value.argument, aliases);
-  }
-  if (value.type === 'ObjectExpression' && Array.isArray(value.properties)) {
-    return value.properties.some((property) => {
-      if (property === null || typeof property !== 'object') return false;
-      const entry = property as AstNode;
-      return entry.type === 'SpreadElement'
-        ? expressionCarriesDeviceIdentity(entry.argument, aliases)
-        : entry.type === 'Property' && expressionCarriesDeviceIdentity(entry.value, aliases);
-    });
-  }
-  if (value.type === 'ArrayExpression' && Array.isArray(value.elements)) {
-    return value.elements.some((element) => expressionCarriesDeviceIdentity(element, aliases));
-  }
-  return false;
-}
-
-function isAllowedDeviceIdentitySink(call: AstNode): boolean {
-  const callee = unwrapExpression(call.callee);
-  const factory = callee?.type === 'CallExpression' ? unwrapExpression(callee.callee) : undefined;
-  if (factory?.type === 'Identifier' && factory.name === 'requireRuntimeFacts') return true;
-  return callee?.type === 'Identifier' && callee.name === 'snapshotPlanUnavailableResponse';
-}
-function boundPatternPaths(
-  pattern: unknown,
-  path: readonly string[] | undefined,
-): readonly (readonly string[])[] {
-  return boundPatternAliases(pattern, path).map(([, aliasPath]) => aliasPath);
-}
-
-function readsDeviceOwnerIdentity(path: readonly string[]): boolean {
-  return (
-    (path[0] === 'device' && path.length > 1) ||
-    (path[0] === 'facts' && path[1] === 'device' && path.length > 2)
-  );
-}
-
-function isDeviceIdentityPath(path: readonly string[]): boolean {
-  return path[0] === 'device' || (path[0] === 'facts' && path[1] === 'device');
-}
-
-function containsNamedCall(node: unknown, name: string): boolean {
-  let found = false;
+function namedCalls(node: AstNode, name: string): AstNode[] {
+  const calls: AstNode[] = [];
   visitAst(node, (candidate) => {
     if (candidate.type !== 'CallExpression') return;
-    const callee = unwrapExpression(candidate.callee);
-    if (callee?.type === 'Identifier' && callee.name === name) found = true;
+    const callee = candidate.callee as AstNode | undefined;
+    if (callee?.type === 'Identifier' && callee.name === name) calls.push(candidate);
   });
-  return found;
+  return calls;
 }
 
-function unwrapExpression(node: unknown): AstNode | undefined {
-  if (node === null || typeof node !== 'object') return undefined;
-  const value = node as AstNode;
-  if (
-    value.type === 'AwaitExpression' ||
-    value.type === 'ChainExpression' ||
-    value.type === 'TSAsExpression' ||
-    value.type === 'TSNonNullExpression'
-  ) {
-    return unwrapExpression(value.expression);
+function hasExactAdmissionInput(call: AstNode | undefined): boolean {
+  const argument = Array.isArray(call?.arguments) ? call.arguments[0] : undefined;
+  if (!isNode(argument, 'ObjectExpression') || !Array.isArray(argument.properties)) return false;
+  const properties = new Map<string, unknown>();
+  for (const candidate of argument.properties) {
+    if (!isNode(candidate, 'Property')) continue;
+    const name = propertyName(candidate.key);
+    if (name !== undefined) properties.set(name, candidate.value);
   }
-  return value;
-}
-
-function isIdentifier(node: unknown): node is AstNode & { name: string } {
   return (
-    node !== null &&
-    typeof node === 'object' &&
-    (node as AstNode).type === 'Identifier' &&
-    typeof (node as AstNode).name === 'string'
+    hasPath(properties.get('device'), ['device']) &&
+    hasPath(properties.get('use'), ['plan', 'use']) &&
+    hasPath(properties.get('inspectFacts'), ['params', 'inspectFacts'])
   );
 }
 
-function samePath(actual: readonly string[], expected: readonly string[]): boolean {
-  return (
-    actual.length === expected.length && actual.every((part, index) => part === expected[index])
-  );
+function hasPath(node: unknown, expected: readonly string[]): boolean {
+  const path = memberPath(node);
+  return path?.length === expected.length && path.every((part, index) => part === expected[index]);
+}
+
+function isNode(node: unknown, type: string): node is AstNode {
+  return node !== null && typeof node === 'object' && (node as AstNode).type === type;
+}
+
+function violation(line: number, message: string): UnruledViolation {
+  return { file: SNAPSHOT_ROUTE_FILE, line, message };
 }

@@ -1,5 +1,4 @@
 import {
-  resolveSnapshotRuntimePlan,
   type CaptureSnapshotInput,
   type RuntimeOperationFact,
   type SnapshotResult,
@@ -8,52 +7,13 @@ import {
 } from '@agent-device/contracts/platform';
 import { buildIosOpenCommandHint } from './ios-app-session-hint.ts';
 import { contextFromFlags } from './context.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
+import type { BindDeviceRuntime } from './request-runtime-binding.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import {
   requireRuntimeBinding,
-  requireRuntimeFacts,
   unavailableRuntimeOperationResponse,
 } from './handlers/session-runtime-admission.ts';
 import { errorResponse } from './handlers/response.ts';
-
-type SnapshotCaptureAdmission =
-  | Readonly<{ admitted: false; response: DaemonResponse }>
-  | Readonly<{
-      admitted: true;
-      session: SessionState | undefined;
-      device: SessionState['device'];
-      plan: SnapshotRuntimePlan;
-    }>;
-
-/** Facts-first admission for the one public snapshot runtime unit. */
-export async function inspectSnapshotCaptureAdmission(params: {
-  req: DaemonRequest;
-  session: SessionState | undefined;
-  device: SessionState['device'];
-  inspectFacts?: InspectDeviceRuntimeFacts;
-}): Promise<SnapshotCaptureAdmission> {
-  const { session, device } = params;
-  const facts = await requireRuntimeFacts(params.inspectFacts)(device);
-  const plan = resolveSnapshotRuntimePlan({
-    customActions: params.req.flags?.snapshotCustomActions === true,
-    hasActiveApp: session?.appBundleId !== undefined,
-  });
-  for (const operation of plan.use.required) {
-    const fact = facts.operations[operation];
-    if (fact.available) continue;
-    return {
-      admitted: false,
-      response: await snapshotPlanUnavailableResponse({ operation, fact, session, device }),
-    };
-  }
-  return {
-    admitted: true,
-    session,
-    device,
-    plan,
-  };
-}
 
 export async function bindSnapshotCaptureRuntime(
   bindDevice: BindDeviceRuntime | undefined,
@@ -110,7 +70,7 @@ function selectSnapshotWithoutActiveApp(
   });
 }
 
-async function snapshotPlanUnavailableResponse(params: {
+export async function snapshotPlanUnavailableResponse(params: {
   operation: SnapshotRuntimePlan['use']['required'][number];
   fact: RuntimeOperationFact;
   session: SessionState | undefined;

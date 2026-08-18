@@ -1,4 +1,9 @@
-import type { RuntimeOperationFact } from '@agent-device/contracts/platform';
+import type {
+  PlatformRuntimeOperations,
+  RuntimeOperationFact,
+  RuntimeOperationKey,
+} from '@agent-device/contracts/platform';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { SessionStore } from '../session-store.ts';
@@ -32,6 +37,32 @@ export function requireRuntimeFacts(
 ): InspectDeviceRuntimeFacts {
   if (inspectFacts) return inspectFacts;
   throw new AppError('COMMAND_FAILED', 'Device runtime facts inspection is unavailable.');
+}
+
+export async function inspectRequiredRuntimeUse<
+  const Use extends Readonly<{
+    required: readonly RuntimeOperationKey<PlatformRuntimeOperations>[];
+  }>,
+>(
+  params: Readonly<{
+    device: DeviceInfo;
+    use: Use;
+    inspectFacts?: InspectDeviceRuntimeFacts;
+  }>,
+): Promise<
+  | Readonly<{ admitted: true }>
+  | Readonly<{
+      admitted: false;
+      operation: Use['required'][number];
+      fact: RuntimeOperationFact;
+    }>
+> {
+  const facts = await requireRuntimeFacts(params.inspectFacts)(params.device);
+  for (const operation of params.use.required) {
+    const fact = facts.operations[operation];
+    if (!fact.available) return { admitted: false, operation, fact };
+  }
+  return { admitted: true };
 }
 
 export function requireRuntimeBinding(

@@ -4,6 +4,7 @@ import {
   type SnapshotDiffSummary,
 } from '@agent-device/contracts/capture';
 import {
+  resolveSnapshotRuntimePlan,
   stripAndroidSystemChromeProvenance,
   type SnapshotResult,
 } from '@agent-device/contracts/platform';
@@ -15,6 +16,7 @@ import { createAgentDevice } from '../runtime.ts';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';
 import { maybeBuildAndroidSnapshotTimeoutFailure } from './android-snapshot-timeout-evidence.ts';
 import { requireCommandSupported } from './handlers/response.ts';
+import { inspectRequiredRuntimeUse } from './handlers/session-runtime-admission.ts';
 import { captureSnapshot, resolveSnapshotScope } from './handlers/snapshot-capture.ts';
 import {
   buildSnapshotSession,
@@ -38,7 +40,7 @@ import type { DaemonRequest, DaemonResponse, DaemonResponseData, SessionState } 
 import {
   bindSnapshotCaptureRuntime,
   buildRuntimeCaptureInput,
-  inspectSnapshotCaptureAdmission,
+  snapshotPlanUnavailableResponse,
 } from './snapshot-runtime-binding.ts';
 import {
   requireLegacyDiffCustomActionsSupported,
@@ -58,14 +60,23 @@ export async function dispatchSnapshotViaRuntime(params: {
 
   const resolvedScope = resolveSnapshotScope(req.flags?.snapshotScope, session);
   if (!resolvedScope.ok) return resolvedScope;
-  const admission = await inspectSnapshotCaptureAdmission({
-    req,
-    session,
+  const plan = resolveSnapshotRuntimePlan({
+    customActions: req.flags?.snapshotCustomActions === true,
+    hasActiveApp: session?.appBundleId !== undefined,
+  });
+  const admission = await inspectRequiredRuntimeUse({
     device,
+    use: plan.use,
     inspectFacts: params.inspectFacts,
   });
-  if (!admission.admitted) return admission.response;
-  const { plan } = admission;
+  if (!admission.admitted) {
+    return await snapshotPlanUnavailableResponse({
+      operation: admission.operation,
+      fact: admission.fact,
+      session,
+      device,
+    });
+  }
   const runtime = await bindSnapshotCaptureRuntime(params.bindDevice, device, plan);
   return await withSessionlessRunnerCleanup(
     session,

@@ -6,18 +6,6 @@ import { cutoverTableDefects } from './runtime-command-cutover-model.ts';
 import { MIGRATED_COMMAND_CUTOVERS } from './runtime-command-cutover-table.ts';
 import { commandDescriptors } from '../../src/core/command-descriptor/registry.ts';
 
-const SNAPSHOT_FACTS_FIRST_ADMISSION = `
-  const facts = await requireRuntimeFacts(params.inspectFacts)(device);
-  const plan = resolveSnapshotRuntimePlan({
-    customActions: params.req.flags?.snapshotCustomActions === true,
-    hasActiveApp: session?.appBundleId !== undefined,
-  });
-  for (const operation of plan.use.required) {
-    const fact = facts.operations[operation];
-    if (fact.available) continue;
-  }
-`;
-
 test('R20 boot rejects the superseded root readiness adapter', () => {
   assert.deepEqual(
     summariesFor('R20 boot-runtime-cutover', [
@@ -81,6 +69,12 @@ test('R32 snapshot rejects legacy admission and dispatcher projection', () => {
             runtime.operations.captureSnapshotWithoutActiveApp(input);
           }
           function dispatchSnapshotViaRuntime() {
+            const plan = resolveSnapshotRuntimePlan(normalizedIntent);
+            inspectRequiredRuntimeUse({
+              device,
+              use: plan.use,
+              inspectFacts: params.inspectFacts,
+            });
             requireCommandSupported('snapshot', device);
           }
           function handleSnapshotCommands() {
@@ -89,14 +83,7 @@ test('R32 snapshot rejects legacy admission and dispatcher projection', () => {
           handleSnapshotCommands(request);
         `,
       ],
-      [
-        'src/daemon/snapshot-runtime-binding.ts',
-        `
-          export async function inspectSnapshotCaptureAdmission(params, device, session) {
-            ${SNAPSHOT_FACTS_FIRST_ADMISSION}
-          }
-        `,
-      ],
+      ['src/daemon/snapshot-runtime-binding.ts', ''],
       ['src/core/dispatch.ts', 'function handleSnapshotCommand() { return legacy.snapshot(); }'],
       [
         'src/core/capabilities.ts',
