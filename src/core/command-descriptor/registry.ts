@@ -1058,6 +1058,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     targetIdentityVerification: 'pre-dispatch',
     catalog: { group: 'public' },
+    frameworkTier: 'extended',
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     daemon: {
