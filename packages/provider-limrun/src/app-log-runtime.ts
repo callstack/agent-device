@@ -26,6 +26,7 @@ import {
   providerRuntimeOwner,
   sameRuntimeOwner,
   snapshotRuntimeOperationFacts,
+  viewportRuntimeOperationFacts,
 } from '@agent-device/contracts/platform';
 import {
   createLimrunAppLogEnvelope,
@@ -83,6 +84,11 @@ const customSnapshotUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
   hint: 'Custom snapshot actions are available only for Limrun iOS simulator sessions.',
+} as const);
+const viewportUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'Limrun does not expose viewport resizing.',
 } as const);
 const recordingUnavailable = Object.freeze({
   available: false,
@@ -425,6 +431,7 @@ function facts(
             : customSnapshotUnavailable,
         withoutActiveApp: available,
       }),
+      ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
       ensureReady: available,
       bootTarget: available,
       bootTargetHeadless: headlessUnavailable,
@@ -463,6 +470,7 @@ function recoveryFacts(
         customActions: liveSessionUnavailable,
         withoutActiveApp: liveSessionUnavailable,
       }),
+      ...viewportRuntimeOperationFacts({ setViewport: liveSessionUnavailable }),
       ensureReady: liveSessionUnavailable,
       bootTarget: liveSessionUnavailable,
       bootTargetHeadless: liveSessionUnavailable,

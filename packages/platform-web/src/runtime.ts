@@ -12,6 +12,7 @@ import {
   localRuntimeOwner,
   snapshotRuntimeOperationFacts,
   sameRuntimeOwner,
+  viewportRuntimeOperationFacts,
 } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -167,6 +168,22 @@ function bindWebRuntime(
           resolveInteractor: host.localInteractors.resolve,
         })
       : {}),
+    ...(facts.operations.setViewport.available
+      ? {
+          setViewport: async (input) => {
+            signal.throwIfAborted();
+            const interactor = await host.localInteractors.resolve(device, { signal });
+            if (!interactor.setViewport) {
+              throw new AppError(
+                'UNSUPPORTED_OPERATION',
+                'viewport is not supported by the bound web interactor',
+              );
+            }
+            await interactor.setViewport(input.width, input.height);
+            signal.throwIfAborted();
+          },
+        }
+      : {}),
     ...availableApplicationLifecycleOperations(
       bindWebApplicationLifecycle({ host: host.localInteractors, device, signal }),
       facts.operations,
@@ -213,6 +230,9 @@ function webRuntimeFacts(
         capture: device.kind === 'device' ? available : openTargetKindUnavailable,
         customActions: snapshotCustomActionsUnavailable,
         withoutActiveApp: device.kind === 'device' ? available : openTargetKindUnavailable,
+      }),
+      ...viewportRuntimeOperationFacts({
+        setViewport: device.kind === 'device' ? available : openTargetKindUnavailable,
       }),
       ensureReady: readinessUnavailable,
       bootTarget: readinessUnavailable,

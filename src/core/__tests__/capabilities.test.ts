@@ -187,24 +187,6 @@ test('core commands support iOS simulator, iOS device, and Android', () => {
   );
 });
 
-test('viewport resizing is admitted only on web, where a backend exists', () => {
-  assertCommandSupport(
-    ['viewport'],
-    [
-      { device: webDevice, expected: true, label: 'on web' },
-      { device: iosSimulator, expected: false, label: 'on iOS simulator' },
-      { device: iosDevice, expected: false, label: 'on iOS device' },
-      { device: macOsDevice, expected: false, label: 'on macOS' },
-      { device: tvOsSimulator, expected: false, label: 'on tvOS simulator' },
-      { device: androidDevice, expected: false, label: 'on Android device' },
-      { device: androidEmulator, expected: false, label: 'on Android emulator' },
-      { device: linuxDevice, expected: false, label: 'on linux' },
-    ],
-  );
-  assert.match(unsupportedHintForDevice('viewport', iosSimulator) ?? '', /--platform web/);
-  assert.equal(unsupportedHintForDevice('viewport', webDevice), undefined);
-});
-
 // #1783: hover is a pointer state, so it is admitted exactly where a pointer
 // exists (the web backend's mouse move) and denied on every touch platform.
 test('hover is admitted only on web, where a pointer backend exists', () => {

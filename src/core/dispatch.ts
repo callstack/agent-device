@@ -26,7 +26,6 @@ import {
   handleTypeCommand,
 } from './dispatch-interactions.ts';
 import { getInteractor } from './interactors.ts';
-import { readViewportDimension } from './viewport-dimension.ts';
 
 export type { DispatchContext } from './dispatch-context.ts';
 export { resolveTargetDevice } from './dispatch-resolve.ts';
@@ -161,7 +160,6 @@ const DISPATCH_HANDLERS: Record<DispatchCommand, DispatchHandler> = {
     handleTriggerAppEventCommand(device, interactor, positionals, context),
   screenshot: ({ interactor, positionals, outPath, context }) =>
     handleScreenshotCommand(interactor, positionals, outPath, context),
-  viewport: ({ interactor, positionals }) => handleViewportCommand(interactor, positionals),
   back: async ({ interactor, context }) => {
     await interactor.back(context?.backMode);
     return { action: 'back', mode: context?.backMode ?? 'in-app', ...successText('Back') };
@@ -260,22 +258,6 @@ async function handleScreenshotCommand(
     captureBackend: context?.screenshotCaptureBackend,
   });
   return { path: screenshotPath, ...successText(`Saved screenshot: ${screenshotPath}`) };
-}
-
-async function handleViewportCommand(
-  interactor: Interactor,
-  positionals: string[],
-): Promise<Record<string, unknown>> {
-  if (positionals.length !== 2) {
-    throw new AppError('INVALID_ARGS', 'viewport requires exactly two arguments: <width> <height>');
-  }
-  const width = readViewportDimension(positionals[0], 'width');
-  const height = readViewportDimension(positionals[1], 'height');
-  if (!interactor.setViewport) {
-    throw new AppError('UNSUPPORTED_OPERATION', 'viewport is not supported by this backend');
-  }
-  await interactor.setViewport(width, height);
-  return { width, height, ...successText(`Viewport set: ${width}x${height}`) };
 }
 
 async function handleClipboardCommand(

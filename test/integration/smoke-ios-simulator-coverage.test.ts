@@ -11,10 +11,7 @@ import {
   swipePayloadFromPositionals,
 } from '@agent-device/contracts/interaction';
 import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
-import {
-  isCommandSupportedOnDevice,
-  unsupportedHintForDevice,
-} from '../../src/core/capabilities.ts';
+import { isCommandSupportedOnDevice } from '../../src/core/capabilities.ts';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import { isValidSelectorExpression } from '@agent-device/selectors';
 import { IOS_SIMULATOR_BEHAVIOR_COVERAGE } from './ios-simulator-e2e/behavior-coverage.ts';
@@ -143,6 +140,14 @@ test('live iOS scenarios reference fixture identifiers that exist', () => {
 
 test('capability classifications match executable simulator behavior', () => {
   for (const [command, entry] of Object.entries(IOS_SIMULATOR_E2E_COVERAGE)) {
+    if (command === PUBLIC_COMMANDS.viewport) {
+      assert.equal(
+        entry.level,
+        'command-contract',
+        'viewport admission belongs to the exact-owner runtime fact',
+      );
+      continue;
+    }
     const supported = isCommandSupportedOnDevice(command, IOS_SIMULATOR);
     if (command === PUBLIC_COMMANDS.audio) {
       assert.equal(
@@ -162,12 +167,10 @@ test('capability classifications match executable simulator behavior', () => {
   assert.equal(isCommandSupportedOnDevice(PUBLIC_COMMANDS.tvRemote, IOS_SIMULATOR), false);
   assert.equal(IOS_SIMULATOR_E2E_COVERAGE[PUBLIC_COMMANDS.tvRemote].level, 'capability-denial');
 
-  assert.equal(isCommandSupportedOnDevice(PUBLIC_COMMANDS.viewport, IOS_SIMULATOR), false);
-  assert.equal(IOS_SIMULATOR_E2E_COVERAGE[PUBLIC_COMMANDS.viewport].level, 'capability-denial');
-  assert.match(
-    unsupportedHintForDevice(PUBLIC_COMMANDS.viewport, IOS_SIMULATOR) ?? '',
-    /--platform web/,
-    'viewport denial names the surface that does support it',
+  assert.equal(
+    IOS_SIMULATOR_E2E_COVERAGE[PUBLIC_COMMANDS.viewport].level,
+    'command-contract',
+    'viewport denial is owned by exact platform runtime facts',
   );
 });
 

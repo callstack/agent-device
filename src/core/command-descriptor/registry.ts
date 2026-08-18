@@ -31,6 +31,7 @@ import {
   runtimeCommandRuntimePlanUses,
   screenRecordingRuntimePlanUses,
   shutdownTargetUse,
+  viewportRuntimeUse,
 } from '@agent-device/contracts/platform';
 import { readDeclaredPlatformExecution } from './platform-execution-entry.ts';
 import type {
@@ -1139,7 +1140,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     // Hover is a pointer-only state (#1783): the web provider moves the mouse
     // without pressing. Touch platforms have no hover, so no device bucket
     // admits it; `WEB_INTERACTION_COMMANDS` in src/core/capabilities.ts adds the
-    // web bucket, the same way `viewport` is web-only.
+    // web bucket; runtime-owned web-only commands use exact operation facts instead.
     capability: { apple: {}, android: {}, linux: LINUX_NONE },
     timeoutPolicy: postActionObservationTimeoutPolicy('hover', PRESERVE_DAEMON_TIMEOUT_POLICY),
     postActionObservation: postActionObservation('hover'),
@@ -1371,17 +1372,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     daemon: { route: 'generic', refFrameEffect: 'may-invalidate' },
-    dispatch: {},
-    // Viewport resizing is a web-surface contract (`WEB_SETTING_COMMANDS` in
-    // src/core/capabilities.ts adds the only admitting bucket). No device platform
-    // has a durable viewport set/read/reset lifecycle: Apple screen geometry is
-    // fixed by the selected simulator/device type and neither simctl nor XCTest can
-    // resize it, and Android has no backend either. Deny both instead of admitting a
-    // command dispatch can only reject (#1407).
-    capability: { apple: {}, android: {}, linux: LINUX_NONE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    platformExecution: { kind: 'device-runtime', uses: [viewportRuntimeUse] },
   },
   // -- capability/batch-only commands (no daemon route) --
   {

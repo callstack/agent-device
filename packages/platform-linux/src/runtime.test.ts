@@ -104,6 +104,8 @@ test.each([
     expect(binding.facts.operations.captureSnapshotWithoutActiveApp.available).toBe(
       device.kind === 'device',
     );
+    expect(binding.facts.operations.setViewport).toMatchObject({ available: false });
+    expect(binding.operations.setViewport).toBeUndefined();
     expect(binding.operations.captureSnapshot).toBeTypeOf(
       device.kind === 'device' ? 'function' : 'undefined',
     );

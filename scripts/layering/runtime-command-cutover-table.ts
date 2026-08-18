@@ -507,6 +507,23 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
     },
     extensions: [diffRetiredDispatchProjectionProof],
   },
+  {
+    rule: 'R34 viewport-runtime-cutover',
+    command: 'viewport',
+    subject: 'web viewport resize',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      routeNames: ['handleViewportCommand'],
+    },
+    runtimeTypeNames: ['ViewportRuntimeOperations'],
+    operations: { names: ['setViewport'] },
+    singularExecution: {
+      routes: ['dispatchGenericCommand'],
+      operations: ['setViewport'],
+      operationOwners: { setViewport: ['resolveBoundViewportRuntime'] },
+    },
+  },
 ];
 
 function snapshotRetiredDispatchProjectionProof(

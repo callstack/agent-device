@@ -135,6 +135,8 @@ test.each([
       reason: 'unsupported-platform-leaf',
     });
     expect(binding.operations.captureSnapshot).toBeUndefined();
+    expect(binding.facts.operations.setViewport).toMatchObject({ available: false });
+    expect(binding.operations.setViewport).toBeUndefined();
     expectLifecycleFacts(binding, legacy);
   },
 );

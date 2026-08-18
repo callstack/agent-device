@@ -13,6 +13,7 @@ import type { NetworkRuntimeHost, NetworkRuntimeOperations } from './network-run
 import type { ScreenRecordingRuntimeHost } from './screen-recording-runtime-host.ts';
 import type { ScreenRecordingRuntimeOperations } from './screen-recording-runtime.ts';
 import type { SnapshotRuntimeHost, SnapshotRuntimeOperations } from './snapshot-runtime.ts';
+import type { ViewportRuntimeOperations } from './viewport-runtime.ts';
 import type {
   DeviceReadinessRuntimeHost,
   DeviceReadinessRuntimeOperations,
@@ -43,6 +44,7 @@ export type PlatformRuntimeOperations = AppLogRuntimeOperations &
   NetworkRuntimeOperations &
   ScreenRecordingRuntimeOperations &
   SnapshotRuntimeOperations &
+  ViewportRuntimeOperations &
   DeviceReadinessRuntimeOperations &
   DeviceShutdownRuntimeOperations &
   ApplicationLifecycleRuntimeOperations;
@@ -61,6 +63,7 @@ export const bootTargetHeadlessUse = defineUse({
 });
 export const appsRuntimeUse = defineUse({ required: ['ensureReady', 'listApps'] });
 export const captureSnapshotUse = defineUse({ required: ['captureSnapshot'] });
+export const viewportRuntimeUse = defineUse({ required: ['setViewport'] });
 const captureSnapshotWithCustomActionsUse = defineUse({
   required: ['captureSnapshot', 'captureSnapshotWithCustomActions'],
 });

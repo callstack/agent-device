@@ -5,6 +5,7 @@ import {
   createUnavailablePlatformRuntimeFacts,
   sameRuntimeOwner,
   snapshotRuntimeOperationFacts,
+  viewportRuntimeOperationFacts,
   type AppDeploymentInput,
   type DeployMaterializedAppInput,
   type DeviceBinding,
@@ -72,6 +73,11 @@ const snapshotCustomActionsUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
   hint: 'WebDriver provider runtimes do not expose iOS simulator custom snapshot actions.',
+} as const);
+const viewportUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'WebDriver provider runtimes do not expose viewport resizing.',
 } as const);
 
 const appStateUnavailable = Object.freeze({
@@ -291,6 +297,7 @@ function webDriverFacts(
           customActions: inactiveSession,
           withoutActiveApp: inactiveSession,
         }),
+        ...viewportRuntimeOperationFacts({ setViewport: inactiveSession }),
         ensureReady: inactiveSession,
         bootTarget: inactiveSession,
         bootTargetHeadless: inactiveSession,
@@ -350,6 +357,7 @@ function webDriverFacts(
             ? available
             : snapshotUnavailable,
       }),
+      ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
       ensureReady: available,
       bootTarget: available,
       bootTargetHeadless: headlessUnavailable,

@@ -68,6 +68,8 @@ test.each([
   expect(facts.operations.captureSnapshot).toEqual({ available: true });
   expect(facts.operations.captureSnapshotWithCustomActions.available).toBe(false);
   expect(facts.operations.captureSnapshotWithoutActiveApp).toEqual({ available: true });
+  expect(facts.operations.setViewport).toMatchObject({ available: false });
+  expect(binding.operations.setViewport).toBeUndefined();
   await expect(binding.operations.ensureReady?.({})).resolves.toMatchObject({ booted: true });
   await expect(
     binding.operations.listApps?.({ device: runtimeDevice, filter: 'all' }),
@@ -100,6 +102,7 @@ test('rejects the non-discovered HarmonyOS simulator cell for appstate', async (
   });
 
   expect(binding.facts.operations.appState).toEqual(appStateUnavailable);
+  expect(binding.facts.operations.setViewport).toMatchObject({ available: false });
   expect(binding.operations.appState).toBeUndefined();
 });
 

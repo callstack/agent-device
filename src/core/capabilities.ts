@@ -68,11 +68,9 @@ const WEB_INTERACTION_COMMANDS = [
   'scroll',
   'type',
 ] as const;
-const WEB_SETTING_COMMANDS = ['viewport'] as const;
 const WEB_SUPPORTED_COMMANDS = new Set<string>([
   ...WEB_QUERY_COMMANDS,
   ...WEB_INTERACTION_COMMANDS,
-  ...WEB_SETTING_COMMANDS,
 ]);
 // Built from the additive command-descriptor registry (ADR-0008, Phase 1 step 3).
 // The hand-authored literal was deleted after #906 proved deriveCapabilityMatrix is

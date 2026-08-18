@@ -50,6 +50,8 @@ test('preserves a narrow web provider dump including empty successful entries', 
   expect(binding.facts.operations.captureSnapshot).toEqual({ available: true });
   expect(binding.facts.operations.captureSnapshotWithCustomActions.available).toBe(false);
   expect(binding.facts.operations.captureSnapshotWithoutActiveApp).toEqual({ available: true });
+  expect(binding.facts.operations.setViewport).toEqual({ available: true });
+  expect(binding.operations.setViewport).toBeTypeOf('function');
   expect(binding.operations.captureSnapshot).toBeTypeOf('function');
   expectLifecycleFacts(binding);
 });
@@ -133,9 +135,42 @@ test.each([
       portReverse: false,
     });
     expect(binding.facts.operations.captureSnapshot.available).toBe(false);
+    expect(binding.facts.operations.setViewport.available).toBe(false);
+    expect(binding.operations.setViewport).toBeUndefined();
     expect(binding.operations.captureSnapshot).toBeUndefined();
   },
 );
+
+test('binds viewport resizing through the local web interactor and honors cancellation', async () => {
+  const setViewport = vi.fn(async () => undefined);
+  const runtimeHost = {
+    ...host({ mode: 'local' }),
+    localInteractors: {
+      resolve: async () => ({ setViewport }) as unknown as Interactor,
+    },
+  };
+  const binding = await createWebPlatformRuntime(runtimeHost).bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: scope(),
+  });
+
+  await binding.operations.setViewport?.({ width: 1280, height: 900 });
+  expect(setViewport).toHaveBeenCalledTimes(1);
+  expect(setViewport).toHaveBeenCalledWith(1280, 900);
+
+  const canceled = new AbortController();
+  canceled.abort(new Error('request canceled'));
+  const canceledBinding = await createWebPlatformRuntime(runtimeHost).bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: { ...scope(), signal: canceled.signal },
+  });
+  await expect(
+    canceledBinding.operations.setViewport?.({ width: 800, height: 600 }),
+  ).rejects.toThrow('request canceled');
+  expect(setViewport).toHaveBeenCalledTimes(1);
+});
 
 type LegacyLifecycleCell = Readonly<{
   openTarget: boolean;

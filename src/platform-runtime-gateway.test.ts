@@ -1,5 +1,16 @@
-import type { PlatformRuntimeHost, PlatformRuntimeOwner } from '@agent-device/contracts/platform';
-import { providerRuntimeOwner } from '@agent-device/contracts/platform';
+import type {
+  DeviceBinding,
+  PlatformRuntimeHost,
+  PlatformRuntimeOperations,
+  PlatformRuntimeOwner,
+} from '@agent-device/contracts/platform';
+import {
+  applicationLifecycleOperationFacts,
+  createUnavailablePlatformRuntimeFacts,
+  localRuntimeOwner,
+  providerRuntimeOwner,
+  viewportRuntimeOperationFacts,
+} from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createLimrunRuntime } from '@agent-device/provider-limrun';
 import { describe, expect, test, vi } from 'vitest';
@@ -20,6 +31,80 @@ import {
 } from './platform-runtime-gateway.fixtures.ts';
 
 describe('composed platform runtime gateway', () => {
+  test('loads only the selected web owner for viewport facts and binding', async () => {
+    const webDevice: DeviceInfo = {
+      platform: 'web',
+      id: 'web',
+      name: 'Web',
+      kind: 'device',
+      target: 'desktop',
+      booted: true,
+    };
+    const unavailable = { available: false, reason: 'unsupported-platform-leaf' } as const;
+    const available = { available: true } as const;
+    const owner = localRuntimeOwner('web');
+    const baseFacts = createUnavailablePlatformRuntimeFacts(webDevice, owner, {
+      appLog: unavailable,
+      network: unavailable,
+      lifecycle: applicationLifecycleOperationFacts({
+        resolveOpenTarget: unavailable,
+        prepareApplicationOpen: unavailable,
+        openApplication: unavailable,
+        applyRuntimeHints: unavailable,
+        clearRuntimeHints: unavailable,
+        closeApplication: unavailable,
+        finalizeApplicationClose: unavailable,
+        prepareAppleRunner: unavailable,
+        configureProviderPortReverse: unavailable,
+      }),
+    });
+    const facts = {
+      ...baseFacts,
+      operations: {
+        ...baseFacts.operations,
+        ...viewportRuntimeOperationFacts({ setViewport: available }),
+      },
+    };
+    const setViewport = vi.fn(async () => undefined);
+    const binding: DeviceBinding<PlatformRuntimeOperations> = {
+      device: webDevice,
+      owner,
+      facts,
+      operations: { setViewport },
+      [Symbol.asyncDispose]: async () => {},
+    };
+    const webLoad = vi.fn(async () => ({
+      owner,
+      ownsDevice: () => true,
+      inspectFacts: async () => facts,
+      bind: async () => binding,
+      shutdown: async () => {},
+    }));
+    const appleLoad = vi.fn(async () => {
+      throw new Error('unselected Apple runtime must stay lazy');
+    });
+    const runtimeGateway = createComposedPlatformRuntimeGateway({
+      modules: new Map([
+        ['web', { family: 'web', loadRuntime: webLoad }],
+        ['apple', { family: 'apple', loadRuntime: appleLoad }],
+      ]),
+      loadHost: async () => ({}) as PlatformRuntimeHost,
+    });
+
+    await expect(runtimeGateway.inspectFacts(webDevice)).resolves.toMatchObject({
+      operations: { setViewport: { available: true } },
+    });
+    const selected = await runtimeGateway.bind({
+      device: webDevice,
+      intent: { kind: 'ordinary' },
+      scope,
+    });
+    await selected.operations.setViewport?.({ width: 1280, height: 900 });
+    expect(webLoad).toHaveBeenCalledTimes(1);
+    expect(appleLoad).not.toHaveBeenCalled();
+    expect(setViewport).toHaveBeenCalledWith({ width: 1280, height: 900 });
+  });
+
   // Which resources need recovering is the host's composition (see
   // platform-runtime-application-resources.test.ts). The gateway owns only the lazy host load and
   // the once-per-process shape of each durable phase.

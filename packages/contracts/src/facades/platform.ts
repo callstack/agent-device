@@ -215,6 +215,7 @@ export {
   defineUse,
   resolveSnapshotRuntimePlan,
   snapshotRuntimePlanUses,
+  viewportRuntimeUse,
 } from '../platform-runtime-operations.ts';
 export type { SnapshotRuntimePlan } from '../platform-runtime-operations.ts';
 export type {
@@ -249,6 +250,12 @@ export type {
   SnapshotRuntimeOperationFacts,
   SnapshotResult,
 } from '../snapshot-runtime.ts';
+export { viewportRuntimeOperationFacts } from '../viewport-runtime.ts';
+export type {
+  SetViewportInput,
+  ViewportRuntimeOperationFacts,
+  ViewportRuntimeOperations,
+} from '../viewport-runtime.ts';
 export type {
   AppStateRuntimeCommand,
   AppStateRuntimeCommandResult,

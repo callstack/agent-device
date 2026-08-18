@@ -1,6 +1,6 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { ViewportCommandOptions } from '@agent-device/contracts/client';
-import { readViewportDimension } from '../../core/viewport-dimension.ts';
+import { readViewportDimensions } from '@agent-device/contracts/capture';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { integerField, requiredField } from '../command-input.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
@@ -30,8 +30,7 @@ const viewportCliSchema = {
 
 const viewportCliReader: CliReader = (positionals, flags) => ({
   ...commonInputFromFlags(flags),
-  width: readViewportDimension(positionals[0], 'width'),
-  height: readViewportDimension(positionals[1], 'height'),
+  ...readViewportDimensions(positionals),
 });
 
 const viewportDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.viewport, (input) => {

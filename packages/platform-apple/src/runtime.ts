@@ -10,6 +10,7 @@ import {
   availableApplicationLifecycleOperations,
   localRuntimeOwner,
   snapshotRuntimeOperationFacts,
+  viewportRuntimeOperationFacts,
 } from '@agent-device/contracts/platform';
 import {
   isIosFamily,
@@ -36,6 +37,11 @@ const available = Object.freeze({ available: true } as const);
 const unavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
+} as const);
+const viewportUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'viewport resizes web targets only (--platform web).',
 } as const);
 const appStateUnavailable = Object.freeze({
   available: false,
@@ -206,6 +212,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         screenRecordingReattach: recordingFacts,
         screenRecordingCleanup: recordingFacts,
         ...appleSnapshotFacts(device),
+        ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ensureReady: readiness,
         bootTarget: boot,
         bootTargetHeadless: headlessUnavailable,

@@ -147,10 +147,6 @@ const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
   audio: supportsHostAudioProbe,
 };
 const HINT_REF: Record<string, (device: DeviceInfo) => string | undefined> = {
-  viewport: (device) =>
-    device.platform === 'apple'
-      ? 'viewport resizes web targets only (--platform web). Apple screen geometry is fixed by the selected simulator or device type — open a different simulator to test another screen size.'
-      : undefined,
   perf: coreDeviceOnlyPhysicalOperationHint,
   'tv-remote': (device) => {
     if (device.platform === 'android') {

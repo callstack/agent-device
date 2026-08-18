@@ -47,8 +47,8 @@ test('Android emulator coverage exhaustively classifies the public catalog', () 
 test('Android coverage report summary accounts for every manifest classification', () => {
   const summary = ANDROID_EMULATOR_COVERAGE_CLASSIFICATION_SUMMARY;
   assert.deepEqual(summary, {
-    capabilityDenial: 3,
-    contract: 10,
+    capabilityDenial: 2,
+    contract: 11,
     gap: 0,
     live: 41,
     total: 54,
@@ -259,11 +259,14 @@ test('Android behavior patterns are owned by live fixture journeys', () => {
   );
 });
 
-test('Android catalog denials exclude fact-owned lifecycle commands', () => {
-  for (const command of [PUBLIC_COMMANDS.tvRemote, PUBLIC_COMMANDS.viewport]) {
-    assert.equal(isCommandSupportedOnDevice(command, ANDROID_EMULATOR), false, command);
-    assert.equal(ANDROID_EMULATOR_E2E_COVERAGE[command].level, 'capability-denial', command);
-  }
+test('Android catalog denials exclude fact-owned runtime commands', () => {
+  assert.equal(isCommandSupportedOnDevice(PUBLIC_COMMANDS.tvRemote, ANDROID_EMULATOR), false);
+  assert.equal(ANDROID_EMULATOR_E2E_COVERAGE[PUBLIC_COMMANDS.tvRemote].level, 'capability-denial');
+  assert.equal(
+    ANDROID_EMULATOR_E2E_COVERAGE[PUBLIC_COMMANDS.viewport].level,
+    'command-contract',
+    'viewport support is controlled by its platform runtime facts, not the capability catalog',
+  );
   assert.equal(
     ANDROID_EMULATOR_E2E_COVERAGE[PUBLIC_COMMANDS.prepare].level,
     'command-contract',

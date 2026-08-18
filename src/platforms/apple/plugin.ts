@@ -94,10 +94,6 @@ const APPLE_UNSUPPORTED_HINT_BY_DEFAULT: Record<
   (device: DeviceInfo) => string | undefined
 > = {
   [PUBLIC_COMMANDS.perf]: coreDeviceOnlyPhysicalOperationHint,
-  [PUBLIC_COMMANDS.viewport]: (device) =>
-    device.platform === 'apple'
-      ? 'viewport resizes web targets only (--platform web). Apple screen geometry is fixed by the selected simulator or device type — open a different simulator to test another screen size.'
-      : undefined,
   [PUBLIC_COMMANDS.tvRemote]: (device) =>
     device.platform === 'android'
       ? device.target === 'tv'

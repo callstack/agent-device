@@ -12,6 +12,7 @@ import {
   bindLocalSnapshotInteractor,
   localRuntimeOwner,
   snapshotRuntimeOperationFacts,
+  viewportRuntimeOperationFacts,
 } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createAndroidAppLogRuntime } from './logs/runtime.ts';
@@ -77,6 +78,11 @@ const snapshotCustomActionsUnavailable = Object.freeze({
   reason: 'unsupported-platform-leaf',
   hint: 'Re-run without --actions, or target an iOS simulator.',
 } as const);
+const viewportUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'viewport resizes web targets only (--platform web).',
+} as const);
 
 function androidLifecycleFacts(device: DeviceInfo) {
   const openTarget = androidOpenTargetFact(device);
@@ -131,6 +137,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           customActions: snapshotCustomActionsUnavailable,
           withoutActiveApp: device.kind === 'simulator' ? snapshotKindUnavailable : available,
         }),
+        ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ensureReady: available,
         bootTarget: available,
         bootTargetHeadless: device.kind === 'emulator' ? available : headlessUnavailable,

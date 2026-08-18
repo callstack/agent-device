@@ -67,6 +67,7 @@ import {
   createScreenRecordingAdmissionLedger,
   type ScreenRecordingAdmissionLedger,
 } from './screen-recording-admission-ledger.ts';
+import { resolveBoundViewportRuntime } from './viewport-runtime.ts';
 
 // ---------------------------------------------------------------------------
 // Request handler API
@@ -425,7 +426,19 @@ async function dispatchGenericForLockedScope(params: {
     return noActiveSessionError();
   }
 
-  const { dispatchGenericCommand } = await loadGenericRequestHandlerModule();
+  const viewportRuntime =
+    lockedScope.req.command === 'viewport'
+      ? await resolveBoundViewportRuntime({
+          device: session.device,
+          positionals: lockedScope.req.positionals ?? [],
+          inspectFacts: lockedScope.inspectFacts,
+          bindDevice: lockedScope.bindDevice,
+        })
+      : undefined;
+  if (viewportRuntime && typeof viewportRuntime !== 'function') return viewportRuntime;
+
+  const { dispatchGenericCommand, executeGenericPlatformCommand } =
+    await loadGenericRequestHandlerModule();
   const dispatchResponse = await dispatchGenericCommand({
     req: lockedScope.req,
     session,
@@ -433,6 +446,7 @@ async function dispatchGenericForLockedScope(params: {
     logPath,
     sessionStore,
     contextFromFlags: lockedScope.contextFromFlags,
+    executePlatformCommand: viewportRuntime ?? executeGenericPlatformCommand,
   });
   return dispatchResponse;
 }

@@ -45,6 +45,11 @@ const ANDROID_APPLICATION_LIFECYCLE_CONTRACT_EVIDENCE = defineAndroidContractEvi
   [C.prepare],
   'Android platform runtime classifies prepareAppleRunner unavailable',
 );
+const ANDROID_VIEWPORT_RUNTIME_CONTRACT_EVIDENCE = defineAndroidContractEvidence(
+  'src/daemon/__tests__/viewport-runtime.test.ts',
+  [C.viewport],
+  'rejects an unavailable exact-owner fact before binding',
+);
 
 /** One primary, observable owner for every public command on an Android emulator. */
 export const ANDROID_EMULATOR_E2E_COVERAGE = {
@@ -199,10 +204,10 @@ export const ANDROID_EMULATOR_E2E_COVERAGE = {
     assertion: 'Android emulator capability model rejects hover, a pointer-only web contract',
     level: 'capability-denial',
   },
-  [C.viewport]: {
-    assertion: 'Android emulator capability model rejects standalone viewport control',
-    level: 'capability-denial',
-  },
+  [C.viewport]: contract(
+    ANDROID_VIEWPORT_RUNTIME_CONTRACT_EVIDENCE,
+    'Android viewport fails closed through its unavailable exact-owner runtime fact',
+  ),
   [C.wait]: live('smoke:automation-system', 'wait observes durable fixture landmarks'),
 } satisfies Record<PublicCommand, AndroidEmulatorCoverageEntry>;
 

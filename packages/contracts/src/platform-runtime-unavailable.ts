@@ -11,6 +11,7 @@ import type {
   RuntimeOwnerRef,
 } from './platform-runtime.ts';
 import { snapshotRuntimeOperationFacts } from './snapshot-runtime.ts';
+import { viewportRuntimeOperationFacts } from './viewport-runtime.ts';
 
 /**
  * A runtime-contract helper for provider ownership gaps. It never assigns lifecycle semantics:
@@ -24,6 +25,7 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   network: RuntimeOperationUnavailability;
   screenRecording?: RuntimeOperationUnavailability;
   snapshot?: RuntimeOperationUnavailability;
+  viewport?: RuntimeOperationUnavailability;
   readiness?: RuntimeOperationUnavailability;
   shutdown?: RuntimeOperationUnavailability;
   lifecycle: ApplicationLifecycleOperationFacts;
@@ -37,6 +39,7 @@ type FrozenUnavailablePlatformRuntimeFacts = Readonly<{
   network: RuntimeOperationUnavailability;
   screenRecording: RuntimeOperationUnavailability;
   snapshot: RuntimeOperationUnavailability;
+  viewport: RuntimeOperationUnavailability;
   readiness: RuntimeOperationUnavailability;
   shutdown: RuntimeOperationUnavailability;
   lifecycle: ApplicationLifecycleOperationFacts;
@@ -69,6 +72,7 @@ export function createUnavailablePlatformRuntimeFacts(
     network,
     screenRecording,
     snapshot,
+    viewport,
     readiness,
     shutdown,
     lifecycle,
@@ -99,6 +103,7 @@ export function createUnavailablePlatformRuntimeFacts(
         customActions: snapshot,
         withoutActiveApp: snapshot,
       }),
+      ...viewportRuntimeOperationFacts({ setViewport: viewport }),
       ensureReady: readiness,
       bootTarget: readiness,
       bootTargetHeadless: readiness,
@@ -121,6 +126,7 @@ function freezeUnavailableFacts(
       ...(unavailable.screenRecording ?? unavailable.network),
     }),
     snapshot: Object.freeze({ ...(unavailable.snapshot ?? unavailable.network) }),
+    viewport: Object.freeze({ ...(unavailable.viewport ?? unavailable.network) }),
     readiness: Object.freeze({ ...(unavailable.readiness ?? unavailable.network) }),
     shutdown: Object.freeze({ ...(unavailable.shutdown ?? unavailable.network) }),
     lifecycle: applicationLifecycleOperationFacts(unavailable.lifecycle),

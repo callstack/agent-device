@@ -98,6 +98,8 @@ test.each([
     device.appleOs !== 'macos' && device.appleOs !== 'watchos',
   );
   expect(facts.operations.bootTargetHeadless.available).toBe(false);
+  expect(facts.operations.setViewport).toMatchObject({ available: false });
+  expect(binding.operations.setViewport).toBeUndefined();
   expectAppleSnapshotAvailability(binding, device);
 });
 

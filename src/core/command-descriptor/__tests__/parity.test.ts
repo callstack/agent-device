@@ -71,6 +71,7 @@ const NO_CAPABILITY_PUBLIC_COMMANDS = new Set<string>([
   PUBLIC_COMMANDS.snapshot,
   PUBLIC_COMMANDS.test,
   PUBLIC_COMMANDS.trace,
+  PUBLIC_COMMANDS.viewport,
 ]);
 
 type TestCommandDescriptor = (typeof commandDescriptors)[number];
@@ -199,7 +200,10 @@ test('platform dispatch command list is built from descriptor dispatch facets', 
 });
 
 test('generic route commands that reach platform dispatch declare the dispatch facet', () => {
-  const nonDispatchGenericCommands = new Set<string>([PUBLIC_COMMANDS.gesture]);
+  const nonDispatchGenericCommands = new Set<string>([
+    PUBLIC_COMMANDS.gesture,
+    PUBLIC_COMMANDS.viewport,
+  ]);
 
   for (const descriptor of commandDescriptors) {
     const route = readDaemonRouteForTest(descriptor);

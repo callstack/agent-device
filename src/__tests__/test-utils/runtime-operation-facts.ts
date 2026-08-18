@@ -30,6 +30,7 @@ export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.fre
     withoutActiveApp: unavailable,
   }),
   ...unavailableShutdownOperationFacts,
+  setViewport: unavailable,
 });
 
 /** Default facts for tests that are unrelated to application lifecycle commands. */

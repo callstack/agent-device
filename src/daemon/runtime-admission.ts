@@ -33,6 +33,8 @@ type RuntimeAdmissionRequest = Readonly<{
   unavailableResponse?: UnavailableRuntimeResponse;
 }>;
 
+export type RuntimeAdmissionBindings = Pick<RuntimeAdmissionRequest, 'inspectFacts' | 'bindDevice'>;
+
 /**
  * The one facts-admission seam every migrated command route shares. It performs exactly one
  * side-effect-free inspection and hands back the binding gateway only once the exact device cell

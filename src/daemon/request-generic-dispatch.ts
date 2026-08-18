@@ -47,6 +47,7 @@ export async function dispatchGenericCommand(params: {
     appBundleId?: string,
     traceLogPath?: string,
   ) => DaemonCommandContext;
+  executePlatformCommand: typeof executeGenericPlatformCommand;
 }): Promise<DaemonResponse> {
   const { req, session, logPath, sessionStore, contextFromFlags } = params;
   const platformCommand = req.command;
@@ -78,14 +79,14 @@ export async function dispatchGenericCommand(params: {
     surface: session.surface,
   };
   // ADR 0014 side-effect seam for generic-route leaves (back/home/rotate/scroll/
-  // tv-remote/app-switcher/viewport/focus, ...). The daemon effect classification
+  // tv-remote/app-switcher/viewport/focus). Effect classification
   // is the honesty guard that decides which of these mutate; expire the frame
   // before dispatching so a later ref cannot reuse it. Read-only generic leaves
   // (screenshot) are classified `preserve` and leave the frame untouched.
   if (resolveRefFrameEffect(req) === 'may-invalidate') {
     expireRefFrame(session);
   }
-  let data = await executeGenericPlatformCommand({
+  let data = await params.executePlatformCommand({
     session,
     sessionName: params.sessionName,
     logPath,
@@ -208,7 +209,10 @@ async function ensureGenericCommandReady(
   session: SessionState,
   platformCommand: string,
 ): Promise<DaemonResponse | null> {
-  const unsupported = requireCommandSupported(platformCommand, session.device, { hint: true });
+  const unsupported =
+    platformCommand === 'viewport'
+      ? null
+      : requireCommandSupported(platformCommand, session.device, { hint: true });
   if (unsupported) return unsupported;
   if (
     session.device.platform !== 'android' ||
@@ -228,7 +232,7 @@ async function ensureGenericCommandReady(
   };
 }
 
-async function executeGenericPlatformCommand(params: {
+export async function executeGenericPlatformCommand(params: {
   session: SessionState;
   sessionName: string;
   logPath: string;

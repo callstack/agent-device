@@ -279,6 +279,8 @@ test.each([
     runtimeDevice.platform === 'apple',
   );
   expect(binding.facts.operations.captureSnapshotWithoutActiveApp).toEqual({ available: true });
+  expect(binding.facts.operations.setViewport).toMatchObject({ available: false });
+  expect(binding.operations.setViewport).toBeUndefined();
   expect(binding.operations.captureSnapshot).toBeTypeOf('function');
   await expect(
     binding.operations.listApps?.({ device: runtimeDevice, filter: 'all' }),
@@ -336,6 +338,7 @@ test('fails closed for a stale Android identity before exposing facts or binding
   });
   expect(facts.operations.captureSnapshotWithCustomActions).toMatchObject({ available: false });
   expect(facts.operations.captureSnapshotWithoutActiveApp).toMatchObject({ available: false });
+  expect(facts.operations.setViewport).toMatchObject({ available: false });
   await expect(
     owner.bind({ device: staleDevice, intent: { kind: 'ordinary' }, scope }),
   ).rejects.toMatchObject({

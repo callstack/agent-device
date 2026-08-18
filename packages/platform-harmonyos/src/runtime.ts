@@ -10,6 +10,7 @@ import {
   bindLocalSnapshotInteractor,
   localRuntimeOwner,
   snapshotRuntimeOperationFacts,
+  viewportRuntimeOperationFacts,
 } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createHarmonyAppLogRuntime } from './logs/runtime.ts';
@@ -67,6 +68,11 @@ const snapshotCustomActionsUnavailable = Object.freeze({
   reason: 'unsupported-platform-leaf',
   hint: 'Re-run without --actions, or target an iOS simulator.',
 } as const);
+const viewportUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'viewport resizes web targets only (--platform web).',
+} as const);
 
 function harmonyLifecycleFacts(device: DeviceInfo) {
   const openTarget = harmonyOpenTargetFact(device);
@@ -123,6 +129,7 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
               ? available
               : snapshotKindUnavailable,
         }),
+        ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ensureReady: available,
         bootTarget: unavailable,
         bootTargetHeadless: unavailable,

@@ -68,6 +68,7 @@ function createAdmissionFacts(
         customActions: unavailable,
         withoutActiveApp: unavailable,
       }),
+      setViewport: unavailable,
       deployApp: options.deployAvailable ? available : unavailable,
       materializeAppSource: options.sourceAvailable ? available : unavailable,
       deployMaterializedApp: options.sourceAvailable ? available : unavailable,

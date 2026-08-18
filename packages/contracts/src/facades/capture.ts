@@ -52,4 +52,5 @@ export type {
   FindLocator,
   ScreenshotResultData,
 } from '../snapshot-types.ts';
+export { readViewportDimensions } from '../viewport.ts';
 export type { ViewportCommandResult } from '../viewport.ts';

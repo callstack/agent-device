@@ -203,14 +203,11 @@ export const IOS_SIMULATOR_E2E_COVERAGE = {
       test: 'capability classifications match executable simulator behavior',
     },
   },
-  [C.viewport]: {
-    assertion: 'iOS simulator capability model rejects viewport resizing, a web-only contract',
-    level: 'capability-denial',
-    owner: {
-      path: 'test/integration/smoke-ios-simulator-coverage.test.ts',
-      test: 'capability classifications match executable simulator behavior',
-    },
-  },
+  [C.viewport]: contract(
+    'src/daemon/__tests__/viewport-runtime.test.ts',
+    'rejects an unavailable exact-owner fact before binding',
+    'iOS viewport fails closed through its unavailable exact-owner runtime fact',
+  ),
   [C.wait]: live('smoke:automation-input', 'polling observes durable fixture state'),
 } satisfies Record<PublicCommand, IosSimulatorCoverageEntry>;
 

@@ -37,7 +37,10 @@ vi.mock('../handlers/interaction-snapshot.ts', async (importOriginal) => {
 
 import { dispatchCommand } from '../../core/dispatch.ts';
 import { captureSnapshotForSession } from '../handlers/interaction-snapshot.ts';
-import { dispatchGenericCommand } from '../request-generic-dispatch.ts';
+import {
+  dispatchGenericCommand,
+  executeGenericPlatformCommand,
+} from '../request-generic-dispatch.ts';
 
 const mockDispatch = vi.mocked(dispatchCommand);
 const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotForSession);
@@ -157,6 +160,7 @@ async function dispatchGeneric(params: {
     logPath: '',
     sessionStore: params.sessionStore,
     contextFromFlags,
+    executePlatformCommand: executeGenericPlatformCommand,
   });
 }
 
