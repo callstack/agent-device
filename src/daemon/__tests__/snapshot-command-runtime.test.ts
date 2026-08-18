@@ -6,7 +6,8 @@ import {
   markRequestCanceled,
   registerRequestAbort,
 } from '../../request/cancel.ts';
-import { dispatchSnapshotDiffViaRuntime, dispatchSnapshotViaRuntime } from '../snapshot-runtime.ts';
+import { dispatchSnapshotDiffViaRuntime } from '../snapshot-diff-runtime.ts';
+import { dispatchSnapshotViaRuntime } from '../snapshot-runtime.ts';
 import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
 
 const dispatchCommandMock = vi.hoisted(() => vi.fn());
@@ -90,7 +91,7 @@ for (const command of ['snapshot', 'diff snapshot'] as const) {
       const running =
         command === 'snapshot'
           ? dispatchSnapshotViaRuntime({ ...input, ...snapshotRuntimeFixture(requestId) })
-          : dispatchSnapshotDiffViaRuntime(input);
+          : dispatchSnapshotDiffViaRuntime({ ...input, ...snapshotRuntimeFixture(requestId) });
       await dispatchEntered.promise;
       markRequestCanceled(requestId);
       releaseDispatch.resolve();

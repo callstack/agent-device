@@ -89,7 +89,9 @@ const mockBuildIosOpenCommandHint = vi.mocked(buildIosOpenCommandHint);
 function handleSnapshotCommands(
   params: Parameters<typeof handleProductionSnapshotCommands>[0],
 ): ReturnType<typeof handleProductionSnapshotCommands> {
-  if (params.req.command !== 'snapshot') return handleProductionSnapshotCommands(params);
+  if (params.req.command !== 'snapshot' && params.req.command !== 'diff') {
+    return handleProductionSnapshotCommands(params);
+  }
   const runtime = snapshotRuntimeFixture(params.req.meta?.requestId);
   return handleProductionSnapshotCommands({
     ...params,

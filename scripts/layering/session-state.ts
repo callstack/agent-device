@@ -76,10 +76,10 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
   pendingInteractionOutcome: ['src/daemon/interaction-outcome-policy.ts'],
   postGestureStabilization: ['src/daemon/deferred-interaction-outcome.ts'],
 
-  // Snapshot lineage on a freshly BUILT record. snapshot-runtime.ts constructs a new
+  // Snapshot lineage on a freshly BUILT record. snapshot-command-runtime.ts constructs a new
   // SessionState rather than mutating the stored one, so it cannot call setSessionSnapshot —
   // but the rule is the same, so the two-field transition lives in session-snapshot.ts.
-  appName: ['src/daemon/snapshot-runtime.ts'],
+  appName: ['src/daemon/snapshot-command-runtime.ts'],
   // Open execution owns the paired lease/claim transition after the handler has admitted one
   // lifecycle binding. Keeping the records together prevents request-policy routing from gaining
   // a second durable owner as the execution seam stays package-bound.

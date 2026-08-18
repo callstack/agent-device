@@ -11,7 +11,8 @@ import {
   applyRecoveredWarningLatch,
   resolveRecoveredWarningLatch,
 } from '../snapshot-quality-latch.ts';
-import { dispatchSnapshotDiffViaRuntime, dispatchSnapshotViaRuntime } from '../snapshot-runtime.ts';
+import { dispatchSnapshotDiffViaRuntime } from '../snapshot-diff-runtime.ts';
+import { dispatchSnapshotViaRuntime } from '../snapshot-runtime.ts';
 import { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../types.ts';
 import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
@@ -289,6 +290,7 @@ test('an empty ref-scoped diff latches on the captured verdict, not the retained
     sessionName: input.sessionName,
     logPath: input.logPath,
     sessionStore: input.sessionStore,
+    ...snapshotRuntimeFixture(),
   });
 
   // The retention actually happened: the stored snapshot (and its healthy

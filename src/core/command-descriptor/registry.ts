@@ -941,10 +941,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
     daemon: { route: 'snapshot', refFrameEffect: 'preserve' },
-    capability: ALL_DEVICE_COMMAND_CAPABILITY,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    platformExecution: { kind: 'device-runtime', uses: snapshotRuntimePlanUses },
   },
   {
     name: 'wait',

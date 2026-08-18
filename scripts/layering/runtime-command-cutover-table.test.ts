@@ -61,21 +61,9 @@ test('R32 snapshot rejects legacy admission and dispatcher projection', () => {
       [
         'src/daemon/snapshot-runtime.ts',
         `
-          function selectActiveAppSnapshot() { runtime.operations.captureSnapshot(input); }
-          function selectCustomActionsSnapshot() {
-            runtime.operations.captureSnapshotWithCustomActions(input);
-          }
-          function selectSnapshotWithoutActiveApp() {
-            runtime.operations.captureSnapshotWithoutActiveApp(input);
-          }
-          function dispatchSnapshotViaRuntime() {
-            const plan = resolveSnapshotRuntimePlan(normalizedIntent);
-            inspectRequiredRuntimeUse({
-              device,
-              use: plan.use,
-              inspectFacts: params.inspectFacts,
-            });
+          function dispatchSnapshotViaRuntime(params) {
             requireCommandSupported('snapshot', device);
+            return dispatchSnapshotRuntimeCommand({ ...params, command: 'snapshot' });
           }
           function handleSnapshotCommands() {
             dispatchSnapshotViaRuntime(request);
@@ -83,7 +71,35 @@ test('R32 snapshot rejects legacy admission and dispatcher projection', () => {
           handleSnapshotCommands(request);
         `,
       ],
-      ['src/daemon/snapshot-runtime-binding.ts', ''],
+      [
+        'src/daemon/snapshot-command-runtime.ts',
+        `
+          function dispatchSnapshotRuntimeCommand(params) {
+            return resolveBoundSnapshotCaptureRuntime(params, params.command);
+          }
+        `,
+      ],
+      [
+        'src/daemon/snapshot-runtime-binding.ts',
+        `
+          function selectActiveAppSnapshot() { runtime.operations.captureSnapshot(input); }
+          function selectCustomActionsSnapshot() {
+            runtime.operations.captureSnapshotWithCustomActions(input);
+          }
+          function selectSnapshotWithoutActiveApp() {
+            runtime.operations.captureSnapshotWithoutActiveApp(input);
+          }
+          function resolveBoundSnapshotCaptureRuntime(params) {
+            const plan = resolveSnapshotRuntimePlan(normalizedIntent);
+            inspectRequiredRuntimeUse({
+              device,
+              use: plan.use,
+              inspectFacts: params.inspectFacts,
+            });
+            return bindSnapshotCaptureRuntime(params.bindDevice, device, plan);
+          }
+        `,
+      ],
       ['src/core/dispatch.ts', 'function handleSnapshotCommand() { return legacy.snapshot(); }'],
       [
         'src/core/capabilities.ts',
@@ -104,7 +120,7 @@ test('R32 snapshot rejects legacy admission and dispatcher projection', () => {
   );
 });
 
-// Per-row acceptance for the five migrated commands. Every older-row case here was carried over
+// Per-row acceptance for migrated commands. Every older-row case here was carried over
 // from the per-command policy tests these rows replaced; the mechanism itself is proven
 // in runtime-command-cutover-policy.test.ts.
 

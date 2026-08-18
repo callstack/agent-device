@@ -1,152 +1,62 @@
-import {
-  snapshotCaptureAnnotationsFrom,
-  summarizeSnapshotDiagnostics,
-  type SnapshotDiffSummary,
-} from '@agent-device/contracts/capture';
-import {
-  resolveSnapshotRuntimePlan,
-  stripAndroidSystemChromeProvenance,
-  type SnapshotResult,
-} from '@agent-device/contracts/platform';
-import { publicPlatformString } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
-import type { AgentDeviceBackend, BackendSnapshotResult } from '../backend.ts';
-import type { CommandSessionRecord } from '../runtime.ts';
-import { createAgentDevice } from '../runtime.ts';
-import { isActiveProviderDevice } from '../provider-device-runtime.ts';
-import { maybeBuildAndroidSnapshotTimeoutFailure } from './android-snapshot-timeout-evidence.ts';
-import { requireCommandSupported } from './handlers/response.ts';
-import { inspectRequiredRuntimeUse } from './handlers/session-runtime-admission.ts';
-import { captureSnapshot, resolveSnapshotScope } from './handlers/snapshot-capture.ts';
-import {
-  buildSnapshotSession,
-  resolveSessionDevice,
-  withSessionlessRunnerCleanup,
-} from './handlers/snapshot-session.ts';
-import { activateCompleteRefFrame } from './ref-frame.ts';
-import {
-  applyRecoveredWarningLatch,
-  type CapturedSnapshotQuality,
-} from './snapshot-quality-latch.ts';
-import { createDaemonRuntimePolicy } from './runtime-policy.ts';
+import { stripAndroidSystemChromeProvenance } from '@agent-device/contracts/platform';
+import { dispatchSnapshotRuntimeCommand } from './snapshot-command-runtime.ts';
 import { captureSparseFallbackScreenshot } from './sparse-fallback-screenshot.ts';
-import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
-import { getRequestSignal } from '../request/cancel.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
-import { isInteractiveObservation } from './session-action-recorder.ts';
-import { setSnapshotLineage } from './session-snapshot.ts';
-import { SessionStore } from './session-store.ts';
-import type { DaemonRequest, DaemonResponse, DaemonResponseData, SessionState } from './types.ts';
-import {
-  bindSnapshotCaptureRuntime,
-  buildRuntimeCaptureInput,
-  snapshotPlanUnavailableResponse,
-} from './snapshot-runtime-binding.ts';
-import {
-  requireLegacyDiffCustomActionsSupported,
-  requireLegacyDiffIosAppSession,
-} from './snapshot-diff-legacy-admission.ts';
+import type { SnapshotRuntimeRouteParams } from './snapshot-runtime-binding.ts';
+import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 
-export async function dispatchSnapshotViaRuntime(params: {
-  req: DaemonRequest;
-  sessionName: string;
-  logPath: string;
-  sessionStore: SessionStore;
-  inspectFacts?: InspectDeviceRuntimeFacts;
-  bindDevice?: BindDeviceRuntime;
-}): Promise<DaemonResponse> {
-  const { req, sessionName, sessionStore } = params;
-  const { session, device } = await resolveSessionDevice(sessionStore, sessionName, req.flags);
-
-  const resolvedScope = resolveSnapshotScope(req.flags?.snapshotScope, session);
-  if (!resolvedScope.ok) return resolvedScope;
-  const plan = resolveSnapshotRuntimePlan({
-    customActions: req.flags?.snapshotCustomActions === true,
-    hasActiveApp: session?.appBundleId !== undefined,
-  });
-  const admission = await inspectRequiredRuntimeUse({
-    device,
-    use: plan.use,
-    inspectFacts: params.inspectFacts,
-  });
-  if (!admission.admitted) {
-    return await snapshotPlanUnavailableResponse({
-      operation: admission.operation,
-      fact: admission.fact,
-      session,
-      device,
-    });
-  }
-  const runtime = await bindSnapshotCaptureRuntime(params.bindDevice, device, plan);
-  return await withSessionlessRunnerCleanup(
-    session,
-    device,
-    async () =>
-      await executeSnapshotRuntimeCommand({
-        ...params,
-        command: 'snapshot',
+export async function dispatchSnapshotViaRuntime(
+  params: SnapshotRuntimeRouteParams,
+): Promise<DaemonResponse> {
+  return await dispatchSnapshotRuntimeCommand({
+    ...params,
+    command: 'snapshot',
+    execute: async ({
+      runtime: agentRuntime,
+      sessionName: resolvedSessionName,
+      req: request,
+      snapshotScope,
+    }) => {
+      const result = await agentRuntime.capture.snapshot({
+        session: resolvedSessionName,
+        interactiveOnly: request.flags?.snapshotInteractiveOnly,
+        depth: request.flags?.snapshotDepth,
+        scope: snapshotScope,
+        raw: request.flags?.snapshotRaw,
+        customActions: request.flags?.snapshotCustomActions,
+        forceFull: request.flags?.snapshotForceFull,
+      });
+      const refsGeneration = publishedSnapshotGeneration(
+        request,
+        params.sessionStore.get(resolvedSessionName),
+      );
+      const publicNodes = stripAndroidSystemChromeProvenance(result.nodes);
+      const publicResult =
+        publicNodes === result.nodes ? result : { ...result, nodes: publicNodes };
+      const session = params.sessionStore.get(resolvedSessionName);
+      const fallbackScreenshot = await captureSparseFallbackScreenshot({
+        req: request,
         session,
-        device,
-        snapshotScope: resolvedScope.scope,
-        captureSnapshotData: async () =>
-          await runtime.captureSnapshot(
-            buildRuntimeCaptureInput(params, session, resolvedScope.scope),
-          ),
-        execute: async ({
-          runtime: agentRuntime,
-          sessionName: resolvedSessionName,
-          req: request,
-          snapshotScope,
-        }) => {
-          const result = await agentRuntime.capture.snapshot({
-            session: resolvedSessionName,
-            interactiveOnly: request.flags?.snapshotInteractiveOnly,
-            depth: request.flags?.snapshotDepth,
-            scope: snapshotScope,
-            raw: request.flags?.snapshotRaw,
-            customActions: request.flags?.snapshotCustomActions,
-            forceFull: request.flags?.snapshotForceFull,
-          });
-          // #1076 versioned refs: the snapshot response is a ref-issuing response,
-          // so it carries the stored tree's generation ONCE (`refsGeneration`) —
-          // the node tree itself stays plain `e12` refs (token economy). The
-          // capture above already stored the next session via setRecord, so the
-          // store holds the generation these refs were minted from.
-          const refsGeneration = publishedSnapshotGeneration(
-            request,
-            params.sessionStore.get(resolvedSessionName),
-          );
-          // ADR 0014: retain provenance in the immutable operational/ref-frame tree;
-          // project only the published copy so settle and replay keep the full evidence.
-          const publicNodes = stripAndroidSystemChromeProvenance(result.nodes);
-          const publicResult =
-            publicNodes === result.nodes ? result : { ...result, nodes: publicNodes };
-          const session = params.sessionStore.get(resolvedSessionName);
-          const fallbackScreenshot = await captureSparseFallbackScreenshot({
-            req: request,
-            session,
-            sessionName: resolvedSessionName,
-            logPath: params.logPath,
-            verdict: result.snapshotQuality,
-          });
-          const published = fallbackScreenshot
-            ? {
-                ...publicResult,
-                fallbackScreenshotPath: fallbackScreenshot.path,
-                artifacts: [fallbackScreenshot.artifact],
-              }
-            : publicResult;
-          return {
-            data: refsGeneration === undefined ? published : { ...published, refsGeneration },
-            record: {
-              kind: 'snapshot',
-              nodes: result.nodes.length,
-              truncated: result.truncated,
-            },
-          };
+        sessionName: resolvedSessionName,
+        logPath: params.logPath,
+        verdict: result.snapshotQuality,
+      });
+      const published = fallbackScreenshot
+        ? {
+            ...publicResult,
+            fallbackScreenshotPath: fallbackScreenshot.path,
+            artifacts: [fallbackScreenshot.artifact],
+          }
+        : publicResult;
+      return {
+        data: refsGeneration === undefined ? published : { ...published, refsGeneration },
+        record: {
+          kind: 'snapshot',
+          nodes: result.nodes.length,
+          truncated: result.truncated,
         },
-      }),
-  );
+      };
+    },
+  });
 }
 
 function publishedSnapshotGeneration(
@@ -154,345 +64,4 @@ function publishedSnapshotGeneration(
   session: SessionState | undefined,
 ): number | undefined {
   return req.internal?.observationOnly === true ? undefined : session?.snapshotGeneration;
-}
-
-export async function dispatchSnapshotDiffViaRuntime(params: {
-  req: DaemonRequest;
-  sessionName: string;
-  logPath: string;
-  sessionStore: SessionStore;
-}): Promise<DaemonResponse> {
-  const { req, sessionName, sessionStore } = params;
-  const { session, device } = await resolveSessionDevice(sessionStore, sessionName, req.flags);
-  const unsupported = requireCommandSupported('diff', device, {
-    message: 'diff is not supported on this device',
-  });
-  if (unsupported) return unsupported;
-  const resolvedScope = resolveSnapshotScope(req.flags?.snapshotScope, session);
-  if (!resolvedScope.ok) return resolvedScope;
-  const customActionsGuard = requireLegacyDiffCustomActionsSupported(req, device);
-  if (customActionsGuard) return customActionsGuard;
-  const iosAppSessionGuard = await requireLegacyDiffIosAppSession({
-    session,
-    device,
-    providerOwned: isActiveProviderDevice(device),
-  });
-  if (iosAppSessionGuard) return iosAppSessionGuard;
-
-  return await withSessionlessRunnerCleanup(
-    session,
-    device,
-    async () =>
-      await executeSnapshotRuntimeCommand({
-        ...params,
-        command: 'diff',
-        session,
-        device,
-        snapshotScope: resolvedScope.scope,
-        execute: async ({ runtime, sessionName, req, snapshotScope }) => {
-          const result = await runtime.capture.diffSnapshot({
-            session: sessionName,
-            interactiveOnly: req.flags?.snapshotInteractiveOnly,
-            depth: req.flags?.snapshotDepth,
-            scope: snapshotScope,
-            raw: req.flags?.snapshotRaw,
-          });
-          return {
-            data: result,
-            record: {
-              kind: 'diff',
-              mode: 'snapshot',
-              baselineInitialized: result.baselineInitialized,
-              summary: result.summary,
-            },
-          };
-        },
-      }),
-  );
-}
-
-type SnapshotRuntimeCommandParams = {
-  req: DaemonRequest;
-  sessionName: string;
-  logPath: string;
-  sessionStore: SessionStore;
-  command: 'snapshot' | 'diff';
-  session: SessionState | undefined;
-  device: SessionState['device'];
-  snapshotScope: string | undefined;
-  captureSnapshotData?: () => Promise<SnapshotResult>;
-  execute(params: {
-    runtime: ReturnType<typeof createSnapshotRuntime>;
-    sessionName: string;
-    req: DaemonRequest;
-    snapshotScope: string | undefined;
-  }): Promise<{ data: DaemonResponseData; record: SnapshotRuntimeRecord }>;
-};
-
-type SnapshotRuntimeRecord =
-  | { kind: 'snapshot'; nodes: number; truncated: boolean | undefined }
-  | {
-      kind: 'diff';
-      mode: 'snapshot';
-      baselineInitialized: boolean;
-      summary: SnapshotDiffSummary;
-    };
-
-async function executeSnapshotRuntimeCommand(
-  params: SnapshotRuntimeCommandParams,
-): Promise<DaemonResponse> {
-  const { req, sessionName, logPath, sessionStore, session, device } = params;
-  const capturedQuality: CapturedSnapshotQuality = {};
-  const runtime = createSnapshotRuntime({
-    req,
-    sessionName,
-    logPath,
-    sessionStore,
-    session,
-    device,
-    snapshotScope: params.snapshotScope,
-    capturedQuality,
-    captureSnapshotData: params.captureSnapshotData,
-  });
-  let result: Awaited<ReturnType<SnapshotRuntimeCommandParams['execute']>>;
-  try {
-    result = await params.execute({
-      runtime,
-      sessionName,
-      req,
-      snapshotScope: params.snapshotScope,
-    });
-  } catch (error) {
-    const timeoutResponse = await maybeBuildAndroidSnapshotTimeoutFailure({
-      error,
-      command: params.command,
-      logPath,
-      session,
-      device,
-    });
-    if (!timeoutResponse) throw error;
-    return timeoutResponse;
-  }
-  recordSnapshotRuntimeAction({
-    req,
-    sessionName,
-    sessionStore,
-    result: result.record,
-  });
-  return {
-    ok: true,
-    data: applyRecoveredWarningLatch({
-      session: sessionStore.get(sessionName),
-      data: result.data,
-      verdict: capturedQuality.value,
-      internalObservation: req.internal?.observationOnly === true,
-    }),
-  };
-}
-
-function createSnapshotRuntime(params: {
-  req: DaemonRequest;
-  sessionName: string;
-  logPath: string;
-  sessionStore: SessionStore;
-  session: SessionState | undefined;
-  device: SessionState['device'];
-  snapshotScope: string | undefined;
-  capturedQuality: CapturedSnapshotQuality;
-  captureSnapshotData?: () => Promise<SnapshotResult>;
-}) {
-  const { req, sessionName, logPath, sessionStore, session, device, snapshotScope } = params;
-  return createAgentDevice({
-    backend: createDaemonSnapshotBackend({
-      req,
-      logPath,
-      session,
-      device,
-      snapshotScope,
-      capturedQuality: params.capturedQuality,
-      captureSnapshotData: params.captureSnapshotData,
-    }),
-    ...createDaemonRuntimePolicy('snapshot'),
-    signal: getRequestSignal(req.meta?.requestId),
-    sessions: createDaemonRuntimeSessionStore({
-      sessionName,
-      getSession: () => sessionStore.get(sessionName),
-      recordOptions: { includeSnapshot: true },
-      setRecord: (record) => {
-        const snapshotRecord = assertSnapshotSessionRecord(record);
-        const current = sessionStore.get(sessionName);
-        sessionStore.set(
-          sessionName,
-          buildNextSnapshotSession({
-            current,
-            sessionName,
-            device,
-            record: snapshotRecord,
-            refScopedSnapshot: isRefScopedSnapshot(req),
-            // Only the snapshot command's response carries every stored node's
-            // ref back to the client; diff returns a summary, so its refreshed
-            // tree leaves client refs stale (#1076).
-            issuesRefsToClient:
-              req.command === 'snapshot' && req.internal?.observationOnly !== true,
-          }),
-        );
-      },
-    }),
-  });
-}
-
-function buildNextSnapshotSession(params: {
-  current: SessionState | undefined;
-  sessionName: string;
-  device: SessionState['device'];
-  record: CommandSessionRecord & { snapshot: NonNullable<CommandSessionRecord['snapshot']> };
-  refScopedSnapshot: boolean;
-  issuesRefsToClient: boolean;
-}): SessionState {
-  const { current, sessionName, device, record, refScopedSnapshot } = params;
-  const keepCurrentSnapshot = shouldKeepCurrentSnapshot(current, record, refScopedSnapshot);
-  const snapshot = keepCurrentSnapshot ? current.snapshot : record.snapshot;
-  const nextSession = buildSnapshotSession({
-    session: current,
-    sessionName,
-    device,
-    snapshot,
-    appBundleId: record.appBundleId,
-  });
-  setSnapshotLineage(nextSession, {
-    scopeSource: resolveNextSnapshotScopeSource({
-      current,
-      keepCurrentSnapshot,
-      refScopedSnapshot,
-    }),
-    keptCurrentSnapshot: keepCurrentSnapshot,
-    previousGeneration: current?.snapshotGeneration,
-  });
-  reactivateCompleteFrameIfIssuing(nextSession, keepCurrentSnapshot, params.issuesRefsToClient);
-  if (record.appName) nextSession.appName = record.appName;
-  return nextSession;
-}
-
-function isRefScopedSnapshot(req: DaemonRequest): boolean {
-  return req.flags?.snapshotScope?.trim().startsWith('@') === true;
-}
-
-function shouldKeepCurrentSnapshot(
-  current: SessionState | undefined,
-  record: CommandSessionRecord,
-  refScopedSnapshot: boolean,
-): current is SessionState & { snapshot: NonNullable<SessionState['snapshot']> } {
-  return (
-    refScopedSnapshot && record.snapshot?.nodes.length === 0 && current?.snapshot !== undefined
-  );
-}
-
-// ADR 0014: only a snapshot command hands the client the complete ref namespace,
-// so only it re-authorizes a complete frame (recovering usability after a
-// side-effect expiry). A diff (summary response) or a kept tree preserves the
-// prior authorization state buildSnapshotSession carried over; partial
-// publications (find/settled/divergence) never reach this path.
-function reactivateCompleteFrameIfIssuing(
-  session: SessionState,
-  keepCurrentSnapshot: boolean,
-  issuesRefsToClient: boolean,
-): void {
-  if (!keepCurrentSnapshot && issuesRefsToClient) {
-    activateCompleteRefFrame(session);
-  }
-}
-
-function resolveNextSnapshotScopeSource(params: {
-  current: SessionState | undefined;
-  keepCurrentSnapshot: boolean;
-  refScopedSnapshot: boolean;
-}): SessionState['snapshotScopeSource'] {
-  const { current, keepCurrentSnapshot, refScopedSnapshot } = params;
-  if (!refScopedSnapshot) return undefined;
-  if (keepCurrentSnapshot) return current?.snapshotScopeSource;
-  return current?.snapshotScopeSource ?? current?.snapshot;
-}
-
-function createDaemonSnapshotBackend(params: {
-  req: DaemonRequest;
-  logPath: string;
-  session: SessionState | undefined;
-  device: SessionState['device'];
-  snapshotScope: string | undefined;
-  capturedQuality: CapturedSnapshotQuality;
-  captureSnapshotData?: () => Promise<SnapshotResult>;
-}): AgentDeviceBackend {
-  const { req, logPath, session, device, snapshotScope } = params;
-  return {
-    platform: publicPlatformString(device),
-    captureSnapshot: async (context, options): Promise<BackendSnapshotResult> => {
-      const capture = await captureSnapshot({
-        device,
-        session,
-        flags: req.flags,
-        outPath: options?.outPath ?? req.flags?.out,
-        logPath,
-        snapshotScope,
-        signal: context.signal,
-        captureData: params.captureSnapshotData,
-      });
-      const annotations = snapshotCaptureAnnotationsFrom(capture);
-      // Feed the latch seam the capture's own verdict: the stored session
-      // snapshot is not a substitute (an empty ref-scoped capture retains the
-      // previous snapshot, and diff never publishes the verdict).
-      params.capturedQuality.value = annotations.quality;
-      const snapshotDiagnostics = summarizeSnapshotDiagnostics(session);
-      return {
-        snapshot: capture.snapshot,
-        ...annotations,
-        ...(snapshotDiagnostics ? { snapshotDiagnostics } : {}),
-        appName: session?.appBundleId ? (session.appName ?? session.appBundleId) : undefined,
-        appBundleId: session?.appBundleId,
-      };
-    },
-  };
-}
-
-function recordSnapshotRuntimeAction(params: {
-  req: DaemonRequest;
-  sessionName: string;
-  sessionStore: SessionStore;
-  result: SnapshotRuntimeRecord;
-}): void {
-  const session = params.sessionStore.get(params.sessionName);
-  if (!session) return;
-  params.sessionStore.recordAction(session, {
-    command: params.req.command,
-    positionals: params.req.positionals ?? [],
-    flags: params.req.flags ?? {},
-    result: toRecordedSnapshotRuntimeResult(params.result),
-    // #1271 stage 2: `snapshot` is observation-only and subject to the
-    // repair-segment default exclusion; `diff` reaches this same recorder and
-    // is deliberately NOT in the classifier's command set, so it is
-    // unaffected. An authored `snapshot` plan step carries replay provenance
-    // and stays in the heal.
-    interactiveObservation: isInteractiveObservation(params.req),
-  });
-}
-
-function assertSnapshotSessionRecord(
-  record: CommandSessionRecord,
-): CommandSessionRecord & { snapshot: NonNullable<CommandSessionRecord['snapshot']> } {
-  if (!record.snapshot) {
-    throw new AppError('UNKNOWN', 'snapshot runtime did not produce session state');
-  }
-  return record as CommandSessionRecord & {
-    snapshot: NonNullable<CommandSessionRecord['snapshot']>;
-  };
-}
-
-function toRecordedSnapshotRuntimeResult(record: SnapshotRuntimeRecord): Record<string, unknown> {
-  if (record.kind === 'snapshot') {
-    return { nodes: record.nodes, truncated: record.truncated };
-  }
-  return {
-    mode: record.mode,
-    baselineInitialized: record.baselineInitialized,
-    summary: record.summary,
-  };
 }

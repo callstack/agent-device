@@ -194,6 +194,15 @@ function providerScenarioSteps(
     { name: 'click', command: 'click', positionals: ['10', '20'], expectData: { x: 10, y: 20 } },
     { name: 'snapshot', command: 'snapshot' },
     {
+      name: 'diff',
+      command: 'diff',
+      positionals: ['snapshot'],
+      expectData: {
+        baselineInitialized: false,
+        summary: { additions: 0, removals: 0, unchanged: 1 },
+      },
+    },
+    {
       name: 'release',
       command: 'lease_release',
       expectData: { released: true, provider: { provider: FAKE_PROVIDER } },
@@ -264,6 +273,7 @@ function assertFakeProviderCallOrder(calls: FakeProviderCall[]): void {
       'inventory',
       'open',
       'tap',
+      'snapshot',
       'snapshot',
       'lease.release',
     ],

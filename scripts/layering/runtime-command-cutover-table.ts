@@ -25,7 +25,8 @@ import { retiredDispatchProjectionViolations } from './runtime-command-cutover-d
  *
  * A row id is a report heading, so it must be unique across every stack that adds rows here.
  * `cutoverTableDefects` rejects a duplicate; lifecycle starts at R28 after the accepted
- * shutdown, install/deploy, and application-lifecycle allocations. Snapshot starts at R32.
+ * shutdown, install/deploy, and application-lifecycle allocations. Snapshot starts at R32;
+ * diff follows at R33.
  */
 export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
   {
@@ -472,12 +473,52 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
     },
     extensions: [snapshotRetiredDispatchProjectionProof, snapshotPlatformPolicyBranchViolations],
   },
+  {
+    rule: 'R33 diff-runtime-cutover',
+    command: 'diff',
+    subject: 'snapshot diff capture',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      modulePaths: ['src/daemon/snapshot-diff-legacy-admission.ts'],
+      importPatterns: [/(?:^|\/)snapshot-diff-legacy-admission(?:\.[cm]?[jt]s)?$/],
+      routeNames: ['requireLegacyDiffCustomActionsSupported', 'requireLegacyDiffIosAppSession'],
+    },
+    runtimeTypeNames: ['SnapshotRuntimeOperations'],
+    operations: {
+      names: [
+        'captureSnapshot',
+        'captureSnapshotWithCustomActions',
+        'captureSnapshotWithoutActiveApp',
+      ],
+    },
+    singularExecution: {
+      routes: ['handleSnapshotCommands'],
+      operations: [
+        'captureSnapshot',
+        'captureSnapshotWithCustomActions',
+        'captureSnapshotWithoutActiveApp',
+      ],
+      operationOwners: {
+        captureSnapshot: ['selectActiveAppSnapshot'],
+        captureSnapshotWithCustomActions: ['selectCustomActionsSnapshot'],
+        captureSnapshotWithoutActiveApp: ['selectSnapshotWithoutActiveApp'],
+      },
+    },
+    extensions: [diffRetiredDispatchProjectionProof],
+  },
 ];
 
 function snapshotRetiredDispatchProjectionProof(
   sources: ReadonlyMap<string, string>,
 ): UnruledViolation[] {
   return retiredDispatchProjectionViolations(sources, 'snapshot');
+}
+
+function diffRetiredDispatchProjectionProof(
+  sources: ReadonlyMap<string, string>,
+): UnruledViolation[] {
+  return retiredDispatchProjectionViolations(sources, 'diff');
 }
 
 /** The record mechanics policy predates the row model and reports `path: message`. */

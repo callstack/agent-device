@@ -5,8 +5,11 @@ const { dispatchSnapshotDiffViaRuntime, dispatchSnapshotViaRuntime } = vi.hoiste
   dispatchSnapshotViaRuntime: vi.fn(),
 }));
 
-vi.mock('../snapshot-runtime.ts', () => ({
+vi.mock('../snapshot-diff-runtime.ts', () => ({
   dispatchSnapshotDiffViaRuntime,
+}));
+
+vi.mock('../snapshot-runtime.ts', () => ({
   dispatchSnapshotViaRuntime,
 }));
 
@@ -53,7 +56,7 @@ test('snapshot route forwards the request runtime facts and binding seams exactl
   expect(dispatchSnapshotDiffViaRuntime).not.toHaveBeenCalled();
 });
 
-test('diff route stays on its independent legacy unit without runtime binding seams', async () => {
+test('diff route forwards the request runtime facts and binding seams exactly once', async () => {
   const inspectFacts = vi.fn();
   const bindDevice = vi.fn();
   const sessionStore = new SessionStore('/tmp/agent-device-snapshot-diff-route-test');
@@ -79,6 +82,8 @@ test('diff route stays on its independent legacy unit without runtime binding se
     sessionName: 'diff-route',
     logPath: '/tmp/diff-route.log',
     sessionStore,
+    inspectFacts,
+    bindDevice,
   });
   expect(dispatchSnapshotViaRuntime).not.toHaveBeenCalled();
 });

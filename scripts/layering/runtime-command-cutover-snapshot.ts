@@ -6,37 +6,84 @@ import type { UnruledViolation } from './runtime-command-cutover-model.ts';
 type AstNode = Record<string, unknown>;
 
 const SNAPSHOT_ROUTE_FILE = 'src/daemon/snapshot-runtime.ts';
+const SNAPSHOT_COMMAND_FILE = 'src/daemon/snapshot-command-runtime.ts';
 const SNAPSHOT_BINDING_FILE = 'src/daemon/snapshot-runtime-binding.ts';
 
 /** R32 admits only through the shared facts-first seam selected by the normalized runtime plan. */
 export function snapshotPlatformPolicyBranchViolations(
   sources: ReadonlyMap<string, string>,
 ): UnruledViolation[] {
-  const source = sources.get(SNAPSHOT_ROUTE_FILE);
-  if (source === undefined) return [violation(1, 'snapshot runtime route is missing')];
-
-  const program = parseSync(SNAPSHOT_ROUTE_FILE, source).program as AstNode;
-  const route = namedFunction(program, 'dispatchSnapshotViaRuntime');
-  if (route === undefined) return [violation(1, 'snapshot public runtime route is missing')];
-
-  const violations: UnruledViolation[] = [];
-  if (countNamedCalls(route, 'resolveSnapshotRuntimePlan') !== 1) {
-    violations.push(
-      violation(lineOf(source, route), 'snapshot route must select exactly one normalized plan'),
-    );
+  const routeSource = sources.get(SNAPSHOT_ROUTE_FILE);
+  if (routeSource === undefined) {
+    return [violation(SNAPSHOT_ROUTE_FILE, 1, 'snapshot runtime route is missing')];
+  }
+  const commandSource = sources.get(SNAPSHOT_COMMAND_FILE);
+  if (commandSource === undefined) {
+    return [violation(SNAPSHOT_COMMAND_FILE, 1, 'snapshot runtime command owner is missing')];
+  }
+  const bindingSource = sources.get(SNAPSHOT_BINDING_FILE);
+  if (bindingSource === undefined) {
+    return [violation(SNAPSHOT_BINDING_FILE, 1, 'snapshot runtime binding is missing')];
   }
 
-  const admissions = namedCalls(route, 'inspectRequiredRuntimeUse');
-  if (admissions.length !== 1 || !hasExactAdmissionInput(admissions[0])) {
+  const routeProgram = parseSync(SNAPSHOT_ROUTE_FILE, routeSource).program as AstNode;
+  const route = namedFunction(routeProgram, 'dispatchSnapshotViaRuntime');
+  if (route === undefined) {
+    return [violation(SNAPSHOT_ROUTE_FILE, 1, 'snapshot public runtime route is missing')];
+  }
+  const commandProgram = parseSync(SNAPSHOT_COMMAND_FILE, commandSource).program as AstNode;
+  const commandOwner = namedFunction(commandProgram, 'dispatchSnapshotRuntimeCommand');
+  if (commandOwner === undefined) {
+    return [violation(SNAPSHOT_COMMAND_FILE, 1, 'snapshot runtime command owner is missing')];
+  }
+  const bindingProgram = parseSync(SNAPSHOT_BINDING_FILE, bindingSource).program as AstNode;
+  const owner = namedFunction(bindingProgram, 'resolveBoundSnapshotCaptureRuntime');
+  if (owner === undefined) {
+    return [
+      violation(SNAPSHOT_BINDING_FILE, 1, 'snapshot bound capture owning interface is missing'),
+    ];
+  }
+
+  const violations: UnruledViolation[] = [];
+  if (countNamedCalls(route, 'dispatchSnapshotRuntimeCommand') !== 1) {
     violations.push(
       violation(
-        lineOf(source, admissions[0] ?? route),
-        'snapshot route must admit exactly once through inspectRequiredRuntimeUse(device, plan.use, inspectFacts)',
+        SNAPSHOT_ROUTE_FILE,
+        lineOf(routeSource, route),
+        'snapshot route must delegate exactly once to the shared runtime command owner',
+      ),
+    );
+  }
+  if (countNamedCalls(commandOwner, 'resolveBoundSnapshotCaptureRuntime') !== 1) {
+    violations.push(
+      violation(
+        SNAPSHOT_COMMAND_FILE,
+        lineOf(commandSource, commandOwner),
+        'snapshot runtime command owner must resolve one bound capture',
+      ),
+    );
+  }
+  if (countNamedCalls(owner, 'resolveSnapshotRuntimePlan') !== 1) {
+    violations.push(
+      violation(
+        SNAPSHOT_BINDING_FILE,
+        lineOf(bindingSource, owner),
+        'snapshot owning interface must select exactly one normalized plan',
       ),
     );
   }
 
-  const bindingSource = sources.get(SNAPSHOT_BINDING_FILE) ?? '';
+  const admissions = namedCalls(owner, 'inspectRequiredRuntimeUse');
+  if (admissions.length !== 1 || !hasExactAdmissionInput(admissions[0])) {
+    violations.push(
+      violation(
+        SNAPSHOT_BINDING_FILE,
+        lineOf(bindingSource, admissions[0] ?? owner),
+        'snapshot owning interface must admit exactly once through inspectRequiredRuntimeUse(device, plan.use, inspectFacts)',
+      ),
+    );
+  }
+
   if (bindingSource.includes('inspectSnapshotCaptureAdmission')) {
     violations.push({
       file: SNAPSHOT_BINDING_FILE,
@@ -82,6 +129,6 @@ function isNode(node: unknown, type: string): node is AstNode {
   return node !== null && typeof node === 'object' && (node as AstNode).type === type;
 }
 
-function violation(line: number, message: string): UnruledViolation {
-  return { file: SNAPSHOT_ROUTE_FILE, line, message };
+function violation(file: string, line: number, message: string): UnruledViolation {
+  return { file, line, message };
 }

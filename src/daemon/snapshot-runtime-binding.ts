@@ -1,4 +1,5 @@
 import {
+  resolveSnapshotRuntimePlan,
   type CaptureSnapshotInput,
   type RuntimeOperationFact,
   type SnapshotResult,
@@ -7,15 +8,81 @@ import {
 } from '@agent-device/contracts/platform';
 import { buildIosOpenCommandHint } from './ios-app-session-hint.ts';
 import { contextFromFlags } from './context.ts';
-import type { BindDeviceRuntime } from './request-runtime-binding.ts';
+import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
+import { SessionStore } from './session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import {
+  inspectRequiredRuntimeUse,
   requireRuntimeBinding,
   unavailableRuntimeOperationResponse,
 } from './handlers/session-runtime-admission.ts';
 import { errorResponse } from './handlers/response.ts';
+import { resolveSnapshotScope } from './handlers/snapshot-capture.ts';
+import { resolveSessionDevice } from './handlers/snapshot-session.ts';
 
-export async function bindSnapshotCaptureRuntime(
+export type SnapshotRuntimeRouteParams = {
+  req: DaemonRequest;
+  sessionName: string;
+  logPath: string;
+  sessionStore: SessionStore;
+  inspectFacts?: InspectDeviceRuntimeFacts;
+  bindDevice?: BindDeviceRuntime;
+};
+
+type ResolvedSnapshotCaptureRuntime =
+  | Readonly<{
+      ok: true;
+      session: SessionState | undefined;
+      device: SessionState['device'];
+      snapshotScope: string | undefined;
+      captureSnapshot: () => Promise<SnapshotResult>;
+    }>
+  | Readonly<{ ok: false; response: DaemonResponse }>;
+
+/** Resolves one plan, inspects its owner facts once, then returns one bound capture closure. */
+export async function resolveBoundSnapshotCaptureRuntime(
+  params: SnapshotRuntimeRouteParams,
+  command: 'snapshot' | 'diff',
+): Promise<ResolvedSnapshotCaptureRuntime> {
+  const { req, sessionName, sessionStore } = params;
+  const { session, device } = await resolveSessionDevice(sessionStore, sessionName, req.flags);
+  const resolvedScope = resolveSnapshotScope(req.flags?.snapshotScope, session);
+  if (!resolvedScope.ok) return { ok: false, response: resolvedScope };
+
+  const plan = resolveSnapshotRuntimePlan({
+    customActions: req.flags?.snapshotCustomActions === true,
+    hasActiveApp: session?.appBundleId !== undefined,
+  });
+  const admission = await inspectRequiredRuntimeUse({
+    device,
+    use: plan.use,
+    inspectFacts: params.inspectFacts,
+  });
+  if (!admission.admitted) {
+    return {
+      ok: false,
+      response: await snapshotPlanUnavailableResponse({
+        operation: admission.operation,
+        fact: admission.fact,
+        session,
+        device,
+        command,
+      }),
+    };
+  }
+
+  const runtime = await bindSnapshotCaptureRuntime(params.bindDevice, device, plan);
+  const captureInput = buildRuntimeCaptureInput(params, session, resolvedScope.scope);
+  return Object.freeze({
+    ok: true,
+    session,
+    device,
+    snapshotScope: resolvedScope.scope,
+    captureSnapshot: async () => await runtime.captureSnapshot(captureInput),
+  });
+}
+
+async function bindSnapshotCaptureRuntime(
   bindDevice: BindDeviceRuntime | undefined,
   device: SessionState['device'],
   plan: SnapshotRuntimePlan,
@@ -70,32 +137,27 @@ function selectSnapshotWithoutActiveApp(
   });
 }
 
-export async function snapshotPlanUnavailableResponse(params: {
+type SnapshotPlanUnavailableParams = {
   operation: SnapshotRuntimePlan['use']['required'][number];
   fact: RuntimeOperationFact;
   session: SessionState | undefined;
   device: SessionState['device'];
-}): Promise<DaemonResponse> {
+  command: 'snapshot' | 'diff';
+};
+
+async function snapshotPlanUnavailableResponse(
+  params: SnapshotPlanUnavailableParams,
+): Promise<DaemonResponse> {
   if (params.operation === 'captureSnapshot') {
-    return unavailableRuntimeOperationResponse('snapshot', params.fact)!;
+    return unavailableRuntimeOperationResponse(params.command, params.fact)!;
   }
   if (params.operation === 'captureSnapshotWithCustomActions') {
-    return errorResponse(
-      'UNSUPPORTED_OPERATION',
-      `--actions requires an iOS simulator: custom actions are unavailable on this ${params.device.platform}/${params.device.kind} target.`,
-      { reason: params.fact.available ? undefined : params.fact.reason },
-      {
-        hint:
-          params.fact.available || !params.fact.hint
-            ? 'Re-run without --actions, or target an iOS simulator.'
-            : params.fact.hint,
-      },
-    );
+    return snapshotCustomActionsUnavailableResponse(params);
   }
   const openCommandHint = await buildIosOpenCommandHint(params.device);
   return errorResponse(
     'SESSION_NOT_FOUND',
-    `iOS snapshot requires an active app session on the target device. Run open first (for example: open --session ${params.session?.name ?? 'sim'} --platform ios --device "<name>" <app>).`,
+    `iOS ${params.command} requires an active app session on the target device. Run open first (for example: open --session ${params.session?.name ?? 'sim'} --platform ios --device "<name>" <app>).`,
     {
       reason: 'ios_app_session_required',
       ...(openCommandHint ? { hint: openCommandHint } : {}),
@@ -103,31 +165,54 @@ export async function snapshotPlanUnavailableResponse(params: {
   );
 }
 
-export function buildRuntimeCaptureInput(
+function snapshotCustomActionsUnavailableResponse(
+  params: SnapshotPlanUnavailableParams,
+): DaemonResponse {
+  const unavailableMessage =
+    params.command === 'diff'
+      ? `--actions requires an iOS simulator: custom actions are read through the private accessibility snapshot backend, which ${params.device.platform}/${params.device.kind} targets do not have.`
+      : `--actions requires an iOS simulator: custom actions are unavailable on this ${params.device.platform}/${params.device.kind} target.`;
+  return errorResponse(
+    'UNSUPPORTED_OPERATION',
+    unavailableMessage,
+    { reason: params.fact.available ? undefined : params.fact.reason },
+    {
+      hint:
+        params.command === 'diff' || params.fact.available || !params.fact.hint
+          ? 'Re-run without --actions, or target an iOS simulator.'
+          : params.fact.hint,
+    },
+  );
+}
+
+function buildRuntimeCaptureInput(
   params: Readonly<{ req: DaemonRequest; logPath: string }>,
   session: SessionState | undefined,
   snapshotScope: string | undefined,
 ): CaptureSnapshotInput {
   const { req, logPath } = params;
+  const flags = req.flags ?? {};
+  const { appBundleId, trace, surface } = session ?? {};
+  const { requestId } = req.meta ?? {};
   const context = contextFromFlags(
     logPath,
-    req.flags,
-    session?.appBundleId,
-    session?.trace?.outPath,
-    req.meta?.requestId,
+    flags,
+    appBundleId,
+    trace?.outPath,
+    requestId,
     req.meta,
   );
   return {
     options: {
-      appBundleId: session?.appBundleId,
-      interactiveOnly: req.flags?.snapshotInteractiveOnly,
-      preferredBackend: req.flags?.snapshotPreferredBackend,
-      depth: req.flags?.snapshotDepth,
+      appBundleId,
+      interactiveOnly: flags.snapshotInteractiveOnly,
+      preferredBackend: flags.snapshotPreferredBackend,
+      depth: flags.snapshotDepth,
       scope: snapshotScope,
-      raw: req.flags?.snapshotRaw,
-      customActions: req.flags?.snapshotCustomActions,
-      includeHiddenContentHints: req.flags?.snapshotIncludeHiddenContentHints,
-      surface: session?.surface,
+      raw: flags.snapshotRaw,
+      customActions: flags.snapshotCustomActions,
+      includeHiddenContentHints: flags.snapshotIncludeHiddenContentHints,
+      surface,
     },
     execution: {
       requestId: context.requestId,

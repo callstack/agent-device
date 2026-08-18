@@ -3,7 +3,8 @@ import { SessionStore } from '../session-store.ts';
 import { errorResponse } from './response.ts';
 import { handleAlertCommand } from './snapshot-alert.ts';
 import { handleSettingsCommand, parseSettingsArgs } from './snapshot-settings.ts';
-import { dispatchSnapshotDiffViaRuntime, dispatchSnapshotViaRuntime } from '../snapshot-runtime.ts';
+import { dispatchSnapshotDiffViaRuntime } from '../snapshot-diff-runtime.ts';
+import { dispatchSnapshotViaRuntime } from '../snapshot-runtime.ts';
 import { dispatchWaitViaRuntime } from '../selector-runtime.ts';
 import { resolveSessionDevice, withSessionlessRunnerCleanup } from './snapshot-session.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
@@ -29,11 +30,18 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
       inspectFacts,
       bindDevice,
     }),
-  diff: async ({ req, sessionName, logPath, sessionStore }) => {
+  diff: async ({ req, sessionName, logPath, sessionStore, inspectFacts, bindDevice }) => {
     if (req.positionals?.[0] !== 'snapshot') {
       return errorResponse('INVALID_ARGS', 'diff currently supports only: diff snapshot');
     }
-    return await dispatchSnapshotDiffViaRuntime({ req, sessionName, logPath, sessionStore });
+    return await dispatchSnapshotDiffViaRuntime({
+      req,
+      sessionName,
+      logPath,
+      sessionStore,
+      inspectFacts,
+      bindDevice,
+    });
   },
   wait: async ({ req, sessionName, logPath, sessionStore }) =>
     await dispatchWaitViaRuntime({ req, sessionName, logPath, sessionStore }),
