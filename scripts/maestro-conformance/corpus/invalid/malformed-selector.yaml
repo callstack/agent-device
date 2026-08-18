@@ -2,4 +2,4 @@
 appId: com.example.app
 ---
 - tapOn:
-    - text: "Button"
+    - text: 'Button'

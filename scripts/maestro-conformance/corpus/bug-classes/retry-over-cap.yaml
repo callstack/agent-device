@@ -6,4 +6,4 @@ appId: com.example.app
 - retry:
     maxRetries: 99
     commands:
-      - tapOn: "Retry"
+      - tapOn: 'Retry'

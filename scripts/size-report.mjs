@@ -479,6 +479,10 @@ async function attemptGitHubRequest(url, init, action) {
   } catch (error) {
     return { failure: `Failed to ${action}: ${error?.message ?? error}` };
   }
+  return await classifyGitHubResponse(response, action);
+}
+
+async function classifyGitHubResponse(response, action) {
   if (response.ok) return { response };
   const failure = `Failed to ${action}: ${response.status} ${await response.text()}`;
   if (isTransientGitHubStatus(response.status)) return { failure };

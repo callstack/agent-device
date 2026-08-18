@@ -2,4 +2,4 @@ appId: com.example.include
 ---
 - launchApp
 - tapOn:
-    id: "included-button"
+    id: 'included-button'

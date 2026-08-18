@@ -4,4 +4,4 @@
 # same name (no reflectable upstream constant exists).
 appId: com.example.app
 ---
-- tapOn: "Submit"
+- tapOn: 'Submit'

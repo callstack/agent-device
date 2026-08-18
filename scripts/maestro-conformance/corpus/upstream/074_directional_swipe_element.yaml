@@ -3,4 +3,4 @@ appId: com.example.app
 - swipe:
     direction: RIGHT
     from:
-        text: "swiping element"
+      text: 'swiping element'
