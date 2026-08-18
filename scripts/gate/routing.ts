@@ -28,7 +28,27 @@ function ignoredByExactName(lane: Lane, file: string): boolean {
   return file.startsWith('.github/') && lane.pathsIgnore.includes(file);
 }
 
-export function routingFor(model: Model, routed: RoutedLane): RoutingFailure[] {
+// Why the selector says the lane must start on `file`, or null when it need not.
+function mustStart(model: Model, needs: ReadonlySet<string>, file: string): string | null {
+  const plan = selectChecks({ changedFiles: [file], packageEntryFiles: model.packageEntryFiles });
+  if (plan.failOpen) {
+    return `fails open on it (${plan.failOpenReasons.map((reason) => reason.rule).join(', ')})`;
+  }
+  const routedTo = plan.checks.filter((id) => needs.has(id));
+  return routedTo.length > 0 ? `routes it to ${routedTo.map((id) => `"${id}"`).join(', ')}` : null;
+}
+
+// How the selector classifies a path the lane need not start, or null when it makes no claim
+// (a path outside the device-lane surface is simply not the routing's business).
+function mustNotStart(needs: ReadonlySet<string>, file: string): string | null {
+  if (isUnitTest(file)) return 'a unit test no device lane runs';
+  if (!isDeviceLaneSurface(file)) return null;
+  const { leaf, lanes } = deviceLanesFor(file);
+  if (lanes.some((id: CheckId) => needs.has(id))) return null;
+  return `${leaf}-owned (lanes: ${lanes.join(', ') || 'none'})`;
+}
+
+function routingFor(model: Model, routed: RoutedLane): RoutingFailure[] {
   const lane = model.lanes.find((candidate) => candidate.label === routed.lane);
   if (!lane) {
     return [failure(`routed lane "${routed.lane}" is not defined by any workflow.`)];
@@ -37,40 +57,31 @@ export function routingFor(model: Model, routed: RoutedLane): RoutingFailure[] {
     return [failure(`routed lane "${routed.lane}" has no pull_request trigger to route.`)];
   }
   const needs = new Set<string>([...lane.gates, ...routed.sampled]);
-  const failures: RoutingFailure[] = [];
-  for (const file of [...model.trackedFiles].sort()) {
-    if (isDocs(file)) continue;
-    const plan = selectChecks({ changedFiles: [file], packageEntryFiles: model.packageEntryFiles });
-    const routedTo = plan.checks.filter((id) => needs.has(id));
-    const needsLane = plan.failOpen || routedTo.length > 0;
-    const starts = triggersOnPath(lane, file);
-    if (needsLane && !starts && !ignoredByExactName(lane, file)) {
-      const why = plan.failOpen
-        ? `fails open on it (${plan.failOpenReasons.map((reason) => reason.rule).join(', ')})`
-        : `routes it to ${routedTo.map((id) => `"${id}"`).join(', ')}`;
-      failures.push(
-        failure(
-          `${lane.workflow} ignores ${file}, but the selector ${why}. Remove the ignore entry.`,
-        ),
-      );
-      continue;
-    }
-    if (needsLane || !starts) continue;
-    const surface = isDeviceLaneSurface(file) ? deviceLanesFor(file) : null;
-    const claim = isUnitTest(file)
-      ? 'a unit test no device lane runs'
-      : surface && !surface.lanes.some((id: CheckId) => needs.has(id))
-        ? `${surface.leaf}-owned (lanes: ${surface.lanes.join(', ') || 'none'})`
-        : null;
-    if (claim === null) continue;
-    failures.push(
-      failure(
-        `${lane.workflow} starts on ${file}, which the selector classifies as ${claim}. ` +
-          `Add it to paths-ignore, or the routing claim is false for that path.`,
-      ),
-    );
-  }
-  return failures;
+  return [...model.trackedFiles]
+    .sort()
+    .filter((file) => !isDocs(file))
+    .flatMap((file) => {
+      const starts = triggersOnPath(lane, file);
+      const why = mustStart(model, needs, file);
+      if (why !== null) {
+        return starts || ignoredByExactName(lane, file)
+          ? []
+          : [
+              failure(
+                `${lane.workflow} ignores ${file}, but the selector ${why}. Remove the ignore entry.`,
+              ),
+            ];
+      }
+      const claim = starts ? mustNotStart(needs, file) : null;
+      return claim === null
+        ? []
+        : [
+            failure(
+              `${lane.workflow} starts on ${file}, which the selector classifies as ${claim}. ` +
+                `Add it to paths-ignore, or the routing claim is false for that path.`,
+            ),
+          ];
+    });
 }
 
 export function routing(model: Model, routedLanes: readonly RoutedLane[]): RoutingFailure[] {

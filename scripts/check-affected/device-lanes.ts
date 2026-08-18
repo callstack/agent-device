@@ -66,7 +66,7 @@ const OTHER_FAMILIES: readonly PlatformFamily[] = CANONICAL_PLATFORM_FAMILIES.fi
   (family) => family !== 'apple',
 );
 
-export const ALL_DEVICE_LANES: readonly CheckId[] = [...new Set(Object.values(LEAF_LANES).flat())];
+const ALL_DEVICE_LANES: readonly CheckId[] = [...new Set(Object.values(LEAF_LANES).flat())];
 
 function leafOfSegment(segment: string): Leaf | null {
   const tag = /^platform-([^/]+)$/.exec(segment)?.[1] ?? segment;
