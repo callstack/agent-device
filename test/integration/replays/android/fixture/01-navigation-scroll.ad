@@ -5,7 +5,7 @@ env APP_TARGET="com.callstack.agentdevicelab"
 
 open "${APP_TARGET}" --relaunch
 wait "Agent Device Tester" 30000
-click "label=\"Catalog, 0 new notifications\""
+click "label=\"Catalog\""
 wait "Catalog scroll: top" 5000
 swipe 220 700 220 380
 wait "Catalog scroll: down" 5000
