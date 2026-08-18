@@ -9,7 +9,7 @@ import { handleCloseCommand } from './session-close.ts';
 import { runReplayScriptSource } from './session-replay-runtime.ts';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
 import { errorResponse } from './response.ts';
-import { asAppError } from '@agent-device/kernel/errors';
+import { AppError, asAppError } from '@agent-device/kernel/errors';
 import { emitRequestProgress } from '../../request/progress.ts';
 import {
   clearRequestCanceled,
@@ -184,18 +184,16 @@ export async function handleSessionReplayCommands(params: {
     // That rejection has always surfaced as an INVALID_ARGS response, so it is caught here
     // rather than escaping the handler now that translation happens before the suite runs.
     let suiteRequest: ReplayTestSuiteRequest;
-    try {
-      suiteRequest = toReplayTestSuiteRequest(req, sessionName);
-    } catch (err) {
-      const appErr = asAppError(err);
-      return errorResponse(appErr.code, appErr.message);
-    }
     // #1802: the caller expanded its own paths/globs and sent one script source bundle per
     // discovered source. `sourceBundles` is that list, keyed below by entry path so each nested
     // replay attempt executes exactly the text the caller read for that file.
-    const sourceBundles = req.flags?.replayScriptSources;
-    if (!sourceBundles) {
-      return errorResponse('INVALID_ARGS', REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE);
+    let sourceBundles: readonly ReplayScriptSourceBundle[];
+    try {
+      suiteRequest = toReplayTestSuiteRequest(req, sessionName);
+      sourceBundles = requireReplayTestScriptSources(req);
+    } catch (err) {
+      const appErr = asAppError(err);
+      return errorResponse(appErr.code, appErr.message);
     }
     const sourceBundlesByPath = new Map(sourceBundles.map((bundle) => [bundle.entry, bundle]));
     const outcome = await runReplayTestSuite({
@@ -375,6 +373,18 @@ function resolveReplayVideoRuntime(params: {
  * `replayBackend` is deliberately not carried across: it selects an engine, and it has already
  * been applied here when building the source-discovery and shard-target capabilities.
  */
+/**
+ * #1802: a `test` request states the script sources its suite runs, because the daemon opens no
+ * caller path. Absent entirely means a client too old to send them; it is rejected as a typed
+ * `AppError` so it travels the same translation-failure path the shard/flag rejections already
+ * take, rather than adding a second refusal shape to the handler.
+ */
+function requireReplayTestScriptSources(req: DaemonRequest): readonly ReplayScriptSourceBundle[] {
+  const sources = req.flags?.replayScriptSources;
+  if (!sources) throw new AppError('INVALID_ARGS', REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE);
+  return sources;
+}
+
 function toReplayTestSuiteRequest(req: DaemonRequest, sessionName: string): ReplayTestSuiteRequest {
   const flags = req.flags ?? {};
   const cwd = req.meta?.cwd;

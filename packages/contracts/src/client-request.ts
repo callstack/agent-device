@@ -15,67 +15,51 @@ import type {
   SessionRuntimeHints,
 } from '@agent-device/kernel/contracts';
 import type { DaemonBatchStep } from './batch-step.ts';
-import type { ReplayScriptSourceBundle } from './replay.ts';
+import type { ReplayRequestFields } from './replay-request-fields.ts';
 import type { AgentDeviceClientConfig, AgentDeviceSelectionOptions } from './client-connection.ts';
 
-export type CommandExecutionOptions = Partial<ScreenshotRequestFlags> & {
-  positionals?: string[];
-  kind?: string;
-  out?: string;
-  artifact?: string;
-  dsym?: string;
-  searchPath?: string;
-  interactiveOnly?: boolean;
-  depth?: number;
-  scope?: string;
-  raw?: boolean;
-  customActions?: boolean;
-  forceFull?: boolean;
-  count?: number;
-  fps?: number;
-  recordingScope?: RecordingScope;
-  quality?: RecordingExportQuality;
-  hideTouches?: boolean;
-  intervalMs?: number;
-  delayMs?: number;
-  durationMs?: number;
-  holdMs?: number;
-  jitterPx?: number;
-  pixels?: number;
-  doubleTap?: boolean;
-  verify?: boolean;
-  settle?: boolean;
-  settleQuietMs?: number;
-  clickButton?: ClickButton;
-  pauseMs?: number;
-  pattern?: SwipePattern;
-  headless?: boolean;
-  restart?: boolean;
-  replayUpdate?: boolean;
-  replayBackend?: string;
-  replayEnv?: string[];
-  replayShellEnv?: Record<string, string>;
-  /** #1802: caller-read script text for `replay`; the daemon never opens a caller path. */
-  replayScriptSource?: ReplayScriptSourceBundle;
-  /** #1802: caller-side `test` discovery result — one bundle per discovered source, in run order. */
-  replayScriptSources?: ReplayScriptSourceBundle[];
-  replayFrom?: number;
-  replayPlanDigest?: string;
-  replayKeepSession?: boolean;
-  failFast?: boolean;
-  timeoutMs?: number;
-  retries?: number;
-  recordVideo?: boolean;
-  artifactsDir?: string;
-  shardAll?: number;
-  shardSplit?: number;
-  findFirst?: boolean;
-  findLast?: boolean;
-  networkInclude?: NetworkIncludeMode;
-  batchOnError?: 'stop';
-  batchMaxSteps?: number;
-  batchSteps?: DaemonBatchStep[];
-};
+export type CommandExecutionOptions = Partial<ScreenshotRequestFlags> &
+  ReplayRequestFields & {
+    positionals?: string[];
+    kind?: string;
+    out?: string;
+    artifact?: string;
+    dsym?: string;
+    searchPath?: string;
+    interactiveOnly?: boolean;
+    depth?: number;
+    scope?: string;
+    raw?: boolean;
+    customActions?: boolean;
+    forceFull?: boolean;
+    count?: number;
+    fps?: number;
+    recordingScope?: RecordingScope;
+    quality?: RecordingExportQuality;
+    hideTouches?: boolean;
+    intervalMs?: number;
+    delayMs?: number;
+    durationMs?: number;
+    holdMs?: number;
+    jitterPx?: number;
+    pixels?: number;
+    doubleTap?: boolean;
+    verify?: boolean;
+    settle?: boolean;
+    settleQuietMs?: number;
+    clickButton?: ClickButton;
+    pauseMs?: number;
+    pattern?: SwipePattern;
+    headless?: boolean;
+    restart?: boolean;
+    replayBackend?: string;
+    findFirst?: boolean;
+    findLast?: boolean;
+    networkInclude?: NetworkIncludeMode;
+    batchOnError?: 'stop';
+    batchMaxSteps?: number;
+    batchSteps?: DaemonBatchStep[];
+  };
 
 export type InternalRequestOptions = AgentDeviceClientConfig &
   AgentDeviceSelectionOptions &
