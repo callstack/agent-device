@@ -90,6 +90,9 @@ the new thing — never to suppress or allowlist it.
 - every command declares a timeout policy on its descriptor (timeout-policy completeness test)
 - TS/Swift rule parity: golden tables under `contracts/fixtures/`, consumed by vitest and the gated
   XCTest — change the rule only via the table
+- runner XCTest reach: `check:xctest-selection` evaluates each test's `#if` guard per platform and
+  fails when a declared method reaches no lane (host/PR/nightly) — classify with the guard, do not
+  list by hand
 - cross-command apple-leak guard; folder DAG/import lint (zero value-import cycles, zero target-spine
   back-edges); fallow (dead code, duplication, complexity)
 

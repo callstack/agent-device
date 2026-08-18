@@ -119,6 +119,17 @@ final class RunnerTests: XCTestCase {
   // Bounds the pre-plan SpringBoard system-modal probe, which can otherwise grind for tens of
   // seconds on remote-hosted consent dialogs and bypass the plan budget (#1244).
   let systemModalProbeBudget: TimeInterval = 4
+  // In-bundle unit tests (every `func test…` except `testCommand` below) compile only under
+  // `-D AGENT_DEVICE_RUNNER_UNIT_TESTS` and are classified by their `#if` guard (#1781 A7):
+  //   - `#if AGENT_DEVICE_RUNNER_UNIT_TESTS` alone: a pure runner decision (rule table,
+  //     geometry, parser, policy, journal, dispatch bookkeeping) that needs no launched app.
+  //     Runs on the macOS host lane on every PR (ci.yml, no simulator) and on the iOS lanes.
+  //   - `… && os(iOS)` (or a nested `#if os(iOS)`): runner/XCTest semantics — launches the
+  //     host app, routes through SpringBoard, swizzles XCUIApplication, or asserts an
+  //     iOS-only branch. Simulator lanes only (ios.yml PR list, xctest-nightly.yml).
+  // `pnpm check:xctest-selection` derives each lane's reachable set from these guards and
+  // fails when a declared test is reachable by no lane, so a test gated to a platform nothing
+  // runs (the old tvOS-only pair) cannot go dark silently.
   #if AGENT_DEVICE_RUNNER_UNIT_TESTS
   // #1605 merge gate: deterministic live reproduction of the field ambiguity —
   // a tap whose coordinate activation LANDS while XCTest bookkeeping records a

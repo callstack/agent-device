@@ -15,22 +15,27 @@ name: XCTest Nightly
 #
 # Under the lane rule in #1781:
 #
-#   - Catches: regressions in the runner-semantics tests the PR list leaves out — selector
-#     matching, snapshot traversal, command journal, sequence execution, tv remote, keyboard,
-#     scroll/gesture policy. Nothing else executes them. Note the reachable set is smaller
-#     than the declared set: `testCommand` is skipped, and the `…OnTvOS` tests sit behind
-#     `#if os(tvOS)` and cannot execute on this lane's iOS Simulator destination.
-#   - Evidence: the list has never been re-derived since it was written by hand; the tests it
-#     omits have been dark for their whole life, so their current state is unmeasured. The
-#     first red night is the evidence this lane exists to produce.
+#   - Catches: regressions in the simulator-only tests (guard `… && os(iOS)`: they launch
+#     the host app, route through SpringBoard, or assert an iOS-only branch) that ios.yml's
+#     PR list leaves out. Since the A7 classification the pure-decision tests also run on
+#     the macOS host lane on every PR (ci.yml "Swift Runner Host XCTests"), so this lane's
+#     unique reach is the simulator-only remainder — `pnpm check:xctest-selection` prints
+#     both numbers. `testCommand` is skipped, and the tests guarded to macOS/tvOS only
+#     cannot execute on this lane's iOS Simulator destination (the host lane runs them).
+#   - Evidence: the first execution found #1812 in the dark set (2 of 155 red, both real);
+#     the other ~114 never-run tests all passed.
 #   - Cost: this is a public repository, so nothing here is billed. The real cost is one macOS
 #     concurrency slot per night. The Apple runner build shares ios.yml's cache (identical
 #     inputs and build variant), but scheduled runs only see DEFAULT-BRANCH caches, so the hit
 #     depends on ios.yml's `push: main` run having populated the cache at the same source
 #     hash — on a miss this lane also pays a full runner build. Adds nothing to any PR.
-#   - Kill criterion: when A7's classification lands — pure Swift decision tests moved to a
-#     fast unit target, stale tests deleted, the rest kept on the simulator — this lane goes
-#     if the surviving set is small enough to run on every PR.
+#   - Kill criterion: what ONLY this lane reaches is 11 tests / ~42 s of simulator time
+#     (measured from the first night's xcresult) — the app-launching, SpringBoard-probing
+#     class. Once ios.yml runs the whole iOS-compiled bundle instead of its hand-written
+#     list — the follow-up stacked on the classification — every test reaches a PR lane and
+#     this lane goes. That trade is not free: those 11 are the flakiest tests in the suite,
+#     and they would land on a blocking 15-minute gate that is already cancelled ~19% of the
+#     time, so measure their flake rate here before moving them.
 #
 # Scheduled + manual only. It is deliberately NOT a PR gate: ios.yml is already over half of
 # this repo's CI spend (#1781 A9), and moving the unrun set onto it would make that worse for
@@ -79,6 +84,7 @@ jobs:
       AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ github.workspace }}/.tmp/ios-runner-derived
       RESULT_BUNDLE_PATH: ${{ github.workspace }}/.tmp/xctest-nightly/RunnerTests.xcresult
       RESULT_SUMMARY_PATH: ${{ github.workspace }}/.tmp/xctest-nightly/test-results-summary.json
+      XCTEST_LANE: nightly
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -155,10 +161,12 @@ jobs:
       # Reports the run AND is the lane's own liveness check. `xcodebuild` exits 0 when a
       # selection matches nothing, so "green" and "ran no tests" are the same log tail: a
       # build variant without the unit-test compile flag, an empty test plan, or a renamed
-      # target would all read as a healthy night. Asserting the run executed tests is what
-      # tells those apart. The failure list is capped so a badly red night cannot blow the
-      # 1 MiB job-summary limit and lose the headline with it.
-      - name: Report the run and assert it executed tests
+      # target would all read as a healthy night. The reporter asserts the executed count
+      # equals what `pnpm check:xctest-selection` derives this lane reaches from the `#if`
+      # guards (XCTEST_LANE above), so a guard that compiles a file of tests out of iOS reads
+      # as red too. The failure list is capped so a badly red night cannot blow the 1 MiB
+      # job-summary limit and lose the headline with it.
+      - name: Report the run and assert it executed the source-derived set
         if: always()
         run: |
           set -euo pipefail

@@ -481,6 +481,11 @@ extension RunnerTests {
     XCTAssertNil(xctestRecordedFailureResponse(command: tapCommand, response: runnerFatalResponse))
   }
 
+  // Simulator-only from here to the matching #endif: these launch the host app, route through
+  // SpringBoard, or assert the iOS-only alert/system-modal branches. Tests outside the
+  // `os(iOS)` regions in this file are pure runner decisions and also run on the macOS host
+  // lane (ci.yml) — see the classification convention in RunnerTests.swift.
+#if os(iOS)
   func testMissingBundleCommandInvalidatesCompleteCachedTargetState() throws {
     app.launch()
     currentApp = app
@@ -681,6 +686,10 @@ extension RunnerTests {
     XCTAssertFalse(shouldSkipAppActivationPreflight(mixedSequence))
   }
 
+  // Launches nothing, but still simulator-only: `shouldSkipAppActivationPreflight` is
+  // `#if os(iOS) …guards… #else return false #endif`, so on macOS this asserts a compile-time
+  // literal and no edit to the iOS body could make it red. Its five siblings above and below
+  // are gated for the same reason.
   func testSkipAppActivationPreflightRequiresCachedForegroundTarget() throws {
     currentApp = nil
     currentBundleId = nil
@@ -727,6 +736,7 @@ extension RunnerTests {
 
     XCTAssertTrue(shouldSkipAppActivationPreflight(alert))
   }
+#endif
 
   func testExecuteDispatchedReturnsBusyBeforeMainThreadFastPath() throws {
     let command = try runnerCommandFixture(#"{"command":"snapshot","commandId":"snapshot-busy"}"#)
@@ -760,6 +770,7 @@ extension RunnerTests {
     XCTAssertTrue(response.error?.hint?.contains("runner session will be restarted") == true)
   }
 
+#if os(iOS)
   func testAlertResolutionCannotBypassRequestedDeadline() throws {
     final class ResultBox {
       var error: Error?
@@ -821,6 +832,7 @@ extension RunnerTests {
     releaseResolution.signal()
     wait(for: [resolutionExited], timeout: 1)
   }
+#endif
 
   func testRunMainThreadWorkExecutesOffMainCallerOnMainThread() {
     final class ResultBox {

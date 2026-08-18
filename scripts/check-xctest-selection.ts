@@ -1,63 +1,119 @@
-// `pnpm check:xctest-selection` — hold the hand-written `-only-testing:` and
-// `-skip-testing:` lists to the tests that actually exist, and ensure those unit-test methods
-// are stripped from the Apple runner source copied into the npm package (#1781 A7).
+// `pnpm check:xctest-selection` — derive, from the Swift sources and the workflow files, which
+// runner XCTest methods each CI lane actually reaches, and fail when a method reaches none
+// (#1781 A7). Also ensures those unit-test methods are stripped from the Apple runner source
+// copied into the npm package.
 //
-// `xcodebuild` treats a test identifier that matches nothing as an empty set rather than an
-// error, in BOTH directions, and each direction fails silently in its own way:
+// Three lanes run the `AgentDeviceRunnerUITests` bundle, and each reaches a different set:
 //
-//   - `-only-testing:` (ios.yml, 37 hand-written entries) — a renamed or deleted test stops
-//     running with no signal. The lane stays green with fewer tests than the list claims.
-//   - `-skip-testing:` (xctest-nightly.yml) — the nightly skips `RunnerTests/testCommand`,
-//     which is not a test at all: it is the runner's server entry point (RunnerTests.swift),
-//     compiled unconditionally, and it starts an NWListener and waits 24 hours. A typo in
-//     that entry re-arms a full-timeout hang, and a hang is the most expensive way a lane
-//     can fail.
+//   - host    ci.yml, macOS host, every PR: the whole bundle as compiled for macOS, minus
+//             `-skip-testing:` — the pure runner-decision tests, whose guard is
+//             `#if AGENT_DEVICE_RUNNER_UNIT_TESTS` alone.
+//   - pr      ios.yml, iOS Simulator, every PR: the hand-written `-only-testing:` list.
+//   - nightly xctest-nightly.yml, iOS Simulator, scheduled: the whole bundle as compiled for
+//             iOS, minus `-skip-testing:` — includes the simulator-only tests, whose guard is
+//             `… && os(iOS)` (they launch the host app, route through SpringBoard, or assert an
+//             iOS-only branch).
 //
-// Deliberately one-directional about coverage: a test in no `-only-testing:` list is fine,
-// the nightly runs it. Only an identifier naming nothing is a defect.
+// The classification therefore lives in the `#if` guards, so this check evaluates them per
+// platform rather than treating a source-level `func test…` as running everywhere. What it
+// holds:
 //
-// The declaration scan is source-level, so a method compiled out by `#if` still counts as
-// declared. That is the intended precision — this check guards the lists against renames and
-// deletions, not against platform availability, which the nightly observes directly.
+//   1. Every `-only-testing:`/`-skip-testing:` identifier names a declared method that
+//      compiles for that lane's platform. `xcodebuild` treats an identifier matching nothing
+//      as an empty set rather than an error, in BOTH directions: an unknown `-only-testing:`
+//      drops a test from the PR lane silently, and an unknown `-skip-testing:` re-admits
+//      `RunnerTests/testCommand` — not a test but the runner's server entry point, which opens
+//      an NWListener and waits 24 hours — into a whole-bundle lane and hangs it.
+//   2. Every declared method is reachable by at least one lane. A test gated to a platform
+//      no lane runs (the tvOS-only pair this check found) is dark from the day it is written.
+//   3. The entry point is reachable by no lane at all.
+//
+// The nightly and host lanes also assert their executed count equals the reach derived here
+// (scripts/xctest-run-summary.ts), so a build variant without the unit-test compile flag, or a
+// guard that quietly compiles a file out, reads as red instead of as a smaller green.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runCmdSync } from '../src/utils/exec.ts';
+import type { Platform } from './swift-conditional-compilation.ts';
+import {
+  parseDeclaredTestsByPlatform,
+  readSwiftSources,
+  RUNNER_TESTS_DIR,
+  type DeclaredTest,
+  type SwiftSource,
+} from './xctest-declarations.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
 const packageAppleRunnerScript = path.join(repoRoot, 'scripts/package-apple-runner-source.mjs');
 
-/** The XCTest target directory; its basename is the target name the identifiers use. */
-export const RUNNER_TESTS_DIR = 'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests';
+/** The macOS host lane, which runs the whole macOS-compiled bundle on every PR. */
+export const HOST_WORKFLOW_FILE = '.github/workflows/ci.yml';
 
-/** The PR lane, whose `-only-testing:` list decides what every pull request runs. */
+/** The PR lane, whose `-only-testing:` list decides what every pull request runs on the simulator. */
 export const PR_WORKFLOW_FILE = '.github/workflows/ios.yml';
 
-/** The nightly lane, whose `-skip-testing:` list decides what the full suite leaves out. */
+/** The nightly lane, whose `-skip-testing:` list decides what the full simulator suite leaves out. */
 export const NIGHTLY_WORKFLOW_FILE = '.github/workflows/xctest-nightly.yml';
 
+export type LaneId = 'host' | 'pr' | 'nightly';
+
+export type Lane = {
+  readonly id: LaneId;
+  readonly workflow: string;
+  readonly platform: Platform;
+  /** `whole`: everything compiled minus `-skip-testing:`; `list`: the `-only-testing:` entries. */
+  readonly selection: 'whole' | 'list';
+  /** The job-summary heading the lane's reporter prints. */
+  readonly title: string;
+};
+
+export const LANES: readonly Lane[] = [
+  {
+    id: 'host',
+    workflow: HOST_WORKFLOW_FILE,
+    platform: 'macOS',
+    selection: 'whole',
+    title: 'iOS runner host XCTest lane (macOS, no simulator)',
+  },
+  {
+    id: 'pr',
+    workflow: PR_WORKFLOW_FILE,
+    platform: 'iOS',
+    selection: 'list',
+    title: 'iOS runner PR XCTest list',
+  },
+  {
+    id: 'nightly',
+    workflow: NIGHTLY_WORKFLOW_FILE,
+    platform: 'iOS',
+    selection: 'whole',
+    title: 'iOS runner full XCTest suite',
+  },
+];
+
+export function lane(id: string): Lane {
+  const found = LANES.find((entry) => entry.id === id);
+  if (!found) {
+    throw new Error(
+      `Unknown XCTest lane "${id}"; expected one of ${LANES.map((e) => e.id).join(', ')}.`,
+    );
+  }
+  return found;
+}
+
 /**
- * Every workflow whose test identifiers this check owns. Both are read, so a workflow that
- * is renamed or deleted fails here rather than leaving a stale claim in the output.
+ * Every workflow whose test identifiers this check owns. All are read, so a workflow that is
+ * renamed or deleted fails here rather than leaving a stale claim in the output.
  */
-export const GUARDED_WORKFLOWS: readonly string[] = [PR_WORKFLOW_FILE, NIGHTLY_WORKFLOW_FILE];
+export const GUARDED_WORKFLOWS: readonly string[] = LANES.map((entry) => entry.workflow);
 
-// Every .swift file in the target directory is a member: the Xcode project uses a
-// PBXFileSystemSynchronizedRootGroup, so membership is the directory, not a file list. A
-// `RunnerTests*` name filter would miss RunnerTapPointPolicy.swift, which declares a real
-// addressable test inside `extension RunnerTests`.
-const SWIFT_SOURCE = /\.swift$/;
-
-// One ordered pass over the source. A column-0 type declaration moves the enclosing type;
-// a `func test…` indented exactly one level binds to it. Position carries the meaning
-// rather than brace counting, which would have to know which `{` sits inside a string
-// literal. It is also the more precise rule: only a method declared directly in a
-// top-level `class`/`extension` block is addressable as `Target/Class/method`, so a
-// helper type nested inside a test body (`final class ResultBox` — several of these
-// exist) contributes no test identifiers, and neither does a closure-local `func test…`.
-const DECLARATION =
-  /^(?:[\w@]+[ \t]+)*(?:class|extension|struct|enum|actor|protocol)[ \t]+([A-Za-z_]\w*)|^ {2}(?:[\w@]+[ \t]+)*func[ \t]+(test\w*)[ \t]*\(/gm;
+/**
+ * The one method that must be reachable by no lane: `testCommand` is the runner's server
+ * entry point (RunnerTests.swift), compiled unconditionally.
+ */
+export const ENTRY_POINT_METHOD = 'RunnerTests/testCommand';
 
 // Two guards against reading prose as configuration, both learned the hard way: these
 // workflows discuss their own flags in comments, and this check's first draft counted the
@@ -67,9 +123,10 @@ const DECLARATION =
 // colon matches nothing. A typo'd identifier is still identifier-shaped, so both guards
 // narrow what counts as a flag without narrowing what counts as a defect.
 const YAML_COMMENT = /^\s*#/;
-const TEST_FLAG = /-(only|skip)-testing:([A-Za-z_][\w.+-]*(?:\/[A-Za-z_]\w*){1,2})/;
-
-export type SwiftSource = { readonly file: string; readonly text: string };
+// Global: a `run:` line may carry more than one flag (nothing stops `-only-testing:A -only-testing:B`
+// on one line), and matching only the first would make the second invisible — silently permissive in
+// the skip direction, where an unseen entry is a lane that stops skipping the 24-hour entry point.
+const TEST_FLAG = /-(only|skip)-testing:([A-Za-z_][\w.+-]*(?:\/[A-Za-z_]\w*){1,2})/g;
 
 export type TestFlag = 'only-testing' | 'skip-testing';
 
@@ -83,57 +140,68 @@ export type FlaggedTest = {
 
 export type SelectionReport = {
   readonly target: string;
-  /** Every `Target/Class/method` the Swift sources declare, sorted. */
+  /** Every `Target/Class/method` the Swift sources declare, sorted, regardless of guards. */
   readonly declared: readonly string[];
+  /** The same set with the platforms each method compiles for. */
+  readonly declaredTests: readonly DeclaredTest[];
   /** Every flagged identifier across the guarded workflows, in file order. */
   readonly flagged: readonly FlaggedTest[];
   /** Guarded workflows that do not exist — a claim this check can no longer make. */
   readonly missingWorkflows: readonly string[];
-  /** Flagged identifiers naming no declared method — the failure. */
+  /** Flagged identifiers naming no declared method — a failure. */
   readonly unknown: readonly FlaggedTest[];
+  /** Flagged identifiers naming a method its lane's platform never compiles — a failure. */
+  readonly uncompiled: readonly FlaggedTest[];
+  /** What each lane reaches, once guards and flags are resolved. */
+  readonly reach: Readonly<Record<LaneId, ReadonlySet<string>>>;
+  /** Declared methods no lane reaches, entry point excluded — a failure. */
+  readonly dark: readonly string[];
+  /** Lanes that reach the entry point — a failure (a 24-hour hang). */
+  readonly entryPointReachedBy: readonly LaneId[];
 };
 
 export type WorkflowSource = { readonly workflow: string; readonly text: string | null };
-
-export function readSwiftSources(directory: string): SwiftSource[] {
-  return fs
-    .readdirSync(directory)
-    .filter((entry) => SWIFT_SOURCE.test(entry))
-    .sort()
-    .map((entry) => ({
-      file: entry,
-      text: fs.readFileSync(path.join(directory, entry), 'utf8'),
-    }));
-}
-
-/** Every `Target/Class/method` identifier the sources declare. */
-export function parseDeclaredTests(target: string, sources: readonly SwiftSource[]): string[] {
-  const declared = new Set<string>();
-  for (const source of sources) {
-    let enclosing = '';
-    for (const [, type, method] of source.text.matchAll(DECLARATION)) {
-      if (type !== undefined) enclosing = type;
-      else if (method !== undefined && enclosing) declared.add(`${target}/${enclosing}/${method}`);
-    }
-  }
-  return [...declared].sort();
-}
 
 /** Every `-only-testing:`/`-skip-testing:` identifier a workflow names, with its line. */
 export function parseFlaggedTests(workflow: string, text: string): FlaggedTest[] {
   return text.split('\n').flatMap((line, index) => {
     if (YAML_COMMENT.test(line)) return [];
-    const match = TEST_FLAG.exec(line);
-    if (!match) return [];
-    return [
-      {
-        workflow,
-        flag: `${match[1]}-testing` as TestFlag,
-        identifier: match[2] as string,
-        line: index + 1,
-      },
-    ];
+    return [...line.matchAll(TEST_FLAG)].map((match) => ({
+      workflow,
+      flag: `${match[1]}-testing` as TestFlag,
+      identifier: match[2] as string,
+      line: index + 1,
+    }));
   });
+}
+
+/** Attributed per workflow, not just per flag: each lane's number has to be its own. */
+function identifiers(
+  flagged: readonly FlaggedTest[],
+  workflow: string,
+  flag: TestFlag,
+): Set<string> {
+  return new Set(
+    flagged
+      .filter((entry) => entry.workflow === workflow && entry.flag === flag)
+      .map((entry) => entry.identifier),
+  );
+}
+
+/** What one lane reaches: its platform's compiled set, narrowed by its flags. */
+function laneReach(
+  entry: Lane,
+  declaredTests: readonly DeclaredTest[],
+  flagged: readonly FlaggedTest[],
+): Set<string> {
+  const only = identifiers(flagged, entry.workflow, 'only-testing');
+  const skipped = identifiers(flagged, entry.workflow, 'skip-testing');
+  return new Set(
+    declaredTests
+      .filter((test) => test.platforms.includes(entry.platform))
+      .map((test) => test.identifier)
+      .filter((id) => (entry.selection === 'whole' || only.has(id)) && !skipped.has(id)),
+  );
 }
 
 export function buildReport(
@@ -141,20 +209,37 @@ export function buildReport(
   sources: readonly SwiftSource[],
   workflows: readonly WorkflowSource[],
 ): SelectionReport {
-  const declared = parseDeclaredTests(target, sources);
-  const known = new Set(declared);
+  const declaredTests = parseDeclaredTestsByPlatform(target, sources);
+  const declared = declaredTests.map((test) => test.identifier);
+  const known = new Map(declaredTests.map((test) => [test.identifier, test]));
   const flagged = workflows.flatMap((entry) =>
     entry.text === null ? [] : parseFlaggedTests(entry.workflow, entry.text),
   );
+  const platformOf = new Map(LANES.map((entry) => [entry.workflow, entry.platform]));
+  // Identifiers for another target are left alone: this check owns one target's sources
+  // and cannot speak for anything else a workflow might select.
+  const owned = flagged.filter((entry) => entry.identifier.startsWith(`${target}/`));
+  const reach = Object.fromEntries(
+    LANES.map((entry) => [entry.id, laneReach(entry, declaredTests, flagged)]),
+  ) as Record<LaneId, ReadonlySet<string>>;
+  const entryPoint = `${target}/${ENTRY_POINT_METHOD}`;
+  const reachedAnywhere = new Set(LANES.flatMap((entry) => [...reach[entry.id]]));
   return {
     target,
     declared,
+    declaredTests,
     flagged,
     missingWorkflows: workflows.filter((entry) => entry.text === null).map((e) => e.workflow),
-    // Identifiers for another target are left alone: this check owns one target's
-    // sources and cannot speak for anything else a workflow might select.
-    unknown: flagged.filter(
-      (entry) => entry.identifier.startsWith(`${target}/`) && !known.has(entry.identifier),
+    unknown: owned.filter((entry) => !known.has(entry.identifier)),
+    uncompiled: owned.filter((entry) => {
+      const test = known.get(entry.identifier);
+      const platform = platformOf.get(entry.workflow);
+      return test !== undefined && platform !== undefined && !test.platforms.includes(platform);
+    }),
+    reach,
+    dark: declared.filter((id) => id !== entryPoint && !reachedAnywhere.has(id)),
+    entryPointReachedBy: LANES.filter((entry) => reach[entry.id].has(entryPoint)).map(
+      (entry) => entry.id,
     ),
   };
 }
@@ -171,29 +256,20 @@ export function loadReport(root: string = repoRoot): SelectionReport {
   );
 }
 
-/** Attributed per workflow, not just per flag: each lane's number has to be its own. */
-function identifiers(report: SelectionReport, workflow: string, flag: TestFlag): Set<string> {
-  return new Set(
-    report.flagged
-      .filter((entry) => entry.workflow === workflow && entry.flag === flag)
-      .map((entry) => entry.identifier),
-  );
-}
-
-/** What each lane reaches, once the two flags are resolved against the declared set. */
+/** The partition a reader needs: how many methods each lane reaches, and how many none does. */
 export function counts(report: SelectionReport): {
   declared: number;
+  host: number;
   pr: number;
-  skipped: number;
-  nightlyOnly: number;
+  nightly: number;
+  dark: number;
 } {
-  const pr = identifiers(report, PR_WORKFLOW_FILE, 'only-testing');
-  const skipped = identifiers(report, NIGHTLY_WORKFLOW_FILE, 'skip-testing');
   return {
     declared: report.declared.length,
-    pr: pr.size,
-    skipped: skipped.size,
-    nightlyOnly: report.declared.filter((id) => !pr.has(id) && !skipped.has(id)).length,
+    host: report.reach.host.size,
+    pr: report.reach.pr.size,
+    nightly: report.reach.nightly.size,
+    dark: report.dark.length,
   };
 }
 
@@ -206,7 +282,7 @@ export function reportFailures(report: SelectionReport): string[] {
     return [
       `Missing guarded workflow(s): ${report.missingWorkflows.join(', ')}. This check names ` +
         'them in its own output, so a renamed or deleted lane must be reflected in ' +
-        'GUARDED_WORKFLOWS rather than leaving a claim nothing backs.',
+        'LANES rather than leaving a claim nothing backs.',
     ];
   }
   if (report.declared.length === 0) {
@@ -218,30 +294,63 @@ export function reportFailures(report: SelectionReport): string[] {
   if (report.flagged.length === 0) {
     return [
       'Found no `-only-testing:`/`-skip-testing:` entries in ' +
-        `${GUARDED_WORKFLOWS.join(', ')}. Either both lanes stopped filtering (drop this ` +
+        `${GUARDED_WORKFLOWS.join(', ')}. Either every lane stopped filtering (drop this ` +
         'check), or the scan is broken and can no longer see a dropped test.',
     ];
   }
-  if (report.unknown.length === 0) return [];
-  return [
-    `${report.unknown.length} XCTest identifier(s) name a method no source declares:`,
-    ...report.unknown.map(
-      (entry) => `  - ${entry.workflow}:${entry.line} (-${entry.flag}) ${entry.identifier}`,
-    ),
-    'xcodebuild matches nothing and still exits 0 for an unknown identifier, in both',
-    'directions: an unknown `-only-testing:` drops a test from the PR lane silently, and an',
-    'unknown `-skip-testing:` re-admits whatever the nightly meant to leave out — including',
-    `${report.target}/RunnerTests/testCommand, the runner's 24-hour server entry point.`,
-    'Update the entry to the current name, or remove it.',
-  ];
+  const failures: string[] = [];
+  const flagLine = (entry: FlaggedTest) =>
+    `  - ${entry.workflow}:${entry.line} (-${entry.flag}) ${entry.identifier}`;
+  if (report.unknown.length > 0) {
+    failures.push(
+      `${report.unknown.length} XCTest identifier(s) name a method no source declares:`,
+      ...report.unknown.map(flagLine),
+      'xcodebuild matches nothing and still exits 0 for an unknown identifier, in both',
+      'directions: an unknown `-only-testing:` drops a test from the PR lane silently, and an',
+      'unknown `-skip-testing:` re-admits whatever a whole-bundle lane meant to leave out —',
+      `including ${report.target}/${ENTRY_POINT_METHOD}, the runner's 24-hour server entry point.`,
+      'Update the entry to the current name, or remove it.',
+    );
+  }
+  if (report.uncompiled.length > 0) {
+    failures.push(
+      `${report.uncompiled.length} XCTest identifier(s) name a method that lane's platform ` +
+        'never compiles:',
+      ...report.uncompiled.map(flagLine),
+      "The method exists, but its `#if` guard compiles it out of that lane's build, so the",
+      'flag matches nothing there. Move the entry to a lane whose platform compiles it, or',
+      'widen the guard.',
+    );
+  }
+  if (report.dark.length > 0) {
+    failures.push(
+      `${report.dark.length} declared XCTest method(s) are reachable by no lane:`,
+      ...report.dark.map((identifier) => `  - ${identifier}`),
+      'The host lane runs everything the macOS build compiles, the nightly everything the iOS',
+      'build compiles, and the PR list names its methods; a method outside all three — usually',
+      'a guard naming a platform no lane runs — is dark from the day it is written. Widen the',
+      'guard, list it, or delete it.',
+    );
+  }
+  if (report.entryPointReachedBy.length > 0) {
+    failures.push(
+      `${report.target}/${ENTRY_POINT_METHOD} is reachable by lane(s): ` +
+        `${report.entryPointReachedBy.join(', ')}.`,
+      'It is not a test: it opens an NWListener and waits 24 hours for a client, so a lane that',
+      'runs it hangs until timeout-minutes. Whole-bundle lanes must keep their -skip-testing:',
+      'entry for it; the PR list must not name it.',
+    );
+  }
+  return failures;
 }
 
 export function formatSummary(report: SelectionReport): string {
-  const { declared, pr, skipped, nightlyOnly } = counts(report);
+  const { declared, host, pr, nightly, dark } = counts(report);
   return (
-    `xctest selection: ${declared} declared ${report.target} methods — ${pr} selected on ` +
-    `every PR (${PR_WORKFLOW_FILE}), ${skipped} skipped by the nightly ` +
-    `(${NIGHTLY_WORKFLOW_FILE}), ${nightlyOnly} reached only by the nightly.\n`
+    `xctest selection: ${declared} declared ${report.target} methods — host lane ` +
+    `(${HOST_WORKFLOW_FILE}, macOS, every PR) reaches ${host}, PR list (${PR_WORKFLOW_FILE}, ` +
+    `iOS Simulator, every PR) selects ${pr}, nightly (${NIGHTLY_WORKFLOW_FILE}, iOS Simulator) ` +
+    `reaches ${nightly}; ${dark} reachable by no lane; ${ENTRY_POINT_METHOD} skipped everywhere.\n`
   );
 }
 

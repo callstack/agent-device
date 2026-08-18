@@ -966,24 +966,5 @@ extension RunnerTests {
       )
     )
   }
-
-  func testSnapshotAccessibilityUnavailableCarriesSparseVerdict() {
-    currentApp = app
-    currentBundleId = "com.example.app"
-    defer {
-      currentApp = nil
-      currentBundleId = nil
-    }
-    let payload = snapshotAccessibilityUnavailable(
-      failure: SnapshotCaptureFailure(
-        code: "IOS_AX_SNAPSHOT_FAILED",
-        message: "kAXErrorIllegalArgument",
-        hint: "use screenshot"
-      )
-    )
-    XCTAssertEqual(payload.runnerFatal, true)
-    XCTAssertEqual(payload.snapshotQuality?.state, "sparse")
-    XCTAssertEqual(payload.snapshotQuality?.reasonCode, "ax-rejected")
-  }
 }
 #endif

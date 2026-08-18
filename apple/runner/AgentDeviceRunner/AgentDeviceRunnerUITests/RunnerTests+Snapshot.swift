@@ -616,6 +616,11 @@ extension RunnerTests {
     XCTAssertEqual(payload.truncated, true)
     XCTAssertEqual(payload.runnerFatal, true)
     XCTAssertEqual(payload.runnerFatalReason, Self.axSnapshotUnavailableReason)
+    // The planned terminal result carries the structured verdict like every other planned
+    // snapshot — downstream sparse handling keys off it, not off node shapes.
+    XCTAssertEqual(payload.snapshotQuality?.state, "sparse")
+    XCTAssertEqual(payload.snapshotQuality?.reasonCode, "ax-rejected")
+    XCTAssertEqual(payload.snapshotQuality?.reason, Self.axSnapshotFailureMessage)
     XCTAssertNil(currentApp)
     XCTAssertNil(currentBundleId)
   }
@@ -651,6 +656,9 @@ extension RunnerTests {
     XCTAssertEqual(Self.systemModalProbeSlice(budget: 4, deadlineRemaining: -5), 0)
   }
 
+  // Simulator-only: the bounded probe body returns nil on macOS (no SpringBoard host), so the
+  // timeout/penalty/drain machinery below only exists on the iOS branch.
+#if os(iOS)
   /// Regression for #1244/#1248: drives the bounded system-modal probe through a real,
   /// production-only command entry point (`snapshotFast` or `snapshotRaw` -- see the two test
   /// methods below), not `boundedBlockingSystemAlertSnapshot` directly, with
@@ -783,6 +791,7 @@ extension RunnerTests {
       try self.snapshotRaw(app: target, options: options)
     }
   }
+#endif
 
   func testDispatchRecoverySkipsBookkeepingWhileXCTestChannelOccupied() {
     // The #1244 recovery shape: the modal probe abandoned an XCTest query that is still grinding on
