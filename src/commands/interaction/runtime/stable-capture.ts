@@ -189,11 +189,11 @@ function stableCaptureTransitionBaseline(
   // still wins so this confirmation cannot leak onto another capture implementation.
   const isXCTestCapture =
     snapshot?.backend === 'xctest' || (snapshot?.backend === undefined && platform === 'ios');
-  // A broad *screen* replacement needs complete viewport projections on both sides. Scoped or
-  // synthetic fragments can have low semantic overlap without representing navigation at all.
-  const hasCompleteViewportProjection =
-    baselineNodes?.some(isViewportRootNode) === true &&
-    snapshot?.nodes.some(isViewportRootNode) === true;
+  // A broad *screen* replacement needs a complete post-action viewport projection. The baseline
+  // comes from settle's authoritative pre-action capture, but a presented iOS modal can omit its
+  // Application root and still be the complete interaction surface. Requiring the root only from
+  // the candidate prevents scoped/synthetic post-action fragments from extending settle latency.
+  const hasCompleteViewportProjection = snapshot?.nodes.some(isViewportRootNode) === true;
   return baselineNodes && isXCTestCapture && hasCompleteViewportProjection
     ? stableCaptureSignal({ ...snapshot, nodes: baselineNodes })
     : undefined;

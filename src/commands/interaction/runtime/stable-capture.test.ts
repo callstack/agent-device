@@ -144,7 +144,12 @@ test('settle confirms an iOS broad replacement when capture omits snapshot backe
   const outcome = await runStableCaptureLoop(
     runtime,
     { session: 'default' },
-    BROAD_TRANSITION_PARAMS,
+    {
+      ...BROAD_TRANSITION_PARAMS,
+      // Presented iOS modals can be complete interaction captures without retaining the
+      // Application root in their projection.
+      broadTransitionBaselineNodes: elementThreadsNoticeSnapshot.nodes.slice(1),
+    },
   );
 
   assert.equal(outcome.settled, true);
@@ -158,16 +163,13 @@ test('settle confirms an iOS broad replacement when capture omits snapshot backe
   );
 });
 
-test('settle keeps the default quiet window for a partial projection with low overlap', async () => {
-  const { runtime } = transitionRuntime({ settledAtMs: 1_200 });
+test('settle keeps the default quiet window for a partial post-action projection with low overlap', async () => {
+  const { runtime } = transitionRuntime({ omitViewportRoot: true, settledAtMs: 1_200 });
 
   const outcome = await runStableCaptureLoop(
     runtime,
     { session: 'default' },
-    {
-      ...BROAD_TRANSITION_PARAMS,
-      broadTransitionBaselineNodes: elementThreadsNoticeSnapshot.nodes.slice(1),
-    },
+    BROAD_TRANSITION_PARAMS,
   );
 
   assert.equal(outcome.settled, true);
@@ -241,6 +243,7 @@ function transitionRuntime(
     captureBackend?: 'tree' | 'private-ax';
     firstCaptureKeepsBaseline?: boolean;
     omitSnapshotBackend?: boolean;
+    omitViewportRoot?: boolean;
     settledAtMs?: number;
     sessionSnapshot?: SnapshotState;
   } = {},
@@ -261,16 +264,17 @@ function transitionRuntime(
       captureSnapshot: async () => {
         const keepsBaseline = options.firstCaptureKeepsBaseline === true && captures === 0;
         captures += 1;
+        const snapshot = keepsBaseline
+          ? elementThreadsNoticeSnapshot
+          : withCaptureBackend(
+              elapsedMs < settledAtMs ? elementTransientRoomSnapshot : elementSettledRoomSnapshot,
+              captureBackend,
+            );
         return {
           snapshot: withoutSnapshotBackend(
-            keepsBaseline
-              ? elementThreadsNoticeSnapshot
-              : withCaptureBackend(
-                  elapsedMs < settledAtMs
-                    ? elementTransientRoomSnapshot
-                    : elementSettledRoomSnapshot,
-                  captureBackend,
-                ),
+            options.omitViewportRoot === true
+              ? { ...snapshot, nodes: snapshot.nodes.slice(1) }
+              : snapshot,
             options.omitSnapshotBackend === true,
           ),
         };
