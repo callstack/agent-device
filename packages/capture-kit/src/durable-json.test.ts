@@ -12,6 +12,14 @@ test('bounded durable JSON rejects cycles and excessive depth', () => {
   assert.equal(isBoundedJsonObject(nested), false);
 });
 
+test('bounded durable JSON rejects a wide, shallow document past the node cap', () => {
+  // Depth 2 everywhere, so only the node budget can reject it: the root plus
+  // one array plus 4,096 empty objects is 4,098 nodes.
+  const wide = { items: Array.from({ length: 4_096 }, () => ({})) };
+  assert.equal(isBoundedJsonObject(wide), false);
+  assert.equal(isBoundedJsonObject({ items: wide.items.slice(0, 4_000) }), true);
+});
+
 test('validated durable JSON freezes without recursively revalidating every subtree', () => {
   let reads = 0;
   const leaf = Object.defineProperty({}, 'value', {

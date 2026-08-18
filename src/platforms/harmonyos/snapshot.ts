@@ -15,9 +15,16 @@ type ArkUiLayoutNode = {
   children?: ArkUiLayoutNode[];
 };
 
+/**
+ * `maxNodes` bounds the emitted tree; nodes past it are dropped and the
+ * result reports `truncated`. Mirrors the Android helper and Linux AT-SPI
+ * capture seams so the bound is exercisable below the 5,000 default.
+ */
+export type HarmonySnapshotOptions = SnapshotOptions & { maxNodes?: number };
+
 export async function snapshotHarmony(
   device: DeviceInfo,
-  options: SnapshotOptions = {},
+  options: HarmonySnapshotOptions = {},
 ): Promise<{
   nodes: RawSnapshotNode[];
   truncated?: boolean;
@@ -75,7 +82,7 @@ export function parseHarmonyLayout(raw: string): ArkUiLayoutNode {
 
 function buildHarmonySnapshot(
   root: ArkUiLayoutNode,
-  options: SnapshotOptions,
+  options: HarmonySnapshotOptions,
 ): {
   nodes: RawSnapshotNode[];
   truncated?: boolean;
@@ -85,7 +92,7 @@ function buildHarmonySnapshot(
   let rawNodeCount = 0;
   let maxDepth = 0;
   let truncated = false;
-  const maxNodes = MAX_NODES;
+  const maxNodes = options.maxNodes ?? MAX_NODES;
   const walk = (node: ArkUiLayoutNode, depth: number, parentIndex?: number): void => {
     rawNodeCount += 1;
     maxDepth = Math.max(maxDepth, depth);
