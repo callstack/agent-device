@@ -141,7 +141,7 @@ function checkTypeCycleBaseline(members: readonly string[]): LayeringViolation[]
   const baseline = DAEMON_MODULARITY_BASELINE.largestTypeCycle;
   if (members.length > TYPE_CYCLE_BASELINE) {
     violations.push({
-      rule: 'R9 type-cycle-growth',
+      rule: 'R9 type-cycle-size',
       file: 'scripts/layering/daemon-modularity.ts',
       line: 1,
       message:
@@ -155,7 +155,7 @@ function checkTypeCycleBaseline(members: readonly string[]): LayeringViolation[]
     // reviewer ever seeing a number move, so the shrink is recorded in the change that earns
     // it — the same equality pin R6 and the R10 R7 counts already carry.
     violations.push({
-      rule: 'R9 type-cycle-growth',
+      rule: 'R9 type-cycle-size',
       file: 'scripts/layering/daemon-modularity.ts',
       line: 1,
       message:

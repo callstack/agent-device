@@ -394,7 +394,7 @@ axis and stages a deeper platform-runtime seam, one abandonment-safe command cut
   two modules until `activateRefFrame` took the transition, and `snapshotScopeSource` +
   `snapshotGeneration` were assigned in `snapshot-runtime.ts` until `setSnapshotLineage` took
   theirs.
-- Type-cycle growth (R9). R4 keeps the VALUE import graph acyclic, so every remaining cycle is
+- Type-cycle size (R9). R4 keeps the VALUE import graph acyclic, so every remaining cycle is
   created by type-only imports — free at runtime, invisible to R5/R6, and the largest single
   obstacle to reading a subsystem in isolation: inside a strongly-connected component of 46 files,
   no file has a self-contained slice. `TYPE_CYCLE_BASELINE`, derived from the zone ceilings in
