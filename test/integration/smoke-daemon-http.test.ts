@@ -7,6 +7,7 @@ import { DAEMON_RPC_PROTOCOL_VERSION } from '../../src/daemon/http-health.ts';
 import { skipWhenLoopbackUnavailable } from '../../src/__tests__/test-utils/loopback.ts';
 import { stopProcessForTakeover } from '../../src/daemon/daemon-process.ts';
 import { formatResultDebug } from './cli-json.ts';
+import { assertNoDaemonLeaks } from './support/daemon-leak-oracle.ts';
 import { runCliJson } from './test-helpers.ts';
 
 type DaemonInfo = {
@@ -112,6 +113,9 @@ async function stopDaemonForStateDir(stateDir: string): Promise<void> {
       killTimeoutMs: 1500,
       expectedStartTime: info.processStartTime,
     });
+    // #1781 B1: the HTTP-mode daemon must exit without owned processes or
+    // unclassified state-dir residue.
+    await assertNoDaemonLeaks({ stateDir, daemonPids: [info.pid], phase: 'after-shutdown' });
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
   }

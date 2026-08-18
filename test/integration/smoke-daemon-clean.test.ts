@@ -7,6 +7,7 @@ import { skipWhenLoopbackUnavailable } from '../../src/__tests__/test-utils/loop
 import { runCmdSync } from '../../src/utils/exec.ts';
 import { stopProcessForTakeover } from '../../src/daemon/daemon-process.ts';
 import { isProcessAlive } from '../../src/utils/host-process.ts';
+import { assertNoDaemonLeaks } from './support/daemon-leak-oracle.ts';
 import { runCliJson } from './test-helpers.ts';
 
 type DaemonInfo = {
@@ -41,6 +42,9 @@ test('clean daemon script stops a live daemon before removing metadata', async (
     assert.equal(isProcessAlive(info.pid), false);
     assert.equal(fs.existsSync(path.join(stateDir, 'daemon.json')), false);
     assert.equal(fs.existsSync(path.join(stateDir, 'daemon.lock')), false);
+    // #1781 B1: the stopped daemon must take every process it owned with it and
+    // leave only classified artifacts in its state dir.
+    await assertNoDaemonLeaks({ stateDir, daemonPids: [info.pid], phase: 'after-shutdown' });
   } finally {
     if (info) {
       await stopProcessForTakeover(info.pid, {

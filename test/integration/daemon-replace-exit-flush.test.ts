@@ -6,6 +6,7 @@ import path from 'node:path';
 import { skipWhenLoopbackUnavailable } from '../../src/__tests__/test-utils/loopback.ts';
 import { stopProcessForTakeover } from '../../src/daemon/daemon-process.ts';
 import { isProcessAlive } from '../../src/utils/host-process.ts';
+import { assertNoDaemonLeaks } from './support/daemon-leak-oracle.ts';
 import { runCliJson } from './test-helpers.ts';
 
 // #1596: a CLI command that finds its recorded daemon unreachable replaces it
@@ -28,6 +29,7 @@ test('daemon replace mid-command returns a structured, parseable error and exits
 
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replace-exit-flush-'));
   let info: DaemonInfo | null = null;
+  const daemonPids: number[] = [];
   try {
     // A real daemon, started by this codebase, so its recorded version/code
     // signature legitimately match — the only way to reach the "unreachable"
@@ -36,6 +38,7 @@ test('daemon replace mid-command returns a structured, parseable error and exits
     assert.equal(started.status, 0, `${started.stderr}\n${started.stdout}`);
 
     info = readDaemonInfo(stateDir);
+    daemonPids.push(info.pid);
     assert.equal(isProcessAlive(info.pid), true, 'expected the started daemon to be alive');
 
     // Kill it out from under its own metadata: daemon.json stays put and
@@ -69,6 +72,16 @@ test('daemon replace mid-command returns a structured, parseable error and exits
     );
 
     info = readDaemonInfo(stateDir);
+    daemonPids.push(info.pid);
+    await stopProcessForTakeover(info.pid, {
+      termTimeoutMs: 1_500,
+      killTimeoutMs: 1_500,
+      expectedStartTime: info.processStartTime,
+    });
+    info = null;
+    // #1781 B1: neither the SIGKILLed daemon nor its replacement may leave owned
+    // processes or unclassified state-dir residue once both are gone.
+    await assertNoDaemonLeaks({ stateDir, daemonPids, phase: 'after-shutdown' });
   } finally {
     if (info) {
       await stopProcessForTakeover(info.pid, {
