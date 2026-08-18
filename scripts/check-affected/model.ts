@@ -20,6 +20,7 @@
 // remains authoritative; this only optimizes local/agent feedback.
 
 import { WIRE_SURFACE_FILES } from '../../test/wire-compat/surface.ts';
+import { deviceLaneOwnership } from './device-lanes.ts';
 
 // The canonical gate universe. Every gate CI runs is one of these — including the
 // ones that drive their own runner (fuzz, mutation, the Maestro differential) and
@@ -209,7 +210,7 @@ function isWorkflowTooling(file: string): boolean {
   );
 }
 
-function isDocs(file: string): boolean {
+export function isDocs(file: string): boolean {
   // skills/ Markdown is agent guidance prose with no owning suite (the
   // SkillGym harness was removed), so it classifies as docs like the rest.
   return (
@@ -481,6 +482,27 @@ const BUILD_OWNERSHIP: ReadonlyArray<{
     detail: 'MCP registry metadata must stay in sync',
     owns: (file) => file === 'server.json' || file === 'smithery.yaml',
   },
+  // TS/Swift golden tables (`contracts/fixtures/*.json`): the vitest parity test and the
+  // runner XCTest twin both read them, so a table edit owns the unit lane and both runner
+  // builds. Without this a `.json` under contracts/ has no derivable owner and fails open.
+  {
+    check: 'unit',
+    rule: 'own:golden-table',
+    detail: 'the vitest parity twin asserts the TS rule against the golden table',
+    owns: (file) => file.startsWith('contracts/fixtures/'),
+  },
+  {
+    check: 'swift-runner-ios',
+    rule: 'own:golden-table',
+    detail: 'the runner XCTest twin asserts the Swift rule against the golden table',
+    owns: (file) => file.startsWith('contracts/fixtures/'),
+  },
+  {
+    check: 'swift-runner-macos',
+    rule: 'own:golden-table',
+    detail: 'the runner XCTest twin asserts the Swift rule against the golden table',
+    owns: (file) => file.startsWith('contracts/fixtures/'),
+  },
 ];
 
 const buildOwnership: OwnershipRule = ({ file }, input) => {
@@ -520,6 +542,10 @@ const docsOwnership: OwnershipRule = ({ file }) =>
       ]
     : [];
 
+// Live device lanes, by platform family (device-lanes.ts). Selected here alongside the
+// static gates so a TypeScript-only Apple change carries its iOS/macOS lanes in the plan.
+const deviceLaneRule: OwnershipRule = ({ file }) => deviceLaneOwnership(file);
+
 const OWNERSHIP_RULES: readonly OwnershipRule[] = [
   formatGate,
   staticTsGates,
@@ -532,6 +558,7 @@ const OWNERSHIP_RULES: readonly OwnershipRule[] = [
   replayCompatOwnership,
   daemonWireCompatOwnership,
   buildOwnership,
+  deviceLaneRule,
 ];
 
 function fileFacts(file: string): FileFacts {

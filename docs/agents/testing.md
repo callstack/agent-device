@@ -195,7 +195,19 @@ hand-maintained path map:
   script fails loudly instead of dropping a gate.
 - A **small explicit build-ownership layer** covers the paths whose owning build
   cannot be derived: Swift runner, Android helpers, macOS helper, MCP metadata,
-  and the public package surface (itself derived from `package.json` `exports`).
+  the TS/Swift golden tables (`contracts/fixtures/`), and the public package
+  surface (itself derived from `package.json` `exports`).
+- **Device lanes** (`replay-ios`, `replay-ios-device`, `replay-macos`,
+  `replay-android`, `replay-linux`, `web-smoke`) are owned by platform family
+  (`scripts/check-affected/device-lanes.ts`): a path under a family-tagged tree
+  (`packages/platform-<family>/`, `src/platforms/<family>/`, `android/`,
+  `test/integration/replays/<leaf>/`, the lane-prefixed `test/integration/`
+  smoke files) owns that family's lanes; untagged runtime surface owns every
+  lane; unit tests under `src/` and `packages/*/src/` own none. The tags are
+  directory-level only — `src/daemon/android-system-dialog.ts` is a naming
+  convention, not a boundary, and stays shared. `ios.yml`'s `pull_request`
+  `paths-ignore` is routed on this ownership and held to it both ways by the
+  gate manifest (below); `push` to main runs every lane unconditionally.
 
 Changed-file discovery folds working-tree state into the local plan: in the
 default local mode (`--head HEAD`) it unions the committed `base..HEAD` diff with
@@ -284,9 +296,14 @@ step executes on every run. Raw shell can still run project code, but it cannot 
 manifest. The check proves the smaller structural claim that every registered gate has an explicit
 CI owner and every affected path can reach one.
 
-The three facts the manifest cannot derive live together in `scripts/gate/declarations.ts`: one
-coverage wrapper, one reporting-only `test:*` script, and the Android replay owner hidden inside a
-third-party action's `script:` input.
+The facts the manifest cannot derive live together in `scripts/gate/declarations.ts`: opaque
+runners, reporting-only `test:*` scripts, unprovable and manual-only owners, and the **routed
+lanes** — a `pull_request` lane whose `paths-ignore` list is asserted against the selector over
+every tracked path, both ways: a path the selector fails open on or routes to one of the lane's
+declared or sampled checks must start the lane, and a path it classifies as another family's
+device-lane surface or as a unit test must not (`scripts/gate/routing.ts`). GitHub evaluates
+`paths-ignore` before a runner is allocated, so this is routing with no job on the critical
+path; the assertion is what keeps the hand-written glob list a derived artifact.
 
 ## Mutation report over decision kernels
 

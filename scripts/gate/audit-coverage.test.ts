@@ -140,3 +140,19 @@ test('a `test:*` script that is a suite by name, not by shape, needs an owner', 
     'a new test:* script with no catalog entry must fail `registered`',
   );
 });
+
+// The device-lane rules (#1781 A9-2) route Apple and Android paths to the parked replay lanes.
+// Path coverage exempts a declared manual-only check the way `owned` does — the gap is already
+// printed by name — but only while it is declared: drop the declaration and every path that
+// selects the check reports it.
+test('a parked check selected by a path is exempt from path-coverage only while declared', () => {
+  const declared = audit(base).filter((failure) => failure.assertion === 'path-coverage');
+  assert.deepEqual(declared, []);
+  const undeclared = audit(base, { manualOnly: {}, unprovable: {} }).filter(
+    (failure) => failure.assertion === 'path-coverage',
+  );
+  assert.ok(
+    undeclared.some((failure) => /selects "replay-ios"/.test(failure.message)),
+    'without the declaration, the iOS replay lane must surface as unreachable from its paths',
+  );
+});

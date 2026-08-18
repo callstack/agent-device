@@ -75,9 +75,13 @@ test('android-adb stub test delegates project ownership to Vitest', () => {
 
 test('Swift runner change selects both XCUITest platform builds', () => {
   // Each platform build is its own gate in its own lane, so a Swift change owns both.
+  // (The Apple device lanes ride along: the runner is what those lanes boot — device-lanes.ts.)
   assert.deepEqual(ids(['apple/runner/Sources/Runner/Main.swift']), [
     'swift-runner-ios',
     'swift-runner-macos',
+    'replay-ios',
+    'replay-ios-device',
+    'replay-macos',
   ]);
   assert.ok(ids(['src/platforms/apple/core/runner/Support.swift']).includes('swift-runner-ios'));
 });
@@ -88,7 +92,14 @@ test('a runner XCTest source also selects the test-list and package-source check
   // (#1781 A7), and the platform builds cannot see that — they compile fine either way.
   assert.deepEqual(
     ids(['apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Alert.swift']),
-    ['swift-runner-ios', 'swift-runner-macos', 'xctest-selection'],
+    [
+      'swift-runner-ios',
+      'swift-runner-macos',
+      'xctest-selection',
+      'replay-ios',
+      'replay-ios-device',
+      'replay-macos',
+    ],
   );
   // The bug the file filter used to have: membership is the directory, not the name.
   assert.ok(
@@ -101,8 +112,14 @@ test('a runner XCTest source also selects the test-list and package-source check
 });
 
 test('Android helper change selects the android-helpers build', () => {
-  assert.deepEqual(ids(['android/snapshot-helper/src/Main.kt']), ['android-helpers']);
-  assert.deepEqual(ids(['android/ime-helper/AndroidManifest.xml']), ['android-helpers']);
+  assert.deepEqual(ids(['android/snapshot-helper/src/Main.kt']), [
+    'android-helpers',
+    'replay-android',
+  ]);
+  assert.deepEqual(ids(['android/ime-helper/AndroidManifest.xml']), [
+    'android-helpers',
+    'replay-android',
+  ]);
 });
 
 test('MCP metadata change selects the mcp-metadata check', () => {
@@ -128,7 +145,15 @@ test('docs-only change selects no checks and records the docs paths', () => {
 test('test app source selects root lint and format plus its isolated typecheck', () => {
   const result = plan(['examples/test-app/app/index.tsx']);
   assert.equal(result.failOpen, false);
-  assert.deepEqual(result.checks, ['format', 'lint', 'test-app-typecheck']);
+  // Plus the mobile lanes that install the fixture app it builds (device-lanes.ts).
+  assert.deepEqual(result.checks, [
+    'format',
+    'lint',
+    'test-app-typecheck',
+    'replay-ios',
+    'replay-ios-device',
+    'replay-android',
+  ]);
 });
 
 test('unknown path fails open to the full check set', () => {

@@ -6,9 +6,12 @@ import {
   MANUAL_ONLY_OWNERS,
   type ManualOnlyOwner,
   REPORTING_SCRIPTS,
+  ROUTED_LANES,
+  type RoutedLane,
   UNPROVABLE_OWNERS,
 } from './declarations.ts';
 import { categories, checkUnits, covered, scriptUnits, type Model } from './model.ts';
+import { routing } from './routing.ts';
 
 export type Failure = { readonly assertion: string; readonly message: string };
 
@@ -16,11 +19,13 @@ export type Failure = { readonly assertion: string; readonly message: string };
 export type GateDeclarations = {
   readonly manualOnly: Readonly<Record<string, ManualOnlyOwner>>;
   readonly unprovable: Readonly<Record<string, string>>;
+  readonly routed?: readonly RoutedLane[];
 };
 
 const DECLARED: GateDeclarations = {
   manualOnly: MANUAL_ONLY_OWNERS,
   unprovable: UNPROVABLE_OWNERS,
+  routed: ROUTED_LANES,
 };
 
 const HEADINGS: Readonly<Record<string, string>> = {
@@ -29,6 +34,7 @@ const HEADINGS: Readonly<Record<string, string>> = {
   gate: 'Gate ids that name no registered check',
   surface: 'Execution surfaces the manifest does not model',
   'path-coverage': 'Paths whose selected checks no triggered lane runs',
+  routing: 'Routed lanes whose paths-ignore disagrees with the selector',
   registered: 'Suites and projects no registered check covers',
 };
 
@@ -169,11 +175,16 @@ function laneSurfaces(model: Model): Failure[] {
     );
 }
 
-function pathCoverage(model: Model): Failure[] {
+// A parked (manual-only) or loader-invisible check is exempt here for the same reason it is
+// exempt in `unowned`: no path can reach a lane nothing starts, and check.ts already prints
+// those checks by name on every run. Repeating the gap once per path that selects them would
+// only bury the real path-coverage findings.
+function pathCoverage(model: Model, declarations: GateDeclarations): Failure[] {
+  const exempt = { ...declarations.unprovable, ...declarations.manualOnly };
   return categories(model).flatMap((category) =>
     category.checks.flatMap((id) => {
       const spec = CHECK_CATALOG.find((entry) => entry.id === id);
-      if (!spec) return [];
+      if (!spec || id in exempt) return [];
       const result = covered(spec, category.path, model);
       if (result.covered) return [];
       return [
@@ -234,7 +245,8 @@ export function audit(model: Model, declarations: GateDeclarations = DECLARED): 
     ...manualOnly(model, declarations.manualOnly),
     ...gateIds(model),
     ...laneSurfaces(model),
-    ...pathCoverage(model),
+    ...pathCoverage(model, declarations),
+    ...routing(model, declarations.routed ?? []),
     ...unregisteredSuites(model),
     ...orphanProjects(model),
   ];

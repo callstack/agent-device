@@ -1,4 +1,4 @@
-// The four small facts the manifest cannot derive from package scripts and workflow YAML.
+// The five small facts the manifest cannot derive from package scripts and workflow YAML.
 
 // A script whose Vitest/node-test invocation the loader cannot read, mapped to the units it
 // really runs. Empty right now: the one entry was a coverage wrapper, and `test:coverage:ci`
@@ -70,3 +70,25 @@ export const MANUAL_ONLY_OWNERS: Readonly<Record<string, ManualOnlyOwner>> = {
     ].join(' '),
   },
 };
+
+/**
+ * A `pull_request` lane whose `paths-ignore` list is routing, not hygiene (#1781 A9-2): the
+ * list is asserted against the affected selector over every tracked path, both ways. A path
+ * the selector fails open on, or routes to one of the lane's declared gates or to `sampled`
+ * (checks the lane runs a slice of through raw shell, invisible to the loader), must start the
+ * lane; a path the selector places on another family's device-lane surface, or classifies as
+ * a unit test, must not. GitHub evaluates the list before a runner is allocated, so the
+ * decision costs no macOS time and adds no job to the critical path.
+ */
+export type RoutedLane = {
+  /** Lane label, exactly as the loader builds it: `<workflow name> / <job name>`. */
+  readonly lane: string;
+  /** Checks the lane samples without declaring, in addition to its run-gate declarations. */
+  readonly sampled: readonly string[];
+};
+
+export const ROUTED_LANES: readonly RoutedLane[] = [
+  // ios.yml declares swift-runner-ios; its raw-shell steps run one iOS simulator replay and, when
+  // IOS_UDID is set, one physical-device replay — a slice of the parked replay-ios lanes.
+  { lane: 'iOS / Smoke Tests', sampled: ['replay-ios', 'replay-ios-device'] },
+];
