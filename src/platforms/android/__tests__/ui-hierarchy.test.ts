@@ -426,6 +426,29 @@ test('parseUiHierarchy keeps app content under an overlay whose only controls si
   );
 });
 
+test('parseUiHierarchy keeps app content under a focusable full-screen overlay holding one clickable icon', () => {
+  // The Telegram wrapper from #1733, but with one floating clickable icon inside it. The icon makes
+  // the wrapper a covering candidate; its focusability must still not paint the box, or the wrapper
+  // condemns the whole app under it exactly as it did before #1733.
+  const xml = `<hierarchy>
+  <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="0">
+    <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="1">
+      <node class="android.widget.TextView" text="Your phone number" bounds="[24,200][366,260]" enabled="true" visible-to-user="true" drawing-order="1"/>
+      <node class="android.widget.EditText" text="208 379 7171" bounds="[24,320][366,380]" clickable="true" focusable="true" enabled="true" visible-to-user="true" drawing-order="2"/>
+    </node>
+    <node class="android.view.View" bounds="[0,0][390,844]" enabled="true" visible-to-user="true" focusable="true" drawing-order="3">
+      <node class="android.widget.ImageView" content-desc="Attach" bounds="[330,780][380,830]" clickable="true" enabled="true" visible-to-user="true" drawing-order="1"/>
+    </node>
+  </node>
+</hierarchy>`;
+
+  const result = parseUiHierarchy(xml, 800, { raw: true });
+  assert.deepEqual(
+    result.nodes.filter((node) => node.label).map((node) => node.label),
+    ['Your phone number', '208 379 7171', 'Attach'],
+  );
+});
+
 test('parseUiHierarchy counts identifier-only markers toward what a covered sibling shows', () => {
   // A screen container carrying testID markers whose only painted content is one corner icon,
   // under a clickable header bar. The bar covers the icon, but the agent would also lose the
