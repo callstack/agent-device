@@ -22,9 +22,10 @@
   (`docs/agents/device-verification.md`) and report any cleanup that could not be completed.
 - Two readiness claims, never blurred: **published and reported** means the branch is pushed, the
   PR body carries the evidence gathered at a named commit, and CI on the head is the authority
-  still to come; **merge-ready** means the required checks are green on the actual head and the
-  live evidence for the changed path exists. "Don't wait for CI" licenses the first, not the
-  second — say which one you are claiming.
+  still to come; **merge-ready** means the required checks are green on the actual head and,
+  where the change touches a device-facing path, the live evidence for that path exists (the
+  device-facing bullet above; docs-only and pure-tooling changes owe none). "Don't wait for CI"
+  licenses the first, not the second — say which one you are claiming.
 
 ## Rebasing onto a moving `main`
 
