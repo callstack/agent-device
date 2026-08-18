@@ -337,7 +337,12 @@ function readReport(file: string): StrykerReport {
   return JSON.parse(fs.readFileSync(absolute, 'utf8')) as StrykerReport;
 }
 
-function readShardedReports(dir: string, expected: number | undefined): StrykerReport {
+/**
+ * Merges whatever shard reports are present and says how many there were. The
+ * expected-count verdict is the caller's, so a short set is still scored and
+ * published before it fails.
+ */
+function readShardedReports(dir: string): { report: StrykerReport; count: number } {
   const root = path.isAbsolute(dir) ? dir : path.join(repoRoot, dir);
   // Shard artifacts also carry the lane envelope and the derived test scope, so
   // the report is selected by name rather than by "every .json here".
@@ -346,17 +351,8 @@ function readShardedReports(dir: string, expected: number | undefined): StrykerR
     .map((file) => path.join(root, file))
     .sort();
   if (files.length === 0) throw new Error(`No Stryker JSON reports found under ${dir}`);
-  // Sub-sharded modules make "every module has mutants" too weak on its own: the
-  // surviving slices would still cover the module, so the expected shard count is
-  // asserted as well.
-  if (expected !== undefined && files.length !== expected) {
-    throw new Error(
-      `Incomplete shard set from ${dir}: ${files.length} report(s), expected ${expected}. ` +
-        'A shard job failed or its artifact is absent; the aggregate is not a sweep.',
-    );
-  }
   process.stdout.write(`mutation: merging ${files.length} shard report(s) from ${dir}\n`);
-  return mergeReports(files.map(readReport));
+  return { report: mergeReports(files.map(readReport)), count: files.length };
 }
 
 async function produceReport(
@@ -369,15 +365,22 @@ async function produceReport(
 }
 
 /**
- * A merged shard set must cover every requested module. `summarizeReport` scores
- * a module with no mutants as 0, so a matrix shard that died would otherwise be
- * aggregated into a `complete`/`pass` envelope reporting a 0% kernel as if the
- * sweep had happened.
+ * A merged shard set is only a sweep if every expected shard reported and every
+ * requested module has mutants — sub-sharded modules make the second check too
+ * weak alone, since a surviving slice still covers its module. `summarizeReport`
+ * scores an absent module as 0, so without this a dead shard would be published
+ * as a `complete`/`pass` envelope claiming the sweep happened.
  *
- * Runs after the table is published: the kernels that did complete are the part
- * of the run still worth reading on a failed-shard day.
+ * Both verdicts run after the table is published: the kernels that did complete
+ * are the part of the run still worth reading on a failed-shard day.
  */
-function assertShardsCoverModules(state: LaneState, dir: string): void {
+function assertCompleteSweep(state: LaneState, dir: string, shards: number, args: Args): void {
+  if (args.expectShards !== undefined && shards !== args.expectShards) {
+    throw new Error(
+      `Incomplete shard set from ${dir}: ${shards} report(s), expected ${args.expectShards}. ` +
+        'A shard job failed or its artifact is absent; the aggregate is not a sweep.',
+    );
+  }
   const missing = state.scores.filter((score) => score.total === 0).map((score) => score.module);
   if (missing.length === 0) return;
   throw new Error(
@@ -386,15 +389,18 @@ function assertShardsCoverModules(state: LaneState, dir: string): void {
   );
 }
 
-/** Reads shard reports, an existing report, or runs Stryker — and scores them. */
-async function scoreModules(args: Args, state: LaneState): Promise<void> {
+/**
+ * Reads shard reports, an existing report, or runs Stryker — and scores them.
+ * Returns the shard count when the source was a shard directory.
+ */
+async function scoreModules(args: Args, state: LaneState): Promise<number | undefined> {
   state.stage = args.reportDir || args.report ? 'report' : 'stryker';
-  const report = args.reportDir
-    ? readShardedReports(args.reportDir, args.expectShards)
-    : await produceReport(state.modules, args.report, args.shard);
+  const shards = args.reportDir ? readShardedReports(args.reportDir) : undefined;
+  const report = shards?.report ?? (await produceReport(state.modules, args.report, args.shard));
 
   state.stage = 'score';
   state.scores = summarizeReport(report, state.modules);
+  return shards?.count;
 }
 
 async function sweep(args: Args, state: LaneState): Promise<number> {
@@ -410,14 +416,14 @@ async function sweep(args: Args, state: LaneState): Promise<number> {
     return 0;
   }
 
-  await scoreModules(args, state);
+  const shards = await scoreModules(args, state);
 
   const title = args.affected
     ? 'Mutation score — affected decision kernels'
     : 'Mutation score — decision kernels';
   emit(renderReport(state.scores, state.provenance, { title }), args.summary);
 
-  if (args.reportDir) assertShardsCoverModules(state, args.reportDir);
+  if (args.reportDir) assertCompleteSweep(state, args.reportDir, shards ?? 0, args);
   state.stage = 'complete';
   return 0;
 }

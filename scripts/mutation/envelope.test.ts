@@ -200,6 +200,35 @@ test('an incomplete shard set fails instead of scoring the missing module as zer
   fs.rmSync(path.join(repoRoot, '.tmp/mutation/partial-shards'), { recursive: true, force: true });
 });
 
+// The weekly job's real shape: `--expect-shards 10` over a directory missing
+// shards. The count check used to run inside the merge, before anything was
+// scored, so one dead shard discarded the nine that had reported.
+test('a short shard set publishes the shards that did report, then fails', () => {
+  const shards = path.join(repoRoot, '.tmp/mutation/short-shards/shard-kernel-errors');
+  fs.mkdirSync(shards, { recursive: true });
+  fs.writeFileSync(
+    path.join(shards, 'mutation.json'),
+    JSON.stringify({
+      files: { 'packages/kernel/src/errors.ts': { mutants: [{ status: 'Killed' }] } },
+    }),
+  );
+  const result = runMutation([
+    '--report-dir',
+    '.tmp/mutation/short-shards',
+    '--expect-shards',
+    '10',
+    '--modules',
+    'kernel-errors',
+  ]);
+  assert.notEqual(result.exitCode, 0, 'a short shard set must fail the aggregate');
+  assert.match(result.stderr, /1 report\(s\), expected 10/);
+  assert.match(result.stdout, /\| `kernel-errors` — [^|]+\| 100% \|/);
+  const envelope = readEnvelope();
+  assert.equal(envelope.result, 'fail');
+  assert.equal(envelope.data.stage, 'score');
+  fs.rmSync(path.join(repoRoot, '.tmp/mutation/short-shards'), { recursive: true, force: true });
+});
+
 // Argument parsing and the provenance read used to sit outside the envelope
 // boundary, so the lane could exit without declaring itself at all.
 test('a malformed invocation still writes an envelope', () => {
