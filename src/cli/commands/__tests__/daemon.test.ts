@@ -35,6 +35,7 @@ const GRACEFUL_RESULT: DaemonStopResult = {
   cleanupConfidence: 'known',
   claimsReleased: [],
   claimsOrphaned: [],
+  claimsSuperseded: [],
   providerReleases: { status: 'completed', released: [], pending: [] },
   warnings: [],
 };
@@ -79,7 +80,7 @@ test('merges a graceful shutdown report and cleans runner leases with the start-
       released: [{ leaseId: 'lease-1', provider: 'limrun' }],
       pending: [],
     },
-    claims: { released: [claim], orphaned: [] },
+    claims: { released: [claim], orphaned: [], superseded: [] },
   });
 
   try {
@@ -105,6 +106,7 @@ test('merges a graceful shutdown report and cleans runner leases with the start-
         // #1799: a graceful stop reports the claims it actually released.
         claimsReleased: [claim],
         claimsOrphaned: [],
+        claimsSuperseded: [],
       }),
       expect.any(Function),
     );

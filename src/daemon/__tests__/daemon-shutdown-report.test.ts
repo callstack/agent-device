@@ -27,7 +27,7 @@ test('round-trips provider release and device claim records without lease creden
   try {
     writeDaemonShutdownReport(stateDir, {
       providerReleases: { released: [lease], pending: [lease] },
-      claims: { released: [claim], orphaned: [] },
+      claims: { released: [claim], orphaned: [], superseded: [claim] },
     });
 
     expect(readDaemonShutdownReport(stateDir)).toEqual({
@@ -35,7 +35,7 @@ test('round-trips provider release and device claim records without lease creden
         released: [{ leaseId: lease.leaseId, provider: 'limrun' }],
         pending: [{ leaseId: lease.leaseId, provider: 'limrun' }],
       },
-      claims: { released: [claim], orphaned: [] },
+      claims: { released: [claim], orphaned: [], superseded: [claim] },
     });
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
@@ -54,7 +54,7 @@ test('a report written before claim reporting still reads its provider releases'
 
     expect(readDaemonShutdownReport(stateDir)).toEqual({
       providerReleases: { released: [], pending: [] },
-      claims: { released: [], orphaned: [] },
+      claims: { released: [], orphaned: [], superseded: [] },
     });
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });

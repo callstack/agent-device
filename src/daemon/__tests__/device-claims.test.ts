@@ -254,8 +254,26 @@ test('clears only the exact owner token and identity, never a successor claim', 
     claimPath(root),
     JSON.stringify({ ...stored, ownerToken: 'successor-token', session: 'second' }),
   );
-  await clearDeviceClaim(acquired.ownership);
+  // Resolving is not releasing: the outcome is what a caller reporting
+  // ownership must read, since the successor's claim is deliberately kept.
+  assert.equal(await clearDeviceClaim(acquired.ownership), 'ownership-changed');
   assert.equal(inspectDeviceClaims({ serial: device.id })[0]?.claim?.session, 'second');
+});
+
+test('reports the exact outcome of clearing an owned, missing, and unowned claim', async () => {
+  const root = useClaimsRoot();
+  const acquired = await acquireDeviceClaim({
+    device,
+    session: 'owner',
+    workspace: '/worktrees/owner',
+    stateDir: root,
+  });
+  assert.equal(acquired.status, 'acquired');
+  if (acquired.status !== 'acquired') return;
+
+  assert.equal(await clearDeviceClaim(acquired.ownership), 'deleted');
+  assert.equal(await clearDeviceClaim(acquired.ownership), 'absent');
+  assert.equal(await clearDeviceClaim(undefined), 'absent');
 });
 
 test('keeps corrupt records visible and classifies dead owners without reclaiming either', () => {

@@ -26,6 +26,8 @@ export type DaemonStopResult = {
    */
   claimsReleased: DeviceClaimRecord[];
   claimsOrphaned: DeviceClaimRecord[];
+  /** Claims another owner had already taken over; this daemon released nothing. */
+  claimsSuperseded: DeviceClaimRecord[];
   providerReleases: {
     status: 'completed' | 'unknown';
     released: ProviderReleaseRecord[];
@@ -71,6 +73,7 @@ export async function stopDaemon(params: {
       cleanupConfidence: 'known',
       claimsReleased: [],
       claimsOrphaned: [],
+      claimsSuperseded: [],
       providerReleases: { status: 'completed', released: [], pending: [] },
       warnings: [],
     };
@@ -94,6 +97,7 @@ export async function stopDaemon(params: {
     cleanupConfidence: 'unknown',
     claimsReleased: [],
     claimsOrphaned: [],
+    claimsSuperseded: [],
     providerReleases: { status: 'unknown', released: [], pending: null },
     warnings: [
       'The daemon was force-killed before provider lease state could be finalized. Provider allocations may remain active.',
@@ -153,6 +157,7 @@ function notRunningResult(): DaemonStopResult {
     cleanupConfidence: 'known',
     claimsReleased: [],
     claimsOrphaned: [],
+    claimsSuperseded: [],
     providerReleases: { status: 'completed', released: [], pending: [] },
     warnings: [],
   };

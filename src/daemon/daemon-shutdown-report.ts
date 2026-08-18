@@ -11,9 +11,11 @@ export type ProviderReleaseRecord = {
 
 /**
  * #1320: what happened to one session's device claim during graceful teardown.
- * `released` means the claim was cleared after the session reached a safe
+ * `released` means the claim was confirmed gone after the session reached a safe
  * terminal state; `orphaned` means teardown left it in place, so the exiting
- * daemon's dead owner identity is what later proves it reclaimable.
+ * daemon's dead owner identity is what later proves it reclaimable; `superseded`
+ * means another owner had already replaced it, so this daemon released nothing
+ * and left nothing to reconcile.
  */
 export type DeviceClaimRecord = {
   deviceKey: string;
@@ -30,6 +32,7 @@ export type DaemonShutdownReport = {
   claims: {
     released: DeviceClaimRecord[];
     orphaned: DeviceClaimRecord[];
+    superseded: DeviceClaimRecord[];
   };
 };
 
@@ -37,7 +40,11 @@ export function writeDaemonShutdownReport(
   stateDir: string,
   outcome: {
     providerReleases: { released: readonly DeviceLease[]; pending: readonly DeviceLease[] };
-    claims: { released: readonly DeviceClaimRecord[]; orphaned: readonly DeviceClaimRecord[] };
+    claims: {
+      released: readonly DeviceClaimRecord[];
+      orphaned: readonly DeviceClaimRecord[];
+      superseded: readonly DeviceClaimRecord[];
+    };
   },
 ): void {
   const report: DaemonShutdownReport = {
@@ -48,6 +55,7 @@ export function writeDaemonShutdownReport(
     claims: {
       released: [...outcome.claims.released],
       orphaned: [...outcome.claims.orphaned],
+      superseded: [...outcome.claims.superseded],
     },
   };
   const filePath = shutdownReportPath(stateDir);
@@ -109,11 +117,12 @@ function isProviderReleaseReport(
 
 function readClaimSection(value: { claims?: unknown }): DaemonShutdownReport['claims'] {
   const claims = value.claims;
-  if (!claims || typeof claims !== 'object') return { released: [], orphaned: [] };
-  const records = claims as { released?: unknown; orphaned?: unknown };
+  if (!claims || typeof claims !== 'object') return { released: [], orphaned: [], superseded: [] };
+  const records = claims as { released?: unknown; orphaned?: unknown; superseded?: unknown };
   return {
     released: readClaimRecords(records.released),
     orphaned: readClaimRecords(records.orphaned),
+    superseded: readClaimRecords(records.superseded),
   };
 }
 

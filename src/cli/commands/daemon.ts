@@ -46,6 +46,8 @@ function mergeShutdownReport(
           providerReleases: { status: 'completed', ...report.providerReleases },
           claimsReleased: report.claims.released,
           claimsOrphaned: report.claims.orphaned,
+          claimsSuperseded: report.claims.superseded,
+          warnings: [...stopped.warnings, ...supersededClaimWarnings(report.claims.superseded)],
         }
       : stopped;
   }
@@ -58,6 +60,16 @@ function mergeShutdownReport(
       'The graceful shutdown report is unavailable, so provider cleanup state is unknown. Provider allocations may remain active.',
     ],
   };
+}
+
+/** A superseded claim is not a failure to report as one, but the operator's
+ * device is now owned elsewhere, so it must not pass silently. */
+function supersededClaimWarnings(superseded: DaemonStopResult['claimsSuperseded']): string[] {
+  if (superseded.length === 0) return [];
+  const devices = superseded.map((claim) => claim.deviceId).join(', ');
+  return [
+    `Another owner had already claimed ${devices} before this daemon released it, so those devices are now owned elsewhere.`,
+  ];
 }
 
 function renderDaemonStop(

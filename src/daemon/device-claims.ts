@@ -231,28 +231,44 @@ function isCurrentClaimOwner(
   );
 }
 
+/**
+ * What releasing a claim actually did. Resolving is not the same as releasing:
+ * clearing deliberately leaves a claim it does not own in place, so a caller
+ * that reports ownership must read this rather than the absence of a throw.
+ *
+ *  - `deleted`          — the claim this ownership acquired was removed.
+ *  - `absent`           — no claim remains for the device; nothing to remove.
+ *  - `ownership-changed`— a claim remains, but it is not the one we acquired
+ *                         (a successor owner, or a record we cannot attribute).
+ */
+export type DeviceClaimClearOutcome = 'deleted' | 'absent' | 'ownership-changed';
+
 export async function clearDeviceClaim(
   ownership: DeviceClaimSessionOwnership | undefined,
-): Promise<void> {
-  if (!ownership) return;
-  await withDeviceClaimLock(ownership.deviceKey, async () => {
-    const inspected = inspectDeviceClaimFile(resolveDeviceClaimPath(ownership.deviceKey));
-    if (!inspected?.claim) return;
+): Promise<DeviceClaimClearOutcome> {
+  if (!ownership) return 'absent';
+  return await withDeviceClaimLock(ownership.deviceKey, async () => {
+    const claimPath = resolveDeviceClaimPath(ownership.deviceKey);
+    const inspected = inspectDeviceClaimFile(claimPath);
+    if (!inspected) return 'absent';
     const claim = inspected.claim;
     if (
+      !claim ||
       claim.ownerToken !== ownership.ownerToken ||
       !ownerIdentityMatches(
         { pid: claim.ownerPid, startTime: claim.ownerStartTime },
         { pid: ownership.ownerPid, startTime: ownership.ownerStartTime },
       )
     ) {
-      return;
+      return 'ownership-changed';
     }
     try {
-      fs.unlinkSync(resolveDeviceClaimPath(ownership.deviceKey));
+      fs.unlinkSync(claimPath);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      return 'absent';
     }
+    return 'deleted';
   });
 }
 
