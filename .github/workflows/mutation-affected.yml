@@ -5,33 +5,27 @@ name: Mutation Affected
 # Advisory only — the lane reports and never gates (#1457). `scripts/mutation/run.ts`
 # exits non-zero on a harness failure, never on a score.
 #
-# Cost control: the kernel report that pays is the weekly sweep, so `select`
-# returns an empty matrix unless the diff touches the lane's own tooling — the
-# one case a PR-side run buys something, since a harness change has to be proven
-# against real mutants. Selecting on derived kernel ownership instead would run
-# the full ten-shard sweep on 24 of the last 40 merged PRs.
+# Cost control: the kernel report that pays is the weekly sweep, so this lane
+# spends mutants on one thing only — proving the harness still runs end to end
+# when the harness itself changes. `select` therefore returns an empty matrix
+# unless the diff touches the lane's own sources. Selecting on derived kernel
+# ownership instead would run the full ten-shard sweep on 24 of the last 40
+# merged PRs.
 #
-# Scope is the AFFECTED modules, derived from the import graph
-# (scripts/mutation/ownership.ts): a kernel source, or any test that reaches one,
-# plus the canary a tooling diff always adds. Selected modules are sharded like
-# the weekly sweep so the PR's wall clock is one module, not their sum.
+# On a harness diff the matrix is the canary (`LANE_CANARY`, the registry's
+# cheapest real sweep — lane sources own no kernel, so derivation alone would
+# select nothing) plus any kernel that same diff reaches through the import
+# graph (scripts/mutation/ownership.ts): a kernel source, or a test that reaches
+# one. Selected modules are sharded like the weekly sweep, so the PR's wall
+# clock is one module rather than their sum.
 
 on:
   pull_request:
     paths:
-      # Kernel sources, every src/package test (ownership is derived, so any
-      # test may own a kernel — `select` decides, not this filter), and the
-      # lane's own tooling. scripts/mutation/workflow.test.ts asserts this
-      # covers the registry.
-      - 'packages/kernel/src/errors.ts'
-      - 'src/daemon/ref-frame.ts'
-      - 'src/commands/interaction/runtime/settle.ts'
-      - 'src/utils/scroll-edge-state.ts'
-      - 'packages/selectors/src/**'
-      - 'packages/ad-script/src/internal/target-annotation-serde.ts'
-      - 'src/snapshot/snapshot-occlusion.ts'
-      - 'src/**/*.test.ts'
-      - 'packages/*/src/**/*.test.ts'
+      # Exactly `LANE_TOOLING` in scripts/mutation/run.ts plus this file — the
+      # only diffs that can produce a non-empty matrix, asserted both ways by
+      # scripts/mutation/workflow.test.ts. A kernel or test path here would only
+      # start a job that selects nothing.
       - 'scripts/mutation/**'
       - 'scripts/lib/**'
       - 'stryker.config.json'

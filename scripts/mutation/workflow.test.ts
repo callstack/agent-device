@@ -1,13 +1,15 @@
-// The workflows' YAML cannot read the kernel registry, so these assertions keep
-// the two in step: a module added to KERNEL_MODULES that no weekly shard runs
-// would silently drop out of the sweep, and one no PR path filter selects could
-// never reach the affected lane's `select` job.
+// The workflows' YAML cannot read the kernel registry or the lane's own source
+// list, so these assertions keep them in step: a module added to KERNEL_MODULES
+// that no weekly shard runs would silently drop out of the sweep, and a PR path
+// filter out of step with LANE_TOOLING either lets a harness change merge
+// unproven or starts a job that selects nothing.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { KERNEL_MODULES, shardMatrix } from './modules.ts';
+import { shardMatrix } from './modules.ts';
+import { LANE_TOOLING } from './run.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 
@@ -55,39 +57,25 @@ test('no mutation shard is allowed to exceed the 30-minute budget', () => {
   }
 });
 
-test('every kernel path a PR can touch selects the affected mutation job', () => {
+// Only a harness diff can produce a non-empty matrix, so the trigger is asserted
+// in both directions against LANE_TOOLING: a missing path lets a harness change
+// merge without ever running a mutant, and an extra one starts a select job that
+// can only answer `[]`.
+test('the affected lane triggers on exactly the lane sources that can select mutants', () => {
   // Quote style is the formatter's business (oxfmt formats the workflow tree), so
   // accept either spelling of the same scalar rather than pinning this gate to it.
   const paths = [
     ...workflow('mutation-affected.yml').matchAll(/^ {6}- (?<q>['"])(?<glob>[^'"]+)\k<q>$/gm),
   ].map((match) => match.groups!.glob);
-  for (const module of KERNEL_MODULES) {
-    for (const owned of module.owns) {
-      const selected = paths.some(
-        (glob) =>
-          glob === owned ||
-          glob === `${owned}**` ||
-          (glob.endsWith('/**') && owned.startsWith(glob.slice(0, -2))),
-      );
-      assert.ok(selected, `no path filter selects ${owned} (module ${module.id})`);
-    }
-  }
-  // Ownership is derived, so any test in src/ or a workspace package's src/
-  // can own a kernel; the filter must let all of them through and leave the
-  // decision to the `select` job. A narrower filter is exactly the omission
-  // the derivation exists to prevent.
-  assert.ok(
-    paths.includes('src/**/*.test.ts'),
-    'the PR lane must trigger on every src test, since test ownership is derived',
-  );
-  assert.ok(
-    paths.includes('packages/*/src/**/*.test.ts'),
-    'the PR lane must trigger on every packages/*/src test too — target-annotation-serde is owned by one',
+  const expected = [
+    ...LANE_TOOLING.map((prefix) => (prefix.endsWith('/') ? `${prefix}**` : prefix)),
+    // The workflow reruns itself so a trigger edit is proven by the lane it edits.
+    '.github/workflows/mutation-affected.yml',
+  ];
+  assert.deepEqual(
+    [...paths].sort(),
+    [...expected].sort(),
+    'the PR path filter drifted from LANE_TOOLING in scripts/mutation/run.ts',
   );
   assert.match(workflow('mutation-affected.yml'), /gate: mutation-affected[\s\S]*--list-affected/);
-  // The lane's own sources fail open into it too: a harness edit must prove
-  // itself against real mutants, not against a stale report.
-  for (const own of ['scripts/mutation/**', 'stryker.config.json']) {
-    assert.ok(paths.includes(own), `missing path filter ${own}`);
-  }
 });

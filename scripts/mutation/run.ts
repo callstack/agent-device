@@ -422,15 +422,22 @@ async function sweep(args: Args, state: LaneState): Promise<number> {
   return 0;
 }
 
-/** Sources of the lane itself: a change here must prove itself on real mutants. */
-const LANE_TOOLING = ['scripts/mutation/', 'scripts/lib/', 'stryker.config.json'];
+/**
+ * Sources of the lane itself: a change here must prove itself on real mutants.
+ * These are also the only paths that can produce a non-empty matrix, so
+ * `mutation-affected.yml` triggers on exactly them — asserted by
+ * `workflow.test.ts`, since a filter that missed one would let a harness change
+ * merge unproven, and any wider filter only buys a no-op job.
+ */
+export const LANE_TOOLING = ['scripts/mutation/', 'scripts/lib/', 'stryker.config.json'];
 
 /**
- * The PR lane's matrix. The kernel report that pays is the weekly sweep, so the
- * PR lane spends mutants on one thing only: proving the harness still runs end
- * to end when the harness itself changes. Selecting on derived kernel ownership
- * instead would run the full ten-shard sweep on 24 of the last 40 merged PRs —
- * a per-PR full sweep for a report nobody gates on.
+ * The PR lane's matrix: empty unless the diff touches the harness, otherwise the
+ * canary plus whatever kernels that same diff derives. The kernel report that
+ * pays is the weekly sweep, so the PR lane spends mutants on one thing only —
+ * proving the harness still runs end to end when the harness changes. Selecting
+ * on derived kernel ownership alone would run the full ten-shard sweep on 24 of
+ * the last 40 merged PRs, a per-PR full sweep for a report nobody gates on.
  */
 export function affectedMatrixFor(
   changed: readonly string[],

@@ -273,14 +273,16 @@ pnpm mutation:check                     # score an existing .tmp/mutation/mutati
   survived, total, timeouts, plus the surviving mutants — and requires the full set
   (`--expect-shards`), so a dead shard fails the lane instead of publishing its module as 0%. The
   table lands in the job summary and the artifact.
-- **PR lane** (`.github/workflows/mutation-affected.yml`) derives the affected shard matrix
-  (`--list-affected`) and reports the same table. The matrix is empty unless the diff touches the
-  lane's own tooling: the weekly sweep is the kernel report, and selecting on derived kernel
+- **PR lane** (`.github/workflows/mutation-affected.yml`) exists to prove the harness still runs end
+  to end when the harness changes, so its matrix (`--list-affected`) is empty unless the diff touches
+  the lane's own sources: the weekly sweep is the kernel report, and selecting on derived kernel
   ownership would run the full ten-shard sweep on 24 of the last 40 merged PRs for a report nobody
-  gates on. Lane sources own no kernel, so a tooling diff adds `LANE_CANARY` (`kernel-errors`, the
-  registry's cheapest real sweep) to whatever it derives; otherwise it would select zero mutants and
-  prove nothing. `scripts/mutation/selection.test.ts` drives both halves of the rule through the real
-  CLI against a throwaway worktree commit.
+  gates on. The workflow triggers on exactly those sources (`LANE_TOOLING` in `run.ts`, asserted both
+  ways by `workflow.test.ts`), so a PR that could only select `[]` never starts the job. Lane sources
+  own no kernel, so a harness diff adds `LANE_CANARY` (`kernel-errors`, the registry's cheapest real
+  sweep) to whatever kernels that same diff derives; otherwise it would select zero mutants and prove
+  nothing. It reports the same table. `scripts/mutation/selection.test.ts` drives both halves of the
+  rule through the real CLI against a throwaway worktree commit.
 - **Provenance**: every report and lane envelope carries the Stryker version and the config content
   hash that produced it, so scores measured across a tool or config change are not read as
   test-strength change.
