@@ -19,6 +19,7 @@ import {
   resolveCommand,
   type CheckSpec,
 } from './checks.ts';
+import { MANUAL_ONLY_OWNERS } from '../gate/declarations.ts';
 import { loadModel, owningLanes } from '../gate/model.ts';
 import { ALL_CHECKS, selectChecks, type CheckId, type CheckPlan } from './model.ts';
 
@@ -193,8 +194,7 @@ export async function runChecks(
   const coverageSelected = plan.checks.includes('coverage');
   const ciJobs = skipped.length > 0 ? ciJobsByCheck() : new Map<CheckId, string[]>();
   for (const spec of skipped) {
-    const jobs = ciJobs.get(spec.id) ?? [];
-    process.stdout.write(`\n[skip] ${spec.id} — GitHub-authoritative (jobs: ${jobs.join(', ')})\n`);
+    process.stdout.write(`\n[skip] ${spec.id} — ${describeOwner(spec.id, ciJobs)}\n`);
   }
   for (const spec of runnable) {
     if (isCoveredByAffectedCoverage(spec, coverageSelected)) {
@@ -213,6 +213,14 @@ export async function runChecks(
   }
   process.stdout.write('\ncheck:affected: all runnable checks passed.\n');
   return 0;
+}
+
+// Where a check the local run skips is authoritative. A parked check has no automatic
+// lane; say so instead of printing an empty job list.
+function describeOwner(id: CheckId, ciJobs: ReadonlyMap<CheckId, string[]>): string {
+  const parked = MANUAL_ONLY_OWNERS[id];
+  if (parked) return `parked, workflow_dispatch only (${parked.lane})`;
+  return `GitHub-authoritative (jobs: ${(ciJobs.get(id) ?? []).join(', ')})`;
 }
 
 function isCoveredByAffectedCoverage(spec: CheckSpec, coverageSelected: boolean): boolean {
