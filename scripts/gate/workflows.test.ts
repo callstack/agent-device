@@ -102,6 +102,26 @@ jobs:
   });
   assert.deepEqual(lane?.gates, ['replay-ios'], 'the gate is still read');
   assert.equal(lane?.qualifying, false, 'but nothing dispatches itself, so it owns nothing');
+  assert.deepEqual(lane?.triggers, ['workflow_dispatch'], 'the trigger kind survives the model');
+});
+
+// `qualifying` collapses every trigger into one bit, and two very different lanes share the
+// `false` side of it: one a human starts, one that starts itself on every push.
+test('trigger kinds survive the model, not just whether they qualify', () => {
+  const [push] = planted({
+    '.github/workflows/planted.yml': `name: Planted
+on:
+  push:
+    branches: [main]
+jobs:
+  planted:
+    steps:
+      - run: echo hi`,
+  });
+  assert.equal(push?.qualifying, false);
+  assert.deepEqual(push?.triggers, ['push']);
+  const nightly = model.lanes.find((lane) => lane.workflow === 'replays-nightly.yml');
+  assert.deepEqual(nightly?.triggers, ['schedule', 'workflow_dispatch']);
 });
 
 test('a gate invoked from inside a composite action belongs to the calling lane', () => {

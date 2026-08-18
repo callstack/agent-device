@@ -75,11 +75,26 @@ function unowned(model: Model, declarations: GateDeclarations): Failure[] {
   });
 }
 
+/**
+ * `workflow_dispatch` and nothing else. Read from the trigger names rather than from
+ * `qualifying`, which only says "not pull_request/schedule": `push`, `release` and friends are
+ * non-qualifying too, and every one of them starts the run without a human.
+ */
+function dispatchOnly(lane: Model['lanes'][number]): boolean {
+  return (
+    lane.triggers.length > 0 && lane.triggers.every((trigger) => trigger === 'workflow_dispatch')
+  );
+}
+
+function describeTriggers(lane: Model['lanes'][number]): string {
+  return lane.triggers.length > 0 ? lane.triggers.join(', ') : 'no trigger at all';
+}
+
 // A manual-only declaration is an attestation about a lane, so the lane has to back it: the
-// job still exists, still runs on dispatch only, and (unless its gate lives inside a surface
-// the loader cannot open) still declares the gate. Without this, deleting the parked job would
-// leave the manifest green and still printing the check as manual-only — parked coverage
-// silently turned into deleted coverage.
+// job still exists, still runs on dispatch and nothing else, and (unless its gate lives inside
+// a surface the loader cannot open) still declares the gate. Without this, deleting the parked
+// job — or quietly re-triggering it — would leave the manifest green and still printing the
+// check as manual-only: parked coverage silently turned into deleted or unattested coverage.
 function manualOnly(model: Model, declared: Readonly<Record<string, ManualOnlyOwner>>): Failure[] {
   return Object.entries(declared).flatMap(([id, owner]) => {
     if (!REGISTERED.has(id)) {
@@ -101,6 +116,17 @@ function manualOnly(model: Model, declared: Readonly<Record<string, ManualOnlyOw
           'manual-only',
           `"${id}" is declared manual-only, but "${owner.lane}" runs on pull_request/schedule ` +
             `again. Delete the MANUAL_ONLY_OWNERS entry so the check counts as wired.`,
+        ),
+      ];
+    }
+    if (!dispatchOnly(lane)) {
+      return [
+        fail(
+          'manual-only',
+          `"${owner.lane}" is triggered by ${describeTriggers(lane)}, so "${id}" is not ` +
+            `manual-only — "manual" is a claim about who starts the run, and every trigger ` +
+            `other than workflow_dispatch starts it without them. Restore a dispatch-only ` +
+            `workflow, or declare what actually runs the check.`,
         ),
       ];
     }

@@ -127,6 +127,32 @@ test('deleting a parked job fails instead of reading as still parked', () => {
   }
 });
 
+// `qualifying` alone cannot carry this: swapping `workflow_dispatch` for `push` keeps the lane
+// non-qualifying, so without the trigger kinds the audit would stay green while the run nobody
+// starts by hand became a run nobody starts by hand *or* reviews.
+test('a parked lane re-triggered by push fails even though push does not qualify', () => {
+  const failures = audit(
+    withManualLanes((lane) => ({ ...lane, qualifying: false, triggers: ['push'] })),
+  );
+  assert.ok(
+    failures.some(
+      (failure) =>
+        failure.assertion === 'manual-only' && failure.message.includes('is triggered by push'),
+    ),
+    'replacing workflow_dispatch with another non-qualifying trigger must fail',
+  );
+});
+
+test('a parked lane that loses workflow_dispatch entirely fails', () => {
+  const failures = audit(withManualLanes((lane) => ({ ...lane, triggers: [] })));
+  assert.ok(
+    failures.some(
+      (failure) =>
+        failure.assertion === 'manual-only' && failure.message.includes('no trigger at all'),
+    ),
+  );
+});
+
 test('a parked lane back on a schedule fails until its declaration is deleted', () => {
   const failures = audit(withManualLanes((lane) => ({ ...lane, qualifying: true })));
   assert.ok(

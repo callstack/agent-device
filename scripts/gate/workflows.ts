@@ -13,6 +13,12 @@ export type Lane = {
   readonly workflow: string;
   readonly label: string;
   readonly qualifying: boolean;
+  /**
+   * The workflow's trigger names, kept rather than collapsed into `qualifying`: "not a
+   * pull_request/schedule lane" and "a lane only a human can start" are different facts, and
+   * a declaration that means the second cannot be checked against the first.
+   */
+  readonly triggers: readonly string[];
   readonly gates: readonly CheckId[];
   readonly verbatim: readonly string[];
   readonly paths: readonly string[];
@@ -103,6 +109,7 @@ function workflowLanes(
     workflow: file,
     label: laneLabel(doc.name ?? file, job.name ?? jobId),
     qualifying,
+    triggers: Object.keys(on),
     gates: [...new Set(declaredGates(job.steps ?? [], root))],
     verbatim: (job.steps ?? []).flatMap((step) =>
       typeof step.run === 'string' ? verbatimScripts(step.run, scripts) : [],
