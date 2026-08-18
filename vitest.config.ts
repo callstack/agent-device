@@ -84,6 +84,9 @@ export default defineConfig({
             // only place the gate's failure direction is exercised at all (the gate itself needs a
             // real `npm pack`, so CI can only watch a healthy package pass).
             'scripts/__tests__/package-closure-audit.test.ts',
+            // The Bundle Size lane's PR-comment path: spawns the real script against a
+            // stubbed fetch, so it needs no network; pins retry/reconcile/fatal outcomes.
+            'scripts/__tests__/size-report-post-comment.test.ts',
             // Parses CI configuration only, so this action guard needs no device or subprocess lane.
             'test/ci/upload-agent-device-artifacts.test.ts',
             // The frozen replay-compat corpus (#1417): parse-only, no device or

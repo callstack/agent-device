@@ -7,7 +7,8 @@ import { gzipSync } from 'node:zlib';
 
 const COMMENT_MARKER = '<!-- agent-device-size-report -->';
 const GITHUB_REQUEST_ATTEMPTS = 4;
-const GITHUB_RETRY_BASE_MS = 1000;
+// Overridable so the regression tests do not sleep through real backoff.
+const GITHUB_RETRY_BASE_MS = Number(process.env.SIZE_REPORT_RETRY_BASE_MS ?? 1000);
 class TransientGitHubError extends Error {}
 const VALUE_ARGS = new Map([
   ['--cwd', 'cwd'],
@@ -387,9 +388,16 @@ async function postGitHubComment(markdownPath, explicitPrNumber) {
   const config = readGitHubCommentConfig(explicitPrNumber);
   const body = fs.readFileSync(markdownPath, 'utf8');
   const commentsUrl = buildCommentsUrl(config.repository, config.prNumber);
-  const comments = await listGitHubComments(commentsUrl, config.headers);
+  await retryTransient(() => syncGitHubComment(commentsUrl, config.headers, body));
+}
+
+// Every attempt re-lists before writing: a create whose response was lost
+// (network error / 5xx) may still have landed server-side, and re-listing turns
+// that into an update of the existing marker comment instead of a duplicate.
+async function syncGitHubComment(commentsUrl, headers, body) {
+  const comments = await listGitHubComments(commentsUrl, headers);
   const existing = comments.find((comment) => comment.body?.includes(COMMENT_MARKER));
-  await writeGitHubComment(commentsUrl, config.headers, body, existing?.url);
+  await writeGitHubComment(commentsUrl, headers, body, existing?.url);
 }
 
 function readGitHubCommentConfig(explicitPrNumber) {
@@ -453,40 +461,50 @@ function commentWriteTarget(commentsUrl, existingUrl) {
   return { url: commentsUrl, method: 'POST', action: 'create' };
 }
 
-// Retries 5xx / 429 / network errors with exponential backoff; any other
-// non-OK status is a configuration problem and throws a plain (fatal) Error.
-async function githubRequest(url, init, action) {
-  let failure = '';
-  for (let attempt = 1; attempt <= GITHUB_REQUEST_ATTEMPTS; attempt += 1) {
-    const result = await attemptGitHubRequest(url, init, action);
-    if (result.response) return result.response;
-    failure = result.failure;
-    if (attempt < GITHUB_REQUEST_ATTEMPTS) {
-      const delayMs = GITHUB_RETRY_BASE_MS * 2 ** (attempt - 1);
-      process.stderr.write(`${failure} (retrying in ${delayMs}ms)\n`);
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
+// Re-runs `operation` with exponential backoff while it throws
+// TransientGitHubError; any other error (a non-transient HTTP status, i.e. a
+// configuration problem) propagates immediately and fails the job.
+async function retryTransient(operation) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      await backoffOrRethrow(error, attempt);
     }
   }
-  throw new TransientGitHubError(`${failure} after ${GITHUB_REQUEST_ATTEMPTS} attempts`);
 }
 
-// Resolves to { response } on success or { failure } on a transient failure;
-// throws a plain Error on a non-transient one.
-async function attemptGitHubRequest(url, init, action) {
-  let response;
-  try {
-    response = await fetch(url, init);
-  } catch (error) {
-    return { failure: `Failed to ${action}: ${error?.message ?? error}` };
+async function backoffOrRethrow(error, attempt) {
+  if (!(error instanceof TransientGitHubError)) throw error;
+  if (attempt >= GITHUB_REQUEST_ATTEMPTS) {
+    throw new TransientGitHubError(`${error.message} after ${attempt} attempts`);
   }
-  return await classifyGitHubResponse(response, action);
+  const delayMs = GITHUB_RETRY_BASE_MS * 2 ** (attempt - 1);
+  process.stderr.write(`${error.message} (retrying in ${delayMs}ms)\n`);
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
-async function classifyGitHubResponse(response, action) {
-  if (response.ok) return { response };
+// One attempt: network errors and 5xx / 429 throw TransientGitHubError;
+// any other non-OK status throws a plain (fatal) Error.
+async function githubRequest(url, init, action) {
+  const response = await fetchOrTransient(url, init, action);
+  if (response.ok) return response;
+  throw await githubStatusError(response, action);
+}
+
+async function fetchOrTransient(url, init, action) {
+  try {
+    return await fetch(url, init);
+  } catch (error) {
+    throw new TransientGitHubError(`Failed to ${action}: ${error?.message ?? error}`);
+  }
+}
+
+async function githubStatusError(response, action) {
   const failure = `Failed to ${action}: ${response.status} ${await response.text()}`;
-  if (isTransientGitHubStatus(response.status)) return { failure };
-  throw new Error(failure);
+  return isTransientGitHubStatus(response.status)
+    ? new TransientGitHubError(failure)
+    : new Error(failure);
 }
 
 function isTransientGitHubStatus(status) {
