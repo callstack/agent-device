@@ -183,6 +183,6 @@ export function createRequestHandler(
   // #1802: stand in for the client that reads a replay script and sends its content, so router
   // cases keep naming a path while the daemon still sees only bundled sources.
   const handleWithClientScriptSources: DaemonInvokeFn = async (req) =>
-    await handle(withClientReplayScriptSources(req));
+    await handle(await withClientReplayScriptSources(req));
   return handleWithClientScriptSources;
 }

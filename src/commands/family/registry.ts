@@ -1,6 +1,6 @@
 import { batchCommandFamily } from '../batch/index.ts';
 import { captureCommandFamily } from '../capture/index.ts';
-import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
+import type { AnyDaemonWriter, CliReader } from '../cli-grammar/types.ts';
 import { debuggingCommandFamily } from '../debugging/index.ts';
 import { interactionCommandFamily } from '../interaction/index.ts';
 import { managementCommandFamily } from '../management/index.ts';
@@ -18,7 +18,7 @@ import { type CommandFamilyFacet } from './types.ts';
 type CommandFamilyRecordMap = {
   cliSchemas: CommandSchema;
   cliReaders: CliReader;
-  daemonWriters: DaemonWriter;
+  daemonWriters: AnyDaemonWriter;
   cliOutputFormatters: CliOutputFormatter;
 };
 
@@ -57,7 +57,7 @@ export function listCommandFamilyCliReaders(): Record<CommandFamilyCommandName, 
   return mergeFamilyRecords('cliReaders') as Record<CommandFamilyCommandName, CliReader>;
 }
 
-export function listCommandFamilyDaemonWriters(): Record<string, DaemonWriter> {
+export function listCommandFamilyDaemonWriters(): Record<string, AnyDaemonWriter> {
   return mergeFamilyRecords('daemonWriters');
 }
 

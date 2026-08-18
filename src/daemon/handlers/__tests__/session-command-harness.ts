@@ -93,12 +93,12 @@ beforeEach(() => {
 });
 
 /** Unit-handler default is explicitly fail-closed; production must inject exact-owner recovery. */
-export function handleSessionCommands(
+export async function handleSessionCommands(
   params: Omit<SessionCommandInput, 'reconcileOrphanedDeviceClaim'>,
 ): ReturnType<typeof handleProductionSessionCommands> {
-  return handleProductionSessionCommands({
+  return await handleProductionSessionCommands({
     ...params,
-    req: withClientReplayScriptSources(params.req),
+    req: await withClientReplayScriptSources(params.req),
     inspectFacts: params.inspectFacts ?? mockInspectDeviceRuntimeFacts,
     bindDevice: params.bindDevice ?? mockBindDeviceRuntime,
     reconcileOrphanedDeviceClaim: async () => ({

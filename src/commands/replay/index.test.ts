@@ -122,10 +122,10 @@ describe('replay command interface', () => {
     });
   });
 
-  test('writes daemon replay and test requests with replay flags', () => {
+  test('writes daemon replay and test requests with replay flags', async () => {
     process.env.AD_VAR_REPLAY_TEST = 'enabled';
     expect(
-      replayDaemonWriter({
+      await replayDaemonWriter({
         path: './checkout.ad',
         cwd: SCRIPT_ROOT,
         update: true,
@@ -143,7 +143,7 @@ describe('replay command interface', () => {
       },
     });
 
-    const testRequest = testDaemonWriter({
+    const testRequest = await testDaemonWriter({
       paths: ['./suite.ad'],
       cwd: SCRIPT_ROOT,
       maestro: true,
@@ -163,11 +163,11 @@ describe('replay command interface', () => {
     expect(testRequest.options).not.toHaveProperty('reportJunit');
   });
 
-  test('projects replay --timeout into the daemon request envelope', () => {
+  test('projects replay --timeout into the daemon request envelope', async () => {
     const input = replayCliReader(['./probe-hang.ad'], flags({ timeoutMs: 1_000 }));
 
     expect(input).toMatchObject({ path: './probe-hang.ad', timeoutMs: 1_000 });
-    expect(replayDaemonWriter({ ...input, cwd: SCRIPT_ROOT })).toMatchObject({
+    expect(await replayDaemonWriter({ ...input, cwd: SCRIPT_ROOT })).toMatchObject({
       command: 'replay',
       positionals: ['./probe-hang.ad'],
       options: { timeoutMs: 1_000 },
@@ -231,9 +231,9 @@ describe('replay resume (ADR 0012 decision 4 / migration step 5)', () => {
     expect(input).not.toHaveProperty('resumePlanDigest');
   });
 
-  test('writes resumeFrom/resumePlanDigest onto the daemon request as replayFrom/replayPlanDigest', () => {
+  test('writes resumeFrom/resumePlanDigest onto the daemon request as replayFrom/replayPlanDigest', async () => {
     expect(
-      replayDaemonWriter({
+      await replayDaemonWriter({
         path: './checkout.ad',
         cwd: SCRIPT_ROOT,
         resumeFrom: 3,
@@ -249,18 +249,18 @@ describe('replay resume (ADR 0012 decision 4 / migration step 5)', () => {
     });
   });
 
-  test('test daemon writer never emits replayFrom/replayPlanDigest', () => {
-    const request = testDaemonWriter({ paths: ['./suite.ad'], cwd: SCRIPT_ROOT });
+  test('test daemon writer never emits replayFrom/replayPlanDigest', async () => {
+    const request = await testDaemonWriter({ paths: ['./suite.ad'], cwd: SCRIPT_ROOT });
     expect(request.options).not.toHaveProperty('replayFrom');
     expect(request.options).not.toHaveProperty('replayPlanDigest');
   });
 });
 
 describe('replay --keep-session', () => {
-  test('projects the CLI flag through structured replay input and the daemon request', () => {
+  test('projects the CLI flag through structured replay input and the daemon request', async () => {
     const input = replayCliReader(['./checkout.ad'], flags({ replayKeepSession: true }));
     expect(input).toMatchObject({ path: './checkout.ad', keepSession: true });
-    expect(replayDaemonWriter({ ...input, cwd: SCRIPT_ROOT })).toMatchObject({
+    expect(await replayDaemonWriter({ ...input, cwd: SCRIPT_ROOT })).toMatchObject({
       command: 'replay',
       positionals: ['./checkout.ad'],
       options: { replayKeepSession: true },
@@ -268,11 +268,11 @@ describe('replay --keep-session', () => {
     expect(replayCommandMetadata.inputSchema.properties).toHaveProperty('keepSession');
   });
 
-  test('test exposes and forwards no keep-session option', () => {
+  test('test exposes and forwards no keep-session option', async () => {
     const input = testCliReader(['./suite.ad'], flags({ replayKeepSession: true } as never));
     expect(input).not.toHaveProperty('keepSession');
     expect(testCommandMetadata.inputSchema.properties).not.toHaveProperty('keepSession');
-    expect(testDaemonWriter({ ...input, cwd: SCRIPT_ROOT }).options).not.toHaveProperty(
+    expect((await testDaemonWriter({ ...input, cwd: SCRIPT_ROOT })).options).not.toHaveProperty(
       'replayKeepSession',
     );
   });
@@ -295,16 +295,16 @@ describe('replay --save-script arming (ADR 0012 decision 6, R1/R6)', () => {
     });
   });
 
-  test('writes saveScript onto the daemon request unchanged', () => {
+  test('writes saveScript onto the daemon request unchanged', async () => {
     expect(
-      replayDaemonWriter({ path: './checkout.ad', cwd: SCRIPT_ROOT, saveScript: true }),
+      await replayDaemonWriter({ path: './checkout.ad', cwd: SCRIPT_ROOT, saveScript: true }),
     ).toMatchObject({
       command: 'replay',
       positionals: ['./checkout.ad'],
       options: { saveScript: true },
     });
     expect(
-      replayDaemonWriter({ path: './checkout.ad', cwd: SCRIPT_ROOT, saveScript: './out.ad' }),
+      await replayDaemonWriter({ path: './checkout.ad', cwd: SCRIPT_ROOT, saveScript: './out.ad' }),
     ).toMatchObject({
       command: 'replay',
       positionals: ['./checkout.ad'],

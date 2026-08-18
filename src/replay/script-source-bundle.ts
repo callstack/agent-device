@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
-import { collectMaestroFlowSources } from '@agent-device/maestro';
 import { resolveUserPath } from '../utils/path-resolution.ts';
 import { resolveReplayFormat } from './format.ts';
 
@@ -16,6 +15,14 @@ import { resolveReplayFormat } from './format.ts';
  * moves the "no such script" failure to where the path means something: it is
  * raised against the caller's own filesystem, naming the path as typed, before
  * any daemon round-trip.
+ *
+ * `@agent-device/maestro` is loaded ON DEMAND, inside `loadReplayScriptSourceBundle`, and only
+ * when the entry resolves to a flow. The replay command family is part of the CLI's startup import
+ * closure (the command registry evaluates it for `--help` and every other invocation), and the
+ * Maestro engine drags its YAML parser in with it — statically importing it here cost ~28ms on
+ * every warm command and a 131 kB startup chunk. `src/__tests__/cli-startup-import-closure.test.ts`
+ * holds that line; ADR 0019 and #1681/#1641 are the same rule applied to `node:http` and the help
+ * fast path.
  */
 
 /**
@@ -35,26 +42,61 @@ export const REPLAY_SCRIPT_SOURCE_BUNDLE_MAX_BYTES = 2 * 1024 * 1024;
 export const REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE =
   'This replay request carries no script sources. Replay scripts are read by the client and sent with the request; upgrade the agent-device client that issued it to a version that sends script sources.';
 
-export function buildReplayScriptSourceBundle(params: {
+export type ReplayScriptSourceRequest = {
   /** The script path as the caller typed it — used verbatim in a not-found error. */
   inputPath: string;
   cwd: string;
   replayBackend?: string;
   /** `${VAR}` values that can resolve a Maestro `runFlow` include path before the run starts. */
   env?: Readonly<Record<string, string>>;
-}): ReplayScriptSourceBundle {
+};
+
+/**
+ * The one bundle constructor every client surface goes through (CLI, Node client, MCP — they all
+ * reach the daemon via the replay command family's writers). Async because the Maestro branch
+ * loads its engine on demand; the native `.ad` branch touches nothing beyond the entry file.
+ */
+export async function loadReplayScriptSourceBundle(
+  params: ReplayScriptSourceRequest,
+): Promise<ReplayScriptSourceBundle> {
   const entry = resolveUserPath(params.inputPath, { cwd: params.cwd });
   const entrySource = readReplayEntryScript(entry, params.inputPath);
-  const files =
-    resolveReplayFormat(entry, params.replayBackend) === 'maestro'
-      ? collectMaestroFlowSources({
-          entryPath: entry,
-          entrySource,
-          env: params.env,
-          readSource: tryReadScriptFile,
-        })
-      : { [entry]: entrySource };
-  assertBundleWithinLimit(files, params.inputPath);
+  if (resolveReplayFormat(entry, params.replayBackend) !== 'maestro') {
+    return finishBundle(entry, { [entry]: entrySource }, params.inputPath);
+  }
+  const { collectMaestroFlowSources } = await import('@agent-device/maestro');
+  const files = collectMaestroFlowSources({
+    entryPath: entry,
+    entrySource,
+    env: params.env,
+    readSource: tryReadScriptFile,
+  });
+  return finishBundle(entry, files, params.inputPath);
+}
+
+/**
+ * A native `.ad` script IS its own whole bundle — it has no include grammar — so this needs
+ * neither the Maestro engine nor an await. `loadReplayScriptSourceBundle` is the entry point
+ * callers use; this is the `.ad` half of it, exported so a test fixture can build the shape the
+ * client really sends without hand-rolling it.
+ */
+export function readAdScriptSourceBundle(
+  params: Pick<ReplayScriptSourceRequest, 'inputPath' | 'cwd'>,
+): ReplayScriptSourceBundle {
+  const entry = resolveUserPath(params.inputPath, { cwd: params.cwd });
+  return finishBundle(
+    entry,
+    { [entry]: readReplayEntryScript(entry, params.inputPath) },
+    params.inputPath,
+  );
+}
+
+function finishBundle(
+  entry: string,
+  files: Record<string, string>,
+  inputPath: string,
+): ReplayScriptSourceBundle {
+  assertBundleWithinLimit(files, inputPath);
   return { entry, files };
 }
 

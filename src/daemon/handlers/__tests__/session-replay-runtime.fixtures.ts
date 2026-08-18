@@ -15,6 +15,12 @@ export function writeReplayFile(root: string, lines: string[]): string {
  * positional names a script also carries that script's source bundle. Tests
  * pass `positionals: [filePath]` as before and the bundle is built from the
  * same file, exactly as `replayDaemonWriter` builds it.
+ *
+ * The bundle carries the ENTRY FILE only, which is the whole of a native `.ad`
+ * script and enough for a self-contained flow. A Maestro fixture with `runFlow`
+ * includes must pass its own `flags.replayScriptSource` from
+ * `maestroScriptSourceBundleFor` — collecting includes needs the engine, which
+ * loads on demand and so cannot happen in a synchronous fixture.
  */
 export function baseReplayRequest(overrides: Partial<DaemonRequest> = {}): DaemonRequest {
   const positionals = overrides.positionals ?? [];
@@ -30,9 +36,7 @@ export function baseReplayRequest(overrides: Partial<DaemonRequest> = {}): Daemo
       ? {
           flags: {
             ...(flags ?? {}),
-            replayScriptSource: replayScriptSourceBundleFor(scriptPath, {
-              replayBackend: flags?.replayBackend,
-            }),
+            replayScriptSource: replayScriptSourceBundleFor(scriptPath),
           },
         }
       : {}),

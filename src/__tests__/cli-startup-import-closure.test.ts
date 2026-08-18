@@ -12,6 +12,12 @@ import { parseSync } from 'oxc-parser';
  * socket). The HTTP daemon transport, remote-artifact upload and download all
  * load these modules on demand instead.
  *
+ * `@agent-device/maestro` is held to the same line for the same reason. The command registry
+ * evaluates every command family's module on startup -- `--help` included -- so a replay-side
+ * static import of the Maestro engine (and the YAML parser behind it) put a 131 kB chunk and
+ * ~28ms on every warm command, for a format most invocations never touch (#1802). The replay
+ * script-source builder loads it on demand, only once an entry actually resolves to a flow.
+ *
  * "On demand" is a claim about SCOPE, not about syntax, which is why this reads
  * the AST rather than matching import forms. Two shapes evaluate the module
  * during module evaluation while looking lazy or looking like nothing at all:
@@ -29,6 +35,8 @@ import { parseSync } from 'oxc-parser';
 
 const srcRoot = path.resolve(import.meta.dirname, '..');
 const LAZY_HTTP_MODULES = new Set(['node:http', 'node:https']);
+/** Engines heavy enough that evaluating them on startup is a measurable regression. */
+const LAZY_ENGINE_MODULES = new Set(['@agent-device/maestro']);
 const FUNCTION_NODES = new Set([
   'FunctionDeclaration',
   'FunctionExpression',
@@ -256,6 +264,24 @@ test('the CLI startup import closure never evaluates node:http or node:https', (
     offenders,
     'Load node:http / node:https on demand instead: evaluating either one here costs every warm ' +
       'CLI command ~79ms of undici + system-CA initialization.',
+  ).toEqual([]);
+});
+
+test('the CLI startup import closure never evaluates the Maestro engine', () => {
+  const offenders: string[] = [];
+  for (const file of eagerClosureOfCli()) {
+    for (const specifier of eagerlyEvaluatedModules(file, fs.readFileSync(file, 'utf8'))) {
+      if (LAZY_ENGINE_MODULES.has(specifier)) {
+        offenders.push(`${path.relative(srcRoot, file)} -> ${specifier}`);
+      }
+    }
+  }
+
+  expect(
+    offenders,
+    'Load @agent-device/maestro on demand instead: the command registry evaluates every command ' +
+      'family on startup, so importing the engine here costs every warm CLI command ~28ms of ' +
+      'YAML-parser evaluation and a 131 kB startup chunk, for a format most runs never use.',
   ).toEqual([]);
 });
 

@@ -16,6 +16,7 @@ import { LeaseRegistry } from '../../../src/daemon/lease-registry.ts';
 import { SessionStore } from '../../../src/daemon/session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../../../src/daemon/types.ts';
 import { runCmdBackground } from '../../../src/utils/exec.ts';
+import { withClientReplayScriptSources } from '../../../src/__tests__/test-utils/replay-script-source.ts';
 import type {
   DeviceInventoryProvider,
   ProviderDeviceRuntime,
@@ -131,7 +132,9 @@ export async function createProviderScenarioHarness(
     ...routerDeps,
   });
   const handleRequest: typeof requestHandler = async (request) => {
-    const response = await requestHandler(request);
+    // #1802: a raw `callCommand('replay', [path])` stands in for a client request, and every
+    // request that reaches a daemon carries the script sources the CLIENT read.
+    const response = await requestHandler(await withClientReplayScriptSources(request));
     assertNoInternalChromeProvenance(response);
     return response;
   };

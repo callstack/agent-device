@@ -57,7 +57,11 @@ import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../types.
 import { SessionStore } from '../../session-store.ts';
 import { makeAndroidSession, makeIosSession } from '../../../__tests__/test-utils/index.ts';
 import { runReplayScriptSource } from '../session-replay-runtime.ts';
-import { replayScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
+import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
+import {
+  maestroScriptSourceBundleFor,
+  replayScriptSourceBundleFor,
+} from '../../../__tests__/test-utils/replay-script-source.ts';
 
 type CapturedInvocation = {
   command: string;
@@ -88,8 +92,11 @@ async function runReplayFixture(params: {
   const invoke = createFixtureInvoke({ calls, delegate: params.invoke, isMaestro });
   const sessionStore = new SessionStore(path.join(root, 'state'));
   seedFixtureSession(sessionStore, params.sessionPlatform);
+  const scriptSource = isMaestro
+    ? await maestroScriptSourceBundleFor(scriptPath)
+    : replayScriptSourceBundleFor(scriptPath);
   const response = await runReplayScriptSource({
-    req: fixtureReplayRequest({ root, scriptPath, flags: params.flags, isMaestro }),
+    req: fixtureReplayRequest({ root, scriptPath, flags: params.flags, isMaestro, scriptSource }),
     sessionName: 's',
     logPath: path.join(root, 'log'),
     sessionStore,
@@ -136,6 +143,7 @@ function fixtureReplayRequest(params: {
   scriptPath: string;
   flags: CommandFlags | undefined;
   isMaestro: boolean;
+  scriptSource: ReplayScriptSourceBundle;
 }): DaemonRequest {
   return {
     token: 't',
@@ -145,9 +153,7 @@ function fixtureReplayRequest(params: {
     flags: {
       ...(params.flags ?? {}),
       ...(params.isMaestro && params.flags?.platform === undefined ? { platform: 'ios' } : {}),
-      replayScriptSource: replayScriptSourceBundleFor(params.scriptPath, {
-        replayBackend: params.flags?.replayBackend,
-      }),
+      replayScriptSource: params.scriptSource,
     },
     meta: { cwd: params.root },
   };

@@ -85,4 +85,15 @@ export type SelectionOptions = {
 
 export type CliInput = Record<string, unknown>;
 export type CliReader = (positionals: string[], flags: CliFlags) => CliInput;
+/** Builds the daemon request for one command. Most writers are pure projections of their input. */
 export type DaemonWriter = (input: CommandInput) => DaemonCommandRequest;
+
+/**
+ * A writer that has caller-side work to do before the request exists: reading the replay script
+ * files the request carries (#1802), which for a Maestro flow also loads the engine that walks its
+ * `runFlow` includes on demand. The registry awaits whichever kind a command declares, so the
+ * asynchrony stays inside the one writer that needs it.
+ */
+export type AsyncDaemonWriter = (input: CommandInput) => Promise<DaemonCommandRequest>;
+
+export type AnyDaemonWriter = DaemonWriter | AsyncDaemonWriter;

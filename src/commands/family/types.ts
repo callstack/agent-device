@@ -1,6 +1,6 @@
 import type { AgentDeviceClient } from '../../client/client-types.ts';
 import type { CommandSchema, CommandSchemaOverride } from '../../cli-schema/types.ts';
-import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
+import type { AnyDaemonWriter, CliReader } from '../cli-grammar/types.ts';
 import type {
   CommandMetadata,
   ExecutableCommandProjection,
@@ -28,7 +28,7 @@ export type CommandFamilyFacet<TCommandName extends string = string> = {
   clientCommandMethods?: Readonly<Record<string, TCommandName>>;
   cliSchemas?: Readonly<Partial<Record<TCommandName, CommandSchema>>>;
   cliReaders: Readonly<Record<TCommandName, CliReader>>;
-  daemonWriters?: Readonly<Record<string, DaemonWriter>>;
+  daemonWriters?: Readonly<Record<string, AnyDaemonWriter>>;
   cliOutputFormatters?: Readonly<Partial<Record<TCommandName, CliOutputFormatter>>>;
 };
 
@@ -43,7 +43,7 @@ export type CommandFacetInput<TCommandName extends string = string> = {
   cliSchema?: CommandSchemaOverride;
   clientMethod?: string;
   cliReader: CliReader;
-  daemonWriter?: DaemonWriter;
+  daemonWriter?: AnyDaemonWriter;
   cliOutputFormatter?: CliOutputFormatter;
   text: FacetCommandText;
 };
@@ -96,7 +96,7 @@ export function defineCommandFamilyFromFacets<
   const cliSchemas: Record<string, CommandSchema> = {};
   const clientCommandMethods: Record<string, string> = {};
   const cliReaders: Record<string, CliReader> = {};
-  const daemonWriters: Record<string, DaemonWriter> = {};
+  const daemonWriters: Record<string, AnyDaemonWriter> = {};
   const cliOutputFormatters: Record<string, CliOutputFormatter> = {};
 
   for (const command of family.commands) {

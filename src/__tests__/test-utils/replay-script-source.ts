@@ -1,22 +1,30 @@
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import type { MaestroSourceReader } from '@agent-device/maestro';
 import type { DaemonRequest } from '../../daemon/types.ts';
-import { buildReplayScriptSourceBundle } from '../../replay/script-source-bundle.ts';
+import {
+  loadReplayScriptSourceBundle,
+  readAdScriptSourceBundle,
+} from '../../replay/script-source-bundle.ts';
 import { discoverReplaySourcePaths } from '../../replay/source-discovery.ts';
 
 /**
- * Builds a replay script source bundle from a file on disk the way a real
- * caller does (#1802) — through the client's own builder, so a test never
- * hand-rolls a bundle shape the CLI would not actually send.
+ * A native `.ad` script's bundle, built from a file on disk through the client's own reader
+ * (#1802) so a test never hand-rolls a shape the CLI would not actually send. Synchronous
+ * because an `.ad` script has no include grammar and needs no engine; use
+ * `maestroScriptSourceBundleFor` for a flow.
  */
-export function replayScriptSourceBundleFor(
+export function replayScriptSourceBundleFor(filePath: string): ReplayScriptSourceBundle {
+  return readAdScriptSourceBundle({ inputPath: filePath, cwd: process.cwd() });
+}
+
+/** A Maestro flow's bundle — async because the engine that walks its includes loads on demand. */
+export async function maestroScriptSourceBundleFor(
   filePath: string,
-  options: { replayBackend?: string } = {},
-): ReplayScriptSourceBundle {
-  return buildReplayScriptSourceBundle({
+): Promise<ReplayScriptSourceBundle> {
+  return await loadReplayScriptSourceBundle({
     inputPath: filePath,
     cwd: process.cwd(),
-    replayBackend: options.replayBackend,
+    replayBackend: 'maestro',
   });
 }
 
@@ -35,36 +43,44 @@ export const noMaestroIncludeSources: MaestroSourceReader = (resolvedPath) => {
  * Test harnesses that stand in for "a request as it arrives at the daemon" call this so their
  * cases keep expressing what they are about; a request that already carries its own sources (or
  * deliberately carries none, to pin the daemon's refusal) is returned untouched.
+ *
+ * Collection that cannot succeed — a case driving `replay` at a path that deliberately does not
+ * exist — leaves the request alone rather than throwing: the real client raises that failure at
+ * the CLI boundary (pinned in `cli-client-commands.test.ts`), and a daemon-level harness must
+ * still deliver the request so the daemon's own response is what the case observes.
  */
-export function withClientReplayScriptSources(req: DaemonRequest): DaemonRequest {
+export async function withClientReplayScriptSources(req: DaemonRequest): Promise<DaemonRequest> {
   if (req.command !== 'replay' && req.command !== 'test') return req;
   const inputs = req.positionals ?? [];
-  if (inputs.length === 0) return req;
+  const entryPath = inputs[0];
+  if (entryPath === undefined) return req;
   const cwd = req.meta?.cwd ?? process.cwd();
   const replayBackend = req.flags?.replayBackend;
-  const entryPath = inputs[0];
-  if (req.command === 'replay') {
-    if (req.flags?.replayScriptSource || entryPath === undefined) return req;
-    return {
-      ...req,
-      flags: {
-        ...(req.flags ?? {}),
-        replayScriptSource: buildReplayScriptSourceBundle({
+  try {
+    if (req.command === 'replay') {
+      if (req.flags?.replayScriptSource) return req;
+      return withFlags(req, {
+        replayScriptSource: await loadReplayScriptSourceBundle({
           inputPath: entryPath,
           cwd,
           replayBackend,
         }),
-      },
-    };
-  }
-  if (req.flags?.replayScriptSources) return req;
-  return {
-    ...req,
-    flags: {
-      ...(req.flags ?? {}),
-      replayScriptSources: discoverReplaySourcePaths({ inputs, cwd, replayBackend }).map(
-        (inputPath) => buildReplayScriptSourceBundle({ inputPath, cwd, replayBackend }),
+      });
+    }
+    if (req.flags?.replayScriptSources) return req;
+    return withFlags(req, {
+      replayScriptSources: await Promise.all(
+        discoverReplaySourcePaths({ inputs, cwd, replayBackend }).map(
+          async (inputPath) =>
+            await loadReplayScriptSourceBundle({ inputPath, cwd, replayBackend }),
+        ),
       ),
-    },
-  };
+    });
+  } catch {
+    return req;
+  }
+}
+
+function withFlags(req: DaemonRequest, flags: Partial<DaemonRequest['flags']>): DaemonRequest {
+  return { ...req, flags: { ...(req.flags ?? {}), ...flags } };
 }

@@ -1,23 +1,23 @@
 import { createBatchDaemonWriter } from './batch/index.ts';
-import type { CommandInput, DaemonCommandRequest, DaemonWriter } from './cli-grammar/types.ts';
+import type { AnyDaemonWriter, CommandInput, DaemonCommandRequest } from './cli-grammar/types.ts';
 import { findCommandMetadata } from './command-metadata.ts';
 import { readMetadataCommandFlags } from './command-flags.ts';
 import { listCommandFamilyDaemonWriters } from './family/registry.ts';
 import { AppError } from '@agent-device/kernel/errors';
 
-const daemonWriters: Record<string, DaemonWriter> = {
+const daemonWriters: Record<string, AnyDaemonWriter> = {
   ...listCommandFamilyDaemonWriters(),
   batch: createBatchDaemonWriter(prepareBatchDaemonCommandRequest),
 };
 
 export type DaemonCommandName = keyof typeof daemonWriters;
 
-function prepareBatchDaemonCommandRequest(
+async function prepareBatchDaemonCommandRequest(
   command: string,
   input: CommandInput,
   stepNumber: number,
-): DaemonCommandRequest {
-  const writer = (daemonWriters as Readonly<Record<string, DaemonWriter>>)[command];
+): Promise<DaemonCommandRequest> {
+  const writer = (daemonWriters as Readonly<Record<string, AnyDaemonWriter>>)[command];
   if (!writer) {
     throw new Error(`Missing daemon writer for batch command: ${command}`);
   }
@@ -26,7 +26,7 @@ function prepareBatchDaemonCommandRequest(
     throw new Error(`Missing command metadata for batch command: ${command}`);
   }
   try {
-    return prepareRequestWithMetadataFlags(
+    return await prepareRequestWithMetadataFlags(
       writer,
       metadata,
       metadata.readInput(input) as CommandInput,
@@ -42,24 +42,24 @@ function prepareBatchDaemonCommandRequest(
   }
 }
 
-export function prepareDaemonCommandRequest(
+export async function prepareDaemonCommandRequest(
   command: DaemonCommandName,
   input: CommandInput,
-): DaemonCommandRequest {
+): Promise<DaemonCommandRequest> {
   const writer = daemonWriters[command];
   if (!writer) {
     throw new Error(`Missing daemon writer for command: ${command}`);
   }
   const metadata = findCommandMetadata(command);
-  return prepareRequestWithMetadataFlags(writer, metadata, input);
+  return await prepareRequestWithMetadataFlags(writer, metadata, input);
 }
 
-function prepareRequestWithMetadataFlags(
-  writer: DaemonWriter,
+async function prepareRequestWithMetadataFlags(
+  writer: AnyDaemonWriter,
   metadata: ReturnType<typeof findCommandMetadata>,
   input: CommandInput,
-): DaemonCommandRequest {
-  const request = writer(input);
+): Promise<DaemonCommandRequest> {
+  const request = await writer(input);
   return {
     ...request,
     ...(metadata ? { metadataFlags: readMetadataCommandFlags(metadata, request.options) } : {}),

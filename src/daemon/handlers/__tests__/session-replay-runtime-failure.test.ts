@@ -13,6 +13,7 @@ import type { DaemonResponse } from '../../types.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { formatReplayDivergenceReport } from '@agent-device/contracts/divergence';
+import { maestroScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,
@@ -349,7 +350,13 @@ test('a failure inside a retry-wrapped runFlow include reports the include file 
   mockDispatchCommand.mockRejectedValue(new Error('no device runner available'));
 
   const response = await runReplayScriptSource({
-    req: baseReq({ positionals: [mainPath], flags: { replayBackend: 'maestro' } }),
+    req: baseReq({
+      positionals: [mainPath],
+      flags: {
+        replayBackend: 'maestro',
+        replayScriptSource: await maestroScriptSourceBundleFor(mainPath),
+      },
+    }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
     sessionStore,
@@ -399,7 +406,13 @@ test('a failure inside a runtime runFlow.when-wrapped include reports the includ
   mockDispatchCommand.mockRejectedValue(new Error('no device runner available'));
 
   const response = await runReplayScriptSource({
-    req: baseReq({ positionals: [mainPath], flags: { replayBackend: 'maestro' } }),
+    req: baseReq({
+      positionals: [mainPath],
+      flags: {
+        replayBackend: 'maestro',
+        replayScriptSource: await maestroScriptSourceBundleFor(mainPath),
+      },
+    }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
     sessionStore,

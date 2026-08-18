@@ -19,7 +19,10 @@ import { runReplayScriptSource } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
-import { replayScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
+import {
+  maestroScriptSourceBundleFor,
+  replayScriptSourceBundleFor,
+} from '../../../__tests__/test-utils/replay-script-source.ts';
 import { REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE } from '../../../replay/script-source-bundle.ts';
 
 beforeEach(() => {
@@ -64,7 +67,7 @@ test('a bundled Maestro replay resolves runFlow includes from the bundle, not th
   const flowPath = path.join(root, 'flow.yaml');
   fs.writeFileSync(flowPath, 'appId: com.example.app\n---\n- runFlow: included.yaml\n');
   fs.writeFileSync(path.join(root, 'included.yaml'), '---\n- back\n');
-  const bundle = replayScriptSourceBundleFor(flowPath, { replayBackend: 'maestro' });
+  const bundle = await maestroScriptSourceBundleFor(flowPath);
   fs.rmSync(root, { recursive: true, force: true });
   const invoked: string[] = [];
 
