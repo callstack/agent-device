@@ -194,7 +194,15 @@ function stableCaptureTransitionBaseline(
   // Application root and still be the complete interaction surface. Requiring the root only from
   // the candidate prevents scoped/synthetic post-action fragments from extending settle latency.
   const hasCompleteViewportProjection = snapshot?.nodes.some(isViewportRootNode) === true;
-  return baselineNodes && isXCTestCapture && hasCompleteViewportProjection
+  // Tiny pre-action surfaces are the other trustworthy completeness signal: iOS presents alerts
+  // and sheets as a handful of nodes, and their first post-dismissal capture can temporarily omit
+  // the viewport root. Treating that rootless replacement as an arbitrary scoped projection lets
+  // a coherent transitional tree win the default 500ms quiet window.
+  const hasTinyPresentedBaseline =
+    baselineNodes !== undefined && baselineNodes.length <= TINY_STABLE_TREE_NODE_COUNT;
+  return baselineNodes &&
+    isXCTestCapture &&
+    (hasCompleteViewportProjection || hasTinyPresentedBaseline)
     ? stableCaptureSignal({ ...snapshot, nodes: baselineNodes })
     : undefined;
 }

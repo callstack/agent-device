@@ -163,13 +163,41 @@ test('settle confirms an iOS broad replacement when capture omits snapshot backe
   );
 });
 
-test('settle keeps the default quiet window for a partial post-action projection with low overlap', async () => {
+test('settle confirms a tiny modal replacement through a partial post-action projection', async () => {
   const { runtime } = transitionRuntime({ omitViewportRoot: true, settledAtMs: 1_200 });
 
   const outcome = await runStableCaptureLoop(
     runtime,
     { session: 'default' },
     BROAD_TRANSITION_PARAMS,
+  );
+
+  assert.equal(outcome.settled, true);
+  assert.equal(
+    outcome.lastCapture?.snapshot.nodes.some((node) => node.label === 'action file'),
+    false,
+  );
+  assert.ok(
+    outcome.waitedMs >= 1_500,
+    `settled partial transitional tree after ${outcome.waitedMs}ms`,
+  );
+});
+
+test('settle keeps the default quiet window for a larger partial projection', async () => {
+  const { runtime } = transitionRuntime({ omitViewportRoot: true, settledAtMs: 1_200 });
+
+  const outcome = await runStableCaptureLoop(
+    runtime,
+    { session: 'default' },
+    {
+      ...BROAD_TRANSITION_PARAMS,
+      broadTransitionBaselineNodes: elementSettingsSnapshot([
+        1_138,
+        1_423,
+        2_144,
+        2_434,
+      ]).nodes,
+    },
   );
 
   assert.equal(outcome.settled, true);
