@@ -1,10 +1,10 @@
-import { listCliCommandNames } from '../../command-catalog.ts';
+import { listCliCommandNames } from '../command-catalog.ts';
 import {
   formatMaestroCompatibilityReference,
   MAESTRO_COMPATIBILITY_ADR_URL,
   MAESTRO_COMPATIBILITY_ISSUE_URL,
 } from '@agent-device/maestro';
-import { helpBody } from '../../commands/command-text.ts';
+import { helpBody } from '../commands/command-text.ts';
 import {
   getCliCommandSchema,
   getCommandSchema,
@@ -13,9 +13,9 @@ import {
   type CommandSchema,
   type FlagDefinition,
   type FlagKey,
-} from '../../cli-schema/command-schema.ts';
-import { buildCommandUsage } from '../../cli-schema/usage.ts';
-import { readVersion } from '../../utils/version.ts';
+} from './command-schema.ts';
+import { buildCommandUsage } from './usage.ts';
+import { readVersion } from '../utils/version.ts';
 import { renderCliHelpOverview } from './cli-help-overview.ts';
 
 const CONFIGURATION_LINES = [

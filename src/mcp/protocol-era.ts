@@ -14,7 +14,8 @@ import { readVersion } from '../utils/version.ts';
  * Era membership follows the *declared revision*, not merely the presence of `_meta`: a
  * revision is served on its own wire contract, so a request declaring `2025-11-25` gets
  * the legacy result shape even though it used modern framing to say so. Legacy responses
- * stay byte-identical to what earlier releases sent.
+ * keep the shape earlier releases sent; the one addition since is `initialize.instructions`,
+ * an optional field of every legacy `InitializeResult`.
  */
 export type ProtocolEra = 'legacy' | 'modern';
 

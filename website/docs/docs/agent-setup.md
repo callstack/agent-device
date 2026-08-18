@@ -58,6 +58,8 @@ Use MCP tools or the CLI in the integrated terminal. If `agent-device` is not on
 
 For web automation, MCP tools can target `platform: "web"` after the managed backend is available, but `agent-device web setup` and `agent-device web doctor` are CLI-only. Run setup from a terminal in the same effective state directory before asking an MCP client to drive a browser session.
 
+The server also ships its own guidance, so MCP-only clients do not depend on a separately installed skill: the handshake (`initialize` and `server/discover`) returns compact `instructions` with the workflow card (start with `open`, act with `settle: true`, verify, `close`, ref fidelity, sparse-AX recovery), and an MCP-only `help` tool returns the same guides as `agent-device help <topic|command>` on demand. `help` is not a startup step; agents call it for specialized work (gestures, scripting, TV, macOS, web, remote, debugging) or an unclear command shape.
+
 Tool execution failures are returned as MCP tool results with `isError: true`; clients and agents should inspect the tool result, not only the successful JSON-RPC envelope.
 
 MCP clients must not use this server as a generic shell runner. If the CLI is missing, agents should ask a human before installing or updating packages, reconnect the server after setup, and retry the intended app-driving command without adding version/help probes.

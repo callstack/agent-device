@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { CASES } from '../help-conformance-cases.mjs';
-import { helpTopicIds } from '../../src/cli/parser/cli-help.ts';
+import { helpTopicIds } from '../../src/cli-schema/cli-help.ts';
 
 // "What enumerates N": benchmark cases are keyed to help topics, and this gate
 // keys the case list to the topic registry itself. A new help topic must gain

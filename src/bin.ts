@@ -34,7 +34,7 @@ function runVersionFastPath(argv: string[]): boolean {
 
 function runNoCommandFastPath(argv: string[]): boolean {
   if (argv.length !== 0) return false;
-  import('./cli/parser/cli-help.ts')
+  import('./cli-schema/cli-help.ts')
     .then(async ({ buildUsageText }) => {
       process.stdout.write(`${buildUsageText()}\n`);
       // #1596: exitAfterFlush (not a bare process.exit) so the full usage
@@ -50,7 +50,7 @@ function runHelpFastPath(argv: string[]): boolean {
   const helpTarget = resolveSimpleHelpTarget(argv);
   if (helpTarget === undefined) return false;
 
-  import('./cli/parser/cli-help.ts')
+  import('./cli-schema/cli-help.ts')
     .then(({ buildCommandUsageText, buildUsageText }) => {
       if (helpTarget === null) {
         process.stdout.write(`${buildUsageText()}\n`);

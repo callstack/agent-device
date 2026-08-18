@@ -32,7 +32,7 @@ ${sampleText(sample)}
 ${question}`;
 }
 
-// Case docs reference help topic ids from src/cli/parser/cli-help.ts plus the
+// Case docs reference help topic ids from src/cli-schema/cli-help.ts plus the
 // synthetic '--help:first30' first-screen slice. Topic coverage is enforced by
 // scripts/__tests__/help-conformance-topic-coverage.test.ts: a new help topic
 // needs a case here or an explicit waiver there.

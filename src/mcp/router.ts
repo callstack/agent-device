@@ -1,6 +1,12 @@
 import { listCommandTools, commandToolExecutor, type ToolResult } from './command-tools.ts';
 import type { JsonRpcId, JsonRpcRequestEnvelope } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
+import {
+  callHelpTool,
+  HELP_TOOL_NAME,
+  helpToolDefinition,
+  MCP_SERVER_INSTRUCTIONS,
+} from './server-guide.ts';
 import { formatToolErrorText, normalizeToolError } from './tool-error.ts';
 import {
   cacheFields,
@@ -16,10 +22,6 @@ import {
   UnsupportedProtocolVersionError,
   type ProtocolEra,
 } from './protocol-era.ts';
-
-const SERVER_INSTRUCTIONS =
-  'agent-device drives iOS, Android, tvOS, Android TV, macOS, Linux, and web targets. ' +
-  'Each tool mirrors the CLI command of the same name; tool descriptions carry the per-command contract.';
 
 export type JsonRpcMessage = JsonRpcRequestEnvelope;
 
@@ -71,7 +73,7 @@ async function handleRequest(method: string, params: unknown, era: ProtocolEra):
       return {
         supportedVersions: SUPPORTED_PROTOCOL_VERSIONS,
         capabilities: { tools: {} },
-        instructions: SERVER_INSTRUCTIONS,
+        instructions: MCP_SERVER_INSTRUCTIONS,
         // A `DiscoverResult` is always a `CacheableResult`: these are required fields
         // here, not the era-dependent hints `tools/list` adds.
         ttlMs: STATIC_RESULT_CACHE_TTL_MS,
@@ -86,12 +88,22 @@ async function handleRequest(method: string, params: unknown, era: ProtocolEra):
           tools: {},
         },
         serverInfo: serverInfo(),
+        // Legacy clients (Codex CLI among them) read their workflow card from the
+        // handshake; `instructions` is an optional InitializeResult field in every
+        // legacy revision served here.
+        instructions: MCP_SERVER_INSTRUCTIONS,
       };
     // Removed in 2026-07-28; still the keepalive legacy clients rely on.
     case 'ping':
       return {};
     case 'tools/list':
-      return { tools: listCommandTools(), ...cacheFields(era, STATIC_RESULT_CACHE_TTL_MS) };
+      // Descriptor tools plus the MCP-only guide tool. `listCommandTools()` stays
+      // descriptor-only because the AI SDK surface reuses it; the composition is the
+      // router's.
+      return {
+        tools: [...listCommandTools(), helpToolDefinition()],
+        ...cacheFields(era, STATIC_RESULT_CACHE_TTL_MS),
+      };
     case 'tools/call':
       return await callTool(params);
     default:
@@ -103,6 +115,7 @@ async function callTool(params: unknown): Promise<ToolResult> {
   const record = asRecord(params);
   const name = stringField(record, 'name');
   try {
+    if (name === HELP_TOOL_NAME) return callHelpTool(optionalArguments(record.arguments));
     // Command-level failures are handled (and ref-pinned) by the executor's
     // own catch; this one covers failures outside a resolved command call
     // (unknown tool name, malformed params).

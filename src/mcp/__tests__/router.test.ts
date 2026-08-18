@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { setImmediate } from 'node:timers/promises';
 import { test } from 'vitest';
+import { helpTopicIds } from '../../cli-schema/cli-help.ts';
 import { listMcpExposedCommandNames } from '../../core/command-descriptor/registry.ts';
 import { handleMcpMessage } from '../router.ts';
+import { HELP_TOOL_NAME, MCP_SERVER_INSTRUCTIONS } from '../server-guide.ts';
 import { createMcpPayloadQueue, handleMcpPayload } from '../server.ts';
 
-test('MCP exposes every automatable CLI command as a structured direct tool', async () => {
+test('MCP exposes every automatable CLI command as a structured direct tool, plus the MCP-only help tool', async () => {
   const response = await handleMcpMessage({
     jsonrpc: '2.0',
     id: 1,
@@ -16,9 +18,13 @@ test('MCP exposes every automatable CLI command as a structured direct tool', as
   const tools = (response.result as { tools: Array<{ name: string }> }).tools.map(
     (tool) => tool.name,
   );
-  const expectedToolNames = listMcpExposedCommandNames().sort();
+  // Descriptor tools plus exactly one router-owned discovery tool: `help` is not a
+  // command descriptor (it drives no device), so it must not leak into the CLI/Node
+  // surfaces the descriptor registry projects.
+  const expectedToolNames = [...listMcpExposedCommandNames(), HELP_TOOL_NAME].sort();
 
   assert.deepEqual(tools.sort(), expectedToolNames);
+  assert.ok(!listMcpExposedCommandNames().includes(HELP_TOOL_NAME as never));
 
   const fillTool = (response.result as { tools: Array<Record<string, unknown>> }).tools.find(
     (tool) => tool.name === 'fill',
@@ -56,6 +62,71 @@ test('MCP exposes every automatable CLI command as a structured direct tool', as
   assert.ok(malformedArgumentsResponse && 'result' in malformedArgumentsResponse);
   assert.equal((malformedArgumentsResponse.result as { isError: boolean }).isError, true);
   assert.match(JSON.stringify(malformedArgumentsResponse.result), /Expected object parameters/);
+});
+
+// Claude Code truncates server instructions at 2 KB and loads them at session start; the
+// card must fit whole, and it must reach both protocol eras (Codex CLI reads it from the
+// legacy `initialize` handshake).
+const CLAUDE_CODE_INSTRUCTIONS_LIMIT_BYTES = 2048;
+
+test('server instructions are the compact workflow card, under the 2 KB client cap', () => {
+  assert.ok(
+    Buffer.byteLength(MCP_SERVER_INSTRUCTIONS, 'utf8') < CLAUDE_CODE_INSTRUCTIONS_LIMIT_BYTES,
+  );
+  // The card must name the start rule and the guide tool, and speak in tool properties.
+  assert.match(MCP_SERVER_INSTRUCTIONS, /open \{app, foreground: true\}/);
+  assert.match(MCP_SERVER_INSTRUCTIONS, /snapshot \{interactiveOnly: true\}/);
+  assert.match(MCP_SERVER_INSTRUCTIONS, /Call help only/);
+});
+
+test('legacy initialize carries the same instructions as server/discover', async () => {
+  const legacy = await handleMcpMessage({
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'initialize',
+    params: {
+      protocolVersion: '2025-11-25',
+      capabilities: {},
+      clientInfo: { name: 'c', version: '1' },
+    },
+  });
+  assert.ok(legacy && 'result' in legacy);
+  assert.equal((legacy.result as { instructions: string }).instructions, MCP_SERVER_INSTRUCTIONS);
+});
+
+test('help tool returns the workflow card, a topic guide, a tool reference, or a listed error', async () => {
+  const call = async (args: Record<string, unknown> | undefined) => {
+    const response = await handleMcpMessage({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: { name: HELP_TOOL_NAME, ...(args ? { arguments: args } : {}) },
+    });
+    assert.ok(response && 'result' in response);
+    const result = response.result as { isError: boolean; content: Array<{ text: string }> };
+    return { isError: result.isError, text: result.content[0]?.text ?? '' };
+  };
+
+  const card = await call(undefined);
+  assert.equal(card.isError, false);
+  assert.match(card.text, /^Reading CLI syntax over MCP:/);
+  assert.match(card.text, /agent-device open <app> --foreground/);
+
+  const topic = await call({ topic: 'gestures' });
+  assert.equal(topic.isError, false);
+  assert.match(topic.text, /gestures/);
+
+  // A tool name resolves to its full flag reference, aliases included.
+  const command = await call({ topic: 'tap' });
+  assert.equal(command.isError, false);
+  assert.match(command.text, /agent-device press/);
+
+  const unknown = await call({ topic: 'no-such-topic' });
+  assert.equal(unknown.isError, true);
+  for (const id of helpTopicIds()) assert.ok(unknown.text.includes(id), id);
+
+  const malformed = await call({ topic: 42 });
+  assert.equal(malformed.isError, true);
 });
 
 const MODERN_META = {

@@ -14,7 +14,7 @@
 // fix, it does not).
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { buildCommandUsageText } from '../cli-help.ts';
+import { buildCommandUsageText } from '../../../cli-schema/cli-help.ts';
 import {
   cliAliasesForCommand,
   normalizeCliCommandAlias,

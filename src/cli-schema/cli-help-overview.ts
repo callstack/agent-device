@@ -1,5 +1,5 @@
 import { SELECTOR_KEY_NAMES } from '@agent-device/selectors';
-import { listCliCommandNames } from '../../command-catalog.ts';
+import { listCliCommandNames } from '../command-catalog.ts';
 
 /**
  * The root help is the no-skill agent's decision card, not the command reference.
