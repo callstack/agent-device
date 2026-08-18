@@ -193,6 +193,22 @@ test('a semantic value change is never stable', () => {
   );
 });
 
+test('semantic whitespace changes do not restart the stability window', () => {
+  const padded = snapshot(0, 900);
+  padded.nodes[2]!.label = ' Profile ';
+  padded.nodes[2]!.identifier = ' profile-button ';
+  padded.nodes[2]!.value = ' Enabled ';
+  const trimmed = snapshot(0, 900);
+  trimmed.nodes[2]!.label = 'Profile';
+  trimmed.nodes[2]!.identifier = 'profile-button';
+  trimmed.nodes[2]!.value = 'Enabled';
+
+  assert.equal(
+    stableCaptureSignalsEqual(stableCaptureSignal(padded), stableCaptureSignal(trimmed)),
+    true,
+  );
+});
+
 test('geometry movement beyond the stability tolerance is never stable', () => {
   assert.equal(
     stableCaptureSignalsEqual(

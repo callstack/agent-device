@@ -68,13 +68,18 @@ export function stableCaptureSignalsEqual(
 
 function stableCaptureNodeSignal(node: SnapshotNode): SignalNode {
   return {
-    identity: `${node.type ?? ''}#${node.label ?? ''}#${node.identifier ?? ''}#${node.value ?? ''}`,
+    identity: `${node.type ?? ''}#${stableSemanticIdentity(node)}`,
     ...(node.rect
       ? {
           rect: { ...node.rect },
         }
       : {}),
   };
+}
+function stableSemanticIdentity(node: SnapshotNode): string {
+  return [node.label, node.identifier, node.value]
+    .map((value) => String(value ?? '').trim())
+    .join('#');
 }
 function sortKey(node: SignalNode): string {
   const rect = node.rect;
