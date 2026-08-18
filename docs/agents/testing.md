@@ -563,7 +563,8 @@ Measured on the full unit suite (340 files, 3,210 tests, 48s wall at ~7x paralle
   not the authority — git is: every file over the line is also held to its length at the
   merge-base with `origin/main` (renames followed), and no pin may exceed its file's base length,
   so growing a file and raising its pin, or adding a giant file with a pin, are red against
-  history. Adding a test to a pinned file means moving that family out first — the failure names
+  history; a pin on a file at or under the line is red on its own, so the map cannot grow by
+  pinning small files at their own length. Adding a test to a pinned file means moving that family out first — the failure names
   the file and the fix; never raise a pin. Needs `origin/main` fetched (CI's Coverage job does).
 - **Isolation stays ON; pool stays forks — both measured.** `--no-isolate`: 205s wall vs 48s
   (module state — timers, memos, singletons — thrashes across files sharing a worker).
