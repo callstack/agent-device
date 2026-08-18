@@ -19,12 +19,6 @@ export type SnapshotScopeCandidate = {
   identifier?: string | null;
 };
 
-export type SnapshotScopeSliceNode = {
-  index: number;
-  depth?: number;
-  parentIndex?: number;
-};
-
 export function matchesSnapshotScope(node: SnapshotScopeCandidate, scope: string): boolean {
   const query = scope.toLowerCase();
   return [node.label, node.value, node.identifier].some((field) =>
@@ -49,10 +43,9 @@ export function findSnapshotScopeRange(
 }
 
 /** Re-roots a document-order slice: fresh indexes, remapped parents, depth rebased by `depthOffset`. */
-export function reindexSnapshotNodes<T extends SnapshotScopeSliceNode>(
-  nodes: readonly T[],
-  depthOffset = 0,
-): T[] {
+export function reindexSnapshotNodes<
+  T extends { index: number; depth?: number; parentIndex?: number },
+>(nodes: readonly T[], depthOffset = 0): T[] {
   const indexMap = new Map<number, number>();
   for (const [index, node] of nodes.entries()) indexMap.set(node.index, index);
   return nodes.map((node, index) => ({
