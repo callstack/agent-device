@@ -375,7 +375,7 @@ struct SnapshotRect: Codable {
   let height: Double
 }
 
-struct SnapshotOptions {
+struct PresentationOptions {
   let interactiveOnly: Bool
   let depth: Int?
   let scope: String?

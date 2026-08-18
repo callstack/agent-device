@@ -99,8 +99,12 @@ metrics, and fallback rules, not as another special case inside the XCTest runne
 
 The acquire/present migration begins with a behavior-preserving typed seam: acquisition backends
 construct `RawAXNode`, `SnapshotPresentation` alone constructs `PresentedNode`, and response payloads
-accept only presented nodes. Until the remaining migration steps move interpretation into that seam,
-raw nodes intentionally carry the derived fields produced by the existing backends.
+accept only presented nodes. Its second behavior-preserving step makes every capture-plan backend
+return `SnapshotAcquisition` and routes the exhaustive backend switch through one
+`SnapshotPresentation.present` call. `PresentationOptions` is the stable request-policy input to
+that boundary. Until the remaining migration steps move interpretation into the boundary, acquisition
+still reads those options and raw nodes intentionally carry the derived fields produced by the
+existing backends.
 
 When adding new iOS snapshot behavior, maintainers should first decide which strategy owns it. If a
 change tries to make regular snapshots fast by dropping visible controls behind a node budget, or

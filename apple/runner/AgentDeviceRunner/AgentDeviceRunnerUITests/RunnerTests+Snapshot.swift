@@ -117,7 +117,7 @@ extension RunnerTests {
   // `boundedBlockingSystemAlertSnapshot`'s probe closure (see `systemModalProbeOverrideForTesting`
   // in RunnerTests.swift), so reverting this entry point to bypass the bounded probe fails the
   // regression test.
-  func snapshotFast(app: XCUIApplication, options: SnapshotOptions) throws -> DataPayload {
+  func snapshotFast(app: XCUIApplication, options: PresentationOptions) throws -> DataPayload {
     let deadline = Date().addingTimeInterval(Self.snapshotPlanBudget)
     if let blocking = boundedBlockingSystemAlertSnapshot(deadline: deadline) {
       return blocking
@@ -131,10 +131,10 @@ extension RunnerTests {
     )
   }
 
-  func recursiveTreeSnapshotPayload(
+  func recursiveTreeSnapshotAcquisition(
     context: SnapshotTraversalContext,
-    options: SnapshotOptions
-  ) -> DataPayload {
+    options: PresentationOptions
+  ) -> SnapshotAcquisition {
     var cachedDescendantElements: [XCUIElement]?
     func collapsedTabDescendants() -> [XCUIElement] {
       if let cachedDescendantElements {
@@ -315,14 +315,15 @@ extension RunnerTests {
 
     }
 
-    return DataPayload(
-      presenting: applyHiddenContentHints(hiddenContentHintsByNodeIndex, to: nodes),
-      truncated: false
+    return SnapshotAcquisition(
+      nodes: applyHiddenContentHints(hiddenContentHintsByNodeIndex, to: nodes),
+      truncated: false,
+      effectiveDepth: nil
     )
   }
 
   // See `snapshotFast` above: the single production entry point, no unit-test overload.
-  func snapshotRaw(app: XCUIApplication, options: SnapshotOptions) throws -> DataPayload {
+  func snapshotRaw(app: XCUIApplication, options: PresentationOptions) throws -> DataPayload {
     let deadline = Date().addingTimeInterval(Self.snapshotPlanBudget)
     if let blocking = boundedBlockingSystemAlertSnapshot(deadline: deadline) {
       return blocking
@@ -418,10 +419,10 @@ extension RunnerTests {
     return min(budget, deadlineRemaining)
   }
 
-  func rawTreeSnapshotPayload(
+  func rawTreeSnapshotAcquisition(
     context: SnapshotTraversalContext,
-    options: SnapshotOptions
-  ) throws -> DataPayload {
+    options: PresentationOptions
+  ) throws -> SnapshotAcquisition {
     var nodes: [RawAXNode] = []
 
     func walk(_ snapshot: XCUIElementSnapshot, depth: Int, parentIndex: Int?) throws {
@@ -460,19 +461,19 @@ extension RunnerTests {
     }
 
     try walk(context.rootSnapshot, depth: 0, parentIndex: nil)
-    return DataPayload(presenting: nodes, truncated: false)
+    return SnapshotAcquisition(nodes: nodes, truncated: false, effectiveDepth: nil)
   }
 
-  func snapshotFlatInteractive(
+  func querySweepSnapshotAcquisition(
     app: XCUIApplication,
-    options: SnapshotOptions,
+    options: PresentationOptions,
     planDeadline: Date = .distantFuture
-  ) -> DataPayload {
+  ) -> SnapshotAcquisition {
     var nodes: [RawAXNode] = [
       interactiveRootNode(rect: .zero)
     ]
     if options.depth == 0 {
-      return DataPayload(presenting: nodes, truncated: false)
+      return SnapshotAcquisition(nodes: nodes, truncated: false, effectiveDepth: nil)
     }
 
     // Bounded by both its own sweep budget and the umbrella capture-plan deadline, so a
@@ -543,7 +544,7 @@ extension RunnerTests {
         )
       )
     }
-    return DataPayload(presenting: nodes, truncated: truncated)
+    return SnapshotAcquisition(nodes: nodes, truncated: truncated, effectiveDepth: nil)
   }
 
   func snapshotAccessibilityUnavailable(failure: SnapshotCaptureFailure) -> DataPayload {
@@ -588,7 +589,7 @@ extension RunnerTests {
   ) -> DataPayload {
     return DataPayload(
       message: message,
-      nodes: SnapshotPresentation.preservingCurrentSemantics([interactiveRootNode(rect: .zero)]),
+      nodes: [SnapshotPresentation.singleElementRead(interactiveRootNode(rect: .zero))],
       truncated: true,
       snapshotQuality: snapshotQuality,
       runnerFatal: runnerFatal,
@@ -669,7 +670,7 @@ extension RunnerTests {
   /// assertion instead of racing a fixed-timing guess.
   private func assertBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrain(
     entryPointName: String,
-    callEntryPoint: @escaping (XCUIApplication, SnapshotOptions) throws -> DataPayload
+    callEntryPoint: @escaping (XCUIApplication, PresentationOptions) throws -> DataPayload
   ) {
     let targetBundleId = "com.callstack.agentdevice.runner.missing.snapshot-timeout-test"
     let snapshotTarget = XCUIApplication(bundleIdentifier: targetBundleId)
@@ -707,7 +708,7 @@ extension RunnerTests {
     DispatchQueue(label: "agent-device.runner.tests.modal-probe-timeout").async {
       box.payload = try? callEntryPoint(
         snapshotTarget,
-        SnapshotOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false)
+        PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false)
       )
 
       // 1) Penalty/busy accounting: must already be in place by the time the entry point
@@ -874,7 +875,7 @@ extension RunnerTests {
     label: String,
     identifier: String,
     valueText: String?,
-    options: SnapshotOptions,
+    options: PresentationOptions,
     hittable: Bool,
     visible: Bool,
     regularSnapshot: Bool = false
@@ -926,7 +927,7 @@ extension RunnerTests {
 
   func makeSnapshotTraversalContext(
     app: XCUIApplication,
-    options: SnapshotOptions,
+    options: PresentationOptions,
     captureDeadline: Date = .distantFuture,
     treeCaptureSliceBudgetOverride: TimeInterval? = nil
   ) throws -> SnapshotTraversalContext? {
@@ -1567,7 +1568,7 @@ extension RunnerTests {
     index: Int,
     parentIndex: Int?,
     viewport: CGRect,
-    options: SnapshotOptions
+    options: PresentationOptions
   ) -> RawAXNode? {
     var node: RawAXNode?
     let exceptionMessage = RunnerObjCExceptionCatcher.catchException({

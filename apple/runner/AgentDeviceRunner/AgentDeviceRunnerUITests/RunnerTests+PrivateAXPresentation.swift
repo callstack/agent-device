@@ -3,7 +3,7 @@ import XCTest
 extension RunnerTests {
   private static let privateAXProjectionTolerance: CGFloat = 1
 
-  func privateAXPresentation(rawRoot: [String: Any], options: SnapshotOptions, viewport: CGRect)
+  func privateAXPresentation(rawRoot: [String: Any], options: PresentationOptions, viewport: CGRect)
     -> [RawAXNode]
   {
     var nodes: [RawAXNode] = []
@@ -15,7 +15,7 @@ extension RunnerTests {
   }
 
   private func appendPrivateAXNode(_ raw: [String: Any], to nodes: inout [RawAXNode],
-    hints: inout [Int: (above: Bool, below: Bool)], options: SnapshotOptions, viewport: CGRect,
+    hints: inout [Int: (above: Bool, below: Bool)], options: PresentationOptions, viewport: CGRect,
     depth: Int, parentIndex: Int?, insideMatchedScope: Bool,
     scrollContext: (index: Int, rect: CGRect)?, projectionCursor: FlatSnapshotProjectionCursor)
   {
@@ -119,7 +119,7 @@ extension RunnerTests {
         "children": [["type": Int(XCUIElement.ElementType.button.rawValue), "label": "Profile picture", "frame": frame(16, 120, 44, 44)],
           ["type": Int(XCUIElement.ElementType.button.rawValue), "label": "Theme", "frame": frame(16, 900, 360, 44)]]]]]
     let nodes = privateAXPresentation(rawRoot: root,
-      options: SnapshotOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
+      options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
       viewport: CGRect(x: 0, y: 0, width: 402, height: 874))
     XCTAssertEqual(nodes.compactMap(\.label), ["Element", "Profile picture"])
     let scrollView = nodes.first { $0.type == "ScrollView" }
@@ -142,7 +142,7 @@ extension RunnerTests {
             "label": "Theme", "frame": frame(340, 96, 46, 44)]]]]]]]
 
     let nodes = privateAXPresentation(rawRoot: root,
-      options: SnapshotOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
+      options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
       viewport: CGRect(x: 0, y: 0, width: 402, height: 874))
 
     XCTAssertEqual(nodes.compactMap(\.label), ["Element"])
@@ -158,7 +158,7 @@ extension RunnerTests {
           "type": Int(XCUIElement.ElementType.button.rawValue), "label": "Theme", "frame": zero],
         ["type": Int(XCUIElement.ElementType.other.rawValue), "frame": zero]]]]]
     let nodes = privateAXPresentation(rawRoot: root,
-      options: SnapshotOptions(interactiveOnly: true, depth: nil, scope: nil, raw: false),
+      options: PresentationOptions(interactiveOnly: true, depth: nil, scope: nil, raw: false),
       viewport: CGRect(x: 0, y: 0, width: 402, height: 874))
     XCTAssertEqual(nodes.compactMap(\.label), ["Element", "Settings semantics", "Theme"])
     XCTAssertEqual(nodes.filter { $0.index != 0 }.map(\.hittable), [false, false])

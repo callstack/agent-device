@@ -103,11 +103,11 @@ extension RunnerTests {
     }
   }
 
-  func privateAXSnapshotCapture(
+  func privateAXSnapshotAcquisition(
     app: XCUIApplication,
-    options: SnapshotOptions,
+    options: PresentationOptions,
     deadline: Date = .distantFuture
-  ) -> SnapshotBackendCapture? {
+  ) -> SnapshotAcquisition? {
     #if os(iOS) && targetEnvironment(simulator)
       let requestedDepth = options.depth ?? 64
       // An explicit --depth request is honored as asked: no accepted-depth
@@ -202,11 +202,9 @@ extension RunnerTests {
         effectiveDepth,
         deepExtension?[RunnerAXSnapshotDeepExtensionNodesAddedKey] as? Int ?? 0
       )
-      return SnapshotBackendCapture(
-        payload: DataPayload(
-          presenting: nodes,
-          truncated: (response["truncated"] as? Bool) == true
-        ),
+      return SnapshotAcquisition(
+        nodes: nodes,
+        truncated: (response["truncated"] as? Bool) == true,
         effectiveDepth: depthLimited ? effectiveDepth : nil,
         customActions: Self.privateAXCustomActionCoverage(
           response[RunnerAXSnapshotCustomActionsKey]
@@ -417,7 +415,7 @@ extension RunnerTests {
   func testCustomActionsRequestPinsPrivateAXBackend() throws {
     let asked = try JSONDecoder().decode(
       Command.self, from: Data(#"{"command":"snapshot","customActions":true}"#.utf8))
-    let options = Self.snapshotOptions(from: asked)
+    let options = Self.presentationOptions(from: asked)
     XCTAssertTrue(options.customActions)
     XCTAssertEqual(options.preferredBackend, SnapshotBackendKind.privateAX.rawValue)
     XCTAssertTrue(
@@ -428,12 +426,12 @@ extension RunnerTests {
     let pinned = try JSONDecoder().decode(
       Command.self,
       from: Data(#"{"command":"snapshot","customActions":true,"preferredBackend":"tree"}"#.utf8))
-    XCTAssertEqual(Self.snapshotOptions(from: pinned).preferredBackend, "tree")
+    XCTAssertEqual(Self.presentationOptions(from: pinned).preferredBackend, "tree")
 
     // And the default capture neither asks nor pins.
     let bare = try JSONDecoder().decode(Command.self, from: Data(#"{"command":"snapshot"}"#.utf8))
-    XCTAssertFalse(Self.snapshotOptions(from: bare).customActions)
-    XCTAssertNil(Self.snapshotOptions(from: bare).preferredBackend)
+    XCTAssertFalse(Self.presentationOptions(from: bare).customActions)
+    XCTAssertNil(Self.presentationOptions(from: bare).preferredBackend)
   }
 
   /// A request-pinned backend degraded nothing, so its verdict must not claim
@@ -639,7 +637,7 @@ extension RunnerTests {
     ]
     let nodes = privateAXPresentation(
       rawRoot: tree,
-      options: SnapshotOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
+      options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
       viewport: CGRect(x: 0, y: 0, width: 390, height: 844)
     )
 
@@ -664,7 +662,12 @@ extension RunnerTests {
     ]
     let nodes = privateAXPresentation(
       rawRoot: tree,
-      options: SnapshotOptions(interactiveOnly: false, depth: nil, scope: "homeScreen", raw: false),
+      options: PresentationOptions(
+        interactiveOnly: false,
+        depth: nil,
+        scope: "homeScreen",
+        raw: false
+      ),
       viewport: .infinite
     )
 
@@ -741,7 +744,7 @@ extension RunnerTests {
     ]
     let nodes = privateAXPresentation(
       rawRoot: tree,
-      options: SnapshotOptions(interactiveOnly: true, depth: nil, scope: nil, raw: false),
+      options: PresentationOptions(interactiveOnly: true, depth: nil, scope: nil, raw: false),
       viewport: CGRect(x: 0, y: 0, width: 390, height: 844)
     )
 

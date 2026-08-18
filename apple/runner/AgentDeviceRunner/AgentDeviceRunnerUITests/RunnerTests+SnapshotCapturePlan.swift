@@ -250,7 +250,7 @@ extension RunnerTests {
   func runSnapshotCapturePlan(
     _ plan: [SnapshotBackendKind],
     app: XCUIApplication,
-    options: SnapshotOptions,
+    options: PresentationOptions,
     terminal: SnapshotCaptureTerminalPolicy,
     deadline: Date? = nil
   ) throws -> DataPayload {
@@ -452,10 +452,11 @@ extension RunnerTests {
   private func captureWithBackend(
     _ kind: SnapshotBackendKind,
     app: XCUIApplication,
-    options: SnapshotOptions,
+    options: PresentationOptions,
     deadline: Date,
     treeCaptureSliceBudgetOverride: TimeInterval?
   ) throws -> SnapshotBackendCapture? {
+    let acquisition: SnapshotAcquisition?
     switch kind {
     case .recursiveTree:
       guard
@@ -468,28 +469,28 @@ extension RunnerTests {
       else {
         return nil
       }
-      let payload = try runMainThreadWork(
+      acquisition = try runMainThreadWork(
         command: nil,
         timeout: min(treeCaptureSliceBudget, max(0.5, deadline.timeIntervalSinceNow)),
         timeoutError: snapshotMainThreadTimeoutError("processing tree snapshot")
       ) {
         options.raw
-          ? try self.rawTreeSnapshotPayload(context: context, options: options)
-          : self.recursiveTreeSnapshotPayload(context: context, options: options)
+          ? try self.rawTreeSnapshotAcquisition(context: context, options: options)
+          : self.recursiveTreeSnapshotAcquisition(context: context, options: options)
       }
-      return SnapshotBackendCapture(payload: payload, effectiveDepth: nil)
     case .querySweep:
-      let payload = try runMainThreadWork(
+      acquisition = try runMainThreadWork(
         command: nil,
         timeout: min(Self.flatInteractiveFallbackBudget, max(0.1, deadline.timeIntervalSinceNow)),
         timeoutError: snapshotMainThreadTimeoutError("running query-sweep snapshot")
       ) {
-        self.snapshotFlatInteractive(app: app, options: options, planDeadline: deadline)
+        self.querySweepSnapshotAcquisition(app: app, options: options, planDeadline: deadline)
       }
-      return SnapshotBackendCapture(payload: payload, effectiveDepth: nil)
     case .privateAX:
-      return privateAXSnapshotCapture(app: app, options: options, deadline: deadline)
+      acquisition = privateAXSnapshotAcquisition(app: app, options: options, deadline: deadline)
     }
+    guard let acquisition else { return nil }
+    return SnapshotPresentation.present(acquisition, options: options)
   }
 
   // MARK: Quality classifier (the single source of "is this snapshot degraded")
@@ -815,7 +816,7 @@ extension RunnerTests {
   func testDecodedPreferredBackendReachesOptionsAndApplicablePlan() throws {
     let json = #"{"command":"snapshot","preferredBackend":"private-ax"}"#
     let command = try JSONDecoder().decode(Command.self, from: Data(json.utf8))
-    let options = Self.snapshotOptions(from: command)
+    let options = Self.presentationOptions(from: command)
     XCTAssertEqual(options.preferredBackend, "private-ax")
     XCTAssertFalse(options.raw)
 
@@ -833,7 +834,7 @@ extension RunnerTests {
     // A command without the field decodes to no pin and a normal plan.
     let bare = try JSONDecoder().decode(
       Command.self, from: Data(#"{"command":"snapshot"}"#.utf8))
-    XCTAssertNil(Self.snapshotOptions(from: bare).preferredBackend)
+    XCTAssertNil(Self.presentationOptions(from: bare).preferredBackend)
   }
 
   /// Same-backend evidence probes: a daemon-pinned private-AX capture takes the

@@ -218,6 +218,12 @@ task touches:
 - Raw AX node: backend-owned iOS acquisition value before the snapshot presentation boundary. During
   the #1797 migration it temporarily carries existing derived fields so the seam can land without a
   wire-behavior change.
+- Snapshot acquisition: the result of one iOS snapshot backend attempt—raw AX nodes plus
+  attempt-level truncation, depth, and custom-action facts. Every capture-plan backend returns this
+  type, and the exhaustive backend switch routes it through `SnapshotPresentation` exactly once.
+- Presentation options: the source-of-truth iOS snapshot request policy accepted by
+  `SnapshotPresentation`. During the behavior-preserving #1797 migration acquisition still reads
+  these options to reproduce current backend-specific decisions.
 - Presented node: wire-facing iOS snapshot value constructed only by `SnapshotPresentation`; response
   payload assembly accepts this type rather than backend-owned raw values.
 - Snapshot capture plan: per-strategy ordered chain of iOS snapshot capture backends (recursive tree,

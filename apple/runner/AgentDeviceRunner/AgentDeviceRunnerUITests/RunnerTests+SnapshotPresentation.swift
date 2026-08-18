@@ -23,6 +23,18 @@ struct RawAXNode {
   var actions: [String]? = nil
 }
 
+/// One backend attempt after acquisition and its current backend-specific interpretation.
+///
+/// Step 2 makes this the only input accepted by snapshot presentation. Later #1797 steps move the
+/// interpretation that still precedes this value into `SnapshotPresentation` without changing the
+/// capture-plan seam.
+struct SnapshotAcquisition {
+  let nodes: [RawAXNode]
+  let truncated: Bool
+  let effectiveDepth: Int?
+  var customActions: SnapshotCustomActionCoverage? = nil
+}
+
 /// The only snapshot node shape accepted by response payload assembly.
 ///
 /// Its initializer is private so a backend cannot bypass `SnapshotPresentation`. The encoded shape
@@ -64,25 +76,28 @@ struct PresentedNode: Codable {
 }
 
 enum SnapshotPresentation {
-  /// Transitional adapter for #1797 migration steps 1 and 2. Acquisition still computes today's
-  /// backend-specific decisions; this seam changes construction authority without changing output.
-  static func preservingCurrentSemantics(_ nodes: [RawAXNode]) -> [PresentedNode] {
-    nodes.map(PresentedNode.init(presenting:))
+  /// The capture plan's single presentation route for every snapshot backend.
+  ///
+  /// Step 2 preserves each backend's current decisions. `options` is deliberately part of the
+  /// stable interface now; later #1797 steps move those decisions behind this seam.
+  static func present(
+    _ acquisition: SnapshotAcquisition,
+    options _: PresentationOptions
+  ) -> SnapshotBackendCapture {
+    SnapshotBackendCapture(
+      payload: DataPayload(
+        nodes: acquisition.nodes.map(PresentedNode.init(presenting:)),
+        truncated: acquisition.truncated
+      ),
+      effectiveDepth: acquisition.effectiveDepth,
+      customActions: acquisition.customActions
+    )
   }
 
   /// Explicit carve-out for selector queries and system-modal reads that intentionally return one
   /// already-resolved element instead of traversing a snapshot backend.
   static func singleElementRead(_ node: RawAXNode) -> PresentedNode {
     PresentedNode(presenting: node)
-  }
-}
-
-extension DataPayload {
-  init(presenting nodes: [RawAXNode], truncated: Bool) {
-    self.init(
-      nodes: SnapshotPresentation.preservingCurrentSemantics(nodes),
-      truncated: truncated
-    )
   }
 }
 
@@ -113,12 +128,36 @@ extension RunnerTests {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
 
-    let encoded = try encoder.encode(SnapshotPresentation.preservingCurrentSemantics([raw]))
+    let capture = SnapshotPresentation.present(
+      SnapshotAcquisition(
+        nodes: [raw],
+        truncated: true,
+        effectiveDepth: 4,
+        customActions: SnapshotCustomActionCoverage(
+          read: 1,
+          candidates: 2,
+          truncated: 0,
+          blocked: false
+        )
+      ),
+      options: PresentationOptions(
+        interactiveOnly: true,
+        depth: nil,
+        scope: nil,
+        raw: false
+      )
+    )
+    let nodes = try XCTUnwrap(capture.payload.nodes)
+    let encoded = try encoder.encode(nodes)
 
     XCTAssertEqual(
       String(decoding: encoded, as: UTF8.self),
       #"[{"actions":["Open menu"],"depth":2,"enabled":true,"focused":true,"hiddenContentAbove":true,"hiddenContentBelow":true,"hittable":true,"identifier":"continue-button","index":3,"label":"Continue","parentIndex":1,"rect":{"height":44,"width":100,"x":10,"y":20},"selected":true,"type":"Button","value":"Ready"}]"#
     )
+    XCTAssertEqual(capture.payload.truncated, true)
+    XCTAssertEqual(capture.effectiveDepth, 4)
+    XCTAssertEqual(capture.customActions?.read, 1)
+    XCTAssertEqual(capture.customActions?.candidates, 2)
   }
 }
 #endif

@@ -1360,10 +1360,10 @@ extension RunnerTests {
   }
 
   /// Pure command→options projection, extracted so the runner unit bundle can
-  /// prove the decoded wire field actually reaches capture options (#1634 P2).
-  static func snapshotOptions(from command: Command) -> SnapshotOptions {
+  /// prove the decoded wire field actually reaches presentation options (#1634 P2).
+  static func presentationOptions(from command: Command) -> PresentationOptions {
     let customActions = command.customActions ?? false
-    return SnapshotOptions(
+    return PresentationOptions(
       interactiveOnly: command.interactiveOnly ?? false,
       depth: command.depth,
       scope: command.scope,
@@ -1378,7 +1378,7 @@ extension RunnerTests {
   }
 
   private func executeSnapshotPrepared(command: Command, activeApp: XCUIApplication) throws -> Response {
-    let options = Self.snapshotOptions(from: command)
+    let options = Self.presentationOptions(from: command)
     do {
       let payload: DataPayload
       if options.raw {
