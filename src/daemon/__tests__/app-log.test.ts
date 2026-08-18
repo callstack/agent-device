@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
+import { assertThrowsAppError } from '../../__tests__/test-utils/index.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { appendAppLogMarker, clearAppLogFiles, getAppLogPathMetadata } from '../app-log.ts';
 
@@ -37,11 +38,14 @@ test.each(['metadata', 'mark', 'clear'] as const)(
     // whose identity check reports the path as simply not a regular file.
     const expectedMessage =
       operation === 'mark' ? /must not be a symbolic link/ : /must be a regular file/;
-    expect(() => {
-      if (operation === 'metadata') getAppLogPathMetadata(outPath);
-      else if (operation === 'mark') appendAppLogMarker(outPath, 'checkpoint');
-      else clearAppLogFiles(outPath);
-    }).toThrow(expectedMessage);
+    assertThrowsAppError(
+      () => {
+        if (operation === 'metadata') getAppLogPathMetadata(outPath);
+        else if (operation === 'mark') appendAppLogMarker(outPath, 'checkpoint');
+        else clearAppLogFiles(outPath);
+      },
+      { code: 'COMMAND_FAILED', message: expectedMessage },
+    );
     expect(fs.readFileSync(outsidePath, 'utf8')).toBe('outside');
     expect(fs.lstatSync(outPath).isSymbolicLink()).toBe(true);
   },

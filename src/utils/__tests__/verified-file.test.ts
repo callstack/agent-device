@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
+import { assertThrowsAppError } from '../../__tests__/test-utils/index.ts';
 import {
   openVerifiedFileForAppend,
   openVerifiedFileForRead,
@@ -11,6 +12,7 @@ import {
 const roots: string[] = [];
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 
@@ -39,18 +41,57 @@ test.each(['read', 'append', 'truncate'] as const)(
     fs.writeFileSync(outside, 'outside');
     fs.symlinkSync(outside, pathname);
 
-    expect(() => {
-      const descriptor =
-        operation === 'read'
-          ? openVerifiedFileForRead(pathname)
-          : operation === 'append'
-            ? openVerifiedFileForAppend(pathname)
-            : openVerifiedFileForTruncate(pathname);
-      if (descriptor !== undefined) fs.closeSync(descriptor);
-    }).toThrow('regular file');
+    assertThrowsAppError(
+      () => {
+        const descriptor =
+          operation === 'read'
+            ? openVerifiedFileForRead(pathname)
+            : operation === 'append'
+              ? openVerifiedFileForAppend(pathname)
+              : openVerifiedFileForTruncate(pathname);
+        if (descriptor !== undefined) fs.closeSync(descriptor);
+      },
+      { code: 'COMMAND_FAILED', message: /must be a regular file/ },
+    );
     expect(fs.readFileSync(outside, 'utf8')).toBe('outside');
   },
 );
+
+// The two race guards cannot be reached from the filesystem alone, so the interleaving is
+// planted: the path is swapped between the open and its post-open lstat, or the create keeps
+// losing to a concurrent creator. Both must surface as typed failures with a recovery hint.
+test('reports a typed failure when the file is swapped while it is being opened', () => {
+  const pathname = fixturePath('swapped');
+  const other = `${pathname}.other`;
+  fs.writeFileSync(pathname, 'first');
+  fs.writeFileSync(other, 'second');
+  const realLstat = fs.lstatSync;
+  let lstatCalls = 0;
+  vi.spyOn(fs, 'lstatSync').mockImplementation(((target: fs.PathLike, options?: unknown) => {
+    lstatCalls += 1;
+    // The second lstat is the post-open identity check; answer it with the other file.
+    const resolved = lstatCalls === 2 ? other : target;
+    return (realLstat as (path: fs.PathLike, options?: unknown) => fs.Stats)(resolved, options);
+  }) as typeof fs.lstatSync);
+
+  assertThrowsAppError(() => openVerifiedFileForRead(pathname), {
+    code: 'COMMAND_FAILED',
+    message: /identity changed while it was opened/,
+  });
+});
+
+test('reports a typed failure when a create keeps losing the identity race', () => {
+  const pathname = fixturePath('contended');
+  const eexist = Object.assign(new Error('EEXIST: file already exists'), { code: 'EEXIST' });
+  vi.spyOn(fs, 'openSync').mockImplementation(() => {
+    throw eexist;
+  });
+
+  assertThrowsAppError(() => openVerifiedFileForAppend(pathname), {
+    code: 'COMMAND_FAILED',
+    message: /could not be opened without an identity race/,
+  });
+});
 
 test('returns absent for a missing read without creating the file', () => {
   const pathname = fixturePath('missing');

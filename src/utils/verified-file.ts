@@ -1,4 +1,14 @@
 import fs from 'node:fs';
+import { AppError } from '@agent-device/kernel/errors';
+
+/**
+ * Both guards are the same failure mode seen from two sides — something other than a plain
+ * regular file sits at the final path — so the recovery is shared (ADR 0010 §3).
+ */
+export const NOT_REGULAR_FILE_HINT =
+  'agent-device only reads and writes regular files at this path. Remove the symbolic link or special file there and retry.';
+const CONCURRENT_REPLACEMENT_HINT =
+  'Another process replaced the file at this path while it was being opened. Stop the concurrent writer, then retry.';
 
 /** Opens a regular final-path file for verified reads, or returns absent. */
 export function openVerifiedFileForRead(pathname: string): number | undefined {
@@ -32,7 +42,11 @@ function openVerifiedFile(
     if (result.status === 'retry') continue;
     return result.status === 'missing' ? undefined : result.descriptor;
   }
-  throw new Error(`Final file could not be opened without an identity race: ${pathname}`);
+  throw new AppError(
+    'COMMAND_FAILED',
+    `Final file could not be opened without an identity race: ${pathname}`,
+    { hint: CONCURRENT_REPLACEMENT_HINT },
+  );
 }
 
 type VerifiedOpenAttempt =
@@ -100,15 +114,28 @@ function assertOpenedIdentity(pathname: string, descriptor: number, before?: fs.
   if (before && !sameFile(before, opened)) throw identityChangedError(pathname);
 }
 
-function identityChangedError(pathname: string): Error {
-  return new Error(`Final file identity changed while it was opened: ${pathname}`);
+function identityChangedError(pathname: string): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    `Final file identity changed while it was opened: ${pathname}`,
+    { hint: CONCURRENT_REPLACEMENT_HINT },
+  );
 }
 
 function lstatRegularFile(pathname: string): fs.Stats | undefined {
+  const stats = lstatIfPresent(pathname);
+  if (stats && !stats.isFile()) {
+    throw new AppError('COMMAND_FAILED', `Final path must be a regular file: ${pathname}`, {
+      hint: NOT_REGULAR_FILE_HINT,
+    });
+  }
+  return stats;
+}
+
+/** `lstat` that treats absence as `undefined`; every other errno propagates. */
+export function lstatIfPresent(pathname: string): fs.Stats | undefined {
   try {
-    const stats = fs.lstatSync(pathname);
-    if (!stats.isFile()) throw new Error(`Final path must be a regular file: ${pathname}`);
-    return stats;
+    return fs.lstatSync(pathname);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
     throw error;

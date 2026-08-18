@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { AppError } from '@agent-device/kernel/errors';
+import { lstatIfPresent, NOT_REGULAR_FILE_HINT } from './verified-file.ts';
 
 const DEFAULT_MAX_APP_LOG_BYTES = 5 * 1024 * 1024;
 const DEFAULT_MAX_ROTATED_FILES = 1;
@@ -37,16 +39,13 @@ function assertAppLogFileIsNotSymbolicLink(outPath: string): void {
 }
 
 function lstatAppLogFile(outPath: string): fs.Stats | undefined {
-  try {
-    const stats = fs.lstatSync(outPath);
-    if (stats.isSymbolicLink()) {
-      throw new Error(`App-log file must not be a symbolic link: ${outPath}`);
-    }
-    return stats;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-    throw error;
+  const stats = lstatIfPresent(outPath);
+  if (stats?.isSymbolicLink()) {
+    throw new AppError('COMMAND_FAILED', `App-log file must not be a symbolic link: ${outPath}`, {
+      hint: NOT_REGULAR_FILE_HINT,
+    });
   }
+  return stats;
 }
 
 function positiveIntEnv(raw: string | undefined, fallback: number): number {

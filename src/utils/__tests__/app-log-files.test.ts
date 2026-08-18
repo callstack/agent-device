@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
+import { assertThrowsAppError } from '../../__tests__/test-utils/index.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { ensureAppLogPath, rotateAppLogIfNeeded } from '../app-log-files.ts';
 
@@ -39,9 +40,10 @@ test('rotation rejects a final app.log symlink without touching its target', () 
   fs.writeFileSync(outsidePath, 'outside');
   fs.symlinkSync(outsidePath, outPath);
 
-  expect(() => rotateAppLogIfNeeded(outPath, { maxBytes: 1, maxRotatedFiles: 1 })).toThrow(
-    'symbolic link',
-  );
+  assertThrowsAppError(() => rotateAppLogIfNeeded(outPath, { maxBytes: 1, maxRotatedFiles: 1 }), {
+    code: 'COMMAND_FAILED',
+    message: /must not be a symbolic link/,
+  });
   expect(fs.readFileSync(outsidePath, 'utf8')).toBe('outside');
   expect(fs.lstatSync(outPath).isSymbolicLink()).toBe(true);
 });
