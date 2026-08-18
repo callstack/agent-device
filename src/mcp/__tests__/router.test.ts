@@ -114,7 +114,7 @@ test('help tool returns the workflow card, a topic guide, a tool reference, or a
 
   const card = await call(undefined);
   assert.equal(card.isError, false);
-  assert.match(card.text, /^Reading CLI syntax over MCP:/);
+  assert.match(card.text, /^CLI syntax over MCP:/);
   assert.match(card.text, /agent-device open <app> --foreground/);
 
   const topic = await call({ topic: 'gestures' });
@@ -133,7 +133,7 @@ test('help tool returns the workflow card, a topic guide, a tool reference, or a
   const web = await call({ topic: 'web' });
   assert.equal(web.isError, false);
   assert.match(web.text, /agent-device web setup/);
-  const terminalOnlyLine = web.text.split('\n').find((line) => line.startsWith('Terminal-only'));
+  const terminalOnlyLine = web.text.split('\n').find((line) => line.includes('Terminal-only'));
   assert.ok(terminalOnlyLine);
   assert.match(terminalOnlyLine, /\bweb\b/);
   const listed = terminalOnlyCommandNames();

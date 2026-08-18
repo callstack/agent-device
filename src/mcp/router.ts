@@ -4,7 +4,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   callHelpTool,
   HELP_TOOL_NAME,
-  helpToolDefinition,
+  HELP_TOOL,
   MCP_SERVER_INSTRUCTIONS,
 } from './server-guide.ts';
 import { formatToolErrorText, normalizeToolError } from './tool-error.ts';
@@ -101,7 +101,7 @@ async function handleRequest(method: string, params: unknown, era: ProtocolEra):
       // descriptor-only because the AI SDK surface reuses it; the composition is the
       // router's.
       return {
-        tools: [...listCommandTools(), helpToolDefinition()],
+        tools: [...listCommandTools(), HELP_TOOL],
         ...cacheFields(era, STATIC_RESULT_CACHE_TTL_MS),
       };
     case 'tools/call':
