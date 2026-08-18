@@ -339,6 +339,7 @@ jobs:
         with: { gate: coverage-model }
 
       - name: Run coverage
+        id: run-coverage
         env:
           OUTPUT_ECONOMY_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         uses: ./.github/actions/run-gate
@@ -355,8 +356,11 @@ jobs:
       # and fails when changed-line coverage < the threshold in
       # scripts/coverage-changed/model.ts. The `coverage-waiver` PR label maps to
       # the waiver env, which skips the failure but still prints the numbers.
+      # Gated on the coverage step's own outcome (#1781 A5): when `Run coverage`
+      # fails, lcov.info is never written, so this step would just re-report that
+      # failure as its own red ("no lcov report") instead of a coverage verdict.
       - name: Enforce changed-line coverage gate
-        if: always() && github.event_name == 'pull_request'
+        if: steps.run-coverage.outcome == 'success' && github.event_name == 'pull_request'
         env:
           AGENT_DEVICE_COVERAGE_WAIVER: ${{ contains(github.event.pull_request.labels.*.name, 'coverage-waiver') }}
         uses: ./.github/actions/run-gate

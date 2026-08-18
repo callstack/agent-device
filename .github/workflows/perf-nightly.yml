@@ -1,14 +1,12 @@
 name: Perf Nightly
 
-# End-to-end command perf benchmark (scripts/perf). Scheduled + manual only — perf timing on
-# shared CI runners is noisy, so treat this as a trend/regression signal, not absolute numbers.
-# Reuses the same build artifacts as the device suites: the cached iOS XCUITest runner
-# (setup-apple-runner-build, ios-runner-prebuilt cache) and the Android replay host, and runs the CLI
-# from source via --experimental-strip-types (no dist build), matching the replay workflows.
+# Parked to workflow_dispatch by #1781 A3: it only writes a report and compares nothing, so it
+# structurally cannot catch a regression, and iOS wall-clock medians swing up to +122%
+# night-to-night at n=5 with no consumer reading the report. `pnpm perf` / scripts/perf are
+# unaffected — still runnable on demand. Un-park once a comparison step with multi-night
+# smoothing (someone reading it) exists, or a perf arc needs nightly data.
 
 on:
-  schedule:
-    - cron: '0 4 * * *'
   workflow_dispatch:
     inputs:
       rounds:
