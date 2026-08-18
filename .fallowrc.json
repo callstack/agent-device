@@ -20,10 +20,6 @@
     "src/utils/png-worker.ts",
     "scripts/patch-xcuitest-runner-icon.ts",
     "scripts/runner-request-count/run.ts",
-    "scripts/lib/contention-retry-run.ts",
-    "scripts/vitest-runner-timeout-setup.ts",
-    "test/contention-retry-fixtures/vitest.fixture.config.ts",
-    "test/contention-retry-fixtures/timeout-provenance.fixture.ts",
     // #1596 regression fixture: runs as a real `node --experimental-strip-types`
     // subprocess (test/integration/daemon-replace-exit-flush.test.ts), so
     // dependency analysis cannot follow the runCmdSync string path to it.
@@ -122,14 +118,9 @@
       ]
     },
     {
-      "comment": "Contention retry lane (#1419): the reporter default is loaded by Vitest from a `--reporter=<path>` string, and SUBPROCESS_STUB_TESTS / resolveVitestMaxWorkers are consumed by vitest.config.ts \u2014 a tool config outside --production analysis.",
-      "file": "scripts/lib/{contention-retry.ts,contention-retry-reporter.ts,vitest-concurrency.ts}",
-      "exports": ["default", "SUBPROCESS_STUB_TESTS", "resolveVitestMaxWorkers"]
-    },
-    {
-      "comment": "Contention retry gate fixtures (#1419): the config default is loaded by the child `vitest run --config` the gate test spawns.",
-      "file": "test/contention-retry-fixtures/vitest.fixture.config.ts",
-      "exports": ["default"]
+      "comment": "resolveVitestMaxWorkers is consumed by vitest.config.ts \u2014 a tool config outside --production analysis.",
+      "file": "scripts/lib/vitest-concurrency.ts",
+      "exports": ["resolveVitestMaxWorkers"]
     },
     {
       "comment": "Mutation-lane seam: readTestScope is consumed by vitest.mutation.config.ts, a tool config outside --production analysis.",

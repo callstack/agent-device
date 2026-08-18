@@ -487,53 +487,26 @@ Use `AGENT_DEVICE_IOS_E2E_TIER=full` for the `Replay Manual` subset. Step histor
 screenshots, recordings, traces, and failure context are written below
 `test/artifacts/ios-simulator/` and uploaded by the existing shared artifact action. The six
 Settings replays remain additive OS-chrome coverage and are not modified by this suite.
-## Contention retry policy (enumerated, timeouts only)
 
-Some test files stub a real binary and then spawn or wait on it, so under host load they fail for a
-reason that has nothing to do with the diff. The set of such files is **enumerated** in
-`scripts/lib/contention-retry.ts` (`CONTENTION_RETRY_FILES`) — never a glob, which would silently
-enroll every future file under a directory. That one constant also derives `SUBPROCESS_STUB_TESTS`,
-the serialized `subprocess-stub` Vitest project in `vitest.config.ts`, so the execution contract and
-the retry policy cannot drift apart.
+## The `subprocess-stub` project (serialized real spawners)
 
-The CI Coverage job runs the suite through `pnpm test:coverage:ci`
-(`scripts/lib/contention-retry-run.ts`), which applies one rule:
+Three test files spawn a real subprocess per case, so under broad file parallelism the spawns get
+starved past an internal budget and production returns a generic timeout instead of the asserted
+error. They are **enumerated** in `SUBPROCESS_STUB_TESTS` (`vitest.config.ts`) — never a glob, which
+would silently enroll every future file under a directory — and run in their own project with
+`fileParallelism: false, maxWorkers: 1`, so only one of them spawns at a time. `unit-core` excludes
+exactly that list, and both projects run inside one `vitest run`, so the serialized chain runs
+alongside the main pool rather than after it (~0 added CI wall clock).
 
-- **Timeouts only, proven by the runner.** A rerun happens only when *every* failure in the run is a
-  test the runner itself aborted, in a listed file. Eligibility comes from a mark written inside the
-  runner (`scripts/vitest-runner-timeout-setup.ts`, a setup file on every project): the runner owns
-  the controller behind `context.signal` and aborts it with the timeout error it raises, so a test
-  that merely *throws* the exact timeout message — immediately, or after blocking the event loop past
-  its budget — never carries the mark. `task.meta` is writable by test code, so the mark is not a
-  flag but the run's secret: the lane mints it per run, and the setup file takes it out of the
-  environment as it loads — before any test module is imported — so a test writing the marker itself
-  has no value to write. Error text is never consulted for eligibility;
-  `test/contention-retry-fixtures/` drives those forgeries through a real Vitest run in the gate. One
-  assertion failure — in a listed file or not — fails the job on the first run, so a real regression
-  can never be papered over.
-- **Anything a rerun cannot re-check blocks the retry.** Unhandled errors, module load/setup errors,
-  a coverage-threshold miss, or a nonzero exit no failed test explains are recorded as blockers
-  (`scripts/lib/contention-retry-blockers.ts`) and fail the job, so a green retry can never erase a
-  second, unrelated failure from the same run.
-- **Gates that fail a run without failing a test publish structurally.** A reporter-level verdict
-  (the slow-test ratchet setting `process.exitCode = 1`) is invisible in test results, so it is
-  recorded on the shared blocker channel `scripts/lib/run-blocker-bus.ts`; the retry lane's failure
-  sink drains it and refuses the rerun. **Any new gate reporter must call `recordRunBlocker`**, and
-  must be ordered before the sink in `reporters()`.
-- **One retry, of the failed files only.** Not the suite, and never twice. Two timed-out tests in one
-  file are one retry, and count as one. The rerun keeps the first run's execution modes — the same
-  `--project` selection and the same V8 instrumentation (`scripts/lib/contention-retry-args.ts`), so
-  a coverage-job failure is never accepted by a run that could not reproduce it. Its coverage lands
-  in `coverage/contention-retry/`, leaving the first run's report as the changed-line gate's evidence.
-- **Retries stay visible.** Every retried file is named in the job summary with its tracking issue
-  and review date, and the run writes the shared scheduled-lane envelope
-  (`scripts/lib/lane-envelope.ts`, #1430) with the retry count, so a permanently flaky file shows up
-  as lane health rather than as a green check.
+Issue #1823 owns the membership and the project's deletion test: if the three run un-serialized in
+the default pool for 20 consecutive CI runs with no timeout-shaped failure, the project goes.
+Adding a file needs the concrete spawn named at the entry; per-file `process.env` isolation is not a
+reason, since `pool: forks` + `isolate: true` already give every project that.
 
-Adding a file to the list is a reviewed waiver in the ADR 0011 sense: a `reason` naming the concrete
-spawn/wait that makes it contention-flaky, a `trackingIssue` for removing that wait, and a `reviewBy`
-date. `pnpm check:contention-retry` (its own CI step, and part of `pnpm check:unit`) fails on an
-expired entry, a missing file, or a glob, so an entry is renewed or removed rather than inherited.
+**Removed 2026-08-18 (#1781 A4):** the enumerated single-retry policy (`contention-retry*`, #1419)
+that reran runner-proven timeouts in these files once. It fired 0 times in 234 sampled Coverage-job
+envelopes over the three weeks it existed, and refused every observed failure class, for ~1.45k LOC.
+There is now no rerun layer in CI; a flaky unit test is fixed or deleted.
 
 ## Speed rules (experiment-backed, 2026-07-04)
 

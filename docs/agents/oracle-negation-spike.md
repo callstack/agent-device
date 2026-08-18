@@ -24,8 +24,7 @@ fails is load-bearing on at least one executed assertion.
   `assert.fail` keeps its always-throw semantics — a reached
   `fail('unreachable')` is a live oracle.
 - A codemod rewrites the two (uniform) import shapes in test files only;
-  shared helpers/worlds keep natural assertions. Setup files and
-  `test/contention-retry-fixtures/` are excluded.
+  shared helpers/worlds keep natural assertions. Setup files are excluded.
 - Self-check per the vacuity doctrine in `testing.md`: seven planted tests
   (dead-branch expect/assert, never-invoked callback, plain matcher, user
   `.not`, async `rejects`, executed assert) all produced the expected verdict
@@ -90,8 +89,7 @@ Follow-ups this spike motivates, in value order:
 1. **Diff-scoped mutation gate** — mechanize the `testing.md` red-run rule:
    mutate the lines a PR changes; require the PR's tests to kill them.
 2. **Seam closures** for the 47 sole-owner modules above; each closure moves
-   files out of the serialized `subprocess-stub` project and shrinks the
-   contention-retry waiver list.
+   files out of the serialized `subprocess-stub` project (#1823).
 3. **Transcript provenance** — provider-scenario worlds are hand-authored
    beliefs about `simctl`/`adb` output. Add a capture mode on the live-device
    lanes and a nightly drift diff, the same shape as the replay-compat corpus

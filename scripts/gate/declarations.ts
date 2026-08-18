@@ -1,15 +1,9 @@
 // The four small facts the manifest cannot derive from package scripts and workflow YAML.
 
-export const OPAQUE_RUNNERS: Readonly<Record<string, readonly string[]>> = {
-  // This wrapper runs Vitest over every project, then retries owned contention failures.
-  'test:coverage:ci': [
-    'vitest:unit-core',
-    'vitest:subprocess-stub',
-    'vitest:provider-integration',
-    'vitest:interaction-contract',
-    'vitest:output-economy',
-  ],
-};
+// A script whose Vitest/node-test invocation the loader cannot read, mapped to the units it
+// really runs. Empty right now: the one entry was a coverage wrapper, and `test:coverage:ci`
+// is a plain `vitest run --coverage` again, which the loader reads directly.
+export const OPAQUE_RUNNERS: Readonly<Record<string, readonly string[]>> = {};
 
 export const REPORTING_SCRIPTS: Readonly<Record<string, string>> = {
   'test:integration:progress': [

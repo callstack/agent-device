@@ -95,8 +95,14 @@ test('a path filter that excludes a category fails, though the check still runs 
   assert.ok(found.some((message) => /selects "daemon-wire-compat"/.test(message)));
 });
 
+// The Coverage lane runs a bare `vitest run --coverage`, which runs every project the config
+// declares — so an unrun project is only representable once that script names its projects.
+const projectScoped = (projects: readonly string[]): string =>
+  `vitest run --coverage ${projects.map((name) => `--project ${name}`).join(' ')}`;
+
 test('a Vitest project no check runs is reported, and so is a suite script', () => {
   const project = mutate((m) => ({
+    scripts: { ...m.scripts, 'test:coverage:ci': projectScoped(m.vitestProjects) },
     vitestProjects: [...m.vitestProjects, 'new-lane'],
   }));
   assert.ok(
@@ -108,6 +114,7 @@ test('a Vitest project no check runs is reported, and so is a suite script', () 
   const script = mutate((m) => ({
     scripts: {
       ...m.scripts,
+      'test:coverage:ci': projectScoped(m.vitestProjects),
       'test:orphan': 'vitest run --project unit-core --project orphan-only',
     },
     vitestProjects: [...m.vitestProjects, 'orphan-only'],

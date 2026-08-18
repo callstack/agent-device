@@ -58,7 +58,6 @@ export type CheckId =
   | 'depgraph'
   | 'tmpdir-leaks'
   | 'tmpdir-leaks-model'
-  | 'contention-retry'
   | 'coverage-model'
   | 'wire-compat-model'
   | 'production-exports'
@@ -118,7 +117,6 @@ export const ALL_CHECKS: readonly CheckId[] = [
   'depgraph',
   'tmpdir-leaks',
   'tmpdir-leaks-model',
-  'contention-retry',
   'coverage-model',
   'wire-compat-model',
   'production-exports',

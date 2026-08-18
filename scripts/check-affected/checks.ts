@@ -79,15 +79,14 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   // them, so nothing could ask whether they still ran.
   //
   // `unit-ci` is the CI form of the unit suite. Locally you run `unit` and
-  // `coverage`; the contention-retry coverage wrapper would just repeat them.
-  gate('unit-ci', 'CI unit suite under coverage + contention retry', 'test:coverage:ci', false),
+  // `coverage`, which together repeat it.
+  gate('unit-ci', 'CI unit suite under coverage', 'test:coverage:ci', false),
   gate('affected-selector', 'Affected-check selector model', 'check:affected:test'),
   gate('gate-manifest', 'Gate manifest — every gate owned and wired', 'check:gate-manifest'),
   gate('gate-manifest-model', 'Gate manifest model', 'check:gate-manifest:test'),
   gate('depgraph', 'Dependency graph report agrees with the gate', 'depgraph:test'),
   gate('tmpdir-leaks', 'Leaked test tmpdir detector', 'check:tmpdir-leaks'),
   gate('tmpdir-leaks-model', 'TMPDIR redirection model', 'check:tmpdir-leaks:test'),
-  gate('contention-retry', 'Contention single-retry policy', 'check:contention-retry'),
   gate('coverage-model', 'Changed-line coverage model', 'check:coverage-changed:test'),
   gate('wire-compat-model', 'Wire-compat rules model', 'check:daemon-wire-compat:test'),
   gate('production-exports', 'Production-unused exports', 'check:production-exports'),

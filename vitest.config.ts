@@ -1,39 +1,23 @@
-import type { Reporter } from 'vitest/node';
 import { defineConfig } from 'vitest/config';
-import contentionRetryReporter, {
-  FAILURE_FILE_ENV,
-} from './scripts/lib/contention-retry-reporter.ts';
-import { SUBPROCESS_STUB_TESTS } from './scripts/lib/contention-retry.ts';
 import { resolveVitestMaxWorkers } from './scripts/lib/vitest-concurrency.ts';
 import slowTestGateReporter from './scripts/vitest-slow-test-reporter.ts';
 
-// Tests that stub a real binary (adb/xcrun/npx) by mutating process.env.PATH and
-// then spawn it, so each case waits real subprocess/retry/poll time. Run with
-// broad file parallelism they contend for CPU and their stub
-// spawns get starved past an internal budget, so production takes a generic
-// failure path and returns a different error than the assertion expects — a
-// contention flake whose failing subset shifts between runs (see
-// docs/agents/testing.md "tests must not wait real time"). Serialized below with
-// per-file isolation so only one such file spawns stubs at a time, the same
-// execution contract the pre-split android index.test.ts aggregation provided.
-// The enumerated file list, with each file's contention reason and its owned
-// waiver, lives in scripts/lib/contention-retry.ts — the same constant the CI
-// single-retry policy (#1419) reads, so the two cannot drift.
-export { SUBPROCESS_STUB_TESTS };
-
-/** Every project loads the same setup, including the runner-timeout provenance hook. */
-const SETUP_FILES = [
-  'scripts/vitest-runner-timeout-setup.ts',
-  'src/__tests__/hermetic-env-setup.ts',
-  'src/__tests__/process-memo-setup.ts',
+// Files that spawn a real subprocess per case, so under broad file parallelism the
+// spawns get starved past an internal budget and production returns a generic
+// timeout instead of the asserted error. The subprocess-stub project below runs
+// them one at a time to bound that contention; per-file `process.env` isolation is
+// already delivered by `pool: forks` + `isolate: true` on every project.
+// Membership and the project's deletion test live in issue #1823.
+export const SUBPROCESS_STUB_TESTS: readonly string[] = [
+  // Stubs npx plus the package managers and spawns a real Metro dev server per case.
+  'src/__tests__/client-metro.test.ts',
+  // The SUT is the subprocess watchdog: a node subprocess per case, one hangs on purpose (#1414).
+  'scripts/fuzz/harness.test.ts',
+  // Replays the fuzz corpus through that same worker watchdog, waiting its per-case budget.
+  'scripts/fuzz/corpus-replay.test.ts',
 ];
 
-/** Reporters for every lane; a `--reporter` flag would replace them, so no lane passes one. */
-export function reporters(env: NodeJS.ProcessEnv = process.env): Array<string | Reporter> {
-  const gates: Array<string | Reporter> = ['default', slowTestGateReporter()];
-  // The failure sink drains the gates' verdicts, so it reports after them.
-  return env[FAILURE_FILE_ENV] ? [...gates, contentionRetryReporter()] : gates;
-}
+const SETUP_FILES = ['src/__tests__/hermetic-env-setup.ts', 'src/__tests__/process-memo-setup.ts'];
 
 export default defineConfig({
   test: {
@@ -60,7 +44,8 @@ export default defineConfig({
     // Capping explicit `test.concurrent` work at one enforces that teardown
     // assumption without reducing ordinary file-level parallelism.
     maxConcurrency: 1,
-    reporters: reporters(),
+    // Gate reporters for every lane; a `--reporter` flag would replace them, so no lane passes one.
+    reporters: ['default', slowTestGateReporter()],
     projects: [
       {
         test: {
@@ -115,11 +100,6 @@ export default defineConfig({
         },
       },
       {
-        // The subprocess-stub tests stub adb/xcrun/npx by mutating process.env
-        // (PATH, AGENT_DEVICE_TEST_ARGS_FILE) and wait real subprocess/retry/poll
-        // time, so the group runs serialized with per-file isolation — the same
-        // execution contract the pre-split android index.test.ts aggregation
-        // provided without leaking module caches between split files.
         test: {
           name: 'subprocess-stub',
           include: [...SUBPROCESS_STUB_TESTS],
