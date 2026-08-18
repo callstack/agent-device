@@ -74,10 +74,7 @@ export async function runStableCaptureLoop(
   let deadlineMs = start + timeoutMs;
   let privateAxRecoveryBudgetReset = false;
   const session = await runtime.sessions.get(options.session ?? 'default');
-  const transitionBaseline = stableCaptureTransitionBaseline(
-    params.broadTransitionBaselineNodes,
-    session?.snapshot,
-  );
+  let transitionBaseline: StableCaptureSignal | undefined;
   let preferredBackend = preferredSnapshotBackendForVerdict(session?.snapshot?.snapshotQuality);
   // Cadence derives from the quiet window (never slower than the default
   // poll): a caller asking for a 50ms quiet window should not be forced onto a
@@ -108,6 +105,10 @@ export async function runStableCaptureLoop(
     }
     captures += 1;
     lastCapture = capture;
+    transitionBaseline ??= stableCaptureTransitionBaseline(
+      params.broadTransitionBaselineNodes,
+      capture.snapshot,
+    );
     const signal = stableCaptureSignal(capture.snapshot);
     requiredQuietMs = stableCaptureTransitionQuietMs({
       baseline: transitionBaseline,

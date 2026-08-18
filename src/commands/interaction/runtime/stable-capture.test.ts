@@ -114,7 +114,7 @@ test('settle confirms a broad replacement that begins after the first post-actio
 
 test('settle confirms against the pre-action tree when the stored snapshot already advanced', async () => {
   const { runtime } = transitionRuntime({
-    sessionSnapshot: elementTransientRoomSnapshot,
+    sessionSnapshot: { ...elementTransientRoomSnapshot, backend: undefined },
     settledAtMs: 1_200,
   });
 
