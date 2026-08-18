@@ -86,6 +86,9 @@ export default defineConfig({
             'scripts/__tests__/package-closure-audit.test.ts',
             // Parses CI configuration only, so this action guard needs no device or subprocess lane.
             'test/ci/upload-agent-device-artifacts.test.ts',
+            // #1781 A9: pins the root-doc paths-ignore entries directly against the
+            // real workflow YAML, parse-only like its sibling above.
+            'test/ci/root-docs-paths-ignore.test.ts',
             // The frozen replay-compat corpus (#1417): parse-only, no device or
             // subprocess work, so it belongs in the fast lane next to the
             // grammar it guards.
