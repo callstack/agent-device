@@ -7,7 +7,9 @@ const LARGEST_TYPE_CYCLE_ZONE_CEILINGS: Readonly<Record<string, number>> = {
   client: 1,
   commands: 14,
   core: 10,
-  'daemon-server': 16,
+  // 17 since d76e0f94e (#1779): snapshot-capture.ts -> handlers/snapshot-interactor-capture.ts ->
+  // core/interactors.ts wedges the new interactor seam between two members, so it joins the cycle.
+  'daemon-server': 17,
   platforms: 2,
 };
 
