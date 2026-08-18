@@ -171,7 +171,9 @@ test('never-settling content returns settled: false without an actionable diff',
 
 test('private-ax recovery resets the settle budget once', async () => {
   const before = buttonSnapshot();
-  const recoveredAfter = welcomeSnapshot();
+  // Keep this a same-screen recovery so the test isolates the private-AX budget reset from the
+  // independently tested broad-transition confirmation window.
+  const recoveredAfter = buttonSnapshot();
   recoveredAfter.snapshotQuality = {
     state: 'recovered',
     backend: 'private-ax',
