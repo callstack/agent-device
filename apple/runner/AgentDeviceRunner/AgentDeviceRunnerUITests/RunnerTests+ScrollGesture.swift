@@ -20,7 +20,9 @@ struct RunnerScrollGesturePlan {
 }
 
 private let runnerDefaultScrollAmount = 0.6
-private let runnerDefaultEdgePaddingFraction = 0.05
+// Mirrors DEFAULT_EDGE_PADDING_FRACTION: scroll gestures stay out of the outer 10% of each axis so a
+// saturated scroll never touches down inside the status bar / Dynamic Island band (#1781 A1).
+private let runnerDefaultEdgePaddingFraction = 0.1
 
 func runnerScrollGesturePlan(
   direction: String,
@@ -104,7 +106,7 @@ extension RunnerTests {
   }
 
   func testRunnerScrollGesturePlanClampsAmountAboveOne() throws {
-    // 400x800, down, amount 2 -> requested 1600 clamps to the safe band (720): (200,760)->(200,40).
+    // 400x800, down, amount 2 -> requested 1600 clamps to the safe band (640): (200,720)->(200,80).
     let plan = try XCTUnwrap(
       runnerScrollGesturePlan(
         direction: "down",
@@ -115,14 +117,14 @@ extension RunnerTests {
       )
     )
     XCTAssertEqual(plan.x1, 200)
-    XCTAssertEqual(plan.y1, 760)
+    XCTAssertEqual(plan.y1, 720)
     XCTAssertEqual(plan.x2, 200)
-    XCTAssertEqual(plan.y2, 40)
-    XCTAssertEqual(plan.travelPixels, 720)
+    XCTAssertEqual(plan.y2, 80)
+    XCTAssertEqual(plan.travelPixels, 640)
   }
 
   func testRunnerScrollGesturePlanClampsExplicitPixelsVertically() throws {
-    // 400x800, down, pixels 1000 clamps travel to the safe band (720): (200,760)->(200,40).
+    // 400x800, down, pixels 1000 clamps travel to the safe band (640): (200,720)->(200,80).
     let plan = try XCTUnwrap(
       runnerScrollGesturePlan(
         direction: "down",
@@ -133,10 +135,10 @@ extension RunnerTests {
       )
     )
     XCTAssertEqual(plan.x1, 200)
-    XCTAssertEqual(plan.y1, 760)
+    XCTAssertEqual(plan.y1, 720)
     XCTAssertEqual(plan.x2, 200)
-    XCTAssertEqual(plan.y2, 40)
-    XCTAssertEqual(plan.travelPixels, 720)
+    XCTAssertEqual(plan.y2, 80)
+    XCTAssertEqual(plan.travelPixels, 640)
   }
 
   func testRunnerScrollGesturePlanFloorsTinyFrames() throws {
@@ -159,7 +161,7 @@ extension RunnerTests {
   }
 
   func testRunnerScrollGesturePlanClampsToSafeBand() throws {
-    // 300x600, right, pixels 500 clamps travel to the safe band (270).
+    // 300x600, right, pixels 500 clamps travel to the safe band (240).
     let plan = try XCTUnwrap(
       runnerScrollGesturePlan(
         direction: "right",
@@ -169,11 +171,28 @@ extension RunnerTests {
         referenceHeight: 600
       )
     )
-    XCTAssertEqual(plan.x1, 285)
-    XCTAssertEqual(plan.x2, 15)
+    XCTAssertEqual(plan.x1, 270)
+    XCTAssertEqual(plan.x2, 30)
     XCTAssertEqual(plan.y1, 300)
     XCTAssertEqual(plan.y2, 300)
-    XCTAssertEqual(plan.travelPixels, 270)
+    XCTAssertEqual(plan.travelPixels, 240)
+  }
+
+  func testRunnerScrollGesturePlanKeepsSaturatedScrollUpOutOfStatusBar() throws {
+    // 1080x2400, up, amount 3 (#1781 A1): the touch-down at y=240 clears a Pixel 7's 136px cutout
+    // status bar; the 5% band used to start at y=120 and pulled the notification shade down.
+    let plan = try XCTUnwrap(
+      runnerScrollGesturePlan(
+        direction: "up",
+        amount: 3,
+        pixels: nil,
+        referenceWidth: 1080,
+        referenceHeight: 2400
+      )
+    )
+    XCTAssertEqual(plan.y1, 240)
+    XCTAssertEqual(plan.y2, 2160)
+    XCTAssertGreaterThan(plan.y1, 136)
   }
 
   func testRunnerScrollGesturePlanRejectsUnknownDirection() {

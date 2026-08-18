@@ -84,7 +84,11 @@ export type InPageSwipeGesturePlan = {
 };
 
 const DEFAULT_SCROLL_AMOUNT = 0.6;
-const DEFAULT_EDGE_PADDING_FRACTION = 0.05;
+// Scroll gestures never touch the outer 10% of either axis. Modern app windows are edge-to-edge,
+// so the viewport includes the system bars: a swipe that starts inside the status bar (5.7% of a
+// Pixel 7's height, 6.9% of an iPhone's with a Dynamic Island) pulls the notification shade or
+// Notification Center down instead of scrolling. 10% clears both with margin (#1781 A1).
+const DEFAULT_EDGE_PADDING_FRACTION = 0.1;
 // Edge presets stay close to the system gesture boundary without emitting edge coordinates.
 const SWIPE_PRESET_EDGE_MARGIN_PX = 8;
 

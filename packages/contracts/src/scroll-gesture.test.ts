@@ -100,13 +100,13 @@ test('buildScrollGesturePlan clamps amounts above 1 to the safe gesture band', (
   assert.deepEqual(plan, {
     direction: 'down',
     x1: 200,
-    y1: 760,
+    y1: 720,
     x2: 200,
-    y2: 40,
+    y2: 80,
     referenceWidth: 400,
     referenceHeight: 800,
     amount: 2,
-    pixels: 720,
+    pixels: 640,
   });
 });
 
@@ -121,13 +121,13 @@ test('buildScrollGesturePlan clamps explicit pixel travel to the vertical safe g
   assert.deepEqual(plan, {
     direction: 'down',
     x1: 200,
-    y1: 760,
+    y1: 720,
     x2: 200,
-    y2: 40,
+    y2: 80,
     referenceWidth: 400,
     referenceHeight: 800,
     amount: undefined,
-    pixels: 720,
+    pixels: 640,
   });
 });
 
@@ -162,11 +162,27 @@ test('buildScrollGesturePlan clamps pixel travel to the safe gesture band', () =
     referenceHeight: 600,
   });
 
-  assert.equal(plan.x1, 285);
-  assert.equal(plan.x2, 15);
+  assert.equal(plan.x1, 270);
+  assert.equal(plan.x2, 30);
   assert.equal(plan.y1, 300);
   assert.equal(plan.y2, 300);
-  assert.equal(plan.pixels, 270);
+  assert.equal(plan.pixels, 240);
+});
+
+// #1781 A1: an edge-to-edge app window includes the status bar, so a saturated `scroll up` used
+// to start inside it (y=120 on a Pixel 7, whose cutout status bar is 136px tall) and pulled the
+// notification shade down instead of scrolling. The band keeps the touch-down below the bar.
+test('buildScrollGesturePlan keeps a saturated scroll up out of a Pixel 7 status bar', () => {
+  const plan = buildScrollGesturePlan({
+    direction: 'up',
+    amount: 3,
+    referenceWidth: 1080,
+    referenceHeight: 2400,
+  });
+
+  assert.equal(plan.y1, 240);
+  assert.equal(plan.y2, 2160);
+  assert.ok(plan.y1 > 136, `touch-down y=${plan.y1} must clear the 136px status bar`);
 });
 
 test('buildScrollGesturePlan rejects invalid amounts', () => {

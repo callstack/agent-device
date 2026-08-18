@@ -189,7 +189,7 @@
     "test:concurrency-torture": "node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/nightly/concurrency-torture.test.ts",
     "test:replay:ios": "node --experimental-strip-types src/bin.ts test test/integration/replays/ios/simulator",
     "test:replay:ios-device": "node --experimental-strip-types src/bin.ts test test/integration/replays/ios/device",
-    "test:replay:android": "node --experimental-strip-types src/bin.ts test test/integration/replays/android",
+    "test:replay:android": "node --experimental-strip-types src/bin.ts test test/integration/replays/android/emulator",
     "test:replay:macos": "node --experimental-strip-types src/bin.ts test test/integration/replays/macos",
     "test:replay:linux": "node --experimental-strip-types src/bin.ts test test/integration/replays/linux"
   },
