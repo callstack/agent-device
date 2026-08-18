@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { walkFiles } from '../../scripts/lib/walk-files.ts';
+import { runCmdSync } from '../utils/exec.ts';
 
 /**
  * Test-file size ratchet (AGENTS.md "Scope & shape": past 1,000 lines is architecture debt,
@@ -14,7 +15,14 @@ import { walkFiles } from '../../scripts/lib/walk-files.ts';
  * shrinking one fails until the pin is lowered, so the list only ever ratchets down. A file
  * that drops under the tripwire leaves the list; a new file may not cross it.
  *
- * Catches: a >1,000-line test file growing, or a new one appearing.
+ * The pin map alone could be edited alongside the file (raise a pin and grow into it; add a
+ * pin with a new giant file), so the gate is history-backed as well: every test file over the
+ * tripwire may be no longer than it was at the merge-base with origin/main (or no longer than
+ * the tripwire if it did not exist there), and no pin may exceed its file's base length. Both
+ * pin-edit bypasses go red against git, not against the map.
+ *
+ * Catches: a >1,000-line test file growing (with or without a matching pin edit), or a new one
+ *   appearing (with or without a pin).
  * Evidence: 26 test files were over the line when this landed (2026-08-18); the largest,
  *   `snapshot-handler.test.ts`, gained 55 lines in the PR before, under a rule with no gate.
  * Cost: one directory walk and a line count per test file — well under a second.
@@ -110,6 +118,108 @@ function ratchetFindings(
   return findings;
 }
 
+/**
+ * Line counts of the given repo paths at the merge-base with origin/main, following renames, in
+ * one `git cat-file --batch` spawn. `undefined` = the file did not exist there.
+ */
+function baseLineCounts(paths: readonly string[]): ReadonlyMap<string, number | undefined> {
+  const mergeBase = runCmdSync('git', ['merge-base', 'origin/main', 'HEAD'], {
+    cwd: REPO_ROOT,
+    allowFailure: true,
+  });
+  if (mergeBase.exitCode !== 0) {
+    throw new Error(
+      'test-file size ratchet needs origin/main to read base lengths (git merge-base origin/main HEAD failed): ' +
+        `${mergeBase.stderr.trim()}. Fetch origin/main; the gate does not skip.`,
+    );
+  }
+  const base = mergeBase.stdout.trim();
+  const renamedFrom = new Map<string, string>();
+  const renames = runCmdSync(
+    'git',
+    ['diff', '--name-status', '--find-renames', '--diff-filter=R', base, 'HEAD', '--', '*.test.*'],
+    { cwd: REPO_ROOT },
+  );
+  for (const line of renames.stdout.split('\n')) {
+    const [, from, to] = line.split('\t');
+    if (from && to) renamedFrom.set(to, from);
+  }
+  const requests = paths.map((file) => `${base}:${renamedFrom.get(file) ?? file}`);
+  const batch = runCmdSync('git', ['cat-file', '--batch'], {
+    cwd: REPO_ROOT,
+    stdin: `${requests.join('\n')}\n`,
+    binaryStdout: true,
+    maxBuffer: 256 * 1024 * 1024,
+  });
+  return parseCatFileBatch(batch.stdoutBuffer ?? Buffer.alloc(0), paths);
+}
+
+/**
+ * `<sha> blob <size>\n<size bytes>\n` per hit, `<request> missing\n` per miss, in request order.
+ * Sizes are bytes, so this walks the raw buffer: a string offset drifts after the first file with
+ * a multi-byte character (every test file with an em dash).
+ */
+function parseCatFileBatch(
+  output: Buffer,
+  paths: readonly string[],
+): ReadonlyMap<string, number | undefined> {
+  const counts = new Map<string, number | undefined>();
+  let offset = 0;
+  for (const file of paths) {
+    const headerEnd = output.indexOf(0x0a, offset);
+    const header = output.subarray(offset, headerEnd).toString('utf8');
+    offset = headerEnd + 1;
+    const blob = /^\S+ blob (\d+)$/.exec(header);
+    if (!blob) {
+      counts.set(file, undefined); // "<request> missing"
+      continue;
+    }
+    const size = Number(blob[1]);
+    let lines = 0;
+    for (let index = offset; index < offset + size; index += 1) {
+      if (output[index] === 0x0a) lines += 1;
+    }
+    offset += size + 1;
+    counts.set(file, lines);
+  }
+  return counts;
+}
+
+/**
+ * The history-backed half: measured against the merge-base, not against the pin map, so
+ * editing the map alongside the file cannot admit growth.
+ */
+function historyFindings(
+  measured: ReadonlyMap<string, number>,
+  pinned: Readonly<Record<string, number>>,
+  baseLines: ReadonlyMap<string, number | undefined>,
+  tripwire: number,
+): string[] {
+  const findings: string[] = [];
+  for (const [file, lines] of [...measured].sort()) {
+    if (lines <= tripwire) continue;
+    const base = baseLines.get(file);
+    if (base === undefined) {
+      findings.push(
+        `${file} is ${lines} lines and did not exist at the merge-base: a new test file may not cross the ${tripwire}-line tripwire, pinned or not.`,
+      );
+    } else if (lines > Math.max(base, tripwire)) {
+      findings.push(
+        `${file} is ${lines} lines, ${base} at the merge-base: a test file over the tripwire may not grow, whatever its pin says.`,
+      );
+    }
+  }
+  for (const [file, pin] of Object.entries(pinned).sort()) {
+    const base = baseLines.get(file);
+    if (base !== undefined && pin > base) {
+      findings.push(
+        `${file} is pinned at ${pin} but was ${base} lines at the merge-base: a pin may not be raised above its file's base length.`,
+      );
+    }
+  }
+  return findings;
+}
+
 test('no test file over the tripwire grows, and every pin matches its file exactly', () => {
   const measured = new Map<string, number>();
   for (const root of TEST_ROOTS) {
@@ -119,6 +229,15 @@ test('no test file over the tripwire grows, and every pin matches its file exact
   }
   expect(measured.size).toBeGreaterThan(500);
   expect(ratchetFindings(measured, PINNED_TEST_FILE_LINES, TRIPWIRE_LINES)).toEqual([]);
+
+  const ofInterest = [
+    ...new Set([
+      ...[...measured].filter(([, lines]) => lines > TRIPWIRE_LINES).map(([file]) => file),
+      ...Object.keys(PINNED_TEST_FILE_LINES),
+    ]),
+  ];
+  const baseLines = baseLineCounts(ofInterest);
+  expect(historyFindings(measured, PINNED_TEST_FILE_LINES, baseLines, TRIPWIRE_LINES)).toEqual([]);
 });
 
 test('planted reds: growth, shrink, unpinned crossing, and a stale pin each name their fix', () => {
@@ -136,4 +255,67 @@ test('planted reds: growth, shrink, unpinned crossing, and a stale pin each name
     'gone.test.ts is pinned but does not exist: remove its pin.',
   ]);
   expect(ratchetFindings(new Map([['a.test.ts', 1200]]), { 'a.test.ts': 1200 }, 1000)).toEqual([]);
+});
+
+test('planted reds against history: raising a pin, growing into it, and pinning a new giant file are all red', () => {
+  const baseLines = new Map<string, number | undefined>([
+    ['a.test.ts', 1200], // existed, 1200 at base
+    ['b.test.ts', 1500],
+    ['fresh.test.ts', undefined], // did not exist at base
+    ['small.test.ts', 900], // existed, under the tripwire at base
+  ]);
+  // Bypass 1: grow a pinned file and raise its pin so the equality pin stays green.
+  expect(
+    historyFindings(new Map([['a.test.ts', 1230]]), { 'a.test.ts': 1230 }, baseLines, 1000),
+  ).toEqual([
+    'a.test.ts is 1230 lines, 1200 at the merge-base: a test file over the tripwire may not grow, whatever its pin says.',
+    "a.test.ts is pinned at 1230 but was 1200 lines at the merge-base: a pin may not be raised above its file's base length.",
+  ]);
+  // Raising the pin alone (before growing into it) is already red.
+  expect(
+    historyFindings(new Map([['a.test.ts', 1200]]), { 'a.test.ts': 1230 }, baseLines, 1000),
+  ).toEqual([
+    "a.test.ts is pinned at 1230 but was 1200 lines at the merge-base: a pin may not be raised above its file's base length.",
+  ]);
+  // Bypass 2: add a new >1,000-line file together with a pin for it.
+  expect(
+    historyFindings(new Map([['fresh.test.ts', 1400]]), { 'fresh.test.ts': 1400 }, baseLines, 1000),
+  ).toEqual([
+    'fresh.test.ts is 1400 lines and did not exist at the merge-base: a new test file may not cross the 1000-line tripwire, pinned or not.',
+  ]);
+  // Same for a file that existed but was under the tripwire at base.
+  expect(
+    historyFindings(new Map([['small.test.ts', 1001]]), { 'small.test.ts': 1001 }, baseLines, 1000),
+  ).toEqual([
+    'small.test.ts is 1001 lines, 900 at the merge-base: a test file over the tripwire may not grow, whatever its pin says.',
+    "small.test.ts is pinned at 1001 but was 900 lines at the merge-base: a pin may not be raised above its file's base length.",
+  ]);
+  // Allowed: shrink with a lowered pin, a pin that disappears, an unchanged file.
+  expect(
+    historyFindings(
+      new Map([
+        ['a.test.ts', 1100],
+        ['b.test.ts', 1500],
+      ]),
+      { 'a.test.ts': 1100, 'b.test.ts': 1500 },
+      baseLines,
+      1000,
+    ),
+  ).toEqual([]);
+  expect(historyFindings(new Map([['a.test.ts', 950]]), {}, baseLines, 1000)).toEqual([]);
+});
+
+test('cat-file --batch output is parsed per request, in order, with misses as undefined', () => {
+  // The dash is 3 bytes in UTF-8: the parser must count by bytes, not characters.
+  const dashed = Buffer.from('a — b\nc\n', 'utf8');
+  const output = Buffer.concat([
+    Buffer.from(`abc blob ${dashed.length}\n`),
+    dashed,
+    Buffer.from('\nHEAD:missing.ts missing\ndef blob 6\nx\ny\nz\n\n'),
+  ]);
+  expect([...parseCatFileBatch(output, ['dashed.ts', 'missing.ts', 'xyz.ts'])]).toEqual([
+    ['dashed.ts', 2],
+    ['missing.ts', undefined],
+    ['xyz.ts', 3],
+  ]);
 });
