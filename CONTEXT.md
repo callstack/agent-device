@@ -215,6 +215,11 @@ task touches:
 
 ### Snapshots & capture
 
+- Raw AX node: backend-owned iOS acquisition value before the snapshot presentation boundary. During
+  the #1797 migration it temporarily carries existing derived fields so the seam can land without a
+  wire-behavior change.
+- Presented node: wire-facing iOS snapshot value constructed only by `SnapshotPresentation`; response
+  payload assembly accepts this type rather than backend-owned raw values.
 - Snapshot capture plan: per-strategy ordered chain of iOS snapshot capture backends (recursive tree,
   query sweep, private AX) run by one plan runner under a shared wall-clock budget; recovery ordering
   is declared data, never a per-call-site branch.

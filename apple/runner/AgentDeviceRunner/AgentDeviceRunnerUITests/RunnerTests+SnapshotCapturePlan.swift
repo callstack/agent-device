@@ -529,7 +529,7 @@ extension RunnerTests {
     }
   }
 
-  static func isSparseApplicationWindowTree(_ nodes: [SnapshotNode]) -> Bool {
+  static func isSparseApplicationWindowTree(_ nodes: [PresentedNode]) -> Bool {
     guard !nodes.isEmpty else { return false }
     let rootRects = nodes.compactMap { node in
       node.type == "Application" || node.type == "Window" ? node.rect : nil
@@ -564,7 +564,7 @@ extension RunnerTests {
   /// A leaf whose label joins many short segments is a container marked as an accessibility
   /// element: the platform folds every descendant into one merged node. Nothing below it can
   /// be addressed — by automation or by assistive tech. This is app-side; no backend recovers it.
-  static func collapsedLeafIndexes(_ nodes: [SnapshotNode]) -> [Int]? {
+  static func collapsedLeafIndexes(_ nodes: [PresentedNode]) -> [Int]? {
     let parents = Set(nodes.compactMap { $0.parentIndex })
     let collapsed = nodes.filter { node in
       guard !parents.contains(node.index) else { return false }
@@ -680,22 +680,24 @@ extension RunnerTests {
     identifier: String? = nil,
     hittable: Bool = false,
     parentIndex: Int? = nil
-  ) -> SnapshotNode {
-    SnapshotNode(
-      index: index,
-      type: type,
-      label: label,
-      identifier: identifier,
-      value: nil,
-      rect: snapshotRect(from: .zero),
-      enabled: true,
-      focused: nil,
-      selected: nil,
-      hittable: hittable,
-      depth: parentIndex == nil ? 0 : 1,
-      parentIndex: parentIndex,
-      hiddenContentAbove: nil,
-      hiddenContentBelow: nil
+  ) -> PresentedNode {
+    SnapshotPresentation.singleElementRead(
+      RawAXNode(
+        index: index,
+        type: type,
+        label: label,
+        identifier: identifier,
+        value: nil,
+        rect: snapshotRect(from: .zero),
+        enabled: true,
+        focused: nil,
+        selected: nil,
+        hittable: hittable,
+        depth: parentIndex == nil ? 0 : 1,
+        parentIndex: parentIndex,
+        hiddenContentAbove: nil,
+        hiddenContentBelow: nil
+      )
     )
   }
 

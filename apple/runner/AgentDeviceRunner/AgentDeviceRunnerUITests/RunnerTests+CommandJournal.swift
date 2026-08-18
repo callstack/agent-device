@@ -416,22 +416,24 @@ extension RunnerTests {
     return try! JSONDecoder().decode(Command.self, from: Data(json.utf8))
   }
 
-  private func runnerJournalNode() -> SnapshotNode {
-    SnapshotNode(
-      index: 0,
-      type: "button",
-      label: "Continue",
-      identifier: "continue",
-      value: nil,
-      rect: SnapshotRect(x: 10, y: 20, width: 100, height: 44),
-      enabled: true,
-      focused: nil,
-      selected: nil,
-      hittable: true,
-      depth: 0,
-      parentIndex: nil,
-      hiddenContentAbove: nil,
-      hiddenContentBelow: nil
+  private func runnerJournalNode() -> PresentedNode {
+    SnapshotPresentation.singleElementRead(
+      RawAXNode(
+        index: 0,
+        type: "button",
+        label: "Continue",
+        identifier: "continue",
+        value: nil,
+        rect: SnapshotRect(x: 10, y: 20, width: 100, height: 44),
+        enabled: true,
+        focused: nil,
+        selected: nil,
+        hittable: true,
+        depth: 0,
+        parentIndex: nil,
+        hiddenContentAbove: nil,
+        hiddenContentBelow: nil
+      )
     )
   }
 

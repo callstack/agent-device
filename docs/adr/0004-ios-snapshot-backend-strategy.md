@@ -54,9 +54,10 @@ strategies:
 - **Future AX-service strategy**: treat Bluesky-class failures as evidence that XCTest is
   not a complete semantic snapshot backend. A robust semantic fix should add a host-side simulator
   accessibility backend, similar in role to existing simulator accessibility inspection tools,
-  and normalize its output into the same `SnapshotNode` model. That backend can be simulator-only;
-  physical devices should use an equivalent non-XCTest semantic backend only if Apple exposes a
-  supported channel.
+  and acquire its output as `RawAXNode` values. Every backend crosses the same
+  `SnapshotPresentation` construction boundary before producing wire-facing `PresentedNode` values.
+  That backend can be simulator-only; physical devices should use an equivalent non-XCTest semantic
+  backend only if Apple exposes a supported channel.
 
 The daemon should make degraded output observable. If an iOS interactive snapshot contains only the
 application root or another sparse shape, surface a structured quality verdict and warning so
@@ -95,6 +96,11 @@ because retrying the same recursive capture is unlikely to reveal a different tr
 A future AX-service backend is the correct place to regain Bluesky-class semantic coverage. It
 should be added as a platform backend with its own lifecycle, protocol, normalization, timing
 metrics, and fallback rules, not as another special case inside the XCTest runner.
+
+The acquire/present migration begins with a behavior-preserving typed seam: acquisition backends
+construct `RawAXNode`, `SnapshotPresentation` alone constructs `PresentedNode`, and response payloads
+accept only presented nodes. Until the remaining migration steps move interpretation into that seam,
+raw nodes intentionally carry the derived fields produced by the existing backends.
 
 When adding new iOS snapshot behavior, maintainers should first decide which strategy owns it. If a
 change tries to make regular snapshots fast by dropping visible controls behind a node budget, or

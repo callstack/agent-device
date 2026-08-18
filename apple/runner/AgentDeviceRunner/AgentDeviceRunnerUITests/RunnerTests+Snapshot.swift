@@ -147,7 +147,7 @@ extension RunnerTests {
       return result.elements
     }
 
-    var nodes: [SnapshotNode] = []
+    var nodes: [RawAXNode] = []
     var hiddenContentHintsByNodeIndex: [Int: (above: Bool, below: Bool)] = [:]
     let rootEvaluation = evaluateSnapshot(context.rootSnapshot, in: context)
     nodes.append(
@@ -316,7 +316,7 @@ extension RunnerTests {
     }
 
     return DataPayload(
-      nodes: applyHiddenContentHints(hiddenContentHintsByNodeIndex, to: nodes),
+      presenting: applyHiddenContentHints(hiddenContentHintsByNodeIndex, to: nodes),
       truncated: false
     )
   }
@@ -422,7 +422,7 @@ extension RunnerTests {
     context: SnapshotTraversalContext,
     options: SnapshotOptions
   ) throws -> DataPayload {
-    var nodes: [SnapshotNode] = []
+    var nodes: [RawAXNode] = []
 
     func walk(_ snapshot: XCUIElementSnapshot, depth: Int, parentIndex: Int?) throws {
       if let limit = options.depth, depth > limit { return }
@@ -460,7 +460,7 @@ extension RunnerTests {
     }
 
     try walk(context.rootSnapshot, depth: 0, parentIndex: nil)
-    return DataPayload(nodes: nodes, truncated: false)
+    return DataPayload(presenting: nodes, truncated: false)
   }
 
   func snapshotFlatInteractive(
@@ -468,11 +468,11 @@ extension RunnerTests {
     options: SnapshotOptions,
     planDeadline: Date = .distantFuture
   ) -> DataPayload {
-    var nodes: [SnapshotNode] = [
+    var nodes: [RawAXNode] = [
       interactiveRootNode(rect: .zero)
     ]
     if options.depth == 0 {
-      return DataPayload(nodes: nodes, truncated: false)
+      return DataPayload(presenting: nodes, truncated: false)
     }
 
     // Bounded by both its own sweep budget and the umbrella capture-plan deadline, so a
@@ -483,7 +483,7 @@ extension RunnerTests {
     let deadline = min(sweepDeadline, planDeadline)
     let viewport = safeSnapshotViewport(app: app)
     var seen = Set<String>()
-    var candidates: [SnapshotNode] = []
+    var candidates: [RawAXNode] = []
     let flatElements = flatInteractiveElements(app: app, deadline: deadline)
     var truncated = flatElements.truncated
     for element in flatElements.elements {
@@ -525,7 +525,7 @@ extension RunnerTests {
     nodes[0] = interactiveRootNode(rect: rootRect)
     for candidate in candidates {
       nodes.append(
-        SnapshotNode(
+        RawAXNode(
           index: nodes.count,
           type: candidate.type,
           label: candidate.label,
@@ -543,7 +543,7 @@ extension RunnerTests {
         )
       )
     }
-    return DataPayload(nodes: nodes, truncated: truncated)
+    return DataPayload(presenting: nodes, truncated: truncated)
   }
 
   func snapshotAccessibilityUnavailable(failure: SnapshotCaptureFailure) -> DataPayload {
@@ -588,7 +588,7 @@ extension RunnerTests {
   ) -> DataPayload {
     return DataPayload(
       message: message,
-      nodes: [interactiveRootNode(rect: .zero)],
+      nodes: SnapshotPresentation.preservingCurrentSemantics([interactiveRootNode(rect: .zero)]),
       truncated: true,
       snapshotQuality: snapshotQuality,
       runnerFatal: runnerFatal,
@@ -830,8 +830,8 @@ extension RunnerTests {
   }
 #endif
 
-  private func interactiveRootNode(rect: CGRect) -> SnapshotNode {
-    SnapshotNode(
+  private func interactiveRootNode(rect: CGRect) -> RawAXNode {
+    RawAXNode(
       index: 0,
       type: "Application",
       label: nil,
@@ -849,7 +849,7 @@ extension RunnerTests {
     )
   }
 
-  private func interactiveRootFrame(for candidates: [SnapshotNode]) -> CGRect {
+  private func interactiveRootFrame(for candidates: [RawAXNode]) -> CGRect {
     guard !candidates.isEmpty else {
       return .zero
     }
@@ -1120,8 +1120,8 @@ extension RunnerTests {
     depth: Int,
     index: Int,
     parentIndex: Int?
-  ) -> SnapshotNode {
-    return SnapshotNode(
+  ) -> RawAXNode {
+    return RawAXNode(
       index: index,
       type: elementTypeName(snapshot.elementType),
       label: evaluation.label.isEmpty ? nil : evaluation.label,
@@ -1241,7 +1241,7 @@ extension RunnerTests {
   }
 
   private func appendCollapsedTabFallbackNodes(
-    to nodes: inout [SnapshotNode],
+    to nodes: inout [RawAXNode],
     containerSnapshot: XCUIElementSnapshot,
     resolveElements: () -> [XCUIElement],
     depth: Int,
@@ -1306,14 +1306,14 @@ extension RunnerTests {
 
   func applyHiddenContentHints(
     _ hints: [Int: (above: Bool, below: Bool)],
-    to nodes: [SnapshotNode]
-  ) -> [SnapshotNode] {
+    to nodes: [RawAXNode]
+  ) -> [RawAXNode] {
     if hints.isEmpty { return nodes }
     return nodes.map { node in
       guard let hint = hints[node.index] else { return node }
       let hiddenContentAbove: Bool? = (node.hiddenContentAbove == true || hint.above) ? true : nil
       let hiddenContentBelow: Bool? = (node.hiddenContentBelow == true || hint.below) ? true : nil
-      return SnapshotNode(
+      return RawAXNode(
         index: node.index,
         type: node.type,
         label: node.label,
@@ -1339,7 +1339,7 @@ extension RunnerTests {
     startingIndex: Int,
     depth: Int,
     parentIndex: Int
-  ) -> [SnapshotNode] {
+  ) -> [RawAXNode] {
     if !containerSnapshot.children.isEmpty { return [] }
     guard shouldExpandCollapsedTabContainer(containerSnapshot) else { return [] }
     let containerFrame = containerSnapshot.frame
@@ -1378,7 +1378,7 @@ extension RunnerTests {
     if uniqueCandidates.count < 2 { return [] }
 
     return uniqueCandidates.enumerated().map { offset, node in
-      SnapshotNode(
+      RawAXNode(
         index: startingIndex + offset,
         type: node.type,
         label: node.label,
@@ -1401,8 +1401,8 @@ extension RunnerTests {
     element: XCUIElement,
     containerSnapshot: XCUIElementSnapshot,
     containerFrame: CGRect
-  ) -> SnapshotNode? {
-    var node: SnapshotNode?
+  ) -> RawAXNode? {
+    var node: RawAXNode?
     let exceptionMessage = RunnerObjCExceptionCatcher.catchException({
       if !element.exists { return }
       let elementType = element.elementType
@@ -1430,7 +1430,7 @@ extension RunnerTests {
         return
       }
 
-      node = SnapshotNode(
+      node = RawAXNode(
         index: 0,
         type: elementTypeName(elementType),
         label: label.isEmpty ? nil : label,
@@ -1568,8 +1568,8 @@ extension RunnerTests {
     parentIndex: Int?,
     viewport: CGRect,
     options: SnapshotOptions
-  ) -> SnapshotNode? {
-    var node: SnapshotNode?
+  ) -> RawAXNode? {
+    var node: RawAXNode?
     let exceptionMessage = RunnerObjCExceptionCatcher.catchException({
       if !element.exists { return }
       let frame = element.frame
@@ -1601,7 +1601,7 @@ extension RunnerTests {
         return
       }
 
-      node = SnapshotNode(
+      node = RawAXNode(
         index: index,
         type: elementTypeName(elementType),
         label: label.isEmpty ? nil : label,

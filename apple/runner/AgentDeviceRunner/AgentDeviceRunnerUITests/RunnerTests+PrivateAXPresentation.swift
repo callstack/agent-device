@@ -4,9 +4,9 @@ extension RunnerTests {
   private static let privateAXProjectionTolerance: CGFloat = 1
 
   func privateAXPresentation(rawRoot: [String: Any], options: SnapshotOptions, viewport: CGRect)
-    -> [SnapshotNode]
+    -> [RawAXNode]
   {
-    var nodes: [SnapshotNode] = []
+    var nodes: [RawAXNode] = []
     var hints: [Int: (above: Bool, below: Bool)] = [:]
     appendPrivateAXNode(rawRoot, to: &nodes, hints: &hints, options: options, viewport: viewport,
       depth: 0, parentIndex: nil, insideMatchedScope: false, scrollContext: nil,
@@ -14,7 +14,7 @@ extension RunnerTests {
     return applyHiddenContentHints(hints, to: nodes)
   }
 
-  private func appendPrivateAXNode(_ raw: [String: Any], to nodes: inout [SnapshotNode],
+  private func appendPrivateAXNode(_ raw: [String: Any], to nodes: inout [RawAXNode],
     hints: inout [Int: (above: Bool, below: Bool)], options: SnapshotOptions, viewport: CGRect,
     depth: Int, parentIndex: Int?, insideMatchedScope: Bool,
     scrollContext: (index: Int, rect: CGRect)?, projectionCursor: FlatSnapshotProjectionCursor)
@@ -65,7 +65,7 @@ extension RunnerTests {
     if include {
       currentIndex = nodes.count
       let typeName = elementType.map(elementTypeName) ?? "Element(\(rawType))"
-      nodes.append(SnapshotNode(index: nodes.count, type: typeName,
+      nodes.append(RawAXNode(index: nodes.count, type: typeName,
         label: label.isEmpty ? nil : label, identifier: identifier.isEmpty ? nil : identifier,
         value: value.isEmpty ? nil : value, rect: snapshotRect(from: rect), enabled: enabled,
         focused: privateAXPresentationBool(raw["focused"]) == true ? true : nil,

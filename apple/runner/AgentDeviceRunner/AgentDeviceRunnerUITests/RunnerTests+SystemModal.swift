@@ -25,7 +25,7 @@ extension RunnerTests {
     ) else {
       return nil
     }
-    var nodes: [SnapshotNode] = [modalNode]
+    var nodes: [PresentedNode] = [modalNode]
 
     for action in actions {
       guard let actionNode = safeMakeSnapshotNode(
@@ -221,24 +221,26 @@ extension RunnerTests {
     depth: Int,
     parentIndex: Int? = nil,
     hittableOverride: Bool? = nil
-  ) -> SnapshotNode {
+  ) -> PresentedNode {
     let label = (labelOverride ?? element.label).trimmingCharacters(in: .whitespacesAndNewlines)
     let identifier = (identifierOverride ?? element.identifier).trimmingCharacters(in: .whitespacesAndNewlines)
-    return SnapshotNode(
-      index: index,
-      type: type,
-      label: label.isEmpty ? nil : label,
-      identifier: identifier.isEmpty ? nil : identifier,
-      value: nil,
-      rect: snapshotRect(from: element.frame),
-      enabled: element.isEnabled,
-      focused: nil,
-      selected: nil,
-      hittable: hittableOverride ?? element.isHittable,
-      depth: depth,
-      parentIndex: parentIndex,
-      hiddenContentAbove: nil,
-      hiddenContentBelow: nil
+    return SnapshotPresentation.singleElementRead(
+      RawAXNode(
+        index: index,
+        type: type,
+        label: label.isEmpty ? nil : label,
+        identifier: identifier.isEmpty ? nil : identifier,
+        value: nil,
+        rect: snapshotRect(from: element.frame),
+        enabled: element.isEnabled,
+        focused: nil,
+        selected: nil,
+        hittable: hittableOverride ?? element.isHittable,
+        depth: depth,
+        parentIndex: parentIndex,
+        hiddenContentAbove: nil,
+        hiddenContentBelow: nil
+      )
     )
   }
 
@@ -251,7 +253,7 @@ extension RunnerTests {
     depth: Int,
     parentIndex: Int? = nil,
     hittableOverride: Bool? = nil
-  ) -> SnapshotNode? {
+  ) -> PresentedNode? {
     safely("MODAL_NODE") {
       makeSnapshotNode(
         element: element,

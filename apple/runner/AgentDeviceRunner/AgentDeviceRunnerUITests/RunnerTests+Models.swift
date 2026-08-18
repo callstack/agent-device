@@ -235,7 +235,7 @@ struct DataPayload: Codable {
   let text: String?
   let found: Bool?
   let items: [String]?
-  let nodes: [SnapshotNode]?
+  let nodes: [PresentedNode]?
   let truncated: Bool?
   let snapshotQuality: SnapshotQuality?
   let gestureStartUptimeMs: Double?
@@ -277,7 +277,7 @@ struct DataPayload: Codable {
     text: String? = nil,
     found: Bool? = nil,
     items: [String]? = nil,
-    nodes: [SnapshotNode]? = nil,
+    nodes: [PresentedNode]? = nil,
     truncated: Bool? = nil,
     snapshotQuality: SnapshotQuality? = nil,
     gestureStartUptimeMs: Double? = nil,
@@ -373,26 +373,6 @@ struct SnapshotRect: Codable {
   let y: Double
   let width: Double
   let height: Double
-}
-
-struct SnapshotNode: Codable {
-  let index: Int
-  let type: String
-  let label: String?
-  let identifier: String?
-  let value: String?
-  let rect: SnapshotRect
-  let enabled: Bool
-  let focused: Bool?
-  let selected: Bool?
-  let hittable: Bool
-  let depth: Int
-  let parentIndex: Int?
-  let hiddenContentAbove: Bool?
-  let hiddenContentBelow: Bool?
-  /// Names of the element's UIAccessibilityCustomActions, present only when the
-  /// capture asked for them and the element carries some.
-  var actions: [String]? = nil
 }
 
 struct SnapshotOptions {

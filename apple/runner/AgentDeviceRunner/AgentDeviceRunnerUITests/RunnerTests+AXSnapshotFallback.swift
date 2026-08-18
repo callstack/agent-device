@@ -203,7 +203,10 @@ extension RunnerTests {
         deepExtension?[RunnerAXSnapshotDeepExtensionNodesAddedKey] as? Int ?? 0
       )
       return SnapshotBackendCapture(
-        payload: DataPayload(nodes: nodes, truncated: (response["truncated"] as? Bool) == true),
+        payload: DataPayload(
+          presenting: nodes,
+          truncated: (response["truncated"] as? Bool) == true
+        ),
         effectiveDepth: depthLimited ? effectiveDepth : nil,
         customActions: Self.privateAXCustomActionCoverage(
           response[RunnerAXSnapshotCustomActionsKey]

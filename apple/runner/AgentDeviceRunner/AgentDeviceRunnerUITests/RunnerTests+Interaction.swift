@@ -229,21 +229,23 @@ extension RunnerTests {
     let identifier = element.identifier.trimmingCharacters(in: .whitespacesAndNewlines)
     let valueText = String(describing: element.value ?? "")
       .trimmingCharacters(in: .whitespacesAndNewlines)
-    let node = SnapshotNode(
-      index: 0,
-      type: elementTypeName(element.elementType),
-      label: label.isEmpty ? nil : label,
-      identifier: identifier.isEmpty ? nil : identifier,
-      value: valueText.isEmpty ? nil : valueText,
-      rect: snapshotRect(from: element.frame),
-      enabled: element.isEnabled,
-      focused: nil,
-      selected: element.isSelected ? true : nil,
-      hittable: element.isHittable,
-      depth: 0,
-      parentIndex: nil,
-      hiddenContentAbove: nil,
-      hiddenContentBelow: nil
+    let node = SnapshotPresentation.singleElementRead(
+      RawAXNode(
+        index: 0,
+        type: elementTypeName(element.elementType),
+        label: label.isEmpty ? nil : label,
+        identifier: identifier.isEmpty ? nil : identifier,
+        value: valueText.isEmpty ? nil : valueText,
+        rect: snapshotRect(from: element.frame),
+        enabled: element.isEnabled,
+        focused: nil,
+        selected: element.isSelected ? true : nil,
+        hittable: element.isHittable,
+        depth: 0,
+        parentIndex: nil,
+        hiddenContentAbove: nil,
+        hiddenContentBelow: nil
+      )
     )
     return Response(
       ok: true,
