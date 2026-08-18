@@ -373,6 +373,9 @@ async function produceReport(
  * a module with no mutants as 0, so a matrix shard that died would otherwise be
  * aggregated into a `complete`/`pass` envelope reporting a 0% kernel as if the
  * sweep had happened.
+ *
+ * Runs after the table is published: the kernels that did complete are the part
+ * of the run still worth reading on a failed-shard day.
  */
 function assertShardsCoverModules(state: LaneState, dir: string): void {
   const missing = state.scores.filter((score) => score.total === 0).map((score) => score.module);
@@ -392,7 +395,6 @@ async function scoreModules(args: Args, state: LaneState): Promise<void> {
 
   state.stage = 'score';
   state.scores = summarizeReport(report, state.modules);
-  if (args.reportDir) assertShardsCoverModules(state, args.reportDir);
 }
 
 async function sweep(args: Args, state: LaneState): Promise<number> {
@@ -415,6 +417,7 @@ async function sweep(args: Args, state: LaneState): Promise<number> {
     : 'Mutation score — decision kernels';
   emit(renderReport(state.scores, state.provenance, { title }), args.summary);
 
+  if (args.reportDir) assertShardsCoverModules(state, args.reportDir);
   state.stage = 'complete';
   return 0;
 }

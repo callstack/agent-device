@@ -113,8 +113,10 @@ jobs:
 
       # run.ts writes the per-kernel score table to $GITHUB_STEP_SUMMARY when the
       # runner exports it, so the summary and the artifact carry the same numbers.
-      # It exits non-zero only on a harness failure (an incomplete shard set), so
-      # a red lane here always means the sweep did not happen — never a low score.
+      # It publishes the table before judging the shard set, so even the one
+      # failure it can raise — an incomplete shard set — still reports the kernels
+      # that completed. A red lane here always means the sweep did not happen,
+      # never a low score.
       - name: Score the merged sweep
         uses: ./.github/actions/run-gate
         with:

@@ -191,6 +191,9 @@ test('an incomplete shard set fails instead of scoring the missing module as zer
   assert.notEqual(result.exitCode, 0, 'a missing shard must fail the aggregate');
   assert.match(result.stderr, /Incomplete shard set/);
   assert.match(result.stderr, /daemon-ref-frame/);
+  // The kernels that did complete are still worth reading on a failed-shard day,
+  // so the table is published before the shard set is judged.
+  assert.match(result.stdout, /\| `kernel-errors` — [^|]+\| 100% \|/);
   const envelope = readEnvelope();
   assert.equal(envelope.result, 'fail');
   assert.equal(envelope.data.stage, 'score');

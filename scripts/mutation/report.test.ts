@@ -46,6 +46,29 @@ test('the table carries score, killed, survived, total and timeouts per kernel',
   assert.match(markdown, /- `packages\/kernel\/src\/errors\.ts:9` BooleanLiteral/);
 });
 
+// The denominator is the report's arithmetic: counting tool-side noise would
+// silently deflate every score the lane publishes. Ported from the deleted
+// ratchet.test.ts, which was where this lived.
+test('statuses outside the score (Ignored, CompileError, RuntimeError) leave the denominator', () => {
+  const [score] = summarizeReport(
+    {
+      files: {
+        'packages/kernel/src/errors.ts': {
+          mutants: [
+            { status: 'Killed' },
+            { status: 'Ignored' },
+            { status: 'CompileError' },
+            { status: 'RuntimeError' },
+          ],
+        },
+      },
+    },
+    ['kernel-errors'],
+  );
+  assert.equal(score?.total, 1);
+  assert.equal(score?.score, 100);
+});
+
 test('a kernel with no surviving mutants lists no detail section', () => {
   const scores = summarizeReport(
     { files: { 'packages/kernel/src/errors.ts': { mutants: [{ status: 'Killed' }] } } },
