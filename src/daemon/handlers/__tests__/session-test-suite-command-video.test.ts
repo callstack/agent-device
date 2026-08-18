@@ -1,3 +1,8 @@
+/**
+ * Per-attempt screen recording inside a `test` suite: the video is finalized exactly once even
+ * when the request is canceled after recording started. Moved here with the command itself when
+ * the test-suite command left `session-replay.ts` (AGENTS.md, tests mirror source topology).
+ */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -6,9 +11,7 @@ import { SessionStore } from '../../session-store.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
 import type { DaemonRequest, DaemonResponse } from '../../types.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/index.ts';
-import { buildNestedReplayFlags, handleSessionReplayCommands } from '../session-replay.ts';
-import { REPLAY_ONLY_TEST_FLAG_REJECTIONS } from '../session-replay-test-policy.ts';
-import { replayCommandFamily } from '../../../commands/replay/index.ts';
+import { handleSessionReplayCommands } from '../session-replay.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import { replayScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
 import {
@@ -211,67 +214,6 @@ function expectRecordRuntimeCall(
   assert.strictEqual(call.throwIfCanceled, expected.throwIfCanceled);
 }
 
-test('buildNestedReplayFlags returns parent flags untouched when neither override is set', () => {
-  const parent = { platform: 'android' as const, timeoutMs: 5000 };
-  const result = buildNestedReplayFlags({
-    parentFlags: parent,
-    platform: undefined,
-    target: undefined,
-    artifactsDir: undefined,
-  });
-  assert.strictEqual(result, parent);
-});
-
-test('buildNestedReplayFlags merges platform, target, and artifactsDir into parent flags', () => {
-  const parent = { timeoutMs: 5000, retries: 1 };
-  const result = buildNestedReplayFlags({
-    parentFlags: parent,
-    platform: 'ios',
-    target: 'mobile',
-    artifactsDir: '/tmp/attempt-1',
-  });
-  assert.deepEqual(result, {
-    timeoutMs: 5000,
-    retries: 1,
-    platform: 'ios',
-    target: 'mobile',
-    artifactsDir: '/tmp/attempt-1',
-  });
-  // Parent object must not be mutated.
-  assert.equal((parent as Record<string, unknown>).artifactsDir, undefined);
-});
-
-test('buildNestedReplayFlags threads artifactsDir through even when parent lacks it', () => {
-  const result = buildNestedReplayFlags({
-    parentFlags: undefined,
-    platform: undefined,
-    target: undefined,
-    artifactsDir: '/tmp/attempt-1',
-  });
-  assert.deepEqual(result, { artifactsDir: '/tmp/attempt-1' });
-});
-
-test('buildNestedReplayFlags overrides a parent artifactsDir with the attempt-level one', () => {
-  const result = buildNestedReplayFlags({
-    parentFlags: { artifactsDir: '/suite-root' },
-    platform: undefined,
-    target: undefined,
-    artifactsDir: '/suite-root/flow/attempt-2',
-  });
-  assert.equal(result?.artifactsDir, '/suite-root/flow/attempt-2');
-});
-
-test('buildNestedReplayFlags strips test-only recordVideo before replay actions inherit flags', () => {
-  const result = buildNestedReplayFlags({
-    parentFlags: { platform: 'ios', recordVideo: true },
-    platform: undefined,
-    target: undefined,
-    artifactsDir: undefined,
-  });
-
-  assert.deepEqual(result, { platform: 'ios' });
-});
-
 test('test finalizes replay video exactly once when cancellation arrives after start', async () => {
   vi.useFakeTimers({ now: 1_000 });
   const { root, replayPath, sessionStore, nestedRequests, events } = createRecordVideoFixture();
@@ -384,176 +326,4 @@ test('test finalizes replay video exactly once when cancellation arrives after s
     nestedRequests.some((nestedReq) => nestedReq.flags?.recordVideo === true),
     false,
   );
-});
-
-// --- ADR 0012 decision 4 / migration step 5: `--from` is replay-only ---
-
-test('raw test-request guards enumerate every daemon-visible replay-only CLI flag', () => {
-  const replayFlags = replayCommandFamily.cliSchemas.replay?.allowedFlags ?? [];
-  const testFlags = new Set(replayCommandFamily.cliSchemas.test?.allowedFlags ?? []);
-  const clientOnlyReplayFlags = new Set(['out']);
-  const expectedDaemonFlags = replayFlags
-    .filter((flag) => !testFlags.has(flag) && !clientOnlyReplayFlags.has(flag))
-    .sort();
-
-  const guardedDaemonFlags = REPLAY_ONLY_TEST_FLAG_REJECTIONS.flatMap(
-    (rejection) => rejection.keys,
-  ).sort();
-  assert.deepEqual(guardedDaemonFlags, expectedDaemonFlags);
-});
-
-test('test rejects raw --keep-session with INVALID_ARGS before running the suite', async () => {
-  const root = mkdtempForTestSync('agent-device-test-keep-session-rejected-');
-  const replayPath = path.join(root, 'flow.ad');
-  fs.writeFileSync(replayPath, 'open "Demo"\n');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
-  const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
-
-  const response = await handleSessionReplayCommands({
-    req: {
-      token: 'token',
-      session: 'default',
-      command: 'test',
-      positionals: [replayPath],
-      flags: { replayKeepSession: true },
-      meta: { cwd: root },
-    },
-    sessionName: 'default',
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    leaseRegistry: new LeaseRegistry(),
-    invoke,
-  });
-
-  if (!response) throw new Error('Expected response');
-  assert.equal(response.ok, false);
-  if (response.ok) return;
-  assert.equal(response.error.code, 'INVALID_ARGS');
-  assert.match(response.error.message, /--keep-session/);
-  assert.equal(invoke.mock.calls.length, 0);
-});
-
-test('test rejects --from with INVALID_ARGS before running the suite', async () => {
-  const root = mkdtempForTestSync('agent-device-test-from-rejected-');
-  const replayPath = path.join(root, 'flow.ad');
-  fs.writeFileSync(replayPath, 'open "Demo"\nclick "Continue"\n');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
-
-  const response = await handleSessionReplayCommands({
-    req: {
-      token: 'token',
-      session: 'default',
-      command: 'test',
-      positionals: [replayPath],
-      flags: { replayFrom: 2, replayPlanDigest: 'deadbeef' },
-      meta: { cwd: root },
-    },
-    sessionName: 'default',
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    leaseRegistry: new LeaseRegistry(),
-    invoke: async () => {
-      throw new Error('test must not start executing when --from is rejected');
-    },
-  });
-
-  if (!response) throw new Error('Expected response');
-  assert.equal(response.ok, false);
-  if (response.ok) return;
-  assert.equal(response.error.code, 'INVALID_ARGS');
-  assert.match(response.error.message, /--from/);
-});
-
-test('test rejects --plan-digest alone with INVALID_ARGS before running the suite', async () => {
-  const root = mkdtempForTestSync('agent-device-test-digest-rejected-');
-  const replayPath = path.join(root, 'flow.ad');
-  fs.writeFileSync(replayPath, 'open "Demo"\nclick "Continue"\n');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
-
-  const response = await handleSessionReplayCommands({
-    req: {
-      token: 'token',
-      session: 'default',
-      command: 'test',
-      positionals: [replayPath],
-      flags: { replayPlanDigest: 'deadbeef' },
-      meta: { cwd: root },
-    },
-    sessionName: 'default',
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    leaseRegistry: new LeaseRegistry(),
-    invoke: async () => {
-      throw new Error('test must not start executing when --plan-digest is rejected');
-    },
-  });
-
-  if (!response) throw new Error('Expected response');
-  assert.equal(response.ok, false);
-  if (response.ok) return;
-  assert.equal(response.error.code, 'INVALID_ARGS');
-});
-
-// --- ADR 0012 decision 6: `--save-script` is replay-only ---
-
-test('test rejects --save-script with INVALID_ARGS before running the suite', async () => {
-  const root = mkdtempForTestSync('agent-device-test-savescript-rejected-');
-  const replayPath = path.join(root, 'flow.ad');
-  fs.writeFileSync(replayPath, 'open "Demo"\nclick "Continue"\n');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
-
-  const response = await handleSessionReplayCommands({
-    req: {
-      token: 'token',
-      session: 'default',
-      command: 'test',
-      positionals: [replayPath],
-      flags: { saveScript: true },
-      meta: { cwd: root },
-    },
-    sessionName: 'default',
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    leaseRegistry: new LeaseRegistry(),
-    invoke: async () => {
-      throw new Error('test must not start executing when --save-script is rejected');
-    },
-  });
-
-  if (!response) throw new Error('Expected response');
-  assert.equal(response.ok, false);
-  if (response.ok) return;
-  assert.equal(response.error.code, 'INVALID_ARGS');
-  assert.match(response.error.message, /--save-script/);
-});
-
-test('test rejects raw --force without --save-script before running the suite', async () => {
-  const root = mkdtempForTestSync('agent-device-test-force-rejected-');
-  const replayPath = path.join(root, 'flow.ad');
-  fs.writeFileSync(replayPath, 'open "Demo"\n');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
-  const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
-
-  const response = await handleSessionReplayCommands({
-    req: {
-      token: 'token',
-      session: 'default',
-      command: 'test',
-      positionals: [replayPath],
-      flags: { force: true },
-      meta: { cwd: root },
-    },
-    sessionName: 'default',
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    leaseRegistry: new LeaseRegistry(),
-    invoke,
-  });
-
-  if (!response) throw new Error('Expected response');
-  assert.equal(response.ok, false);
-  if (response.ok) return;
-  assert.equal(response.error.code, 'INVALID_ARGS');
-  assert.match(response.error.message, /--force/);
-  assert.equal(invoke.mock.calls.length, 0);
 });

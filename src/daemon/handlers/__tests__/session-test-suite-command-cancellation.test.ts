@@ -6,7 +6,7 @@ import {
   markRequestCanceled,
   registerRequestAbort,
 } from '../../../request/cancel.ts';
-import { bindReplayTestAttemptCancellation } from '../session-replay.ts';
+import { bindReplayTestAttemptCancellation } from '../session-test-suite-command.ts';
 
 // The daemon half of the replay-test cancellation seam (#1478 P3b). The scheduler only says
 // "cancel" and "release"; everything here — registry entries, the parent-abort relay, and
