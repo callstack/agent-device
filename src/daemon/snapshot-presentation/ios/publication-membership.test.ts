@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { buildSnapshotState } from '../../handlers/snapshot-capture.ts';
+import { buildSnapshotState } from '../../snapshot-state.ts';
 
 // End-to-end publication-membership contract for the acquire/present design (#1797, external
 // review pass 4 finding 1), exercised through the production interface. Runner presentation owns

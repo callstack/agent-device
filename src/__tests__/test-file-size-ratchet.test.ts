@@ -40,7 +40,7 @@ const PINNED_TEST_FILE_LINES: Readonly<Record<string, number>> = Object.freeze({
   'src/platforms/apple/core/__tests__/runner-session.test.ts': 2001,
   'src/utils/__tests__/daemon-client.test.ts': 1910,
   'src/utils/__tests__/output.test.ts': 1861,
-  'src/platforms/android/__tests__/snapshot.test.ts': 1660,
+  'src/platforms/android/__tests__/snapshot.test.ts': 1658,
   'src/platforms/apple/core/__tests__/runner-client.test.ts': 1615,
   'src/__tests__/client.test.ts': 1598,
   'test/integration/provider-scenarios/android-lifecycle.test.ts': 1559,
