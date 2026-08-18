@@ -305,6 +305,13 @@ device-lane surface or as a unit test must not (`scripts/gate/routing.ts`). GitH
 `paths-ignore` before a runner is allocated, so this is routing with no job on the critical
 path; the assertion is what keeps the hand-written glob list a derived artifact.
 
+Two limits of the mechanism, both inherent to `paths-ignore` rather than to the assertion:
+GitHub's path filters examine only the **first 300 changed files**, so a PR larger than that can
+skip a routed lane on the strength of its first 300 paths alone (`push` to `main` has no filter
+and is the backstop); and a lane may name a *sibling* workflow file exactly to say it does not
+use it, but never a file in its own `uses:` closure — the composite actions its steps run, plus
+its own definition — which the assertion refuses.
+
 ## Mutation report over decision kernels
 
 Mutation score is the mechanical answer to "is this test load-bearing or decorative". A full-suite

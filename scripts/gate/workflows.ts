@@ -20,6 +20,12 @@ export type Lane = {
    */
   readonly triggers: readonly string[];
   readonly gates: readonly CheckId[];
+  /**
+   * Repo-relative files of the local composite actions this job's steps use, transitively,
+   * plus the workflow file itself: the lane's own machinery. Editing one of these changes what
+   * the lane does, so the lane cannot claim to be unaffected by it (`scripts/gate/routing.ts`).
+   */
+  readonly uses: readonly string[];
   readonly verbatim: readonly string[];
   readonly paths: readonly string[];
   readonly pathsIgnore: readonly string[];
@@ -88,6 +94,26 @@ function declaredGates(
   return gates;
 }
 
+// The transitive closure of local composite actions the steps use, as repo-relative action
+// files. Same walk `declaredGates` performs, kept separate because it answers a different
+// question: not "which gate does this lane declare" but "which files ARE this lane".
+function localActionFiles(
+  steps: readonly RawStep[],
+  root: string,
+  chain: readonly string[] = [],
+): string[] {
+  const files: string[] = [];
+  for (const step of steps) {
+    const action = readLocalAction(step.uses, root);
+    if (!action || !step.uses || chain.includes(step.uses)) continue;
+    files.push(
+      path.posix.join(step.uses.slice(2), 'action.yml'),
+      ...localActionFiles(action.runs?.steps ?? [], root, [...chain, step.uses]),
+    );
+  }
+  return files;
+}
+
 function triggerPaths(on: Record<string, { paths?: string[]; 'paths-ignore'?: string[] }>) {
   const pr = on.pull_request ?? {};
   return { paths: pr.paths ?? [], pathsIgnore: pr['paths-ignore'] ?? [] };
@@ -111,6 +137,7 @@ function workflowLanes(
     qualifying,
     triggers: Object.keys(on),
     gates: [...new Set(declaredGates(job.steps ?? [], root))],
+    uses: [...new Set([`.github/workflows/${file}`, ...localActionFiles(job.steps ?? [], root)])],
     verbatim: (job.steps ?? []).flatMap((step) =>
       typeof step.run === 'string' ? verbatimScripts(step.run, scripts) : [],
     ),

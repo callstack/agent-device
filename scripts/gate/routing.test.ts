@@ -85,6 +85,44 @@ test('a .github path ignored by exact name stays the workflow’s own call', () 
   assert.deepEqual(messages(model), []);
 });
 
+// Review finding on #1857: the exact-name exemption was unbounded, so naming the lane's OWN
+// build and boot actions skipped the lane that runs them and the manifest stayed green. The
+// exemption now stops at `lane.uses` — the transitive composite-action closure plus the
+// workflow file — and these are the reviewer's two planted cases.
+test('the exemption cannot name an action the lane itself runs', () => {
+  for (const own of [
+    '.github/actions/setup-apple-runner-build/action.yml',
+    '.github/actions/boot-ios-test-simulator/action.yml',
+    '.github/actions/run-gate/action.yml', // reached only through a composite action
+    '.github/workflows/ios.yml', // the lane's own definition
+  ]) {
+    assert.ok(iosLane.uses.includes(own), `${own} must be in the lane's uses closure`);
+    const model = withIos((lane) => ({ ...lane, pathsIgnore: [...lane.pathsIgnore, own] }));
+    assert.ok(
+      messages(model).some(
+        (message) => message.includes(`ignores ${own}`) && /fails open/.test(message),
+      ),
+      `naming ${own} exactly must still fail the routing assertion`,
+    );
+  }
+});
+
+// The trap fires correctly for a tracked non-TS file under an ignored family root, but the
+// remedy is not "remove the ignore entry" — that would un-route every sibling `.ts` in the
+// tree. The selector gap is the fix, and the message has to say so.
+test('an unowned path under an ignored root asks for an owner, not for the entry’s removal', () => {
+  const planted = 'src/platforms/android/probe-fixture.json';
+  const model = {
+    ...base,
+    trackedFiles: new Set([...base.trackedFiles, planted]),
+  };
+  const found = routing(model, ROUTED_LANES).map((failure) => failure.message);
+  assert.equal(found.length, 1, found.join('\n'));
+  assert.match(found[0] ?? '', /fails open on it \(ambiguous-path\)/);
+  assert.match(found[0] ?? '', /Give it an owning check in scripts\/check-affected\//);
+  assert.ok(!/Remove the ignore entry/.test(found[0] ?? ''));
+});
+
 test('dropping a family root from the ignore list fails the routing claim for that tree', () => {
   const model = withIos((lane) => ({
     ...lane,

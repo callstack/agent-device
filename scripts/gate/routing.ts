@@ -22,20 +22,41 @@ function failure(message: string): RoutingFailure {
 
 // A `.github/**` path the lane ignores by its exact name is the workflow's own knowledge of a
 // sibling workflow it does not use (deploy, docs preview); the selector's fail-open on
-// `.github/**` is about *local* checks and cannot see that. A glob there is not exempt: it
-// could hide the composite action the lane itself runs.
-function ignoredByExactName(lane: Lane, file: string): boolean {
-  return file.startsWith('.github/') && lane.pathsIgnore.includes(file);
+// `.github/**` is about *local* checks and cannot see that.
+//
+// The exemption stops at the lane's own machinery, and that is enforced rather than asserted in
+// prose: `lane.uses` is the transitive closure of the composite actions the job's steps run,
+// plus the workflow file itself, so naming `setup-apple-runner-build/action.yml` or
+// `boot-ios-test-simulator/action.yml` exactly is refused the way a glob is. Reviewer planted
+// both and the manifest stayed green before this check existed.
+function exemptSiblingWorkflow(lane: Lane, file: string): boolean {
+  return (
+    file.startsWith('.github/') && lane.pathsIgnore.includes(file) && !lane.uses.includes(file)
+  );
 }
 
-// Why the selector says the lane must start on `file`, or null when it need not.
+// Why the selector says the lane must start on `file`, and what to do about it, or null when
+// the lane need not start. The remedy differs by cause: a path the selector *routes* to the
+// lane, or fails open on because it is tooling, is one the ignore list must not name. A path it
+// fails open on because it has no owner at all (`unknown-path`/`ambiguous-path` — a fixture
+// under a family root, say) is a selector gap: deleting the ignore entry that happens to match
+// it would un-route every sibling in that tree, which is the opposite of the fix.
+const UNOWNED_RULES = new Set(['unknown-path', 'ambiguous-path']);
+
 function mustStart(model: Model, needs: ReadonlySet<string>, file: string): string | null {
   const plan = selectChecks({ changedFiles: [file], packageEntryFiles: model.packageEntryFiles });
   if (plan.failOpen) {
-    return `fails open on it (${plan.failOpenReasons.map((reason) => reason.rule).join(', ')})`;
+    const rules = plan.failOpenReasons.map((reason) => reason.rule);
+    const remedy = rules.every((rule) => UNOWNED_RULES.has(rule))
+      ? 'Give it an owning check in scripts/check-affected/ — the ignore entry that matches it ' +
+        'is load-bearing for the rest of that tree'
+      : 'Remove the ignore entry';
+    return `fails open on it (${rules.join(', ')}). ${remedy}.`;
   }
   const routedTo = plan.checks.filter((id) => needs.has(id));
-  return routedTo.length > 0 ? `routes it to ${routedTo.map((id) => `"${id}"`).join(', ')}` : null;
+  return routedTo.length > 0
+    ? `routes it to ${routedTo.map((id) => `"${id}"`).join(', ')}. Remove the ignore entry.`
+    : null;
 }
 
 // How the selector classifies a path the lane need not start, or null when it makes no claim
@@ -64,13 +85,9 @@ function routingFor(model: Model, routed: RoutedLane): RoutingFailure[] {
       const starts = triggersOnPath(lane, file);
       const why = mustStart(model, needs, file);
       if (why !== null) {
-        return starts || ignoredByExactName(lane, file)
+        return starts || exemptSiblingWorkflow(lane, file)
           ? []
-          : [
-              failure(
-                `${lane.workflow} ignores ${file}, but the selector ${why}. Remove the ignore entry.`,
-              ),
-            ];
+          : [failure(`${lane.workflow} ignores ${file}, but the selector ${why}`)];
       }
       const claim = starts ? mustNotStart(needs, file) : null;
       return claim === null
