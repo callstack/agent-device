@@ -33,6 +33,7 @@ const supportedSubpaths = [
   './contracts',
   './selectors',
   './finders',
+  './ai-sdk',
 ];
 const typeOnlySubpaths = new Set(['./remote-config']);
 

@@ -13,6 +13,7 @@
     "src/sdk/contracts.ts",
     "src/sdk/selectors.ts",
     "src/sdk/finders.ts",
+    "src/ai-sdk/index.ts",
     "src/bin.ts",
     "src/client/companion-tunnel.ts",
     "src/daemon.ts",
@@ -32,6 +33,7 @@
     "examples/sdk/metro-runtime.ts",
     "examples/sdk/contracts-result.ts",
     "examples/sdk/batch-orchestration.ts",
+    "examples/sdk/ai-sdk-tools.ts",
     "test/scripts/metro-prepare-packaged-smoke.mjs",
     "test/integration/*.test.ts",
     "website/docs/404.mdx",
@@ -96,7 +98,7 @@
     },
     {
       "comment": "Published package surface (see package.json#exports); consumed by SDK users, not internally.",
-      "file": "src/sdk/*.ts",
+      "file": "{src/sdk/*.ts,src/ai-sdk/index.ts}",
       "exports": ["*"]
     },
     {

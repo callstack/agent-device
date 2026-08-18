@@ -288,6 +288,7 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
         ).sort();
         const subpathSmoke = {
           '.': (mod) => mod.centerOfRect({ x: 0, y: 0, width: 10, height: 4 }),
+          './ai-sdk': (mod) => typeof mod.createAgentDeviceTools,
           './android-adb': (mod) => {
             const manager = mod.createAndroidPortReverseManager(async () => ({
               stdout: '',
@@ -387,6 +388,7 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
     assert.deepEqual(imports.smokedSubpaths, imports.exportSubpaths);
     assert.deepEqual(imports.subpathSmokeResults, {
       '.': { x: 5, y: 2 },
+      './ai-sdk': 'function',
       './android-adb': 'function',
       './artifacts': 'undefined',
       './batch': 'INVALID_ARGS',
