@@ -73,7 +73,7 @@ export async function settleAfterInteraction(
 ): Promise<SettleOutcome> {
   return await settleAfterAction(runtime, options, {
     ...params,
-    baselineNodes: resolveBaselineNodes(params.resolved),
+    baselineNodes: await resolveBaselineNodes(runtime, options, params.resolved),
     actionPoint: params.resolved.point,
   });
 }
@@ -202,8 +202,20 @@ export function settleEvidence(
   return { ...after, changedFromBefore };
 }
 
-function resolveBaselineNodes(resolved: ResolvedInteractionTarget): SnapshotNode[] {
-  return 'preActionNodes' in resolved && resolved.preActionNodes ? resolved.preActionNodes : [];
+async function resolveBaselineNodes(
+  runtime: AgentDeviceRuntime,
+  options: CommandContext,
+  resolved: ResolvedInteractionTarget,
+): Promise<SnapshotNode[]> {
+  if ('preActionNodes' in resolved && resolved.preActionNodes?.length) {
+    return resolved.preActionNodes;
+  }
+  // Resolved-target evidence is best-effort at the contracts boundary. The session still owns the
+  // authoritative ref frame, so reuse it rather than silently turning a missing optional field
+  // into an empty transition/diff baseline. Fall back to the latest observation for point targets
+  // and pre-frame sessions.
+  const session = await runtime.sessions.get(options.session ?? 'default');
+  return session?.refFrameSnapshot?.nodes ?? session?.snapshot?.nodes ?? [];
 }
 
 function buildSettleDiff(
