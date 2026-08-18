@@ -30,6 +30,15 @@ extension RunnerTests {
     let visible: Bool
   }
 
+  private struct SnapshotTraversalEntry {
+    let snapshot: XCUIElementSnapshot
+    let depth: Int
+    let visibleDepth: Int
+    let parentIndex: Int?
+    let nearestScrollAnchor: (index: Int, rect: CGRect)?
+    let projectionCursor: FlatSnapshotProjectionCursor
+  }
+
   struct SnapshotCaptureFailure: Error {
     let code: String
     let message: String
@@ -166,23 +175,67 @@ extension RunnerTests {
       visible: rootEvaluation.visible,
       nodeIndex: 0
     )
-    var stack: [(XCUIElementSnapshot, Int, Int, Int?, (index: Int, rect: CGRect)?)] =
-      context.rootSnapshot.children.map {
-        ($0, 1, 1, 0, rootScrollAnchor)
-      }
+    #if os(iOS)
+      let rootProjection = flatSnapshotProjectionTransition(
+        frame: context.rootSnapshot.frame,
+        intersectsViewportAndScrollClip: rootEvaluation.visible,
+        elementType: context.rootSnapshot.elementType,
+        hasChildren: !context.rootSnapshot.children.isEmpty,
+        cursor: .root
+      )
+      let rootDescendantProjectionCursor = rootProjection.decision.descendants
+    #else
+      let rootDescendantProjectionCursor = FlatSnapshotProjectionCursor.root
+    #endif
+    var stack: [SnapshotTraversalEntry] = context.rootSnapshot.children.map {
+      SnapshotTraversalEntry(
+        snapshot: $0,
+        depth: 1,
+        visibleDepth: 1,
+        parentIndex: 0,
+        nearestScrollAnchor: rootScrollAnchor,
+        projectionCursor: rootDescendantProjectionCursor
+      )
+    }
 
-    while let (snapshot, depth, visibleDepth, parentIndex, nearestScrollAnchor) = stack.popLast() {
+    while let entry = stack.popLast() {
+      let snapshot = entry.snapshot
+      let depth = entry.depth
+      let visibleDepth = entry.visibleDepth
+      let parentIndex = entry.parentIndex
+      let nearestScrollAnchor = entry.nearestScrollAnchor
+      let projectionCursor = entry.projectionCursor
       if let limit = options.depth, depth > limit { continue }
 
       let evaluation = evaluateSnapshot(snapshot, in: context)
-      let regularVisible = isVisibleInRegularSnapshot(
+      let intersectsViewportAndScrollClip = isVisibleInRegularSnapshot(
         snapshot.frame,
         viewport: context.viewport,
         scrollContainerAnchor: nearestScrollAnchor
       )
-      if !regularVisible, let nearestScrollAnchor {
+      #if os(iOS)
+        let projectionTransition = flatSnapshotProjectionTransition(
+          frame: snapshot.frame,
+          intersectsViewportAndScrollClip: intersectsViewportAndScrollClip,
+          elementType: snapshot.elementType,
+          hasChildren: !snapshot.children.isEmpty,
+          cursor: projectionCursor
+        )
+        let projection = projectionTransition.decision
+      #else
+        let projectionTransition = FlatSnapshotProjectionTransition(
+          decision: FlatSnapshotProjectionDecision(
+            presentationVisible: intersectsViewportAndScrollClip,
+            descendants: .root
+          ),
+          hiddenContentFrame: !intersectsViewportAndScrollClip ? snapshot.frame : nil
+        )
+        let projection = projectionTransition.decision
+      #endif
+      if let hiddenFrame = projectionTransition.hiddenContentFrame, let nearestScrollAnchor
+      {
         rememberHiddenContentHint(
-          for: snapshot.frame,
+          for: hiddenFrame,
           relativeTo: nearestScrollAnchor,
           hints: &hiddenContentHintsByNodeIndex
         )
@@ -194,7 +247,7 @@ extension RunnerTests {
         valueText: evaluation.valueText,
         options: options,
         hittable: evaluation.hittable,
-        visible: regularVisible,
+        visible: projection.presentationVisible,
         regularSnapshot: true
       )
 
@@ -217,7 +270,7 @@ extension RunnerTests {
           nextScrollContainerAnchor =
             scrollContainerAnchor(
               for: snapshot,
-              visible: regularVisible,
+              visible: intersectsViewportAndScrollClip,
               nodeIndex: currentIndex
             )
             ?? nearestScrollAnchor
@@ -225,7 +278,16 @@ extension RunnerTests {
           nextScrollContainerAnchor = nearestScrollAnchor
         }
         for child in snapshot.children.reversed() {
-          stack.append((child, depth + 1, nextVisibleDepth, currentIndex, nextScrollContainerAnchor))
+          stack.append(
+            SnapshotTraversalEntry(
+              snapshot: child,
+              depth: depth + 1,
+              visibleDepth: nextVisibleDepth,
+              parentIndex: currentIndex,
+              nearestScrollAnchor: nextScrollContainerAnchor,
+              projectionCursor: projection.descendants
+            )
+          )
         }
       }
 
@@ -819,6 +881,11 @@ extension RunnerTests {
   ) -> Bool {
     let type = snapshot.elementType
     let hasContent = !label.isEmpty || !identifier.isEmpty || (valueText != nil)
+    #if os(iOS)
+      if regularSnapshot && !visible && type != .application && type != .window {
+        return false
+      }
+    #endif
     if options.interactiveOnly {
       if isScrollableContainer(snapshot, visible: visible) { return true }
       #if os(macOS)

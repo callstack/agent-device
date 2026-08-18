@@ -10,14 +10,14 @@ extension RunnerTests {
     var hints: [Int: (above: Bool, below: Bool)] = [:]
     appendPrivateAXNode(rawRoot, to: &nodes, hints: &hints, options: options, viewport: viewport,
       depth: 0, parentIndex: nil, insideMatchedScope: false, scrollContext: nil,
-      ancestorOffscreen: false)
+      projectionCursor: .root)
     return applyHiddenContentHints(hints, to: nodes)
   }
 
   private func appendPrivateAXNode(_ raw: [String: Any], to nodes: inout [SnapshotNode],
     hints: inout [Int: (above: Bool, below: Bool)], options: SnapshotOptions, viewport: CGRect,
     depth: Int, parentIndex: Int?, insideMatchedScope: Bool,
-    scrollContext: (index: Int, rect: CGRect)?, ancestorOffscreen: Bool)
+    scrollContext: (index: Int, rect: CGRect)?, projectionCursor: FlatSnapshotProjectionCursor)
   {
     if let limit = options.depth, depth > limit { return }
     let rect = privateAXRect(raw["frame"])
@@ -41,8 +41,15 @@ extension RunnerTests {
         viewport: viewport,
         scrollContainerAnchor: scrollContext
       )
-    let offscreen = ancestorOffscreen || (hasFrame && !onScreen)
-    let presentationVisible = !offscreen && !negligibleDecoration
+    let projectionTransition = flatSnapshotProjectionTransition(
+      frame: rect,
+      intersectsViewportAndScrollClip: onScreen,
+      elementType: elementType,
+      hasChildren: !children.isEmpty,
+      cursor: projectionCursor
+    )
+    let projection = projectionTransition.decision
+    let presentationVisible = projection.presentationVisible && !negligibleDecoration
     let decision = flatSnapshotFilterDecision(
       FlatSnapshotFilterNode(isRoot: parentIndex == nil, label: label, identifier: identifier,
         valueText: value.isEmpty ? nil : value, visible: presentationVisible),
@@ -50,8 +57,8 @@ extension RunnerTests {
       insideMatchedScope: insideMatchedScope)
     let include = decision.include
 
-    if !ancestorOffscreen && hasFrame && !onScreen, let scrollContext {
-      rememberHiddenContentHint(for: rect, relativeTo: scrollContext, hints: &hints)
+    if let hiddenFrame = projectionTransition.hiddenContentFrame, let scrollContext {
+      rememberHiddenContentHint(for: hiddenFrame, relativeTo: scrollContext, hints: &hints)
     }
 
     let currentIndex: Int?
@@ -82,7 +89,7 @@ extension RunnerTests {
       appendPrivateAXNode(child, to: &nodes, hints: &hints, options: options, viewport: viewport,
         depth: depth + 1, parentIndex: currentIndex,
         insideMatchedScope: decision.insideMatchedScope, scrollContext: nextScrollContext,
-        ancestorOffscreen: offscreen)
+        projectionCursor: projection.descendants)
     }
   }
 
