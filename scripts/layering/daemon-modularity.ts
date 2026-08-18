@@ -165,15 +165,24 @@ function checkTypeCycleBaseline(members: readonly string[]): LayeringViolation[]
     });
   }
 
-  const zoneCounts = countBy(members, targetDagZone);
-  for (const [zone, count] of zoneCounts) {
+  const membersByZone = groupBy(members, targetDagZone);
+  for (const [zone, zoneMembers] of membersByZone) {
     const allowed = baseline.zoneMembers[zone] ?? 0;
-    if (count <= allowed) continue;
+    if (zoneMembers.length <= allowed) continue;
+    // The ceiling records a count, not a membership, so the gate cannot name the file that
+    // joined; naming the alphabetically-first member instead sent #1837's diagnosis to a file
+    // that had been in the cycle all along. List the whole zone so the joining edge is one
+    // diff away from the author, who knows which of these files the change touched.
     violations.push({
       rule: 'R10 daemon-modularity',
-      file: members.find((member) => targetDagZone(member) === zone) ?? 'scripts/layering/check.ts',
+      file: 'scripts/layering/daemon-modularity.ts',
       line: 1,
-      message: `the largest type cycle now contains ${count} ${zone} file(s) (baseline ${allowed}); extraction must not trade one zone's locality for another's.`,
+      message:
+        `the largest type cycle now contains ${zoneMembers.length} ${zone} file(s) (baseline ` +
+        `${allowed}); extraction must not trade one zone's locality for another's. ` +
+        `${zone} members: ${zoneMembers.join(', ')}. ${zoneMembers.length - allowed} of these ` +
+        `joined with this change (a new file, or a new import that closed the loop); cut that ` +
+        `edge rather than raising the ceiling.`,
     });
   }
 
@@ -285,13 +294,18 @@ function isInsideInternalTree(file: string, roots: readonly string[]): boolean {
   return roots.some((root) => file.startsWith(path.posix.join(root, 'internal/')));
 }
 
-function countBy(values: readonly string[], keyOf: (value: string) => string): Map<string, number> {
-  const counts = new Map<string, number>();
+function groupBy(
+  values: readonly string[],
+  keyOf: (value: string) => string,
+): Map<string, string[]> {
+  const groups = new Map<string, string[]>();
   for (const value of values) {
     const key = keyOf(value);
-    counts.set(key, (counts.get(key) ?? 0) + 1);
+    const group = groups.get(key) ?? [];
+    group.push(value);
+    groups.set(key, group);
   }
-  return counts;
+  return groups;
 }
 
 export function daemonModularitySummary(): string {

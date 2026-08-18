@@ -219,6 +219,30 @@ test('R9 records zone ceilings and keeps engine files outside the largest compon
   assert.ok(violations.some(({ message }) => /engine file entered/.test(message)));
 });
 
+// #1837: the zone violation used to name the alphabetically-first zone member — a file that had
+// been in the cycle all along — so the +1 was found only by diffing member lists between commits.
+// The ceiling records a count, not a membership, so the message lists every zone member instead.
+test('R10 zone overflow lists the whole zone so the joining member is visible', () => {
+  const zones = DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers;
+  // Sorts after the daemon-server probes: the old first-member pick could not name it by luck.
+  const joined = 'src/daemon/snapshot-interactor-capture.ts';
+  const members = [...baselineTypeCycleMembers({ commands: zones.commands - 1 }), joined].sort();
+  const daemonMembers = members.filter((member) => member.startsWith('src/daemon/'));
+  assert.notEqual(daemonMembers[0], joined);
+
+  const violations = checkDaemonModularityRatchets(baselineEdges(), members);
+
+  assert.equal(violations.length, 1);
+  const [violation] = violations;
+  assert.equal(violation!.rule, 'R10 daemon-modularity');
+  assert.equal(violation!.file, 'scripts/layering/daemon-modularity.ts');
+  assert.match(violation!.message, /contains 17 daemon-server file\(s\) \(baseline 16\)/);
+  for (const member of daemonMembers) {
+    assert.ok(violation!.message.includes(member), `${member} missing from: ${violation!.message}`);
+  }
+  assert.match(violation!.message, /1 of these joined with this change/);
+});
+
 // Growth was always rejected; a baseline left ABOVE the measured size used to be a suggestion
 // in the success line, which is headroom the next change spends without a number moving.
 test('R9 rejects a baseline left above the measured cycle', () => {
