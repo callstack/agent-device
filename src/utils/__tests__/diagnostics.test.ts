@@ -38,7 +38,7 @@ test('diagnostics redacts sensitive fields', async () => {
             safe: 'ok',
           },
         });
-        return flushDiagnosticsToSessionFile({ force: true });
+        return flushDiagnosticsToSessionFile({ force: true })?.path;
       },
     );
 

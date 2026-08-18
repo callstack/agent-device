@@ -129,7 +129,7 @@ test('request diagnostics flush into the effective session request log', async (
       });
       return {
         expectedPath: scope.requestLogPath,
-        flushedPath: flushDiagnosticsToSessionFile({ force: true }),
+        flushedPath: flushDiagnosticsToSessionFile({ force: true })?.path ?? null,
       };
     },
   );
@@ -587,7 +587,7 @@ test('tenant lease rejection flushes diagnostics into the effective session requ
       leaseRegistry: new LeaseRegistry(),
     });
     await expect(scope.runLocked(async () => 'ran')).rejects.toThrow(/Lease is not active/);
-    flushedPath = flushDiagnosticsToSessionFile({ force: true });
+    flushedPath = flushDiagnosticsToSessionFile({ force: true })?.path ?? null;
   });
 
   const expectedPath = resolveSessionRequestLogPath(

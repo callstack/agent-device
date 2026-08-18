@@ -57,7 +57,7 @@ test('retryWithPolicy publishes retry diagnostics events', async () => {
           },
           { maxAttempts: 2, baseDelayMs: 1, maxDelayMs: 1, jitter: 0 },
         );
-        return flushDiagnosticsToSessionFile({ force: true });
+        return flushDiagnosticsToSessionFile({ force: true })?.path;
       },
     );
     assert.ok(outPath);

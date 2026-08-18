@@ -1,5 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { normalizeTenantId, resolveSessionIsolationMode } from './config.ts';
+import { isTenantOwnedSessionName, tenantScopedSessionName } from './session-tenant-scope.ts';
 import { isLeaseAdmissionExempt } from './daemon-command-registry.ts';
 import {
   DEFAULT_PROXY_LEASE_TTL_MS,
@@ -36,7 +37,7 @@ export function scopeRequestSession(req: DaemonRequest): DaemonRequest {
     );
   }
   const requestedSession = req.session || 'default';
-  if (requestedSession.startsWith(`${tenant}:`)) {
+  if (isTenantOwnedSessionName(tenant, requestedSession)) {
     return {
       ...req,
       meta: {
@@ -48,7 +49,7 @@ export function scopeRequestSession(req: DaemonRequest): DaemonRequest {
   }
   return {
     ...req,
-    session: `${tenant}:${requestedSession}`,
+    session: tenantScopedSessionName(tenant, requestedSession),
     meta: {
       ...req.meta,
       tenantId: tenant,

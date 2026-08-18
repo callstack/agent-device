@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { redactDiagnosticData } from '@agent-device/kernel/redaction';
+import type { DiagnosticsRecordRef } from '@agent-device/kernel/errors';
 
 type DiagnosticLevel = 'info' | 'warn' | 'error' | 'debug';
 
@@ -25,6 +26,13 @@ type DiagnosticsScopeOptions = {
   debug?: boolean;
   flushOnSuccess?: boolean;
   logPath?: string;
+  /**
+   * Set together with `logPath` whenever that path is a session request
+   * diagnostics record — the locator a remote caller fetches the same record
+   * by. Both come from one `resolveSessionRequestLog` result, so the path and
+   * the locator cannot name different records (#1801).
+   */
+  logRecord?: DiagnosticsRecordRef;
   traceLogPath?: string;
 };
 
@@ -180,7 +188,20 @@ export async function withDiagnosticTimer<T>(
   }
 }
 
-export function flushDiagnosticsToSessionFile(options: { force?: boolean } = {}): string | null {
+/**
+ * Where a flushed diagnostics record landed: a path on THIS host, plus the
+ * locator a remote caller can fetch the same record by when the record is a
+ * session request record. `ref` is absent for the homedir fallback file below,
+ * which no daemon route serves.
+ */
+export type FlushedDiagnosticsRecord = {
+  path: string;
+  ref?: DiagnosticsRecordRef;
+};
+
+export function flushDiagnosticsToSessionFile(
+  options: { force?: boolean } = {},
+): FlushedDiagnosticsRecord | null {
   const scope = diagnosticsStorage.getStore();
   if (!scope) return null;
   if (!options.force && !scope.debug && !scope.flushOnSuccess) return null;
@@ -194,9 +215,10 @@ export function flushDiagnosticsToSessionFile(options: { force?: boolean } = {})
         appendDiagnosticLine(scope.logPath, `${lines.join('\n')}\n`);
       }
       const logPath = scope.logPath;
+      const logRecord = scope.logRecord;
       scope.events = [];
       scope.liveWrittenEventCount = 0;
-      return logPath;
+      return { path: logPath, ...(logRecord ? { ref: logRecord } : {}) };
     }
 
     const sessionDir = sanitizePathPart(scope.session ?? 'default');
@@ -208,7 +230,7 @@ export function flushDiagnosticsToSessionFile(options: { force?: boolean } = {})
     const lines = scope.events.map((entry) => JSON.stringify(redactScopeData(scope, entry)));
     fs.writeFileSync(filePath, `${lines.join('\n')}\n`);
     scope.events = [];
-    return filePath;
+    return { path: filePath };
   } catch {
     return null;
   }

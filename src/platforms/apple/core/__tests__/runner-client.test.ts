@@ -973,7 +973,7 @@ async function captureParseRunnerDiagnostics(callback: () => Promise<void>): Pro
       { session: 'runner-parse-test', requestId: 'request-1', command: 'drag' },
       async () => {
         await callback();
-        const diagnosticsPath = flushDiagnosticsToSessionFile({ force: true });
+        const diagnosticsPath = flushDiagnosticsToSessionFile({ force: true })?.path;
         assert.ok(diagnosticsPath);
         return fs.readFileSync(diagnosticsPath, 'utf8');
       },

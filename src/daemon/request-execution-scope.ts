@@ -34,7 +34,7 @@ import {
 } from './session-event-log.ts';
 import type { LeaseRegistry } from './lease-registry.ts';
 import {
-  resolveSessionRequestLogPath,
+  resolveSessionRequestLog,
   resolveSessionRunnerLogPath,
   type SessionStore,
 } from './session-store.ts';
@@ -119,14 +119,17 @@ export async function createRequestExecutionScope(params: {
   const sessionName = resolveEffectiveSessionName(scopedReq, sessionStore);
   const diagnosticsMeta = getDiagnosticsMeta();
   const sessionDir = sessionStore.resolveSessionDir(sessionName);
-  const requestLogPath = resolveSessionRequestLogPath(
+  const requestLog = resolveSessionRequestLog({
     sessionDir,
-    scopedReq.meta?.requestId ?? diagnosticsMeta.requestId,
-  );
+    session: sessionName,
+    requestId: scopedReq.meta?.requestId ?? diagnosticsMeta.requestId,
+  });
+  const requestLogPath = requestLog.path;
   const runnerLogPath = resolveSessionRunnerLogPath(sessionDir);
   updateDiagnosticsScope({
     session: sessionName,
-    logPath: requestLogPath,
+    logPath: requestLog.path,
+    logRecord: requestLog.ref,
   });
   emitDiagnostic({
     level: 'info',

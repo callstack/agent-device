@@ -2051,7 +2051,7 @@ async function captureDiagnostics(callback: () => Promise<void>): Promise<string
       { session: 'runner-session-test', requestId: 'request-1', command: 'tap' },
       async () => {
         await callback();
-        const diagnosticsPath = flushDiagnosticsToSessionFile({ force: true });
+        const diagnosticsPath = flushDiagnosticsToSessionFile({ force: true })?.path;
         assert.ok(diagnosticsPath);
         return fs.readFileSync(diagnosticsPath, 'utf8');
       },

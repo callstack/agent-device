@@ -7,7 +7,8 @@ import {
   listDownloadableArtifacts,
   prepareDownloadableArtifact,
 } from './artifact-tracking.ts';
-import { sendRestJsonError, statusCodeForNormalizedError } from './http-errors.ts';
+import { failStreamedHttpResponse, sendRestJsonError } from './http-errors.ts';
+import { decodeUriSegment } from './http-request-target.ts';
 
 type DownloadableArtifactHttpRoute =
   | { kind: 'inventory' }
@@ -99,13 +100,7 @@ async function handleArtifactDownload(
       );
     }
     stream.on('error', (error) => {
-      if (!res.headersSent) {
-        const normalized = normalizeError(error);
-        res.statusCode = statusCodeForNormalizedError(normalized.code);
-        res.end(normalized.message);
-      } else {
-        res.destroy(error as Error);
-      }
+      failStreamedHttpResponse(res, error);
     });
     let didCleanupArtifact = false;
     const cleanupCompletedDownload = () => {
@@ -161,11 +156,7 @@ async function handleArtifactInventory(
 function readArtifactId(pathname: string): string {
   const encoded = pathname.slice('/artifacts/'.length);
   if (!encoded || encoded.includes('/')) return '';
-  try {
-    return decodeURIComponent(encoded);
-  } catch {
-    return '';
-  }
+  return decodeUriSegment(encoded);
 }
 
 function readRequestPathname(requestUrl: string | undefined): string {

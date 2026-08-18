@@ -612,7 +612,7 @@ test('snapshotAndroid emits helper phase diagnostics', async () => {
         helperAdb,
         helperArtifact,
       });
-      return flushDiagnosticsToSessionFile({ force: true });
+      return flushDiagnosticsToSessionFile({ force: true })?.path ?? null;
     },
   );
 
@@ -1077,7 +1077,7 @@ test('snapshotAndroid emits helper failure diagnostics', async () => {
           return true;
         },
       );
-      return flushDiagnosticsToSessionFile({ force: true });
+      return flushDiagnosticsToSessionFile({ force: true })?.path ?? null;
     },
   );
 
@@ -1101,7 +1101,7 @@ test('snapshotAndroid emits unavailable diagnostics when helper artifact is miss
           () => snapshotAndroid(device),
           /Android snapshot helper is unavailable/,
         );
-        return flushDiagnosticsToSessionFile({ force: true });
+        return flushDiagnosticsToSessionFile({ force: true })?.path ?? null;
       },
     );
 
@@ -1205,7 +1205,7 @@ test('snapshotAndroid emits timeout diagnostics when helper capture times out', 
         () => snapshotAndroidWithHelper(helperAdb),
         /Android snapshot helper failed: helper capture timed out/,
       );
-      return flushDiagnosticsToSessionFile({ force: true });
+      return flushDiagnosticsToSessionFile({ force: true })?.path ?? null;
     },
   );
 

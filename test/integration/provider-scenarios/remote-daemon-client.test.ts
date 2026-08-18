@@ -608,7 +608,14 @@ async function assertRemoteRpcErrorNormalization(client: RemoteClient): Promise<
       assert.equal(normalized.message, 'remote invalid args');
       assert.equal(normalized.hint, 'remote hint');
       assert.equal(normalized.diagnosticId, 'diag-remote');
-      assert.equal(normalized.logPath, '/remote/log.txt');
+      // #1801: `/remote/log.txt` is a path on the daemon host. It never reaches
+      // the caller; with no fetchable record the error says so instead.
+      assert.equal(normalized.logPath, undefined);
+      assert.match(
+        normalized.logPathUnavailable ?? '',
+        /^remote daemon http:\/\/127\.0\.0\.1:\d+, request \w+: the daemon named no diagnostics record$/,
+      );
+      assert.equal(JSON.stringify(normalized).includes('/remote/log.txt'), false);
       assert.equal(normalized.details?.remote, true);
       assert.equal(typeof normalized.details?.requestId, 'string');
       return true;

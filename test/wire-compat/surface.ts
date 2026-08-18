@@ -48,6 +48,9 @@ const HTTP_ERRORS = 'src/daemon/http-errors.ts';
 const HTTP_SERVER = 'src/daemon/server/http-server.ts';
 const UPLOAD_HTTP = 'src/daemon/upload-http.ts';
 const ARTIFACT_HTTP = 'src/daemon/downloadable-artifact-http.ts';
+const REQUEST_DIAGNOSTICS_HTTP = 'src/daemon/request-diagnostics-http.ts';
+const HTTP_REQUEST_TARGET = 'src/daemon/http-request-target.ts';
+const REMOTE_REQUEST_DIAGNOSTICS = 'src/remote/remote-request-diagnostics.ts';
 const PROGRESS_PROTOCOL = 'src/daemon/request-progress-protocol.ts';
 const CLIENT_RPC = 'src/daemon/client/daemon-client-rpc.ts';
 const CLIENT_PROGRESS = 'src/daemon/client/daemon-client-progress.ts';
@@ -93,6 +96,15 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'readArtifactId',
         'readRequestPathname',
       ),
+      // Shared by every auxiliary route: how one segment of a request target
+      // becomes the id a route matches on.
+      ...from(HTTP_REQUEST_TARGET, 'decodeUriSegment'),
+      // `/sessions/<session>/requests/<requestId>/diagnostics` (#1801): the
+      // route a remote caller fetches a failed request's record by. The
+      // resolver owns the path shape and the segment vocabulary; the client's
+      // URL builder below is its counterpart.
+      ...from(REQUEST_DIAGNOSTICS_HTTP, 'resolveRequestDiagnosticsHttpRoute'),
+      ...from(REMOTE_REQUEST_DIAGNOSTICS, 'buildRemoteRequestDiagnosticsUrl'),
       // Consumer side of /health: the client reads this payload and refuses a
       // mismatched peer from it, so a narrowed reader defeats the very check
       // ADR 0006 built. `readRemoteDaemonHealth` is where the comparison lives.
@@ -139,6 +151,11 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
       ),
       ...from(UPLOAD_HTTP, 'AuxiliaryHttpAuthorizer', 'buildUploadTicketAuthHeaders'),
       ...from(ARTIFACT_HTTP, 'DownloadableArtifactHttpAuthorizer'),
+      // The diagnostics route's authorization: the same token/auth-hook gate as
+      // the artifact routes, plus the tenant rule that decides which sessions a
+      // caller may read a record from (#1801).
+      ...from(REQUEST_DIAGNOSTICS_HTTP, 'RequestDiagnosticsHttpAuthorizer'),
+      ...from('src/daemon/session-tenant-scope.ts', 'isTenantOwnedSessionName'),
     ],
   },
   {
@@ -217,7 +234,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'DaemonArtifactType',
         'DaemonArtifactKnownType',
       ),
-      ...from(KERNEL_ERRORS, 'DaemonError'),
+      ...from(KERNEL_ERRORS, 'DaemonError', 'DiagnosticsRecordRef', 'readDiagnosticsRecordRef'),
       // "These are wire values" — the progress module says so itself: the daemon
       // serializes them onto the response stream and the CLI reconstructs them.
       ...from(
@@ -251,6 +268,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'NormalizedHttpError',
         'statusCodeForNormalizedError',
         'sendRestJsonError',
+        'failStreamedHttpResponse',
       ),
       ...from(
         UPLOAD_HTTP,
@@ -266,8 +284,24 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
       // `NormalizedHttpError` is `ReturnType<typeof normalizeError>`, so the
       // function and its return type — not a type alias — are what fix the
       // REST error payload a released client parses.
-      ...from(KERNEL_ERRORS, 'normalizeError', 'NormalizedError'),
+      ...from(KERNEL_ERRORS, 'normalizeError', 'NormalizedError', 'NormalizeErrorContext'),
       ...from(ARTIFACT_HTTP, 'handleArtifactInventory', 'handleArtifactDownload'),
+      // Producer and consumer of the diagnostics record body (#1801): what the
+      // daemon streams back (status, content type/length) and what the client
+      // accepts before it will name the fetched copy as the caller's log path.
+      ...from(
+        REQUEST_DIAGNOSTICS_HTTP,
+        'REQUEST_DIAGNOSTICS_CONTENT_TYPE',
+        'RequestDiagnosticsHttpOptions',
+        'handleRequestDiagnostics',
+      ),
+      ...from(
+        REMOTE_REQUEST_DIAGNOSTICS,
+        'RemoteDiagnosticsEndpoint',
+        'RemoteDaemonErrorPayload',
+        'localizeRemoteDaemonError',
+        'fetchRemoteRequestDiagnostics',
+      ),
       // Consumer side: what the client accepts back. A parser narrowed here
       // rejects a released daemon's response without any server change.
       ...from(
@@ -275,6 +309,8 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'handleDaemonHttpResponseBody',
         'parseDaemonHttpResponseBody',
         'toDaemonHttpRpcError',
+        'rejectDaemonHttpRpcError',
+        'appErrorFromDaemonError',
         'resolveDaemonHttpResult',
       ),
       ...from(

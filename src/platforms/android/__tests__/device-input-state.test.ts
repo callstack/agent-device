@@ -119,7 +119,7 @@ test('getAndroidKeyboardState diagnoses fallback IME ownership classification', 
         process.env.HOME = homeDir;
         const state = await withDiagnosticsScope({ session: 'keyboard-ime-fallback' }, async () => {
           const keyboardState = await getAndroidKeyboardState(device);
-          diagnosticsPath = flushDiagnosticsToSessionFile({ force: true });
+          diagnosticsPath = flushDiagnosticsToSessionFile({ force: true })?.path ?? null;
           return keyboardState;
         });
 

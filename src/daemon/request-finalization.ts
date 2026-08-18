@@ -28,7 +28,7 @@ export function finalizeDaemonResponse(
         message: response.error.message,
       },
     });
-    const logPathOnFailure = flushDiagnosticsToSessionFile({ force: true }) ?? undefined;
+    const flushed = flushDiagnosticsToSessionFile({ force: true });
     // ADR 0012 decision 6, BLOCKER 2 (second follow-up): every handler-RETURNED
     // (as opposed to thrown) failure response is rebuilt here into a fresh
     // AppError before re-normalizing — this used to copy `hint`/`diagnosticId`/
@@ -49,6 +49,7 @@ export function finalizeDaemonResponse(
             : undefined),
         diagnosticId: response.error.diagnosticId,
         logPath: response.error.logPath,
+        diagnosticsRecord: response.error.diagnosticsRecord,
         retriable:
           response.error.retriable ??
           (typeof response.error.details?.retriable === 'boolean'
@@ -62,7 +63,8 @@ export function finalizeDaemonResponse(
       }),
       {
         diagnosticId: details.diagnosticId,
-        logPath: logPathOnFailure,
+        logPath: flushed?.path,
+        diagnosticsRecord: flushed?.ref,
       },
     );
     return { ok: false, error: normalizedError };

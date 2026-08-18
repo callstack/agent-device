@@ -45,10 +45,23 @@ export function toAppErrorCode(
 }
 
 /**
+ * Locator for one request's diagnostics record on the daemon host, in the
+ * daemon's own vocabulary rather than as a filesystem path: `logPath` names
+ * that same record as a path, which only a caller on the daemon host can read.
+ * A remote caller fetches the record by this locator instead
+ * (`GET /sessions/<session>/requests/<requestId>/diagnostics`).
+ */
+export type DiagnosticsRecordRef = {
+  session: string;
+  requestId: string;
+};
+
+/**
  * Details bag for AppError. Free-form context is allowed, but these keys carry
  * meaning at normalize/render time and must keep their types:
  * - `hint` — overrides `defaultHintForCode`; re-wraps preserve an existing hint.
- * - `diagnosticId` / `logPath` — lifted onto the normalized error, stripped from details.
+ * - `diagnosticId` / `logPath` / `logPathUnavailable` / `diagnosticsRecord` —
+ *   lifted onto the normalized error, stripped from details.
  * - `processExitError` + `stdout`/`stderr`/`exitCode` — marks a wrap of a real
  *   process exit so normalizeError can surface the first meaningful stderr line;
  *   build these via `execFailureDetails`/`requireExecSuccess` in src/utils/exec.ts
@@ -60,6 +73,8 @@ export type AppErrorDetails = Record<string, unknown> & {
   hint?: string;
   diagnosticId?: string;
   logPath?: string;
+  logPathUnavailable?: string;
+  diagnosticsRecord?: DiagnosticsRecordRef;
   retriable?: boolean;
   supportedOn?: string;
   processExitError?: boolean;
@@ -75,7 +90,22 @@ export type NormalizedError = {
   message: string;
   hint?: string;
   diagnosticId?: string;
+  /**
+   * Diagnostics record path **the reader of this error can open**. A daemon
+   * renders its own host path here; a client talking to a REMOTE daemon
+   * replaces it with the caller-local copy it fetched, or drops it and sets
+   * `logPathUnavailable` (see `localizeRemoteDaemonError`). A path the reader
+   * cannot open never belongs in this field (#1801).
+   */
   logPath?: string;
+  /**
+   * Why no readable `logPath` could be produced, e.g.
+   * `remote daemon https://host, request 8f2c: 404`. Set only in place of
+   * `logPath`, and never carries a daemon-host path.
+   */
+  logPathUnavailable?: string;
+  /** Locator the record can be fetched by when it lives on a remote daemon. */
+  diagnosticsRecord?: DiagnosticsRecordRef;
   /**
    * Lifted from `details.retriable` when a throw site classified the failure as
    * clearly transient (or clearly not). Included only when set, so the default
@@ -96,7 +126,16 @@ export type DaemonError = {
   message: string;
   hint?: string;
   diagnosticId?: string;
+  /** Path on the DAEMON host. Meaningful to a local caller only (#1801). */
   logPath?: string;
+  /** Why no readable path is named; set by the client, never by the daemon. */
+  logPathUnavailable?: string;
+  /**
+   * Additive locator (#1801) for the request diagnostics record `logPath`
+   * names, so a remote caller can fetch it over the daemon API instead of
+   * being handed a path on a filesystem it cannot read.
+   */
+  diagnosticsRecord?: DiagnosticsRecordRef;
   details?: Record<string, unknown>;
   /** Additive retry and platform-support signals; absent when not derivable. */
   retriable?: boolean;
@@ -123,6 +162,8 @@ export function throwDaemonError(error: DaemonError): never {
     hint: error.hint,
     diagnosticId: error.diagnosticId,
     logPath: error.logPath,
+    logPathUnavailable: error.logPathUnavailable,
+    diagnosticsRecord: error.diagnosticsRecord,
     retriable: error.retriable,
     supportedOn: error.supportedOn,
   });
@@ -140,21 +181,27 @@ export function isAgentDeviceError(err: unknown): err is AppError {
   return err instanceof AppError;
 }
 
+export type NormalizeErrorContext = {
+  diagnosticId?: string;
+  logPath?: string;
+  diagnosticsRecord?: DiagnosticsRecordRef;
+};
+
 export function normalizeAgentDeviceError(
   err: unknown,
-  context: { diagnosticId?: string; logPath?: string } = {},
+  context: NormalizeErrorContext = {},
 ): NormalizedError {
   return normalizeError(err, context);
 }
 
-export function normalizeError(
-  err: unknown,
-  context: { diagnosticId?: string; logPath?: string } = {},
-): NormalizedError {
+export function normalizeError(err: unknown, context: NormalizeErrorContext = {}): NormalizedError {
   const appErr = asAppError(err);
   const details = appErr.details ? redactDiagnosticData(appErr.details) : undefined;
   const diagnosticId = stringDetail(details, 'diagnosticId') ?? context.diagnosticId;
   const logPath = stringDetail(details, 'logPath') ?? context.logPath;
+  const logPathUnavailable = stringDetail(details, 'logPathUnavailable');
+  const diagnosticsRecord =
+    readDiagnosticsRecordRef(details?.diagnosticsRecord) ?? context.diagnosticsRecord;
   const hint = stringDetail(details, 'hint') ?? defaultHintForCode(appErr.code);
   const retriable = booleanDetail(details, 'retriable') ?? retriableForErrorCode(appErr.code);
   const supportedOn = stringDetail(details, 'supportedOn');
@@ -167,6 +214,8 @@ export function normalizeError(
     hint,
     diagnosticId,
     logPath,
+    ...(logPathUnavailable !== undefined ? { logPathUnavailable } : {}),
+    ...(diagnosticsRecord !== undefined ? { diagnosticsRecord } : {}),
     // Typed-error signals stay absent unless confidently known (#939 wire shape).
     ...(retriable !== undefined ? { retriable } : {}),
     ...(supportedOn !== undefined ? { supportedOn } : {}),
@@ -226,6 +275,19 @@ function stringDetail(
   return typeof value === 'string' ? value : undefined;
 }
 
+/**
+ * Narrows an untrusted `diagnosticsRecord` — off the wire or out of a details
+ * bag — to the locator type, or `undefined`. One reader, so a daemon payload
+ * and a details bag can never be accepted on different terms.
+ */
+export function readDiagnosticsRecordRef(value: unknown): DiagnosticsRecordRef | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const { session, requestId } = value as Partial<DiagnosticsRecordRef>;
+  if (typeof session !== 'string' || typeof requestId !== 'string') return undefined;
+  if (session.length === 0 || requestId.length === 0) return undefined;
+  return { session, requestId };
+}
+
 function booleanDetail(
   details: Record<string, unknown> | undefined,
   key: string,
@@ -242,6 +304,8 @@ function stripDiagnosticMeta(
   delete output.hint;
   delete output.diagnosticId;
   delete output.logPath;
+  delete output.logPathUnavailable;
+  delete output.diagnosticsRecord;
   delete output.retriable;
   delete output.supportedOn;
   return Object.keys(output).length > 0 ? output : undefined;

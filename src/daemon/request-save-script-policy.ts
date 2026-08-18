@@ -52,14 +52,14 @@ export function unsupportedSaveScriptFlagResponse(req: DaemonRequest): DaemonRes
   // ADR 0010 decision 6: a failed request always carries its diagnosticId +
   // ndjson logPath, so this rejection is as traceable as a thrown one.
   const meta = getDiagnosticsMeta();
-  const logPath = flushDiagnosticsToSessionFile({ force: true }) ?? undefined;
+  const flushed = flushDiagnosticsToSessionFile({ force: true });
   return {
     ok: false,
     error: normalizeError(
       new AppError('INVALID_ARGS', UNSUPPORTED_SAVE_SCRIPT_MESSAGE, {
         hint: UNSUPPORTED_SAVE_SCRIPT_HINT,
       }),
-      { diagnosticId: meta.diagnosticId, logPath },
+      { diagnosticId: meta.diagnosticId, logPath: flushed?.path, diagnosticsRecord: flushed?.ref },
     ),
   };
 }

@@ -1,6 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type DiagnosticsRecordRef } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import type { SessionRuntimeHints, SessionState } from './types.ts';
 import { recordActionEntry, type RecordActionEntry } from './session-action-recorder.ts';
@@ -403,4 +403,38 @@ export function resolveSessionRequestLogPath(
 ): string {
   const safeRequestId = safeSessionName(requestId && requestId.length > 0 ? requestId : 'unknown');
   return path.join(sessionDir, 'requests', `${safeRequestId}.ndjson`);
+}
+
+/**
+ * The request diagnostics record for one request: the path it is written to on
+ * this host, and the locator a remote caller fetches the same record by
+ * (#1801). Built in one call so the two can never name different records.
+ */
+export function resolveSessionRequestLog(params: {
+  sessionDir: string;
+  session: string;
+  requestId: string | undefined;
+}): { path: string; ref: DiagnosticsRecordRef } {
+  return {
+    path: resolveSessionRequestLogPath(params.sessionDir, params.requestId),
+    ref: {
+      session: params.session,
+      requestId: params.requestId && params.requestId.length > 0 ? params.requestId : 'unknown',
+    },
+  };
+}
+
+/**
+ * Where a CLIENT keeps its own copy of a remote daemon's request diagnostics
+ * record (#1801). Mirrors the daemon-side layout under the caller's state dir
+ * so a CI job can archive `remote-diagnostics/` wholesale.
+ */
+export function resolveRemoteRequestDiagnosticsPath(
+  stateDir: string,
+  ref: DiagnosticsRecordRef,
+): string {
+  return resolveSessionRequestLogPath(
+    path.join(stateDir, 'remote-diagnostics', safeSessionName(ref.session)),
+    ref.requestId,
+  );
 }

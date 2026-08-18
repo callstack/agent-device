@@ -1,7 +1,13 @@
-import { AppError, toAppErrorCode } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  readDiagnosticsRecordRef,
+  toAppErrorCode,
+  type DaemonError,
+} from '@agent-device/kernel/errors';
 import { createRequestId } from '../../utils/diagnostics.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { materializeRemoteArtifacts } from '../../remote/daemon-artifacts.ts';
+import { localizeRemoteDaemonError } from '../../remote/remote-request-diagnostics.ts';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
 import {
   leaseScopeFromRequest,
@@ -14,15 +20,16 @@ export function handleDaemonHttpResponseBody(
   options: {
     info: DaemonInfo;
     req: DaemonRequest;
+    stateDir: string;
     resolve: (response: DaemonResponse | PromiseLike<DaemonResponse>) => void;
     reject: (error: unknown) => void;
   },
 ): void {
-  const { info, req, resolve, reject } = options;
+  const { info, req, stateDir, resolve, reject } = options;
   try {
     const parsed = parseDaemonHttpResponseBody(body);
     if (parsed.error) {
-      reject(toDaemonHttpRpcError(parsed.error, req.meta?.requestId));
+      void rejectDaemonHttpRpcError(parsed.error, { info, req, stateDir, reject });
       return;
     }
     if (!parsed.result || typeof parsed.result !== 'object') {
@@ -59,24 +66,69 @@ function parseDaemonHttpResponseBody(body: string): {
   };
 }
 
-function toDaemonHttpRpcError(
+/**
+ * #1801: a REMOTE daemon's error names a `logPath` on ITS host, so the failure
+ * is rehydrated only after that record has been made readable here — the error
+ * the caller sees then names a caller-local copy, or no path at all. A local
+ * daemon shares the filesystem, so its error is rehydrated as-is.
+ */
+async function rejectDaemonHttpRpcError(
   error: { message?: string; data?: Record<string, unknown> },
-  requestId: string | undefined,
-): AppError {
+  options: {
+    info: DaemonInfo;
+    req: DaemonRequest;
+    stateDir: string;
+    reject: (error: unknown) => void;
+  },
+): Promise<void> {
+  const { info, req, stateDir, reject } = options;
+  const requestId = req.meta?.requestId;
+  const payload = toDaemonHttpRpcError(error);
+  if (!info.baseUrl) {
+    reject(appErrorFromDaemonError(payload, requestId));
+    return;
+  }
+  const localized = await localizeRemoteDaemonError(payload, {
+    endpoint: { baseUrl: info.baseUrl, token: info.token, tenantId: req.meta?.tenantId },
+    stateDir,
+    requestId,
+  });
+  reject(appErrorFromDaemonError(localized, requestId));
+}
+
+function toDaemonHttpRpcError(error: {
+  message?: string;
+  data?: Record<string, unknown>;
+}): DaemonError {
   const data = error.data ?? {};
-  return new AppError(
-    toAppErrorCode(data.code != null ? String(data.code) : undefined, 'COMMAND_FAILED'),
-    String(data.message ?? error.message ?? 'Daemon RPC request failed'),
-    {
-      ...(typeof data.details === 'object' && data.details ? data.details : {}),
-      hint: typeof data.hint === 'string' ? data.hint : undefined,
-      diagnosticId: typeof data.diagnosticId === 'string' ? data.diagnosticId : undefined,
-      logPath: typeof data.logPath === 'string' ? data.logPath : undefined,
-      retriable: typeof data.retriable === 'boolean' ? data.retriable : undefined,
-      supportedOn: typeof data.supportedOn === 'string' ? data.supportedOn : undefined,
-      requestId,
-    },
-  );
+  return {
+    code: toAppErrorCode(data.code != null ? String(data.code) : undefined, 'COMMAND_FAILED'),
+    message: String(data.message ?? error.message ?? 'Daemon RPC request failed'),
+    details:
+      typeof data.details === 'object' && data.details
+        ? (data.details as Record<string, unknown>)
+        : undefined,
+    hint: typeof data.hint === 'string' ? data.hint : undefined,
+    diagnosticId: typeof data.diagnosticId === 'string' ? data.diagnosticId : undefined,
+    logPath: typeof data.logPath === 'string' ? data.logPath : undefined,
+    diagnosticsRecord: readDiagnosticsRecordRef(data.diagnosticsRecord),
+    retriable: typeof data.retriable === 'boolean' ? data.retriable : undefined,
+    supportedOn: typeof data.supportedOn === 'string' ? data.supportedOn : undefined,
+  };
+}
+
+function appErrorFromDaemonError(error: DaemonError, requestId: string | undefined): AppError {
+  return new AppError(toAppErrorCode(error.code, 'COMMAND_FAILED'), error.message, {
+    ...(error.details ?? {}),
+    hint: error.hint,
+    diagnosticId: error.diagnosticId,
+    logPath: error.logPath,
+    logPathUnavailable: error.logPathUnavailable,
+    diagnosticsRecord: error.diagnosticsRecord,
+    retriable: error.retriable,
+    supportedOn: error.supportedOn,
+    requestId,
+  });
 }
 
 async function resolveDaemonHttpResult(

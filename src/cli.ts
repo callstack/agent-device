@@ -5,7 +5,9 @@ import {
   AppError,
   normalizeError,
   throwDaemonError,
+  type NormalizedError,
 } from '@agent-device/kernel/errors';
+import { resolveRemoteRequestDiagnosticsPath } from './daemon/session-store.ts';
 import { printHumanError, printJson } from './utils/output.ts';
 import { exitAfterFlush } from './utils/process-exit.ts';
 import { readVersion } from './utils/version.ts';
@@ -202,7 +204,7 @@ async function parseCliInputOrExit(
     });
     const normalized = normalizeError(error, {
       diagnosticId: getDiagnosticsMeta().diagnosticId,
-      logPath: flushDiagnosticsToSessionFile({ force: true }) ?? undefined,
+      logPath: flushDiagnosticsToSessionFile({ force: true })?.path,
     });
     if (options.jsonRequested) {
       printJson({ success: false, error: normalized });
@@ -320,7 +322,7 @@ async function resolveRunContextOrExit(
     const appErr = asAppError(err);
     const normalized = normalizeError(appErr, {
       diagnosticId: getDiagnosticsMeta().diagnosticId,
-      logPath: flushDiagnosticsToSessionFile({ force: true }) ?? undefined,
+      logPath: flushDiagnosticsToSessionFile({ force: true })?.path,
     });
     if (parsed.flags.json) {
       printJson({ success: false, error: normalized });
@@ -548,7 +550,7 @@ async function handleRunCliFailure(
   const appErr = asAppError(err);
   const normalized = normalizeError(appErr, {
     diagnosticId: getDiagnosticsMeta().diagnosticId,
-    logPath: flushDiagnosticsToSessionFile({ force: true }) ?? undefined,
+    logPath: flushDiagnosticsToSessionFile({ force: true })?.path,
   });
   if (ctx.command === 'close' && isDaemonStartupFailure(appErr)) {
     if (ctx.effectiveFlags.json) {
@@ -564,7 +566,7 @@ async function handleRunCliFailure(
   } else {
     printHumanError(normalized, { showDetails: ctx.debugOutputEnabled });
     if (ctx.debugOutputEnabled) {
-      printDaemonLogTailOnError(ctx.daemonPaths.logPath);
+      printFailureLogTail(ctx, normalized);
     }
   }
   if (logTailStopper) logTailStopper();
@@ -577,7 +579,32 @@ async function handleRunCliFailure(
 
 const DAEMON_LOG_TAIL_MAX_BYTES = 64_000;
 
-function printDaemonLogTailOnError(logPath: string): void {
+/**
+ * The evidence `--debug` puts inline in the caller's own log after a failure.
+ *
+ * For a LOCAL daemon that is the daemon log this process can read. For a REMOTE
+ * one that file belongs to another machine (the same reason
+ * `maybeStartDaemonLogTail` does not follow it), so the tail comes from the
+ * request record fetched to this host instead — which is what makes a CI job's
+ * transcript carry the evidence without a second round trip (#1801).
+ */
+function printFailureLogTail(ctx: CliRunContext, normalized: NormalizedError): void {
+  if (!ctx.effectiveFlags.daemonBaseUrl) {
+    printLogFileTail('daemon log', ctx.daemonPaths.logPath);
+    return;
+  }
+  const record = normalized.diagnosticsRecord;
+  if (!record) return;
+  // Recomputed from the locator through the same helper that wrote the copy, so
+  // the tail can only ever come from the fetched record (absent when the fetch
+  // failed, since nothing was written).
+  printLogFileTail(
+    'remote diagnostics',
+    resolveRemoteRequestDiagnosticsPath(ctx.daemonPaths.baseDir, record),
+  );
+}
+
+function printLogFileTail(label: string, logPath: string): void {
   try {
     if (fs.existsSync(logPath)) {
       const content = fs.readFileSync(logPath, 'utf8');
@@ -587,7 +614,7 @@ function printDaemonLogTailOnError(logPath: string): void {
         tail = tail.slice(tail.length - DAEMON_LOG_TAIL_MAX_BYTES);
       }
       if (tail.trim().length > 0) {
-        process.stderr.write(`\n[daemon log]\n${tail}\n`);
+        process.stderr.write(`\n[${label}]\n${tail}\n`);
       }
     }
   } catch {}

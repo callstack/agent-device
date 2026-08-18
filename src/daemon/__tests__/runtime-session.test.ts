@@ -31,7 +31,7 @@ test('createDaemonRuntimeSessionStore hides non-matching sessions and scopes wri
       { session: 'qa-ios', command: 'snapshot' },
       async () => {
         await store.set({ name: 'other', appBundleId: 'com.example.other' });
-        return flushDiagnosticsToSessionFile({ force: true });
+        return flushDiagnosticsToSessionFile({ force: true })?.path;
       },
     );
 

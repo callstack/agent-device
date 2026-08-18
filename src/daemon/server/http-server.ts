@@ -1,6 +1,11 @@
 import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import http, { type IncomingHttpHeaders } from 'node:http';
-import { AppError, normalizeError, toAppErrorCode } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  normalizeError,
+  toAppErrorCode,
+  type DiagnosticsRecordRef,
+} from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { timingSafeStringEqual } from '../../utils/timing-safe-equal.ts';
 import type {
@@ -31,6 +36,7 @@ import { DAEMON_HTTP_TENANT_HEADER } from '../http-contract.ts';
 import { sendRestJsonError, statusCodeForNormalizedError } from '../http-errors.ts';
 import { tryHandleUploadHttpRoute } from '../upload-http.ts';
 import { tryHandleDownloadableArtifactHttpRoute } from '../downloadable-artifact-http.ts';
+import { tryHandleRequestDiagnosticsHttpRoute } from '../request-diagnostics-http.ts';
 
 type JsonRpcRequest = JsonRpcRequestEnvelope;
 
@@ -512,9 +518,16 @@ export async function createDaemonHttpServer(options: {
   handleRequest: DaemonInvokeFn;
   token?: string;
   retainArtifacts?: boolean;
+  /**
+   * Resolves a request diagnostics record path for the `/sessions/.../requests/...`
+   * route (#1801). Omitted by embedded servers with no session store; the route
+   * then does not exist and a remote caller is told the record is unavailable
+   * rather than handed a daemon-host path.
+   */
+  resolveRequestDiagnosticsPath?: (ref: DiagnosticsRecordRef) => string;
 }): Promise<http.Server> {
   const authHook = await loadHttpAuthHook();
-  const { handleRequest, token, retainArtifacts = false } = options;
+  const { handleRequest, token, retainArtifacts = false, resolveRequestDiagnosticsPath } = options;
   return http.createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/health') {
       res.statusCode = 200;
@@ -546,6 +559,25 @@ export async function createDaemonHttpServer(options: {
         req,
         res,
         retainArtifacts,
+        authorize: async (request) =>
+          await authorizeAuxiliaryHttpRequest({
+            req: request.req,
+            res: request.res,
+            authHook,
+            expectedToken: token,
+            daemonRequest: request.daemonRequest,
+          }),
+      })
+    ) {
+      return;
+    }
+
+    if (
+      resolveRequestDiagnosticsPath &&
+      tryHandleRequestDiagnosticsHttpRoute({
+        req,
+        res,
+        resolveRecordPath: resolveRequestDiagnosticsPath,
         authorize: async (request) =>
           await authorizeAuxiliaryHttpRequest({
             req: request.req,

@@ -471,10 +471,11 @@ function finalizeThrownRequestError(error: unknown): DaemonResponse {
     },
   });
   const details = getDiagnosticsMeta();
-  const logPathOnFailure = flushDiagnosticsToSessionFile({ force: true }) ?? undefined;
+  const flushed = flushDiagnosticsToSessionFile({ force: true });
   const normalizedError = normalizeError(error, {
     diagnosticId: details.diagnosticId,
-    logPath: logPathOnFailure,
+    logPath: flushed?.path,
+    diagnosticsRecord: flushed?.ref,
   });
   return { ok: false, error: normalizedError };
 }

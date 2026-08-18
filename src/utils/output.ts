@@ -50,8 +50,14 @@ export function printHumanError(
   if (normalized.diagnosticId) {
     process.stderr.write(`Diagnostic ID: ${normalized.diagnosticId}\n`);
   }
+  // #1801: `logPath` is always a path on THIS machine. A record that stayed on
+  // a remote daemon is reported as unavailable, with the reason, on its own
+  // line — never as a path the reader cannot open.
   if (normalized.logPath) {
     process.stderr.write(`Diagnostics Log: ${normalized.logPath}\n`);
+  }
+  if (normalized.logPathUnavailable) {
+    process.stderr.write(`Remote Diagnostics: unavailable (${normalized.logPathUnavailable})\n`);
   }
   // ADR 0012: the divergence compact report always renders; --debug's raw
   // details dump below remains the full-object view.

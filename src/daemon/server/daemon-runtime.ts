@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { asAppError, AppError } from '@agent-device/kernel/errors';
-import { SessionStore } from '../session-store.ts';
+import { resolveSessionRequestLogPath, SessionStore } from '../session-store.ts';
 import { resolveDaemonPaths, resolveDaemonServerMode } from '../config.ts';
 import { createDaemonHttpServer } from './http-server.ts';
 import { trackDownloadableArtifact } from '../artifact-tracking.ts';
@@ -399,6 +399,10 @@ export async function startDaemonRuntime(
         handleRequest,
         token,
         retainArtifacts,
+        // #1801: the same record `DaemonError.logPath` names, addressed by its
+        // locator so a remote caller can fetch what it cannot read by path.
+        resolveRequestDiagnosticsPath: (ref) =>
+          resolveSessionRequestLogPath(sessionStore.resolveSessionDir(ref.session), ref.requestId),
       });
       servers.push(httpServer);
       httpPort = await listenHttpServer(httpServer);

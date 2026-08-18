@@ -31,31 +31,36 @@
     "packages/kernel/src/contracts.ts#jsonRpcRequestSchema": "sha256:67e6b8a28b39a3883424a565ae7033c336dc2ea6b193e9b32bb98eb3e18dca7c",
     "packages/kernel/src/device.ts#PLATFORM_SELECTORS": "sha256:36e9da1cc660c0ddfb4cf52521f7f230341ff20e3ebda3405ba7c1799476c42d",
     "packages/kernel/src/device.ts#PlatformSelector": "sha256:61de3f003507ea2f53b396b0146c17670bf674a2db2132e19c462ca6c10cc8fd",
-    "packages/kernel/src/errors.ts#DaemonError": "sha256:398b23dfcdfb972119b7506dd789f7b78ad1504832203f98119524ec4b26a40b",
-    "packages/kernel/src/errors.ts#NormalizedError": "sha256:0d6be3fd0f72a5f74cdd0ed042a5a361c99606979c5b4ad9971a5aa72f688be9",
-    "packages/kernel/src/errors.ts#normalizeError": "sha256:a544353ea11d1c0e50c0eb08c11bcd7a9745642f22b299dc5d3bd42104b76404",
+    "packages/kernel/src/errors.ts#DaemonError": "sha256:af0f0f420277a57338dc59b7b443ec83d371e18768d064b7a265949e6435e976",
+    "packages/kernel/src/errors.ts#DiagnosticsRecordRef": "sha256:c5ef4185d01814fbfddcdcf797ce892f6ebfe1fd3c3fa73c7560ce2d3b6fce60",
+    "packages/kernel/src/errors.ts#NormalizeErrorContext": "sha256:98567378fc456335c8751474152edcf989e676ad0d9f4b54afdd8e6a96b03ae2",
+    "packages/kernel/src/errors.ts#NormalizedError": "sha256:ac2c600668420fe5b3d459f8e677676af83951fbad8ee1c2149092fd48e9d47c",
+    "packages/kernel/src/errors.ts#normalizeError": "sha256:f91f2fa4789075c838be9c42c04046b42d4ebb368eeb1b21194bdb000181e6ce",
+    "packages/kernel/src/errors.ts#readDiagnosticsRecordRef": "sha256:3a210f401221c0a15eb75d488450034885c7b73be39f5e93424c72874d14c395",
     "src/commands/cli-grammar/types.ts#DaemonCommandRequest": "sha256:ea3f4118244711f0eaec0e471f62b0de42ca97181c085df165d37b63301a4619",
     "src/core/lease-scope.ts#LeaseRpcCommand": "sha256:714f66efa725a5d0654e492a76daeb4059caad31b79562cfc9133029ea95bfe5",
     "src/daemon/client/daemon-client-progress.ts#ProgressResponseFormat": "sha256:6d7a99ac13fd422671fd86f8fe093efa40ca369f4ae1f97c98d40a7132543637",
     "src/daemon/client/daemon-client-progress.ts#createInvalidDaemonResponseError": "sha256:0af812346b667a23fdfef641b242cd86d07edaa05eb928c4c531628c09a4031b",
     "src/daemon/client/daemon-client-progress.ts#shouldReadDaemonProgressStream": "sha256:6811404f41d8db3fa6fc751332c7186a2399ec7ecbc4e9c547d9cb9f14dbb350",
+    "src/daemon/client/daemon-client-rpc.ts#appErrorFromDaemonError": "sha256:6188ea43d4da42ea1dd8a61ab1f3d4a6e287ec0a0210b65f850dc3030fdcd508",
     "src/daemon/client/daemon-client-rpc.ts#buildHttpRpcPayload": "sha256:c12b5945e89defe3ede7d699a5caa9f006e1bb2d47ce9adbc7e7dac5670ab5c0",
     "src/daemon/client/daemon-client-rpc.ts#buildLeaseRpcParams": "sha256:1755f46be8c62e7a8eb409e9a94d61781c96ccbef3306702121aa94264d63267",
-    "src/daemon/client/daemon-client-rpc.ts#handleDaemonHttpResponseBody": "sha256:9bb325c99ca8bda6a682eae9552f03913574ca2fbdffcc1000d430e65b6dc7df",
+    "src/daemon/client/daemon-client-rpc.ts#handleDaemonHttpResponseBody": "sha256:8f1c4bba1918545db6296ad29b95f0baa9f949e7c23bc04d59e261130f14611e",
     "src/daemon/client/daemon-client-rpc.ts#isLeaseRpcCommand": "sha256:955dc1b73462d40593e5728dbcbaeec1307944b08262a22627e84cc5dc507e8f",
     "src/daemon/client/daemon-client-rpc.ts#leaseRpcMethodForCommand": "sha256:3613555c6002c23ab5bec4b98bc1b4d6947014b52fa100176177f955cf762881",
     "src/daemon/client/daemon-client-rpc.ts#parseDaemonHttpResponseBody": "sha256:0cbe39dbd09e321ec00854a1626a7d89b6344e59c6faabe2fe02504268b2d886",
+    "src/daemon/client/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:83b0312fe88bc3b3497de799e23d8d14455f665b7cf880f4617cd62b181351cd",
     "src/daemon/client/daemon-client-rpc.ts#resolveDaemonHttpResult": "sha256:296f9d376ce67c8cb20209bdf1c59c2423ffcfa35b5565a99e70271263149048",
-    "src/daemon/client/daemon-client-rpc.ts#toDaemonHttpRpcError": "sha256:32c27a34c2c72c74367bf865159ee2f0c1235589584408ac7c7d2de6d077c4c0",
+    "src/daemon/client/daemon-client-rpc.ts#toDaemonHttpRpcError": "sha256:ceb3286173ff05415ae71fe8dd974d9a2dfe4d33c9144ae219a3ee992b501e0e",
     "src/daemon/client/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:38fe712390d247de59a74b9dc209fdf407ff5f9b1e32b698ae71ebc57569b66d",
     "src/daemon/client/daemon-client-transport.ts#readDaemonHttpHealth": "sha256:5e75af39e96045ce7faba986c900744cee76cdaa1e0df360ea38f3c020520711",
     "src/daemon/client/daemon-client-transport.ts#readHealthPayload": "sha256:5b15e14319b16aebf32d07336986a7f1f2a6b13cec1823ca9aa7c9f01bf1b0b6",
     "src/daemon/client/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:b22111f693ecb65705195a66bce617e58441483ebfd67cf264d6900ba1dcb401",
     "src/daemon/downloadable-artifact-http.ts#DownloadableArtifactHttpAuthorizer": "sha256:1b2702a929ca9170db2ca97c08e3ab67e17edb3ee75325a576c4c1b9cdbebb44",
     "src/daemon/downloadable-artifact-http.ts#DownloadableArtifactHttpRoute": "sha256:e63c4581ccde668913914149c9092d16ecf8a5cbd7ab33c6eb8617e77fc1015e",
-    "src/daemon/downloadable-artifact-http.ts#handleArtifactDownload": "sha256:2fe9778960869a80d99517c9bc6a18093b96ac4c9d7346e185dd1a7fecf06201",
+    "src/daemon/downloadable-artifact-http.ts#handleArtifactDownload": "sha256:7f96d17b7c605230fb3cc21ceaa5b2e515d7445653ff95b2b0f6f15fa6214d4e",
     "src/daemon/downloadable-artifact-http.ts#handleArtifactInventory": "sha256:24f071c082af80f2c50fb4f390bd8949f0f2c91e0bb58e67518b6cdcf6108aff",
-    "src/daemon/downloadable-artifact-http.ts#readArtifactId": "sha256:07f70f27471263f766de347dd1b757f9d296e86521d60f722ae786330e06a355",
+    "src/daemon/downloadable-artifact-http.ts#readArtifactId": "sha256:3472ee52d951fdf7ef00ee500298602c68f0e1e3b8c44ff51b09981efabf348c",
     "src/daemon/downloadable-artifact-http.ts#readRequestPathname": "sha256:6b3a49c72365cf7da4552abef59862c073461f746025e28d409048815dd586f2",
     "src/daemon/downloadable-artifact-http.ts#resolveDownloadableArtifactHttpRoute": "sha256:9fcdc9619e8d378e8f04ef7b3584863af446e855702ddce83a16ec194a6d98af",
     "src/daemon/http-contract.ts#DAEMON_HTTP_BASE_PATH": "sha256:a1ada25c6f90d9c69c8c836538e8882547bf239559f7c1accacd0654355802dd",
@@ -65,10 +70,17 @@
     "src/daemon/http-contract.ts#buildDaemonHttpTenantHeaders": "sha256:e38a5f0b5ab07ee3a5fe3db229d0de750888660c55bf31692e100002be96de1d",
     "src/daemon/http-contract.ts#buildDaemonHttpUrl": "sha256:d38f1f8877588fbcb1fea8c52a5cb7dc205043e3fc698b3d78fdcf821fa80471",
     "src/daemon/http-errors.ts#NormalizedHttpError": "sha256:2c2111802fe5f193acbeacc454de9cfab82bc8e4274b896f485e19a14f5518cf",
+    "src/daemon/http-errors.ts#failStreamedHttpResponse": "sha256:7199933eca7244bc801e0601b17cc1aed584bc2353879830fd0686e99f1200c4",
     "src/daemon/http-errors.ts#sendRestJsonError": "sha256:981abb859649419604d555601b5c4bd6616e78215327e055e5f8023c6c15f556",
     "src/daemon/http-errors.ts#statusCodeForNormalizedError": "sha256:20ad272162e28425920bd2dcb4da5ec104bd7e8be2028b902b05bfa4da3df966",
     "src/daemon/http-health.ts#DaemonHealthPayload": "sha256:050650184ad3e61d9359bf5866e7fc1e15e13f14f736a8c92ca57cad6d388967",
     "src/daemon/http-health.ts#buildDaemonHealthPayload": "sha256:5eebf35539d04e3693bb6d7081ffdfcb0d2d8b7d53066e30ca6b4017fa4a55a3",
+    "src/daemon/http-request-target.ts#decodeUriSegment": "sha256:b37622771ea4e61d1a9820169dbdc5809b5c38889bfad79277d7b22f3c3f1ef1",
+    "src/daemon/request-diagnostics-http.ts#REQUEST_DIAGNOSTICS_CONTENT_TYPE": "sha256:16bbd9ae7eaeaaa8c8cbd6e65c4ce786a6c5230c5351288228bbf1a6f11bdcdc",
+    "src/daemon/request-diagnostics-http.ts#RequestDiagnosticsHttpAuthorizer": "sha256:20761c39f434c675bb3405838dded5640bb623737957257e0452ebd46035eef1",
+    "src/daemon/request-diagnostics-http.ts#RequestDiagnosticsHttpOptions": "sha256:cd2c0dda77d2bc434857aea07206a5491ce5f0b82cb86628569f607d6c2cebcf",
+    "src/daemon/request-diagnostics-http.ts#handleRequestDiagnostics": "sha256:83d80f1386028ee56e8954949206dbb723d8411e5c13d25565d32ce3ee84dd9e",
+    "src/daemon/request-diagnostics-http.ts#resolveRequestDiagnosticsHttpRoute": "sha256:4ff07623b27a6f7461e1addb87aabd149904da63f7462149ae4114d14336cde0",
     "src/daemon/request-progress-protocol.ts#DaemonProgressEnvelope": "sha256:16162d01cfc43fc6a0198dbba3358981c1a278a70f7494ebe70d051f517cfb22",
     "src/daemon/request-progress-protocol.ts#DaemonResponseEnvelope": "sha256:202ae64836af890549a1d95963903f9a506294b80bd0862c1b708e72d7f286d0",
     "src/daemon/request-progress-protocol.ts#isDaemonProgressEnvelope": "sha256:e38ec26b64d20e257ff00860548e9c12ac22faf5a6308749d4715129814b381f",
@@ -106,6 +118,7 @@
     "src/daemon/server/http-server.ts#toReleaseMaterializedPathsDaemonRequest": "sha256:708736ca03d6a3fc449bb408382dbd509e490de1f84ecc8771fd77d4adda0154",
     "src/daemon/server/http-server.ts#writeProgressEnvelope": "sha256:ca661f6dd2de6e517c520dbd1e20b59b24b58d925157ed06123149ed2bc0fa3b",
     "src/daemon/server/http-server.ts#writeRpcResponseEnvelope": "sha256:7a8155e9fcbb53485489728250a85109b5dab0d96cdd4aa8b7e7eb87a4898ddb",
+    "src/daemon/session-tenant-scope.ts#isTenantOwnedSessionName": "sha256:c3cff883507d462548846554b89779cb815ceb265714575e57bee022b57c4bd1",
     "src/daemon/upload-http.ts#AuxiliaryHttpAuthorizer": "sha256:6521ffa355c57af97bfc8095699f2a2b38745a6ef8d61a34c8cfc80ee690b6b5",
     "src/daemon/upload-http.ts#DIRECT_UPLOAD_PATH_PREFIX": "sha256:6fe7d42a65baceb595d96b6aa83fe9aa84527d9aa2e448d7ef47882d31a03276",
     "src/daemon/upload-http.ts#UploadFinalizeBody": "sha256:c358aea9b3c341f51f3fa263032dfda8a3fbbf729396fcf7f2d8aa051b231b8b",
@@ -129,6 +142,11 @@
     "src/remote/daemon-artifacts.ts#isRemoteDaemon": "sha256:0f6a714c5f60ce4e8548d811b516d8b6241eca9f7e5414733732da395b8a00e7",
     "src/remote/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:1dcab98fba2674f87053ae888c2235b6a6780405aa70648dc57eb6b9077a02fd",
     "src/remote/daemon-artifacts.ts#resolveMaterializedArtifactPath": "sha256:db5c44effc41ff9fa40bd094945e56ac60fac89a42fa68c65c9293e6de6fb1dc",
+    "src/remote/remote-request-diagnostics.ts#RemoteDaemonErrorPayload": "sha256:8fbcbcdf4bae7b66a08e465a72593794f36364759f18f1a814cd39dfdb76f309",
+    "src/remote/remote-request-diagnostics.ts#RemoteDiagnosticsEndpoint": "sha256:bdf63219ecea77d1290f0f5eeef6d5adc55077fa2fa6750ba4608aa3efd540f0",
+    "src/remote/remote-request-diagnostics.ts#buildRemoteRequestDiagnosticsUrl": "sha256:30a1a9bf0df24d3564a616699916a3bb4360c2b4d21c4ad0562fb0c1e738d0a9",
+    "src/remote/remote-request-diagnostics.ts#fetchRemoteRequestDiagnostics": "sha256:d856cc83f831491a4c34b1e4feb0867741310bc435808dc469800a643c6b5c31",
+    "src/remote/remote-request-diagnostics.ts#localizeRemoteDaemonError": "sha256:35cfa186ad64663ae4dbb4e102d49238532cd7e3b75e8337edcc3d1fd77f92d5",
     "src/remote/upload-client-artifact.ts#PreparedUploadArtifact": "sha256:5c40027d47feda3c946e836372b9f08ad866ab1612708b0d506551545f931ea4",
     "src/remote/upload-client.ts#ARTIFACT_HASH_ALGORITHM": "sha256:328c135ea5f9d89fd2c142b440d5402a61d19f9044bf0504dfc2c525e58c1909",
     "src/remote/upload-client.ts#UploadPreflightResponse": "sha256:196a1d9ef41a1aec192589fa7ccb30cf71d971a005349d5d73eed42e6ab21327",
@@ -153,5 +171,41 @@
     "src/remote/upload-stream.ts#streamFileToHttpRequest": "sha256:eaf2ea49957034f6a7e17d34092dc6cb1998812bddfd68381a0ac34d8a2de58c",
     "src/remote/upload-stream.ts#streamFileToHttpRequestAttempt": "sha256:da39a79fa7c1f81e55caf613eedc347c0f3a9a9711b265a4db185677532d9552"
   },
-  "compatibleChanges": []
+  "compatibleChanges": [
+    {
+      "declaration": "packages/kernel/src/errors.ts#DaemonError",
+      "digest": "sha256:af0f0f420277a57338dc59b7b443ec83d371e18768d064b7a265949e6435e976",
+      "rationale": "#1801 adds two optional error fields: `diagnosticsRecord` (session + request id locating the diagnostics record the daemon already names by path) and `logPathUnavailable` (client-set only). A peer on protocol 2 that does not send them is unchanged, and one that does not read them keeps parsing every field it read before."
+    },
+    {
+      "declaration": "packages/kernel/src/errors.ts#NormalizedError",
+      "digest": "sha256:ac2c600668420fe5b3d459f8e677676af83951fbad8ee1c2149092fd48e9d47c",
+      "rationale": "#1801 adds the same two optional fields to the normalized error the daemon serializes; both are omitted unless set, so a released client parsing this payload sees the exact bytes it saw before whenever they are absent, and ignores them otherwise."
+    },
+    {
+      "declaration": "src/daemon/client/daemon-client-rpc.ts#handleDaemonHttpResponseBody",
+      "digest": "sha256:8f1c4bba1918545db6296ad29b95f0baa9f949e7c23bc04d59e261130f14611e",
+      "rationale": "#1801 client-side only: the RPC error branch now runs through `rejectDaemonHttpRpcError`, which reads a superset of the fields it read before and, for a remote daemon, replaces the daemon-host `logPath` with a caller-local copy. Every field a released daemon sends is still accepted; nothing new is required of the daemon."
+    },
+    {
+      "declaration": "src/daemon/client/daemon-client-rpc.ts#toDaemonHttpRpcError",
+      "digest": "sha256:ceb3286173ff05415ae71fe8dd974d9a2dfe4d33c9144ae219a3ee992b501e0e",
+      "rationale": "#1801 client-side only: this now returns the parsed `DaemonError` instead of an `AppError` (construction moved to `appErrorFromDaemonError`) and additionally reads the optional `diagnosticsRecord`. Parsing of every previously read field is unchanged, so a released daemon\u2019s error payload is accepted exactly as before."
+    },
+    {
+      "declaration": "src/daemon/downloadable-artifact-http.ts#readArtifactId",
+      "digest": "sha256:3472ee52d951fdf7ef00ee500298602c68f0e1e3b8c44ff51b09981efabf348c",
+      "rationale": "Inlined `decodeURIComponent`+catch replaced by the shared `decodeUriSegment` (src/daemon/http-request-target.ts), which is listed and byte-identical in behaviour: the same artifact ids decode, and an undecodable id still resolves to the empty id the route rejects."
+    },
+    {
+      "declaration": "src/daemon/downloadable-artifact-http.ts#handleArtifactDownload",
+      "digest": "sha256:7f96d17b7c605230fb3cc21ceaa5b2e515d7445653ff95b2b0f6f15fa6214d4e",
+      "rationale": "The mid-stream error branch moved verbatim into the shared `failStreamedHttpResponse` (listed): same status codes before headers, same destroy after. Response framing on the success path is untouched."
+    },
+    {
+      "declaration": "packages/kernel/src/errors.ts#normalizeError",
+      "digest": "sha256:f91f2fa4789075c838be9c42c04046b42d4ebb368eeb1b21194bdb000181e6ce",
+      "rationale": "#1801 lifts `diagnosticsRecord` / `logPathUnavailable` from details (and from a new optional context field) onto the normalized error and strips them from `details`, the same treatment `logPath` and `diagnosticId` already had. No previously emitted field changes shape or value."
+    }
+  ]
 }

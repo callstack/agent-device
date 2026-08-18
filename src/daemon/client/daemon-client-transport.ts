@@ -401,14 +401,26 @@ async function sendHttpRequest(
               if (timeoutHandle) clearTimeout(timeoutHandle);
             },
             handleResponseBody: (body) =>
-              handleDaemonHttpResponseBody(body, { info, req, resolve, reject }),
+              handleDaemonHttpResponseBody(body, {
+                info,
+                req,
+                stateDir: statePaths.baseDir,
+                resolve,
+                reject,
+              }),
           });
           return;
         }
         void readNodeHttpResponseBody(res)
           .then((body) => {
             if (timeoutHandle) clearTimeout(timeoutHandle);
-            handleDaemonHttpResponseBody(body, { info, req, resolve, reject });
+            handleDaemonHttpResponseBody(body, {
+              info,
+              req,
+              stateDir: statePaths.baseDir,
+              resolve,
+              reject,
+            });
           })
           .catch((err: unknown) => {
             if (timeoutHandle) clearTimeout(timeoutHandle);

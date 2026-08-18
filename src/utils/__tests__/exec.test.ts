@@ -69,7 +69,7 @@ test('runCmd emits exec_command diagnostics when the scope is debug-enabled', as
     },
     async () => {
       await runCmd(process.execPath, ['-e', 'process.stdout.write("ok")']);
-      return flushDiagnosticsToSessionFile();
+      return flushDiagnosticsToSessionFile()?.path ?? null;
     },
   );
 
@@ -121,7 +121,7 @@ test.sequential('runCmdBackground emits bounded exec_command diagnostics when AG
             'f',
           ]);
           await wait;
-          return flushDiagnosticsToSessionFile();
+          return flushDiagnosticsToSessionFile()?.path ?? null;
         },
       ),
   );
@@ -167,7 +167,7 @@ test.sequential('runCmd stays silent when exec tracing is not enabled', async ()
       },
       async () => {
         await runCmd(process.execPath, ['-e', 'process.stdout.write("ok")']);
-        return flushDiagnosticsToSessionFile();
+        return flushDiagnosticsToSessionFile()?.path ?? null;
       },
     );
 

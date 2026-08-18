@@ -69,6 +69,12 @@ protected, operator-controlled configuration. Do not put either value in `./agen
 For non-loopback remote daemon URLs, the client still requires authentication. Saved `connect` profiles
 and explicit `--remote-config` workflows remain supported; generated profiles do not persist tokens.
 
+When a command fails against a remote daemon, the `Diagnostics Log:` path is always on the calling
+machine: the failing request's record is fetched over the same base URL and token into
+`<state-dir>/remote-diagnostics/<session>/<request-id>.ndjson`, so a CI job can keep it as a build
+artifact. If the record cannot be fetched the line reads `unavailable` with the remote daemon, the
+request id, and the reason — never a path on the daemon host.
+
 Project-safe keys include command defaults such as `platform`, `target`, `device`, `session`,
 `snapshotDepth`, recording/capture options, and action timing. Connection and provider keys below are
 user- or explicit-config only:
