@@ -132,16 +132,17 @@ test('a relative import resolves within its own workspace package src/, but not 
     ]),
   );
 
-  assert.deepEqual(
-    edges.map(({ file, target }) => `${file} -> ${target}`).sort(),
-    [
-      'packages/contracts/src/cycle-a.ts -> packages/contracts/src/cycle-b.ts',
-      'packages/contracts/src/cycle-b.ts -> packages/contracts/src/cycle-a.ts',
-      'packages/contracts/src/facades/device.ts -> packages/contracts/src/device.ts',
-    ],
-  );
+  assert.deepEqual(edges.map(({ file, target }) => `${file} -> ${target}`).sort(), [
+    'packages/contracts/src/cycle-a.ts -> packages/contracts/src/cycle-b.ts',
+    'packages/contracts/src/cycle-b.ts -> packages/contracts/src/cycle-a.ts',
+    'packages/contracts/src/facades/device.ts -> packages/contracts/src/device.ts',
+  ]);
   assert.deepEqual(findValueImportCycles(edges), [
-    ['packages/contracts/src/cycle-a.ts', 'packages/contracts/src/cycle-b.ts', 'packages/contracts/src/cycle-a.ts'],
+    [
+      'packages/contracts/src/cycle-a.ts',
+      'packages/contracts/src/cycle-b.ts',
+      'packages/contracts/src/cycle-a.ts',
+    ],
   ]);
 });
 
