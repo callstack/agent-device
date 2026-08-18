@@ -187,24 +187,29 @@ function stableCaptureTransitionBaseline(
   // SnapshotState.backend is optional at the runtime boundary. The bound iOS backend remains
   // authoritative when a presented capture omits that provenance; a declared non-XCTest backend
   // still wins so this confirmation cannot leak onto another capture implementation.
-  const isXCTestCapture =
-    snapshot?.backend === 'xctest' || (snapshot?.backend === undefined && platform === 'ios');
+  if (!baselineNodes || !snapshot || !isBoundIosXCTestCapture(snapshot.backend, platform)) {
+    return undefined;
+  }
   // A broad *screen* replacement needs a complete post-action viewport projection. The baseline
   // comes from settle's authoritative pre-action capture, but a presented iOS modal can omit its
   // Application root and still be the complete interaction surface. Requiring the root only from
   // the candidate prevents scoped/synthetic post-action fragments from extending settle latency.
-  const hasCompleteViewportProjection = snapshot?.nodes.some(isViewportRootNode) === true;
+  const hasCompleteViewportProjection = snapshot.nodes.some(isViewportRootNode);
   // Tiny pre-action surfaces are the other trustworthy completeness signal: iOS presents alerts
   // and sheets as a handful of nodes, and their first post-dismissal capture can temporarily omit
   // the viewport root. Treating that rootless replacement as an arbitrary scoped projection lets
   // a coherent transitional tree win the default 500ms quiet window.
-  const hasTinyPresentedBaseline =
-    baselineNodes !== undefined && baselineNodes.length <= TINY_STABLE_TREE_NODE_COUNT;
-  return baselineNodes &&
-    isXCTestCapture &&
-    (hasCompleteViewportProjection || hasTinyPresentedBaseline)
-    ? stableCaptureSignal({ ...snapshot, nodes: baselineNodes })
-    : undefined;
+  const hasTinyPresentedBaseline = baselineNodes.length <= TINY_STABLE_TREE_NODE_COUNT;
+  if (!hasCompleteViewportProjection && !hasTinyPresentedBaseline) return undefined;
+  return stableCaptureSignal({ ...snapshot, nodes: baselineNodes });
+}
+
+function isBoundIosXCTestCapture(
+  backend: Parameters<typeof stableCaptureSignal>[0]['backend'],
+  platform: AgentDeviceRuntime['backend']['platform'],
+): boolean {
+  if (backend === 'xctest') return true;
+  return backend === undefined && platform === 'ios';
 }
 
 function stableCaptureTransitionQuietMs(params: {
