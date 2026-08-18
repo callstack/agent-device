@@ -427,8 +427,13 @@ The iOS lane combines three evidence layers instead of treating a catalog mentio
   every scheduled run from 2026-07-24 on — so `replay-ios`, `replay-ios-device`, and
   `replay-android` run when someone dispatches the workflow and at no other time. That gap is
   declared in `scripts/gate/declarations.ts` (`MANUAL_ONLY_OWNERS`) and printed by
-  `pnpm check:gate-manifest` on every run; put the jobs back on a schedule once a dispatch run is
-  green and delete their entries;
+  `pnpm check:gate-manifest` on every run. Each entry names the dispatch lane that still runs it,
+  and the audit resolves that name: deleting the parked job, putting it back on a schedule, or
+  removing its `run-gate` step fails the manifest instead of leaving the check listed as merely
+  parked. `replay-android` is marked `opaque` because its gate sits inside the third-party
+  emulator action's `script:`, which the loader does not read (#1429), so the job's existence is
+  the whole attestation. Put the jobs back on a schedule once a dispatch run is green and delete
+  their entries;
 - command-contract, workflow-live, and capability-denial rows explicitly own functionality that
   requires remote sources, unavailable host permissions, or CI setup outside the app session.
 

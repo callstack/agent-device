@@ -86,6 +86,75 @@ test('every manual-only declaration names a registered check no qualifying lane 
   }
 });
 
+/** The live model with the parked dispatch lanes rewritten, to age the declaration on purpose. */
+function withManualLanes(rewrite: (lane: Model['lanes'][number]) => Model['lanes'][number] | null) {
+  const parked = new Set(Object.values(MANUAL_ONLY_OWNERS).map((owner) => owner.lane));
+  return {
+    ...base,
+    lanes: base.lanes.flatMap((lane) => {
+      if (!parked.has(lane.label)) return [lane];
+      const rewritten = rewrite(lane);
+      return rewritten ? [rewritten] : [];
+    }),
+  };
+}
+
+test('deleting a manual-only declaration reports its check as unowned', () => {
+  const failures = audit(base, { manualOnly: {}, unprovable: {} });
+  for (const id of Object.keys(MANUAL_ONLY_OWNERS)) {
+    assert.ok(
+      failures.some(
+        (failure) => failure.assertion === 'owned' && failure.message.includes(`"${id}"`),
+      ),
+      `dropping the declaration for "${id}" must surface it as unowned, not as wired`,
+    );
+  }
+});
+
+// The failure this record exists to prevent: parked coverage quietly becoming deleted coverage.
+test('deleting a parked job fails instead of reading as still parked', () => {
+  const failures = audit(withManualLanes(() => null));
+  for (const id of Object.keys(MANUAL_ONLY_OWNERS)) {
+    assert.ok(
+      failures.some(
+        (failure) =>
+          failure.assertion === 'manual-only' &&
+          failure.message.includes(`"${id}"`) &&
+          failure.message.includes('no workflow defines'),
+      ),
+      `deleting the lane "${MANUAL_ONLY_OWNERS[id]?.lane}" must fail the manifest for "${id}"`,
+    );
+  }
+});
+
+test('a parked lane back on a schedule fails until its declaration is deleted', () => {
+  const failures = audit(withManualLanes((lane) => ({ ...lane, qualifying: true })));
+  assert.ok(
+    failures.some(
+      (failure) =>
+        failure.assertion === 'manual-only' &&
+        /runs on pull_request\/schedule again/.test(failure.message),
+    ),
+  );
+});
+
+// Android is the reason `opaque` exists: its gate sits inside a third-party action's `script:`,
+// so the lane's own steps can never show it and the job's existence is the whole attestation.
+test('a parked lane that stops declaring its gate fails unless the gate is opaque', () => {
+  const failures = audit(withManualLanes((lane) => ({ ...lane, gates: [] })));
+  assert.ok(
+    failures.some(
+      (failure) =>
+        failure.assertion === 'manual-only' && failure.message.includes('no longer declares gate'),
+    ),
+    'a visible parked lane losing its run-gate step must fail',
+  );
+  assert.ok(
+    !failures.some((failure) => failure.message.includes('gate "replay-android"')),
+    'the opaque Android entry cannot assert a step the loader never reads',
+  );
+});
+
 test('unknown assertion kinds remain visible in the report', () => {
   const report = formatFailures([
     { assertion: 'owned', message: 'a' },
