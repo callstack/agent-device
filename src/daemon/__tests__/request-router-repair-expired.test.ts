@@ -135,10 +135,12 @@ test('a replay --from continuation on a reaped repair session gets REPAIR_SESSIO
   const scriptPath = path.join(root, 'flow.ad');
   fs.writeFileSync(scriptPath, 'open "Demo"\nclick id="a"\n');
 
-  // Compute the plan digest exactly as runReplayScriptFile does (a real agent
+  // Compute the plan digest exactly as runReplayScriptSource does (a real agent
   // takes it from the divergence report's resume.planDigest).
   const flags = { platform: 'ios' as const };
-  const digest = inspectAdReplay(scriptPath, { platform: flags.platform }).planDigest;
+  const digest = inspectAdReplay(fs.readFileSync(scriptPath, 'utf8'), {
+    platform: flags.platform,
+  }).planDigest;
 
   // The repair session was reaped, leaving a tombstone; no live session exists.
   sessionStore.writeRepairTombstone(tombstonedSession('repair-from'));

@@ -141,3 +141,25 @@ export type ReplaySuiteResult = {
   tests: ReplaySuiteTestResult[];
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
 };
+
+/**
+ * A **replay script source bundle**: every script file one replay run needs,
+ * read and resolved by the CALLER and shipped with the request.
+ *
+ * `replay <path>` used to send only the path, which the daemon then opened on
+ * ITS filesystem. That works only while caller and daemon share a disk; against
+ * a remote daemon it fails with `ENOENT` on a path the caller can read (#1802).
+ * The bundle removes the class: the daemon never resolves a caller path, so a
+ * local run and a remote run read exactly the same bytes.
+ *
+ * `entry` is the caller-resolved absolute path of the script that was invoked —
+ * it is also the display path every error, line reference, and
+ * `actionSourcePaths` entry is stated in, and it is always a key of `files`.
+ * `files` maps each caller-resolved absolute path to that file's text: one
+ * entry for a native `.ad` script, plus one per transitively included flow for
+ * Maestro YAML `runFlow`.
+ */
+export type ReplayScriptSourceBundle = Readonly<{
+  entry: string;
+  files: Readonly<Record<string, string>>;
+}>;

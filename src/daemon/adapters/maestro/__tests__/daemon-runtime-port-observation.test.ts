@@ -1,3 +1,4 @@
+import { noMaestroIncludeSources } from '../../../../__tests__/test-utils/replay-script-source.ts';
 import { expect, test } from 'vitest';
 import {
   executeMaestroFlow,
@@ -357,7 +358,7 @@ test('assertVisible and assertNotVisible scope duplicate matching children by ch
     '/flows/observation.yaml',
   );
 
-  const result = await executeMaestroFlow(flow, port);
+  const result = await executeMaestroFlow(flow, port, { readSource: noMaestroIncludeSources });
 
   expect(result).toMatchObject({ ok: true, replayed: 2 });
   expect(observations).toHaveLength(2);

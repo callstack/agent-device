@@ -1,7 +1,7 @@
 /**
  * ADR 0012 decision 6 "repair transaction" lifecycle fixes (Q1/Q2a/Q2b/Q2c):
  * proves the WHOLE chain end to end, at the layer these fixes actually live —
- * `runReplayScriptFile` + `handleCloseCommand` sharing a live `SessionStore`,
+ * `runReplayScriptSource` + `handleCloseCommand` sharing a live `SessionStore`,
  * exactly like an agent's separate CLI invocations against the same daemon
  * session would. `sendToDaemon`'s process-level keep-alive (Fix 1's daemon
  * teardown guard) is a different architectural layer — a client-side process
@@ -52,7 +52,7 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
 });
 import fs from 'node:fs';
 import path from 'node:path';
-import { runReplayScriptFile } from '../session-replay-runtime.ts';
+import { runReplayScriptSource } from '../session-replay-runtime.ts';
 import { handleCloseCommand as handleProductionCloseCommand } from '../session-close.ts';
 import { SessionStore } from '../../session-store.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
@@ -177,7 +177,7 @@ test('end-to-end repair transaction: cold divergence stays alive, corrective res
   });
 
   // --- Cold `replay drifted.ad --save-script` diverges on the renamed id. ---
-  const leg1 = await runReplayScriptFile({
+  const leg1 = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath,
@@ -222,7 +222,7 @@ test('end-to-end repair transaction: cold divergence stays alive, corrective res
   // --- `replay --from N+1 --plan-digest <original>` resumes to the end. The
   // source plan's own terminal `close` (Fix 3) is skipped, so this completes
   // instead of diverging on lifecycle. ---
-  const leg2 = await runReplayScriptFile({
+  const leg2 = await runReplayScriptSource({
     req: baseReq({
       positionals: [filePath],
       flags: { saveScript: true, replayFrom: 3, replayPlanDigest: divergence.resume.planDigest },
@@ -295,7 +295,7 @@ test('end-to-end repair transaction: cold divergence stays alive, corrective res
     sessionName: abandoned.sessionName,
   });
 
-  const abandonedLeg1 = await runReplayScriptFile({
+  const abandonedLeg1 = await runReplayScriptSource({
     req: baseReq({ positionals: [abandonedFilePath], flags: { saveScript: true } }),
     sessionName: abandoned.sessionName,
     logPath: abandoned.logPath,
@@ -343,7 +343,7 @@ test('C5a: an incomplete repair reaped by idle-reap leaves a tombstone (no heale
   ]);
   const invoke = makeRecordingReplayInvoke({ sessionStore, sessionName });
 
-  const leg1 = await runReplayScriptFile({
+  const leg1 = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath,
@@ -367,7 +367,7 @@ test('C5a: an incomplete repair reaped by idle-reap leaves a tombstone (no heale
   expect(tombstone?.sourcePath).toBe(filePath);
 
   // A fresh `replay --save-script` on the same key clears the tombstone.
-  await runReplayScriptFile({
+  await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath,
@@ -391,7 +391,7 @@ test('C5a/BLOCKER 3: teardown of a COMPLETE repair auto-commits a self-contained
     evidence: (req) => (req.command === 'click' ? freshEvidence('save-v2', 'Save V2') : undefined),
   });
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath,
@@ -439,7 +439,7 @@ test('BLOCKER 1: a --from continuation on a reaped session returns SESSION_NOT_F
   const invoke = makeRecordingReplayInvoke({ sessionStore, sessionName });
 
   // Leg 1 arms + diverges (save renamed to save-v2 in the mock tree).
-  const leg1 = await runReplayScriptFile({
+  const leg1 = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath,
@@ -459,7 +459,7 @@ test('BLOCKER 1: a --from continuation on a reaped session returns SESSION_NOT_F
   // A `--from` continuation targeting the (now reaped) session must surface
   // SESSION_NOT_FOUND — NOT a REPLAY_DIVERGENCE wrapping the first step's
   // failure — so the router translates it to REPAIR_SESSION_EXPIRED.
-  const resumed = await runReplayScriptFile({
+  const resumed = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { replayFrom: 3, replayPlanDigest: digest } }),
     sessionName,
     logPath,
@@ -612,7 +612,7 @@ test('#1258 arm-time preflight: an existing --save-script target rejects BEFORE 
   const spy: DaemonRequest[] = [];
   const invoke = makeRecordingReplayInvoke({ sessionStore, sessionName, spy });
 
-  const result = await runReplayScriptFile({
+  const result = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath,
@@ -643,7 +643,7 @@ test('#1258: --force skips the arm-time preflight and the replay proceeds despit
   const spy: DaemonRequest[] = [];
   const invoke = makeRecordingReplayInvoke({ sessionStore, sessionName, spy });
 
-  const result = await runReplayScriptFile({
+  const result = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true, force: true } }),
     sessionName,
     logPath,
@@ -684,7 +684,7 @@ test('#1258 preflight honors PERSISTED force: a --from continuation without --fo
   // Leg 1: `replay --save-script --force` — the LIVE force passes the preflight
   // (target exists), arms the session, PERSISTS saveScriptForce, then diverges
   // (nothing published, so the pre-existing target survives).
-  const leg1 = await runReplayScriptFile({
+  const leg1 = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true, force: true } }),
     sessionName,
     logPath,
@@ -710,7 +710,7 @@ test('#1258 preflight honors PERSISTED force: a --from continuation without --fo
   // Leg 2: `replay --from N --save-script` WITHOUT --force — the target still
   // exists. The persisted saveScriptForce must make the arm-time preflight use
   // the SAME effective decision publication uses, so this is NOT rejected.
-  const leg2 = await runReplayScriptFile({
+  const leg2 = await runReplayScriptSource({
     req: baseReq({
       positionals: [filePath],
       flags: { saveScript: true, replayFrom: 3, replayPlanDigest: divergence.resume.planDigest },
@@ -758,7 +758,7 @@ test('#1258 preflight is per-target: a --from continuation RETARGETING to an exi
 
   // Leg 1: `--save-script=<a> --force` — arms + PERSISTS force for <a>, then
   // diverges (nothing published).
-  const leg1 = await runReplayScriptFile({
+  const leg1 = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: targetA, force: true } }),
     sessionName,
     logPath,
@@ -792,7 +792,7 @@ test('#1258 preflight is per-target: a --from continuation RETARGETING to an exi
   // `applySaveScriptRetarget` WOULD clear it for <b>; the preflight must MATCH
   // that per-target contract and REFUSE here, before any step dispatches,
   // instead of executing the leg and only refusing at publish time.
-  const leg2 = await runReplayScriptFile({
+  const leg2 = await runReplayScriptSource({
     req: baseReq({
       positionals: [filePath],
       flags: { saveScript: targetB, replayFrom: 3, replayPlanDigest: divergence.resume.planDigest },

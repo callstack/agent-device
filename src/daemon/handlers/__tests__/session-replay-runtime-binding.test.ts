@@ -4,7 +4,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { resolveTargetDevice } from '../../../core/dispatch.ts';
 import { SessionStore } from '../../session-store.ts';
-import { runReplayScriptFile } from '../session-replay-runtime.ts';
+import { runReplayScriptSource } from '../session-replay-runtime.ts';
 import { baseReplayRequest as baseReq } from './session-replay-runtime.fixtures.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
@@ -27,7 +27,7 @@ test('typed Maestro does not resolve a device before an explicit-platform flow n
   fs.writeFileSync(flowPath, 'appId: com.example.app\n---\n- launchApp\n');
   const invoked: string[] = [];
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({
       positionals: [flowPath],
       flags: { replayBackend: 'maestro', platform: 'android' },
@@ -54,7 +54,7 @@ test('typed Maestro keeps a port-only runtime digest stable after launch binds t
   fs.writeFileSync(flowPath, 'appId: com.example.app\n---\n- launchApp\n- back\n');
   const runtime = { metroPort: 8083 };
 
-  const firstAttempt = await runReplayScriptFile({
+  const firstAttempt = await runReplayScriptSource({
     req: baseReq({
       positionals: [flowPath],
       flags: { replayBackend: 'maestro', platform: 'ios' },
@@ -86,7 +86,7 @@ test('typed Maestro keeps a port-only runtime digest stable after launch binds t
   expect(divergence.resume.from).toBe(2);
 
   const invoked: string[] = [];
-  const resumedAttempt = await runReplayScriptFile({
+  const resumedAttempt = await runReplayScriptSource({
     req: baseReq({
       positionals: [flowPath],
       flags: {

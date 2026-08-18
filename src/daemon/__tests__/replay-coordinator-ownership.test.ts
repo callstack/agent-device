@@ -10,7 +10,7 @@ import { parseSync } from 'oxc-parser';
  * `ReplayCoordinator`, and a `ReplayCoordinator`/`ReplayResumeStamper` manufactured from a bare
  * `SessionStore` + session name is repair authority conjured by naming a session, not proof of
  * holding the request's own coordinator. A behavior test cannot distinguish "the one coordinator
- * `runReplayScriptFile` created, threaded through" from "a second one built from the same
+ * `runReplayScriptSource` created, threaded through" from "a second one built from the same
  * store/name" — both produce identical wire output — so this is a structural check over the
  * import graph, using the same `oxc-parser` AST approach as `scripts/layering/session-state.ts`.
  *

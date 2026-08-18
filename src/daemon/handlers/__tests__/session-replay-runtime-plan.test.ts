@@ -8,7 +8,7 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { runReplayScriptFile } from '../session-replay-runtime.ts';
+import { runReplayScriptSource } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import { createReplayCoordinator } from '../../session-replay-coordinator.ts';
 import { dispatchCommand, resolveTargetDevice } from '../../../core/dispatch.ts';
@@ -42,7 +42,7 @@ test('resume skips steps 1..from-1 without invoking them and executes only from 
   ]);
 
   // First attempt: step 3 fails, capturing a real resume report.
-  const firstAttempt = await runReplayScriptFile({
+  const firstAttempt = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -65,7 +65,7 @@ test('resume skips steps 1..from-1 without invoking them and executes only from 
   // Second attempt: repair app state, resume at the reported step. Steps 1-2
   // must never be invoked — the mock throws if they are.
   const invokedCommands: string[] = [];
-  const resumedAttempt = await runReplayScriptFile({
+  const resumedAttempt = await runReplayScriptSource({
     req: baseReq({
       positionals: [filePath],
       flags: { replayFrom: divergence.resume.from, replayPlanDigest: divergence.resume.planDigest },
@@ -96,7 +96,7 @@ test('resume requires both --from and --plan-digest together', async () => {
   sessionStore.set(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
 
-  const fromOnly = await runReplayScriptFile({
+  const fromOnly = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { replayFrom: 2 } }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -108,7 +108,7 @@ test('resume requires both --from and --plan-digest together', async () => {
   expect(fromOnly.ok).toBe(false);
   if (!fromOnly.ok) expect(fromOnly.error.code).toBe('INVALID_ARGS');
 
-  const digestOnly = await runReplayScriptFile({
+  const digestOnly = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { replayPlanDigest: 'deadbeef' } }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -128,7 +128,7 @@ test('resume rejects an out-of-range --from before any action', async () => {
   sessionStore.set(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({
       positionals: [filePath],
       flags: { replayFrom: 99, replayPlanDigest: 'deadbeef' },
@@ -181,7 +181,7 @@ test("a rejected --from/--plan-digest resume never reaches prepareReplaySession'
   const beforeView = coordinator.view();
   const beforeActionsLength = sessionStore.get(sessionName)!.actions.length;
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({
       positionals: [filePath],
       flags: { replayFrom: 2, replayPlanDigest: 'not-the-real-digest' },
@@ -213,7 +213,7 @@ test('resume rejects a stale --plan-digest after the script changed', async () =
   sessionStore.set(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
 
-  const firstAttempt = await runReplayScriptFile({
+  const firstAttempt = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -235,7 +235,7 @@ test('resume rejects a stale --plan-digest after the script changed', async () =
   // longer match.
   fs.writeFileSync(filePath, 'open "Demo"\nclick "Extra"\nclick "Save"\n');
 
-  const resumedAttempt = await runReplayScriptFile({
+  const resumedAttempt = await runReplayScriptSource({
     req: baseReq({
       positionals: [filePath],
       flags: { replayFrom: divergence.resume.from, replayPlanDigest: divergence.resume.planDigest },
@@ -265,7 +265,7 @@ test('resume rejects a digest from a different effective platform or target befo
   ]);
   const executionFlags = { platform: 'ios' as const, target: 'mobile' as const };
 
-  const firstAttempt = await runReplayScriptFile({
+  const firstAttempt = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: executionFlags }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -285,7 +285,7 @@ test('resume rejects a digest from a different effective platform or target befo
     { ...executionFlags, target: 'desktop' as const },
     { ...executionFlags, platform: 'android' as const },
   ]) {
-    const resumedAttempt = await runReplayScriptFile({
+    const resumedAttempt = await runReplayScriptSource({
       req: baseReq({
         positionals: [filePath],
         flags: {
@@ -333,7 +333,7 @@ test('resume rejects resuming past a retry-wrapped step in the skipped range', a
   // directly — the retry block's nested `back` (1st call) succeeds; the
   // top-level step-2 `back` (2nd call) fails.
   let backCalls = 0;
-  const firstAttempt = await runReplayScriptFile({
+  const firstAttempt = await runReplayScriptSource({
     req: baseReq({ positionals: [mainPath], flags: { replayBackend: 'maestro' } }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -356,7 +356,7 @@ test('resume rejects resuming past a retry-wrapped step in the skipped range', a
   expect(divergence.resume.allowed).toBe(false);
   expect(divergence.resume.reason).toMatch(/control flow/);
 
-  const resumedAttempt = await runReplayScriptFile({
+  const resumedAttempt = await runReplayScriptSource({
     req: baseReq({
       positionals: [mainPath],
       flags: {
@@ -387,7 +387,7 @@ test('typed Maestro resume digest binds an inferred session target', async () =>
   const flowPath = path.join(root, 'flow.yaml');
   fs.writeFileSync(flowPath, 'appId: com.example.app\n---\n- back\n');
 
-  const firstAttempt = await runReplayScriptFile({
+  const firstAttempt = await runReplayScriptSource({
     req: baseReq({ positionals: [flowPath], flags: { replayBackend: 'maestro' } }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -407,7 +407,7 @@ test('typed Maestro resume digest binds an inferred session target', async () =>
     ...session,
     device: { ...session.device, target: 'tv' },
   });
-  const resumedAttempt = await runReplayScriptFile({
+  const resumedAttempt = await runReplayScriptSource({
     req: baseReq({
       positionals: [flowPath],
       flags: {
@@ -439,7 +439,7 @@ test('typed Maestro rejects selectors that conflict with an active session', asy
   fs.writeFileSync(flowPath, 'appId: com.example.app\n---\n- back\n');
   const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({
       positionals: [flowPath],
       flags: { replayBackend: 'maestro', platform: 'android' },
@@ -469,7 +469,7 @@ test('fresh typed Maestro replay resolves its configured app before runtime defa
   );
   const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({
       positionals: [flowPath],
       flags: { replayBackend: 'maestro', platform: 'ios' },
@@ -483,7 +483,7 @@ test('fresh typed Maestro replay resolves its configured app before runtime defa
 
   expect(response.ok).toBe(true);
   expect(mockResolveTargetDevice).toHaveBeenCalledWith(
-    { replayBackend: 'maestro', platform: 'ios' },
+    expect.objectContaining({ replayBackend: 'maestro', platform: 'ios' }),
     { appleSimulatorAppTarget: 'com.example.demo' },
   );
   expect(invoke).toHaveBeenCalledWith(
@@ -504,7 +504,7 @@ test('native replay applies an authored Android platform to its static app open'
   );
   const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [replayPath] }),
     sessionName: 'default',
     logPath: path.join(root, 'daemon.log'),
@@ -531,7 +531,7 @@ test('platform-less typed Maestro replay preserves a resolved Android device', a
   mockResolveTargetDevice.mockResolvedValue(androidDevice);
   const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({
       positionals: [flowPath],
       flags: { replayBackend: 'maestro' },
@@ -544,7 +544,10 @@ test('platform-less typed Maestro replay preserves a resolved Android device', a
   });
 
   expect(response.ok).toBe(true);
-  expect(mockResolveTargetDevice).toHaveBeenCalledWith({ replayBackend: 'maestro' }, {});
+  expect(mockResolveTargetDevice).toHaveBeenCalledWith(
+    expect.objectContaining({ replayBackend: 'maestro' }),
+    {},
+  );
   expect(invoke).toHaveBeenCalledWith(
     expect.objectContaining({
       command: 'open',
@@ -566,7 +569,7 @@ test('typed Maestro resume digest binds effective stored runtime hints', async (
   const flowPath = path.join(root, 'flow.yaml');
   fs.writeFileSync(flowPath, 'appId: com.example.app\n---\n- back\n');
 
-  const firstAttempt = await runReplayScriptFile({
+  const firstAttempt = await runReplayScriptSource({
     req: baseReq({ positionals: [flowPath], flags: { replayBackend: 'maestro' } }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -587,7 +590,7 @@ test('typed Maestro resume digest binds effective stored runtime hints', async (
     metroHost: '127.0.0.1',
     metroPort: 8084,
   });
-  const resumedAttempt = await runReplayScriptFile({
+  const resumedAttempt = await runReplayScriptSource({
     req: baseReq({
       positionals: [flowPath],
       flags: {

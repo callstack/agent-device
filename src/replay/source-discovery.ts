@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { isMaestroYamlPath, maestroBackendRequiredMessage } from '../replay/format.ts';
-import { SessionStore } from './session-store.ts';
+import { resolveUserPath } from '../utils/path-resolution.ts';
+import { isMaestroYamlPath, maestroBackendRequiredMessage } from './format.ts';
 
 const GLOB_PATTERN_CHARS = /[*?[\]{}]/;
 type ReplayInputSource = 'directory' | 'file' | 'glob';
@@ -11,6 +11,11 @@ type ReplayInputSource = 'directory' | 'file' | 'glob';
  * One traversal and ordering policy for both replay engines. It intentionally
  * matches Maestro: explicit files lead, directories use native DFS order, and
  * glob groups are extension-ranked then lexicographic.
+ *
+ * #1802: this runs on the CALLER. `test <path-or-glob>` names files on the
+ * machine that typed the command, so expanding them daemon-side resolved
+ * globs against the wrong filesystem entirely against a remote daemon; the
+ * caller expands and then ships each source's text.
  */
 export function discoverReplaySourcePaths(params: {
   inputs: string[];
@@ -42,7 +47,7 @@ function expandReplayInput(
   cwd: string,
   extensions: ReadonlySet<string>,
 ): { paths: string[]; source: ReplayInputSource } {
-  const expandedInput = SessionStore.expandHome(input, cwd);
+  const expandedInput = resolveUserPath(input, { cwd });
   if (fs.existsSync(expandedInput)) {
     const stat = fs.statSync(expandedInput);
     if (stat.isDirectory()) {

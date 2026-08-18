@@ -6,6 +6,7 @@ import { makeSessionStore } from '../../__tests__/test-utils/index.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { replayScriptSourceBundleFor } from '../../__tests__/test-utils/replay-script-source.ts';
 
 function createHarness() {
   const root = mkdtempForTestSync('agent-device-router-replay-env-');
@@ -34,7 +35,10 @@ test('malformed replay env returns a normalized INVALID_ARGS response', async ()
       session: 'default',
       command: 'replay',
       positionals: [flowPath],
-      flags: { replayEnv: ['NOEQUAL'] },
+      flags: {
+        replayEnv: ['NOEQUAL'],
+        replayScriptSource: replayScriptSourceBundleFor(flowPath),
+      },
       meta: { requestId: 'req-invalid-replay-env' },
     }),
   ).resolves.toMatchObject({
@@ -55,7 +59,13 @@ test('ordinary replay env values do not globally corrupt request diagnostics', a
     session: 'default',
     command: 'replay',
     positionals: [missingPath],
-    flags: { replayEnv: ['RETRIES=2', 'USER=demo'] },
+    // #1802: a request whose bundle does not carry its own entry — the shape a daemon sees when
+    // the caller's script vanished between collection and dispatch. The failure still names the
+    // path, which is what this test is about.
+    flags: {
+      replayEnv: ['RETRIES=2', 'USER=demo'],
+      replayScriptSource: { entry: missingPath, files: {} },
+    },
     meta: { requestId: 'req-ordinary-replay-env' },
   });
 

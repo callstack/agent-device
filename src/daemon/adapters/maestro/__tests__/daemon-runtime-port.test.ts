@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
+import { noMaestroIncludeSources } from '../../../../__tests__/test-utils/replay-script-source.ts';
 import { executeMaestroFlow, inspectMaestroFlow } from '@agent-device/maestro';
 import type { DaemonInvokeFn, DaemonRequest } from '../../../types.ts';
 import { PNG } from '../../../../utils/png.ts';
@@ -676,7 +677,7 @@ test('waitForAnimationToEnd between two taps does not throw a stability-generati
     '/flows/settled.yaml',
   );
 
-  const result = await executeMaestroFlow(flow, port);
+  const result = await executeMaestroFlow(flow, port, { readSource: noMaestroIncludeSources });
 
   expect(result).toMatchObject({ ok: true, replayed: 3 });
   expect(requests.map(({ command }) => command)).toEqual([
@@ -749,7 +750,7 @@ test('timed-out waitForAnimationToEnd retains the pending hierarchy settle', asy
     '/flows/timed-out.yaml',
   );
 
-  const result = await executeMaestroFlow(flow, port);
+  const result = await executeMaestroFlow(flow, port, { readSource: noMaestroIncludeSources });
 
   expect(result).toMatchObject({ ok: true, replayed: 3 });
   expect(clock.value).toBe(MAESTRO_OBSERVATION_POLL_MS);

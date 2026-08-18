@@ -9,7 +9,7 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { runReplayScriptFile } from '../session-replay-runtime.ts';
+import { runReplayScriptSource } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import {
@@ -34,7 +34,7 @@ test('a successful replay prints one line with the step count and wall time', as
   sessionStore.set(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -63,7 +63,7 @@ test('a close-less replay reports sessionActive: true (real producer, session st
   sessionStore.set(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -84,7 +84,7 @@ test('a replay whose terminal close removes the session reports sessionActive: f
   sessionStore.set(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'close']);
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -123,7 +123,7 @@ test('Maestro YAML uses the typed engine while .ad remains generic', async () =>
     return { ok: true as const, data: {} };
   });
 
-  const yamlResponse = await runReplayScriptFile({
+  const yamlResponse = await runReplayScriptSource({
     req: baseReq({
       positionals: [yamlPath],
       flags: { replayBackend: 'maestro', platform: 'ios', replayKeepSession: false },
@@ -139,7 +139,7 @@ test('Maestro YAML uses the typed engine while .ad remains generic', async () =>
 
   commands.length = 0;
   const adPath = writeReplayFile(root, ['open "Generic"']);
-  const adResponse = await runReplayScriptFile({
+  const adResponse = await runReplayScriptSource({
     req: baseReq({
       positionals: [adPath],
       flags: { replayBackend: 'maestro', platform: 'ios' },
@@ -161,7 +161,7 @@ test('bare Maestro YAML requires explicit --maestro routing', async () => {
   const yamlPath = path.join(root, 'flow.yaml');
   fs.writeFileSync(yamlPath, 'appId: com.example.app\n---\n- launchApp\n');
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [yamlPath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -186,7 +186,7 @@ test('ADR 0016 / #1384: a Maestro replay reports sessionActive: true (real produ
   const yamlPath = path.join(root, 'flow.yaml');
   fs.writeFileSync(yamlPath, 'appId: com.example.app\n---\n- launchApp\n');
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({
       positionals: [yamlPath],
       flags: { replayBackend: 'maestro', platform: 'ios' },
@@ -219,9 +219,9 @@ test('typed Maestro nested commands receive the runtime hints bound into the pla
   });
   const yamlPath = path.join(root, 'flow.yaml');
   fs.writeFileSync(yamlPath, 'appId: com.example.app\n---\n- launchApp\n');
-  const requests: Parameters<Parameters<typeof runReplayScriptFile>[0]['invoke']>[0][] = [];
+  const requests: Parameters<Parameters<typeof runReplayScriptSource>[0]['invoke']>[0][] = [];
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({
       positionals: [yamlPath],
       flags: { replayBackend: 'maestro', platform: 'ios' },
@@ -263,7 +263,7 @@ test('typed Maestro writes source-aware redacted step timing traces', async () =
   fs.writeFileSync(yamlPath, 'appId: com.example.app\n---\n- inputText: highly-sensitive\n');
   fs.writeFileSync(tracePath, '');
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({
       positionals: [yamlPath],
       flags: { replayBackend: 'maestro', platform: 'ios' },
@@ -315,7 +315,7 @@ test('replay trace failures do not change action semantics', async () => {
   const yamlPath = path.join(root, 'flow.yaml');
   fs.writeFileSync(yamlPath, 'appId: com.example.app\n---\n- back\n');
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({
       positionals: [yamlPath],
       flags: { replayBackend: 'maestro', platform: 'ios' },
@@ -340,7 +340,7 @@ test('generic replay traces redact typed text', async () => {
   const tracePath = path.join(root, 'replay-timing.ndjson');
   fs.writeFileSync(tracePath, '');
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -365,7 +365,7 @@ test('Maestro YAML rejects .ad repair recording before executing any command', a
   fs.writeFileSync(yamlPath, 'appId: com.example.app\n---\n- launchApp\n');
   const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({
       positionals: [yamlPath],
       flags: { replayBackend: 'maestro', platform: 'ios', saveScript: true },
@@ -394,7 +394,7 @@ test('Maestro YAML cannot append commands to an active .ad repair session', asyn
   fs.writeFileSync(yamlPath, 'appId: com.example.app\n---\n- launchApp\n');
   const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({
       positionals: [yamlPath],
       flags: { replayBackend: 'maestro', platform: 'ios' },
@@ -419,7 +419,7 @@ test('replay rejects legacy JSON payload files', async () => {
   const filePath = path.join(root, 'replay.json');
   fs.writeFileSync(filePath, JSON.stringify({ optimizedActions: [] }, null, 2));
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -452,7 +452,7 @@ test('replay rejects an unknown --replay-backend value before any step dispatch 
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
   const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { replayBackend: 'unknown' } }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -482,7 +482,7 @@ test('replay still dispatches a plain .ad script with replayBackend: "maestro"',
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
   const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { replayBackend: 'maestro' } }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -503,7 +503,7 @@ test('replay rejects malformed .ad lines with unclosed quotes', async () => {
   sessionStore.set(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['click "id=\\"broken\\"']);
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -545,7 +545,7 @@ test('--update never rewrites the .ad file, even when a re-resolvable suggestion
     backend: 'xctest',
   });
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { replayUpdate: true } }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -576,7 +576,7 @@ test('a successful --update replay reports healed: 0 (heal is retired, not just 
   sessionStore.set(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { replayUpdate: true } }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -597,7 +597,7 @@ test('--update no longer refuses env directives (the guard existed only for rewr
   sessionStore.set(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['env NAME=World', 'open "Demo"']);
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { replayUpdate: true } }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -615,7 +615,7 @@ test('--update no longer refuses ${VAR} interpolation (the guard existed only fo
   sessionStore.set(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['click label="${NAME}"']);
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({
       positionals: [filePath],
       flags: { replayUpdate: true, replayEnv: ['NAME=World'] },

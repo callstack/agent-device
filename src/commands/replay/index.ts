@@ -21,6 +21,13 @@ import {
 import type { CliReader, CommandInput, DaemonWriter } from '../cli-grammar/types.ts';
 import { METRO_RELOAD_FLAGS, REPLAY_FLAGS } from '../cli-grammar/flag-groups.ts';
 import { withCommandRuntimeHints } from '../runtime-hints.ts';
+import {
+  collectReplayShellEnv,
+  parseReplayCliEnvEntries,
+  readReplayCliEnvEntries,
+} from '@agent-device/ad-script';
+import { buildReplayScriptSourceBundle } from '../../replay/script-source-bundle.ts';
+import { discoverReplaySourcePaths } from '../../replay/source-discovery.ts';
 
 const REPLAY_COMMAND_NAME = 'replay';
 const TEST_COMMAND_NAME = 'test';
@@ -178,27 +185,57 @@ export const testCliReader: CliReader = (positionals, flags) => ({
   shardSplit: flags.shardSplit,
 });
 
-export const replayDaemonWriter: DaemonWriter = (input) =>
-  request(REPLAY_COMMAND_NAME, [requiredDaemonString(input.path, 'replay requires path')], {
+export const replayDaemonWriter: DaemonWriter = (input) => {
+  const inputPath = requiredDaemonString(input.path, 'replay requires path');
+  const replayBackend = readReplayBackend(input);
+  const replayShellEnv = collectReplayClientShellEnv(process.env);
+  return request(REPLAY_COMMAND_NAME, [inputPath], {
     ...input,
     replayUpdate: input.update,
-    replayBackend: readReplayBackend(input),
+    replayBackend,
     replayEnv: input.env,
-    replayShellEnv: collectReplayClientShellEnv(process.env),
+    replayShellEnv,
+    // #1802: the caller owns the flow files, so it reads them here — the same
+    // client-collects-local-input move `replayShellEnv` already makes — and
+    // the daemon executes only what arrives in this bundle.
+    replayScriptSource: buildReplayScriptSourceBundle({
+      inputPath,
+      cwd: readReplayClientCwd(input),
+      replayBackend,
+      env: readReplayScriptSourceEnv(input, replayShellEnv),
+    }),
     replayFrom: input.resumeFrom,
     replayPlanDigest: input.resumePlanDigest,
     replayKeepSession: input.keepSession,
     saveScript: input.saveScript,
   });
+};
 
-export const testDaemonWriter: DaemonWriter = (input) =>
-  request(TEST_COMMAND_NAME, input.paths ?? [], {
+export const testDaemonWriter: DaemonWriter = (input) => {
+  const inputs = input.paths ?? [];
+  const replayBackend = readReplayBackend(input);
+  const cwd = readReplayClientCwd(input);
+  const replayShellEnv = collectReplayClientShellEnv(process.env);
+  return request(TEST_COMMAND_NAME, inputs, {
     ...stripReplayTestPresentationInput(input),
     replayUpdate: input.update,
-    replayBackend: readReplayBackend(input),
+    replayBackend,
     replayEnv: input.env,
-    replayShellEnv: collectReplayClientShellEnv(process.env),
+    replayShellEnv,
+    // #1802: `test` inputs are paths, directories, and globs on the CALLER's
+    // filesystem. Expanding them here keeps discovery order identical for a
+    // local and a remote daemon and ships each discovered source's text.
+    replayScriptSources: discoverReplaySourcePaths({ inputs, cwd, replayBackend }).map(
+      (inputPath) =>
+        buildReplayScriptSourceBundle({
+          inputPath,
+          cwd,
+          replayBackend,
+          env: readReplayScriptSourceEnv(input, replayShellEnv),
+        }),
+    ),
   });
+};
 
 const replayCommandFacet = defineCommandFacet({
   name: REPLAY_COMMAND_NAME,
@@ -230,6 +267,25 @@ export const replayCommandFamily = defineCommandFamilyFromFacets({
   name: 'replay',
   commands: [replayCommandFacet, testCommandFacet],
 });
+
+/**
+ * The `${VAR}` values a Maestro `runFlow` include path can be resolved from before the run
+ * starts — the same shell (`AD_VAR_*`) and `-e KEY=VALUE` sources the run itself merges into its
+ * environment, read here so collection sees what the run will see.
+ */
+function readReplayScriptSourceEnv(
+  input: CommandInput,
+  replayShellEnv: Record<string, string>,
+): Record<string, string> {
+  return {
+    ...collectReplayShellEnv(replayShellEnv),
+    ...parseReplayCliEnvEntries(readReplayCliEnvEntries(input.env)),
+  };
+}
+
+function readReplayClientCwd(input: CommandInput): string {
+  return typeof input.cwd === 'string' && input.cwd.length > 0 ? input.cwd : process.cwd();
+}
 
 function readReplayBackend(input: CommandInput): string | undefined {
   return input.backend ?? (input.maestro === true ? 'maestro' : undefined);

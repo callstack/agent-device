@@ -52,6 +52,7 @@ export async function prepareRemoteRequestArtifacts(
     });
   }
 
+  assertRemoteDaemonSupportsSaveScript(req);
   flags = applyRemoteArtifactCommand(req, positionals, flags, clientArtifactPaths);
   const remoteInstallSource = await prepareRemoteInstallSource(req, info, uploadProgress);
   if (remoteInstallSource) {
@@ -77,6 +78,27 @@ export async function prepareRemoteRequestArtifacts(
   );
   uploadedArtifactId = installPackageResult ?? uploadedArtifactId;
   return baseResult();
+}
+
+/**
+ * #1802 (the other half of the caller/daemon file split): `--save-script` WRITES a `.ad` file,
+ * and the writer is the daemon's `SessionScriptWriter` — on the daemon's own disk, next to a
+ * source path that does not exist there. Reading was fixed by sending script sources with the
+ * request; writing has no such symmetric path yet (the healed script commits at session teardown,
+ * not in the replay response), so a remote request that would produce a file the caller can never
+ * see is refused here instead of appearing to succeed. Tracked for the return-the-healed-script
+ * response plumbing.
+ */
+function assertRemoteDaemonSupportsSaveScript(req: Omit<DaemonRequest, 'token'>): void {
+  if (req.flags?.saveScript === undefined) return;
+  throw new AppError(
+    'INVALID_ARGS',
+    '--save-script is not supported against a remote daemon: the healed script would be written on the daemon host, not on this machine.',
+    {
+      hint: 'Run the script against a local daemon to capture a healed .ad, or re-run without --save-script.',
+      command: req.command,
+    },
+  );
 }
 
 async function prepareRemoteInstallPackage(

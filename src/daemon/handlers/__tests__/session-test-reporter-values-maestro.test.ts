@@ -4,9 +4,9 @@
 // Both are needed, and neither substitutes for the other: P3 replaced a request-global
 // AsyncLocalStorage with an explicit per-attempt `onStep` port, and that port has two
 // independent forwarding chains. The native chain is
-//   scheduler sink -> runReplayScriptFile -> executeReplayActions -> onStep?.(...)
+//   scheduler sink -> runReplayScriptSource -> executeReplayActions -> onStep?.(...)
 // and the Maestro chain is a different set of links entirely:
-//   scheduler sink -> runReplayScriptFile -> runTypedMaestroReplayFile
+//   scheduler sink -> runReplayScriptSource -> runTypedMaestroReplay
 //                  -> createMaestroReplayObserver({ onStep }) -> actionStarted -> onStep?.(...)
 //
 // An `.ad`-only reporter test stays green if any Maestro link is deleted, so `onTestStep`

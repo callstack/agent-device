@@ -17,6 +17,15 @@ import { AppError } from '@agent-device/kernel/errors';
 import { resolveCliOptions } from '../cli/resolve-cli-options.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
+// #1802: the replay client reads the script it names, so CLI-level replay cases need a real file.
+const REPLAY_SCRIPT_ROOT = mkdtempForTestSync('agent-device-cli-replay-scripts-');
+
+function writeReplayScript(name: string): string {
+  const scriptPath = path.join(REPLAY_SCRIPT_ROOT, name);
+  fs.writeFileSync(scriptPath, 'open "Demo"\n');
+  return scriptPath;
+}
+
 test('install-from-source forwards URL and repeated headers to client.apps.installFromSource', async () => {
   let observed: AppInstallFromSourceOptions | undefined;
   const client = createStubClient({
@@ -721,33 +730,40 @@ test('replay without a path reaches replay validation instead of unknown command
 });
 
 test('replay path falls through to the generic client command route', async () => {
-  const missingPath = '/tmp/does-not-exist.ad';
-  const result = await runCliCapture(['replay', missingPath], async (request) => {
+  const scriptPath = writeReplayScript('fallthrough.ad');
+  const result = await runCliCapture(['replay', scriptPath], async (request) => {
     assert.equal(request.command, 'replay');
-    assert.deepEqual(request.positionals, [missingPath]);
-    return {
-      ok: false,
-      error: {
-        code: 'UNKNOWN',
-        message: `ENOENT: no such file or directory, open '${missingPath}'`,
-      },
-    };
+    assert.deepEqual(request.positionals, [scriptPath]);
+    return { ok: false, error: { code: 'COMMAND_FAILED', message: 'replay step failed' } };
   });
 
   assert.equal(result.code, 1);
   assert.equal(result.calls.length, 1);
-  assert.match(result.stderr, /ENOENT/);
+  assert.match(result.stderr, /replay step failed/);
   assert.doesNotMatch(result.stderr, /Unknown command: replay/);
 });
 
+// #1802: the caller reads the script, so a path that does not resolve on THIS machine is refused
+// here — before any daemon round-trip — naming the path exactly as it was typed. Against a remote
+// daemon this used to travel and come back as an ENOENT for a file the caller can read.
+test('replay refuses a script missing on the caller before any daemon request', async () => {
+  const missingPath = '/tmp/agent-device-does-not-exist.ad';
+  const result = await runCliCapture(['replay', missingPath], async () => ({
+    ok: true,
+    data: {},
+  }));
+
+  assert.equal(result.code, 1);
+  assert.equal(result.calls.length, 0);
+  assert.match(result.stderr, /replay script not found on this machine/);
+  assert.match(result.stderr, new RegExp(missingPath.replace(/[.]/g, '\\.')));
+});
+
 test('replay --timeout reaches the daemon request envelope through the public CLI', async () => {
-  const missingPath = '/tmp/does-not-exist.ad';
-  const result = await runCliCapture(['replay', missingPath, '--timeout', '1000'], async () => ({
+  const scriptPath = writeReplayScript('timeout.ad');
+  const result = await runCliCapture(['replay', scriptPath, '--timeout', '1000'], async () => ({
     ok: false,
-    error: {
-      code: 'UNKNOWN',
-      message: `ENOENT: no such file or directory, open '${missingPath}'`,
-    },
+    error: { code: 'COMMAND_FAILED', message: 'replay step failed' },
   }));
 
   assert.equal(result.code, 1);

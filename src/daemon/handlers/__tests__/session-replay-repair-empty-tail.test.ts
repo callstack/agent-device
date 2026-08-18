@@ -32,7 +32,7 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { runReplayScriptFile } from '../session-replay-runtime.ts';
+import { runReplayScriptSource } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
@@ -92,7 +92,7 @@ test('a record-and-heal divergence on the LAST step resumes with an empty tail a
   // recorded evidence's real ancestry + the still-present container routes
   // this to `record-and-heal`, and since it is the plan's LAST step,
   // resume.from = 3 = actions.length (2) + 1. ---
-  const leg1 = await runReplayScriptFile({
+  const leg1 = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -118,7 +118,7 @@ test('a record-and-heal divergence on the LAST step resumes with an empty tail a
   // --- A blind resume at the reported target BEFORE performing the
   // corrective press is rejected: no new action was recorded since the
   // divergence, so nothing proves the diverged step was actually repaired. ---
-  const blindResume = await runReplayScriptFile({
+  const blindResume = await runReplayScriptSource({
     req: baseReq({
       positionals: [filePath],
       flags: {
@@ -153,7 +153,7 @@ test('a record-and-heal divergence on the LAST step resumes with an empty tail a
   // session.actions, consuming the watermark. Zero steps execute (there is
   // nothing left in the plan), and the runtime's normal end-of-plan path
   // flips the transaction COMPLETE. ---
-  const leg2 = await runReplayScriptFile({
+  const leg2 = await runReplayScriptSource({
     req: baseReq({
       positionals: [filePath],
       flags: {
@@ -216,7 +216,7 @@ test('a manual divergence (unannotated action-failure) on the LAST step resumes 
   // recorded target evidence, routing to `manual`. It is the plan's LAST
   // step, so the record-and-heal-shaped alternate target is 3 = actions
   // (2) + 1 — but `resume.from` itself stays at 2, unshifted. ---
-  const leg1 = await runReplayScriptFile({
+  const leg1 = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -249,7 +249,7 @@ test('a manual divergence (unannotated action-failure) on the LAST step resumes 
   // corrective press is rejected: no new action was recorded since the
   // divergence, so nothing proves the diverged step's intent was actually
   // performed. ---
-  const blindResume = await runReplayScriptFile({
+  const blindResume = await runReplayScriptSource({
     req: baseReq({
       positionals: [filePath],
       flags: { saveScript: true, replayFrom: 3, replayPlanDigest: divergence.resume.planDigest },
@@ -279,7 +279,7 @@ test('a manual divergence (unannotated action-failure) on the LAST step resumes 
   // --- Leg 2: the SAME `--from 3` now succeeds — the corrective press grew
   // session.actions, consuming the watermark. Zero steps execute, and the
   // runtime's normal end-of-plan path flips the transaction COMPLETE. ---
-  const leg2 = await runReplayScriptFile({
+  const leg2 = await runReplayScriptSource({
     req: baseReq({
       positionals: [filePath],
       flags: { saveScript: true, replayFrom: 3, replayPlanDigest: divergence.resume.planDigest },
@@ -348,7 +348,7 @@ test('a caution (identity-mismatch) divergence on the LAST step resumes with an 
   // identity-mismatch/`caution`. It is the plan's LAST step, so the
   // record-and-heal-shaped alternate target is 3 = actions (2) + 1 — but
   // `resume.from` itself stays at 2, unshifted (#1262 item 1). ---
-  const leg1 = await runReplayScriptFile({
+  const leg1 = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -376,7 +376,7 @@ test('a caution (identity-mismatch) divergence on the LAST step resumes with an 
 
   // --- A blind resume at the empty-tail target BEFORE performing the
   // corrective press is rejected. ---
-  const blindResume = await runReplayScriptFile({
+  const blindResume = await runReplayScriptSource({
     req: baseReq({
       positionals: [filePath],
       flags: { saveScript: true, replayFrom: 3, replayPlanDigest: divergence.resume.planDigest },
@@ -406,7 +406,7 @@ test('a caution (identity-mismatch) divergence on the LAST step resumes with an 
 
   // --- Leg 2: the SAME `--from 3` now succeeds — zero steps execute, and
   // the runtime's normal end-of-plan path flips the transaction COMPLETE. ---
-  const leg2 = await runReplayScriptFile({
+  const leg2 = await runReplayScriptSource({
     req: baseReq({
       positionals: [filePath],
       flags: { saveScript: true, replayFrom: 3, replayPlanDigest: divergence.resume.planDigest },
@@ -466,7 +466,7 @@ test('--from N stays legal for a caution divergence even after the N + 1 empty-t
 
   const invoke = makeRecordingReplayInvoke({ sessionStore, sessionName });
 
-  const leg1 = await runReplayScriptFile({
+  const leg1 = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -507,7 +507,7 @@ test('--from N stays legal for a caution divergence even after the N + 1 empty-t
     truncated: false,
     backend: 'xctest',
   });
-  const resumeAtN = await runReplayScriptFile({
+  const resumeAtN = await runReplayScriptSource({
     req: baseReq({
       positionals: [filePath],
       flags: {
@@ -566,7 +566,7 @@ test('an unauthorized --from one past the plan end is rejected on an ARMED sessi
   // reaching `invoke` for "click" — this is the SAME repair-armed
   // (`--save-script`) lifecycle a record-and-heal repair uses, just a
   // different repair sub-flow. ---
-  const leg1 = await runReplayScriptFile({
+  const leg1 = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -594,7 +594,7 @@ test('an unauthorized --from one past the plan end is rejected on an ARMED sessi
   // record-and-heal watermark authorizes skipping the unresolved final step,
   // regardless of how the session's OTHER lifecycle state (armed/held)
   // looks. ---
-  const exploitAttempt = await runReplayScriptFile({
+  const exploitAttempt = await runReplayScriptSource({
     req: baseReq({
       positionals: [filePath],
       flags: { saveScript: true, replayFrom: 3, replayPlanDigest: divergence.resume.planDigest },
@@ -630,7 +630,7 @@ test('a stale --plan-digest on an empty-tail resume is rejected WITHOUT consumin
     failSteps: new Set(['click id="article"']),
   });
 
-  const leg1 = await runReplayScriptFile({
+  const leg1 = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -661,7 +661,7 @@ test('a stale --plan-digest on an empty-tail resume is rejected WITHOUT consumin
   // correct digest would find it already cleared and get rejected as
   // out-of-range, permanently locking the agent out of completing the
   // repair. ---
-  const staleDigestAttempt = await runReplayScriptFile({
+  const staleDigestAttempt = await runReplayScriptSource({
     req: baseReq({
       positionals: [filePath],
       flags: {
@@ -687,7 +687,7 @@ test('a stale --plan-digest on an empty-tail resume is rejected WITHOUT consumin
   });
 
   // --- The retry with the CORRECT digest still succeeds — never locked out. ---
-  const retry = await runReplayScriptFile({
+  const retry = await runReplayScriptSource({
     req: baseReq({
       positionals: [filePath],
       flags: {

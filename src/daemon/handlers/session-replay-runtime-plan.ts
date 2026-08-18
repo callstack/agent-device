@@ -19,11 +19,11 @@ import {
 } from '@agent-device/ad-script';
 import { resolveReplayFormat } from '../../replay/format.ts';
 import { buildReplayBuiltinVars } from './session-replay-vars.ts';
-import { runTypedMaestroReplayFile } from './session-replay-maestro-runtime.ts';
+import { runTypedMaestroReplay } from './session-replay-maestro-runtime.ts';
 import type { ReplayTestAttemptStepSink } from '@agent-device/replay-test';
 
 /**
- * #1555 P5 (decomposition): `runReplayScriptFile`'s (`session-replay-runtime.ts`) plan-side
+ * #1555 P5 (decomposition): `runReplayScriptSource`'s (`session-replay-runtime.ts`) plan-side
  * helpers — everything that inspects the script, resolves its `--from`/`--plan-digest` entry
  * point, and routes a Maestro-format request, before any session-mutating work begins. Extracted
  * verbatim; `buildReplayMetadataFlags` (below) was already here from the #1555 review pass — see
@@ -31,13 +31,13 @@ import type { ReplayTestAttemptStepSink } from '@agent-device/replay-test';
  */
 
 /**
- * `runReplayScriptFile`'s own parameter shape, named here (rather than derived at the call site
- * via `Parameters<typeof runReplayScriptFile>`) so `routeMaestroReplay` below can reference it
+ * `runReplayScriptSource`'s own parameter shape, named here (rather than derived at the call site
+ * via `Parameters<typeof runReplayScriptSource>`) so `routeMaestroReplay` below can reference it
  * without importing back from `session-replay-runtime.ts` — that direction would be a cycle now
  * that the Maestro routing decision lives in this module instead of alongside the function it
  * routes for. `session-replay-runtime.ts` imports this type instead of restating the params.
  */
-export type ReplayScriptFileParams = {
+export type ReplayScriptSourceRunParams = {
   req: DaemonRequest;
   sessionName: string;
   logPath: string;
@@ -56,8 +56,8 @@ export type ReplayScriptFileParams = {
  * Routes a Maestro-format request to the typed Maestro engine, rejecting
  * `--keep-session` (native-`.ad`-only lifecycle) and an active `.ad`
  * `--save-script` repair boundary first. Returns `undefined` for a non-Maestro
- * request so `runReplayScriptFile` continues down the native `.ad` path —
- * extracted from `runReplayScriptFile` itself (fallow complexity) rather than
+ * request so `runReplayScriptSource` continues down the native `.ad` path —
+ * extracted from `runReplayScriptSource` itself (fallow complexity) rather than
  * split further, since every branch here is this one routing decision.
  */
 export async function routeMaestroReplay(params: {
@@ -65,7 +65,7 @@ export async function routeMaestroReplay(params: {
   req: DaemonRequest;
   keepSession: boolean;
   coordinator: ReplayCoordinator;
-  maestroParams: ReplayScriptFileParams;
+  maestroParams: ReplayScriptSourceRunParams;
 }): Promise<DaemonResponse | undefined> {
   const { resolved, req, keepSession, coordinator, maestroParams } = params;
   if (resolveReplayFormat(resolved, req.flags?.replayBackend) !== 'maestro') return undefined;
@@ -81,7 +81,7 @@ export async function routeMaestroReplay(params: {
       'This session has an active .ad --save-script repair run; finish it with replay --from or close before running Maestro YAML.',
     );
   }
-  return await runTypedMaestroReplayFile(maestroParams);
+  return await runTypedMaestroReplay(maestroParams);
 }
 
 export type PreparedReplayPlan = {
@@ -108,13 +108,15 @@ export function prepareReplayPlan(params: {
   sessionStore: SessionStore;
   tracePath: string | undefined;
   resolved: string;
+  /** The entry script's text, taken from the request's replay script source bundle (#1802). */
+  script: string;
   coordinator: ReplayCoordinator;
 }): { ok: true; value: PreparedReplayPlan } | { ok: false; response: DaemonResponse } {
-  const { req, sessionName, sessionStore, tracePath, resolved, coordinator } = params;
+  const { req, sessionName, sessionStore, tracePath, resolved, script, coordinator } = params;
   const backendRejection = validateReplayBackendFlag(req);
   if (backendRejection) return { ok: false, response: backendRejection };
 
-  const { manifest, replayReq } = inspectReplayPlanManifest(req, resolved);
+  const { manifest, replayReq } = inspectReplayPlanManifest(req, script);
   const { metadata, actions, actionLines, actionSourcePaths, planDigest } = manifest;
   const preEntrySession = sessionStore.get(sessionName);
   const entryIndexResult = resolveReplayPlanEntryIndex({
@@ -154,8 +156,8 @@ export function prepareReplayPlan(params: {
  * `inspectAdReplay` that reaches this point with a non-Maestro request)
  * matches `src/compat/replay-input.ts`'s `parseReplayInput` exactly, byte for
  * byte, before any plan/session work begins. `replayBackend: 'maestro'` still
- * passes here because `runReplayScriptFile` has already routed a real
- * Maestro-format request to `runTypedMaestroReplayFile` above; only a
+ * passes here because `runReplayScriptSource` has already routed a real
+ * Maestro-format request to `runTypedMaestroReplay` above; only a
  * stray/unknown value reaches this branch.
  */
 function validateReplayBackendFlag(req: DaemonRequest): DaemonResponse | undefined {
@@ -177,9 +179,9 @@ function validateReplayBackendFlag(req: DaemonRequest): DaemonResponse | undefin
  */
 function inspectReplayPlanManifest(
   req: DaemonRequest,
-  resolved: string,
+  script: string,
 ): { manifest: AdReplayManifest; replayReq: DaemonRequest } {
-  const manifest = inspectAdReplay(resolved, {
+  const manifest = inspectAdReplay(script, {
     platform: req.flags?.platform,
     target: req.flags?.target,
   });
@@ -255,7 +257,7 @@ function buildPreparedReplayVarSources(params: {
  * resume math as a `resolveEntryIndex` closure, both computed from the SAME
  * effective platform/target precedence this file used to apply itself. Only
  * `buildReplayMetadataFlags` stays here: it builds the REQUEST's flags (used
- * throughout `runReplayScriptFile`, not just for the digest), which is a
+ * throughout `runReplayScriptSource`, not just for the digest), which is a
  * daemon/wire concern the manifest has no reason to own.
  *
  * Module-private as of the #1555 P5 decomposition: its one caller,

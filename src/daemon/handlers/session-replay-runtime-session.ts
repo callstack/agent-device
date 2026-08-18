@@ -12,7 +12,7 @@ import {
 import { healedScriptSiblingPath, type ReplayCoordinator } from '../session-replay-coordinator.ts';
 
 /**
- * #1555 P5 (decomposition): `runReplayScriptFile`'s (`session-replay-runtime.ts`) session
+ * #1555 P5 (decomposition): `runReplayScriptSource`'s (`session-replay-runtime.ts`) session
  * preparation — the repair-preflight/resume-consumption/save-script-arming work that runs after
  * `prepareReplayPlan` (`session-replay-runtime-plan.ts`) accepts a plan but before the engine step
  * loop dispatches step 1. Extracted verbatim. `prepareReplaySession` is the one entry point;

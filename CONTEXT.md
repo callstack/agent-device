@@ -247,6 +247,11 @@ task touches:
 - Destination guard: portable selector-targeted `wait` near the end of an open-to-destination script
   that confirms a landmark on the ready destination screen before replay hands the live session to
   its caller.
+- Replay script source bundle: every script file one `replay`/`test` run needs, read and resolved by
+  the CALLER and shipped inside the request — an entry display path plus a resolved-path-to-text map
+  covering the `.ad` script or the Maestro flow and its `runFlow` includes. The daemon executes only
+  what the bundle carries and resolves no caller path, so a local run and a run against a remote
+  daemon read identical bytes (#1802). Avoid: script upload, flow payload.
 - Screen-recording facet: runtime facet that starts platform screen/video capture and returns a live
   handle plus its durable descriptor. It is distinct from script recording.
 - Live resource handle: process-local authority to finish or forcibly dispose active app-log,

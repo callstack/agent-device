@@ -18,6 +18,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 import { LeaseRegistry } from '../lease-registry.ts';
+import { REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE } from '../../replay/script-source-bundle.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { SessionStore } from '../session-store.ts';
 import { createDaemonHttpServer } from '../server/http-server.ts';
@@ -235,8 +236,8 @@ for (const [transport, send] of TRANSPORTS) {
     if (await skipWhenLoopbackUnavailable(t)) return;
     const { handleRequest } = setup();
 
-    // `replay` is a flag owner, so the seam lets it through and the request
-    // fails only on its own missing-path validation, downstream of admission.
+    // `replay` is a flag owner, so the seam lets it through and the request fails only on its
+    // own missing-script-sources validation (#1802), downstream of admission.
     const response = await send(handleRequest, {
       command: 'replay',
       positionals: [],
@@ -245,7 +246,7 @@ for (const [transport, send] of TRANSPORTS) {
 
     expect(response.ok).toBe(false);
     if (response.ok) return;
-    expect(response.error.message).toBe('replay requires a path');
+    expect(response.error.message).toBe(REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE);
   });
 }
 

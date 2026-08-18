@@ -1,5 +1,5 @@
 /**
- * ADR 0012 migration step 4, end-to-end: `runReplayScriptFile` must consult
+ * ADR 0012 migration step 4, end-to-end: `runReplayScriptSource` must consult
  * `verifyReplayActionTarget` for every annotated resolved-target action
  * BEFORE dispatching it, and never send the device action on a non-verified
  * outcome. Mirrors the mocking pattern of `session-replay-runtime.test.ts`
@@ -24,14 +24,17 @@ vi.mock('../../../utils/timeouts.ts', async (importOriginal) => {
   return { ...actual, sleep: vi.fn(async () => {}) };
 });
 
-import fs from 'node:fs';
 import path from 'node:path';
-import { runReplayScriptFile } from '../session-replay-runtime.ts';
-import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest } from '../../types.ts';
+import { runReplayScriptSource } from '../session-replay-runtime.ts';
+import { SessionStore } from '../../session-store.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import {
+  baseReplayRequest as baseReq,
+  writeReplayFile,
+} from './session-replay-runtime.fixtures.ts';
 
 const mockDispatchCommand = vi.mocked(dispatchCommand);
 
@@ -39,16 +42,6 @@ beforeEach(() => {
   mockDispatchCommand.mockReset();
   mockDispatchCommand.mockResolvedValue({});
 });
-
-function writeReplayFile(root: string, lines: string[]): string {
-  const filePath = path.join(root, 'flow.ad');
-  fs.writeFileSync(filePath, `${lines.join('\n')}\n`);
-  return filePath;
-}
-
-function baseReq(overrides: Partial<DaemonRequest> = {}): DaemonRequest {
-  return { token: 'token', session: 'default', command: 'replay', positionals: [], ...overrides };
-}
 
 const SAVE_ANNOTATION =
   '# agent-device:target-v1 {"id":"save","role":"button","label":"Save","ancestry":[],"sibling":0,"viewportOrder":0,"verification":"verified"}';
@@ -109,7 +102,7 @@ test('an unannotated action executes unchanged (old-script pass-through)', async
   const filePath = writeReplayFile(root, ['click id="save"']);
 
   const invoked: DaemonRequest[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -148,7 +141,7 @@ test('a verified target proceeds to dispatch the action', async () => {
   });
 
   const invoked: DaemonRequest[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -174,7 +167,7 @@ test('a verified drag guards both source and destination before dispatch', async
   mockDispatchCommand.mockResolvedValue({ nodes: DRAG_NODES, backend: 'xctest' });
 
   const invoked: DaemonRequest[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -206,7 +199,7 @@ test('a shifted drag destination diverges before pointer-down even when the sour
   });
 
   const invoked: DaemonRequest[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -237,7 +230,7 @@ test('a destination guard refusal reports destination evidence after both prefli
   ]);
   mockDispatchCommand.mockResolvedValue({ nodes: DRAG_NODES, backend: 'xctest' });
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -276,7 +269,7 @@ test('a selector-miss divergence blocks dispatch and never sends the action', as
   mockDispatchCommand.mockResolvedValue({ nodes: [], truncated: false, backend: 'xctest' });
 
   const invoked: DaemonRequest[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -322,7 +315,7 @@ test('an identity-mismatch divergence reports matchCount and an observed identit
   });
 
   const invoked: DaemonRequest[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -374,7 +367,7 @@ test('a recorded-unverifiable annotation is an identity-unverifiable divergence 
   });
 
   const invoked: DaemonRequest[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -416,7 +409,7 @@ test('a verified annotated action carries the post-resolution guard on its dispa
   });
 
   const invoked: DaemonRequest[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -443,7 +436,7 @@ test('an unannotated action never carries a post-resolution guard', async () => 
   const filePath = writeReplayFile(root, ['click id="save"']);
 
   const invoked: DaemonRequest[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -480,7 +473,7 @@ test('a dispatch-time guard mismatch converts to an identity-mismatch target-bin
   });
 
   const invoked: DaemonRequest[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -549,7 +542,7 @@ test('a same-identity guard mismatch surfaces the structural position difference
     backend: 'xctest',
   });
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -604,7 +597,7 @@ test('a target-binding divergence carries a real computed resume (step 5 wiring,
   ]);
   mockDispatchCommand.mockResolvedValue({ nodes: [], truncated: false, backend: 'xctest' });
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -698,7 +691,7 @@ test('a transient content-quality capture failure right after launch recovers wi
     });
 
   const invoked: DaemonRequest[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -722,7 +715,7 @@ test('a content-quality capture failure that never recovers still fails closed a
   mockDispatchCommand.mockImplementation(async () => throwContentQualityCaptureFailure());
 
   const invoked: DaemonRequest[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -793,7 +786,7 @@ test('an iOS sparse-snapshot verdict right after launch recovers within the boun
     });
 
   const invoked: DaemonRequest[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -819,7 +812,7 @@ test('an iOS sparse-snapshot verdict that never recovers still fails closed as i
   mockDispatchCommand.mockImplementation(async () => iosSparseCapture());
 
   const invoked: DaemonRequest[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -855,7 +848,7 @@ test('a permanent (non-content-quality) capture failure fails fast without retry
   mockDispatchCommand.mockImplementation(async () => throwPermanentCaptureFailure());
 
   const invoked: DaemonRequest[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -886,7 +879,7 @@ test('an adb mechanism failure marked retriable at the transport level still fai
   mockDispatchCommand.mockImplementation(async () => throwAdbMechanismFailureMarkedRetriable());
 
   const invoked: DaemonRequest[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -926,7 +919,7 @@ test('an annotated selector wait dispatches with the landmark guard and no eager
   const filePath = writeReplayFile(root, [WAIT_ANNOTATION, 'wait "label=\\"Screen X\\"" 2000']);
 
   const invoked: DaemonRequest[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -964,7 +957,7 @@ test('a recorded-unverifiable wait annotation refuses before polling with matchC
   mockDispatchCommand.mockResolvedValue({ nodes: [], truncated: false, backend: 'xctest' });
 
   const invoked: DaemonRequest[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -1005,7 +998,7 @@ test("the wait loop's landmark refusal converts into an identity-mismatch diverg
   });
 
   const invoked: DaemonRequest[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -1052,7 +1045,7 @@ test('a plain wait timeout on an annotated wait stays an action-failure divergen
 
   mockDispatchCommand.mockResolvedValue({ nodes: [], truncated: false, backend: 'xctest' });
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -1078,7 +1071,7 @@ test('an annotation on a duration wait is inert (no guard, no refusal)', async (
   const filePath = writeReplayFile(root, [WAIT_UNVERIFIABLE_ANNOTATION, 'wait 500']);
 
   const invoked: DaemonRequest[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -1123,7 +1116,7 @@ test('an annotated is step verifies pre-dispatch and threads the post-resolution
   });
 
   const invoked: DaemonRequest[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -1162,7 +1155,7 @@ test('an annotated is step whose recorded identity vanished diverges before disp
   });
 
   const invoked: DaemonRequest[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),

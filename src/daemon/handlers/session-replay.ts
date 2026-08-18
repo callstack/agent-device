@@ -1,10 +1,12 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
+import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
+import { REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE } from '../../replay/script-source-bundle.ts';
 import type { ReplayScriptMetadata } from '@agent-device/ad-script';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { runReplayTestSuite } from '@agent-device/replay-test';
 import { handleCloseCommand } from './session-close.ts';
-import { runReplayScriptFile } from './session-replay-runtime.ts';
+import { runReplayScriptSource } from './session-replay-runtime.ts';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
 import { errorResponse } from './response.ts';
 import { asAppError } from '@agent-device/kernel/errors';
@@ -94,14 +96,17 @@ export function buildNestedReplayFlags(params: {
   target: ReplayScriptMetadata['target'] | undefined;
   artifactsDir: string | undefined;
   shard?: ReplayTestShardContext;
+  /** The one source bundle this attempt replays; `test`'s own multi-source list never fans in. */
+  sourceBundle?: ReplayScriptSourceBundle;
 }): CommandFlags | undefined {
-  const { platform, target, artifactsDir, shard } = params;
+  const { platform, target, artifactsDir, shard, sourceBundle } = params;
   const parentFlags = stripReplayTestHarnessFlags(params.parentFlags);
   if (
     platform === undefined &&
     target === undefined &&
     artifactsDir === undefined &&
-    shard === undefined
+    shard === undefined &&
+    sourceBundle === undefined
   ) {
     return parentFlags;
   }
@@ -111,15 +116,23 @@ export function buildNestedReplayFlags(params: {
       ...(platform !== undefined ? { platform } : {}),
       ...(target !== undefined ? { target } : {}),
       ...(artifactsDir !== undefined ? { artifactsDir } : {}),
+      ...(sourceBundle !== undefined ? { replayScriptSource: sourceBundle } : {}),
     },
     shard,
   );
 }
 
+/**
+ * Strips what belongs to the SUITE rather than to one attempt: the harness's own
+ * `--record-video`, and (#1802) `replayScriptSources` — the suite's whole discovery result, which
+ * `buildNestedReplayFlags` replaces with the single `replayScriptSource` this attempt runs.
+ */
 function stripReplayTestHarnessFlags(flags: CommandFlags | undefined): CommandFlags | undefined {
-  if (flags?.recordVideo !== true) return flags;
+  if (!flags) return flags;
+  if (flags.recordVideo !== true && flags.replayScriptSources === undefined) return flags;
   const nestedFlags = { ...flags };
   delete nestedFlags.recordVideo;
+  delete nestedFlags.replayScriptSources;
   return Object.keys(nestedFlags).length > 0 ? nestedFlags : undefined;
 }
 
@@ -141,7 +154,7 @@ export async function handleSessionReplayCommands(params: {
   const { req, sessionName, logPath, sessionStore, leaseRegistry, invoke } = params;
 
   if (req.command === 'replay') {
-    return await runReplayScriptFile({
+    return await runReplayScriptSource({
       req,
       sessionName,
       logPath,
@@ -177,6 +190,14 @@ export async function handleSessionReplayCommands(params: {
       const appErr = asAppError(err);
       return errorResponse(appErr.code, appErr.message);
     }
+    // #1802: the caller expanded its own paths/globs and sent one script source bundle per
+    // discovered source. `sourceBundles` is that list, keyed below by entry path so each nested
+    // replay attempt executes exactly the text the caller read for that file.
+    const sourceBundles = req.flags?.replayScriptSources;
+    if (!sourceBundles) {
+      return errorResponse('INVALID_ARGS', REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE);
+    }
+    const sourceBundlesByPath = new Map(sourceBundles.map((bundle) => [bundle.entry, bundle]));
     const outcome = await runReplayTestSuite({
       request: suiteRequest,
       // The host owns the request-global progress sink; the scheduler receives only the
@@ -210,6 +231,7 @@ export async function handleSessionReplayCommands(params: {
           target,
           artifactsDir,
           shard,
+          sourceBundle: sourceBundlesByPath.get(filePath),
         });
 
         const videoRecordingParams = replayVideoRuntime
@@ -225,7 +247,7 @@ export async function handleSessionReplayCommands(params: {
         const openLifecycle = videoRecordingParams
           ? buildReplayTestVideoOpenLifecycle(videoRecordingParams)
           : undefined;
-        const replayResponse = await runReplayScriptFile({
+        const replayResponse = await runReplayScriptSource({
           req: {
             ...req,
             command: 'replay',
@@ -280,7 +302,7 @@ export async function handleSessionReplayCommands(params: {
           }),
         );
       },
-      discoverSources: buildReplayTestSourceDiscovery(req.flags?.replayBackend),
+      discoverSources: buildReplayTestSourceDiscovery(sourceBundles, req.flags?.replayBackend),
       resolveShardTargets: buildReplayTestShardTargetResolver(req.flags),
       cleanupSession: async (testSessionName) => {
         if (!sessionStore.get(testSessionName)) return;

@@ -71,7 +71,7 @@ import type {
  *
  * #1478 P5 follow-up (one daemon-owned artifact ledger): artifact-path
  * accumulation used to be DOUBLE-WRITTEN — `dispatchStep` added each step's
- * entries to the daemon's own `Set` (`runReplayScriptFile`'s, read by its
+ * entries to the daemon's own `Set` (`runReplayScriptSource`'s, read by its
  * catch block so a mid-loop throw still reports what was collected) AND
  * returned them for this loop to add to a second `Set` of its own. Two
  * mutable collections, kept in sync by hand, with no single owner. The

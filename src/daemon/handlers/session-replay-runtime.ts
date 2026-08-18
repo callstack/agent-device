@@ -1,6 +1,6 @@
 import { asAppError } from '@agent-device/kernel/errors';
 import type { DaemonResponse, SessionState } from '../types.ts';
-import { SessionStore } from '../session-store.ts';
+import type { SessionStore } from '../session-store.ts';
 import { errorResponse } from './response.ts';
 import { runAdReplay } from '@agent-device/ad-replay';
 import type { SnapshotTimingSample } from '@agent-device/contracts/capture';
@@ -16,8 +16,12 @@ import {
 import {
   prepareReplayPlan,
   routeMaestroReplay,
-  type ReplayScriptFileParams,
+  type ReplayScriptSourceRunParams,
 } from './session-replay-runtime-plan.ts';
+import {
+  readReplayScriptSourceFile,
+  REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE,
+} from '../../replay/script-source-bundle.ts';
 import { prepareReplaySession } from './session-replay-runtime-session.ts';
 
 /**
@@ -33,7 +37,7 @@ import { prepareReplaySession } from './session-replay-runtime-session.ts';
  *  - the `AdReplayStepRuntime` engine adapter (`createAdReplayStepRuntime`, its `build*Failure`
  *    capability implementations, and the `lastResponse`/`lastObservation` side-map mechanics)
  *    lives in `session-replay-runtime-engine-adapter.ts`.
- * This file is what remains: the one place `runReplayScriptFile` composes them, and the run's
+ * This file is what remains: the one place `runReplayScriptSource` composes them, and the run's
  * completion (`completeReplayRun`/`requireLiveSessionForKeepSession`), which runs after the engine
  * loop returns and never touches the step runtime itself.
  *
@@ -43,11 +47,21 @@ import { prepareReplaySession } from './session-replay-runtime-session.ts';
  * constructing its own.
  */
 
-export async function runReplayScriptFile(params: ReplayScriptFileParams): Promise<DaemonResponse> {
+/**
+ * #1802: the run's script text arrives IN THE REQUEST (a replay script source
+ * bundle the caller read and resolved), never as a path this process opens.
+ * That is why this is `runReplayScriptSource` and no longer the old
+ * `…ScriptFile`: a remote daemon shares no filesystem with the caller,
+ * so a handler that opened `req.positionals[0]` could only ever work when the
+ * two happened to be the same host.
+ */
+export async function runReplayScriptSource(
+  params: ReplayScriptSourceRunParams,
+): Promise<DaemonResponse> {
   const { req, sessionName, logPath, sessionStore, tracePath, onStep, invoke } = params;
-  const filePath = req.positionals?.[0];
-  if (!filePath) {
-    return errorResponse('INVALID_ARGS', 'replay requires a path');
+  const bundle = req.flags?.replayScriptSource;
+  if (!bundle) {
+    return errorResponse('INVALID_ARGS', REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE);
   }
 
   const startedAt = Date.now();
@@ -63,9 +77,9 @@ export async function runReplayScriptFile(params: ReplayScriptFileParams): Promi
   // transaction and resume watermark through.
   const coordinator = createReplayCoordinator({ sessionStore, sessionName });
   try {
-    resolved = SessionStore.expandHome(filePath, req.meta?.cwd);
+    resolved = bundle.entry;
     if (isMaestroYamlPath(resolved) && req.flags?.replayBackend !== 'maestro') {
-      return errorResponse('INVALID_ARGS', maestroBackendRequiredMessage('replay', filePath));
+      return errorResponse('INVALID_ARGS', maestroBackendRequiredMessage('replay', resolved));
     }
     const maestroResponse = await routeMaestroReplay({
       resolved,
@@ -81,6 +95,7 @@ export async function runReplayScriptFile(params: ReplayScriptFileParams): Promi
       sessionStore,
       tracePath,
       resolved,
+      script: readReplayScriptSourceFile(bundle, resolved),
       coordinator,
     });
     if (!planPreparation.ok) return planPreparation.response;

@@ -43,7 +43,7 @@ export type ReplaySessionView = Readonly<{
 /**
  * The one capability the divergence-report chain (`session-replay-resume.ts`,
  * `session-replay-divergence.ts`, `session-replay-target-verification.ts`) needs from a
- * `ReplayCoordinator`, bound to the SAME instance the owning `runReplayScriptFile` call
+ * `ReplayCoordinator`, bound to the SAME instance the owning `runReplayScriptSource` call
  * created — never a second construction from a bare session name. Carries no `SessionStore`
  * and cannot name or reacquire a different session.
  */

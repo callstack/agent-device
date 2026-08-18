@@ -34,13 +34,11 @@ export type ReplayTestRunEntry = Extract<ReplayTestDiscoveryEntry, { kind: 'run'
  * suite that matched nothing.
  */
 export function discoverReplayTestEntries(params: {
-  inputs: string[];
-  cwd?: string;
   platformFilter?: PlatformSelector;
   discoverSources: ReplayTestDiscoverSources;
 }): ReplayTestDiscoveryEntry[] {
-  const { inputs, cwd, platformFilter, discoverSources } = params;
-  const sources = discoverSources({ inputs, cwd });
+  const { platformFilter, discoverSources } = params;
+  const sources = discoverSources();
 
   const entries: ReplayTestDiscoveryEntry[] = [];
   for (const source of sources) {

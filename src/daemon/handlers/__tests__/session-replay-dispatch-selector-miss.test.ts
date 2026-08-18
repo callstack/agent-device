@@ -4,7 +4,7 @@
  * press/click/fill/longpress THROWS an AppError instead of resolving to
  * `{ok:false}`. `invokeReplayAction` (session-replay-action-runtime.ts)
  * previously let that throw escape the per-action `if (!response.ok)`
- * handling in `runReplayScriptFile`'s loop, so it hit the outer catch and
+ * handling in `runReplayScriptSource`'s loop, so it hit the outer catch and
  * returned a bare `COMMAND_FAILED` with the legacy diagnostics shape instead
  * of the ADR 0012 `REPLAY_DIVERGENCE` report — breaking the interactive
  * repair loop (no `resume`, no `screen` refs, no `suggestions`) for the
@@ -28,7 +28,7 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
 });
 
 import path from 'node:path';
-import { runReplayScriptFile } from '../session-replay-runtime.ts';
+import { runReplayScriptSource } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { dispatchCommand } from '../../../core/dispatch.ts';
@@ -66,7 +66,7 @@ function throwSelectorMiss(selector: string): never {
 }
 
 function assertDivergenceShape(
-  response: Awaited<ReturnType<typeof runReplayScriptFile>>,
+  response: Awaited<ReturnType<typeof runReplayScriptSource>>,
   expectedResume: { allowed: boolean; from: number } = { allowed: true, from: 1 },
 ): {
   divergence: Record<string, unknown>;
@@ -116,7 +116,7 @@ test('(a) an ANNOTATED press whose dispatch throws a selector-miss yields REPLAY
   });
 
   const invoked: string[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -162,7 +162,7 @@ test('(b) an UNANNOTATED press whose dispatch throws a selector-miss yields REPL
   });
 
   const invoked: string[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -192,7 +192,7 @@ test('(c) a fill selector-miss thrown at dispatch yields REPLAY_DIVERGENCE, not 
   });
 
   const invoked: string[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -224,7 +224,7 @@ test('(d) a thrown NON-AppError at dispatch propagates as an internal error, not
   });
 
   const invoked: string[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -257,7 +257,7 @@ test('(e) a thrown AppError with retriable/supportedOn preserves them at the top
   });
 
   const invoked: string[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),

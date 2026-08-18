@@ -7,7 +7,7 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
 });
 import path from 'node:path';
 import { buildReplayDivergenceFailureResponseFromDescriptor } from '../session-replay-runtime-failure-response.ts';
-import { runReplayScriptFile } from '../session-replay-runtime.ts';
+import { runReplayScriptSource } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
@@ -76,7 +76,7 @@ test('divergence cause and action strings pass through the central redactor at c
   const filePath = writeReplayFile(root, ['click "Save"']);
   mockDispatchCommand.mockRejectedValue(new Error('no device runner available'));
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -112,7 +112,7 @@ test('a fill divergence never serializes the typed text at any response level', 
     // message is a realistic selector error, not an echo of the typed text.
     mockDispatchCommand.mockRejectedValue(new Error('no device runner available'));
 
-    const response = await runReplayScriptFile({
+    const response = await runReplayScriptSource({
       req: baseReq({ positionals: [filePath], meta: { responseLevel: level } }),
       sessionName,
       logPath: path.join(root, 'daemon.log'),
@@ -165,7 +165,7 @@ test('a capture-failed screen hint redacts a secret in the capture error', async
   // The post-failure snapshot capture throws with a secret-bearing message.
   mockDispatchCommand.mockRejectedValue(new Error('snapshot failed: api_key=sk-live-abc123def456'));
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -198,7 +198,7 @@ test('an expanded ${VAR} value echoed by a selector error never reaches the publ
   const filePath = writeReplayFile(root, ['press label="${SECRET}"']);
   mockDispatchCommand.mockRejectedValue(new Error('no device runner available'));
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { replayEnv: [`SECRET=${sentinel}`] } }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -242,7 +242,7 @@ test('an expanded built-in AD_DEVICE_ID never reaches the public divergence', as
   const filePath = writeReplayFile(root, ['press label="${AD_DEVICE_ID}"']);
   mockDispatchCommand.mockRejectedValue(new Error('no device runner available'));
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { serial: deviceId } }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),

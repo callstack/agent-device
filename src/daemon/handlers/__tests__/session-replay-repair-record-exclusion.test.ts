@@ -3,7 +3,7 @@
  * observation-only commands (`snapshot`/`get`/`is`/a read-only `find`), the
  * `--record` opt-in for the corrective-read case, and the fail-loud empty-
  * segment guard. Exercised end to end at the same layer the ADR 0012 decision
- * 6 lifecycle tests use — `runReplayScriptFile` + `handleCloseCommand` sharing
+ * 6 lifecycle tests use — `runReplayScriptSource` + `handleCloseCommand` sharing
  * a live `SessionStore`, exactly like an agent's separate CLI invocations
  * against the same daemon session.
  *
@@ -50,7 +50,7 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
 });
 import fs from 'node:fs';
 import path from 'node:path';
-import { runReplayScriptFile } from '../session-replay-runtime.ts';
+import { runReplayScriptSource } from '../session-replay-runtime.ts';
 import { handleCloseCommand as handleProductionCloseCommand } from '../session-close.ts';
 import { SessionStore } from '../../session-store.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
@@ -150,7 +150,7 @@ async function armAndDiverge(params: ReturnType<typeof setup>, filePath: string)
     sessionName,
     evidence: (req) => (req.command === 'click' ? freshEvidence('confirm', 'Confirm') : undefined),
   });
-  const leg1 = await runReplayScriptFile({
+  const leg1 = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath,
@@ -216,7 +216,7 @@ test('diagnostic get/is reads mid-repair are excluded from the healed script by 
   expect(session.actions.map((a) => a.command)).toEqual(['open', 'press']);
 
   // --- `replay --from N+1` resumes to completion (terminal close skipped). ---
-  const leg2 = await runReplayScriptFile({
+  const leg2 = await runReplayScriptSource({
     req: baseReq({
       positionals: [filePath],
       flags: { saveScript: true, replayFrom: 3, replayPlanDigest: divergence.resume.planDigest },
@@ -264,7 +264,7 @@ test('diagnostic get/is reads mid-repair are excluded from the healed script by 
     sessionStore: fresh.sessionStore,
     sessionName: fresh.sessionName,
   });
-  const freshRun = await runReplayScriptFile({
+  const freshRun = await runReplayScriptSource({
     req: baseReq({ positionals: [healedPath] }),
     sessionName: fresh.sessionName,
     logPath: fresh.logPath,
@@ -298,7 +298,7 @@ test("a --record'ed diagnostic read lands in the healed script (the diverged-ste
   });
   expect(session.actions.map((a) => a.command)).toEqual(['open', 'get']);
 
-  const leg2 = await runReplayScriptFile({
+  const leg2 = await runReplayScriptSource({
     req: baseReq({
       positionals: [filePath],
       flags: { saveScript: true, replayFrom: 3, replayPlanDigest: divergence.resume.planDigest },
@@ -343,7 +343,7 @@ test("a --record'ed diagnostic read lands in the healed script (the diverged-ste
     sessionStore: fresh.sessionStore,
     sessionName: fresh.sessionName,
   });
-  const freshRun = await runReplayScriptFile({
+  const freshRun = await runReplayScriptSource({
     req: baseReq({ positionals: [healedPath] }),
     sessionName: fresh.sessionName,
     logPath: fresh.logPath,
@@ -384,7 +384,7 @@ test('empty-segment guard: a --from resume refuses with an actionable --record h
   });
   expect(session.actions.map((a) => a.command)).toEqual(['open']);
 
-  const blindResume = await runReplayScriptFile({
+  const blindResume = await runReplayScriptSource({
     req: baseReq({
       positionals: [filePath],
       flags: { saveScript: true, replayFrom: 3, replayPlanDigest: divergence.resume.planDigest },

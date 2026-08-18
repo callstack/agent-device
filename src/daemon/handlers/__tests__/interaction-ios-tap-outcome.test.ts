@@ -14,7 +14,8 @@ import {
 } from '../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { SessionScriptWriter } from '../../session-script-writer.ts';
-import { runReplayScriptFile } from '../session-replay-runtime.ts';
+import { runReplayScriptSource } from '../session-replay-runtime.ts';
+import { replayScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
 import {
   imageViewerNodes,
   profileNodes,
@@ -637,13 +638,16 @@ test('corroborated runtime taps retain target evidence through save and replay',
       snapshot: snapshot(profileNodes),
     }),
   );
-  const replayResponse = await runReplayScriptFile({
+  const replayResponse = await runReplayScriptSource({
     req: {
       token: 'test',
       session: replaySessionName,
       command: 'replay',
       positionals: [written.path],
-      flags: { replayKeepSession: true },
+      flags: {
+        replayKeepSession: true,
+        replayScriptSource: replayScriptSourceBundleFor(written.path),
+      },
     },
     sessionName: replaySessionName,
     logPath: path.join(root, 'replay-daemon.log'),

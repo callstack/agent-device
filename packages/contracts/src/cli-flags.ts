@@ -20,6 +20,7 @@ import type {
 } from './remote-config-fields.ts';
 import type { ScreenshotRequestFlags } from './screenshot.ts';
 import type { RecordingScope } from './recording-scope.ts';
+import type { ReplayScriptSourceBundle } from './replay.ts';
 
 export type CliFlags = CloudProviderProfileFields &
   RemoteConfigMetroOptions &
@@ -143,6 +144,13 @@ export type CliFlags = CloudProviderProfileFields &
     replayMaestro?: boolean;
     replayEnv?: string[];
     replayShellEnv?: Record<string, string>;
+    /**
+     * #1802: the caller-read script text `replay` executes. The daemon never
+     * opens a caller path, so this is the ONLY source a replay run reads.
+     */
+    replayScriptSource?: ReplayScriptSourceBundle;
+    /** #1802: `test`'s caller-side discovery result — one bundle per discovered source, in run order. */
+    replayScriptSources?: ReplayScriptSourceBundle[];
     replayFrom?: number;
     replayPlanDigest?: string;
     /** Replay: leave the session active by suppressing an authored terminal close in native .ad. */

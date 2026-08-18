@@ -16,7 +16,7 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { runReplayScriptFile } from '../session-replay-runtime.ts';
+import { runReplayScriptSource } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
@@ -83,7 +83,7 @@ test('a healed script survives repair + fresh-session replay: self-contained ope
   });
 
   // --- Leg 1: open records; "click id=save" diverges (renamed to save-v2). ---
-  const leg1 = await runReplayScriptFile({
+  const leg1 = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -111,7 +111,7 @@ test('a healed script survives repair + fresh-session replay: self-contained ope
   });
 
   // --- Leg 2: resume past the step the agent just performed. ---
-  const leg2 = await runReplayScriptFile({
+  const leg2 = await runReplayScriptSource({
     req: baseReq({
       positionals: [filePath],
       flags: { replayFrom: 3, replayPlanDigest: divergence.resume.planDigest },
@@ -143,7 +143,7 @@ test('a healed script survives repair + fresh-session replay: self-contained ope
   const freshSessionStore = new SessionStore(path.join(freshRoot, 'sessions'));
   const freshSessionName = 'fresh';
   const invokedFresh: DaemonRequest[] = [];
-  const freshReplay = await runReplayScriptFile({
+  const freshReplay = await runReplayScriptSource({
     req: baseReq({ session: freshSessionName, positionals: [healedPath] }),
     sessionName: freshSessionName,
     logPath: path.join(freshRoot, 'daemon.log'),
@@ -184,7 +184,7 @@ function assertHealedScriptStructure(healedScript: string): void {
 
 /** The fresh-session replay dispatched every step with the healed open's flags intact. */
 function assertFreshReplayReached(
-  freshReplay: Awaited<ReturnType<typeof runReplayScriptFile>>,
+  freshReplay: Awaited<ReturnType<typeof runReplayScriptSource>>,
   invokedFresh: DaemonRequest[],
 ): void {
   expect(freshReplay.ok).toBe(true);

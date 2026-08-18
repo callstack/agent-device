@@ -15,7 +15,7 @@ import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
  * These six cases stayed daemon-side rather than moving into the package's
  * `step-loop.test.ts` because they are NOT a test of engine policy through
  * the façade in isolation — every one drives the full
- * `runReplayScriptFile` round trip against a REAL `SessionStore`, and two of
+ * `runReplayScriptSource` round trip against a REAL `SessionStore`, and two of
  * the six (`--keep-session fails explicitly when the completed replay has
  * no live session`, `--keep-session rejects Maestro YAML before engine
  * dispatch`) exercise daemon-ONLY authority
@@ -24,7 +24,7 @@ import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
  * OWN terminal-close-suppression decision has its own cheaper, direct
  * coverage in `packages/ad-replay/src/internal/__tests__/step-loop.test.ts`
  * (see that file's header). This file's real subject is
- * `session-replay-runtime.ts`'s `runReplayScriptFile` — specifically its
+ * `session-replay-runtime.ts`'s `runReplayScriptSource` — specifically its
  * `--keep-session` behavior — so it is named and grouped alongside that
  * file's other `session-replay-runtime-*.test.ts` siblings
  * (`-plan.test.ts`, `-maestro.test.ts`, `-failure.test.ts`, …) rather than
@@ -39,7 +39,7 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { runReplayScriptFile } from '../session-replay-runtime.ts';
+import { runReplayScriptSource } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest } from '../../types.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
@@ -56,7 +56,7 @@ test('--keep-session suppresses a close that is terminal among executable action
   const filePath = writeReplayFile(root, ['open "Demo"', 'close', 'replay "./nested-flow.ad"']);
   const commands: string[] = [];
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { replayKeepSession: true } }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -81,7 +81,7 @@ test('--keep-session fails explicitly when the completed replay has no live sess
   sessionStore.set(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Log out"']);
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { replayKeepSession: true } }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -109,7 +109,7 @@ test('--keep-session suppresses only the authored terminal close and reports the
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"', 'close']);
   const commands: string[] = [];
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { replayKeepSession: true } }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -136,7 +136,7 @@ test('--keep-session preserves an interior close instead of broad command filter
   const filePath = writeReplayFile(root, ['open "Demo"', 'close', 'open "Next"']);
   const commands: string[] = [];
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { replayKeepSession: true } }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -159,7 +159,7 @@ test('--keep-session is a no-op for an already close-less script', async () => {
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
   const invoke = vi.fn(async (_req: DaemonRequest) => ({ ok: true as const, data: {} }));
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { replayKeepSession: true } }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -182,7 +182,7 @@ test('--keep-session rejects Maestro YAML before engine dispatch', async () => {
   fs.writeFileSync(filePath, ['appId: com.example.app', '---', '- launchApp'].join('\n'));
   const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({
       positionals: [filePath],
       flags: { replayBackend: 'maestro', replayKeepSession: true },

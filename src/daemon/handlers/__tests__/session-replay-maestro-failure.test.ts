@@ -1,3 +1,4 @@
+import { noMaestroIncludeSources } from '../../../__tests__/test-utils/replay-script-source.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
@@ -19,7 +20,7 @@ import {
   buildTypedMaestroFailureReportProjection,
   buildTypedMaestroFailureResponse,
 } from '../session-replay-maestro-failure.ts';
-import { runReplayScriptFile } from '../session-replay-runtime.ts';
+import { runReplayScriptSource } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
@@ -102,7 +103,10 @@ async function captureMaestroFailure(
       throw error;
     },
   };
-  const outcome = await executeMaestroFlow(flow, port, { platform: 'ios' });
+  const outcome = await executeMaestroFlow(flow, port, {
+    platform: 'ios',
+    readSource: noMaestroIncludeSources,
+  });
   if (outcome.ok || !outcome.failure) throw new Error('expected typed Maestro failure');
   return outcome.failure;
 }
@@ -135,7 +139,7 @@ test('typed Maestro failure diagnostics render expanded selector values without 
     ['appId: com.example.app', '---', '- tapOn: ${TARGET}', ''].join('\n'),
   );
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({
       positionals: [flowPath],
       flags: {
@@ -229,7 +233,7 @@ test('typed Maestro nested scopes retain resolved target values after unwind', a
     },
   ];
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({
       positionals: [flowPath],
       flags: {
@@ -294,7 +298,7 @@ test('typed Maestro renders flow-local values when static include resolution fai
     ['env:', `  FLOW_NAME: ${flowName}`, '---', '- runFlow: ${FLOW_NAME}.yaml', ''].join('\n'),
   );
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({
       positionals: [flowPath],
       flags: { replayBackend: 'maestro', platform: 'ios' },

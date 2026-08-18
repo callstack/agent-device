@@ -23,6 +23,7 @@ import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import { deviceShape, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { beforeEach, vi } from 'vitest';
 import { applicationLifecycleRuntimeFixture } from '../../__tests__/application-lifecycle-runtime-fixture.ts';
+import { withClientReplayScriptSources } from '../../../__tests__/test-utils/replay-script-source.ts';
 
 const unavailable = Object.freeze({
   available: false,
@@ -97,6 +98,7 @@ export function handleSessionCommands(
 ): ReturnType<typeof handleProductionSessionCommands> {
   return handleProductionSessionCommands({
     ...params,
+    req: withClientReplayScriptSources(params.req),
     inspectFacts: params.inspectFacts ?? mockInspectDeviceRuntimeFacts,
     bindDevice: params.bindDevice ?? mockBindDeviceRuntime,
     reconcileOrphanedDeviceClaim: async () => ({

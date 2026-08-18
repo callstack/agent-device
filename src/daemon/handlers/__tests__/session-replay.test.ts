@@ -10,6 +10,7 @@ import { buildNestedReplayFlags, handleSessionReplayCommands } from '../session-
 import { REPLAY_ONLY_TEST_FLAG_REJECTIONS } from '../session-replay-test-policy.ts';
 import { replayCommandFamily } from '../../../commands/replay/index.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { replayScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
 import {
   unavailableBindDevice,
   unavailableBindExactDevice,
@@ -319,6 +320,7 @@ test('test finalizes replay video exactly once when cancellation arrives after s
         saveScript: false,
         force: false,
         artifactsDir: path.join(root, 'artifacts'),
+        replayScriptSources: [replayScriptSourceBundleFor(replayPath)],
       },
       meta: { cwd: root, requestId: 'record-video-suite' },
     },

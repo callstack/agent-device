@@ -19,7 +19,7 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
 });
 
 import path from 'node:path';
-import { runReplayScriptFile } from '../session-replay-runtime.ts';
+import { runReplayScriptSource } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import {
@@ -99,7 +99,7 @@ test('R1/R2/R6: prefix steps get fresh evidence, corrective + resumed steps land
 
   // --- Leg 1: arms recording, records open + the verified prefix step, then
   // diverges at "click id=delete" — never recorded. ---
-  const leg1 = await runReplayScriptFile({
+  const leg1 = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath,
@@ -133,7 +133,7 @@ test('R1/R2/R6: prefix steps get fresh evidence, corrective + resumed steps land
 
   // --- Leg 2: a --from resume that redundantly passes --save-script — allowed
   // (it is a resume, not a full replay), and must NOT re-stamp the boundary. ---
-  const leg2 = await runReplayScriptFile({
+  const leg2 = await runReplayScriptSource({
     req: baseReq({
       positionals: [filePath],
       flags: { saveScript: true, replayFrom: 4, replayPlanDigest: divergence.resume.planDigest },
@@ -162,7 +162,7 @@ test('R2: a fresh FULL replay --save-script on an already-armed session is rejec
   const invoke = makeRecordingReplayInvoke({ sessionStore, sessionName });
 
   // First run arms the session (sets saveScriptBoundary).
-  const first = await runReplayScriptFile({
+  const first = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath,
@@ -174,7 +174,7 @@ test('R2: a fresh FULL replay --save-script on an already-armed session is rejec
 
   // A SECOND full (non---from) replay --save-script would re-append the prefix.
   const spy: DaemonRequest[] = [];
-  const second = await runReplayScriptFile({
+  const second = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath,
@@ -197,7 +197,7 @@ test('R2 bypass guard: a PLAIN full replay (no --save-script) on an armed sessio
 
   // Arm the repair run — session stays repair-armed (recording +
   // saveScriptBoundary) after it returns.
-  const first = await runReplayScriptFile({
+  const first = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath,
@@ -214,7 +214,7 @@ test('R2 bypass guard: a PLAIN full replay (no --save-script) on an armed sessio
   // is still true, so it would re-append the prefix. Reject it, zero dispatches,
   // healed slice not duplicated.
   const spy: DaemonRequest[] = [];
-  const plain = await runReplayScriptFile({
+  const plain = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath,
@@ -257,7 +257,7 @@ test('R6 no amputation: a pre-populated session whose step-1 open REPLACES the s
     evidence: (req) => (req.command === 'click' ? freshEvidence('x', 'X') : undefined),
   });
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath,
@@ -294,7 +294,7 @@ test('R6 preserved session: prior actions are excluded from the healed slice', a
     evidence: (req) => (req.command === 'click' ? freshEvidence('a', 'A') : undefined),
   });
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath,
@@ -319,7 +319,7 @@ test('opt-in: without --save-script, replay neither arms recording nor records e
     evidence: () => freshEvidence('save', 'Save'),
   });
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath,
@@ -349,7 +349,7 @@ test('a thrown/failed dispatch never lands a partial action in session.actions',
     failSteps: new Set(['click']),
   });
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath,
@@ -399,7 +399,7 @@ test('R1 bootstrap: a session created by step 1 (open) arms in time for step 2 t
     evidence: (req) => (req.command === 'click' ? freshEvidence('save', 'Save') : undefined),
   });
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -424,7 +424,7 @@ test('BLOCKER 4: a minimal [open, terminal close] cold-start script arms the tra
   const spy: DaemonRequest[] = [];
   const invoke = makeRecordingReplayInvoke({ sessionStore, sessionName, spy });
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -463,7 +463,7 @@ test("Fix 3: the source plan's terminal close is skipped (never dispatched, neve
     evidence: (req) => (req.command === 'click' ? freshEvidence('save', 'Save') : undefined),
   });
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath,
@@ -493,7 +493,7 @@ test('Fix 3: an ordinary (non-repair) replay still dispatches its terminal close
   const invoke = makeRecordingReplayInvoke({ sessionStore, sessionName, spy });
 
   // No --save-script: this is a plain deterministic replay, not a repair.
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath,
@@ -518,7 +518,7 @@ test('Fix 3: only the TERMINAL close is skipped during a repair — a mid-plan c
     openReplacesSession: true,
   });
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath,
@@ -550,7 +550,7 @@ test('Fix 3: a --from resume that lands on the terminal close skips it too, lett
     failSteps: new Set(['click id="save"']),
   });
 
-  const leg1 = await runReplayScriptFile({
+  const leg1 = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath,
@@ -575,7 +575,7 @@ test('Fix 3: a --from resume that lands on the terminal close skips it too, lett
   });
 
   spy.length = 0;
-  const leg2 = await runReplayScriptFile({
+  const leg2 = await runReplayScriptSource({
     req: baseReq({
       positionals: [filePath],
       flags: { saveScript: true, replayFrom: 3, replayPlanDigest: divergence.resume.planDigest },
@@ -614,7 +614,7 @@ test('a --from continuation WITHOUT --save-script that diverges is still held al
 
   // Leg 1: `replay --save-script` opens the transaction, arms the session, and
   // diverges at step 2 — held alive.
-  const leg1 = await runReplayScriptFile({
+  const leg1 = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
     logPath,
@@ -633,7 +633,7 @@ test('a --from continuation WITHOUT --save-script that diverges is still held al
   // Leg 2: the `--from 3` continuation carries NO --save-script. It re-diverges
   // at step 3 — and must STILL be held alive, keyed off the persisted armed
   // state, so the transaction survives.
-  const leg2 = await runReplayScriptFile({
+  const leg2 = await runReplayScriptSource({
     req: baseReq({
       positionals: [filePath],
       flags: { replayFrom: 3, replayPlanDigest: leg1Divergence.resume.planDigest },

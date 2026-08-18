@@ -15,6 +15,7 @@ import type {
   SessionRuntimeHints,
 } from '@agent-device/kernel/contracts';
 import type { DaemonBatchStep } from './batch-step.ts';
+import type { ReplayScriptSourceBundle } from './replay.ts';
 import type { AgentDeviceClientConfig, AgentDeviceSelectionOptions } from './client-connection.ts';
 
 export type CommandExecutionOptions = Partial<ScreenshotRequestFlags> & {
@@ -54,6 +55,10 @@ export type CommandExecutionOptions = Partial<ScreenshotRequestFlags> & {
   replayBackend?: string;
   replayEnv?: string[];
   replayShellEnv?: Record<string, string>;
+  /** #1802: caller-read script text for `replay`; the daemon never opens a caller path. */
+  replayScriptSource?: ReplayScriptSourceBundle;
+  /** #1802: caller-side `test` discovery result — one bundle per discovered source, in run order. */
+  replayScriptSources?: ReplayScriptSourceBundle[];
   replayFrom?: number;
   replayPlanDigest?: string;
   replayKeepSession?: boolean;

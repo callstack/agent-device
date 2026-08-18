@@ -162,8 +162,6 @@ function discoverReplayTestSuiteEntries(
   discoverSources: ReplayTestDiscoverSources,
 ): ReplayTestEntry[] {
   return discoverReplayTestEntries({
-    inputs: [...request.inputs],
-    cwd: request.cwd,
     platformFilter: request.platformFilter,
     discoverSources,
   });

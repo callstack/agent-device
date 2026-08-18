@@ -3,7 +3,7 @@ import type { MaestroExecutionOutcome } from '@agent-device/maestro';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { summarizeSnapshotTimingSamples } from '@agent-device/contracts/capture';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
-import { SessionStore } from '../session-store.ts';
+import type { SessionStore } from '../session-store.ts';
 import { buildTypedMaestroFailureResponse } from './session-replay-maestro-failure.ts';
 import { errorResponse } from './response.ts';
 
@@ -34,7 +34,8 @@ export function buildTypedMaestroSuccessResponse(params: {
 
 export async function buildTypedMaestroReplayErrorResponse(params: {
   req: DaemonRequest;
-  requestedPath: string;
+  /** The entry flow's caller-resolved display path (the replay script source bundle's entry). */
+  replayPath: string;
   state: {
     snapshotStart: number;
   };
@@ -49,7 +50,7 @@ export async function buildTypedMaestroReplayErrorResponse(params: {
     return await buildTypedMaestroFailureResponse({
       error: normalizedError,
       failure,
-      replayPath: SessionStore.expandHome(params.requestedPath, params.req.meta?.cwd),
+      replayPath: params.replayPath,
       req: params.req,
       sessionName: params.sessionName,
       sessionStore: params.sessionStore,

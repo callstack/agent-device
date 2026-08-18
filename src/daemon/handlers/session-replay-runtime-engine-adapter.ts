@@ -32,7 +32,7 @@ import type { ReplayTestAttemptStepSink } from '@agent-device/replay-test';
 /**
  * #1555 P5 (decomposition): the daemon's `AdReplayStepRuntime` adapter — extracted verbatim out
  * of `session-replay-runtime.ts`, which now only constructs a `ReplayStepContext` and calls
- * `createAdReplayStepRuntime`. See that file's `runReplayScriptFile` for the request-level
+ * `createAdReplayStepRuntime`. See that file's `runReplayScriptSource` for the request-level
  * orchestration this adapter plugs into.
  *
  * The wire-narrowing concern (guard threading, `details` bag -> typed
@@ -63,7 +63,7 @@ import type { ReplayTestAttemptStepSink } from '@agent-device/replay-test';
  * can end a step (`dispatchStep`, the three `build*Failure` capabilities, and
  * `handleActionFailure`) records the wire response it just built here before
  * projecting it down to the neutral `AdReplayStepOutcome`/`AdReplayStepFailure`
- * the engine actually sees; `readLastResponse` lets `runReplayScriptFile`
+ * the engine actually sees; `readLastResponse` lets `runReplayScriptSource`
  * recover the exact final response once `runAdReplay` reports which step
  * failed, so the client-visible wire output never changes even though the
  * engine itself never touches it.
@@ -91,11 +91,11 @@ export function createAdReplayStepRuntime(params: {
   ctx: ReplayStepContext;
   req: DaemonRequest;
   /**
-   * The run's ONE artifact ledger, owned by `runReplayScriptFile`. `dispatchStep`
+   * The run's ONE artifact ledger, owned by `runReplayScriptSource`. `dispatchStep`
    * is its only writer, and returns its contents for the engine to thread as a
    * plain value — the engine keeps no accumulator of its own (#1478 P5
    * follow-up; see `@agent-device/ad-replay`'s `step-loop.ts` header). Also what
-   * `runReplayScriptFile`'s catch block reports, so a mid-loop throw still names
+   * `runReplayScriptSource`'s catch block reports, so a mid-loop throw still names
    * the artifacts collected up to that point.
    */
   artifactPaths: Set<string>;

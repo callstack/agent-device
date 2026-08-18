@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { replayScriptSourceBundleFor } from '../../__tests__/test-utils/replay-script-source.ts';
 
 vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 vi.mock('../../utils/host-process.ts', async (importOriginal) => {
@@ -183,7 +184,7 @@ test('fresh replay reserves its authored app simulator before any replay step', 
       session: 'fresh-replay',
       command: 'replay',
       positionals: [replayPath],
-      flags: {},
+      flags: { replayScriptSource: replayScriptSourceBundleFor(replayPath) },
       meta: { cwd: root },
     },
     sessionName: 'fresh-replay',
@@ -192,7 +193,7 @@ test('fresh replay reserves its authored app simulator before any replay step', 
 
   expect(keys).toEqual(['session:fresh-replay', 'device:SIM-WITH-APP']);
   expect(mockResolveTargetDevice).toHaveBeenCalledWith(
-    { platform: 'ios' },
+    expect.objectContaining({ platform: 'ios' }),
     { appleSimulatorAppTarget: 'com.example.demo' },
   );
 });
@@ -212,7 +213,7 @@ test('fresh replay leaves a first deep-link open unbound when a later app target
       session: 'fresh-replay-deep-link',
       command: 'replay',
       positionals: [replayPath],
-      flags: {},
+      flags: { replayScriptSource: replayScriptSourceBundleFor(replayPath) },
       meta: { cwd: root },
     },
     sessionName: 'fresh-replay-deep-link',
@@ -240,7 +241,7 @@ test('fresh replay preserves an authored Android platform before advisory lockin
       session: 'fresh-replay-android',
       command: 'replay',
       positionals: [replayPath],
-      flags: {},
+      flags: { replayScriptSource: replayScriptSourceBundleFor(replayPath) },
       meta: { cwd: root },
     },
     sessionName: 'fresh-replay-android',
@@ -248,7 +249,10 @@ test('fresh replay preserves an authored Android platform before advisory lockin
   });
 
   expect(keys).toEqual(['session:fresh-replay-android', 'device:ANDROID-EMULATOR']);
-  expect(mockResolveTargetDevice).toHaveBeenCalledWith({ platform: 'android' }, undefined);
+  expect(mockResolveTargetDevice).toHaveBeenCalledWith(
+    expect.objectContaining({ platform: 'android' }),
+    undefined,
+  );
 });
 
 test('open --debug writes bounded open timing diagnostics to requestLogPath', async () => {

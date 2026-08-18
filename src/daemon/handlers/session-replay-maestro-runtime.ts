@@ -1,5 +1,4 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import fs from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
 import {
   executeMaestroFlow,
@@ -33,6 +32,11 @@ import {
 import { resolveEffectiveOpenRuntimeHints } from './session-runtime.ts';
 import { contextFromFlags } from '../context.ts';
 import { buildMaestroReplayTargetDeviceResolutionOptions } from '../replay-device-selection.ts';
+import {
+  readReplayScriptSourceFile,
+  REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE,
+} from '../../replay/script-source-bundle.ts';
+import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 
 type TypedMaestroReplayParams = {
   req: DaemonRequest;
@@ -65,12 +69,12 @@ type MaestroReplayBinding = Pick<
   'device' | 'platform' | 'target' | 'runtimeHints'
 >;
 
-export async function runTypedMaestroReplayFile(
+export async function runTypedMaestroReplay(
   params: TypedMaestroReplayParams,
 ): Promise<DaemonResponse> {
   const { req } = params;
-  const requestedPath = req.positionals?.[0];
-  if (!requestedPath) return errorResponse('INVALID_ARGS', 'replay requires a path');
+  const bundle = req.flags?.replayScriptSource;
+  if (!bundle) return errorResponse('INVALID_ARGS', REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE);
   if (req.flags?.saveScript !== undefined) {
     return errorResponse(
       'INVALID_ARGS',
@@ -82,14 +86,14 @@ export async function runTypedMaestroReplayFile(
   try {
     return await executeTypedMaestroReplay({
       ...params,
-      requestedPath,
+      bundle,
       startedAt,
       state,
     });
   } catch (error) {
     return await buildTypedMaestroReplayErrorResponse({
       ...params,
-      requestedPath,
+      replayPath: bundle.entry,
       state,
       outcome: { ok: false, error },
     });
@@ -98,7 +102,7 @@ export async function runTypedMaestroReplayFile(
 
 async function executeTypedMaestroReplay(
   params: TypedMaestroReplayParams & {
-    requestedPath: string;
+    bundle: ReplayScriptSourceBundle;
     startedAt: number;
     state: TypedMaestroReplayState;
   },
@@ -126,6 +130,9 @@ async function executeTypedMaestroReplay(
     signal: context.signal,
     from: req.flags?.replayFrom,
     planDigest: req.flags?.replayPlanDigest,
+    // #1802: `runFlow` includes resolve out of the caller's bundle, so a local
+    // and a remote run compile the same flow closure.
+    readSource: (includePath) => readReplayScriptSourceFile(params.bundle, includePath),
     observer: createMaestroReplayObserver({
       filePath: context.filePath,
       tracePath,
@@ -135,7 +142,7 @@ async function executeTypedMaestroReplay(
   if (!outcome.ok) {
     return await buildTypedMaestroReplayErrorResponse({
       ...params,
-      requestedPath: params.requestedPath,
+      replayPath: params.bundle.entry,
       state,
       outcome,
     });
@@ -150,11 +157,11 @@ async function executeTypedMaestroReplay(
 }
 
 async function prepareTypedMaestroReplay(
-  params: TypedMaestroReplayParams & { requestedPath: string },
+  params: TypedMaestroReplayParams & { bundle: ReplayScriptSourceBundle },
 ): Promise<TypedMaestroReplayContext> {
-  const { req, requestedPath, sessionName, sessionStore } = params;
-  const filePath = SessionStore.expandHome(requestedPath, req.meta?.cwd);
-  const flow = inspectMaestroFlow(fs.readFileSync(filePath, 'utf8'), filePath);
+  const { req, bundle, sessionName, sessionStore } = params;
+  const filePath = bundle.entry;
+  const flow = inspectMaestroFlow(readReplayScriptSourceFile(bundle, filePath), filePath);
   const session = sessionStore.get(sessionName);
   if (session) assertSessionSelectorMatches(session, req.flags);
   const binding = await resolveMaestroReplayBinding({

@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
 import type { SessionAction } from '@agent-device/contracts/session';
 import {
@@ -12,7 +11,7 @@ import { resolveReplayEntryIndex, type PendingRecordAndHeal } from './resume.ts'
 
 /**
  * #1478 P5 stage C2b: the read-only `.ad` inspection façade. Moved out of
- * `session-replay-runtime.ts`'s old `parseReplayScript` (the fs read + the
+ * `session-replay-runtime.ts`'s old `parseReplayScript` (the
  * legacy-JSON-payload rejection it guarded) plus the `parseReplayInput`
  * composition (`src/compat/replay-input.ts`) it fed into — this is the same
  * `parseReplayScriptDetailed` + `readReplayScriptMetadata` pair
@@ -50,12 +49,14 @@ export type AdReplayManifest = Readonly<{
 export type AdReplayDigestFlags = Readonly<{ platform?: string; target?: string }>;
 
 /**
- * Reads `sourcePath` once and returns its parsed actions/line table, header
- * metadata, plan digest, and resume-index resolver. Throws
+ * Parses one `.ad` script's TEXT and returns its actions/line table, header
+ * metadata, plan digest, and resume-index resolver. Takes the script itself,
+ * never a path: #1802 made the CALLER read every script file a replay run
+ * needs, so nothing below this façade opens a file. Throws
  * `AppError('INVALID_ARGS', …)` for the one source format `.ad` replay no
  * longer accepts — a legacy JSON replay payload — matching the daemon's
  * prior explicit rejection exactly. Callers do not need to check for this
- * case separately: `runReplayScriptFile`'s top-level catch (`asAppError`)
+ * case separately: `runReplayScriptSource`'s top-level catch (`asAppError`)
  * maps a thrown `AppError` straight to the same `errorResponse` the old
  * explicit branch built, so this is not a behavior change, only where the
  * check lives.
@@ -67,10 +68,9 @@ export type AdReplayDigestFlags = Readonly<{ platform?: string; target?: string 
  * `open` wins; absent that, the `context platform=`/`target=` header line.
  */
 export function inspectAdReplay(
-  sourcePath: string,
+  script: string,
   digestFlags?: AdReplayDigestFlags,
 ): AdReplayManifest {
-  const script = fs.readFileSync(sourcePath, 'utf8');
   const firstNonWhitespace = script.trimStart()[0];
   if (firstNonWhitespace === '{' || firstNonWhitespace === '[') {
     throw new AppError(

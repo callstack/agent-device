@@ -5,7 +5,7 @@ import { makeIosSession } from '../../../__tests__/test-utils/session-factories.
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import { SessionStore } from '../../session-store.ts';
-import { runReplayScriptFile } from '../session-replay-runtime.ts';
+import { runReplayScriptSource } from '../session-replay-runtime.ts';
 import { baseReplayRequest, writeReplayFile } from './session-replay-runtime.fixtures.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
@@ -35,7 +35,7 @@ test('replay executes selector reads before reporting a covered-target divergenc
   ]);
   const invoked: string[] = [];
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReplayRequest({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),

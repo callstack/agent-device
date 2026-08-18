@@ -11,6 +11,13 @@ export {
   type MaestroFlow,
 } from './internal/facade-execution.ts';
 
+export type { MaestroSourceReader } from './internal/program-loader.ts';
+
+export {
+  collectMaestroFlowSources,
+  type MaestroOptionalSourceReader,
+} from './internal/source-closure.ts';
+
 export {
   exportReplayActionsToMaestro,
   MAESTRO_SELECTOR_PROJECTION,

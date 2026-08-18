@@ -30,10 +30,29 @@ import type {
   DaemonResponseData,
 } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
+import fs from 'node:fs';
+import nodePath from 'node:path';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 // Isolated so open/close metro-session-hint file writes never touch the real state dir.
 const TEST_STATE_DIR = mkdtempForTestSync('agent-device-client-test-');
+
+// #1802: replay/test requests carry the script text the CLIENT read, so these cases need real
+// files. `cwd` is what the writer resolves the caller's relative path against.
+const FLOWS_CWD = mkdtempForTestSync('agent-device-client-flows-');
+for (const relativePath of [
+  'flows/login.ad',
+  'flows/login.yaml',
+  'flows/mod-lists.yaml',
+  'e2e/maestro/01-flow.yaml',
+]) {
+  const absolutePath = nodePath.join(FLOWS_CWD, relativePath);
+  fs.mkdirSync(nodePath.dirname(absolutePath), { recursive: true });
+  fs.writeFileSync(
+    absolutePath,
+    relativePath.endsWith('.ad') ? 'open "Demo"\n' : 'appId: demo\n---\n- launchApp\n',
+  );
+}
 
 type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
@@ -883,6 +902,7 @@ test('replay.run serializes client-collected AD_VAR shell env into daemon reques
 
     await client.replay.run({
       path: './flows/login.ad',
+      cwd: FLOWS_CWD,
       env: ['APP_ID=cli-override'],
     });
 
@@ -913,6 +933,7 @@ test('replay.run keeps deprecated maestro option as backend alias', async () => 
 
   await client.replay.run({
     path: './flows/login.yaml',
+    cwd: FLOWS_CWD,
     maestro: true,
   });
 
@@ -928,6 +949,7 @@ test('replay.run forwards timeout budget', async () => {
 
   await client.replay.run({
     path: './flows/mod-lists.yaml',
+    cwd: FLOWS_CWD,
     backend: 'maestro',
     timeoutMs: 240_000,
   });
@@ -943,6 +965,7 @@ test('replay.test keeps backend alias for suite discovery', async () => {
 
   await client.replay.test({
     paths: ['./flows/login.yaml'],
+    cwd: FLOWS_CWD,
     backend: 'maestro',
   });
 
@@ -958,6 +981,7 @@ test('replay.test forwards recordVideo for per-attempt video recording', async (
 
   await client.replay.test({
     paths: ['./flows/login.ad'],
+    cwd: FLOWS_CWD,
     recordVideo: true,
   });
 
@@ -972,6 +996,7 @@ test('structured replay.test command forwards Maestro backend for suite discover
 
   await runCommand(client, 'test', {
     paths: ['./e2e/maestro'],
+    cwd: FLOWS_CWD,
     backend: 'maestro',
     platform: 'android',
   });
@@ -989,10 +1014,12 @@ test('structured replay commands keep deprecated Maestro boolean alias', async (
 
   await runCommand(client, 'replay', {
     path: './flows/login.yaml',
+    cwd: FLOWS_CWD,
     maestro: true,
   });
   await runCommand(client, 'test', {
     paths: ['./e2e/maestro'],
+    cwd: FLOWS_CWD,
     maestro: true,
     platform: 'android',
   });

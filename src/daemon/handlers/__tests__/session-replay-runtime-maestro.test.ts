@@ -12,7 +12,7 @@ import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 //
 // This file carries the Maestro-heavy majority of what used to live in
 // session-replay-vars.test.ts, plus a handful of generic (non-Maestro) `.ad`
-// runReplayScriptFile tests that happen to share the same runReplayFixture
+// runReplayScriptSource tests that happen to share the same runReplayFixture
 // helper and mock configuration below. It is a sibling of
 // session-replay-runtime.test.ts rather than a merge into it because that
 // file mocks '../../../core/dispatch.ts' differently (dispatchCommand
@@ -56,7 +56,8 @@ import { PNG } from '../../../utils/png.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../types.ts';
 import { SessionStore } from '../../session-store.ts';
 import { makeAndroidSession, makeIosSession } from '../../../__tests__/test-utils/index.ts';
-import { runReplayScriptFile } from '../session-replay-runtime.ts';
+import { runReplayScriptSource } from '../session-replay-runtime.ts';
+import { replayScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
 
 type CapturedInvocation = {
   command: string;
@@ -87,7 +88,7 @@ async function runReplayFixture(params: {
   const invoke = createFixtureInvoke({ calls, delegate: params.invoke, isMaestro });
   const sessionStore = new SessionStore(path.join(root, 'state'));
   seedFixtureSession(sessionStore, params.sessionPlatform);
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: fixtureReplayRequest({ root, scriptPath, flags: params.flags, isMaestro }),
     sessionName: 's',
     logPath: path.join(root, 'log'),
@@ -144,6 +145,9 @@ function fixtureReplayRequest(params: {
     flags: {
       ...(params.flags ?? {}),
       ...(params.isMaestro && params.flags?.platform === undefined ? { platform: 'ios' } : {}),
+      replayScriptSource: replayScriptSourceBundleFor(params.scriptPath, {
+        replayBackend: params.flags?.replayBackend,
+      }),
     },
     meta: { cwd: params.root },
   };
@@ -175,7 +179,7 @@ function assertNoUnresolvedInterpolation(calls: CapturedInvocation[]): void {
   }
 }
 
-test('runReplayScriptFile dispatches resolved literals with file env overridden by CLI', async () => {
+test('runReplayScriptSource dispatches resolved literals with file env overridden by CLI', async () => {
   const { response, calls } = await runReplayFixture({
     label: 'green',
     script:
@@ -251,7 +255,7 @@ test('.ad replay normalizes resolved gesture and swipe syntax into structured da
   );
 });
 
-test('runReplayScriptFile reports snapshot diagnostics from per-action session samples', async () => {
+test('runReplayScriptSource reports snapshot diagnostics from per-action session samples', async () => {
   const root = mkdtempForTestSync('agent-device-replay-snapshot-samples-');
   const scriptPath = path.join(root, 'flow.ad');
   // Four warm captures beyond the cold start: the slow-run warning judges warm
@@ -269,12 +273,13 @@ test('runReplayScriptFile reports snapshot diagnostics from per-action session s
   );
   let captures = 0;
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: {
       token: 't',
       session: 's',
       command: 'replay',
       positionals: [scriptPath],
+      flags: { replayScriptSource: replayScriptSourceBundleFor(scriptPath) },
       meta: { cwd: root },
     },
     sessionName: 's',
@@ -314,7 +319,7 @@ test('runReplayScriptFile reports snapshot diagnostics from per-action session s
   assert.match(String(diagnostics?.warning), /p95 1900ms over 4 captures/);
 });
 
-test('runReplayScriptFile reports snapshot diagnostics on replay failure', async () => {
+test('runReplayScriptSource reports snapshot diagnostics on replay failure', async () => {
   const root = mkdtempForTestSync('agent-device-replay-snapshot-failure-');
   const scriptPath = path.join(root, 'flow.ad');
   // Three warm captures precede the failing click so the failure-path summary
@@ -332,12 +337,13 @@ test('runReplayScriptFile reports snapshot diagnostics on replay failure', async
   );
   let captures = 0;
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: {
       token: 't',
       session: 's',
       command: 'replay',
       positionals: [scriptPath],
+      flags: { replayScriptSource: replayScriptSourceBundleFor(scriptPath) },
       meta: { cwd: root },
     },
     sessionName: 's',
@@ -365,7 +371,7 @@ test('runReplayScriptFile reports snapshot diagnostics on replay failure', async
   assert.match(String(diagnostics?.warning), /p95 2100ms over 4 captures/);
 });
 
-test('runReplayScriptFile applies CLI env overrides before Maestro compat mapping', async () => {
+test('runReplayScriptSource applies CLI env overrides before Maestro compat mapping', async () => {
   const { response, calls } = await runReplayFixture({
     label: 'maestro-env',
     script: [
@@ -417,7 +423,7 @@ test('runReplayScriptFile applies CLI env overrides before Maestro compat mappin
   );
 });
 
-test('runReplayScriptFile runs Maestro runScript in replay order and exposes output variables', async () => {
+test('runReplayScriptSource runs Maestro runScript in replay order and exposes output variables', async () => {
   const { response, calls } = await runReplayFixture({
     label: 'maestro-runscript-runtime',
     files: {
@@ -450,7 +456,7 @@ output.result = SERVER_PATH + ':' + json(res.body).appviewDid
   );
 });
 
-test('runReplayScriptFile supports successful Maestro runScript http.post calls', async () => {
+test('runReplayScriptSource supports successful Maestro runScript http.post calls', async () => {
   const server = new Worker(
     `
 const http = require('node:http');
@@ -512,7 +518,7 @@ output.result = parsed.method + ':' + json(parsed.body).ok
   }
 });
 
-test('runReplayScriptFile strips prototype pollution keys from runScript json()', async () => {
+test('runReplayScriptSource strips prototype pollution keys from runScript json()', async () => {
   const { response, calls } = await runReplayFixture({
     label: 'maestro-runscript-json-prototype-keys',
     files: {
@@ -547,7 +553,7 @@ output.result = [
   );
 });
 
-test('runReplayScriptFile reports Maestro runScript failures at the runScript step', async () => {
+test('runReplayScriptSource reports Maestro runScript failures at the runScript step', async () => {
   const { response, calls } = await runReplayFixture({
     label: 'maestro-runscript-fail',
     files: {
@@ -568,7 +574,7 @@ test('runReplayScriptFile reports Maestro runScript failures at the runScript st
   assert.equal(calls.length, 0);
 });
 
-test('runReplayScriptFile reports iOS Maestro openLink setup failures before assertions', async () => {
+test('runReplayScriptSource reports iOS Maestro openLink setup failures before assertions', async () => {
   const { response, calls } = await runReplayFixture({
     label: 'maestro-ios-openlink-prewarm-fail',
     script: [
@@ -612,7 +618,7 @@ test('runReplayScriptFile reports iOS Maestro openLink setup failures before ass
   assert.equal(calls[0]?.flags?.maestro?.prewarmRunnerBeforeOpen, true);
 });
 
-test('runReplayScriptFile explains empty Maestro runScript JSON bodies', async () => {
+test('runReplayScriptSource explains empty Maestro runScript JSON bodies', async () => {
   const { response, calls } = await runReplayFixture({
     label: 'maestro-runscript-empty-json',
     files: {
@@ -633,7 +639,7 @@ test('runReplayScriptFile explains empty Maestro runScript JSON bodies', async (
   assert.equal(calls.length, 0);
 });
 
-test('runReplayScriptFile rejects Maestro runScript output keys containing dots', async () => {
+test('runReplayScriptSource rejects Maestro runScript output keys containing dots', async () => {
   const { response, calls } = await runReplayFixture({
     label: 'maestro-runscript-dotted-output',
     files: {
@@ -653,7 +659,7 @@ test('runReplayScriptFile rejects Maestro runScript output keys containing dots'
   assert.equal(calls.length, 0);
 });
 
-test('runReplayScriptFile retries Maestro scrollUntilVisible with scroll probes', async () => {
+test('runReplayScriptSource retries Maestro scrollUntilVisible with scroll probes', async () => {
   const calls: CapturedInvocation[] = [];
   let snapshotAttempts = 0;
   const { response } = await runReplayFixture({
@@ -705,7 +711,7 @@ test('runReplayScriptFile retries Maestro scrollUntilVisible with scroll probes'
   );
 });
 
-test('runReplayScriptFile uses semantic iOS dispatch for an exact text tapOn', async () => {
+test('runReplayScriptSource uses semantic iOS dispatch for an exact text tapOn', async () => {
   const calls: CapturedInvocation[] = [];
   const { response } = await runReplayFixture({
     label: 'maestro-tap-visible-text-atomic-ios',
@@ -751,7 +757,7 @@ test('runReplayScriptFile uses semantic iOS dispatch for an exact text tapOn', a
   );
 });
 
-test('runReplayScriptFile uses matched Android id geometry for tapOn', async () => {
+test('runReplayScriptSource uses matched Android id geometry for tapOn', async () => {
   const calls: CapturedInvocation[] = [];
   const { response } = await runReplayFixture({
     label: 'maestro-tap-id-matched-geometry',
@@ -796,7 +802,7 @@ test('runReplayScriptFile uses matched Android id geometry for tapOn', async () 
   );
 });
 
-test('runReplayScriptFile captures fresh geometry for tapOn after assertVisible', async () => {
+test('runReplayScriptSource captures fresh geometry for tapOn after assertVisible', async () => {
   let snapshots = 0;
   const { response, calls } = await runReplayFixture({
     label: 'maestro-assert-visible-tap-fresh-snapshot',
@@ -847,7 +853,7 @@ test('runReplayScriptFile captures fresh geometry for tapOn after assertVisible'
   );
 });
 
-test('runReplayScriptFile scopes duplicate tap targets after native Maestro assertVisible', async () => {
+test('runReplayScriptSource scopes duplicate tap targets after native Maestro assertVisible', async () => {
   const { response, calls } = await runReplayFixture({
     label: 'maestro-native-assert-context-duplicate-tap',
     script: ['appId: demo.app', '---', '- assertVisible: Albums', '- tapOn: Push article', ''].join(
@@ -915,7 +921,7 @@ test('runReplayScriptFile scopes duplicate tap targets after native Maestro asse
   );
 });
 
-test('runReplayScriptFile treats absent Maestro assertNotVisible targets as passing', async () => {
+test('runReplayScriptSource treats absent Maestro assertNotVisible targets as passing', async () => {
   const calls: CapturedInvocation[] = [];
   const { response } = await runReplayFixture({
     label: 'maestro-assert-not-visible-absent',
@@ -941,7 +947,7 @@ test('runReplayScriptFile treats absent Maestro assertNotVisible targets as pass
   assert.equal(calls[0]?.flags?.noRecord, true);
 });
 
-test('runReplayScriptFile propagates Maestro assertNotVisible infrastructure failures', async () => {
+test('runReplayScriptSource propagates Maestro assertNotVisible infrastructure failures', async () => {
   const calls: CapturedInvocation[] = [];
   const { response } = await runReplayFixture({
     label: 'maestro-assert-not-visible-infra-fail',
@@ -964,7 +970,7 @@ test('runReplayScriptFile propagates Maestro assertNotVisible infrastructure fai
   assert.equal(calls.length, 1);
 });
 
-test('runReplayScriptFile waits briefly for Maestro assertNotVisible to stabilize', async () => {
+test('runReplayScriptSource waits briefly for Maestro assertNotVisible to stabilize', async () => {
   const calls: CapturedInvocation[] = [];
   let snapshots = 0;
   const { response } = await runReplayFixture({
@@ -1003,7 +1009,7 @@ test('runReplayScriptFile waits briefly for Maestro assertNotVisible to stabiliz
   assert.equal(calls.length, 2);
 });
 
-test('runReplayScriptFile treats absent Maestro extendedWaitUntil.notVisible targets as passing', async () => {
+test('runReplayScriptSource treats absent Maestro extendedWaitUntil.notVisible targets as passing', async () => {
   const { response, calls } = await runReplayFixture({
     label: 'maestro-extended-wait-not-visible-absent',
     script: [
@@ -1032,7 +1038,7 @@ test('runReplayScriptFile treats absent Maestro extendedWaitUntil.notVisible tar
   assert.equal(calls[0]?.flags?.noRecord, true);
 });
 
-test('runReplayScriptFile resolves Maestro percentage point taps from the direct viewport', async () => {
+test('runReplayScriptSource resolves Maestro percentage point taps from the direct viewport', async () => {
   const calls: CapturedInvocation[] = [];
   const { response } = await runReplayFixture({
     label: 'maestro-tap-point-percent',
@@ -1070,7 +1076,7 @@ test('runReplayScriptFile resolves Maestro percentage point taps from the direct
   );
 });
 
-test('runReplayScriptFile retries Maestro id tapOn through snapshot coordinates', async () => {
+test('runReplayScriptSource retries Maestro id tapOn through snapshot coordinates', async () => {
   const calls: CapturedInvocation[] = [];
   let snapshotAttempts = 0;
   const { response } = await runReplayFixture({
@@ -1117,7 +1123,7 @@ test('runReplayScriptFile retries Maestro id tapOn through snapshot coordinates'
   );
 });
 
-test('runReplayScriptFile resolves Maestro tapOn index and childOf from snapshots', async () => {
+test('runReplayScriptSource resolves Maestro tapOn index and childOf from snapshots', async () => {
   const calls: CapturedInvocation[] = [];
   const { response } = await runReplayFixture({
     label: 'maestro-tap-index-childof',
@@ -1186,7 +1192,7 @@ test('runReplayScriptFile resolves Maestro tapOn index and childOf from snapshot
   assert.equal(calls[0]?.flags?.noRecord, true);
 });
 
-test('runReplayScriptFile lets snapshot id tap handle Maestro one-point edge controls', async () => {
+test('runReplayScriptSource lets snapshot id tap handle Maestro one-point edge controls', async () => {
   const calls: CapturedInvocation[] = [];
   const { response } = await runReplayFixture({
     label: 'maestro-tap-edge-rect',
@@ -1222,7 +1228,7 @@ test('runReplayScriptFile lets snapshot id tap handle Maestro one-point edge con
   );
 });
 
-test('runReplayScriptFile resolves a text-entry target once before typing', async () => {
+test('runReplayScriptSource resolves a text-entry target once before typing', async () => {
   const calls: CapturedInvocation[] = [];
   const { response } = await runReplayFixture({
     label: 'maestro-tap-input-text-snapshot',
@@ -1271,7 +1277,7 @@ test('runReplayScriptFile resolves a text-entry target once before typing', asyn
   );
 });
 
-test('runReplayScriptFile resolves Maestro swipe.label from a labeled element rect', async () => {
+test('runReplayScriptSource resolves Maestro swipe.label from a labeled element rect', async () => {
   const calls: CapturedInvocation[] = [];
   const { response } = await runReplayFixture({
     label: 'maestro-swipe-label',
@@ -1328,7 +1334,7 @@ test('runReplayScriptFile resolves Maestro swipe.label from a labeled element re
   );
 });
 
-test('runReplayScriptFile keeps Maestro swipe.label anchored to the matched label rect', async () => {
+test('runReplayScriptSource keeps Maestro swipe.label anchored to the matched label rect', async () => {
   const calls: CapturedInvocation[] = [];
   const { response } = await runReplayFixture({
     label: 'maestro-swipe-label-child-rect',
@@ -1394,7 +1400,7 @@ test('runReplayScriptFile keeps Maestro swipe.label anchored to the matched labe
   );
 });
 
-test('runReplayScriptFile resolves Maestro screen swipes from the direct viewport', async () => {
+test('runReplayScriptSource resolves Maestro screen swipes from the direct viewport', async () => {
   const calls: CapturedInvocation[] = [];
   const { response } = await runReplayFixture({
     label: 'maestro-screen-swipe',
@@ -1465,7 +1471,7 @@ test('runReplayScriptFile resolves Maestro screen swipes from the direct viewpor
   );
 });
 
-test('runReplayScriptFile delegates Android directional swipes and preserves percentage points', async () => {
+test('runReplayScriptSource delegates Android directional swipes and preserves percentage points', async () => {
   const calls: CapturedInvocation[] = [];
   const { response } = await runReplayFixture({
     label: 'maestro-screen-swipe-android-midpoint-lane',
@@ -1536,7 +1542,7 @@ test('runReplayScriptFile delegates Android directional swipes and preserves per
   );
 });
 
-test('runReplayScriptFile maps Maestro enter to keyboard enter', async () => {
+test('runReplayScriptSource maps Maestro enter to keyboard enter', async () => {
   const calls: CapturedInvocation[] = [];
   const { response } = await runReplayFixture({
     label: 'maestro-press-enter',
@@ -1555,7 +1561,7 @@ test('runReplayScriptFile maps Maestro enter to keyboard enter', async () => {
   );
 });
 
-test('runReplayScriptFile waits for Maestro animation screenshots to stabilize', async () => {
+test('runReplayScriptSource waits for Maestro animation screenshots to stabilize', async () => {
   const calls: CapturedInvocation[] = [];
   const screenshot = PNG.sync.write(new PNG({ width: 1, height: 1 }));
   const { response } = await runReplayFixture({
@@ -1581,7 +1587,7 @@ test('runReplayScriptFile waits for Maestro animation screenshots to stabilize',
   assert.equal(calls[1]?.flags?.screenshotNoStabilize, true);
 });
 
-test('runReplayScriptFile propagates unsupported keyboard enter dispatch', async () => {
+test('runReplayScriptSource propagates unsupported keyboard enter dispatch', async () => {
   const calls: CapturedInvocation[] = [];
   const { response } = await runReplayFixture({
     label: 'maestro-press-enter-unsupported',
@@ -1607,7 +1613,7 @@ test('runReplayScriptFile propagates unsupported keyboard enter dispatch', async
   );
 });
 
-test('runReplayScriptFile retries Maestro retry commands until they pass', async () => {
+test('runReplayScriptSource retries Maestro retry commands until they pass', async () => {
   const calls: CapturedInvocation[] = [];
   let openAttempts = 0;
   const { response } = await runReplayFixture({
@@ -1670,7 +1676,7 @@ test('runReplayScriptFile retries Maestro retry commands until they pass', async
   assert.equal(calls.filter((call) => call.command === 'snapshot').length > 1, true);
 });
 
-test('runReplayScriptFile propagates Maestro runFlow.when runtime errors', async () => {
+test('runReplayScriptSource propagates Maestro runFlow.when runtime errors', async () => {
   const { response } = await runReplayFixture({
     label: 'maestro-run-flow-when-visible-runtime-error',
     script: [
@@ -1705,7 +1711,7 @@ test('runReplayScriptFile propagates Maestro runFlow.when runtime errors', async
   }
 });
 
-test('runReplayScriptFile runs Maestro runFlow.when.visible commands when present', async () => {
+test('runReplayScriptSource runs Maestro runFlow.when.visible commands when present', async () => {
   const calls: CapturedInvocation[] = [];
   const { response } = await runReplayFixture({
     label: 'maestro-run-flow-when-visible-run',
@@ -1767,7 +1773,7 @@ test('runReplayScriptFile runs Maestro runFlow.when.visible commands when presen
   );
 });
 
-test('runReplayScriptFile runs nested Maestro runtime commands inside runFlow.when', async () => {
+test('runReplayScriptSource runs nested Maestro runtime commands inside runFlow.when', async () => {
   const calls: CapturedInvocation[] = [];
   let snapshots = 0;
   const { response } = await runReplayFixture({
@@ -1840,7 +1846,7 @@ test('runReplayScriptFile runs nested Maestro runtime commands inside runFlow.wh
   );
 });
 
-test('runReplayScriptFile resolves nested Maestro runFlow.when command variables once at execution', async () => {
+test('runReplayScriptSource resolves nested Maestro runFlow.when command variables once at execution', async () => {
   const calls: CapturedInvocation[] = [];
   const { response } = await runReplayFixture({
     label: 'maestro-run-flow-when-nested-vars',
@@ -1906,7 +1912,7 @@ test('runReplayScriptFile resolves nested Maestro runFlow.when command variables
   );
 });
 
-test('runReplayScriptFile reads shell env from request (client-collected), not daemon process.env', async () => {
+test('runReplayScriptSource reads shell env from request (client-collected), not daemon process.env', async () => {
   // Ensure the daemon's own process.env does NOT contain AD_VAR_APP.
   assert.equal(process.env.AD_VAR_APP, undefined);
   const { response, calls } = await runReplayFixture({
@@ -1919,7 +1925,7 @@ test('runReplayScriptFile reads shell env from request (client-collected), not d
   assert.deepEqual(calls[0]?.positionals, ['client-shell-app']);
 });
 
-test('runReplayScriptFile falls back to process.env when request omits replayShellEnv', async () => {
+test('runReplayScriptSource falls back to process.env when request omits replayShellEnv', async () => {
   const previous = process.env.AD_VAR_APP;
   process.env.AD_VAR_APP = 'daemon-env-app';
   try {
@@ -1935,7 +1941,7 @@ test('runReplayScriptFile falls back to process.env when request omits replayShe
   }
 });
 
-test('runReplayScriptFile writes per-action timing events to active trace', async () => {
+test('runReplayScriptSource writes per-action timing events to active trace', async () => {
   const root = mkdtempForTestSync('agent-device-replay-trace-');
   const scriptPath = path.join(root, 'flow.ad');
   const tracePath = path.join(root, 'trace.ndjson');
@@ -1957,13 +1963,13 @@ test('runReplayScriptFile writes per-action timing events to active trace', asyn
     actions: [],
   });
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: {
       token: 't',
       session: 's',
       command: 'replay',
       positionals: [scriptPath],
-      flags: {},
+      flags: { replayScriptSource: replayScriptSourceBundleFor(scriptPath) },
       meta: { cwd: root },
     },
     sessionName: 's',

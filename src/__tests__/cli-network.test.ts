@@ -1,9 +1,26 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { promises as fs } from 'node:fs';
+import nodeFs, { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { runCliCapture } from './cli-capture.ts';
-import { mkdtempForTest } from './test-utils/tmp-dir.ts';
+import { runCliCapture, type CliCaptureOptions } from './cli-capture.ts';
+import { mkdtempForTest, mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+
+/**
+ * #1802: `test <path-or-glob>` expands on the CALLER, so these reporter cases need a real suite
+ * directory to expand. The suite's contents are irrelevant here — every case stubs the daemon
+ * response — but the inputs have to resolve, so each runs from a cwd that has `./suite`.
+ */
+const SUITE_CWD = mkdtempForTestSync('agent-device-cli-suite-');
+nodeFs.mkdirSync(path.join(SUITE_CWD, 'suite'), { recursive: true });
+nodeFs.writeFileSync(path.join(SUITE_CWD, 'suite', '01-flow.ad'), 'open "Demo"\n');
+
+function runTestSuiteCli(
+  argv: string[],
+  responderOrOptions: Parameters<typeof runCliCapture>[1] = {},
+  extraOptions: CliCaptureOptions = {},
+): ReturnType<typeof runCliCapture> {
+  return runCliCapture(argv, responderOrOptions, { ...extraOptions, cwd: SUITE_CWD });
+}
 
 function makeFailedReplayResult() {
   return {
@@ -134,7 +151,7 @@ test('json commands do not opt into progress streaming', async () => {
 });
 
 test('test command prints suite summary and exits non-zero on failures', async () => {
-  const result = await runCliCapture(['test', './suite'], async () => makeReplaySuiteResponse());
+  const result = await runTestSuiteCli(['test', './suite'], async () => makeReplaySuiteResponse());
 
   assert.equal(result.code, 1);
   assert.equal(result.calls.length, 1);
@@ -189,7 +206,7 @@ test('doctor command keeps json output non-streaming', async () => {
 });
 
 test('test command --verbose prints all test statuses', async () => {
-  const result = await runCliCapture(['test', './suite', '--verbose'], async () =>
+  const result = await runTestSuiteCli(['test', './suite', '--verbose'], async () =>
     makeReplaySuiteResponse(),
   );
 
@@ -202,7 +219,7 @@ test('test command --verbose prints all test statuses', async () => {
 });
 
 test('test command colors suite summary segments when color is enabled', async () => {
-  const result = await runCliCapture(
+  const result = await runTestSuiteCli(
     ['test', './suite'],
     async () => ({
       ok: true,
@@ -282,7 +299,7 @@ test('test command --verbose omits step telemetry for passing tests without debu
   );
 
   try {
-    const result = await runCliCapture(['test', './suite', '--verbose'], async () => ({
+    const result = await runTestSuiteCli(['test', './suite', '--verbose'], async () => ({
       ok: true,
       data: {
         total: 1,
@@ -350,46 +367,49 @@ test('test command --verbose includes step telemetry in completed progress outpu
   );
 
   try {
-    const result = await runCliCapture(['test', './suite', '--verbose'], async (_req, options) => {
-      options?.onProgress?.({
-        type: 'replay-test',
-        file: '/tmp/auth-flow.yml',
-        title: 'Authentication flow',
-        status: 'pass',
-        index: 1,
-        total: 1,
-        durationMs: 500,
-        attempt: 1,
-        artifactsDir,
-      });
-      return {
-        ok: true,
-        data: {
+    const result = await runTestSuiteCli(
+      ['test', './suite', '--verbose'],
+      async (_req, options) => {
+        options?.onProgress?.({
+          type: 'replay-test',
+          file: '/tmp/auth-flow.yml',
+          title: 'Authentication flow',
+          status: 'pass',
+          index: 1,
           total: 1,
-          executed: 1,
-          passed: 1,
-          failed: 0,
-          skipped: 0,
-          notRun: 0,
           durationMs: 500,
-          failures: [],
-          tests: [
-            {
-              file: '/tmp/auth-flow.yml',
-              title: 'Authentication flow',
-              session: 'default:test:suite:1',
-              status: 'passed',
-              durationMs: 500,
-              finalAttemptDurationMs: 500,
-              attempts: 1,
-              artifactsDir,
-              replayed: 1,
-              healed: 0,
-            },
-          ],
-        },
-      };
-    });
+          attempt: 1,
+          artifactsDir,
+        });
+        return {
+          ok: true,
+          data: {
+            total: 1,
+            executed: 1,
+            passed: 1,
+            failed: 0,
+            skipped: 0,
+            notRun: 0,
+            durationMs: 500,
+            failures: [],
+            tests: [
+              {
+                file: '/tmp/auth-flow.yml',
+                title: 'Authentication flow',
+                session: 'default:test:suite:1',
+                status: 'passed',
+                durationMs: 500,
+                finalAttemptDurationMs: 500,
+                attempts: 1,
+                artifactsDir,
+                replayed: 1,
+                healed: 0,
+              },
+            ],
+          },
+        };
+      },
+    );
 
     assert.equal(result.code, null);
     assert.equal(result.calls[0]?.meta?.debug, false);
@@ -461,7 +481,7 @@ test('test command --verbose omits nested passing step telemetry', async () => {
   );
 
   try {
-    const result = await runCliCapture(['test', './suite', '--verbose'], async () => ({
+    const result = await runTestSuiteCli(['test', './suite', '--verbose'], async () => ({
       ok: true,
       data: {
         total: 1,
@@ -509,7 +529,7 @@ test('test command --verbose omits nested passing step telemetry', async () => {
 });
 
 test('test command reports flaky passed-on-retry cases in the default summary', async () => {
-  const result = await runCliCapture(['test', './suite'], async () => ({
+  const result = await runTestSuiteCli(['test', './suite'], async () => ({
     ok: true,
     data: {
       total: 1,
@@ -649,7 +669,7 @@ test('test command --debug prints failed attempt step window when timing trace e
         message: 'Replay failed at step 3 (assertVisible "Receipt"): selector not found',
       },
     };
-    const result = await runCliCapture(['test', './suite', '--debug'], async () => ({
+    const result = await runTestSuiteCli(['test', './suite', '--debug'], async () => ({
       ok: true,
       data: {
         total: 1,
@@ -691,7 +711,7 @@ test('test --maestro forwards Maestro backend and platform for directory suites'
   );
 
   try {
-    const result = await runCliCapture(
+    const result = await runTestSuiteCli(
       ['test', '--maestro', '--platform', 'android', tmpDir],
       async () => ({
         ok: true,
@@ -723,7 +743,7 @@ test('test --maestro forwards Maestro backend and platform for directory suites'
 });
 
 test('test forwards shard flags and comma device lists', async () => {
-  const result = await runCliCapture(
+  const result = await runTestSuiteCli(
     ['test', '--maestro', '--device', 'udid1,emulator-5554', '--shard-all', '2', './suite'],
     async () => ({
       ok: true,
@@ -753,7 +773,7 @@ test('test command writes JUnit report with failure metadata', async () => {
   const reportPath = path.join(tmpDir, 'replays.junit.xml');
 
   try {
-    const result = await runCliCapture(
+    const result = await runTestSuiteCli(
       ['test', './suite', '--report-junit', reportPath],
       async () => ({
         ok: true,
@@ -857,7 +877,7 @@ test('test command supports explicit reporter lists', async () => {
   const reportPath = path.join(tmpDir, 'replays.junit.xml');
 
   try {
-    const result = await runCliCapture(
+    const result = await runTestSuiteCli(
       ['test', './suite', '--reporter', `junit:${reportPath}`],
       async () => makeReplaySuiteResponse(),
     );
@@ -894,7 +914,7 @@ test('test command loads custom reporter modules', async () => {
       'utf8',
     );
 
-    const result = await runCliCapture(
+    const result = await runTestSuiteCli(
       ['test', './suite', '--reporter', reporterPath],
       async (_req, options) => {
         options?.onProgress?.({
@@ -946,7 +966,7 @@ test('test command streams progress to custom reporter modules', async () => {
       'utf8',
     );
 
-    const result = await runCliCapture(
+    const result = await runTestSuiteCli(
       ['test', './suite', '--reporter', reporterPath],
       async (_req, options) => {
         options?.onProgress?.({
@@ -1004,7 +1024,7 @@ test('test command reuses custom reporter instance for progress and final output
       'utf8',
     );
 
-    const result = await runCliCapture(
+    const result = await runTestSuiteCli(
       ['test', './suite', '--reporter', reporterPath],
       async (_req, options) => {
         options?.onProgress?.({
@@ -1048,7 +1068,7 @@ test('test command surfaces a throwing live reporter hook without aborting the r
       'utf8',
     );
 
-    const result = await runCliCapture(
+    const result = await runTestSuiteCli(
       ['test', './suite', '--reporter', reporterPath],
       async (_req, options) => {
         options?.onProgress?.({

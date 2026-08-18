@@ -50,7 +50,7 @@ export function buildAndPersistReplayDivergenceResume(params: {
  * `from` is at most `actions.length + 1` — never further out of range. That
  * boundary case (`record-and-heal` diverged on the plan's LAST step) is a
  * legal EMPTY-TAIL resume, not an error: the runtime loop
- * (`runReplayScriptFile`) executes zero steps and reaches the normal
+ * (`runReplayScriptSource`) executes zero steps and reaches the normal
  * end-of-plan completion path, correctly flipping a repair transaction
  * COMPLETE. Rejecting it would send the agent to `close` instead —
  * which discards the just-recorded corrective action, since commit is gated

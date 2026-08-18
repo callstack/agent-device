@@ -492,6 +492,7 @@ agent-device replay ./session.ad --keep-session   # Suppress its terminal close 
 ```
 
 - `replay` runs deterministic `.ad` scripts.
+- Script paths belong to the caller: `replay <path>` and `test <path-or-glob>` are resolved and read by the client, which sends the script content (and any Maestro `runFlow` includes) with the request. The same command therefore works against a local daemon and against a remote one (`AGENT_DEVICE_DAEMON_BASE_URL`) with no copy step, and a script missing on the calling machine fails immediately, naming the path you typed.
 - `replay --keep-session` suppresses exactly an authored terminal `close` in native `.ad`; interior closes still run, and a close-less script is unchanged. The option is rejected by `test` and Maestro YAML.
 - `test` runs one or more `.ad` scripts as a serial suite from files, directories, or glob inputs.
 - `test --platform <platform>` filters suite files by `context platform=...` metadata instead of overriding the script target.
@@ -500,7 +501,7 @@ agent-device replay ./session.ad --keep-session   # Suppress its terminal close 
 - `test` prints a short `Running replay suite...` line before dispatch, then streams one-line `pass`, `fail`, or `skip` progress on stderr as each suite entry finishes or retries. Each line includes current/total suite position and elapsed seconds such as `pass 3/6 ... duration=12.34s`. The final summary still prints failures and flaky passed-on-retry tests by default; add `--verbose` to print every final result.
 - A failing step returns a `REPLAY_DIVERGENCE` report (screen digest, ranked selector suggestions, and a `resume` field); `replay --from <n> --plan-digest <sha256>` resumes at and executes plan step `n` without re-running `1..n-1`. If the failed action was completed manually, resume from the next safe plan index using the matching digest. `replay`-only; `test` rejects `--from`.
 - `replay -u`/`--update` no longer rewrites the script (retired — see [Replay & E2E](/docs/replay-e2e)); it is a no-op kept for compatibility, since every divergence already carries the same ranked suggestions.
-- `--save-script` records a replay script on `close`; optional path is a file path and parent directories are created.
+- `--save-script` records a replay script on `close`; optional path is a file path and parent directories are created. It writes on the daemon host, so it is rejected against a remote daemon.
 
 See [Replay & E2E](/docs/replay-e2e) for recording, Maestro compatibility, and CI workflow details.
 

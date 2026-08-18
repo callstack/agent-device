@@ -6,6 +6,7 @@ import { makeSessionStore } from './session-test-harness.ts';
 import { handleSessionCommands } from './session-command-harness.ts';
 import type { DaemonRequest } from '../../types.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { replayScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
 
 test('replay parses open --relaunch flag and replays open with relaunch semantics', async () => {
   const sessionStore = makeSessionStore();
@@ -20,7 +21,7 @@ test('replay parses open --relaunch flag and replays open with relaunch semantic
       session: 'default',
       command: 'replay',
       positionals: [replayPath],
-      flags: {},
+      flags: { replayScriptSource: replayScriptSourceBundleFor(replayPath) },
     },
     sessionName: 'default',
     logPath: path.join(os.tmpdir(), 'daemon.log'),
@@ -58,7 +59,7 @@ test('replay parses runtime set flags and replays runtime command', async () => 
       session: 'default',
       command: 'replay',
       positionals: [replayPath],
-      flags: {},
+      flags: { replayScriptSource: replayScriptSourceBundleFor(replayPath) },
       meta: { cwd: replayRoot },
     },
     sessionName: 'default',
@@ -97,7 +98,7 @@ test('replay parses inline open runtime flags and replays open with runtime payl
       session: 'default',
       command: 'replay',
       positionals: [replayPath],
-      flags: {},
+      flags: { replayScriptSource: replayScriptSourceBundleFor(replayPath) },
       meta: { cwd: replayRoot },
     },
     sessionName: 'default',
@@ -121,39 +122,6 @@ test('replay parses inline open runtime flags and replays open with runtime payl
   });
 });
 
-test('replay resolves relative script path against request cwd', async () => {
-  const sessionStore = makeSessionStore();
-  const replayRoot = mkdtempForTestSync('agent-device-replay-cwd-');
-  const replayDir = path.join(replayRoot, 'workflows');
-  fs.mkdirSync(replayDir, { recursive: true });
-  fs.writeFileSync(path.join(replayDir, 'flow.ad'), 'open "Settings"\n');
-
-  const invoked: DaemonRequest[] = [];
-  const response = await handleSessionCommands({
-    req: {
-      token: 't',
-      session: 'default',
-      command: 'replay',
-      positionals: ['workflows/flow.ad'],
-      flags: {},
-      meta: { cwd: replayRoot },
-    },
-    sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
-    sessionStore,
-    invoke: async (req) => {
-      invoked.push(req);
-      return { ok: true, data: {} };
-    },
-  });
-
-  expect(response).toBeTruthy();
-  expect(response?.ok).toBe(true);
-  expect(invoked.length).toBe(1);
-  expect(invoked[0]?.command).toBe('open');
-  expect(invoked[0]?.positionals).toEqual(['Settings']);
-});
-
 test('replay inherits parent device selectors for each invoked step', async () => {
   const sessionStore = makeSessionStore();
   const replayRoot = mkdtempForTestSync('agent-device-replay-parent-selectors-');
@@ -171,6 +139,7 @@ test('replay inherits parent device selectors for each invoked step', async () =
         platform: 'ios',
         device: 'thymikee-iphone',
         udid: '00008150-001849640CF8401C',
+        replayScriptSource: replayScriptSourceBundleFor(replayPath),
       },
     },
     sessionName: 'default',

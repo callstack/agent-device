@@ -16,7 +16,7 @@ import type {
   MaestroProgram,
   MaestroSourceLocation,
 } from './program-ir.ts';
-import { createMaestroProgramLoader } from './program-loader.ts';
+import { createMaestroProgramLoader, type MaestroSourceReader } from './program-loader.ts';
 import { formatMaestroCommandProgress } from './progress.ts';
 import {
   compileMaestroReplayPlan,
@@ -92,6 +92,12 @@ export type MaestroExecutionOptions = {
   readonly planDigest?: string;
   readonly signal?: AbortSignal;
   readonly observer?: MaestroExecutionObserver;
+  /**
+   * #1802: how a `runFlow` include's text is obtained. Required — the engine
+   * owns no filesystem, so a run against a remote daemon reads the caller's
+   * bundled flows through exactly the port a local run reads them through.
+   */
+  readonly readSource: MaestroSourceReader;
 };
 
 export type MaestroExecutionOutcome =
@@ -122,11 +128,11 @@ export function inspectMaestroFlow(source: string, sourcePath: string): MaestroF
 export async function executeMaestroFlow(
   flow: MaestroFlow,
   port: MaestroRuntimePort,
-  options: MaestroExecutionOptions = {},
+  options: MaestroExecutionOptions,
 ): Promise<MaestroExecutionOutcome> {
   let failed: MaestroFailedAction | undefined;
   try {
-    const loader = createMaestroProgramLoader(path.dirname(flow.sourcePath));
+    const loader = createMaestroProgramLoader(path.dirname(flow.sourcePath), options.readSource);
     const plan = await compileMaestroReplayPlan(flow[flowProgram], {
       defaults: options.defaults,
       env: options.env,

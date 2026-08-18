@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { runReplayScriptFile } from '../session-replay-runtime.ts';
+import { runReplayScriptSource } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import {
@@ -18,7 +18,7 @@ import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
  * now the single ledger; `dispatchStep` writes it and returns its contents, and
  * the engine only threads that value.
  *
- * The ledger's one INDEPENDENT observation point is `runReplayScriptFile`'s
+ * The ledger's one INDEPENDENT observation point is `runReplayScriptSource`'s
  * catch block: on a mid-loop throw there is no run outcome to read artifacts
  * from, so what the failure reports comes from the ledger and nothing else.
  * That makes this the counterfactual test for the threading — break the ledger
@@ -51,7 +51,7 @@ test('a mid-loop throw reports exactly the artifacts of the steps that ran befor
   ]);
 
   const dispatched: string[] = [];
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -96,7 +96,7 @@ test('a completed run reports every step’s artifacts through the threaded ledg
 
   const filePath = writeReplayFile(root, ['click "First"', 'click "Second"']);
 
-  const response = await runReplayScriptFile({
+  const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
