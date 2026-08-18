@@ -3,10 +3,10 @@ import XCTest
 // Swift port of buildScrollGesturePlan from packages/contracts/src/scroll-gesture.ts.
 //
 // This is a deliberate two-place invariant: the daemon keeps the TS implementation (for Android,
-// recording, and reported-pixels), and the runner places the gesture with this Swift copy. The
-// parity test vectors at the bottom of this file mirror
-// packages/contracts/src/scroll-gesture.test.ts —
-// if you change the math in either language, update the other and both vector sets.
+// recording, and reported-pixels), and the runner places the gesture with this Swift copy. Both
+// ports are asserted against the same table, contracts/fixtures/scroll-gesture.json (gated
+// XCTest at the bottom of this file, vitest twin packages/contracts/src/scroll-gesture.test.ts) —
+// if you change the math in either language, update the other and the table.
 //
 // All inputs here are positive (reference dims, travel, center), so Swift's `.rounded()`
 // (half away from zero) matches JS `Math.round` (half up) on every value computed below.
@@ -20,8 +20,9 @@ struct RunnerScrollGesturePlan {
 }
 
 private let runnerDefaultScrollAmount = 0.6
-// Mirrors DEFAULT_EDGE_PADDING_FRACTION: scroll gestures stay out of the outer 10% of each axis so a
-// saturated scroll never touches down inside the status bar / Dynamic Island band (#1781 A1).
+// Both constants are pinned by contracts/fixtures/scroll-gesture.json (`constants`). Scroll gestures
+// stay out of the outer 10% of each axis so a saturated scroll never touches down inside the status
+// bar / Dynamic Island band (#1781 A1).
 private let runnerDefaultEdgePaddingFraction = 0.1
 
 func runnerScrollGesturePlan(
@@ -66,133 +67,88 @@ func runnerScrollGesturePlan(
 }
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
+private struct ScrollGestureFixture: Decodable {
+  struct Constants: Decodable {
+    let defaultScrollAmount: Double
+    let defaultEdgePaddingFraction: Double
+  }
+  struct Expected: Decodable {
+    let x1: Double
+    let y1: Double
+    let x2: Double
+    let y2: Double
+    let pixels: Double
+  }
+  struct Case: Decodable {
+    let name: String
+    let direction: String
+    let amount: Double?
+    let pixels: Double?
+    let referenceWidth: Double
+    let referenceHeight: Double
+    let expected: Expected
+  }
+
+  let constants: Constants
+  let cases: [Case]
+}
+
 extension RunnerTests {
-  // Cross-language parity vectors mirroring packages/contracts/src/scroll-gesture.test.ts. Keep these
-  // in sync with the vitest vectors so the two buildScrollGesturePlan implementations cannot drift.
-
-  func testRunnerScrollGesturePlanMapsRelativeAmount() throws {
-    let plan = try XCTUnwrap(
-      runnerScrollGesturePlan(
-        direction: "down",
-        amount: 0.5,
-        pixels: nil,
-        referenceWidth: 400,
-        referenceHeight: 800
-      )
-    )
-    XCTAssertEqual(plan.x1, 200)
-    XCTAssertEqual(plan.y1, 600)
-    XCTAssertEqual(plan.x2, 200)
-    XCTAssertEqual(plan.y2, 200)
-    XCTAssertEqual(plan.travelPixels, 400)
+  // Cross-language parity table: every case in contracts/fixtures/scroll-gesture.json must agree
+  // with the vitest twin (packages/contracts/src/scroll-gesture.test.ts). Add vectors there,
+  // never fork the math.
+  private func loadScrollGestureFixture() throws -> ScrollGestureFixture {
+    let fixtureURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent() // AgentDeviceRunnerUITests
+      .deletingLastPathComponent() // AgentDeviceRunner
+      .deletingLastPathComponent() // runner
+      .deletingLastPathComponent() // apple
+      .deletingLastPathComponent() // repo root
+      .appendingPathComponent("contracts")
+      .appendingPathComponent("fixtures")
+      .appendingPathComponent("scroll-gesture.json")
+    return try JSONDecoder().decode(ScrollGestureFixture.self, from: Data(contentsOf: fixtureURL))
   }
 
-  func testRunnerScrollGesturePlanPixelsDown() throws {
-    // 300x600, down, pixels 120 -> (150,360)->(150,240), travel 120.
-    let plan = try XCTUnwrap(
-      runnerScrollGesturePlan(
-        direction: "down",
-        amount: nil,
-        pixels: 120,
-        referenceWidth: 300,
-        referenceHeight: 600
+  func testRunnerScrollGesturePlanMatchesParityTable() throws {
+    let fixture = try loadScrollGestureFixture()
+    XCTAssertFalse(fixture.cases.isEmpty, "parity table must not be empty")
+    for testCase in fixture.cases {
+      let plan = try XCTUnwrap(
+        runnerScrollGesturePlan(
+          direction: testCase.direction,
+          amount: testCase.amount,
+          pixels: testCase.pixels,
+          referenceWidth: testCase.referenceWidth,
+          referenceHeight: testCase.referenceHeight
+        ),
+        testCase.name
       )
-    )
-    XCTAssertEqual(plan.x1, 150)
-    XCTAssertEqual(plan.y1, 360)
-    XCTAssertEqual(plan.x2, 150)
-    XCTAssertEqual(plan.y2, 240)
-    XCTAssertEqual(plan.travelPixels, 120)
+      XCTAssertEqual(plan.x1, testCase.expected.x1, testCase.name)
+      XCTAssertEqual(plan.y1, testCase.expected.y1, testCase.name)
+      XCTAssertEqual(plan.x2, testCase.expected.x2, testCase.name)
+      XCTAssertEqual(plan.y2, testCase.expected.y2, testCase.name)
+      XCTAssertEqual(plan.travelPixels, testCase.expected.pixels, testCase.name)
+    }
   }
 
-  func testRunnerScrollGesturePlanClampsAmountAboveOne() throws {
-    // 400x800, down, amount 2 -> requested 1600 clamps to the safe band (640): (200,720)->(200,80).
-    let plan = try XCTUnwrap(
+  // The planner constants are private on both sides; the table pins them behaviourally on a
+  // 1000px axis where every rounding step is exact.
+  func testRunnerScrollGesturePlanUsesParityTableConstants() throws {
+    let constants = try loadScrollGestureFixture().constants
+    let defaulted = try XCTUnwrap(
       runnerScrollGesturePlan(
-        direction: "down",
-        amount: 2,
-        pixels: nil,
-        referenceWidth: 400,
-        referenceHeight: 800
+        direction: "down", amount: nil, pixels: nil, referenceWidth: 1000, referenceHeight: 1000
       )
     )
-    XCTAssertEqual(plan.x1, 200)
-    XCTAssertEqual(plan.y1, 720)
-    XCTAssertEqual(plan.x2, 200)
-    XCTAssertEqual(plan.y2, 80)
-    XCTAssertEqual(plan.travelPixels, 640)
-  }
-
-  func testRunnerScrollGesturePlanClampsExplicitPixelsVertically() throws {
-    // 400x800, down, pixels 1000 clamps travel to the safe band (640): (200,720)->(200,80).
-    let plan = try XCTUnwrap(
+    XCTAssertEqual(defaulted.travelPixels, 1000 * constants.defaultScrollAmount)
+    let saturated = try XCTUnwrap(
       runnerScrollGesturePlan(
-        direction: "down",
-        amount: nil,
-        pixels: 1000,
-        referenceWidth: 400,
-        referenceHeight: 800
+        direction: "down", amount: 10, pixels: nil, referenceWidth: 1000, referenceHeight: 1000
       )
     )
-    XCTAssertEqual(plan.x1, 200)
-    XCTAssertEqual(plan.y1, 720)
-    XCTAssertEqual(plan.x2, 200)
-    XCTAssertEqual(plan.y2, 80)
-    XCTAssertEqual(plan.travelPixels, 640)
-  }
-
-  func testRunnerScrollGesturePlanFloorsTinyFrames() throws {
-    // 2x2, down, pixels 10 engages every max(1, ...) floor and the .5 rounding cases the two
-    // ports must agree on (halfTravel 0.5 -> 1, center 1 from 2/2): (1,2)->(1,0), travel 1.
-    let plan = try XCTUnwrap(
-      runnerScrollGesturePlan(
-        direction: "down",
-        amount: nil,
-        pixels: 10,
-        referenceWidth: 2,
-        referenceHeight: 2
-      )
-    )
-    XCTAssertEqual(plan.x1, 1)
-    XCTAssertEqual(plan.y1, 2)
-    XCTAssertEqual(plan.x2, 1)
-    XCTAssertEqual(plan.y2, 0)
-    XCTAssertEqual(plan.travelPixels, 1)
-  }
-
-  func testRunnerScrollGesturePlanClampsToSafeBand() throws {
-    // 300x600, right, pixels 500 clamps travel to the safe band (240).
-    let plan = try XCTUnwrap(
-      runnerScrollGesturePlan(
-        direction: "right",
-        amount: nil,
-        pixels: 500,
-        referenceWidth: 300,
-        referenceHeight: 600
-      )
-    )
-    XCTAssertEqual(plan.x1, 270)
-    XCTAssertEqual(plan.x2, 30)
-    XCTAssertEqual(plan.y1, 300)
-    XCTAssertEqual(plan.y2, 300)
-    XCTAssertEqual(plan.travelPixels, 240)
-  }
-
-  func testRunnerScrollGesturePlanKeepsSaturatedScrollUpOutOfStatusBar() throws {
-    // 1080x2400, up, amount 3 (#1781 A1): the touch-down at y=240 clears a Pixel 7's 136px cutout
-    // status bar; the 5% band used to start at y=120 and pulled the notification shade down.
-    let plan = try XCTUnwrap(
-      runnerScrollGesturePlan(
-        direction: "up",
-        amount: 3,
-        pixels: nil,
-        referenceWidth: 1080,
-        referenceHeight: 2400
-      )
-    )
-    XCTAssertEqual(plan.y1, 240)
-    XCTAssertEqual(plan.y2, 2160)
-    XCTAssertGreaterThan(plan.y1, 136)
+    XCTAssertEqual(
+      saturated.travelPixels, 1000 - 2 * 1000 * constants.defaultEdgePaddingFraction)
   }
 
   func testRunnerScrollGesturePlanRejectsUnknownDirection() {

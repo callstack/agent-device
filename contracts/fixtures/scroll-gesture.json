@@ -1,0 +1,64 @@
+{
+  "constants": {
+    "defaultScrollAmount": 0.6,
+    "defaultEdgePaddingFraction": 0.1
+  },
+  "cases": [
+    {
+      "name": "relative amount maps to viewport travel: 400x800 down 0.5 -> (200,600)->(200,200), travel 400",
+      "direction": "down",
+      "amount": 0.5,
+      "referenceWidth": 400,
+      "referenceHeight": 800,
+      "expected": { "x1": 200, "y1": 600, "x2": 200, "y2": 200, "pixels": 400 }
+    },
+    {
+      "name": "explicit pixels below the safe band cap: 300x600 down 120px -> (150,360)->(150,240)",
+      "direction": "down",
+      "pixels": 120,
+      "referenceWidth": 300,
+      "referenceHeight": 600,
+      "expected": { "x1": 150, "y1": 360, "x2": 150, "y2": 240, "pixels": 120 }
+    },
+    {
+      "name": "amount above 1 clamps to the safe band: 400x800 down 2 -> requested 1600 clamps to 640, (200,720)->(200,80)",
+      "direction": "down",
+      "amount": 2,
+      "referenceWidth": 400,
+      "referenceHeight": 800,
+      "expected": { "x1": 200, "y1": 720, "x2": 200, "y2": 80, "pixels": 640 }
+    },
+    {
+      "name": "explicit pixels clamp to the vertical safe band: 400x800 down 1000px -> 640, (200,720)->(200,80)",
+      "direction": "down",
+      "pixels": 1000,
+      "referenceWidth": 400,
+      "referenceHeight": 800,
+      "expected": { "x1": 200, "y1": 720, "x2": 200, "y2": 80, "pixels": 640 }
+    },
+    {
+      "name": "tiny frame engages every max(1, ...) floor and the .5 rounding both ports must agree on: 2x2 down 10px -> (1,2)->(1,0), travel 1",
+      "direction": "down",
+      "pixels": 10,
+      "referenceWidth": 2,
+      "referenceHeight": 2,
+      "expected": { "x1": 1, "y1": 2, "x2": 1, "y2": 0, "pixels": 1 }
+    },
+    {
+      "name": "explicit pixels clamp to the horizontal safe band: 300x600 right 500px -> 240, (270,300)->(30,300)",
+      "direction": "right",
+      "pixels": 500,
+      "referenceWidth": 300,
+      "referenceHeight": 600,
+      "expected": { "x1": 270, "y1": 300, "x2": 30, "y2": 300, "pixels": 240 }
+    },
+    {
+      "name": "#1781 A1: a saturated scroll up on a Pixel 7 (1080x2400) touches down at y=240, clear of its 136px cutout status bar; the 5% band started at y=120 and pulled the notification shade",
+      "direction": "up",
+      "amount": 3,
+      "referenceWidth": 1080,
+      "referenceHeight": 2400,
+      "expected": { "x1": 540, "y1": 240, "x2": 540, "y2": 2160, "pixels": 1920 }
+    }
+  ]
+}

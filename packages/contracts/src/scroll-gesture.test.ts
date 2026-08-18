@@ -1,5 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   assertScrollGestureInput,
@@ -44,145 +46,70 @@ test('buildInPageSwipeGesturePlan truncates percentage coordinates on odd viewpo
   );
 });
 
-// The buildScrollGesturePlan vectors below are the canonical cross-language parity vectors,
-// mirrored by RunnerTests+ScrollGesture.swift (runnerScrollGesturePlan). If you change the scroll
-// math, update both this suite and the Swift parity test so the two ports cannot drift silently.
-test('buildScrollGesturePlan maps relative amount to viewport travel', () => {
-  const plan = buildScrollGesturePlan({
-    direction: 'down',
-    amount: 0.5,
-    referenceWidth: 400,
-    referenceHeight: 800,
-  });
+// Cross-language parity table: every case in contracts/fixtures/scroll-gesture.json is asserted
+// here AND by the Swift port (runnerScrollGesturePlan in RunnerTests+ScrollGesture.swift, gated
+// XCTest in the same file). Add vectors to the table, never to one suite — drift on either side
+// turns CI red without a simulator.
+type ScrollGestureFixture = {
+  constants: { defaultScrollAmount: number; defaultEdgePaddingFraction: number };
+  cases: Array<{
+    name: string;
+    direction: 'up' | 'down' | 'left' | 'right';
+    amount?: number;
+    pixels?: number;
+    referenceWidth: number;
+    referenceHeight: number;
+    expected: { x1: number; y1: number; x2: number; y2: number; pixels: number };
+  }>;
+};
 
-  assert.deepEqual(plan, {
-    direction: 'down',
-    x1: 200,
-    y1: 600,
-    x2: 200,
-    y2: 200,
-    referenceWidth: 400,
-    referenceHeight: 800,
-    amount: 0.5,
-    pixels: 400,
-  });
+const SCROLL_TABLE_PATH = path.resolve(
+  import.meta.dirname,
+  '..',
+  '..',
+  '..',
+  'contracts',
+  'fixtures',
+  'scroll-gesture.json',
+);
+
+function readScrollGestureFixture(): ScrollGestureFixture {
+  return JSON.parse(fs.readFileSync(SCROLL_TABLE_PATH, 'utf8')) as ScrollGestureFixture;
+}
+
+test('buildScrollGesturePlan agrees with every scroll-gesture parity table case', () => {
+  const { cases } = readScrollGestureFixture();
+  assert.ok(cases.length > 0, 'parity table must not be empty');
+  assert.equal(new Set(cases.map((c) => c.name)).size, cases.length, 'case names must be unique');
+  for (const fixture of cases) {
+    const plan = buildScrollGesturePlan({
+      direction: fixture.direction,
+      amount: fixture.amount,
+      pixels: fixture.pixels,
+      referenceWidth: fixture.referenceWidth,
+      referenceHeight: fixture.referenceHeight,
+    });
+    assert.deepEqual(
+      { x1: plan.x1, y1: plan.y1, x2: plan.x2, y2: plan.y2, pixels: plan.pixels },
+      fixture.expected,
+      fixture.name,
+    );
+    assert.equal(plan.direction, fixture.direction, fixture.name);
+    assert.equal(plan.amount, fixture.amount, fixture.name);
+    assert.equal(plan.referenceWidth, fixture.referenceWidth, fixture.name);
+    assert.equal(plan.referenceHeight, fixture.referenceHeight, fixture.name);
+  }
 });
 
-test('buildScrollGesturePlan maps explicit pixels below the safe band cap', () => {
-  const plan = buildScrollGesturePlan({
-    direction: 'down',
-    pixels: 120,
-    referenceWidth: 300,
-    referenceHeight: 600,
-  });
-
-  assert.deepEqual(plan, {
-    direction: 'down',
-    x1: 150,
-    y1: 360,
-    x2: 150,
-    y2: 240,
-    referenceWidth: 300,
-    referenceHeight: 600,
-    amount: undefined,
-    pixels: 120,
-  });
-});
-
-test('buildScrollGesturePlan clamps amounts above 1 to the safe gesture band', () => {
-  const plan = buildScrollGesturePlan({
-    direction: 'down',
-    amount: 2,
-    referenceWidth: 400,
-    referenceHeight: 800,
-  });
-
-  assert.deepEqual(plan, {
-    direction: 'down',
-    x1: 200,
-    y1: 720,
-    x2: 200,
-    y2: 80,
-    referenceWidth: 400,
-    referenceHeight: 800,
-    amount: 2,
-    pixels: 640,
-  });
-});
-
-test('buildScrollGesturePlan clamps explicit pixel travel to the vertical safe gesture band', () => {
-  const plan = buildScrollGesturePlan({
-    direction: 'down',
-    pixels: 1000,
-    referenceWidth: 400,
-    referenceHeight: 800,
-  });
-
-  assert.deepEqual(plan, {
-    direction: 'down',
-    x1: 200,
-    y1: 720,
-    x2: 200,
-    y2: 80,
-    referenceWidth: 400,
-    referenceHeight: 800,
-    amount: undefined,
-    pixels: 640,
-  });
-});
-
-test('buildScrollGesturePlan floors padding and travel on tiny frames', () => {
-  // 2x2 engages every max(1, ...) floor and the .5 rounding cases the two ports must agree on
-  // (halfTravel 0.5 -> 1, center 1 from 2/2).
-  const plan = buildScrollGesturePlan({
-    direction: 'down',
-    pixels: 10,
-    referenceWidth: 2,
-    referenceHeight: 2,
-  });
-
-  assert.deepEqual(plan, {
-    direction: 'down',
-    x1: 1,
-    y1: 2,
-    x2: 1,
-    y2: 0,
-    referenceWidth: 2,
-    referenceHeight: 2,
-    amount: undefined,
-    pixels: 1,
-  });
-});
-
-test('buildScrollGesturePlan clamps pixel travel to the safe gesture band', () => {
-  const plan = buildScrollGesturePlan({
-    direction: 'right',
-    pixels: 500,
-    referenceWidth: 300,
-    referenceHeight: 600,
-  });
-
-  assert.equal(plan.x1, 270);
-  assert.equal(plan.x2, 30);
-  assert.equal(plan.y1, 300);
-  assert.equal(plan.y2, 300);
-  assert.equal(plan.pixels, 240);
-});
-
-// #1781 A1: an edge-to-edge app window includes the status bar, so a saturated `scroll up` used
-// to start inside it (y=120 on a Pixel 7, whose cutout status bar is 136px tall) and pulled the
-// notification shade down instead of scrolling. The band keeps the touch-down below the bar.
-test('buildScrollGesturePlan keeps a saturated scroll up out of a Pixel 7 status bar', () => {
-  const plan = buildScrollGesturePlan({
-    direction: 'up',
-    amount: 3,
-    referenceWidth: 1080,
-    referenceHeight: 2400,
-  });
-
-  assert.equal(plan.y1, 240);
-  assert.equal(plan.y2, 2160);
-  assert.ok(plan.y1 > 136, `touch-down y=${plan.y1} must clear the 136px status bar`);
+// The two planner constants are private on both sides; the table pins them behaviourally on a
+// 1000px axis where every rounding step is exact.
+test('buildScrollGesturePlan uses the parity table default amount and edge padding', () => {
+  const { constants } = readScrollGestureFixture();
+  const frame = { referenceWidth: 1000, referenceHeight: 1000 };
+  const defaulted = buildScrollGesturePlan({ direction: 'down', ...frame });
+  assert.equal(defaulted.pixels, 1000 * constants.defaultScrollAmount);
+  const saturated = buildScrollGesturePlan({ direction: 'down', amount: 10, ...frame });
+  assert.equal(saturated.pixels, 1000 - 2 * 1000 * constants.defaultEdgePaddingFraction);
 });
 
 test('buildScrollGesturePlan rejects invalid amounts', () => {
