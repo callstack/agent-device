@@ -20,8 +20,7 @@ test('settle recovers the session baseline when resolved target evidence is abse
     backend: {
       platform: 'ios',
       captureSnapshot: async () => ({
-        snapshot:
-          elapsedMs < 1_200 ? elementTransientRoomSnapshot : elementSettledRoomSnapshot,
+        snapshot: elapsedMs < 1_200 ? elementTransientRoomSnapshot : elementSettledRoomSnapshot,
       }),
     } satisfies AgentDeviceBackend,
     artifacts: createLocalArtifactAdapter(),
@@ -56,7 +55,10 @@ test('settle recovers the session baseline when resolved target evidence is abse
   );
 
   assert.equal(outcome.observation.settled, true);
-  assert.equal(outcome.settledNodes?.some((node) => node.label === 'action file'), false);
+  assert.equal(
+    outcome.settledNodes?.some((node) => node.label === 'action file'),
+    false,
+  );
   assert.ok(
     outcome.observation.waitedMs >= 1_500,
     `settled without recovered baseline after ${outcome.observation.waitedMs}ms`,
@@ -69,8 +71,7 @@ test('settle uses the authorized ref frame instead of a polluted evidence captur
     backend: {
       platform: 'ios',
       captureSnapshot: async () => ({
-        snapshot:
-          elapsedMs < 1_200 ? elementTransientRoomSnapshot : elementSettledRoomSnapshot,
+        snapshot: elapsedMs < 1_200 ? elementTransientRoomSnapshot : elementSettledRoomSnapshot,
       }),
     } satisfies AgentDeviceBackend,
     artifacts: createLocalArtifactAdapter(),
@@ -106,7 +107,10 @@ test('settle uses the authorized ref frame instead of a polluted evidence captur
   );
 
   assert.equal(outcome.observation.settled, true);
-  assert.equal(outcome.settledNodes?.some((node) => node.label === 'action file'), false);
+  assert.equal(
+    outcome.settledNodes?.some((node) => node.label === 'action file'),
+    false,
+  );
   assert.ok(
     outcome.observation.waitedMs >= 1_500,
     `settled against polluted evidence after ${outcome.observation.waitedMs}ms`,

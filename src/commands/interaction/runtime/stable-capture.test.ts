@@ -191,12 +191,7 @@ test('settle keeps the default quiet window for a larger partial projection', as
     { session: 'default' },
     {
       ...BROAD_TRANSITION_PARAMS,
-      broadTransitionBaselineNodes: elementSettingsSnapshot([
-        1_138,
-        1_423,
-        2_144,
-        2_434,
-      ]).nodes,
+      broadTransitionBaselineNodes: elementSettingsSnapshot([1_138, 1_423, 2_144, 2_434]).nodes,
     },
   );
 
