@@ -20,6 +20,27 @@
   bounded arrays in JSON, artifact paths for large raw data, progressive lookup for deeper detail.
 - Close every manual `agent-device` session opened during verification
   (`docs/agents/device-verification.md`) and report any cleanup that could not be completed.
+- Two readiness claims, never blurred: **published and reported** means the branch is pushed, the
+  PR body carries the evidence gathered at a named commit, and CI on the head is the authority
+  still to come; **merge-ready** means the required checks are green on the actual head and the
+  live evidence for the changed path exists. "Don't wait for CI" licenses the first, not the
+  second — say which one you are claiming.
+
+## Rebasing onto a moving `main`
+
+`main` has no "require branches up to date" rule; a rebase is not owed to GitHub. Rebase when
+there is a conflict, or when the commits `main` gained since your base touch a surface your
+change depends on or that decides your gates:
+
+```sh
+pnpm check:affected --base <your-merge-base> --head origin/main   # what main gained, by gate
+```
+
+If that plan names only files and gates disjoint from yours, the rebase buys nothing but another
+full validation cycle. Evidence in the PR body is stamped with the commit it was gathered at, so a
+rebase dates it rather than invalidating it, and CI on the new head re-establishes it. A merge
+queue is the answer once independent migration units regularly land against each other; until
+then this rule is.
 
 ## PR body
 

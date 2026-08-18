@@ -14,6 +14,7 @@ situational lives one hop away — load it when the task calls for it.
 | Which gates to run, test speed rules, shared fixtures | `docs/agents/testing.md` |
 | Adding or changing a CLI flag | `docs/agents/cli-flags.md` |
 | Opening a PR, or reviewing one | `docs/agents/pull-requests.md` |
+| Migrating a command onto the request-bound platform runtime (an ADR 0019 unit) | `docs/agents/adr-0019-unit.md` |
 | Running commands against a real device | `docs/agents/device-verification.md` |
 | Issues, PRDs, triage labels | `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md` |
 | Web automation backend setup/diagnostics | `docs/agents/web-backend.md` |
@@ -160,6 +161,16 @@ one question so `rg` → read-whole-file stays one cheap bounded read.
   under `~/.agent-device/dev/<basename-slug>-<hash>`. Inspect with `pnpm daemon:state-dir`, override
   with `--state-dir`/`AGENT_DEVICE_STATE_DIR`, prune with `pnpm clean:daemon --prune-dev`. Daemons
   are isolated per worktree; **devices are not** — target different devices for concurrent worktrees.
+- A fresh worktree is not ready until `pnpm install --frozen-lockfile && pnpm build` ran **in it**.
+  Until then `@agent-device/*` and optional peers (`ai`) resolve against whichever checkout last
+  installed — typecheck fails on `src/ai-sdk`, and the smoke lanes fail with "Missing dist build".
+  Neither is a regression. The layering scan (`check:layering`) reads tracked files only, so an
+  untracked new module is invisible to it until `git add`.
+- Concurrent agents on one host: one full gate (`pnpm check`, `check:unit`) at a time — several
+  worktrees running unit suites together *are* the contention that produces timeout-shaped
+  failures. Verify a subagent's edits with `git -C <worktree> status/diff`, never from its report;
+  keep one PR per worktree and address PRs by URL/branch, not a number recalled from context;
+  give each agent its own scratch directory.
 - Node ≥22. Prefer built-ins (`fetch`, Web Streams, `AbortSignal.timeout`) over compatibility
   wrappers unless the surrounding code needs a lower-level transport.
 - Emit with `tsdown` (Rolldown), typecheck with TypeScript 7 via `tsc`. Declaration generation uses

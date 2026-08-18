@@ -90,6 +90,16 @@ forked workers, and any daemon a test spawned running with that `TMPDIR` — the
 until the last of them exits. A concurrent run in another worktree is live by both tests. If the
 check fails, the leak is this run's: a teardown that did not execute, not history.
 
+Mock the seam the code under test consumes, not the widest one available. A daemon handler that
+binds a device runtime is tested by handing it a fake `inspectFacts` / `bindDevice` (the fixture
+shape in `src/daemon/__tests__/snapshot-runtime-fixture.ts`; the shared mocks in
+`src/daemon/handlers/__tests__/session-command-harness.ts`; facts builders in
+`src/__tests__/test-utils/runtime-operation-facts.ts`) — not by `vi.mock('.../core/dispatch.ts')`.
+The generic dispatch mock is for tests *of* dispatch. Sixty-odd files still mock it from before
+the runtime seam existed; retiring `dispatchCommand('snapshot')` surfaced them one failure at a
+time. Do not add to that set, and when a command migrates (`docs/agents/adr-0019-unit.md`), its
+tests move to the runtime seam in the same PR.
+
 Keep tests behavioral. Do not assert shapes or cases TypeScript already proves.
 
 A test added as a regression pin must be shown to fail without the change it pins — vacuity is the
