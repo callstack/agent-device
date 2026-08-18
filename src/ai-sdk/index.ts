@@ -49,11 +49,26 @@ export type AgentDeviceTools = {
   toolApproval?: Partial<Record<string, ToolApprovalStatus>>;
 };
 
-// Hidden unconditionally: `session` is always pinned by this factory, and
-// `mcpOutputFormat` only selects between the MCP text-content renderings —
-// irrelevant here since `execute` below returns structuredContent directly
-// and never reads a tool's rendered text.
-const ALWAYS_HIDDEN_SCHEMA_FIELDS = ['session', 'mcpOutputFormat'] as const;
+// Hidden unconditionally, from both the schema the model sees and the input
+// `execute` forwards to the shared executor:
+//  - `session` is always pinned by this factory — the whole point is that a
+//    tool call can never target a session other than the one passed in.
+//  - `stateDir` selects which daemon state directory (and therefore which
+//    daemon/session namespace) a call resolves against. Left model-visible,
+//    it would let a call escape the pinned session into another daemon's
+//    state entirely, defeating that guarantee.
+//  - `mcpOutputFormat`, `includeCost`, `responseLevel` are MCP tool-config
+//    knobs, not command arguments; irrelevant here since `execute` below
+//    returns structuredContent directly and never reads a tool's rendered
+//    text, and shaping the response is this factory's decision, not the
+//    model's.
+const ALWAYS_HIDDEN_FIELDS = [
+  'session',
+  'stateDir',
+  'mcpOutputFormat',
+  'includeCost',
+  'responseLevel',
+] as const;
 
 // The registry's hand-rolled JsonSchema type and `jsonSchema()`'s expected
 // JSONSchema7 (re-exported from @ai-sdk/provider, not from `ai` itself) are
@@ -89,7 +104,7 @@ export async function createAgentDeviceTools(
   });
   const executor = createCommandToolExecutor();
 
-  const hiddenFields = new Set<string>(ALWAYS_HIDDEN_SCHEMA_FIELDS);
+  const hiddenFields = new Set<string>(ALWAYS_HIDDEN_FIELDS);
   if (platform) hiddenFields.add('platform');
 
   const tools: ToolSet = {};
@@ -105,8 +120,12 @@ export async function createAgentDeviceTools(
         ? { outputSchema: jsonSchema(definition.outputSchema as unknown as Json7Schema) }
         : {}),
       execute: async (input) => {
+        // Strip hidden fields from the model's input too, not just the schema
+        // it was generated from: `additionalProperties: false` should already
+        // reject an out-of-schema field, but the pinned session/state-dir
+        // guarantee must hold even if some caller bypasses schema validation.
         const filledInput = {
-          ...input,
+          ...omitHidden(input, hiddenFields),
           session,
           ...(platform ? { platform } : {}),
         };
@@ -141,10 +160,19 @@ async function importAiSdk(): Promise<typeof import('ai')> {
 
 function omitSchemaProperties(schema: JsonSchema, hidden: ReadonlySet<string>): JsonSchema {
   if (!schema.properties) return schema;
-  const properties: Record<string, JsonSchema> = {};
-  for (const [key, value] of Object.entries(schema.properties)) {
-    if (!hidden.has(key)) properties[key] = value;
-  }
   const required = schema.required?.filter((key) => !hidden.has(key));
-  return { ...schema, properties, ...(required ? { required } : {}) };
+  return {
+    ...schema,
+    properties: omitHidden(schema.properties, hidden),
+    ...(required ? { required } : {}),
+  };
+}
+
+/** Shared by both the schema (over `.properties`) and the runtime input (over the call itself). */
+function omitHidden<T>(record: Record<string, T>, hidden: ReadonlySet<string>): Record<string, T> {
+  const result: Record<string, T> = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (!hidden.has(key)) result[key] = value;
+  }
+  return result;
 }

@@ -90,6 +90,34 @@ test('defaults to the core tool set and pins the session for every call', async 
   ]);
 });
 
+test('MCP transport/config controls are hidden from the schema and cannot reach the executor', async () => {
+  const { tools } = await createAgentDeviceTools({ session: 'pinned-session' });
+
+  const schema = rawSchemaOf(tools, 'snapshot');
+  for (const field of ['stateDir', 'includeCost', 'responseLevel', 'mcpOutputFormat']) {
+    assert.equal(field in schema.properties, false, `${field} must not be model-visible`);
+  }
+
+  // Simulate a caller that bypasses schema validation (e.g. a non-conforming
+  // provider) and supplies these fields directly: the pinned session must
+  // still hold, and none of them may reach the shared executor.
+  await executeOf(
+    tools,
+    'snapshot',
+  )({
+    interactiveOnly: true,
+    stateDir: '/tmp/attacker-controlled-state-dir',
+    includeCost: true,
+    responseLevel: 'full',
+    mcpOutputFormat: 'json',
+    session: 'attacker-supplied-session',
+  });
+
+  assert.deepEqual(executorCalls, [
+    { name: 'snapshot', input: { interactiveOnly: true, session: 'pinned-session' } },
+  ]);
+});
+
 test("set: 'all' includes extended-tier commands too", async () => {
   const { tools } = await createAgentDeviceTools({ session: 's', set: 'all' });
   assert.ok('devices' in tools, 'set: all reaches every MCP-exposed command, not just core');
