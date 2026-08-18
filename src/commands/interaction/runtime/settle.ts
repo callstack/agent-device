@@ -207,6 +207,13 @@ async function resolveBaselineNodes(
   options: CommandContext,
   resolved: ResolvedInteractionTarget,
 ): Promise<SnapshotNode[]> {
+  const session = await runtime.sessions.get(options.session ?? 'default');
+  // A ref is authorized against the stored ref frame. Keep that visible presentation as the
+  // transition baseline: a best-effort evidence recapture can recover through private AX and see
+  // covered background controls that were not actionable when the ref was issued.
+  if (resolved.kind === 'ref' && session?.refFrameSnapshot?.nodes.length) {
+    return session.refFrameSnapshot.nodes;
+  }
   if ('preActionNodes' in resolved && resolved.preActionNodes?.length) {
     return resolved.preActionNodes;
   }
@@ -214,7 +221,6 @@ async function resolveBaselineNodes(
   // authoritative ref frame, so reuse it rather than silently turning a missing optional field
   // into an empty transition/diff baseline. Fall back to the latest observation for point targets
   // and pre-frame sessions.
-  const session = await runtime.sessions.get(options.session ?? 'default');
   return session?.refFrameSnapshot?.nodes ?? session?.snapshot?.nodes ?? [];
 }
 
