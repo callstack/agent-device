@@ -164,10 +164,10 @@ isolation. At the current measured commit it spans `commands` (33), `daemon-serv
 Now ratcheted for growth by **R9** (`TYPE_CYCLE_BASELINE`, derived from the zone ceilings in
 `scripts/layering/daemon-modularity.ts`), so it cannot get worse
 while nobody is looking — a type-only import that closes a new loop fails the gate, verified by
-adding one type-only import that closes a loop and watching the gate reject it. Growth-only on
-purpose: reducing it is a real refactor, so a
-hard equality would turn every unrelated improvement into a baseline edit. The refactor itself is
-still deliberately not attempted; it starts at those four hubs.
+adding one type-only import that closes a loop and watching the gate reject it. It was growth-only
+here; #1781 A6 made it an equality pin, so a baseline left above the measured size fails too and a
+shrink is banked by the change that earns it. The refactor itself is still deliberately not
+attempted; it starts at those four hubs.
 
 ### The facade cycle: investigated, no narrower port exists
 
@@ -430,8 +430,8 @@ declarative syntax gains, and `ZONE_POLICIES` gets that syntax anyway:
   this. Any new boundary with existing violations — the platforms facade has ~89 — would need one
   disable comment per site.
 - **It cannot replace the gate.** R4 (cycles), R5/R6 (spine ranking + ratchet), R7 (field
-  ownership — not an import rule at all), R8 (CI job closure) and R9 (cycle size) are whole-graph or
-  non-import properties. Adopting it means R1-R3 live in one system and R4-R9 in another, so
+  ownership — not an import rule at all) and R9 (cycle size) are whole-graph or non-import
+  properties. Adopting it means R1-R3 live in one system and R4-R9 in another, so
   "where is our architecture defined" gets two answers.
 - **Inline type specifiers are misread.** `import { type A, type B } from '…'` is fully erased at
   runtime, but the plugin classifies it as a value import (its `importKind` is statement-level).

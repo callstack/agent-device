@@ -50,9 +50,9 @@
 // description of intent.
 //
 // AST-based (`oxc-parser`, the standing precedent in this directory — session-state.ts,
-// facade-exports.ts, zero-dep-jobs.ts), not a line scan: a line scan reading raw text for
-// "'tap'" would mistake this very comment, or a fixture string in a test file, for the real
-// thing — precisely the false-positive failure mode that turned this directory to
+// facade-exports.ts, contracts-implementation-policy.ts), not a line scan: a line scan reading
+// raw text for "'tap'" would mistake this very comment, or a fixture string in a test file, for
+// the real thing — precisely the false-positive failure mode that turned this directory to
 // `parseSync(...).module`/`.program` in the first place.
 
 import { parseSync } from 'oxc-parser';
@@ -105,8 +105,8 @@ export function registryAliasTokens(registrySource: string): string[] {
  * The LOCAL binding name `binSource` imports `normalizeCliCommandAlias` as — following any `as`
  * alias — for a VALUE (not type-only) import from the alias registry, or `null` if there is no
  * such import. Reads `oxc-parser`'s own resolved import-entry table (`module.staticImports`),
- * the same source `zero-dep-jobs.ts`'s `moduleSpecifiers` uses — not a regex, so
- * `import type { normalizeCliCommandAlias as x }` (erased at compile time, no runtime delegation
+ * the same source `contracts-implementation-policy.ts`'s `moduleSpecifiers` uses — not a regex,
+ * so `import type { normalizeCliCommandAlias as x }` (erased at compile time, no runtime delegation
  * at all) cannot pass as a real import the way a line match on the specifier text would.
  *
  * Reporting the LOCAL name (not just a boolean) is what lets `usageTextDelegationFailure` below

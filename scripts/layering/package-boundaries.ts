@@ -7,14 +7,13 @@
 // manifest never declared, and a specifier subpath the owning `exports` map
 // does not name.
 //
-// The single tolerated relative route into a package is an R8 zero-dep script
-// importing an exports-named source target. That exception is exactly
-// co-extensive with safety: Node's ESM loader does not realpath specifiers, so
-// a module loaded BOTH relatively and via its package specifier instantiates
-// twice in one process (duplicate AppError, broken instanceof). A zero-dep
-// closure can never coexist with specifier loads — no node_modules — which is
-// the only reason the exception exists at all. Production src/test files never
-// qualify.
+// No relative route into a package is tolerated. Node's ESM loader does not
+// realpath specifiers, so a module loaded BOTH relatively and via its package
+// specifier instantiates twice in one process (duplicate AppError, broken
+// instanceof). The one exception this rule used to grant — a file inside an R8
+// zero-dep job closure, where no node_modules means specifier loads cannot
+// coexist — retired with R8 itself (#1781 A6), because the repo runs no
+// `install-deps: false` job for it to cover.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -174,41 +173,28 @@ export function checkPackageInternalSites(
 
 /**
  * Rules for files OUTSIDE packages/ (src, test, scripts): workspace specifiers
- * must be root-declared and exports-named; relative paths into `packages/·/src`
- * are forbidden except the R8 zero-dep exception — a `scripts/` file importing
- * an exports-named source target.
+ * must be root-declared and exports-named, and relative paths into
+ * `packages/·/src` are forbidden outright.
  */
 export function checkRootSites(
   sites: readonly SpecifierSite[],
   packages: readonly WorkspacePackage[],
   rootWorkspaceDependencies: ReadonlySet<string>,
-  zeroDepClosureFiles: ReadonlySet<string>,
 ): PackageBoundaryViolation[] {
   const violations: PackageBoundaryViolation[] = [];
-  const exportedSources = new Set(packages.flatMap((pkg) => [...pkg.exportTargets.values()]));
   for (const site of sites) {
     if (site.specifier.startsWith('.')) {
       const resolved = path.posix.normalize(
         path.posix.join(path.posix.dirname(site.file), site.specifier),
       );
       if (!/^packages\/[^/]+\//.test(resolved)) continue;
-      // The R8 exception requires BOTH membership in an actual zero-dep job
-      // closure (no node_modules -> no coexisting specifier loads -> no dual
-      // instantiation) AND an exports-named target. `scripts/` placement alone
-      // proves neither.
-      const inZeroDepClosure = zeroDepClosureFiles.has(site.file);
-      if (inZeroDepClosure && exportedSources.has(resolved)) continue;
       violations.push({
         rule: 'R11 package-boundaries',
         file: site.file,
         line: site.line,
-        message: inZeroDepClosure
-          ? `'${site.specifier}' targets a non-exported package source — the R8 exception only ` +
-            `covers files named by the package's exports map.`
-          : `'${site.specifier}' bypasses the package boundary — import the package specifier ` +
-            `instead. The relative route is reserved for files inside an R8 zero-dep job ` +
-            `closure; anywhere else, dual specifier/relative loads would instantiate the ` +
-            `module twice.`,
+        message:
+          `'${site.specifier}' bypasses the package boundary — import the package specifier ` +
+          `instead, or dual specifier/relative loads instantiate the module twice.`,
       });
       continue;
     }
@@ -298,10 +284,7 @@ export function workspaceSpecifierTargets(repoRoot: string): Map<string, string>
 }
 
 /** The real-tree R11 run used by check.ts. */
-export function checkPackageBoundaries(
-  repoRoot: string,
-  zeroDepClosure: ReadonlySet<string>,
-): PackageBoundaryViolation[] {
+export function checkPackageBoundaries(repoRoot: string): PackageBoundaryViolation[] {
   const packages = readWorkspacePackages(repoRoot);
   if (packages.length === 0) return [];
   const rootDependencies = rootWorkspaceDependencyNames(repoRoot);
@@ -315,13 +298,11 @@ export function checkPackageBoundaries(
   for (const root of ['src', 'test', 'scripts']) {
     for (const file of walkTsFiles(repoRoot, root)) {
       // Gate tests under scripts/ carry import syntax inside fixture strings
-      // (same reason R8 parses module records instead of scanning lines);
+      // (which is why this reads module records instead of scanning lines);
       // src/ and test/ suites stay covered — they import packages for real.
       if (root === 'scripts' && file.endsWith('.test.ts')) continue;
       const source = fs.readFileSync(path.join(repoRoot, file), 'utf8');
-      violations.push(
-        ...checkRootSites(specifierSites(file, source), packages, rootDependencies, zeroDepClosure),
-      );
+      violations.push(...checkRootSites(specifierSites(file, source), packages, rootDependencies));
     }
   }
   return violations;

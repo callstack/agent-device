@@ -11,8 +11,8 @@ import type { ImportEdge } from './model.ts';
  *
  * The evaluator is deliberately small. Everything a policy can say is in `ZonePolicy`, so a rule
  * that needs more than these fields does NOT belong here: R4 (cycles), R5/R6 (spine ranking),
- * R7 (field ownership), R8 (CI job closure) and R9 (cycle size) are whole-graph or non-import
- * properties, and each keeps its own checker.
+ * R7 (field ownership) and R9 (cycle size) are whole-graph or non-import properties, and each
+ * keeps its own checker.
  */
 
 /** Edge kinds a boundary can tolerate. Both are erased or deferred, so both can be legitimate. */

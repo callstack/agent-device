@@ -171,19 +171,19 @@ test('double-quoted and re-export routes into packages are not invisible to R11'
     'src/utils/exec.ts',
     'import { AppError } from "../../packages/kernel/src/errors.ts";',
   );
-  assert.equal(checkRootSites(doubleQuoted, ALL, new Set([kernel.name]), new Set()).length, 1);
+  assert.equal(checkRootSites(doubleQuoted, ALL, new Set([kernel.name])).length, 1);
 
   const reExport = specifierSites(
     'src/utils/exec.ts',
     'export { AppError } from "../../packages/kernel/src/errors.ts";',
   );
-  assert.equal(checkRootSites(reExport, ALL, new Set([kernel.name]), new Set()).length, 1);
+  assert.equal(checkRootSites(reExport, ALL, new Set([kernel.name])).length, 1);
 
   const dynamic = specifierSites(
     'src/utils/exec.ts',
     'void import("../../packages/kernel/src/errors.ts");',
   );
-  assert.equal(checkRootSites(dynamic, ALL, new Set([kernel.name]), new Set()).length, 1);
+  assert.equal(checkRootSites(dynamic, ALL, new Set([kernel.name])).length, 1);
 
   const packageEscape = specifierSites(
     'packages/kernel/src/errors.ts',
@@ -249,28 +249,27 @@ test('a root src file tunnelling into packages/*/src relatively is a violation',
     'src/utils/exec.ts',
     "import { AppError } from '../../packages/kernel/src/errors.ts';",
   );
-  const violations = checkRootSites(sites, ALL, new Set([kernel.name]), new Set());
+  const violations = checkRootSites(sites, ALL, new Set([kernel.name]));
   assert.deepEqual(rules(violations), ['R11 package-boundaries']);
   assert.match(violations[0]!.message, /instantiate the module twice/);
 });
 
-test('the R8 exception requires zero-dep closure membership AND an exports-named target', () => {
-  const closure = new Set(['scripts/some-tool/run.ts']);
-  const allowed = specifierSites(
+// The R8 zero-dep exception retired with R8 (#1781 A6). `scripts/` placement never
+// proved anything about dual instantiation on its own, and there is no longer a job
+// whose absent node_modules could prove it, so the route is closed to every caller —
+// exports-named target or not.
+test('a scripts/ file gets no relative route into a package either', () => {
+  const exportsNamed = specifierSites(
     'scripts/some-tool/run.ts',
     "import { AppError } from '../../packages/kernel/src/errors.ts';",
   );
-  assert.deepEqual(checkRootSites(allowed, ALL, new Set([kernel.name]), closure), []);
-
-  // Same import, but the file is NOT in any zero-dep closure: scripts/
-  // placement alone proves nothing about dual instantiation.
-  assert.equal(checkRootSites(allowed, ALL, new Set([kernel.name]), new Set()).length, 1);
+  assert.equal(checkRootSites(exportsNamed, ALL, new Set([kernel.name])).length, 1);
 
   const nonExported = specifierSites(
     'scripts/some-tool/run.ts',
     "import { hidden } from '../../packages/kernel/src/internal.ts';",
   );
-  assert.equal(checkRootSites(nonExported, ALL, new Set([kernel.name]), closure).length, 1);
+  assert.equal(checkRootSites(nonExported, ALL, new Set([kernel.name])).length, 1);
 });
 
 test('root workspace specifiers need a root workspace:* entry and an exported subpath', () => {
@@ -288,10 +287,10 @@ test('root workspace specifiers need a root workspace:* entry and an exported su
     'src/cli.ts',
     "import { x } from '@agent-device/kernel/src/errors.ts';",
   );
-  assert.equal(checkRootSites(deep, ALL, new Set([kernel.name]), new Set()).length, 1);
+  assert.equal(checkRootSites(deep, ALL, new Set([kernel.name])).length, 1);
 
   const unknown = specifierSites('src/cli.ts', "import { x } from '@agent-device/nope/thing';");
-  assert.equal(checkRootSites(unknown, ALL, new Set([kernel.name]), new Set()).length, 1);
+  assert.equal(checkRootSites(unknown, ALL, new Set([kernel.name])).length, 1);
 });
 
 test('the real tree parses, declares, and passes R11', () => {

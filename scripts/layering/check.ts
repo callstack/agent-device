@@ -11,18 +11,19 @@
 // This gate enforces five things, across four scopes:
 //   - GLOBALLY, across every production source file: the R2-R3 move rules and
 //     rejection of all production static value-import cycles (R4). R1 kernel-sink
-//     retired with the kernel's move to packages/kernel (#1490 W0).
+//     retired with the kernel's move to packages/kernel (#1490 W0); R8
+//     zero-dep-job-closure retired with the last `install-deps: false` job
+//     (#1781 A6) — its invariant has no subjects, and both numbers are spent, so
+//     a new rule takes the next free id rather than reusing them.
 //   - Over the RANKED SPINE only: rejection of every spine back-edge (R5), i.e.
 //     an import whose source zone outranks its target zone, plus a ratchet on the
 //     same inversion measured over TYPE-ONLY edges (R6).
 //   - Over the DAEMON only: SessionState field ownership (R7), because the session
 //     record is store-owned mutable state that any daemon module can write.
-//   - Over the ZERO-DEP CI JOBS only: their scripts may import nothing that needs
-//     installing (R8), a constraint no local run can feel because `node_modules` is
-//     always there locally and never there in those jobs.
-//   - Over the TYPE GRAPH: the largest type-level import cycle may not grow (R9). R4
-//     keeps the value graph acyclic, so these cycles are free at runtime but bound
-//     what can be read in isolation. Growth-only, deliberately loose.
+//   - Over the TYPE GRAPH: the largest type-level import cycle is pinned by
+//     equality (R9). R4 keeps the value graph acyclic, so these cycles are free at
+//     runtime but bound what can be read in isolation; growth fails, and so does a
+//     baseline left above the measured size.
 //   - Across the DAEMON MODULARITY MIGRATION: R7 ownership pressure and external
 //     daemon/types.ts importers only shrink, R9 zone membership cannot grow or absorb
 //     engine files, and planned logical modules start with zero forbidden/internal imports (R10).
@@ -56,7 +57,6 @@ import {
   SESSION_STATE_FIELD_OWNERS,
   STORE_OWNED_SESSION_STATE_FIELDS,
 } from './session-state.ts';
-import { uninstallableImports, zeroDepClosureFiles, zeroDepJobs } from './zero-dep-jobs.ts';
 import {
   ALIAS_REGISTRY_FILE,
   aliasResolverLocalName,
@@ -75,11 +75,7 @@ import {
   type LayeringViolation,
   type ResolvedImportEdge,
 } from './model.ts';
-import {
-  checkDaemonModularityRatchets,
-  daemonModularitySummary,
-  TYPE_CYCLE_BASELINE,
-} from './daemon-modularity.ts';
+import { checkDaemonModularityRatchets, daemonModularitySummary } from './daemon-modularity.ts';
 import {
   checkPackageBoundaries,
   packageBoundariesSummary,
@@ -130,16 +126,6 @@ export function listSourceFiles(): string[] {
 
 function readSources(files: readonly string[]): Map<string, string> {
   return new Map(files.map((file) => [file, fs.readFileSync(path.join(repoRoot, file), 'utf8')]));
-}
-
-function fileExists(file: string): boolean {
-  return (
-    fs.existsSync(path.join(repoRoot, file)) && fs.statSync(path.join(repoRoot, file)).isFile()
-  );
-}
-
-function readSourceOrNull(file: string): string | null {
-  return fileExists(file) ? fs.readFileSync(path.join(repoRoot, file), 'utf8') : null;
 }
 
 function isProductionSourceFile(file: string): boolean {
@@ -500,68 +486,6 @@ function checkBinAliasFastPath(sources: ReadonlyMap<string, string>): LayeringVi
   return violations;
 }
 
-// R8: a CI job that runs with `install-deps: false` has no `node_modules`, so every script it
-// reaches must import only Node builtins and other repo files. Locally the opposite is true —
-// `node_modules` is always present — which is why this needs a gate rather than a convention.
-function repoZeroDepJobs() {
-  const workflows = readSources(
-    execFileSync('git', ['ls-files', '.github/workflows/*.yml'], {
-      cwd: repoRoot,
-      encoding: 'utf8',
-    })
-      .split('\n')
-      .filter(Boolean),
-  );
-  const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as {
-    scripts?: Record<string, string>;
-  };
-  const packageScripts = new Map(Object.entries(packageJson.scripts ?? {}));
-  return zeroDepJobs(workflows, fileExists, packageScripts);
-}
-
-function checkZeroDepJobs(): LayeringViolation[] {
-  const violations: LayeringViolation[] = [];
-  for (const job of repoZeroDepJobs()) {
-    // Fail closed: a zero-dep job whose commands the entry scan cannot recognize would
-    // otherwise be silently exempt from the rule it is the whole reason for.
-    if (job.entries.length === 0) {
-      violations.push({
-        rule: 'R8 zero-dep-job-closure',
-        file: job.workflow,
-        line: 1,
-        message:
-          `job '${job.job}' runs with install-deps: false but no entry script was found in its ` +
-          `run steps, so its import closure cannot be checked. Invoke the script by path, or ` +
-          `let the job install dependencies.`,
-      });
-      continue;
-    }
-    for (const bare of uninstallableImports(job, readSourceOrNull, fileExists)) {
-      violations.push({
-        rule: 'R8 zero-dep-job-closure',
-        file: bare.file,
-        line: bare.line,
-        message:
-          `'${bare.spec}' is a package, and job '${bare.job}' (${bare.workflow}) runs with ` +
-          `install-deps: false — nothing installs it, so this resolves locally and fails in CI. ` +
-          `Use a Node builtin, inline what you need, or drop install-deps: false from the job.`,
-      });
-    }
-  }
-  return violations;
-}
-
-/** R9 is growth-only, so a shrunk tree is reported rather than failed by the ratchet. */
-function typeCycleNote(actual: number): string {
-  if (actual >= TYPE_CYCLE_BASELINE) {
-    return `the largest type-level cycle is ${actual} files (R9)`;
-  }
-  return (
-    `the largest type-level cycle is down to ${actual} files, under the R9 baseline of ` +
-    `${TYPE_CYCLE_BASELINE} — lower the daemon modularity zone ceilings when convenient`
-  );
-}
-
 function report(
   files: readonly string[],
   violations: readonly LayeringViolation[],
@@ -574,8 +498,8 @@ function report(
         `back-edges (only the composition root is unranked among src zones), and its type-only ` +
         `inversions match the R6 ratchet (${Object.values(TYPE_INVERSION_BASELINE).reduce((sum, count) => sum + count, 0)} remaining); ` +
         `all ${sessionStateFieldCount()} SessionState fields are classified and every write is ` +
-        `inside its declared owner (R7); every zero-dep CI job resolves without ` +
-        `node_modules (R8); ${typeCycleNote(typeCycle)}; ${daemonModularitySummary()}; ` +
+        `inside its declared owner (R7); the largest type-level cycle is ${typeCycle} files ` +
+        `(R9); ${daemonModularitySummary()}; ` +
         `${packageBoundariesSummary(repoRoot)}; ${platformPackagePolicySummary()}; ` +
         `${runtimeCommandCutoverSummary()}; and bin.ts imports normalizeCliCommandAlias, ` +
         `actually passes it into buildCommandUsageText, and holds no local alias literals ` +
@@ -635,7 +559,6 @@ export const LAYERING_RULE_IDS = [
   'type-spine-inversions',
   'session-state-ownership',
   'daemon-modularity-ratchets',
-  'zero-dep-job-closure',
   'bin-alias-fast-path',
   'package-boundaries',
   'platform-package-policy',
@@ -657,13 +580,8 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
   'session-state-ownership': (context) => checkSessionStateOwnership(context.sources),
   'daemon-modularity-ratchets': (context) =>
     checkDaemonModularityRatchets(context.edges, context.typeCycleMembers),
-  'zero-dep-job-closure': () => checkZeroDepJobs(),
   'bin-alias-fast-path': (context) => checkBinAliasFastPath(context.sources),
-  'package-boundaries': () =>
-    checkPackageBoundaries(
-      repoRoot,
-      zeroDepClosureFiles(repoZeroDepJobs(), readSourceOrNull, fileExists),
-    ),
+  'package-boundaries': () => checkPackageBoundaries(repoRoot),
   'platform-package-policy': (context) =>
     checkPlatformPackagePolicy(
       context.allTypeScriptSources,

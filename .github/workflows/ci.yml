@@ -106,12 +106,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      # This job used to run with install-deps: false, and R8 still holds every
-      # remaining zero-dep job to that contract. The layering guard itself opted out
-      # when R7 (SessionState ownership) started parsing the daemon with `oxc-parser`
-      # instead of matching assignment operators with a regex: a regex cannot see
-      # `??=` or a computed `session[key] =` write, so the choice was a real parser or
-      # a rule with holes in it. Keep install-deps enabled.
+      # This job used to run with install-deps: false. It opted out when R7
+      # (SessionState ownership) started parsing the daemon with `oxc-parser` instead
+      # of matching assignment operators with a regex: a regex cannot see `??=` or a
+      # computed `session[key] =` write, so the choice was a real parser or a rule with
+      # holes in it. It was the last such job, so R8 zero-dep-job-closure retired for
+      # want of subjects (#1781 A6). Keep install-deps enabled.
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
@@ -152,9 +152,9 @@ jobs:
 
       # The selector's entry closure reaches `@agent-device/kernel` workspace
       # specifiers through src/utils/exec.ts and diagnostics.ts (#1490 W0), and
-      # workspace package resolution needs the pnpm link in node_modules. The
-      # R8 relative-import exception is reserved for scripts, not production
-      # src files, so this job installs dependencies instead.
+      # workspace package resolution needs the pnpm link in node_modules. R11
+      # grants no relative route into a package, so this job installs
+      # dependencies instead.
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 

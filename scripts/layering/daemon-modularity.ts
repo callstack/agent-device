@@ -7,7 +7,7 @@ const LARGEST_TYPE_CYCLE_ZONE_CEILINGS: Readonly<Record<string, number>> = {
   client: 1,
   commands: 14,
   core: 10,
-  'daemon-server': 17,
+  'daemon-server': 16,
   platforms: 2,
 };
 
@@ -149,6 +149,19 @@ function checkTypeCycleBaseline(members: readonly string[]): LayeringViolation[]
         `${TYPE_CYCLE_BASELINE}). A type-only import that closes a loop makes every file in the ` +
         `loop unreadable in isolation. Declare the shared type below both modules, or if the growth ` +
         `is genuinely warranted, raise the zone ceilings in the same commit and say why.`,
+    });
+  } else if (members.length < TYPE_CYCLE_BASELINE) {
+    // A ceiling left above the measured size is headroom a later change spends without a
+    // reviewer ever seeing a number move, so the shrink is recorded in the change that earns
+    // it — the same equality pin R6 and the R10 R7 counts already carry.
+    violations.push({
+      rule: 'R9 type-cycle-growth',
+      file: 'scripts/layering/daemon-modularity.ts',
+      line: 1,
+      message:
+        `the largest type-level import cycle dropped to ${members.length} files (baseline ` +
+        `${TYPE_CYCLE_BASELINE}). Lower LARGEST_TYPE_CYCLE_ZONE_CEILINGS by the same ${TYPE_CYCLE_BASELINE - members.length} ` +
+        `in this change so the cycle cannot regrow into slack nobody chose.`,
     });
   }
 

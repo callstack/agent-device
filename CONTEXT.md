@@ -396,25 +396,25 @@ axis and stages a deeper platform-runtime seam, one abandonment-safe command cut
   theirs.
 - Type-cycle growth (R9). R4 keeps the VALUE import graph acyclic, so every remaining cycle is
   created by type-only imports — free at runtime, invisible to R5/R6, and the largest single
-  obstacle to reading a subsystem in isolation: inside a strongly-connected component of 47 files,
+  obstacle to reading a subsystem in isolation: inside a strongly-connected component of 46 files,
   no file has a self-contained slice. `TYPE_CYCLE_BASELINE`, derived from the zone ceilings in
-  `scripts/layering/daemon-modularity.ts`, ratchets it for **growth only**, deliberately unlike R6: reducing it
-  is a real refactor rather than a file move, so a hard equality would turn every unrelated
-  improvement into a baseline edit. A shrunk tree is reported in the success line instead of
-  failing. Hubs by in-component dependents: `core/dispatch.ts` (8),
+  `scripts/layering/daemon-modularity.ts`, pins it by **equality**: growth fails, and so does a
+  baseline left above the measured size, which is headroom the next change spends without a
+  reviewer seeing a number move. A shrink is recorded by lowering the zone ceilings in the change
+  that earns it (#1781 A6; the rule was growth-only until then, and reported the slack as a
+  suggestion). Hubs by in-component dependents: `core/dispatch.ts` (8),
   `command-catalog.ts` (7), `commands/interaction/runtime/resolution.ts` (6),
   `core/command-descriptor/registry.ts` (6). The former type hubs (`runtime-contract.ts`,
   `commands/runtime-types.ts`, `backend.ts`, `commands/runtime-common.ts`) left the cycle when
   #1632 sank `backend.ts`'s two upward type imports — 27 files stranded out of the component at
   once.
 - Daemon modularity ratchets (R10). The same tooling-only declaration pins R7's writer-owned
-  field/owner-claim counts, R9's 47 members by zone (`commands` 14, `daemon-server` 17, `core` 10,
+  field/owner-claim counts, R9's 46 members by zone (`commands` 14, `daemon-server` 16, `core` 10,
   `platforms` 2, root 3, `client` 1), and the external production importers of `daemon/types.ts`
   (down to 2: the client normalizers and remote artifacts). R7 counts and external importers may
   only shrink; no zone may grow inside R9, and replay/Maestro/replay-test engine files remain outside
-  it. This per-zone ratchet is intentionally stricter than R9's ordinary total-growth rule: even
-  moving cycle membership into a zone at its ceiling must be justified by lowering another ceiling
-  or changing the baseline explicitly. The #1478 extraction arc (P0–P5) completed against these
+  it. The per-zone ratchet stays stricter than R9's total: even moving cycle membership into a zone
+  at its ceiling must be justified by lowering another ceiling or changing the baseline explicitly. The #1478 extraction arc (P0–P5) completed against these
   ratchets: engines live behind the `packages/{maestro,replay-test,ad-replay,selectors}` façades, engines
   cannot import daemon/platform/provider implementations, and no logical module may deep-import
   another module's `internal/` tree. The P6 platform-modularity phases were measured and deferred
@@ -429,16 +429,37 @@ axis and stages a deeper platform-runtime seam, one abandonment-safe command cut
   keeps package façades metadata-eager but inventory/runtime mechanics lazy. Composition cannot probe tools, prepare
   assets, or construct helpers. Each rule has a planted-red structural case; R11 still owns the
   general workspace exports/dependency boundary.
-- Zero-dep CI jobs (R8). Some jobs run scripts straight from a checkout with `install-deps: false`,
-  so they have no `node_modules`. Nothing local can feel that constraint — every dev machine has
-  `node_modules` sitting right there — so a script grows a package import, passes locally, and fails
-  the runner on the resolve. R8 reads the zero-dep job list out of `.github/workflows/` (declaring a
-  job zero-dep is what puts it under the rule; there is no second list to update), walks each job's
-  entry scripts and their whole relative-import closure, and requires every specifier to be a Node
-  builtin or another repo file. A zero-dep job whose entry scripts the scan cannot identify fails
-  too, so the rule cannot be escaped by changing how the job invokes them. Specifiers come from
-  `oxc-parser`'s module record rather than a line scan, because these closures include `--test`
-  files whose fixtures legitimately contain import syntax inside strings.
+- `bin.ts` alias fast path (R12). `bin.ts --help` resolves a command alias before looking up static
+  help text, and it must do that through the one alias registry
+  (`commands/cli-command-aliases.ts`) rather than a table of its own: the hand-written table it once
+  carried fell out of sync and silently dropped `tap`/`launch`/`relaunch` off the fast path. R12
+  reads three structural facts out of `bin.ts`'s source — a value import of
+  `normalizeCliCommandAlias`, no registry alias token as a local string literal, and *every*
+  `buildCommandUsageText` call receiving the resolver applied to the fast path's own help-target
+  binding. The universal form is the point: an existential one passes on a decoy call while the
+  shipped call runs raw. `bin.ts` dispatches on import and is excluded from coverage, so no unit
+  test can reach this.
+- Contracts implementation authority (R18). `packages/contracts` owns vocabulary, so its production
+  source may not import `child_process`, `fs` or `timers`, call a timer primitive, or grow parser
+  mechanics under `network-traffic` — host, process and lifecycle mechanics belong in
+  `@agent-device/capture-kit` or an adapter. oxlint's restricted-import rule covers `child_process`
+  under `src/**` only, which is neither this package nor these modules.
+- Selector pipeline ownership (R19). The structural stages of selector resolution (occlusion,
+  off-screen, hittable-ancestor promotion, poll budget) are declared per caller in
+  `core/selector-pipeline-policy.ts` and run by `core/selector-pipeline.ts`; a route that reaches
+  the matching engine directly inherits a row's ambiguity contract while skipping every stage
+  (#1649, #1656). R19 admits `core/selector-pipeline.ts` as the only importer of
+  `@agent-device/selectors/engine`, keyed on the specifier over the resolved graph so a namespace
+  import, a re-export and a deferred `import()` are all the same edge. If that subpath stops being
+  exported the rule fails loudly rather than going quiet, because an unresolvable specifier drops
+  out of the graph.
+- Zero-dep CI jobs (R8) — **retired** (#1781 A6). Jobs running with `install-deps: false` had no
+  `node_modules`, a constraint no local run can feel, so R8 walked each such job's entry scripts and
+  required every specifier to be a Node builtin or another repo file. #1490 W0 removed the last one
+  and `ci.yml` records why each remaining job keeps `install-deps` enabled, leaving the rule with no
+  subjects; R11's relative-into-`packages/` exception, which existed only because a zero-dep closure
+  cannot coexist with specifier loads, retired with it. The number is spent: reintroducing the
+  constraint means a new rule with the next free id.
 - Agent-cost. Responses carry a cost block and MCP `outputSchema`, rendered through a leveled
   `ResponseView`.
 

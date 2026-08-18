@@ -426,7 +426,9 @@ composed inventory gateway. Never more than one and never none. A migrated devic
 capability closures/hints and legacy platform adapter. A migrated inventory unit deletes its old
 inventory branches/adapter. Neither cutover deletes, duplicates, or changes the ADR 0003 daemon route.
 No handler selects old versus new platform behavior by family, provider, failure, environment
-variable, or feature flag.
+variable, or feature flag. Each cutover row is scaffolding for one in-flight migration and is
+deleted in the change where this ADR declares that command's migration closed and its retired
+symbols unreachable; the table must never outlive the migration it guards.
 
 One device-command migration unit is one command across every runtime cell where it is currently
 supported: all applicable platform leaves, device kinds/backends, transport-composed providers, and
@@ -464,7 +466,8 @@ resource field one transition owner. The permitted live value is the opaque impl
 neutral facet-specific handle contract. The unit proves partial-start cleanup, transfer, finish,
 forced disposal, and error precedence. Equality-pinned R10 writer/owner counts and external
 `daemon/types.ts` importer membership are lowered in the same unit when they shrink. R9 total-cycle
-and R10 cycle-zone pressure may not grow; shrink reporting follows their existing growth-only policy.
+and R10 cycle-zone pressure may not grow, and R9 is equality-pinned since #1781 A6: a unit that
+shrinks the cycle lowers the zone ceilings in the same change rather than leaving the slack open.
 
 ### 7. Adoption checkpoint
 

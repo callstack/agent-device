@@ -42,6 +42,28 @@ function baselineEdges(): ResolvedImportEdge[] {
   return [...baselineDaemonTypesEdges(), ...recordedMigrationEdges()];
 }
 
+/** Where a member of `zone` lives, so a zone count can be turned back into file paths. */
+const ZONE_DIRECTORY: Readonly<Record<string, string>> = {
+  '(root)': 'src/',
+  'daemon-server': 'src/daemon/',
+  'ad-replay': 'packages/ad-replay/src/',
+};
+
+/**
+ * A cycle membership that exactly fills the zone ceilings. R9 is equality-pinned, so a test
+ * probing anything else starts from the pinned size the way `baselineEdges` starts from the
+ * pinned edges; `overrides` re-counts one zone without disturbing the others.
+ */
+function baselineTypeCycleMembers(overrides: Readonly<Record<string, number>> = {}): string[] {
+  const zones = { ...DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers, ...overrides };
+  return Object.entries(zones).flatMap(([zone, count]) =>
+    Array.from(
+      { length: count },
+      (_, index) => `${ZONE_DIRECTORY[zone] ?? `src/${zone}/`}probe-${index}.ts`,
+    ),
+  );
+}
+
 test('daemon modularity baseline records the measured R7 ownership pressure', () => {
   assert.equal(
     Object.keys(SESSION_STATE_FIELD_OWNERS).length,
@@ -51,8 +73,8 @@ test('daemon modularity baseline records the measured R7 ownership pressure', ()
     Object.values(SESSION_STATE_FIELD_OWNERS).reduce((sum, owners) => sum + owners.length, 0),
     DAEMON_MODULARITY_BASELINE.sessionState.ownerFileClaims,
   );
-  assert.equal(TYPE_CYCLE_BASELINE, 47);
-  assert.equal(DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers['daemon-server'], 17);
+  assert.equal(TYPE_CYCLE_BASELINE, 46);
+  assert.equal(DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers['daemon-server'], 16);
   assert.equal('daemon' in DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers, false);
 });
 
@@ -64,13 +86,16 @@ test('external daemon/types.ts importer membership changes require the baseline 
     ]),
   );
 
-  const violations = checkDaemonModularityRatchets([...baselineEdges(), ...edges], []);
+  const violations = checkDaemonModularityRatchets(
+    [...baselineEdges(), ...edges],
+    baselineTypeCycleMembers(),
+  );
   assert.equal(violations.length, 1);
   assert.match(violations[0]!.message, /may only shrink from the recorded 2/);
 
   const removed = checkDaemonModularityRatchets(
     [...baselineDaemonTypesEdges().slice(1), ...recordedMigrationEdges()],
-    [],
+    baselineTypeCycleMembers(),
   );
   assert.equal(removed.length, 1);
   assert.match(removed[0]!.message, /delete it from externalDaemonTypesImporters/);
@@ -87,7 +112,10 @@ test('planned logical modules start with zero forbidden imports', () => {
     ]),
   );
 
-  const violations = checkDaemonModularityRatchets([...baselineEdges(), ...edges], []);
+  const violations = checkDaemonModularityRatchets(
+    [...baselineEdges(), ...edges],
+    baselineTypeCycleMembers(),
+  );
   assert.equal(violations.length, 1);
   assert.match(violations[0]!.message, /replay-test must not import/);
 });
@@ -109,7 +137,10 @@ test('replay-test rejects request-global and engine-internal imports', () => {
     ]),
   );
 
-  const violations = checkDaemonModularityRatchets([...baselineEdges(), ...edges], []);
+  const violations = checkDaemonModularityRatchets(
+    [...baselineEdges(), ...edges],
+    baselineTypeCycleMembers(),
+  );
   assert.deepEqual(
     violations.map(({ message }) => message.replace(/;.*/, '')),
     [
@@ -131,7 +162,10 @@ test('replay-test may still import its own files inside the package', () => {
     ]),
   );
 
-  assert.deepEqual(checkDaemonModularityRatchets([...baselineEdges(), ...edges], []), []);
+  assert.deepEqual(
+    checkDaemonModularityRatchets([...baselineEdges(), ...edges], baselineTypeCycleMembers()),
+    [],
+  );
 });
 
 // #1478 P3 cleared every recorded replay-test migration import: the ADR 0012 divergence
@@ -147,7 +181,7 @@ test('replay-test carries no recorded migration imports', () => {
     LOGICAL_MODULE_POLICIES.flatMap((module) => module.recordedMigrationImports ?? []),
     [],
   );
-  assert.deepEqual(checkDaemonModularityRatchets(baselineEdges(), []), []);
+  assert.deepEqual(checkDaemonModularityRatchets(baselineEdges(), baselineTypeCycleMembers()), []);
 });
 
 test('internal trees reject deep imports globally, including from daemon', () => {
@@ -158,23 +192,44 @@ test('internal trees reject deep imports globally, including from daemon', () =>
     ]),
   );
 
-  const violations = checkDaemonModularityRatchets([...baselineEdges(), ...edges], []);
+  const violations = checkDaemonModularityRatchets(
+    [...baselineEdges(), ...edges],
+    baselineTypeCycleMembers(),
+  );
   assert.equal(violations.length, 1);
   assert.match(violations[0]!.message, /must not import maestro's internal tree/);
 });
 
 test('R9 records zone ceilings and keeps engine files outside the largest component', () => {
-  const commandMembers = Array.from(
-    { length: DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers.commands + 1 },
-    (_, index) => `src/commands/probe-${index}.ts`,
+  // One commands file and one engine file traded for two daemon-server ones, so the total
+  // stays at the baseline and only the per-zone claims are on trial.
+  const zones = DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers;
+  const violations = checkDaemonModularityRatchets(
+    baselineEdges(),
+    baselineTypeCycleMembers({
+      commands: zones.commands + 1,
+      'ad-replay': 1,
+      'daemon-server': zones['daemon-server']! - 2,
+    }),
   );
-  const violations = checkDaemonModularityRatchets(baselineEdges(), [
-    ...commandMembers,
-    'packages/ad-replay/src/internal/engine.ts',
-  ]);
 
   assert.equal(violations.length, 3);
   assert.ok(violations.some(({ message }) => /contains 15 commands file/.test(message)));
   assert.ok(violations.some(({ message }) => /contains 1 ad-replay file/.test(message)));
   assert.ok(violations.some(({ message }) => /engine file entered/.test(message)));
+});
+
+// Growth was always rejected; a baseline left ABOVE the measured size used to be a suggestion
+// in the success line, which is headroom the next change spends without a number moving.
+test('R9 rejects a baseline left above the measured cycle', () => {
+  const zones = DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers;
+  const violations = checkDaemonModularityRatchets(
+    baselineEdges(),
+    baselineTypeCycleMembers({ 'daemon-server': zones['daemon-server']! - 1 }),
+  );
+
+  assert.equal(violations.length, 1);
+  assert.match(violations[0]!.rule, /^R9 /);
+  assert.match(violations[0]!.message, /dropped to 45 files \(baseline 46\)/);
+  assert.match(violations[0]!.message, /Lower LARGEST_TYPE_CYCLE_ZONE_CEILINGS by the same 1/);
 });
