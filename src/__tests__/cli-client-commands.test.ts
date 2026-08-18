@@ -756,7 +756,7 @@ test('replay refuses a script missing on the caller before any daemon request', 
   assert.equal(result.code, 1);
   assert.equal(result.calls.length, 0);
   assert.match(result.stderr, /replay script not found on this machine/);
-  assert.match(result.stderr, new RegExp(missingPath.replace(/[.]/g, '\\.')));
+  assert.ok(result.stderr.includes(missingPath), result.stderr);
 });
 
 test('replay --timeout reaches the daemon request envelope through the public CLI', async () => {
