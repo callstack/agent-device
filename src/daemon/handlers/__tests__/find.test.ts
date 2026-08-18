@@ -317,17 +317,10 @@ test('handleFindCommands click uses query-scoped full retry when sparse verdict 
       nodes: [
         {
           index: 0,
-          type: 'Application',
-          hittable: false,
-          rect: { x: 0, y: 0, width: 390, height: 844 },
-        },
-        {
-          index: 1,
           type: 'Button',
           label: 'Search',
           hittable: true,
           rect: { x: 80, y: 792, width: 78, height: 48 },
-          parentIndex: 0,
         },
       ],
     },
@@ -423,17 +416,10 @@ test('handleFindCommands click scopes full retry for legacy sparse shape when un
       nodes: [
         {
           index: 0,
-          type: 'Application',
-          hittable: false,
-          rect: { x: 0, y: 0, width: 390, height: 844 },
-        },
-        {
-          index: 1,
           type: 'Button',
           label: 'Search',
           hittable: true,
           rect: { x: 80, y: 792, width: 78, height: 48 },
-          parentIndex: 0,
         },
       ],
     },

@@ -1,5 +1,23 @@
 [
   {
+    "name": "blank scope keeps the full projection",
+    "scope": "   ",
+    "nodes": [
+      {
+        "depth": 0,
+        "type": "FrameLayout",
+        "label": "Root"
+      },
+      {
+        "depth": 1,
+        "type": "Button",
+        "label": "Continue"
+      }
+    ],
+    "expectedRootIndex": null,
+    "expectedSubtreeIndexes": [0, 1]
+  },
+  {
     "name": "first document-order match wins over a shallower later sibling (breadth-first would pick index 3)",
     "scope": "Settings",
     "nodes": [

@@ -2,20 +2,11 @@ import XCTest
 
 struct FlatSnapshotFilterNode {
   let isRoot: Bool
-  let label: String
-  let identifier: String
-  let valueText: String?
   let visible: Bool
-
-  func matchesScope(_ scope: String) -> Bool {
-    let haystack = [label, identifier, valueText ?? ""].joined(separator: "\n")
-    return haystack.localizedCaseInsensitiveContains(scope)
-  }
 }
 
 struct FlatSnapshotFilterDecision {
   let include: Bool
-  let insideMatchedScope: Bool
 }
 
 enum FlatSnapshotVisibilityPolicy {
@@ -120,24 +111,11 @@ extension RunnerTests {
   func flatSnapshotFilterDecision(
     _ node: FlatSnapshotFilterNode,
     options: PresentationOptions,
-    visibilityPolicy: FlatSnapshotVisibilityPolicy,
-    insideMatchedScope: Bool
+    visibilityPolicy: FlatSnapshotVisibilityPolicy
   ) -> FlatSnapshotFilterDecision {
-    let scope = options.scope?.trimmingCharacters(in: .whitespacesAndNewlines)
-    let scopeActive = scope?.isEmpty == false
-    let matchesScope: Bool
-    if scopeActive, let scope {
-      matchesScope = node.matchesScope(scope)
-    } else {
-      matchesScope = false
-    }
-    let nowInsideScope = insideMatchedScope || matchesScope
-
     let include: Bool
     if node.isRoot {
       include = true
-    } else if scopeActive && !nowInsideScope {
-      include = false
     } else if !node.visible
       && (options.interactiveOnly || visibilityPolicy == .viewportProjected)
     {
@@ -146,7 +124,7 @@ extension RunnerTests {
       include = true
     }
 
-    return FlatSnapshotFilterDecision(include: include, insideMatchedScope: nowInsideScope)
+    return FlatSnapshotFilterDecision(include: include)
   }
 
   func privateAXInteractiveCandidate(rawElementType: Int) -> Bool {
@@ -309,30 +287,18 @@ extension RunnerTests {
   func testFlatSnapshotFilterDecisionMatrixCoversOptions() {
     let visibleContent = FlatSnapshotFilterNode(
       isRoot: false,
-      label: "Welcome back",
-      identifier: "",
-      valueText: nil,
       visible: true
     )
     let hiddenInteractive = FlatSnapshotFilterNode(
       isRoot: false,
-      label: "Hidden menu",
-      identifier: "",
-      valueText: nil,
       visible: false
     )
     let decorative = FlatSnapshotFilterNode(
       isRoot: false,
-      label: "",
-      identifier: "",
-      valueText: nil,
       visible: true
     )
     let hiddenRoot = FlatSnapshotFilterNode(
       isRoot: true,
-      label: "App",
-      identifier: "",
-      valueText: nil,
       visible: false
     )
 
@@ -340,92 +306,42 @@ extension RunnerTests {
       flatSnapshotFilterDecision(
         visibleContent,
         options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
-        visibilityPolicy: .interactiveOnly,
-        insideMatchedScope: false
+        visibilityPolicy: .interactiveOnly
       ).include
     )
     XCTAssertFalse(
       flatSnapshotFilterDecision(
         hiddenInteractive,
         options: PresentationOptions(interactiveOnly: true, depth: nil, scope: nil, raw: false),
-        visibilityPolicy: .interactiveOnly,
-        insideMatchedScope: false
+        visibilityPolicy: .interactiveOnly
       ).include
     )
     XCTAssertFalse(
       flatSnapshotFilterDecision(
         hiddenInteractive,
         options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
-        visibilityPolicy: .viewportProjected,
-        insideMatchedScope: false
+        visibilityPolicy: .viewportProjected
       ).include
     )
     XCTAssertTrue(
       flatSnapshotFilterDecision(
         hiddenInteractive,
         options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
-        visibilityPolicy: .interactiveOnly,
-        insideMatchedScope: false
+        visibilityPolicy: .interactiveOnly
       ).include
     )
     XCTAssertTrue(
       flatSnapshotFilterDecision(
         hiddenRoot,
         options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
-        visibilityPolicy: .viewportProjected,
-        insideMatchedScope: false
+        visibilityPolicy: .viewportProjected
       ).include
     )
     XCTAssertTrue(
       flatSnapshotFilterDecision(
         decorative,
         options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
-        visibilityPolicy: .interactiveOnly,
-        insideMatchedScope: false
-      ).include
-    )
-  }
-
-  func testFlatSnapshotFilterDecisionCarriesSubtreeScopeState() {
-    let scopeRoot = FlatSnapshotFilterNode(
-      isRoot: false,
-      label: "",
-      identifier: "homeScreen",
-      valueText: nil,
-      visible: true
-    )
-    let unmatchedDescendant = FlatSnapshotFilterNode(
-      isRoot: false,
-      label: "Post body without the scope text",
-      identifier: "",
-      valueText: nil,
-      visible: true
-    )
-    let options = PresentationOptions(interactiveOnly: false, depth: nil, scope: "homeScreen", raw: false)
-
-    let rootDecision = flatSnapshotFilterDecision(
-      scopeRoot,
-      options: options,
-      visibilityPolicy: .interactiveOnly,
-      insideMatchedScope: false
-    )
-    XCTAssertTrue(rootDecision.include)
-    XCTAssertTrue(rootDecision.insideMatchedScope)
-
-    XCTAssertTrue(
-      flatSnapshotFilterDecision(
-        unmatchedDescendant,
-        options: options,
-        visibilityPolicy: .interactiveOnly,
-        insideMatchedScope: rootDecision.insideMatchedScope
-      ).include
-    )
-    XCTAssertFalse(
-      flatSnapshotFilterDecision(
-        unmatchedDescendant,
-        options: options,
-        visibilityPolicy: .interactiveOnly,
-        insideMatchedScope: false
+        visibilityPolicy: .interactiveOnly
       ).include
     )
   }

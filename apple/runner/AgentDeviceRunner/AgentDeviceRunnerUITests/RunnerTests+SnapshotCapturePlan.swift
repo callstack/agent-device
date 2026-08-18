@@ -97,6 +97,9 @@ struct SnapshotBackendCapture {
   let effectiveDepth: Int?
   /// Set by the private AX backend when the capture asked for custom actions.
   var customActions: SnapshotCustomActionCoverage? = nil
+  /// Broad presentation used only by the quality classifier when a scope narrows publication.
+  /// A legitimate missing scope is an empty healthy projection, not backend failure evidence.
+  var qualityPayload: DataPayload? = nil
 }
 
 extension RunnerTests {
@@ -365,7 +368,7 @@ extension RunnerTests {
         continue
       }
 
-      if let sparseReason = Self.sparsePayloadReason(capture.payload) {
+      if let sparseReason = Self.sparsePayloadReason(capture.qualityPayload ?? capture.payload) {
         if firstFailure == nil { firstFailure = sparseReason }
         if Self.payloadNodeCount(capture.payload) > Self.payloadNodeCount(best?.capture.payload) {
           best = (kind, capture)
@@ -456,13 +459,14 @@ extension RunnerTests {
     deadline: Date,
     treeCaptureSliceBudgetOverride: TimeInterval?
   ) throws -> SnapshotBackendCapture? {
+    let acquisitionOptions = SnapshotPresentation.conservativeAcquisitionOptions(for: options)
     let acquisition: SnapshotAcquisition?
     switch kind {
     case .recursiveTree:
       guard
         let context = try makeSnapshotTraversalContext(
           app: app,
-          options: options,
+          options: acquisitionOptions,
           captureDeadline: deadline,
           treeCaptureSliceBudgetOverride: treeCaptureSliceBudgetOverride
         )
@@ -474,9 +478,9 @@ extension RunnerTests {
         timeout: min(treeCaptureSliceBudget, max(0.5, deadline.timeIntervalSinceNow)),
         timeoutError: snapshotMainThreadTimeoutError("processing tree snapshot")
       ) {
-        options.raw
-          ? try self.rawTreeSnapshotAcquisition(context: context, options: options)
-          : self.recursiveTreeSnapshotAcquisition(context: context, options: options)
+        acquisitionOptions.raw
+          ? try self.rawTreeSnapshotAcquisition(context: context, options: acquisitionOptions)
+          : self.recursiveTreeSnapshotAcquisition(context: context, options: acquisitionOptions)
       }
     case .querySweep:
       acquisition = try runMainThreadWork(
@@ -484,10 +488,18 @@ extension RunnerTests {
         timeout: min(Self.flatInteractiveFallbackBudget, max(0.1, deadline.timeIntervalSinceNow)),
         timeoutError: snapshotMainThreadTimeoutError("running query-sweep snapshot")
       ) {
-        self.querySweepSnapshotAcquisition(app: app, options: options, planDeadline: deadline)
+        self.querySweepSnapshotAcquisition(
+          app: app,
+          options: acquisitionOptions,
+          planDeadline: deadline
+        )
       }
     case .privateAX:
-      acquisition = privateAXSnapshotAcquisition(app: app, options: options, deadline: deadline)
+      acquisition = privateAXSnapshotAcquisition(
+        app: app,
+        options: acquisitionOptions,
+        deadline: deadline
+      )
     }
     guard let acquisition else { return nil }
     return SnapshotPresentation.present(acquisition, options: options)

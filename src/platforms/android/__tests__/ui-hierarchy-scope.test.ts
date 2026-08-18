@@ -6,8 +6,8 @@ import { buildSnapshotState } from '../../../daemon/snapshot-state.ts';
 import { parseUiHierarchy } from './ui-hierarchy-fixtures.ts';
 
 // Android's scope leg of the golden table (#1832 C2). Android resolves `--scope` exactly once,
-// over the PRESENTED nodes of the requested projection, inside its projection; the daemon's
-// post-wire pass skips the android backend. Pinned here: the projection agrees with
+// over the PRESENTED nodes of the requested projection, inside its projection; the daemon never
+// reapplies scope after the wire. Pinned here: the projection agrees with
 // contracts/fixtures/snapshot-scope-policy.json, scope resolves after membership, ancestor
 // context above the scope root still shapes membership inside it, --depth is scope-relative, and
 // a scoped Android snapshot survives buildSnapshotState untouched.

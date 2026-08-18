@@ -1,7 +1,7 @@
 import type { RawSnapshotNode, Rect, SnapshotOptions } from '@agent-device/kernel/snapshot';
 import { parseBounds } from '@agent-device/kernel/bounds';
 import { decodeXmlCharacterReferences } from '@agent-device/xml';
-import { isScrollableType } from '@agent-device/contracts/snapshot';
+import { isScrollableType, normalizeSnapshotScope } from '@agent-device/contracts/snapshot';
 import {
   isAgentTarget,
   isGenericAndroidId,
@@ -126,13 +126,14 @@ export function buildUiHierarchySnapshot(
   options: SnapshotOptions,
 ): AndroidBuiltSnapshot {
   const requestedDepth = options.depth ?? Number.POSITIVE_INFINITY;
+  const scope = normalizeSnapshotScope(options.scope);
   const state: AndroidSnapshotBuildState = {
     nodes: [],
     sourceNodes: [],
     ...(maxNodes !== undefined ? { maxNodes } : {}),
     // Under --scope, depth is relative to the scope root, which is only known once the tree is
     // presented: walk unbounded and cut after scoping.
-    maxDepth: options.scope ? Number.POSITIVE_INFINITY : requestedDepth,
+    maxDepth: scope ? Number.POSITIVE_INFINITY : requestedDepth,
     options,
     analysis: analyzeAndroidTree(tree),
     interactiveDescendantMemo: new Map(),
@@ -147,8 +148,8 @@ export function buildUiHierarchySnapshot(
     if (state.truncated) break;
   }
 
-  const { nodes, sourceNodes } = options.scope
-    ? scopePresentedAndroidSnapshot(state, tree.children, options.scope, requestedDepth)
+  const { nodes, sourceNodes } = scope
+    ? scopePresentedAndroidSnapshot(state, tree.children, scope, requestedDepth)
     : state;
   const snapshot = { nodes, sourceNodes, analysis: state.analysis };
   return state.truncated ? { ...snapshot, truncated: true } : snapshot;

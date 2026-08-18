@@ -2,12 +2,11 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { matchesSnapshotScope } from './facades/snapshot.ts';
+import { matchesSnapshotScope, normalizeSnapshotScope } from './facades/snapshot.ts';
 
 // Golden scope-policy table (#1797 / #1832 C2): the SAME JSON is asserted against every runtime
 // that resolves `--scope` — this predicate, the Android platform projection
-// (src/platforms/android/__tests__/ui-hierarchy-scope.test.ts), the daemon's post-wire pass
-// (src/snapshot/snapshot-desktop-surface.test.ts) and the Swift runner twin once #1797 lands it.
+// (src/platforms/android/__tests__/ui-hierarchy-scope.test.ts), and the Swift runner twin.
 // This file proves the PREDICATE + first-document-order-match rule; subtree slicing is proved by
 // the runtime legs.
 
@@ -35,6 +34,14 @@ test('the shared scope predicate picks the golden table root as the first docume
   assert.ok(cases.length > 0, 'scope policy table must not be empty');
   assert.equal(new Set(cases.map((fixture) => fixture.name)).size, cases.length);
   for (const fixture of cases) {
+    if (!normalizeSnapshotScope(fixture.scope)) {
+      assert.equal(fixture.expectedRootIndex, null, fixture.name);
+      assert.deepEqual(
+        fixture.expectedSubtreeIndexes,
+        fixture.nodes.map((_, index) => index),
+      );
+      continue;
+    }
     const rootIndex = fixture.nodes.findIndex((node) => matchesSnapshotScope(node, fixture.scope));
     assert.equal(rootIndex === -1 ? null : rootIndex, fixture.expectedRootIndex, fixture.name);
     assert.deepEqual(

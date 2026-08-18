@@ -114,6 +114,15 @@ not daemon publication membership; backend-blind daemon compaction retains owner
 noise suppressions. When eligibility removes a structural wrapper, presentation reparents its
 surviving descendants to the nearest surviving ancestor and normalizes their indexes and depths.
 
+The second semantic layer makes scope a presentation specification rather than an acquisition or
+daemon-compaction policy. A trimmed non-empty scope selects the first presentation-preorder node
+whose label, identifier, or value contains it case-insensitively; the selected subtree is re-rooted,
+depth is applied relative to that root, and no match publishes an empty healthy projection. Swift
+and TypeScript implementations are pinned by `contracts/fixtures/snapshot-scope-policy.json`.
+Scoped iOS acquisition stays broad (including when depth is requested) until an adapter can prove a
+narrowing hint complete. The daemon never reapplies scope after the wire; Android selects its root
+inside its TypeScript presentation and desktop surface runtimes retain their platform projection.
+
 When adding new iOS snapshot behavior, maintainers should first decide which strategy owns it. If a
 change tries to make regular snapshots fast by dropping visible controls behind a node budget, or
 tries to make raw snapshots safe by silently truncating, it is probably crossing strategy

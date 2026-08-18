@@ -10,7 +10,7 @@ import {
 const captureSnapshotWithInteractor = vi.hoisted(() => vi.fn());
 vi.mock('../snapshot-interactor-capture.ts', () => ({ captureSnapshotWithInteractor }));
 
-test('iOS interactive capture does not send local presentation scope to XCTest', async () => {
+test('iOS interactive capture sends scope to runner presentation', async () => {
   captureSnapshotWithInteractor.mockClear();
   captureSnapshotWithInteractor.mockResolvedValueOnce({ nodes: [], backend: 'xctest' });
 
@@ -25,12 +25,12 @@ test('iOS interactive capture does not send local presentation scope to XCTest',
   expect(captureSnapshotWithInteractor).toHaveBeenCalledOnce();
   expect(captureSnapshotWithInteractor).toHaveBeenCalledWith(
     expect.objectContaining({
-      options: expect.objectContaining({ interactiveOnly: true, scope: undefined }),
+      options: expect.objectContaining({ interactiveOnly: true, scope: 'action file' }),
     }),
   );
 });
 
-test('snapshot capture preserves backend scope outside iOS interactive presentation', async () => {
+test('snapshot capture preserves scope for every other platform projection', async () => {
   captureSnapshotWithInteractor.mockClear();
   for (const [device, flags] of [
     [ANDROID_EMULATOR, { snapshotInteractiveOnly: true, snapshotScope: 'action file' }],

@@ -149,6 +149,8 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotTraversalIdentityPreservesSameOriginNodesWithDifferentBounds \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotPresentationPreservesCurrentWireShape \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotPresentationOwnsBackendNeutralEligibility \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotPresentationOwnsScopeAndRelativeDepth \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotScopePolicyMatchesGoldenParityTable \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFlatSnapshotProjectionMatchesElementReverseScrollCapture \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXDepthLimitedRequiresEveryFrontierResolved \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testDeepExtensionCountsMissedFrontiers \
@@ -156,7 +158,7 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXRegularPresentationProjectsToViewportAndKeepsScrollHint \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXPresentationKeepsOffscreenSubtreeExcludedWhenChildFramesAreClamped \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXGeometrylessSemanticsAreNeverActionableOrScrollContexts \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXScopeSelectsSubtreeNotMatchingLabels \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXAcquisitionDoesNotInterpretScope \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXInteractiveFiltersLoginLikeHiddenDrawer \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testDecodedPreferredBackendReachesOptionsAndApplicablePlan \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSparsePayloadReasonMatrix \

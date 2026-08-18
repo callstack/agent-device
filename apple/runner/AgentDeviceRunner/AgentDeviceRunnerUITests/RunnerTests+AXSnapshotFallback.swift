@@ -647,7 +647,7 @@ extension RunnerTests {
     XCTAssertNil(nodes.first { $0.label == "Compose" }?.actions)
   }
 
-  func testPrivateAXScopeSelectsSubtreeNotMatchingLabels() {
+  func testPrivateAXAcquisitionDoesNotInterpretScope() {
     let tree: [String: Any] = [
       "type": 1, "label": "App",
       "children": [
@@ -675,7 +675,7 @@ extension RunnerTests {
     XCTAssertTrue(labels.contains("homeScreen"))
     // Descendants of the matched scope are included even when they do not contain the text.
     XCTAssertTrue(labels.contains("Post body without the scope text"))
-    XCTAssertFalse(labels.contains("unrelated sibling"))
+    XCTAssertTrue(labels.contains("unrelated sibling"))
   }
 
   func testPrivateAXInteractiveFiltersLoginLikeHiddenDrawer() {

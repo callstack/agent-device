@@ -5,20 +5,21 @@ import { buildSnapshotState } from '../../snapshot-state.ts';
 import { presentIosInteractiveSnapshot } from './index.ts';
 import { navigationTitleWithAppProvidedDetailsAffordanceNodes } from './transitions.fixtures.ts';
 
-test('iOS presentation applies transition semantics before scoping the snapshot', () => {
+test('iOS daemon presentation applies transitions without reapplying runner-owned scope', () => {
   const snapshot = buildSnapshotState(
     { nodes: navigationTitleWithAppProvidedDetailsAffordanceNodes, backend: 'xctest' },
     { snapshotInteractiveOnly: true, snapshotScope: 'DisplayNameTextField' },
   );
 
-  expect(snapshot.nodes).toHaveLength(1);
-  expect(snapshot.nodes[0]).toEqual(
+  expect(snapshot.nodes).toHaveLength(8);
+  expect(snapshot.nodes).toContainEqual(
     expect.objectContaining({
       type: 'Button',
       label: 'Team Standup',
       identifier: 'DisplayNameTextField',
     }),
   );
+  expect(snapshot.nodes).toContainEqual(expect.objectContaining({ label: 'Video Call' }));
 });
 
 test('iOS presentation promotes an app-provided navigation title affordance without stealing a content action', () => {

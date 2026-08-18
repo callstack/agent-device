@@ -2,6 +2,7 @@ export { isScrollableNodeLike, isScrollableType } from '../snapshot-scroll.ts';
 export {
   findSnapshotScopeRange,
   matchesSnapshotScope,
+  normalizeSnapshotScope,
   reindexSnapshotNodes,
   type SnapshotScopeCandidate,
 } from '../snapshot-scope.ts';

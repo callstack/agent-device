@@ -942,26 +942,23 @@ extension RunnerTests {
     captureDeadline: Date = .distantFuture,
     treeCaptureSliceBudgetOverride: TimeInterval? = nil
   ) throws -> SnapshotTraversalContext? {
-    let (viewport, queryRoot) = try runMainThreadWork(
+    let viewport = try runMainThreadWork(
       command: nil,
       timeout: min(1.0, max(0.1, captureDeadline.timeIntervalSinceNow)),
       timeoutError: snapshotMainThreadTimeoutError("preparing tree snapshot")
     ) {
-      (
-        self.safeSnapshotViewport(app: app),
-        options.scope.flatMap { self.findScopeElement(app: app, scope: $0) } ?? app
-      )
+      self.safeSnapshotViewport(app: app)
     }
 
     let treeSliceBudget = treeCaptureSliceBudgetOverride ?? treeCaptureSliceBudget
     let slice = min(treeSliceBudget, max(0.5, captureDeadline.timeIntervalSinceNow))
-    guard let rootSnapshot = try captureSnapshotRootBounded(queryRoot, sliceSeconds: slice) else {
+    guard let rootSnapshot = try captureSnapshotRootBounded(app, sliceSeconds: slice) else {
       return nil
     }
 
     let (flatSnapshots, snapshotRanges) = flattenedSnapshots(rootSnapshot)
     return SnapshotTraversalContext(
-      queryRoot: queryRoot,
+      queryRoot: app,
       rootSnapshot: rootSnapshot,
       viewport: viewport,
       flatSnapshots: flatSnapshots,
@@ -1599,16 +1596,12 @@ extension RunnerTests {
       let hittable = visible && enabled && element.isHittable
       let filterNode = FlatSnapshotFilterNode(
         isRoot: false,
-        label: label,
-        identifier: identifier,
-        valueText: valueText,
         visible: visible
       )
       if !flatSnapshotFilterDecision(
         filterNode,
         options: options,
-        visibilityPolicy: .interactiveOnly,
-        insideMatchedScope: false
+        visibilityPolicy: .interactiveOnly
       ).include {
         return
       }

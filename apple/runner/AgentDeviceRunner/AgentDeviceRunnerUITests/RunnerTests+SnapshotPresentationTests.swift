@@ -136,5 +136,94 @@ extension RunnerTests {
     XCTAssertEqual(raw.last?.depth, 2)
     XCTAssertEqual(raw.last?.parentIndex, 9)
   }
+
+  func testSnapshotPresentationOwnsScopeAndRelativeDepth() throws {
+    // Non-vacuity: disconnecting applyScope produces eight scope, depth, and raw-projection failures.
+    func node(
+      _ index: Int,
+      type: String,
+      label: String? = nil,
+      identifier: String? = nil,
+      depth: Int,
+      parentIndex: Int?
+    ) -> RawAXNode {
+      RawAXNode(
+        index: index,
+        type: type,
+        label: label,
+        identifier: identifier,
+        value: nil,
+        rect: SnapshotRect(x: 0, y: Double(index * 20), width: 100, height: 20),
+        enabled: true,
+        focused: nil,
+        selected: nil,
+        hittable: type == "Button",
+        depth: depth,
+        parentIndex: parentIndex,
+        hiddenContentAbove: nil,
+        hiddenContentBelow: nil
+      )
+    }
+
+    let acquisition = SnapshotAcquisition(
+      nodes: [
+        node(0, type: "Application", label: "App", depth: 0, parentIndex: nil),
+        node(1, type: "Button", label: "Earlier sibling", depth: 1, parentIndex: 0),
+        node(2, type: "Other", identifier: "scope-root", depth: 1, parentIndex: 0),
+        node(3, type: "StaticText", label: "Child", depth: 2, parentIndex: 2),
+        node(4, type: "Image", depth: 2, parentIndex: 2),
+        node(5, type: "Button", label: "Grandchild", depth: 3, parentIndex: 3),
+        node(6, type: "Button", label: "Outside sibling", depth: 1, parentIndex: 0),
+      ],
+      truncated: false,
+      effectiveDepth: nil
+    )
+    let options = PresentationOptions(
+      interactiveOnly: true,
+      depth: 1,
+      scope: " SCOPE-ROOT ",
+      raw: false
+    )
+    let capture = SnapshotPresentation.present(acquisition, options: options)
+    let nodes = try XCTUnwrap(capture.payload.nodes)
+
+    XCTAssertEqual(nodes.map(\.label), [nil, "Child"])
+    XCTAssertEqual(nodes.map(\.identifier), ["scope-root", nil])
+    XCTAssertEqual(nodes.map(\.index), [0, 1])
+    XCTAssertEqual(nodes.map(\.depth), [0, 1])
+    XCTAssertEqual(nodes.map(\.parentIndex), [nil, 0])
+    XCTAssertEqual(capture.qualityPayload?.nodes?.count, 6)
+
+    let raw = try XCTUnwrap(
+      SnapshotPresentation.present(
+        acquisition,
+        options: PresentationOptions(
+          interactiveOnly: true,
+          depth: 1,
+          scope: "scope-root",
+          raw: true
+        )
+      ).payload.nodes
+    )
+    XCTAssertEqual(raw.map(\.type), ["Other", "StaticText", "Image"])
+    XCTAssertEqual(raw.map(\.depth), [0, 1, 1])
+
+    let hint = SnapshotPresentation.conservativeAcquisitionOptions(for: options)
+    XCTAssertNil(hint.scope)
+    XCTAssertNil(hint.depth)
+    XCTAssertTrue(hint.interactiveOnly)
+
+    let missing = SnapshotPresentation.present(
+      acquisition,
+      options: PresentationOptions(
+        interactiveOnly: true,
+        depth: 1,
+        scope: "missing",
+        raw: false
+      )
+    )
+    XCTAssertEqual(missing.payload.nodes?.count, 0)
+    XCTAssertNil(RunnerTests.sparsePayloadReason(try XCTUnwrap(missing.qualityPayload)))
+  }
 }
 #endif

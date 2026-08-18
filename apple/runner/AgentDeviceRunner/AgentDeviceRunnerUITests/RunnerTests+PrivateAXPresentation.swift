@@ -9,14 +9,14 @@ extension RunnerTests {
     var nodes: [RawAXNode] = []
     var hints: [Int: (above: Bool, below: Bool)] = [:]
     appendPrivateAXNode(rawRoot, to: &nodes, hints: &hints, options: options, viewport: viewport,
-      depth: 0, parentIndex: nil, insideMatchedScope: false, scrollContext: nil,
+      depth: 0, parentIndex: nil, scrollContext: nil,
       projectionCursor: .root)
     return applyHiddenContentHints(hints, to: nodes)
   }
 
   private func appendPrivateAXNode(_ raw: [String: Any], to nodes: inout [RawAXNode],
     hints: inout [Int: (above: Bool, below: Bool)], options: PresentationOptions, viewport: CGRect,
-    depth: Int, parentIndex: Int?, insideMatchedScope: Bool,
+    depth: Int, parentIndex: Int?,
     scrollContext: (index: Int, rect: CGRect)?, projectionCursor: FlatSnapshotProjectionCursor)
   {
     if let limit = options.depth, depth > limit { return }
@@ -51,10 +51,8 @@ extension RunnerTests {
     let projection = projectionTransition.decision
     let presentationVisible = projection.presentationVisible && !negligibleDecoration
     let decision = flatSnapshotFilterDecision(
-      FlatSnapshotFilterNode(isRoot: parentIndex == nil, label: label, identifier: identifier,
-        valueText: value.isEmpty ? nil : value, visible: presentationVisible),
-      options: options, visibilityPolicy: .viewportProjected,
-      insideMatchedScope: insideMatchedScope)
+      FlatSnapshotFilterNode(isRoot: parentIndex == nil, visible: presentationVisible),
+      options: options, visibilityPolicy: .viewportProjected)
     let include = decision.include
 
     if let hiddenFrame = projectionTransition.hiddenContentFrame, let scrollContext {
@@ -88,7 +86,7 @@ extension RunnerTests {
     for child in children {
       appendPrivateAXNode(child, to: &nodes, hints: &hints, options: options, viewport: viewport,
         depth: depth + 1, parentIndex: currentIndex,
-        insideMatchedScope: decision.insideMatchedScope, scrollContext: nextScrollContext,
+        scrollContext: nextScrollContext,
         projectionCursor: projection.descendants)
     }
   }

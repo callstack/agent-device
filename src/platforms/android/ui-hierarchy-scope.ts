@@ -33,9 +33,9 @@ export type AndroidPresentedNodes<Node extends PresentedNode, Source> = {
  * can differ from the compacted depth printed beside each node — pre-existing, tracked on #1832.)
  * `reindexSnapshotNodes` drops parent links that pointed outside the slice.
  *
- * This is the ONLY scope pass an Android snapshot goes through — the daemon's post-wire
- * `scopeSnapshotNodes` skips the android backend — and it runs after the walk, so ancestor context
- * above the scope root (hittable / collection / chrome) still shapes membership inside it.
+ * This is the ONLY scope pass an Android snapshot goes through — the daemon never reapplies scope
+ * after the wire — and it runs after the walk, so ancestor context above the scope root (hittable /
+ * collection / chrome) still shapes membership inside it.
  * `sourceNodes` stay parallel to `nodes` for hint bridging.
  */
 export function scopePresentedAndroidSnapshot<

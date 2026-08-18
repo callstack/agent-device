@@ -10,11 +10,9 @@
  * - the scoped snapshot is that root's presented subtree, re-rooted at depth 0 and reindexed;
  * - no match yields an EMPTY snapshot — never the full tree.
  *
- * The golden table `contracts/fixtures/snapshot-scope-policy.json` pins the rule; every runtime
- * that resolves scope (Android projection, the daemon's post-wire pass, the Swift runner twin) is
- * asserted against the same table so drift turns CI red on whichever side changed. The
- * contributes-content clause is vacuous for a runtime that only ever sees presented nodes (the
- * post-wire pass): there, a match always contributes itself.
+ * The golden table `contracts/fixtures/snapshot-scope-policy.json` pins the rule; the Android
+ * projection and Swift runner are asserted against the same table so drift turns CI red on
+ * whichever side changed.
  */
 export type SnapshotScopeCandidate = {
   label?: string | null;
@@ -22,8 +20,14 @@ export type SnapshotScopeCandidate = {
   identifier?: string | null;
 };
 
+export function normalizeSnapshotScope(scope: string | undefined): string | null {
+  const query = scope?.trim().toLowerCase();
+  return query ? query : null;
+}
+
 export function matchesSnapshotScope(node: SnapshotScopeCandidate, scope: string): boolean {
-  const query = scope.toLowerCase();
+  const query = normalizeSnapshotScope(scope);
+  if (!query) return false;
   return [node.label, node.value, node.identifier].some((field) =>
     (field ?? '').toLowerCase().includes(query),
   );
@@ -37,6 +41,7 @@ export function findSnapshotScopeRange(
   nodes: readonly (SnapshotScopeCandidate & { depth?: number })[],
   scope: string,
 ): { start: number; end: number } | null {
+  if (!normalizeSnapshotScope(scope)) return null;
   const start = nodes.findIndex((node) => matchesSnapshotScope(node, scope));
   if (start === -1) return null;
   const rootDepth = nodes[start]?.depth ?? 0;

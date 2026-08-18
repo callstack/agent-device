@@ -4,7 +4,7 @@ import {
   snapshotCaptureAnnotationsFrom,
   type SnapshotCaptureAnnotations,
 } from '@agent-device/contracts/capture';
-import { isIosFamily, publicPlatformString } from '@agent-device/kernel/device';
+import { publicPlatformString } from '@agent-device/kernel/device';
 import {
   findNodeByRef,
   normalizeRef,
@@ -85,7 +85,7 @@ export async function captureSnapshotData(params: CaptureSnapshotParams): Promis
   const { device, session, logPath } = params;
   const context = contextFromFlags(
     logPath,
-    snapshotCaptureFlagsForBackend(device, resolveSnapshotStateFlags(params)),
+    resolveSnapshotStateFlags(params),
     session?.appBundleId,
     session?.trace?.outPath,
   );
@@ -155,21 +155,6 @@ function resolveSnapshotStateFlags(
     ...params.flags,
     snapshotScope: params.snapshotScope,
   };
-}
-
-function snapshotCaptureFlagsForBackend(
-  device: SessionState['device'],
-  flags: CommandFlags | undefined,
-): CommandFlags | undefined {
-  if (
-    !isIosFamily(device) ||
-    flags?.snapshotInteractiveOnly !== true ||
-    flags.snapshotRaw === true ||
-    flags.snapshotScope === undefined
-  ) {
-    return flags;
-  }
-  return { ...flags, snapshotScope: undefined };
 }
 
 export function resolveSnapshotScope(

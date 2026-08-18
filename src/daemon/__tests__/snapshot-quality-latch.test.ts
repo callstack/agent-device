@@ -275,9 +275,13 @@ test('an empty ref-scoped diff latches on the captured verdict, not the retained
       },
     ],
   };
-  // The deferred capture holds no node labeled 'Continue', so the '@e1' scope
-  // resolves to zero nodes and the retention path runs.
-  seedCapture(deferredVerdict(), 'Something else');
+  // The runner owns scope publication and returns the healthy empty projection for a miss.
+  dispatchCommandMock.mockResolvedValue({
+    backend: 'xctest',
+    truncated: false,
+    quality: deferredVerdict(),
+    nodes: [],
+  });
 
   const diff = await dispatchSnapshotDiffViaRuntime({
     req: {

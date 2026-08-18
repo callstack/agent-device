@@ -2,7 +2,11 @@ import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { SnapshotOptions, SnapshotResult } from '@agent-device/contracts/interaction';
 import type { CaptureSnapshotInput, SnapshotRuntimeHost } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { findSnapshotScopeRange, reindexSnapshotNodes } from '@agent-device/contracts/snapshot';
+import {
+  findSnapshotScopeRange,
+  normalizeSnapshotScope,
+  reindexSnapshotNodes,
+} from '@agent-device/contracts/snapshot';
 
 type SnapshotSurfaceOptions = NonNullable<CaptureSnapshotInput['options']>;
 
@@ -76,7 +80,9 @@ function shapeDesktopSurfaceSnapshot(
 
 /** The shared scope specification applied post-wire (`@agent-device/contracts/snapshot`). */
 export function scopeSnapshotNodes(nodes: RawSnapshotNode[], scope: string): RawSnapshotNode[] {
-  const range = findSnapshotScopeRange(nodes, scope);
+  const normalizedScope = normalizeSnapshotScope(scope);
+  if (!normalizedScope) return reindexSnapshotNodes(nodes);
+  const range = findSnapshotScopeRange(nodes, normalizedScope);
   if (!range) return [];
   const slice = nodes.slice(range.start, range.end);
   return reindexSnapshotNodes(slice, slice[0]?.depth ?? 0);

@@ -115,13 +115,36 @@ enum SnapshotPresentation {
     _ acquisition: SnapshotAcquisition,
     options: PresentationOptions
   ) -> SnapshotBackendCapture {
-    SnapshotBackendCapture(
-      payload: DataPayload(
+    let scopedRawNodes = applyScope(to: acquisition.nodes, options: options)
+    let nodes = presentedNodes(from: scopedRawNodes, options: options)
+    let qualityPayload: DataPayload? = SnapshotScopePolicy.isActive(options.scope)
+      ? DataPayload(
         nodes: presentedNodes(from: acquisition.nodes, options: options),
+        truncated: acquisition.truncated
+      )
+      : nil
+    return SnapshotBackendCapture(
+      payload: DataPayload(
+        nodes: nodes,
         truncated: acquisition.truncated
       ),
       effectiveDepth: acquisition.effectiveDepth,
-      customActions: acquisition.customActions
+      customActions: acquisition.customActions,
+      qualityPayload: qualityPayload
+    )
+  }
+
+  /// Scope and depth cannot safely narrow acquisition until a backend proves its hint complete.
+  /// Acquire the broad tree, then apply both relative to the selected presentation subtree.
+  static func conservativeAcquisitionOptions(for options: PresentationOptions) -> PresentationOptions {
+    guard SnapshotScopePolicy.isActive(options.scope) else { return options }
+    return PresentationOptions(
+      interactiveOnly: options.interactiveOnly,
+      depth: nil,
+      scope: nil,
+      raw: options.raw,
+      preferredBackend: options.preferredBackend,
+      customActions: options.customActions
     )
   }
 
@@ -165,6 +188,56 @@ enum SnapshotPresentation {
       )
     }
     return nodes
+  }
+
+  private static func applyScope(
+    to rawNodes: [RawAXNode],
+    options: PresentationOptions
+  ) -> [RawAXNode] {
+    switch SnapshotScopePolicy.select(
+      fromPreorder: rawNodes,
+      scope: options.scope,
+      semanticValues: { [$0.label, $0.identifier, $0.value] }
+    ) {
+    case .unscoped:
+      return rawNodes
+    case .missing:
+      return []
+    case .matched(let startIndex):
+      let startDepth = rawNodes[startIndex].depth
+      var endIndex = startIndex + 1
+      while endIndex < rawNodes.count, rawNodes[endIndex].depth > startDepth {
+        endIndex += 1
+      }
+      let maxDepth = options.depth ?? Int.max
+      return reindex(
+        Array(rawNodes[startIndex..<endIndex]).filter { $0.depth - startDepth <= maxDepth },
+        depthOffset: startDepth
+      )
+    }
+  }
+
+  private static func reindex(_ rawNodes: [RawAXNode], depthOffset: Int) -> [RawAXNode] {
+    let indexMap = Dictionary(uniqueKeysWithValues: rawNodes.enumerated().map { ($0.element.index, $0.offset) })
+    return rawNodes.enumerated().map { offset, raw in
+      RawAXNode(
+        index: offset,
+        type: raw.type,
+        label: raw.label,
+        identifier: raw.identifier,
+        value: raw.value,
+        rect: raw.rect,
+        enabled: raw.enabled,
+        focused: raw.focused,
+        selected: raw.selected,
+        hittable: raw.hittable,
+        depth: max(0, raw.depth - depthOffset),
+        parentIndex: raw.parentIndex.flatMap { indexMap[$0] },
+        hiddenContentAbove: raw.hiddenContentAbove,
+        hiddenContentBelow: raw.hiddenContentBelow,
+        actions: raw.actions
+      )
+    }
   }
 
   private static func isEligibleForRegularPresentation(_ node: RawAXNode) -> Bool {
