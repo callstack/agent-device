@@ -81,17 +81,16 @@ extension RunnerTests {
     return navigationBackKeywords.firstIndex { text.contains($0) }
   }
 
+  // isFinite/>0 alone don't reject CGRect.infinite — its origin (~-9e307) is finite.
+  static func isUsableNavigationFrame(_ frame: CGRect) -> Bool {
+    guard frame.width.isFinite, frame.height.isFinite, frame.width > 0, frame.height > 0 else {
+      return false
+    }
+    return !frame.isInfinite
+  }
+
   static func isTopNavigationControlFrame(_ candidate: CGRect, in window: CGRect) -> Bool {
-    guard
-      candidate.width.isFinite,
-      candidate.height.isFinite,
-      window.width.isFinite,
-      window.height.isFinite,
-      candidate.width > 0,
-      candidate.height > 0,
-      window.width > 0,
-      window.height > 0
-    else {
+    guard isUsableNavigationFrame(candidate), isUsableNavigationFrame(window) else {
       return false
     }
     // Accept the compact navigation/search header band without matching deep content controls.
@@ -100,7 +99,7 @@ extension RunnerTests {
   }
 
   static func topLeadingNavigationFallbackPoint(in frame: CGRect) -> CGPoint? {
-    guard frame.width.isFinite, frame.height.isFinite, frame.width > 0, frame.height > 0 else {
+    guard isUsableNavigationFrame(frame) else {
       return nil
     }
     // Aim at the standard leading navigation slot, bounded for compact and tablet widths.
