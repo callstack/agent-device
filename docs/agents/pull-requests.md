@@ -60,6 +60,12 @@ asked or when the work is intentionally incomplete.
   validation does not apply instead of writing a command checklist.
 - Call out real tradeoffs, known gaps, and follow-ups; omit boilerplate when there are none.
 - Note touched-file count and whether scope expanded beyond the initial command family.
+- Paste the block `pnpm pr:evidence` prints (add `--size` for a unit with a size budget,
+  `--coverage` after `pnpm test:coverage`) rather than transcribing SHAs, gate lists, layering
+  counts, or edge deltas by hand: it stamps the exact merge-base and head, composes the affected
+  plan, layering guard, depgraph deltas, and the two optional reports, and links the head's CI
+  instead of claiming it. After a rebase, re-run it (~20s) rather than editing the old block; the
+  stamp is what makes the evidence dated instead of stale.
 ## Reviewing
 
 - Review against the linked issue, not only the diff. State the issue's motivating behavior and

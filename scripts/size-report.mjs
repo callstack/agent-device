@@ -35,7 +35,9 @@ if (args.postComment) {
 }
 
 if (args.compare && args.base) {
-  throw new Error('--compare and --base are exclusive: one supplies the base report, the other measures it');
+  throw new Error(
+    '--compare and --base are exclusive: one supplies the base report, the other measures it',
+  );
 }
 const startupRuns = parseNonNegativeInteger(args.startupRuns ?? '0', '--startup-runs');
 const report = collectReport(cwd, { startupRuns });
@@ -180,7 +182,9 @@ function measureBaseRef(root, ref, options) {
   }
   const built = fs.existsSync(path.join(worktreeDir, 'dist', 'src'));
   if (!built) {
-    process.stderr.write(`[size] measuring base ${sha.slice(0, 9)} (${ref}): install + build in ${worktreeDir}\n`);
+    process.stderr.write(
+      `[size] measuring base ${sha.slice(0, 9)} (${ref}): install + build in ${worktreeDir}\n`,
+    );
     execFileSync('pnpm', ['install', '--frozen-lockfile', '--prefer-offline'], {
       cwd: worktreeDir,
       stdio: ['ignore', 'ignore', 'inherit'],
@@ -192,17 +196,21 @@ function measureBaseRef(root, ref, options) {
 
 function pruneOtherBaseWorktrees(root, worktreesRoot, keep) {
   if (!fs.existsSync(worktreesRoot)) return;
-  for (const entry of fs.readdirSync(worktreesRoot, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const dir = path.join(worktreesRoot, entry.name);
-    if (dir === keep) continue;
-    try {
-      execFileSync('git', ['worktree', 'remove', '--force', dir], { cwd: root, stdio: 'ignore' });
-    } catch {
-      // Not a registered worktree (a half-created or hand-copied directory): plain removal.
-    }
-    fs.rmSync(dir, { recursive: true, force: true });
+  const others = fs
+    .readdirSync(worktreesRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => path.join(worktreesRoot, entry.name))
+    .filter((dir) => dir !== keep);
+  for (const dir of others) removeWorktree(root, dir);
+}
+
+function removeWorktree(root, dir) {
+  try {
+    execFileSync('git', ['worktree', 'remove', '--force', dir], { cwd: root, stdio: 'ignore' });
+  } catch {
+    // Not a registered worktree (a half-created or hand-copied directory): plain removal.
   }
+  fs.rmSync(dir, { recursive: true, force: true });
 }
 
 function prepareGeneratedPackageAssets(root) {
@@ -311,13 +319,17 @@ function formatMarkdown(report, baseReport, baseLabel) {
   return `${COMMENT_MARKER}
 ## Size Report
 
-| Metric | Base${baseLabel ? ` (${baseLabel})` : ''} | Current | Diff |
+| Metric | ${baseColumnLabel(baseLabel)} | Current | Diff |
 |---|---:|---:|---:|
 ${rows.join('\n')}
 
 ${startup}
 ${changedChunks}
 `;
+}
+
+function baseColumnLabel(baseLabel) {
+  return baseLabel ? `Base (${baseLabel})` : 'Base';
 }
 
 function metricRow(label, base, current) {

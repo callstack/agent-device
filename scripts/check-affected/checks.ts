@@ -88,6 +88,7 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   gate('tmpdir-leaks', 'Leaked test tmpdir detector', 'check:tmpdir-leaks'),
   gate('tmpdir-leaks-model', 'TMPDIR redirection model', 'check:tmpdir-leaks:test'),
   gate('coverage-model', 'Changed-line coverage model', 'check:coverage-changed:test'),
+  gate('pr-evidence-model', 'PR evidence composer model', 'pr:evidence:test'),
   gate('wire-compat-model', 'Wire-compat rules model', 'check:daemon-wire-compat:test'),
   gate('production-exports', 'Production-unused exports', 'check:production-exports'),
   gate('bundle-owner-files', 'Bundle owner-file manifest', 'check:bundle-owner-files'),

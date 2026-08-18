@@ -59,6 +59,7 @@ export type CheckId =
   | 'tmpdir-leaks'
   | 'tmpdir-leaks-model'
   | 'coverage-model'
+  | 'pr-evidence-model'
   | 'wire-compat-model'
   | 'production-exports'
   | 'bundle-owner-files'
@@ -118,6 +119,7 @@ export const ALL_CHECKS: readonly CheckId[] = [
   'tmpdir-leaks',
   'tmpdir-leaks-model',
   'coverage-model',
+  'pr-evidence-model',
   'wire-compat-model',
   'production-exports',
   'bundle-owner-files',
