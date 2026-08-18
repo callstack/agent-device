@@ -134,7 +134,9 @@ Module size is about agent context safety, and the unit is questions, not lines:
 one question so `rg` → read-whole-file stays one cheap bounded read.
 
 - tripwires: target ≤300 LOC per implementation file; past 500, extract before adding behavior; past
-  1,000 is architecture debt unless it is generated data or a fixture snapshot. Tests are not exempt.
+  1,000 is architecture debt unless it is generated data or a fixture snapshot. Tests are not exempt:
+  test files over 1,000 lines are pinned at their exact length and may only shrink
+  (`src/__tests__/test-file-size-ratchet.test.ts`).
 - name files by the domain concept they answer (`runner-cache.ts`, `interaction-touch-response.ts`),
   not by layer leftovers (`utils2.ts`, `common.ts` accretion).
 - colocate machine-readable claims with the code they describe — coverage manifests beside contract

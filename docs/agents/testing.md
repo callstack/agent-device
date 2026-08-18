@@ -555,6 +555,13 @@ Measured on the full unit suite (340 files, 3,210 tests, 48s wall at ~7x paralle
   2.5s, integration 15s, failure at 2x budget (the band between reports without failing — host
   load legitimately stretches borderline tests, and a flaky gate trains people to ignore it).
   The pin list only shrinks, or grows in the same PR with a justification.
+- **The test-file size ratchet** (`src/__tests__/test-file-size-ratchet.test.ts`) is the same
+  shape for the other resource a giant test file consumes — a reader's context. Every test file
+  over the 1,000-line tripwire is pinned at its exact length, R9-style: growth fails ("split it
+  along the source module it mirrors"), shrinking fails until the pin is lowered in the same PR,
+  a file that drops under the line leaves the list, and a new file may not cross it. Adding a
+  test to a pinned file means moving that family out first — the failure names the file and the
+  fix; never raise a pin.
 - **Isolation stays ON; pool stays forks — both measured.** `--no-isolate`: 205s wall vs 48s
   (module state — timers, memos, singletons — thrashes across files sharing a worker).
   `--pool=threads`: no change (50.4s). The ~100s aggregate import overhead is the price of
