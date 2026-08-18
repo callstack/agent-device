@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { AppError } from '@agent-device/kernel/errors';
 import { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../types.ts';
 import { buildRequestFinishedEvent } from '../session-event-log.ts';
@@ -112,6 +113,26 @@ test('defaultTracePath sanitizes session name', () => {
   const tracePath = store.defaultTracePath(session);
   assert.match(tracePath, /session_with_spaces/);
   assert.match(tracePath, /\.trace\.log$/);
+});
+
+test('resolveSessionDir keeps every session dir beneath the sessions dir', () => {
+  const sessionsDir = path.join(os.tmpdir(), 'agent-device-tests', 'sessions');
+  const store = new SessionStore(sessionsDir);
+  assert.equal(store.resolveSessionDir('a/b:c d'), path.join(sessionsDir, 'a_b_c_d'));
+  // `.` and `..` survive `safeSessionName` unchanged, so without an explicit
+  // refusal `path.join` resolves them to the sessions dir itself and its parent
+  // (the daemon state dir): a remote caller's `--session ..` would then land
+  // app.log / runner.log / requests/*.ndjson outside the sessions tree.
+  for (const name of ['.', '..', '']) {
+    assert.throws(
+      () => store.resolveSessionDir(name),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'INVALID_ARGS' &&
+        /session name/i.test(error.message),
+      `expected resolveSessionDir(${JSON.stringify(name)}) to reject`,
+    );
+  }
 });
 
 test('session lease metadata round-trips through the store', () => {

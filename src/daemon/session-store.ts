@@ -1,9 +1,10 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import type { SessionRuntimeHints, SessionState } from './types.ts';
 import { recordActionEntry, type RecordActionEntry } from './session-action-recorder.ts';
-import { expandSessionPath, safeSessionName } from './session-paths.ts';
+import { expandSessionPath, isSafeSessionSegment, safeSessionName } from './session-paths.ts';
 import { NO_SCRIPT_PUBLICATION, isRepairCommittable } from './session-script-publication-state.ts';
 import { effectiveWriteForce } from './session-script-publication-capability.ts';
 import {
@@ -276,7 +277,19 @@ export class SessionStore {
     return path.join(this.sessionsDir, `${safeName}-${timestamp}.trace.log`);
   }
 
+  /**
+   * The one place a session name becomes a directory, so the invariant that every
+   * session dir lies beneath `sessionsDir` is enforced here rather than by each
+   * caller: `.` and `..` survive `safeSessionName` and would resolve to the
+   * sessions dir itself or the daemon state dir above it.
+   */
   resolveSessionDir(sessionName: string): string {
+    if (!isSafeSessionSegment(sessionName)) {
+      throw new AppError(
+        'INVALID_ARGS',
+        `Invalid session name ${JSON.stringify(sessionName)}: a session name cannot be empty, ".", or "..".`,
+      );
+    }
     return path.join(this.sessionsDir, safeSessionName(sessionName));
   }
 

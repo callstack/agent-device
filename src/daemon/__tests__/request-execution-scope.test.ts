@@ -91,6 +91,29 @@ test('createRequestExecutionScope resolves session-scoped request and runner log
   expect(scope.runnerLogPath).toMatch(/cwd_[a-f0-9]{16}_default\/runner\.log$/);
 });
 
+test('a relative session name is rejected before any session artifact path is written', async () => {
+  const sessionStore = makeSessionStore('agent-device-request-scope-');
+  const stateDir = sessionStore.resolveDaemonStateDir();
+  const requestId = 'relative-session-1';
+
+  await withDiagnosticsScope({ command: 'snapshot', requestId, logPath: LOG_PATH }, async () => {
+    await expect(
+      createRequestExecutionScope({
+        req: makeRequest({ session: '..', meta: { requestId } }),
+        sessionStore,
+        leaseRegistry: new LeaseRegistry(),
+      }),
+    ).rejects.toMatchObject({
+      code: 'INVALID_ARGS',
+      message: expect.stringMatching(/session name/i),
+    });
+    flushDiagnosticsToSessionFile({ force: true });
+  });
+
+  // Nothing landed in the state dir itself (where `sessions/..` resolves to).
+  expect(fs.readdirSync(stateDir).filter((entry) => entry !== 'sessions')).toEqual([]);
+});
+
 test('request diagnostics flush into the effective session request log', async () => {
   const sessionStore = makeSessionStore('agent-device-request-scope-');
   const cwd = fs.mkdtempSync(path.join(TEST_ROOT, 'diag-scope-'));
