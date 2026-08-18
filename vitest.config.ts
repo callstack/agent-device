@@ -17,7 +17,12 @@ export const SUBPROCESS_STUB_TESTS: readonly string[] = [
   'scripts/fuzz/corpus-replay.test.ts',
 ];
 
-const SETUP_FILES = ['src/__tests__/hermetic-env-setup.ts', 'src/__tests__/process-memo-setup.ts'];
+const SETUP_FILES = [
+  'src/__tests__/hermetic-env-setup.ts',
+  'src/__tests__/process-memo-setup.ts',
+  // w3-1824 EXPERIMENT (temporary): per-fork kill tracer.
+  './w3-1824-kill-trace-setup.ts',
+];
 
 export default defineConfig({
   test: {
