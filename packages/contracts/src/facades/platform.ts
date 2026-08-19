@@ -233,8 +233,13 @@ export {
   appStateRuntimeUses,
   appStateUse,
   shutdownTargetUse,
+  elementReadRuntimeUse,
+  elementReadRuntimePlan,
 } from '../platform-runtime-operations.ts';
-export type { DeviceReadinessRuntimePlan } from '../platform-runtime-operations.ts';
+export type {
+  DeviceReadinessRuntimePlan,
+  ElementReadRuntimePlan,
+} from '../platform-runtime-operations.ts';
 export {
   bindLocalSnapshotInteractor,
   bindProviderSnapshotInteractor,
@@ -256,6 +261,17 @@ export type {
   ViewportRuntimeOperationFacts,
   ViewportRuntimeOperations,
 } from '../viewport-runtime.ts';
+export {
+  bindElementTextRuntime,
+  elementTextRuntimeOperationFacts,
+} from '../element-text-runtime.ts';
+export type {
+  ElementTextRuntimeExecution,
+  ElementTextRuntimeHost,
+  ElementTextRuntimeOperationFacts,
+  ElementTextRuntimeOperations,
+  ReadTextAtPointInput,
+} from '../element-text-runtime.ts';
 export type {
   AppStateRuntimeCommand,
   AppStateRuntimeCommandResult,

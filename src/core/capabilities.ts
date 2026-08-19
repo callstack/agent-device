@@ -44,7 +44,6 @@ const HARMONYOS_SUPPORTED_COMMANDS = new Set<string>([
   'fill',
   'find',
   'focus',
-  'get',
   'home',
   'gesture',
   'keyboard',
@@ -58,7 +57,7 @@ const HARMONYOS_SUPPORTED_COMMANDS = new Set<string>([
   'type',
   'wait',
 ]);
-const WEB_QUERY_COMMANDS = ['audio', 'find', 'get', 'is', 'screenshot', 'wait'] as const;
+const WEB_QUERY_COMMANDS = ['audio', 'find', 'is', 'screenshot', 'wait'] as const;
 const WEB_INTERACTION_COMMANDS = [
   'click',
   'fill',

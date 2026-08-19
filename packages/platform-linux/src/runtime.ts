@@ -10,7 +10,9 @@ import type {
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
+  bindElementTextRuntime,
   createUnavailablePlatformRuntimeFacts,
+  elementTextRuntimeOperationFacts,
   localRuntimeOwner,
   sameRuntimeOwner,
   snapshotRuntimeOperationFacts,
@@ -22,6 +24,7 @@ import { bindLinuxApplicationLifecycle } from './lifecycle.ts';
 const supported = Object.freeze({ available: true } as const);
 const linuxOwner = localRuntimeOwner('linux');
 const unsupportedPlatformLeaf = unavailableLinuxRuntimeFact('unsupported-platform-leaf');
+const elementTextKindUnavailable = unavailableLinuxRuntimeFact('unsupported-device-kind');
 const runtimeHintsUnavailable = unavailableLinuxRuntimeFact(
   'unsupported-platform-leaf',
   'Runtime hints are supported only for local iOS-family simulators and Android devices.',
@@ -80,6 +83,9 @@ export function createLinuxPlatformRuntime(host: PlatformRuntimeHost): PlatformR
           ...(facts.operations.captureSnapshot.available
             ? linuxSnapshotOperations(host, request)
             : {}),
+          ...(facts.operations.readTextAtPoint.available
+            ? bindElementTextRuntime({ device: request.device, host: host.elementText })
+            : {}),
         }),
         [Symbol.asyncDispose]: async () => undefined,
       }) satisfies DeviceBinding<PlatformRuntimeOperations>;
@@ -96,6 +102,7 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
     network: unsupportedPlatformLeaf,
     snapshot: snapshotKindUnavailable,
     viewport: unsupportedPlatformLeaf,
+    elementText: elementTextKindUnavailable,
     readiness: unsupportedPlatformLeaf,
     lifecycle: applicationLifecycleOperationFacts({
       resolveOpenTarget: openTarget,
@@ -117,6 +124,11 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
         capture: device.kind === 'device' ? supported : snapshotKindUnavailable,
         customActions: snapshotCustomActionsUnavailable,
         withoutActiveApp: device.kind === 'device' ? supported : snapshotKindUnavailable,
+      }),
+      // The Linux read is value-first (AXValue/title/description) where the captured tree is
+      // label-first, so the desktop row genuinely reads differently from its snapshot text.
+      ...elementTextRuntimeOperationFacts({
+        readTextAtPoint: device.kind === 'device' ? supported : elementTextKindUnavailable,
       }),
     },
   });

@@ -139,6 +139,7 @@ function readinessFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperati
         withoutActiveApp: unavailable,
       }),
       setViewport: unavailable,
+      readTextAtPoint: unavailable,
       deployApp: operationAvailability(deployment.deploy),
       materializeAppSource: operationAvailability(deployment.source),
       deployMaterializedApp: operationAvailability(deployment.source),

@@ -357,6 +357,7 @@ function sourceRuntimeFacts(
         withoutActiveApp: unavailable,
       }),
       setViewport: unavailable,
+      readTextAtPoint: unavailable,
       deployApp: unavailable,
       materializeAppSource: materializationAvailable ? { available: true } : unavailable,
       deployMaterializedApp: materializationAvailable ? { available: true } : unavailable,
