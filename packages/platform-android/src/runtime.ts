@@ -218,6 +218,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
                 signal: request.scope.signal,
                 resolveInteractor: host.localInteractors.resolve,
               })
+            : {}),
           ...(facts.operations.readTextAtPoint.available
             ? bindElementTextRuntime({ device: request.device, host: host.elementText })
             : {}),

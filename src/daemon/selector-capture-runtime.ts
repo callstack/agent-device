@@ -204,9 +204,6 @@ async function runCapture(
                 session: params.session,
                 snapshotScope,
                 includeRects: request.includeRects,
-                // The poll's remaining budget, not the request's: `wait`/`find <q> wait`
-                // abort a stalled capture at its deadline instead of racing it.
-                signal: request.signal,
               }),
             ),
         }),

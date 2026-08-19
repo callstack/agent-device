@@ -61,7 +61,6 @@ export function selectorCaptureFixture(
   const captureSnapshot = async (input: CaptureSnapshotInput): Promise<SnapshotResult> => {
     const index = captures.length;
     captures.push(input);
-    input.signal?.throwIfAborted();
     return params.snapshot?.(input, index) ?? { nodes: [], backend: 'xctest' };
   };
 

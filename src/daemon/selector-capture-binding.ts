@@ -14,7 +14,7 @@ export type SelectorCaptureCommand = 'find' | 'get' | 'is' | 'wait';
 /**
  * One request's bound accessibility capture. Selector commands capture repeatedly under one
  * binding (polling, sparse recovery), so the operation is parametrized by intent rather than
- * frozen at bind time and `input.signal` carries a poll's remaining budget.
+ * frozen at bind time.
  */
 export type BoundSelectorCapture = (input: CaptureSnapshotInput) => Promise<SnapshotResult>;
 
