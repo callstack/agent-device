@@ -19,7 +19,7 @@ import { interactionCliOutputFormatters } from '../../src/commands/interaction/o
 import { snapshotCliOutput } from '../../src/commands/capture/output.ts';
 import { openCliOutput } from '../../src/commands/management/output.ts';
 import { NEVER_SETTLED_HINT } from '../../src/commands/interaction/runtime/settle.ts';
-import { buildAmbiguousMatchError } from '../../src/daemon/handlers/find.ts';
+import { buildAmbiguousMatchError } from '../../src/daemon/handlers/find-match-resolution.ts';
 import { refMutationAdmissionResponse } from '../../src/daemon/handlers/interaction-ref-policy.ts';
 import { buildDeviceInUseBySessionError } from '../../src/daemon/handlers/session-open.ts';
 import { buildDeviceClaimConflictError } from '../../src/daemon/device-claim-conflict.ts';

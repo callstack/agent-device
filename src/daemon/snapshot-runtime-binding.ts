@@ -7,7 +7,7 @@ import {
   type SnapshotRuntimePlan,
 } from '@agent-device/contracts/platform';
 import { buildIosOpenCommandHint } from './ios-app-session-hint.ts';
-import { contextFromFlags } from './context.ts';
+import { buildRuntimeCaptureInput } from './snapshot-runtime-capture-input.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
 import { SessionStore } from './session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
@@ -41,20 +41,31 @@ type ResolvedSnapshotCaptureRuntime =
     }>
   | Readonly<{ ok: false; response: DaemonResponse }>;
 
-/** Resolves one plan, inspects its owner facts once, then returns one bound capture closure. */
-export async function resolveBoundSnapshotCaptureRuntime(
-  params: SnapshotRuntimeRouteParams,
-  command: 'snapshot' | 'diff',
-): Promise<ResolvedSnapshotCaptureRuntime> {
-  const { req, sessionName, sessionStore } = params;
-  const { session, device } = await resolveSessionDevice(sessionStore, sessionName, req.flags);
-  const resolvedScope = resolveSnapshotScope(req.flags?.snapshotScope, session);
-  if (!resolvedScope.ok) return { ok: false, response: resolvedScope };
+/** A capture operation parametrized by intent, so a polling caller can capture repeatedly
+ * under the one binding it was admitted for. */
+type BoundSnapshotCapture = (input: CaptureSnapshotInput) => Promise<SnapshotResult>;
 
-  const plan = resolveSnapshotRuntimePlan({
-    customActions: req.flags?.snapshotCustomActions === true,
-    hasActiveApp: session?.appBundleId !== undefined,
-  });
+type AdmittedSnapshotCapture =
+  | Readonly<{ ok: true; capture: BoundSnapshotCapture }>
+  | Readonly<{ ok: false; response: DaemonResponse }>;
+
+/**
+ * The ONE admit-then-bind path for every request-bound snapshot capture (ADR 0019 §9):
+ * side-effect-free facts inspection, refusal before any binding, then exactly one bind on
+ * the admitted device. `snapshot`/`diff` supply the four-way custom-actions plan and the
+ * selector family the active-app plan; a new consumer supplies a plan and a command name.
+ */
+async function admitAndBindSnapshotCapture(
+  params: Readonly<{
+    command: string;
+    device: SessionState['device'];
+    session: SessionState | undefined;
+    plan: SnapshotRuntimePlan;
+    inspectFacts?: InspectDeviceRuntimeFacts;
+    bindDevice?: BindDeviceRuntime;
+  }>,
+): Promise<AdmittedSnapshotCapture> {
+  const { command, device, session, plan } = params;
   const admission = await admitRuntimePlan({ device, plan, inspectFacts: params.inspectFacts });
   if (!admission.admitted) {
     return {
@@ -68,15 +79,49 @@ export async function resolveBoundSnapshotCaptureRuntime(
       }),
     };
   }
-
   const runtime = await bindSnapshotCaptureRuntime(params.bindDevice, admission);
-  const captureInput = buildRuntimeCaptureInput(params, session, resolvedScope.scope);
+  return Object.freeze({
+    ok: true,
+    capture: async (input: CaptureSnapshotInput) => await runtime.captureSnapshot(input),
+  });
+}
+
+/** Resolves one plan, inspects its owner facts once, then returns one bound capture closure. */
+export async function resolveBoundSnapshotCaptureRuntime(
+  params: SnapshotRuntimeRouteParams,
+  command: 'snapshot' | 'diff',
+): Promise<ResolvedSnapshotCaptureRuntime> {
+  const { req, sessionName, sessionStore } = params;
+  const { session, device } = await resolveSessionDevice(sessionStore, sessionName, req.flags);
+  const resolvedScope = resolveSnapshotScope(req.flags?.snapshotScope, session);
+  if (!resolvedScope.ok) return { ok: false, response: resolvedScope };
+
+  const bound = await admitAndBindSnapshotCapture({
+    command,
+    device,
+    session,
+    plan: resolveSnapshotRuntimePlan({
+      customActions: req.flags?.snapshotCustomActions === true,
+      hasActiveApp: session?.appBundleId !== undefined,
+    }),
+    inspectFacts: params.inspectFacts,
+    bindDevice: params.bindDevice,
+  });
+  if (!bound.ok) return bound;
+
+  const captureInput = buildRuntimeCaptureInput({
+    flags: req.flags,
+    logPath: params.logPath,
+    meta: req.meta,
+    session,
+    snapshotScope: resolvedScope.scope,
+  });
   return Object.freeze({
     ok: true,
     session,
     device,
     snapshotScope: resolvedScope.scope,
-    captureSnapshot: async () => await runtime.captureSnapshot(captureInput),
+    captureSnapshot: async () => await bound.capture(captureInput),
   });
 }
 
@@ -145,7 +190,7 @@ type SnapshotPlanUnavailableParams = {
   fact: RuntimeOperationFact;
   session: SessionState | undefined;
   device: SessionState['device'];
-  command: 'snapshot' | 'diff';
+  command: string;
 };
 
 async function snapshotPlanUnavailableResponse(
@@ -186,46 +231,4 @@ function snapshotCustomActionsUnavailableResponse(
           : params.fact.hint,
     },
   );
-}
-
-function buildRuntimeCaptureInput(
-  params: Readonly<{ req: DaemonRequest; logPath: string }>,
-  session: SessionState | undefined,
-  snapshotScope: string | undefined,
-): CaptureSnapshotInput {
-  const { req, logPath } = params;
-  const flags = req.flags ?? {};
-  const { appBundleId, trace, surface } = session ?? {};
-  const { requestId } = req.meta ?? {};
-  const context = contextFromFlags(
-    logPath,
-    flags,
-    appBundleId,
-    trace?.outPath,
-    requestId,
-    req.meta,
-  );
-  return {
-    options: {
-      appBundleId,
-      interactiveOnly: flags.snapshotInteractiveOnly,
-      preferredBackend: flags.snapshotPreferredBackend,
-      depth: flags.snapshotDepth,
-      scope: snapshotScope,
-      raw: flags.snapshotRaw,
-      customActions: flags.snapshotCustomActions,
-      includeHiddenContentHints: flags.snapshotIncludeHiddenContentHints,
-      surface,
-    },
-    execution: {
-      requestId: context.requestId,
-      verbose: context.verbose,
-      logPath: context.logPath,
-      traceLogPath: context.traceLogPath,
-      iosXctestrunFile: context.iosXctestrunFile,
-      iosXctestDerivedDataPath: context.iosXctestDerivedDataPath,
-      iosXctestEnvDir: context.iosXctestEnvDir,
-      runnerLeaseContext: context.runnerLeaseContext,
-    },
-  };
 }

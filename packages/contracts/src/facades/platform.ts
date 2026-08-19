@@ -238,6 +238,7 @@ export type { DeviceReadinessRuntimePlan } from '../platform-runtime-operations.
 export {
   bindLocalSnapshotInteractor,
   bindProviderSnapshotInteractor,
+  captureSnapshotSignal,
   snapshotRuntimeOperationFacts,
 } from '../snapshot-runtime.ts';
 export type {

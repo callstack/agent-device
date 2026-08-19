@@ -10,6 +10,7 @@ import type {
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
+  captureSnapshotSignal,
   createUnavailablePlatformRuntimeFacts,
   localRuntimeOwner,
   sameRuntimeOwner,
@@ -127,7 +128,11 @@ function linuxSnapshotOperations(
   request: Parameters<PlatformRuntimeOwner['bind']>[0],
 ) {
   const captureSnapshot = async (input: CaptureSnapshotInput) =>
-    await host.snapshot.captureSurface(request.device, input.options, request.scope.signal);
+    await host.snapshot.captureSurface(
+      request.device,
+      input.options,
+      captureSnapshotSignal(request.scope.signal, input),
+    );
   return Object.freeze({
     captureSnapshot,
     captureSnapshotWithCustomActions: captureSnapshot,
