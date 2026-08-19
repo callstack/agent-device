@@ -1491,10 +1491,15 @@ function assertAndroidSettingsContract(world: AndroidSettingsWorld): void {
   assertCommandCall(adbCalls, ['shell', 'cmd', 'uimode', 'night', 'yes']);
   assertCommandCall(adbCalls, ['emu', 'geo', 'fix', '-122.009', '37.3349']);
   assertCommandCall(adbCalls, ['shell', 'cmd', 'fingerprint', 'touch', '1']);
+  // #1796: the grant names the acting user, because `pm` would otherwise default to user 0
+  // rather than the foreground user the session's app runs as.
+  assertCommandCall(adbCalls, ['shell', 'am', 'get-current-user']);
   assertCommandCall(adbCalls, [
     'shell',
     'pm',
     'grant',
+    '--user',
+    '0',
     'com.example.demo',
     'android.permission.CAMERA',
   ]);

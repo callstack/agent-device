@@ -466,10 +466,18 @@ function androidFingerprintMutationAdbResult(args: string[]): AndroidAdbResult |
 }
 
 function androidPermissionMutationAdbResult(args: string[]): AndroidAdbResult | undefined {
+  // #1796: permission mutations name the acting user explicitly, because `pm` defaults
+  // grant/revoke to user 0 rather than the foreground user. The scripted provider answers the
+  // resolution and accepts the `--user <id>` form the production path now sends.
+  if (args.length === 3 && argsStartWith(args, ['shell', 'am', 'get-current-user'])) {
+    return { stdout: '0\n', stderr: '', exitCode: 0 };
+  }
+  const scoped = args[3] === '--user';
+  const verb = args[2];
   if (
-    args.length === 5 &&
     argsStartWith(args, ['shell', 'pm']) &&
-    (args[2] === 'grant' || args[2] === 'revoke')
+    (verb === 'grant' || verb === 'revoke') &&
+    args.length === (scoped ? 7 : 5)
   ) {
     return { stdout: '', stderr: '', exitCode: 0 };
   }
