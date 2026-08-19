@@ -26,14 +26,29 @@ type CliCommandSurface = {
   flags: readonly FlagDefinition[];
 };
 
-// Commands whose parse path is deliberately special: cdp preserves post-command args verbatim,
-// react-devtools passes unknown flags through, and batch's step-source rule has an input space of
-// two strings, so it is pinned as a seed case on the target instead of generated.
-const EXCLUDED_CLI_COMMANDS = new Set(['cdp', 'react-devtools', 'batch']);
+/**
+ * Commands this generator never emits, each with the reason it is out. Declared as data because
+ * `validation-arbitraries-cli.test.ts` walks the catalog and fails on any command that is neither
+ * reachable nor waived here — and on any waiver the catalog no longer has, so dead entries cannot
+ * accumulate the way the Maestro shape table drifted before its coverage assertion existed.
+ */
+export const UNGENERATED_COMMANDS: Readonly<Record<string, string>> = {
+  cdp: 'preserves every post-command argument verbatim, so no planted violation can be refused',
+  'react-devtools': 'passes unknown flags through to the local tool instead of refusing them',
+  batch: 'its step-source rule has an input space of two strings, pinned as seed cases instead',
+};
 
-// help/version reroute parsing and snapshotDiff rewrites the command, so a case carrying one
-// asserts an outcome the generator did not plant; steps/stepsFile belong to the pinned batch seeds.
-const EXCLUDED_FLAG_KEYS = new Set(['help', 'version', 'snapshotDiff', 'steps', 'stepsFile']);
+/** Flag keys this generator never emits, same contract as the commands above. */
+export const UNGENERATED_FLAG_KEYS: Readonly<Record<string, string>> = {
+  help: 'reroutes parsing to help output, so the planted outcome never happens',
+  version: 'reroutes parsing to version output, same as help',
+  snapshotDiff: 'rewrites the command to `diff`, so the case no longer asserts what it planted',
+  steps: 'belongs to the pinned batch step-source seeds',
+  stepsFile: 'belongs to the pinned batch step-source seeds',
+  installSource: 'carries no CLI token at all (`names: []`) — reachable only through config',
+  batchOnError: 'supported only on `batch`, which is waived above, so no case can carry it',
+  batchMaxSteps: 'supported only on `batch`, which is waived above, so no case can carry it',
+};
 
 /**
  * Deriving the surface walks the whole command-metadata registry, so it is computed on first use
@@ -57,42 +72,46 @@ export function validationSurfaceBuildCount(): number {
   return surfaceBuilds;
 }
 
-/** Names carried by more than one definition (`--port`, `--scope`): which one the parser picks
- * depends on the command, so a case built on one would assert an outcome the parser never owed. */
-const collidingNames = memoize(() => {
-  const seen = new Set<string>();
-  const colliding = new Set<string>();
-  for (const definition of getFlagDefinitions()) {
-    for (const name of definition.names) (seen.has(name) ? colliding : seen).add(name);
-  }
-  return colliding;
-});
-
-/** Flag definitions with a single unambiguous long name, excluding the special keys. */
+/** Every definition that can be written as a token at all, minus the waived keys. */
 const safeFlagPool = memoize<readonly FlagDefinition[]>(() =>
   getFlagDefinitions().filter(
-    (definition) =>
-      !EXCLUDED_FLAG_KEYS.has(definition.key) &&
-      definition.names.some((name) => name.startsWith('--') && !collidingNames().has(name)),
+    (definition) => !(definition.key in UNGENERATED_FLAG_KEYS) && definition.names.length > 0,
   ),
 );
 
+/** Long token when there is one; short-only definitions (`-i`) are part of the surface too. */
 function flagToken(definition: FlagDefinition): string {
-  return definition.names.find((name) => name.startsWith('--') && !collidingNames().has(name))!;
+  return definition.names.find((name) => name.startsWith('--')) ?? definition.names[0]!;
+}
+
+/**
+ * Flags this command can carry unambiguously. A token two definitions share (`--port` on `proxy`
+ * versus `metro`, `--scope` on `record` versus the snapshot family) is fine as long as only one of
+ * them is supported *here* — which is how `resolveFlagDefinition` reads it too. Excluding those
+ * tokens outright left six keys silently ungenerated until the coverage assertion said so.
+ */
+function unambiguousFlagsFor(command: string): readonly FlagDefinition[] {
+  const supported = safeFlagPool().filter((definition) =>
+    isFlagSupportedForCommand(definition.key, command),
+  );
+  const perToken = new Map<string, number>();
+  for (const definition of supported) {
+    const token = flagToken(definition);
+    perToken.set(token, (perToken.get(token) ?? 0) + 1);
+  }
+  return supported.filter((definition) => perToken.get(flagToken(definition)) === 1);
 }
 
 const cliSurfaces = memoize<readonly CliCommandSurface[]>(() => {
   surfaceBuilds += 1;
   return listCliCommandNames()
-    .filter((name) => !EXCLUDED_CLI_COMMANDS.has(name))
+    .filter((name) => !(name in UNGENERATED_COMMANDS))
     .map((name) => {
       const schema = getCliCommandSchema(name);
       return {
         name,
         maxPositionals: schema.allowsExtraPositionals ? null : (schema.positionalArgs?.length ?? 0),
-        flags: safeFlagPool().filter((definition) =>
-          isFlagSupportedForCommand(definition.key, name),
-        ),
+        flags: unambiguousFlagsFor(name),
       };
     });
 });
@@ -225,10 +244,17 @@ const CLI_MUTATIONS: readonly CliMutation[] = [
     layer: 'command-validation',
     weight: 6,
     code: 'INVALID_ARGS',
-    candidates: (base) =>
-      safeFlagPool().filter(
-        (definition) => !isFlagSupportedForCommand(definition.key, base.surface.name),
-      ),
+    // A foreign flag must also be a foreign *token*: `--port` is unsupported on `proxy` as the
+    // metro key, but the parser resolves that token to proxy's own `--port` and accepts it, so the
+    // case would assert a violation the parser never owed.
+    candidates: (base) => {
+      const ownTokens = new Set(base.surface.flags.map(flagToken));
+      return safeFlagPool().filter(
+        (definition) =>
+          !isFlagSupportedForCommand(definition.key, base.surface.name) &&
+          !ownTokens.has(flagToken(definition)),
+      );
+    },
     argv: (definition, base) => [...validArgv(base), renderFlag(definition, base.salt)],
   }),
   flagMutation({
@@ -289,6 +315,19 @@ const CLI_MUTATIONS: readonly CliMutation[] = [
     },
   },
 ];
+
+/**
+ * What the generator can emit at all: the commands it builds cases for and the flag keys those
+ * commands can carry. Reachability rather than a sample, because a flag drawn about once per
+ * 3,000 cases would make a coverage gate depend on seed luck instead of on the surface.
+ */
+export function generatableCliSurface(): { commands: string[]; flagKeys: string[] } {
+  const surfaces = cliSurfaces();
+  return {
+    commands: surfaces.map((surface) => surface.name),
+    flagKeys: [...new Set(surfaces.flatMap((surface) => surface.flags.map((flag) => flag.key)))],
+  };
+}
 
 /** The classes this generator declares, so its coverage test needs no hand-kept list. */
 export const CLI_MUTATION_NAMES: readonly string[] = CLI_MUTATIONS.map((mutation) => mutation.name);

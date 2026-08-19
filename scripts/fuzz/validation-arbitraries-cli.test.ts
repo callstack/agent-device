@@ -8,10 +8,18 @@
 
 import fc from 'fast-check';
 import { describe, expect, it, vi } from 'vitest';
+import { listCliCommandNames } from '../../src/command-catalog.ts';
+import { getFlagDefinitions } from '../../src/cli-schema/command-schema.ts';
 import { getFuzzTarget } from './registry.ts';
 import { decodeValidationCase } from './validation-case.ts';
 import { describeGeneratorContract } from './validation-generator-contract.ts';
-import { CLI_MUTATION_NAMES, cliValidationArb } from './validation-arbitraries-cli.ts';
+import {
+  CLI_MUTATION_NAMES,
+  cliValidationArb,
+  generatableCliSurface,
+  UNGENERATED_COMMANDS,
+  UNGENERATED_FLAG_KEYS,
+} from './validation-arbitraries-cli.ts';
 
 // A mismatch that fires at ~1-in-1000 must not pass here and then phantom nightly: the nightly
 // draws 38,000 cases per target, so this samples 7.9% of it rather than the 1.5% it began at.
@@ -83,5 +91,47 @@ describe('generator startup', () => {
     expect(fresh.validationSurfaceBuildCount()).toBe(0);
     fc.sample(fresh.cliValidationArb, { numRuns: 1, seed: SEED });
     expect(fresh.validationSurfaceBuildCount()).toBe(1);
+  });
+});
+
+describe('surface coverage against the registry', () => {
+  // The same shape as the Maestro converter-coverage assertion, and it found the same class of
+  // bug: hand-kept knowledge about which parts of the surface are skipped goes stale silently.
+  // Both sides are derived — the catalog and the flag registry on one, the generator's own
+  // reachable surface on the other — so a new command or flag key is covered or named, never
+  // ignored. Reachability, not sampling: a flag drawn once per few thousand cases would otherwise
+  // make this gate depend on seed luck.
+  const generatable = generatableCliSurface();
+
+  it('can emit every command in the catalog, or waives it with a reason', () => {
+    const commands = new Set(generatable.commands);
+    const missing = listCliCommandNames().filter(
+      (command) => !commands.has(command) && !(command in UNGENERATED_COMMANDS),
+    );
+    expect(missing).toEqual([]);
+  });
+
+  it('can emit every flag key in the schema, or waives it with a reason', () => {
+    const emitted = new Set(generatable.flagKeys);
+    const keys = [...new Set(getFlagDefinitions().map((definition) => definition.key))];
+    const missing = keys.filter((key) => !emitted.has(key) && !(key in UNGENERATED_FLAG_KEYS));
+    expect(missing).toEqual([]);
+  });
+
+  it('waives nothing it can emit, and nothing the registry no longer has', () => {
+    const catalog = new Set<string>(listCliCommandNames());
+    const commands = new Set(generatable.commands);
+    for (const [command, reason] of Object.entries(UNGENERATED_COMMANDS)) {
+      expect(catalog, `${command} is waived but not in the catalog`).toContain(command);
+      expect(commands, `${command} is waived but generatable`).not.toContain(command);
+      expect(reason.trim().length).toBeGreaterThan(10);
+    }
+    const keys = new Set(getFlagDefinitions().map((definition) => definition.key));
+    const emitted = new Set(generatable.flagKeys);
+    for (const [key, reason] of Object.entries(UNGENERATED_FLAG_KEYS)) {
+      expect(keys, `${key} is waived but not in the schema`).toContain(key);
+      expect(emitted, `${key} is waived but generatable`).not.toContain(key);
+      expect(reason.trim().length).toBeGreaterThan(10);
+    }
   });
 });
