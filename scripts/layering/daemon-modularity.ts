@@ -172,7 +172,9 @@ function checkTypeCycleBaseline(members: readonly string[]): LayeringViolation[]
     // The ceiling records a count, not a membership, so the gate cannot name the file that
     // joined; naming the alphabetically-first member instead sent #1837's diagnosis to a file
     // that had been in the cycle all along. List the whole zone so the joining edge is one
-    // diff away from the author, who knows which of these files the change touched.
+    // diff away from the author, who knows which of these files the change touched. The
+    // overflow is net growth (a join and a departure cancel out), so it bounds nothing about
+    // how many members are new — only that at least one of the listed files is.
     violations.push({
       rule: 'R10 daemon-modularity',
       file: 'scripts/layering/daemon-modularity.ts',
@@ -180,9 +182,9 @@ function checkTypeCycleBaseline(members: readonly string[]): LayeringViolation[]
       message:
         `the largest type cycle now contains ${zoneMembers.length} ${zone} file(s) (baseline ` +
         `${allowed}); extraction must not trade one zone's locality for another's. ` +
-        `${zone} members: ${zoneMembers.join(', ')}. ${zoneMembers.length - allowed} of these ` +
-        `joined with this change (a new file, or a new import that closed the loop); cut that ` +
-        `edge rather than raising the ceiling.`,
+        `${zoneMembers.length - allowed} over the ceiling — the member(s) that joined are among ` +
+        `these ${zone} files: ${zoneMembers.join(', ')}. Cut the edge that pulled them in ` +
+        `rather than raising the ceiling.`,
     });
   }
 

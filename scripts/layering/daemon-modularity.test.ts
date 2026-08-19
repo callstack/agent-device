@@ -240,7 +240,7 @@ test('R10 zone overflow lists the whole zone so the joining member is visible', 
   for (const member of daemonMembers) {
     assert.ok(violation!.message.includes(member), `${member} missing from: ${violation!.message}`);
   }
-  assert.match(violation!.message, /1 of these joined with this change/);
+  assert.match(violation!.message, /1 over the ceiling — the member\(s\) that joined are among/);
 });
 
 // Growth was always rejected; a baseline left ABOVE the measured size used to be a suggestion
