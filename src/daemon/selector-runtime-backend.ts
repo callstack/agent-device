@@ -2,7 +2,7 @@ import type { AgentDeviceBackend, BackendSnapshotResult } from '../backend.ts';
 import { resolveTargetDevice } from '../core/dispatch.ts';
 import { createAgentDevice } from '../runtime.ts';
 import { isMacOs, isApplePlatform, publicPlatformString } from '@agent-device/kernel/device';
-import { noActiveSessionError, requireCommandSupported } from './handlers/response.ts';
+import { noActiveSessionError } from './handlers/response.ts';
 import type { SnapshotState, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { findNodeByLabel } from '../core/snapshot-node-lookup.ts';
 import { runAppleRunnerCommand } from '../platforms/apple/core/runner/runner-client.ts';
@@ -95,10 +95,17 @@ async function resolveSelectorRuntimeDevice(
 }
 
 /**
- * A migrated selector command's runtime: facts-first admission, exactly one binding, and a
- * backend whose every capture goes through the bound operation. A sibling unit migrates by
- * naming its command here instead of passing a `capability` to {@link createSelectorRuntime};
- * nothing else in this module or `selector-capture-runtime.ts` needs to change.
+ * THE selector runtime: facts-first admission, exactly one binding, and a backend whose every
+ * capture goes through the bound operation. Since `is` (R37) there is no other one — the legacy
+ * capability-admitted `createSelectorRuntime` and its `requireCommandSupported` call were its
+ * last consumer and retired with it, so a selector command cannot reach the device on a
+ * capability bucket even by mistake.
+ *
+ * ADR 0019 §6: a `device-runtime` command reaches the device only after resolve -> admit ->
+ * bind, so THIS CALL COMES FIRST in its route — ahead of every shortcut, including the
+ * direct-iOS selector query that answers some targets without a capture. That query is a fast
+ * path *within* an admitted request, never a way around exact-owner facts or the one-binding
+ * invariant. `get` (R36) and `is` (R37) both order it this way.
  */
 export async function createBoundSelectorRuntime(
   params: SelectorRuntimeParams,
@@ -121,29 +128,6 @@ export async function createBoundSelectorRuntime(
       session: resolved.session,
       device: resolved.device,
       bound: bound.operations,
-    }),
-  };
-}
-
-/**
- * The legacy capability-admitted selector runtime, for the selector commands whose ADR 0019
- * unit has not landed. The union narrows as each one migrates, and the last selector unit
- * deletes this function together with its `requireCommandSupported` call.
- */
-export async function createSelectorRuntime(
-  params: SelectorRuntimeParams,
-  options: { requireSession: boolean; capability: 'is' },
-): Promise<ResolvedSelectorRuntime> {
-  const resolved = await resolveSelectorRuntimeDevice(params, options.requireSession);
-  if (!resolved.ok) return resolved;
-  const unsupported = requireCommandSupported(options.capability, resolved.device);
-  if (unsupported) return { ok: false, response: unsupported };
-  return {
-    ok: true,
-    runtime: createSelectorRuntimeForDevice({
-      ...params,
-      session: resolved.session,
-      device: resolved.device,
     }),
   };
 }
