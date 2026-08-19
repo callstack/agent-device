@@ -285,6 +285,6 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     enumValues: ['reject', 'strip'],
     usageLabel: '--session-lock reject|strip',
     usageDescription:
-      'Lock bound-session device routing for this CLI invocation and nested batch steps',
+      'Lock bound-session device routing for this CLI invocation and nested batch steps; strip drops conflicting platform/scope selectors only, and a selector naming a different device always fails',
   },
 ];

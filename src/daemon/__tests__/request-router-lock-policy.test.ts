@@ -525,7 +525,6 @@ test('direct daemon requests apply strip lock policy for existing sessions befor
     positionals: [],
     flags: {
       target: 'tv',
-      udid: 'SIM-999',
       device: 'iPhone 16',
     },
     meta: {
@@ -537,9 +536,47 @@ test('direct daemon requests apply strip lock policy for existing sessions befor
   expect(response.ok).toBe(true);
   const action = sessionStore.get('qa-ios')?.actions.at(-1);
   expect(action?.flags.platform).toBe('ios');
-  expect(action?.flags.udid).toBe(undefined);
   expect(action?.flags.target).toBe(undefined);
   expect(action?.flags.device).toBe('iPhone 16');
+});
+
+test('strip lock policy still refuses a request naming a different device, before dispatch', async () => {
+  // The wrong-device footgun: `strip` used to delete --udid and run the command against the bound
+  // session's device instead. A request that names another device must fail, not silently retarget.
+  const sessionStore = makeSessionStore('agent-device-router-lock-');
+  sessionStore.set('qa-ios', makeIosSession('qa-ios'));
+  let dispatchCalls = 0;
+  mockDispatch.mockImplementation(async () => {
+    dispatchCalls += 1;
+    return {};
+  });
+
+  const handler = createRequestHandler({
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    token: 'test-token',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
+    trackDownloadableArtifact: () => 'artifact-id',
+  });
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'qa-ios',
+    command: 'home',
+    positionals: [],
+    flags: {
+      udid: 'SIM-999',
+    },
+    meta: {
+      lockPolicy: 'strip',
+    },
+  });
+
+  expect(dispatchCalls).toBe(0);
+  expect(response.ok).toBe(false);
+  expect(response.ok === false && response.error.code).toBe('INVALID_ARGS');
+  expect(response.ok === false && response.error.hint).not.toContain('--session-lock');
 });
 
 test('batch preserves tenant-scoped session names across nested requests', async () => {
