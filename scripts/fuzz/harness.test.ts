@@ -13,6 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { LANE_ENVELOPE_SCHEMA_VERSION } from '../lib/lane-envelope.ts';
+import { CASE_GENERATION_INPUTS } from './envelope.ts';
 import { checkCase } from './invariant.ts';
 import { SELF_CHECK_TARGETS } from './self-check-targets.ts';
 
@@ -122,15 +123,7 @@ describe('worker startup budget', () => {
  */
 function hashWithout(skip: string): string {
   const digest = crypto.createHash('sha256');
-  const inputs = [
-    'arbitraries.ts',
-    'generate.ts',
-    'targets.ts',
-    'invariant.ts',
-    'validation-arbitraries.ts',
-    'validation-case.ts',
-  ];
-  for (const name of inputs) {
+  for (const name of CASE_GENERATION_INPUTS) {
     if (name !== skip) digest.update(fs.readFileSync(path.join(FUZZ_DIR, name)));
   }
   return `sha256:${digest.digest('hex').slice(0, 16)}`;

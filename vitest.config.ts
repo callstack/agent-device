@@ -67,6 +67,7 @@ export default defineConfig({
             'scripts/fuzz/validation-arbitraries-cli.test.ts',
             'scripts/fuzz/validation-arbitraries-maestro.test.ts',
             'scripts/fuzz/validation-case.test.ts',
+            'scripts/fuzz/envelope.test.ts',
             'scripts/__tests__/help-conformance-bench.test.ts',
             'scripts/__tests__/help-conformance-error-recovery-coverage.test.ts',
             'scripts/__tests__/help-conformance-sample-outputs.test.ts',

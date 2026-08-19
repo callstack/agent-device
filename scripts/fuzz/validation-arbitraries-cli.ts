@@ -27,12 +27,12 @@ type CliCommandSurface = {
 };
 
 // Commands whose parse path is deliberately special: cdp preserves post-command args verbatim,
-// react-devtools passes unknown flags through, batch enforces a step-source invariant covered
-// by its own fixed mutation below.
+// react-devtools passes unknown flags through, and batch's step-source rule has an input space of
+// two strings, so it is pinned as a seed case on the target instead of generated.
 const EXCLUDED_CLI_COMMANDS = new Set(['cdp', 'react-devtools', 'batch']);
 
-// help/version reroute parsing, snapshotDiff rewrites the command, steps/stepsFile carry the
-// batch step-source invariant. All are exercised elsewhere; here they would blur expectations.
+// help/version reroute parsing and snapshotDiff rewrites the command, so a case carrying one
+// asserts an outcome the generator did not plant; steps/stepsFile belong to the pinned batch seeds.
 const EXCLUDED_FLAG_KEYS = new Set(['help', 'version', 'snapshotDiff', 'steps', 'stepsFile']);
 
 /**
@@ -97,42 +97,34 @@ const cliSurfaces = memoize<readonly CliCommandSurface[]>(() => {
     });
 });
 
-/** Inclusive bounds for a numeric flag, defaulted when the schema leaves an end open. */
-function numericBounds(definition: FlagDefinition): { low: number; high: number } {
-  const low = definition.min ?? 0;
-  return { low, high: definition.max ?? low + 1000 };
-}
-
 /**
- * A schema-valid numeric value. Floats take endpoints and the midpoint only: modulo arithmetic
- * can drift past a fractional `max` (a 33k-case slice produced `--scale=1.110000000000017`,
- * which the parser rightly rejected — a phantom finding, not a bug).
+ * A value the schema accepts, salt-selected so a case replays. Floats take endpoints and the
+ * midpoint only — modulo arithmetic drifts past a fractional `max` (a 33k slice produced
+ * `--scale=1.110000000000017`, which the parser rightly rejected: a phantom, not a bug).
  */
-function validNumericValue(definition: FlagDefinition, salt: number): string {
-  const { low, high } = numericBounds(definition);
-  if (definition.type === 'int') return String(low + (salt % (high - low + 1)));
-  return String([low, high, (low + high) / 2][salt % 3]);
+function flagValue(definition: FlagDefinition, salt: number): string {
+  const low = definition.min ?? 0;
+  const high = definition.max ?? low + 1000;
+  switch (definition.type) {
+    case 'enum':
+      return definition.enumValues![salt % definition.enumValues!.length]!;
+    case 'int':
+      return String(low + (salt % (high - low + 1)));
+    case 'number':
+      return String([low, high, (low + high) / 2][salt % 3]);
+    default:
+      return SAFE_VALUES[salt % SAFE_VALUES.length] || 'value';
+  }
 }
 
-/** A schema-valid value for one flag, salt-selected so shrinking stays deterministic. */
-function validFlagValue(definition: FlagDefinition, salt: number): string {
-  if (definition.type === 'enum') {
-    const values = definition.enumValues!;
-    return values[salt % values.length]!;
-  }
-  if (definition.type === 'int' || definition.type === 'number') {
-    return validNumericValue(definition, salt);
-  }
-  const value = SAFE_VALUES[salt % SAFE_VALUES.length]!;
-  return value.length === 0 ? 'value' : value;
-}
-
-/** Renders one flag as argv tokens; value flags use `--flag=value` so no token is consumed. */
+/** One flag as argv: a bare token for the kinds that take no value, `--flag=value` otherwise. */
 function renderFlag(definition: FlagDefinition, salt: number): string {
   const token = flagToken(definition);
-  if (definition.type === 'boolean' || definition.setValue !== undefined) return token;
-  if (definition.type === 'booleanOrString') return token;
-  return `${token}=${validFlagValue(definition, salt)}`;
+  const bare =
+    definition.setValue !== undefined ||
+    definition.type === 'boolean' ||
+    definition.type === 'booleanOrString';
+  return bare ? token : `${token}=${flagValue(definition, salt)}`;
 }
 
 type CliBase = {

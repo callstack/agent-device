@@ -83,14 +83,29 @@ export function writeFuzzEnvelope(input: {
  * and the invariant itself. Hashing a subset would let a changed case set look like an unchanged
  * lane, which is exactly the drift this field exists to catch.
  */
-const CASE_GENERATION_INPUTS = [
+export const CASE_GENERATION_INPUTS = [
   'arbitraries.ts',
   'generate.ts',
   'targets.ts',
   'invariant.ts',
   'validation-arbitraries.ts',
+  'validation-arbitraries-cli.ts',
+  'validation-arbitraries-maestro.ts',
+  'validation-values.ts',
   'validation-case.ts',
 ] as const;
+
+/**
+ * Modules reachable from the generation roots that deliberately do NOT feed the hash, because
+ * they cannot change what a case contains. Kept as data so `envelope.test.ts` can prove the list
+ * above still covers everything else: the domain split moved case generation out of
+ * `validation-arbitraries.ts` into two new modules and the hash silently stopped covering them,
+ * which is exactly the drift a stale corpus reads as confidence.
+ */
+export const NON_GENERATING_MODULES: Readonly<Record<string, string>> = {
+  'target-types.ts': 'types only — erased at runtime, so no value of it reaches a case',
+  'execute.ts': 'runs cases under the watchdog; decides how a case executes, not what it contains',
+};
 
 /** Content hash of `CASE_GENERATION_INPUTS`. */
 function harnessHash(): string {

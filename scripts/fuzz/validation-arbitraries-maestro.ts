@@ -2,9 +2,9 @@
 //
 // Cases are built from the command shapes the converter accepts, then one shape rule is violated,
 // so the failure surfaces in command-shape validation rather than in the YAML tokenizer. The
-// shapes are rendered here rather than derived from a registry — Maestro's accepted surface is a
-// parser table, not exported data — so the generator test replays samples against the real parser
-// and a drifted shape fails at PR time instead of phantoming nightly.
+// shapes are rendered here because Maestro's accepted surface is a parser table rather than
+// exported data; the test asserts this file covers `SUPPORTED_MAESTRO_COMMAND_NAMES`, so the copy
+// cannot silently drift from the converter.
 
 import fc from 'fast-check';
 import { encodeValidationCase } from './validation-case.ts';
