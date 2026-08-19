@@ -1,21 +1,30 @@
 import fs from 'node:fs';
-import { StringDecoder } from 'node:string_decoder';
 import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '../utils/parsing.ts';
+import {
+  measureEventLogFile,
+  readFirstLineDigest,
+  scanEventLogLines,
+} from './session-event-log-lines.ts';
 
 /**
  * Retention window for a session's `events.ndjson` (#1788).
  *
  * The `events` reader pages with a cursor that is an absolute line index since
- * the log was created, and callers persist `nextCursor` to resume. A
- * rotate-and-truncate copied from `app-log-files.ts` would reset that index to
- * 0 and make a resumed cursor silently read the wrong events. Rotation here
- * keeps the index absolute: exactly one rotated generation (`events.ndjson.1`)
- * is retained, and a sidecar (`events.ndjson.window.json`) records how many
- * lines were dropped ahead of the oldest retained file. The reader maps an
- * absolute cursor onto the retained files through that offset and answers a
- * cursor that fell off the window with a typed `EVENT_LOG_CURSOR_EXPIRED` error instead
- * of a wrong page.
+ * the log was created, and callers persist `nextCursor` to resume, so the
+ * app-log's rotate-and-truncate would silently renumber every live cursor.
+ * Rotation here keeps the index absolute instead: one rotated generation
+ * (`events.ndjson.1`) is retained and a sidecar records, per generation, its
+ * first absolute line index, its line count, and a digest of its first line.
+ *
+ * The digest is what makes the mapping **verifiable rather than declared**.
+ * The sidecar is written *before* the destructive rename, so a reader can land
+ * on either side of it; it identifies each file on disk by digest and derives
+ * that file's absolute start from the matching record, then checks the
+ * recorded line count and the two files' contiguity against what is actually
+ * on disk. Anything it cannot verify — an unrecorded rotated file, a line
+ * count that moved, a gap between generations, a corrupt sidecar — raises a
+ * typed error. The reader never guesses an offset.
  *
  * Entry bytes are never rewritten (ADR 0018 keeps `events.ndjson` v1 lines
  * byte-compatible); only whole files move.
@@ -24,177 +33,300 @@ import { isRecord } from '../utils/parsing.ts';
 const DEFAULT_EVENT_LOG_MAX_BYTES = 5 * 1024 * 1024;
 const ROTATED_EVENT_LOG_SUFFIX = '.1';
 const EVENT_LOG_WINDOW_SUFFIX = '.window.json';
-const EVENT_LOG_WINDOW_VERSION = 1;
-const EVENT_LOG_READ_CHUNK_BYTES = 64 * 1024;
+const EVENT_LOG_WINDOW_VERSION = 2;
+const RETAINED_GENERATIONS = 2;
+const WINDOW_READ_ATTEMPTS = 3;
 
 export const EVENT_LOG_CURSOR_EXPIRED_REASON = 'EVENT_LOG_CURSOR_EXPIRED';
+export const EVENT_LOG_WINDOW_UNVERIFIED_REASON = 'EVENT_LOG_WINDOW_UNVERIFIED';
+
+/** One retained file generation, identified by the digest of its first line. */
+type EventLogGeneration = {
+  firstLineIndex: number;
+  lineCount: number;
+  firstLineDigest: string;
+};
+
+type EventLogWindowFile = { path: string; firstLineIndex: number };
 
 export type SessionEventLogWindow = {
-  /** Absolute line index of the first line in the oldest retained file. */
-  droppedLines: number;
-  /** Retained files, oldest first; only files that exist. */
-  files: string[];
+  /** Retained files, oldest first, each with its absolute starting index. */
+  files: EventLogWindowFile[];
+  /** Oldest absolute cursor that still resolves. */
+  earliestCursor: number;
 };
 
 /**
- * `AGENT_DEVICE_EVENT_LOG_MAX_BYTES` overrides the active-file cap in bytes
- * (the app-log precedent is `AGENT_DEVICE_APP_LOG_MAX_BYTES`). One rotated
- * generation is always kept, so a live cursor can read at least `maxBytes` of
- * history after any rotation.
+ * `AGENT_DEVICE_EVENT_LOG_MAX_BYTES` overrides the active-file cap, in whole
+ * bytes (the app-log precedent is `AGENT_DEVICE_APP_LOG_MAX_BYTES`). One
+ * rotated generation is always kept, so a live cursor can read at least
+ * `maxBytes` of history after any rotation. A non-integer value is ignored
+ * rather than parsed leniently: `5MB` is not 5 bytes.
  */
 export function resolveSessionEventLogMaxBytes(env: NodeJS.ProcessEnv = process.env): number {
-  const parsed = Number.parseInt(env.AGENT_DEVICE_EVENT_LOG_MAX_BYTES ?? '', 10);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_EVENT_LOG_MAX_BYTES;
+  const raw = env.AGENT_DEVICE_EVENT_LOG_MAX_BYTES?.trim();
+  if (raw === undefined || !/^\d+$/.test(raw)) return DEFAULT_EVENT_LOG_MAX_BYTES;
+  const parsed = Number(raw);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : DEFAULT_EVENT_LOG_MAX_BYTES;
 }
 
 export function resolveRotatedSessionEventLogPath(eventLogPath: string): string {
   return `${eventLogPath}${ROTATED_EVENT_LOG_SUFFIX}`;
 }
 
-function resolveSessionEventLogWindowPath(eventLogPath: string): string {
+function resolveWindowPath(eventLogPath: string): string {
   return `${eventLogPath}${EVENT_LOG_WINDOW_SUFFIX}`;
 }
 
+/**
+ * Resolve which files hold which absolute line indices, verifying every claim
+ * the sidecar makes against the files themselves.
+ *
+ * The reader is synchronous but rotation's `fs.promises` calls land from the
+ * libuv threadpool, so the filesystem can move *between* two of this
+ * function's own sync reads. Each attempt therefore re-reads the sidecar after
+ * placing the files and retries when it changed underneath — a torn snapshot
+ * is retried, never interpreted. A state that stays inconsistent across
+ * attempts is a real fault and raises a typed error.
+ */
 export function readSessionEventLogWindow(eventLogPath: string): SessionEventLogWindow {
-  const files = [resolveRotatedSessionEventLogPath(eventLogPath), eventLogPath].filter((file) =>
-    fs.existsSync(file),
-  );
-  return { droppedLines: readDroppedLines(eventLogPath), files };
+  let lastError: unknown;
+  for (let attempt = 0; attempt < WINDOW_READ_ATTEMPTS; attempt += 1) {
+    const before = readWindowStateToken(eventLogPath);
+    try {
+      const window = placeSessionEventLogWindow(eventLogPath);
+      if (readWindowStateToken(eventLogPath) === before) return window;
+    } catch (error) {
+      lastError = error;
+      if (readWindowStateToken(eventLogPath) === before) throw error;
+    }
+  }
+  throw lastError ?? unverifiedWindowError(eventLogPath, 'the window did not settle while reading');
+}
+
+function placeSessionEventLogWindow(eventLogPath: string): SessionEventLogWindow {
+  const activePath = eventLogPath;
+  const rotatedPath = resolveRotatedSessionEventLogPath(eventLogPath);
+  const sidecar = readWindowSidecar(eventLogPath);
+  const activeDigest = readFirstLineDigest(activePath);
+  const activeExists = fileExists(activePath);
+  const rotatedDigest = readFirstLineDigest(rotatedPath);
+
+  if (sidecar === 'unverifiable')
+    throw unverifiedWindowError(eventLogPath, 'window file is invalid');
+  if (sidecar === undefined) {
+    // Never rotated: the active file starts the timeline. A rotated file with
+    // no record cannot be placed, so it is an error rather than a guess.
+    if (rotatedDigest !== undefined) {
+      throw unverifiedWindowError(eventLogPath, 'a rotated event log exists with no window record');
+    }
+    return {
+      files: activeExists ? [{ path: activePath, firstLineIndex: 0 }] : [],
+      earliestCursor: 0,
+    };
+  }
+
+  const newest = sidecar[sidecar.length - 1];
+  if (!newest) throw unverifiedWindowError(eventLogPath, 'window file records no generation');
+
+  // The newest record describes the generation that was in the active file when
+  // it was written. Matching digests means the rename has not landed yet.
+  const activeStart =
+    activeDigest !== undefined && activeDigest === newest.firstLineDigest
+      ? newest.firstLineIndex
+      : newest.firstLineIndex + newest.lineCount;
+
+  const files: EventLogWindowFile[] = [];
+  if (rotatedDigest !== undefined) {
+    const record = sidecar.find((generation) => generation.firstLineDigest === rotatedDigest);
+    if (!record) {
+      throw unverifiedWindowError(eventLogPath, 'the rotated event log matches no window record');
+    }
+    const observedLines = countLines(rotatedPath);
+    if (observedLines !== record.lineCount) {
+      throw unverifiedWindowError(
+        eventLogPath,
+        `the rotated event log holds ${observedLines} lines, the window recorded ${record.lineCount}`,
+      );
+    }
+    if (activeExists && record.firstLineIndex + record.lineCount !== activeStart) {
+      throw unverifiedWindowError(
+        eventLogPath,
+        'retained event log generations are not contiguous',
+      );
+    }
+    files.push({ path: rotatedPath, firstLineIndex: record.firstLineIndex });
+  }
+  if (activeExists) files.push({ path: activePath, firstLineIndex: activeStart });
+  return { files, earliestCursor: files[0]?.firstLineIndex ?? activeStart };
 }
 
 /**
- * Rotate `events.ndjson` to `events.ndjson.1` once the active file reaches
- * `maxBytes`, dropping the previous rotated generation and advancing the
- * window offset by the lines it held. Runs inside the per-path serialized
- * write queue, so no append interleaves with the rename.
+ * Rotate `events.ndjson` to `events.ndjson.1` once it reaches `maxBytes`.
  *
- * Order: drop, rename, then record the offset. A failure before the sidecar
- * write leaves the offset stale for that generation rather than double
- * counting it on the retry the next append performs.
+ * Runs inside the per-path serialized write queue. The sidecar describing the
+ * post-rename world is written first, so the only intermediate state a reader
+ * can observe is "sidecar ahead of rename" — which the digests identify
+ * exactly. A sidecar this function cannot read never blocks the append: the
+ * window is marked unverifiable (reads then fail typed) and writing continues.
  */
 export async function rotateSessionEventLogIfNeeded(
   eventLogPath: string,
   maxBytes: number,
 ): Promise<boolean> {
-  const active = await statIfExists(eventLogPath);
+  const active = lstatEventLogFile(eventLogPath);
   if (!active || active.size < maxBytes) return false;
-  const rotatedPath = resolveRotatedSessionEventLogPath(eventLogPath);
-  const rotated = await statIfExists(rotatedPath);
-  const rotatedLines = rotated ? countSessionEventLogLines(rotatedPath) : 0;
-  if (rotated) await fs.promises.unlink(rotatedPath);
-  await fs.promises.rename(eventLogPath, rotatedPath);
-  if (rotated) await writeDroppedLines(eventLogPath, readDroppedLines(eventLogPath) + rotatedLines);
+
+  const sidecar = readWindowSidecar(eventLogPath);
+  if (sidecar === 'unverifiable') {
+    await fs.promises.rename(eventLogPath, resolveRotatedSessionEventLogPath(eventLogPath));
+    return true;
+  }
+
+  const measured = await measureEventLogFile(eventLogPath);
+  if (measured.firstLineDigest !== undefined) {
+    const generations = sidecar ?? [];
+    const newest = generations[generations.length - 1];
+    // A record whose digest already matches this exact file means a previous
+    // rotation wrote the record but died before its rename; reuse it instead of
+    // counting the same generation twice.
+    const record: EventLogGeneration =
+      newest && newest.firstLineDigest === measured.firstLineDigest
+        ? newest
+        : {
+            firstLineIndex: newest ? newest.firstLineIndex + newest.lineCount : 0,
+            lineCount: measured.lineCount,
+            firstLineDigest: measured.firstLineDigest,
+          };
+    const next = (record === newest ? generations : [...generations, record]).slice(
+      -RETAINED_GENERATIONS,
+    );
+    await writeWindowSidecar(eventLogPath, next);
+  }
+  await fs.promises.rename(eventLogPath, resolveRotatedSessionEventLogPath(eventLogPath));
   return true;
 }
 
-export function assertSessionEventLogCursorRetained(cursor: number, droppedLines: number): void {
-  if (cursor >= droppedLines) return;
+export function assertSessionEventLogCursorRetained(cursor: number, earliestCursor: number): void {
+  if (cursor >= earliestCursor) return;
   throw new AppError(
     'COMMAND_FAILED',
-    `events cursor ${cursor} precedes the retained event log window; events before cursor ${droppedLines} were rotated out.`,
+    `events cursor ${cursor} precedes the retained event log window; events before cursor ${earliestCursor} were rotated out.`,
     {
       reason: EVENT_LOG_CURSOR_EXPIRED_REASON,
       cursor,
-      earliestCursor: droppedLines,
-      hint: `Resume with cursor ${droppedLines}, the oldest retained event; earlier events are no longer available.`,
+      earliestCursor,
+      hint: `Resume with cursor ${earliestCursor}, the oldest retained event; earlier events are no longer available.`,
     },
   );
 }
 
-/**
- * Visit each non-blank line of one event log file in order, applying the
- * line rule the reader uses (CRLF-tolerant, blank lines are not lines).
- * Returning `false` from `onLine` stops the scan.
- */
-export function scanSessionEventLogLines(
-  filePath: string,
-  onLine: (line: string) => boolean | void,
-): void {
-  const fd = fs.openSync(filePath, 'r');
-  try {
-    const decoder = new StringDecoder('utf8');
-    const buffer = Buffer.allocUnsafe(EVENT_LOG_READ_CHUNK_BYTES);
-    let pending = '';
-    let bytesRead = 0;
-    do {
-      bytesRead = fs.readSync(fd, buffer, 0, buffer.length, null);
-      const text = `${pending}${decoder.write(buffer.subarray(0, bytesRead))}`;
-      let start = 0;
-      for (let index = text.indexOf('\n'); index !== -1; index = text.indexOf('\n', start)) {
-        if (visitLine(text.slice(start, index), onLine) === false) return;
-        start = index + 1;
-      }
-      pending = text.slice(start);
-    } while (bytesRead > 0);
-    visitLine(`${pending}${decoder.end()}`, onLine);
-  } finally {
-    fs.closeSync(fd);
-  }
+function unverifiedWindowError(eventLogPath: string, detail: string): AppError {
+  return new AppError('COMMAND_FAILED', `Session event log window cannot be verified: ${detail}.`, {
+    reason: EVENT_LOG_WINDOW_UNVERIFIED_REASON,
+    path: eventLogPath,
+    hint: `Cursor positions for this session cannot be resolved. Delete ${eventLogPath}, ${resolveRotatedSessionEventLogPath(eventLogPath)}, and ${resolveWindowPath(eventLogPath)} to restart the timeline, or read the files directly.`,
+  });
 }
 
-function visitLine(rawLine: string, onLine: (line: string) => boolean | void): boolean | void {
-  const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
-  if (line.trim().length === 0) return;
-  return onLine(line);
-}
-
-function countSessionEventLogLines(filePath: string): number {
+function countLines(filePath: string): number {
   let count = 0;
-  scanSessionEventLogLines(filePath, () => {
+  scanEventLogLines(filePath, () => {
     count += 1;
   });
   return count;
 }
 
-function readDroppedLines(eventLogPath: string): number {
-  const windowPath = resolveSessionEventLogWindowPath(eventLogPath);
+/**
+ * Identity of everything the placement reads: the sidecar's bytes and each
+ * retained file's inode/size/mtime. Rotation's rename and sidecar write land
+ * from the threadpool, so comparing this before and after a placement is what
+ * distinguishes "read a torn snapshot" from "the window is really broken".
+ */
+function readWindowStateToken(eventLogPath: string): string {
+  return [
+    readFileToken(resolveWindowPath(eventLogPath)),
+    readFileToken(eventLogPath),
+    readFileToken(resolveRotatedSessionEventLogPath(eventLogPath)),
+  ].join('|');
+}
+
+function readFileToken(filePath: string): string {
+  try {
+    const stats = fs.lstatSync(filePath);
+    return `${stats.ino}:${stats.size}:${stats.mtimeMs}`;
+  } catch {
+    return 'absent';
+  }
+}
+
+/** `undefined` when never rotated, `'unverifiable'` when the file is unusable. */
+function readWindowSidecar(
+  eventLogPath: string,
+): EventLogGeneration[] | 'unverifiable' | undefined {
   let raw: string;
   try {
-    raw = fs.readFileSync(windowPath, 'utf8');
+    raw = fs.readFileSync(resolveWindowPath(eventLogPath), 'utf8');
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0;
-    throw error;
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    return 'unverifiable';
   }
-  const parsed = parseWindowFile(raw);
-  if (parsed === undefined) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      `Session event log window file is invalid: ${windowPath}`,
-      {
-        hint: 'Delete the window file to read the retained event log from cursor 0; cursors issued before it was corrupted no longer resolve.',
-      },
-    );
-  }
-  return parsed;
-}
-
-function parseWindowFile(raw: string): number | undefined {
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (!isRecord(parsed) || parsed.version !== EVENT_LOG_WINDOW_VERSION) return undefined;
-    const { droppedLines } = parsed;
-    return typeof droppedLines === 'number' && Number.isInteger(droppedLines) && droppedLines >= 0
-      ? droppedLines
-      : undefined;
+    if (!isRecord(parsed) || parsed.version !== EVENT_LOG_WINDOW_VERSION) return 'unverifiable';
+    const { generations } = parsed;
+    if (!Array.isArray(generations) || generations.length === 0) return 'unverifiable';
+    const records = generations.map(readGeneration);
+    return records.every((record) => record !== undefined)
+      ? (records as EventLogGeneration[])
+      : 'unverifiable';
   } catch {
-    return undefined;
+    return 'unverifiable';
   }
 }
 
-async function writeDroppedLines(eventLogPath: string, droppedLines: number): Promise<void> {
-  const windowPath = resolveSessionEventLogWindowPath(eventLogPath);
+function readGeneration(value: unknown): EventLogGeneration | undefined {
+  if (!isRecord(value)) return undefined;
+  const { firstLineIndex, lineCount, firstLineDigest } = value;
+  if (!Number.isSafeInteger(firstLineIndex) || (firstLineIndex as number) < 0) return undefined;
+  if (!Number.isSafeInteger(lineCount) || (lineCount as number) < 0) return undefined;
+  if (typeof firstLineDigest !== 'string' || firstLineDigest.length === 0) return undefined;
+  return {
+    firstLineIndex: firstLineIndex as number,
+    lineCount: lineCount as number,
+    firstLineDigest,
+  };
+}
+
+async function writeWindowSidecar(
+  eventLogPath: string,
+  generations: readonly EventLogGeneration[],
+): Promise<void> {
+  const windowPath = resolveWindowPath(eventLogPath);
   const tmpPath = `${windowPath}.${process.pid}.tmp`;
   await fs.promises.writeFile(
     tmpPath,
-    JSON.stringify({ version: EVENT_LOG_WINDOW_VERSION, droppedLines }),
+    JSON.stringify({ version: EVENT_LOG_WINDOW_VERSION, generations }),
     'utf8',
   );
   await fs.promises.rename(tmpPath, windowPath);
 }
 
-async function statIfExists(filePath: string): Promise<fs.Stats | undefined> {
+function fileExists(filePath: string): boolean {
+  return lstatEventLogFile(filePath) !== undefined;
+}
+
+/** Refuses a symlinked event log, as the app-log rotation model does. */
+function lstatEventLogFile(filePath: string): fs.Stats | undefined {
   try {
-    return await fs.promises.stat(filePath);
+    const stats = fs.lstatSync(filePath);
+    if (stats.isSymbolicLink()) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        `Session event log must not be a symbolic link: ${filePath}`,
+      );
+    }
+    return stats;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
     throw error;

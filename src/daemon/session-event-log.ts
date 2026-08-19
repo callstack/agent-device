@@ -9,12 +9,12 @@ import { isRecord } from '../utils/parsing.ts';
 import type { DaemonRequest, DaemonResponse } from './types.ts';
 import { buildActionDetails, buildActionSummary } from './session-event-action.ts';
 import { buildRequestSuccessEventPresentation } from './session-event-request.ts';
+import { scanEventLogLines } from './session-event-log-lines.ts';
 import {
   assertSessionEventLogCursorRetained,
   readSessionEventLogWindow,
   resolveSessionEventLogMaxBytes,
   rotateSessionEventLogIfNeeded,
-  scanSessionEventLogLines,
 } from './session-event-log-window.ts';
 
 const SESSION_EVENT_LOG_FILENAME = 'events.ndjson';
@@ -189,8 +189,8 @@ export function readSessionEventLog(
   const cursor = normalizeCursor(options.cursor);
   const limit = normalizeLimit(options.limit);
   const window = readSessionEventLogWindow(eventLogPath);
-  assertSessionEventLogCursorRetained(cursor, window.droppedLines);
-  const page = readSessionEventLogLines(window.files, window.droppedLines, cursor, limit);
+  assertSessionEventLogCursorRetained(cursor, window.earliestCursor);
+  const page = readSessionEventLogLines(window.files, cursor, limit);
   const events = page.lines.flatMap((line) => {
     const parsed = parseSessionEventLogLine(line);
     return parsed ? [parsed] : [];
@@ -205,21 +205,20 @@ export function readSessionEventLog(
 }
 
 /**
- * Scan the retained files oldest-first with one absolute line index that
- * starts at the window offset, so a cursor means the same line before and
- * after rotation.
+ * Scan the retained files oldest-first, each starting at the absolute index the
+ * verified window assigned it, so a cursor names the same event before and
+ * after a rotation.
  */
 function readSessionEventLogLines(
-  files: readonly string[],
-  firstLineIndex: number,
+  files: readonly { path: string; firstLineIndex: number }[],
   cursor: number,
   limit: number,
 ): { lines: string[]; nextCursor?: number } {
   const lines: string[] = [];
-  let lineIndex = firstLineIndex;
   let nextCursor: number | undefined;
   for (const file of files) {
-    scanSessionEventLogLines(file, (line) => {
+    let lineIndex = file.firstLineIndex;
+    scanEventLogLines(file.path, (line) => {
       if (lineIndex >= cursor + limit) {
         nextCursor = cursor + limit;
         return false;

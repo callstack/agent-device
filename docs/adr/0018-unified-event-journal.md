@@ -200,9 +200,12 @@ statically enumerable, greppable, no dynamic subscription API. Semantics, normat
 - **session event log sink** — consumes the `session-lifecycle` trait kinds and writes today's
   `events.ndjson` v1 entries, reusing the existing presentation builders (`buildActionSummary`,
   `buildRequestSuccessEventPresentation`), write queue, and retention window
-  (`session-event-log-window.ts`, #1788: size-capped rotation to `events.ndjson.1` with the
-  absolute cursor offset kept in a sidecar, so entry bytes and `events` cursors are unchanged by
-  the cap); receives events from request scopes and teardown scopes alike;
+  (`session-event-log-window.ts`, #1788: size-capped rotation to one retained generation,
+  `events.ndjson.1`). Entry bytes are unchanged by the cap, but the window's sidecar
+  (`events.ndjson.window.json`) is **new journal-owned state that cursor identity depends on**:
+  it records each retained generation's first absolute line index, line count, and first-line
+  digest, and the reader verifies those against the files before answering. A sink that ever owns
+  this file owns that contract too — it is not a cache and cannot be regenerated from the entries;
 - **replay trace sink** — consumes `replay-trace` trait kinds, maps internal kinds to the legacy
   `type` values, writes the per-attempt file via bound routing context; replaces both existing
   append helpers;
@@ -336,13 +339,18 @@ gets built.
 - Out-of-request coverage: an idle-reap/shutdown `finalizeRepairTeardown` still lands its
   synthesized `close` as an `action.recorded` entry in `events.ndjson`, via a teardown scope, with
   no request active.
+- Retention: the size cap (#1788) is orthogonal to sink ownership but shares the file. A sink
+  migration keeps rotation inside the one serialized write path, keeps the sidecar written before
+  the rename it describes, and keeps reads failing typed
+  (`EVENT_LOG_CURSOR_EXPIRED` / `EVENT_LOG_WINDOW_UNVERIFIED`) rather than answering a cursor it
+  cannot place.
 - Per-attempt routing: a multi-attempt `test` run writes each attempt's trace to its own file with
   legacy `type` values; trace-kind events emitted with no bound destination are dropped, not
   misrouted. A **concurrent nested-action regression** runs sharded attempts in parallel — each
   performing nested dispatch that rebinds `session`/`logPath` via `createRequestExecutionScope` —
   and proves per-fork isolation across **all three routed outputs**: each `replay-timing.ndjson`,
-  each per-request diagnostics ndjson, and each session's `events.ndjson` contain only their own
-  shard's events — no cross-writes, no drops — including events emitted after `await` points.
+  each per-request diagnostics ndjson, and each session's `events.ndjson` plus its retained generation contain only
+  their own shard's events — no cross-writes, no drops — including events emitted after `await` points.
 - Sink isolation: a sink that throws does not affect the buffer, other sinks, or the response;
   ordering across sinks is registration order.
 - `cost.runnerRoundTrips` parity: the trait-derived set equals the current literal list; the
@@ -370,7 +378,8 @@ Each step lands green and independently useful:
 3. **Session event log as sink + teardown scopes** — request-lifecycle emit points route through
    the journal; the `events.ndjson` writer becomes a sink; idle-reap/shutdown finalizers open
    session-scoped teardown scopes so out-of-request `action.recorded` events keep flowing; the
-   `events` command and pagination untouched.
+   `events` command keeps its paging contract, including the typed cursor-expiry and
+   window-verification errors the #1788 retention window added to it.
 4. **Replay trace as sink** — the journal fork primitive lands with its concurrent-shard
    regression; both trace helpers are replaced by one sink with fork-bound per-attempt routing and
    legacy `type` mapping; the declared redaction change ships here with its fixture and changelog
