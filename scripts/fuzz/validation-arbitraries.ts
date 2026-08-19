@@ -100,10 +100,17 @@ function validFlagValue(definition: FlagDefinition, salt: number): string {
     const values = definition.enumValues ?? [];
     return values[salt % Math.max(values.length, 1)] ?? '1';
   }
-  if (definition.type === 'int' || definition.type === 'number') {
+  if (definition.type === 'int') {
     const low = definition.min ?? 0;
     const high = definition.max ?? low + 1000;
     return String(low + (salt % (high - low + 1)));
+  }
+  if (definition.type === 'number') {
+    // Endpoints and midpoint only: float modulo arithmetic can drift past a fractional `max`
+    // (a 33k-case nightly slice caught `--scale=1.110000000000017` as a phantom rejection).
+    const low = definition.min ?? 0;
+    const high = definition.max ?? low + 1000;
+    return String([low, high, (low + high) / 2][salt % 3]);
   }
   const value = SAFE_VALUES[salt % SAFE_VALUES.length]!;
   return value.length === 0 ? 'value' : value;

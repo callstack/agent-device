@@ -10,6 +10,11 @@
     "note": "seed: flag with a missing value must reject as INVALID_ARGS with a hint"
   },
   {
+    "target": "cli-validation",
+    "input": "{\"payload\":[\"alert\",\"p\",\"p\",\"com.example.app\"],\"mutation\":\"excess-positional\",\"expect\":{\"outcome\":\"reject\",\"code\":\"INVALID_ARGS\"}}",
+    "note": "silent-accept: #1433 excess positionals — rediscovered against the pre-fix behaviour of assertCommandPositionalArity (fix 4c02b6ad2), 11 cases in"
+  },
+  {
     "target": "maestro",
     "input": "appId: com.example.app\n---\n- tapOn: \"unterminated\n",
     "note": "seed: unterminated YAML scalar must surface as a typed parse error"
