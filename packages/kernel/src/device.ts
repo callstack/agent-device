@@ -281,9 +281,35 @@ function resolveExplicitDevice(
   candidates: DeviceInfo[],
   selector: DeviceSelector,
 ): DeviceInfo | undefined {
+  assertSelectorFlagMatchesPlatform(selector);
   if (selector.udid) return resolveAppleDeviceByUdid(candidates, selector.udid);
   if (selector.serial) return resolveDeviceBySerial(candidates, selector);
   return undefined;
+}
+
+/**
+ * `--udid` addresses Apple devices and `--serial` addresses serial-addressable ones (Android,
+ * HarmonyOS). Passing the wrong pair used to reach resolution and fail as "No Apple device with
+ * UDID emulator-5580" on an explicitly `--platform android` request — an answer about the wrong
+ * platform, which reads as a missing device rather than a mistyped flag.
+ */
+function assertSelectorFlagMatchesPlatform(selector: DeviceSelector): void {
+  const platform = selector.platform;
+  if (!platform) return;
+  if (selector.udid && isSerialAddressablePlatform(platform)) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `--udid selects Apple devices, but this request selected --platform ${platform}.`,
+      { hint: `Use --serial ${selector.udid} to select a ${platform} device by serial.` },
+    );
+  }
+  if (selector.serial && isApplePlatform(platform)) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `--serial selects Android and HarmonyOS devices, but this request selected --platform ${platform}.`,
+      { hint: `Use --udid ${selector.serial} to select an Apple device by UDID.` },
+    );
+  }
 }
 
 function resolveAppleDeviceByUdid(candidates: DeviceInfo[], udid: string): DeviceInfo {
