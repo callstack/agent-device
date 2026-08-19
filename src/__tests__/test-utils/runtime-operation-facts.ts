@@ -1,6 +1,7 @@
 import {
   applicationLifecycleOperationFacts,
   screenshotRuntimeOperationFacts,
+  elementTextRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
   type RuntimeOperationFact,
 } from '@agent-device/contracts/platform';
@@ -33,6 +34,7 @@ export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.fre
   ...unavailableShutdownOperationFacts,
   ...screenshotRuntimeOperationFacts({ capture: unavailable }),
   setViewport: unavailable,
+  ...elementTextRuntimeOperationFacts({ readTextAtPoint: unavailable }),
 });
 
 /** Default facts for tests that are unrelated to application lifecycle commands. */

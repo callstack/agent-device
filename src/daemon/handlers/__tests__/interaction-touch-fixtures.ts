@@ -10,6 +10,7 @@ import { activateCompleteRefFrame } from '../../ref-frame.ts';
 import type { SessionStore } from '../../session-store.ts';
 import type { SessionState } from '../../types.ts';
 import { handleInteractionCommands } from '../interaction.ts';
+import { getRuntimeBindings } from './interaction-get-runtime-fixture.ts';
 import { buildSnapshotState } from '../../snapshot-state.ts';
 
 /**
@@ -125,6 +126,7 @@ export async function runInteraction(
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 }
 

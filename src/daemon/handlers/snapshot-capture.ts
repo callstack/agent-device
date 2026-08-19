@@ -1,4 +1,5 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
+import type { CaptureSnapshotInput } from '@agent-device/contracts/platform';
 import {
   recordSnapshotTiming,
   snapshotCaptureAnnotationsFrom,
@@ -35,11 +36,13 @@ type CaptureSnapshotParams = {
   androidFreshnessMode?: AndroidFreshnessMode;
   signal?: AbortSignal;
   /**
-   * Request-bound platform capture. Migrated callers inject the selected
-   * runtime operation; legacy consumers keep the existing interactor path
-   * until their own command descriptor cuts over.
+   * Request-bound platform capture. Migrated callers inject the selected runtime operation;
+   * legacy consumers keep the existing interactor path until their own command descriptor cuts
+   * over. The already-resolved neutral capture intent is passed in, so a per-call consumer (the
+   * selector capture runtime, whose flags differ per call) does not have to rebuild it; a caller
+   * whose intent is fixed at bind time simply ignores the argument.
    */
-  captureData?: () => Promise<SnapshotData>;
+  captureData?: (input: CaptureSnapshotInput) => Promise<SnapshotData>;
 };
 
 type SnapshotData = {
@@ -81,7 +84,6 @@ export async function captureSnapshot(
 }
 
 export async function captureSnapshotData(params: CaptureSnapshotParams): Promise<SnapshotData> {
-  if (params.captureData) return await params.captureData();
   const { device, session, logPath } = params;
   const context = contextFromFlags(
     logPath,
@@ -89,33 +91,33 @@ export async function captureSnapshotData(params: CaptureSnapshotParams): Promis
     session?.appBundleId,
     session?.trace?.outPath,
   );
+  const options = {
+    appBundleId: context.appBundleId,
+    interactiveOnly: context.snapshotInteractiveOnly,
+    preferredBackend: context.snapshotPreferredBackend,
+    depth: context.snapshotDepth,
+    scope: context.snapshotScope,
+    raw: context.snapshotRaw,
+    customActions: context.snapshotCustomActions,
+    includeRects: params.includeRects,
+    includeHiddenContentHints: context.snapshotIncludeHiddenContentHints,
+    surface: session?.surface,
+  };
+  const execution = {
+    requestId: context.requestId,
+    verbose: context.verbose,
+    logPath: context.logPath,
+    traceLogPath: context.traceLogPath,
+    iosXctestrunFile: context.iosXctestrunFile,
+    iosXctestDerivedDataPath: context.iosXctestDerivedDataPath,
+    iosXctestEnvDir: context.iosXctestEnvDir,
+    runnerLeaseContext: context.runnerLeaseContext,
+  };
+  if (params.captureData) return await params.captureData({ options, execution });
   return await captureSnapshotWithInteractor({
     device,
-    runnerContext: {
-      requestId: context.requestId,
-      signal: params.signal,
-      appBundleId: context.appBundleId,
-      verbose: context.verbose,
-      logPath: context.logPath,
-      traceLogPath: context.traceLogPath,
-      iosXctestrunFile: context.iosXctestrunFile,
-      iosXctestDerivedDataPath: context.iosXctestDerivedDataPath,
-      iosXctestEnvDir: context.iosXctestEnvDir,
-      runnerLeaseContext: context.runnerLeaseContext,
-    },
-    options: {
-      appBundleId: context.appBundleId,
-      signal: params.signal,
-      interactiveOnly: context.snapshotInteractiveOnly,
-      preferredBackend: context.snapshotPreferredBackend,
-      depth: context.snapshotDepth,
-      scope: context.snapshotScope,
-      raw: context.snapshotRaw,
-      customActions: context.snapshotCustomActions,
-      includeRects: params.includeRects,
-      includeHiddenContentHints: context.snapshotIncludeHiddenContentHints,
-      surface: session?.surface,
-    },
+    runnerContext: { ...execution, signal: params.signal, appBundleId: context.appBundleId },
+    options: { ...options, signal: params.signal },
   });
 }
 

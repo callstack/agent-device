@@ -52,6 +52,7 @@ import {
   createSelectorRuntimeForDevice,
   type SelectorRuntimeParams,
 } from './selector-runtime-backend.ts';
+import { resolveBoundGetRuntime } from './get-runtime.ts';
 
 export type DirectIosSelectorQueryResult = {
   found: boolean;
@@ -170,11 +171,19 @@ export async function dispatchGetViaRuntime(
     if (directResponse) return directResponse;
   }
 
-  const resolvedRuntime = await createSelectorRuntime(params, {
-    requireSession: true,
-    capability: 'get',
+  const boundRuntime = await resolveBoundGetRuntime({
+    session: params.sessionStore.get(params.sessionName),
+    inspectFacts: params.inspectFacts,
+    bindDevice: params.bindDevice,
   });
-  if (!resolvedRuntime.ok) return resolvedRuntime.response;
+  if (!boundRuntime.ok) return boundRuntime.response;
+  params.consumedSnapshot ??= {};
+  const runtime = createSelectorRuntimeForDevice({
+    ...params,
+    session: boundRuntime.session,
+    device: boundRuntime.device,
+    operations: boundRuntime.operations,
+  });
 
   // #1076 + ADR 0014: a get @ref binds against the retained ref-frame evidence,
   // so it never silently retargets to a newer positional tree. Its warning is
@@ -190,7 +199,7 @@ export async function dispatchGetViaRuntime(
         })
       : undefined;
   const response = await toDaemonResponse(async () => {
-    const result = await resolvedRuntime.runtime.selectors.get({
+    const result = await runtime.selectors.get({
       session: params.sessionName,
       requestId: req.meta?.requestId,
       property: sub,

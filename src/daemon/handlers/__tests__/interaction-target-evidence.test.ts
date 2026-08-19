@@ -47,6 +47,7 @@ vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOr
   };
 });
 
+import { getRuntimeBindings, resetGetRuntimeFixture } from './interaction-get-runtime-fixture.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 const mockDispatch = vi.mocked(dispatchCommand);
 
@@ -57,6 +58,7 @@ beforeEach(() => {
   mockDispatch.mockResolvedValue({});
   mockRunAppleRunnerCommand.mockReset();
   mockRunAppleRunnerCommand.mockResolvedValue({});
+  resetGetRuntimeFixture();
 });
 
 const SAVE_BUTTON_NODES: RawSnapshotNode[] = [
@@ -99,6 +101,7 @@ async function runCommand(
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 }
 

@@ -305,6 +305,7 @@ function unavailableProviderBinding(
     network: unavailable,
     screenshot: unavailable,
     viewport: unavailable,
+    elementText: unavailable,
     lifecycle: unavailableProviderLifecycleFacts(unavailable),
   });
 }
@@ -323,6 +324,7 @@ function unavailableProviderFacts(runtime: ProviderDeviceRuntime, device: Device
       network: unavailable,
       screenshot: unavailable,
       viewport: unavailable,
+      elementText: unavailable,
       readiness: unavailable,
       lifecycle: unavailableProviderLifecycleFacts(unavailable),
     },
