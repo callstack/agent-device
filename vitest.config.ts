@@ -86,6 +86,10 @@ export default defineConfig({
             // The `size --base` cache's claim protocol: pure filesystem, so the dangerous
             // takeover interleavings are planted directly rather than raced for. Milliseconds.
             'scripts/__tests__/size-base-cache.test.ts',
+            // The Size workflow copies the reporter out of the tree to measure the base with the
+            // PR's instrument; nothing local reproduces that copy, so this holds the step to the
+            // reporter's real import closure.
+            'scripts/__tests__/size-report-preserved-closure.test.ts',
             // `--base` orchestration (per-SHA worktree, lock, completion stamp, eviction) against
             // a throwaway git repo with pnpm/npm shimmed on PATH: git + node only.
             'scripts/__tests__/size-report-base.test.ts',
