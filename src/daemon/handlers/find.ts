@@ -1,47 +1,27 @@
 import { dispatchCommand } from '../../core/dispatch.ts';
 import type { PreresolvedInteractionTarget } from '@agent-device/contracts/interaction';
 import {
-  findBestMatchesByLocator,
   isReadOnlyFindAction,
   checkFindArgs,
   parseFindSelectorExpression,
   type FindLocator,
-  type SelectorResolutionPolicy,
 } from '@agent-device/selectors';
-import {
-  listSelectorPipelineMatches,
-  runNodePipelineStages,
-} from '../../core/selector-pipeline.ts';
+import { runNodePipelineStages } from '../../core/selector-pipeline.ts';
 import { SELECTOR_PIPELINE_POLICIES } from '../../core/selector-pipeline-policy.ts';
-import {
-  centerOfRect,
-  type SnapshotQualityVerdict,
-  type SnapshotState,
-} from '@agent-device/kernel/snapshot';
+import { centerOfRect, type SnapshotState } from '@agent-device/kernel/snapshot';
 import { expireRefFrame } from '../ref-frame.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { contextFromFlags } from '../context.ts';
-import {
-  isRootInteractionContainer,
-  resolveActionableTouchResolution,
-} from '../../core/interaction-targeting.ts';
-import { formatSnapshotLine } from '../../snapshot/snapshot-lines.ts';
-import type { ElementMatchCandidateDetails } from '../../utils/error-candidates.ts';
 import { readCommandMessage, successText } from '../../utils/success-text.ts';
 import { errorResponse, noActiveSessionError } from './response.ts';
 import { withSystemSurfaceDisclosure } from './system-surface-disclosure.ts';
 import { recordSessionAction } from './handler-utils.ts';
 import { stripInternalInteractionFlags } from '../interaction-outcome-policy.ts';
+import { resolveFindMatch } from './find-match-resolution.ts';
 import { dispatchFindReadOnlyViaRuntime } from '../selector-runtime.ts';
-import { createSelectorCaptureRuntime } from '../selector-capture-runtime.ts';
+import { createFindTargetCapture, sparseFindSnapshotResponse } from './find-target-capture.ts';
 import { isSparseSnapshotQualityVerdict } from '../../snapshot-quality/verdict.ts';
-
-function assertRejectsCandidates(policy: SelectorResolutionPolicy): void {
-  if (policy.ambiguity !== 'reject-candidates') {
-    throw new Error(`find's resolution policy must reject candidates, got "${policy.ambiguity}"`);
-  }
-}
 
 type FindContext = {
   req: DaemonRequest;
@@ -70,10 +50,6 @@ type ResolvedMatch = {
    */
   occludedNode?: SnapshotState['nodes'][number];
 };
-
-type FindMatchResult =
-  | { ok: true; node: SnapshotState['nodes'][number] }
-  | { ok: false; response: DaemonResponse };
 
 export async function handleFindCommands(params: {
   req: DaemonRequest;
@@ -116,7 +92,7 @@ export async function handleFindCommands(params: {
   if (!session) return noActiveSessionError();
   const device = session.device;
   const selectorExpression = parseFindSelectorExpression(locator, query);
-  const fetchNodes = createFindNodeFetcher({
+  const readTargetTree = createFindTargetCapture({
     device,
     session,
     req,
@@ -141,7 +117,7 @@ export async function handleFindCommands(params: {
     publicFlags: publicFindFlags(req.flags),
   };
 
-  const snapshotResult = await fetchNodes();
+  const snapshotResult = await readTargetTree();
   if (isSparseSnapshotQualityVerdict(snapshotResult.snapshotQuality)) {
     return sparseFindSnapshotResponse(snapshotResult.snapshotQuality);
   }
@@ -200,200 +176,6 @@ async function dispatchFindAction(
 }
 
 // --- Per-action handlers ---
-
-type FindSnapshotResult = {
-  nodes: SnapshotState['nodes'];
-  snapshotQuality?: SnapshotQualityVerdict;
-  systemSurfaceOnly?: boolean;
-};
-
-type FindNodeFetcher = () => Promise<FindSnapshotResult>;
-
-function createFindNodeFetcher(params: {
-  device: SessionState['device'];
-  session: SessionState;
-  req: DaemonRequest;
-  logPath: string;
-  locator: FindLocator;
-  query: string;
-  sessionStore: SessionStore;
-  sessionName: string;
-}): FindNodeFetcher {
-  const { device, session, req, logPath, locator, query } = params;
-  const { sessionStore, sessionName } = params;
-  const captureRuntime = createSelectorCaptureRuntime({
-    device,
-    session,
-    sessionStore,
-    sessionName,
-    req,
-    logPath,
-  });
-  return async () => {
-    // Interaction targets need the full interactive tree so duplicate labels can
-    // be resolved against viewport visibility before an off-screen subtree wins.
-    const { snapshot } = await captureRuntime.capture({
-      flags: {
-        ...req.flags,
-        snapshotInteractiveOnly: true,
-      },
-      recovery: {
-        legacyIosSparse: {
-          query,
-          shouldScope: shouldScopeFind(locator),
-        },
-        sparseVerdictQueryScope: {
-          query,
-          shouldScope: shouldScopeFind(locator),
-        },
-      },
-    });
-    return {
-      nodes: snapshot.nodes,
-      snapshotQuality: snapshot.snapshotQuality,
-      systemSurfaceOnly: snapshot.systemSurfaceOnly,
-    };
-  };
-}
-
-function sparseFindSnapshotResponse(verdict: SnapshotQualityVerdict): DaemonResponse {
-  return errorResponse('COMMAND_FAILED', 'find could not read the current accessibility tree', {
-    reason: verdict.reason,
-    hint: 'The snapshot quality verdict is sparse. Use screenshot as visual truth, navigate with coordinates if needed, then retry find after reaching a readable screen.',
-  });
-}
-
-function resolveFindMatch(params: {
-  nodes: SnapshotState['nodes'];
-  locator: FindLocator;
-  query: string;
-  selectorExpression: string | null;
-  flags: DaemonRequest['flags'];
-  platform: SessionState['device']['platform'];
-}): FindMatchResult {
-  const { nodes, locator, query, selectorExpression, flags, platform } = params;
-  const pipeline = SELECTOR_PIPELINE_POLICIES.findAct;
-  const rooted = nodes.filter((node) => !isRootInteractionContainer(node, nodes[0]));
-  // #1625: selector-shaped and text-shaped queries share ONE ambiguity
-  // contract — multiple matches reject with candidates unless --first/--last
-  // explicitly opts into positional narrowing. Selectors used to take the
-  // first match silently, which was exactly the mis-binding path the error's
-  // own recovery advice ("use a selector") pointed agents at.
-  const policy = pipeline.resolution;
-  let matches: SnapshotState['nodes'];
-  if (selectorExpression) {
-    // The `reject-candidates` door: the row's candidacy stage runs inside, and
-    // the whole candidate set comes back for find to rank and narrow.
-    matches =
-      listSelectorPipelineMatches(pipeline, rooted, selectorExpression, { platform }).list
-        ?.matchedNodes ?? [];
-  } else {
-    // Fuzzy text scoring, not a selector chain: this branch brings its own
-    // matcher and reads the row's rect requirement. The row still governs the
-    // target it produces — occlusion and promotion run on it below, in the
-    // same node stages the selector branch reaches.
-    matches = findBestMatchesByLocator(rooted, locator, query, {
-      requireRect: policy.requireRect,
-    }).matches;
-  }
-  matches = preferOnscreenMatches(matches, nodes);
-
-  if (matches.length > 1) {
-    // The row says candidates reject unless the caller narrowed explicitly;
-    // assert that rather than assuming, so a future row edit cannot silently
-    // turn this into first-match.
-    assertRejectsCandidates(policy);
-    const narrowed = narrowMultipleMatches(matches, flags);
-    if (!narrowed) {
-      return { ok: false, response: buildAmbiguousMatchError(matches, locator, query) };
-    }
-    matches = narrowed;
-  }
-
-  const node = matches[0] ?? null;
-  if (!node) {
-    return {
-      ok: false,
-      response: errorResponse('COMMAND_FAILED', 'find did not match any element'),
-    };
-  }
-  return { ok: true, node };
-}
-
-function narrowMultipleMatches(
-  matches: SnapshotState['nodes'],
-  flags: DaemonRequest['flags'],
-): SnapshotState['nodes'] | null {
-  if (flags?.findFirst) return [matches[0]!];
-  if (flags?.findLast) return [matches[matches.length - 1]!];
-  return null;
-}
-
-function preferOnscreenMatches(
-  matches: SnapshotState['nodes'],
-  nodes: SnapshotState['nodes'],
-): SnapshotState['nodes'] {
-  const viewport = nodes[0]?.rect;
-  if (!viewport) return matches;
-  const onscreen = matches.filter((node) => {
-    if (!node.rect) return false;
-    const center = centerOfRect(node.rect);
-    return (
-      center.x >= viewport.x &&
-      center.x <= viewport.x + viewport.width &&
-      center.y >= viewport.y &&
-      center.y <= viewport.y + viewport.height
-    );
-  });
-  return rankInteractiveMatches(onscreen.length > 0 ? onscreen : matches, nodes);
-}
-
-function rankInteractiveMatches(
-  matches: SnapshotState['nodes'],
-  nodes: SnapshotState['nodes'],
-): SnapshotState['nodes'] {
-  if (matches.length < 2) return matches;
-  return matches
-    .map((node, index) => ({ node, index, score: interactiveMatchScore(node, nodes) }))
-    .sort((left, right) => {
-      if (right.score !== left.score) return right.score - left.score;
-      return rectArea(left.node) - rectArea(right.node) || left.index - right.index;
-    })
-    .map((entry) => entry.node);
-}
-
-function interactiveMatchScore(
-  node: SnapshotState['nodes'][number],
-  nodes: SnapshotState['nodes'],
-): number {
-  const resolution = resolveActionableTouchResolution(nodes, node);
-  if (resolution.reason === 'covered') return 0;
-  const resolved = resolvedTouchScore(resolution, nodes[0]);
-  if (resolved > 0) return resolved;
-  if (node.hittable && node.rect && !isRootInteractionContainer(node, nodes[0])) return 3;
-  return node.rect ? 1 : 0;
-}
-
-function resolvedTouchScore(
-  resolution: ReturnType<typeof resolveActionableTouchResolution>,
-  root: SnapshotState['nodes'][number] | undefined,
-): number {
-  if (!resolution.node.rect) return 0;
-  if (resolution.reason === 'semantic-target' || resolution.reason === 'same-rect-descendant') {
-    return 4;
-  }
-  if (
-    resolution.reason === 'hittable-ancestor' &&
-    !isRootInteractionContainer(resolution.node, root)
-  ) {
-    return 2;
-  }
-  return 0;
-}
-
-function rectArea(node: SnapshotState['nodes'][number]): number {
-  return node.rect ? node.rect.width * node.rect.height : Number.POSITIVE_INFINITY;
-}
 
 /**
  * #1654: hand the interaction leaf the node this find already resolved, so the
@@ -561,40 +343,4 @@ function recordFindAction(ctx: FindContext, match: ResolvedMatch, action: string
 
 function publicFindFlags(flags: DaemonRequest['flags']): Record<string, unknown> {
   return { ...(stripInternalInteractionFlags(flags) ?? {}) };
-}
-
-// #1597: an agent reading an ambiguous-match error must be able to act on the
-// right @ref immediately, without a follow-up snapshot round trip. Candidate
-// lines reuse the exact snapshot-line renderer (`formatSnapshotLine`) so a
-// candidate reads identically to its row in `snapshot -i` output: ref, role,
-// label/identifier. Capped at AMBIGUOUS_MATCH_CANDIDATE_LIMIT to bound the
-// error payload — `matches` (the true total) is what a "+N more" marker is
-// computed from at render time (src/utils/error-candidates.ts).
-// Module-local: no consumer outside this file needs the raw cap, only the
-// already-capped `candidates` array on the response.
-const AMBIGUOUS_MATCH_CANDIDATE_LIMIT = 5;
-
-// Exported as the single AMBIGUOUS_MATCH producer so the help-benchmark
-// sample parity test renders the exact error this handler returns; a message
-// change here fails that gate instead of drifting past it.
-export function buildAmbiguousMatchError(
-  matches: SnapshotState['nodes'],
-  locator: FindLocator,
-  query: string,
-): DaemonResponse {
-  const candidateDetails: ElementMatchCandidateDetails = {
-    matches: matches.length,
-    candidates: matches
-      .slice(0, AMBIGUOUS_MATCH_CANDIDATE_LIMIT)
-      .map((candidate) => formatSnapshotLine(candidate, 0, false)),
-  };
-  return errorResponse(
-    'AMBIGUOUS_MATCH',
-    `find matched ${matches.length} elements for ${locator} "${query}". Use a more specific locator or selector.`,
-    { locator, query, ...candidateDetails },
-  );
-}
-
-function shouldScopeFind(locator: FindLocator): boolean {
-  return locator !== 'role';
 }
