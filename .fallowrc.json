@@ -24,10 +24,6 @@
     // subprocess (test/integration/daemon-replace-exit-flush.test.ts), so
     // dependency analysis cannot follow the runCmdSync string path to it.
     "test/integration/support/exit-after-flush.ts",
-    // #1781 B1: the manual red-proof probe for daemon-owned child processes. It
-    // is run by hand (and produced the #1109/#1324 evidence), so nothing imports
-    // it; see its header for why that arm cannot assert from a device-free lane.
-    "test/integration/support/daemon-owned-process-probe.ts",
     "src/utils/update-check-entry.ts",
     "examples/sdk/client-session.ts",
     "examples/sdk/metro-runtime.ts",

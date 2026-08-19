@@ -78,10 +78,13 @@ test('daemon replace mid-command returns a structured, parseable error and exits
       killTimeoutMs: 1_500,
       expectedStartTime: info.processStartTime,
     });
-    info = null;
     // #1781 B1: neither the SIGKILLed daemon nor its replacement may leave owned
-    // processes or unclassified state-dir residue once both are gone.
+    // processes or unclassified state-dir residue once both are gone. `info`
+    // stays set until this passes: `stopProcessForTakeover` is best-effort, so a
+    // failed stop must still reach the `finally` retry below rather than have
+    // the state dir removed out from under a daemon that is still running.
     await assertNoDaemonLeaks({ stateDir, daemonPids, phase: 'after-shutdown' });
+    info = null;
   } finally {
     if (info) {
       await stopProcessForTakeover(info.pid, {

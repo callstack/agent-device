@@ -95,10 +95,6 @@ export default defineConfig({
             // oracle are device-free, so this is where the #1109/#1324 leak
             // shapes are actually guarded.
             'test/integration/support/daemon-leak-model.test.ts',
-            // Same for the manual owned-process probe's rules: no lane can run the
-            // probe (a device-free daemon owns no children), so its fixtures are
-            // the only CI guard on the #1109/#1324 ownership shapes.
-            'test/integration/support/daemon-owned-process-probe.test.ts',
             // The frozen replay-compat corpus (#1417): parse-only, no device or
             // subprocess work, so it belongs in the fast lane next to the
             // grammar it guards.
