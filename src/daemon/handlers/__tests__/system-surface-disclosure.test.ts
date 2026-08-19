@@ -1,5 +1,6 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import { handleFindCommands } from '../find.ts';
+import { getRuntimeBindings } from './interaction-get-runtime-fixture.ts';
 import { dispatchFindReadOnlyViaRuntime, dispatchWaitViaRuntime } from '../../selector-runtime.ts';
 import type { DaemonRequest, DaemonResponse } from '../../types.ts';
 import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '../../../core/android-system-surface-disclosure.ts';
@@ -105,6 +106,7 @@ test('read-only find exists on a system-surface capture discloses the occlusion'
     sessionName: 'default',
     logPath: '/tmp/test.log',
     sessionStore,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
@@ -130,6 +132,7 @@ test('wait timeout for app text hidden behind a system surface discloses the occ
     sessionName: 'default',
     logPath: '/tmp/test.log',
     sessionStore,
+    ...getRuntimeBindings(),
   });
 
   expect(response.ok).toBe(false);
@@ -153,6 +156,7 @@ test('sessionless read-only find still discloses the occluding system surface', 
     sessionName: 'default',
     logPath: '/tmp/test.log',
     sessionStore,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
@@ -213,6 +217,7 @@ test('sessionless wait success on shade content still discloses the occluding sy
     sessionName: 'default',
     logPath: '/tmp/test.log',
     sessionStore,
+    ...getRuntimeBindings(),
   });
 
   expect(response.ok).toBe(true);
@@ -238,6 +243,7 @@ test('sessionless wait timeout still discloses the occluding system surface', as
     sessionName: 'default',
     logPath: '/tmp/test.log',
     sessionStore,
+    ...getRuntimeBindings(),
   });
 
   expect(response.ok).toBe(false);

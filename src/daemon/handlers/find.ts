@@ -20,6 +20,7 @@ import { recordSessionAction } from './handler-utils.ts';
 import { stripInternalInteractionFlags } from '../interaction-outcome-policy.ts';
 import { resolveFindMatch } from './find-match-resolution.ts';
 import { dispatchFindReadOnlyViaRuntime } from '../selector-runtime.ts';
+import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { createFindTargetCapture, sparseFindSnapshotResponse } from './find-target-capture.ts';
 import { isSparseSnapshotQualityVerdict } from '../../snapshot-quality/verdict.ts';
 
@@ -57,6 +58,8 @@ export async function handleFindCommands(params: {
   logPath: string;
   sessionStore: SessionStore;
   invoke: DaemonInvokeFn;
+  inspectFacts?: InspectDeviceRuntimeFacts;
+  bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse | null> {
   const { req, sessionName, logPath, sessionStore, invoke } = params;
   const command = req.command;
@@ -83,6 +86,8 @@ export async function handleFindCommands(params: {
     sessionName,
     logPath,
     sessionStore,
+    inspectFacts: params.inspectFacts,
+    bindDevice: params.bindDevice,
   });
   if (runtimeResponse) return runtimeResponse;
   // Read-only find actions (exists/wait/list/get_text/get_attrs) always return from

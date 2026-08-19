@@ -1194,17 +1194,6 @@ export const RAW_COMMAND_DESCRIPTORS = [
     platformExecution: { kind: 'device-runtime', uses: selectorCaptureRuntimePlanUses },
   },
   {
-    name: 'read',
-    deviceClaimPolicy: 'require-owner',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/daemon/handlers/interaction.ts'] as const } : {}),
-    catalog: { group: 'dispatch-alias' },
-    recordsSessionAction: false,
-    dispatch: {},
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
-  },
-  {
     name: 'is',
     deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),

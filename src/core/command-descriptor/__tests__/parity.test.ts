@@ -193,7 +193,11 @@ test('platform dispatch command list is built from descriptor dispatch facets', 
     .sort();
 
   assert.deepEqual(listRegisteredDispatchCommandNames(), dispatchCommands);
-  assert.ok(dispatchCommands.includes('read'), 'read stays dispatch-only');
+  assert.equal(
+    dispatchCommands.includes('read' as never),
+    false,
+    'the read dispatch alias retired with the selector element-read cutover (#1739)',
+  );
   assert.equal(
     dispatchCommands.includes(PUBLIC_COMMANDS.gesture),
     false,
