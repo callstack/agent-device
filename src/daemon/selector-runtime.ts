@@ -48,11 +48,11 @@ import {
 } from './direct-ios-selector.ts';
 import { isSessionRecording } from './session-script-publication-capability.ts';
 import {
+  createBoundSelectorRuntime,
   createSelectorRuntime,
   createSelectorRuntimeForDevice,
   type SelectorRuntimeParams,
 } from './selector-runtime-backend.ts';
-import { resolveBoundGetRuntime } from './get-runtime.ts';
 
 export type DirectIosSelectorQueryResult = {
   found: boolean;
@@ -173,25 +173,18 @@ export async function dispatchGetViaRuntime(
   // *within* an admitted request, never a way around exact-owner facts or the one-binding
   // invariant. (The query itself is still the shared root mechanic co-owned by `is`, `wait`,
   // and the Wave 5 offscreen probe — this unit orders it, it does not claim it.)
-  const boundRuntime = await resolveBoundGetRuntime({
-    session: params.sessionStore.get(params.sessionName),
-    inspectFacts: params.inspectFacts,
-    bindDevice: params.bindDevice,
+  const resolvedRuntime = await createBoundSelectorRuntime(params, {
+    requireSession: true,
+    command: 'get',
   });
-  if (!boundRuntime.ok) return boundRuntime.response;
-  params.consumedSnapshot ??= {};
+  if (!resolvedRuntime.ok) return resolvedRuntime.response;
 
   if (target.target.kind === 'selector' && !replayTargetGuard) {
     const directResponse = await dispatchDirectIosSelectorGet(params, sub, target.target.selector);
     if (directResponse) return directResponse;
   }
 
-  const runtime = createSelectorRuntimeForDevice({
-    ...params,
-    session: boundRuntime.session,
-    device: boundRuntime.device,
-    operations: boundRuntime.operations,
-  });
+  const runtime = resolvedRuntime.runtime;
 
   // #1076 + ADR 0014: a get @ref binds against the retained ref-frame evidence,
   // so it never silently retargets to a newer positional tree. Its warning is

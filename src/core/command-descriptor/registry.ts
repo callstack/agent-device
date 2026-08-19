@@ -26,7 +26,7 @@ import {
   readySendPushNotificationUse,
   openApplicationRuntimePlanUses,
   closeApplicationRuntimePlanUses,
-  elementReadRuntimeUse,
+  selectorCaptureRuntimePlanUses,
   snapshotRuntimePlanUses,
   prepareAppleRunnerRuntimeUse,
   runtimeCommandRuntimePlanUses,
@@ -1191,7 +1191,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: { route: 'interaction', refFrameEffect: 'preserve' },
     timeoutPolicy: postActionObservationTimeoutPolicy('get', PRESERVE_DAEMON_TIMEOUT_POLICY),
     batchable: true,
-    platformExecution: { kind: 'device-runtime', uses: [elementReadRuntimeUse] as const },
+    platformExecution: { kind: 'device-runtime', uses: selectorCaptureRuntimePlanUses },
   },
   {
     name: 'read',

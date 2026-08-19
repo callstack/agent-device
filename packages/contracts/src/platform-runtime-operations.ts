@@ -71,30 +71,6 @@ export const bootTargetHeadlessUse = defineUse({
 export const appsRuntimeUse = defineUse({ required: ['ensureReady', 'listApps'] });
 export const captureSnapshotUse = defineUse({ required: ['captureSnapshot'] });
 export const viewportRuntimeUse = defineUse({ required: ['setViewport'] });
-/**
- * `get` reads one element's text or attributes. The required path answers from the captured
- * tree on every supported cell; `readTextAtPoint` is the owner-provided live read that recovers
- * fuller text for editable/expandable elements, so it is preferred rather than required (ADR
- * 0019 §2). An owner without it still executes `get` completely.
- */
-export const elementReadRuntimeUse = defineUse({
-  required: ['captureSnapshot'],
-  preferred: ['readTextAtPoint'],
-});
-
-/**
- * `get`'s use does not vary with its input, so there is nothing to resolve: the one plan is a
- * frozen constant rather than a `resolve…RuntimePlan` over a single row.
- */
-export type ElementReadRuntimePlan = Readonly<{
-  kind: 'element-read';
-  use: typeof elementReadRuntimeUse;
-}>;
-
-export const elementReadRuntimePlan: ElementReadRuntimePlan = Object.freeze({
-  kind: 'element-read',
-  use: elementReadRuntimeUse,
-});
 const captureSnapshotWithCustomActionsUse = defineUse({
   required: ['captureSnapshot', 'captureSnapshotWithCustomActions'],
 });
@@ -108,6 +84,31 @@ const captureSnapshotWithCustomActionsWithoutActiveAppUse = defineUse({
     'captureSnapshotWithoutActiveApp',
   ],
 });
+
+/**
+ * The selector family's capture uses. Declared ALONGSIDE the snapshot uses above, never in place
+ * of them: `snapshot`/`diff` keep binding exactly what they bind today. The only difference is the
+ * PREFERRED element read — every selector read's required path answers from the captured tree, so
+ * an owner without the read still executes the command completely (ADR 0019 §2), but an owner that
+ * has one lets `get text` return the live value a truncated snapshot node cannot.
+ */
+const selectorCaptureUse = defineUse({
+  required: ['captureSnapshot'],
+  preferred: ['readTextAtPoint'],
+});
+const selectorCaptureWithoutActiveAppUse = defineUse({
+  required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp'],
+  preferred: ['readTextAtPoint'],
+});
+
+/**
+ * The selector family (`find`, `get`, `is`, `wait`) resolves targets from the plain accessibility
+ * capture: it exposes no `--actions` surface, so only the active-app split applies.
+ */
+export const selectorCaptureRuntimePlanUses = Object.freeze([
+  selectorCaptureUse,
+  selectorCaptureWithoutActiveAppUse,
+] as const);
 
 export const snapshotRuntimePlanUses = Object.freeze([
   captureSnapshotUse,
@@ -138,30 +139,67 @@ export type SnapshotRuntimePlan =
       use: typeof captureSnapshotWithoutActiveAppUse;
     }>;
 
+/**
+ * Same two `kind`s the snapshot plan uses for this split — deliberately, so the shared
+ * admit-then-bind path keeps ONE set of arms rather than growing a parallel dispatch — but
+ * carrying the selector uses, which add the preferred element read.
+ */
+export type SelectorCaptureRuntimePlan =
+  | Readonly<{
+      kind: 'selector-active-app';
+      operation: 'captureSnapshot';
+      use: typeof selectorCaptureUse;
+    }>
+  | Readonly<{
+      kind: 'selector-without-active-app';
+      operation: 'captureSnapshotWithoutActiveApp';
+      use: typeof selectorCaptureWithoutActiveAppUse;
+    }>;
+
+/**
+ * The active-app split every selector capture selects from. The selector family exposes no
+ * `--actions` surface, so custom actions are outside its declaration.
+ */
+export function resolveSelectorCaptureRuntimePlan(
+  input: Readonly<{ hasActiveApp: boolean }>,
+): SelectorCaptureRuntimePlan {
+  return input.hasActiveApp
+    ? Object.freeze({
+        kind: 'selector-active-app',
+        operation: 'captureSnapshot',
+        use: selectorCaptureUse,
+      })
+    : Object.freeze({
+        kind: 'selector-without-active-app',
+        operation: 'captureSnapshotWithoutActiveApp',
+        use: selectorCaptureWithoutActiveAppUse,
+      });
+}
+
 /** Selects one owner-fact-backed capture plan from normalized command/session intent. */
 export function resolveSnapshotRuntimePlan(input: {
   customActions: boolean;
   hasActiveApp: boolean;
 }): SnapshotRuntimePlan {
-  if (input.customActions) {
+  if (!input.customActions) {
     return input.hasActiveApp
-      ? Object.freeze({
-          kind: 'custom-actions-active-app',
-          operation: 'captureSnapshotWithCustomActions',
-          use: captureSnapshotWithCustomActionsUse,
-        })
+      ? Object.freeze({ kind: 'active-app', operation: 'captureSnapshot', use: captureSnapshotUse })
       : Object.freeze({
-          kind: 'custom-actions-without-active-app',
-          operation: 'captureSnapshotWithCustomActions',
-          use: captureSnapshotWithCustomActionsWithoutActiveAppUse,
+          kind: 'without-active-app',
+          operation: 'captureSnapshotWithoutActiveApp',
+          use: captureSnapshotWithoutActiveAppUse,
         });
   }
   return input.hasActiveApp
-    ? Object.freeze({ kind: 'active-app', operation: 'captureSnapshot', use: captureSnapshotUse })
+    ? Object.freeze({
+        kind: 'custom-actions-active-app',
+        operation: 'captureSnapshotWithCustomActions',
+        use: captureSnapshotWithCustomActionsUse,
+      })
     : Object.freeze({
-        kind: 'without-active-app',
-        operation: 'captureSnapshotWithoutActiveApp',
-        use: captureSnapshotWithoutActiveAppUse,
+        kind: 'custom-actions-without-active-app',
+        operation: 'captureSnapshotWithCustomActions',
+        use: captureSnapshotWithCustomActionsWithoutActiveAppUse,
       });
 }
 
