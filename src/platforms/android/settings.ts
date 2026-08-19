@@ -154,15 +154,20 @@ export async function setAndroidSetting(
  * revoked (`pm revoke` after a grant, foreground or background), so a `deny`/`reset` that
  * follows a grant leaves the session pointing at a dead app and the next selector fails
  * against the launcher (#1796). Revoking a permission the app does not hold is harmless.
- * The prior grant state is read before the revoke so the response can say so.
+ *
+ * The prior grant state is read before the revoke; process death itself is NOT observed
+ * (that would be option (b) in the issue), and the read cannot prove the app was running
+ * or that the grant belonged to the current user profile. The wording therefore states the
+ * platform rule and makes the consequence conditional rather than asserting a death.
  */
 export function androidRevokedGrantedPermissionWarning(
   appPackage: string,
   permission: string,
 ): string {
   return (
-    `Revoking ${permission} while it was granted made Android kill ${appPackage}; the app is ` +
-    `no longer running. Relaunch it with open ${appPackage} --relaunch before the next interaction.`
+    `${permission} was granted before this revoke, and Android kills an app when a granted ` +
+    `permission is revoked: if ${appPackage} was running it is no longer. Relaunch it with ` +
+    `open ${appPackage} --relaunch before the next interaction.`
   );
 }
 

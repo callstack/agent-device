@@ -190,7 +190,7 @@ describe('capture command interface', () => {
 
   // #1796: the Android revoke warning rides `warnings`; the human CLI line must show it.
   test('settings CLI output renders response warnings after the message', () => {
-    const warning = 'Revoking android.permission.CAMERA while it was granted made Android kill …';
+    const warning = 'android.permission.CAMERA was granted before this revoke, and Android …';
     const output = settingsCommandFacet.cliOutputFormatter!({
       input: {},
       result: { setting: 'permission', state: 'reset', message: 'Updated setting: permission' },

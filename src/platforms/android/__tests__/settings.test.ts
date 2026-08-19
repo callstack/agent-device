@@ -222,6 +222,10 @@ test.each(['deny', 'reset'] as const)(
           ],
         });
         assert.match(String(result?.warnings), /open com\.example\.app --relaunch/);
+        // The warning states the platform rule and keeps the consequence conditional: the
+        // prior-grant read proves neither that the app was running nor that the grant was
+        // the current user's (#1796 review).
+        assert.match(String(result?.warnings), /if com\.example\.app was running it is no longer/);
       },
     );
   },

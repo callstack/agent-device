@@ -60,7 +60,7 @@ export const settingsCommandFacet = defineCommandFacet({
   text: {
     summary: 'Change OS settings and app permissions',
     cliDetail:
-      'macOS supports only settings appearance <light|dark|toggle> and settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>; wifi|airplane|location|animations remain unsupported on macOS. Mobile permission actions use the active session app. On Android, deny|reset of a permission the app currently holds kills the app process; the response warns, and open <app> --relaunch restores it.',
+      'macOS supports only settings appearance <light|dark|toggle> and settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>; wifi|airplane|location|animations remain unsupported on macOS. Mobile permission actions use the active session app. On Android, deny|reset of a permission the app currently holds kills a running app; the response warns, and open <app> --relaunch restores it.',
   },
   metadata: settingsCommandMetadata,
   definition: settingsCommandDefinition,
