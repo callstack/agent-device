@@ -666,59 +666,6 @@ function parseScrollTarget(input: string): {
   return { direction: parseScrollDirection(input) };
 }
 
-export async function handleReadCommand(
-  device: DeviceInfo,
-  positionals: string[],
-  context: DispatchContext | undefined,
-): Promise<Record<string, unknown>> {
-  const { x, y } = readPoint(positionals, 'read requires x y');
-  if (device.platform === 'android') {
-    const { readAndroidTextAtPoint } = await import('../platforms/android/input-actions.ts');
-    const text = await readAndroidTextAtPoint(device, x, y);
-    return { action: 'read', text: text ?? '' };
-  }
-  if (device.platform === 'linux') {
-    const { readLinuxTextAtPoint } = await import('../platforms/linux/snapshot.ts');
-    const text = await readLinuxTextAtPoint(x, y, context?.surface);
-    return { action: 'read', text };
-  }
-  if (isMacOs(device) && context?.surface && context.surface !== 'app') {
-    const { runMacOsReadTextAction } = await import('../platforms/apple/os/macos/helper.ts');
-    const result = await runMacOsReadTextAction(x, y, {
-      bundleId: context.appBundleId,
-      surface: context.surface,
-    });
-    return { action: 'read', text: result.text };
-  }
-  // macOS app sessions run through the XCUITest runner; only desktop/menubar surfaces use the helper.
-  const { runAppleRunnerCommand } = await import('../platforms/apple/core/runner/runner-client.ts');
-  const result = await runAppleRunnerCommand(
-    device,
-    {
-      command: 'readText',
-      x,
-      y,
-      appBundleId: context?.appBundleId,
-    },
-    {
-      verbose: context?.verbose,
-      logPath: context?.logPath,
-      traceLogPath: context?.traceLogPath,
-      requestId: context?.requestId,
-      iosXctestrunFile: context?.iosXctestrunFile,
-      iosXctestDerivedDataPath: context?.iosXctestDerivedDataPath,
-      iosXctestEnvDir: context?.iosXctestEnvDir,
-    },
-  );
-  const text =
-    typeof result.text === 'string'
-      ? result.text
-      : typeof result.message === 'string'
-        ? result.message
-        : '';
-  return { action: 'read', text };
-}
-
 function findMistargetedTypeRef(positionals: string[]): string | null {
   return findMistargetedTypeRefToken(positionals[0]);
 }

@@ -512,13 +512,18 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
     subject: 'element read',
     tier: 'request-scoped',
     execution: 'device-runtime',
-    // `get`'s legacy admission WAS its capability bucket plus the static family command sets the
-    // matrix augments it with; the row's automatic admission columns reject the bucket and the
-    // `requireCommandSupported('get', …)` call, and these names are the augmentation entries that
-    // had to disappear with them (`addWebCommandCapabilities` throws for a web-listed command
-    // with no matrix row, so the web entry could not be left behind).
+    // Two retirements. `get`'s own legacy admission was its capability bucket plus the static
+    // family command sets the matrix augments it with — the row's automatic admission columns
+    // reject the bucket and the `requireCommandSupported('get', …)` call. And the shared element
+    // read: both consumers of the selector backend's read (`get text` and read-only
+    // `find … get text`) now execute the bound `readTextAtPoint`, so the legacy `read` dispatch
+    // alias retires whole. Deleting its registry entry drops `'read'` from
+    // `DescriptorDispatchCommandName`, which makes a surviving `DISPATCH_HANDLERS.read` a COMPILE
+    // error rather than something this row has to police.
     legacyRetirement: {
-      routeNames: ['WEB_QUERY_COMMANDS_WITH_GET', 'HARMONYOS_GET_SUPPORT'],
+      modulePaths: ['src/daemon/handlers/interaction-read-legacy-dispatch.ts'],
+      importPatterns: [/(?:^|\/)handlers\/interaction-read-legacy-dispatch(?:\.[cm]?[jt]s)?$/],
+      routeNames: ['handleReadCommand'],
     },
     runtimeTypeNames: ['ElementTextRuntimeOperations', 'SnapshotRuntimeOperations'],
     operations: {

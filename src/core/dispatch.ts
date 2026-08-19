@@ -21,7 +21,6 @@ import {
   handleHoverCommand,
   handleLongPressCommand,
   handlePressCommand,
-  handleReadCommand,
   handleScrollCommand,
   handleTypeCommand,
 } from './dispatch-interactions.ts';
@@ -185,7 +184,6 @@ const DISPATCH_HANDLERS: Record<DispatchCommand, DispatchHandler> = {
     handleTvRemoteCommand(device, interactor, positionals, context),
   settings: ({ device, interactor, positionals, context }) =>
     handleSettingsCommand(device, interactor, positionals, context),
-  read: ({ device, positionals, context }) => handleReadCommand(device, positionals, context),
 };
 
 /**
