@@ -28,9 +28,13 @@ vi.mock('../snapshot-interactor-capture.ts', async () => {
 
 import { dispatchCommand } from '../../../core/dispatch.ts';
 
+import { resetGetRuntimeFixture } from './interaction-get-runtime-fixture.ts';
+import { invokeFindHandler } from './find-handler-fixture.ts';
+
 const mockDispatch = vi.mocked(dispatchCommand);
 
 beforeEach(() => {
+  resetGetRuntimeFixture();
   mockDispatch.mockReset();
   mockDispatch.mockImplementation(async (_device: unknown, command: string) => {
     return command === 'snapshot' ? { nodes: [] } : {};
@@ -63,17 +67,11 @@ async function runFindClickScenario(options: {
   }
 
   const invokeCalls: DaemonRequest[] = [];
-  const response = await handleFindCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'find',
-      positionals: options.positionals,
-      flags: options.flags ?? {},
-    },
+  const response = await invokeFindHandler({
     sessionName,
-    logPath: '/tmp/test.log',
     sessionStore,
+    positionals: options.positionals,
+    flags: options.flags,
     invoke: async (req) => {
       invokeCalls.push(req);
       const data = options.invoke ? await options.invoke(req) : {};
@@ -1039,17 +1037,10 @@ test('read-only find while recording is intentionally deferred from target-v1 ev
     return {};
   });
 
-  const response = await handleFindCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'find',
-      positionals: ['text', 'Save', 'exists'],
-      flags: {},
-    },
+  const response = await invokeFindHandler({
     sessionName,
-    logPath: '/tmp/test.log',
     sessionStore,
+    positionals: ['text', 'Save', 'exists'],
     invoke: async () => ({ ok: true, data: {} }),
   });
 
@@ -1134,17 +1125,10 @@ async function runFindThroughLeaf(options: {
   );
 
   const invokeCalls: DaemonRequest[] = [];
-  const response = await handleFindCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'find',
-      positionals: options.positionals,
-      flags: {},
-    },
+  const response = await invokeFindHandler({
     sessionName,
-    logPath: '/tmp/test.log',
     sessionStore,
+    positionals: options.positionals,
     invoke: async (req) => {
       invokeCalls.push(req);
       if (options.divergeBeforeDispatch) {
