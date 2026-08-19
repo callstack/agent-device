@@ -285,3 +285,57 @@ test('every shipped row states its claims', () => {
     [],
   );
 });
+
+// A data-only admission retirement — a capability bucket plus static-set membership, with no
+// module, route, or dispatch projection to name as gone. Both halves are planted, because the
+// half that matters is the one an identifier-shaped claim cannot state: a set that never existed.
+const DATA_ONLY_ROW: MigratedCommandCutover = {
+  ...PLANTED_ROW,
+  legacyRetirement: { staticCommandSets: ['WEB_QUERY_COMMANDS'] },
+};
+
+test('a data-only retirement is a stated claim, so a row needs no invented identifier', () => {
+  assert.deepEqual(cutoverRowDefects(DATA_ONLY_ROW), []);
+});
+
+test('planted red: a row claiming a static command set that does not exist is rejected', () => {
+  assert.deepEqual(
+    summariesFor(
+      PLANTED_RULE,
+      [['src/core/capabilities.ts', `const WEB_QUERY_COMMANDS = ['find'];`]],
+      [
+        {
+          ...DATA_ONLY_ROW,
+          legacyRetirement: { staticCommandSets: ['WEB_QUERY_COMMANDS_WITH_PLANTED'] },
+        },
+      ],
+    ).filter((summary) => summary.includes('static command set')),
+    [
+      "(planted cutover row): claims retired static command set 'WEB_QUERY_COMMANDS_WITH_PLANTED', which no production source declares",
+    ],
+  );
+});
+
+test('planted red: a claimed static command set that still lists the command is rejected', () => {
+  assert.deepEqual(
+    summariesFor(
+      PLANTED_RULE,
+      [['src/core/capabilities.ts', `const WEB_QUERY_COMMANDS = ['find', 'planted'];`]],
+      [DATA_ONLY_ROW],
+    ).filter((summary) => summary.includes('still admits')),
+    ['src/core/capabilities.ts: static command set WEB_QUERY_COMMANDS still admits planted'],
+  );
+});
+
+test('a claimed static command set that exists and dropped the command passes', () => {
+  // Scoped to this column: the planted row's singular-execution claims are unrelated here and
+  // have their own cases above.
+  assert.deepEqual(
+    summariesFor(
+      PLANTED_RULE,
+      [['src/core/capabilities.ts', `const WEB_QUERY_COMMANDS = ['find'];`]],
+      [DATA_ONLY_ROW],
+    ).filter((summary) => summary.includes('static command set')),
+    [],
+  );
+});
