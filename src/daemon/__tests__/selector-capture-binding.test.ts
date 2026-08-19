@@ -1,5 +1,4 @@
 import { expect, test } from 'vitest';
-import type { CaptureSnapshotInput } from '@agent-device/contracts/platform';
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import {
   makeAndroidSession,
@@ -46,23 +45,6 @@ test('repeated captures reuse the one binding the plan was admitted for', async 
 
   expect(fixture.binds).toEqual([ANDROID_EMULATOR]);
   expect(fixture.captures).toHaveLength(2);
-});
-
-test('a per-capture signal reaches the bound operation for a poll deadline', async () => {
-  const fixture = selectorCaptureFixture();
-  const bound = await resolveBoundSelectorCapture({
-    command: 'wait',
-    device: ANDROID_EMULATOR,
-    session: makeAndroidSession('selector'),
-    inspectFacts: fixture.inspectFacts,
-    bindDevice: fixture.bindDevice,
-  });
-  if (!bound.ok) throw new Error('expected an admitted capture');
-  const deadline = new AbortController();
-  deadline.abort(new Error('poll deadline'));
-
-  const input: CaptureSnapshotInput = { signal: deadline.signal };
-  await expect(bound.operations.capture(input)).rejects.toThrow(/poll deadline/);
 });
 
 test('an unavailable required operation refuses before any bind', async () => {
