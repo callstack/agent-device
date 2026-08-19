@@ -66,29 +66,62 @@ function collidingFlagNames(definitions: readonly FlagDefinition[]): Set<string>
   return new Set([...counts.entries()].filter(([, count]) => count > 1).map(([name]) => name));
 }
 
-const COLLIDING_FLAG_NAMES = collidingFlagNames(getFlagDefinitions());
+/**
+ * Deriving the surface walks the whole command-metadata registry, so it is computed on first use
+ * rather than at import: a `--input-file` replay or a classic-target run must not pay for a
+ * generator it never asks for (it did, and timed out the coverage-instrumented promotion test).
+ */
+function memoize<T>(build: () => T): () => T {
+  let value: T | undefined;
+  return () => (value ??= build());
+}
+
+const collidingNames = memoize(() => collidingFlagNames(getFlagDefinitions()));
 
 /** Flag definitions with a single unambiguous long name, excluding the special keys. */
-const SAFE_FLAG_POOL: readonly FlagDefinition[] = getFlagDefinitions().filter(
-  (definition) =>
-    !EXCLUDED_FLAG_KEYS.has(definition.key) &&
-    definition.names.some((name) => name.startsWith('--') && !COLLIDING_FLAG_NAMES.has(name)),
+const safeFlagPool = memoize<readonly FlagDefinition[]>(() =>
+  getFlagDefinitions().filter(
+    (definition) =>
+      !EXCLUDED_FLAG_KEYS.has(definition.key) &&
+      definition.names.some((name) => name.startsWith('--') && !collidingNames().has(name)),
+  ),
 );
 
 function flagToken(definition: FlagDefinition): string {
-  return definition.names.find((name) => name.startsWith('--') && !COLLIDING_FLAG_NAMES.has(name))!;
+  return definition.names.find((name) => name.startsWith('--') && !collidingNames().has(name))!;
 }
 
-const CLI_SURFACES: readonly CliCommandSurface[] = listCliCommandNames()
-  .filter((name) => !EXCLUDED_CLI_COMMANDS.has(name))
-  .map((name) => {
-    const schema = getCliCommandSchema(name);
-    return {
-      name,
-      maxPositionals: schema.allowsExtraPositionals ? null : (schema.positionalArgs?.length ?? 0),
-      flags: SAFE_FLAG_POOL.filter((definition) => isFlagSupportedForCommand(definition.key, name)),
-    };
-  });
+const cliSurfaces = memoize<readonly CliCommandSurface[]>(() =>
+  listCliCommandNames()
+    .filter((name) => !EXCLUDED_CLI_COMMANDS.has(name))
+    .map((name) => {
+      const schema = getCliCommandSchema(name);
+      return {
+        name,
+        maxPositionals: schema.allowsExtraPositionals ? null : (schema.positionalArgs?.length ?? 0),
+        flags: safeFlagPool().filter((definition) =>
+          isFlagSupportedForCommand(definition.key, name),
+        ),
+      };
+    }),
+);
+
+/** Inclusive bounds for a numeric flag, defaulted when the schema leaves an end open. */
+function numericBounds(definition: FlagDefinition): { low: number; high: number } {
+  const low = definition.min ?? 0;
+  return { low, high: definition.max ?? low + 1000 };
+}
+
+/**
+ * A schema-valid numeric value. Floats take endpoints and the midpoint only: modulo arithmetic
+ * can drift past a fractional `max` (a 33k-case slice produced `--scale=1.110000000000017`,
+ * which the parser rightly rejected — a phantom finding, not a bug).
+ */
+function validNumericValue(definition: FlagDefinition, salt: number): string {
+  const { low, high } = numericBounds(definition);
+  if (definition.type === 'int') return String(low + (salt % (high - low + 1)));
+  return String([low, high, (low + high) / 2][salt % 3]);
+}
 
 /** A schema-valid value for one flag, salt-selected so shrinking stays deterministic. */
 function validFlagValue(definition: FlagDefinition, salt: number): string {
@@ -96,17 +129,8 @@ function validFlagValue(definition: FlagDefinition, salt: number): string {
     const values = definition.enumValues ?? [];
     return values[salt % Math.max(values.length, 1)] ?? '1';
   }
-  if (definition.type === 'int') {
-    const low = definition.min ?? 0;
-    const high = definition.max ?? low + 1000;
-    return String(low + (salt % (high - low + 1)));
-  }
-  if (definition.type === 'number') {
-    // Endpoints and midpoint only: float modulo arithmetic can drift past a fractional `max`
-    // (a 33k-case nightly slice caught `--scale=1.110000000000017` as a phantom rejection).
-    const low = definition.min ?? 0;
-    const high = definition.max ?? low + 1000;
-    return String([low, high, (low + high) / 2][salt % 3]);
+  if (definition.type === 'int' || definition.type === 'number') {
+    return validNumericValue(definition, salt);
   }
   const value = SAFE_VALUES[salt % SAFE_VALUES.length]!;
   return value.length === 0 ? 'value' : value;
@@ -147,8 +171,10 @@ const isValueFlag = (definition: FlagDefinition) =>
     definition.type === 'int' ||
     definition.type === 'number');
 
-const FAKE_COMMANDS = ['frobnicate', 'tapp', 'navigate', 'clik', 'snapshoot', 'opne'].filter(
-  (name) => !isKnownCliCommandName(name),
+const fakeCommands = memoize(() =>
+  ['frobnicate', 'tapp', 'navigate', 'clik', 'snapshoot', 'opne'].filter(
+    (name) => !isKnownCliCommandName(name),
+  ),
 );
 
 const CLI_MUTATIONS: readonly CliMutation[] = [
@@ -172,7 +198,7 @@ const CLI_MUTATIONS: readonly CliMutation[] = [
   {
     name: 'unsupported-flag',
     apply: (base) => {
-      const foreign = SAFE_FLAG_POOL.filter(
+      const foreign = safeFlagPool().filter(
         (definition) => !isFlagSupportedForCommand(definition.key, base.surface.name),
       );
       const definition = foreign[base.salt % Math.max(foreign.length, 1)];
@@ -247,7 +273,8 @@ const CLI_MUTATIONS: readonly CliMutation[] = [
   {
     name: 'unknown-command',
     apply: (base) => {
-      const name = FAKE_COMMANDS[base.salt % FAKE_COMMANDS.length]!;
+      const names = fakeCommands();
+      const name = names[base.salt % names.length]!;
       return { payload: [name, ...base.positionals], mutation: 'unknown-command', expect: REJECT };
     },
   },
@@ -277,7 +304,8 @@ const cliBaseArb: fc.Arbitrary<CliBase> = fc
     salt: fc.nat({ max: 10_000 }),
   })
   .map(({ surfaceIndex, positionals, flagIndices, salt }) => {
-    const surface = CLI_SURFACES[surfaceIndex % CLI_SURFACES.length]!;
+    const surfaces = cliSurfaces();
+    const surface = surfaces[surfaceIndex % surfaces.length]!;
     const maxPositionals = surface.maxPositionals ?? 3;
     const flags = [
       ...new Map(

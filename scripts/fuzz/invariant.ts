@@ -13,9 +13,11 @@
 // and wrong error codes too (validation-case.ts).
 
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import type { FuzzFailure, FuzzFailureKind, FuzzTarget } from './target-types.ts';
+import type { FuzzFailure, FuzzTarget } from './target-types.ts';
 
-export type { FuzzFailure, FuzzFailureKind };
+// Re-exported because every existing consumer imports the failure type from the invariant it
+// belongs to; the declaration moved to target-types.ts only to keep targets cycle-free.
+export type { FuzzFailure };
 
 /**
  * Runs one case and returns the invariant violation it produced, or `null`.
