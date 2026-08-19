@@ -1,7 +1,10 @@
 import {
   resolveSnapshotRuntimePlan,
   type CaptureSnapshotInput,
+  type ElementTextRuntimeOperations,
+  type ReadTextAtPointInput,
   type RuntimeOperationFact,
+  type SelectorCaptureRuntimePlan,
   type SnapshotResult,
   type SnapshotRuntimeOperations,
   type SnapshotRuntimePlan,
@@ -43,10 +46,22 @@ type ResolvedSnapshotCaptureRuntime =
 
 /** A capture operation parametrized by intent, so a polling caller can capture repeatedly
  * under the one binding it was admitted for. */
-type BoundSnapshotCapture = (input: CaptureSnapshotInput) => Promise<SnapshotResult>;
+export type BoundSnapshotCapture = (input: CaptureSnapshotInput) => Promise<SnapshotResult>;
 
-type AdmittedSnapshotCapture =
-  | Readonly<{ ok: true; capture: BoundSnapshotCapture }>
+/** The owner's live element read, when its facts advertise one. */
+export type BoundElementRead = ElementTextRuntimeOperations['readTextAtPoint'];
+
+export type AdmittedSnapshotCapture =
+  | Readonly<{
+      ok: true;
+      capture: BoundSnapshotCapture;
+      /**
+       * The owner's live element read, present only when the caller's plan declared it PREFERRED
+       * and the admitted owner advertised it. `snapshot`/`diff` plans declare no read, so this is
+       * simply absent for them — the member is additive and they are unchanged.
+       */
+      readTextAtPoint?: BoundElementRead;
+    }>
   | Readonly<{ ok: false; response: DaemonResponse }>;
 
 /**
@@ -55,12 +70,12 @@ type AdmittedSnapshotCapture =
  * the admitted device. `snapshot`/`diff` supply the four-way custom-actions plan and the
  * selector family the active-app plan; a new consumer supplies a plan and a command name.
  */
-async function admitAndBindSnapshotCapture(
+export async function admitAndBindSnapshotCapture(
   params: Readonly<{
     command: string;
     device: SessionState['device'];
     session: SessionState | undefined;
-    plan: SnapshotRuntimePlan;
+    plan: SnapshotRuntimePlan | SelectorCaptureRuntimePlan;
     inspectFacts?: InspectDeviceRuntimeFacts;
     bindDevice?: BindDeviceRuntime;
   }>,
@@ -79,10 +94,11 @@ async function admitAndBindSnapshotCapture(
       }),
     };
   }
-  const runtime = await bindSnapshotCaptureRuntime(params.bindDevice, admission);
+  const bound = await bindSnapshotCaptureRuntime(params.bindDevice, admission);
   return Object.freeze({
     ok: true,
-    capture: async (input: CaptureSnapshotInput) => await runtime.captureSnapshot(input),
+    capture: async (input: CaptureSnapshotInput) => await bound.captureSnapshot(input),
+    ...(bound.readTextAtPoint ? { readTextAtPoint: bound.readTextAtPoint } : {}),
   });
 }
 
@@ -132,14 +148,27 @@ export async function resolveBoundSnapshotCaptureRuntime(
  */
 async function bindSnapshotCaptureRuntime(
   bindDevice: BindDeviceRuntime | undefined,
-  admission: AdmittedRuntimePlan<SnapshotRuntimePlan>,
-): Promise<Readonly<{ captureSnapshot(input: CaptureSnapshotInput): Promise<SnapshotResult> }>> {
+  admission: AdmittedRuntimePlan<SnapshotRuntimePlan | SelectorCaptureRuntimePlan>,
+): Promise<
+  Readonly<{
+    captureSnapshot(input: CaptureSnapshotInput): Promise<SnapshotResult>;
+    readTextAtPoint?: BoundElementRead;
+  }>
+> {
   const bind = requireRuntimeBinding(bindDevice);
   const { device, plan } = unwrapAdmittedRuntimePlan(admission);
+  // One switch, one set of operation selectors. The selector arms reuse the SAME
+  // `selectActiveAppSnapshot` / `selectSnapshotWithoutActiveApp` the snapshot arms use and only
+  // add the preferred element read; the discriminants differ solely so the compiler can narrow
+  // `plan.use` per family. No parallel plan-to-operation dispatch is introduced.
   switch (plan.kind) {
     case 'active-app': {
       const runtime = await bind(device, plan.use);
       return selectActiveAppSnapshot(runtime);
+    }
+    case 'selector-active-app': {
+      const runtime = await bind(device, plan.use);
+      return { ...selectActiveAppSnapshot(runtime), ...selectElementRead(runtime) };
     }
     case 'custom-actions-active-app': {
       const runtime = await bind(device, plan.use);
@@ -149,11 +178,37 @@ async function bindSnapshotCaptureRuntime(
       const runtime = await bind(device, plan.use);
       return selectSnapshotWithoutActiveApp(runtime);
     }
+    case 'selector-without-active-app': {
+      const runtime = await bind(device, plan.use);
+      return { ...selectSnapshotWithoutActiveApp(runtime), ...selectElementRead(runtime) };
+    }
     case 'custom-actions-without-active-app': {
       const runtime = await bind(device, plan.use);
       return selectCustomActionsSnapshot(runtime);
     }
   }
+}
+
+/**
+ * Projects the preferred element read when the admitted owner advertised it. A projection whose
+ * use never declared it simply has no such member, so this yields `{}` for `snapshot`/`diff`.
+ */
+function selectElementRead(
+  runtime: Readonly<{ operations: Readonly<{ readTextAtPoint?: BoundElementRead }> }>,
+): Readonly<{ readTextAtPoint?: BoundElementRead }> {
+  const readTextAtPoint = runtime.operations.readTextAtPoint;
+  // Narrowed by CONSTRUCTION rather than by assertion: the projection below is only buildable
+  // from a non-undefined local, so presence is carried by the value that captured it.
+  return readTextAtPoint
+    ? { readTextAtPoint: bindElementRead({ operations: { readTextAtPoint } }) }
+    : {};
+}
+
+/** The one lexical owner of the narrowed `readTextAtPoint` call. */
+function bindElementRead(
+  runtime: Readonly<{ operations: Readonly<{ readTextAtPoint: BoundElementRead }> }>,
+): BoundElementRead {
+  return async (input: ReadTextAtPointInput) => await runtime.operations.readTextAtPoint(input);
 }
 
 type BoundSnapshotOperation<Operation extends keyof SnapshotRuntimeOperations> = Readonly<{

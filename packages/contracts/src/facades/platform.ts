@@ -214,12 +214,18 @@ export {
   captureSnapshotUse,
   defineUse,
   resolveScreenshotRuntimePlan,
+  resolveSelectorCaptureRuntimePlan,
   resolveSnapshotRuntimePlan,
   screenshotRuntimePlanUses,
+  selectorCaptureRuntimePlanUses,
   snapshotRuntimePlanUses,
   viewportRuntimeUse,
 } from '../platform-runtime-operations.ts';
-export type { ScreenshotRuntimePlan, SnapshotRuntimePlan } from '../platform-runtime-operations.ts';
+export type {
+  ScreenshotRuntimePlan,
+  SelectorCaptureRuntimePlan,
+  SnapshotRuntimePlan,
+} from '../platform-runtime-operations.ts';
 export type {
   PlatformRuntimeHost,
   PlatformRuntimeModule,
@@ -235,13 +241,8 @@ export {
   appStateRuntimeUses,
   appStateUse,
   shutdownTargetUse,
-  elementReadRuntimeUse,
-  elementReadRuntimePlan,
 } from '../platform-runtime-operations.ts';
-export type {
-  DeviceReadinessRuntimePlan,
-  ElementReadRuntimePlan,
-} from '../platform-runtime-operations.ts';
+export type { DeviceReadinessRuntimePlan } from '../platform-runtime-operations.ts';
 export {
   bindLocalScreenshotInteractor,
   bindProviderScreenshotInteractor,
