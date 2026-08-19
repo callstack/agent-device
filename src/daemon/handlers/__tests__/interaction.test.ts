@@ -575,7 +575,22 @@ test('is selected simple iOS id selector uses runner query without snapshot', as
   expect(recorded?.result?.selectorChain).toEqual(['id="shipping-pickup"']);
 });
 
-test('is simple iOS selector returns false directly when runner predicate fails', async () => {
+// PIN CHANGED (#1739, R37) — this case previously asserted `ok: true` with `pass: false` and zero
+// snapshots, the shape #557 introduced. That broke `is`'s documented contract:
+// `website/docs/docs/commands.md` says under "Assertions" that `is` "exits non-zero on failure",
+// and on device `is text id=… "Wrong Expected Text"` printed `Passed: is text` and exited 0 — a
+// failing assertion reported as success, the one thing an assertion command must never do.
+//
+// #557's perf claim is NOT reversed, and the case above pins it: a predicate that HOLDS still
+// answers from the runner with zero snapshots. Only the negative falls through, which is what
+// #557's own summary asked for ("preserving snapshot fallback for misses" — it refused fallback
+// only for HARD failures like ambiguous matches). That fall-through was designed and never armed:
+// `buildDirectIosIsResult` was already typed `| null` behind an `if (!payload) return null;`
+// caller guard that nothing could reach.
+//
+// The negative could not be trusted either: the runner evaluates a ONE-NODE tree, so `visible`
+// cannot see the ancestor geometry a list row inherits. Falling through re-asks the real tree.
+test('is simple iOS selector falls through to the snapshot when the runner predicate fails', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'is-selected-ios-direct-selector-false';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
@@ -608,11 +623,12 @@ test('is simple iOS selector returns false directly when runner predicate fails'
     ...getRuntimeBindings(),
   });
 
-  expect(response?.ok).toBe(true);
-  expect(mockDispatch.mock.calls.filter((call) => call[1] === 'snapshot')).toHaveLength(0);
-  if (response?.ok) {
-    expect(response.data?.predicate).toBe('selected');
-    expect(response.data?.pass).toBe(false);
+  // The runner answered `selected: false`; the session snapshot has no `id=submit` at all, so the
+  // authoritative capture reports the typed selector failure instead of a zero-exit "pass: false".
+  expect(response?.ok).toBe(false);
+  expect(mockDispatch.mock.calls.filter((call) => call[1] === 'snapshot')).toHaveLength(1);
+  if (response?.ok === false) {
+    expect(response.error?.code).toBe('COMMAND_FAILED');
   }
 });
 

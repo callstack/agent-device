@@ -511,6 +511,20 @@ function isDirectIosSelectorErrorResult(
   return result !== null && 'kind' in result && result.kind === 'error';
 }
 
+/**
+ * The runner query is a fast path, not the semantic source of truth — the rule `findText` and
+ * `dispatchDirectIosSelectorWait` already state — so it answers ONLY when the predicate holds.
+ *
+ * A negative returns null and the admitted capture answers instead, for two reasons. This
+ * evaluation sees a ONE-NODE tree, so `visible` cannot consult the ancestor geometry a list row
+ * inherits and its negative can simply be wrong. And `is` is an assertion that "exits non-zero on
+ * failure" (`website/docs/docs/commands.md`), which reporting `ok: true, pass: false` here broke:
+ * `is text id=… "Wrong Expected Text"` printed `Passed: is text` and exited 0 on device (#1739).
+ *
+ * This is the fall-through #557 designed and never armed — it left this `| null` return and the
+ * caller's `if (!payload) return null;` guard unreachable. Its perf claim is untouched: what it
+ * bought was a snapshot-free PASSING assertion, which the positive arm still delivers.
+ */
 function buildDirectIosIsResult(
   predicate: Exclude<IsPredicate, 'exists' | 'hidden'>,
   expectedText: string,
@@ -525,9 +539,12 @@ function buildDirectIosIsResult(
     expectedText,
     platform: session.device.platform,
   });
+  if (!result.pass) return null;
   return {
     predicate,
-    pass: result.pass,
+    // Literal, not `result.pass`: past the guard this payload exists only for a predicate that
+    // held, so the type carries the fact instead of re-reading a value that can only be true.
+    pass: true,
     selector,
     ...(predicate === 'text' ? { text: result.actualText } : {}),
     selectorChain: [selector],
