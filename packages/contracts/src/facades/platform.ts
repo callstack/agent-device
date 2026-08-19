@@ -263,13 +263,16 @@ export type {
 } from '../viewport-runtime.ts';
 export {
   bindElementTextRuntime,
+  elementTextRead,
   elementTextRuntimeOperationFacts,
 } from '../element-text-runtime.ts';
 export type {
+  ElementTextReadOutcome,
   ElementTextRuntimeExecution,
   ElementTextRuntimeHost,
   ElementTextRuntimeOperationFacts,
   ElementTextRuntimeOperations,
+  ElementTextUnreadableReason,
   ReadTextAtPointInput,
 } from '../element-text-runtime.ts';
 export type {
