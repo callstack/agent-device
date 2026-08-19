@@ -6,7 +6,12 @@ const { runHarmonyHdc } = vi.hoisted(() => ({ runHarmonyHdc: vi.fn() }));
 
 vi.mock('../hdc.ts', () => ({ runHarmonyHdc }));
 
-import { parseArkUiBounds, parseHarmonyLayout, snapshotHarmony } from '../snapshot.ts';
+import {
+  collectArkUiNodes,
+  parseArkUiBounds,
+  parseHarmonyLayout,
+  snapshotHarmony,
+} from '../snapshot.ts';
 
 const DEVICE = {
   platform: 'harmonyos' as const,
@@ -16,6 +21,8 @@ const DEVICE = {
   target: 'mobile' as const,
   booted: true,
 };
+
+const UNBOUNDED = { maxDepth: Number.POSITIVE_INFINITY, interactiveOnly: false };
 
 beforeEach(() => {
   runHarmonyHdc.mockReset();
@@ -45,51 +52,54 @@ test('parseHarmonyLayout rejects non-object uitest documents', () => {
   assert.throws(() => parseHarmonyLayout('[]'), /invalid layout JSON/i);
 });
 
-test('snapshotHarmony reports truncation once the node cap is hit instead of dropping nodes silently', async () => {
-  scriptHarmonyLayoutDump({
-    attributes: { type: 'root', bounds: '[0,0][1080,2340]' },
-    children: [
-      { attributes: { type: 'Button', text: 'first', clickable: 'true' } },
-      { attributes: { type: 'Button', text: 'second', clickable: 'true' } },
-      { attributes: { type: 'Button', text: 'third', clickable: 'true' } },
-    ],
-  });
+test('collectArkUiNodes reports truncation once the emitted-node limit is reached', () => {
+  const root = parseHarmonyLayout(
+    JSON.stringify({
+      attributes: { type: 'root', bounds: '[0,0][1080,2340]' },
+      children: [
+        { attributes: { type: 'Button', text: 'first', clickable: 'true' } },
+        { attributes: { type: 'Button', text: 'second', clickable: 'true' } },
+        { attributes: { type: 'Button', text: 'third', clickable: 'true' } },
+      ],
+    }),
+  );
 
-  const capped = await snapshotHarmony(DEVICE, { maxNodes: 2 });
-
+  const capped = collectArkUiNodes(root, { ...UNBOUNDED, maxNodes: 2 });
   assert.equal(capped.truncated, true);
   assert.deepEqual(
     capped.nodes.map((node) => node.value ?? node.type),
     ['Application', 'first'],
   );
-  assert.equal(capped.analysis.rawNodeCount, 4);
+  assert.deepEqual(capped.analysis, { rawNodeCount: 4, maxDepth: 1 });
 
-  const uncapped = await snapshotHarmony(DEVICE);
-  assert.equal(uncapped.truncated, undefined);
+  const uncapped = collectArkUiNodes(root, { ...UNBOUNDED, maxNodes: 5_000 });
+  assert.equal(uncapped.truncated, false);
   assert.equal(uncapped.nodes.length, 4);
 });
 
-test('snapshotHarmony keeps counting the tree below a node the cap omitted', async () => {
-  // The cap fills on `first`, so `branch` and everything under it is omitted.
-  // `analysis` still describes the tree the device reported, so the omitted
-  // subtree must reach both counters — five nodes, deepest at depth 3.
-  scriptHarmonyLayoutDump({
-    attributes: { type: 'root', bounds: '[0,0][1080,2340]' },
-    children: [
-      { attributes: { type: 'Button', text: 'first', clickable: 'true' } },
-      {
-        attributes: { type: 'Column', text: 'branch' },
-        children: [
-          {
-            attributes: { type: 'Row', text: 'leaf' },
-            children: [{ attributes: { type: 'Text', text: 'deep' } }],
-          },
-        ],
-      },
-    ],
-  });
+test('collectArkUiNodes keeps counting the tree below a node the limit omitted', () => {
+  // The limit fills on `first`, so `branch` and everything under it is
+  // omitted. `analysis` still describes the tree the device reported, so the
+  // omitted subtree must reach both counters: five nodes, deepest at depth 3.
+  const root = parseHarmonyLayout(
+    JSON.stringify({
+      attributes: { type: 'root', bounds: '[0,0][1080,2340]' },
+      children: [
+        { attributes: { type: 'Button', text: 'first', clickable: 'true' } },
+        {
+          attributes: { type: 'Column', text: 'branch' },
+          children: [
+            {
+              attributes: { type: 'Row', text: 'leaf' },
+              children: [{ attributes: { type: 'Text', text: 'deep' } }],
+            },
+          ],
+        },
+      ],
+    }),
+  );
 
-  const capped = await snapshotHarmony(DEVICE, { maxNodes: 2 });
+  const capped = collectArkUiNodes(root, { ...UNBOUNDED, maxNodes: 2 });
 
   assert.equal(capped.truncated, true);
   assert.deepEqual(
@@ -97,4 +107,20 @@ test('snapshotHarmony keeps counting the tree below a node the cap omitted', asy
     ['Application', 'first'],
   );
   assert.deepEqual(capped.analysis, { rawNodeCount: 5, maxDepth: 3 });
+});
+
+test('snapshotHarmony pulls a uitest layout and reports its analysis', async () => {
+  scriptHarmonyLayoutDump({
+    attributes: { type: 'root', bounds: '[0,0][1080,2340]' },
+    children: [{ attributes: { type: 'Button', text: 'first', clickable: 'true' } }],
+  });
+
+  const snapshot = await snapshotHarmony(DEVICE);
+
+  assert.equal(snapshot.truncated, undefined);
+  assert.deepEqual(
+    snapshot.nodes.map((node) => node.value ?? node.type),
+    ['Application', 'first'],
+  );
+  assert.deepEqual(snapshot.analysis, { rawNodeCount: 2, maxDepth: 1 });
 });

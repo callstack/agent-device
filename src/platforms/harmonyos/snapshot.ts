@@ -15,16 +15,9 @@ type ArkUiLayoutNode = {
   children?: ArkUiLayoutNode[];
 };
 
-/**
- * `maxNodes` bounds the emitted tree; nodes past it are dropped and the
- * result reports `truncated`. Mirrors the Android helper and Linux AT-SPI
- * capture seams so the bound is exercisable below the 5,000 default.
- */
-export type HarmonySnapshotOptions = SnapshotOptions & { maxNodes?: number };
-
 export async function snapshotHarmony(
   device: DeviceInfo,
-  options: HarmonySnapshotOptions = {},
+  options: SnapshotOptions = {},
 ): Promise<{
   nodes: RawSnapshotNode[];
   truncated?: boolean;
@@ -82,43 +75,60 @@ export function parseHarmonyLayout(raw: string): ArkUiLayoutNode {
 
 function buildHarmonySnapshot(
   root: ArkUiLayoutNode,
-  options: HarmonySnapshotOptions,
+  options: SnapshotOptions,
 ): {
   nodes: RawSnapshotNode[];
   truncated?: boolean;
+  analysis: { rawNodeCount: number; maxDepth: number };
+} {
+  const { nodes, truncated, analysis } = collectArkUiNodes(root, {
+    maxNodes: MAX_NODES,
+    maxDepth: options.depth ?? Number.POSITIVE_INFINITY,
+    interactiveOnly: options.interactiveOnly === true,
+  });
+  return { nodes, ...(truncated ? { truncated: true } : {}), analysis };
+}
+
+/**
+ * Traversal and emission policy for an ArkUI layout tree, with every bound
+ * passed in.
+ *
+ * Emission and accounting are deliberately separate: emission stops at
+ * `maxNodes`, while `analysis` keeps describing the tree the device reported,
+ * so the walk continues counting and descending below an omitted node. Halting
+ * there would under-report `rawNodeCount` and `maxDepth` for exactly the
+ * oversized trees the cap exists for.
+ */
+export function collectArkUiNodes(
+  root: ArkUiLayoutNode,
+  policy: { maxNodes: number; maxDepth: number; interactiveOnly: boolean },
+): {
+  nodes: RawSnapshotNode[];
+  truncated: boolean;
   analysis: { rawNodeCount: number; maxDepth: number };
 } {
   const nodes: RawSnapshotNode[] = [];
   let rawNodeCount = 0;
   let maxDepth = 0;
   let truncated = false;
-  const maxNodes = options.maxNodes ?? MAX_NODES;
-  // Accounting is separate from emission: `analysis` describes the tree the
-  // device reported, so the walk keeps counting and descending after the
-  // emitted-node cap fills. Stopping there would under-report `rawNodeCount`
-  // and `maxDepth` for exactly the oversized trees the cap exists for.
   const walk = (node: ArkUiLayoutNode, depth: number, parentIndex?: number): void => {
     rawNodeCount += 1;
     maxDepth = Math.max(maxDepth, depth);
     let currentIndex = parentIndex;
-    if (nodes.length >= maxNodes) {
+    if (nodes.length >= policy.maxNodes) {
       truncated = true;
     } else {
       const attributes = node.attributes ?? {};
       const candidate = arkUiNodeFromAttributes(attributes, nodes.length, depth, parentIndex);
-      const include = !options.interactiveOnly || candidate.hittable === true;
+      const include = !policy.interactiveOnly || candidate.hittable === true;
       currentIndex = include ? nodes.push(candidate) - 1 : parentIndex;
     }
-    if (depth < (options.depth ?? Number.POSITIVE_INFINITY)) {
+    if (depth < policy.maxDepth) {
       for (const child of node.children ?? []) walk(child, depth + 1, currentIndex);
     }
   };
   walk(root, 0);
-  return {
-    nodes,
-    ...(truncated ? { truncated: true } : {}),
-    analysis: { rawNodeCount, maxDepth },
-  };
+  return { nodes, truncated, analysis: { rawNodeCount, maxDepth } };
 }
 
 function arkUiNodeFromAttributes(
