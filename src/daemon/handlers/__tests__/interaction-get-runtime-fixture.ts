@@ -90,17 +90,23 @@ const mockInspectElementReadFacts: InspectDeviceRuntimeFacts = vi.fn(async (devi
 
 const mockBindElementReadRuntime: BindDeviceRuntime = vi.fn(async (device: DeviceInfo, use) => {
   const facts = elementReadFacts(device);
+  // Delegates to the interactor capture the surrounding suites already mock, so only the two
+  // selector operations are fixture-owned here.
+  const capture = async (input: CaptureSnapshotInput) =>
+    await captureSnapshotWithInteractor({
+      device,
+      runnerContext: { ...input.execution, appBundleId: input.options?.appBundleId },
+      options: { ...input.options },
+    });
   const binding: DeviceBinding<PlatformRuntimeOperations> = Object.freeze({
     device,
     owner: localRuntimeOwner('apple'),
     facts,
     operations: Object.freeze({
-      captureSnapshot: async (input: CaptureSnapshotInput) =>
-        await captureSnapshotWithInteractor({
-          device,
-          runnerContext: { ...input.execution, appBundleId: input.options?.appBundleId },
-          options: { ...input.options },
-        }),
+      captureSnapshot: capture,
+      // The selector plan takes this row on a session with no tracked app, so an owner that
+      // advertises it must implement it or `narrowDeviceBinding` rejects the contract.
+      captureSnapshotWithoutActiveApp: capture,
       ...(elementReadFixtureState.readTextAtPointAvailable
         ? { readTextAtPoint: mockReadTextAtPoint }
         : {}),
@@ -110,7 +116,10 @@ const mockBindElementReadRuntime: BindDeviceRuntime = vi.fn(async (device: Devic
   return narrowDeviceBinding(binding, use);
 }) as BindDeviceRuntime;
 
-/** Spread into any interaction-handler params so `get` can admit and bind. */
+/**
+ * Spread into a handler's params so a selector command can admit and bind. Consumed by `get` and
+ * by read-only `find`, which share the bound element read.
+ */
 export function getRuntimeBindings(): Readonly<{
   inspectFacts: InspectDeviceRuntimeFacts;
   bindDevice: BindDeviceRuntime;

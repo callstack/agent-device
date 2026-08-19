@@ -12,7 +12,6 @@ import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
 import { contextFromFlags } from './context.ts';
 import { ensureDeviceReady } from './device-ready.ts';
 import { readTextForNode } from './handlers/interaction-read.ts';
-import { legacyDispatchReadTextAtPoint } from './handlers/interaction-read-legacy-dispatch.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
 import type { ContextFromFlags } from './handlers/interaction-common.ts';
 import { SessionStore } from './session-store.ts';
@@ -133,7 +132,7 @@ export async function createBoundSelectorRuntime(
  */
 export async function createSelectorRuntime(
   params: SelectorRuntimeParams,
-  options: { requireSession: boolean; capability: 'find' | 'is' },
+  options: { requireSession: boolean; capability: 'is' },
 ): Promise<ResolvedSelectorRuntime> {
   const resolved = await resolveSelectorRuntimeDevice(params, options.requireSession);
   if (!resolved.ok) return resolved;
@@ -150,25 +149,15 @@ export async function createSelectorRuntime(
 }
 
 function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDeviceBackend {
-  // Which read the backend uses is fixed by WHICH COMMAND CONSTRUCTED THIS RUNTIME, never by
-  // failure, family, environment, or flag. A migrated command arrives with `bound` and its
-  // binding is authoritative — including when the owner advertised no read, which is the complete
-  // required path. An unmigrated selector command arrives without `bound` and keeps the legacy
-  // dispatch until its own descriptor cuts over (ADR 0019 §6 permits the unmigrated sibling's own
-  // path); a migrated command can never reach it.
+  // The bound operation is the ONLY element read. Both consumers of the shared backend read —
+  // `get text` and read-only `find … get text` — construct a bound backend, so there is no second
+  // read path to choose between and nothing reaches the retired `read` dispatch.
   const { req, session, device, logPath, sessionName, sessionStore } = params;
   const resolveContextFromFlags: ContextFromFlags =
     params.contextFromFlags ??
     ((flags, appBundleId, traceLogPath) =>
       contextFromFlags(logPath ?? '', flags, appBundleId, traceLogPath));
-  const readTextAtPoint = params.bound
-    ? params.bound.readText
-    : legacyDispatchReadTextAtPoint({
-        device,
-        flags: req.flags,
-        surface: session?.surface,
-        contextFromFlags: resolveContextFromFlags,
-      });
+  const readTextAtPoint = params.bound?.readText;
   const captureRuntime = createSelectorCaptureRuntime({
     device,
     session,

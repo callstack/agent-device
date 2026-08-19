@@ -103,7 +103,7 @@ export type DeviceClaimPolicy =
   | 'acquire-session'
   | 'release-session';
 
-export type CommandCatalogGroup = 'public' | 'internal' | 'local-cli' | 'dispatch-alias';
+export type CommandCatalogGroup = 'public' | 'internal' | 'local-cli';
 
 /**
  * Which default tool set a framework adapter (`agent-device/ai-sdk`, the

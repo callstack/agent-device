@@ -88,9 +88,13 @@ export async function dispatchFindReadOnlyViaRuntime(
   const action = parsed.action;
   if (!isReadOnlyFindAction(action)) return null;
 
-  const resolvedRuntime = await createSelectorRuntime(params, {
+  // Read-only `find` shares the element read with `get`, so it constructs a BOUND backend and
+  // the two consume one bound operation instead of one binding it and the other dispatching the
+  // legacy `read`. This moves find's READ LEG only: find's descriptor stays
+  // `LEGACY_PLATFORM_EXECUTION`, it claims no cutover row, and its mutating actions are untouched.
+  const resolvedRuntime = await createBoundSelectorRuntime(params, {
     requireSession: false,
-    capability: 'find',
+    command: 'find',
   });
   if (!resolvedRuntime.ok) return resolvedRuntime.response;
 
