@@ -51,6 +51,15 @@ export function makeIosSession(name: string, overrides?: Partial<SessionState>):
   return makeSession(name, { device: IOS_SIMULATOR, ...overrides });
 }
 
+/**
+ * An iOS session with a tracked app — what `open <app>` produces. The shared snapshot
+ * runtime exposes capture on an iOS leaf only through the active-app plan row, so a test
+ * that captures on iOS needs this rather than a bare session.
+ */
+export function makeIosAppSession(name: string, overrides?: Partial<SessionState>): SessionState {
+  return makeIosSession(name, { appBundleId: 'com.example.app', ...overrides });
+}
+
 export function makeAndroidSession(name: string, overrides?: Partial<SessionState>): SessionState {
   return makeSession(name, { device: ANDROID_EMULATOR, ...overrides });
 }

@@ -1,5 +1,4 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { CaptureSnapshotInput, SnapshotResult } from '@agent-device/contracts/platform';
 import type { BackendSnapshotResult } from '../backend.ts';
 import {
   buildSnapshotPresentationKey,
@@ -13,10 +12,12 @@ import { captureSnapshot } from './handlers/snapshot-capture.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
 import { getActiveAndroidSnapshotFreshness } from './android-snapshot-freshness.ts';
 import { isPostGestureStabilizationPending } from './deferred-interaction-outcome.ts';
+import type { BoundSelectorCapture } from './selector-capture-binding.ts';
+import { buildRuntimeCaptureInput } from './snapshot-runtime-capture-input.ts';
 
 const SELECTOR_CAPTURE_CACHE_TTL_MS = 750;
 
-type SelectorCaptureRuntimeParams = {
+export type SelectorCaptureRuntimeParams = {
   device: SessionState['device'];
   session: SessionState | undefined;
   sessionStore: SessionStore;
@@ -27,11 +28,11 @@ type SelectorCaptureRuntimeParams = {
   // capture runtime reports every consumed snapshot here for response-level disclosures.
   consumedSnapshot?: { state?: SnapshotState };
   /**
-   * Request-bound platform capture, supplied by a selector command that already bound its device
-   * runtime. Unmigrated selector commands omit it and keep the legacy interactor capture until
-   * their own descriptor cuts over.
+   * The request-bound capture from `resolveBoundSelectorCapture`: every cache tier, recovery
+   * re-capture, and poll below reaches the platform through it. Selector commands still on
+   * legacy admission pass nothing; the last one to migrate makes this required.
    */
-  captureData?: (input: CaptureSnapshotInput) => Promise<SnapshotResult>;
+  capture?: BoundSelectorCapture;
 };
 
 /**
@@ -177,19 +178,38 @@ async function runCapture(
   snapshotScope: string | undefined,
   interactiveOnly = request.flags?.snapshotInteractiveOnly,
 ): Promise<SnapshotState> {
+  const flags = {
+    ...request.flags,
+    snapshotInteractiveOnly: interactiveOnly,
+  };
+  const boundCapture = params.capture;
   const capture = await captureSnapshot({
     device: params.device,
     session: params.session,
-    flags: {
-      ...request.flags,
-      snapshotInteractiveOnly: interactiveOnly,
-    },
+    flags,
     outPath: request.outPath ?? params.req.flags?.out,
     logPath: params.logPath ?? '',
     snapshotScope,
     includeRects: request.includeRects,
     signal: request.signal,
-    ...(params.captureData ? { captureData: params.captureData } : {}),
+    ...(boundCapture === undefined
+      ? {}
+      : {
+          captureData: async () =>
+            await boundCapture(
+              buildRuntimeCaptureInput({
+                flags,
+                logPath: params.logPath ?? '',
+                meta: params.req.meta,
+                session: params.session,
+                snapshotScope,
+                includeRects: request.includeRects,
+                // The poll's remaining budget, not the request's: `wait`/`find <q> wait`
+                // abort a stalled capture at its deadline instead of racing it.
+                signal: request.signal,
+              }),
+            ),
+        }),
   });
   return capture.snapshot;
 }

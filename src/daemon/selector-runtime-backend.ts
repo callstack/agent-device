@@ -18,8 +18,12 @@ import type { ContextFromFlags } from './handlers/interaction-common.ts';
 import { SessionStore } from './session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { createSelectorCaptureRuntime } from './selector-capture-runtime.ts';
+import {
+  resolveBoundSelectorCapture,
+  type BoundSelectorOperations,
+  type SelectorCaptureCommand,
+} from './selector-capture-binding.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
-import type { BoundGetRuntimeOperations } from './get-runtime.ts';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';
 import { getRequestSignal } from '../request/cancel.ts';
 import { snapshotOptionsToFlags } from '../backend-snapshot-options.ts';
@@ -30,27 +34,29 @@ export type SelectorRuntimeParams = {
   logPath?: string;
   sessionStore: SessionStore;
   contextFromFlags?: ContextFromFlags;
-  /**
-   * Request-bound device runtime seams. Migrated selector commands resolve their own plan from
-   * these; unmigrated ones ignore them and keep their legacy admission until their unit lands.
-   */
-  inspectFacts?: InspectDeviceRuntimeFacts;
-  bindDevice?: BindDeviceRuntime;
   // Filled by the capture runtime with the snapshot each selector command actually consumed;
   // sessionless routes disclose from here because no session record stores the capture.
   consumedSnapshot?: { state?: SnapshotState };
   signal?: AbortSignal;
+  inspectFacts?: InspectDeviceRuntimeFacts;
+  bindDevice?: BindDeviceRuntime;
 };
 
-type SelectorRuntimeDeviceParams = SelectorRuntimeParams & {
+export type SelectorRuntimeDeviceParams = SelectorRuntimeParams & {
   session: SessionState | undefined;
   device: SessionState['device'];
-  /**
-   * The operations the calling command already bound. A migrated command passes them so its
-   * capture and element read execute through its own binding instead of the legacy adapter.
-   */
-  operations?: BoundGetRuntimeOperations;
+  /** The request-bound operations this runtime executes through. Absent for selector
+   * commands still on legacy admission, until their own ADR 0019 unit lands. */
+  bound?: BoundSelectorOperations;
 };
+
+type ResolvedSelectorRuntime =
+  | { ok: true; runtime: ReturnType<typeof createSelectorRuntimeForDevice> }
+  | { ok: false; response: DaemonResponse };
+
+type ResolvedSelectorDevice =
+  | { ok: true; session: SessionState | undefined; device: SessionState['device'] }
+  | { ok: false; response: DaemonResponse };
 
 type AppleRunnerFindTextTarget = {
   device: SessionState['device'];
@@ -76,45 +82,87 @@ export function createSelectorRuntimeForDevice(params: SelectorRuntimeDevicePara
   });
 }
 
+/** The session/device a selector command runs against, before any admission decides. */
+async function resolveSelectorRuntimeDevice(
+  params: SelectorRuntimeParams,
+  requireSession: boolean,
+): Promise<ResolvedSelectorDevice> {
+  params.consumedSnapshot ??= {};
+  const session = params.sessionStore.get(params.sessionName);
+  if (!session && requireSession) return { ok: false, response: noActiveSessionError() };
+  const device = session?.device ?? (await resolveTargetDevice(params.req.flags ?? {}));
+  if (!session) await ensureDeviceReady(device);
+  return { ok: true, session, device };
+}
+
+/**
+ * A migrated selector command's runtime: facts-first admission, exactly one binding, and a
+ * backend whose every capture goes through the bound operation. A sibling unit migrates by
+ * naming its command here instead of passing a `capability` to {@link createSelectorRuntime};
+ * nothing else in this module or `selector-capture-runtime.ts` needs to change.
+ */
+export async function createBoundSelectorRuntime(
+  params: SelectorRuntimeParams,
+  options: { requireSession: boolean; command: SelectorCaptureCommand },
+): Promise<ResolvedSelectorRuntime> {
+  const resolved = await resolveSelectorRuntimeDevice(params, options.requireSession);
+  if (!resolved.ok) return resolved;
+  const bound = await resolveBoundSelectorCapture({
+    command: options.command,
+    device: resolved.device,
+    session: resolved.session,
+    inspectFacts: params.inspectFacts,
+    bindDevice: params.bindDevice,
+  });
+  if (!bound.ok) return { ok: false, response: bound.response };
+  return {
+    ok: true,
+    runtime: createSelectorRuntimeForDevice({
+      ...params,
+      session: resolved.session,
+      device: resolved.device,
+      bound: bound.operations,
+    }),
+  };
+}
+
+/**
+ * The legacy capability-admitted selector runtime, for the selector commands whose ADR 0019
+ * unit has not landed. The union narrows as each one migrates, and the last selector unit
+ * deletes this function together with its `requireCommandSupported` call.
+ */
 export async function createSelectorRuntime(
   params: SelectorRuntimeParams,
   options: { requireSession: boolean; capability: 'find' | 'is' },
-): Promise<
-  | { ok: true; runtime: ReturnType<typeof createSelectorRuntimeForDevice> }
-  | { ok: false; response: DaemonResponse }
-> {
-  params.consumedSnapshot ??= {};
-  const session = params.sessionStore.get(params.sessionName);
-  if (!session && options.requireSession) {
-    return {
-      ok: false,
-      response: noActiveSessionError(),
-    };
-  }
-  const device = session?.device ?? (await resolveTargetDevice(params.req.flags ?? {}));
-  if (!session) await ensureDeviceReady(device);
-  const unsupported = requireCommandSupported(options.capability, device);
+): Promise<ResolvedSelectorRuntime> {
+  const resolved = await resolveSelectorRuntimeDevice(params, options.requireSession);
+  if (!resolved.ok) return resolved;
+  const unsupported = requireCommandSupported(options.capability, resolved.device);
   if (unsupported) return { ok: false, response: unsupported };
   return {
     ok: true,
     runtime: createSelectorRuntimeForDevice({
       ...params,
-      session,
-      device,
+      session: resolved.session,
+      device: resolved.device,
     }),
   };
 }
 
 function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDeviceBackend {
+  // Which read the backend uses is fixed by WHICH COMMAND CONSTRUCTED THIS RUNTIME, never by
+  // failure, family, environment, or flag. A migrated command arrives with `bound` and its
+  // binding is authoritative — including when the owner advertised no read, which is the complete
+  // required path. An unmigrated selector command arrives without `bound` and keeps the legacy
+  // dispatch until its own descriptor cuts over (ADR 0019 §6 permits the unmigrated sibling's own
+  // path); a migrated command can never reach it.
   const { req, session, device, logPath, sessionName, sessionStore } = params;
   const resolveContextFromFlags: ContextFromFlags =
     params.contextFromFlags ??
     ((flags, appBundleId, traceLogPath) =>
       contextFromFlags(logPath ?? '', flags, appBundleId, traceLogPath));
-  // A migrated command's binding is authoritative, including when it reports no live read;
-  // an unmigrated command keeps the legacy dispatch until its own descriptor cuts over.
-  const readTextAtPoint = params.operations
-    ? params.operations.readTextAtPoint
+  const readTextAtPoint = params.bound
+    ? params.bound.readText
     : legacyDispatchReadTextAtPoint({
         device,
         flags: req.flags,
@@ -129,7 +177,7 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
     req,
     consumedSnapshot: params.consumedSnapshot,
     logPath,
-    captureData: params.operations?.captureSnapshot,
+    capture: params.bound?.capture,
   });
   return {
     platform: publicPlatformString(device),
@@ -158,13 +206,13 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
     },
     readText: async (_context, node: SnapshotNode) => ({
       text: await readTextForNode({
+        readTextAtPoint,
         device,
         node,
         flags: req.flags,
         appBundleId: session?.appBundleId,
         traceOutPath: session?.trace?.outPath,
         surface: session?.surface,
-        readTextAtPoint,
         contextFromFlags: resolveContextFromFlags,
       }),
     }),

@@ -521,13 +521,18 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
       routeNames: ['WEB_QUERY_COMMANDS_WITH_GET', 'HARMONYOS_GET_SUPPORT'],
     },
     runtimeTypeNames: ['ElementTextRuntimeOperations', 'SnapshotRuntimeOperations'],
-    operations: { names: ['captureSnapshot', 'readTextAtPoint'] },
+    operations: {
+      names: ['captureSnapshot', 'captureSnapshotWithoutActiveApp', 'readTextAtPoint'],
+    },
     singularExecution: {
       routes: ['dispatchGetViaRuntime'],
-      operations: ['captureSnapshot', 'readTextAtPoint'],
+      operations: ['captureSnapshot', 'captureSnapshotWithoutActiveApp', 'readTextAtPoint'],
+      // `get` executes through the shared selector seam, so the capture owners are the SAME
+      // selectors `snapshot`/`diff` count; only the preferred element read is this unit's own.
       operationOwners: {
-        captureSnapshot: ['selectElementReadOperations'],
-        readTextAtPoint: ['selectElementTextRead'],
+        captureSnapshot: ['selectActiveAppSnapshot'],
+        captureSnapshotWithoutActiveApp: ['selectSnapshotWithoutActiveApp'],
+        readTextAtPoint: ['bindElementRead'],
       },
     },
   },
