@@ -15,6 +15,11 @@ export function buildRuntimeCaptureInput(
     meta?: DaemonRequest['meta'];
     session: SessionState | undefined;
     snapshotScope: string | undefined;
+    /**
+     * Web rect captures request bounds explicitly. Lands here with the selector capture path,
+     * its first consumer; `snapshot`/`diff` pass nothing and are unaffected.
+     */
+    includeRects?: boolean;
   }>,
 ): CaptureSnapshotInput {
   const { flags, logPath, meta, session, snapshotScope } = params;
@@ -37,6 +42,7 @@ export function buildRuntimeCaptureInput(
       raw: flags?.snapshotRaw,
       customActions: flags?.snapshotCustomActions,
       includeHiddenContentHints: flags?.snapshotIncludeHiddenContentHints,
+      includeRects: params.includeRects,
       surface,
     },
     execution: {

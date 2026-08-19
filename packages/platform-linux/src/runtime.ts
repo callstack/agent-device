@@ -95,6 +95,7 @@ export function createLinuxPlatformRuntime(host: PlatformRuntimeHost): PlatformR
                 signal: request.scope.signal,
                 resolveInteractor: host.localInteractors.resolve,
               })
+            : {}),
           ...(facts.operations.readTextAtPoint.available
             ? bindElementTextRuntime({ device: request.device, host: host.elementText })
             : {}),
@@ -140,6 +141,7 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
       }),
       ...screenshotRuntimeOperationFacts({
         capture: device.kind === 'device' ? supported : screenshotKindUnavailable,
+      }),
       // The Linux read is value-first (AXValue/title/description) where the captured tree is
       // label-first, so the desktop row genuinely reads differently from its snapshot text.
       ...elementTextRuntimeOperationFacts({

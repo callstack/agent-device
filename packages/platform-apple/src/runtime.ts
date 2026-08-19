@@ -286,6 +286,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
                 signal: request.scope.signal,
                 resolveInteractor: host.localInteractors.resolve,
               })
+            : {}),
           ...(facts.operations.readTextAtPoint.available
             ? bindElementTextRuntime({ device: request.device, host: host.elementText })
             : {}),
