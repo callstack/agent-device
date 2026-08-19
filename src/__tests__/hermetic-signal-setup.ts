@@ -25,19 +25,21 @@ import { afterAll, afterEach, expect } from 'vitest';
 // reads.
 
 /**
- * Direct children only. A grandchild (a server started through a shell or
- * `npx` wrapper) is not tracked, so signalling its pid is refused even though
- * the test legitimately owns it; signal the direct child, or its process group
- * via the negative pid, or mock the seam.
+ * Direct, *live* children only.
  *
- * Synchronous spawns (`spawnSync`, `execFileSync`) are deliberately not
- * remembered: they have already exited by the time the call returns, so
- * remembering them would license a signal to whatever inherits that pid next —
- * the very hazard this file closes. Asynchronous children are remembered for
- * the worker's lifetime rather than evicted on exit, because tests legitimately
- * signal a child they have already reaped (idempotent cleanup); with
- * `isolate: true` a worker runs one file, so the set stays small and
- * short-lived.
+ * A grandchild (a server started through a shell or `npx` wrapper) is not
+ * tracked, so signalling its pid is refused even though the test legitimately
+ * owns it; signal the direct child, or its process group via the negative pid,
+ * or mock the seam.
+ *
+ * Authority ends when the child is reaped: a pid is only ever a claim on a slot
+ * in the host's process table, and the kernel hands that slot to someone else
+ * once it is free. So synchronous spawns (`spawnSync`, `execFileSync`) are never
+ * remembered — they have already exited when the call returns — and async
+ * children are dropped on `exit`. Cleanup that signals a child must gate on
+ * `isProcessAlive` (as `stopProcess` in `client-metro.test.ts` already does);
+ * "I spawned this pid once" is not ownership of whatever holds it now, which is
+ * the exact hazard this file exists to close.
  */
 const ownPids = new Set<number>([process.pid]);
 
@@ -52,8 +54,14 @@ function record(what: string): void {
 }
 
 function rememberChild(child: unknown): void {
-  const pid = (child as { pid?: unknown } | null)?.pid;
-  if (typeof pid === 'number') ownPids.add(pid);
+  const handle = child as { pid?: unknown; once?: (event: string, cb: () => void) => void } | null;
+  const pid = handle?.pid;
+  if (typeof pid !== 'number') return;
+  ownPids.add(pid);
+  // Both events are attached because a child that is never spawned at all
+  // ('error') emits close without exit.
+  handle?.once?.('exit', () => ownPids.delete(pid));
+  handle?.once?.('close', () => ownPids.delete(pid));
 }
 
 function killBinaryName(command: unknown): string | undefined {
@@ -85,9 +93,22 @@ function wrapSpawner<T extends (...args: never[]) => unknown>(real: T, remember:
     if (remember) rememberChild(child);
     return child;
   }) as unknown as T;
-  // `util.promisify(execFile)` resolves through the custom-promisify symbol.
-  const custom = (real as unknown as Record<symbol, unknown>)[util.promisify.custom];
-  if (custom) Object.defineProperty(wrapped, util.promisify.custom, { value: custom });
+  // `util.promisify(execFile)` does not call the function at all: it resolves
+  // through the custom-promisify symbol, so copying the original across would
+  // hand every promisified caller an unguarded execFile. Wrap that path too.
+  const custom = (real as unknown as Record<symbol, unknown>)[util.promisify.custom] as
+    | ((...args: unknown[]) => unknown)
+    | undefined;
+  if (custom) {
+    const wrappedCustom = (...args: unknown[]) => {
+      const refusal = refuseSpawnedKill(args[0], args[1]);
+      if (refusal) return Promise.reject(refusal);
+      const promise = custom(...args);
+      if (remember) rememberChild((promise as { child?: unknown } | null)?.child);
+      return promise;
+    };
+    Object.defineProperty(wrapped, util.promisify.custom, { value: wrappedCustom });
+  }
   return wrapped;
 }
 
@@ -138,3 +159,12 @@ function failOnRefusedSignals(scope: string): void {
 
 afterEach(() => failOnRefusedSignals('This test'));
 afterAll(() => failOnRefusedSignals('This file'));
+
+/**
+ * Takes the pending refusals so a test can assert on them without the hooks
+ * above failing it. Only `hermetic-signal-setup.test.ts`, which drives the
+ * guard's own refusal paths on purpose, should call this.
+ */
+export function drainRefusedWritesForTest(): string[] {
+  return refused.splice(0);
+}
