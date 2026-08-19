@@ -7,6 +7,7 @@
 
 import fc from 'fast-check';
 import { arbitraryForTarget } from './arbitraries.ts';
+import { validationArbitraryFor } from './validation-arbitraries.ts';
 import { type CaseRunner, createCaseRunner } from './execute.ts';
 import type { FuzzFailure } from './invariant.ts';
 import type { FuzzTarget } from './target-types.ts';
@@ -68,6 +69,16 @@ export async function generateAndCheck(
   }
 }
 
+/**
+ * Validation targets carry their own expectation-encoding generators; splicing hazards into an
+ * envelope would corrupt the envelope rather than the payload. They are resolved here rather
+ * than inside `arbitraryForTarget` so the corpus-replay unit file — which only ever samples the
+ * classic targets — does not pull the CLI schema registry into its instrumented worker (#1824).
+ */
+function casesFor(target: FuzzTarget): fc.Arbitrary<string> {
+  return validationArbitraryFor(target.name) ?? arbitraryForTarget(target);
+}
+
 /** The generated half of a run: fast-check picks the inputs and shrinks any counterexample. */
 async function checkGenerated(
   target: FuzzTarget,
@@ -76,7 +87,7 @@ async function checkGenerated(
 ): Promise<GeneratedRun> {
   let cases = target.seeds.length;
   const details = await fc.check(
-    fc.asyncProperty(arbitraryForTarget(target), async (input) => {
+    fc.asyncProperty(casesFor(target), async (input) => {
       cases += 1;
       return (await runner.run(input)) === null;
     }),

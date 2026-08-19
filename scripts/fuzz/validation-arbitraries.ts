@@ -17,6 +17,7 @@ import {
   type FlagDefinition,
 } from '../../src/cli-schema/command-schema.ts';
 import { isFlagSupportedForCommand } from '../../src/cli-schema/option-schema.ts';
+import type { FuzzTargetName } from './target-types.ts';
 import { encodeValidationCase, type ValidationCase } from './validation-case.ts';
 
 const REJECT = { outcome: 'reject', code: 'INVALID_ARGS' } as const;
@@ -460,3 +461,10 @@ export const maestroValidationArb: fc.Arbitrary<string> = fc
       expect: REJECT,
     });
   });
+
+/** The generator for a validation target, or `undefined` for the classic targets. */
+export function validationArbitraryFor(target: FuzzTargetName): fc.Arbitrary<string> | undefined {
+  if (target === 'cli-validation') return cliValidationArb;
+  if (target === 'maestro-validation') return maestroValidationArb;
+  return undefined;
+}
