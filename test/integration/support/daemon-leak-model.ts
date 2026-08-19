@@ -88,23 +88,31 @@ export type OwnedProcess = {
   reasons: OwnershipReason[];
 };
 
-export type DaemonLeakObservation = {
+export type NonEmpty<T> = readonly [T, ...T[]];
+
+/**
+ * The phase and the identity it needs, as one shape. An `after-close`
+ * checkpoint that cannot name the sessions that closed cannot tell their
+ * unfinalized capture handles from another session's legitimately live one, so
+ * it would accept every open handle and certify nothing. The identity is
+ * therefore part of the phase rather than an option a caller may omit, and the
+ * typechecker refuses the empty case.
+ */
+export type DaemonLeakPhaseSelection =
+  | { phase: 'after-shutdown' }
+  | { phase: 'after-close'; closedSessions: NonEmpty<string> };
+
+export type DaemonLeakObservationBase = {
   stateDir: string;
   daemonPids: readonly number[];
   livePids: readonly number[];
-  phase: DaemonLeakPhase;
   processes: readonly HostProcess[];
   /** Pids never treated as owned: the observer and its own ancestors. */
   excludedPids: readonly number[];
-  /**
-   * Session directory names closed at this checkpoint. Their capture handles
-   * must be finalized; other sessions may still hold live ones. A checkpoint
-   * that cannot say which session closed cannot tell an unfinalized handle from
-   * a legitimately live one, so `after-close` callers always pass them.
-   */
-  closedSessions: readonly string[];
   stateEntries: readonly StateEntry[];
 };
+
+export type DaemonLeakObservation = DaemonLeakPhaseSelection & DaemonLeakObservationBase;
 
 export type DaemonLeakSnapshot = {
   stateDir: string;
@@ -150,7 +158,7 @@ export function evaluateDaemonLeaks(observation: DaemonLeakObservation): DaemonL
           classifyStateEntry(entry, {
             phase: observation.phase,
             daemonLegitimatelyAlive,
-            closedSessions: observation.closedSessions,
+            closedSessions: closedSessionsOf(observation),
           }) === 'stray',
       )
       .map((entry) => entry.path)
@@ -256,6 +264,10 @@ function classifyCaptureEntry(entry: StateEntry, context: StateEntryContext): 'e
   if (!owningSessionGone) return 'expected';
   if (!CAPTURE_DESCRIPTOR_ENTRY.test(entry.path)) return 'stray';
   return entry.descriptorLifecycle === 'completed' ? 'expected' : 'stray';
+}
+
+function closedSessionsOf(observation: DaemonLeakObservation): readonly string[] {
+  return observation.phase === 'after-close' ? observation.closedSessions : [];
 }
 
 function sessionDirectoryOf(entryPath: string): string | undefined {

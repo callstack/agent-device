@@ -4,8 +4,10 @@ import {
   formatDaemonLeakReport,
   hasDaemonLeaks,
   type DaemonLeakObservation,
-  type DaemonLeakPhase,
+  type DaemonLeakObservationBase,
+  type DaemonLeakPhaseSelection,
   type HostProcess,
+  type NonEmpty,
   type StateEntry,
 } from './daemon-leak-model.ts';
 
@@ -22,18 +24,33 @@ function proc(overrides: Partial<HostProcess> & Pick<HostProcess, 'pid'>): HostP
   return { ppid: 1, pgid: overrides.pid, command: 'unrelated', env: '', ...overrides };
 }
 
-function observe(overrides: Partial<DaemonLeakObservation> = {}): DaemonLeakObservation {
+// The phase and its identity arrive together: `after-close` cannot be requested
+// without naming the sessions that closed, so these helpers cannot construct the
+// vacuous checkpoint either.
+function observe(
+  overrides: Partial<DaemonLeakObservationBase> = {},
+  selection: DaemonLeakPhaseSelection = { phase: 'after-shutdown' },
+): DaemonLeakObservation {
   return {
     stateDir: STATE_DIR,
     daemonPids: [DAEMON_PID],
     livePids: [],
-    phase: 'after-shutdown',
     processes: [],
     excludedPids: [OBSERVER_PID],
-    closedSessions: [],
     stateEntries: [],
     ...overrides,
+    ...selection,
   };
+}
+
+function observeAfterClose(
+  closedSessions: NonEmpty<string>,
+  overrides: Partial<DaemonLeakObservationBase> = {},
+): DaemonLeakObservation {
+  return observe(
+    { livePids: [DAEMON_PID], ...overrides },
+    { phase: 'after-close', closedSessions },
+  );
 }
 
 function file(entryPath: string, descriptorLifecycle?: string): StateEntry {
@@ -129,9 +146,7 @@ describe('surviving-daemon rule', () => {
 
   test('a live daemon is expected while a session merely closed', () => {
     const snapshot = evaluateDaemonLeaks(
-      observe({
-        phase: 'after-close',
-        livePids: [DAEMON_PID],
+      observeAfterClose(['closed-one'], {
         stateEntries: [file('daemon.json'), file('daemon.lock')],
       }),
     );
@@ -141,51 +156,59 @@ describe('surviving-daemon rule', () => {
 });
 
 describe('state-dir residue rules', () => {
-  test.each<[string, StateEntry, DaemonLeakPhase, 'expected' | 'stray']>([
-    ['session event log', file('sessions/default/events.ndjson'), 'after-shutdown', 'expected'],
-    ['request diagnostics', file('sessions/d/requests/abc.ndjson'), 'after-shutdown', 'expected'],
-    ['shutdown report', file('daemon-shutdown.json'), 'after-shutdown', 'expected'],
-    ['torn publish temporary', file('device-claims/a.json.55.tmp'), 'after-shutdown', 'stray'],
+  const AFTER_SHUTDOWN: DaemonLeakPhaseSelection = { phase: 'after-shutdown' };
+  // A different session from the one this entry belongs to, so the row proves the
+  // phase rule rather than the closed-session rule.
+  const AFTER_CLOSE: DaemonLeakPhaseSelection = {
+    phase: 'after-close',
+    closedSessions: ['closed-one'],
+  };
+
+  test.each<[string, StateEntry, DaemonLeakPhaseSelection, 'expected' | 'stray']>([
+    ['session event log', file('sessions/default/events.ndjson'), AFTER_SHUTDOWN, 'expected'],
+    ['request diagnostics', file('sessions/d/requests/abc.ndjson'), AFTER_SHUTDOWN, 'expected'],
+    ['shutdown report', file('daemon-shutdown.json'), AFTER_SHUTDOWN, 'expected'],
+    ['torn publish temporary', file('device-claims/a.json.55.tmp'), AFTER_SHUTDOWN, 'stray'],
     [
       'managed tool download',
       file('tools/agent-browser/0.27.1/dl.tmp'),
-      'after-shutdown',
+      AFTER_SHUTDOWN,
       'expected',
     ],
     [
       'unswept artifact scaffold',
       { path: 'sessions/d/artifacts/pending/', kind: 'empty-directory' },
-      'after-shutdown',
+      AFTER_SHUTDOWN,
       'stray',
     ],
     [
       'unswept session scaffold',
       { path: 'sessions/leaked/requests/', kind: 'empty-directory' },
-      'after-shutdown',
+      AFTER_SHUTDOWN,
       'stray',
     ],
-    ['unknown artifact', file('sessions/d/mystery.bin'), 'after-shutdown', 'stray'],
+    ['unknown artifact', file('sessions/d/mystery.bin'), AFTER_SHUTDOWN, 'stray'],
     [
       'open capture descriptor',
       file('sessions/d/screen-recording.resource.json', 'open'),
-      'after-shutdown',
+      AFTER_SHUTDOWN,
       'stray',
     ],
     [
       'completed capture descriptor',
       file('sessions/d/screen-recording.resource.json', 'completed'),
-      'after-shutdown',
+      AFTER_SHUTDOWN,
       'expected',
     ],
     [
       "another session's open capture during close",
       file('sessions/other/screen-recording.resource.json', 'open'),
-      'after-close',
+      AFTER_CLOSE,
       'expected',
     ],
-    ['legacy app-log marker', file('sessions/d/app-log.pid'), 'after-shutdown', 'stray'],
-  ])('%s is %s at %s', (_name, entry, phase, verdict) => {
-    const snapshot = evaluateDaemonLeaks(observe({ phase, stateEntries: [entry] }));
+    ['legacy app-log marker', file('sessions/d/app-log.pid'), AFTER_SHUTDOWN, 'stray'],
+  ])('%s is %s', (_name, entry, selection, verdict) => {
+    const snapshot = evaluateDaemonLeaks(observe({ stateEntries: [entry] }, selection));
 
     expect(snapshot.strayStateEntries).toEqual(verdict === 'stray' ? [entry.path] : []);
   });
@@ -210,12 +233,7 @@ describe('closed-session capture handles', () => {
   const closedSessionCapture = (lifecycle: string) =>
     file('sessions/closed-one/screen-recording.resource.json', lifecycle);
   const afterClose = (stateEntries: StateEntry[]): DaemonLeakObservation =>
-    observe({
-      phase: 'after-close',
-      livePids: [DAEMON_PID],
-      closedSessions: ['closed-one'],
-      stateEntries,
-    });
+    observeAfterClose(['closed-one'], { stateEntries });
 
   test('the closed session must have finalized its capture handle', () => {
     const snapshot = evaluateDaemonLeaks(afterClose([closedSessionCapture('open')]));

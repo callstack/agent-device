@@ -13,11 +13,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runCmd } from '../../../src/utils/exec.ts';
 import { isProcessAlive } from '../../../src/utils/host-process.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   evaluateDaemonLeaks,
   formatDaemonLeakReport,
   hasDaemonLeaks,
-  type DaemonLeakPhase,
+  type DaemonLeakPhaseSelection,
   type DaemonLeakSnapshot,
   type HostProcess,
   type StateEntry,
@@ -30,20 +31,20 @@ const SETTLE_POLL_MS = 250;
 // third-party `ps` (Homebrew, procps) cannot change the flag semantics.
 const HOST_PS_COMMAND = process.platform === 'win32' ? 'ps' : '/bin/ps';
 
-export type { DaemonLeakPhase } from './daemon-leak-model.ts';
-
-export type DaemonLeakOracleOptions = {
+/**
+ * `phase` carries the identity that phase needs: `after-close` cannot be
+ * requested without naming at least one closed session (see
+ * DaemonLeakPhaseSelection), so the vacuous checkpoint that accepts every open
+ * capture handle is not expressible. `after-shutdown` takes nothing extra.
+ *
+ * Closed sessions are directory names, not paths — the basename of
+ * `sessionStore.resolveSessionDir(name)`, or of the `sessionStateDir` an
+ * `open`/`close` response reports.
+ */
+export type DaemonLeakOracleOptions = DaemonLeakPhaseSelection & {
   stateDir: string;
   /** Every daemon pid the lane observed for this state dir (from daemon.json). */
   daemonPids: readonly number[];
-  phase: DaemonLeakPhase;
-  /**
-   * Session directory names (not paths) closed at this checkpoint — required at
-   * `after-close`, where only they identify whose capture handle must be
-   * finalized. `sessionStore.resolveSessionDir(name)`'s basename, or the
-   * `sessionStateDir` an `open`/`close` response reports.
-   */
-  closedSessions?: readonly string[];
   /**
    * Where sessions live, when that is not `<stateDir>/sessions` — an in-process
    * scenario harness roots its SessionStore directly at its own temp dir.
@@ -61,13 +62,12 @@ async function captureDaemonLeakSnapshot(
   const stateDir = path.resolve(options.stateDir);
   const processes = await listHostProcessesWithGroups();
   return evaluateDaemonLeaks({
+    ...phaseSelectionOf(options),
     stateDir,
     daemonPids: options.daemonPids,
     livePids: options.daemonPids.filter((pid) => isProcessAlive(pid)),
-    phase: options.phase,
     processes,
     excludedPids: [...ancestorsOf(process.pid, processes)],
-    closedSessions: options.closedSessions ?? [],
     stateEntries: readStateEntries(stateDir, options.sessionsDir),
   });
 }
@@ -92,6 +92,12 @@ async function settleDaemonLeakSnapshot(
 export async function assertNoDaemonLeaks(options: DaemonLeakOracleOptions): Promise<void> {
   const snapshot = await settleDaemonLeakSnapshot(options);
   if (hasDaemonLeaks(snapshot)) throw new Error(formatDaemonLeakReport(snapshot));
+}
+
+function phaseSelectionOf(options: DaemonLeakOracleOptions): DaemonLeakPhaseSelection {
+  return options.phase === 'after-close'
+    ? { phase: 'after-close', closedSessions: options.closedSessions }
+    : { phase: 'after-shutdown' };
 }
 
 // Files, plus empty directories as their own entries (an unswept session
@@ -207,25 +213,47 @@ function ancestorsOf(pid: number, processes: readonly HostProcess[]): Set<number
   return chain;
 }
 
+/**
+ * Parses the standalone CLI's argv into oracle options, refusing the invocation
+ * the type system already refuses in code: `--phase after-close` without a
+ * `--closed-session` would accept every open capture handle and report clean.
+ */
+function parseDaemonLeakOracleArgs(argv: readonly string[]): DaemonLeakOracleOptions {
+  const readFlag = (name: string): string[] =>
+    argv.flatMap((arg, index) => (arg === name && argv[index + 1] ? [argv[index + 1]!] : []));
+  const stateDir = readFlag('--state-dir')[0];
+  if (!stateDir) {
+    throw new AppError('INVALID_ARGS', 'daemon leak oracle: --state-dir is required');
+  }
+  const common = {
+    stateDir,
+    daemonPids: readFlag('--daemon-pid').map(Number),
+    ...(readFlag('--sessions-dir')[0] ? { sessionsDir: readFlag('--sessions-dir')[0] } : {}),
+    settleMs: Number(readFlag('--settle-ms')[0] ?? DEFAULT_SETTLE_MS),
+  };
+  const phase = readFlag('--phase')[0] ?? 'after-shutdown';
+  if (phase !== 'after-close') return { ...common, phase: 'after-shutdown' };
+  const [first, ...rest] = readFlag('--closed-session');
+  if (!first) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'daemon leak oracle: --phase after-close requires at least one --closed-session',
+      {
+        hint: 'Pass the closed session directory name (the basename of the session state dir). Without it the checkpoint would accept every unfinalized capture handle and report clean.',
+      },
+    );
+  }
+  return { ...common, phase: 'after-close', closedSessions: [first, ...rest] };
+}
+
 // Standalone use (red-proofs, manual triage):
 //   node --experimental-strip-types test/integration/support/daemon-leak-oracle.ts \
 //     --state-dir <dir> --daemon-pid <pid> [--daemon-pid <pid>…] \
-//     [--phase after-shutdown|after-close] [--closed-session <dir-name>…]
-//     [--settle-ms <n>]
+//     [--phase after-shutdown | --phase after-close --closed-session <dir-name>…]
+//     [--sessions-dir <dir>] [--settle-ms <n>]
 // Prints the report and exits 1 on a leak.
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const args = process.argv.slice(2);
-  const readFlag = (name: string): string[] =>
-    args.flatMap((arg, index) => (arg === name && args[index + 1] ? [args[index + 1]!] : []));
-  const stateDir = readFlag('--state-dir')[0];
-  if (!stateDir) throw new Error('daemon leak oracle: --state-dir is required');
-  const snapshot = await settleDaemonLeakSnapshot({
-    stateDir,
-    daemonPids: readFlag('--daemon-pid').map(Number),
-    phase: (readFlag('--phase')[0] as DaemonLeakPhase | undefined) ?? 'after-shutdown',
-    closedSessions: readFlag('--closed-session'),
-    settleMs: Number(readFlag('--settle-ms')[0] ?? DEFAULT_SETTLE_MS),
-  });
+  const snapshot = await settleDaemonLeakSnapshot(parseDaemonLeakOracleArgs(process.argv.slice(2)));
   process.stdout.write(`${formatDaemonLeakReport(snapshot)}\n`);
   process.exitCode = hasDaemonLeaks(snapshot) ? 1 : 0;
 }
