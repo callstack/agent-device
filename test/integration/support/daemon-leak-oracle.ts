@@ -3,11 +3,11 @@
 // `daemon-leak-model.ts` (which documents them and is where they are tested).
 //
 // What each caller actually exercises depends on what its daemon did. The three
-// real-subprocess daemon lanes run `session list`/`close` with no device,
-// simulator or browser, so their daemons own no children and the process arm
-// asserts an empty set; what they guard is the surviving-daemon check and the
-// state-dir residue. The #1109/#1324 leak shapes are guarded by the model's
-// fixture test and reproduced by hand against the pre-fix commits — see the PR.
+// device-free daemon lanes guard surviving-daemon and state-dir residue rules.
+// The Web smoke owns a real managed agent-browser + Chrome fleet, so its
+// post-shutdown checkpoint makes the #1109 process arm fail on the shipped
+// route. The model fixtures pin every ownership shape, including #1324's
+// reparented recorder; both historical failures also have manual red-proofs.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
