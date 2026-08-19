@@ -300,14 +300,14 @@ function assertSelectorFlagMatchesPlatform(selector: DeviceSelector): void {
     throw new AppError(
       'INVALID_ARGS',
       `--udid selects Apple devices, but this request selected --platform ${platform}.`,
-      { hint: `Use --serial ${selector.udid} to select a ${platform} device by serial.` },
+      { hint: `Use --serial ${selector.udid} for ${platform} devices.` },
     );
   }
   if (selector.serial && isApplePlatform(platform)) {
     throw new AppError(
       'INVALID_ARGS',
       `--serial selects Android and HarmonyOS devices, but this request selected --platform ${platform}.`,
-      { hint: `Use --udid ${selector.serial} to select an Apple device by UDID.` },
+      { hint: `Use --udid ${selector.serial} for Apple devices.` },
     );
   }
 }

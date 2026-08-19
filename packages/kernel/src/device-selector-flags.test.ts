@@ -30,14 +30,17 @@ test('--udid with an Android platform is rejected as a flag mistake, naming --se
   const error = await resolveError([ANDROID], { platform: 'android', udid: 'emulator-5580' });
   assert.equal(error.code, 'INVALID_ARGS');
   assert.match(error.message, /--udid selects Apple devices/);
-  assert.match(String(error.details?.hint ?? ''), /--serial emulator-5580/);
+  assert.match(
+    String(error.details?.hint ?? ''),
+    /Use --serial emulator-5580 for android devices\./,
+  );
 });
 
 test('--serial with an Apple platform is rejected as a flag mistake, naming --udid', async () => {
   const error = await resolveError([APPLE], { platform: 'ios', serial: 'SIM-001' });
   assert.equal(error.code, 'INVALID_ARGS');
   assert.match(error.message, /--serial selects Android and HarmonyOS devices/);
-  assert.match(String(error.details?.hint ?? ''), /--udid SIM-001/);
+  assert.match(String(error.details?.hint ?? ''), /Use --udid SIM-001 for Apple devices\./);
 });
 
 test('matching selector/platform pairs still resolve', async () => {
