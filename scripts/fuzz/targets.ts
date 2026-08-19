@@ -124,6 +124,31 @@ export const FUZZ_TARGETS: readonly FuzzTarget[] = [
         mutation: 'missing-flag-value',
         expect: { outcome: 'reject', code: 'INVALID_ARGS' },
       }),
+      // Two command-validation rules whose entire input space is a handful of strings: `batch` is
+      // the only command with a step-source rule, and `backMode` the only flag key reachable
+      // through two tokens. Generating them re-executed ~15 payloads thousands of times a night
+      // for no added reach, so they are pinned here and run verbatim once per run, before any
+      // generated case. They are seed regressions, not generated reach — #1781's table says so.
+      encodeValidationCase({
+        payload: ['batch'],
+        mutation: 'batch-step-source-none',
+        expect: { outcome: 'reject', code: 'INVALID_ARGS' },
+      }),
+      encodeValidationCase({
+        payload: ['batch', '--steps=[]', '--steps-file=steps.json'],
+        mutation: 'batch-step-source-both',
+        expect: { outcome: 'reject', code: 'INVALID_ARGS' },
+      }),
+      encodeValidationCase({
+        payload: ['back', '--in-app', '--system'],
+        mutation: 'conflicting-flag-tokens',
+        expect: { outcome: 'reject', code: 'INVALID_ARGS' },
+      }),
+      encodeValidationCase({
+        payload: ['back', '--system', '--in-app'],
+        mutation: 'conflicting-flag-tokens',
+        expect: { outcome: 'reject', code: 'INVALID_ARGS' },
+      }),
     ],
   },
   {

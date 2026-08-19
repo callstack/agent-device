@@ -20,7 +20,6 @@ import { isFlagSupportedForCommand } from '../../src/cli-schema/option-schema.ts
 import type { FuzzTargetName } from './target-types.ts';
 import { encodeValidationCase, type ValidationCase } from './validation-case.ts';
 
-const REJECT = { outcome: 'reject', code: 'INVALID_ARGS' } as const;
 const ACCEPT = { outcome: 'accept' } as const;
 
 // Benign, occasionally hostile positional/flag values. No leading '-': a dash token would be
@@ -77,6 +76,18 @@ function memoize<T>(build: () => T): () => T {
   return () => (value ??= build());
 }
 
+let surfaceBuilds = 0;
+
+/**
+ * How many times the schema-derived surface has been built. It must still be 0 after importing
+ * this module: an eager build cost every harness path — `--input-file` and the classic targets
+ * included — the whole command-metadata registry, and timed out the coverage-instrumented
+ * promotion test. Asserted in validation-arbitraries.test.ts, which is the actual #1824 guard.
+ */
+export function validationSurfaceBuildCount(): number {
+  return surfaceBuilds;
+}
+
 const collidingNames = memoize(() => collidingFlagNames(getFlagDefinitions()));
 
 /** Flag definitions with a single unambiguous long name, excluding the special keys. */
@@ -92,8 +103,9 @@ function flagToken(definition: FlagDefinition): string {
   return definition.names.find((name) => name.startsWith('--') && !collidingNames().has(name))!;
 }
 
-const cliSurfaces = memoize<readonly CliCommandSurface[]>(() =>
-  listCliCommandNames()
+const cliSurfaces = memoize<readonly CliCommandSurface[]>(() => {
+  surfaceBuilds += 1;
+  return listCliCommandNames()
     .filter((name) => !EXCLUDED_CLI_COMMANDS.has(name))
     .map((name) => {
       const schema = getCliCommandSchema(name);
@@ -104,8 +116,8 @@ const cliSurfaces = memoize<readonly CliCommandSurface[]>(() =>
           isFlagSupportedForCommand(definition.key, name),
         ),
       };
-    }),
-);
+    });
+});
 
 /** Inclusive bounds for a numeric flag, defaulted when the schema leaves an end open. */
 function numericBounds(definition: FlagDefinition): { low: number; high: number } {
@@ -160,9 +172,24 @@ function validArgv(base: CliBase): string[] {
   ];
 }
 
+/**
+ * Which parser layer refuses the planted violation. `token-scan` violations are refused inside
+ * `parseRawArgs`/`parseFlagValue` while argv is still being scanned — the layer the classic
+ * `cli-args` target already reaches; `command-validation` violations survive the scan and are
+ * refused by `finalizeParsedArgs` (arity, per-command flag support, command identity), the layer
+ * B2 exists to reach. Asserted per class in validation-arbitraries.test.ts, so the lane's real
+ * reach stays disclosed rather than implied.
+ */
+type CliMutationLayer = 'token-scan' | 'command-validation';
+
 type CliMutation = {
   name: string;
-  apply: (base: CliBase) => ValidationCase | null;
+  layer: CliMutationLayer;
+  /** Relative share of the mutated budget; command-validation classes are weighted up. */
+  weight: number;
+  /** The `AppError.code` this class must be refused with. */
+  code: string;
+  apply: (base: CliBase) => Omit<ValidationCase, 'expect'> | null;
 };
 
 const isValueFlag = (definition: FlagDefinition) =>
@@ -182,6 +209,9 @@ const CLI_MUTATIONS: readonly CliMutation[] = [
   {
     // #1433: a bounded command must refuse extra positionals instead of swallowing them.
     name: 'excess-positional',
+    layer: 'command-validation',
+    weight: 6,
+    code: 'INVALID_ARGS',
     apply: (base) => {
       if (base.surface.maxPositionals === null) return null;
       const filler = SAFE_VALUES[base.salt % SAFE_VALUES.length] || 'extra';
@@ -192,12 +222,14 @@ const CLI_MUTATIONS: readonly CliMutation[] = [
       return {
         payload: [base.surface.name, ...positionals],
         mutation: 'excess-positional',
-        expect: REJECT,
       };
     },
   },
   {
     name: 'unsupported-flag',
+    layer: 'command-validation',
+    weight: 6,
+    code: 'INVALID_ARGS',
     apply: (base) => {
       const foreign = safeFlagPool().filter(
         (definition) => !isFlagSupportedForCommand(definition.key, base.surface.name),
@@ -207,12 +239,14 @@ const CLI_MUTATIONS: readonly CliMutation[] = [
       return {
         payload: [...validArgv(base), renderFlag(definition, base.salt)],
         mutation: 'unsupported-flag',
-        expect: REJECT,
       };
     },
   },
   {
     name: 'bad-enum-value',
+    layer: 'token-scan',
+    weight: 1,
+    code: 'INVALID_ARGS',
     apply: (base) => {
       const enums = base.surface.flags.filter((definition) => definition.type === 'enum');
       const definition = enums[base.salt % Math.max(enums.length, 1)];
@@ -220,12 +254,14 @@ const CLI_MUTATIONS: readonly CliMutation[] = [
       return {
         payload: [base.surface.name, `${flagToken(definition)}=bogus-${base.salt % 7}`],
         mutation: 'bad-enum-value',
-        expect: REJECT,
       };
     },
   },
   {
     name: 'int-out-of-range',
+    layer: 'token-scan',
+    weight: 1,
+    code: 'INVALID_ARGS',
     apply: (base) => {
       const bounded = base.surface.flags.filter(
         (definition) =>
@@ -239,12 +275,14 @@ const CLI_MUTATIONS: readonly CliMutation[] = [
       return {
         payload: [base.surface.name, `${flagToken(definition)}=${value}`],
         mutation: 'int-out-of-range',
-        expect: REJECT,
       };
     },
   },
   {
     name: 'missing-flag-value',
+    layer: 'token-scan',
+    weight: 1,
+    code: 'INVALID_ARGS',
     apply: (base) => {
       const valued = base.surface.flags.filter(isValueFlag);
       const definition = valued[base.salt % Math.max(valued.length, 1)];
@@ -252,12 +290,14 @@ const CLI_MUTATIONS: readonly CliMutation[] = [
       return {
         payload: [base.surface.name, flagToken(definition)],
         mutation: 'missing-flag-value',
-        expect: REJECT,
       };
     },
   },
   {
     name: 'boolean-with-value',
+    layer: 'token-scan',
+    weight: 1,
+    code: 'INVALID_ARGS',
     apply: (base) => {
       const booleans = base.surface.flags.filter(
         (definition) => definition.type === 'boolean' || definition.setValue !== undefined,
@@ -267,33 +307,19 @@ const CLI_MUTATIONS: readonly CliMutation[] = [
       return {
         payload: [...validArgv(base), `${flagToken(definition)}=true`],
         mutation: 'boolean-with-value',
-        expect: REJECT,
       };
     },
   },
   {
     name: 'unknown-command',
+    layer: 'command-validation',
+    weight: 3,
+    code: 'INVALID_ARGS',
     apply: (base) => {
       const names = fakeCommands();
       const name = names[base.salt % names.length]!;
-      return { payload: [name, ...base.positionals], mutation: 'unknown-command', expect: REJECT };
+      return { payload: [name, ...base.positionals], mutation: 'unknown-command' };
     },
-  },
-  {
-    name: 'batch-step-source',
-    apply: (base) => ({
-      payload: base.salt % 2 === 0 ? ['batch'] : ['batch', '--steps=[]', '--steps-file=steps.json'],
-      mutation: 'batch-step-source',
-      expect: REJECT,
-    }),
-  },
-  {
-    name: 'back-mode-conflict',
-    apply: () => ({
-      payload: ['back', '--in-app', '--system'],
-      mutation: 'back-mode-conflict',
-      expect: REJECT,
-    }),
   },
 ];
 
@@ -319,21 +345,34 @@ const cliBaseArb: fc.Arbitrary<CliBase> = fc
     return { surface, positionals: positionals.slice(0, maxPositionals), flags, salt };
   });
 
-/** Encoded CLI validation cases: ~1/3 valid (expect accept), the rest planted violations. */
+/** Mutation indices expanded by weight, so command-validation classes take the larger share. */
+const weightedCliMutations = memoize(() =>
+  CLI_MUTATIONS.flatMap((mutation, index) => Array.from({ length: mutation.weight }, () => index)),
+);
+
+function validCase(base: CliBase): string {
+  return encodeValidationCase({ payload: validArgv(base), mutation: 'valid', expect: ACCEPT });
+}
+
+/** Encoded CLI validation cases: ~1/4 valid (expect accept), the rest planted violations. */
 export const cliValidationArb: fc.Arbitrary<string> = fc
   .record({ base: cliBaseArb, mutationIndex: fc.nat() })
   .map(({ base, mutationIndex }) => {
-    // A third of the space stays valid so a false rejection is discoverable too.
-    if (mutationIndex % (CLI_MUTATIONS.length + 4) >= CLI_MUTATIONS.length) {
-      return encodeValidationCase({ payload: validArgv(base), mutation: 'valid', expect: ACCEPT });
-    }
+    const weighted = weightedCliMutations();
+    // A quarter of the space stays valid so a false rejection is discoverable too.
+    if (mutationIndex % (weighted.length + 6) >= weighted.length) return validCase(base);
     // Rotate to the first applicable mutation so the map stays total.
-    for (let step = 0; step < CLI_MUTATIONS.length; step += 1) {
-      const mutation = CLI_MUTATIONS[(mutationIndex + step) % CLI_MUTATIONS.length]!;
-      const validationCase = mutation.apply(base);
-      if (validationCase) return encodeValidationCase(validationCase);
+    for (let step = 0; step < weighted.length; step += 1) {
+      const mutation = CLI_MUTATIONS[weighted[(mutationIndex + step) % weighted.length]!]!;
+      const built = mutation.apply(base);
+      if (built) {
+        return encodeValidationCase({
+          ...built,
+          expect: { outcome: 'reject', code: mutation.code },
+        });
+      }
     }
-    return encodeValidationCase({ payload: validArgv(base), mutation: 'valid', expect: ACCEPT });
+    return validCase(base);
   });
 
 // ---------------------------------------------------------------------------------------------
@@ -385,13 +424,15 @@ const FAKE_MAESTRO_COMMANDS = [
   'inputTextt',
 ] as const;
 
-type MaestroMutation = { name: string; lines: (salt: number) => string[] };
+/** `code` is per class, like the CLI table: a class whose contract changes moves alone. */
+type MaestroMutation = { name: string; code: string; lines: (salt: number) => string[] };
 
 const MAESTRO_MUTATIONS: readonly MaestroMutation[] = [
   {
     // The B2 headline: an unknown command name must die in command validation, not the
     // YAML tokenizer — mutated names used to be unreachable because the YAML never parsed.
     name: 'unsupported-command',
+    code: 'INVALID_ARGS',
     lines: (salt) => {
       const name = FAKE_MAESTRO_COMMANDS[salt % FAKE_MAESTRO_COMMANDS.length]!;
       return salt % 2 === 0 ? [`- ${name}`] : [`- ${name}: ${yamlText(salt)}`];
@@ -399,6 +440,7 @@ const MAESTRO_MUTATIONS: readonly MaestroMutation[] = [
   },
   {
     name: 'unsupported-field',
+    code: 'INVALID_ARGS',
     lines: (salt) =>
       salt % 2 === 0
         ? ['- tapOn:', `    bogusField: ${yamlText(salt)}`]
@@ -406,15 +448,17 @@ const MAESTRO_MUTATIONS: readonly MaestroMutation[] = [
   },
   {
     name: 'multi-key-command',
+    code: 'INVALID_ARGS',
     lines: (salt) => [`- tapOn: ${yamlText(salt)}`, `  inputText: ${yamlText(salt + 1)}`],
   },
   {
     name: 'missing-required',
+    code: 'INVALID_ARGS',
     lines: (salt) =>
       salt % 2 === 0 ? ['- inputText:'] : ['- extendedWaitUntil:', '    timeout: 500'],
   },
-  { name: 'bad-press-key', lines: () => ['- pressKey: sleep'] },
-  { name: 'scroll-options', lines: () => ['- scroll:', '    direction: UP'] },
+  { name: 'bad-press-key', code: 'INVALID_ARGS', lines: () => ['- pressKey: sleep'] },
+  { name: 'scroll-options', code: 'INVALID_ARGS', lines: () => ['- scroll:', '    direction: UP'] },
 ];
 
 type MaestroBase = { commandPicks: number[]; salt: number; withConfig: boolean };
@@ -452,13 +496,13 @@ export const maestroValidationArb: fc.Arbitrary<string> = fc
       return encodeValidationCase({
         payload: `appId: com.example.app\nbogusKey: 1\n---\n${renderMaestroFlow({ ...base, withConfig: false })}`,
         mutation: 'config-unknown-key',
-        expect: REJECT,
+        expect: { outcome: 'reject', code: 'INVALID_ARGS' },
       });
     }
     return encodeValidationCase({
       payload: renderMaestroFlow(base, mutation.lines(base.salt), insertAt),
       mutation: mutation.name,
-      expect: REJECT,
+      expect: { outcome: 'reject', code: mutation.code },
     });
   });
 

@@ -12,7 +12,7 @@ on:
       fuzz-iterations:
         description: 'Parser fuzz cases per target'
         required: false
-        default: '33000'
+        default: '38000'
       fuzz-seed:
         description: 'Parser fuzz PRNG seed (defaults to the run number)'
         required: false
@@ -35,8 +35,10 @@ jobs:
   # exploring, and anything it catches is appended to the checked-in corpus that the unit
   # lane replays (scripts/fuzz/corpus/regressions.json).
   #
-  # 33,000 cases/target holds the job's wall-clock at the pre-B2 five-target/50k budget
-  # (~2min measured) now that seven targets share it — the budget is flat, not the depth.
+  # 38,000 cases/target holds the job's wall-clock at the pre-B2 five-target/50k budget now that
+  # seven targets share it: measured on a quiet host, 7x38k = 16.5s against 5x50k = 16.6-16.9s.
+  # Chosen by measurement rather than rounding — 33k would have been 2s cheaper but cost the
+  # five untouched targets a third of their depth for no wall-clock reason.
   nightly-parser-fuzz:
     name: Parser Fuzz Lane
     runs-on: ubuntu-latest
@@ -65,7 +67,7 @@ jobs:
       - name: Fuzz parsers
         if: always()
         env:
-          FUZZ_ITERATIONS: ${{ github.event.inputs.fuzz-iterations || '33000' }}
+          FUZZ_ITERATIONS: ${{ github.event.inputs.fuzz-iterations || '38000' }}
           FUZZ_SEED: ${{ github.event.inputs.fuzz-seed || github.run_number }}
         uses: ./.github/actions/run-gate
         with:

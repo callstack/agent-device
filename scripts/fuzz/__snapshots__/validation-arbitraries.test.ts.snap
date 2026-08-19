@@ -2,9 +2,7 @@
 
 exports[`cli-validation generator > exercises every mutation class, including valid accept cases 1`] = `
 [
-  "back-mode-conflict",
   "bad-enum-value",
-  "batch-step-source",
   "boolean-with-value",
   "excess-positional",
   "int-out-of-range",

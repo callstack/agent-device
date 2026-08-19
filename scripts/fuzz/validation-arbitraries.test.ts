@@ -7,13 +7,19 @@
 // violations must surface as validation-layer errors, past the tokenizer.
 
 import fc from 'fast-check';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { checkCase, describeFailure } from './invariant.ts';
 import { getFuzzTarget } from './registry.ts';
 import { decodeValidationCase } from './validation-case.ts';
-import { cliValidationArb, maestroValidationArb } from './validation-arbitraries.ts';
+import {
+  cliValidationArb,
+  maestroValidationArb,
+  validationSurfaceBuildCount,
+} from './validation-arbitraries.ts';
 
-const SAMPLE_SIZE = 500;
+// A mismatch that fires at ~1-in-1000 must not pass here and then phantom nightly: the nightly
+// draws 38,000 cases per target, so this samples 7.9% of it rather than the 1.5% it began at.
+const SAMPLE_SIZE = 3_000;
 const SEED = 1;
 
 const TARGETS = [
@@ -50,7 +56,7 @@ describe.each(TARGETS)('%s generator', (targetName, arbitrary) => {
   });
 });
 
-describe('planted violations surface past the tokenizer', () => {
+describe('planted violations surface where the generator says they do', () => {
   function rejectionMessageFor(targetName: (typeof TARGETS)[number][0], mutation: string): string {
     const arbitrary = targetName === 'cli-validation' ? cliValidationArb : maestroValidationArb;
     const sample = fc.sample(arbitrary, { numRuns: SAMPLE_SIZE, seed: SEED });
@@ -66,20 +72,38 @@ describe('planted violations surface past the tokenizer', () => {
     throw new Error(`expected ${mutation} case to reject: ${JSON.stringify(decoded.payload)}`);
   }
 
-  it('CLI excess positionals die in positional-arity validation (#1433)', () => {
-    expect(rejectionMessageFor('cli-validation', 'excess-positional')).toMatch(
-      /accepts at most \d+ positional argument/,
-    );
+  // The layer each class actually reaches, asserted rather than implied. `command-validation`
+  // classes survive the argv scan and are refused by finalizeParsedArgs — the reach B2 adds.
+  // `token-scan` classes are refused inside parseFlagValue while argv is still being scanned:
+  // the layer the classic `cli-args` target already reaches. They stay for the error-code
+  // assertion cli-args cannot make, and are not claimed as new reach anywhere.
+  it.each([
+    ['excess-positional', 'command-validation', /accepts at most \d+ positional argument/],
+    ['unsupported-flag', 'command-validation', /is not supported for command/],
+    ['unknown-command', 'command-validation', /^Unknown command:/],
+    ['bad-enum-value', 'token-scan', /^Invalid /],
+    ['int-out-of-range', 'token-scan', /^Invalid /],
+    ['missing-flag-value', 'token-scan', /requires a value\./],
+    ['boolean-with-value', 'token-scan', /does not take a value\./],
+  ])('CLI %s is refused in %s', (mutation, _layer, expected) => {
+    expect(rejectionMessageFor('cli-validation', mutation)).toMatch(expected);
   });
 
-  it('CLI enum violations die in flag-value validation', () => {
-    expect(rejectionMessageFor('cli-validation', 'bad-enum-value')).toMatch(/^Invalid /);
-  });
-
-  it('CLI unsupported flags die in per-command flag support validation', () => {
-    expect(rejectionMessageFor('cli-validation', 'unsupported-flag')).toMatch(
-      /is not supported for command/,
-    );
+  it('spends most of the CLI budget on classes that survive the argv scan', () => {
+    const sample = fc.sample(cliValidationArb, { numRuns: SAMPLE_SIZE, seed: SEED });
+    const tokenScan = new Set([
+      'bad-enum-value',
+      'int-out-of-range',
+      'missing-flag-value',
+      'boolean-with-value',
+    ]);
+    const mutated = sample
+      .map((input) => decodeValidationCase(input)!.mutation)
+      .filter((mutation) => mutation !== 'valid');
+    const scanned = mutated.filter((mutation) => tokenScan.has(mutation)).length;
+    // Weighted down rather than removed, so the ratio is the lane's disclosed reach: a weight
+    // edit that quietly hands the budget back to the token scan fails here.
+    expect(scanned / mutated.length).toBeLessThan(0.25);
   });
 
   it('Maestro unknown commands die in command-shape validation, not the YAML tokenizer', () => {
@@ -92,6 +116,18 @@ describe('planted violations surface past the tokenizer', () => {
     expect(rejectionMessageFor('maestro-validation', 'unsupported-field')).toMatch(
       /field ".+" is not supported/,
     );
+  });
+});
+
+describe('generator startup', () => {
+  // The eager version of this derivation charged every harness path the command-metadata
+  // registry and timed out the coverage-instrumented promotion test. Importing must stay free.
+  it('does not derive the CLI surface until a case is actually generated', async () => {
+    vi.resetModules();
+    const fresh = await import('./validation-arbitraries.ts');
+    expect(fresh.validationSurfaceBuildCount()).toBe(0);
+    fc.sample(fresh.cliValidationArb, { numRuns: 1, seed: SEED });
+    expect(fresh.validationSurfaceBuildCount()).toBe(1);
   });
 });
 
