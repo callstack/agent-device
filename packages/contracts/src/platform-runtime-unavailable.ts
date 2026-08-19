@@ -35,21 +35,14 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   lifecycle: ApplicationLifecycleOperationFacts;
 }>;
 
-type FrozenUnavailablePlatformRuntimeFacts = Readonly<{
-  appLog: RuntimeOperationUnavailability;
-  apps: RuntimeOperationUnavailability;
-  appDeployment: RuntimeOperationUnavailability;
-  appState: RuntimeOperationUnavailability;
-  network: RuntimeOperationUnavailability;
-  screenRecording: RuntimeOperationUnavailability;
-  screenshot: RuntimeOperationUnavailability;
-  snapshot: RuntimeOperationUnavailability;
-  viewport: RuntimeOperationUnavailability;
-  elementText: RuntimeOperationUnavailability;
-  readiness: RuntimeOperationUnavailability;
-  shutdown: RuntimeOperationUnavailability;
-  lifecycle: ApplicationLifecycleOperationFacts;
-}>;
+/**
+ * The same cells with every optional one resolved. Derived from the input type rather than
+ * restated, so a new cell cannot be added to one and forgotten in the other.
+ */
+type FrozenUnavailablePlatformRuntimeFacts = Readonly<
+  Required<Omit<UnavailablePlatformRuntimeFacts, 'lifecycle'>> &
+    Readonly<{ lifecycle: ApplicationLifecycleOperationFacts }>
+>;
 
 export function createUnavailablePlatformRuntimeBinding(
   device: DeviceInfo,

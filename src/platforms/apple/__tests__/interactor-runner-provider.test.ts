@@ -41,6 +41,12 @@ const RUNNER_TRANSPORT_METHODS: Record<
   },
   gestureViewport: { invoke: (i) => i.gestureViewport!(), runnerCommand: 'gestureViewport' },
   snapshot: { invoke: (i) => i.snapshot(), runnerCommand: 'snapshot' },
+  // Runner-routed for every provider-backed device: the macOS-helper branch is reachable only
+  // for a local desktop/menubar surface, which a provider-owned mobile device never carries.
+  readTextAtPoint: {
+    invoke: (i) => i.readTextAtPoint!({ x: 10, y: 20 }),
+    runnerCommand: 'readText',
+  },
   back: { invoke: (i) => i.back(), runnerCommand: 'backInApp' },
   home: { invoke: (i) => i.home(), runnerCommand: 'home' },
   setOrientation: { invoke: (i) => i.setOrientation('portrait'), runnerCommand: 'rotate' },

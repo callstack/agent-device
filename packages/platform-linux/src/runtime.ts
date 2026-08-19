@@ -97,7 +97,11 @@ export function createLinuxPlatformRuntime(host: PlatformRuntimeHost): PlatformR
               })
             : {}),
           ...(facts.operations.readTextAtPoint.available
-            ? bindElementTextRuntime({ device: request.device, host: host.elementText })
+            ? bindElementTextRuntime({
+                device: request.device,
+                signal: request.scope.signal,
+                resolveInteractor: host.localInteractors.resolve,
+              })
             : {}),
         }),
         [Symbol.asyncDispose]: async () => undefined,

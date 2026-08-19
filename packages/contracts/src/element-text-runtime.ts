@@ -1,11 +1,9 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Point } from '@agent-device/kernel/snapshot';
-import type { RunnerContext } from './interactor-types.ts';
+import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { SessionSurface } from './session-surface.ts';
-
-/** Runner metadata the selected read implementation needs, without request-owned state. */
-export type ElementTextRuntimeExecution = Readonly<Omit<RunnerContext, 'appBundleId' | 'signal'>>;
+import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
 
 /**
  * Neutral intent for one point-addressed element read. The point is already resolved from the
@@ -14,7 +12,8 @@ export type ElementTextRuntimeExecution = Readonly<Omit<RunnerContext, 'appBundl
 export type ReadTextAtPointInput = Readonly<{
   point: Point;
   options?: Readonly<{ appBundleId?: string; surface?: SessionSurface }>;
-  execution?: ElementTextRuntimeExecution;
+  /** Same runner metadata a capture needs; reuses that type rather than restating it. */
+  execution?: SnapshotRuntimeExecution;
 }>;
 
 /**
@@ -71,24 +70,47 @@ export function elementTextRuntimeOperationFacts(
   return Object.freeze({ readTextAtPoint: input.readTextAtPoint });
 }
 
-/**
- * The existing per-family read mechanics, injected by composition. Families reach their own
- * tools through this port rather than importing root modules, matching the snapshot runtime's
- * interactor-resolver seam.
- */
-export type ElementTextRuntimeHost = Readonly<{
-  readTextAtPoint(device: DeviceInfo, input: ReadTextAtPointInput): Promise<ElementTextReadOutcome>;
-}>;
+/** Resolves the selected owner's interactor, exactly as the snapshot runtime does. */
+export type ElementTextInteractorResolver = (
+  device: DeviceInfo,
+  runner: RunnerContext,
+) => Promise<Interactor>;
 
-/** Captures one selected owner's read authority for the lifetime of a request binding. */
+/**
+ * Binds the owner's live point read for the lifetime of a request binding.
+ *
+ * Rides the same `Interactor` seam `findText` uses rather than a bespoke host port: two
+ * operations of the same class reaching their mechanics two different ways is duplication of
+ * mechanism, and Wave 5/6 retires the seam for both together.
+ */
 export function bindElementTextRuntime(
   params: Readonly<{
     device: DeviceInfo;
-    host: ElementTextRuntimeHost;
+    signal: AbortSignal;
+    resolveInteractor: ElementTextInteractorResolver;
   }>,
 ): ElementTextRuntimeOperations {
   return Object.freeze({
-    readTextAtPoint: async (input: ReadTextAtPointInput) =>
-      await params.host.readTextAtPoint(params.device, input),
+    readTextAtPoint: async (input: ReadTextAtPointInput) => {
+      const signal = params.signal;
+      signal.throwIfAborted();
+      const interactor = await params.resolveInteractor(params.device, {
+        ...input.execution,
+        appBundleId: input.options?.appBundleId,
+        signal,
+      });
+      // An owner whose facts advertised the read but whose interactor has none is a runtime
+      // contract error surfaced as a declined read, not a silent empty answer.
+      if (!interactor.readTextAtPoint) {
+        return Object.freeze({ status: 'unreadable', reason: 'surface-not-readable' } as const);
+      }
+      return elementTextRead(
+        await interactor.readTextAtPoint(input.point, {
+          appBundleId: input.options?.appBundleId,
+          surface: input.options?.surface,
+          signal,
+        }),
+      );
+    },
   });
 }

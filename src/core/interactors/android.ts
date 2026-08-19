@@ -65,6 +65,11 @@ export function createAndroidInteractor(
     performGesture: (plan) => executeAndroidTouchPlan(device, plan),
     gestureViewport: () => readAndroidGestureViewport(device),
     screenshot: (outPath, options) => screenshotAndroid(device, outPath, options),
+    // uiautomator reads the node covering a point; `undefined` means nothing covers it.
+    readTextAtPoint: async (point) => {
+      const { readAndroidTextAtPoint } = await import('../../platforms/android/input-actions.ts');
+      return (await readAndroidTextAtPoint(device, point.x, point.y)) ?? undefined;
+    },
     snapshot: async (options) => {
       const snapshotOptions = options ?? {};
       const result = await withDiagnosticTimer(

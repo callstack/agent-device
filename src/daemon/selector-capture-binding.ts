@@ -19,18 +19,17 @@ export type SelectorCaptureCommand = 'find' | 'get' | 'is' | 'wait';
 export type BoundSelectorCapture = (input: CaptureSnapshotInput) => Promise<SnapshotResult>;
 
 /**
- * The bound operations a selector command's runtime executes through. A record rather than a
- * bare capture function on purpose: the next selector unit adds its own bound operation here
- * (`get`'s preferred element read, whose platform branches `get` and `find <q> get text`
- * currently duplicate) without changing any signature on this seam.
- */
-/**
  * The owner's live element-text read, when its facts advertise one. Optional because it is a
  * PREFERRED operation: every selector read's required path answers from the captured tree, so an
  * owner without it still executes the command completely (ADR 0019 §2).
  */
 export type BoundSelectorRead = ElementTextRuntimeOperations['readTextAtPoint'];
 
+/**
+ * The bound operations a selector command's runtime executes through. A record rather than a bare
+ * capture function so a unit can add its own bound operation without changing any signature on
+ * this seam — which is how `readText` arrived, and how the next one will.
+ */
 export type BoundSelectorOperations = Readonly<{
   capture: BoundSelectorCapture;
   readText?: BoundSelectorRead;

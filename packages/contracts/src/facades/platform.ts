@@ -283,8 +283,7 @@ export {
 } from '../element-text-runtime.ts';
 export type {
   ElementTextReadOutcome,
-  ElementTextRuntimeExecution,
-  ElementTextRuntimeHost,
+  ElementTextInteractorResolver,
   ElementTextRuntimeOperationFacts,
   ElementTextRuntimeOperations,
   ElementTextUnreadableReason,
