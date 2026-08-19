@@ -258,11 +258,12 @@ function webDriverFacts(
   device: DeviceInfo,
 ): RuntimeFacts<PlatformRuntimeOperations> {
   if (!webDriverSessionActive(options, device)) {
-    const unavailable = createUnavailablePlatformRuntimeFacts(device, options.owner, {
+    return createUnavailablePlatformRuntimeFacts(device, options.owner, {
       appLog: inactiveSession,
       appDeployment: inactiveSession,
       network: inactiveSession,
       screenRecording: inactiveSession,
+      viewport: inactiveSession,
       lifecycle: applicationLifecycleOperationFacts({
         resolveOpenTarget: inactiveSession,
         prepareApplicationOpen: inactiveSession,
@@ -275,47 +276,6 @@ function webDriverFacts(
         configureProviderPortReverse: inactiveSession,
       }),
     });
-    return Object.freeze({
-      device: unavailable.device,
-      operations: {
-        appLogInspect: inactiveSession,
-        appLogDoctor: inactiveSession,
-        appLogStart: inactiveSession,
-        appLogReattach: inactiveSession,
-        appLogCleanup: inactiveSession,
-        deployApp: inactiveSession,
-        materializeAppSource: inactiveSession,
-        deployMaterializedApp: inactiveSession,
-        sendPushNotification: inactiveSession,
-        appState: inactiveSession,
-        networkDump: inactiveSession,
-        screenRecordingStart: inactiveSession,
-        screenRecordingReattach: inactiveSession,
-        screenRecordingCleanup: inactiveSession,
-        ...snapshotRuntimeOperationFacts({
-          capture: inactiveSession,
-          customActions: inactiveSession,
-          withoutActiveApp: inactiveSession,
-        }),
-        ...viewportRuntimeOperationFacts({ setViewport: inactiveSession }),
-        ensureReady: inactiveSession,
-        bootTarget: inactiveSession,
-        bootTargetHeadless: inactiveSession,
-        listApps: inactiveSession,
-        shutdownTarget: inactiveSession,
-        ...applicationLifecycleOperationFacts({
-          resolveOpenTarget: inactiveSession,
-          prepareApplicationOpen: inactiveSession,
-          openApplication: inactiveSession,
-          applyRuntimeHints: inactiveSession,
-          clearRuntimeHints: inactiveSession,
-          closeApplication: inactiveSession,
-          finalizeApplicationClose: inactiveSession,
-          prepareAppleRunner: inactiveSession,
-          configureProviderPortReverse: inactiveSession,
-        }),
-      },
-    });
   }
   const deployment = options.deployment?.fact(device) ?? deploymentUnavailable;
   const unavailable = createUnavailablePlatformRuntimeFacts(device, options.owner, {
@@ -323,25 +283,19 @@ function webDriverFacts(
     appDeployment: deploymentUnavailable,
     network: appLogUnavailable,
     screenRecording: recordingUnavailable,
+    viewport: viewportUnavailable,
     lifecycle: webDriverLifecycleFacts(device),
   });
   return Object.freeze({
     device: unavailable.device,
     operations: {
-      appLogInspect: appLogUnavailable,
-      appLogDoctor: appLogUnavailable,
-      appLogStart: appLogUnavailable,
-      appLogReattach: appLogUnavailable,
-      appLogCleanup: appLogUnavailable,
+      ...unavailable.operations,
       deployApp: deployment,
       materializeAppSource: deployment,
       deployMaterializedApp: deployment,
       sendPushNotification: pushUnavailable,
       appState: appStateUnavailable,
       networkDump: available,
-      screenRecordingStart: recordingUnavailable,
-      screenRecordingReattach: recordingUnavailable,
-      screenRecordingCleanup: recordingUnavailable,
       ...snapshotRuntimeOperationFacts({
         capture:
           options.snapshotAvailable !== false &&
@@ -367,7 +321,6 @@ function webDriverFacts(
         reason: 'unsupported-provider-mode',
         hint: 'WebDriver owns the target lifecycle for provider-owned devices.',
       },
-      ...webDriverLifecycleFacts(device),
     },
   });
 }

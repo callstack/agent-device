@@ -187,6 +187,7 @@ export function createLimrunPlatformRuntimeOwner(
             appState: liveSessionUnavailable,
             appDeployment: liveSessionUnavailable,
             network: liveSessionUnavailable,
+            viewport: liveSessionUnavailable,
             readiness: liveSessionUnavailable,
             shutdown: liveSessionUnavailable,
             lifecycle: limrunLifecycleFacts(device, false),

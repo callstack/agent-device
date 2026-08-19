@@ -83,6 +83,7 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
     appLog: unsupportedPlatformLeaf,
     network: unsupportedPlatformLeaf,
     snapshot: unsupportedPlatformLeaf,
+    viewport: unsupportedPlatformLeaf,
     readiness: unsupportedPlatformLeaf,
     lifecycle: applicationLifecycleOperationFacts({
       resolveOpenTarget: openTarget,

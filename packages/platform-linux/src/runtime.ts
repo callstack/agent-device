@@ -95,6 +95,7 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
     appLog: unsupportedPlatformLeaf,
     network: unsupportedPlatformLeaf,
     snapshot: snapshotKindUnavailable,
+    viewport: unsupportedPlatformLeaf,
     readiness: unsupportedPlatformLeaf,
     lifecycle: applicationLifecycleOperationFacts({
       resolveOpenTarget: openTarget,

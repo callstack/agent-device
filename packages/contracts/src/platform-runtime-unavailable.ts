@@ -25,7 +25,7 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   network: RuntimeOperationUnavailability;
   screenRecording?: RuntimeOperationUnavailability;
   snapshot?: RuntimeOperationUnavailability;
-  viewport?: RuntimeOperationUnavailability;
+  viewport: RuntimeOperationUnavailability;
   readiness?: RuntimeOperationUnavailability;
   shutdown?: RuntimeOperationUnavailability;
   lifecycle: ApplicationLifecycleOperationFacts;
@@ -126,7 +126,7 @@ function freezeUnavailableFacts(
       ...(unavailable.screenRecording ?? unavailable.network),
     }),
     snapshot: Object.freeze({ ...(unavailable.snapshot ?? unavailable.network) }),
-    viewport: Object.freeze({ ...(unavailable.viewport ?? unavailable.network) }),
+    viewport: Object.freeze({ ...unavailable.viewport }),
     readiness: Object.freeze({ ...(unavailable.readiness ?? unavailable.network) }),
     shutdown: Object.freeze({ ...(unavailable.shutdown ?? unavailable.network) }),
     lifecycle: applicationLifecycleOperationFacts(unavailable.lifecycle),

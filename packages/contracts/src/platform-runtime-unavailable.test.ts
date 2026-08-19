@@ -29,11 +29,16 @@ test('generic unavailable binding preserves exact provider ownership and mode', 
   const binding = createUnavailablePlatformRuntimeBinding(device, owner, {
     appLog: { available: false, reason: 'unsupported-provider-mode' },
     network: { available: false, reason: 'owner-capability-missing' },
+    viewport: { available: false, reason: 'unsupported-platform-leaf' },
     lifecycle,
   });
 
   assert.equal(binding.owner, owner);
   assert.equal(binding.facts.device.providerMode, 'provider-runtime');
+  assert.deepEqual(binding.facts.operations.setViewport, {
+    available: false,
+    reason: 'unsupported-platform-leaf',
+  });
   assert.deepEqual(binding.operations, {});
   await binding[Symbol.asyncDispose]();
 });

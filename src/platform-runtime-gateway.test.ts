@@ -46,6 +46,7 @@ describe('composed platform runtime gateway', () => {
     const baseFacts = createUnavailablePlatformRuntimeFacts(webDevice, owner, {
       appLog: unavailable,
       network: unavailable,
+      viewport: unavailable,
       lifecycle: applicationLifecycleOperationFacts({
         resolveOpenTarget: unavailable,
         prepareApplicationOpen: unavailable,
