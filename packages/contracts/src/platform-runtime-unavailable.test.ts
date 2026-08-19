@@ -45,6 +45,7 @@ test('generic unavailable binding preserves exact provider ownership and mode', 
   assert.deepEqual(binding.facts.operations.captureScreenshot, {
     available: false,
     reason: 'unsupported-device-kind',
+  });
   assert.deepEqual(binding.facts.operations.readTextAtPoint, {
     available: false,
     reason: 'unsupported-provider-mode',

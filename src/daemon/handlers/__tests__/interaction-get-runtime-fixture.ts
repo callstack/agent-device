@@ -58,6 +58,7 @@ function elementReadFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOpera
     network: unavailable,
     viewport: unavailable,
     elementText: unavailable,
+    screenshot: unavailable,
     lifecycle: applicationLifecycleOperationFacts({
       resolveOpenTarget: unavailable,
       prepareApplicationOpen: unavailable,

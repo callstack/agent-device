@@ -48,6 +48,7 @@ describe('composed platform runtime gateway', () => {
       appLog: unavailable,
       network: unavailable,
       screenshot: unavailable,
+      elementText: unavailable,
       viewport: unavailable,
       lifecycle: applicationLifecycleOperationFacts({
         resolveOpenTarget: unavailable,

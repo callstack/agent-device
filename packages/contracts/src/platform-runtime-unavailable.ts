@@ -144,8 +144,6 @@ function freezeUnavailableFacts(
     readiness: orNetwork(unavailable.readiness),
     shutdown: orNetwork(unavailable.shutdown),
     elementText: Object.freeze({ ...unavailable.elementText }),
-    readiness: Object.freeze({ ...(unavailable.readiness ?? unavailable.network) }),
-    shutdown: Object.freeze({ ...(unavailable.shutdown ?? unavailable.network) }),
     lifecycle: applicationLifecycleOperationFacts(unavailable.lifecycle),
   });
 }
