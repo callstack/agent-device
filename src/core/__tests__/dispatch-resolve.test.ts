@@ -195,16 +195,45 @@ test('resolveTargetDevice selects the unique booted simulator with the requested
 });
 
 test('resolveTargetDevice leaves platform-less static app selection to normal cross-platform resolution', async () => {
+  // One booted device: cross-platform resolution answers without probing simulators for the app.
   const result = await withDeviceInventoryProvider(
     async (request) => {
       assert.equal(request.platform, undefined);
-      return [androidEmulator, bootedSimulator, secondBootedSimulator];
+      return [androidEmulator];
     },
     async () =>
       await resolveTargetDeviceInContext({}, { appleSimulatorAppTarget: 'com.example.demo' }),
   );
 
   assert.equal(result.id, androidEmulator.id);
+  assert.equal(mockFindIosSimulatorInstalledApp.mock.calls.length, 0);
+});
+
+test('platform-less resolution refuses to pick between equally booted devices', async () => {
+  // Three booted devices and no identity: the previous winner was simply the first in discovery
+  // order, so a caller could get a successful answer about a device they never selected.
+  const error = await withDeviceInventoryProvider(
+    async () => [androidEmulator, bootedSimulator, secondBootedSimulator],
+    async () => {
+      try {
+        await resolveTargetDeviceInContext({}, { appleSimulatorAppTarget: 'com.example.demo' });
+      } catch (thrown) {
+        return thrown;
+      }
+      throw new assert.AssertionError({
+        message: 'expected ambiguous device resolution to refuse',
+      });
+    },
+  );
+
+  assert.ok(error instanceof AppError);
+  assert.equal(error.code, 'AMBIGUOUS_MATCH');
+  const listed = (error.details?.devices ?? []) as Array<{ id: string }>;
+  assert.deepEqual(
+    listed.map((device) => device.id),
+    [androidEmulator.id, bootedSimulator.id, secondBootedSimulator.id],
+  );
+  assert.match(String(error.details?.hint ?? ''), /--serial emulator-5554|--device/);
   assert.equal(mockFindIosSimulatorInstalledApp.mock.calls.length, 0);
 });
 

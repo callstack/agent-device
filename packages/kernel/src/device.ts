@@ -337,6 +337,14 @@ function resolveDeviceByName(
   return match;
 }
 
+/**
+ * SINGULAR RESOLUTION. Every caller of `resolveDevice` needs exactly one concrete device, so when
+ * the request carries no device identity and more than one candidate survives the preference tiers,
+ * this refuses with the candidates rather than picking one. A quietly chosen device produces a
+ * successful response describing the WRONG device — indistinguishable from the right one — and
+ * reads are no safer than writes: three successful snapshots of the wrong emulator are still three
+ * wrong answers. Multi-device operations (`devices`) never enter this path.
+ */
 function selectDefaultDevice(
   candidates: DeviceInfo[],
   selector: DeviceSelector,
@@ -349,20 +357,65 @@ function selectDefaultDevice(
     throwNoDevicesFound(selector, context);
   }
 
-  const selected = selectPreferredDevice(candidates);
+  const preferred = preferredDeviceCandidates(candidates);
+  if (preferred.length > 1) throwAmbiguousDeviceSelection(preferred);
+  const selected = preferred[0];
   if (!selected) throwNoDevicesFound(selector, context);
   return selected;
 }
 
-function selectPreferredDevice(candidates: DeviceInfo[]): DeviceInfo | undefined {
-  const virtual = candidates.filter((device) => device.kind !== 'device');
-  const selectable = virtual.length > 0 ? virtual : candidates;
-  if (isAppleDeviceCandidateSet(selectable)) return selectable[0];
+const AMBIGUOUS_DEVICE_CANDIDATE_LIMIT = 10;
 
-  const booted = selectable.filter((device) => device.booted);
-  const onlyBooted = booted[0];
-  if (onlyBooted && booted.length === 1) return onlyBooted;
-  return booted[0] ?? selectable[0];
+function throwAmbiguousDeviceSelection(candidates: DeviceInfo[]): never {
+  const listed = candidates.slice(0, AMBIGUOUS_DEVICE_CANDIDATE_LIMIT);
+  throw new AppError(
+    'AMBIGUOUS_MATCH',
+    `${candidates.length} devices match this request equally; select one explicitly.`,
+    {
+      // The declared device-candidate details domain (src/utils/error-candidates.ts), so the CLI
+      // and MCP renderers print these candidates without a new shape to learn.
+      devices: listed.map((device) => ({ id: device.id, name: device.name })),
+      matches: candidates.length,
+      hint: buildAmbiguousDeviceHint(listed),
+    },
+  );
+}
+
+function buildAmbiguousDeviceHint(candidates: DeviceInfo[]): string {
+  const first = candidates[0];
+  const identitySelector =
+    first && isSerialAddressablePlatform(first.platform)
+      ? `--serial ${first.id}`
+      : `--udid ${first?.id ?? '<id>'}`;
+  return (
+    `Select the intended device explicitly, for example ${identitySelector} ` +
+    `or --device ${JSON.stringify(first?.name ?? '<name>')}. ` +
+    `Run agent-device devices to list them.`
+  );
+}
+
+/**
+ * The candidates left after every ESTABLISHED preference — virtual over physical (Apple ranks its
+ * kinds/targets instead), then booted over offline. Whatever survives is equally preferred: the
+ * comparator's remaining tie-breaks are name order and discovery order, which encode nothing about
+ * intent.
+ */
+function preferredDeviceCandidates(candidates: DeviceInfo[]): DeviceInfo[] {
+  const ranked = isAppleDeviceCandidateSet(candidates)
+    ? candidatesWithBestAppleRank(candidates)
+    : preferVirtualCandidates(candidates);
+  const booted = ranked.filter((device) => device.booted);
+  return booted.length > 0 ? booted : ranked;
+}
+
+function preferVirtualCandidates(candidates: DeviceInfo[]): DeviceInfo[] {
+  const virtual = candidates.filter((device) => device.kind !== 'device');
+  return virtual.length > 0 ? virtual : candidates;
+}
+
+function candidatesWithBestAppleRank(candidates: DeviceInfo[]): DeviceInfo[] {
+  const bestRank = Math.min(...candidates.map((device) => appleDeviceSelectionRank(device)));
+  return candidates.filter((device) => appleDeviceSelectionRank(device) === bestRank);
 }
 
 export function matchesDeviceSelector(

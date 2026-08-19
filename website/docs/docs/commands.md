@@ -80,6 +80,7 @@ agent-device app-switcher
 - `orientation <orientation>` forces a mobile device into `portrait`, `portrait-upside-down`, `landscape-left`, or `landscape-right`.
 - `orientation` is supported on iOS and Android mobile targets. macOS and tvOS do not expose it.
 - On iOS devices, `http(s)://` URLs open in Safari when no app is active. Custom scheme URLs require an active app in the session.
+- Commands that need one concrete device refuse to guess: if no `--device`/`--udid`/`--serial` is given and several candidates are equally preferred (for example two booted emulators), the command fails with `AMBIGUOUS_MATCH` and lists them, rather than picking one and returning a successful answer about a device you did not select. Preferences still apply first — virtual over physical, booted over offline — so one booted emulator beside offline ones resolves normally, as does any command running inside an existing session. `devices` lists everything as before.
 - Commands that omit `--session` use an implicit `default` session scoped to the caller's current git worktree or working directory. This keeps independent local agents from accidentally attaching to each other's default session.
 - `--session <name>` or `AGENT_DEVICE_SESSION` opt into an explicitly named session when a script intentionally wants to share or reuse that session name.
 - A configured `AGENT_DEVICE_SESSION` implies bound-session lock mode by default. The CLI forwards that policy to the daemon, which enforces the same conflict handling for CLI, typed client, and direct RPC requests.
