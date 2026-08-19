@@ -239,3 +239,116 @@ test('a direct-iOS predicate that holds still short-circuits without a capture',
   // The fast path is still a fast path: a positive answer consumes no capture.
   expect(fixture.captures).toEqual([]);
 });
+
+// Deliberate reversal of a merged decision (#557), on thymikee's instruction. `is` is an
+// ASSERTION: `website/docs/docs/commands.md` says under "Assertions" that it "evaluates UI
+// predicates against a selector expression and exits non-zero on failure". The direct-iOS arm
+// broke that contract — it reported a failed predicate as a completed command, so
+// `is text id=… "Wrong Expected Text"` printed `Passed: is text` and exited 0 on device.
+//
+// The fall-through was #557's own design and was simply never armed: `buildDirectIosIsResult`
+// was already typed `Record<string, unknown> | null` and its caller already had
+// `if (!payload) return null;`, but nothing ever returned null. #557's summary says it preserved
+// "snapshot fallback for misses" and refused it only for HARD failures like ambiguity; a
+// predicate the fast path could not establish is a miss, not a hard failure.
+test('a direct-iOS predicate that does NOT hold falls through to the admitted capture instead of exiting zero', async () => {
+  const fixture = selectorCaptureFixture({
+    snapshot: () => ({
+      nodes: [
+        { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
+        {
+          index: 1,
+          parentIndex: 0,
+          type: 'Button',
+          label: 'Apple Account',
+          identifier: 'account_row',
+          rect: { x: 10, y: 20, width: 120, height: 44 },
+          enabled: true,
+          hittable: true,
+        },
+      ],
+      backend: 'xctest',
+    }),
+  });
+  const sessionStore = makeSessionStore();
+  sessionStore.set('is-direct-false', makeIosAppSession('is-direct-false'));
+  mockRunAppleRunnerCommand.mockResolvedValue({
+    found: true,
+    text: 'Apple Account',
+    nodes: [
+      {
+        index: 0,
+        type: 'Button',
+        label: 'Apple Account',
+        identifier: 'account_row',
+        rect: { x: 10, y: 20, width: 120, height: 44 },
+        enabled: true,
+        hittable: true,
+      },
+    ],
+  });
+
+  const response = await dispatchIsViaRuntime({
+    req: isRequest('is-direct-false', ['text', 'id=account_row', 'Wrong Expected Text']),
+    sessionName: 'is-direct-false',
+    sessionStore,
+    inspectFacts: fixture.inspectFacts,
+    bindDevice: fixture.bindDevice,
+  });
+
+  // A failed assertion is a failed command on every other path and in the docs; it is one here.
+  expect(response?.ok).toBe(false);
+  if (response?.ok === false) {
+    expect(response.error?.code).toBe('COMMAND_FAILED');
+    expect(response.error?.details?.reason).toBe('predicate_failed');
+  }
+  // It fell through rather than inventing its own refusal, so the authoritative capture answered.
+  expect(fixture.captures.length).toBeGreaterThan(0);
+});
+
+// Why fall through rather than refuse inside the fast path: the runner query evaluates against a
+// ONE-NODE tree (`nodes: [node]`), so `visible` cannot consult the ancestor geometry a list row
+// inherits. A negative from the fast path can therefore be wrong, and re-evaluating against the
+// real captured tree can legitimately turn it into a pass.
+test('a fast-path negative that the real tree contradicts resolves as a pass, not a failure', async () => {
+  const listRow = {
+    index: 1,
+    parentIndex: 0,
+    type: 'Cell',
+    rect: { x: 0, y: 160, width: 390, height: 44 },
+    hittable: false,
+  };
+  const listText = {
+    index: 2,
+    parentIndex: 1,
+    type: 'StaticText',
+    label: 'Trip ideas',
+    identifier: 'trip_ideas',
+    hittable: false,
+  };
+  const fixture = selectorCaptureFixture({
+    snapshot: () => ({
+      nodes: [
+        { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
+        listRow,
+        listText,
+      ],
+      backend: 'xctest',
+    }),
+  });
+  const sessionStore = makeSessionStore();
+  sessionStore.set('is-ancestor', makeIosAppSession('is-ancestor'));
+  // The runner returns the same node WITHOUT its ancestors, so a one-node `visible` says no.
+  mockRunAppleRunnerCommand.mockResolvedValue({ found: true, nodes: [listText] });
+
+  const response = await dispatchIsViaRuntime({
+    req: isRequest('is-ancestor', ['visible', 'id=trip_ideas']),
+    sessionName: 'is-ancestor',
+    sessionStore,
+    inspectFacts: fixture.inspectFacts,
+    bindDevice: fixture.bindDevice,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(fixture.captures.length).toBeGreaterThan(0);
+});
