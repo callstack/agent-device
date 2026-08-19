@@ -36,8 +36,8 @@
 //     composition file; premature implementation loading and forbidden cross-boundary edges fail (R13).
 //   - Over COMMAND-ATOMIC RUNTIME CUTOVERS: one parametrized gate reads the migrated-command
 //     table (appstate R22, shutdown R23, boot R20, apps R21, install/deploy R24-R27,
-//     lifecycle R28-R31, devices R17, logs R14, network R15, record R16, snapshot R32, diff R33)
-//     and proves each command keeps
+//     lifecycle R28-R31, devices R17, logs R14, network R15, record R16, snapshot R32, diff R33,
+//     viewport R34, get R36, is R37 — R35 reserved for find) and proves each command keeps
 //     exactly one platform-execution path — retired routes, admission, modules, and widened
 //     runtime access cannot coexist with its operation-fact-derived descriptor and handler.
 //   - Over CONTRACTS PRODUCTION SOURCE: contracts owns vocabulary only — host, process, and timer
