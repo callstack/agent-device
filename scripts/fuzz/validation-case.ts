@@ -10,9 +10,7 @@
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { FuzzFailure, FuzzTargetName } from './target-types.ts';
 
-export type ValidationExpectation =
-  | { outcome: 'accept' }
-  | { outcome: 'reject'; code: string };
+export type ValidationExpectation = { outcome: 'accept' } | { outcome: 'reject'; code: string };
 
 export type ValidationCase = {
   /** CLI argv vector or Maestro flow source, depending on the target. */

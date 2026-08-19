@@ -132,8 +132,9 @@ export const FUZZ_TARGETS: readonly FuzzTarget[] = [
     name: 'maestro-validation',
     description: 'inspectMaestroFlow via shape-derived flows with expected outcomes',
     run: (input) => void inspectMaestroFlow(JSON.parse(input).payload as string, 'fuzz.yaml'),
-    check: makeValidationCheck('maestro-validation', (payload) =>
-      void inspectMaestroFlow(payload as string, 'fuzz.yaml'),
+    check: makeValidationCheck(
+      'maestro-validation',
+      (payload) => void inspectMaestroFlow(payload as string, 'fuzz.yaml'),
     ),
     seeds: [
       encodeValidationCase({

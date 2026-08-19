@@ -70,31 +70,27 @@ describe('fuzz invariant classifier', () => {
 describe('fuzz harness self-check', () => {
   // One run asserts both the report and its envelope: a second full self-check would cost five
   // more worker startups in the serialized subprocess-stub project (#1823) for no new signal.
-  it(
-    'catches every seeded violation kind and writes the self-check envelope',
-    () => {
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fuzz-selfcheck-'));
-      const { status, stdout } = runHarness([
-        '--self-check',
-        '--case-timeout-ms',
-        '750',
-        '--artifact-dir',
-        dir,
-      ]);
-      expect(stdout).toContain('ok   self-check-untyped-throw: expected untyped-throw');
-      expect(stdout).toContain('ok   self-check-empty-hint: expected empty-hint');
-      expect(stdout).toContain('ok   self-check-hang: expected hang, got hang');
-      expect(stdout).toContain('ok   self-check-silent-accept: expected silent-accept');
-      expect(stdout).toContain('ok   self-check-wrong-code: expected wrong-code');
-      expect(status).toBe(0);
-      const envelope = JSON.parse(fs.readFileSync(path.join(dir, 'run-envelope.json'), 'utf8'));
-      expect(envelope.result).toBe('pass');
-      expect(envelope.data.mode).toBe('self-check');
-      expect(envelope.data.targetRuns).toHaveLength(5);
-      fs.rmSync(dir, { recursive: true, force: true });
-    },
-    30_000,
-  );
+  it('catches every seeded violation kind and writes the self-check envelope', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fuzz-selfcheck-'));
+    const { status, stdout } = runHarness([
+      '--self-check',
+      '--case-timeout-ms',
+      '750',
+      '--artifact-dir',
+      dir,
+    ]);
+    expect(stdout).toContain('ok   self-check-untyped-throw: expected untyped-throw');
+    expect(stdout).toContain('ok   self-check-empty-hint: expected empty-hint');
+    expect(stdout).toContain('ok   self-check-hang: expected hang, got hang');
+    expect(stdout).toContain('ok   self-check-silent-accept: expected silent-accept');
+    expect(stdout).toContain('ok   self-check-wrong-code: expected wrong-code');
+    expect(status).toBe(0);
+    const envelope = JSON.parse(fs.readFileSync(path.join(dir, 'run-envelope.json'), 'utf8'));
+    expect(envelope.result).toBe('pass');
+    expect(envelope.data.mode).toBe('self-check');
+    expect(envelope.data.targetRuns).toHaveLength(5);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }, 30_000);
 });
 
 describe('worker startup budget', () => {
@@ -199,7 +195,6 @@ describe('run envelope', () => {
     expect(envelope.result).toBe('fail');
     expect(envelope.data.stage).toBe('error');
   });
-
 });
 
 describe('artifact promotion', () => {

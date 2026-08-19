@@ -76,9 +76,7 @@ const SAFE_FLAG_POOL: readonly FlagDefinition[] = getFlagDefinitions().filter(
 );
 
 function flagToken(definition: FlagDefinition): string {
-  return definition.names.find(
-    (name) => name.startsWith('--') && !COLLIDING_FLAG_NAMES.has(name),
-  )!;
+  return definition.names.find((name) => name.startsWith('--') && !COLLIDING_FLAG_NAMES.has(name))!;
 }
 
 const CLI_SURFACES: readonly CliCommandSurface[] = listCliCommandNames()
@@ -88,9 +86,7 @@ const CLI_SURFACES: readonly CliCommandSurface[] = listCliCommandNames()
     return {
       name,
       maxPositionals: schema.allowsExtraPositionals ? null : (schema.positionalArgs?.length ?? 0),
-      flags: SAFE_FLAG_POOL.filter((definition) =>
-        isFlagSupportedForCommand(definition.key, name),
-      ),
+      flags: SAFE_FLAG_POOL.filter((definition) => isFlagSupportedForCommand(definition.key, name)),
     };
   });
 
@@ -258,8 +254,7 @@ const CLI_MUTATIONS: readonly CliMutation[] = [
   {
     name: 'batch-step-source',
     apply: (base) => ({
-      payload:
-        base.salt % 2 === 0 ? ['batch'] : ['batch', '--steps=[]', '--steps-file=steps.json'],
+      payload: base.salt % 2 === 0 ? ['batch'] : ['batch', '--steps=[]', '--steps-file=steps.json'],
       mutation: 'batch-step-source',
       expect: REJECT,
     }),
