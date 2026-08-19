@@ -17,6 +17,7 @@ import {
   type AppleOS,
 } from '@agent-device/kernel/device';
 import { AppError, type DaemonError } from '@agent-device/kernel/errors';
+import { sanitizeErrorCause } from '@agent-device/kernel/redaction';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { leaseScopeFromOptions, leaseScopeToRequestMeta } from '../core/lease-scope.ts';
 import type { DaemonRequest, SessionRuntimeHints } from '../daemon/types.ts';
@@ -289,13 +290,8 @@ function normalizeDaemonError(value: unknown): DaemonError | undefined {
 }
 
 function normalizeDaemonErrorCause(value: unknown): Pick<DaemonError, 'cause'> | undefined {
-  if (!isRecord(value) || typeof value.message !== 'string') return undefined;
-  return {
-    cause: {
-      message: value.message,
-      ...(typeof value.code === 'string' ? { code: value.code } : {}),
-    },
-  };
+  const cause = sanitizeErrorCause(value);
+  return cause ? { cause } : undefined;
 }
 
 /**

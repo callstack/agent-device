@@ -10,6 +10,19 @@ export function redactDiagnosticData<T>(input: T): T {
   return redactValue(input, new WeakSet<object>()) as T;
 }
 
+/** Sanitizes an untrusted structured cause before it crosses a process or client boundary. */
+export function sanitizeErrorCause(cause: unknown): { message: string; code?: string } | undefined {
+  if (!cause || typeof cause !== 'object') return undefined;
+  const candidate = cause as { message?: unknown; code?: unknown };
+  if (typeof candidate.message !== 'string' || candidate.message.length === 0) return undefined;
+  return redactDiagnosticData({
+    message: candidate.message,
+    ...(typeof candidate.code === 'string' && candidate.code.length > 0
+      ? { code: candidate.code }
+      : {}),
+  });
+}
+
 function redactValue(value: unknown, seen: WeakSet<object>, keyHint?: string): unknown {
   if (value === null || value === undefined) return value;
   if (typeof value === 'string') return redactString(value, keyHint);

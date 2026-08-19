@@ -4,6 +4,7 @@ import {
   toAppErrorCode,
   type DaemonError,
 } from '@agent-device/kernel/errors';
+import { sanitizeErrorCause } from '@agent-device/kernel/redaction';
 import { createRequestId } from '../../utils/diagnostics.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { materializeRemoteArtifacts } from '../../remote/daemon-artifacts.ts';
@@ -120,13 +121,7 @@ function toDaemonHttpRpcError(error: {
 }
 
 function readDaemonErrorCause(value: unknown): DaemonError['cause'] {
-  if (!value || typeof value !== 'object') return undefined;
-  const cause = value as Record<string, unknown>;
-  if (typeof cause.message !== 'string') return undefined;
-  return {
-    message: cause.message,
-    ...(typeof cause.code === 'string' ? { code: cause.code } : {}),
-  };
+  return sanitizeErrorCause(value);
 }
 
 function appErrorFromDaemonError(error: DaemonError, requestId: string | undefined): AppError {

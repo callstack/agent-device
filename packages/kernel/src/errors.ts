@@ -1,4 +1,4 @@
-import { redactDiagnosticData } from './redaction.ts';
+import { redactDiagnosticData, sanitizeErrorCause as normalizeErrorCause } from './redaction.ts';
 
 /**
  * The known error codes as a value, so gates can enumerate them: every code
@@ -274,19 +274,6 @@ export function normalizeError(err: unknown, context: NormalizeErrorContext = {}
     ...(supportedOn !== undefined ? { supportedOn } : {}),
     details: cleanDetails,
   };
-}
-
-function normalizeErrorCause(cause: unknown): ErrorCause | undefined {
-  if (!cause || typeof cause !== 'object') return undefined;
-  const candidate = cause as { message?: unknown; code?: unknown };
-  if (typeof candidate.message !== 'string' || candidate.message.length === 0) return undefined;
-  const redacted = redactDiagnosticData({
-    message: candidate.message,
-    ...(typeof candidate.code === 'string' && candidate.code.length > 0
-      ? { code: candidate.code }
-      : {}),
-  });
-  return redacted;
 }
 
 const GENERIC_EXIT_MESSAGE = /^\S+ exited with code -?\d+$/;
