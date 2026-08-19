@@ -12,16 +12,3 @@ exports[`cli-validation generator > exercises every mutation class, including va
   "valid",
 ]
 `;
-
-exports[`maestro-validation generator > exercises every mutation class, including valid accept cases 1`] = `
-[
-  "bad-press-key",
-  "config-unknown-key",
-  "missing-required",
-  "multi-key-command",
-  "scroll-options",
-  "unsupported-command",
-  "unsupported-field",
-  "valid",
-]
-`;
