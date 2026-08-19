@@ -2,13 +2,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import crypto from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { gzipSync } from 'node:zlib';
+import { withPreparedBaseWorktree } from './size-base-cache.mjs';
 
 const COMMENT_MARKER = '<!-- agent-device-size-report -->';
-// This run's identity as a base-worktree lock owner: pid for liveness, nonce against pid reuse.
-const LOCK_IDENTITY = `${process.pid}:${crypto.randomUUID()}`;
 const GITHUB_REQUEST_ATTEMPTS = 4;
 // Overridable so the regression tests do not sleep through real backoff.
 const GITHUB_RETRY_BASE_MS = Number(process.env.SIZE_REPORT_RETRY_BASE_MS ?? 1000);
@@ -159,192 +157,11 @@ function collectReport(root, options) {
   };
 }
 
-// The Size workflow measures the base by checking it out, installing, and building; this is
-// the same recipe in a detached worktree so the working tree is never touched. Cache semantics
-// are per SHA and non-destructive toward anything in use:
-//   - .tmp/size-base/<sha12>/ is the worktree; a second run against the same base finds the
-//     completeness stamp and skips install+build (mirroring the workflow's dist cache);
-//   - .tmp/size-base/<sha12>.lock (pid inside, created O_EXCL) is held from before the worktree
-//     is created until the base report has been read, so a concurrent run against the same base
-//     fails fast instead of reading a half-built dist, and a run against another base never
-//     removes a worktree whose lock is held by a live pid; a lock whose pid is dead is stale;
-//   - dist/.size-base-complete is written after a successful build, so an interrupted build is
-//     rebuilt rather than trusted because dist/src happens to exist.
+// The Size workflow measures the base by checking it out, installing, and building; this is the
+// same recipe in a detached worktree, so the working tree is never touched. Entry reuse, claim
+// ownership, and eviction belong to scripts/size-base-cache.mjs.
 function measureBaseRef(root, ref, options) {
-  const sha = execFileSync('git', ['rev-parse', '--verify', `${ref}^{commit}`], {
-    cwd: root,
-    encoding: 'utf8',
-  }).trim();
-  fs.mkdirSync(path.join(root, '.tmp', 'size-base'), { recursive: true });
-  // Canonical: git lists worktrees by real path (/tmp is /private/tmp on macOS), and the
-  // registration check below compares against that listing.
-  const worktreesRoot = fs.realpathSync(path.join(root, '.tmp', 'size-base'));
-  const worktreeDir = path.join(worktreesRoot, sha.slice(0, 12));
-  const release = acquireBaseLock(worktreeDir, sha);
-  try {
-    pruneOtherBaseWorktrees(root, worktreesRoot, worktreeDir);
-    ensureBaseWorktree(root, worktreeDir, sha);
-    if (!fs.existsSync(baseCompletionStamp(worktreeDir))) {
-      process.stderr.write(
-        `[size] measuring base ${sha.slice(0, 9)} (${ref}): install + build in ${worktreeDir}\n`,
-      );
-      execFileSync('pnpm', ['install', '--frozen-lockfile', '--prefer-offline'], {
-        cwd: worktreeDir,
-        stdio: ['ignore', 'ignore', 'inherit'],
-      });
-      execFileSync('pnpm', ['build'], { cwd: worktreeDir, stdio: ['ignore', 'ignore', 'inherit'] });
-      fs.writeFileSync(baseCompletionStamp(worktreeDir), `${sha}\n`);
-    }
-    return collectReport(worktreeDir, options);
-  } finally {
-    release();
-  }
-}
-
-function baseCompletionStamp(worktreeDir) {
-  return path.join(worktreeDir, 'dist', '.size-base-complete');
-}
-
-function baseLockPath(worktreeDir) {
-  return `${worktreeDir}.lock`;
-}
-
-// The lock is a symlink whose *target* is the owner identity (`<pid>:<nonce>`): one syscall
-// creates it with its identity in place (no empty-file window for another run to misread as
-// stale) and fails EEXIST while held. A stale lock (its pid is dead) is taken over by
-// compare-then-unlink on that identity — the unlink is skipped if the link no longer names the
-// identity that was judged stale — and every acquisition verifies the link names this run
-// before returning. Release unlinks only a link that still names this run.
-function acquireBaseLock(worktreeDir, sha) {
-  const lockPath = baseLockPath(worktreeDir);
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    if (tryCreateLock(lockPath) && readLockIdentity(lockPath) === LOCK_IDENTITY) {
-      return () => releaseLock(lockPath);
-    }
-    clearStaleLockOrThrow(lockPath, worktreeDir, sha);
-  }
-  throw new Error(`could not acquire ${lockPath} after repeated stale-lock takeovers`);
-}
-
-/** Held by a live process → throw; stale (dead owner) → compare-then-unlink; garbage → remove. */
-function clearStaleLockOrThrow(lockPath, worktreeDir, sha) {
-  const holder = readLockIdentity(lockPath);
-  if (holder === undefined) {
-    removeIfNotSymlink(lockPath); // a regular file or directory here is not a lock of this scheme
-    return; // or it vanished between our create and read: the caller retries
-  }
-  if (isProcessAlive(pidOfIdentity(holder))) {
-    throw new Error(
-      `another \`size --base\` (pid ${pidOfIdentity(holder)}) is using base ${sha.slice(0, 9)} in ${worktreeDir}; wait for it or measure a different base`,
-    );
-  }
-  unlinkIfIdentity(lockPath, holder); // stale: its owner is gone; the caller retries the create
-}
-
-function tryCreateLock(lockPath) {
-  try {
-    fs.symlinkSync(LOCK_IDENTITY, lockPath);
-    return true;
-  } catch (error) {
-    if (error.code === 'EEXIST') return false;
-    throw error;
-  }
-}
-
-function releaseLock(lockPath) {
-  unlinkIfIdentity(lockPath, LOCK_IDENTITY);
-}
-
-/** Compare-then-unlink: never remove a lock that has since come to name someone else. */
-function unlinkIfIdentity(lockPath, identity) {
-  if (readLockIdentity(lockPath) !== identity) return;
-  try {
-    fs.unlinkSync(lockPath);
-  } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
-  }
-}
-
-function removeIfNotSymlink(lockPath) {
-  try {
-    if (!fs.lstatSync(lockPath).isSymbolicLink())
-      fs.rmSync(lockPath, { recursive: true, force: true });
-  } catch {
-    // already gone
-  }
-}
-
-function readLockIdentity(lockPath) {
-  try {
-    return fs.readlinkSync(lockPath);
-  } catch {
-    return undefined;
-  }
-}
-
-function pidOfIdentity(identity) {
-  const pid = Number(identity.split(':')[0]);
-  return Number.isInteger(pid) && pid > 0 ? pid : undefined;
-}
-
-function isProcessAlive(pid) {
-  if (pid === undefined) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error.code === 'EPERM';
-  }
-}
-
-function ensureBaseWorktree(root, worktreeDir, sha) {
-  const registered = execFileSync('git', ['worktree', 'list', '--porcelain'], {
-    cwd: root,
-    encoding: 'utf8',
-  }).includes(`worktree ${worktreeDir}\n`);
-  if (registered && fs.existsSync(worktreeDir)) return;
-  // Registered but gone (hand-deleted), or present but unregistered (hand-copied): start clean.
-  fs.rmSync(worktreeDir, { recursive: true, force: true });
-  execFileSync('git', ['worktree', 'prune'], { cwd: root, stdio: 'ignore' });
-  execFileSync('git', ['worktree', 'add', '--detach', worktreeDir, sha], {
-    cwd: root,
-    stdio: ['ignore', 'ignore', 'pipe'],
-    encoding: 'utf8',
-  });
-}
-
-// Cache eviction of idle entries only, and only while holding the victim's own lock: a
-// worktree whose lock is held by a live pid is in use by another run and is left alone, and a
-// run that wants the victim after this check finds it locked (fails fast) rather than finding
-// it half-removed.
-function pruneOtherBaseWorktrees(root, worktreesRoot, keep) {
-  const others = fs
-    .readdirSync(worktreesRoot, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => path.join(worktreesRoot, entry.name))
-    .filter((dir) => dir !== keep);
-  for (const dir of others) {
-    let releaseVictim;
-    try {
-      releaseVictim = acquireBaseLock(dir, path.basename(dir));
-    } catch {
-      continue; // in use by a live run: not ours to evict
-    }
-    try {
-      removeWorktree(root, dir);
-    } finally {
-      releaseVictim();
-    }
-  }
-}
-
-function removeWorktree(root, dir) {
-  try {
-    execFileSync('git', ['worktree', 'remove', '--force', dir], { cwd: root, stdio: 'ignore' });
-  } catch {
-    // Not a registered worktree (a half-created or hand-copied directory): plain removal.
-  }
-  fs.rmSync(dir, { recursive: true, force: true });
+  return withPreparedBaseWorktree(root, ref, (worktreeDir) => collectReport(worktreeDir, options));
 }
 
 function prepareGeneratedPackageAssets(root) {

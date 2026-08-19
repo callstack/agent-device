@@ -83,6 +83,9 @@ export default defineConfig({
             // The Bundle Size lane's PR-comment path: spawns the real script against a
             // stubbed fetch, so it needs no network; pins retry/reconcile/fatal outcomes.
             'scripts/__tests__/size-report-post-comment.test.ts',
+            // The `size --base` cache's claim protocol: pure filesystem, so the dangerous
+            // takeover interleavings are planted directly rather than raced for. Milliseconds.
+            'scripts/__tests__/size-base-cache.test.ts',
             // `--base` orchestration (per-SHA worktree, lock, completion stamp, eviction) against
             // a throwaway git repo with pnpm/npm shimmed on PATH: git + node only.
             'scripts/__tests__/size-report-base.test.ts',

@@ -8,6 +8,11 @@ import { runCmd, runCmdSync } from '../../src/utils/exec.ts';
 // `pnpm size --base <ref>` orchestration against a throwaway git repository, with `pnpm` and
 // `npm` shimmed on PATH: the shim `pnpm build` writes dist/src and appends to a log, the shim
 // `npm pack` prints a fixed dry-run JSON. No install, no network; every run is git + node.
+//
+// This file owns what only real processes can show: that two concurrent runs build once, that a
+// cached entry is reused, and that eviction respects a claim. The claim protocol's own
+// interleavings (takeover, replacement, contention) are planted directly in
+// size-base-cache.test.ts, which needs no subprocess at all.
 
 const ROOT = path.join(import.meta.dirname, '..', '..');
 const SCRIPT = path.join(ROOT, 'scripts', 'size-report.mjs');
@@ -190,56 +195,4 @@ if [ "$1" = "build" ]; then sleep 1; mkdir -p dist/src && printf 'export const b
     false,
     'the winner released; the loser removed nothing',
   );
-});
-
-test('stale-lock takeover racing another taker: the live lock is never unlinked, and never both proceed', async () => {
-  // Another process C also finds the stale lock and takes it over (compare-then-unlink, then
-  // create), at a random moment while our run is doing the same. Whatever the interleaving:
-  // if our run acquired, C's compare sees a foreign identity and skips; if C acquired first (or
-  // in our run's window between judging stale and unlinking), our run finds a live lock and
-  // refuses. It must never unlink C's live lock, and both must never proceed.
-  const stale = `${NEVER_A_PID}:stale`;
-  const live = `${process.pid}:taker-c`;
-  const takeOver = (): 'took-over' | 'held-by-run' | 'absent' => {
-    let current: string | undefined;
-    try {
-      current = fs.readlinkSync(lockOf(first));
-    } catch {
-      current = undefined;
-    }
-    if (current === undefined) return 'absent'; // our run already finished and released: no overlap
-    if (current === stale) fs.unlinkSync(lockOf(first)); // compare-then-unlink, as the script does
-    try {
-      fs.symlinkSync(live, lockOf(first));
-      return 'took-over';
-    } catch {
-      return 'held-by-run'; // our run holds it: C skips
-    }
-  };
-  let ourWins = 0;
-  let cWins = 0;
-  // Delays straddle the run's time-to-acquire (node start + git rev-parse ≈ 300ms here) so both
-  // orders occur in practice; the assertions hold under either, so the mix is reported, not required.
-  const delays = [0, 200, 400, 650];
-  for (const [round, delay] of delays.entries()) {
-    fs.rmSync(lockOf(first), { force: true });
-    fs.symlinkSync(stale, lockOf(first));
-    const [result, c] = await Promise.all([
-      size(first),
-      new Promise<ReturnType<typeof takeOver>>((resolve) =>
-        setTimeout(() => resolve(takeOver()), delay),
-      ),
-    ]);
-    if (result.exitCode === 0) {
-      ourWins += 1;
-      assert.notEqual(c, 'took-over', `round ${round}: C must not acquire while our run holds it`);
-    } else {
-      cWins += 1;
-      assert.match(result.stderr, /is using base/);
-      assert.equal(fs.readlinkSync(lockOf(first)), live, `round ${round}: C's live lock intact`);
-    }
-    fs.rmSync(lockOf(first), { force: true });
-  }
-  assert.equal(ourWins + cWins, delays.length);
-  process.stderr.write(`[size-report-base] takeover race: run won ${ourWins}, C won ${cWins}\n`);
 });
