@@ -359,6 +359,7 @@ function sourceRuntimeFacts(
       }),
       ...screenshotRuntimeOperationFacts({ capture: unavailable }),
       setViewport: unavailable,
+      readTextAtPoint: unavailable,
       deployApp: unavailable,
       materializeAppSource: materializationAvailable ? { available: true } : unavailable,
       deployMaterializedApp: materializationAvailable ? { available: true } : unavailable,

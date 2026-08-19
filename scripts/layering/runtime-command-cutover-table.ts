@@ -25,7 +25,7 @@ import { retiredDispatchProjectionViolations } from './runtime-command-cutover-d
  * A row id is a report heading, so it must be unique across every stack that adds rows here.
  * `cutoverTableDefects` rejects a duplicate; lifecycle starts at R28 after the accepted
  * shutdown, install/deploy, and application-lifecycle allocations. Snapshot starts at R32;
- * diff follows at R33.
+ * diff follows at R33, viewport at R34, and get at R36 (R35 is reserved for find).
  */
 export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
   {
@@ -505,6 +505,31 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
       },
     },
     extensions: [diffRetiredDispatchProjectionProof],
+  },
+  {
+    rule: 'R36 get-runtime-cutover',
+    command: 'get',
+    subject: 'element read',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    // `get`'s legacy admission WAS its capability bucket plus the static family command sets the
+    // matrix augments it with; the row's automatic admission columns reject the bucket and the
+    // `requireCommandSupported('get', …)` call, and these names are the augmentation entries that
+    // had to disappear with them (`addWebCommandCapabilities` throws for a web-listed command
+    // with no matrix row, so the web entry could not be left behind).
+    legacyRetirement: {
+      routeNames: ['WEB_QUERY_COMMANDS_WITH_GET', 'HARMONYOS_GET_SUPPORT'],
+    },
+    runtimeTypeNames: ['ElementTextRuntimeOperations', 'SnapshotRuntimeOperations'],
+    operations: { names: ['captureSnapshot', 'readTextAtPoint'] },
+    singularExecution: {
+      routes: ['dispatchGetViaRuntime'],
+      operations: ['captureSnapshot', 'readTextAtPoint'],
+      operationOwners: {
+        captureSnapshot: ['selectElementReadOperations'],
+        readTextAtPoint: ['selectElementTextRead'],
+      },
+    },
   },
   {
     rule: 'R34 viewport-runtime-cutover',

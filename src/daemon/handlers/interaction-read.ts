@@ -1,6 +1,6 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
+import type { ElementTextRuntimeOperations } from '@agent-device/contracts/platform';
 import { isIosFamily } from '@agent-device/kernel/device';
-import { dispatchCommand } from '../../core/dispatch.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import type { SessionState } from '../types.ts';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
@@ -8,6 +8,14 @@ import { extractReadableText, prefersValueForReadableText } from '../../utils/te
 import type { ContextFromFlags } from './interaction-common.ts';
 import { resolveRectCenter } from './interaction-targeting.ts';
 
+export type ReadElementTextAtPoint = ElementTextRuntimeOperations['readTextAtPoint'];
+
+/**
+ * When a selector read consults the owner's live point read, and what it does with the answer.
+ * This module owns that policy only: the read itself is injected, so nothing here names a
+ * platform. A migrated command passes its bound `readTextAtPoint` — including passing nothing
+ * when its selected owner's facts report no live read, which is the complete required path.
+ */
 export async function readTextForNode(params: {
   device: SessionState['device'];
   node: SnapshotNode;
@@ -15,16 +23,20 @@ export async function readTextForNode(params: {
   appBundleId?: string;
   traceOutPath?: string;
   surface?: SessionState['surface'];
+  readTextAtPoint?: ReadElementTextAtPoint;
   contextFromFlags: ContextFromFlags;
 }): Promise<string> {
   const { device, node, flags, appBundleId, traceOutPath, surface, contextFromFlags } = params;
   const fallbackText = extractReadableText(node);
+  const readTextAtPoint = params.readTextAtPoint;
+  // No live read on this owner: the captured tree is the whole answer, with nothing to disclose.
+  if (!readTextAtPoint) return fallbackText;
   const center = resolveRectCenter(node.rect);
   if (!center) {
     return fallbackText;
   }
 
-  // iOS only: the XCUITest backend `read` re-resolves the element at a point by enumerating
+  // iOS only: the XCUITest backend `readText` re-resolves the element at a point by enumerating
   // the full element tree (allElementsBoundByIndex), which is ~20x slower than the snapshot we
   // already captured to resolve this node. That re-read only recovers fuller text for
   // editable/expandable inputs (textField/searchField/textView/…), where the live value can
@@ -36,19 +48,22 @@ export async function readTextForNode(params: {
     return fallbackText;
   }
 
+  const context = contextFromFlags(flags, appBundleId, traceOutPath);
   try {
-    const rawData = await dispatchCommand(
-      device,
-      'read',
-      [String(center.x), String(center.y)],
-      undefined,
-      {
-        ...contextFromFlags(flags, appBundleId, traceOutPath),
-        surface,
+    const text = await readTextAtPoint({
+      point: center,
+      options: { appBundleId, surface },
+      execution: {
+        requestId: context.requestId,
+        verbose: context.verbose,
+        logPath: context.logPath,
+        traceLogPath: context.traceLogPath,
+        iosXctestrunFile: context.iosXctestrunFile,
+        iosXctestDerivedDataPath: context.iosXctestDerivedDataPath,
+        iosXctestEnvDir: context.iosXctestEnvDir,
+        runnerLeaseContext: context.runnerLeaseContext,
       },
-    );
-    const data = rawData && typeof rawData === 'object' ? rawData : undefined;
-    const text = typeof data?.text === 'string' ? data.text : '';
+    });
     if (text.trim()) {
       return text;
     }
@@ -64,6 +79,9 @@ export async function readTextForNode(params: {
     });
     return fallbackText;
   } catch (error) {
+    // ADR 0019 §2: a preferred operation's failure may fall back to the complete required path
+    // through a TYPED reason. `interaction_read_fallback` is that reason — structured, never
+    // sniffed from an error message — and the required path (the captured tree) is what answers.
     emitDiagnostic({
       level: 'warn',
       phase: 'interaction_read_fallback',

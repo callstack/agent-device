@@ -72,6 +72,10 @@ test.each([
   expect(binding.operations.setViewport).toBeUndefined();
   expect(facts.operations.captureScreenshot).toEqual({ available: true });
   expect(binding.operations.captureScreenshot).toBeTypeOf('function');
+  // HarmonyOS has no point-read tool: `get` answers from the captured tree, which is what the
+  // legacy dispatch already did once its Apple-runner fall-through failed.
+  expect(facts.operations.readTextAtPoint).toMatchObject({ available: false });
+  expect(binding.operations.readTextAtPoint).toBeUndefined();
   await expect(binding.operations.ensureReady?.({})).resolves.toMatchObject({ booted: true });
   await expect(
     binding.operations.listApps?.({ device: runtimeDevice, filter: 'all' }),
@@ -188,6 +192,7 @@ test.each([
     expect(facts.operations.ensureReady).toMatchObject({ available: true });
     expect(facts.operations.bootTarget).toMatchObject({ available: false });
     expect(facts.operations.bootTargetHeadless).toMatchObject({ available: false });
+    expect(facts.operations.readTextAtPoint.available).toBe(false);
     expect(facts.operations.captureSnapshot.available).toBe(
       runtimeDevice.kind === 'emulator' || runtimeDevice.kind === 'device',
     );

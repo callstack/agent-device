@@ -16,6 +16,10 @@ import type { ScreenshotRuntimeOperations } from './screenshot-runtime.ts';
 import type { SnapshotRuntimeHost, SnapshotRuntimeOperations } from './snapshot-runtime.ts';
 import type { ViewportRuntimeOperations } from './viewport-runtime.ts';
 import type {
+  ElementTextRuntimeHost,
+  ElementTextRuntimeOperations,
+} from './element-text-runtime.ts';
+import type {
   DeviceReadinessRuntimeHost,
   DeviceReadinessRuntimeOperations,
 } from './device-readiness-runtime.ts';
@@ -47,6 +51,7 @@ export type PlatformRuntimeOperations = AppLogRuntimeOperations &
   ScreenshotRuntimeOperations &
   SnapshotRuntimeOperations &
   ViewportRuntimeOperations &
+  ElementTextRuntimeOperations &
   DeviceReadinessRuntimeOperations &
   DeviceShutdownRuntimeOperations &
   ApplicationLifecycleRuntimeOperations;
@@ -66,6 +71,30 @@ export const bootTargetHeadlessUse = defineUse({
 export const appsRuntimeUse = defineUse({ required: ['ensureReady', 'listApps'] });
 export const captureSnapshotUse = defineUse({ required: ['captureSnapshot'] });
 export const viewportRuntimeUse = defineUse({ required: ['setViewport'] });
+/**
+ * `get` reads one element's text or attributes. The required path answers from the captured
+ * tree on every supported cell; `readTextAtPoint` is the owner-provided live read that recovers
+ * fuller text for editable/expandable elements, so it is preferred rather than required (ADR
+ * 0019 §2). An owner without it still executes `get` completely.
+ */
+export const elementReadRuntimeUse = defineUse({
+  required: ['captureSnapshot'],
+  preferred: ['readTextAtPoint'],
+});
+
+/**
+ * `get`'s use does not vary with its input, so there is nothing to resolve: the one plan is a
+ * frozen constant rather than a `resolve…RuntimePlan` over a single row.
+ */
+export type ElementReadRuntimePlan = Readonly<{
+  kind: 'element-read';
+  use: typeof elementReadRuntimeUse;
+}>;
+
+export const elementReadRuntimePlan: ElementReadRuntimePlan = Object.freeze({
+  kind: 'element-read',
+  use: elementReadRuntimeUse,
+});
 const captureSnapshotWithCustomActionsUse = defineUse({
   required: ['captureSnapshot', 'captureSnapshotWithCustomActions'],
 });
@@ -224,6 +253,7 @@ export type PlatformRuntimeHost = AppLogRuntimeHost &
     }>;
     screenRecording: ScreenRecordingRuntimeHost;
     snapshot: SnapshotRuntimeHost;
+    elementText: ElementTextRuntimeHost;
     deviceReadiness: DeviceReadinessRuntimeHost;
     deviceShutdown: DeviceShutdownRuntimeHost;
     localInteractors: LocalApplicationInteractorHost;

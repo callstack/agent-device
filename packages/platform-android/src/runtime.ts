@@ -10,7 +10,9 @@ import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
   bindLocalScreenshotInteractor,
+  bindElementTextRuntime,
   bindLocalSnapshotInteractor,
+  elementTextRuntimeOperationFacts,
   localRuntimeOwner,
   screenshotRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
@@ -30,6 +32,10 @@ import {
 
 const owner = localRuntimeOwner('android');
 const available = Object.freeze({ available: true } as const);
+const elementTextKindUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+} as const);
 const headlessUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-device-kind',
@@ -148,6 +154,11 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           capture: device.kind === 'simulator' ? screenshotKindUnavailable : available,
         }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
+        // uiautomator reads text at a point through the same adb path the snapshot uses, so the
+        // synthetic `simulator` row is the only Android kind without a live read.
+        ...elementTextRuntimeOperationFacts({
+          readTextAtPoint: device.kind === 'simulator' ? elementTextKindUnavailable : available,
+        }),
         ensureReady: available,
         bootTarget: available,
         bootTargetHeadless: device.kind === 'emulator' ? available : headlessUnavailable,
@@ -207,6 +218,8 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
                 signal: request.scope.signal,
                 resolveInteractor: host.localInteractors.resolve,
               })
+          ...(facts.operations.readTextAtPoint.available
+            ? bindElementTextRuntime({ device: request.device, host: host.elementText })
             : {}),
           ensureReady: async (input: EnsureReadyInput) =>
             await ensureAndroidReady(

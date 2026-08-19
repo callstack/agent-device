@@ -9,6 +9,8 @@ import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
   bindLocalScreenshotInteractor,
+  bindElementTextRuntime,
+  elementTextRuntimeOperationFacts,
   localRuntimeOwner,
   screenshotRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
@@ -54,6 +56,15 @@ const headlessUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
   hint: 'Headless boot is supported only for local Android emulators.',
+} as const);
+const elementTextLeafUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'watchOS has no XCUITest-driveable UI, so element text comes from the captured tree only.',
+} as const);
+const elementTextKindUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
 } as const);
 const watchOpenTargetUnavailable = Object.freeze({
   available: false,
@@ -224,6 +235,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         ...appleSnapshotFacts(device),
         ...screenshotRuntimeOperationFacts({ capture: appleScreenshotFact(device) }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
+        ...elementTextRuntimeOperationFacts({ readTextAtPoint: appleElementTextFact(device) }),
         ensureReady: readiness,
         bootTarget: boot,
         bootTargetHeadless: headlessUnavailable,
@@ -274,6 +286,8 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
                 signal: request.scope.signal,
                 resolveInteractor: host.localInteractors.resolve,
               })
+          ...(facts.operations.readTextAtPoint.available
+            ? bindElementTextRuntime({ device: request.device, host: host.elementText })
             : {}),
           ...(facts.operations.ensureReady.available
             ? {
@@ -320,6 +334,18 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
     },
     shutdown: async () => await appLogs.shutdown(),
   });
+}
+
+/**
+ * The live point read is the XCUITest runner's `readText` for app sessions and the macOS helper
+ * for desktop/menubar surfaces. Both need a driveable Apple UI, so watchOS and the non
+ * simulator/device kinds have no read at all.
+ */
+function appleElementTextFact(device: DeviceInfo) {
+  if (resolveDeviceAppleOs(device) === 'watchos') return elementTextLeafUnavailable;
+  return device.kind === 'simulator' || device.kind === 'device'
+    ? available
+    : elementTextKindUnavailable;
 }
 
 function appleSnapshotFact(device: DeviceInfo) {

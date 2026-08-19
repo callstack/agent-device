@@ -284,6 +284,13 @@ test.each([
   expect(binding.facts.operations.captureScreenshot).toEqual({ available: true });
   expect(binding.operations.captureScreenshot).toBeTypeOf('function');
   expect(binding.operations.captureSnapshot).toBeTypeOf('function');
+  // Limrun owns the device remotely and exposes no local point-read tool, so the live read is
+  // unavailable and `get` answers from the captured tree — never by borrowing the local runtime.
+  expect(binding.facts.operations.readTextAtPoint).toMatchObject({
+    available: false,
+    reason: 'unsupported-provider-mode',
+  });
+  expect(binding.operations.readTextAtPoint).toBeUndefined();
   await expect(
     binding.operations.listApps?.({ device: runtimeDevice, filter: 'all' }),
   ).resolves.toEqual([]);
