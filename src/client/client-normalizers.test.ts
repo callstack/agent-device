@@ -4,6 +4,7 @@ import { normalizeOpenForegroundComposition } from './client-normalizers.ts';
 
 test('embedded daemon errors sanitize an untrusted cause before client exposure', () => {
   const secret = 'adc_live_remote-secret';
+  const oversizedCode = `token=${secret} ${'c'.repeat(500)}`;
   const message =
     `request to https://user:pass@example.test/app?token=${secret} failed: bearer ${secret} ` +
     'x'.repeat(500);
@@ -12,7 +13,7 @@ test('embedded daemon errors sanitize an untrusted cause before client exposure'
     initialSnapshotError: {
       code: 'COMMAND_FAILED',
       message: 'capture failed',
-      cause: { code: `token=${secret}`, message },
+      cause: { code: oversizedCode, message },
     },
   });
 
@@ -20,6 +21,9 @@ test('embedded daemon errors sanitize an untrusted cause before client exposure'
   assert.ok(cause);
   assert.equal(JSON.stringify(cause).includes(secret), false);
   assert.match(cause.message, /REDACTED/);
-  assert.ok(cause.message.length < message.length);
-  assert.equal(cause.code, 'token=[REDACTED]');
+  assert.equal(cause.message.length, 400);
+  assert.match(cause.message, /<truncated>$/);
+  assert.match(cause.code ?? '', /^token=\[REDACTED\]/);
+  assert.equal(cause.code?.length, 400);
+  assert.match(cause.code ?? '', /<truncated>$/);
 });

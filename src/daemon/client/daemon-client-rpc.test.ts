@@ -5,6 +5,7 @@ import { handleDaemonHttpResponseBody } from './daemon-client-rpc.ts';
 
 test('HTTP RPC errors sanitize an untrusted cause before rehydration', () => {
   const secret = 'adc_agent_remote-secret';
+  const oversizedCode = `apiKey=${secret} ${'c'.repeat(500)}`;
   const message =
     `download https://user:pass@example.test/app?token=${secret} failed: bearer ${secret} ` +
     'x'.repeat(500);
@@ -16,7 +17,7 @@ test('HTTP RPC errors sanitize an untrusted cause before rehydration', () => {
         data: {
           code: 'COMMAND_FAILED',
           message: 'remote download failed',
-          cause: { code: `apiKey=${secret}`, message },
+          cause: { code: oversizedCode, message },
         },
       },
     }),
@@ -41,6 +42,9 @@ test('HTTP RPC errors sanitize an untrusted cause before rehydration', () => {
   assert.ok(cause);
   assert.equal(JSON.stringify(cause).includes(secret), false);
   assert.match(cause.message, /REDACTED/);
-  assert.ok(cause.message.length < message.length);
-  assert.equal(cause.code, 'apiKey=[REDACTED]');
+  assert.equal(cause.message.length, 400);
+  assert.match(cause.message, /<truncated>$/);
+  assert.match(cause.code ?? '', /^apiKey=\[REDACTED\]/);
+  assert.equal(cause.code?.length, 400);
+  assert.match(cause.code ?? '', /<truncated>$/);
 });
