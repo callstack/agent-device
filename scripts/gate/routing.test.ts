@@ -107,6 +107,29 @@ test('the exemption cannot name an action the lane itself runs', () => {
   }
 });
 
+// Second review finding on #1857, one level past the first: `Lane.uses` recorded only the
+// composite actions' `action.yml` descriptors, so a support file the descriptor *executes*
+// (`bash "$GITHUB_ACTION_PATH/fetch-artifact.sh"`) was exemptible as if it were an unrelated
+// sibling workflow. The closure is the action's directory now, which also covers the two files
+// referenced no closer than inside that shell script.
+test('the exemption cannot name a support file of an action the lane runs', () => {
+  const support = [
+    '.github/actions/setup-fixture-app/fetch-artifact.sh', // named by the action.yml
+    '.github/actions/setup-fixture-app/resolve-artifact-name.sh', // named only inside that script
+    '.github/actions/setup-fixture-app/trusted-artifact.mjs', // likewise
+  ];
+  for (const file of support) {
+    assert.ok(iosLane.uses.includes(file), `${file} must be in the lane's uses closure`);
+    const model = withIos((lane) => ({ ...lane, pathsIgnore: [...lane.pathsIgnore, file] }));
+    assert.ok(
+      messages(model).some(
+        (message) => message.includes(`ignores ${file}`) && /fails open/.test(message),
+      ),
+      `naming ${file} exactly must still fail the routing assertion`,
+    );
+  }
+});
+
 // The trap fires correctly for a tracked non-TS file under an ignored family root, but the
 // remedy is not "remove the ignore entry" — that would un-route every sibling `.ts` in the
 // tree. The selector gap is the fix, and the message has to say so.

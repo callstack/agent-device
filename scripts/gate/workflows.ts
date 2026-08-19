@@ -94,9 +94,17 @@ function declaredGates(
   return gates;
 }
 
-// The transitive closure of local composite actions the steps use, as repo-relative action
-// files. Same walk `declaredGates` performs, kept separate because it answers a different
+// Every file of every local composite action the steps use, transitively, as repo-relative
+// paths. Same walk `declaredGates` performs, kept separate because it answers a different
 // question: not "which gate does this lane declare" but "which files ARE this lane".
+//
+// The unit is the action's DIRECTORY, not its `action.yml`. A composite action's descriptor is
+// only its entry point: `setup-fixture-app/action.yml` runs
+// `bash "$GITHUB_ACTION_PATH/fetch-artifact.sh"`, and that script in turn runs its siblings
+// `resolve-artifact-name.sh` and `trusted-artifact.mjs` — references that exist only inside
+// shell, one level past anything YAML parsing can see. Collecting the directory needs no shell
+// model and cannot miss a file however deep the chain goes; the cost is coarseness, which is
+// harmless here because a file inside an action's own directory belongs to that action.
 function localActionFiles(
   steps: readonly RawStep[],
   root: string,
@@ -106,12 +114,24 @@ function localActionFiles(
   for (const step of steps) {
     const action = readLocalAction(step.uses, root);
     if (!action || !step.uses || chain.includes(step.uses)) continue;
+    const dir = step.uses.slice(2);
     files.push(
-      path.posix.join(step.uses.slice(2), 'action.yml'),
+      ...filesUnder(path.join(root, dir)).map((file) => path.posix.join(dir, file)),
       ...localActionFiles(action.runs?.steps ?? [], root, [...chain, step.uses]),
     );
   }
   return files;
+}
+
+/** Every file under `dir`, recursively, as paths relative to it. */
+function filesUnder(dir: string): string[] {
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir, { withFileTypes: true, recursive: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) =>
+      path.posix.join(path.relative(dir, entry.parentPath).split(path.sep).join('/'), entry.name),
+    );
 }
 
 function triggerPaths(on: Record<string, { paths?: string[]; 'paths-ignore'?: string[] }>) {
