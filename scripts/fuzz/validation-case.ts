@@ -8,6 +8,7 @@
 // carry it unchanged.
 
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { describeThrown } from './invariant.ts';
 import type { FuzzFailure, FuzzTargetName } from './target-types.ts';
 
 export type ValidationExpectation = { outcome: 'accept' } | { outcome: 'reject'; code: string };
@@ -22,6 +23,23 @@ export type ValidationCase = {
 
 export function encodeValidationCase(validationCase: ValidationCase): string {
   return JSON.stringify(validationCase);
+}
+
+/** A pinned case the parser must accept. */
+export function acceptCase(payload: ValidationCase['payload']): string {
+  return encodeValidationCase({ payload, mutation: 'valid', expect: { outcome: 'accept' } });
+}
+
+/**
+ * A pinned case the parser must refuse with `code`. Seeds run verbatim before any generated case,
+ * which is where rules whose whole input space is a few strings belong (#1781 B2).
+ */
+export function rejectCase(
+  payload: ValidationCase['payload'],
+  mutation: string,
+  code = 'INVALID_ARGS',
+): string {
+  return encodeValidationCase({ payload, mutation, expect: { outcome: 'reject', code } });
 }
 
 /** `null` for anything that is not a well-formed validation envelope. */
@@ -140,9 +158,4 @@ function failure(
   detail: string,
 ): FuzzFailure {
   return { target, input, kind, detail };
-}
-
-function describeThrown(error: unknown): string {
-  if (error instanceof Error) return `${error.name}: ${error.message}`;
-  return `non-Error throw: ${typeof error} ${String(error)}`;
 }

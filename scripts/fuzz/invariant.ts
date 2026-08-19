@@ -51,7 +51,7 @@ export function checkCase(target: FuzzTarget, input: string): FuzzFailure | null
   }
 }
 
-function describeThrown(error: unknown): string {
+export function describeThrown(error: unknown): string {
   if (error instanceof Error) {
     const stackLine = error.stack?.split('\n')[1]?.trim();
     return `${error.name}: ${error.message}${stackLine ? ` (at ${stackLine})` : ''}`;

@@ -8,10 +8,10 @@
 
 import fc from 'fast-check';
 import { describe, expect, it, vi } from 'vitest';
-import { describeFailure } from './invariant.ts';
 import { getFuzzTarget } from './registry.ts';
 import { decodeValidationCase } from './validation-case.ts';
-import { cliValidationArb } from './validation-arbitraries-cli.ts';
+import { describeGeneratorContract } from './validation-generator-contract.ts';
+import { CLI_MUTATION_NAMES, cliValidationArb } from './validation-arbitraries-cli.ts';
 
 // A mismatch that fires at ~1-in-1000 must not pass here and then phantom nightly: the nightly
 // draws 38,000 cases per target, so this samples 7.9% of it rather than the 1.5% it began at.
@@ -21,29 +21,11 @@ const SEED = 1;
 const target = getFuzzTarget('cli-validation');
 const sample = fc.sample(cliValidationArb, { numRuns: SAMPLE_SIZE, seed: SEED });
 
-describe('cli-validation generator', () => {
-  it('is deterministic for a seed, so a reported counterexample replays', () => {
-    const again = fc.sample(cliValidationArb, { numRuns: 32, seed: 7 });
-    expect(again).toEqual(fc.sample(cliValidationArb, { numRuns: 32, seed: 7 }));
-    expect(again).not.toEqual(fc.sample(cliValidationArb, { numRuns: 32, seed: 8 }));
-  });
-
-  it('produces decodable envelopes whose expectations hold on a healthy tree', () => {
-    const failures = [];
-    for (const input of sample) {
-      expect(decodeValidationCase(input)).not.toBeNull();
-      const failure = target.check!(input);
-      if (failure) failures.push(describeFailure(failure));
-    }
-    expect(failures).toEqual([]);
-  });
-
-  it('exercises every mutation class, including valid accept cases', () => {
-    const mutations = new Set(sample.map((input) => decodeValidationCase(input)!.mutation));
-    expect(mutations).toContain('valid');
-    // A class that stops firing (surface drift, weight bug) is dead coverage and fails here.
-    expect([...mutations].sort()).toMatchSnapshot();
-  });
+describeGeneratorContract({
+  targetName: 'cli-validation',
+  arbitrary: cliValidationArb,
+  declaredClasses: CLI_MUTATION_NAMES,
+  sample,
 });
 
 describe('planted CLI violations are refused where the generator says they are', () => {

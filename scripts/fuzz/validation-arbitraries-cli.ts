@@ -35,14 +35,6 @@ const EXCLUDED_CLI_COMMANDS = new Set(['cdp', 'react-devtools', 'batch']);
 // batch step-source invariant. All are exercised elsewhere; here they would blur expectations.
 const EXCLUDED_FLAG_KEYS = new Set(['help', 'version', 'snapshotDiff', 'steps', 'stepsFile']);
 
-function collidingFlagNames(definitions: readonly FlagDefinition[]): Set<string> {
-  const counts = new Map<string, number>();
-  for (const definition of definitions) {
-    for (const name of definition.names) counts.set(name, (counts.get(name) ?? 0) + 1);
-  }
-  return new Set([...counts.entries()].filter(([, count]) => count > 1).map(([name]) => name));
-}
-
 /**
  * Deriving the surface walks the whole command-metadata registry, so it is computed on first use
  * rather than at import: a `--input-file` replay or a classic-target run must not pay for a
@@ -65,7 +57,16 @@ export function validationSurfaceBuildCount(): number {
   return surfaceBuilds;
 }
 
-const collidingNames = memoize(() => collidingFlagNames(getFlagDefinitions()));
+/** Names carried by more than one definition (`--port`, `--scope`): which one the parser picks
+ * depends on the command, so a case built on one would assert an outcome the parser never owed. */
+const collidingNames = memoize(() => {
+  const seen = new Set<string>();
+  const colliding = new Set<string>();
+  for (const definition of getFlagDefinitions()) {
+    for (const name of definition.names) (seen.has(name) ? colliding : seen).add(name);
+  }
+  return colliding;
+});
 
 /** Flag definitions with a single unambiguous long name, excluding the special keys. */
 const safeFlagPool = memoize<readonly FlagDefinition[]>(() =>
@@ -116,8 +117,8 @@ function validNumericValue(definition: FlagDefinition, salt: number): string {
 /** A schema-valid value for one flag, salt-selected so shrinking stays deterministic. */
 function validFlagValue(definition: FlagDefinition, salt: number): string {
   if (definition.type === 'enum') {
-    const values = definition.enumValues ?? [];
-    return values[salt % Math.max(values.length, 1)] ?? '1';
+    const values = definition.enumValues!;
+    return values[salt % values.length]!;
   }
   if (definition.type === 'int' || definition.type === 'number') {
     return validNumericValue(definition, salt);
@@ -182,6 +183,31 @@ const fakeCommands = memoize(() =>
   ),
 );
 
+/**
+ * Five of the seven classes are the same shape: pick a flag the schema says matches, render argv
+ * around it. Writing that out per class duplicated the picker and restated each class name inside
+ * its own body, where it could drift from the declared `name`; the factory owns both.
+ */
+function flagMutation(spec: {
+  name: string;
+  layer: CliMutationLayer;
+  weight: number;
+  code: string;
+  /** Flags this class can plant, from the schema — empty means the class does not apply. */
+  candidates: (base: CliBase) => readonly FlagDefinition[];
+  argv: (definition: FlagDefinition, base: CliBase) => string[];
+}): CliMutation {
+  const { candidates, argv, ...declaration } = spec;
+  return {
+    ...declaration,
+    apply: (base) => {
+      const pool = candidates(base);
+      const definition = pool[base.salt % pool.length];
+      return definition ? { payload: argv(definition, base), mutation: spec.name } : null;
+    },
+  };
+}
+
 const CLI_MUTATIONS: readonly CliMutation[] = [
   {
     // #1433: a bounded command must refuse extra positionals instead of swallowing them.
@@ -202,91 +228,63 @@ const CLI_MUTATIONS: readonly CliMutation[] = [
       };
     },
   },
-  {
+  flagMutation({
     name: 'unsupported-flag',
     layer: 'command-validation',
     weight: 6,
     code: 'INVALID_ARGS',
-    apply: (base) => {
-      const foreign = safeFlagPool().filter(
+    candidates: (base) =>
+      safeFlagPool().filter(
         (definition) => !isFlagSupportedForCommand(definition.key, base.surface.name),
-      );
-      const definition = foreign[base.salt % Math.max(foreign.length, 1)];
-      if (!definition) return null;
-      return {
-        payload: [...validArgv(base), renderFlag(definition, base.salt)],
-        mutation: 'unsupported-flag',
-      };
-    },
-  },
-  {
+      ),
+    argv: (definition, base) => [...validArgv(base), renderFlag(definition, base.salt)],
+  }),
+  flagMutation({
     name: 'bad-enum-value',
     layer: 'token-scan',
     weight: 1,
     code: 'INVALID_ARGS',
-    apply: (base) => {
-      const enums = base.surface.flags.filter((definition) => definition.type === 'enum');
-      const definition = enums[base.salt % Math.max(enums.length, 1)];
-      if (!definition) return null;
-      return {
-        payload: [base.surface.name, `${flagToken(definition)}=bogus-${base.salt % 7}`],
-        mutation: 'bad-enum-value',
-      };
-    },
-  },
-  {
+    candidates: (base) => base.surface.flags.filter((definition) => definition.type === 'enum'),
+    argv: (definition, base) => [
+      base.surface.name,
+      `${flagToken(definition)}=bogus-${base.salt % 7}`,
+    ],
+  }),
+  flagMutation({
     name: 'int-out-of-range',
     layer: 'token-scan',
     weight: 1,
     code: 'INVALID_ARGS',
-    apply: (base) => {
-      const bounded = base.surface.flags.filter(
+    candidates: (base) =>
+      base.surface.flags.filter(
         (definition) =>
           (definition.type === 'int' || definition.type === 'number') &&
           (definition.min !== undefined || definition.max !== undefined),
-      );
-      const definition = bounded[base.salt % Math.max(bounded.length, 1)];
-      if (!definition) return null;
-      const value =
-        definition.min !== undefined ? String(definition.min - 1) : String(definition.max! + 1);
-      return {
-        payload: [base.surface.name, `${flagToken(definition)}=${value}`],
-        mutation: 'int-out-of-range',
-      };
-    },
-  },
-  {
+      ),
+    argv: (definition, base) => [
+      base.surface.name,
+      `${flagToken(definition)}=${definition.min !== undefined ? definition.min - 1 : definition.max! + 1}`,
+    ],
+  }),
+  flagMutation({
     name: 'missing-flag-value',
     layer: 'token-scan',
     weight: 1,
     code: 'INVALID_ARGS',
-    apply: (base) => {
-      const valued = base.surface.flags.filter(isValueFlag);
-      const definition = valued[base.salt % Math.max(valued.length, 1)];
-      if (!definition) return null;
-      return {
-        payload: [base.surface.name, flagToken(definition)],
-        mutation: 'missing-flag-value',
-      };
-    },
-  },
-  {
+    candidates: (base) => base.surface.flags.filter(isValueFlag),
+    argv: (definition, base) => [base.surface.name, flagToken(definition)],
+  }),
+  flagMutation({
     name: 'boolean-with-value',
     layer: 'token-scan',
     weight: 1,
     code: 'INVALID_ARGS',
-    apply: (base) => {
-      const booleans = base.surface.flags.filter(
+    candidates: (base) =>
+      base.surface.flags.filter(
         (definition) => definition.type === 'boolean' || definition.setValue !== undefined,
-      );
-      const definition = booleans[base.salt % Math.max(booleans.length, 1)];
-      if (!definition) return null;
-      return {
-        payload: [...validArgv(base), `${flagToken(definition)}=true`],
-        mutation: 'boolean-with-value',
-      };
-    },
-  },
+      ),
+    argv: (definition, base) => [...validArgv(base), `${flagToken(definition)}=true`],
+  }),
   {
     name: 'unknown-command',
     layer: 'command-validation',
@@ -299,6 +297,9 @@ const CLI_MUTATIONS: readonly CliMutation[] = [
     },
   },
 ];
+
+/** The classes this generator declares, so its coverage test needs no hand-kept list. */
+export const CLI_MUTATION_NAMES: readonly string[] = CLI_MUTATIONS.map((mutation) => mutation.name);
 
 const cliBaseArb: fc.Arbitrary<CliBase> = fc
   .record({

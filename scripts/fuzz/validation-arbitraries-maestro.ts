@@ -24,6 +24,8 @@ function validMaestroCommand(pick: number, salt: number): string[] {
     () => ['- stopApp'],
     () => ['- scroll'],
     () => ['- waitForAnimationToEnd'],
+    () => ['- eraseText'],
+    () => [`- eraseText: ${1 + (salt % 9)}`],
     () => ['- launchApp'],
     () => [`- launchApp: ${text}`],
     () => [`- tapOn: ${text}`],
@@ -92,13 +94,20 @@ const MAESTRO_MUTATIONS: readonly MaestroMutation[] = [
   { name: 'scroll-options', code: 'INVALID_ARGS', lines: () => ['- scroll:', '    direction: UP'] },
 ];
 
+/** Declared classes plus the config-level variant `unsupported-field` renders for a salt slice. */
+export const MAESTRO_MUTATION_NAMES: readonly string[] = [
+  ...MAESTRO_MUTATIONS.map((mutation) => mutation.name),
+  'config-unknown-key',
+];
+
 type MaestroBase = { commandPicks: number[]; salt: number; withConfig: boolean };
 
-function renderMaestroFlow(base: MaestroBase, mutatedLines?: string[], at?: number): string {
+/** `planted` travels as one value: a mutation's lines and where they go are never separable. */
+function renderMaestroFlow(base: MaestroBase, planted?: { lines: string[]; at: number }): string {
   const commands = base.commandPicks.map((pick, index) =>
     validMaestroCommand(pick, base.salt + index),
   );
-  if (mutatedLines) commands.splice(Math.min(at ?? 0, commands.length), 0, mutatedLines);
+  if (planted) commands.splice(Math.min(planted.at, commands.length), 0, planted.lines);
   const body = commands.flat().join('\n');
   const config = base.withConfig ? `appId: ${yamlText(base.salt)}\n---\n` : '';
   return `${config}${body}\n`;
@@ -131,7 +140,7 @@ export const maestroValidationArb: fc.Arbitrary<string> = fc
       });
     }
     return encodeValidationCase({
-      payload: renderMaestroFlow(base, mutation.lines(base.salt), insertAt),
+      payload: renderMaestroFlow(base, { lines: mutation.lines(base.salt), at: insertAt }),
       mutation: mutation.name,
       expect: { outcome: 'reject', code: mutation.code },
     });

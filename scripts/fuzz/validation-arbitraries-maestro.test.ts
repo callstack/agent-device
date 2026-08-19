@@ -8,10 +8,11 @@
 
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { describeFailure } from './invariant.ts';
+import { SUPPORTED_MAESTRO_COMMAND_NAMES } from '../../packages/maestro/src/internal/program-ir-command-parser.ts';
 import { getFuzzTarget } from './registry.ts';
 import { decodeValidationCase } from './validation-case.ts';
-import { maestroValidationArb } from './validation-arbitraries-maestro.ts';
+import { describeGeneratorContract } from './validation-generator-contract.ts';
+import { MAESTRO_MUTATION_NAMES, maestroValidationArb } from './validation-arbitraries-maestro.ts';
 
 const SAMPLE_SIZE = 3_000;
 const SEED = 1;
@@ -19,28 +20,11 @@ const SEED = 1;
 const target = getFuzzTarget('maestro-validation');
 const sample = fc.sample(maestroValidationArb, { numRuns: SAMPLE_SIZE, seed: SEED });
 
-describe('maestro-validation generator', () => {
-  it('is deterministic for a seed, so a reported counterexample replays', () => {
-    const again = fc.sample(maestroValidationArb, { numRuns: 32, seed: 7 });
-    expect(again).toEqual(fc.sample(maestroValidationArb, { numRuns: 32, seed: 7 }));
-    expect(again).not.toEqual(fc.sample(maestroValidationArb, { numRuns: 32, seed: 8 }));
-  });
-
-  it('produces decodable envelopes whose expectations hold on a healthy tree', () => {
-    const failures = [];
-    for (const input of sample) {
-      expect(decodeValidationCase(input)).not.toBeNull();
-      const failure = target.check!(input);
-      if (failure) failures.push(describeFailure(failure));
-    }
-    expect(failures).toEqual([]);
-  });
-
-  it('exercises every mutation class, including valid accept cases', () => {
-    const mutations = new Set(sample.map((input) => decodeValidationCase(input)!.mutation));
-    expect(mutations).toContain('valid');
-    expect([...mutations].sort()).toMatchSnapshot();
-  });
+describeGeneratorContract({
+  targetName: 'maestro-validation',
+  arbitrary: maestroValidationArb,
+  declaredClasses: MAESTRO_MUTATION_NAMES,
+  sample,
 });
 
 describe('planted Maestro violations are refused by command-shape validation', () => {
@@ -70,5 +54,32 @@ describe('planted Maestro violations are refused by command-shape validation', (
     expect(rejectionMessageFor('config-unknown-key')).toMatch(
       /Maestro flow config field ".+" is not supported/,
     );
+  });
+});
+
+describe('shape coverage against the converter', () => {
+  // The valid Maestro shapes are rendered by hand here, so the one thing that cannot be left to
+  // drift is which commands they cover: a command the converter accepts but this generator never
+  // emits is a hole the nightly cannot see. Waivers are explicit and must say why.
+  const NOT_GENERATED = new Set([
+    // Both take a nested command list whose bodies the repeat/runFlow cases already cover.
+    'retry',
+    // Needs a JS file on disk to resolve, which a generated case has no way to provide.
+    'runScript',
+  ]);
+
+  it('emits every command the converter supports, or waives it explicitly', () => {
+    const emitted = new Set(
+      sample.flatMap((entry) => {
+        const { payload } = decodeValidationCase(entry)!;
+        return typeof payload === 'string' ? payload.split('\n') : [];
+      }),
+    );
+    const covered = (command: string) =>
+      [...emitted].some((line) => line.trim().startsWith(`- ${command}`));
+    const missing = SUPPORTED_MAESTRO_COMMAND_NAMES.filter(
+      (command) => !NOT_GENERATED.has(command) && !covered(command),
+    );
+    expect(missing).toEqual([]);
   });
 });

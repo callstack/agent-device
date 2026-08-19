@@ -382,25 +382,19 @@ Two **validation targets** (#1781 B2) — `cli-validation` and `maestro-validati
 their cases are built from the real command surface (the CLI schema registry, the Maestro command
 shapes) so they tokenize cleanly, and each case carries the outcome its generator planted
 (`scripts/fuzz/validation-case.ts`). The judge then also fails a **silent acceptance** of an input
-built to be invalid (the #1433 excess-positionals class, which a rejection-only invariant cannot
-see at all) and a rejection with the **wrong `AppError.code`** — not just "some error".
+built to be invalid (the #1433 class, which a rejection-only invariant cannot see at all) and a
+rejection carrying the **wrong `AppError.code`**.
 
-Each CLI mutation class declares the parser layer it is refused by. `command-validation` classes
-(excess positionals, unsupported-for-command flags, unknown commands) survive the argv scan and
-reach `finalizeParsedArgs` — the reach these targets exist to add; `token-scan` classes (bad enum
-values, out-of-range ints, missing flag values, valued booleans) are refused inside `parseFlagValue`
-while argv is still being scanned, which is where the classic `cli-args` target already reaches.
-They are weighted down to under a quarter of the mutated budget and kept only for the error-code
-assertion `cli-args` cannot make. Rules whose whole input space is a few strings (`batch`'s
-step-source rule, the `--in-app`/`--system` conflict) are **pinned seed cases** rather than
-generated classes, so the nightly does not re-execute a handful of literals thousands of times.
+Each CLI mutation class declares the parser layer that refuses it — `command-validation` (past the
+argv scan, the reach these targets add) or `token-scan` (inside `parseFlagValue`, where the classic
+`cli-args` target already reaches, capped under a quarter of the mutated budget). Rules whose whole
+input space is a few strings are pinned seed cases rather than generated classes.
 
-`scripts/fuzz/validation-arbitraries.test.ts` (unit-core, in-process) gates all of this at PR time:
-fixed-seed samples must hold every planted expectation, every mutation class must still fire, each
-class must be refused in its declared layer, the token-scan share must stay under 25%, and the
-schema surface must not be derived until a case is generated (an eager derivation timed out the
-coverage-instrumented promotion test). A drifted generator fails in seconds instead of producing
-phantom nightly findings.
+The declarations above are executable: `scripts/fuzz/validation-arbitraries-{cli,maestro}.test.ts`
+replay fixed-seed samples against the real parsers and fail on a drifted generator, an unfired
+class, a class refused in a layer it does not claim, a token-scan share over 25%, or a schema
+surface derived at import (#1824). Read those files for the current guarantees rather than a list
+here, which would only age.
 
 Cases come from fast-check arbitraries (`scripts/fuzz/arbitraries.ts`, validation envelopes in
 `scripts/fuzz/validation-arbitraries.ts`) built on the hazard vocabulary
