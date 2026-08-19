@@ -380,31 +380,27 @@ hangs (a worker-thread watchdog attributes a stall to the exact input).
 
 Two **validation targets** (#1781 B2) — `cli-validation` and `maestro-validation` — go further:
 their cases are built from the real command surface (the CLI schema registry, the Maestro command
-shapes) so they tokenize cleanly and die in command validation, and each case carries the outcome
-its generator planted (`scripts/fuzz/validation-case.ts`). The judge then also fails a **silent
-acceptance** of an input built to be invalid (the #1433 excess-positionals class) and a rejection
-with the **wrong `AppError.code`** — not just "some error". Their generator expectations are gated
-at PR time by `scripts/fuzz/validation-arbitraries.test.ts` (unit-core: in-process, no worker), so
-a drifted generator fails in seconds instead of producing phantom nightly findings.
+shapes) so they tokenize cleanly, and each case carries the outcome its generator planted
+(`scripts/fuzz/validation-case.ts`). The judge then also fails a **silent acceptance** of an input
+built to be invalid (the #1433 excess-positionals class, which a rejection-only invariant cannot
+see at all) and a rejection with the **wrong `AppError.code`** — not just "some error".
 
-```sh
-pnpm fuzz:parsers                                  # all targets, 2,000 cases each, seed 1
-pnpm fuzz:parsers --target selector --iterations 50000 --seed 7
-pnpm fuzz:parsers --input-file .tmp/fuzz/<case>.json                  # repro a saved case
-pnpm fuzz:parsers --input-file .tmp/fuzz/<case>.json --append-corpus  # …and pin it
-pnpm fuzz:parsers --self-check                     # require the harness to still fail
-```
+Each CLI mutation class declares the parser layer it is refused by. `command-validation` classes
+(excess positionals, unsupported-for-command flags, unknown commands) survive the argv scan and
+reach `finalizeParsedArgs` — the reach these targets exist to add; `token-scan` classes (bad enum
+values, out-of-range ints, missing flag values, valued booleans) are refused inside `parseFlagValue`
+while argv is still being scanned, which is where the classic `cli-args` target already reaches.
+They are weighted down to under a quarter of the mutated budget and kept only for the error-code
+assertion `cli-args` cannot make. Rules whose whole input space is a few strings (`batch`'s
+step-source rule, the `--in-app`/`--system` conflict) are **pinned seed cases** rather than
+generated classes, so the nightly does not re-execute a handful of literals thousands of times.
 
-The generating run is nightly (`Parser Fuzz Lane` in `.github/workflows/replays-nightly.yml`, seeded
-by the run number). Every terminal path — pass, fail, `--self-check`, or a crash in the harness
-itself — writes `<artifact-dir>/run-envelope.json` on the shared lane contract
-(`scripts/lib/lane-envelope.ts`, #1430), with the lane's own facts under `data`: mode, per-target
-cases/failures/durations, failures, repro commands, and `stage` (`error` marks a run that could not
-complete itself, since the shared `result` is only `pass`/`fail`). `configHash` hashes the modules
-that decide a case set, so "the same seed means different inputs now" is distinguishable from "the
-parsers changed". The self-check and fuzz steps write to separate artifact subdirectories and both
-run unconditionally; the step summary prints each envelope it finds and never fails on a missing
-file.
+`scripts/fuzz/validation-arbitraries.test.ts` (unit-core, in-process) gates all of this at PR time:
+fixed-seed samples must hold every planted expectation, every mutation class must still fire, each
+class must be refused in its declared layer, the token-scan share must stay under 25%, and the
+schema surface must not be derived until a case is generated (an eager derivation timed out the
+coverage-instrumented promotion test). A drifted generator fails in seconds instead of producing
+phantom nightly findings.
 
 Cases come from fast-check arbitraries (`scripts/fuzz/arbitraries.ts`, validation envelopes in
 `scripts/fuzz/validation-arbitraries.ts`) built on the hazard vocabulary

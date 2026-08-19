@@ -11,11 +11,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { checkCase, describeFailure } from './invariant.ts';
 import { getFuzzTarget } from './registry.ts';
 import { decodeValidationCase } from './validation-case.ts';
-import {
-  cliValidationArb,
-  maestroValidationArb,
-  validationSurfaceBuildCount,
-} from './validation-arbitraries.ts';
+import { cliValidationArb, maestroValidationArb } from './validation-arbitraries.ts';
 
 // A mismatch that fires at ~1-in-1000 must not pass here and then phantom nightly: the nightly
 // draws 38,000 cases per target, so this samples 7.9% of it rather than the 1.5% it began at.
