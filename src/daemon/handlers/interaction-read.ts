@@ -1,5 +1,8 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { ElementTextRuntimeOperations } from '@agent-device/contracts/platform';
+import type {
+  ElementTextRuntimeOperations,
+  ElementTextUnreadableReason,
+} from '@agent-device/contracts/platform';
 import { isIosFamily } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import type { SessionState } from '../types.ts';
@@ -49,50 +52,51 @@ export async function readTextForNode(params: {
   }
 
   const context = contextFromFlags(flags, appBundleId, traceOutPath);
-  try {
-    const text = await readTextAtPoint({
-      point: center,
-      options: { appBundleId, surface },
-      execution: {
-        requestId: context.requestId,
-        verbose: context.verbose,
-        logPath: context.logPath,
-        traceLogPath: context.traceLogPath,
-        iosXctestrunFile: context.iosXctestrunFile,
-        iosXctestDerivedDataPath: context.iosXctestDerivedDataPath,
-        iosXctestEnvDir: context.iosXctestEnvDir,
-        runnerLeaseContext: context.runnerLeaseContext,
-      },
-    });
-    if (text.trim()) {
-      return text;
+  // No try/catch: an unexpected read failure propagates. Only the outcomes the contract
+  // classifies fall back to the captured tree (ADR 0019 §2 typed reason), so a runner or
+  // helper failure can never masquerade as "this element has no text".
+  const outcome = await readTextAtPoint({
+    point: center,
+    options: { appBundleId, surface },
+    execution: {
+      requestId: context.requestId,
+      verbose: context.verbose,
+      logPath: context.logPath,
+      traceLogPath: context.traceLogPath,
+      iosXctestrunFile: context.iosXctestrunFile,
+      iosXctestDerivedDataPath: context.iosXctestDerivedDataPath,
+      iosXctestEnvDir: context.iosXctestEnvDir,
+      runnerLeaseContext: context.runnerLeaseContext,
+    },
+  });
+  if (outcome.status === 'read') return outcome.text;
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'interaction_read_fallback',
+    data: {
+      reason: classifiedFallbackReason(outcome.reason),
+      nodeRef: node.ref,
+      surface,
+      platform: device.platform,
+    },
+  });
+  return fallbackText;
+}
+
+/**
+ * The typed reason a fallback to the captured tree is allowed, one diagnostic reason per
+ * classified outcome. The `satisfies never` arm makes a new `ElementTextUnreadableReason`
+ * a COMPILE error here rather than a silent untyped fallback.
+ */
+function classifiedFallbackReason(reason: ElementTextUnreadableReason): string {
+  switch (reason) {
+    case 'no-text-at-point':
+      return 'no_text_at_point';
+    case 'surface-not-readable':
+      return 'surface_not_readable';
+    default: {
+      const unhandled: never = reason;
+      return unhandled;
     }
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'interaction_read_fallback',
-      data: {
-        reason: 'empty_backend_text',
-        nodeRef: node.ref,
-        surface,
-        platform: device.platform,
-      },
-    });
-    return fallbackText;
-  } catch (error) {
-    // ADR 0019 §2: a preferred operation's failure may fall back to the complete required path
-    // through a TYPED reason. `interaction_read_fallback` is that reason — structured, never
-    // sniffed from an error message — and the required path (the captured tree) is what answers.
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'interaction_read_fallback',
-      data: {
-        reason: 'backend_read_failed',
-        nodeRef: node.ref,
-        surface,
-        platform: device.platform,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    });
-    return fallbackText;
   }
 }

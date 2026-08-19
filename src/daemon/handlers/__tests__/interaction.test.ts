@@ -58,6 +58,7 @@ vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOr
   };
 });
 
+import { elementTextRead } from '@agent-device/contracts/platform';
 import {
   elementReadFixtureState,
   getRuntimeBindings,
@@ -153,7 +154,9 @@ test('get text uses backend read expansion when the resolved node has a rect', a
   };
   sessionStore.set(sessionName, session);
 
-  mockReadTextAtPoint.mockResolvedValue('package com.example.app\nclass MainActivity {}');
+  mockReadTextAtPoint.mockResolvedValue(
+    elementTextRead('package com.example.app\nclass MainActivity {}'),
+  );
 
   const response = await handleInteractionCommands({
     req: {
@@ -222,6 +225,42 @@ test('get text answers from the captured tree when the bound owner advertises no
   if (response?.ok) {
     expect(response.data?.text).toBe('preview only');
   }
+});
+
+// ADR 0019 regression: `get` declares `device-runtime`, so an ELIGIBLE direct-iOS selector —
+// one the fast path would otherwise answer without a tree capture — must not reach the device
+// until the request has resolved, admitted, and bound. A refused admission means zero runner
+// queries, not a fast-path answer that skipped exact-owner facts entirely.
+test('an eligible direct iOS selector cannot operate before admission', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'get-text-direct-before-admission';
+  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  elementReadFixtureState.captureSnapshotAvailable = false;
+  mockRunAppleRunnerCommand.mockResolvedValue({
+    found: true,
+    text: 'Ada Lovelace',
+    nodes: [{ index: 0, depth: 0, type: 'StaticText', label: 'Ada Lovelace' }],
+  });
+
+  const response = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'get',
+      positionals: ['text', 'id=name'],
+      flags: {},
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+    ...getRuntimeBindings(),
+  });
+
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) expect(response.error.code).toBe('UNSUPPORTED_OPERATION');
+  // The whole point: the fast path never ran.
+  expect(mockRunAppleRunnerCommand).not.toHaveBeenCalled();
+  expect(mockDispatch).not.toHaveBeenCalled();
 });
 
 test('get text simple iOS id selector uses runner query without snapshot', async () => {
