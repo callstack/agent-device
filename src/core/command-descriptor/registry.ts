@@ -1203,10 +1203,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
     daemon: { route: 'interaction', refFrameEffect: 'preserve' },
-    capability: ALL_DEVICE_COMMAND_CAPABILITY,
     timeoutPolicy: postActionObservationTimeoutPolicy('is', PRESERVE_DAEMON_TIMEOUT_POLICY),
     batchable: true,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    platformExecution: { kind: 'device-runtime', uses: selectorCaptureRuntimePlanUses },
   },
 
   // -- generic (route: generic) --

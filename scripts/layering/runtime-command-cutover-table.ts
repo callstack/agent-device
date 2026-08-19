@@ -25,7 +25,8 @@ import { retiredDispatchProjectionViolations } from './runtime-command-cutover-d
  * A row id is a report heading, so it must be unique across every stack that adds rows here.
  * `cutoverTableDefects` rejects a duplicate; lifecycle starts at R28 after the accepted
  * shutdown, install/deploy, and application-lifecycle allocations. Snapshot starts at R32;
- * diff follows at R33, viewport at R34, and get at R36 (R35 is reserved for find).
+ * diff follows at R33, viewport at R34, get at R36, and is at R37. R35 stays reserved for
+ * find, whose cutover is deferred behind the Wave 5 `focus`/`type` surfaces.
  */
 export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
   {
@@ -545,6 +546,38 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
         captureSnapshot: ['selectActiveAppSnapshot'],
         captureSnapshotWithoutActiveApp: ['selectSnapshotWithoutActiveApp'],
         readTextAtPoint: ['bindElementRead'],
+      },
+    },
+  },
+  {
+    rule: 'R37 is-runtime-cutover',
+    command: 'is',
+    subject: 'element predicate',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    // `is` had no legacy adapter module and no `dispatch` projection of its own: its whole legacy
+    // admission WAS the capability bucket plus the two static family command sets that augmented
+    // it. The row's automatic columns already reject the bucket, `requireCommandSupported('is',
+    // …)`, and any `/(?:WEB|HARMONY).*COMMANDS/` declarator that still lists it — but
+    // `cutoverRowDefects` requires every row to state at least one retirement form rather than
+    // rely on the automatic ones, so these name the augmentation entries that had to disappear,
+    // in the same shape R36 uses. They are names no production source may ever define:
+    // `addWebCommandCapabilities` throws for a web-listed command with no matrix row, so the web
+    // entry could not have been left behind either way.
+    legacyRetirement: {
+      routeNames: ['WEB_QUERY_COMMANDS_WITH_IS', 'HARMONYOS_IS_SUPPORT'],
+    },
+    runtimeTypeNames: ['SnapshotRuntimeOperations'],
+    operations: { names: ['captureSnapshot', 'captureSnapshotWithoutActiveApp'] },
+    singularExecution: {
+      routes: ['dispatchIsViaRuntime'],
+      operations: ['captureSnapshot', 'captureSnapshotWithoutActiveApp'],
+      // `is` executes through the shared selector seam, so its capture owners are the SAME
+      // selectors `snapshot`/`diff`/`get` count. It declares no operation of its own: every
+      // predicate answers from the resolved tree, so `readTextAtPoint` stays R36's alone.
+      operationOwners: {
+        captureSnapshot: ['selectActiveAppSnapshot'],
+        captureSnapshotWithoutActiveApp: ['selectSnapshotWithoutActiveApp'],
       },
     },
   },
