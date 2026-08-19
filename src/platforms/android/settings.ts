@@ -15,6 +15,11 @@ import { parseSettingState } from '../setting-state.ts';
 import { runAndroidAdb } from './adb.ts';
 import { androidAdbResultError } from './adb-executor.ts';
 import { resolveAndroidApp } from './app-deployment-resolution.ts';
+import {
+  androidPriorGrantState,
+  readAndroidRuntimePermissionGrants,
+  type AndroidPriorGrantState,
+} from './permission-grant-state.ts';
 
 const ANDROID_ANIMATION_SCALE_SETTINGS = [
   'window_animation_scale',
@@ -155,20 +160,22 @@ export async function setAndroidSetting(
  * follows a grant leaves the session pointing at a dead app and the next selector fails
  * against the launcher (#1796). Revoking a permission the app does not hold is harmless.
  *
- * The prior grant state is read before the revoke; process death itself is NOT observed
- * (that would be option (b) in the issue), and the read cannot prove the app was running
- * or that the grant belonged to the current user profile. The wording therefore states the
- * platform rule and makes the consequence conditional rather than asserting a death.
+ * Process death itself is NOT observed (that would be option (b) in the issue) and the prior
+ * state cannot prove the app was running, so the consequence stays conditional. When the state
+ * could not be read, the same guidance is given without claiming what the state was: silence
+ * there would assert "your app is untouched" on no evidence.
  */
-export function androidRevokedGrantedPermissionWarning(
+export function androidRevokedPermissionWarning(
   appPackage: string,
   permission: string,
-): string {
-  return (
-    `${permission} was granted before this revoke, and Android kills an app when a granted ` +
-    `permission is revoked: if ${appPackage} was running it is no longer. Relaunch it with ` +
-    `open ${appPackage} --relaunch before the next interaction.`
-  );
+  priorGrantState: AndroidPriorGrantState,
+): string | undefined {
+  if (priorGrantState === 'not_granted') return undefined;
+  const preamble =
+    priorGrantState === 'granted'
+      ? `${permission} was granted before this revoke, and Android kills an app when a granted permission is revoked: if ${appPackage} was running it is no longer.`
+      : `Whether ${permission} was granted before this revoke could not be read (adb did not report the acting user's runtime permission state), and Android kills an app when a granted permission is revoked: ${appPackage} may no longer be running.`;
+  return `${preamble} Relaunch it with open ${appPackage} --relaunch before the next interaction.`;
 }
 
 type AndroidPermissionTarget = ReturnType<typeof parseAndroidPermissionTarget>;
@@ -185,15 +192,16 @@ async function setAndroidPermission(
     await grantAndroidPermission(device, appPackage, target);
     return;
   }
-  const grantedBefore = await readAndroidGrantedRuntimePermissions(device, appPackage);
+  // Read before the revoke — afterwards every permission reads as not granted — but resolved
+  // after it, because `photos` only learns which permission it revoked by probing the device.
+  const grants = await readAndroidRuntimePermissionGrants(device, appPackage);
   const permission = await revokeAndroidPermission(device, appPackage, action, target);
-  const wasGranted = grantedBefore.has(permission);
+  const priorGrantState = androidPriorGrantState(grants, permission);
+  const warning = androidRevokedPermissionWarning(appPackage, permission, priorGrantState);
   return {
     permission,
-    wasGranted,
-    ...(wasGranted
-      ? { warnings: [androidRevokedGrantedPermissionWarning(appPackage, permission)] }
-      : {}),
+    priorGrantState,
+    ...(warning ? { warnings: [warning] } : {}),
   };
 }
 
@@ -231,29 +239,6 @@ async function revokeAndroidPermission(
   }
   if (action === 'reset') await clearAndroidPermissionFlags(device, appPackage, permission);
   return permission;
-}
-
-/**
- * Runtime permissions `dumpsys package <pkg>` reports as `granted=true`. Best-effort: a
- * failed or unparseable dump reads as "nothing granted", which only costs the warning.
- */
-async function readAndroidGrantedRuntimePermissions(
-  device: DeviceInfo,
-  appPackage: string,
-): Promise<ReadonlySet<string>> {
-  const result = await runAndroidAdb(device, ['shell', 'dumpsys', 'package', appPackage], {
-    allowFailure: true,
-  });
-  if (result.exitCode !== 0) return new Set();
-  return parseAndroidGrantedRuntimePermissions(result.stdout);
-}
-
-export function parseAndroidGrantedRuntimePermissions(dumpsysOutput: string): ReadonlySet<string> {
-  const granted = new Set<string>();
-  for (const match of dumpsysOutput.matchAll(/^\s*([\w.]+): granted=true\b/gm)) {
-    granted.add(match[1]!);
-  }
-  return granted;
 }
 
 type AndroidFingerprintAction = 'match' | 'nonmatch';

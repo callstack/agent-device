@@ -1,10 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import {
-  androidRevokedGrantedPermissionWarning,
-  parseAndroidGrantedRuntimePermissions,
-  setAndroidSetting,
-} from '../settings.ts';
+import { androidRevokedPermissionWarning, setAndroidSetting } from '../settings.ts';
 import {
   ANDROID_EMULATOR,
   assertRejectsAppError,
@@ -181,67 +177,163 @@ test('setAndroidSetting permission reset notifications clears permission flags f
   );
 });
 
-// #1796: Android kills the app when a permission it holds is revoked. The prior grant state is
-// read before `pm revoke`, and a granted -> revoked transition surfaces as a warning + typed field.
-const DUMPSYS_MICROPHONE_GRANTED = [
-  'Packages:',
-  '  Package [com.example.app] (abc):',
-  '    User 0: ceDataInode=0 installed=true',
-  '      runtime permissions:',
-  '        android.permission.RECORD_AUDIO: granted=true, flags=[ USER_SET|USER_SENSITIVE_WHEN_GRANTED]',
-  '        android.permission.CAMERA: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED]',
-].join('\n');
+// #1796: Android kills the app when a permission it holds is revoked. The acting user's prior
+// state is read before `pm revoke`; the response reports it as a three-state typed field, because
+// a failed or unreadable dump is NOT evidence that the app was left alone.
+const CURRENT_USER = 'shell am get-current-user';
+const DUMPSYS = 'shell dumpsys package com.example.app';
+const REVOKE_MICROPHONE = 'shell pm revoke com.example.app android.permission.RECORD_AUDIO';
+
+/** A dump shaped like the real one: an install-permission section, then per-user blocks. */
+function dumpsys(
+  users: ReadonlyArray<{ id: number; runtime?: ReadonlyArray<[string, boolean]> }>,
+): string {
+  return [
+    'Packages:',
+    '  Package [com.example.app] (abc):',
+    '    install permissions:',
+    // Install permissions are granted for the package, not per user, and `pm revoke` cannot
+    // touch them — a scan that reads `granted=true` anywhere reports these as runtime grants.
+    '      android.permission.INTERNET: granted=true',
+    '      android.permission.RECORD_AUDIO: granted=true',
+    ...users.flatMap(({ id, runtime }) => [
+      `    User ${id}: ceDataInode=0 installed=true`,
+      ...(runtime
+        ? [
+            '      runtime permissions:',
+            ...runtime.map(
+              ([permission, granted]) =>
+                `        ${permission}: granted=${granted}, flags=[ USER_SET]`,
+            ),
+          ]
+        : []),
+    ]),
+    // A later section repeats `User <id>:` without any runtime block.
+    'Queries:',
+    '  queryable via interaction:',
+    '    User 0:',
+  ].join('\n');
+}
+
+function fakeAdb(
+  script: (flat: string) => string | undefined | { stderr: string; exitCode: number },
+) {
+  return (args: string[]) => script(args.join(' '));
+}
 
 test.each(['deny', 'reset'] as const)(
-  'setAndroidSetting permission %s warns that revoking a granted permission killed the app',
+  'setAndroidSetting permission %s reports a granted prior state and warns',
   async (action) => {
     await withFakeAdb(
-      (args) =>
-        args.join(' ') === 'shell dumpsys package com.example.app'
-          ? DUMPSYS_MICROPHONE_GRANTED
-          : undefined,
+      fakeAdb((flat) => {
+        if (flat === CURRENT_USER) return '0';
+        if (flat === DUMPSYS) {
+          return dumpsys([{ id: 0, runtime: [['android.permission.RECORD_AUDIO', true]] }]);
+        }
+        return undefined;
+      }),
       async ({ calls, device }) => {
         const result = await setAndroidSetting(device, 'permission', action, 'com.example.app', {
           permissionTarget: 'microphone',
         });
         const flat = calls.map((args) => args.join(' '));
         // The state is read BEFORE the revoke: after it, dumpsys would already say false.
-        assert.ok(
-          flat.indexOf('shell dumpsys package com.example.app') <
-            flat.indexOf('shell pm revoke com.example.app android.permission.RECORD_AUDIO'),
-          flat.join('; '),
-        );
+        assert.ok(flat.indexOf(DUMPSYS) < flat.indexOf(REVOKE_MICROPHONE), flat.join('; '));
         assert.deepEqual(result, {
           permission: 'android.permission.RECORD_AUDIO',
-          wasGranted: true,
+          priorGrantState: 'granted',
           warnings: [
-            androidRevokedGrantedPermissionWarning(
+            androidRevokedPermissionWarning(
               'com.example.app',
               'android.permission.RECORD_AUDIO',
+              'granted',
             ),
           ],
         });
         assert.match(String(result?.warnings), /open com\.example\.app --relaunch/);
-        // The warning states the platform rule and keeps the consequence conditional: the
-        // prior-grant read proves neither that the app was running nor that the grant was
-        // the current user's (#1796 review).
+        // Conditional on purpose: the read proves neither that the app was running nor that a
+        // grant seen elsewhere belonged to the acting user (#1796 review).
         assert.match(String(result?.warnings), /if com\.example\.app was running it is no longer/);
       },
     );
   },
 );
 
-test('setAndroidSetting permission deny stays quiet when the permission was not granted', async () => {
+test('setAndroidSetting permission deny stays quiet when the acting user did not hold it', async () => {
   await withFakeAdb(
-    (args) =>
-      args.join(' ') === 'shell dumpsys package com.example.app'
-        ? DUMPSYS_MICROPHONE_GRANTED
-        : undefined,
+    fakeAdb((flat) => {
+      if (flat === CURRENT_USER) return '0';
+      if (flat === DUMPSYS) {
+        return dumpsys([{ id: 0, runtime: [['android.permission.CAMERA', false]] }]);
+      }
+      return undefined;
+    }),
     async ({ device }) => {
       const result = await setAndroidSetting(device, 'permission', 'deny', 'com.example.app', {
         permissionTarget: 'camera',
       });
-      assert.deepEqual(result, { permission: 'android.permission.CAMERA', wasGranted: false });
+      assert.deepEqual(result, {
+        permission: 'android.permission.CAMERA',
+        priorGrantState: 'not_granted',
+      });
+    },
+  );
+});
+
+// The three ways the prior state is genuinely unknown. Each must report `unknown` and still
+// hand over the relaunch guidance: asserting `not_granted` here would claim the app survived.
+test.each([
+  ['dumpsys fails', (flat: string) => (flat === DUMPSYS ? { stderr: 'error', exitCode: 1 } : '0')],
+  [
+    'dumpsys output is unparseable',
+    (flat: string) => (flat === DUMPSYS ? 'Packages:\n  <none>' : '0'),
+  ],
+  [
+    'the acting user cannot be resolved',
+    (flat: string) =>
+      flat === CURRENT_USER
+        ? { stderr: 'cmd: not found', exitCode: 1 }
+        : dumpsys([{ id: 0, runtime: [['android.permission.RECORD_AUDIO', true]] }]),
+  ],
+] as const)(
+  'setAndroidSetting permission deny reports unknown (not not_granted) when %s',
+  async (_label, script) => {
+    await withFakeAdb(
+      fakeAdb((flat) => script(flat) as string | { stderr: string; exitCode: number }),
+      async ({ device }) => {
+        const result = await setAndroidSetting(device, 'permission', 'deny', 'com.example.app', {
+          permissionTarget: 'microphone',
+        });
+        assert.equal(result?.priorGrantState, 'unknown');
+        assert.match(String(result?.warnings), /could not be read/);
+        assert.match(String(result?.warnings), /open com\.example\.app --relaunch/);
+      },
+    );
+  },
+);
+
+// A grant held by another profile is not this revoke's business: `pm revoke` acts on the
+// acting user, so user 10's grant must not make user 0's revoke claim the app was killed.
+test("setAndroidSetting permission deny reads only the acting user's block", async () => {
+  await withFakeAdb(
+    fakeAdb((flat) => {
+      if (flat === CURRENT_USER) return '0';
+      if (flat === DUMPSYS) {
+        return dumpsys([
+          { id: 0, runtime: [['android.permission.RECORD_AUDIO', false]] },
+          { id: 10, runtime: [['android.permission.RECORD_AUDIO', true]] },
+        ]);
+      }
+      return undefined;
+    }),
+    async ({ device }) => {
+      const result = await setAndroidSetting(device, 'permission', 'deny', 'com.example.app', {
+        permissionTarget: 'microphone',
+      });
+      assert.deepEqual(result, {
+        permission: 'android.permission.RECORD_AUDIO',
+        priorGrantState: 'not_granted',
+      });
     },
   );
 });
@@ -261,28 +353,23 @@ test('setAndroidSetting permission grant does not read grant state', async () =>
   );
 });
 
-test('setAndroidSetting permission reset notifications warns when POST_NOTIFICATIONS was granted', async () => {
+test('setAndroidSetting permission reset notifications reports the POST_NOTIFICATIONS state', async () => {
   await withFakeAdb(
-    (args) =>
-      args.join(' ') === 'shell dumpsys package com.example.app'
-        ? '      runtime permissions:\n        android.permission.POST_NOTIFICATIONS: granted=true, flags=[ USER_SET]'
-        : undefined,
+    fakeAdb((flat) => {
+      if (flat === CURRENT_USER) return '0';
+      if (flat === DUMPSYS) {
+        return dumpsys([{ id: 0, runtime: [['android.permission.POST_NOTIFICATIONS', true]] }]);
+      }
+      return undefined;
+    }),
     async ({ device }) => {
       const result = await setAndroidSetting(device, 'permission', 'reset', 'com.example.app', {
         permissionTarget: 'notifications',
       });
-      assert.equal(result?.wasGranted, true);
+      assert.equal(result?.priorGrantState, 'granted');
       assert.equal(Array.isArray(result?.warnings), true);
     },
   );
-});
-
-test('parseAndroidGrantedRuntimePermissions reads only granted=true runtime permissions', () => {
-  assert.deepEqual(
-    [...parseAndroidGrantedRuntimePermissions(DUMPSYS_MICROPHONE_GRANTED)],
-    ['android.permission.RECORD_AUDIO'],
-  );
-  assert.deepEqual([...parseAndroidGrantedRuntimePermissions('')], []);
 });
 
 test('setAndroidSetting permission reset camera clears permission flags for reprompt', async () => {
