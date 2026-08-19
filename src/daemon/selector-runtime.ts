@@ -167,12 +167,7 @@ export async function dispatchGetViaRuntime(
   // snapshot path so the post-resolution identity guard runs.
   const replayTargetGuard = req.internal?.replayTargetGuard;
 
-  // ADR 0019: `get` declares `device-runtime`, so NOTHING in its request path may reach the
-  // device before resolve -> admit -> bind. Admission runs first for every target shape,
-  // including the ones the direct-iOS fast path below can answer: that path is a fast path
-  // *within* an admitted request, never a way around exact-owner facts or the one-binding
-  // invariant. (The query itself is still the shared root mechanic co-owned by `is`, `wait`,
-  // and the Wave 5 offscreen probe — this unit orders it, it does not claim it.)
+  // Admit before the direct-iOS fast path below — see {@link createBoundSelectorRuntime}.
   const resolvedRuntime = await createBoundSelectorRuntime(params, {
     requireSession: true,
     command: 'get',
@@ -236,35 +231,36 @@ export async function dispatchIsViaRuntime(
       checked.hint ? { hint: checked.hint } : undefined,
     );
   }
-  const { predicate, expectedText } = checked;
-  const split = { selectorExpression: checked.selectorExpression };
+  const { predicate, selectorExpression, expectedText } = checked;
   // ADR 0012 decision 3 / #1349: recording and a guarded replay dispatch both
   // require the snapshot path — evidence and the post-resolution identity
   // guard are computed from the resolution tree.
   const replayTargetGuard = req.internal?.replayTargetGuard;
   const recordingSession = isSessionRecording(params.sessionStore.get(params.sessionName));
+
+  // Admit before the direct-iOS fast path below — see {@link createBoundSelectorRuntime}.
+  const resolvedRuntime = await createBoundSelectorRuntime(params, {
+    requireSession: true,
+    command: 'is',
+  });
+  if (!resolvedRuntime.ok) return resolvedRuntime.response;
+
   if (!replayTargetGuard && !recordingSession) {
     const directResponse = await dispatchDirectIosSelectorIs(
       params,
-      predicate as IsPredicate,
-      split.selectorExpression,
+      predicate,
+      selectorExpression,
       expectedText,
     );
     if (directResponse) return directResponse;
   }
 
-  const resolvedRuntime = await createSelectorRuntime(params, {
-    requireSession: true,
-    capability: 'is',
-  });
-  if (!resolvedRuntime.ok) return resolvedRuntime.response;
-
   const response = await toDaemonResponse(async () => {
     const result = await resolvedRuntime.runtime.selectors.is({
       session: params.sessionName,
       requestId: req.meta?.requestId,
-      predicate: predicate as IsPredicate,
-      selector: split.selectorExpression,
+      predicate,
+      selector: selectorExpression,
       expectedText,
       expectedResolvedTarget: replayTargetGuard,
     });

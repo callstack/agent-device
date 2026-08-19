@@ -100,6 +100,12 @@ async function resolveSelectorRuntimeDevice(
  * backend whose every capture goes through the bound operation. A sibling unit migrates by
  * naming its command here instead of passing a `capability` to {@link createSelectorRuntime};
  * nothing else in this module or `selector-capture-runtime.ts` needs to change.
+ *
+ * ADR 0019 §6: a `device-runtime` command reaches the device only after resolve -> admit ->
+ * bind, so THIS CALL COMES FIRST in its route — ahead of every shortcut, including the
+ * direct-iOS selector query that answers some targets without a capture. That query is a fast
+ * path *within* an admitted request, never a way around exact-owner facts or the one-binding
+ * invariant. `get` (R36) and `is` (R37) both order it this way.
  */
 export async function createBoundSelectorRuntime(
   params: SelectorRuntimeParams,
@@ -127,13 +133,15 @@ export async function createBoundSelectorRuntime(
 }
 
 /**
- * The legacy capability-admitted selector runtime, for the selector commands whose ADR 0019
- * unit has not landed. The union narrows as each one migrates, and the last selector unit
- * deletes this function together with its `requireCommandSupported` call.
+ * The legacy capability-admitted selector runtime. `get` and `is` have migrated, so `find` is
+ * the only remaining caller — and `find`'s own cutover is deferred behind the Wave 5
+ * `focus`/`type` surfaces (`find focus`, `find type`, and `find <q> get text` still reach the
+ * device through `dispatchCommand`). This function and its `requireCommandSupported` call
+ * therefore retire with `find`, NOT with the last selector unit of this wave.
  */
 export async function createSelectorRuntime(
   params: SelectorRuntimeParams,
-  options: { requireSession: boolean; capability: 'find' | 'is' },
+  options: { requireSession: boolean; capability: 'find' },
 ): Promise<ResolvedSelectorRuntime> {
   const resolved = await resolveSelectorRuntimeDevice(params, options.requireSession);
   if (!resolved.ok) return resolved;
