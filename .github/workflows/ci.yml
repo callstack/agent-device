@@ -338,22 +338,12 @@ jobs:
         uses: ./.github/actions/run-gate
         with: { gate: coverage-model }
 
-      # w3-1824 EXPERIMENT (temporary): sentinels on the pids the runner tests
-      # fabricate, plus a per-fork kill tracer wired through vitest.config.ts.
-      - name: w3-1824 plant sentinels
-        run: bash ./w3-1824-plant-sentinels.sh /tmp/w3-1824
-
       - name: Run coverage
         id: run-coverage
         env:
           OUTPUT_ECONOMY_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-          W3_1824_KILL_TRACE: /tmp/w3-1824/kill-trace.ndjson
         uses: ./.github/actions/run-gate
         with: { gate: unit-ci }
-
-      - name: w3-1824 report
-        if: always()
-        run: bash ./w3-1824-report.sh /tmp/w3-1824 /tmp/w3-1824/kill-trace.ndjson
       # The TMPDIR redirection both test lanes depend on (#1593/#1595). The check is a real
       # package script that no workflow ran: it is reachable only through `check:unit`, an
       # aggregate CI never invokes, so a leak regression could not fail a PR. Placed here
