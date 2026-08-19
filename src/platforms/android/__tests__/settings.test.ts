@@ -182,7 +182,8 @@ test('setAndroidSetting permission reset notifications clears permission flags f
 // a failed or unreadable dump is NOT evidence that the app was left alone.
 const CURRENT_USER = 'shell am get-current-user';
 const DUMPSYS = 'shell dumpsys package com.example.app';
-const REVOKE_MICROPHONE = 'shell pm revoke com.example.app android.permission.RECORD_AUDIO';
+const REVOKE_MICROPHONE =
+  'shell pm revoke --user 0 com.example.app android.permission.RECORD_AUDIO';
 
 /** A dump shaped like the real one: an install-permission section, then per-user blocks. */
 function dumpsys(
@@ -338,16 +339,160 @@ test("setAndroidSetting permission deny reads only the acting user's block", asy
   );
 });
 
+// The read scopes state to the foreground user, so the mutation has to name the same one:
+// PackageManagerShellCommand defaults grant/revoke/permission-flag operations to
+// UserHandle.USER_SYSTEM, so a bare `pm revoke` on a device whose foreground user is 10 edits
+// user 0 and leaves the running app untouched. Proven on a Pixel 7 / API 36 emulator with the
+// foreground user switched to 10: bare `pm revoke` flipped User 0 to granted=false while
+// User 10 stayed granted=true. These pin the exact argv and order, because a response-shape
+// assertion passes either way.
+test.each([
+  [
+    'deny microphone',
+    { permissionTarget: 'microphone' } as const,
+    'deny' as const,
+    [
+      ['shell', 'am', 'get-current-user'],
+      ['shell', 'dumpsys', 'package', 'com.example.app'],
+      [
+        'shell',
+        'pm',
+        'revoke',
+        '--user',
+        '10',
+        'com.example.app',
+        'android.permission.RECORD_AUDIO',
+      ],
+    ],
+  ],
+  [
+    'reset camera',
+    { permissionTarget: 'camera' } as const,
+    'reset' as const,
+    [
+      ['shell', 'am', 'get-current-user'],
+      ['shell', 'dumpsys', 'package', 'com.example.app'],
+      ['shell', 'pm', 'revoke', '--user', '10', 'com.example.app', 'android.permission.CAMERA'],
+      // prettier-ignore
+      ['shell', 'pm', 'clear-permission-flags', '--user', '10', 'com.example.app', 'android.permission.CAMERA', 'user-set'],
+      // prettier-ignore
+      ['shell', 'pm', 'clear-permission-flags', '--user', '10', 'com.example.app', 'android.permission.CAMERA', 'user-fixed'],
+    ],
+  ],
+  [
+    'reset notifications',
+    { permissionTarget: 'notifications' } as const,
+    'reset' as const,
+    [
+      ['shell', 'am', 'get-current-user'],
+      ['shell', 'dumpsys', 'package', 'com.example.app'],
+      // prettier-ignore
+      ['shell', 'pm', 'revoke', '--user', '10', 'com.example.app', 'android.permission.POST_NOTIFICATIONS'],
+      // prettier-ignore
+      ['shell', 'pm', 'clear-permission-flags', '--user', '10', 'com.example.app', 'android.permission.POST_NOTIFICATIONS', 'user-set'],
+      // prettier-ignore
+      ['shell', 'pm', 'clear-permission-flags', '--user', '10', 'com.example.app', 'android.permission.POST_NOTIFICATIONS', 'user-fixed'],
+      // prettier-ignore
+      ['shell', 'appops', 'set', '--user', '10', 'com.example.app', 'POST_NOTIFICATION', 'default'],
+    ],
+  ],
+] as const)(
+  'setAndroidSetting permission %s addresses the foreground user in every adb call',
+  async (_label, options, action, expected) => {
+    await withFakeAdb(
+      fakeAdb((flat) => {
+        if (flat === CURRENT_USER) return '10';
+        if (flat === DUMPSYS) {
+          return dumpsys([
+            { id: 0, runtime: [['android.permission.RECORD_AUDIO', true]] },
+            { id: 10, runtime: [['android.permission.RECORD_AUDIO', false]] },
+          ]);
+        }
+        return undefined;
+      }),
+      async ({ calls, device }) => {
+        await setAndroidSetting(device, 'permission', action, 'com.example.app', options);
+        assert.deepEqual(
+          calls,
+          expected.map((args) => [...args]),
+        );
+      },
+    );
+  },
+);
+
+test('setAndroidSetting permission grant addresses the foreground user too', async () => {
+  await withFakeAdb(
+    fakeAdb((flat) => (flat === CURRENT_USER ? '10' : undefined)),
+    async ({ calls, device }) => {
+      await setAndroidSetting(device, 'permission', 'grant', 'com.example.app', {
+        permissionTarget: 'microphone',
+      });
+      assert.deepEqual(calls, [
+        ['shell', 'am', 'get-current-user'],
+        // prettier-ignore
+        ['shell', 'pm', 'grant', '--user', '10', 'com.example.app', 'android.permission.RECORD_AUDIO'],
+      ]);
+    },
+  );
+});
+
+// The read and the mutation must agree about WHICH user, not merely both name one: with the
+// foreground user 10 holding the permission and user 0 not, the response must report granted.
+test('setAndroidSetting permission deny reads the same user it revokes', async () => {
+  await withFakeAdb(
+    fakeAdb((flat) => {
+      if (flat === CURRENT_USER) return '10';
+      if (flat === DUMPSYS) {
+        return dumpsys([
+          { id: 0, runtime: [['android.permission.RECORD_AUDIO', false]] },
+          { id: 10, runtime: [['android.permission.RECORD_AUDIO', true]] },
+        ]);
+      }
+      return undefined;
+    }),
+    async ({ device }) => {
+      const result = await setAndroidSetting(device, 'permission', 'deny', 'com.example.app', {
+        permissionTarget: 'microphone',
+      });
+      assert.equal(result?.priorGrantState, 'granted');
+      assert.match(String(result?.warnings), /open com\.example\.app --relaunch/);
+    },
+  );
+});
+
+// No resolvable user means no way to address one: the mutation keeps the platform default and
+// the state is reported unknown rather than read from a user the revoke may not have touched.
+test('setAndroidSetting permission deny omits --user when the foreground user is unknown', async () => {
+  await withFakeAdb(
+    fakeAdb((flat) =>
+      flat === CURRENT_USER ? { stderr: 'cmd: not found', exitCode: 1 } : undefined,
+    ),
+    async ({ calls, device }) => {
+      const result = await setAndroidSetting(device, 'permission', 'deny', 'com.example.app', {
+        permissionTarget: 'microphone',
+      });
+      assert.deepEqual(calls, [
+        ['shell', 'am', 'get-current-user'],
+        ['shell', 'pm', 'revoke', 'com.example.app', 'android.permission.RECORD_AUDIO'],
+      ]);
+      assert.equal(result?.priorGrantState, 'unknown');
+    },
+  );
+});
+
 test('setAndroidSetting permission grant does not read grant state', async () => {
   await withFakeAdb(
-    () => undefined,
+    fakeAdb((flat) => (flat === CURRENT_USER ? '0' : undefined)),
     async ({ calls, device }) => {
       const result = await setAndroidSetting(device, 'permission', 'grant', 'com.example.app', {
         permissionTarget: 'camera',
       });
       assert.equal(result, undefined);
+      // The user is resolved for the mutation, but no state is read: grant cannot kill the app.
       assert.deepEqual(calls, [
-        ['shell', 'pm', 'grant', 'com.example.app', 'android.permission.CAMERA'],
+        ['shell', 'am', 'get-current-user'],
+        ['shell', 'pm', 'grant', '--user', '0', 'com.example.app', 'android.permission.CAMERA'],
       ]);
     },
   );

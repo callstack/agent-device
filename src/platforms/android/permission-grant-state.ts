@@ -28,21 +28,19 @@ export function androidPriorGrantState(
 }
 
 /**
- * The acting user's runtime permissions, or `undefined` when the state could not be read —
- * adb failed, the current user could not be resolved, or the dump carried no runtime-permission
- * block for that user.
+ * `userId`'s runtime permissions, or `undefined` when the state could not be read — adb failed
+ * or the dump carried no runtime-permission block for that user.
  *
- * `pm revoke` without `--user` acts on the caller's user, so the state must be read from that
- * same user's block. `dumpsys package` prints an `install permissions:` section and one block
- * per user, all carrying `granted=` lines; a scan that ignores that structure reports another
- * profile's grant — or an install permission that `pm revoke` cannot touch — as this user's.
+ * The caller passes the user its mutation will target, so the two halves cannot disagree.
+ * `dumpsys package` prints an `install permissions:` section and one block per user, all
+ * carrying `granted=` lines; a scan that ignores that structure reports another profile's
+ * grant — or an install permission that `pm revoke` cannot touch — as this user's.
  */
 export async function readAndroidRuntimePermissionGrants(
   device: DeviceInfo,
   appPackage: string,
+  userId: number,
 ): Promise<AndroidRuntimePermissionGrants | undefined> {
-  const userId = await readAndroidCurrentUserId(device);
-  if (userId === undefined) return undefined;
   const result = await runAndroidAdb(device, ['shell', 'dumpsys', 'package', appPackage], {
     allowFailure: true,
   });
@@ -50,8 +48,16 @@ export async function readAndroidRuntimePermissionGrants(
   return parseAndroidRuntimePermissionGrants(result.stdout, userId);
 }
 
-/** The user `adb shell` commands act on, or `undefined` when it cannot be resolved. */
-async function readAndroidCurrentUserId(device: DeviceInfo): Promise<number | undefined> {
+/**
+ * The foreground user, or `undefined` when it cannot be resolved.
+ *
+ * This is the user the session's app runs as, and it is NOT what `pm` defaults to:
+ * `PackageManagerShellCommand` defaults grant/revoke/permission-flag operations to
+ * `UserHandle.USER_SYSTEM`, so on a device whose foreground user is nonzero a bare `pm revoke`
+ * silently edits user 0 and leaves the running app's permission untouched. Every permission
+ * mutation therefore passes `--user` explicitly (#1796).
+ */
+export async function readAndroidCurrentUserId(device: DeviceInfo): Promise<number | undefined> {
   const result = await runAndroidAdb(device, ['shell', 'am', 'get-current-user'], {
     allowFailure: true,
   });

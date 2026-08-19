@@ -17,6 +17,7 @@ import { androidAdbResultError } from './adb-executor.ts';
 import { resolveAndroidApp } from './app-deployment-resolution.ts';
 import {
   androidPriorGrantState,
+  readAndroidCurrentUserId,
   readAndroidRuntimePermissionGrants,
   type AndroidPriorGrantState,
 } from './permission-grant-state.ts';
@@ -180,6 +181,14 @@ export function androidRevokedPermissionWarning(
 
 type AndroidPermissionTarget = ReturnType<typeof parseAndroidPermissionTarget>;
 
+/**
+ * `--user <id>` for every permission mutation, resolved once so the state read and the mutation
+ * cannot address different users. Empty only when the foreground user could not be resolved, in
+ * which case the platform default (`UserHandle.USER_SYSTEM`) applies and the prior state is
+ * reported as unknown rather than guessed.
+ */
+type AndroidUserArgs = readonly string[];
+
 async function setAndroidPermission(
   device: DeviceInfo,
   appPackage: string,
@@ -188,14 +197,19 @@ async function setAndroidPermission(
 ): Promise<Record<string, unknown> | void> {
   const action = parsePermissionAction(state);
   const target = parseAndroidPermissionTarget(options?.permissionTarget, options?.permissionMode);
+  const userId = await readAndroidCurrentUserId(device);
+  const userArgs: AndroidUserArgs = userId === undefined ? [] : ['--user', String(userId)];
   if (action === 'grant') {
-    await grantAndroidPermission(device, appPackage, target);
+    await grantAndroidPermission(device, appPackage, target, userArgs);
     return;
   }
   // Read before the revoke — afterwards every permission reads as not granted — but resolved
   // after it, because `photos` only learns which permission it revoked by probing the device.
-  const grants = await readAndroidRuntimePermissionGrants(device, appPackage);
-  const permission = await revokeAndroidPermission(device, appPackage, action, target);
+  const grants =
+    userId === undefined
+      ? undefined
+      : await readAndroidRuntimePermissionGrants(device, appPackage, userId);
+  const permission = await revokeAndroidPermission(device, appPackage, action, target, userArgs);
   const priorGrantState = androidPriorGrantState(grants, permission);
   const warning = androidRevokedPermissionWarning(appPackage, permission, priorGrantState);
   return {
@@ -209,13 +223,14 @@ async function grantAndroidPermission(
   device: DeviceInfo,
   appPackage: string,
   target: AndroidPermissionTarget,
+  userArgs: AndroidUserArgs,
 ): Promise<void> {
   if (target.kind === 'notifications') {
-    await setAndroidNotificationPermission(device, appPackage, 'grant', target);
+    await setAndroidNotificationPermission(device, appPackage, 'grant', target, userArgs);
   } else if (target.type === 'photos') {
-    await setAndroidPhotoPermission(device, appPackage, 'grant');
+    await setAndroidPhotoPermission(device, appPackage, 'grant', userArgs);
   } else {
-    await runAndroidAdb(device, ['shell', 'pm', 'grant', appPackage, target.value]);
+    await runAndroidAdb(device, ['shell', 'pm', 'grant', ...userArgs, appPackage, target.value]);
   }
 }
 
@@ -225,19 +240,22 @@ async function revokeAndroidPermission(
   appPackage: string,
   action: 'deny' | 'reset',
   target: AndroidPermissionTarget,
+  userArgs: AndroidUserArgs,
 ): Promise<string> {
   if (target.kind === 'notifications') {
-    await setAndroidNotificationPermission(device, appPackage, action, target);
+    await setAndroidNotificationPermission(device, appPackage, action, target, userArgs);
     return target.permission;
   }
   let permission: string;
   if (target.type === 'photos') {
-    permission = await setAndroidPhotoPermission(device, appPackage, 'revoke');
+    permission = await setAndroidPhotoPermission(device, appPackage, 'revoke', userArgs);
   } else {
     permission = target.value;
-    await runAndroidAdb(device, ['shell', 'pm', 'revoke', appPackage, permission]);
+    await runAndroidAdb(device, ['shell', 'pm', 'revoke', ...userArgs, appPackage, permission]);
   }
-  if (action === 'reset') await clearAndroidPermissionFlags(device, appPackage, permission);
+  if (action === 'reset') {
+    await clearAndroidPermissionFlags(device, appPackage, permission, userArgs);
+  }
   return permission;
 }
 
@@ -400,6 +418,7 @@ async function setAndroidPhotoPermission(
   device: DeviceInfo,
   appPackage: string,
   pmAction: 'grant' | 'revoke',
+  userArgs: AndroidUserArgs,
 ): Promise<string> {
   const sdkInt = await getAndroidSdkInt(device);
   const candidates =
@@ -409,9 +428,11 @@ async function setAndroidPhotoPermission(
 
   const failures: Array<{ permission: string; stderr: string; exitCode: number }> = [];
   for (const permission of candidates) {
-    const result = await runAndroidAdb(device, ['shell', 'pm', pmAction, appPackage, permission], {
-      allowFailure: true,
-    });
+    const result = await runAndroidAdb(
+      device,
+      ['shell', 'pm', pmAction, ...userArgs, appPackage, permission],
+      { allowFailure: true },
+    );
     if (result.exitCode === 0) return permission;
     failures.push({ permission, stderr: result.stderr, exitCode: result.exitCode });
   }
@@ -428,38 +449,49 @@ async function setAndroidNotificationPermission(
   appPackage: string,
   action: 'grant' | 'deny' | 'reset',
   target: { appOps: string; permission: string },
+  userArgs: AndroidUserArgs,
 ): Promise<void> {
   const appOpsMode = action === 'grant' ? 'allow' : action === 'deny' ? 'deny' : 'default';
   if (action === 'grant') {
-    await runAndroidAdb(device, ['shell', 'pm', 'grant', appPackage, target.permission], {
-      allowFailure: true,
-    });
+    await runAndroidAdb(
+      device,
+      ['shell', 'pm', 'grant', ...userArgs, appPackage, target.permission],
+      { allowFailure: true },
+    );
   } else {
-    await runAndroidAdb(device, ['shell', 'pm', 'revoke', appPackage, target.permission], {
-      allowFailure: true,
-    });
+    await runAndroidAdb(
+      device,
+      ['shell', 'pm', 'revoke', ...userArgs, appPackage, target.permission],
+      { allowFailure: true },
+    );
     if (action === 'reset') {
-      await clearAndroidPermissionFlags(device, appPackage, target.permission);
+      await clearAndroidPermissionFlags(device, appPackage, target.permission, userArgs);
     }
   }
-  await runAndroidAdb(device, ['shell', 'appops', 'set', appPackage, target.appOps, appOpsMode]);
+  await runAndroidAdb(device, [
+    'shell',
+    'appops',
+    'set',
+    ...userArgs,
+    appPackage,
+    target.appOps,
+    appOpsMode,
+  ]);
 }
 
 async function clearAndroidPermissionFlags(
   device: DeviceInfo,
   appPackage: string,
   permission: string,
+  userArgs: AndroidUserArgs,
 ): Promise<void> {
-  await runAndroidAdb(
-    device,
-    ['shell', 'pm', 'clear-permission-flags', appPackage, permission, 'user-set'],
-    { allowFailure: true },
-  );
-  await runAndroidAdb(
-    device,
-    ['shell', 'pm', 'clear-permission-flags', appPackage, permission, 'user-fixed'],
-    { allowFailure: true },
-  );
+  for (const flag of ['user-set', 'user-fixed']) {
+    await runAndroidAdb(
+      device,
+      ['shell', 'pm', 'clear-permission-flags', ...userArgs, appPackage, permission, flag],
+      { allowFailure: true },
+    );
+  }
 }
 
 async function getAndroidSdkInt(device: DeviceInfo): Promise<number | null> {

@@ -673,7 +673,7 @@ agent-device settings permission reset screen-recording --platform macos
 - macOS permission targets: `accessibility`, `screen-recording`, `input-monitoring`.
 - On macOS, `settings permission grant ...` checks/request access and opens System Settings guidance when needed; it does not silently grant TCC permissions.
 - On macOS, `settings permission deny ...` is intentionally unsupported.
-- Android uses `pm grant|revoke` for runtime permissions (`reset` maps to revoke) and `appops` for notifications.
+- Android uses `pm grant|revoke` for runtime permissions (`reset` maps to revoke) and `appops` for notifications. Every permission mutation names the foreground user explicitly (`--user <id>`, resolved with `am get-current-user`): `pm` defaults these operations to user 0, so on a device whose foreground user is nonzero an unscoped revoke would edit user 0 and leave the running app's permission untouched.
 - Android kills a running app whenever a runtime permission it currently holds is revoked, so `settings permission deny|reset` after a grant leaves the session app no longer running. The response reports the prior state of the revoked permission for the acting user as `priorGrantState: granted | not_granted | unknown`, and carries a warning naming `open <app> --relaunch` for both `granted` and `unknown` — `unknown` means the device did not report a readable state, not that the app was left alone. Revoking a permission the app does not hold (`not_granted`) is harmless and warns nothing.
 - `full|limited` mode is supported only for iOS `photos`; other targets reject mode.
 - Use `match`/`nonmatch` to simulate valid/invalid Face ID, Touch ID, and Android fingerprint outcomes.
