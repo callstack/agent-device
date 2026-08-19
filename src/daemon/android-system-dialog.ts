@@ -11,6 +11,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { centerOfRect, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import { sleep } from '../utils/timeouts.ts';
 import { buildSnapshotState } from './snapshot-state.ts';
+import { isSnapshotNodeInteractionBlocked } from '../snapshot/snapshot-occlusion.ts';
 import { expireRefFrame } from './ref-frame.ts';
 import type { SessionState } from './types.ts';
 
@@ -302,6 +303,12 @@ async function tapAndroidDialogButton(
   return { ok: true, x, y };
 }
 
+/**
+ * Recovery acts on what a user can actually touch, so both decisions read the presentation's
+ * structured occlusion result rather than raw text: a stale "Close app" left under the foreground
+ * surface must neither trigger recovery nor be tapped ahead of the visible one (#1832 review).
+ * `buildSnapshotState` already annotates covered nodes; this is the consumer side of that.
+ */
 function findCloseAppButton(
   nodes: SnapshotNode[],
   options: { requireDialogSignal?: boolean } = {},
@@ -309,11 +316,16 @@ function findCloseAppButton(
   if (options.requireDialogSignal !== false && !containsBlockingDialog(nodes)) {
     return undefined;
   }
-  return nodes.find((node) => {
+  return nodes.filter(isTouchableDialogNode).find((node) => {
     return (
       readNodeTextParts(node).some((text) => ANDROID_CLOSE_APP_PATTERN.test(text)) && node.rect
     );
   });
+}
+
+/** A node the recovery tap can actually reach: present in the tree and not covered by a surface above it. */
+function isTouchableDialogNode(node: SnapshotNode): boolean {
+  return !isSnapshotNodeInteractionBlocked(node);
 }
 
 async function waitForBlockingDialogToDismiss(session: SessionState): Promise<boolean> {
@@ -377,7 +389,7 @@ function readNodeTextParts(node: {
 }
 
 function containsBlockingDialog(nodes: SnapshotNode[]): boolean {
-  return nodes.some((node) => {
+  return nodes.filter(isTouchableDialogNode).some((node) => {
     const text = readNodeText(node);
     return text.length > 0 && ANDROID_BLOCKING_MODAL_PATTERN.test(text);
   });

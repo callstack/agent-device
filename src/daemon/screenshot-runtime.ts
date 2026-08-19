@@ -19,7 +19,8 @@ import {
   readScreenshotResultMetadata,
 } from '../utils/screenshot-density.ts';
 import type { DaemonCommandContext } from './context.ts';
-import { buildSnapshotState, captureSnapshotData } from './handlers/snapshot-capture.ts';
+import { captureSnapshotData } from './handlers/snapshot-capture.ts';
+import { buildSnapshotState } from './snapshot-state.ts';
 import type {
   RecordedGenericRequest,
   ResolvedGenericExecution,
