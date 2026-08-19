@@ -4,7 +4,7 @@ import { createServer, type Server } from 'node:http';
 import path from 'node:path';
 import test from 'node:test';
 import { type CliJsonResult, formatResultDebug, runBuiltCliJson } from './cli-json.ts';
-import { assertPngFile } from './provider-scenarios/assertions.ts';
+import { assertPngDimensions, assertPngFile } from './provider-scenarios/assertions.ts';
 
 const TEST_NAME = 'live web platform e2e smoke';
 const WEB_E2E_ENABLED = process.env.AGENT_DEVICE_WEB_E2E === '1';
@@ -49,6 +49,7 @@ async function runWebSmoke(context: WebSmokeContext): Promise<void> {
     await runStep(context, 'verify managed web backend', ['web', 'doctor', '--json']);
     await runStep(context, 'open local fixture', ['open', context.url, ...context.common]);
     opened = true;
+    await assertWebViewport(context);
     await assertInitialWebSurface(context);
     await assertWebNetwork(context);
     await assertReadAndVisibility(context);
@@ -57,6 +58,13 @@ async function runWebSmoke(context: WebSmokeContext): Promise<void> {
   } finally {
     await cleanupWebSmoke(context, opened);
   }
+}
+
+async function assertWebViewport(context: WebSmokeContext): Promise<void> {
+  await assertCommandData(context, 'resize browser viewport', ['viewport', '640', '480'], {
+    width: 640,
+    height: 480,
+  });
 }
 
 async function createWebSmokeContext(): Promise<WebSmokeContext> {
@@ -186,10 +194,11 @@ async function assertWebScreenshot(context: WebSmokeContext): Promise<void> {
   await assertCommandData(
     context,
     'capture screenshot artifact',
-    ['screenshot', context.screenshotPath, '--full', '--no-stabilize'],
+    ['screenshot', context.screenshotPath, '--no-stabilize'],
     { path: context.screenshotPath },
   );
   assertPngFile(context.screenshotPath);
+  assertPngDimensions(context.screenshotPath, 640, 480);
 }
 
 async function assertCommandData(

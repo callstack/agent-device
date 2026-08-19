@@ -98,7 +98,11 @@ test.each([
     device.appleOs !== 'macos' && device.appleOs !== 'watchos',
   );
   expect(facts.operations.bootTargetHeadless.available).toBe(false);
-  expect(facts.operations.setViewport).toMatchObject({ available: false });
+  expect(facts.operations.setViewport).toEqual({
+    available: false,
+    reason: 'unsupported-platform-leaf',
+    hint: 'viewport resizes web targets only (--platform web). Apple screen geometry is fixed by the selected simulator or device type — open a different simulator to test another screen size.',
+  });
   expect(binding.operations.setViewport).toBeUndefined();
   expectAppleSnapshotAvailability(binding, device);
 });
