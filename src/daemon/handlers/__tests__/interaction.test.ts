@@ -1,5 +1,4 @@
 import { test, expect, vi, beforeEach } from 'vitest';
-import { AppError } from '@agent-device/kernel/errors';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { WEB_DESKTOP_DEVICE } from '../../../__tests__/test-utils/device-fixtures.ts';
 import {
@@ -263,17 +262,29 @@ test('an eligible direct iOS selector cannot operate before admission', async ()
   expect(mockDispatch).not.toHaveBeenCalled();
 });
 
-test('get text simple iOS id selector uses runner query without snapshot', async () => {
+// The direct-iOS shortcut is RETIRED (#1739): `get` declares `device-runtime`, so a simple
+// `id=` selector resolves through the bound capture like every other shape rather than through a
+// raw runner query R36 declares no operation for. The cost is real and accepted — this selector
+// no longer skips the tree capture.
+test('get text simple iOS id selector resolves through the bound capture, not a runner query', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'get-text-ios-direct-selector';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
-  mockRunAppleRunnerCommand.mockResolvedValue({
-    found: true,
-    text: 'Ada Lovelace',
+  mockDispatch.mockResolvedValue({
+    backend: 'xctest',
     nodes: [
       {
         index: 0,
         depth: 0,
+        type: 'Application',
+        rect: { x: 0, y: 0, width: 393, height: 852 },
+        enabled: true,
+        hittable: true,
+      },
+      {
+        index: 1,
+        depth: 1,
+        parentIndex: 0,
         type: 'TextField',
         label: 'Name',
         identifier: 'field-name',
@@ -300,29 +311,16 @@ test('get text simple iOS id selector uses runner query without snapshot', async
   });
 
   expect(response?.ok).toBe(true);
-  expect(mockRunAppleRunnerCommand).toHaveBeenCalledWith(
-    expect.anything(),
-    {
-      command: 'querySelector',
-      selectorKey: 'id',
-      selectorValue: 'field-name',
-      appBundleId: 'com.example.app',
-    },
-    expect.anything(),
-  );
-  expect(mockDispatch).not.toHaveBeenCalledWith(
-    expect.anything(),
-    'snapshot',
-    expect.anything(),
-    expect.anything(),
-    expect.anything(),
-  );
   if (response?.ok) {
     expect(response.data?.text).toBe('Ada Lovelace');
     expect(response.data?.selector).toBe('id="field-name"');
   }
-  const recorded = sessionStore.get(sessionName)?.actions.at(-1);
-  expect(recorded?.result?.selectorChain).toEqual(['id="field-name"']);
+  // No querySelector: the retired bypass was the only caller on this path.
+  expect(mockRunAppleRunnerCommand).not.toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({ command: 'querySelector' }),
+    expect.anything(),
+  );
 });
 
 test('get text iOS label selector uses snapshot disambiguation instead of runner query', async () => {
@@ -395,41 +393,6 @@ test('get text iOS label selector uses snapshot disambiguation instead of runner
     expect(response.data?.text).toBe('General');
     expect(response.data?.selector).toBe('label="General"');
   }
-});
-
-test('get text simple iOS id selector does not snapshot-fallback on ambiguous runner match', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'get-text-ios-direct-selector-ambiguous';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
-  mockRunAppleRunnerCommand.mockRejectedValue(
-    new AppError('AMBIGUOUS_MATCH', 'selector matched multiple elements'),
-  );
-
-  const response = await handleInteractionCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'get',
-      positionals: ['text', 'id="field-name"'],
-      flags: {},
-    },
-    sessionName,
-    sessionStore,
-    contextFromFlags,
-    ...getRuntimeBindings(),
-  });
-
-  expect(response?.ok).toBe(false);
-  if (response?.ok === false) {
-    expect(response.error.code).toBe('AMBIGUOUS_MATCH');
-  }
-  expect(mockDispatch).not.toHaveBeenCalledWith(
-    expect.anything(),
-    'snapshot',
-    expect.anything(),
-    expect.anything(),
-    expect.anything(),
-  );
 });
 
 test('is visible preserves CLI snapshot flags during runtime snapshot capture', async () => {
