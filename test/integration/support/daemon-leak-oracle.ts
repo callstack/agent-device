@@ -37,6 +37,20 @@ export type DaemonLeakOracleOptions = {
   /** Every daemon pid the lane observed for this state dir (from daemon.json). */
   daemonPids: readonly number[];
   phase: DaemonLeakPhase;
+  /**
+   * Session directory names (not paths) closed at this checkpoint — required at
+   * `after-close`, where only they identify whose capture handle must be
+   * finalized. `sessionStore.resolveSessionDir(name)`'s basename, or the
+   * `sessionStateDir` an `open`/`close` response reports.
+   */
+  closedSessions?: readonly string[];
+  /**
+   * Where sessions live, when that is not `<stateDir>/sessions` — an in-process
+   * scenario harness roots its SessionStore directly at its own temp dir.
+   * Entries below it are normalized to the canonical `sessions/<name>/…` shape
+   * so the rules stay layout-independent.
+   */
+  sessionsDir?: string;
   /** How long stragglers may take to exit before they count as leaked. */
   settleMs?: number;
 };
@@ -53,7 +67,8 @@ async function captureDaemonLeakSnapshot(
     phase: options.phase,
     processes,
     excludedPids: [...ancestorsOf(process.pid, processes)],
-    stateEntries: readStateEntries(stateDir),
+    closedSessions: options.closedSessions ?? [],
+    stateEntries: readStateEntries(stateDir, options.sessionsDir),
   });
 }
 
@@ -82,12 +97,13 @@ export async function assertNoDaemonLeaks(options: DaemonLeakOracleOptions): Pro
 // Files, plus empty directories as their own entries (an unswept session
 // scaffold leaves no file behind), plus the `lifecycle` of durable capture
 // descriptors so the rules stay free of filesystem access.
-function readStateEntries(stateDir: string): StateEntry[] {
+function readStateEntries(stateDir: string, sessionsDir?: string): StateEntry[] {
   if (!fs.existsSync(stateDir)) return [];
+  const sessionsRoot = path.resolve(sessionsDir ?? path.join(stateDir, 'sessions'));
   const entries: StateEntry[] = [];
   for (const dirent of fs.readdirSync(stateDir, { recursive: true, withFileTypes: true })) {
     const absolute = path.join(dirent.parentPath, dirent.name);
-    const relative = path.relative(stateDir, absolute).split(path.sep).join('/');
+    const relative = toCanonicalEntryPath(absolute, stateDir, sessionsRoot);
     if (!dirent.isDirectory()) {
       entries.push({
         path: relative,
@@ -101,6 +117,16 @@ function readStateEntries(stateDir: string): StateEntry[] {
     }
   }
   return entries;
+}
+
+// `sessions/<name>/…` regardless of where the SessionStore is rooted.
+function toCanonicalEntryPath(absolute: string, stateDir: string, sessionsRoot: string): string {
+  const withinSessions = path.relative(sessionsRoot, absolute);
+  const relative =
+    withinSessions.startsWith('..') || path.isAbsolute(withinSessions)
+      ? path.relative(stateDir, absolute)
+      : path.join('sessions', withinSessions);
+  return relative.split(path.sep).join('/');
 }
 
 function isEmptyDirectory(directoryPath: string): boolean {
@@ -184,7 +210,8 @@ function ancestorsOf(pid: number, processes: readonly HostProcess[]): Set<number
 // Standalone use (red-proofs, manual triage):
 //   node --experimental-strip-types test/integration/support/daemon-leak-oracle.ts \
 //     --state-dir <dir> --daemon-pid <pid> [--daemon-pid <pid>…] \
-//     [--phase after-shutdown|after-close] [--settle-ms <n>]
+//     [--phase after-shutdown|after-close] [--closed-session <dir-name>…]
+//     [--settle-ms <n>]
 // Prints the report and exits 1 on a leak.
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
@@ -196,6 +223,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     stateDir,
     daemonPids: readFlag('--daemon-pid').map(Number),
     phase: (readFlag('--phase')[0] as DaemonLeakPhase | undefined) ?? 'after-shutdown',
+    closedSessions: readFlag('--closed-session'),
     settleMs: Number(readFlag('--settle-ms')[0] ?? DEFAULT_SETTLE_MS),
   });
   process.stdout.write(`${formatDaemonLeakReport(snapshot)}\n`);

@@ -96,6 +96,13 @@ export type DaemonLeakObservation = {
   processes: readonly HostProcess[];
   /** Pids never treated as owned: the observer and its own ancestors. */
   excludedPids: readonly number[];
+  /**
+   * Session directory names closed at this checkpoint. Their capture handles
+   * must be finalized; other sessions may still hold live ones. A checkpoint
+   * that cannot say which session closed cannot tell an unfinalized handle from
+   * a legitimately live one, so `after-close` callers always pass them.
+   */
+  closedSessions: readonly string[];
   stateEntries: readonly StateEntry[];
 };
 
@@ -140,7 +147,11 @@ export function evaluateDaemonLeaks(observation: DaemonLeakObservation): DaemonL
     strayStateEntries: observation.stateEntries
       .filter(
         (entry) =>
-          classifyStateEntry(entry, observation.phase, daemonLegitimatelyAlive) === 'stray',
+          classifyStateEntry(entry, {
+            phase: observation.phase,
+            daemonLegitimatelyAlive,
+            closedSessions: observation.closedSessions,
+          }) === 'stray',
       )
       .map((entry) => entry.path)
       .sort(),
@@ -213,31 +224,42 @@ function directOwnershipReasons(
   return reasons;
 }
 
-function classifyStateEntry(
-  entry: StateEntry,
-  phase: DaemonLeakPhase,
-  daemonLegitimatelyAlive: boolean,
-): 'expected' | 'stray' {
+type StateEntryContext = {
+  phase: DaemonLeakPhase;
+  daemonLegitimatelyAlive: boolean;
+  closedSessions: readonly string[];
+};
+
+function classifyStateEntry(entry: StateEntry, context: StateEntryContext): 'expected' | 'stray' {
   if (MANAGED_TOOLS_ENTRY.test(entry.path)) return 'expected';
   if (entry.kind === 'empty-directory') return 'stray';
   if (entry.path.endsWith('.tmp')) return 'stray';
   if (DAEMON_LIVENESS_ENTRY.test(entry.path)) {
-    return daemonLegitimatelyAlive ? 'expected' : 'stray';
+    return context.daemonLegitimatelyAlive ? 'expected' : 'stray';
   }
   if (CAPTURE_DESCRIPTOR_ENTRY.test(entry.path) || LEGACY_APP_LOG_MARKER_ENTRY.test(entry.path)) {
-    return classifyCaptureEntry(entry, phase);
+    return classifyCaptureEntry(entry, context);
   }
   return EXPECTED_STATE_DIR_ENTRIES.some((matcher) => matcher.test(entry.path))
     ? 'expected'
     : 'stray';
 }
 
-// Another session may still hold a live capture while this one closes; after
-// shutdown only a completed capture record may remain (never a pid marker).
-function classifyCaptureEntry(entry: StateEntry, phase: DaemonLeakPhase): 'expected' | 'stray' {
-  if (phase === 'after-close') return 'expected';
+// A capture handle must be finalized once its owning session is gone: after
+// shutdown that is every session, after close only the sessions that closed.
+// Another session's live capture stays expected, and a legacy pid marker is
+// never a finish record, so it is stray whenever its session is gone.
+function classifyCaptureEntry(entry: StateEntry, context: StateEntryContext): 'expected' | 'stray' {
+  const owningSessionGone =
+    context.phase === 'after-shutdown' ||
+    context.closedSessions.includes(sessionDirectoryOf(entry.path) ?? '');
+  if (!owningSessionGone) return 'expected';
   if (!CAPTURE_DESCRIPTOR_ENTRY.test(entry.path)) return 'stray';
   return entry.descriptorLifecycle === 'completed' ? 'expected' : 'stray';
+}
+
+function sessionDirectoryOf(entryPath: string): string | undefined {
+  return /^sessions\/([^/]+)\//.exec(entryPath)?.[1];
 }
 
 export function formatDaemonLeakReport(snapshot: DaemonLeakSnapshot): string {

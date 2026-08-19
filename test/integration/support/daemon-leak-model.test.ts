@@ -30,6 +30,7 @@ function observe(overrides: Partial<DaemonLeakObservation> = {}): DaemonLeakObse
     phase: 'after-shutdown',
     processes: [],
     excludedPids: [OBSERVER_PID],
+    closedSessions: [],
     stateEntries: [],
     ...overrides,
   };
@@ -177,8 +178,8 @@ describe('state-dir residue rules', () => {
       'expected',
     ],
     [
-      'open capture during close',
-      file('sessions/d/screen-recording.resource.json', 'open'),
+      "another session's open capture during close",
+      file('sessions/other/screen-recording.resource.json', 'open'),
       'after-close',
       'expected',
     ],
@@ -197,6 +198,52 @@ describe('state-dir residue rules', () => {
     );
 
     expect(snapshot.strayStateEntries).toEqual(['sessions/d/tools/pending.tmp']);
+  });
+});
+
+// The phase only means something if it can name the session that closed: without
+// that, the closed session's unfinalized capture handle is indistinguishable
+// from another session's legitimately live one, and `after-close` certifies
+// nothing. Wired through by the session-close route regression in
+// test/integration/provider-scenarios/session-close-leak-oracle.test.ts.
+describe('closed-session capture handles', () => {
+  const closedSessionCapture = (lifecycle: string) =>
+    file('sessions/closed-one/screen-recording.resource.json', lifecycle);
+  const afterClose = (stateEntries: StateEntry[]): DaemonLeakObservation =>
+    observe({
+      phase: 'after-close',
+      livePids: [DAEMON_PID],
+      closedSessions: ['closed-one'],
+      stateEntries,
+    });
+
+  test('the closed session must have finalized its capture handle', () => {
+    const snapshot = evaluateDaemonLeaks(afterClose([closedSessionCapture('open')]));
+
+    expect(snapshot.strayStateEntries).toEqual([
+      'sessions/closed-one/screen-recording.resource.json',
+    ]);
+    expect(hasDaemonLeaks(snapshot)).toBe(true);
+  });
+
+  test('a session that did not close may still hold a live capture handle', () => {
+    const snapshot = evaluateDaemonLeaks(
+      afterClose([file('sessions/still-open/screen-recording.resource.json', 'open')]),
+    );
+
+    expect(hasDaemonLeaks(snapshot)).toBe(false);
+  });
+
+  test('a finalized handle from the closed session is its finish record', () => {
+    const snapshot = evaluateDaemonLeaks(afterClose([closedSessionCapture('completed')]));
+
+    expect(hasDaemonLeaks(snapshot)).toBe(false);
+  });
+
+  test('a legacy pid marker is never a finish record for the closed session', () => {
+    const snapshot = evaluateDaemonLeaks(afterClose([file('sessions/closed-one/app-log.pid')]));
+
+    expect(snapshot.strayStateEntries).toEqual(['sessions/closed-one/app-log.pid']);
   });
 });
 
