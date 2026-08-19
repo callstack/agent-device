@@ -20,8 +20,8 @@ export type AndroidPriorGrantState = 'granted' | 'not_granted' | 'unknown';
 export type AndroidRuntimePermissionGrants = ReadonlyMap<string, 'granted' | 'not_granted'>;
 
 /**
- * `userId`'s runtime permissions, or `undefined` when the state could not be read — no acting
- * user, adb failed, or the dump carried no runtime-permission block for that user.
+ * `userId`'s runtime permissions, or `undefined` when the state could not be read — adb failed,
+ * or the dump carried no runtime-permission block for that user.
  *
  * The caller passes the user its mutation will target, so the two halves cannot disagree.
  * `dumpsys package` prints an `install permissions:` section and one block per user, all
@@ -31,9 +31,8 @@ export type AndroidRuntimePermissionGrants = ReadonlyMap<string, 'granted' | 'no
 export async function readAndroidRuntimePermissionGrants(
   device: DeviceInfo,
   appPackage: string,
-  userId: number | undefined,
+  userId: number,
 ): Promise<AndroidRuntimePermissionGrants | undefined> {
-  if (userId === undefined) return undefined;
   const result = await runAndroidAdb(device, ['shell', 'dumpsys', 'package', appPackage], {
     allowFailure: true,
   });

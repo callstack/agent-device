@@ -37,11 +37,32 @@ type AndroidPermissionTarget = ReturnType<typeof parseAndroidPermissionTarget>;
 
 /**
  * `--user <id>` for every permission mutation, resolved once so the state read and the mutation
- * cannot address different users. Empty only when the foreground user could not be resolved, in
- * which case the platform default (`UserHandle.USER_SYSTEM`) applies and the prior state is
- * reported as unknown rather than guessed.
+ * cannot address different users. Never empty: a permission mutation that cannot name its user
+ * is refused rather than issued (see `requireAndroidPermissionUser`).
  */
 type AndroidUserArgs = readonly string[];
+
+/**
+ * The user a permission mutation will act on, or a refusal.
+ *
+ * `pm` and `appops` default to `UserHandle.USER_SYSTEM`, so an unscoped mutation on a device
+ * whose foreground user is nonzero edits user 0 and leaves the running app untouched — the
+ * defect #1796 is about. Issuing the bare command as a fallback would reintroduce it on exactly
+ * the path where we already know we are guessing, so the command refuses instead: no permission
+ * state is changed when we cannot name whose state it is.
+ */
+async function requireAndroidPermissionUser(device: DeviceInfo): Promise<number> {
+  const userId = await readAndroidCurrentUserId(device);
+  if (userId !== undefined) return userId;
+  throw new AppError(
+    'COMMAND_FAILED',
+    'Could not determine which Android user the session runs as, so no permission was changed.',
+    {
+      deviceId: device.id,
+      hint: `Check adb -s ${device.id} shell am get-current-user — if the device is still booting, retry once it reports a user. agent-device refuses to change permissions it cannot scope, because pm would silently apply them to user 0.`,
+    },
+  );
+}
 
 export async function setAndroidPermission(
   device: DeviceInfo,
@@ -51,8 +72,8 @@ export async function setAndroidPermission(
 ): Promise<Record<string, unknown> | void> {
   const action = parsePermissionAction(state);
   const target = parseAndroidPermissionTarget(options?.permissionTarget, options?.permissionMode);
-  const userId = await readAndroidCurrentUserId(device);
-  const userArgs: AndroidUserArgs = userId === undefined ? [] : ['--user', String(userId)];
+  const userId = await requireAndroidPermissionUser(device);
+  const userArgs: AndroidUserArgs = ['--user', String(userId)];
   if (action === 'grant') {
     await grantAndroidPermission(device, appPackage, target, userArgs);
     return;

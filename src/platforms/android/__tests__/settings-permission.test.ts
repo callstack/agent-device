@@ -187,13 +187,6 @@ test.each([
     fakeAdb((flat) => (flat === DUMPSYS ? 'Packages:' : '0')),
     'unknown',
   ],
-  [
-    'the acting user cannot be resolved',
-    fakeAdb((flat) =>
-      flat === CURRENT_USER ? { stderr: 'cmd: not found', exitCode: 1 } : dumpsys([{ id: 0 }]),
-    ),
-    'unknown',
-  ],
 ] as const)(
   'setAndroidSetting permission deny reports %s',
   async (_label, script, priorGrantState) => {
@@ -230,23 +223,34 @@ test('the revoke warning states the platform rule and keeps the consequence cond
   );
 });
 
-// No resolvable user means no way to address one: the mutation keeps the platform default.
-test('setAndroidSetting permission deny omits --user when the foreground user is unknown', async () => {
-  await withFakeAdb(
-    fakeAdb((flat) =>
-      flat === CURRENT_USER ? { stderr: 'cmd: not found', exitCode: 1 } : undefined,
-    ),
-    async ({ calls, device }) => {
-      await setAndroidSetting(device, 'permission', 'deny', 'com.example.app', {
-        permissionTarget: 'microphone',
-      });
-      assert.deepEqual(calls, [
-        ['shell', 'am', 'get-current-user'],
-        ['shell', 'pm', 'revoke', 'com.example.app', MICROPHONE],
-      ]);
-    },
-  );
-});
+// A mutation that cannot name its user is refused, not issued unscoped: `pm` would apply it to
+// user 0 and leave a session running as another user untouched, which is the whole defect.
+test.each(['grant', 'deny', 'reset'] as const)(
+  'setAndroidSetting permission %s refuses to mutate when the acting user cannot be resolved',
+  async (action) => {
+    await withFakeAdb(
+      fakeAdb((flat) =>
+        flat === CURRENT_USER ? { stderr: 'cmd: not found', exitCode: 1 } : undefined,
+      ),
+      async ({ calls, device }) => {
+        await assertRejectsAppError(
+          () =>
+            setAndroidSetting(device, 'permission', action, 'com.example.app', {
+              permissionTarget: 'microphone',
+            }),
+          {
+            code: 'COMMAND_FAILED',
+            message: /Could not determine which Android user/,
+            hint: /am get-current-user/,
+          },
+        );
+        // The load-bearing assertion: the resolution attempt is the ONLY adb call. No pm, no
+        // appops, no clear-permission-flags — nothing that could edit user 0's state.
+        assert.deepEqual(calls, [['shell', 'am', 'get-current-user']]);
+      },
+    );
+  },
+);
 
 // `photos` is the one target whose permission is discovered by probing the device, so its
 // SDK-dependent candidate order and the flags that follow the resolved permission are pinned.
