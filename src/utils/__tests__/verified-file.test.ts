@@ -3,6 +3,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { assertThrowsAppError } from '../../__tests__/test-utils/index.ts';
+
+// The recovery hints are pinned as literals, not imported from the module under test: an
+// assertion that compares the constant to itself stays green when the constant is deleted or
+// reworded, which is the whole behaviour #1792 adds (ADR 0010 — errors say how to recover).
+const NOT_REGULAR_FILE_HINT =
+  'agent-device only reads and writes regular files at this path. Remove the symbolic link or special file there and retry.';
+const CONCURRENT_REPLACEMENT_HINT =
+  'Another process replaced the file at this path while it was being opened. Stop the concurrent writer, then retry.';
 import {
   openVerifiedFileForAppend,
   openVerifiedFileForRead,
@@ -51,7 +59,7 @@ test.each(['read', 'append', 'truncate'] as const)(
               : openVerifiedFileForTruncate(pathname);
         if (descriptor !== undefined) fs.closeSync(descriptor);
       },
-      { code: 'COMMAND_FAILED', message: /must be a regular file/ },
+      { code: 'COMMAND_FAILED', message: /must be a regular file/, hint: NOT_REGULAR_FILE_HINT },
     );
     expect(fs.readFileSync(outside, 'utf8')).toBe('outside');
   },
@@ -77,6 +85,7 @@ test('reports a typed failure when the file is swapped while it is being opened'
   assertThrowsAppError(() => openVerifiedFileForRead(pathname), {
     code: 'COMMAND_FAILED',
     message: /identity changed while it was opened/,
+    hint: CONCURRENT_REPLACEMENT_HINT,
   });
 });
 
@@ -90,6 +99,7 @@ test('reports a typed failure when a create keeps losing the identity race', () 
   assertThrowsAppError(() => openVerifiedFileForAppend(pathname), {
     code: 'COMMAND_FAILED',
     message: /could not be opened without an identity race/,
+    hint: CONCURRENT_REPLACEMENT_HINT,
   });
 });
 
