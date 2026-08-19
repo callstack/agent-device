@@ -45,6 +45,12 @@ export function createLinuxInteractor(): Interactor {
       await swipeLinux(start.x, start.y, end.x, end.y, plan.durationMs);
     },
     screenshot: (outPath, options) => screenshotLinux(outPath, options),
+    // The Linux read is value-first (AXValue/title/description) where the captured tree is
+    // label-first, so this genuinely reads differently from its snapshot text.
+    readTextAtPoint: async (point, options) => {
+      const { readLinuxTextAtPoint } = await import('../../platforms/linux/snapshot.ts');
+      return await readLinuxTextAtPoint(point.x, point.y, options?.surface);
+    },
     snapshot: async (options) => {
       return await withDiagnosticTimer(
         'snapshot_capture',

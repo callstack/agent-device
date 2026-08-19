@@ -28,7 +28,6 @@ import { createAndroidApplicationTools } from './platform-runtime-android-applic
 import { createLocalApplicationInteractorHost } from './platform-runtime-local-application-interactors.ts';
 import { createApplicationResourceLifecycle } from './platform-runtime-application-resources.ts';
 import { createSnapshotRuntimeHost } from './snapshot/snapshot-desktop-surface.ts';
-import { createElementTextRuntimeHost } from './platform-runtime-element-text-host.ts';
 
 export function createPlatformRuntimeHost(options: {
   sessionsDir: string;
@@ -107,7 +106,6 @@ export function createPlatformRuntimeHost(options: {
     ),
     screenRecording: createScreenRecordingRuntimeHost(),
     snapshot: createSnapshotRuntimeHost(),
-    elementText: createElementTextRuntimeHost(),
     localInteractors: createLocalApplicationInteractorHost(),
     appleApplications,
     androidApplications,

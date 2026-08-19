@@ -18,13 +18,14 @@ import {
   type AppleRunnerProvider,
 } from './core/runner/runner-provider.ts';
 import { toAppleTvRemoteButton } from '@agent-device/contracts/interaction';
+import type { SessionSurface } from '@agent-device/contracts/session';
 import { DEVICE_ROTATIONS, type DeviceRotation } from '@agent-device/contracts/device';
 import { normalizeSnapshotScope } from '@agent-device/contracts/snapshot';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { isMacOs, isTvOsDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { withMethodScope } from '../../utils/method-scope.ts';
-import type { RawSnapshotNode, SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
+import type { Point, RawSnapshotNode, SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import type {
   Interactor,
   RunnerCallOptions,
@@ -65,6 +66,12 @@ export function createAppleInteractor(
     close: (app) => closeIosApp(device, app, runnerOpts),
     screenshot: (outPath, options) => runAppleScreenshot(device, outPath, options, runnerOpts),
     snapshot: async (options) => await captureAppleSnapshot(device, options, runnerOpts),
+    // The live text at a point: helper for macOS desktop/menubar surfaces, XCTest runner for
+    // every other Apple leaf including a macOS app session.
+    readTextAtPoint: async (point, options) =>
+      usesMacOsHelperSurface(device, options?.surface)
+        ? await readMacOsSurfaceTextAtPoint(point, options)
+        : await readRunnerTextAtPoint(device, point, options, runnerOpts),
     back: async (mode) => {
       if (isTvOsDevice(device)) {
         // tvOS focus-only navigation: the Menu button pops focus, not a coordinate tap.
@@ -329,4 +336,37 @@ function readAppleSnapshotResult(result: Record<string, unknown>): {
         ? result.message
         : undefined,
   };
+}
+
+/** Only non-app macOS surfaces are helper-read; an app session is runner-read like any leaf. */
+function usesMacOsHelperSurface(device: DeviceInfo, surface: SessionSurface | undefined): boolean {
+  return isMacOs(device) && surface !== undefined && surface !== 'app';
+}
+
+async function readMacOsSurfaceTextAtPoint(
+  point: Point,
+  options?: { appBundleId?: string; surface?: SessionSurface },
+): Promise<string | undefined> {
+  const { runMacOsReadTextAction } = await import('./os/macos/helper.ts');
+  const result = await runMacOsReadTextAction(point.x, point.y, {
+    bundleId: options?.appBundleId,
+    surface: options?.surface,
+  });
+  return result.text;
+}
+
+async function readRunnerTextAtPoint(
+  device: DeviceInfo,
+  point: Point,
+  options: { appBundleId?: string; signal?: AbortSignal } | undefined,
+  runnerOpts: RunnerCallOptions,
+): Promise<string | undefined> {
+  const result = await runAppleRunnerCommand(
+    device,
+    { command: 'readText', x: point.x, y: point.y, appBundleId: options?.appBundleId },
+    options?.signal ? { ...runnerOpts, signal: options.signal } : runnerOpts,
+  );
+  if (typeof result.text === 'string') return result.text;
+  // The runner answers `message` when it reached the element but rendered no readable text.
+  return typeof result.message === 'string' ? result.message : undefined;
 }

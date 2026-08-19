@@ -222,6 +222,16 @@ export type Interactor = {
   screenshot(outPath: string, options?: ScreenshotOptions): Promise<void>;
   setViewport?(width: number, height: number): Promise<Record<string, unknown> | void>;
   snapshot(options?: SnapshotOptions): Promise<SnapshotResult>;
+  /**
+   * Native reading of the live text at a point, when the backend has one. Answers the text the
+   * owner can see right now, which can exceed what an already-captured node carries (an editable
+   * field whose value is longer than its label). Optional: a backend without it leaves the
+   * captured tree as the complete answer.
+   */
+  readTextAtPoint?(
+    point: Point,
+    options?: { appBundleId?: string; surface?: SessionSurface; signal?: AbortSignal },
+  ): Promise<string | undefined>;
   gestureViewport?(): Promise<Rect>;
   back(mode?: BackMode): Promise<void>;
   home(): Promise<void>;

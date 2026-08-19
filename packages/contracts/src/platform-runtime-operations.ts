@@ -15,10 +15,7 @@ import type { ScreenRecordingRuntimeOperations } from './screen-recording-runtim
 import type { ScreenshotRuntimeOperations } from './screenshot-runtime.ts';
 import type { SnapshotRuntimeHost, SnapshotRuntimeOperations } from './snapshot-runtime.ts';
 import type { ViewportRuntimeOperations } from './viewport-runtime.ts';
-import type {
-  ElementTextRuntimeHost,
-  ElementTextRuntimeOperations,
-} from './element-text-runtime.ts';
+import type { ElementTextRuntimeOperations } from './element-text-runtime.ts';
 import type {
   DeviceReadinessRuntimeHost,
   DeviceReadinessRuntimeOperations,
@@ -291,7 +288,6 @@ export type PlatformRuntimeHost = AppLogRuntimeHost &
     }>;
     screenRecording: ScreenRecordingRuntimeHost;
     snapshot: SnapshotRuntimeHost;
-    elementText: ElementTextRuntimeHost;
     deviceReadiness: DeviceReadinessRuntimeHost;
     deviceShutdown: DeviceShutdownRuntimeHost;
     localInteractors: LocalApplicationInteractorHost;

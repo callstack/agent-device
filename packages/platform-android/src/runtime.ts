@@ -220,7 +220,11 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
               })
             : {}),
           ...(facts.operations.readTextAtPoint.available
-            ? bindElementTextRuntime({ device: request.device, host: host.elementText })
+            ? bindElementTextRuntime({
+                device: request.device,
+                signal: request.scope.signal,
+                resolveInteractor: host.localInteractors.resolve,
+              })
             : {}),
           ensureReady: async (input: EnsureReadyInput) =>
             await ensureAndroidReady(
