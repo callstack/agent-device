@@ -513,84 +513,14 @@ test('is visible recaptures web snapshots when cached nodes may lack rects', asy
   });
 });
 
-test('is selected simple iOS id selector uses runner query without snapshot', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'is-selected-ios-direct-selector';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
-  mockRunAppleRunnerCommand.mockResolvedValue({
-    found: true,
-    text: 'Pickup',
-    nodes: [
-      {
-        index: 0,
-        depth: 0,
-        type: 'Button',
-        label: 'Pickup',
-        identifier: 'shipping-pickup',
-        selected: true,
-        rect: { x: 126, y: 555, width: 75, height: 38 },
-        enabled: true,
-        hittable: true,
-      },
-    ],
-  });
-
-  const response = await handleInteractionCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'is',
-      positionals: ['selected', 'id="shipping-pickup"'],
-      flags: {},
-    },
-    sessionName,
-    sessionStore,
-    contextFromFlags,
-    ...getRuntimeBindings(),
-  });
-
-  expect(response?.ok).toBe(true);
-  expect(mockRunAppleRunnerCommand).toHaveBeenCalledWith(
-    expect.anything(),
-    {
-      command: 'querySelector',
-      selectorKey: 'id',
-      selectorValue: 'shipping-pickup',
-      appBundleId: 'com.example.app',
-    },
-    expect.anything(),
-  );
-  expect(mockDispatch).not.toHaveBeenCalledWith(
-    expect.anything(),
-    'snapshot',
-    expect.anything(),
-    expect.anything(),
-    expect.anything(),
-  );
-  if (response?.ok) {
-    expect(response.data?.predicate).toBe('selected');
-    expect(response.data?.pass).toBe(true);
-  }
-  const recorded = sessionStore.get(sessionName)?.actions.at(-1);
-  expect(recorded?.result?.selectorChain).toEqual(['id="shipping-pickup"']);
-});
-
-// PIN CHANGED (#1739, R37) — this case previously asserted `ok: true` with `pass: false` and zero
-// snapshots, the shape #557 introduced. That broke `is`'s documented contract:
-// `website/docs/docs/commands.md` says under "Assertions" that `is` "exits non-zero on failure",
-// and on device `is text id=… "Wrong Expected Text"` printed `Passed: is text` and exited 0 — a
-// failing assertion reported as success, the one thing an assertion command must never do.
-//
-// #557's perf claim is NOT reversed, and the case above pins it: a predicate that HOLDS still
-// answers from the runner with zero snapshots. Only the negative falls through, which is what
-// #557's own summary asked for ("preserving snapshot fallback for misses" — it refused fallback
-// only for HARD failures like ambiguous matches). That fall-through was designed and never armed:
-// `buildDirectIosIsResult` was already typed `| null` behind an `if (!payload) return null;`
-// caller guard that nothing could reach.
-//
-// The negative could not be trusted either: the runner evaluates a ONE-NODE tree, so `visible`
-// cannot see the ancestor geometry a list row inherits. Falling through re-asks the real tree.
-test('is simple iOS selector falls through to the snapshot when the runner predicate fails', async () => {
+// PIN CHANGED TWICE (#1739, R37). #557 asserted `ok: true` with `pass: false` and zero snapshots
+// here, from the direct-iOS shortcut. That broke `is`'s documented contract — it "exits non-zero
+// on failure" (website/docs/docs/commands.md) — and on device printed `Passed: is text` with exit
+// 0 for a failed assertion. The reversal made the shortcut answer only when the predicate held;
+// the shortcut is now retired outright, so the bound capture answers every predicate and this is
+// simply what `is` does. The assertion below is unchanged across both edits because it was always
+// about the OUTCOME, not about which path produced it.
+test('a failing is predicate is COMMAND_FAILED, never a zero-exit pass', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'is-selected-ios-direct-selector-false';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
@@ -623,66 +553,13 @@ test('is simple iOS selector falls through to the snapshot when the runner predi
     ...getRuntimeBindings(),
   });
 
-  // The runner answered `selected: false`; the session snapshot has no `id=submit` at all, so the
-  // authoritative capture reports the typed selector failure instead of a zero-exit "pass: false".
+  // The session snapshot has no `id=submit`, so the bound capture reports the typed selector
+  // failure. Nothing can report a failed assertion as a completed command.
   expect(response?.ok).toBe(false);
   expect(mockDispatch.mock.calls.filter((call) => call[1] === 'snapshot')).toHaveLength(1);
   if (response?.ok === false) {
     expect(response.error?.code).toBe('COMMAND_FAILED');
   }
-});
-
-test('is simple iOS selector falls back to snapshot while gesture stabilization is pending', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'is-selected-ios-stabilizing';
-  const session = makeIosSession(sessionName, { appBundleId: 'com.example.app' });
-  session.postGestureStabilization = { action: 'swipe', positionals: [], markedAt: Date.now() };
-  sessionStore.set(sessionName, session);
-
-  mockDispatch.mockImplementation(async (_device, command) => {
-    if (command !== 'snapshot') throw new Error(`unexpected command: ${command}`);
-    return {
-      nodes: [
-        {
-          index: 0,
-          depth: 0,
-          type: 'Window',
-          rect: { x: 0, y: 0, width: 390, height: 844 },
-        },
-        {
-          index: 1,
-          depth: 1,
-          parentIndex: 0,
-          type: 'Button',
-          label: 'Pickup',
-          identifier: 'shipping-pickup',
-          selected: true,
-          rect: { x: 126, y: 555, width: 75, height: 38 },
-          enabled: true,
-          hittable: true,
-        },
-      ],
-      backend: 'xctest',
-    };
-  });
-
-  const response = await handleInteractionCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'is',
-      positionals: ['selected', 'id="shipping-pickup"'],
-      flags: {},
-    },
-    sessionName,
-    sessionStore,
-    contextFromFlags,
-    ...getRuntimeBindings(),
-  });
-
-  expect(response?.ok).toBe(true);
-  expect(mockRunAppleRunnerCommand).not.toHaveBeenCalled();
-  expect(mockDispatch.mock.calls.some((call) => call[1] === 'snapshot')).toBe(true);
 });
 
 test('is visible passes for list text that inherits viewport visibility from an ancestor', async () => {
