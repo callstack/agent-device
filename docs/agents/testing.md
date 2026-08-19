@@ -136,6 +136,12 @@ the generator, where every property inherits it — not in a new hand-pinned cas
 
 ## Affected-check selector (`pnpm check:affected`)
 
+Fast local feedback is a project value: the default developer loop should run the smallest relevant
+gate set and return as quickly as correctness allows. Expensive informational measurements belong in
+CI unless they are needed to diagnose a reported result. In particular, do not build a base checkout
+or run package-size comparisons locally by default; use the authoritative Size workflow report during
+review.
+
 `pnpm check:affected --base <ref>` derives which local checks a diff needs, so
 agents stop interpreting the testing matrix by hand. It is a **fail-open
 advisory**: existing GitHub CI stays authoritative and required, and this only
@@ -227,27 +233,6 @@ The output tells you which gates to run and which live scenarios claim the behav
 Lists are bounded (`--limit`, default 10) and always disclose what they hid; `--json` is
 unbounded. The query is read-only, runs in well under a second, and adds no CI work — its model is
 covered by `pnpm depgraph:test` (the existing `Layering Guard` job).
-
-## Shipped size (`pnpm size --base <ref>`)
-
-The Size workflow posts a base/PR comparison on every PR; the same comparison runs locally in one
-command, before the PR exists:
-
-```sh
-pnpm size --base origin/main    # first run: detached worktree + install + build of the base (~1-2 min)
-                                # later runs against the same base: ~3s (the worktree is kept under .tmp/size-base/<sha>)
-```
-
-The cache is per SHA and never destructive toward a run in progress: a `.lock` (pid inside) is held
-from before the worktree exists until the base report is read, a concurrent run against the same
-base fails fast rather than reading a half-built `dist`, another base's run evicts only worktrees
-whose lock is absent or whose owner is dead, and a build that was interrupted before its
-`dist/.size-base-complete` stamp is rebuilt.
-
-Requires a current `pnpm build` of your own tree. `JS raw`/`JS gzip` are the numbers to quote and to
-budget against (ADR 0019 §8 units state theirs before starting); the `npm tarball`/`npm unpacked`
-rows compare a fresh base checkout against your working tree, which may carry locally built helper
-artifacts CI's fresh checkout does not, so read a tarball delta on GitHub's comment, not here.
 
 ## Gate manifest: proving every check has a CI owner
 
@@ -542,11 +527,8 @@ would silently enroll every future file under a directory — and run in their o
 exactly that list, and both projects run inside one `vitest run`, so the serialized chain runs
 alongside the main pool rather than after it (~0 added CI wall clock).
 
-Issue #1823 owns the membership and the project's deletion test: if they run un-serialized in
+Issue #1823 owns the membership and the project's deletion test: if the three run un-serialized in
 the default pool for 20 consecutive CI runs with no timeout-shaped failure, the project goes.
-`size-report-base.test.ts` joined in #1842 — it drives `pnpm size --base`'s worktree/lock
-orchestration through a real `node scripts/size-report.mjs` per case, which spawns git and the
-shimmed package managers under it.
 Adding a file needs the concrete spawn named at the entry; per-file `process.env` isolation is not a
 reason, since `pool: forks` + `isolate: true` already give every project that.
 

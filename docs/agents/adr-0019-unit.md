@@ -45,9 +45,9 @@ Each step names its declaration site; read that, not prose.
   §4–5 lifecycle evidence. Importing durable machinery promotes the tier — say so.
 - Planted-red for anything new that is *not* a table row (a facet, a package boundary): revert,
   run, quote the failing line. A row needs no planted-red of its own.
-- Size: root-bytes-removed vs package-bytes-added and the four checkpoint metrics
-  (`pnpm size --compare` against the base build), against the posted budget. Move-dominated is the
-  rule; net growth is itemized, not explained away.
+- Size: use the CI Size workflow's root-bytes-removed vs package-bytes-added and four checkpoint
+  metrics against the posted budget. Do not build a base checkout or run a local size comparison by
+  default. Move-dominated is the rule; net growth is itemized, not explained away.
 - Live evidence for the changed path on at least one real target per family the denominator
   claims (`docs/agents/device-verification.md`); fixture-backed parity does not replace it.
 - Layering: `pnpm check:layering` green — R3 seam list narrows in the unit that removes an area's

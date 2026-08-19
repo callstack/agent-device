@@ -40,14 +40,8 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
-      # The base is measured with the PR's instrument, so the reporter is copied out before the
-      # checkout moves. It is a module graph, not one file: copy the whole directory so a future
-      # split cannot silently leave an import behind (a one-file copy broke exactly that way).
-      # scripts/__tests__/size-report-preserved-closure.test.ts holds this step to the closure.
       - name: Preserve report script
-        run: |
-          rm -rf /tmp/agent-device-size-report
-          cp -R scripts /tmp/agent-device-size-report
+        run: cp scripts/size-report.mjs /tmp/agent-device-size-report.mjs
 
       # dist is fully determined by the base commit, so reuse it across PR runs
       # against the same base. Startup medians are still measured fresh on this
@@ -66,7 +60,7 @@ jobs:
           if [ "${{ steps.base-dist-cache.outputs.cache-hit }}" != "true" ]; then
             pnpm build
           fi
-          node /tmp/agent-device-size-report/size-report.mjs \
+          node /tmp/agent-device-size-report.mjs \
             --startup-runs 7 \
             --json /tmp/agent-device-size-base.json
 

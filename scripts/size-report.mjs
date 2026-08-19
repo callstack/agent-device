@@ -4,15 +4,17 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { performance } from 'node:perf_hooks';
 import { gzipSync } from 'node:zlib';
-import { withPreparedBaseWorktree } from './size-base-cache.mjs';
-import { COMMENT_MARKER, postGitHubCommentBestEffort } from './size-report-comment.mjs';
 
+const COMMENT_MARKER = '<!-- agent-device-size-report -->';
+const GITHUB_REQUEST_ATTEMPTS = 4;
+// Overridable so the regression tests do not sleep through real backoff.
+const GITHUB_RETRY_BASE_MS = Number(process.env.SIZE_REPORT_RETRY_BASE_MS ?? 1000);
+class TransientGitHubError extends Error {}
 const VALUE_ARGS = new Map([
   ['--cwd', 'cwd'],
   ['--json', 'json'],
   ['--markdown', 'markdown'],
   ['--compare', 'compare'],
-  ['--base', 'base'],
   ['--post-comment', 'postComment'],
   ['--pr', 'pr'],
   ['--startup-runs', 'startupRuns'],
@@ -31,24 +33,16 @@ if (args.postComment) {
   process.exit(0);
 }
 
-if (args.compare && args.base) {
-  throw new Error(
-    '--compare and --base are exclusive: one supplies the base report, the other measures it',
-  );
-}
-const startupRuns = parseNonNegativeInteger(args.startupRuns ?? '0', '--startup-runs');
-const report = collectReport(cwd, { startupRuns });
-const baseReport = args.compare
-  ? JSON.parse(fs.readFileSync(args.compare, 'utf8'))
-  : args.base
-    ? measureBaseRef(cwd, args.base, { startupRuns })
-    : null;
+const report = collectReport(cwd, {
+  startupRuns: parseNonNegativeInteger(args.startupRuns ?? '0', '--startup-runs'),
+});
+const baseReport = args.compare ? JSON.parse(fs.readFileSync(args.compare, 'utf8')) : null;
 
 if (args.json) {
   writeFile(args.json, `${JSON.stringify(report, null, 2)}\n`);
 }
 
-const markdown = formatMarkdown(report, baseReport, args.base);
+const markdown = formatMarkdown(report, baseReport);
 
 if (args.markdown) {
   writeFile(args.markdown, markdown);
@@ -86,9 +80,6 @@ Options:
   --json <path>            Write the raw size report JSON.
   --markdown <path>        Write the markdown report.
   --compare <path>         Compare against a previously written JSON report.
-  --base <ref>             Measure <ref> (e.g. origin/main) in a detached worktree under
-                           .tmp/size-base/ and compare against it: the local one-command
-                           equivalent of the Size workflow's base/PR comparison.
   --startup-runs <count>   Measure startup medians for side-effect-free CLI commands.
   --post-comment <path>    Post or update the markdown report on the current PR.
   --pr <number>            Pull request number for --post-comment.
@@ -151,13 +142,6 @@ function collectReport(root, options) {
       : {}),
     chunks: chunks.slice(0, 20),
   };
-}
-
-// The Size workflow measures the base by checking it out, installing, and building; this is the
-// same recipe in a detached worktree, so the working tree is never touched. Entry reuse, claim
-// ownership, and eviction belong to scripts/size-base-cache.mjs.
-function measureBaseRef(root, ref, options) {
-  return withPreparedBaseWorktree(root, ref, (worktreeDir) => collectReport(worktreeDir, options));
 }
 
 function prepareGeneratedPackageAssets(root) {
@@ -250,7 +234,7 @@ function countNpmPackEntries(pack) {
   return Array.isArray(pack.files) ? pack.files.length : 0;
 }
 
-function formatMarkdown(report, baseReport, baseLabel) {
+function formatMarkdown(report, baseReport) {
   const rows = [
     metricRow('JS raw', baseReport?.js.rawBytes, report.js.rawBytes),
     metricRow('JS gzip', baseReport?.js.gzipBytes, report.js.gzipBytes),
@@ -266,17 +250,13 @@ function formatMarkdown(report, baseReport, baseLabel) {
   return `${COMMENT_MARKER}
 ## Size Report
 
-| Metric | ${baseColumnLabel(baseLabel)} | Current | Diff |
+| Metric | Base | Current | Diff |
 |---|---:|---:|---:|
 ${rows.join('\n')}
 
 ${startup}
 ${changedChunks}
 `;
-}
-
-function baseColumnLabel(baseLabel) {
-  return baseLabel ? `Base (${baseLabel})` : 'Base';
 }
 
 function metricRow(label, base, current) {
@@ -383,4 +363,150 @@ function formatSignedBytes(value) {
 function writeFile(filePath, contents) {
   fs.mkdirSync(path.dirname(path.resolve(filePath)), { recursive: true });
   fs.writeFileSync(filePath, contents);
+}
+
+// The PR comment is a convenience surface: the same markdown is already in the
+// job summary. A GitHub outage (5xx / 429 / network error) must not fail the
+// job, but a real misconfiguration (bad token, missing permissions) still does.
+async function postGitHubCommentBestEffort(markdownPath, explicitPrNumber) {
+  try {
+    await postGitHubComment(markdownPath, explicitPrNumber);
+  } catch (error) {
+    if (!(error instanceof TransientGitHubError)) throw error;
+    const message = `Skipping PR size comment after transient GitHub failure: ${error.message}`;
+    process.stdout.write(`::warning::${message}\n`);
+    appendStepSummary(`> ⚠️ ${message} The size report above is authoritative.\n`);
+  }
+}
+
+function appendStepSummary(text) {
+  const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+  if (summaryPath) fs.appendFileSync(summaryPath, text);
+}
+
+async function postGitHubComment(markdownPath, explicitPrNumber) {
+  const config = readGitHubCommentConfig(explicitPrNumber);
+  const body = fs.readFileSync(markdownPath, 'utf8');
+  const commentsUrl = buildCommentsUrl(config.repository, config.prNumber);
+  await retryTransient(() => syncGitHubComment(commentsUrl, config.headers, body));
+}
+
+// Every attempt re-lists before writing: a create whose response was lost
+// (network error / 5xx) may still have landed server-side, and re-listing turns
+// that into an update of the existing marker comment instead of a duplicate.
+async function syncGitHubComment(commentsUrl, headers, body) {
+  const comments = await listGitHubComments(commentsUrl, headers);
+  const existing = comments.find((comment) => comment.body?.includes(COMMENT_MARKER));
+  await writeGitHubComment(commentsUrl, headers, body, existing?.url);
+}
+
+function readGitHubCommentConfig(explicitPrNumber) {
+  const token = process.env.GITHUB_TOKEN;
+  const repository = process.env.GITHUB_REPOSITORY;
+  const prNumber = explicitPrNumber ?? process.env.GITHUB_PR_NUMBER;
+  assertGitHubCommentConfig(token, repository, prNumber);
+  return {
+    repository,
+    prNumber,
+    headers: buildGitHubHeaders(token),
+  };
+}
+
+function assertGitHubCommentConfig(token, repository, prNumber) {
+  for (const value of [token, repository, prNumber]) {
+    if (!value) {
+      throw new Error(
+        'GITHUB_TOKEN, GITHUB_REPOSITORY, and PR number are required to post a comment.',
+      );
+    }
+  }
+}
+
+function buildGitHubHeaders(token) {
+  return {
+    accept: 'application/vnd.github+json',
+    authorization: `Bearer ${token}`,
+    'content-type': 'application/json',
+    'x-github-api-version': '2022-11-28',
+  };
+}
+
+function buildCommentsUrl(repository, prNumber) {
+  const [owner, repo] = repository.split('/');
+  return `https://api.github.com/repos/${owner}/${repo}/issues/${prNumber}/comments`;
+}
+
+async function listGitHubComments(commentsUrl, headers) {
+  const response = await githubRequest(
+    `${commentsUrl}?per_page=100`,
+    { headers },
+    'list PR comments',
+  );
+  return await response.json();
+}
+
+async function writeGitHubComment(commentsUrl, headers, body, existingUrl) {
+  const target = commentWriteTarget(commentsUrl, existingUrl);
+  await githubRequest(
+    target.url,
+    { method: target.method, headers, body: JSON.stringify({ body }) },
+    `${target.action} PR comment`,
+  );
+}
+
+function commentWriteTarget(commentsUrl, existingUrl) {
+  if (existingUrl) {
+    return { url: existingUrl, method: 'PATCH', action: 'update' };
+  }
+  return { url: commentsUrl, method: 'POST', action: 'create' };
+}
+
+// Re-runs `operation` with exponential backoff while it throws
+// TransientGitHubError; any other error (a non-transient HTTP status, i.e. a
+// configuration problem) propagates immediately and fails the job.
+async function retryTransient(operation) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      await backoffOrRethrow(error, attempt);
+    }
+  }
+}
+
+async function backoffOrRethrow(error, attempt) {
+  if (!(error instanceof TransientGitHubError)) throw error;
+  if (attempt >= GITHUB_REQUEST_ATTEMPTS) {
+    throw new TransientGitHubError(`${error.message} after ${attempt} attempts`);
+  }
+  const delayMs = GITHUB_RETRY_BASE_MS * 2 ** (attempt - 1);
+  process.stderr.write(`${error.message} (retrying in ${delayMs}ms)\n`);
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+// One attempt: network errors and 5xx / 429 throw TransientGitHubError;
+// any other non-OK status throws a plain (fatal) Error.
+async function githubRequest(url, init, action) {
+  const response = await fetchOrTransient(url, init, action);
+  if (response.ok) return response;
+  throw await githubStatusError(response, action);
+}
+
+async function fetchOrTransient(url, init, action) {
+  try {
+    return await fetch(url, init);
+  } catch (error) {
+    throw new TransientGitHubError(`Failed to ${action}: ${error?.message ?? error}`);
+  }
+}
+
+async function githubStatusError(response, action) {
+  const failure = `Failed to ${action}: ${response.status} ${await response.text()}`;
+  return isTransientGitHubStatus(response.status)
+    ? new TransientGitHubError(failure)
+    : new Error(failure);
+}
+
+function isTransientGitHubStatus(status) {
+  return status === 429 || status >= 500;
 }

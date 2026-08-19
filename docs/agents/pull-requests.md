@@ -60,12 +60,6 @@ asked or when the work is intentionally incomplete.
   validation does not apply instead of writing a command checklist.
 - Call out real tradeoffs, known gaps, and follow-ups; omit boilerplate when there are none.
 - Note touched-file count and whether scope expanded beyond the initial command family.
-- Paste the block `pnpm pr:evidence` prints (add `--size` for a unit with a size budget,
-  `--coverage` after `pnpm test:coverage`) rather than transcribing SHAs, gate lists, layering
-  counts, or edge deltas by hand: it stamps the exact merge-base and head, composes the affected
-  plan, layering guard, depgraph deltas, and the two optional reports, and links the head's CI
-  instead of claiming it. After a rebase, re-run it (~20s) rather than editing the old block; the
-  stamp is what makes the evidence dated instead of stale.
 ## Reviewing
 
 - Review against the linked issue, not only the diff. State the issue's motivating behavior and
@@ -89,3 +83,11 @@ asked or when the work is intentionally incomplete.
   before/after evidence when an issue reports a concrete divergence.
 - Green CI is necessary but insufficient for device-facing or routing-sensitive work.
 - Check whether the tightening pass removed code/tests the change made obsolete.
+- Treat the CI Size workflow as review evidence; local size comparisons are not required by default.
+  Escalate scrutiny when a PR adds roughly 700 or more net production lines (excluding tests,
+  generated data, fixtures, and documentation) or increases npm unpacked size by more than 3 kB.
+  Consider gross additions and deletions too, so a move-dominated change is not mistaken for pure
+  growth. These thresholds trigger investigation, not automatic rejection: ask an independent
+  reviewer whether a deeper owning interface, stronger types, less ceremony, reuse of an existing
+  construction path, or deletion of superseded code can make the change materially smaller. The PR
+  should itemize justified growth and record why a smaller design was rejected.

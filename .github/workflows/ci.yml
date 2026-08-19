@@ -177,13 +177,6 @@ jobs:
         uses: ./.github/actions/run-gate
         with: { gate: gate-manifest }
 
-      # `pnpm pr:evidence` composes this job's selector output (plus the depgraph and layering
-      # reports) into the PR-body evidence block; its pure model lives here with the selector
-      # it reads. Seconds, no install beyond this job's.
-      - name: Check the PR evidence composer model
-        uses: ./.github/actions/run-gate
-        with: { gate: pr-evidence-model }
-
       # Same family as the manifest above — a CI selection that has stopped selecting what
       # it claims. ios.yml runs a hand-written subset of the runner XCTest methods through an
       # `-only-testing:` list, and xcodebuild treats an identifier that matches nothing as

@@ -15,11 +15,6 @@ export const SUBPROCESS_STUB_TESTS: readonly string[] = [
   'scripts/fuzz/harness.test.ts',
   // Replays the fuzz corpus through that same worker watchdog, waiting its per-case budget.
   'scripts/fuzz/corpus-replay.test.ts',
-  // Spawns `node scripts/size-report.mjs` per case, which itself spawns git plus the shimmed
-  // pnpm/npm — several real subprocesses deep. Un-serialized it took 14s for the file under the
-  // full suite versus ~5.5s alone, and starved spawns surfaced as a vitest test timeout instead
-  // of the orchestration assertion the case is about (#1842).
-  'scripts/__tests__/size-report-base.test.ts',
 ];
 
 const SETUP_FILES = ['src/__tests__/hermetic-env-setup.ts', 'src/__tests__/process-memo-setup.ts'];
@@ -83,16 +78,6 @@ export default defineConfig({
             // The Bundle Size lane's PR-comment path: spawns the real script against a
             // stubbed fetch, so it needs no network; pins retry/reconcile/fatal outcomes.
             'scripts/__tests__/size-report-post-comment.test.ts',
-            // The `size --base` cache's claim protocol: pure filesystem, so the dangerous
-            // takeover interleavings are planted directly rather than raced for. Milliseconds.
-            'scripts/__tests__/size-base-cache.test.ts',
-            // The Size workflow copies the reporter out of the tree to measure the base with the
-            // PR's instrument; nothing local reproduces that copy, so this holds the step to the
-            // reporter's real import closure.
-            'scripts/__tests__/size-report-preserved-closure.test.ts',
-            // `--base` orchestration (per-SHA worktree, lock, completion stamp, eviction) against
-            // a throwaway git repo with pnpm/npm shimmed on PATH: git + node only.
-            'scripts/__tests__/size-report-base.test.ts',
             // Parses CI configuration only, so this action guard needs no device or subprocess lane.
             'test/ci/upload-agent-device-artifacts.test.ts',
             // #1781 A9: pins the root-doc paths-ignore entries directly against the
