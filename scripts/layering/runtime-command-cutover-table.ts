@@ -571,6 +571,15 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
       // `is` executes through the shared selector seam, so its capture owners are the SAME
       // selectors `snapshot`/`diff`/`get` count. It declares no operation of its own: every
       // predicate answers from the resolved tree, so `readTextAtPoint` stays R36's alone.
+      //
+      // Scope, stated so this is not read as absolute: the claim covers how a predicate is
+      // EXECUTED. Since the direct-iOS selector shortcut retired, the bound capture is the only
+      // thing that answers one. It does NOT claim the route makes no other device call — the
+      // Android foreground-blocker diagnostic still reaches adb through
+      // `platforms/android/app-lifecycle.ts`, on the FAILURE path only, where it can enrich an
+      // already-failed response's message but can never produce or change a verdict. That edge
+      // is pre-existing, co-owned with `wait`, and recorded as Wave 6 denominator work; R22's
+      // `appState` is its declared replacement.
       operationOwners: {
         captureSnapshot: ['selectActiveAppSnapshot'],
         captureSnapshotWithoutActiveApp: ['selectSnapshotWithoutActiveApp'],

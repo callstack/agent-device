@@ -17,9 +17,7 @@ import {
   checkIsArgs,
   checkWaitText,
   checkFindArgs,
-  evaluateIsPredicate,
   isReadOnlyFindAction,
-  type IsPredicate,
 } from '@agent-device/selectors';
 import { refSnapshotFlagGuardResponse } from './handlers/interaction-flags.ts';
 import { parseVersionedRefPositional } from './handlers/interaction-touch-targets.ts';
@@ -63,15 +61,6 @@ type DirectIosSelectorErrorResult = { kind: 'error'; response: DaemonResponse };
 
 type DirectIosSelectorFallbackResult =
   | DirectIosSelectorQueryResult
-  | DirectIosSelectorErrorResult
-  | null;
-
-type ResolvedDirectIosSelectorQuery =
-  | {
-      session: SessionState;
-      selector: DirectIosSelectorTarget;
-      result: DirectIosSelectorQueryResult;
-    }
   | DirectIosSelectorErrorResult
   | null;
 
@@ -234,28 +223,20 @@ export async function dispatchIsViaRuntime(
     );
   }
   const { predicate, selectorExpression, expectedText } = checked;
-  // ADR 0012 decision 3 / #1349: recording and a guarded replay dispatch both
-  // require the snapshot path — evidence and the post-resolution identity
-  // guard are computed from the resolution tree.
+  // ADR 0012 decision 3 / #1349: a guarded replay dispatch resolves through the snapshot path so
+  // the post-resolution identity guard runs against the resolution tree.
   const replayTargetGuard = req.internal?.replayTargetGuard;
-  const recordingSession = isSessionRecording(params.sessionStore.get(params.sessionName));
 
-  // Admit before the direct-iOS fast path below — see {@link createBoundSelectorRuntime}.
+  // ADR 0019: `is` declares `device-runtime`, so its request path reaches the device ONLY through
+  // the operations R37 declares. Every predicate — including the simple iOS `id=` selector a
+  // direct runner query used to answer without a capture — resolves through the bound capture.
+  // Admission before a bypass is not the same as executing through the seam, so the bypass is
+  // gone rather than merely ordered after admission.
   const resolvedRuntime = await createBoundSelectorRuntime(params, {
     requireSession: true,
     command: 'is',
   });
   if (!resolvedRuntime.ok) return resolvedRuntime.response;
-
-  if (!replayTargetGuard && !recordingSession) {
-    const directResponse = await dispatchDirectIosSelectorIs(
-      params,
-      predicate,
-      selectorExpression,
-      expectedText,
-    );
-    if (directResponse) return directResponse;
-  }
 
   const response = await toDaemonResponse(async () => {
     const result = await resolvedRuntime.runtime.selectors.is({
@@ -376,38 +357,6 @@ function readRecordedResolutionTarget(
   return { node: node as SnapshotNode, preActionNodes: preActionNodes as SnapshotNode[] };
 }
 
-async function dispatchDirectIosSelectorIs(
-  params: SelectorRuntimeParams,
-  predicate: IsPredicate,
-  selectorExpression: string,
-  expectedText: string,
-): Promise<DaemonResponse | null> {
-  if (predicate === 'hidden') return null;
-  const directQuery = await resolveDirectIosSelectorQuery(params, selectorExpression);
-  if (isDirectIosSelectorErrorResult(directQuery)) return directQuery.response;
-  if (!directQuery?.result.found || !directQuery.result.node) return null;
-
-  const payload =
-    predicate === 'exists'
-      ? {
-          predicate,
-          pass: true,
-          selector: directQuery.selector.raw,
-          matches: 1,
-          selectorChain: [directQuery.selector.raw],
-        }
-      : buildDirectIosIsResult(
-          predicate,
-          expectedText,
-          directQuery.selector.raw,
-          directQuery.session,
-          directQuery.result.node,
-        );
-  if (!payload) return null;
-  recordIfSession(params.sessionStore, params.sessionName, params.req, payload);
-  return { ok: true, data: stripSelectorChain(payload) };
-}
-
 async function dispatchDirectIosSelectorWait(
   params: SelectorRuntimeParams & {
     session: SessionState | undefined;
@@ -437,19 +386,6 @@ async function dispatchDirectIosSelectorWait(
     { req: params.req, logPath: params.logPath, session: params.session, device: params.device },
     response,
   );
-}
-
-async function resolveDirectIosSelectorQuery(
-  params: SelectorRuntimeParams,
-  selectorExpression: string,
-): Promise<ResolvedDirectIosSelectorQuery> {
-  const session = params.sessionStore.get(params.sessionName);
-  const selector = readSimpleIosSelectorTarget({ session, selectorExpression });
-  if (!session || !selector) return null;
-  const result = await queryDirectIosSelectorOrFallback(params, session, selector);
-  if (isDirectIosSelectorErrorResult(result)) return result;
-  if (!result) return null;
-  return { session, selector, result };
 }
 
 /**
@@ -506,49 +442,9 @@ async function queryDirectIosSelectorOrFallback(
 }
 
 function isDirectIosSelectorErrorResult(
-  result: DirectIosSelectorFallbackResult | ResolvedDirectIosSelectorQuery,
+  result: DirectIosSelectorFallbackResult,
 ): result is DirectIosSelectorErrorResult {
   return result !== null && 'kind' in result && result.kind === 'error';
-}
-
-/**
- * The runner query is a fast path, not the semantic source of truth — the rule `findText` and
- * `dispatchDirectIosSelectorWait` already state — so it answers ONLY when the predicate holds.
- *
- * A negative returns null and the admitted capture answers instead, for two reasons. This
- * evaluation sees a ONE-NODE tree, so `visible` cannot consult the ancestor geometry a list row
- * inherits and its negative can simply be wrong. And `is` is an assertion that "exits non-zero on
- * failure" (`website/docs/docs/commands.md`), which reporting `ok: true, pass: false` here broke:
- * `is text id=… "Wrong Expected Text"` printed `Passed: is text` and exited 0 on device (#1739).
- *
- * This is the fall-through #557 designed and never armed — it left this `| null` return and the
- * caller's `if (!payload) return null;` guard unreachable. Its perf claim is untouched: what it
- * bought was a snapshot-free PASSING assertion, which the positive arm still delivers.
- */
-function buildDirectIosIsResult(
-  predicate: Exclude<IsPredicate, 'exists' | 'hidden'>,
-  expectedText: string,
-  selector: string,
-  session: SessionState,
-  node: SnapshotNode,
-): Record<string, unknown> | null {
-  const result = evaluateIsPredicate({
-    predicate,
-    node,
-    nodes: [node],
-    expectedText,
-    platform: session.device.platform,
-  });
-  if (!result.pass) return null;
-  return {
-    predicate,
-    // Literal, not `result.pass`: past the guard this payload exists only for a predicate that
-    // held, so the type carries the fact instead of re-reading a value that can only be true.
-    pass: true,
-    selector,
-    ...(predicate === 'text' ? { text: result.actualText } : {}),
-    selectorChain: [selector],
-  };
 }
 
 function readDirectIosSelectorNode(data: Record<string, unknown>): SnapshotNode | undefined {
