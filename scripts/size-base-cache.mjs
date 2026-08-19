@@ -18,10 +18,9 @@
 //     delete a replacement.
 //   - Release unlinks only a claim that still names this run, under the same mutex.
 //
-// The mutex protects a few syscalls with no I/O in between, so a leaked one means a process died
-// inside a sub-millisecond window; one older than TAKEOVER_STALE_MS is reclaimed. Even a wrong
-// reclamation is contained: two takers would both re-verify inside, at most one unlink succeeds,
-// and the winner is still decided by the atomic `symlink()` that follows.
+// The mutex has exactly one holder for its whole life: it is never reclaimed by age or by any
+// other guess about the holder, because a second holder would restore the split ownership the
+// mutex removes. See enterTakeover for what that costs and why it is the safe direction.
 
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -31,7 +30,6 @@ import path from 'node:path';
 /** This run's claim identity: pid for liveness, nonce so a reused pid is still a different run. */
 export const CLAIM_IDENTITY = `${process.pid}:${randomUUID()}`;
 
-const TAKEOVER_STALE_MS = 30_000;
 const CLAIM_ATTEMPTS = 8;
 
 export function claimPath(worktreeDir) {
@@ -80,31 +78,33 @@ function tryCreateClaim(claim) {
   }
 }
 
+// The takeover mutex is a symlink naming its holder, created in one syscall like a claim, and it
+// is *never* force-reclaimed: an age-based reclamation would hand a second holder the section
+// whenever the first is merely slow (a paused or SIGSTOPed process crosses any threshold), and
+// two holders is exactly the split ownership the mutex exists to prevent. So there is at most one
+// holder, ever, and release removes only a mutex that still names this run — it can neither
+// force-remove nor release a replacement.
+//
+// The cost of never reclaiming is a mutex leaked by a process killed inside a critical section of
+// three syscalls with no I/O between them. That wedges one cache entry, loudly and with the path
+// to remove in the message, instead of silently deleting another run's live claim.
 function enterTakeover(takeover) {
   try {
-    fs.mkdirSync(takeover);
+    fs.symlinkSync(CLAIM_IDENTITY, takeover);
     return true;
   } catch (error) {
-    if (error.code !== 'EEXIST') throw error;
-  }
-  let age;
-  try {
-    age = Date.now() - fs.statSync(takeover).mtimeMs;
-  } catch {
-    return false; // vanished; the caller retries
-  }
-  if (age < TAKEOVER_STALE_MS) return false;
-  try {
-    fs.rmSync(takeover, { recursive: true, force: true });
-    fs.mkdirSync(takeover);
-    return true;
-  } catch {
-    return false;
+    if (error.code === 'EEXIST') return false;
+    throw error;
   }
 }
 
 function leaveTakeover(takeover) {
-  fs.rmSync(takeover, { recursive: true, force: true });
+  try {
+    if (fs.readlinkSync(takeover) !== CLAIM_IDENTITY) return; // someone else's: not ours to remove
+    fs.unlinkSync(takeover);
+  } catch {
+    // Already gone, or not a symlink we own: nothing this run may remove.
+  }
 }
 
 /**
@@ -163,7 +163,8 @@ export function acquireBaseClaim(worktreeDir, label) {
     if (outcome === 'live') throw heldError(worktreeDir, readClaimIdentity(claim), label);
     if (outcome === 'busy' && attempt === CLAIM_ATTEMPTS - 1) {
       throw new Error(
-        `another run is taking over the abandoned claim on base ${label} in ${worktreeDir}; retry shortly`,
+        `another run is taking over the abandoned claim on base ${label} in ${worktreeDir}; ` +
+          `retry shortly, or remove ${takeoverPath(worktreeDir)} if no other \`size --base\` is running`,
       );
     }
   }
