@@ -14,6 +14,7 @@ import type { ScreenRecordingRuntimeHost } from './screen-recording-runtime-host
 import type { ScreenRecordingRuntimeOperations } from './screen-recording-runtime.ts';
 import type { ScreenshotRuntimeOperations } from './screenshot-runtime.ts';
 import type { SnapshotRuntimeHost, SnapshotRuntimeOperations } from './snapshot-runtime.ts';
+import type { FindTextRuntimeOperations } from './find-text-runtime.ts';
 import type { ViewportRuntimeOperations } from './viewport-runtime.ts';
 import type { ElementTextRuntimeOperations } from './element-text-runtime.ts';
 import type {
@@ -47,6 +48,7 @@ export type PlatformRuntimeOperations = AppLogRuntimeOperations &
   ScreenRecordingRuntimeOperations &
   ScreenshotRuntimeOperations &
   SnapshotRuntimeOperations &
+  FindTextRuntimeOperations &
   ViewportRuntimeOperations &
   ElementTextRuntimeOperations &
   DeviceReadinessRuntimeOperations &
@@ -91,11 +93,11 @@ const captureSnapshotWithCustomActionsWithoutActiveAppUse = defineUse({
  */
 const selectorCaptureUse = defineUse({
   required: ['captureSnapshot'],
-  preferred: ['readTextAtPoint'],
+  preferred: ['readTextAtPoint', 'findText'],
 });
 const selectorCaptureWithoutActiveAppUse = defineUse({
   required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp'],
-  preferred: ['readTextAtPoint'],
+  preferred: ['readTextAtPoint', 'findText'],
 });
 
 /**

@@ -72,6 +72,17 @@ export function createAppleInteractor(
       usesMacOsHelperSurface(device, options?.surface)
         ? await readMacOsSurfaceTextAtPoint(point, options)
         : await readRunnerTextAtPoint(device, point, options, runnerOpts),
+    // The XCTest runner's own text reading: it observes the live accessibility hierarchy
+    // directly, so it answers without the cost — and without the pruning — of a tree capture.
+    // Only a positive answer is authoritative; see `FindTextResult`.
+    findText: async (text, options) => {
+      const result = (await runAppleRunnerCommand(
+        device,
+        { command: 'findText', text, appBundleId: options?.appBundleId },
+        options?.signal ? { ...runnerOpts, signal: options.signal } : runnerOpts,
+      )) as { found?: boolean };
+      return { found: result?.found === true };
+    },
     back: async (mode) => {
       if (isTvOsDevice(device)) {
         // tvOS focus-only navigation: the Menu button pops focus, not a coordinate tap.

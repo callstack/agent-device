@@ -559,7 +559,6 @@ export function createSelectorDevice(
   snapshot: SnapshotState,
   options: {
     readText?: string;
-    findText?: boolean;
     now?: number;
     captureSnapshot?: () => BackendSnapshotResult | Promise<BackendSnapshotResult>;
     /**
@@ -584,7 +583,6 @@ export function createSelectorDevice(
       captureSnapshot: async () =>
         options.captureSnapshot ? await options.captureSnapshot() : { snapshot },
       readText: async () => ({ text: options.readText ?? '' }),
-      findText: async () => ({ found: options.findText ?? false }),
     } satisfies AgentDeviceBackend,
     artifacts: createLocalArtifactAdapter(),
     sessions,

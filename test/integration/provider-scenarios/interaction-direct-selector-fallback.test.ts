@@ -135,26 +135,27 @@ async function withDirectSelectorScenario(
   );
 }
 
-test('Provider-backed direct iOS selector wait strips selectorChain from the public response', async () => {
+// `wait` has no direct-runner probe since its ADR 0019 cutover: a selector wait polls the
+// canonical tree through its one request-bound capture on every platform, and the public
+// response keeps stripping the internal `selectorChain`.
+test('Provider-backed iOS selector wait polls the tree and strips selectorChain', async () => {
   const transcript = createProviderTranscript([
-    {
-      command: 'ios.runner.querySelector',
-      deviceId: DEVICE_ID,
-      platform: 'apple',
-      request: {
-        command: 'querySelector',
-        selectorKey: 'label',
-        selectorValue: 'Continue',
-        appBundleId: APP,
+    snapshotEntry([
+      APPLICATION_NODE,
+      {
+        index: 1,
+        parentIndex: 0,
+        type: 'Button',
+        label: 'Continue',
+        hittable: true,
+        rect: { x: 100, y: 300, width: 200, height: 44 },
       },
-      result: { found: true, node: { label: 'Continue' } },
-    },
+    ]),
   ]);
 
   await withDirectSelectorScenario(transcript, async (daemon) => {
     const wait = await daemon.callCommand('wait', ['label="Continue"']);
     const data = assertRpcOk(wait);
-    assert.equal(data.kind, 'selector');
     assert.equal(data.selector, 'label="Continue"');
     assert.equal('selectorChain' in data, false);
   });

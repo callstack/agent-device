@@ -118,6 +118,11 @@ export type WaitForTextCommandOptions = WaitCommandContext &
 type SelectorWaitRuntime = {
   backend: {
     platform: PublicPlatform;
+    /**
+     * The backend's native text reading, present only when the bound runtime advertised the
+     * preferred `findText` operation. It is consulted first and is authoritative ONLY when it
+     * answers `true`; see `waitForText`.
+     */
     findText?: (context: WaitCommandContext, text: string) => Promise<{ found: boolean }>;
   };
   clock?: {
@@ -364,11 +369,8 @@ async function waitForText<Runtime extends SelectorWaitRuntime>(
   const polling = createWaitPolling(runtime, options, timeoutMs, SELECTOR_PIPELINE_POLICIES.wait);
   let deadline: WaitPollDeadline | undefined;
   while (polling.hasTimeRemaining()) {
-    const poll = await polling.capture(async (signal) =>
-      runtime.backend.findText
-        ? (await runtime.backend.findText(backendContext(runtime, { ...options, signal }), text))
-            .found
-        : await snapshotContainsText(operations, runtime, { ...options, signal }, text),
+    const poll = await polling.capture(
+      async (signal) => await observeText(operations, runtime, { ...options, signal }, text),
     );
     if (poll.timedOut) {
       deadline = poll.deadline;
@@ -379,6 +381,32 @@ async function waitForText<Runtime extends SelectorWaitRuntime>(
     await polling.sleepUntilNextPoll();
   }
   throw waitTimeoutError(`wait timed out for text: ${text}`, polling, deadline);
+}
+
+/**
+ * One poll's answer to "is this text on screen", from two sources with deliberately asymmetric
+ * authority:
+ *
+ * 1. the owner's native reading, when the bound runtime advertised it — a `true` here short-
+ *    circuits the poll and skips the capture entirely, which is the whole benefit of the
+ *    preferred operation; and
+ * 2. the canonical tree, always consulted when (1) did not answer `true`.
+ *
+ * So the fast path can only ever make a satisfied wait return sooner. It can never make a wait
+ * that the tree would satisfy fail, and it is never the reason a wait times out — the required
+ * tree path below it is complete on its own.
+ */
+async function observeText<Runtime extends SelectorWaitRuntime>(
+  operations: SelectorWaitOperations<Runtime>,
+  runtime: Runtime,
+  options: WaitCommandOptions,
+  text: string,
+): Promise<boolean> {
+  if (runtime.backend.findText) {
+    const native = await runtime.backend.findText(backendContext(runtime, options), text);
+    if (native.found) return true;
+  }
+  return await snapshotContainsText(operations, runtime, options, text);
 }
 
 async function snapshotContainsText<Runtime extends SelectorWaitRuntime>(

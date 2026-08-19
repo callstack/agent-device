@@ -1,12 +1,13 @@
-import type { AgentDeviceBackend, BackendSnapshotResult } from '../backend.ts';
+import type {
+  AgentDeviceBackend,
+  BackendCommandContext,
+  BackendSnapshotResult,
+} from '../backend.ts';
 import { resolveTargetDevice } from '../core/dispatch.ts';
 import { createAgentDevice } from '../runtime.ts';
-import { isMacOs, isApplePlatform, publicPlatformString } from '@agent-device/kernel/device';
+import { publicPlatformString } from '@agent-device/kernel/device';
 import { noActiveSessionError } from './handlers/response.ts';
 import type { SnapshotState, SnapshotNode } from '@agent-device/kernel/snapshot';
-import { findNodeByLabel } from '../core/snapshot-node-lookup.ts';
-import { runAppleRunnerCommand } from '../platforms/apple/core/runner/runner-client.ts';
-import { buildAppleRunnerRequestOptions } from './apple-runner-options.ts';
 import { createDaemonRuntimePolicy } from './runtime-policy.ts';
 import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
 import { contextFromFlags } from './context.ts';
@@ -17,13 +18,13 @@ import type { ContextFromFlags } from './handlers/interaction-common.ts';
 import { SessionStore } from './session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { createSelectorCaptureRuntime } from './selector-capture-runtime.ts';
+import { buildRuntimeCaptureInput } from './snapshot-runtime-capture-input.ts';
 import {
   resolveBoundSelectorCapture,
   type BoundSelectorOperations,
   type SelectorCaptureCommand,
 } from './selector-capture-binding.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
-import { isActiveProviderDevice } from '../provider-device-runtime.ts';
 import { getRequestSignal } from '../request/cancel.ts';
 import { snapshotOptionsToFlags } from '../backend-snapshot-options.ts';
 
@@ -56,12 +57,6 @@ type ResolvedSelectorRuntime =
 type ResolvedSelectorDevice =
   | { ok: true; session: SessionState | undefined; device: SessionState['device'] }
   | { ok: false; response: DaemonResponse };
-
-type AppleRunnerFindTextTarget = {
-  device: SessionState['device'];
-  appBundleId: string;
-  traceLogPath?: string;
-};
 
 export function createSelectorRuntimeForDevice(params: SelectorRuntimeDeviceParams) {
   return createAgentDevice({
@@ -142,6 +137,18 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
     ((flags, appBundleId, traceLogPath) =>
       contextFromFlags(logPath ?? '', flags, appBundleId, traceLogPath));
   const readTextAtPoint = params.bound?.readText;
+  const boundFindText = params.bound?.findText;
+  // The native reading must run in the SAME runner context as the capture it short-circuits:
+  // one requestId so diagnostics land in one request file, the session's log/trace paths, and
+  // the XCUITest override + runner-lease context the caller configured. Built through the one
+  // capture-intent builder the capture leg uses, never a second hand-rolled context.
+  const runnerExecution = buildRuntimeCaptureInput({
+    flags: req.flags,
+    logPath: logPath ?? '',
+    meta: req.meta,
+    session,
+    snapshotScope: undefined,
+  }).execution;
   const captureRuntime = createSelectorCaptureRuntime({
     device,
     session,
@@ -189,107 +196,22 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
         contextFromFlags: resolveContextFromFlags,
       }),
     }),
-    findText: async (context, text) => ({
-      found: await findText(params, text, context.signal),
-    }),
+    // The owner's native text reading, forwarded only when its facts advertised it. The daemon
+    // makes no family, provider, surface, or session decision here: an owner that cannot answer
+    // reports `found: false` and the poll consults the canonical tree.
+    ...(boundFindText
+      ? {
+          findText: async (context: BackendCommandContext, text: string) => ({
+            found: (
+              await boundFindText({
+                text,
+                options: { appBundleId: session?.appBundleId, surface: session?.surface },
+                execution: runnerExecution,
+                ...(context.signal ? { signal: context.signal } : {}),
+              })
+            ).found,
+          }),
+        }
+      : {}),
   };
-}
-
-async function findText(
-  params: SelectorRuntimeDeviceParams,
-  text: string,
-  signal?: AbortSignal,
-): Promise<boolean> {
-  const macosSurfaceResult = await findTextInMacosNonAppSurface(params, text, signal);
-  if (macosSurfaceResult !== null) return macosSurfaceResult;
-  const appleRunnerResult = await findTextWithAppleRunner(params, text, signal);
-  // The runner query is a fast path, not the semantic source of truth. XCTest can report a
-  // transient miss for visible SwiftUI text that the canonical snapshot already contains.
-  if (appleRunnerResult === true) return true;
-  return await findTextInWaitSnapshot(params, text, signal);
-}
-
-async function findTextInMacosNonAppSurface(
-  params: SelectorRuntimeDeviceParams,
-  text: string,
-  signal?: AbortSignal,
-): Promise<boolean | null> {
-  if (!isMacOs(params.device)) return null;
-  if (!params.session?.surface || params.session.surface === 'app') return null;
-  return await findTextInWaitSnapshot(params, text, signal);
-}
-
-async function findTextWithAppleRunner(
-  params: SelectorRuntimeDeviceParams,
-  text: string,
-  signal?: AbortSignal,
-): Promise<boolean | null> {
-  const target = readAppleRunnerFindTextTarget(params);
-  if (!target) return null;
-  const result = (await runAppleRunnerCommand(
-    target.device,
-    { command: 'findText', text, appBundleId: target.appBundleId },
-    { ...buildAppleRunnerFindTextOptions(params, target), signal },
-  )) as { found?: boolean };
-  return result?.found === true;
-}
-
-function readAppleRunnerFindTextTarget(
-  params: SelectorRuntimeDeviceParams,
-): AppleRunnerFindTextTarget | null {
-  if (!isApplePlatform(params.device.platform)) return null;
-  if (isActiveProviderDevice(params.device)) return null;
-  if (!params.session?.appBundleId) return null;
-  return {
-    device: params.device,
-    appBundleId: params.session.appBundleId,
-    traceLogPath: params.session.trace?.outPath,
-  };
-}
-
-function buildAppleRunnerFindTextOptions(
-  params: SelectorRuntimeDeviceParams,
-  target: AppleRunnerFindTextTarget,
-) {
-  return buildAppleRunnerRequestOptions({
-    req: params.req,
-    logPath: params.logPath,
-    traceLogPath: target.traceLogPath,
-  });
-}
-
-async function findTextInWaitSnapshot(
-  params: SelectorRuntimeDeviceParams,
-  text: string,
-  signal?: AbortSignal,
-): Promise<boolean> {
-  const snapshot = await captureWaitSnapshot(params, signal);
-  return Boolean(findNodeByLabel(snapshot.nodes, text));
-}
-
-async function captureWaitSnapshot(params: SelectorRuntimeDeviceParams, signal?: AbortSignal) {
-  const captureRuntime = createSelectorCaptureRuntime({
-    device: params.device,
-    session: params.session,
-    sessionStore: params.sessionStore,
-    sessionName: params.sessionName,
-    req: params.req,
-    logPath: params.logPath,
-    consumedSnapshot: params.consumedSnapshot,
-  });
-  const { snapshot } = await captureRuntime.capture({
-    flags: {
-      ...params.req.flags,
-      snapshotInteractiveOnly: false,
-      // Presence-only wait poll (findText is only called from waitForText):
-      // skip scroll-hint derivation (#1270).
-      snapshotIncludeHiddenContentHints: false,
-    },
-    signal,
-    cache: {
-      forceFresh: true,
-      bypassForPostGestureStabilization: true,
-    },
-  });
-  return snapshot;
 }

@@ -75,6 +75,7 @@ const NO_CAPABILITY_PUBLIC_COMMANDS = new Set<string>([
   PUBLIC_COMMANDS.test,
   PUBLIC_COMMANDS.trace,
   PUBLIC_COMMANDS.viewport,
+  PUBLIC_COMMANDS.wait,
 ]);
 
 type TestCommandDescriptor = (typeof commandDescriptors)[number];

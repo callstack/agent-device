@@ -53,9 +53,8 @@ const HARMONYOS_SUPPORTED_COMMANDS = new Set<string>([
   'settings',
   'swipe',
   'type',
-  'wait',
 ]);
-const WEB_QUERY_COMMANDS = ['audio', 'find', 'wait'] as const;
+const WEB_QUERY_COMMANDS = ['audio', 'find'] as const;
 const WEB_INTERACTION_COMMANDS = [
   'click',
   'fill',

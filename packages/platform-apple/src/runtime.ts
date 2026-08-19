@@ -1,6 +1,7 @@
 import type {
   DeviceBinding,
   NetworkDumpInput,
+  RuntimeOperationFact,
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
   PlatformRuntimeOwner,
@@ -13,6 +14,7 @@ import {
   elementTextRuntimeOperationFacts,
   localRuntimeOwner,
   screenshotRuntimeOperationFacts,
+  findTextRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
   viewportRuntimeOperationFacts,
 } from '@agent-device/contracts/platform';
@@ -34,7 +36,7 @@ import {
   appleAppDeploymentFacts,
   createAppleAppDeploymentOperations,
 } from './deployment/runtime.ts';
-import { bindAppleSnapshotRuntime } from './runtime-snapshot.ts';
+import { bindAppleFindTextRuntime, bindAppleSnapshotRuntime } from './runtime-snapshot.ts';
 
 const owner = localRuntimeOwner('apple');
 const available = Object.freeze({ available: true } as const);
@@ -234,6 +236,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         screenRecordingCleanup: recordingFacts,
         ...appleSnapshotFacts(device),
         ...screenshotRuntimeOperationFacts({ capture: appleScreenshotFact(device) }),
+        ...findTextRuntimeOperationFacts({ findText: appleSnapshotFact(device) }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ...elementTextRuntimeOperationFacts({ readTextAtPoint: appleElementTextFact(device) }),
         ensureReady: readiness,
@@ -266,56 +269,56 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
           }),
           networkDump: async (input: NetworkDumpInput) =>
             await dumpAppleNetworkTraffic(host, request.device, input, request.scope.signal),
-          ...(recordingFacts.available
-            ? createAppleScreenRecordingOperations({
-                host,
-                device: request.device,
-                owner,
-                signal: request.scope.signal,
-              })
-            : {}),
-          ...(facts.operations.captureSnapshot.available
-            ? bindAppleSnapshotRuntime(host, {
-                device: request.device,
-                signal: request.scope.signal,
-              })
-            : {}),
-          ...(facts.operations.captureScreenshot.available
-            ? bindLocalScreenshotInteractor({
-                device: request.device,
-                signal: request.scope.signal,
-                resolveInteractor: host.localInteractors.resolve,
-              })
-            : {}),
-          ...(facts.operations.readTextAtPoint.available
-            ? bindElementTextRuntime({
-                device: request.device,
-                signal: request.scope.signal,
-                resolveInteractor: host.localInteractors.resolve,
-              })
-            : {}),
-          ...(facts.operations.ensureReady.available
-            ? {
-                ensureReady: async () =>
-                  await ensureAppleReady(host, request.device, request.scope.signal),
-              }
-            : {}),
-          ...(facts.operations.bootTarget.available
-            ? {
-                bootTarget: async () =>
-                  await ensureAppleReady(host, request.device, request.scope.signal),
-              }
-            : {}),
-          ...(facts.operations.listApps.available
-            ? {
-                listApps: async (input: { device: DeviceInfo; filter: 'all' | 'user-installed' }) =>
-                  await host.appInventory.apple.listApps(
-                    input.device,
-                    input.filter,
-                    request.scope.signal,
-                  ),
-              }
-            : {}),
+          ...whenAdmitted(recordingFacts, () =>
+            createAppleScreenRecordingOperations({
+              host,
+              device: request.device,
+              owner,
+              signal: request.scope.signal,
+            }),
+          ),
+          ...whenAdmitted(facts.operations.captureSnapshot, () =>
+            bindAppleSnapshotRuntime(host, {
+              device: request.device,
+              signal: request.scope.signal,
+            }),
+          ),
+          ...whenAdmitted(facts.operations.captureScreenshot, () =>
+            bindLocalScreenshotInteractor({
+              device: request.device,
+              signal: request.scope.signal,
+              resolveInteractor: host.localInteractors.resolve,
+            }),
+          ),
+          ...whenAdmitted(facts.operations.readTextAtPoint, () =>
+            bindElementTextRuntime({
+              device: request.device,
+              signal: request.scope.signal,
+              resolveInteractor: host.localInteractors.resolve,
+            }),
+          ),
+          ...whenAdmitted(facts.operations.findText, () =>
+            bindAppleFindTextRuntime(host, {
+              device: request.device,
+              signal: request.scope.signal,
+            }),
+          ),
+          ...whenAdmitted(facts.operations.ensureReady, () => ({
+            ensureReady: async () =>
+              await ensureAppleReady(host, request.device, request.scope.signal),
+          })),
+          ...whenAdmitted(facts.operations.bootTarget, () => ({
+            bootTarget: async () =>
+              await ensureAppleReady(host, request.device, request.scope.signal),
+          })),
+          ...whenAdmitted(facts.operations.listApps, () => ({
+            listApps: async (input: { device: DeviceInfo; filter: 'all' | 'user-installed' }) =>
+              await host.appInventory.apple.listApps(
+                input.device,
+                input.filter,
+                request.scope.signal,
+              ),
+          })),
           ...availableApplicationLifecycleOperations(
             bindAppleApplicationLifecycle({
               host,
@@ -324,15 +327,10 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
             }),
             facts.operations,
           ),
-          ...(facts.operations.shutdownTarget.available
-            ? {
-                shutdownTarget: async () =>
-                  await host.deviceShutdown.apple.shutdownTarget(
-                    request.device,
-                    request.scope.signal,
-                  ),
-              }
-            : {}),
+          ...whenAdmitted(facts.operations.shutdownTarget, () => ({
+            shutdownTarget: async () =>
+              await host.deviceShutdown.apple.shutdownTarget(request.device, request.scope.signal),
+          })),
         }),
         [Symbol.asyncDispose]: async () => await logs[Symbol.asyncDispose](),
       }) satisfies DeviceBinding<PlatformRuntimeOperations>;
@@ -382,4 +380,16 @@ function appleSnapshotFacts(device: DeviceInfo) {
         : snapshotCustomActionsUnavailable,
     withoutActiveApp: isIosFamily(device) ? snapshotActiveAppRequired : capture,
   });
+}
+
+/**
+ * An operation is present on a binding only when the owner's own facts admitted it. One helper so
+ * the binding below reads as a list of admitted operations rather than a chain of branches — and
+ * so the next operation added here costs no additional complexity.
+ */
+function whenAdmitted<T extends object>(
+  fact: RuntimeOperationFact,
+  build: () => T,
+): T | Record<string, never> {
+  return fact.available ? build() : {};
 }

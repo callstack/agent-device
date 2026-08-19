@@ -204,6 +204,11 @@ async function runCapture(
                 session: params.session,
                 snapshotScope,
                 includeRects: request.includeRects,
+                // The POLL's remaining budget, not the request's. A binding's signal is fixed at
+                // bind time and `wait` binds once and polls many times, so without this the
+                // deadline never reaches the platform: a stalled capture would consume the whole
+                // request instead of producing the `capture-stalled` verdict.
+                signal: request.signal,
               }),
             ),
         }),

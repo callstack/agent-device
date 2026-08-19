@@ -23,6 +23,8 @@ export function buildRuntimeCaptureInput(
      * its first consumer; `snapshot`/`diff` pass nothing and are unaffected.
      */
     includeRects?: boolean;
+    /** Per-capture cancellation for polling consumers; see `CaptureSnapshotInput.signal`. */
+    signal?: AbortSignal;
   }>,
 ): CaptureSnapshotInput {
   const { flags, logPath, meta, session, snapshotScope } = params;
@@ -49,6 +51,7 @@ export function buildRuntimeCaptureInput(
       surface,
     },
     execution: runtimeExecutionFromContext(context),
+    ...(params.signal === undefined ? {} : { signal: params.signal }),
   };
 }
 

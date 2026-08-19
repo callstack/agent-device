@@ -12,6 +12,7 @@ import {
   elementTextRuntimeOperationFacts,
   localRuntimeOwner,
   screenshotRuntimeOperationFacts,
+  findTextRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
   viewportRuntimeOperationFacts,
 } from '@agent-device/contracts/platform';
@@ -148,6 +149,8 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
               ? available
               : screenshotKindUnavailable,
         }),
+        // No native text reading: every text wait on this owner polls the canonical tree.
+        ...findTextRuntimeOperationFacts({ findText: snapshotKindUnavailable }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         // HarmonyOS has no point-read tool: `get` answers from the captured tree, which is what
         // the legacy dispatch already did after its Apple-runner attempt failed.

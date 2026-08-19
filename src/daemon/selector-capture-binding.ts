@@ -2,6 +2,7 @@ import {
   resolveSelectorCaptureRuntimePlan,
   type CaptureSnapshotInput,
   type ElementTextRuntimeOperations,
+  type FindTextRuntimeOperations,
   type SnapshotResult,
 } from '@agent-device/contracts/platform';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
@@ -28,11 +29,19 @@ export type BoundSelectorRead = ElementTextRuntimeOperations['readTextAtPoint'];
 /**
  * The bound operations a selector command's runtime executes through. A record rather than a bare
  * capture function so a unit can add its own bound operation without changing any signature on
- * this seam — which is how `readText` arrived, and how the next one will.
+ * this seam — which is how `readText` arrived, and how `findText` followed.
  */
+/**
+ * The owner's native text-presence reading, when its facts advertise one. Optional for the same
+ * reason as `readText`: it is a PREFERRED operation, so `wait`'s required path answers from the
+ * captured tree and an owner without it still executes the command completely (ADR 0019 §2).
+ */
+export type BoundSelectorFindText = FindTextRuntimeOperations['findText'];
+
 export type BoundSelectorOperations = Readonly<{
   capture: BoundSelectorCapture;
   readText?: BoundSelectorRead;
+  findText?: BoundSelectorFindText;
 }>;
 
 export type ResolvedSelectorCapture =
@@ -67,6 +76,7 @@ export async function resolveBoundSelectorCapture(
     operations: {
       capture: bound.capture,
       ...(bound.readTextAtPoint ? { readText: bound.readTextAtPoint } : {}),
+      ...(bound.findText ? { findText: bound.findText } : {}),
     },
   };
 }

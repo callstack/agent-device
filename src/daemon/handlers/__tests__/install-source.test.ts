@@ -358,6 +358,7 @@ function sourceRuntimeFacts(
         withoutActiveApp: unavailable,
       }),
       ...screenshotRuntimeOperationFacts({ capture: unavailable }),
+      findText: unavailable,
       setViewport: unavailable,
       readTextAtPoint: unavailable,
       deployApp: unavailable,

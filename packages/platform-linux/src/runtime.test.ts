@@ -3,6 +3,7 @@ import type {
   DeviceBinding,
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
+  SnapshotRuntimeHost,
 } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createLinuxPlatformRuntime } from './runtime.ts';
@@ -131,7 +132,7 @@ test.each([
 );
 
 function lifecycleHost(
-  captureSurface = async () => ({
+  captureSurface: SnapshotRuntimeHost['captureSurface'] = async () => ({
     backend: 'linux-atspi' as const,
     nodes: [],
     truncated: false,
@@ -162,3 +163,47 @@ function expectLifecycleFacts(
     }
   }
 }
+
+// `linuxSnapshotOperations` is the other direct `captureSurface` caller, so the shared
+// `bindSnapshotInteractor` composition does not cover it either. Note it composes against
+// `request.scope.signal` rather than `request.signal` — the Linux owner takes its signal off the
+// request scope, which is exactly the detail a patch application can get wrong silently.
+test('the Linux surface capture composes the per-capture signal with the request scope signal', async () => {
+  const captureSurface = vi.fn<SnapshotRuntimeHost['captureSurface']>(async () => ({
+    backend: 'linux-atspi' as const,
+    nodes: [],
+    truncated: false,
+  }));
+  const scope = new AbortController();
+  const binding = await createLinuxPlatformRuntime(lifecycleHost(captureSurface)).bind({
+    device: {
+      platform: 'linux' as const,
+      id: 'linux',
+      name: 'Linux',
+      kind: 'device' as const,
+      target: 'desktop' as const,
+      booted: true,
+    },
+    intent: { kind: 'ordinary' },
+    scope: {
+      signal: scope.signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+  });
+
+  const poll = new AbortController();
+  await binding.operations.captureSnapshot?.({ options: {}, signal: poll.signal });
+
+  const passed = captureSurface.mock.calls[0]?.[2] as AbortSignal;
+  expect(passed.aborted).toBe(false);
+  poll.abort(new DOMException('Wait deadline exceeded', 'TimeoutError'));
+  expect(passed.aborted).toBe(true);
+
+  // The scope signal must still cancel too: composition adds a way to cancel, never replaces one.
+  const second = new AbortController();
+  await binding.operations.captureSnapshot?.({ options: {}, signal: second.signal });
+  const passedSecond = captureSurface.mock.calls[1]?.[2] as AbortSignal;
+  scope.abort();
+  expect(passedSecond.aborted).toBe(true);
+});

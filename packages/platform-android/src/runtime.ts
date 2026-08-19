@@ -15,6 +15,7 @@ import {
   elementTextRuntimeOperationFacts,
   localRuntimeOwner,
   screenshotRuntimeOperationFacts,
+  findTextRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
   viewportRuntimeOperationFacts,
 } from '@agent-device/contracts/platform';
@@ -153,6 +154,8 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         ...screenshotRuntimeOperationFacts({
           capture: device.kind === 'simulator' ? screenshotKindUnavailable : available,
         }),
+        // No native text reading: every text wait on this owner polls the canonical tree.
+        ...findTextRuntimeOperationFacts({ findText: snapshotKindUnavailable }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         // uiautomator reads text at a point through the same adb path the snapshot uses, so the
         // synthetic `simulator` row is the only Android kind without a live read.

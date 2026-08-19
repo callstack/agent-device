@@ -277,7 +277,6 @@ test('HarmonyOS static capabilities omit runtime-backed command admissions', () 
     'settings',
     'swipe',
     'type',
-    'wait',
   ]);
 });
 

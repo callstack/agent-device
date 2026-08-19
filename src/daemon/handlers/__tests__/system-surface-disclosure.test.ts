@@ -4,6 +4,7 @@ import { getRuntimeBindings } from './interaction-get-runtime-fixture.ts';
 import { dispatchFindReadOnlyViaRuntime, dispatchWaitViaRuntime } from '../../selector-runtime.ts';
 import type { DaemonRequest, DaemonResponse } from '../../types.ts';
 import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '../../../core/android-system-surface-disclosure.ts';
+import { snapshotRuntimeFixture } from '../../__tests__/snapshot-runtime-fixture.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { makeAndroidSession } from '../../../__tests__/test-utils/session-factories.ts';
 
@@ -132,7 +133,7 @@ test('wait timeout for app text hidden behind a system surface discloses the occ
     sessionName: 'default',
     logPath: '/tmp/test.log',
     sessionStore,
-    ...getRuntimeBindings(),
+    ...snapshotRuntimeFixture(),
   });
 
   expect(response.ok).toBe(false);
@@ -217,7 +218,7 @@ test('sessionless wait success on shade content still discloses the occluding sy
     sessionName: 'default',
     logPath: '/tmp/test.log',
     sessionStore,
-    ...getRuntimeBindings(),
+    ...snapshotRuntimeFixture(),
   });
 
   expect(response.ok).toBe(true);
@@ -243,7 +244,7 @@ test('sessionless wait timeout still discloses the occluding system surface', as
     sessionName: 'default',
     logPath: '/tmp/test.log',
     sessionStore,
-    ...getRuntimeBindings(),
+    ...snapshotRuntimeFixture(),
   });
 
   expect(response.ok).toBe(false);

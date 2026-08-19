@@ -226,6 +226,8 @@ export type {
   SelectorCaptureRuntimePlan,
   SnapshotRuntimePlan,
 } from '../platform-runtime-operations.ts';
+export { waitObservesDevice } from '../wait-runtime-plan.ts';
+export type { WaitRuntimeTarget } from '../wait-runtime-plan.ts';
 export type {
   PlatformRuntimeHost,
   PlatformRuntimeModule,
@@ -258,8 +260,16 @@ export type {
 export {
   bindLocalSnapshotInteractor,
   bindProviderSnapshotInteractor,
+  captureSnapshotSignal,
   snapshotRuntimeOperationFacts,
 } from '../snapshot-runtime.ts';
+export { findTextRuntimeOperationFacts } from '../find-text-runtime.ts';
+export type {
+  FindTextInput,
+  FindTextResult,
+  FindTextRuntimeOperationFacts,
+  FindTextRuntimeOperations,
+} from '../find-text-runtime.ts';
 export type {
   CaptureSnapshotInput,
   LocalSnapshotInteractorResolver,

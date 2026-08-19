@@ -2,6 +2,7 @@ import {
   resolveSnapshotRuntimePlan,
   type CaptureSnapshotInput,
   type ElementTextRuntimeOperations,
+  type FindTextRuntimeOperations,
   type ReadTextAtPointInput,
   type RuntimeOperationFact,
   type SelectorCaptureRuntimePlan,
@@ -50,6 +51,7 @@ export type BoundSnapshotCapture = (input: CaptureSnapshotInput) => Promise<Snap
 
 /** The owner's live element read, when its facts advertise one. */
 export type BoundElementRead = ElementTextRuntimeOperations['readTextAtPoint'];
+export type BoundNativeTextRead = FindTextRuntimeOperations['findText'];
 
 export type AdmittedSnapshotCapture =
   | Readonly<{
@@ -61,6 +63,8 @@ export type AdmittedSnapshotCapture =
        * simply absent for them — the member is additive and they are unchanged.
        */
       readTextAtPoint?: BoundElementRead;
+      /** The owner's native text reading; present on the same terms as `readTextAtPoint`. */
+      findText?: BoundNativeTextRead;
     }>
   | Readonly<{ ok: false; response: DaemonResponse }>;
 
@@ -99,6 +103,7 @@ export async function admitAndBindSnapshotCapture(
     ok: true,
     capture: async (input: CaptureSnapshotInput) => await bound.captureSnapshot(input),
     ...(bound.readTextAtPoint ? { readTextAtPoint: bound.readTextAtPoint } : {}),
+    ...(bound.findText ? { findText: bound.findText } : {}),
   });
 }
 
@@ -153,6 +158,7 @@ async function bindSnapshotCaptureRuntime(
   Readonly<{
     captureSnapshot(input: CaptureSnapshotInput): Promise<SnapshotResult>;
     readTextAtPoint?: BoundElementRead;
+    findText?: BoundNativeTextRead;
   }>
 > {
   const bind = requireRuntimeBinding(bindDevice);
@@ -168,7 +174,11 @@ async function bindSnapshotCaptureRuntime(
     }
     case 'selector-active-app': {
       const runtime = await bind(device, plan.use);
-      return { ...selectActiveAppSnapshot(runtime), ...selectElementRead(runtime) };
+      return {
+        ...selectActiveAppSnapshot(runtime),
+        ...selectElementRead(runtime),
+        ...selectNativeTextRead(runtime),
+      };
     }
     case 'custom-actions-active-app': {
       const runtime = await bind(device, plan.use);
@@ -180,13 +190,38 @@ async function bindSnapshotCaptureRuntime(
     }
     case 'selector-without-active-app': {
       const runtime = await bind(device, plan.use);
-      return { ...selectSnapshotWithoutActiveApp(runtime), ...selectElementRead(runtime) };
+      return {
+        ...selectSnapshotWithoutActiveApp(runtime),
+        ...selectElementRead(runtime),
+        ...selectNativeTextRead(runtime),
+      };
     }
     case 'custom-actions-without-active-app': {
       const runtime = await bind(device, plan.use);
       return selectCustomActionsSnapshot(runtime);
     }
   }
+}
+
+/**
+ * Projects the preferred native text reading when the admitted owner advertised it — the exact
+ * counterpart of {@link selectElementRead}, so both preferred operations reach a caller the same
+ * way and neither can be reached without admission.
+ */
+function selectNativeTextRead(
+  runtime: Readonly<{ operations: Readonly<{ findText?: BoundNativeTextRead }> }>,
+): Readonly<{ findText?: BoundNativeTextRead }> {
+  const findText = runtime.operations.findText;
+  // Narrowed by CONSTRUCTION, not by assertion: the projection is only buildable from a
+  // non-undefined local, so presence travels with the value that captured it.
+  return findText ? { findText: bindNativeTextRead({ operations: { findText } }) } : {};
+}
+
+/** The one lexical owner of the narrowed `findText` call. */
+function bindNativeTextRead(
+  runtime: Readonly<{ operations: Readonly<{ findText: BoundNativeTextRead }> }>,
+): BoundNativeTextRead {
+  return async (input) => await runtime.operations.findText(input);
 }
 
 /**

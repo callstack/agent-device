@@ -107,14 +107,14 @@ function makeSessionStore(): SessionStore {
   return new SessionStore(path.join(root, 'sessions'));
 }
 
-function makeSession(name: string, device: SessionState['device']): SessionState {
-  return {
-    name,
-    device,
-    createdAt: Date.now(),
-    actions: [],
-  };
+type SessionExtra = Partial<SessionState>;
+function makeSession(name: string, d: SessionState['device'], extra?: SessionExtra): SessionState {
+  return { name, device: d, createdAt: Date.now(), actions: [], ...extra };
 }
+// An Apple wait runs inside an opened app: that bundle id is XCUITest's attach target, and
+// without one the plan asks for the without-active-app row local Apple refuses.
+const appAttach = (d: SessionState['device']): Partial<SessionState> =>
+  d.platform === 'apple' ? { appBundleId: 'com.example.app' } : {};
 
 const iosSimulatorDevice: SessionState['device'] = {
   platform: 'apple',
@@ -250,7 +250,7 @@ async function runWaitCommand(
   positionals: string[],
 ) {
   const sessionStore = makeSessionStore();
-  sessionStore.set(sessionName, makeSession(sessionName, device));
+  sessionStore.set(sessionName, makeSession(sessionName, device, appAttach(device)));
   return await handleSnapshotCommands({
     req: {
       token: 't',
@@ -262,6 +262,7 @@ async function runWaitCommand(
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
+    ...snapshotRuntimeFixture(),
   });
 }
 
@@ -1715,6 +1716,7 @@ test('wait text on Android uses freshness-aware capture instead of one-shot snap
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
+    ...snapshotRuntimeFixture(),
   });
 
   expect(response?.ok).toBe(true);
@@ -2090,337 +2092,6 @@ test('diff screenshot is not handled daemon-side (client-backed command)', async
   }
 });
 
-test('wait text uses Apple runner path on macOS desktop sessions', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'macos-wait';
-  sessionStore.set(sessionName, {
-    ...makeSession(sessionName, macOsDevice),
-    appBundleId: 'com.apple.systempreferences',
-  });
-
-  mockRunnerCommand.mockResolvedValue({ found: true });
-
-  const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'wait',
-      positionals: ['Accessibility', '10'],
-      flags: {},
-    },
-    sessionName,
-    logPath: '/tmp/daemon.log',
-    sessionStore,
-  });
-
-  expect(response?.ok).toBe(true);
-  expect(mockRunnerCommand).toHaveBeenCalledTimes(1);
-  const callArgs = mockRunnerCommand.mock.calls[0];
-  expect((callArgs?.[1] as any)?.command).toBe('findText');
-  expect((callArgs?.[1] as any)?.text).toBe('Accessibility');
-});
-
-test('wait text on iOS without app bundle id uses snapshot path', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'ios-wait-no-app-bundle';
-  sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
-
-  mockDispatch.mockResolvedValue({
-    nodes: [
-      {
-        index: 0,
-        depth: 0,
-        type: 'Window',
-        rect: { x: 0, y: 0, width: 390, height: 844 },
-      },
-      {
-        index: 1,
-        depth: 1,
-        parentIndex: 0,
-        type: 'StaticText',
-        label: 'Agent Device Tester',
-        rect: { x: 20, y: 80, width: 240, height: 40 },
-      },
-    ],
-  });
-
-  const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'wait',
-      positionals: ['Agent Device Tester', '5000'],
-      flags: {},
-    },
-    sessionName,
-    logPath: '/tmp/daemon.log',
-    sessionStore,
-  });
-
-  expect(response?.ok).toBe(true);
-  expect(mockRunnerCommand).not.toHaveBeenCalled();
-  expect(mockDispatch).toHaveBeenCalledWith(
-    expect.anything(),
-    'snapshot',
-    [],
-    undefined,
-    expect.anything(),
-  );
-});
-
-test('wait text falls back to the canonical snapshot after an Apple runner miss', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'ios-wait-runner-miss';
-  sessionStore.set(sessionName, {
-    ...makeSession(sessionName, iosSimulatorDevice),
-    appBundleId: 'com.example.app',
-  });
-
-  mockRunnerCommand.mockResolvedValue({ found: false });
-  mockDispatch.mockResolvedValue({
-    nodes: [
-      {
-        index: 0,
-        depth: 0,
-        type: 'Window',
-        rect: { x: 0, y: 0, width: 390, height: 844 },
-      },
-      {
-        index: 1,
-        depth: 1,
-        parentIndex: 0,
-        type: 'StaticText',
-        label: 'Agent Device Tester',
-        rect: { x: 20, y: 80, width: 240, height: 40 },
-      },
-    ],
-  });
-
-  const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'wait',
-      positionals: ['Agent Device Tester', '5000'],
-      flags: {},
-    },
-    sessionName,
-    logPath: '/tmp/daemon.log',
-    sessionStore,
-  });
-
-  expect(response?.ok).toBe(true);
-  expect(mockRunnerCommand).toHaveBeenCalledTimes(1);
-  expect(mockDispatch).toHaveBeenCalledWith(
-    expect.anything(),
-    'snapshot',
-    [],
-    undefined,
-    expect.anything(),
-  );
-});
-
-// fallow-ignore-next-line complexity
-test('wait selector uses direct iOS selector query when possible', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'ios-wait-selector';
-  sessionStore.set(sessionName, {
-    ...makeSession(sessionName, iosSimulatorDevice),
-    appBundleId: 'com.example.app',
-  });
-
-  mockRunnerCommand.mockResolvedValue({
-    found: true,
-    nodes: [
-      {
-        ref: 'e1',
-        type: 'Button',
-        label: 'Continue',
-        rect: { x: 10, y: 20, width: 120, height: 44 },
-      },
-    ],
-  });
-
-  const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'wait',
-      positionals: ['id="continue-button"', '5000'],
-      flags: {},
-    },
-    sessionName,
-    logPath: '/tmp/daemon.log',
-    sessionStore,
-  });
-
-  expect(response?.ok).toBe(true);
-  if (response?.ok) {
-    expect(response.data?.selector).toBe('id="continue-button"');
-  }
-  expect(mockRunnerCommand).toHaveBeenCalledTimes(1);
-  const callArgs = mockRunnerCommand.mock.calls[0];
-  expect((callArgs?.[1] as any)?.command).toBe('querySelector');
-  expect((callArgs?.[1] as any)?.selectorKey).toBe('id');
-  expect((callArgs?.[1] as any)?.selectorValue).toBe('continue-button');
-});
-
-test('wait selector falls back to snapshot runtime when direct iOS selector misses', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'ios-wait-selector-fallback';
-  sessionStore.set(sessionName, {
-    ...makeSession(sessionName, iosSimulatorDevice),
-    appBundleId: 'com.example.app',
-  });
-
-  mockRunnerCommand.mockResolvedValue({ found: false });
-  mockDispatch.mockResolvedValue({
-    nodes: [
-      {
-        index: 0,
-        depth: 0,
-        type: 'Window',
-        rect: { x: 0, y: 0, width: 390, height: 844 },
-      },
-      {
-        index: 1,
-        depth: 1,
-        parentIndex: 0,
-        type: 'Button',
-        identifier: 'continue-button',
-        label: 'Continue',
-        rect: { x: 10, y: 20, width: 120, height: 44 },
-      },
-    ],
-  });
-
-  const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'wait',
-      positionals: ['id="continue-button"', '5000'],
-      flags: {},
-    },
-    sessionName,
-    logPath: '/tmp/daemon.log',
-    sessionStore,
-  });
-
-  expect(response?.ok).toBe(true);
-  expect(mockRunnerCommand).toHaveBeenCalledTimes(1);
-  expect(mockDispatch).toHaveBeenCalledWith(
-    expect.anything(),
-    'snapshot',
-    [],
-    undefined,
-    expect.anything(),
-  );
-});
-
-test('wait selector bypasses fresh snapshot cache after direct iOS selector misses', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'ios-wait-selector-fresh-snapshot';
-  const session = {
-    ...makeSession(sessionName, iosSimulatorDevice),
-    appBundleId: 'com.example.app',
-  };
-  session.snapshot = {
-    createdAt: Date.now(),
-    presentationKey: buildSnapshotPresentationKey({}),
-    nodes: [
-      {
-        ref: 'e0',
-        index: 0,
-        type: 'Window',
-        rect: { x: 0, y: 0, width: 390, height: 844 },
-      },
-    ],
-  };
-  sessionStore.set(sessionName, session);
-
-  mockRunnerCommand.mockResolvedValue({ found: false });
-  mockDispatch.mockResolvedValue({
-    nodes: [
-      {
-        index: 0,
-        depth: 0,
-        type: 'Window',
-        rect: { x: 0, y: 0, width: 390, height: 844 },
-      },
-      {
-        index: 1,
-        depth: 1,
-        parentIndex: 0,
-        type: 'Button',
-        identifier: 'continue-button',
-        label: 'Continue',
-        rect: { x: 10, y: 20, width: 120, height: 44 },
-      },
-    ],
-  });
-
-  const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'wait',
-      positionals: ['id="continue-button"', '5000'],
-      flags: {},
-    },
-    sessionName,
-    logPath: '/tmp/daemon.log',
-    sessionStore,
-  });
-
-  expect(response?.ok).toBe(true);
-  expect(mockDispatch).toHaveBeenCalledWith(
-    expect.anything(),
-    'snapshot',
-    [],
-    undefined,
-    expect.anything(),
-  );
-});
-
-test('wait selector does not snapshot-fallback on ambiguous direct iOS selector match', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'ios-wait-selector-ambiguous';
-  sessionStore.set(sessionName, {
-    ...makeSession(sessionName, iosSimulatorDevice),
-    appBundleId: 'com.example.app',
-  });
-
-  mockRunnerCommand.mockRejectedValue(
-    new AppError('AMBIGUOUS_MATCH', 'Selector matched multiple elements'),
-  );
-
-  const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'wait',
-      positionals: ['id="continue-button"', '5000'],
-      flags: {},
-    },
-    sessionName,
-    logPath: '/tmp/daemon.log',
-    sessionStore,
-  });
-
-  expect(response?.ok).toBe(false);
-  if (response?.ok === false) {
-    expect(response.error.code).toBe('AMBIGUOUS_MATCH');
-  }
-  expect(mockDispatch).not.toHaveBeenCalledWith(
-    expect.anything(),
-    'snapshot',
-    expect.anything(),
-    expect.anything(),
-    expect.anything(),
-  );
-});
-
 test('wait selector bypasses a fresh matching session snapshot', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'android-wait-fresh-capture';
@@ -2459,6 +2130,7 @@ test('wait selector bypasses a fresh matching session snapshot', async () => {
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
+    ...snapshotRuntimeFixture(),
   });
 
   expect(response?.ok).toBe(true);

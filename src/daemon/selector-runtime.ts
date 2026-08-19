@@ -1,3 +1,4 @@
+import { waitObservesDevice } from '@agent-device/contracts/platform';
 import { parseWaitPositionals } from '../core/wait-positionals.ts';
 import type { WaitParsed } from '../core/wait-positionals.ts';
 import { AppError, asAppError, normalizeError } from '@agent-device/kernel/errors';
@@ -8,7 +9,7 @@ import {
   type AppleRunnerRequestOptions,
 } from './apple-runner-options.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
-import { errorResponse, requireCommandSupported } from './handlers/response.ts';
+import { errorResponse } from './handlers/response.ts';
 import { markSessionPartialRefsIssued, resolveRefStalenessWarning } from './session-snapshot.ts';
 import { resolveSessionDevice, withSessionlessRunnerCleanup } from './handlers/snapshot-session.ts';
 import {
@@ -50,6 +51,11 @@ import {
   createSelectorRuntimeForDevice,
   type SelectorRuntimeParams,
 } from './selector-runtime-backend.ts';
+import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
+import {
+  resolveBoundSelectorCapture,
+  type BoundSelectorOperations,
+} from './selector-capture-binding.ts';
 
 export type DirectIosSelectorQueryResult = {
   found: boolean;
@@ -259,31 +265,31 @@ export async function dispatchIsViaRuntime(
 }
 
 export async function dispatchWaitViaRuntime(
-  params: SelectorRuntimeParams,
+  params: SelectorRuntimeParams &
+    Readonly<{ inspectFacts?: InspectDeviceRuntimeFacts; bindDevice?: BindDeviceRuntime }>,
 ): Promise<DaemonResponse> {
   const { req, sessionName, sessionStore } = params;
   const parsed = parseWaitPositionals(req.positionals ?? []);
   if (!parsed) return errorResponse('INVALID_ARGS', 'wait requires a duration or text');
   if (parsed.kind === 'invalid') return errorResponse('INVALID_ARGS', parsed.message);
   const { session, device } = await resolveSessionDevice(sessionStore, sessionName, req.flags);
-  if (parsed.kind !== 'sleep') {
-    const unsupported = requireCommandSupported('wait', device);
-    if (unsupported) return unsupported;
-  }
-  // ADR 0012 / #1349: recording and a replayed landmark check both need the
-  // snapshot polling path — evidence and the identity comparison are computed
-  // from the resolution tree the direct runner query never captures.
-  const recordedLandmark = req.internal?.replayLandmarkGuard;
-  if (parsed.kind === 'selector' && !recordedLandmark && !isSessionRecording(session)) {
-    const directResponse = await dispatchDirectIosSelectorWait({
-      ...params,
-      session,
+  // ADR 0019: facts are the only support authority, through the selector family's one
+  // admit-then-bind entry. A duration wait observes nothing, so it never asks for a binding —
+  // exactly the cell legacy admission skipped by testing `parsed.kind !== 'sleep'`.
+  let waitOperations: BoundSelectorOperations | undefined;
+  if (waitObservesDevice(parsed.kind)) {
+    const bound = await resolveBoundSelectorCapture({
+      command: 'wait',
       device,
-      selectorExpression: parsed.selectorExpression,
-      timeoutMs: parsed.timeoutMs,
+      session,
+      inspectFacts: params.inspectFacts,
+      bindDevice: params.bindDevice,
     });
-    if (directResponse) return directResponse;
+    if (!bound.ok) return bound.response;
+    waitOperations = bound.operations;
   }
+  // ADR 0012 / #1349, replay-only: the recorded landmark identity this wait must observe.
+  const recordedLandmark = req.internal?.replayLandmarkGuard;
   // #1076 + ADR 0014: a wait @ref names an element from the retained ref-frame
   // evidence, and its staleness is frame-derived rather than a property of the
   // live polling capture the condition is checked against. Once the ref frame
@@ -311,6 +317,7 @@ export async function dispatchWaitViaRuntime(
       ...params,
       session,
       device,
+      bound: waitOperations,
     });
     const response = await toDaemonResponse(async () => {
       const result = await runtime.selectors.wait({
@@ -330,10 +337,14 @@ export async function dispatchWaitViaRuntime(
       const data = toDaemonWaitData(result);
       return staleRefsWarning ? { ...data, warning: staleRefsWarning } : data;
     });
-    const enrichedResponse = await maybeWaitTimeoutSurfaceResponse(
-      { req, logPath: params.logPath, session, device },
-      response,
-    );
+    // Only a polling wait can fail with `targetAbsent`/`stableTimeout`, and only it holds a
+    // capture binding to describe the surface with. A duration wait has neither.
+    const enrichedResponse = waitOperations
+      ? await maybeWaitTimeoutSurfaceResponse(
+          { req, logPath: params.logPath, session, device, capture: waitOperations.capture },
+          response,
+        )
+      : response;
     // Keep generic wait-surface details first so Android blocker detection can own the top-level message.
     return await maybeAndroidForegroundBlockerResponse(params, enrichedResponse, 'wait');
   };
@@ -355,37 +366,6 @@ function readRecordedResolutionTarget(
   const preActionNodes = result.preActionNodes;
   if (!node || typeof node !== 'object' || !Array.isArray(preActionNodes)) return undefined;
   return { node: node as SnapshotNode, preActionNodes: preActionNodes as SnapshotNode[] };
-}
-
-async function dispatchDirectIosSelectorWait(
-  params: SelectorRuntimeParams & {
-    session: SessionState | undefined;
-    device: SessionState['device'];
-    selectorExpression: string;
-    timeoutMs: number | null;
-  },
-): Promise<DaemonResponse | null> {
-  const selector = readSimpleIosSelectorTarget({
-    session: params.session,
-    selectorExpression: params.selectorExpression,
-  });
-  if (!params.session || !selector) return null;
-  const startedAt = Date.now();
-  const result = await queryDirectIosSelectorOrFallback(params, params.session, selector);
-  if (isDirectIosSelectorErrorResult(result)) return result.response;
-  if (!result?.found) return null;
-  const payload = {
-    kind: 'selector',
-    selector: selector.raw,
-    waitedMs: Date.now() - startedAt,
-    selectorChain: [selector.raw],
-  };
-  recordIfSession(params.sessionStore, params.sessionName, params.req, payload);
-  const response: DaemonResponse = { ok: true, data: stripSelectorChain(payload) };
-  return await maybeWaitTimeoutSurfaceResponse(
-    { req: params.req, logPath: params.logPath, session: params.session, device: params.device },
-    response,
-  );
 }
 
 /**

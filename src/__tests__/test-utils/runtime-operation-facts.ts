@@ -33,6 +33,7 @@ export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.fre
   }),
   ...unavailableShutdownOperationFacts,
   ...screenshotRuntimeOperationFacts({ capture: unavailable }),
+  findText: unavailable,
   setViewport: unavailable,
   ...elementTextRuntimeOperationFacts({ readTextAtPoint: unavailable }),
 });

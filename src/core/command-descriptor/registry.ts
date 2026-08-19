@@ -960,7 +960,6 @@ export const RAW_COMMAND_DESCRIPTORS = [
     // starts, so identity verification runs inside its polling resolution.
     targetIdentityVerification: 'post-resolution',
     daemon: { route: 'snapshot', refFrameEffect: 'preserve' },
-    capability: ALL_DEVICE_COMMAND_CAPABILITY,
     // The wait budget travels as a positional, not a flag; parse it the same
     // way the daemon will so the request envelope extends past it (#1075).
     timeoutPolicy: {
@@ -968,7 +967,20 @@ export const RAW_COMMAND_DESCRIPTORS = [
       budget: { source: 'positional-parser', parser: resolveWaitBudgetMs },
     },
     batchable: true,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    // A duration wait declares no operation and never binds (`waitObservesDevice`); every
+    // observing shape polls the selector family's ordinary capture plan, whose preferred set
+    // carries wait's measured `findText` beside get's `readTextAtPoint`.
+    //
+    // ACCEPTED BEHAVIOUR CHANGE (#1875, ruled rather than assumed): binding the family plan means
+    // wait asks the owner whether it can observe a device with no app attached, and the families
+    // answer differently. On iOS `appBundleId` is the XCUITest attach target, so with none set
+    // local Apple refuses `captureSnapshotWithoutActiveApp` and wait now fails immediately naming
+    // `open`, where it used to poll to its deadline. It could never have succeeded: the runner's
+    // own process foregrounds and displaces the app under test, then answers about its own blank
+    // screen — so `wait stable` and `wait @ref` stopped returning a success that was describing
+    // the runner, not the app. Android captures the real launcher in that state, its facts say
+    // so, and wait proceeds unchanged. Same plan, opposite outcomes, chosen by the owner.
+    platformExecution: { kind: 'device-runtime', uses: selectorCaptureRuntimePlanUses },
   },
   {
     name: 'alert',

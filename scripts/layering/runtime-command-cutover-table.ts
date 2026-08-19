@@ -627,6 +627,41 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
       operationOwners: { captureScreenshot: ['selectScreenshotCapture'] },
     },
   },
+  {
+    rule: 'R38 wait-runtime-cutover',
+    command: 'wait',
+    subject: 'wait polling capture',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      // The direct iOS selector probe wait took before polling, and the daemon-side Apple
+      // plumbing that used to answer `findText` by selecting on family and provider. The
+      // reading itself did not go away — it moved behind the owner's declared `findText`
+      // operation — but nothing in the daemon may reach the runner for it again.
+      routeNames: [
+        'dispatchDirectIosSelectorWait',
+        'findTextWithAppleRunner',
+        'findTextInMacosNonAppSurface',
+        'readAppleRunnerFindTextTarget',
+        'buildAppleRunnerFindTextOptions',
+        'captureWaitSnapshot',
+        'AppleRunnerFindTextTarget',
+      ],
+    },
+    runtimeTypeNames: ['SnapshotRuntimeOperations', 'FindTextRuntimeOperations'],
+    operations: { names: ['captureSnapshot', 'captureSnapshotWithoutActiveApp', 'findText'] },
+    singularExecution: {
+      routes: ['handleSnapshotCommands'],
+      operations: ['captureSnapshot', 'captureSnapshotWithoutActiveApp', 'findText'],
+      // The selector family's shared owners: wait binds through the same admit-then-bind entry
+      // as find/get/is, so it introduces no parallel binder for either operation.
+      operationOwners: {
+        captureSnapshot: ['selectActiveAppSnapshot'],
+        captureSnapshotWithoutActiveApp: ['selectSnapshotWithoutActiveApp'],
+        findText: ['bindNativeTextRead'],
+      },
+    },
+  },
 ];
 
 function snapshotRetiredDispatchProjectionProof(

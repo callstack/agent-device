@@ -78,6 +78,7 @@ function createAdmissionFacts(
         withoutActiveApp: unavailable,
       }),
       ...screenshotRuntimeOperationFacts({ capture: screenshotFact }),
+      findText: unavailable,
       setViewport: unavailable,
       deployApp: cell(options.deployAvailable),
       materializeAppSource: cell(options.sourceAvailable),

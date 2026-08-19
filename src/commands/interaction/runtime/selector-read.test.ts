@@ -476,7 +476,6 @@ test('runtime find wait cancels and joins a capture that consumes its full deadl
 test('runtime selector convenience methods use explicit target helpers', async () => {
   const device = createSelectorDevice(selectorReadSnapshot(), {
     readText: 'Continue',
-    findText: true,
   });
 
   const text = await device.selectors.getText(selector('label=Continue'), { session: 'default' });
@@ -484,7 +483,7 @@ test('runtime selector convenience methods use explicit target helpers', async (
   const visible = await device.selectors.isVisible(selector('label=Continue'), {
     session: 'default',
   });
-  const waited = await device.selectors.waitForText('Ready', {
+  const waited = await device.selectors.waitForText('Continue', {
     session: 'default',
     timeoutMs: 100,
   });
@@ -492,7 +491,7 @@ test('runtime selector convenience methods use explicit target helpers', async (
   assert.equal(text.kind, 'text');
   assert.equal(attrs.kind, 'attrs');
   assert.equal(visible.pass, true);
-  assert.deepEqual(waited, { kind: 'text', text: 'Ready', waitedMs: 0 });
+  assert.deepEqual(waited, { kind: 'text', text: 'Continue', waitedMs: 0 });
 });
 
 // ---------------------------------------------------------------------------

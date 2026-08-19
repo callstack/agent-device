@@ -47,6 +47,7 @@ const RUNNER_TRANSPORT_METHODS: Record<
     invoke: (i) => i.readTextAtPoint!({ x: 10, y: 20 }),
     runnerCommand: 'readText',
   },
+  findText: { invoke: (i) => i.findText!('Ready'), runnerCommand: 'findText' },
   back: { invoke: (i) => i.back(), runnerCommand: 'backInApp' },
   home: { invoke: (i) => i.home(), runnerCommand: 'home' },
   setOrientation: { invoke: (i) => i.setOrientation('portrait'), runnerCommand: 'rotate' },

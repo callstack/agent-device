@@ -66,6 +66,10 @@ export type BackendReadTextResult = {
   text: string;
 };
 
+/**
+ * A backend's native text-presence reading. `found: true` is authoritative; `false` means
+ * "not proven by this backend" and the caller still consults the canonical tree.
+ */
 export type BackendFindTextResult = {
   found: boolean;
 };
@@ -434,6 +438,7 @@ export type AgentDeviceBackend = {
     options?: BackendScreenshotOptions,
   ): Promise<BackendScreenshotResult | void>;
   readText?(context: BackendCommandContext, node: SnapshotNode): Promise<BackendReadTextResult>;
+  /** Present only when the bound runtime advertised the preferred `findText` operation. */
   findText?(context: BackendCommandContext, text: string): Promise<BackendFindTextResult>;
   /**
    * #1542 off-screen refusal double-check: called ONLY at the moment the

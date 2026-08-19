@@ -16,6 +16,7 @@ import { dispatchWaitViaRuntime } from '../../selector-runtime.ts';
 import type { DaemonRequest } from '../../types.ts';
 import { WAIT_LANDMARK_MISMATCH_REASON } from '@agent-device/contracts/replay';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
+import { snapshotRuntimeFixture } from '../../__tests__/snapshot-runtime-fixture.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import {
   makeAndroidSession,
@@ -96,6 +97,7 @@ async function runWait(options: { recording?: boolean; req?: DaemonRequest } = {
     sessionName: 'default',
     logPath: '/tmp/test.log',
     sessionStore,
+    ...snapshotRuntimeFixture(),
   });
   return { response, sessionStore };
 }
