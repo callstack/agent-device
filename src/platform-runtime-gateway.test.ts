@@ -125,6 +125,7 @@ describe('composed platform runtime gateway', () => {
       network: unavailable,
       screenshot: unavailable,
       viewport: unavailable,
+      elementText: unavailable,
       lifecycle: applicationLifecycleOperationFacts({
         resolveOpenTarget: unavailable,
         prepareApplicationOpen: unavailable,

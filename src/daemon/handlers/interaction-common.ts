@@ -12,6 +12,7 @@ import { inferFillText } from '../action-utils.ts';
 import { recordedInputPlaceholder } from '../../replay/recorded-input.ts';
 import { parameterizeRecordedFillPayload } from '../parameterized-recorded-fill.ts';
 import { isSessionRecording } from '../session-script-publication-capability.ts';
+import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 
 export type ContextFromFlags = (
   flags: CommandFlags | undefined,
@@ -25,6 +26,8 @@ export type InteractionHandlerParams = {
   logPath?: string;
   sessionStore: SessionStore;
   contextFromFlags: ContextFromFlags;
+  inspectFacts?: InspectDeviceRuntimeFacts;
+  bindDevice?: BindDeviceRuntime;
 };
 
 export function finalizeTouchInteraction(params: {

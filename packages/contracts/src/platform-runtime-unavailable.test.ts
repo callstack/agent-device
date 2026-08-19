@@ -31,6 +31,7 @@ test('generic unavailable binding preserves exact provider ownership and mode', 
     network: { available: false, reason: 'owner-capability-missing' },
     screenshot: { available: false, reason: 'unsupported-device-kind' },
     viewport: { available: false, reason: 'unsupported-platform-leaf' },
+    elementText: { available: false, reason: 'unsupported-provider-mode' },
     lifecycle,
   });
 
@@ -44,6 +45,9 @@ test('generic unavailable binding preserves exact provider ownership and mode', 
   assert.deepEqual(binding.facts.operations.captureScreenshot, {
     available: false,
     reason: 'unsupported-device-kind',
+  assert.deepEqual(binding.facts.operations.readTextAtPoint, {
+    available: false,
+    reason: 'unsupported-provider-mode',
   });
   assert.deepEqual(binding.operations, {});
   await binding[Symbol.asyncDispose]();

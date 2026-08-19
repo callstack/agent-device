@@ -27,6 +27,7 @@ import {
   providerRuntimeOwner,
   sameRuntimeOwner,
   screenshotRuntimeOperationFacts,
+  elementTextRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
   viewportRuntimeOperationFacts,
 } from '@agent-device/contracts/platform';
@@ -91,6 +92,16 @@ const viewportUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
   hint: 'Limrun does not expose viewport resizing.',
+} as const);
+/**
+ * A point read needs a local tool (adb uiautomator, the XCUITest runner). Limrun's transport
+ * carries none of them, so the owner reports no live read and `get` answers from the captured
+ * tree; provider ownership never borrows the local family read.
+ */
+const elementTextUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'Limrun-owned devices read element text from the captured tree only.',
 } as const);
 const recordingUnavailable = Object.freeze({
   available: false,
@@ -191,6 +202,7 @@ export function createLimrunPlatformRuntimeOwner(
             network: liveSessionUnavailable,
             screenshot: liveSessionUnavailable,
             viewport: liveSessionUnavailable,
+            elementText: liveSessionUnavailable,
             readiness: liveSessionUnavailable,
             shutdown: liveSessionUnavailable,
             lifecycle: limrunLifecycleFacts(device, false),
@@ -442,6 +454,7 @@ function facts(
       }),
       ...screenshotRuntimeOperationFacts({ capture: available }),
       ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
+      ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementTextUnavailable }),
       ensureReady: available,
       bootTarget: available,
       bootTargetHeadless: headlessUnavailable,

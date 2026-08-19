@@ -58,6 +58,12 @@ vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOr
   };
 });
 
+import {
+  elementReadFixtureState,
+  getRuntimeBindings,
+  mockReadTextAtPoint,
+  resetGetRuntimeFixture,
+} from './interaction-get-runtime-fixture.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 const mockDispatch = vi.mocked(dispatchCommand);
 import {
@@ -75,6 +81,7 @@ beforeEach(() => {
   mockGetAndroidBlockingDialogFocus.mockResolvedValue(null);
   mockRunAppleRunnerCommand.mockReset();
   mockRunAppleRunnerCommand.mockResolvedValue({});
+  resetGetRuntimeFixture();
 });
 
 test('get text prefers underlying value for text surfaces and avoids recording giant ref labels', async () => {
@@ -111,6 +118,7 @@ test('get text prefers underlying value for text surfaces and avoids recording g
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response).toBeTruthy();
@@ -145,10 +153,7 @@ test('get text uses backend read expansion when the resolved node has a rect', a
   };
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockResolvedValue({
-    action: 'read',
-    text: 'package com.example.app\nclass MainActivity {}',
-  });
+  mockReadTextAtPoint.mockResolvedValue('package com.example.app\nclass MainActivity {}');
 
   const response = await handleInteractionCommands({
     req: {
@@ -161,14 +166,61 @@ test('get text uses backend read expansion when the resolved node has a rect', a
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
-  expect(mockDispatch).toHaveBeenCalledTimes(1);
-  expect(mockDispatch.mock.calls[0]?.[1]).toBe('read');
-  expect(mockDispatch.mock.calls[0]?.[2]).toEqual(['80', '80']);
+  // The live read now reaches the bound runtime operation, not the legacy `read` dispatch.
+  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(mockReadTextAtPoint).toHaveBeenCalledTimes(1);
+  expect(mockReadTextAtPoint.mock.calls[0]?.[0].point).toEqual({ x: 80, y: 80 });
   expect(response?.ok).toBe(true);
   if (response?.ok) {
     expect(response.data?.text).toBe('package com.example.app\nclass MainActivity {}');
+  }
+});
+
+test('get text answers from the captured tree when the bound owner advertises no live read', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'get-text-no-live-read';
+  const session = makeSession(sessionName);
+  session.snapshot = {
+    nodes: attachRefs([
+      {
+        index: 0,
+        depth: 0,
+        type: 'TextView',
+        label: 'Editor for MainActivity.kt',
+        value: 'preview only',
+        rect: { x: 20, y: 40, width: 120, height: 80 },
+      },
+    ]),
+    createdAt: Date.now(),
+    backend: 'xctest',
+  };
+  sessionStore.set(sessionName, session);
+  elementReadFixtureState.readTextAtPointAvailable = false;
+
+  const response = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'get',
+      positionals: ['text', '@e1'],
+      flags: {},
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+    ...getRuntimeBindings(),
+  });
+
+  // Preferred-operation absence is not a failure and not a fallback: the required capture path
+  // answers completely, and nothing reaches the legacy dispatcher.
+  expect(mockReadTextAtPoint).not.toHaveBeenCalled();
+  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(response?.ok).toBe(true);
+  if (response?.ok) {
+    expect(response.data?.text).toBe('preview only');
   }
 });
 
@@ -205,6 +257,7 @@ test('get text simple iOS id selector uses runner query without snapshot', async
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
@@ -292,6 +345,7 @@ test('get text iOS label selector uses snapshot disambiguation instead of runner
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
@@ -323,6 +377,7 @@ test('get text simple iOS id selector does not snapshot-fallback on ambiguous ru
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(false);
@@ -382,6 +437,7 @@ test('is visible preserves CLI snapshot flags during runtime snapshot capture', 
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
@@ -413,6 +469,7 @@ test('is visible reuses fresh cached iOS snapshots with rects', async () => {
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
@@ -445,6 +502,7 @@ test('is visible recaptures web snapshots when cached nodes may lack rects', asy
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
@@ -486,6 +544,7 @@ test('is selected simple iOS id selector uses runner query without snapshot', as
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
@@ -544,6 +603,7 @@ test('is simple iOS selector returns false directly when runner predicate fails'
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
@@ -599,6 +659,7 @@ test('is simple iOS selector falls back to snapshot while gesture stabilization 
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
@@ -646,6 +707,7 @@ test('is visible passes for list text that inherits viewport visibility from an 
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response).toBeTruthy();
@@ -691,6 +753,7 @@ test('is visible fails for nodes outside the current viewport', async () => {
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response).toBeTruthy();
@@ -729,6 +792,7 @@ test('is reports Android permission dialog blocker when app content assertion fa
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response).toBeTruthy();

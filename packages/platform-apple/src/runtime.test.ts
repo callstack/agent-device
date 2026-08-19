@@ -134,6 +134,10 @@ function expectAppleSnapshotAvailability(
     device.appleOs === 'macos',
   );
   expect(binding.operations.captureSnapshot).toBeTypeOf(available ? 'function' : 'undefined');
+  // The live point read needs a driveable Apple UI, so it follows the same watchOS sentinel the
+  // capture does; every other supported leaf advertises and binds it.
+  expect(binding.facts.operations.readTextAtPoint.available).toBe(available);
+  expect(binding.operations.readTextAtPoint).toBeTypeOf(available ? 'function' : 'undefined');
 }
 
 test.each(['frontmost-app', 'desktop', 'menubar'] as const)(
@@ -426,4 +430,5 @@ function expectLegacyLifecycleFactCell(
     facts.device.appleOs !== 'watchos' &&
     (facts.device.kind === 'simulator' || facts.device.kind === 'device');
   expect(facts.operations.captureSnapshot.available).toBe(snapshotAvailable);
+  expect(facts.operations.readTextAtPoint.available).toBe(snapshotAvailable);
 }

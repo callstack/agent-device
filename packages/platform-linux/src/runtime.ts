@@ -11,7 +11,9 @@ import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
   bindLocalScreenshotInteractor,
+  bindElementTextRuntime,
   createUnavailablePlatformRuntimeFacts,
+  elementTextRuntimeOperationFacts,
   localRuntimeOwner,
   sameRuntimeOwner,
   screenshotRuntimeOperationFacts,
@@ -24,6 +26,7 @@ import { bindLinuxApplicationLifecycle } from './lifecycle.ts';
 const supported = Object.freeze({ available: true } as const);
 const linuxOwner = localRuntimeOwner('linux');
 const unsupportedPlatformLeaf = unavailableLinuxRuntimeFact('unsupported-platform-leaf');
+const elementTextKindUnavailable = unavailableLinuxRuntimeFact('unsupported-device-kind');
 const runtimeHintsUnavailable = unavailableLinuxRuntimeFact(
   'unsupported-platform-leaf',
   'Runtime hints are supported only for local iOS-family simulators and Android devices.',
@@ -92,6 +95,8 @@ export function createLinuxPlatformRuntime(host: PlatformRuntimeHost): PlatformR
                 signal: request.scope.signal,
                 resolveInteractor: host.localInteractors.resolve,
               })
+          ...(facts.operations.readTextAtPoint.available
+            ? bindElementTextRuntime({ device: request.device, host: host.elementText })
             : {}),
         }),
         [Symbol.asyncDispose]: async () => undefined,
@@ -110,6 +115,7 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
     screenshot: screenshotKindUnavailable,
     snapshot: snapshotKindUnavailable,
     viewport: unsupportedPlatformLeaf,
+    elementText: elementTextKindUnavailable,
     readiness: unsupportedPlatformLeaf,
     lifecycle: applicationLifecycleOperationFacts({
       resolveOpenTarget: openTarget,
@@ -134,6 +140,10 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
       }),
       ...screenshotRuntimeOperationFacts({
         capture: device.kind === 'device' ? supported : screenshotKindUnavailable,
+      // The Linux read is value-first (AXValue/title/description) where the captured tree is
+      // label-first, so the desktop row genuinely reads differently from its snapshot text.
+      ...elementTextRuntimeOperationFacts({
+        readTextAtPoint: device.kind === 'device' ? supported : elementTextKindUnavailable,
       }),
     },
   });

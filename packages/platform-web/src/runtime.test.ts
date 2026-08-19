@@ -54,6 +54,10 @@ test('preserves a narrow web provider dump including empty successful entries', 
   expect(binding.operations.setViewport).toBeTypeOf('function');
   expect(binding.facts.operations.captureScreenshot).toEqual({ available: true });
   expect(binding.operations.captureScreenshot).toBeTypeOf('function');
+  // No point-addressed read on the web backend: `get` answers from the captured DOM tree. The
+  // legacy `read` dispatch had no web arm at all and threw on every call before falling back.
+  expect(binding.facts.operations.readTextAtPoint.available).toBe(false);
+  expect(binding.operations.readTextAtPoint).toBeUndefined();
   expect(binding.operations.captureSnapshot).toBeTypeOf('function');
   expectLifecycleFacts(binding);
 });

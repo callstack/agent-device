@@ -145,6 +145,7 @@ function readinessFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperati
         capture: operationAvailability(device.kind !== 'simulator' || device.platform === 'apple'),
       }),
       setViewport: unavailable,
+      readTextAtPoint: unavailable,
       deployApp: operationAvailability(deployment.deploy),
       materializeAppSource: operationAvailability(deployment.source),
       deployMaterializedApp: operationAvailability(deployment.source),

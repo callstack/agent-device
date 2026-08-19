@@ -100,6 +100,9 @@ test.each([
     expect(binding.facts.operations.appState).toMatchObject({ available: false });
     expect(binding.facts.operations.listApps).toMatchObject({ available: false });
     expect(binding.facts.operations.captureSnapshot.available).toBe(device.kind === 'device');
+    // The Linux read is value-first where the captured tree is label-first, so the desktop row
+    // genuinely reads differently from its snapshot text and advertises the live read.
+    expect(binding.facts.operations.readTextAtPoint.available).toBe(device.kind === 'device');
     expect(binding.facts.operations.captureSnapshotWithCustomActions.available).toBe(false);
     expect(binding.facts.operations.captureSnapshotWithoutActiveApp.available).toBe(
       device.kind === 'device',

@@ -239,6 +239,13 @@ test('captures through only the active exact WebDriver interactor', async () => 
   expect(binding.operations.setViewport).toBeUndefined();
   expect(binding.facts.operations.captureScreenshot).toEqual({ available: true });
   expect(binding.operations.captureScreenshot).toBeTypeOf('function');
+  // Provider ownership is authoritative and fails closed: a WebDriver owner's transport carries
+  // no local point-read tool, so it advertises none and never borrows the local family read.
+  expect(binding.facts.operations.readTextAtPoint).toMatchObject({
+    available: false,
+    reason: 'unsupported-provider-mode',
+  });
+  expect(binding.operations.readTextAtPoint).toBeUndefined();
   await expect(
     binding.operations.captureSnapshot?.({ options: { interactiveOnly: true } }),
   ).resolves.toEqual({ backend: 'android', nodes: [] });
@@ -273,6 +280,7 @@ test.each([
   expect(facts.operations.captureSnapshotWithoutActiveApp.available).toBe(false);
   expect(facts.operations.setViewport.available).toBe(false);
   expect(facts.operations.captureScreenshot.available).toBe(false);
+  expect(facts.operations.readTextAtPoint.available).toBe(false);
   if (state.isSessionActive()) {
     const binding = await owner.bind({
       device,

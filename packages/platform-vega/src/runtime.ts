@@ -90,6 +90,7 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
     screenshot: screenshotUnavailable,
     snapshot: unsupportedPlatformLeaf,
     viewport: unsupportedPlatformLeaf,
+    elementText: unsupportedPlatformLeaf,
     readiness: unsupportedPlatformLeaf,
     lifecycle: applicationLifecycleOperationFacts({
       resolveOpenTarget: openTarget,

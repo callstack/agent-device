@@ -57,6 +57,7 @@ const NO_CAPABILITY_PUBLIC_COMMANDS = new Set<string>([
   PUBLIC_COMMANDS.diff,
   PUBLIC_COMMANDS.doctor,
   PUBLIC_COMMANDS.events,
+  PUBLIC_COMMANDS.get,
   PUBLIC_COMMANDS.install,
   PUBLIC_COMMANDS.installFromSource,
   PUBLIC_COMMANDS.logs,

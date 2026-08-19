@@ -46,6 +46,7 @@ test('boot rejects --headless outside Android directly', async () => {
             network: { available: false, reason: 'owner-capability-missing' },
             screenshot: { available: false, reason: 'owner-capability-missing' },
             viewport: { available: false, reason: 'owner-capability-missing' },
+            elementText: { available: false, reason: 'owner-capability-missing' },
             readiness: { available: false, reason: 'unsupported-device-kind' },
             lifecycle: applicationLifecycleOperationFacts({
               resolveOpenTarget: { available: false, reason: 'owner-capability-missing' },
@@ -131,6 +132,7 @@ test('appstate rejects web before Android app-state backend dispatch', async () 
             network: { available: false, reason: 'unsupported-platform-leaf' },
             screenshot: { available: false, reason: 'unsupported-platform-leaf' },
             viewport: { available: false, reason: 'unsupported-platform-leaf' },
+            elementText: { available: false, reason: 'unsupported-platform-leaf' },
             readiness: { available: false, reason: 'unsupported-platform-leaf' },
             lifecycle: applicationLifecycleOperationFacts({
               resolveOpenTarget: { available: false, reason: 'unsupported-platform-leaf' },
