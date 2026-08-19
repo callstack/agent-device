@@ -96,7 +96,7 @@ export const COMMON_COMMAND_SUPPORTED_FLAG_KEYS = flagKeys(
   'noRecord',
 );
 
-export const GLOBAL_FLAG_KEYS = new Set<FlagKey>([
+export const GLOBAL_FLAG_KEYS: ReadonlySet<FlagKey> = new Set([
   'json',
   'config',
   'help',
