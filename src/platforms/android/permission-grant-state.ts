@@ -13,23 +13,15 @@ import { runAndroidAdb } from './adb.ts';
 export type AndroidPriorGrantState = 'granted' | 'not_granted' | 'unknown';
 
 /**
- * The grants a revoke's prior state is resolved against. Held opaque so a caller reads the
- * state once, before the revoke, and can still answer for a permission it only learns
- * afterwards (`photos` resolves its permission by probing the device).
+ * What the acting user actually holds. `unknown` is never a value here — absence is what carries
+ * it, so a caller reads the map before the revoke and can still answer for a permission it only
+ * learns afterwards (`photos` resolves its permission by probing the device).
  */
-export type AndroidRuntimePermissionGrants = ReadonlyMap<string, AndroidPriorGrantState>;
-
-/** The state of one permission within a grants read; `unknown` when either is absent. */
-export function androidPriorGrantState(
-  grants: AndroidRuntimePermissionGrants | undefined,
-  permission: string,
-): AndroidPriorGrantState {
-  return grants?.get(permission) ?? 'unknown';
-}
+export type AndroidRuntimePermissionGrants = ReadonlyMap<string, 'granted' | 'not_granted'>;
 
 /**
- * `userId`'s runtime permissions, or `undefined` when the state could not be read — adb failed
- * or the dump carried no runtime-permission block for that user.
+ * `userId`'s runtime permissions, or `undefined` when the state could not be read — no acting
+ * user, adb failed, or the dump carried no runtime-permission block for that user.
  *
  * The caller passes the user its mutation will target, so the two halves cannot disagree.
  * `dumpsys package` prints an `install permissions:` section and one block per user, all
@@ -39,8 +31,9 @@ export function androidPriorGrantState(
 export async function readAndroidRuntimePermissionGrants(
   device: DeviceInfo,
   appPackage: string,
-  userId: number,
+  userId: number | undefined,
 ): Promise<AndroidRuntimePermissionGrants | undefined> {
+  if (userId === undefined) return undefined;
   const result = await runAndroidAdb(device, ['shell', 'dumpsys', 'package', appPackage], {
     allowFailure: true,
   });
@@ -62,12 +55,11 @@ export async function readAndroidCurrentUserId(device: DeviceInfo): Promise<numb
     allowFailure: true,
   });
   if (result.exitCode !== 0) return undefined;
+  // Device stdout is a trust boundary: `parsed` is whatever the shell printed.
   const parsed = Number.parseInt(result.stdout.trim(), 10);
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
-const TOP_LEVEL_SECTION = /^\S.*:\s*$/;
-const PACKAGES_SECTION = 'Packages:';
 const USER_BLOCK = /^\s*User (\d+):/;
 const RUNTIME_PERMISSIONS_BLOCK = /^\s*runtime permissions:\s*$/;
 const GRANT_LINE = /^\s*([\w.]+): granted=(true|false)\b/;
@@ -79,24 +71,30 @@ type DumpLine = { text: string; indent: number };
  * Runtime permission grants for `userId` only, or `undefined` when that user has no
  * runtime-permission block in the dump.
  *
- * `dumpsys package` is indentation-structured: top-level `Packages:` holds the package's own
- * blocks, `User <id>:` opens a per-user block, and `runtime permissions:` opens the grant list
- * inside it. The read walks that nesting instead of matching `granted=` anywhere, which is what
- * keeps the `install permissions:` section, other users' blocks, and the later top-level
- * sections (`Queries:`, `Shared users:`, `Dexopt state:` — which repeat `User <id>:` and can
- * repeat grant lines) out of the answer.
+ * `dumpsys package` is indentation-structured, so the read walks three nested blocks —
+ * `Packages:` → `User <id>:` → `runtime permissions:` — instead of matching `granted=`
+ * anywhere. That nesting is what keeps the `install permissions:` section, other users'
+ * blocks, and the later top-level sections (`Queries:`, `Shared users:`, `Dexopt state:`,
+ * which repeat `User <id>:` and can repeat grant lines) out of the answer.
  */
 export function parseAndroidRuntimePermissionGrants(
   dumpsysOutput: string,
   userId: number,
 ): AndroidRuntimePermissionGrants | undefined {
-  const packages = topLevelSection(readDumpLines(dumpsysOutput), PACKAGES_SECTION);
+  const lines = dumpsysOutput
+    .split('\n')
+    .filter((text) => text.trim().length > 0)
+    .map((text) => ({ text, indent: text.length - text.trimStart().length }));
+  const packages = nestedBlock(
+    lines,
+    (line) => line.indent === 0 && line.text.trim() === 'Packages:',
+  );
   const user = nestedBlock(packages, (line) => USER_BLOCK.exec(line.text)?.[1] === String(userId));
   const runtime = nestedBlock(user, (line) => RUNTIME_PERMISSIONS_BLOCK.test(line.text));
   // Absent block: the device never reported this user's grants. An empty one is still an
   // answer — the app holds no runtime permissions for this user.
   if (!runtime) return undefined;
-  const grants = new Map<string, AndroidPriorGrantState>();
+  const grants = new Map<string, 'granted' | 'not_granted'>();
   for (const { text } of runtime) {
     const grant = GRANT_LINE.exec(text);
     if (grant) grants.set(grant[1]!, grant[2] === 'true' ? 'granted' : 'not_granted');
@@ -104,23 +102,11 @@ export function parseAndroidRuntimePermissionGrants(
   return grants;
 }
 
-function readDumpLines(dumpsysOutput: string): DumpLine[] {
-  return dumpsysOutput
-    .split('\n')
-    .filter((text) => text.trim().length > 0)
-    .map((text) => ({ text, indent: text.length - text.trimStart().length }));
-}
-
-/** The lines under a top-level `<name>` header, up to the next top-level header. */
-function topLevelSection(lines: readonly DumpLine[], name: string): DumpLine[] {
-  const start = lines.findIndex((line) => line.indent === 0 && line.text.trim() === name);
-  if (start < 0) return [];
-  const rest = lines.slice(start + 1);
-  const end = rest.findIndex((line) => line.indent === 0 && TOP_LEVEL_SECTION.test(line.text));
-  return end < 0 ? rest : rest.slice(0, end);
-}
-
-/** The lines nested under the first line `isHeader` accepts, or `undefined` if there is none. */
+/**
+ * The lines nested under the first line `isHeader` accepts, or `undefined` if there is none.
+ * A block ends at the first line indented no deeper than its header, which is also what ends
+ * the top-level `Packages:` section at the next top-level heading.
+ */
 function nestedBlock(
   lines: readonly DumpLine[] | undefined,
   isHeader: (line: DumpLine) => boolean,
