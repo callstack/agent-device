@@ -166,11 +166,13 @@ export async function dispatchGetViaRuntime(
   // ADR 0012 step 4: a guarded replay dispatch must resolve through the
   // snapshot path so the post-resolution identity guard runs.
   const replayTargetGuard = req.internal?.replayTargetGuard;
-  if (target.target.kind === 'selector' && !replayTargetGuard) {
-    const directResponse = await dispatchDirectIosSelectorGet(params, sub, target.target.selector);
-    if (directResponse) return directResponse;
-  }
 
+  // ADR 0019: `get` declares `device-runtime`, so NOTHING in its request path may reach the
+  // device before resolve -> admit -> bind. Admission runs first for every target shape,
+  // including the ones the direct-iOS fast path below can answer: that path is a fast path
+  // *within* an admitted request, never a way around exact-owner facts or the one-binding
+  // invariant. (The query itself is still the shared root mechanic co-owned by `is`, `wait`,
+  // and the Wave 5 offscreen probe — this unit orders it, it does not claim it.)
   const boundRuntime = await resolveBoundGetRuntime({
     session: params.sessionStore.get(params.sessionName),
     inspectFacts: params.inspectFacts,
@@ -178,6 +180,12 @@ export async function dispatchGetViaRuntime(
   });
   if (!boundRuntime.ok) return boundRuntime.response;
   params.consumedSnapshot ??= {};
+
+  if (target.target.kind === 'selector' && !replayTargetGuard) {
+    const directResponse = await dispatchDirectIosSelectorGet(params, sub, target.target.selector);
+    if (directResponse) return directResponse;
+  }
+
   const runtime = createSelectorRuntimeForDevice({
     ...params,
     session: boundRuntime.session,

@@ -1,6 +1,8 @@
-import type {
-  ElementTextRuntimeHost,
-  ReadTextAtPointInput,
+import {
+  elementTextRead,
+  type ElementTextReadOutcome,
+  type ElementTextRuntimeHost,
+  type ReadTextAtPointInput,
 } from '@agent-device/contracts/platform';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 
@@ -17,7 +19,10 @@ export function createElementTextRuntimeHost(): ElementTextRuntimeHost {
   });
 }
 
-async function readTextAtPoint(device: DeviceInfo, input: ReadTextAtPointInput): Promise<string> {
+async function readTextAtPoint(
+  device: DeviceInfo,
+  input: ReadTextAtPointInput,
+): Promise<ElementTextReadOutcome> {
   if (device.platform === 'android') return await readAndroidText(device, input);
   if (device.platform === 'linux') return await readLinuxText(input);
   if (usesMacOsHelperSurface(device, input)) return await readMacOsSurfaceText(input);
@@ -32,29 +37,38 @@ function usesMacOsHelperSurface(device: DeviceInfo, input: ReadTextAtPointInput)
   return isMacOs(device) && surface !== undefined && surface !== 'app';
 }
 
-async function readAndroidText(device: DeviceInfo, input: ReadTextAtPointInput): Promise<string> {
+// Each reader classifies its own owner's "nothing here" answer through `elementTextRead`.
+// None of them catches: a transport or tooling failure is unexpected and propagates.
+
+async function readAndroidText(
+  device: DeviceInfo,
+  input: ReadTextAtPointInput,
+): Promise<ElementTextReadOutcome> {
   const { readAndroidTextAtPoint } = await import('./platforms/android/input-actions.ts');
-  return (await readAndroidTextAtPoint(device, input.point.x, input.point.y)) ?? '';
+  // uiautomator answers `undefined` when no node covers the point.
+  return elementTextRead(await readAndroidTextAtPoint(device, input.point.x, input.point.y));
 }
 
-async function readLinuxText(input: ReadTextAtPointInput): Promise<string> {
+async function readLinuxText(input: ReadTextAtPointInput): Promise<ElementTextReadOutcome> {
   const { readLinuxTextAtPoint } = await import('./platforms/linux/snapshot.ts');
-  return await readLinuxTextAtPoint(input.point.x, input.point.y, input.options?.surface);
+  return elementTextRead(
+    await readLinuxTextAtPoint(input.point.x, input.point.y, input.options?.surface),
+  );
 }
 
-async function readMacOsSurfaceText(input: ReadTextAtPointInput): Promise<string> {
+async function readMacOsSurfaceText(input: ReadTextAtPointInput): Promise<ElementTextReadOutcome> {
   const { runMacOsReadTextAction } = await import('./platforms/apple/os/macos/helper.ts');
   const result = await runMacOsReadTextAction(input.point.x, input.point.y, {
     bundleId: input.options?.appBundleId,
     surface: input.options?.surface,
   });
-  return result.text;
+  return elementTextRead(result.text);
 }
 
 async function readAppleRunnerText(
   device: DeviceInfo,
   input: ReadTextAtPointInput,
-): Promise<string> {
+): Promise<ElementTextReadOutcome> {
   const { runAppleRunnerCommand } = await import('./platforms/apple/core/runner/runner-client.ts');
   const result = await runAppleRunnerCommand(
     device,
@@ -66,6 +80,10 @@ async function readAppleRunnerText(
     },
     { ...input.execution },
   );
-  if (typeof result.text === 'string') return result.text;
-  return typeof result.message === 'string' ? result.message : '';
+  if (typeof result.text === 'string') return elementTextRead(result.text);
+  // The runner answers `message` instead of `text` when it queried the element but could not
+  // render readable text from it — a declined read, not a failed one.
+  return typeof result.message === 'string'
+    ? elementTextRead(result.message)
+    : Object.freeze({ status: 'unreadable', reason: 'surface-not-readable' } as const);
 }

@@ -7,6 +7,7 @@ import {
   type CaptureSnapshotInput,
   type DeviceBinding,
   type PlatformRuntimeOperations,
+  type ElementTextReadOutcome,
   type ReadTextAtPointInput,
   type RuntimeFacts,
 } from '@agent-device/contracts/platform';
@@ -22,15 +23,27 @@ import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts
  * at `core/dispatch.ts`. The bound capture still runs the interactor capture the surrounding
  * interaction tests already mock, so only the two `get` operations are fixture-owned here.
  */
-export const mockReadTextAtPoint = vi.fn(async (_input: ReadTextAtPointInput) => '');
+export const mockReadTextAtPoint = vi.fn(
+  async (_input: ReadTextAtPointInput): Promise<ElementTextReadOutcome> =>
+    Object.freeze({ status: 'unreadable', reason: 'no-text-at-point' } as const),
+);
 
-/** Flip to model an owner whose facts advertise no live element read (web, HarmonyOS, provider). */
-export const elementReadFixtureState = { readTextAtPointAvailable: true };
+/**
+ * Flip to model an exact owner cell: no live element read (web, HarmonyOS, provider), or no
+ * capture at all (the watchOS sentinel, an inactive provider), which refuses admission outright.
+ */
+export const elementReadFixtureState = {
+  readTextAtPointAvailable: true,
+  captureSnapshotAvailable: true,
+};
 
 export function resetGetRuntimeFixture(): void {
   mockReadTextAtPoint.mockReset();
-  mockReadTextAtPoint.mockResolvedValue('');
+  mockReadTextAtPoint.mockResolvedValue(
+    Object.freeze({ status: 'unreadable', reason: 'no-text-at-point' } as const),
+  );
   elementReadFixtureState.readTextAtPointAvailable = true;
+  elementReadFixtureState.captureSnapshotAvailable = true;
 }
 
 const available = Object.freeze({ available: true } as const);
@@ -61,7 +74,7 @@ function elementReadFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOpera
     device: base.device,
     operations: {
       ...base.operations,
-      captureSnapshot: available,
+      captureSnapshot: elementReadFixtureState.captureSnapshotAvailable ? available : unavailable,
       readTextAtPoint: elementReadFixtureState.readTextAtPointAvailable ? available : unavailable,
     },
   });

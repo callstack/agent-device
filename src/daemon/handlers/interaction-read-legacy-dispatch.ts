@@ -2,6 +2,7 @@ import { dispatchCommand } from '../../core/dispatch.ts';
 import type { SessionState } from '../types.ts';
 import type { ContextFromFlags } from './interaction-common.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
+import { elementTextRead } from '@agent-device/contracts/platform';
 import type { ReadElementTextAtPoint } from './interaction-read.ts';
 
 /**
@@ -39,6 +40,6 @@ export function legacyDispatchReadTextAtPoint(params: {
       },
     );
     const data = rawData && typeof rawData === 'object' ? rawData : undefined;
-    return typeof data?.text === 'string' ? data.text : '';
+    return elementTextRead(typeof data?.text === 'string' ? data.text : undefined);
   };
 }
