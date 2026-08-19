@@ -523,7 +523,12 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
     legacyRetirement: {
       modulePaths: ['src/daemon/handlers/interaction-read-legacy-dispatch.ts'],
       importPatterns: [/(?:^|\/)handlers\/interaction-read-legacy-dispatch(?:\.[cm]?[jt]s)?$/],
-      routeNames: ['handleReadCommand'],
+      // `dispatchDirectIosSelectorGet` was `get`'s last route to the platform outside the seam:
+      // it reached `runAppleRunnerCommand` through a path this row declares no operation for.
+      // Admitting before a bypass is not executing through the seam, so the bypass is retired
+      // rather than ordered after admission. `queryDirectIosSelector` itself stays — the Wave 5
+      // offscreen-target probe still consumes it and it remains single-copy.
+      routeNames: ['handleReadCommand', 'dispatchDirectIosSelectorGet'],
     },
     runtimeTypeNames: ['ElementTextRuntimeOperations', 'SnapshotRuntimeOperations'],
     operations: {
@@ -534,6 +539,8 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
       operations: ['captureSnapshot', 'captureSnapshotWithoutActiveApp', 'readTextAtPoint'],
       // `get` executes through the shared selector seam, so the capture owners are the SAME
       // selectors `snapshot`/`diff` count; only the preferred element read is this unit's own.
+      // With the direct-iOS bypass retired these names are now the ONLY routes from
+      // `dispatchGetViaRuntime` to the platform, so the claim states what the code does.
       operationOwners: {
         captureSnapshot: ['selectActiveAppSnapshot'],
         captureSnapshotWithoutActiveApp: ['selectSnapshotWithoutActiveApp'],

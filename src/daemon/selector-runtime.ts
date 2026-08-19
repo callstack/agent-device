@@ -171,22 +171,16 @@ export async function dispatchGetViaRuntime(
   // snapshot path so the post-resolution identity guard runs.
   const replayTargetGuard = req.internal?.replayTargetGuard;
 
-  // ADR 0019: `get` declares `device-runtime`, so NOTHING in its request path may reach the
-  // device before resolve -> admit -> bind. Admission runs first for every target shape,
-  // including the ones the direct-iOS fast path below can answer: that path is a fast path
-  // *within* an admitted request, never a way around exact-owner facts or the one-binding
-  // invariant. (The query itself is still the shared root mechanic co-owned by `is`, `wait`,
-  // and the Wave 5 offscreen probe — this unit orders it, it does not claim it.)
+  // ADR 0019: `get` declares `device-runtime`, so its request path reaches the device ONLY
+  // through operations R36 declares. Every target shape — including the simple iOS `id=` selector
+  // a direct runner query used to answer without a capture — resolves through the bound capture.
+  // Admission before a bypass is not the same as executing through the seam, so the bypass is
+  // gone rather than merely ordered after admission.
   const resolvedRuntime = await createBoundSelectorRuntime(params, {
     requireSession: true,
     command: 'get',
   });
   if (!resolvedRuntime.ok) return resolvedRuntime.response;
-
-  if (target.target.kind === 'selector' && !replayTargetGuard) {
-    const directResponse = await dispatchDirectIosSelectorGet(params, sub, target.target.selector);
-    if (directResponse) return directResponse;
-  }
 
   const runtime = resolvedRuntime.runtime;
 
@@ -382,44 +376,6 @@ function readRecordedResolutionTarget(
   return { node: node as SnapshotNode, preActionNodes: preActionNodes as SnapshotNode[] };
 }
 
-function readDirectIosGetSelector(
-  session: SessionState | undefined,
-  property: 'text' | 'attrs',
-  selectorExpression: string,
-): DirectIosSelectorTarget | null {
-  // ADR 0012 decision 3: recording requires the snapshot path so target
-  // evidence can be computed from the resolution tree.
-  if (!session || isSessionRecording(session)) return null;
-  const selector = readSimpleIosSelectorTarget({ session, selectorExpression });
-  // get text intentionally disambiguates label/text/value triplets from snapshots; the runner
-  // direct query rejects those ambiguous matches before the shared selector resolver can rank them.
-  if (property === 'text' && selector?.key !== 'id') return null;
-  return selector;
-}
-
-async function dispatchDirectIosSelectorGet(
-  params: SelectorRuntimeParams,
-  property: 'text' | 'attrs',
-  selectorExpression: string,
-): Promise<DaemonResponse | null> {
-  const session = params.sessionStore.get(params.sessionName);
-  const selector = readDirectIosGetSelector(session, property, selectorExpression);
-  if (!session || !selector) return null;
-
-  const result = await queryDirectIosSelectorOrFallback(params, session, selector);
-  if (isDirectIosSelectorErrorResult(result)) return result.response;
-  if (!result) return null;
-  const payload = buildDirectIosGetResult(property, selector.raw, result);
-  if (!payload) return null;
-  recordIfSession(
-    params.sessionStore,
-    params.sessionName,
-    params.req,
-    buildGetRecordResult(payload, property),
-  );
-  return { ok: true, data: toDaemonGetData(payload) };
-}
-
 async function dispatchDirectIosSelectorIs(
   params: SelectorRuntimeParams,
   predicate: IsPredicate,
@@ -553,22 +509,6 @@ function isDirectIosSelectorErrorResult(
   result: DirectIosSelectorFallbackResult | ResolvedDirectIosSelectorQuery,
 ): result is DirectIosSelectorErrorResult {
   return result !== null && 'kind' in result && result.kind === 'error';
-}
-
-function buildDirectIosGetResult(
-  property: 'text' | 'attrs',
-  selector: string,
-  result: DirectIosSelectorQueryResult,
-) {
-  if (!result.found || !result.node) return null;
-  const base = {
-    target: { kind: 'selector' as const, selector },
-    node: result.node,
-    selectorChain: [selector],
-  };
-  if (property === 'attrs') return { kind: 'attrs' as const, ...base };
-  if (typeof result.text !== 'string') return null;
-  return { kind: 'text' as const, ...base, text: result.text };
 }
 
 function buildDirectIosIsResult(
