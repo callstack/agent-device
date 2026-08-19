@@ -1,20 +1,15 @@
 import path from 'node:path';
-import { expect, test, vi } from 'vitest';
+import { expect, test } from 'vitest';
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import { makeIosSession, mkdtempForTest } from '../../__tests__/test-utils/index.ts';
 import { SessionStore } from '../session-store.ts';
 import { dispatchSnapshotViaRuntime } from '../snapshot-runtime.ts';
-import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
-
-const dispatchCommandMock = vi.hoisted(() => vi.fn());
-
-vi.mock('../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../core/dispatch.ts')>();
-  return {
-    ...actual,
-    dispatchCommand: dispatchCommandMock,
-  };
-});
+import {
+  screenshotRuntimeFixture,
+  writeSolidPng,
+  type ScreenshotRuntimeFixture,
+  type ScreenshotRuntimeFixtureOptions,
+} from './screenshot-runtime-fixture.ts';
 
 const SPARSE: SnapshotQualityVerdict = {
   state: 'sparse',
@@ -31,26 +26,29 @@ async function scenario() {
   return { sessionStore, sessionName, logPath: path.join(root, 'daemon.log') };
 }
 
-/** Snapshot captures answer with the seeded verdict; screenshot captures answer per `screenshot`. */
+/** Both captures answer at the request-bound runtime seam: the snapshot carries the seeded
+ * verdict, and the screenshot leg is the fallback under test. */
 function seed(
   verdict: SnapshotQualityVerdict,
-  screenshot: () => Promise<Record<string, unknown>> = async () => ({ width: 390, height: 844 }),
-) {
-  dispatchCommandMock.mockReset();
-  dispatchCommandMock.mockImplementation(async (_device: unknown, command: string) =>
-    command === 'screenshot'
-      ? await screenshot()
-      : {
-          backend: 'xctest',
-          truncated: false,
-          quality: verdict,
-          nodes: [{ index: 0, depth: 0, type: 'Application', label: 'Demo' }],
-        },
-  );
+  onCapture: ScreenshotRuntimeFixtureOptions['onCapture'] = (input) => writeSolidPng(input.outPath),
+): ScreenshotRuntimeFixture {
+  return screenshotRuntimeFixture({
+    onCapture,
+    snapshotResult: () =>
+      ({
+        backend: 'xctest',
+        truncated: false,
+        quality: verdict,
+        nodes: [{ index: 0, depth: 0, type: 'Application', label: 'Demo' }],
+      }) as never,
+  });
 }
 
-async function dispatch(input: Awaited<ReturnType<typeof scenario>>, internalObservation = false) {
-  const runtime = snapshotRuntimeFixture();
+async function dispatch(
+  input: Awaited<ReturnType<typeof scenario>>,
+  runtime: ScreenshotRuntimeFixture,
+  internalObservation = false,
+) {
   const response = await dispatchSnapshotViaRuntime({
     req: {
       command: 'snapshot',
@@ -62,24 +60,21 @@ async function dispatch(input: Awaited<ReturnType<typeof scenario>>, internalObs
     sessionName: input.sessionName,
     logPath: input.logPath,
     sessionStore: input.sessionStore,
-    ...runtime,
+    inspectFacts: runtime.inspectFacts,
+    bindDevice: runtime.bindDevice,
   });
   if (!response.ok) throw new Error('expected ok response');
   return response.data ?? {};
 }
 
-function screenshotCalls() {
-  return dispatchCommandMock.mock.calls.filter((call) => call[1] === 'screenshot');
-}
-
 test('a sparse snapshot captures the screenshot its own remedy asks for and links it', async () => {
   const input = await scenario();
-  seed(SPARSE);
+  const runtime = seed(SPARSE);
 
-  const data = await dispatch(input);
+  const data = await dispatch(input, runtime);
   const warnings = (data.warnings ?? []) as string[];
 
-  expect(screenshotCalls()).toHaveLength(1);
+  expect(runtime.captureScreenshot).toHaveBeenCalledTimes(1);
   expect(data.fallbackScreenshotPath).toMatch(/\.png$/);
   expect(data.artifacts).toEqual([
     {
@@ -97,36 +92,36 @@ test('a sparse snapshot captures the screenshot its own remedy asks for and link
 
 test('a readable snapshot never pays for a screenshot', async () => {
   const input = await scenario();
-  seed({ state: 'healthy', backend: 'tree' });
+  const runtime = seed({ state: 'healthy', backend: 'tree' });
 
-  const data = await dispatch(input);
+  const data = await dispatch(input, runtime);
 
-  expect(screenshotCalls()).toHaveLength(0);
+  expect(runtime.captureScreenshot).not.toHaveBeenCalled();
   expect(data.fallbackScreenshotPath).toBeUndefined();
   expect(data.artifacts).toBeUndefined();
 });
 
 test('internal observations stay silent so a polling wait cannot shoot once per poll', async () => {
   const input = await scenario();
-  seed(SPARSE);
+  const runtime = seed(SPARSE);
 
-  const data = await dispatch(input, true);
+  const data = await dispatch(input, runtime, true);
 
-  expect(screenshotCalls()).toHaveLength(0);
+  expect(runtime.captureScreenshot).not.toHaveBeenCalled();
   expect(data.fallbackScreenshotPath).toBeUndefined();
   expect(data.artifacts).toBeUndefined();
 });
 
 test('a failed fallback screenshot does not fail the snapshot that was asked for', async () => {
   const input = await scenario();
-  seed(SPARSE, async () => {
-    throw new Error('screenshot dispatch exploded');
+  const runtime = seed(SPARSE, () => {
+    throw new Error('screenshot capture exploded');
   });
 
-  const data = await dispatch(input);
+  const data = await dispatch(input, runtime);
   const warnings = (data.warnings ?? []) as string[];
 
-  expect(screenshotCalls()).toHaveLength(1);
+  expect(runtime.captureScreenshot).toHaveBeenCalledTimes(1);
   expect(data.fallbackScreenshotPath).toBeUndefined();
   expect(data.artifacts).toBeUndefined();
   // The manual remedy is still on the response, so the caller is not left without one.

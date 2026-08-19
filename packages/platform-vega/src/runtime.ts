@@ -75,6 +75,11 @@ export function createVegaPlatformRuntime(host: PlatformRuntimeHost): PlatformRu
   });
 }
 
+const screenshotUnavailable = vegaUnavailable(
+  'unsupported-platform-leaf',
+  'screenshot is not supported on Vega OS: the Vega runtime exposes remote navigation only.',
+);
+
 function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> {
   const supported = device.kind === 'emulator' && device.target === 'tv';
   const openTarget = supported ? lifecycleAvailable : openTargetUnavailable;
@@ -82,6 +87,7 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
   return createUnavailablePlatformRuntimeFacts(device, vegaOwner, {
     appLog: unsupportedPlatformLeaf,
     network: unsupportedPlatformLeaf,
+    screenshot: screenshotUnavailable,
     snapshot: unsupportedPlatformLeaf,
     viewport: unsupportedPlatformLeaf,
     readiness: unsupportedPlatformLeaf,

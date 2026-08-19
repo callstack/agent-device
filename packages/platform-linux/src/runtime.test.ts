@@ -106,6 +106,10 @@ test.each([
     );
     expect(binding.facts.operations.setViewport).toMatchObject({ available: false });
     expect(binding.operations.setViewport).toBeUndefined();
+    expect(binding.facts.operations.captureScreenshot.available).toBe(device.kind === 'device');
+    expect(binding.operations.captureScreenshot).toBeTypeOf(
+      device.kind === 'device' ? 'function' : 'undefined',
+    );
     expect(binding.operations.captureSnapshot).toBeTypeOf(
       device.kind === 'device' ? 'function' : 'undefined',
     );

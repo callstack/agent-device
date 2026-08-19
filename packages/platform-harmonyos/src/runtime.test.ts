@@ -70,6 +70,8 @@ test.each([
   expect(facts.operations.captureSnapshotWithoutActiveApp).toEqual({ available: true });
   expect(facts.operations.setViewport).toMatchObject({ available: false });
   expect(binding.operations.setViewport).toBeUndefined();
+  expect(facts.operations.captureScreenshot).toEqual({ available: true });
+  expect(binding.operations.captureScreenshot).toBeTypeOf('function');
   await expect(binding.operations.ensureReady?.({})).resolves.toMatchObject({ booted: true });
   await expect(
     binding.operations.listApps?.({ device: runtimeDevice, filter: 'all' }),

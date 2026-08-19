@@ -21,10 +21,12 @@ import {
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
+  bindProviderScreenshotInteractor,
   bindProviderSnapshotInteractor,
   createUnavailablePlatformRuntimeFacts,
   providerRuntimeOwner,
   sameRuntimeOwner,
+  screenshotRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
   viewportRuntimeOperationFacts,
 } from '@agent-device/contracts/platform';
@@ -187,6 +189,7 @@ export function createLimrunPlatformRuntimeOwner(
             appState: liveSessionUnavailable,
             appDeployment: liveSessionUnavailable,
             network: liveSessionUnavailable,
+            screenshot: liveSessionUnavailable,
             viewport: liveSessionUnavailable,
             readiness: liveSessionUnavailable,
             shutdown: liveSessionUnavailable,
@@ -353,6 +356,11 @@ function bindLimrunAppLogs(
       signal,
       resolveInteractor: (runner) => options.getInteractor(device, runner),
     }),
+    ...bindProviderScreenshotInteractor({
+      device,
+      signal,
+      resolveInteractor: (runner) => options.getInteractor(device, runner),
+    }),
     ...createLimrunAppDeploymentOperations(
       deploymentOptions(options),
       device,
@@ -432,6 +440,7 @@ function facts(
             : customSnapshotUnavailable,
         withoutActiveApp: available,
       }),
+      ...screenshotRuntimeOperationFacts({ capture: available }),
       ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
       ensureReady: available,
       bootTarget: available,
@@ -471,6 +480,7 @@ function recoveryFacts(
         customActions: liveSessionUnavailable,
         withoutActiveApp: liveSessionUnavailable,
       }),
+      ...screenshotRuntimeOperationFacts({ capture: liveSessionUnavailable }),
       ...viewportRuntimeOperationFacts({ setViewport: liveSessionUnavailable }),
       ensureReady: liveSessionUnavailable,
       bootTarget: liveSessionUnavailable,

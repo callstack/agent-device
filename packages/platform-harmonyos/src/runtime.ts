@@ -7,8 +7,10 @@ import type {
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
+  bindLocalScreenshotInteractor,
   bindLocalSnapshotInteractor,
   localRuntimeOwner,
+  screenshotRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
   viewportRuntimeOperationFacts,
 } from '@agent-device/contracts/platform';
@@ -62,6 +64,11 @@ const snapshotKindUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-device-kind',
   hint: 'snapshot is supported only for HarmonyOS emulators and devices.',
+} as const);
+const screenshotKindUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'screenshot is supported only for HarmonyOS emulators and devices.',
 } as const);
 const snapshotCustomActionsUnavailable = Object.freeze({
   available: false,
@@ -129,6 +136,12 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
               ? available
               : snapshotKindUnavailable,
         }),
+        ...screenshotRuntimeOperationFacts({
+          capture:
+            device.kind === 'emulator' || device.kind === 'device'
+              ? available
+              : screenshotKindUnavailable,
+        }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ensureReady: available,
         bootTarget: unavailable,
@@ -179,6 +192,13 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
             : {}),
           ...(facts.operations.captureSnapshot.available
             ? bindLocalSnapshotInteractor({
+                device: request.device,
+                signal: request.scope.signal,
+                resolveInteractor: host.localInteractors.resolve,
+              })
+            : {}),
+          ...(facts.operations.captureScreenshot.available
+            ? bindLocalScreenshotInteractor({
                 device: request.device,
                 signal: request.scope.signal,
                 resolveInteractor: host.localInteractors.resolve,

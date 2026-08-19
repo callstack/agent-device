@@ -1,5 +1,6 @@
 import {
   applicationLifecycleOperationFacts,
+  screenshotRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
   type RuntimeOperationFact,
 } from '@agent-device/contracts/platform';
@@ -30,6 +31,7 @@ export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.fre
     withoutActiveApp: unavailable,
   }),
   ...unavailableShutdownOperationFacts,
+  ...screenshotRuntimeOperationFacts({ capture: unavailable }),
   setViewport: unavailable,
 });
 

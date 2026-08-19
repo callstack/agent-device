@@ -12,6 +12,7 @@ import type { AppStateRuntimeHost, AppStateRuntimeOperations } from './app-state
 import type { NetworkRuntimeHost, NetworkRuntimeOperations } from './network-runtime.ts';
 import type { ScreenRecordingRuntimeHost } from './screen-recording-runtime-host.ts';
 import type { ScreenRecordingRuntimeOperations } from './screen-recording-runtime.ts';
+import type { ScreenshotRuntimeOperations } from './screenshot-runtime.ts';
 import type { SnapshotRuntimeHost, SnapshotRuntimeOperations } from './snapshot-runtime.ts';
 import type { ViewportRuntimeOperations } from './viewport-runtime.ts';
 import type {
@@ -43,6 +44,7 @@ export type PlatformRuntimeOperations = AppLogRuntimeOperations &
   AppStateRuntimeOperations &
   NetworkRuntimeOperations &
   ScreenRecordingRuntimeOperations &
+  ScreenshotRuntimeOperations &
   SnapshotRuntimeOperations &
   ViewportRuntimeOperations &
   DeviceReadinessRuntimeOperations &
@@ -132,6 +134,41 @@ export function resolveSnapshotRuntimePlan(input: {
         operation: 'captureSnapshotWithoutActiveApp',
         use: captureSnapshotWithoutActiveAppUse,
       });
+}
+
+const captureScreenshotUse = defineUse({ required: ['captureScreenshot'] });
+/**
+ * `--overlay-refs` annotates the capture with the refs of a snapshot taken in the same request, so
+ * the snapshot is part of what the command requires — not something to discover after the PNG is
+ * already on disk. Declaring it in the use is what lets admission refuse the whole request up
+ * front on a target that can capture pixels but not a tree.
+ */
+const captureScreenshotWithOverlayRefsUse = defineUse({
+  required: ['captureScreenshot', 'captureSnapshot'],
+});
+
+export const screenshotRuntimePlanUses = Object.freeze([
+  captureScreenshotUse,
+  captureScreenshotWithOverlayRefsUse,
+] as const);
+
+export type ScreenshotRuntimePlan =
+  | Readonly<{ kind: 'capture'; use: typeof captureScreenshotUse }>
+  | Readonly<{
+      kind: 'capture-with-overlay-refs';
+      use: typeof captureScreenshotWithOverlayRefsUse;
+    }>;
+
+/** Selects one owner-fact-backed capture plan from normalized command intent. */
+export function resolveScreenshotRuntimePlan(
+  input: Readonly<{ overlayRefs: boolean }>,
+): ScreenshotRuntimePlan {
+  return input.overlayRefs
+    ? Object.freeze({
+        kind: 'capture-with-overlay-refs',
+        use: captureScreenshotWithOverlayRefsUse,
+      })
+    : Object.freeze({ kind: 'capture', use: captureScreenshotUse });
 }
 export const deviceBootRuntimeUses = Object.freeze([bootTargetUse, bootTargetHeadlessUse] as const);
 

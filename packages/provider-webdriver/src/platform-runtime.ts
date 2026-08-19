@@ -1,9 +1,11 @@
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
+  bindProviderScreenshotInteractor,
   bindProviderSnapshotInteractor,
   createUnavailablePlatformRuntimeFacts,
   sameRuntimeOwner,
+  screenshotRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
   viewportRuntimeOperationFacts,
   type AppDeploymentInput,
@@ -69,6 +71,11 @@ const snapshotUnavailable = Object.freeze({
   reason: 'unsupported-provider-mode',
   hint: 'This WebDriver provider runtime does not expose snapshot capture for this device.',
 } as const);
+const screenshotUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'This WebDriver provider runtime does not expose screenshot capture for this device.',
+} as const);
 const snapshotCustomActionsUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
@@ -132,16 +139,20 @@ function webDriverLifecycleFacts(device: DeviceInfo) {
     configureProviderPortReverse: portReverseUnavailable,
   });
 }
+/** How this provider instance was configured: identity, session liveness, and declared capture. */
+export type WebDriverPlatformRuntimeOptions = Readonly<{
+  host: PlatformRuntimeHost;
+  owner: Extract<RuntimeOwnerRef, { kind: 'provider-runtime' }>;
+  ownsDevice(device: DeviceInfo): boolean;
+  isSessionActive?(device: DeviceInfo): boolean;
+  deployment?: WebDriverPlatformDeploymentRuntime;
+  screenshotAvailable?: boolean;
+  snapshotAvailable?: boolean;
+  getInteractor?(device: DeviceInfo, runner?: RunnerContext): Interactor | undefined;
+}>;
+
 export function createWebDriverPlatformRuntimeOwner(
-  options: Readonly<{
-    host: PlatformRuntimeHost;
-    owner: Extract<RuntimeOwnerRef, { kind: 'provider-runtime' }>;
-    ownsDevice(device: DeviceInfo): boolean;
-    isSessionActive?(device: DeviceInfo): boolean;
-    deployment?: WebDriverPlatformDeploymentRuntime;
-    snapshotAvailable?: boolean;
-    getInteractor?(device: DeviceInfo, runner?: RunnerContext): Interactor | undefined;
-  }>,
+  options: WebDriverPlatformRuntimeOptions,
 ): PlatformRuntimeOwner {
   return Object.freeze({
     owner: options.owner,
@@ -173,15 +184,7 @@ export function createWebDriverPlatformRuntimeOwner(
 }
 
 function bindWebDriverPlatformRuntime(
-  options: Readonly<{
-    host: PlatformRuntimeHost;
-    owner: Extract<RuntimeOwnerRef, { kind: 'provider-runtime' }>;
-    ownsDevice(device: DeviceInfo): boolean;
-    isSessionActive?(device: DeviceInfo): boolean;
-    deployment?: WebDriverPlatformDeploymentRuntime;
-    snapshotAvailable?: boolean;
-    getInteractor?(device: DeviceInfo, runner?: RunnerContext): Interactor | undefined;
-  }>,
+  options: WebDriverPlatformRuntimeOptions,
   device: DeviceInfo,
   signal: AbortSignal,
 ): DeviceBinding<PlatformRuntimeOperations> {
@@ -201,6 +204,13 @@ function bindWebDriverPlatformRuntime(
     ),
     ...(facts.operations.captureSnapshot.available
       ? bindProviderSnapshotInteractor({
+          device,
+          signal,
+          resolveInteractor: (runner) => options.getInteractor?.(device, runner),
+        })
+      : {}),
+    ...(facts.operations.captureScreenshot.available
+      ? bindProviderScreenshotInteractor({
           device,
           signal,
           resolveInteractor: (runner) => options.getInteractor?.(device, runner),
@@ -247,14 +257,7 @@ function bindWebDriverPlatformRuntime(
 }
 
 function webDriverFacts(
-  options: Readonly<{
-    owner: Extract<RuntimeOwnerRef, { kind: 'provider-runtime' }>;
-    ownsDevice(device: DeviceInfo): boolean;
-    isSessionActive?(device: DeviceInfo): boolean;
-    deployment?: WebDriverPlatformDeploymentRuntime;
-    snapshotAvailable?: boolean;
-    getInteractor?(device: DeviceInfo, runner?: RunnerContext): Interactor | undefined;
-  }>,
+  options: Omit<WebDriverPlatformRuntimeOptions, 'host'>,
   device: DeviceInfo,
 ): RuntimeFacts<PlatformRuntimeOperations> {
   if (!webDriverSessionActive(options, device)) {
@@ -263,6 +266,7 @@ function webDriverFacts(
       appDeployment: inactiveSession,
       network: inactiveSession,
       screenRecording: inactiveSession,
+      screenshot: inactiveSession,
       viewport: inactiveSession,
       lifecycle: applicationLifecycleOperationFacts({
         resolveOpenTarget: inactiveSession,
@@ -283,9 +287,17 @@ function webDriverFacts(
     appDeployment: deploymentUnavailable,
     network: appLogUnavailable,
     screenRecording: recordingUnavailable,
+    screenshot: screenshotUnavailable,
     viewport: viewportUnavailable,
     lifecycle: webDriverLifecycleFacts(device),
   });
+  // Both capture cells need the same reachability: an interactor this provider can drive, on a
+  // device shape it supports. Each then adds its own declared-capability gate.
+  const reachable = options.getInteractor !== undefined && webDriverInteractorDevice(device);
+  const snapshotCell =
+    reachable && options.snapshotAvailable !== false ? available : snapshotUnavailable;
+  const screenshotCell =
+    reachable && options.screenshotAvailable !== false ? available : screenshotUnavailable;
   return Object.freeze({
     device: unavailable.device,
     operations: {
@@ -297,20 +309,11 @@ function webDriverFacts(
       appState: appStateUnavailable,
       networkDump: available,
       ...snapshotRuntimeOperationFacts({
-        capture:
-          options.snapshotAvailable !== false &&
-          options.getInteractor !== undefined &&
-          webDriverSnapshotDevice(device)
-            ? available
-            : snapshotUnavailable,
+        capture: snapshotCell,
         customActions: snapshotCustomActionsUnavailable,
-        withoutActiveApp:
-          options.snapshotAvailable !== false &&
-          options.getInteractor !== undefined &&
-          webDriverSnapshotDevice(device)
-            ? available
-            : snapshotUnavailable,
+        withoutActiveApp: snapshotCell,
       }),
+      ...screenshotRuntimeOperationFacts({ capture: screenshotCell }),
       ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
       ensureReady: available,
       bootTarget: available,
@@ -325,7 +328,8 @@ function webDriverFacts(
   });
 }
 
-function webDriverSnapshotDevice(device: DeviceInfo): boolean {
+/** The device shapes this provider can reach at all through its own WebDriver interactor. */
+function webDriverInteractorDevice(device: DeviceInfo): boolean {
   return (
     device.kind === 'device' &&
     device.target === 'mobile' &&

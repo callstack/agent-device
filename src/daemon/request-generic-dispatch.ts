@@ -1,40 +1,66 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SettleObservation } from '@agent-device/contracts/interaction';
-import { commandSupportsSettleObservation } from '../core/command-descriptor/registry.ts';
+import {
+  commandSupportsSettleObservation,
+  commandUsesDeviceRuntimeExecution,
+} from '../core/command-descriptor/registry.ts';
 import { dispatchCommand } from '../core/dispatch.ts';
 import { requireCommandSupported } from './handlers/response.ts';
-import { SessionStore } from './session-store.ts';
+import type { SessionStore } from './session-store.ts';
 import type { DaemonCommandContext } from './context.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
-import { buildSnapshotState, captureSnapshotData } from './handlers/snapshot-capture.ts';
-import { setSessionSnapshot } from './session-snapshot.ts';
-import {
-  dispatchScreenshotViaRuntime,
-  type ScreenshotOutputPlacement,
-} from './screenshot-runtime.ts';
 import {
   ensureAndroidBlockingSystemDialogReady,
   recoverAndroidBlockingSystemDialog,
 } from './android-system-dialog.ts';
-import { annotateScreenshotWithRefs } from './screenshot-overlay.ts';
 import { markDeferredInteractionOutcome } from './deferred-interaction-outcome.ts';
 import {
   augmentScrollVisualizationResult,
   recordTouchVisualizationEvent,
 } from './recording-gestures.ts';
-import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { retiredScreenshotMaxSizeFlagError } from '@agent-device/contracts/capture';
+import { normalizeError } from '@agent-device/kernel/errors';
 import { expireRefFrame } from './ref-frame.ts';
 import {
   resolveRefFrameEffect,
   shouldGuardAndroidBlockingDialog,
 } from './daemon-command-registry.ts';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';
-import {
-  assertSupportedScreenshotPixelDensity,
-  readScreenshotResultMetadata,
-} from '../utils/screenshot-density.ts';
 import { buildActionEventResult } from './session-event-action-presentation.ts';
+
+export type GenericPlatformExecutionParams = {
+  session: SessionState;
+  sessionName: string;
+  logPath: string;
+  command: string;
+  request: DaemonRequest;
+  positionals: string[];
+  out: string | undefined;
+  dispatchContext: DaemonCommandContext;
+};
+
+/**
+ * What actually performs a generic leaf's platform work. Legacy leaves get
+ * {@link executeGenericPlatformCommand}; a command migrated onto a request-bound device runtime
+ * supplies its own already-admitted, already-bound closure instead (ADR 0019).
+ */
+export type GenericPlatformExecution = (
+  params: GenericPlatformExecutionParams,
+) => Promise<Record<string, unknown> | void>;
+
+/**
+ * What the session action records for this request. A runtime-owned leaf may normalize its
+ * arguments (a screenshot destination is a user-typed path) and records the normalized form.
+ */
+export type RecordedGenericRequest = Readonly<{
+  positionals: string[];
+  flags: Record<string, unknown>;
+}>;
+
+/** What a runtime-owned generic leaf resolves to before the dispatcher runs: a refusal, or the
+ * bound execution plus whatever the session action should record for it. */
+export type ResolvedGenericExecution =
+  | Readonly<{ ok: false; response: DaemonResponse }>
+  | Readonly<{ ok: true; execute: GenericPlatformExecution; recorded?: RecordedGenericRequest }>;
 
 export async function dispatchGenericCommand(params: {
   req: DaemonRequest;
@@ -47,7 +73,8 @@ export async function dispatchGenericCommand(params: {
     appBundleId?: string,
     traceLogPath?: string,
   ) => DaemonCommandContext;
-  executePlatformCommand: typeof executeGenericPlatformCommand;
+  executePlatformCommand: GenericPlatformExecution;
+  recordedRequest?: RecordedGenericRequest;
 }): Promise<DaemonResponse> {
   const { req, session, logPath, sessionStore, contextFromFlags } = params;
   const platformCommand = req.command;
@@ -70,8 +97,11 @@ export async function dispatchGenericCommand(params: {
   const preflightReadiness = await ensureNoAndroidBlockingDialogReady(session, platformCommand);
   if ('response' in preflightReadiness) return preflightReadiness.response;
 
-  const { resolvedPositionals, resolvedOut, recordedPositionals, recordedFlags } =
-    resolveCommandPositionals(req);
+  const resolvedPositionals = req.positionals ?? [];
+  const recorded = params.recordedRequest ?? {
+    positionals: resolvedPositionals,
+    flags: req.flags ?? {},
+  };
 
   const actionStartedAt = Date.now();
   const dispatchContext = {
@@ -86,50 +116,73 @@ export async function dispatchGenericCommand(params: {
   if (resolveRefFrameEffect(req) === 'may-invalidate') {
     expireRefFrame(session);
   }
-  let data = await params.executePlatformCommand({
+  const data = await params.executePlatformCommand({
     session,
     sessionName: params.sessionName,
     logPath,
     command: platformCommand,
     request: req,
     positionals: resolvedPositionals,
-    out: resolvedOut,
+    out: req.flags?.out,
     dispatchContext,
   });
-  const postflightReadiness = await ensureNoAndroidBlockingDialogReady(
-    session,
-    platformCommand,
-    'after-command',
-  );
-  if ('response' in postflightReadiness) return postflightReadiness.response;
-  if (
-    'status' in preflightReadiness &&
-    preflightReadiness.status === 'recovered' &&
-    (!data || typeof data === 'object')
-  ) {
-    data ??= {};
-    data.warning = preflightReadiness.warning;
-  }
-
-  const actionFinishedAt = Date.now();
-  recordVisualizationAndAction({
+  return await finalizeGenericCommand({
+    req,
     session,
     sessionStore,
     command: platformCommand,
     resolvedPositionals,
-    recordedPositionals,
-    recordedFlags,
+    recorded,
     data,
     actionStartedAt,
-    actionFinishedAt,
+    preflightReadiness,
+    observeSettle: settlePlan.observe,
+  });
+}
+
+/**
+ * Everything a generic leaf owes after its platform work returns: the post-command dialog check,
+ * the recovered-dialog warning, the recorded action, deferred interaction markers, and the opt-in
+ * settle observation — in that order, because each one depends on the previous having happened.
+ */
+async function finalizeGenericCommand(params: {
+  req: DaemonRequest;
+  session: SessionState;
+  sessionStore: SessionStore;
+  command: string;
+  resolvedPositionals: string[];
+  recorded: RecordedGenericRequest;
+  data: Record<string, unknown> | void;
+  actionStartedAt: number;
+  preflightReadiness: AndroidDialogReadiness;
+  observeSettle?: () => Promise<SettleObservation | undefined>;
+}): Promise<DaemonResponse> {
+  const { req, session, sessionStore, command } = params;
+  const postflightReadiness = await ensureNoAndroidBlockingDialogReady(
+    session,
+    command,
+    'after-command',
+  );
+  if ('response' in postflightReadiness) return postflightReadiness.response;
+
+  let data = withRecoveredDialogWarning(params.data, params.preflightReadiness);
+  recordVisualizationAndAction({
+    session,
+    sessionStore,
+    command,
+    resolvedPositionals: params.resolvedPositionals,
+    recorded: params.recorded,
+    data,
+    actionStartedAt: params.actionStartedAt,
+    actionFinishedAt: Date.now(),
     flags: req.flags ?? {},
     clientArtifactPaths: req.meta?.clientArtifactPaths,
   });
 
   markDeferredInteractionOutcome({
     session,
-    command: platformCommand,
-    positionals: resolvedPositionals,
+    command,
+    positionals: params.resolvedPositionals,
     flags: req.flags,
   });
 
@@ -137,12 +190,22 @@ export async function dispatchGenericCommand(params: {
   // in the #1542 post-gesture stabilization, and after the recorded action so
   // the session history keeps the ACTION's own timing rather than the
   // observation wait that followed it.
-  if (settlePlan.observe) {
-    const settle = await settlePlan.observe();
+  if (params.observeSettle) {
+    const settle = await params.observeSettle();
     if (settle) data = { ...(data ?? {}), settle };
   }
 
   return { ok: true, data: data ?? {} };
+}
+
+/** A dialog the preflight had to dismiss is disclosed on the result it made possible. */
+function withRecoveredDialogWarning(
+  data: Record<string, unknown> | void,
+  preflight: AndroidDialogReadiness,
+): Record<string, unknown> | void {
+  if (!('status' in preflight) || preflight.status !== 'recovered') return data;
+  if (data && typeof data !== 'object') return data;
+  return { ...(data ?? {}), warning: preflight.warning };
 }
 
 /**
@@ -181,13 +244,16 @@ function usesSettleFlags(flags: CommandFlags | undefined): boolean {
   return flags?.settle === true || flags?.settleQuietMs !== undefined;
 }
 
+type AndroidDialogReadiness =
+  | { status: 'clear' }
+  | { status: 'recovered'; warning: string }
+  | { response: DaemonResponse };
+
 async function ensureNoAndroidBlockingDialogReady(
   session: SessionState,
   platformCommand: string,
   phase: 'before-command' | 'after-command' = 'before-command',
-): Promise<
-  { status: 'clear' } | { status: 'recovered'; warning: string } | { response: DaemonResponse }
-> {
+): Promise<AndroidDialogReadiness> {
   if (session.device.platform !== 'android' || !shouldGuardAndroidBlockingDialog(platformCommand)) {
     return { status: 'clear' };
   }
@@ -209,10 +275,11 @@ async function ensureGenericCommandReady(
   session: SessionState,
   platformCommand: string,
 ): Promise<DaemonResponse | null> {
-  const unsupported =
-    platformCommand === 'viewport'
-      ? null
-      : requireCommandSupported(platformCommand, session.device, { hint: true });
+  // A device-runtime command has no capability bucket: its exact owner facts already admitted it
+  // (or refused it) before this route was reached.
+  const unsupported = commandUsesDeviceRuntimeExecution(platformCommand)
+    ? null
+    : requireCommandSupported(platformCommand, session.device, { hint: true });
   if (unsupported) return unsupported;
   if (
     session.device.platform !== 'android' ||
@@ -232,156 +299,19 @@ async function ensureGenericCommandReady(
   };
 }
 
-export async function executeGenericPlatformCommand(params: {
-  session: SessionState;
-  sessionName: string;
-  logPath: string;
-  command: string;
-  request: DaemonRequest;
-  positionals: string[];
-  out: string | undefined;
-  dispatchContext: DaemonCommandContext;
-}): Promise<Record<string, unknown> | void> {
+export const executeGenericPlatformCommand: GenericPlatformExecution = async (params) => {
   const { session, command, positionals, out, dispatchContext } = params;
-  if (command === 'screenshot') {
-    return await executeScreenshotPlatformCommand(params);
-  }
   return await dispatchCommand(session.device, command, positionals, out, {
     ...dispatchContext,
   });
-}
-
-async function executeScreenshotPlatformCommand(params: {
-  session: SessionState;
-  sessionName: string;
-  logPath: string;
-  request: DaemonRequest;
-  positionals: string[];
-  out: string | undefined;
-  dispatchContext: DaemonCommandContext;
-}): Promise<Record<string, unknown>> {
-  const { session, request, positionals, out, dispatchContext } = params;
-  const retiredMaxSize = retiredScreenshotMaxSizeFlagError('screenshot', request.flags);
-  if (retiredMaxSize) throw new AppError('INVALID_ARGS', retiredMaxSize);
-  assertSupportedScreenshotPixelDensity(session.device, request.flags?.screenshotPixelDensity);
-  const data = await dispatchScreenshotViaRuntime({
-    session,
-    sessionName: params.sessionName,
-    outPath: positionals[0] ?? out,
-    outputPlacement: resolveScreenshotOutputPlacement(request),
-    dispatchContext,
-  });
-  if (typeof data.path !== 'string') {
-    return data;
-  }
-  if (request.flags?.overlayRefs) {
-    await applyScreenshotOverlay(session, data, params.logPath);
-  }
-  Object.assign(
-    data,
-    await readScreenshotResultMetadata({
-      device: session.device,
-      path: data.path,
-      requestedPixelDensity: request.flags?.screenshotPixelDensity,
-      scale: request.flags?.screenshotScale,
-    }),
-  );
-  return data;
-}
-
-function resolveScreenshotOutputPlacement(req: DaemonRequest): ScreenshotOutputPlacement {
-  if (req.command !== 'screenshot') return 'default';
-  if ((req.positionals ?? [])[0]) return 'positional';
-  if (req.flags?.out) return 'out';
-  return 'default';
-}
-
-function resolveCommandPositionals(req: DaemonRequest): {
-  resolvedPositionals: string[];
-  resolvedOut: string | undefined;
-  recordedPositionals: string[];
-  recordedFlags: Record<string, unknown>;
-} {
-  return req.command === 'screenshot'
-    ? resolveScreenshotCommandPositionals(req)
-    : resolveDefaultCommandPositionals(req);
-}
-
-function resolveDefaultCommandPositionals(req: DaemonRequest): {
-  resolvedPositionals: string[];
-  resolvedOut: string | undefined;
-  recordedPositionals: string[];
-  recordedFlags: Record<string, unknown>;
-} {
-  const positionals = req.positionals ?? [];
-  return {
-    resolvedPositionals: positionals,
-    resolvedOut: req.flags?.out,
-    recordedPositionals: positionals,
-    recordedFlags: req.flags ?? {},
-  };
-}
-
-function resolveScreenshotCommandPositionals(req: DaemonRequest): {
-  resolvedPositionals: string[];
-  resolvedOut: string | undefined;
-  recordedPositionals: string[];
-  recordedFlags: Record<string, unknown>;
-} {
-  const positionals = req.positionals ?? [];
-  const resolvedPositionals = resolveScreenshotPositionals(positionals, req.meta?.cwd);
-  const resolvedOut = resolveScreenshotOut(req.flags?.out, req.meta?.cwd);
-  const recordedPositionals = resolvedPositionals;
-  const recordedFlags = resolvedOut
-    ? { ...(req.flags ?? {}), out: resolvedOut }
-    : (req.flags ?? {});
-  return { resolvedPositionals, resolvedOut, recordedPositionals, recordedFlags };
-}
-
-function resolveScreenshotPositionals(positionals: string[], cwd: string | undefined): string[] {
-  const outPath = positionals[0];
-  if (!outPath) return positionals;
-  return [SessionStore.expandHome(outPath, cwd), ...positionals.slice(1)];
-}
-
-function resolveScreenshotOut(
-  out: string | undefined,
-  cwd: string | undefined,
-): string | undefined {
-  return out ? SessionStore.expandHome(out, cwd) : out;
-}
-
-async function applyScreenshotOverlay(
-  session: SessionState,
-  data: Record<string, unknown>,
-  logPath: string,
-): Promise<void> {
-  const overlaySnapshotFlags = {
-    snapshotInteractiveOnly: true,
-  } satisfies CommandFlags;
-  const overlaySnapshotData = await captureSnapshotData({
-    device: session.device,
-    session,
-    flags: overlaySnapshotFlags,
-    logPath,
-    snapshotScope: undefined,
-  });
-  const overlaySnapshot = buildSnapshotState(overlaySnapshotData, overlaySnapshotFlags);
-  setSessionSnapshot(session, overlaySnapshot);
-  const overlayRefs = await annotateScreenshotWithRefs({
-    screenshotPath: data.path as string,
-    snapshot: overlaySnapshot,
-  });
-  data.overlayRefs = overlayRefs;
-}
+};
 
 function recordVisualizationAndAction(params: {
   session: SessionState;
   sessionStore: SessionStore;
   command: string;
   resolvedPositionals: string[];
-  recordedPositionals: string[];
-  recordedFlags: Record<string, unknown>;
+  recorded: RecordedGenericRequest;
   data: Record<string, unknown> | void;
   actionStartedAt: number;
   actionFinishedAt: number;
@@ -393,8 +323,7 @@ function recordVisualizationAndAction(params: {
     sessionStore,
     command,
     resolvedPositionals,
-    recordedPositionals,
-    recordedFlags,
+    recorded,
     data,
     actionStartedAt,
     actionFinishedAt,
@@ -418,8 +347,8 @@ function recordVisualizationAndAction(params: {
   );
   sessionStore.recordAction(session, {
     command,
-    positionals: recordedPositionals,
-    flags: recordedFlags,
+    positionals: recorded.positionals,
+    flags: recorded.flags,
     result: buildActionEventResult({ command, meta: { clientArtifactPaths } }, data ?? {}),
   });
 }

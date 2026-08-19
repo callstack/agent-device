@@ -29,6 +29,7 @@ test('generic unavailable binding preserves exact provider ownership and mode', 
   const binding = createUnavailablePlatformRuntimeBinding(device, owner, {
     appLog: { available: false, reason: 'unsupported-provider-mode' },
     network: { available: false, reason: 'owner-capability-missing' },
+    screenshot: { available: false, reason: 'unsupported-device-kind' },
     viewport: { available: false, reason: 'unsupported-platform-leaf' },
     lifecycle,
   });
@@ -38,6 +39,11 @@ test('generic unavailable binding preserves exact provider ownership and mode', 
   assert.deepEqual(binding.facts.operations.setViewport, {
     available: false,
     reason: 'unsupported-platform-leaf',
+  });
+  // Both capture cells are owner-stated, so neither inherits the network gap's reason.
+  assert.deepEqual(binding.facts.operations.captureScreenshot, {
+    available: false,
+    reason: 'unsupported-device-kind',
   });
   assert.deepEqual(binding.operations, {});
   await binding[Symbol.asyncDispose]();

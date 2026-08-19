@@ -30,6 +30,7 @@ import {
   prepareAppleRunnerRuntimeUse,
   runtimeCommandRuntimePlanUses,
   screenRecordingRuntimePlanUses,
+  screenshotRuntimePlanUses,
   shutdownTargetUse,
   viewportRuntimeUse,
 } from '@agent-device/contracts/platform';
@@ -1351,17 +1352,22 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'screenshot',
     deviceClaimPolicy: 'require-owner',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/screenshot.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? {
+          ownerFiles: [
+            'src/commands/capture/screenshot.ts',
+            'src/daemon/screenshot-runtime.ts',
+          ] as const,
+        }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'core',
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
     daemon: { route: 'generic', refFrameEffect: 'preserve' },
-    dispatch: {},
-    capability: ALL_DEVICE_COMMAND_CAPABILITY,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    platformExecution: { kind: 'device-runtime', uses: screenshotRuntimePlanUses },
   },
   {
     name: 'viewport',
@@ -1712,6 +1718,18 @@ export function commandSupportsSettleObservation(command: string | undefined): b
 
 export function commandSupportsVerifyEvidence(command: string | undefined): boolean {
   return resolveCommandPostActionObservationSupport(command) === 'settle-and-verify';
+}
+
+/**
+ * Whether a command's platform behavior comes from a request-bound device runtime (ADR 0019).
+ * Admission for those commands is the owner's exact operation facts, so a route must never also
+ * consult a capability bucket for them — and a migrated command has no bucket to consult. Reading
+ * the discriminator here rather than naming commands at each route means the next unit's
+ * descriptor flip is the whole change.
+ */
+export function commandUsesDeviceRuntimeExecution(command: string | undefined): boolean {
+  if (command === undefined) return false;
+  return COMMAND_DESCRIPTOR_BY_NAME.get(command)?.platformExecution.kind === 'device-runtime';
 }
 
 /**

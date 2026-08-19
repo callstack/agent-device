@@ -8,8 +8,10 @@ import type {
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
+  bindLocalScreenshotInteractor,
   bindLocalSnapshotInteractor,
   localRuntimeOwner,
+  screenshotRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
   sameRuntimeOwner,
   viewportRuntimeOperationFacts,
@@ -168,6 +170,13 @@ function bindWebRuntime(
           resolveInteractor: host.localInteractors.resolve,
         })
       : {}),
+    ...(facts.operations.captureScreenshot.available
+      ? bindLocalScreenshotInteractor({
+          device,
+          signal,
+          resolveInteractor: host.localInteractors.resolve,
+        })
+      : {}),
     ...(facts.operations.setViewport.available
       ? {
           setViewport: async (input) => {
@@ -208,6 +217,8 @@ function webRuntimeFacts(
     reason: 'owner-capability-missing',
     hint: 'network is not supported by this web provider',
   } as const);
+  // One browser-device cell, read by every operation this runtime binds through the interactor.
+  const browserDevice = device.kind === 'device' ? available : openTargetKindUnavailable;
   return Object.freeze({
     device: {
       family: 'web',
@@ -227,13 +238,12 @@ function webRuntimeFacts(
       screenRecordingReattach: recordingAvailable ? available : recordingUnavailable,
       screenRecordingCleanup: recordingAvailable ? available : recordingUnavailable,
       ...snapshotRuntimeOperationFacts({
-        capture: device.kind === 'device' ? available : openTargetKindUnavailable,
+        capture: browserDevice,
         customActions: snapshotCustomActionsUnavailable,
-        withoutActiveApp: device.kind === 'device' ? available : openTargetKindUnavailable,
+        withoutActiveApp: browserDevice,
       }),
-      ...viewportRuntimeOperationFacts({
-        setViewport: device.kind === 'device' ? available : openTargetKindUnavailable,
-      }),
+      ...screenshotRuntimeOperationFacts({ capture: browserDevice }),
+      ...viewportRuntimeOperationFacts({ setViewport: browserDevice }),
       ensureReady: readinessUnavailable,
       bootTarget: readinessUnavailable,
       bootTargetHeadless: readinessUnavailable,

@@ -10,9 +10,11 @@ import type {
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
+  bindLocalScreenshotInteractor,
   createUnavailablePlatformRuntimeFacts,
   localRuntimeOwner,
   sameRuntimeOwner,
+  screenshotRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
 } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -45,6 +47,10 @@ const closeTargetKindUnavailable = unavailableLinuxRuntimeFact(
 const snapshotKindUnavailable = unavailableLinuxRuntimeFact(
   'unsupported-device-kind',
   'snapshot is supported only for the Linux desktop device.',
+);
+const screenshotKindUnavailable = unavailableLinuxRuntimeFact(
+  'unsupported-device-kind',
+  'screenshot is supported only for the Linux desktop device.',
 );
 const snapshotCustomActionsUnavailable = unavailableLinuxRuntimeFact(
   'unsupported-platform-leaf',
@@ -80,6 +86,13 @@ export function createLinuxPlatformRuntime(host: PlatformRuntimeHost): PlatformR
           ...(facts.operations.captureSnapshot.available
             ? linuxSnapshotOperations(host, request)
             : {}),
+          ...(facts.operations.captureScreenshot.available
+            ? bindLocalScreenshotInteractor({
+                device: request.device,
+                signal: request.scope.signal,
+                resolveInteractor: host.localInteractors.resolve,
+              })
+            : {}),
         }),
         [Symbol.asyncDispose]: async () => undefined,
       }) satisfies DeviceBinding<PlatformRuntimeOperations>;
@@ -94,6 +107,7 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
   const unavailable = createUnavailablePlatformRuntimeFacts(device, linuxOwner, {
     appLog: unsupportedPlatformLeaf,
     network: unsupportedPlatformLeaf,
+    screenshot: screenshotKindUnavailable,
     snapshot: snapshotKindUnavailable,
     viewport: unsupportedPlatformLeaf,
     readiness: unsupportedPlatformLeaf,
@@ -117,6 +131,9 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
         capture: device.kind === 'device' ? supported : snapshotKindUnavailable,
         customActions: snapshotCustomActionsUnavailable,
         withoutActiveApp: device.kind === 'device' ? supported : snapshotKindUnavailable,
+      }),
+      ...screenshotRuntimeOperationFacts({
+        capture: device.kind === 'device' ? supported : screenshotKindUnavailable,
       }),
     },
   });

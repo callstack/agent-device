@@ -8,7 +8,9 @@ import type {
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
+  bindLocalScreenshotInteractor,
   localRuntimeOwner,
+  screenshotRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
   viewportRuntimeOperationFacts,
 } from '@agent-device/contracts/platform';
@@ -101,6 +103,14 @@ const snapshotCustomActionsUnavailable = Object.freeze({
   reason: 'unsupported-platform-leaf',
   hint: 'Re-run without --actions, or target an iOS simulator.',
 } as const);
+const screenshotWatchOsUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'screenshot is not supported on watchOS because XCUITest cannot drive watchOS UI.',
+} as const);
+const screenshotKindUnavailable = unsupportedAppleDeviceKind(
+  'screenshot is supported only for Apple simulators and devices.',
+);
 const snapshotActiveAppRequired = Object.freeze({
   available: false,
   reason: 'owner-capability-missing',
@@ -212,6 +222,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         screenRecordingReattach: recordingFacts,
         screenRecordingCleanup: recordingFacts,
         ...appleSnapshotFacts(device),
+        ...screenshotRuntimeOperationFacts({ capture: appleScreenshotFact(device) }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ensureReady: readiness,
         bootTarget: boot,
@@ -255,6 +266,13 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
             ? bindAppleSnapshotRuntime(host, {
                 device: request.device,
                 signal: request.scope.signal,
+              })
+            : {}),
+          ...(facts.operations.captureScreenshot.available
+            ? bindLocalScreenshotInteractor({
+                device: request.device,
+                signal: request.scope.signal,
+                resolveInteractor: host.localInteractors.resolve,
               })
             : {}),
           ...(facts.operations.ensureReady.available
@@ -309,6 +327,18 @@ function appleSnapshotFact(device: DeviceInfo) {
   return device.kind === 'simulator' || device.kind === 'device'
     ? available
     : snapshotKindUnavailable;
+}
+
+/**
+ * macOS surface selection (app window vs desktop/menubar) lives inside the Apple interactor's own
+ * capture, so the ordinary local interactor binding covers every admitted Apple cell — unlike
+ * snapshot, whose desktop surfaces come from a separate host port.
+ */
+function appleScreenshotFact(device: DeviceInfo) {
+  if (resolveDeviceAppleOs(device) === 'watchos') return screenshotWatchOsUnavailable;
+  return device.kind === 'simulator' || device.kind === 'device'
+    ? available
+    : screenshotKindUnavailable;
 }
 
 function appleSnapshotFacts(device: DeviceInfo) {

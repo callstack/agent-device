@@ -237,6 +237,8 @@ test('captures through only the active exact WebDriver interactor', async () => 
   expect(binding.facts.operations.captureSnapshotWithoutActiveApp).toEqual({ available: true });
   expect(binding.facts.operations.setViewport).toMatchObject({ available: false });
   expect(binding.operations.setViewport).toBeUndefined();
+  expect(binding.facts.operations.captureScreenshot).toEqual({ available: true });
+  expect(binding.operations.captureScreenshot).toBeTypeOf('function');
   await expect(
     binding.operations.captureSnapshot?.({ options: { interactiveOnly: true } }),
   ).resolves.toEqual({ backend: 'android', nodes: [] });
@@ -248,9 +250,15 @@ test('captures through only the active exact WebDriver interactor', async () => 
 });
 
 test.each([
-  ['inactive session', { isSessionActive: () => false, snapshotAvailable: true }],
-  ['unsupported capability', { isSessionActive: () => true, snapshotAvailable: false }],
-] as const)('fails closed for an %s snapshot owner cell', async (_name, state) => {
+  [
+    'inactive session',
+    { isSessionActive: () => false, snapshotAvailable: true, screenshotAvailable: true },
+  ],
+  [
+    'unsupported capability',
+    { isSessionActive: () => true, snapshotAvailable: false, screenshotAvailable: false },
+  ],
+] as const)('fails closed for an %s capture owner cell', async (_name, state) => {
   const getInteractor = vi.fn(() => ({}) as unknown as Interactor);
   const owner = createWebDriverPlatformRuntimeOwner({
     host: host(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
@@ -264,6 +272,7 @@ test.each([
   expect(facts.operations.captureSnapshotWithCustomActions.available).toBe(false);
   expect(facts.operations.captureSnapshotWithoutActiveApp.available).toBe(false);
   expect(facts.operations.setViewport.available).toBe(false);
+  expect(facts.operations.captureScreenshot.available).toBe(false);
   if (state.isSessionActive()) {
     const binding = await owner.bind({
       device,

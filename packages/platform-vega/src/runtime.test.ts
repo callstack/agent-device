@@ -136,6 +136,11 @@ test.each([
     });
     expect(binding.operations.captureSnapshot).toBeUndefined();
     expect(binding.facts.operations.setViewport).toMatchObject({ available: false });
+    expect(binding.facts.operations.captureScreenshot).toMatchObject({
+      available: false,
+      hint: 'screenshot is not supported on Vega OS: the Vega runtime exposes remote navigation only.',
+    });
+    expect(binding.operations.captureScreenshot).toBeUndefined();
     expect(binding.operations.setViewport).toBeUndefined();
     expectLifecycleFacts(binding, legacy);
   },

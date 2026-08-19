@@ -17,6 +17,7 @@ import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/de
 import { LeaseRegistry } from '../lease-registry.ts';
 import { activateCompleteRefFrame } from '../ref-frame.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
+import type { GenericPlatformExecutionParams } from '../request-generic-dispatch.ts';
 import { resolveBoundViewportRuntime } from '../viewport-runtime.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 
@@ -42,6 +43,26 @@ const unavailable = Object.freeze({
   reason: 'owner-capability-missing' as const,
   hint: 'viewport is not supported by the exact runtime owner',
 });
+
+/** Viewport's bound execution ignores the dispatcher's params; it closes over its own input. */
+function viewportExecutionParams(): GenericPlatformExecutionParams {
+  const session = makeSession('viewport-runtime', { device: webDevice });
+  return {
+    session,
+    sessionName: session.name,
+    logPath: '/tmp/daemon.log',
+    command: 'viewport',
+    request: {
+      command: 'viewport',
+      positionals: ['1280', '900'],
+      token: 't',
+      session: session.name,
+    },
+    positionals: ['1280', '900'],
+    out: undefined,
+    dispatchContext: {},
+  };
+}
 
 function runtimeHarness(
   fact: RuntimeOperationFact = available,
@@ -86,13 +107,13 @@ test('resolves one admitted binding and exposes one normalized viewport operatio
     bindDevice: harness.bindDevice,
   });
 
-  expect(resolved).toBeTypeOf('function');
-  if (typeof resolved !== 'function') return;
+  expect(resolved.ok).toBe(true);
+  if (!resolved.ok) return;
   expect(harness.inspectFacts).toHaveBeenCalledTimes(1);
   expect(harness.inspectFacts).toHaveBeenCalledWith(webDevice);
   expect(harness.bindDevice).toHaveBeenCalledTimes(1);
   expect(harness.bindDevice).toHaveBeenCalledWith(webDevice, viewportRuntimeUse);
-  expect(await resolved()).toEqual({
+  expect(await resolved.execute(viewportExecutionParams())).toEqual({
     width: 1280,
     height: 900,
     message: 'Viewport set: 1280x900',
@@ -128,10 +149,13 @@ test('rejects an unavailable exact-owner fact before binding', async () => {
 
   expect(resolved).toEqual({
     ok: false,
-    error: {
-      code: 'UNSUPPORTED_OPERATION',
-      message: 'viewport is not supported on this device',
-      hint: unavailable.hint,
+    response: {
+      ok: false,
+      error: {
+        code: 'UNSUPPORTED_OPERATION',
+        message: 'viewport is not supported on this device',
+        hint: unavailable.hint,
+      },
     },
   });
   expect(harness.inspectFacts).toHaveBeenCalledTimes(1);
@@ -155,10 +179,13 @@ test('preserves the Apple viewport recovery hint through admission', async () =>
 
   expect(resolved).toEqual({
     ok: false,
-    error: {
-      code: 'UNSUPPORTED_OPERATION',
-      message: 'viewport is not supported on this device',
-      hint,
+    response: {
+      ok: false,
+      error: {
+        code: 'UNSUPPORTED_OPERATION',
+        message: 'viewport is not supported on this device',
+        hint,
+      },
     },
   });
   expect(harness.inspectFacts).toHaveBeenCalledOnce();

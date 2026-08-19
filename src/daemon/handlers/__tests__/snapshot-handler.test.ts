@@ -1,7 +1,6 @@
 import { test, expect, vi, afterEach, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { PNG } from '../../../utils/png.ts';
 import { handleSnapshotCommands as handleProductionSnapshotCommands } from '../snapshot.ts';
 import { withSessionlessRunnerCleanup } from '../snapshot-session.ts';
 import { captureSnapshot } from '../snapshot-capture.ts';
@@ -16,7 +15,10 @@ import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
 import { snapshotCliOutput } from '../../../commands/capture/output.ts';
 import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
-import { snapshotRuntimeFixture } from '../../__tests__/snapshot-runtime-fixture.ts';
+import {
+  fixtureScreenshotCaptures,
+  snapshotRuntimeFixture,
+} from '../../__tests__/snapshot-runtime-fixture.ts';
 import type { BindDeviceRuntime } from '../../request-runtime-binding.ts';
 
 const dispatchCommandMock = vi.hoisted(() => vi.fn(async (..._args: unknown[]) => ({})));
@@ -178,17 +180,6 @@ beforeEach(() => {
   mockBuildIosOpenCommandHint.mockResolvedValue(undefined);
 });
 
-function writeSolidPng(filePath: string, width = 390, height = 844): void {
-  const png = new PNG({ width, height });
-  for (let index = 0; index < png.data.length; index += 4) {
-    png.data[index] = 255;
-    png.data[index + 1] = 255;
-    png.data[index + 2] = 255;
-    png.data[index + 3] = 255;
-  }
-  fs.writeFileSync(filePath, PNG.sync.write(png));
-}
-
 function makeAndroidTimeoutEvidenceSession(sessionName: string): SessionStore {
   const sessionStore = makeSessionStore();
   const session = makeSession(sessionName, androidDevice);
@@ -212,14 +203,8 @@ function makeAndroidTimeoutEvidenceSession(sessionName: string): SessionStore {
 }
 
 function mockAndroidTimeoutEvidenceDispatch(): void {
-  mockDispatch.mockImplementation(async (_device, command, positionals, _out, context) => {
+  mockDispatch.mockImplementation(async (_device, command) => {
     if (command === 'snapshot') throw androidSnapshotTimeoutError();
-    if (command === 'screenshot') {
-      const screenshotPath = positionals[0]!;
-      expect(context?.screenshotNoStabilize).toBe(true);
-      writeSolidPng(screenshotPath);
-      return { path: screenshotPath };
-    }
     return {};
   });
 }
@@ -884,7 +869,8 @@ test('snapshot timeout captures Android screenshot evidence with overlay refs', 
     sessionStore,
   });
   expectAndroidTimeoutEvidence(response);
-  expect(mockDispatch.mock.calls.map((call) => call[1])).toEqual(['snapshot', 'screenshot']);
+  expect(mockDispatch.mock.calls.map((call) => call[1])).toEqual(['snapshot']);
+  expect(fixtureScreenshotCaptures.at(-1)?.options).toMatchObject({ stabilize: false });
 });
 
 test('snapshot warns when recent snapshot node count collapses sharply', async () => {

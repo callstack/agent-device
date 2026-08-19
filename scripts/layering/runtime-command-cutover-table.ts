@@ -523,6 +523,30 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
       operationOwners: { setViewport: ['resolveBoundViewportRuntime'] },
     },
   },
+  {
+    rule: 'R39 screenshot-runtime-cutover',
+    command: 'screenshot',
+    subject: 'screen capture',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      // The command leaf, the daemon adapter that re-entered it, and the evidence capture that
+      // dispatched it directly. `captureSnapshot` is shared with the snapshot unit and stays.
+      routeNames: [
+        'handleScreenshotCommand',
+        'dispatchScreenshotViaRuntime',
+        'executeScreenshotPlatformCommand',
+        'resolveScreenshotOutputPlacement',
+      ],
+    },
+    runtimeTypeNames: ['ScreenshotRuntimeOperations'],
+    operations: { names: ['captureScreenshot'] },
+    singularExecution: {
+      routes: ['dispatchGenericCommand'],
+      operations: ['captureScreenshot'],
+      operationOwners: { captureScreenshot: ['selectScreenshotCapture'] },
+    },
+  },
 ];
 
 function snapshotRetiredDispatchProjectionProof(

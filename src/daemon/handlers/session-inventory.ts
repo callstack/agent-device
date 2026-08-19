@@ -281,6 +281,7 @@ const factOwnedCapabilityOperations: Readonly<
   close: ['closeApplication', 'finalizeApplicationClose'],
   prepare: ['prepareAppleRunner'],
   runtime: ['clearRuntimeHints'],
+  screenshot: ['captureScreenshot'],
   viewport: ['setViewport'],
 });
 

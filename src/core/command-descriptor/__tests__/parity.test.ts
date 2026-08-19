@@ -68,6 +68,7 @@ const NO_CAPABILITY_PUBLIC_COMMANDS = new Set<string>([
   PUBLIC_COMMANDS.reinstall,
   PUBLIC_COMMANDS.replay,
   PUBLIC_COMMANDS.shutdown,
+  PUBLIC_COMMANDS.screenshot,
   PUBLIC_COMMANDS.snapshot,
   PUBLIC_COMMANDS.test,
   PUBLIC_COMMANDS.trace,
@@ -202,6 +203,7 @@ test('platform dispatch command list is built from descriptor dispatch facets', 
 test('generic route commands that reach platform dispatch declare the dispatch facet', () => {
   const nonDispatchGenericCommands = new Set<string>([
     PUBLIC_COMMANDS.gesture,
+    PUBLIC_COMMANDS.screenshot,
     PUBLIC_COMMANDS.viewport,
   ]);
 

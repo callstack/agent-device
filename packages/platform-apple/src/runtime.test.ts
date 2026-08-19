@@ -104,8 +104,22 @@ test.each([
     hint: 'viewport resizes web targets only (--platform web). Apple screen geometry is fixed by the selected simulator or device type — open a different simulator to test another screen size.',
   });
   expect(binding.operations.setViewport).toBeUndefined();
+  expectAppleCaptureAvailability(binding, device);
   expectAppleSnapshotAvailability(binding, device);
 });
+
+/**
+ * watchOS is admitted by no capture cell: the Apple interactor cannot even be constructed for it,
+ * so the refusal is a fact rather than a throw from inside the leaf.
+ */
+function expectAppleCaptureAvailability(
+  binding: DeviceBinding<PlatformRuntimeOperations>,
+  device: DeviceInfo,
+): void {
+  const available = device.appleOs !== 'watchos';
+  expect(binding.facts.operations.captureScreenshot.available).toBe(available);
+  expect(binding.operations.captureScreenshot).toBeTypeOf(available ? 'function' : 'undefined');
+}
 
 function expectAppleSnapshotAvailability(
   binding: DeviceBinding<PlatformRuntimeOperations>,

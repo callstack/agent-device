@@ -1,7 +1,11 @@
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import { isSparseSnapshotQualityVerdict } from '../snapshot-quality/verdict.ts';
 import { contextFromFlags } from './context.ts';
-import { dispatchScreenshotViaRuntime } from './screenshot-runtime.ts';
+import { captureScreenshotArtifact } from './screenshot-runtime.ts';
+import {
+  resolveBoundScreenshotRuntime,
+  type ScreenshotRuntimeBindings,
+} from './screenshot-runtime-binding.ts';
 import type { DaemonRequest, SessionState } from './types.ts';
 
 export type SparseFallbackScreenshot = {
@@ -26,13 +30,15 @@ export type SparseFallbackScreenshot = {
  * `captureSnapshot` directly rather than through this runtime command, so a wait polling
  * an unreadable screen cannot turn into a screenshot per poll.
  */
-export async function captureSparseFallbackScreenshot(params: {
-  req: DaemonRequest;
-  session: SessionState | undefined;
-  sessionName: string;
-  logPath: string;
-  verdict: SnapshotQualityVerdict | undefined;
-}): Promise<SparseFallbackScreenshot | undefined> {
+export async function captureSparseFallbackScreenshot(
+  params: {
+    req: DaemonRequest;
+    session: SessionState | undefined;
+    sessionName: string;
+    logPath: string;
+    verdict: SnapshotQualityVerdict | undefined;
+  } & ScreenshotRuntimeBindings,
+): Promise<SparseFallbackScreenshot | undefined> {
   const session = params.session;
   if (!session) return undefined;
   if (!isSparseSnapshotQualityVerdict(params.verdict)) return undefined;
@@ -51,20 +57,31 @@ export async function captureSparseFallbackScreenshot(params: {
   };
 }
 
-async function captureFallbackScreenshotPath(params: {
-  req: DaemonRequest;
-  session: SessionState;
-  sessionName: string;
-  logPath: string;
-}): Promise<string | undefined> {
+async function captureFallbackScreenshotPath(
+  params: {
+    req: DaemonRequest;
+    session: SessionState;
+    sessionName: string;
+    logPath: string;
+  } & ScreenshotRuntimeBindings,
+): Promise<string | undefined> {
   const { req, session } = params;
   try {
-    const data = await dispatchScreenshotViaRuntime({
+    const capture = await resolveBoundScreenshotRuntime({
+      device: session.device,
+      overlayRefs: false,
+      inspectFacts: params.inspectFacts,
+      bindDevice: params.bindDevice,
+    });
+    // A target that cannot capture pixels owes the caller nothing here: the sparse verdict's own
+    // warning still carries the manual remedy.
+    if (!capture.ok) return undefined;
+    const data = await captureScreenshotArtifact({
       session,
       sessionName: params.sessionName,
       // No caller-supplied destination: the screenshot artifact adapter mints a temp
       // path, so the fallback never writes where an explicit `--out` would have.
-      outputPlacement: 'default',
+      captureScreenshot: capture.runtime.captureScreenshot,
       dispatchContext: contextFromFlags(
         params.logPath,
         // The request's own flags carry the toolchain selection (xctestrun file,
@@ -77,7 +94,7 @@ async function captureFallbackScreenshotPath(params: {
         req.meta,
       ),
     });
-    return typeof data.path === 'string' ? data.path : undefined;
+    return data.path;
   } catch {
     // A convenience on an already-degraded path. The sparse verdict's own warning still
     // carries the manual remedy, so a failed fallback must not fail the snapshot the

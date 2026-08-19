@@ -2,12 +2,16 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { DaemonResponse, SessionState } from './types.ts';
-import { dispatchCommand } from '../core/dispatch.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
-import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import type { ScreenshotOverlayRef } from '@agent-device/kernel/snapshot';
 import { contextFromFlags } from './context.ts';
 import { annotateScreenshotWithRefs } from './screenshot-overlay.ts';
+import { screenshotExecutionFromContext } from './screenshot-runtime.ts';
+import {
+  resolveBoundScreenshotRuntime,
+  type ScreenshotRuntimeBindings,
+} from './screenshot-runtime-binding.ts';
 
 type CapturedAndroidSnapshotTimeoutEvidenceBase = {
   path: string;
@@ -37,13 +41,15 @@ type AndroidSnapshotTimeoutEvidence =
       overlayAnnotationError: string;
     });
 
-export async function maybeBuildAndroidSnapshotTimeoutFailure(params: {
-  error: unknown;
-  command: 'snapshot' | 'diff';
-  logPath: string;
-  session: SessionState | undefined;
-  device: SessionState['device'];
-}): Promise<Extract<DaemonResponse, { ok: false }> | undefined> {
+export async function maybeBuildAndroidSnapshotTimeoutFailure(
+  params: {
+    error: unknown;
+    command: 'snapshot' | 'diff';
+    logPath: string;
+    session: SessionState | undefined;
+    device: SessionState['device'];
+  } & ScreenshotRuntimeBindings,
+): Promise<Extract<DaemonResponse, { ok: false }> | undefined> {
   if (params.command !== 'snapshot') return undefined;
   if (params.device.platform !== 'android') return undefined;
 
@@ -62,36 +68,56 @@ export async function maybeBuildAndroidSnapshotTimeoutFailure(params: {
   };
 }
 
-async function captureAndroidSnapshotTimeoutEvidence(params: {
-  logPath: string;
-  session: SessionState | undefined;
-  device: SessionState['device'];
-}): Promise<AndroidSnapshotTimeoutEvidence> {
+async function captureAndroidSnapshotTimeoutEvidence(
+  params: {
+    logPath: string;
+    session: SessionState | undefined;
+    device: SessionState['device'];
+  } & ScreenshotRuntimeBindings,
+): Promise<AndroidSnapshotTimeoutEvidence> {
   try {
+    const capture = await resolveBoundScreenshotRuntime({
+      device: params.device,
+      overlayRefs: false,
+      inspectFacts: params.inspectFacts,
+      bindDevice: params.bindDevice,
+    });
+    if (!capture.ok) {
+      throw new AppError(
+        'UNSUPPORTED_OPERATION',
+        'The target does not support screenshot capture, so no timeout evidence was taken.',
+      );
+    }
     const tempDir = await fs.mkdtemp(
       path.join(os.tmpdir(), 'agent-device-android-snapshot-timeout-'),
     );
     const screenshotPath = path.join(tempDir, 'snapshot-timeout-overlay-refs.png');
-    const data = await dispatchCommand(params.device, 'screenshot', [screenshotPath], undefined, {
-      ...contextFromFlags(
-        params.logPath,
-        // Use a fresh unstabilized screenshot context; inheriting snapshot flags could repeat the
-        // accessibility stabilization timeout that this fallback is trying to avoid.
-        { screenshotNoStabilize: true },
-        params.session?.appBundleId,
-        params.session?.trace?.outPath,
+    await capture.runtime.captureScreenshot({
+      outPath: screenshotPath,
+      options: {
+        appBundleId: params.session?.appBundleId,
+        // Capture unstabilized: inheriting the snapshot's stabilization could repeat the
+        // accessibility timeout that this evidence path exists to escape.
+        stabilize: false,
+        surface: params.session?.surface,
+      },
+      execution: screenshotExecutionFromContext(
+        contextFromFlags(
+          params.logPath,
+          { screenshotNoStabilize: true },
+          params.session?.appBundleId,
+          params.session?.trace?.outPath,
+        ),
       ),
-      surface: params.session?.surface,
     });
-    const resolvedPath = resolveCapturedScreenshotPath(data, screenshotPath);
-    await fs.access(resolvedPath);
-    const evidence = await annotateAndroidSnapshotTimeoutEvidence(resolvedPath, params.session);
+    await fs.access(screenshotPath);
+    const evidence = await annotateAndroidSnapshotTimeoutEvidence(screenshotPath, params.session);
 
     emitDiagnostic({
       level: 'warn',
       phase: 'android_snapshot_timeout_screenshot_captured',
       data: {
-        path: resolvedPath,
+        path: screenshotPath,
         overlayRefCount: 'overlayRefCount' in evidence ? evidence.overlayRefCount : undefined,
         overlayRefsAnnotated:
           'overlayRefsAnnotated' in evidence ? evidence.overlayRefsAnnotated : undefined,
@@ -155,16 +181,6 @@ async function annotateAndroidSnapshotTimeoutEvidence(
       overlayAnnotationError: normalized.message,
     };
   }
-}
-
-function resolveCapturedScreenshotPath(data: unknown, fallbackPath: string): string {
-  return hasStringPath(data) ? data.path : fallbackPath;
-}
-
-function hasStringPath(value: unknown): value is { path: string } {
-  return (
-    typeof value === 'object' && value !== null && 'path' in value && typeof value.path === 'string'
-  );
 }
 
 function isAndroidSnapshotTimeoutError(error: NormalizedError): boolean {

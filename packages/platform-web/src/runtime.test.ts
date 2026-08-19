@@ -52,6 +52,8 @@ test('preserves a narrow web provider dump including empty successful entries', 
   expect(binding.facts.operations.captureSnapshotWithoutActiveApp).toEqual({ available: true });
   expect(binding.facts.operations.setViewport).toEqual({ available: true });
   expect(binding.operations.setViewport).toBeTypeOf('function');
+  expect(binding.facts.operations.captureScreenshot).toEqual({ available: true });
+  expect(binding.operations.captureScreenshot).toBeTypeOf('function');
   expect(binding.operations.captureSnapshot).toBeTypeOf('function');
   expectLifecycleFacts(binding);
 });
@@ -137,6 +139,8 @@ test.each([
     expect(binding.facts.operations.captureSnapshot.available).toBe(false);
     expect(binding.facts.operations.setViewport.available).toBe(false);
     expect(binding.operations.setViewport).toBeUndefined();
+    expect(binding.facts.operations.captureScreenshot.available).toBe(false);
+    expect(binding.operations.captureScreenshot).toBeUndefined();
     expect(binding.operations.captureSnapshot).toBeUndefined();
   },
 );

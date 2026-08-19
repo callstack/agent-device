@@ -6,6 +6,7 @@ import {
   applicationLifecycleOperationFacts,
   localRuntimeOwner,
   narrowDeviceBinding,
+  screenshotRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
   type AppDeploymentInput,
   type AppDeploymentResult,
@@ -137,6 +138,11 @@ function readinessFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperati
         capture: unavailable,
         customActions: unavailable,
         withoutActiveApp: unavailable,
+      }),
+      // Mirrors the real owners: every kind this harness models except an Apple `simulator`-shaped
+      // Android placeholder can capture pixels, and `capabilities` now reads this cell.
+      ...screenshotRuntimeOperationFacts({
+        capture: operationAvailability(device.kind !== 'simulator' || device.platform === 'apple'),
       }),
       setViewport: unavailable,
       deployApp: operationAvailability(deployment.deploy),

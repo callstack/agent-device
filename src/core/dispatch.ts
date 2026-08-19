@@ -1,12 +1,9 @@
-import { screenshotOptionsFromFlags } from '@agent-device/contracts/capture';
 import { parseDeviceRotation } from '@agent-device/contracts/device';
 import type { GesturePlan, Interactor, RunnerContext } from '@agent-device/contracts/interaction';
 import { parseTvRemoteButton } from '@agent-device/contracts/interaction';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { Rect } from '@agent-device/kernel/snapshot';
-import { promises as fs } from 'node:fs';
-import pathModule from 'node:path';
 import { emitDiagnostic, withDiagnosticTimer } from '../utils/diagnostics.ts';
 import { isKeyboardAction, type KeyboardAction } from '../utils/keyboard-actions.ts';
 import { readLocationCoordinate } from '../utils/location-coordinates.ts';
@@ -158,8 +155,6 @@ const DISPATCH_HANDLERS: Record<DispatchCommand, DispatchHandler> = {
     handleScrollCommand(interactor, positionals, context),
   'trigger-app-event': ({ device, interactor, positionals, context }) =>
     handleTriggerAppEventCommand(device, interactor, positionals, context),
-  screenshot: ({ interactor, positionals, outPath, context }) =>
-    handleScreenshotCommand(interactor, positionals, outPath, context),
   back: async ({ interactor, context }) => {
     await interactor.back(context?.backMode);
     return { action: 'back', mode: context?.backMode ?? 'in-app', ...successText('Back') };
@@ -235,29 +230,6 @@ async function handleTriggerAppEventCommand(
     transport: 'deep-link',
     ...successText(`Triggered app event: ${eventName}`),
   };
-}
-
-async function handleScreenshotCommand(
-  interactor: Interactor,
-  positionals: string[],
-  outPath: string | undefined,
-  context: DispatchContext | undefined,
-): Promise<Record<string, unknown>> {
-  const positionalPath = positionals[0];
-  const screenshotPath = positionalPath ?? outPath ?? `./screenshot-${Date.now()}.png`;
-  await fs.mkdir(pathModule.dirname(screenshotPath), { recursive: true });
-  const screenshotOptions = screenshotOptionsFromFlags(context);
-  await interactor.screenshot(screenshotPath, {
-    appBundleId: context?.appBundleId,
-    pixelDensity: screenshotOptions.pixelDensity,
-    fullscreen: screenshotOptions.fullscreen,
-    normalizeStatusBar: screenshotOptions.normalizeStatusBar,
-    stabilize: screenshotOptions.stabilize,
-    surface: context?.surface,
-    skipIosSimulatorBootCheck: context?.skipIosSimulatorBootCheck,
-    captureBackend: context?.screenshotCaptureBackend,
-  });
-  return { path: screenshotPath, ...successText(`Saved screenshot: ${screenshotPath}`) };
 }
 
 async function handleClipboardCommand(

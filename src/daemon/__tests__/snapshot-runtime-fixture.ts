@@ -2,7 +2,9 @@ import {
   localRuntimeOwner,
   narrowDeviceBinding,
   providerRuntimeOwner,
+  screenshotRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
+  type CaptureScreenshotInput,
   type CaptureSnapshotInput,
   type PlatformRuntimeOperations,
   type RuntimeFacts,
@@ -14,6 +16,14 @@ import { getRequestSignal } from '../../request/cancel.ts';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { unavailableDeviceRuntimeGateway } from './test-device-runtime-gateway.ts';
+import { writeSolidPng } from './screenshot-runtime-fixture.ts';
+
+/**
+ * Every capture the fixture's bound screenshot operation received, newest last. Handler tests that
+ * cannot reach the fixture instance (the snapshot route builds it internally) assert the capture
+ * intent here instead of on a legacy dispatch call.
+ */
+export const fixtureScreenshotCaptures: CaptureScreenshotInput[] = [];
 
 /** Request-scoped snapshot seam for handler tests that mock the legacy leaf dispatch. */
 export function snapshotRuntimeFixture(requestId?: string): Readonly<{
@@ -28,6 +38,10 @@ export function snapshotRuntimeFixture(requestId?: string): Readonly<{
     const providerOwned = facts.device.providerMode === 'provider-runtime';
     const captureSnapshot = async (input: CaptureSnapshotInput) =>
       await dispatchFixtureSnapshot(device, input, requestSignal);
+    const captureScreenshot = async (input: CaptureScreenshotInput) => {
+      fixtureScreenshotCaptures.push(input);
+      writeSolidPng(input.outPath);
+    };
     return narrowDeviceBinding(
       {
         device,
@@ -39,6 +53,7 @@ export function snapshotRuntimeFixture(requestId?: string): Readonly<{
           captureSnapshot,
           captureSnapshotWithCustomActions: captureSnapshot,
           captureSnapshotWithoutActiveApp: captureSnapshot,
+          captureScreenshot,
         },
         [Symbol.asyncDispose]: async () => {},
       },
@@ -70,6 +85,7 @@ async function snapshotFacts(device: DeviceInfo): Promise<RuntimeFacts<PlatformR
     },
     operations: {
       ...base.operations,
+      ...screenshotRuntimeOperationFacts({ capture: available }),
       ...snapshotRuntimeOperationFacts({
         capture: available,
         customActions:

@@ -79,6 +79,8 @@ export async function dispatchSnapshotRuntimeCommand(
         logPath,
         session,
         device,
+        inspectFacts: params.inspectFacts,
+        bindDevice: params.bindDevice,
       });
       if (!timeoutResponse) throw error;
       return timeoutResponse;

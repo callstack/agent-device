@@ -39,6 +39,8 @@ export async function dispatchSnapshotViaRuntime(
         sessionName: resolvedSessionName,
         logPath: params.logPath,
         verdict: result.snapshotQuality,
+        inspectFacts: params.inspectFacts,
+        bindDevice: params.bindDevice,
       });
       const published = fallbackScreenshot
         ? {

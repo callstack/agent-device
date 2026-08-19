@@ -17,6 +17,7 @@ import {
   localRuntimeOwner,
   narrowDeviceBinding,
   providerRuntimeOwner,
+  screenshotRuntimeOperationFacts,
   type DeviceBinding,
   type PlatformRuntimeOperations,
   type RuntimeOperationFact,
@@ -500,6 +501,7 @@ function createAdmissionRuntime(options: {
   ensureReadyAvailable?: boolean;
   networkAvailable: boolean;
   appsAvailable?: boolean;
+  screenshotAvailable?: boolean;
   providerMode: RuntimeProviderMode;
 }) {
   const uses: Array<{ required: readonly string[]; preferred: readonly string[] }> = [];
@@ -521,6 +523,8 @@ type AdmissionRuntimeOptions = Readonly<{
   ensureReadyAvailable?: boolean;
   networkAvailable: boolean;
   appsAvailable?: boolean;
+  /** `screenshot` is fact-owned since R39; the projection reads this cell, not a bucket. */
+  screenshotAvailable?: boolean;
   providerMode: RuntimeProviderMode;
 }>;
 
@@ -583,6 +587,9 @@ function createAdmissionOperationFacts(
 ) {
   return {
     ...unavailableDeploymentSnapshotAndShutdownOperationFacts,
+    ...screenshotRuntimeOperationFacts({
+      capture: options.screenshotAvailable === false ? unavailable : { available: true as const },
+    }),
     appLogInspect: options.appLogAvailable ? { available: true as const } : unavailable,
     appLogDoctor: unavailable,
     appLogStart: unavailable,

@@ -9,8 +9,10 @@ import type {
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
+  bindLocalScreenshotInteractor,
   bindLocalSnapshotInteractor,
   localRuntimeOwner,
+  screenshotRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
   viewportRuntimeOperationFacts,
 } from '@agent-device/contracts/platform';
@@ -67,6 +69,11 @@ const shutdownKindUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-device-kind',
   hint: 'shutdown is supported only for Apple simulators and Android emulators.',
+} as const);
+const screenshotKindUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'screenshot is supported only for Android emulators and devices.',
 } as const);
 const snapshotKindUnavailable = Object.freeze({
   available: false,
@@ -137,6 +144,9 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           customActions: snapshotCustomActionsUnavailable,
           withoutActiveApp: device.kind === 'simulator' ? snapshotKindUnavailable : available,
         }),
+        ...screenshotRuntimeOperationFacts({
+          capture: device.kind === 'simulator' ? screenshotKindUnavailable : available,
+        }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ensureReady: available,
         bootTarget: available,
@@ -186,6 +196,13 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           ...recording,
           ...(facts.operations.captureSnapshot.available
             ? bindLocalSnapshotInteractor({
+                device: request.device,
+                signal: request.scope.signal,
+                resolveInteractor: host.localInteractors.resolve,
+              })
+            : {}),
+          ...(facts.operations.captureScreenshot.available
+            ? bindLocalScreenshotInteractor({
                 device: request.device,
                 signal: request.scope.signal,
                 resolveInteractor: host.localInteractors.resolve,

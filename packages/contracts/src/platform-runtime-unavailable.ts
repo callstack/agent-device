@@ -10,6 +10,7 @@ import type {
   RuntimeOperationUnavailability,
   RuntimeOwnerRef,
 } from './platform-runtime.ts';
+import { screenshotRuntimeOperationFacts } from './screenshot-runtime.ts';
 import { snapshotRuntimeOperationFacts } from './snapshot-runtime.ts';
 import { viewportRuntimeOperationFacts } from './viewport-runtime.ts';
 
@@ -24,6 +25,7 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   appState?: RuntimeOperationUnavailability;
   network: RuntimeOperationUnavailability;
   screenRecording?: RuntimeOperationUnavailability;
+  screenshot: RuntimeOperationUnavailability;
   snapshot?: RuntimeOperationUnavailability;
   viewport: RuntimeOperationUnavailability;
   readiness?: RuntimeOperationUnavailability;
@@ -38,6 +40,7 @@ type FrozenUnavailablePlatformRuntimeFacts = Readonly<{
   appState: RuntimeOperationUnavailability;
   network: RuntimeOperationUnavailability;
   screenRecording: RuntimeOperationUnavailability;
+  screenshot: RuntimeOperationUnavailability;
   snapshot: RuntimeOperationUnavailability;
   viewport: RuntimeOperationUnavailability;
   readiness: RuntimeOperationUnavailability;
@@ -71,6 +74,7 @@ export function createUnavailablePlatformRuntimeFacts(
     appState,
     network,
     screenRecording,
+    screenshot,
     snapshot,
     viewport,
     readiness,
@@ -98,6 +102,7 @@ export function createUnavailablePlatformRuntimeFacts(
       screenRecordingStart: screenRecording,
       screenRecordingReattach: screenRecording,
       screenRecordingCleanup: screenRecording,
+      ...screenshotRuntimeOperationFacts({ capture: screenshot }),
       ...snapshotRuntimeOperationFacts({
         capture: snapshot,
         customActions: snapshot,
@@ -116,19 +121,23 @@ export function createUnavailablePlatformRuntimeFacts(
 function freezeUnavailableFacts(
   unavailable: UnavailablePlatformRuntimeFacts,
 ): FrozenUnavailablePlatformRuntimeFacts {
+  // Every optional cell falls back to the caller's network gap: an owner that did not classify a
+  // family has, by construction, the same reason its transport does.
+  const orNetwork = (fact: RuntimeOperationUnavailability | undefined) =>
+    Object.freeze({ ...(fact ?? unavailable.network) });
   return Object.freeze({
     appLog: Object.freeze({ ...unavailable.appLog }),
-    apps: Object.freeze({ ...(unavailable.apps ?? unavailable.network) }),
-    appDeployment: Object.freeze({ ...(unavailable.appDeployment ?? unavailable.network) }),
-    appState: Object.freeze({ ...(unavailable.appState ?? unavailable.network) }),
+    apps: orNetwork(unavailable.apps),
+    appDeployment: orNetwork(unavailable.appDeployment),
+    appState: orNetwork(unavailable.appState),
     network: Object.freeze({ ...unavailable.network }),
-    screenRecording: Object.freeze({
-      ...(unavailable.screenRecording ?? unavailable.network),
-    }),
-    snapshot: Object.freeze({ ...(unavailable.snapshot ?? unavailable.network) }),
+    screenRecording: orNetwork(unavailable.screenRecording),
+    // Capture cells are stated by their owner, never inherited from the transport gap (#1873).
+    screenshot: Object.freeze({ ...unavailable.screenshot }),
+    snapshot: orNetwork(unavailable.snapshot),
     viewport: Object.freeze({ ...unavailable.viewport }),
-    readiness: Object.freeze({ ...(unavailable.readiness ?? unavailable.network) }),
-    shutdown: Object.freeze({ ...(unavailable.shutdown ?? unavailable.network) }),
+    readiness: orNetwork(unavailable.readiness),
+    shutdown: orNetwork(unavailable.shutdown),
     lifecycle: applicationLifecycleOperationFacts(unavailable.lifecycle),
   });
 }

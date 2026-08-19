@@ -67,7 +67,7 @@ import {
   createScreenRecordingAdmissionLedger,
   type ScreenRecordingAdmissionLedger,
 } from './screen-recording-admission-ledger.ts';
-import { resolveBoundViewportRuntime } from './viewport-runtime.ts';
+import { resolveGenericRuntimeExecution } from './generic-runtime-execution.ts';
 
 // ---------------------------------------------------------------------------
 // Request handler API
@@ -426,16 +426,13 @@ async function dispatchGenericForLockedScope(params: {
     return noActiveSessionError();
   }
 
-  const viewportRuntime =
-    lockedScope.req.command === 'viewport'
-      ? await resolveBoundViewportRuntime({
-          device: session.device,
-          positionals: lockedScope.req.positionals ?? [],
-          inspectFacts: lockedScope.inspectFacts,
-          bindDevice: lockedScope.bindDevice,
-        })
-      : undefined;
-  if (viewportRuntime && typeof viewportRuntime !== 'function') return viewportRuntime;
+  const runtimeExecution = await resolveGenericRuntimeExecution({
+    req: lockedScope.req,
+    session,
+    inspectFacts: lockedScope.inspectFacts,
+    bindDevice: lockedScope.bindDevice,
+  });
+  if (runtimeExecution && !runtimeExecution.ok) return runtimeExecution.response;
 
   const { dispatchGenericCommand, executeGenericPlatformCommand } =
     await loadGenericRequestHandlerModule();
@@ -446,7 +443,8 @@ async function dispatchGenericForLockedScope(params: {
     logPath,
     sessionStore,
     contextFromFlags: lockedScope.contextFromFlags,
-    executePlatformCommand: viewportRuntime ?? executeGenericPlatformCommand,
+    executePlatformCommand: runtimeExecution?.execute ?? executeGenericPlatformCommand,
+    ...(runtimeExecution?.recorded ? { recordedRequest: runtimeExecution.recorded } : {}),
   });
   return dispatchResponse;
 }

@@ -9,6 +9,7 @@ import {
   createUnavailablePlatformRuntimeFacts,
   localRuntimeOwner,
   providerRuntimeOwner,
+  screenshotRuntimeOperationFacts,
   viewportRuntimeOperationFacts,
 } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -31,6 +32,82 @@ import {
 } from './platform-runtime-gateway.fixtures.ts';
 
 describe('composed platform runtime gateway', () => {
+  test('loads only the selected Apple owner for screenshot facts and binding', async () => {
+    const appleDevice: DeviceInfo = {
+      platform: 'apple',
+      appleOs: 'ios',
+      id: 'ios-simulator',
+      name: 'iPhone',
+      kind: 'simulator',
+      target: 'mobile',
+      booted: true,
+    };
+    const unavailable = { available: false, reason: 'unsupported-platform-leaf' } as const;
+    const owner = localRuntimeOwner('apple');
+    const baseFacts = createUnavailablePlatformRuntimeFacts(appleDevice, owner, {
+      appLog: unavailable,
+      network: unavailable,
+      screenshot: unavailable,
+      viewport: unavailable,
+      lifecycle: applicationLifecycleOperationFacts({
+        resolveOpenTarget: unavailable,
+        prepareApplicationOpen: unavailable,
+        openApplication: unavailable,
+        applyRuntimeHints: unavailable,
+        clearRuntimeHints: unavailable,
+        closeApplication: unavailable,
+        finalizeApplicationClose: unavailable,
+        prepareAppleRunner: unavailable,
+        configureProviderPortReverse: unavailable,
+      }),
+    });
+    const facts = {
+      ...baseFacts,
+      operations: {
+        ...baseFacts.operations,
+        ...screenshotRuntimeOperationFacts({ capture: { available: true } }),
+      },
+    };
+    const captureScreenshot = vi.fn(async () => undefined);
+    const binding: DeviceBinding<PlatformRuntimeOperations> = {
+      device: appleDevice,
+      owner,
+      facts,
+      operations: { captureScreenshot },
+      [Symbol.asyncDispose]: async () => {},
+    };
+    const appleLoad = vi.fn(async () => ({
+      owner,
+      ownsDevice: () => true,
+      inspectFacts: async () => facts,
+      bind: async () => binding,
+      shutdown: async () => {},
+    }));
+    const webLoad = vi.fn(async () => {
+      throw new Error('unselected web runtime must stay lazy');
+    });
+    const runtimeGateway = createComposedPlatformRuntimeGateway({
+      modules: new Map([
+        ['apple', { family: 'apple', loadRuntime: appleLoad }],
+        ['web', { family: 'web', loadRuntime: webLoad }],
+      ]),
+      loadHost: async () => ({}) as PlatformRuntimeHost,
+    });
+
+    await expect(runtimeGateway.inspectFacts(appleDevice)).resolves.toMatchObject({
+      operations: { captureScreenshot: { available: true } },
+    });
+    const selected = await runtimeGateway.bind({
+      device: appleDevice,
+      intent: { kind: 'ordinary' },
+      scope,
+    });
+    await selected.operations.captureScreenshot?.({ outPath: '/tmp/gateway.png' });
+    expect(appleLoad).toHaveBeenCalledTimes(1);
+    expect(webLoad).not.toHaveBeenCalled();
+    expect(captureScreenshot).toHaveBeenCalledWith({ outPath: '/tmp/gateway.png' });
+  });
+
   test('loads only the selected web owner for viewport facts and binding', async () => {
     const webDevice: DeviceInfo = {
       platform: 'web',
@@ -46,6 +123,7 @@ describe('composed platform runtime gateway', () => {
     const baseFacts = createUnavailablePlatformRuntimeFacts(webDevice, owner, {
       appLog: unavailable,
       network: unavailable,
+      screenshot: unavailable,
       viewport: unavailable,
       lifecycle: applicationLifecycleOperationFacts({
         resolveOpenTarget: unavailable,

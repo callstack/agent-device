@@ -166,6 +166,7 @@ class CloudWebDriverRuntimeImplementation implements CloudWebDriverRuntime {
       isSessionActive: (device) => this.sessions.findSessionForDevice(device) !== undefined,
       deployment: this.deployment,
       snapshotAvailable: this.capabilities.operations.snapshot.support !== 'unsupported',
+      screenshotAvailable: this.capabilities.operations.screenshot.support !== 'unsupported',
       getInteractor: (device) => this.getInteractor(device),
     });
   }

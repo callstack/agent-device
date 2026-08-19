@@ -149,7 +149,8 @@ describe('explainCommand table-driven coverage', () => {
   test.each([
     ['press', ['src/commands/interaction/index.ts', 'src/daemon/handlers/interaction.ts']],
     ['apps', ['src/commands/management/app.ts']],
-    ['screenshot', ['src/commands/capture/screenshot.ts', 'src/core/dispatch.ts']],
+    // R39: screenshot has no dispatch projection left, so its platform work is named directly.
+    ['screenshot', ['src/commands/capture/screenshot.ts', 'src/daemon/screenshot-runtime.ts']],
     ['react-native', ['src/daemon/handlers/react-native.ts']],
     ['record', ['src/daemon/handlers/record-trace.ts']],
     ['trace', ['src/daemon/handlers/record-trace.ts']],

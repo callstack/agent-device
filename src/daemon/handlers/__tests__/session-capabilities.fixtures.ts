@@ -3,6 +3,7 @@ import {
   localRuntimeOwner,
   narrowDeviceBinding,
   providerRuntimeOwner,
+  screenshotRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
   type DeviceBinding,
   type PlatformRuntimeOperations,
@@ -24,6 +25,11 @@ export type CapabilitiesAdmissionRuntimeOptions = Readonly<{
   sourceAvailable?: boolean;
   pushAvailable?: boolean;
   readinessAvailable?: boolean;
+  /**
+   * `screenshot` is fact-owned since R39, so the capabilities projection reads this cell instead
+   * of a capability bucket. Defaults to available, matching every device the bucket used to admit.
+   */
+  screenshotAvailable?: boolean;
 }>;
 
 export const legacyCapabilityUses = [
@@ -52,12 +58,15 @@ function createAdmissionFacts(
 ): RuntimeFacts<PlatformRuntimeOperations> {
   const unavailable = unavailableOperationFact(options.providerMode);
   const available = { available: true } as const;
-  const appsFact = options.appsAvailable ? available : unavailable;
+  /** Every option-driven cell reads the same way: opted in means available for this fake owner. */
+  const cell = (enabled: boolean | undefined) => (enabled ? available : unavailable);
+  const appsFact = cell(options.appsAvailable);
+  const screenshotFact = cell(options.screenshotAvailable !== false);
   return {
     device: { ...deviceShape(device), providerMode: options.providerMode },
     operations: {
       ...unavailableApplicationLifecycleOperationFacts,
-      appLogInspect: options.appLogAvailable ? available : unavailable,
+      appLogInspect: cell(options.appLogAvailable),
       appLogDoctor: unavailable,
       appLogStart: unavailable,
       appLogReattach: unavailable,
@@ -68,12 +77,13 @@ function createAdmissionFacts(
         customActions: unavailable,
         withoutActiveApp: unavailable,
       }),
+      ...screenshotRuntimeOperationFacts({ capture: screenshotFact }),
       setViewport: unavailable,
-      deployApp: options.deployAvailable ? available : unavailable,
-      materializeAppSource: options.sourceAvailable ? available : unavailable,
-      deployMaterializedApp: options.sourceAvailable ? available : unavailable,
-      sendPushNotification: options.pushAvailable ? available : unavailable,
-      networkDump: options.networkAvailable ? available : unavailable,
+      deployApp: cell(options.deployAvailable),
+      materializeAppSource: cell(options.sourceAvailable),
+      deployMaterializedApp: cell(options.sourceAvailable),
+      sendPushNotification: cell(options.pushAvailable),
+      networkDump: cell(options.networkAvailable),
       screenRecordingStart: unavailable,
       screenRecordingReattach: unavailable,
       screenRecordingCleanup: unavailable,
