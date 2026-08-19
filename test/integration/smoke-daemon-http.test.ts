@@ -66,8 +66,17 @@ test('daemon HTTP transport starts from CLI and accepts a command RPC', async (t
     const unauthorized = await callCommandRpc({ ...info, token: 'wrong-token' }, 'session_list');
     assert.equal(unauthorized.status, 401);
     assert.equal(unauthorized.body.error?.data?.code, 'UNAUTHORIZED');
+    // #1781 B1: the HTTP-mode daemon must exit — leaving nothing it owns and no
+    // unclassified state-dir residue. Asserted on the success path so the
+    // oracle's settle window can never replace a primary assertion's
+    // diagnostic; the `finally` below stays best-effort cleanup.
+    await stopDaemon(info);
+    await assertNoDaemonLeaks({ stateDir, daemonPids: [info.pid], phase: 'after-shutdown' });
   } finally {
-    await stopDaemonForStateDir(stateDir);
+    if (fs.existsSync(path.join(stateDir, 'daemon.json'))) {
+      await stopDaemon(readDaemonInfo(stateDir));
+    }
+    fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
 
@@ -102,21 +111,11 @@ async function callCommandRpc(
   };
 }
 
-async function stopDaemonForStateDir(stateDir: string): Promise<void> {
-  try {
-    const infoPath = path.join(stateDir, 'daemon.json');
-    if (!fs.existsSync(infoPath)) return;
-    const info = readDaemonInfo(stateDir);
-    if (!Number.isInteger(info.pid) || info.pid <= 0) return;
-    await stopProcessForTakeover(info.pid, {
-      termTimeoutMs: 1500,
-      killTimeoutMs: 1500,
-      expectedStartTime: info.processStartTime,
-    });
-    // #1781 B1: the HTTP-mode daemon must exit without owned processes or
-    // unclassified state-dir residue.
-    await assertNoDaemonLeaks({ stateDir, daemonPids: [info.pid], phase: 'after-shutdown' });
-  } finally {
-    fs.rmSync(stateDir, { recursive: true, force: true });
-  }
+async function stopDaemon(info: DaemonInfo): Promise<void> {
+  if (!Number.isInteger(info.pid) || info.pid <= 0) return;
+  await stopProcessForTakeover(info.pid, {
+    termTimeoutMs: 1500,
+    killTimeoutMs: 1500,
+    expectedStartTime: info.processStartTime,
+  });
 }

@@ -1,72 +1,36 @@
-// Daemon leak oracle (#1781 B1, feeds #1431). The real-subprocess daemon lanes
-// (smoke-daemon-clean, smoke-daemon-http, daemon-replace-exit-flush) call it at
-// their end to answer one question: after `close` and after daemon shutdown,
-// did the daemon leave anything it OWNS behind?
+// Daemon leak oracle (#1781 B1, feeds #1431): observes the host process table
+// and an isolated state dir, then applies the ownership/residue rules in
+// `daemon-leak-model.ts` (which documents them and is where they are tested).
 //
-// Ownership is explicit and conservative. Global process counts are not
-// evidence — the simulator, XCTest, and Chrome-for-Testing own processes this
-// daemon does not. A host process is daemon-owned when ANY rule holds:
-//
-//   descendant     its PPID chain reaches a daemon pid (observable only while
-//                  that daemon lives; orphans reparent to launchd/init).
-//   process-group  its PGID equals a daemon pid. The CLI launches the daemon
-//                  detached (setsid), so the daemon is its own group leader and
-//                  every non-detached runCmdBackground child stays in that group
-//                  after reparenting. This is the #1324 signature: `simctl io …
-//                  recordVideo` with PPID 1 and PGID = the dead daemon's pid.
-//                  POSIX keeps a pgid reserved while any member lives, so it
-//                  cannot be recycled under the check.
-//   state-dir-env  its environment carries AGENT_DEVICE_STATE_DIR=<state dir>.
-//                  The CLI starts the daemon with that variable and children
-//                  inherit it, including setsid'd grandchildren the pgid rule
-//                  misses (agent-browser's own daemon → Chrome fleet: #1109).
-//                  macOS hides the environment of Apple platform binaries
-//                  (`ps -E` shows it for node/Chrome, not for /bin/sleep or
-//                  simctl), so Apple tooling is caught by the pgid/argv rules.
-//   state-dir-argv its command line contains the state dir path (recorders
-//                  writing session artifacts, browsers pinned to a managed home).
-//
-// The lanes use a fresh mkdtemp state dir per run, so env/argv rules cannot
-// match a foreign process. The oracle also excludes itself and its ancestors.
-//
-// State-dir residue: after shutdown every entry must match
-// EXPECTED_STATE_DIR_ENTRIES (unknown ⇒ classify the new artifact, do not widen
-// the matcher), `*.tmp` write-then-publish temporaries always fail (torn
-// publish), daemon.json/daemon.lock may exist only while a daemon lives, and a
-// durable capture descriptor still `lifecycle: "open"` (or a legacy
-// `app-log.pid` marker) after shutdown means a capture handle outlived its
-// owner — a `completed` descriptor is the finish record ADR 0019 keeps.
+// What each caller actually exercises depends on what its daemon did. The three
+// real-subprocess daemon lanes run `session list`/`close` with no device,
+// simulator or browser, so their daemons own no children and the process arm
+// asserts an empty set; what they guard is the surviving-daemon check and the
+// state-dir residue. The #1109/#1324 leak shapes are guarded by the model's
+// fixture test and reproduced by hand against the pre-fix commits — see the PR.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runCmd } from '../../../src/utils/exec.ts';
 import { isProcessAlive } from '../../../src/utils/host-process.ts';
+import {
+  evaluateDaemonLeaks,
+  formatDaemonLeakReport,
+  hasDaemonLeaks,
+  type DaemonLeakPhase,
+  type DaemonLeakSnapshot,
+  type HostProcess,
+  type StateEntry,
+} from './daemon-leak-model.ts';
 
 const PS_TIMEOUT_MS = 5_000;
 const DEFAULT_SETTLE_MS = 5_000;
 const SETTLE_POLL_MS = 250;
-const COMMAND_PREVIEW_CHARS = 160;
+// Matches src/utils/host-process.ts: an absolute path so a PATH-resolved
+// third-party `ps` (Homebrew, procps) cannot change the flag semantics.
+const HOST_PS_COMMAND = process.platform === 'win32' ? 'ps' : '/bin/ps';
 
-export type DaemonLeakPhase = 'after-close' | 'after-shutdown';
-
-type OwnershipReason = 'descendant' | 'process-group' | 'state-dir-env' | 'state-dir-argv';
-
-type OwnedProcess = {
-  pid: number;
-  ppid: number;
-  pgid: number;
-  command: string;
-  reasons: OwnershipReason[];
-};
-
-type DaemonLeakSnapshot = {
-  stateDir: string;
-  daemonPids: number[];
-  phase: DaemonLeakPhase;
-  liveDaemonPids: number[];
-  ownedProcesses: OwnedProcess[];
-  strayStateEntries: string[];
-};
+export type { DaemonLeakPhase } from './daemon-leak-model.ts';
 
 export type DaemonLeakOracleOptions = {
   stateDir: string;
@@ -77,93 +41,20 @@ export type DaemonLeakOracleOptions = {
   settleMs?: number;
 };
 
-type HostProcess = { pid: number; ppid: number; pgid: number; command: string; env: string };
-
-// Relative-path matchers for everything the daemon may legitimately leave in a
-// state dir. `daemon.json`/`daemon.lock` are additionally gated on a live
-// daemon; capture descriptors are gated on the phase (see classifyStateEntry).
-const EXPECTED_STATE_DIR_ENTRIES: readonly RegExp[] = [
-  /^daemon\.json$/,
-  /^daemon\.lock$/,
-  /^daemon\.log$/,
-  /^daemon-shutdown\.json$/,
-  /^sessions\/[^/]+\/events\.ndjson$/,
-  /^sessions\/[^/]+\/requests\/[^/]+\.ndjson$/,
-  /^sessions\/[^/]+\/(?:app|runner)\.log$/,
-  /^sessions\/[^/]+\/repair-tombstone\.json$/,
-  /^sessions\/[^/]+\/artifacts\/.+$/,
-  /^tools\/.+$/,
-  /^device-claims\/.+$/,
-];
-const CAPTURE_DESCRIPTOR_ENTRY = /^sessions\/[^/]+\/[^/]+\.resource\.json$/;
-const LEGACY_APP_LOG_MARKER_ENTRY = /^sessions\/[^/]+\/app-log\.pid$/;
-const DAEMON_LIVENESS_ENTRY = /^daemon\.(?:json|lock)$/;
-
 async function captureDaemonLeakSnapshot(
   options: DaemonLeakOracleOptions,
 ): Promise<DaemonLeakSnapshot> {
   const stateDir = path.resolve(options.stateDir);
-  const daemonPids = uniquePids(options.daemonPids);
-  const processes = await listHostProcesses();
-  const liveDaemonPids = daemonPids.filter((pid) => isProcessAlive(pid));
-  return {
+  const processes = await listHostProcessesWithGroups();
+  return evaluateDaemonLeaks({
     stateDir,
-    daemonPids,
+    daemonPids: options.daemonPids,
+    livePids: options.daemonPids.filter((pid) => isProcessAlive(pid)),
     phase: options.phase,
-    liveDaemonPids,
-    ownedProcesses: findOwnedProcesses(processes, daemonPids, stateDir),
-    strayStateEntries: listStateEntries(stateDir).filter(
-      (entry) =>
-        classifyStateEntry(stateDir, entry, options.phase, liveDaemonPids.length > 0) !==
-        'expected',
-    ),
-  };
-}
-
-function findOwnedProcesses(
-  processes: readonly HostProcess[],
-  daemonPids: readonly number[],
-  stateDir: string,
-): OwnedProcess[] {
-  const excluded = new Set([...ancestorsOf(process.pid, processes), ...daemonPids]);
-  const reasonsByPid = new Map<number, OwnershipReason[]>();
-  for (const proc of processes) {
-    if (excluded.has(proc.pid)) continue;
-    const reasons = directOwnershipReasons(proc, daemonPids, stateDir);
-    if (reasons.length > 0) reasonsByPid.set(proc.pid, reasons);
-  }
-  // Ownership propagates down the tree: a child of the daemon, or of any
-  // process the rules above own, is owned (a detached `(simctl)` grandchild of
-  // a leaked recorder shim, DTServiceHub under a runner xcodebuild, …).
-  for (const pid of descendantsOf([...daemonPids, ...reasonsByPid.keys()], processes)) {
-    if (excluded.has(pid)) continue;
-    reasonsByPid.set(pid, [...(reasonsByPid.get(pid) ?? []), 'descendant']);
-  }
-  return processes.flatMap((proc) => {
-    const reasons = reasonsByPid.get(proc.pid);
-    return reasons
-      ? [{ pid: proc.pid, ppid: proc.ppid, pgid: proc.pgid, command: proc.command, reasons }]
-      : [];
+    processes,
+    excludedPids: [...ancestorsOf(process.pid, processes)],
+    stateEntries: readStateEntries(stateDir),
   });
-}
-
-function directOwnershipReasons(
-  proc: HostProcess,
-  daemonPids: readonly number[],
-  stateDir: string,
-): OwnershipReason[] {
-  // Whole-path matches only: `<dir>` as a token or `<dir>/…`, never `<dir>-sibling`.
-  const stateDirToken = new RegExp(`(?:^|[\\s=])${escapeRegExp(stateDir)}(?:[\\s/]|$)`);
-  const stateDirEnv = new RegExp(`AGENT_DEVICE_STATE_DIR=${escapeRegExp(stateDir)}(?:\\s|$)`);
-  const reasons: OwnershipReason[] = [];
-  if (daemonPids.includes(proc.pgid)) reasons.push('process-group');
-  if (stateDirEnv.test(proc.env)) reasons.push('state-dir-env');
-  if (stateDirToken.test(proc.command)) reasons.push('state-dir-argv');
-  return reasons;
-}
-
-function hasDaemonLeaks(snapshot: DaemonLeakSnapshot): boolean {
-  return snapshot.ownedProcesses.length > 0 || snapshot.strayStateEntries.length > 0;
 }
 
 /**
@@ -188,55 +79,36 @@ export async function assertNoDaemonLeaks(options: DaemonLeakOracleOptions): Pro
   if (hasDaemonLeaks(snapshot)) throw new Error(formatDaemonLeakReport(snapshot));
 }
 
-function formatDaemonLeakReport(snapshot: DaemonLeakSnapshot): string {
-  const lines = [
-    `daemon leak oracle: ${hasDaemonLeaks(snapshot) ? 'LEAK' : 'clean'} (${snapshot.phase})`,
-    `  state dir: ${snapshot.stateDir}`,
-    `  daemon pids: ${snapshot.daemonPids.join(', ') || '(none)'}; live: ${
-      snapshot.liveDaemonPids.join(', ') || '(none)'
-    }`,
-    `  owned processes still alive: ${snapshot.ownedProcesses.length}`,
-    ...snapshot.ownedProcesses.map((proc) => {
-      const command = proc.command.replace(
-        new RegExp(`${escapeRegExp(snapshot.stateDir)}(?=[\\s/]|$)`, 'g'),
-        '<state-dir>',
-      );
-      const preview =
-        command.length > COMMAND_PREVIEW_CHARS
-          ? `${command.slice(0, COMMAND_PREVIEW_CHARS)}…`
-          : command;
-      return `    pid ${proc.pid} ppid ${proc.ppid} pgid ${proc.pgid} [${proc.reasons.join(',')}] ${preview}`;
-    }),
-    `  stray state-dir entries: ${snapshot.strayStateEntries.length}`,
-    ...snapshot.strayStateEntries.map((entry) => `    ${entry}`),
-  ];
-  return lines.join('\n');
-}
-
-function classifyStateEntry(
-  stateDir: string,
-  entry: string,
-  phase: DaemonLeakPhase,
-  daemonAlive: boolean,
-): 'expected' | 'stray' {
-  if (entry.endsWith('.tmp')) return 'stray';
-  if (DAEMON_LIVENESS_ENTRY.test(entry)) return daemonAlive ? 'expected' : 'stray';
-  if (CAPTURE_DESCRIPTOR_ENTRY.test(entry) || LEGACY_APP_LOG_MARKER_ENTRY.test(entry)) {
-    return classifyCaptureEntry(stateDir, entry, phase);
+// Files, plus empty directories as their own entries (an unswept session
+// scaffold leaves no file behind), plus the `lifecycle` of durable capture
+// descriptors so the rules stay free of filesystem access.
+function readStateEntries(stateDir: string): StateEntry[] {
+  if (!fs.existsSync(stateDir)) return [];
+  const entries: StateEntry[] = [];
+  for (const dirent of fs.readdirSync(stateDir, { recursive: true, withFileTypes: true })) {
+    const absolute = path.join(dirent.parentPath, dirent.name);
+    const relative = path.relative(stateDir, absolute).split(path.sep).join('/');
+    if (!dirent.isDirectory()) {
+      entries.push({
+        path: relative,
+        kind: 'file',
+        ...(relative.endsWith('.resource.json')
+          ? { descriptorLifecycle: readDescriptorLifecycle(absolute) }
+          : {}),
+      });
+    } else if (isEmptyDirectory(absolute)) {
+      entries.push({ path: `${relative}/`, kind: 'empty-directory' });
+    }
   }
-  return EXPECTED_STATE_DIR_ENTRIES.some((matcher) => matcher.test(entry)) ? 'expected' : 'stray';
+  return entries;
 }
 
-// Other sessions may still hold live captures while this one closes; after
-// shutdown only a completed capture record may remain (never a pid marker).
-function classifyCaptureEntry(
-  stateDir: string,
-  entry: string,
-  phase: DaemonLeakPhase,
-): 'expected' | 'stray' {
-  if (phase === 'after-close') return 'expected';
-  if (!CAPTURE_DESCRIPTOR_ENTRY.test(entry)) return 'stray';
-  return readDescriptorLifecycle(path.join(stateDir, entry)) === 'completed' ? 'expected' : 'stray';
+function isEmptyDirectory(directoryPath: string): boolean {
+  try {
+    return fs.readdirSync(directoryPath).length === 0;
+  } catch {
+    return false;
+  }
 }
 
 function readDescriptorLifecycle(filePath: string): string | undefined {
@@ -248,21 +120,11 @@ function readDescriptorLifecycle(filePath: string): string | undefined {
   }
 }
 
-function listStateEntries(stateDir: string): string[] {
-  if (!fs.existsSync(stateDir)) return [];
-  return fs
-    .readdirSync(stateDir, { recursive: true, withFileTypes: true })
-    .filter((entry) => !entry.isDirectory())
-    .map((entry) =>
-      path.relative(stateDir, path.join(entry.parentPath, entry.name)).split(path.sep).join('/'),
-    )
-    .sort();
-}
-
-// pid/ppid/pgid plus the command line, and separately the environment so the
-// argv and env rules stay distinct. macOS `ps -E` appends the environment to
-// the command line for same-user processes; Linux exposes it in /proc.
-async function listHostProcesses(): Promise<HostProcess[]> {
+// src/utils/host-process.ts's listHostProcesses covers pid/ppid/command; the
+// ownership rules also need the process group and the environment, which need a
+// second `ps` on macOS (`-E` appends the environment to the command column) and
+// /proc on Linux.
+async function listHostProcessesWithGroups(): Promise<HostProcess[]> {
   const darwin = process.platform === 'darwin';
   const [tree, darwinEnv] = await Promise.all([
     runPs(['-axww', '-o', 'pid=,ppid=,pgid=,command=']),
@@ -290,7 +152,10 @@ function parsePsLines(stdout: string, shape: RegExp): string[][] {
 }
 
 async function runPs(args: string[]): Promise<string> {
-  const result = await runCmd('ps', args, { allowFailure: true, timeoutMs: PS_TIMEOUT_MS });
+  const result = await runCmd(HOST_PS_COMMAND, args, {
+    allowFailure: true,
+    timeoutMs: PS_TIMEOUT_MS,
+  });
   if (result.exitCode !== 0) {
     throw new Error(
       `daemon leak oracle: ps ${args.join(' ')} failed (${result.exitCode}): ${result.stderr}`,
@@ -307,24 +172,6 @@ function readLinuxEnviron(pid: number): string {
   }
 }
 
-function descendantsOf(
-  rootPids: readonly number[],
-  processes: readonly HostProcess[],
-): Set<number> {
-  const selected = new Set(rootPids);
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const proc of processes) {
-      if (!selected.has(proc.ppid) || selected.has(proc.pid)) continue;
-      selected.add(proc.pid);
-      changed = true;
-    }
-  }
-  for (const pid of rootPids) selected.delete(pid);
-  return selected;
-}
-
 function ancestorsOf(pid: number, processes: readonly HostProcess[]): Set<number> {
   const byPid = new Map(processes.map((proc) => [proc.pid, proc]));
   const chain = new Set<number>();
@@ -332,14 +179,6 @@ function ancestorsOf(pid: number, processes: readonly HostProcess[]): Set<number
     chain.add(cursor);
   }
   return chain;
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function uniquePids(pids: readonly number[]): number[] {
-  return [...new Set(pids)].filter((pid) => Number.isInteger(pid) && pid > 0);
 }
 
 // Standalone use (red-proofs, manual triage):

@@ -89,6 +89,12 @@ export default defineConfig({
             // #1781 A9: pins the root-doc paths-ignore entries directly against the
             // real workflow YAML, parse-only like its sibling above.
             'test/ci/root-docs-paths-ignore.test.ts',
+            // The daemon leak oracle's ownership/residue rules (#1781 B1): pure
+            // decisions over fixture `ps` rows and state-dir listings, so they
+            // need no daemon, device, or subprocess. The lanes that call the
+            // oracle are device-free, so this is where the #1109/#1324 leak
+            // shapes are actually guarded.
+            'test/integration/support/daemon-leak-model.test.ts',
             // The frozen replay-compat corpus (#1417): parse-only, no device or
             // subprocess work, so it belongs in the fast lane next to the
             // grammar it guards.
