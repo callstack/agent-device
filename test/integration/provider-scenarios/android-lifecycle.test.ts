@@ -11,6 +11,7 @@ import {
   assertRpcOk,
 } from './assertions.ts';
 import { createAndroidSettingsWorld, waitForFileContent } from './android-world.ts';
+import { assertAndroidSettingsContract } from './android-settings-contract.ts';
 import { PROVIDER_SCENARIO_ANDROID } from './fixtures.ts';
 import { createProviderScenarioTempPath, withProviderScenarioResource } from './harness.ts';
 import {
@@ -1484,50 +1485,6 @@ function assertAndroidObservabilityContract(world: AndroidSettingsWorld): void {
     spawnedLogcat.filter((child) => child.killed).length >= 2,
     'Expected close to auto-stop the active scripted logcat stream',
   );
-}
-
-function assertAndroidSettingsContract(world: AndroidSettingsWorld): void {
-  const { adbCalls } = world;
-  assertCommandCall(adbCalls, ['shell', 'cmd', 'uimode', 'night', 'yes']);
-  assertCommandCall(adbCalls, ['emu', 'geo', 'fix', '-122.009', '37.3349']);
-  assertCommandCall(adbCalls, ['shell', 'cmd', 'fingerprint', 'touch', '1']);
-  // #1796: the grant names the acting user, because `pm` would otherwise default to user 0
-  // rather than the foreground user the session's app runs as.
-  assertCommandCall(adbCalls, ['shell', 'am', 'get-current-user']);
-  assertCommandCall(adbCalls, [
-    'shell',
-    'pm',
-    'grant',
-    '--user',
-    '0',
-    'com.example.demo',
-    'android.permission.CAMERA',
-  ]);
-  assertCommandCall(adbCalls, [
-    'shell',
-    'settings',
-    'put',
-    'global',
-    'window_animation_scale',
-    '0',
-  ]);
-  assertCommandCall(adbCalls, [
-    'shell',
-    'settings',
-    'put',
-    'global',
-    'transition_animation_scale',
-    '0',
-  ]);
-  assertCommandCall(adbCalls, [
-    'shell',
-    'settings',
-    'put',
-    'global',
-    'animator_duration_scale',
-    '0',
-  ]);
-  assertCommandCall(adbCalls, ['shell', 'echo', 'ok']);
 }
 
 function assertAndroidInteractionContract(world: AndroidSettingsWorld): void {
