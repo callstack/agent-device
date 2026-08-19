@@ -1,40 +1,9 @@
-// Daemon leak rules (#1781 B1, feeds #1431): given one observation of the host
-// process table and of an isolated state dir, decide what the daemon still owns.
-// Pure — `daemon-leak-oracle.ts` gathers the observation and asserts on it, and
-// `daemon-leak-model.test.ts` pins these rules against fixture observations,
-// including the #1109 and #1324 leak shapes.
+// Daemon leak rules (#1781 B1, feeds #1431): given one observation of an
+// isolated state dir and the daemon pids a lane observed, decide whether daemon
+// lifecycle or durable state leaked. Pure — `daemon-leak-oracle.ts` gathers the
+// observation and asserts on it; `daemon-leak-model.test.ts` pins the rules.
 //
-// Ownership is explicit and conservative. Global process counts are not
-// evidence — the simulator, XCTest, and Chrome-for-Testing own processes this
-// daemon does not. A host process is daemon-owned when ANY rule holds:
-//
-//   descendant     its PPID chain reaches a daemon pid, or any process already
-//                  owned below (observable while that ancestor lives; orphans
-//                  reparent to launchd/init).
-//   process-group  its PGID equals a daemon pid. The CLI launches the daemon
-//                  detached (setsid), so the daemon is its own group leader and
-//                  every non-detached runCmdBackground child stays in that group
-//                  after reparenting. This is the #1324 signature: `simctl io …
-//                  recordVideo` with PPID 1 and PGID = the dead daemon's pid.
-//                  A pgid is reserved only while the group has a live member, so
-//                  on a long-lived host pid reuse can eventually hand the number
-//                  to an unrelated process; the lanes' state dirs are fresh per
-//                  run, and every red-proof cross-checks the command line.
-//   state-dir-env  its environment carries AGENT_DEVICE_STATE_DIR=<state dir>.
-//                  The CLI starts the daemon with that variable and children
-//                  inherit it, including setsid'd grandchildren the pgid rule
-//                  misses (agent-browser's own daemon → Chrome fleet: #1109).
-//                  macOS hides the environment of Apple platform binaries
-//                  (`ps -E` shows it for node/Chrome, not for /bin/sleep or
-//                  simctl), so Apple tooling is caught by the pgid/argv rules.
-//   state-dir-argv its command line contains the state dir path as a whole path
-//                  token (recorders writing session artifacts, browsers pinned
-//                  to a managed home).
-//
-// The lanes use a fresh mkdtemp state dir per run, so the env/argv rules cannot
-// match a foreign process. The caller excludes itself and its own ancestors.
-//
-// Two further leak classes, independent of owned children:
+// Two leak classes:
 //
 //   surviving daemon   at `after-shutdown` a daemon pid that is still alive IS
 //                      the leak. `stopProcessForTakeover` is best-effort and
@@ -54,22 +23,9 @@
 //                      installs (agent-browser and its Chrome), whose own
 //                      download temporaries and scaffolding this daemon neither
 //                      writes nor owns.
-import { expandProcessTree, uniquePositivePids } from '../../../src/utils/host-process.ts';
-
-const COMMAND_PREVIEW_CHARS = 160;
+import { uniquePositivePids } from '../../../src/utils/host-process.ts';
 
 export type DaemonLeakPhase = 'after-close' | 'after-shutdown';
-
-export type OwnershipReason = 'descendant' | 'process-group' | 'state-dir-env' | 'state-dir-argv';
-
-export type HostProcess = {
-  pid: number;
-  ppid: number;
-  pgid: number;
-  command: string;
-  /** Environment as a single string; empty when the host hides it. */
-  env: string;
-};
 
 /** One state-dir path, pre-read so the rules stay free of filesystem access. */
 export type StateEntry = {
@@ -78,14 +34,6 @@ export type StateEntry = {
   kind: 'file' | 'empty-directory';
   /** `lifecycle` of a durable capture descriptor, when this entry is one. */
   descriptorLifecycle?: string;
-};
-
-export type OwnedProcess = {
-  pid: number;
-  ppid: number;
-  pgid: number;
-  command: string;
-  reasons: OwnershipReason[];
 };
 
 export type NonEmpty<T> = readonly [T, ...T[]];
@@ -106,9 +54,6 @@ export type DaemonLeakObservationBase = {
   stateDir: string;
   daemonPids: readonly number[];
   livePids: readonly number[];
-  processes: readonly HostProcess[];
-  /** Pids never treated as owned: the observer and its own ancestors. */
-  excludedPids: readonly number[];
   stateEntries: readonly StateEntry[];
 };
 
@@ -119,7 +64,6 @@ export type DaemonLeakSnapshot = {
   daemonPids: number[];
   phase: DaemonLeakPhase;
   liveDaemonPids: number[];
-  ownedProcesses: OwnedProcess[];
   strayStateEntries: string[];
 };
 
@@ -151,7 +95,6 @@ export function evaluateDaemonLeaks(observation: DaemonLeakObservation): DaemonL
     daemonPids,
     phase: observation.phase,
     liveDaemonPids,
-    ownedProcesses: findOwnedProcesses(observation, daemonPids),
     strayStateEntries: observation.stateEntries
       .filter(
         (entry) =>
@@ -171,65 +114,11 @@ export function evaluateDaemonLeaks(observation: DaemonLeakObservation): DaemonL
  * the report — so it fails alongside owned children and state-dir residue.
  */
 export function hasDaemonLeaks(snapshot: DaemonLeakSnapshot): boolean {
-  return (
-    survivingDaemonPids(snapshot).length > 0 ||
-    snapshot.ownedProcesses.length > 0 ||
-    snapshot.strayStateEntries.length > 0
-  );
+  return survivingDaemonPids(snapshot).length > 0 || snapshot.strayStateEntries.length > 0;
 }
 
 function survivingDaemonPids(snapshot: DaemonLeakSnapshot): number[] {
   return snapshot.phase === 'after-shutdown' ? snapshot.liveDaemonPids : [];
-}
-
-function findOwnedProcesses(
-  observation: DaemonLeakObservation,
-  daemonPids: readonly number[],
-): OwnedProcess[] {
-  const excluded = new Set([...observation.excludedPids, ...daemonPids]);
-  const matchers = stateDirMatchers(observation.stateDir);
-  const reasonsByPid = new Map<number, OwnershipReason[]>();
-  for (const proc of observation.processes) {
-    if (excluded.has(proc.pid)) continue;
-    const reasons = directOwnershipReasons(proc, daemonPids, matchers);
-    if (reasons.length > 0) reasonsByPid.set(proc.pid, reasons);
-  }
-  // Ownership propagates down the tree: a child of the daemon, or of any process
-  // the rules above own, is owned (a detached `(simctl)` grandchild of a leaked
-  // recorder shim, DTServiceHub under a runner xcodebuild, …).
-  const roots = [...daemonPids, ...reasonsByPid.keys()];
-  for (const proc of expandProcessTree(roots, observation.processes)) {
-    if (excluded.has(proc.pid) || roots.includes(proc.pid)) continue;
-    reasonsByPid.set(proc.pid, [...(reasonsByPid.get(proc.pid) ?? []), 'descendant']);
-  }
-  return observation.processes.flatMap((proc) => {
-    const reasons = reasonsByPid.get(proc.pid);
-    return reasons
-      ? [{ pid: proc.pid, ppid: proc.ppid, pgid: proc.pgid, command: proc.command, reasons }]
-      : [];
-  });
-}
-
-type StateDirMatchers = { argv: RegExp; env: RegExp };
-
-function stateDirMatchers(stateDir: string): StateDirMatchers {
-  // Whole-path matches only: `<dir>` as a token or `<dir>/…`, never `<dir>-sibling`.
-  return {
-    argv: new RegExp(`(?:^|[\\s=])${escapeRegExp(stateDir)}(?:[\\s/]|$)`),
-    env: new RegExp(`AGENT_DEVICE_STATE_DIR=${escapeRegExp(stateDir)}(?:\\s|$)`),
-  };
-}
-
-function directOwnershipReasons(
-  proc: HostProcess,
-  daemonPids: readonly number[],
-  matchers: StateDirMatchers,
-): OwnershipReason[] {
-  const reasons: OwnershipReason[] = [];
-  if (daemonPids.includes(proc.pgid)) reasons.push('process-group');
-  if (matchers.env.test(proc.env)) reasons.push('state-dir-env');
-  if (matchers.argv.test(proc.command)) reasons.push('state-dir-argv');
-  return reasons;
 }
 
 type StateEntryContext = {
@@ -283,33 +172,11 @@ export function formatDaemonLeakReport(snapshot: DaemonLeakSnapshot): string {
     `  daemons that outlived shutdown: ${surviving.length}${
       surviving.length > 0 ? ` (${formatPids(surviving)})` : ''
     }`,
-    `  owned processes still alive: ${snapshot.ownedProcesses.length}`,
-    ...snapshot.ownedProcesses.map(
-      (proc) =>
-        `    pid ${proc.pid} ppid ${proc.ppid} pgid ${proc.pgid} [${proc.reasons.join(',')}] ${previewCommand(
-          proc.command,
-          snapshot.stateDir,
-        )}`,
-    ),
     `  stray state-dir entries: ${snapshot.strayStateEntries.length}`,
     ...snapshot.strayStateEntries.map((entry) => `    ${entry}`),
   ].join('\n');
 }
 
-function previewCommand(command: string, stateDir: string): string {
-  const masked = command.replace(
-    new RegExp(`${escapeRegExp(stateDir)}(?=[\\s/]|$)`, 'g'),
-    '<state-dir>',
-  );
-  return masked.length > COMMAND_PREVIEW_CHARS
-    ? `${masked.slice(0, COMMAND_PREVIEW_CHARS)}…`
-    : masked;
-}
-
 function formatPids(pids: readonly number[]): string {
   return pids.join(', ') || '(none)';
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

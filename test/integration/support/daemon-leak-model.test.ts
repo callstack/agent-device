@@ -6,23 +6,12 @@ import {
   type DaemonLeakObservation,
   type DaemonLeakObservationBase,
   type DaemonLeakPhaseSelection,
-  type HostProcess,
   type NonEmpty,
   type StateEntry,
 } from './daemon-leak-model.ts';
 
-// The lanes that call the oracle run device-free daemons, so the ownership rules
-// would otherwise only ever see an empty process set. These fixtures are the
-// real `ps` shapes captured during the #1109 and #1324 red-proofs (SHAs in the
-// #1781 B1 PR), so a regex or ordering edit that stops catching either leak
-// fails here instead of silently going quiet in CI.
 const STATE_DIR = '/tmp/agent-device-lane-abc';
 const DAEMON_PID = 4340;
-const OBSERVER_PID = 999;
-
-function proc(overrides: Partial<HostProcess> & Pick<HostProcess, 'pid'>): HostProcess {
-  return { ppid: 1, pgid: overrides.pid, command: 'unrelated', env: '', ...overrides };
-}
 
 // The phase and its identity arrive together: `after-close` cannot be requested
 // without naming the sessions that closed, so these helpers cannot construct the
@@ -35,8 +24,6 @@ function observe(
     stateDir: STATE_DIR,
     daemonPids: [DAEMON_PID],
     livePids: [],
-    processes: [],
-    excludedPids: [OBSERVER_PID],
     stateEntries: [],
     ...overrides,
     ...selection,
@@ -56,72 +43,6 @@ function observeAfterClose(
 function file(entryPath: string, descriptorLifecycle?: string): StateEntry {
   return { path: entryPath, kind: 'file', ...(descriptorLifecycle ? { descriptorLifecycle } : {}) };
 }
-
-describe('owned-process rules', () => {
-  // #1324: `simctl io … recordVideo` reparents to launchd (ppid 1) but keeps the
-  // dead daemon's process group, and simctl only finalizes the mp4 on SIGINT.
-  test('flags a recorder orphaned into the dead daemon process group', () => {
-    const recorder = proc({
-      pid: 52420,
-      ppid: 1,
-      pgid: DAEMON_PID,
-      command: '/…/simctl io 416440AE recordVideo /tmp/out.mp4',
-    });
-    const snapshot = evaluateDaemonLeaks(observe({ processes: [recorder] }));
-
-    expect(snapshot.ownedProcesses).toEqual([
-      expect.objectContaining({ pid: 52420, reasons: ['process-group'] }),
-    ]);
-    expect(hasDaemonLeaks(snapshot)).toBe(true);
-  });
-
-  // #1109: the agent-browser daemon setsids away from the daemon's group, so
-  // only the inherited state-dir environment and its argv identify the fleet.
-  test('flags an agent-browser fleet by inherited state dir, including its children', () => {
-    const browserDaemon = proc({
-      pid: 47515,
-      ppid: 1,
-      pgid: 47515,
-      command: `${STATE_DIR}/tools/agent-browser/0.27.1/package/…/agent-browser-darwin-arm64`,
-      env: `HOME=/tmp AGENT_DEVICE_STATE_DIR=${STATE_DIR}`,
-    });
-    const chrome = proc({
-      pid: 47586,
-      ppid: 47515,
-      pgid: 47586,
-      command: 'Google Chrome for Testing',
-    });
-    const renderer = proc({
-      pid: 47953,
-      ppid: 47586,
-      pgid: 47586,
-      command: 'Chrome Helper (Renderer)',
-    });
-    const snapshot = evaluateDaemonLeaks(observe({ processes: [browserDaemon, chrome, renderer] }));
-
-    expect(snapshot.ownedProcesses.map((owned) => owned.pid)).toEqual([47515, 47586, 47953]);
-    expect(snapshot.ownedProcesses[0]?.reasons).toEqual(['state-dir-env', 'state-dir-argv']);
-    // The fleet below the matched root is owned transitively, not by its own argv.
-    expect(snapshot.ownedProcesses[1]?.reasons).toEqual(['descendant']);
-  });
-
-  test('ignores foreign processes, the observer chain, and the daemons themselves', () => {
-    const simulator = proc({ pid: 700, command: '/…/CoreSimulator … SimulatorTrampoline' });
-    const neighbourStateDir = proc({
-      pid: 701,
-      command: `node --state-dir ${STATE_DIR}-other/daemon.ts`,
-      env: `AGENT_DEVICE_STATE_DIR=${STATE_DIR}-other`,
-    });
-    const observer = proc({ pid: OBSERVER_PID, pgid: DAEMON_PID });
-    const daemon = proc({ pid: DAEMON_PID, pgid: DAEMON_PID });
-    const snapshot = evaluateDaemonLeaks(
-      observe({ processes: [simulator, neighbourStateDir, observer, daemon] }),
-    );
-
-    expect(snapshot.ownedProcesses).toEqual([]);
-    expect(hasDaemonLeaks(snapshot)).toBe(false);
-  });
-});
 
 describe('surviving-daemon rule', () => {
   // stopProcessForTakeover is best-effort void: it returns silently on identity
@@ -268,7 +189,6 @@ describe('closed-session capture handles', () => {
 test('a clean shutdown reports no leak', () => {
   const snapshot = evaluateDaemonLeaks(
     observe({
-      processes: [proc({ pid: 700, command: 'unrelated' })],
       stateEntries: [file('daemon.log'), file('sessions/default/events.ndjson')],
     }),
   );

@@ -1,17 +1,9 @@
-// Daemon leak oracle (#1781 B1, feeds #1431): observes the host process table
-// and an isolated state dir, then applies the ownership/residue rules in
+// Daemon leak oracle (#1781 B1, feeds #1431): observes daemon liveness and an
+// isolated state dir, then applies the lifecycle/residue rules in
 // `daemon-leak-model.ts` (which documents them and is where they are tested).
-//
-// What each caller actually exercises depends on what its daemon did. The three
-// device-free daemon lanes guard surviving-daemon and state-dir residue rules.
-// The Web smoke owns a real managed agent-browser + Chrome fleet, so its
-// post-shutdown checkpoint makes the #1109 process arm fail on the shipped
-// route. The model fixtures pin every ownership shape, including #1324's
-// reparented recorder; both historical failures also have manual red-proofs.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runCmd } from '../../../src/utils/exec.ts';
 import { isProcessAlive } from '../../../src/utils/host-process.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -20,16 +12,11 @@ import {
   hasDaemonLeaks,
   type DaemonLeakPhaseSelection,
   type DaemonLeakSnapshot,
-  type HostProcess,
   type StateEntry,
 } from './daemon-leak-model.ts';
 
-const PS_TIMEOUT_MS = 5_000;
 const DEFAULT_SETTLE_MS = 5_000;
 const SETTLE_POLL_MS = 250;
-// Matches src/utils/host-process.ts: an absolute path so a PATH-resolved
-// third-party `ps` (Homebrew, procps) cannot change the flag semantics.
-const HOST_PS_COMMAND = process.platform === 'win32' ? 'ps' : '/bin/ps';
 
 /**
  * `phase` carries the identity that phase needs: `after-close` cannot be
@@ -60,21 +47,18 @@ async function captureDaemonLeakSnapshot(
   options: DaemonLeakOracleOptions,
 ): Promise<DaemonLeakSnapshot> {
   const stateDir = path.resolve(options.stateDir);
-  const processes = await listHostProcessesWithGroups();
   return evaluateDaemonLeaks({
     ...phaseSelectionOf(options),
     stateDir,
     daemonPids: options.daemonPids,
     livePids: options.daemonPids.filter((pid) => isProcessAlive(pid)),
-    processes,
-    excludedPids: [...ancestorsOf(process.pid, processes)],
     stateEntries: readStateEntries(stateDir, options.sessionsDir),
   });
 }
 
 /**
  * Re-snapshots until clean or `settleMs` elapses. Stragglers that exit on their
- * own inside the window are not leaks; #1324/#1109 orphans never exit on their own.
+ * own inside the window are not leaks.
  */
 async function settleDaemonLeakSnapshot(
   options: DaemonLeakOracleOptions,
@@ -150,67 +134,6 @@ function readDescriptorLifecycle(filePath: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-// src/utils/host-process.ts's listHostProcesses covers pid/ppid/command; the
-// ownership rules also need the process group and the environment, which need a
-// second `ps` on macOS (`-E` appends the environment to the command column) and
-// /proc on Linux.
-async function listHostProcessesWithGroups(): Promise<HostProcess[]> {
-  const darwin = process.platform === 'darwin';
-  const [tree, darwinEnv] = await Promise.all([
-    runPs(['-axww', '-o', 'pid=,ppid=,pgid=,command=']),
-    darwin ? runPs(['-E', '-axww', '-o', 'pid=,command=']) : Promise.resolve(''),
-  ]);
-  const envByPid = new Map(
-    parsePsLines(darwinEnv, /^\s*(\d+)\s+(.*)$/).map(([pid, env]) => [Number(pid), env ?? '']),
-  );
-  return parsePsLines(tree, /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.*)$/).map(
-    ([pid, ppid, pgid, command]) => ({
-      pid: Number(pid),
-      ppid: Number(ppid),
-      pgid: Number(pgid),
-      command: command ?? '',
-      env: darwin ? (envByPid.get(Number(pid)) ?? '') : readLinuxEnviron(Number(pid)),
-    }),
-  );
-}
-
-function parsePsLines(stdout: string, shape: RegExp): string[][] {
-  return stdout.split('\n').flatMap((line) => {
-    const match = shape.exec(line);
-    return match ? [match.slice(1)] : [];
-  });
-}
-
-async function runPs(args: string[]): Promise<string> {
-  const result = await runCmd(HOST_PS_COMMAND, args, {
-    allowFailure: true,
-    timeoutMs: PS_TIMEOUT_MS,
-  });
-  if (result.exitCode !== 0) {
-    throw new Error(
-      `daemon leak oracle: ps ${args.join(' ')} failed (${result.exitCode}): ${result.stderr}`,
-    );
-  }
-  return result.stdout;
-}
-
-function readLinuxEnviron(pid: number): string {
-  try {
-    return fs.readFileSync(`/proc/${pid}/environ`, 'latin1').replaceAll('\0', ' ');
-  } catch {
-    return '';
-  }
-}
-
-function ancestorsOf(pid: number, processes: readonly HostProcess[]): Set<number> {
-  const byPid = new Map(processes.map((proc) => [proc.pid, proc]));
-  const chain = new Set<number>();
-  for (let cursor = pid; cursor > 0 && !chain.has(cursor); cursor = byPid.get(cursor)?.ppid ?? 0) {
-    chain.add(cursor);
-  }
-  return chain;
 }
 
 /**

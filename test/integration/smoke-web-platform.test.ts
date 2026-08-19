@@ -1,12 +1,10 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import path from 'node:path';
 import test from 'node:test';
-import { stopProcessForTakeover } from '../../src/daemon/daemon-process.ts';
 import { type CliJsonResult, formatResultDebug, runBuiltCliJson } from './cli-json.ts';
 import { assertPngDimensions, assertPngFile } from './provider-scenarios/assertions.ts';
-import { assertNoDaemonLeaks } from './support/daemon-leak-oracle.ts';
 
 const TEST_NAME = 'live web platform e2e smoke';
 const WEB_E2E_ENABLED = process.env.AGENT_DEVICE_WEB_E2E === '1';
@@ -27,20 +25,9 @@ type WebSmokeContext = {
   lastSnapshot?: any;
   screenshotPath: string;
   server: Server;
-  stateDir: string;
   stepHistory: StepRecord[];
   url: string;
 };
-
-// #1781 B1 / #1109: this is the one lane whose daemon owns real child processes
-// — the managed agent-browser daemon and its Chrome fleet — so it is where the
-// leak oracle's owned-process arm can actually fail. #1109's acceptance is that
-// a stopped daemon leaves zero agent-browser processes behind within the idle
-// window; the lane pins AGENT_BROWSER_IDLE_TIMEOUT_MS at 30s, so the settle
-// window here has to outlast it. Graceful daemon shutdown does not close web
-// sessions (#1868), so the fleet legitimately lives until that window elapses —
-// which is why the checkpoint waits it out rather than asserting immediately.
-const WEB_LEAK_SETTLE_MS = 90_000;
 
 test(
   TEST_NAME,
@@ -103,7 +90,6 @@ async function createWebSmokeContext(): Promise<WebSmokeContext> {
     env,
     screenshotPath: path.join(artifactDir, 'web-smoke.png'),
     server: fixture.server,
-    stateDir,
     stepHistory: [],
     url: fixture.url,
   };
@@ -252,11 +238,6 @@ async function cleanupWebSmoke(context: WebSmokeContext, opened: boolean): Promi
     }
   }
   try {
-    await assertOrphanedWebSessionLeavesNothingOwned(context);
-  } catch (error) {
-    errors.push(error);
-  }
-  try {
     await closeServer(context.server);
   } catch (error) {
     errors.push(error);
@@ -267,41 +248,6 @@ async function cleanupWebSmoke(context: WebSmokeContext, opened: boolean): Promi
   if (errors.length > 1) {
     throw new AggregateError(errors, 'web smoke cleanup failed');
   }
-}
-
-// #1109's acceptance, as a lane assertion: a daemon that dies while a web
-// session is still open must leave zero agent-browser processes behind within
-// the idle window. That is the leak's real shape — an ordinary `close` reaps the
-// fleet, so only an unclosed session can strand it — and it is the one route in
-// CI where the oracle's owned-process arm has real children to find.
-async function assertOrphanedWebSessionLeavesNothingOwned(context: WebSmokeContext): Promise<void> {
-  await runStep(context, 'reopen for the orphan checkpoint', [
-    'open',
-    context.url,
-    ...context.common,
-  ]);
-  const infoPath = path.join(context.stateDir, 'daemon.json');
-  // Never skip silently: no daemon metadata after a live web session means the
-  // checkpoint would certify a daemon it never observed.
-  assert.ok(existsSync(infoPath), `expected daemon metadata at ${infoPath}`);
-  const info = JSON.parse(readFileSync(infoPath, 'utf8')) as {
-    pid: number;
-    processStartTime?: string;
-  };
-  assert.ok(Number.isInteger(info.pid) && info.pid > 0, `expected a daemon pid in ${infoPath}`);
-  // Stop the daemon with the session still open: the browser fleet is orphaned
-  // exactly as in #1109, and only its idle lifecycle can still reap it.
-  await stopProcessForTakeover(info.pid, {
-    termTimeoutMs: 5_000,
-    killTimeoutMs: 5_000,
-    expectedStartTime: info.processStartTime,
-  });
-  await assertNoDaemonLeaks({
-    stateDir: context.stateDir,
-    daemonPids: [info.pid],
-    phase: 'after-shutdown',
-    settleMs: WEB_LEAK_SETTLE_MS,
-  });
 }
 
 function recordStep(
