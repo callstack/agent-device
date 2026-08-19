@@ -15,6 +15,11 @@ export const SUBPROCESS_STUB_TESTS: readonly string[] = [
   'scripts/fuzz/harness.test.ts',
   // Replays the fuzz corpus through that same worker watchdog, waiting its per-case budget.
   'scripts/fuzz/corpus-replay.test.ts',
+  // Spawns `node scripts/size-report.mjs` per case, which itself spawns git plus the shimmed
+  // pnpm/npm — several real subprocesses deep. Un-serialized it took 14s for the file under the
+  // full suite versus ~5.5s alone, and starved spawns surfaced as a vitest test timeout instead
+  // of the orchestration assertion the case is about (#1842).
+  'scripts/__tests__/size-report-base.test.ts',
 ];
 
 const SETUP_FILES = ['src/__tests__/hermetic-env-setup.ts', 'src/__tests__/process-memo-setup.ts'];

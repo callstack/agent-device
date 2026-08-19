@@ -542,8 +542,11 @@ would silently enroll every future file under a directory — and run in their o
 exactly that list, and both projects run inside one `vitest run`, so the serialized chain runs
 alongside the main pool rather than after it (~0 added CI wall clock).
 
-Issue #1823 owns the membership and the project's deletion test: if the three run un-serialized in
+Issue #1823 owns the membership and the project's deletion test: if they run un-serialized in
 the default pool for 20 consecutive CI runs with no timeout-shaped failure, the project goes.
+`size-report-base.test.ts` joined in #1842 — it drives `pnpm size --base`'s worktree/lock
+orchestration through a real `node scripts/size-report.mjs` per case, which spawns git and the
+shimmed package managers under it.
 Adding a file needs the concrete spawn named at the entry; per-file `process.env` isolation is not a
 reason, since `pool: forks` + `isolate: true` already give every project that.
 
