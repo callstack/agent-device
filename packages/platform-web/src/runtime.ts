@@ -9,6 +9,7 @@ import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
   bindLocalSnapshotInteractor,
+  elementTextRuntimeOperationFacts,
   localRuntimeOwner,
   snapshotRuntimeOperationFacts,
   sameRuntimeOwner,
@@ -21,6 +22,11 @@ import { bindWebApplicationLifecycle } from './lifecycle.ts';
 
 const owner = localRuntimeOwner('web');
 const available = Object.freeze({ available: true } as const);
+const elementTextUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'Web targets read element text from the captured tree only.',
+} as const);
 const appLogUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
@@ -234,6 +240,9 @@ function webRuntimeFacts(
       ...viewportRuntimeOperationFacts({
         setViewport: device.kind === 'device' ? available : openTargetKindUnavailable,
       }),
+      // The web backend has no point-addressed read: `get` answers from the captured DOM tree,
+      // which is what the legacy dispatch already did once its Apple-runner attempt failed.
+      ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementTextUnavailable }),
       ensureReady: readinessUnavailable,
       bootTarget: readinessUnavailable,
       bootTargetHeadless: readinessUnavailable,

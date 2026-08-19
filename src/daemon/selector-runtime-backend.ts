@@ -12,11 +12,14 @@ import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
 import { contextFromFlags } from './context.ts';
 import { ensureDeviceReady } from './device-ready.ts';
 import { readTextForNode } from './handlers/interaction-read.ts';
+import { legacyDispatchReadTextAtPoint } from './handlers/interaction-read-legacy-dispatch.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
 import type { ContextFromFlags } from './handlers/interaction-common.ts';
 import { SessionStore } from './session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { createSelectorCaptureRuntime } from './selector-capture-runtime.ts';
+import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
+import type { BoundGetRuntimeOperations } from './get-runtime.ts';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';
 import { getRequestSignal } from '../request/cancel.ts';
 import { snapshotOptionsToFlags } from '../backend-snapshot-options.ts';
@@ -27,6 +30,12 @@ export type SelectorRuntimeParams = {
   logPath?: string;
   sessionStore: SessionStore;
   contextFromFlags?: ContextFromFlags;
+  /**
+   * Request-bound device runtime seams. Migrated selector commands resolve their own plan from
+   * these; unmigrated ones ignore them and keep their legacy admission until their unit lands.
+   */
+  inspectFacts?: InspectDeviceRuntimeFacts;
+  bindDevice?: BindDeviceRuntime;
   // Filled by the capture runtime with the snapshot each selector command actually consumed;
   // sessionless routes disclose from here because no session record stores the capture.
   consumedSnapshot?: { state?: SnapshotState };
@@ -36,6 +45,11 @@ export type SelectorRuntimeParams = {
 type SelectorRuntimeDeviceParams = SelectorRuntimeParams & {
   session: SessionState | undefined;
   device: SessionState['device'];
+  /**
+   * The operations the calling command already bound. A migrated command passes them so its
+   * capture and element read execute through its own binding instead of the legacy adapter.
+   */
+  operations?: BoundGetRuntimeOperations;
 };
 
 type AppleRunnerFindTextTarget = {
@@ -64,7 +78,7 @@ export function createSelectorRuntimeForDevice(params: SelectorRuntimeDevicePara
 
 export async function createSelectorRuntime(
   params: SelectorRuntimeParams,
-  options: { requireSession: boolean; capability: 'find' | 'get' | 'is' },
+  options: { requireSession: boolean; capability: 'find' | 'is' },
 ): Promise<
   | { ok: true; runtime: ReturnType<typeof createSelectorRuntimeForDevice> }
   | { ok: false; response: DaemonResponse }
@@ -93,6 +107,20 @@ export async function createSelectorRuntime(
 
 function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDeviceBackend {
   const { req, session, device, logPath, sessionName, sessionStore } = params;
+  const resolveContextFromFlags: ContextFromFlags =
+    params.contextFromFlags ??
+    ((flags, appBundleId, traceLogPath) =>
+      contextFromFlags(logPath ?? '', flags, appBundleId, traceLogPath));
+  // A migrated command's binding is authoritative, including when it reports no live read;
+  // an unmigrated command keeps the legacy dispatch until its own descriptor cuts over.
+  const readTextAtPoint = params.operations
+    ? params.operations.readTextAtPoint
+    : legacyDispatchReadTextAtPoint({
+        device,
+        flags: req.flags,
+        surface: session?.surface,
+        contextFromFlags: resolveContextFromFlags,
+      });
   const captureRuntime = createSelectorCaptureRuntime({
     device,
     session,
@@ -101,6 +129,7 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
     req,
     consumedSnapshot: params.consumedSnapshot,
     logPath,
+    captureData: params.operations?.captureSnapshot,
   });
   return {
     platform: publicPlatformString(device),
@@ -135,10 +164,8 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
         appBundleId: session?.appBundleId,
         traceOutPath: session?.trace?.outPath,
         surface: session?.surface,
-        contextFromFlags:
-          params.contextFromFlags ??
-          ((flags, appBundleId, traceLogPath) =>
-            contextFromFlags(logPath ?? '', flags, appBundleId, traceLogPath)),
+        readTextAtPoint,
+        contextFromFlags: resolveContextFromFlags,
       }),
     }),
     findText: async (context, text) => ({

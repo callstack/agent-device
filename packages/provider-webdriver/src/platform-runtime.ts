@@ -80,6 +80,18 @@ const viewportUnavailable = Object.freeze({
   hint: 'WebDriver provider runtimes do not expose viewport resizing.',
 } as const);
 
+/**
+ * A point read is a local-tool operation (adb uiautomator, the XCUITest runner, the macOS
+ * helper). A WebDriver owner's transport carries none of them, so the owner reports no live
+ * read and `get` answers from the captured tree; provider ownership never borrows the local
+ * family read.
+ */
+const elementTextUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'WebDriver provider runtimes read element text from the captured tree only.',
+} as const);
+
 const appStateUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
@@ -264,6 +276,7 @@ function webDriverFacts(
       network: inactiveSession,
       screenRecording: inactiveSession,
       viewport: inactiveSession,
+      elementText: inactiveSession,
       lifecycle: applicationLifecycleOperationFacts({
         resolveOpenTarget: inactiveSession,
         prepareApplicationOpen: inactiveSession,
@@ -284,6 +297,7 @@ function webDriverFacts(
     network: appLogUnavailable,
     screenRecording: recordingUnavailable,
     viewport: viewportUnavailable,
+    elementText: elementTextUnavailable,
     lifecycle: webDriverLifecycleFacts(device),
   });
   return Object.freeze({

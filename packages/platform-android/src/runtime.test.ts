@@ -94,11 +94,14 @@ test.each([
   expect(facts.operations.bootTarget).toEqual({ available: true });
   expect(facts.operations.bootTargetHeadless.available).toBe(runtimeDevice.kind === 'emulator');
   expect(facts.operations.captureSnapshot).toEqual({ available: true });
+  // uiautomator reads text at a point over the same adb transport the capture uses.
+  expect(facts.operations.readTextAtPoint).toEqual({ available: true });
   expect(facts.operations.captureSnapshotWithCustomActions.available).toBe(false);
   expect(facts.operations.captureSnapshotWithoutActiveApp).toEqual({ available: true });
   expect(facts.operations.setViewport).toMatchObject({ available: false });
   expect(binding.operations.setViewport).toBeUndefined();
   expect(binding.operations.captureSnapshot).toBeTypeOf('function');
+  expect(binding.operations.readTextAtPoint).toBeTypeOf('function');
 
   await expect(binding.operations.ensureReady?.({})).resolves.toMatchObject({
     id: runtimeDevice.id,
@@ -266,6 +269,7 @@ test.each([
     expect(facts.operations.bootTarget).toEqual({ available: true });
     expect(facts.operations.bootTargetHeadless.available).toBe(runtimeDevice.kind === 'emulator');
     expect(facts.operations.captureSnapshot.available).toBe(runtimeDevice.kind !== 'simulator');
+    expect(facts.operations.readTextAtPoint.available).toBe(runtimeDevice.kind !== 'simulator');
     expect(binding.operations.captureSnapshot).toBeTypeOf(
       runtimeDevice.kind === 'simulator' ? 'undefined' : 'function',
     );

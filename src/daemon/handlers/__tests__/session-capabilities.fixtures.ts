@@ -69,6 +69,7 @@ function createAdmissionFacts(
         withoutActiveApp: unavailable,
       }),
       setViewport: unavailable,
+      readTextAtPoint: unavailable,
       deployApp: options.deployAvailable ? available : unavailable,
       materializeAppSource: options.sourceAvailable ? available : unavailable,
       deployMaterializedApp: options.sourceAvailable ? available : unavailable,

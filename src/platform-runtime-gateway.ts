@@ -304,6 +304,7 @@ function unavailableProviderBinding(
     appState: unavailable,
     network: unavailable,
     viewport: unavailable,
+    elementText: unavailable,
     lifecycle: unavailableProviderLifecycleFacts(unavailable),
   });
 }
@@ -321,6 +322,7 @@ function unavailableProviderFacts(runtime: ProviderDeviceRuntime, device: Device
       appState: unavailable,
       network: unavailable,
       viewport: unavailable,
+      elementText: unavailable,
       readiness: unavailable,
       lifecycle: unavailableProviderLifecycleFacts(unavailable),
     },

@@ -241,6 +241,8 @@ async function runInteractionHandler(
       logPath: params.logPath,
       sessionStore: params.sessionStore,
       contextFromFlags: params.contextFromFlags,
+      inspectFacts: params.inspectFacts,
+      bindDevice: params.bindDevice,
     }),
   );
 }

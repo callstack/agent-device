@@ -8,6 +8,7 @@ import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
   bindLocalSnapshotInteractor,
+  elementTextRuntimeOperationFacts,
   localRuntimeOwner,
   snapshotRuntimeOperationFacts,
   viewportRuntimeOperationFacts,
@@ -26,6 +27,11 @@ import {
 } from './deployment/runtime.ts';
 
 const owner = localRuntimeOwner('harmonyos');
+const elementTextUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'HarmonyOS reads element text from the captured tree only.',
+} as const);
 const available = Object.freeze({ available: true } as const);
 const unavailable = Object.freeze({
   available: false,
@@ -130,6 +136,9 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
               : snapshotKindUnavailable,
         }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
+        // HarmonyOS has no point-read tool: `get` answers from the captured tree, which is what
+        // the legacy dispatch already did after its Apple-runner attempt failed.
+        ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementTextUnavailable }),
         ensureReady: available,
         bootTarget: unavailable,
         bootTargetHeadless: unavailable,

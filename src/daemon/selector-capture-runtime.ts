@@ -1,4 +1,5 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
+import type { CaptureSnapshotInput, SnapshotResult } from '@agent-device/contracts/platform';
 import type { BackendSnapshotResult } from '../backend.ts';
 import {
   buildSnapshotPresentationKey,
@@ -25,6 +26,12 @@ type SelectorCaptureRuntimeParams = {
   // Sessionless routes have no session record to read the consumed capture back from, so the
   // capture runtime reports every consumed snapshot here for response-level disclosures.
   consumedSnapshot?: { state?: SnapshotState };
+  /**
+   * Request-bound platform capture, supplied by a selector command that already bound its device
+   * runtime. Unmigrated selector commands omit it and keep the legacy interactor capture until
+   * their own descriptor cuts over.
+   */
+  captureData?: (input: CaptureSnapshotInput) => Promise<SnapshotResult>;
 };
 
 /**
@@ -182,6 +189,7 @@ async function runCapture(
     snapshotScope,
     includeRects: request.includeRects,
     signal: request.signal,
+    ...(params.captureData ? { captureData: params.captureData } : {}),
   });
   return capture.snapshot;
 }
