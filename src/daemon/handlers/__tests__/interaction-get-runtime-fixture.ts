@@ -75,6 +75,10 @@ function elementReadFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOpera
     operations: {
       ...base.operations,
       captureSnapshot: elementReadFixtureState.captureSnapshotAvailable ? available : unavailable,
+      // The selector plan requires this row too on a session with no tracked app.
+      captureSnapshotWithoutActiveApp: elementReadFixtureState.captureSnapshotAvailable
+        ? available
+        : unavailable,
       readTextAtPoint: elementReadFixtureState.readTextAtPointAvailable ? available : unavailable,
     },
   });
