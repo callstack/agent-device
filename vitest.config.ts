@@ -17,7 +17,9 @@ export const SUBPROCESS_STUB_TESTS: readonly string[] = [
   'scripts/fuzz/corpus-replay.test.ts',
 ];
 
-const SETUP_FILES = [
+// Imported by vitest.mutation.config.ts so the two lanes cannot drift: a guard
+// added here must reach the Stryker sandbox too.
+export const SETUP_FILES = [
   'src/__tests__/hermetic-env-setup.ts',
   'src/__tests__/hermetic-signal-setup.ts',
   'src/__tests__/process-memo-setup.ts',

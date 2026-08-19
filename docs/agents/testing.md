@@ -100,15 +100,22 @@ the runtime seam existed; retiring `dispatchCommand('snapshot')` surfaced them o
 time. Do not add to that set, and when a command migrates (`docs/agents/adr-0019-unit.md`), its
 tests move to the runtime seam in the same PR.
 
-Signals are hermetic too. A vitest worker may signal only itself and the processes it spawned;
-`src/__tests__/hermetic-signal-setup.ts` refuses every other `process.kill` (signal 0, the liveness
-probe, stays free) and fails the sending test by name. The refused pid is one the test made up
-(`child: { pid: 4242 }`), and on a real host that number can belong to anyone — on CI it periodically
-belonged to a sibling fork, which died mid-file with no test attributed ("Worker exited
-unexpectedly", #1824). If a test drives a real kill path against a fabricated pid, mock the signal
-writes where it already mocks the liveness reads: `signalPidsBestEffort` and
-`signalProcessGroupBestEffort` in `src/utils/host-process.ts` (or `vi.spyOn(process, 'kill')`).
-Killing a daemon or Metro fixture the test itself spawned is fine — that pid is the worker's own.
+Signals are hermetic too. A vitest worker may signal only itself and its own **direct children**;
+`src/__tests__/hermetic-signal-setup.ts` refuses every other process-table write and fails the
+sending test by name. It covers both ways out of the process, because the runner-disposal family
+uses both: `process.kill` (signal 0, the liveness probe, stays free) and a spawned
+`kill`/`pkill`/`killall`, whose `-P` and `-f` forms reach processes the worker never spawned at all.
+The refused pid is usually one the test made up (`child: { pid: 4242 }`), and on a real host that
+number can belong to anyone — on CI it periodically belonged to a sibling fork, which died mid-file
+with no test attributed ("Worker exited unexpectedly", #1824); a `pkill -f 'xcodebuild.*'` from a
+unit test would find a developer's live runner.
+
+If a test drives a real kill path against a fabricated pid, mock the seam where it already mocks the
+liveness reads: `signalPidsBestEffort` / `signalProcessGroupBestEffort` in `src/utils/host-process.ts`
+for direct writes, the exec or tool-provider seam for a spawned `pkill`. Killing a daemon or Metro
+fixture the test itself spawned is fine — that pid is the worker's own. *Direct* is literal: a
+grandchild started through a shell or `npx` wrapper is not tracked, so signal the direct child, or
+its process group through the negative pid, rather than the grandchild's pid.
 
 Keep tests behavioral. Do not assert shapes or cases TypeScript already proves.
 

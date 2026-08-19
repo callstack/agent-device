@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import { readTestScope, threadHostileTestFiles } from './scripts/mutation/test-scope.ts';
 import { workspaceSourceAliases } from './scripts/mutation/workspace-aliases.ts';
-import { SUBPROCESS_STUB_TESTS } from './vitest.config.ts';
+import { SETUP_FILES, SUBPROCESS_STUB_TESTS } from './vitest.config.ts';
 
 const repoRoot = path.dirname(fileURLToPath(import.meta.url));
 
@@ -36,6 +36,6 @@ export default defineConfig({
   test: {
     include: scope ?? ['src/**/*.test.ts', 'packages/*/src/**/*.test.ts'],
     exclude: [...SUBPROCESS_STUB_TESTS, ...threadHostileTestFiles(repoRoot), '**/node_modules/**'],
-    setupFiles: ['src/__tests__/hermetic-env-setup.ts', 'src/__tests__/process-memo-setup.ts'],
+    setupFiles: [...SETUP_FILES],
   },
 });

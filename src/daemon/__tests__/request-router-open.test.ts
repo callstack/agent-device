@@ -12,6 +12,19 @@ vi.mock('../../utils/host-process.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../utils/host-process.ts')>();
   return { ...actual, readProcessStartTime: vi.fn(() => 'test-process-start') };
 });
+// Opening a session runs the owned-lease cleanup, which pattern-kills stale
+// xcodebuild runners with a real `pkill -f`. The session id here is fabricated,
+// so on a host with a live Apple runner that write would reach a process this
+// test does not own; stub the tool seam the way the runner tests stub the
+// signal seam (#1824).
+vi.mock('../../platforms/apple/core/tool-provider.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../platforms/apple/core/tool-provider.ts')>();
+  return {
+    ...actual,
+    runAppleToolCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+  };
+});
 
 import { dispatchCommand } from '../../core/dispatch.ts';
 import {
