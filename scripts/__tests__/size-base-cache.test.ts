@@ -88,23 +88,25 @@ test('removal cannot run at all while another run holds the takeover mutex', () 
 
 test('a delayed takeover holder is never displaced, however old its mutex looks', () => {
   // The interleaving that age-based reclamation created: holder A is merely slow — paused, or
-  // SIGSTOPed past any threshold — while still inside the section. Reclaiming its mutex would put
-  // B inside too, and then A's release could remove B's mutex and either could unlink the claim
-  // the other just created. A mutex is therefore never taken from its holder, at any age.
+  // SIGSTOPed past any threshold — while still inside the section. Use the old implementation's
+  // directory-shaped mutex so this is also a planted regression against that exact code: it would
+  // reclaim the aged directory and enter concurrently. Reclaiming the mutex would put B inside too,
+  // and then A's release could remove B's mutex and either could unlink the claim the other just
+  // created. A mutex is therefore never taken from its holder, at any age.
   fs.symlinkSync(ABANDONED, claimPath(entry));
-  fs.symlinkSync(`${process.pid}:delayed-holder`, takeoverPath(entry));
+  fs.mkdirSync(takeoverPath(entry));
   const longAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  fs.lutimesSync(takeoverPath(entry), longAgo, longAgo);
+  fs.utimesSync(takeoverPath(entry), longAgo, longAgo);
 
   assert.equal(removeAbandonedClaim(entry, ABANDONED), 'busy');
   assert.equal(
-    fs.readlinkSync(takeoverPath(entry)),
-    `${process.pid}:delayed-holder`,
+    fs.lstatSync(takeoverPath(entry)).isDirectory(),
+    true,
     "the holder's mutex is intact",
   );
   assert.equal(readClaimIdentity(claimPath(entry)), ABANDONED, 'and it removed nothing');
   assert.throws(() => acquireBaseClaim(entry, 'abc123456'), /taking over the abandoned claim/);
-  assert.equal(fs.readlinkSync(takeoverPath(entry)), `${process.pid}:delayed-holder`);
+  assert.equal(fs.lstatSync(takeoverPath(entry)).isDirectory(), true);
 });
 
 test('a leaked mutex wedges only its own entry, and says how to clear it', () => {
