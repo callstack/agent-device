@@ -68,3 +68,33 @@ test('snapshotHarmony reports truncation once the node cap is hit instead of dro
   assert.equal(uncapped.truncated, undefined);
   assert.equal(uncapped.nodes.length, 4);
 });
+
+test('snapshotHarmony keeps counting the tree below a node the cap omitted', async () => {
+  // The cap fills on `first`, so `branch` and everything under it is omitted.
+  // `analysis` still describes the tree the device reported, so the omitted
+  // subtree must reach both counters — five nodes, deepest at depth 3.
+  scriptHarmonyLayoutDump({
+    attributes: { type: 'root', bounds: '[0,0][1080,2340]' },
+    children: [
+      { attributes: { type: 'Button', text: 'first', clickable: 'true' } },
+      {
+        attributes: { type: 'Column', text: 'branch' },
+        children: [
+          {
+            attributes: { type: 'Row', text: 'leaf' },
+            children: [{ attributes: { type: 'Text', text: 'deep' } }],
+          },
+        ],
+      },
+    ],
+  });
+
+  const capped = await snapshotHarmony(DEVICE, { maxNodes: 2 });
+
+  assert.equal(capped.truncated, true);
+  assert.deepEqual(
+    capped.nodes.map((node) => node.value ?? node.type),
+    ['Application', 'first'],
+  );
+  assert.deepEqual(capped.analysis, { rawNodeCount: 5, maxDepth: 3 });
+});

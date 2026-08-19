@@ -93,17 +93,22 @@ function buildHarmonySnapshot(
   let maxDepth = 0;
   let truncated = false;
   const maxNodes = options.maxNodes ?? MAX_NODES;
+  // Accounting is separate from emission: `analysis` describes the tree the
+  // device reported, so the walk keeps counting and descending after the
+  // emitted-node cap fills. Stopping there would under-report `rawNodeCount`
+  // and `maxDepth` for exactly the oversized trees the cap exists for.
   const walk = (node: ArkUiLayoutNode, depth: number, parentIndex?: number): void => {
     rawNodeCount += 1;
     maxDepth = Math.max(maxDepth, depth);
+    let currentIndex = parentIndex;
     if (nodes.length >= maxNodes) {
       truncated = true;
-      return;
+    } else {
+      const attributes = node.attributes ?? {};
+      const candidate = arkUiNodeFromAttributes(attributes, nodes.length, depth, parentIndex);
+      const include = !options.interactiveOnly || candidate.hittable === true;
+      currentIndex = include ? nodes.push(candidate) - 1 : parentIndex;
     }
-    const attributes = node.attributes ?? {};
-    const candidate = arkUiNodeFromAttributes(attributes, nodes.length, depth, parentIndex);
-    const include = !options.interactiveOnly || candidate.hittable === true;
-    const currentIndex = include ? nodes.push(candidate) - 1 : parentIndex;
     if (depth < (options.depth ?? Number.POSITIVE_INFINITY)) {
       for (const child of node.children ?? []) walk(child, depth + 1, currentIndex);
     }
