@@ -79,6 +79,7 @@ function rowViolations(
     violations.push(...narrowingViolations(row, file, program));
   }
   violations.push(...exactCallViolations(row, files, programs));
+  violations.push(...staticCommandSetViolations(row, files, programs));
   const sources = new Map(files.map(({ path, source }) => [path, source]));
   for (const check of rowChecks(row)) violations.push(...check(sources));
   return violations;
@@ -354,6 +355,59 @@ function isAdmissionMember(
     node['type'] === 'MemberExpression' &&
     isCommandExpression(node, command)
   );
+}
+
+/**
+ * A data-only admission retirement, proven from both sides.
+ *
+ * A command whose legacy admission was a capability bucket plus membership in a static platform
+ * command set retires no module, route, or dispatch projection — there is no identifier to name
+ * as gone. Naming an invented one satisfies the non-empty shape check while proving nothing, so
+ * the row names the sets themselves: each must still be DECLARED in production source, and must
+ * no longer carry this command.
+ *
+ * The existence half is what an identifier-shaped claim cannot express. The membership half
+ * overlaps the automatic static-set column for `WEB`/`HARMONY`-named sets, deliberately: stating
+ * it here keeps the declared claim self-sufficient rather than dependent on that regex.
+ */
+function staticCommandSetViolations(
+  row: MigratedCommandCutover,
+  files: readonly ProductionSource[],
+  programs: ReadonlyMap<string, AstNode>,
+): UnruledViolation[] {
+  const declared = row.legacyRetirement.staticCommandSets ?? [];
+  if (declared.length === 0) return [];
+  const violations: UnruledViolation[] = [];
+  const seen = new Set<string>();
+  for (const file of files) {
+    const program = programs.get(file.path);
+    if (!program) continue;
+    visitAst(program, (node) => {
+      const name = staticCommandSetName(node, declared);
+      if (name === undefined) return;
+      seen.add(name);
+      if (containsStringLiteral(node['init'], row.command)) {
+        violations.push(at(file, node, `static command set ${name} still admits ${row.command}`));
+      }
+    });
+  }
+  for (const name of declared) {
+    if (seen.has(name)) continue;
+    violations.push({
+      file: `(${row.command} cutover row)`,
+      line: 1,
+      message: `claims retired static command set '${name}', which no production source declares`,
+    });
+  }
+  return violations;
+}
+
+function staticCommandSetName(node: AstNode, declared: readonly string[]): string | undefined {
+  if (node['type'] !== 'VariableDeclarator') return undefined;
+  const id = node['id'] as AstNode | undefined;
+  if (id?.['type'] !== 'Identifier') return undefined;
+  const name = String(id['name']);
+  return declared.includes(name) ? name : undefined;
 }
 
 function containsStringLiteral(node: unknown, expected: string): boolean {

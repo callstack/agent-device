@@ -555,17 +555,13 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
     subject: 'element predicate',
     tier: 'request-scoped',
     execution: 'device-runtime',
-    // `is` had no legacy adapter module and no `dispatch` projection of its own: its whole legacy
-    // admission WAS the capability bucket plus the two static family command sets that augmented
-    // it. The row's automatic columns already reject the bucket, `requireCommandSupported('is',
-    // …)`, and any `/(?:WEB|HARMONY).*COMMANDS/` declarator that still lists it — but
-    // `cutoverRowDefects` requires every row to state at least one retirement form rather than
-    // rely on the automatic ones, so these name the augmentation entries that had to disappear,
-    // in the same shape R36 uses. They are names no production source may ever define:
-    // `addWebCommandCapabilities` throws for a web-listed command with no matrix row, so the web
-    // entry could not have been left behind either way.
+    // `is` retired no module, route, or dispatch projection — it had none. Its whole legacy
+    // admission was the capability bucket (rejected by this row's automatic descriptor column)
+    // plus membership in these two static sets, which is a DATA deletion. Naming the sets proves
+    // it from both sides: each must still be declared in production source and must no longer
+    // list `is`, so neither an invented name nor a skipped deletion can satisfy it.
     legacyRetirement: {
-      routeNames: ['WEB_QUERY_COMMANDS_WITH_IS', 'HARMONYOS_IS_SUPPORT'],
+      staticCommandSets: ['HARMONYOS_SUPPORTED_COMMANDS', 'WEB_QUERY_COMMANDS'],
     },
     runtimeTypeNames: ['SnapshotRuntimeOperations'],
     operations: { names: ['captureSnapshot', 'captureSnapshotWithoutActiveApp'] },
