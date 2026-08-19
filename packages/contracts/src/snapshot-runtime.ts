@@ -13,11 +13,29 @@ export type { SnapshotResult } from './interactor-types.ts';
 /** Runner metadata needed by the selected snapshot implementation, without request-owned state. */
 export type SnapshotRuntimeExecution = Readonly<Omit<RunnerContext, 'appBundleId' | 'signal'>>;
 
-/** Neutral snapshot intent. The request binding supplies cancellation and exact-owner authority. */
+/** Neutral snapshot intent. The request binding supplies exact-owner authority. */
 export type CaptureSnapshotInput = Readonly<{
   options?: Readonly<Omit<SnapshotOptions, 'signal'>>;
   execution?: SnapshotRuntimeExecution;
+  /**
+   * Per-capture cancellation, composed with the binding's own signal. Polling commands
+   * (`wait`, `find <q> wait`) enforce each poll's remaining budget by aborting that capture
+   * and waiting for it to quiesce rather than racing it, so without this a stalled capture
+   * consumes the whole request instead of producing the poll's stalled-capture verdict.
+   */
+  signal?: AbortSignal;
 }>;
+
+/** The one place a per-capture signal joins its binding's: the binding always cancels, the
+ * caller may cancel sooner — identically for app and desktop surface captures. */
+export function captureSnapshotSignal(
+  bindingSignal: AbortSignal,
+  input: CaptureSnapshotInput,
+): AbortSignal {
+  return input.signal === undefined
+    ? bindingSignal
+    : AbortSignal.any([bindingSignal, input.signal]);
+}
 
 export type SnapshotRuntimeOperations = Readonly<{
   captureSnapshot(input: CaptureSnapshotInput): Promise<SnapshotResult>;
@@ -81,10 +99,11 @@ function bindSnapshotInteractor(
   params: SnapshotInteractorBindingParams,
 ): SnapshotRuntimeOperations {
   const captureSnapshot = async (input: CaptureSnapshotInput) => {
+    const signal = captureSnapshotSignal(params.signal, input);
     const runner: RunnerContext = {
       ...input.execution,
       appBundleId: input.options?.appBundleId,
-      signal: params.signal,
+      signal,
     };
     const interactor =
       params.ownership === 'local'
@@ -97,7 +116,7 @@ function bindSnapshotInteractor(
         { reason: 'provider-runtime-interactor-missing', deviceId: params.device.id },
       );
     }
-    return await interactor.snapshot({ ...input.options, signal: params.signal });
+    return await interactor.snapshot({ ...input.options, signal });
   };
   return Object.freeze({
     captureSnapshot,

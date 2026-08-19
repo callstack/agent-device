@@ -6,7 +6,7 @@ import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts
 import { buildSnapshotSignatures } from '../../android-snapshot-freshness.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import {
-  makeIosSession as makeSession,
+  makeIosAppSession as makeSession,
   makeAuthoringSession,
 } from '../../../__tests__/test-utils/session-factories.ts';
 
@@ -1032,7 +1032,7 @@ test('find rejects --record on a mutating action before any device work', async 
 test('read-only find while recording is intentionally deferred from target-v1 evidence (#1349)', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'default';
-  const session = makeAuthoringSession(sessionName);
+  const session = makeAuthoringSession(sessionName, { appBundleId: 'com.example.app' });
   sessionStore.set(sessionName, session);
   mockDispatch.mockImplementation(async (_device, command) => {
     if (command === 'snapshot') {

@@ -3,7 +3,10 @@ import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform';
-import { bindLocalSnapshotInteractor } from '@agent-device/contracts/platform';
+import {
+  bindLocalSnapshotInteractor,
+  captureSnapshotSignal,
+} from '@agent-device/contracts/platform';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 
 /** Apple-owned selection between app snapshots and explicit macOS surface snapshots. */
@@ -22,7 +25,11 @@ export function bindAppleSnapshotRuntime(
       input.options?.surface !== undefined &&
       input.options.surface !== 'app'
     ) {
-      return await host.snapshot.captureSurface(request.device, input.options, request.signal);
+      return await host.snapshot.captureSurface(
+        request.device,
+        input.options,
+        captureSnapshotSignal(request.signal, input),
+      );
     }
     return await appSnapshot.captureSnapshot(input);
   };

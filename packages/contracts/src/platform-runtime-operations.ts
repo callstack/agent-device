@@ -107,30 +107,43 @@ export type SnapshotRuntimePlan =
       use: typeof captureSnapshotWithoutActiveAppUse;
     }>;
 
-/** Selects one owner-fact-backed capture plan from normalized command/session intent. */
-export function resolveSnapshotRuntimePlan(input: {
-  customActions: boolean;
-  hasActiveApp: boolean;
-}): SnapshotRuntimePlan {
-  if (input.customActions) {
-    return input.hasActiveApp
-      ? Object.freeze({
-          kind: 'custom-actions-active-app',
-          operation: 'captureSnapshotWithCustomActions',
-          use: captureSnapshotWithCustomActionsUse,
-        })
-      : Object.freeze({
-          kind: 'custom-actions-without-active-app',
-          operation: 'captureSnapshotWithCustomActions',
-          use: captureSnapshotWithCustomActionsWithoutActiveAppUse,
-        });
-  }
+export type SelectorCaptureRuntimePlan = Extract<
+  SnapshotRuntimePlan,
+  { kind: 'active-app' | 'without-active-app' }
+>;
+
+/**
+ * The active-app split every selector capture selects from. The selector family exposes no
+ * `--actions` surface, so custom actions are outside its declaration.
+ */
+export function resolveSelectorCaptureRuntimePlan(
+  input: Readonly<{ hasActiveApp: boolean }>,
+): SelectorCaptureRuntimePlan {
   return input.hasActiveApp
     ? Object.freeze({ kind: 'active-app', operation: 'captureSnapshot', use: captureSnapshotUse })
     : Object.freeze({
         kind: 'without-active-app',
         operation: 'captureSnapshotWithoutActiveApp',
         use: captureSnapshotWithoutActiveAppUse,
+      });
+}
+
+/** Selects one owner-fact-backed capture plan from normalized command/session intent. */
+export function resolveSnapshotRuntimePlan(input: {
+  customActions: boolean;
+  hasActiveApp: boolean;
+}): SnapshotRuntimePlan {
+  if (!input.customActions) return resolveSelectorCaptureRuntimePlan(input);
+  return input.hasActiveApp
+    ? Object.freeze({
+        kind: 'custom-actions-active-app',
+        operation: 'captureSnapshotWithCustomActions',
+        use: captureSnapshotWithCustomActionsUse,
+      })
+    : Object.freeze({
+        kind: 'custom-actions-without-active-app',
+        operation: 'captureSnapshotWithCustomActions',
+        use: captureSnapshotWithCustomActionsWithoutActiveAppUse,
       });
 }
 export const deviceBootRuntimeUses = Object.freeze([bootTargetUse, bootTargetHeadlessUse] as const);

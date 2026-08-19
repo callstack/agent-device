@@ -17,6 +17,12 @@ import type { ContextFromFlags } from './handlers/interaction-common.ts';
 import { SessionStore } from './session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { createSelectorCaptureRuntime } from './selector-capture-runtime.ts';
+import {
+  resolveBoundSelectorCapture,
+  type BoundSelectorOperations,
+  type SelectorCaptureCommand,
+} from './selector-capture-binding.ts';
+import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';
 import { getRequestSignal } from '../request/cancel.ts';
 import { snapshotOptionsToFlags } from '../backend-snapshot-options.ts';
@@ -31,12 +37,25 @@ export type SelectorRuntimeParams = {
   // sessionless routes disclose from here because no session record stores the capture.
   consumedSnapshot?: { state?: SnapshotState };
   signal?: AbortSignal;
+  inspectFacts?: InspectDeviceRuntimeFacts;
+  bindDevice?: BindDeviceRuntime;
 };
 
-type SelectorRuntimeDeviceParams = SelectorRuntimeParams & {
+export type SelectorRuntimeDeviceParams = SelectorRuntimeParams & {
   session: SessionState | undefined;
   device: SessionState['device'];
+  /** The request-bound operations this runtime executes through. Absent for selector
+   * commands still on legacy admission, until their own ADR 0019 unit lands. */
+  bound?: BoundSelectorOperations;
 };
+
+type ResolvedSelectorRuntime =
+  | { ok: true; runtime: ReturnType<typeof createSelectorRuntimeForDevice> }
+  | { ok: false; response: DaemonResponse };
+
+type ResolvedSelectorDevice =
+  | { ok: true; session: SessionState | undefined; device: SessionState['device'] }
+  | { ok: false; response: DaemonResponse };
 
 type AppleRunnerFindTextTarget = {
   device: SessionState['device'];
@@ -62,31 +81,69 @@ export function createSelectorRuntimeForDevice(params: SelectorRuntimeDevicePara
   });
 }
 
+/** The session/device a selector command runs against, before any admission decides. */
+async function resolveSelectorRuntimeDevice(
+  params: SelectorRuntimeParams,
+  requireSession: boolean,
+): Promise<ResolvedSelectorDevice> {
+  params.consumedSnapshot ??= {};
+  const session = params.sessionStore.get(params.sessionName);
+  if (!session && requireSession) return { ok: false, response: noActiveSessionError() };
+  const device = session?.device ?? (await resolveTargetDevice(params.req.flags ?? {}));
+  if (!session) await ensureDeviceReady(device);
+  return { ok: true, session, device };
+}
+
+/**
+ * A migrated selector command's runtime: facts-first admission, exactly one binding, and a
+ * backend whose every capture goes through the bound operation. A sibling unit migrates by
+ * naming its command here instead of passing a `capability` to {@link createSelectorRuntime};
+ * nothing else in this module or `selector-capture-runtime.ts` needs to change.
+ */
+export async function createBoundSelectorRuntime(
+  params: SelectorRuntimeParams,
+  options: { requireSession: boolean; command: SelectorCaptureCommand },
+): Promise<ResolvedSelectorRuntime> {
+  const resolved = await resolveSelectorRuntimeDevice(params, options.requireSession);
+  if (!resolved.ok) return resolved;
+  const bound = await resolveBoundSelectorCapture({
+    command: options.command,
+    device: resolved.device,
+    session: resolved.session,
+    inspectFacts: params.inspectFacts,
+    bindDevice: params.bindDevice,
+  });
+  if (!bound.ok) return { ok: false, response: bound.response };
+  return {
+    ok: true,
+    runtime: createSelectorRuntimeForDevice({
+      ...params,
+      session: resolved.session,
+      device: resolved.device,
+      bound: bound.operations,
+    }),
+  };
+}
+
+/**
+ * The legacy capability-admitted selector runtime, for the selector commands whose ADR 0019
+ * unit has not landed. The union narrows as each one migrates, and the last selector unit
+ * deletes this function together with its `requireCommandSupported` call.
+ */
 export async function createSelectorRuntime(
   params: SelectorRuntimeParams,
   options: { requireSession: boolean; capability: 'find' | 'get' | 'is' },
-): Promise<
-  | { ok: true; runtime: ReturnType<typeof createSelectorRuntimeForDevice> }
-  | { ok: false; response: DaemonResponse }
-> {
-  params.consumedSnapshot ??= {};
-  const session = params.sessionStore.get(params.sessionName);
-  if (!session && options.requireSession) {
-    return {
-      ok: false,
-      response: noActiveSessionError(),
-    };
-  }
-  const device = session?.device ?? (await resolveTargetDevice(params.req.flags ?? {}));
-  if (!session) await ensureDeviceReady(device);
-  const unsupported = requireCommandSupported(options.capability, device);
+): Promise<ResolvedSelectorRuntime> {
+  const resolved = await resolveSelectorRuntimeDevice(params, options.requireSession);
+  if (!resolved.ok) return resolved;
+  const unsupported = requireCommandSupported(options.capability, resolved.device);
   if (unsupported) return { ok: false, response: unsupported };
   return {
     ok: true,
     runtime: createSelectorRuntimeForDevice({
       ...params,
-      session,
-      device,
+      session: resolved.session,
+      device: resolved.device,
     }),
   };
 }
@@ -101,6 +158,7 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
     req,
     consumedSnapshot: params.consumedSnapshot,
     logPath,
+    capture: params.bound?.capture,
   });
   return {
     platform: publicPlatformString(device),
