@@ -105,60 +105,80 @@ export function readSessionEventLogWindow(eventLogPath: string): SessionEventLog
 }
 
 function placeSessionEventLogWindow(eventLogPath: string): SessionEventLogWindow {
-  const activePath = eventLogPath;
   const rotatedPath = resolveRotatedSessionEventLogPath(eventLogPath);
   const sidecar = readWindowSidecar(eventLogPath);
-  const activeDigest = readFirstLineDigest(activePath);
-  const activeExists = fileExists(activePath);
-  const rotatedDigest = readFirstLineDigest(rotatedPath);
-
-  if (sidecar === 'unverifiable')
+  if (sidecar === 'unverifiable') {
     throw unverifiedWindowError(eventLogPath, 'window file is invalid');
-  if (sidecar === undefined) {
-    // Never rotated: the active file starts the timeline. A rotated file with
-    // no record cannot be placed, so it is an error rather than a guess.
-    if (rotatedDigest !== undefined) {
-      throw unverifiedWindowError(eventLogPath, 'a rotated event log exists with no window record');
-    }
-    return {
-      files: activeExists ? [{ path: activePath, firstLineIndex: 0 }] : [],
-      earliestCursor: 0,
-    };
   }
+  if (sidecar === undefined) return placeNeverRotatedWindow(eventLogPath, rotatedPath);
 
   const newest = sidecar[sidecar.length - 1];
   if (!newest) throw unverifiedWindowError(eventLogPath, 'window file records no generation');
 
-  // The newest record describes the generation that was in the active file when
-  // it was written. Matching digests means the rename has not landed yet.
-  const activeStart =
-    activeDigest !== undefined && activeDigest === newest.firstLineDigest
-      ? newest.firstLineIndex
-      : newest.firstLineIndex + newest.lineCount;
-
+  const activeExists = fileExists(eventLogPath);
+  const activeStart = placeActiveGeneration(eventLogPath, newest);
   const files: EventLogWindowFile[] = [];
-  if (rotatedDigest !== undefined) {
-    const record = sidecar.find((generation) => generation.firstLineDigest === rotatedDigest);
-    if (!record) {
-      throw unverifiedWindowError(eventLogPath, 'the rotated event log matches no window record');
-    }
-    const observedLines = countLines(rotatedPath);
-    if (observedLines !== record.lineCount) {
-      throw unverifiedWindowError(
-        eventLogPath,
-        `the rotated event log holds ${observedLines} lines, the window recorded ${record.lineCount}`,
-      );
-    }
-    if (activeExists && record.firstLineIndex + record.lineCount !== activeStart) {
-      throw unverifiedWindowError(
-        eventLogPath,
-        'retained event log generations are not contiguous',
-      );
-    }
-    files.push({ path: rotatedPath, firstLineIndex: record.firstLineIndex });
-  }
-  if (activeExists) files.push({ path: activePath, firstLineIndex: activeStart });
+  const rotatedStart = placeRotatedGeneration({
+    eventLogPath,
+    rotatedPath,
+    sidecar,
+    activeStart,
+    activeExists,
+  });
+  if (rotatedStart !== undefined) files.push({ path: rotatedPath, firstLineIndex: rotatedStart });
+  if (activeExists) files.push({ path: eventLogPath, firstLineIndex: activeStart });
   return { files, earliestCursor: files[0]?.firstLineIndex ?? activeStart };
+}
+
+/** No sidecar means the log has never rotated, so the active file starts the timeline. */
+function placeNeverRotatedWindow(eventLogPath: string, rotatedPath: string): SessionEventLogWindow {
+  if (readFirstLineDigest(rotatedPath) !== undefined) {
+    throw unverifiedWindowError(eventLogPath, 'a rotated event log exists with no window record');
+  }
+  return {
+    files: fileExists(eventLogPath) ? [{ path: eventLogPath, firstLineIndex: 0 }] : [],
+    earliestCursor: 0,
+  };
+}
+
+/**
+ * The newest record describes the generation that was in the active file when
+ * the sidecar was written, so a first line still matching it means the rename
+ * has not landed yet and the active file is still that generation.
+ */
+function placeActiveGeneration(eventLogPath: string, newest: EventLogGeneration): number {
+  const activeDigest = readFirstLineDigest(eventLogPath);
+  return activeDigest !== undefined && activeDigest === newest.firstLineDigest
+    ? newest.firstLineIndex
+    : newest.firstLineIndex + newest.lineCount;
+}
+
+/** Returns the rotated file's absolute start, or undefined when it is absent. */
+function placeRotatedGeneration(params: {
+  eventLogPath: string;
+  rotatedPath: string;
+  sidecar: readonly EventLogGeneration[];
+  activeStart: number;
+  activeExists: boolean;
+}): number | undefined {
+  const { eventLogPath, rotatedPath, sidecar, activeStart, activeExists } = params;
+  const rotatedDigest = readFirstLineDigest(rotatedPath);
+  if (rotatedDigest === undefined) return undefined;
+  const record = sidecar.find((generation) => generation.firstLineDigest === rotatedDigest);
+  if (!record) {
+    throw unverifiedWindowError(eventLogPath, 'the rotated event log matches no window record');
+  }
+  const observedLines = countLines(rotatedPath);
+  if (observedLines !== record.lineCount) {
+    throw unverifiedWindowError(
+      eventLogPath,
+      `the rotated event log holds ${observedLines} lines, the window recorded ${record.lineCount}`,
+    );
+  }
+  if (activeExists && record.firstLineIndex + record.lineCount !== activeStart) {
+    throw unverifiedWindowError(eventLogPath, 'retained event log generations are not contiguous');
+  }
+  return record.firstLineIndex;
 }
 
 /**

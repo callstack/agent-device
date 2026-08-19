@@ -22,7 +22,7 @@ export function digestEventLogLine(line: string): string {
 }
 
 /**
- * Visit each non-blank line of one event log file in order. Returns false from
+ * Visit each non-blank line of one event log file in order. Return false from
  * `onLine` to stop. A file that disappeared (rotation renamed it between the
  * caller's listing and this open) reports as absent rather than throwing.
  */
@@ -30,29 +30,17 @@ export function scanEventLogLines(
   filePath: string,
   onLine: (line: string) => boolean | void,
 ): boolean {
-  let fd: number;
+  const fd = openSyncIfExists(filePath);
+  if (fd === undefined) return false;
   try {
-    fd = fs.openSync(filePath, 'r');
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
-    throw error;
-  }
-  try {
-    const decoder = new StringDecoder('utf8');
+    const splitter = createLineSplitter(onLine);
     const buffer = Buffer.allocUnsafe(READ_CHUNK_BYTES);
-    let pending = '';
     let bytesRead = 0;
     do {
       bytesRead = fs.readSync(fd, buffer, 0, buffer.length, null);
-      const text = `${pending}${decoder.write(buffer.subarray(0, bytesRead))}`;
-      let start = 0;
-      for (let index = text.indexOf('\n'); index !== -1; index = text.indexOf('\n', start)) {
-        if (visitLine(text.slice(start, index), onLine) === false) return true;
-        start = index + 1;
-      }
-      pending = text.slice(start);
+      if (!splitter.push(buffer.subarray(0, bytesRead))) return true;
     } while (bytesRead > 0);
-    visitLine(`${pending}${decoder.end()}`, onLine);
+    splitter.end();
     return true;
   } finally {
     fs.closeSync(fd);
@@ -61,42 +49,22 @@ export function scanEventLogLines(
 
 /** Line count plus first-line digest, read without blocking the event loop. */
 export async function measureEventLogFile(filePath: string): Promise<EventLogFileMeasurement> {
-  let handle: fs.promises.FileHandle;
+  const handle = await openIfExists(filePath);
+  if (handle === undefined) return { lineCount: 0, firstLineDigest: undefined };
+  const measurement: EventLogFileMeasurement = { lineCount: 0, firstLineDigest: undefined };
   try {
-    handle = await fs.promises.open(filePath, 'r');
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return { lineCount: 0, firstLineDigest: undefined };
-    }
-    throw error;
-  }
-  try {
-    const decoder = new StringDecoder('utf8');
+    const splitter = createLineSplitter((line) => {
+      if (measurement.lineCount === 0) measurement.firstLineDigest = digestEventLogLine(line);
+      measurement.lineCount += 1;
+    });
     const buffer = Buffer.allocUnsafe(READ_CHUNK_BYTES);
-    let pending = '';
-    let lineCount = 0;
-    let firstLineDigest: string | undefined;
     for (;;) {
       const { bytesRead } = await handle.read(buffer, 0, buffer.length, null);
-      const text = `${pending}${decoder.write(buffer.subarray(0, bytesRead))}`;
-      let start = 0;
-      for (let index = text.indexOf('\n'); index !== -1; index = text.indexOf('\n', start)) {
-        const line = normalizeLine(text.slice(start, index));
-        if (line !== undefined) {
-          if (lineCount === 0) firstLineDigest = digestEventLogLine(line);
-          lineCount += 1;
-        }
-        start = index + 1;
-      }
-      pending = text.slice(start);
+      splitter.push(buffer.subarray(0, bytesRead));
       if (bytesRead === 0) break;
     }
-    const trailing = normalizeLine(`${pending}${decoder.end()}`);
-    if (trailing !== undefined) {
-      if (lineCount === 0) firstLineDigest = digestEventLogLine(trailing);
-      lineCount += 1;
-    }
-    return { lineCount, firstLineDigest };
+    splitter.end();
+    return measurement;
   } finally {
     await handle.close();
   }
@@ -112,13 +80,55 @@ export function readFirstLineDigest(filePath: string): string | undefined {
   return digest;
 }
 
-function normalizeLine(rawLine: string): string | undefined {
-  const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
-  return line.trim().length === 0 ? undefined : line;
+/** Splits streamed chunks into event-log lines; `push` returns false once the consumer stops. */
+function createLineSplitter(onLine: (line: string) => boolean | void): {
+  push: (chunk: Buffer) => boolean;
+  end: () => void;
+} {
+  const decoder = new StringDecoder('utf8');
+  let pending = '';
+  let stopped = false;
+  return {
+    push(chunk) {
+      if (stopped) return false;
+      const text = `${pending}${decoder.write(chunk)}`;
+      let start = 0;
+      for (let index = text.indexOf('\n'); index !== -1; index = text.indexOf('\n', start)) {
+        if (visitLine(text.slice(start, index), onLine) === false) {
+          stopped = true;
+          return false;
+        }
+        start = index + 1;
+      }
+      pending = text.slice(start);
+      return true;
+    },
+    end() {
+      if (!stopped) visitLine(`${pending}${decoder.end()}`, onLine);
+    },
+  };
 }
 
 function visitLine(rawLine: string, onLine: (line: string) => boolean | void): boolean | void {
-  const line = normalizeLine(rawLine);
-  if (line === undefined) return;
+  const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
+  if (line.trim().length === 0) return;
   return onLine(line);
+}
+
+function openSyncIfExists(filePath: string): number | undefined {
+  try {
+    return fs.openSync(filePath, 'r');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
+
+async function openIfExists(filePath: string): Promise<fs.promises.FileHandle | undefined> {
+  try {
+    return await fs.promises.open(filePath, 'r');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
 }
