@@ -6,7 +6,6 @@ import {
 } from './live-scenarios.ts';
 
 export { MACOS_LIVE_SCENARIOS } from './live-scenarios.ts';
-export type { MacOsLiveScenario, MacOsLiveScenarioId } from './live-scenarios.ts';
 
 type PublicCommand = (typeof PUBLIC_COMMANDS)[keyof typeof PUBLIC_COMMANDS];
 
