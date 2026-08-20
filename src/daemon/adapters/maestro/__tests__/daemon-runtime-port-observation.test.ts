@@ -10,6 +10,7 @@ import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
 import {
   MAESTRO_OBSERVATION_POLL_MS,
   maestroSnapshotSignature,
+  observeTypedMaestroCondition,
   resolveTypedMaestroTarget,
   waitForTypedSnapshotStability,
 } from '../daemon-runtime-port-observation.ts';
@@ -128,6 +129,37 @@ test('computes expensive target evidence only for the command policies that cons
   expect(ordinary).not.toHaveProperty('dispatchSelector');
   expect(atomicRetry.surfaceSignature).toMatch(/^[a-f0-9]{64}$/);
   expect(atomicRetry.dispatchSelector).toEqual({ key: 'id', value: 'continue' });
+});
+
+test('matches iOS Maestro ids on semantic nodes suppressed from interactive presentation', async () => {
+  const snapshot = makeSnapshot([
+    { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 402, height: 874 } },
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'Other',
+      identifier: 'inert-title',
+      rect: { x: 20, y: 100, width: 180, height: 32 },
+    },
+    {
+      index: 2,
+      parentIndex: 1,
+      type: 'StaticText',
+      label: 'Inert surface',
+      rect: { x: 20, y: 100, width: 180, height: 32 },
+    },
+  ]);
+
+  await expect(
+    observeTypedMaestroCondition({
+      condition: { kind: 'visible', selector: { id: 'inert-title' } },
+      timeoutMs: 0,
+      context: { generation: 0, env: {} },
+      snapshot: async () => snapshot,
+      dependencies: makeDependencies(),
+      platform: 'ios',
+    }),
+  ).resolves.toMatchObject({ matched: true, visible: true, candidateCount: 1 });
 });
 
 test('compares snapshots before sleeping and captures once beyond a zero settle budget', async () => {

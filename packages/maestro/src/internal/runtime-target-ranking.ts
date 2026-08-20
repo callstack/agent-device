@@ -22,14 +22,19 @@ export function rankMaestroCandidates(
   selector: MaestroSelector,
   platform: MaestroPlatform,
   childOf?: MaestroSelector,
+  options: {
+    isVisible?: (node: SnapshotNode) => boolean;
+  } = {},
 ): MaestroRankedCandidates {
   const matches = snapshot.nodes.filter((node) => matchesMaestroTypedSelector(node, selector));
   const scoped = scopeMatchesByAncestor(snapshot, matches, childOf);
-  const visible = filterVisibleMaestroMatches({
-    nodes: snapshot.nodes,
-    matches: scoped.matches,
-    platform,
-  });
+  const visible = options.isVisible
+    ? scoped.matches.filter(options.isVisible)
+    : filterVisibleMaestroMatches({
+        nodes: snapshot.nodes,
+        matches: scoped.matches,
+        platform,
+      });
   return {
     matches: scoped.matches,
     visible,
