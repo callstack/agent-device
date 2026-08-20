@@ -134,11 +134,54 @@ extension RunnerTests {
     XCTAssertEqual(index, 2)
   }
 
+  // Adversarial-review finding: the deadline used to be checked BEFORE observing, so a commit
+  // landing during the final poll sleep was condemned as never observed — a false failure under
+  // exactly the loaded-host timing this wait exists for. Red against that ordering.
+  func testCommitLandingDuringTheFinalSleepIsStillObserved() {
+    var polls = 0
+    let outcome = Self.awaitSynthesizedCommitOutcome(
+      expectedText: "hardware-keyboard",
+      isExpired: { polls >= 1 },
+      observe: { polls == 0 ? "hardware-" : "hardware-keyboard" },
+      waitForNextObservation: { polls += 1 }
+    )
+    XCTAssertEqual(outcome, .settled)
+  }
+
+  // Adversarial-review finding: `treatingPlaceholderAsEmpty` maps a value equal to the field's
+  // placeholder to "", a prefix of everything. Typing a string that equals the placeholder
+  // committed instantly yet read as pending until the deadline. The observation now settles on an
+  // exact raw match, so this is the wait's view of that field.
+  func testValueEqualToThePlaceholderSettlesInsteadOfStallingUntilTheDeadline() {
+    var polls = 0
+    let outcome = Self.awaitSynthesizedCommitOutcome(
+      expectedText: "0.00",
+      isExpired: { polls >= 4 },
+      // What the fixed observe closure yields once the raw value matches: the exact text, not the
+      // placeholder-normalized "" that the prefix walk would treat as still pending.
+      observe: { "0.00" },
+      waitForNextObservation: { polls += 1 }
+    )
+    XCTAssertEqual(outcome, .settled)
+    XCTAssertEqual(polls, 0, "an exact match must not poll at all")
+  }
+
+  // The mapping the command actually refuses on. `.unobservable` must stay a success: it is the
+  // pre-existing contract for submit-key text and unreadable fields, so inverting it would fail
+  // every `type "...\n"`.
+  func testOnlyAnUnobservedCommitBecomesACommandFailure() {
+    XCTAssertNil(Self.textEntryFailure(forCommitOutcome: .settled))
+    XCTAssertNil(Self.textEntryFailure(forCommitOutcome: .unobservable))
+    XCTAssertEqual(Self.textEntryFailure(forCommitOutcome: .notObserved), .commitNotObserved)
+  }
+
   func testCommitNotObservedCarriesItsOwnCodeAndRecovery() {
     XCTAssertEqual(TextEntryFailure.commitNotObserved.rawValue, "TEXT_INPUT_COMMIT_NOT_OBSERVED")
     // The recovery has to name fill: `type` appends, so retrying it over a partial value would
     // concatenate onto whatever committed rather than repair it.
     XCTAssertTrue(TextEntryFailure.commitNotObserved.hint.contains("fill"))
+    // And it must not assert a field state the runner never read — the value may be complete.
+    XCTAssertFalse(TextEntryFailure.commitNotObserved.message.contains("only part"))
   }
 
 #if os(iOS)

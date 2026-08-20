@@ -16,7 +16,7 @@ extension RunnerTests {
       case .synthesisUnavailable:
         return "Reliable text synthesis is unavailable while the software keyboard is hidden."
       case .commitNotObserved:
-        return "The app committed only part of the typed text before the commit deadline."
+        return "The runner could not confirm the typed text committed before its deadline."
       }
     }
 
@@ -27,7 +27,7 @@ extension RunnerTests {
       case .synthesisUnavailable:
         return "Show the software keyboard, then retry type or fill."
       case .commitNotObserved:
-        return "The field holds a partial value. Read it back before retrying, and prefer fill, which replaces the whole value, over type, which appends to whatever committed."
+        return "The field may hold none, part, or all of the text. Read it back before retrying, and prefer fill, which replaces the whole value, over type, which appends to whatever committed."
       }
     }
   }

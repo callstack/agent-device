@@ -208,15 +208,32 @@ extension RunnerTests {
     observe: () -> String?,
     waitForNextObservation: () -> Void
   ) -> SynthesizedTextCommitOutcome {
-    while !isExpired() {
+    // The deadline is checked AFTER an observation, never before one, so the last thing that
+    // happens before condemning a commit is a read. Checking first would condemn a commit that
+    // landed during the final poll sleep — the exact loaded-host timing this wait exists for.
+    while true {
       switch synthesizedTextCommitProgress(observedText: observe(), expectedText: expectedText) {
       case .committed, .diverged:
         return .settled
       case .pending:
+        if isExpired() { return .notObserved }
         waitForNextObservation()
       }
     }
-    return .notObserved
+  }
+
+  /// The command-level consequence of a commit wait. `.unobservable` is not a failure: there was
+  /// no baseline to compare against, which is the pre-existing contract for submit-key text and
+  /// unreadable fields, not evidence that anything went wrong.
+  static func textEntryFailure(
+    forCommitOutcome outcome: SynthesizedTextCommitOutcome
+  ) -> TextEntryFailure? {
+    switch outcome {
+    case .settled, .unobservable:
+      return nil
+    case .notObserved:
+      return .commitNotObserved
+    }
   }
 
   /// Blocks until the synthesized bare-type text is observable in the target field, so `type`
@@ -238,15 +255,21 @@ extension RunnerTests {
     guard let textBefore, !typedText.contains("\n"), !typedText.contains("\r") else {
       return .unobservable
     }
+    let expectedText = textBefore + typedText
     let deadline = Date().addingTimeInterval(TextEntryTiming.synthesizedCommitTimeout)
     return Self.awaitSynthesizedCommitOutcome(
-      expectedText: textBefore + typedText,
+      expectedText: expectedText,
       isExpired: { Date() >= deadline },
       observe: {
-        editableTextValue(
-          for: resolveTextEntryElement(app: app, target: target),
-          treatingPlaceholderAsEmpty: true
-        )
+        let element = resolveTextEntryElement(app: app, target: target)
+        // `treatingPlaceholderAsEmpty` maps a value equal to the field's placeholder to "", which
+        // is a prefix of every expected value. Typing a string that happens to equal the
+        // placeholder (`type "0.00"` into a field placeheld "0.00") would then read as pending
+        // forever and be condemned at the deadline, having in fact committed immediately. The
+        // exact raw match settles that case; the normalized read still drives the prefix walk,
+        // where placeholder-as-empty is the reading we want.
+        if editableTextValue(for: element) == expectedText { return expectedText }
+        return editableTextValue(for: element, treatingPlaceholderAsEmpty: true)
       },
       waitForNextObservation: { sleepFor(TextEntryTiming.pollInterval) }
     )

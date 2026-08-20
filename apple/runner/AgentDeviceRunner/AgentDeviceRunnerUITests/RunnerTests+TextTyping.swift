@@ -131,7 +131,7 @@ extension RunnerTests {
           // The characters were posted, so the element stays on the tuple for the caller's
           // bookkeeping; the failure is what makes the command refuse. Reporting ok here is the
           // defect this route had — the deadline was indistinguishable from a commit.
-          return (currentTarget, commit == .notObserved ? .commitNotObserved : nil)
+          return (currentTarget, Self.textEntryFailure(forCommitOutcome: commit))
         case .fallback:
           return (nil, .synthesisUnavailable)
         case .raise(let message):
