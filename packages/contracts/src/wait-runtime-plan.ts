@@ -6,10 +6,9 @@ export type WaitRuntimeTarget = 'sleep' | 'text' | 'ref' | 'selector' | 'stable'
  * for a plan and therefore never admits or binds — the absence of platform execution for that
  * shape is stated here rather than left as an incidental branch in the handler.
  *
- * Every other shape polls the selector family's ordinary capture plan
- * (`resolveSelectorCaptureRuntimePlan`); `wait` contributes no plan of its own. Its correctness-
- * bearing native observations ride that plan's conditional set, while `get`'s optimization-only
- * `readTextAtPoint` remains preferred.
+ * Every other shape polls the selector family's wait-observation capture plan. The binder remains
+ * shared, but wait's correctness-bearing conditionals are absent from capture-only and element-text
+ * uses, so unrelated commands cannot be rejected for operations they never execute.
  */
 export function waitObservesDevice(target: WaitRuntimeTarget): boolean {
   return target !== 'sleep';

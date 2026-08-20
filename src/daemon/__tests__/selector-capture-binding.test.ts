@@ -64,6 +64,38 @@ test('an unavailable required operation refuses before any bind', async () => {
   expect(fixture.binds).toEqual([]);
 });
 
+test.each(['find', 'get', 'is'] as const)(
+  '%s ignores an advertised wait observation it does not execute',
+  async (command) => {
+    const fixture = selectorCaptureFixture({ findText: { available: true } });
+
+    const bound = await resolveBoundSelectorCapture({
+      command,
+      device: ANDROID_EMULATOR,
+      session: makeAndroidSession('selector'),
+      inspectFacts: fixture.inspectFacts,
+      bindDevice: fixture.bindDevice,
+    });
+
+    expect(bound.ok).toBe(true);
+    expect(fixture.binds).toEqual([ANDROID_EMULATOR]);
+  },
+);
+
+test('wait rejects an advertised observation with no implementation', async () => {
+  const fixture = selectorCaptureFixture({ findText: { available: true } });
+
+  await expect(
+    resolveBoundSelectorCapture({
+      command: 'wait',
+      device: ANDROID_EMULATOR,
+      session: makeAndroidSession('selector'),
+      inspectFacts: fixture.inspectFacts,
+      bindDevice: fixture.bindDevice,
+    }),
+  ).rejects.toMatchObject({ details: { reason: 'runtime-contract-invalid' } });
+});
+
 // The active-app split is the only plan axis selector commands have: no `--actions` surface,
 // so `captureSnapshotWithCustomActions` is never required and never admitted for them.
 test('a session without a tracked app selects the without-active-app plan', async () => {

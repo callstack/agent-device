@@ -218,11 +218,14 @@ export {
   resolveSnapshotRuntimePlan,
   screenshotRuntimePlanUses,
   selectorCaptureRuntimePlanUses,
+  selectorTextCaptureRuntimePlanUses,
   snapshotRuntimePlanUses,
+  waitSelectorCaptureRuntimePlanUses,
   viewportRuntimeUse,
 } from '../platform-runtime-operations.ts';
 export type {
   ScreenshotRuntimePlan,
+  SelectorCaptureRuntimeIntent,
   SelectorCaptureRuntimePlan,
   SnapshotRuntimePlan,
 } from '../platform-runtime-operations.ts';

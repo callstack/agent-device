@@ -10,7 +10,7 @@ import {
   type PlatformRuntimeOperations,
   type RuntimeFacts,
   type RuntimeOperationFact,
-  selectorCaptureRuntimePlanUses,
+  waitSelectorCaptureRuntimePlanUses,
   type FindTextInput,
   type SnapshotResult,
 } from '@agent-device/contracts/platform';
@@ -33,7 +33,7 @@ const webDevice = {
 
 const available = Object.freeze({ available: true } as const);
 /** The harness session tracks no app bundle id, so wait's plan is the without-active-app one. */
-const waitWithoutActiveAppUse = selectorCaptureRuntimePlanUses[1];
+const waitWithoutActiveAppUse = waitSelectorCaptureRuntimePlanUses[1];
 
 const findTextUnavailable = Object.freeze({
   available: false,

@@ -17,40 +17,47 @@ type SelectorOperations = Readonly<{
   findSelector?: BoundNativeSelectorRead;
 }>;
 
-/** Projects only admitted selector operations and captures each narrowed function exactly once. */
-export function selectSelectorOperations(
-  runtime: Readonly<{ operations: SelectorOperations }>,
-): SelectorOperations {
-  const { readTextAtPoint, findText, findSelector } = runtime.operations;
+/** Projects the one preferred operation admitted for `get` and read-only `find`. */
+export function selectElementTextOperation(
+  runtime: Readonly<{
+    operations: Readonly<{ readTextAtPoint?: BoundElementRead }>;
+  }>,
+): Pick<SelectorOperations, 'readTextAtPoint'> {
+  const { readTextAtPoint } = runtime.operations;
+  const selected = readTextAtPoint ? { operations: { readTextAtPoint } } : undefined;
   return Object.freeze({
-    ...(readTextAtPoint
+    ...(selected
       ? {
-          readTextAtPoint: bindElementRead({ operations: { readTextAtPoint } }),
-        }
-      : {}),
-    ...(findText ? { findText: bindConditionalTextRead({ operations: { findText } }) } : {}),
-    ...(findSelector
-      ? {
-          findSelector: bindConditionalSelectorRead({ operations: { findSelector } }),
+          readTextAtPoint: async (input: ReadTextAtPointInput) =>
+            await selected.operations.readTextAtPoint(input),
         }
       : {}),
   });
 }
 
-function bindElementRead(
-  runtime: Readonly<{ operations: Readonly<{ readTextAtPoint: BoundElementRead }> }>,
-): BoundElementRead {
-  return async (input: ReadTextAtPointInput) => await runtime.operations.readTextAtPoint(input);
-}
-
-function bindConditionalTextRead(
-  runtime: Readonly<{ operations: Readonly<{ findText: BoundNativeTextRead }> }>,
-): BoundNativeTextRead {
-  return async (input: FindTextInput) => await runtime.operations.findText(input);
-}
-
-function bindConditionalSelectorRead(
-  runtime: Readonly<{ operations: Readonly<{ findSelector: BoundNativeSelectorRead }> }>,
-): BoundNativeSelectorRead {
-  return async (input: FindSelectorInput) => await runtime.operations.findSelector(input);
+/** Projects only the fact-conditional observations admitted for `wait`. */
+export function selectWaitObservationOperations(
+  runtime: Readonly<{
+    operations: Readonly<{
+      findText?: BoundNativeTextRead;
+      findSelector?: BoundNativeSelectorRead;
+    }>;
+  }>,
+): Pick<SelectorOperations, 'findText' | 'findSelector'> {
+  const { findText, findSelector } = runtime.operations;
+  const selectedText = findText ? { operations: { findText } } : undefined;
+  const selectedSelector = findSelector ? { operations: { findSelector } } : undefined;
+  return Object.freeze({
+    ...(selectedText
+      ? {
+          findText: async (input: FindTextInput) => await selectedText.operations.findText(input),
+        }
+      : {}),
+    ...(selectedSelector
+      ? {
+          findSelector: async (input: FindSelectorInput) =>
+            await selectedSelector.operations.findSelector(input),
+        }
+      : {}),
+  });
 }

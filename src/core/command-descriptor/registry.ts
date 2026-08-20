@@ -27,6 +27,8 @@ import {
   openApplicationRuntimePlanUses,
   closeApplicationRuntimePlanUses,
   selectorCaptureRuntimePlanUses,
+  selectorTextCaptureRuntimePlanUses,
+  waitSelectorCaptureRuntimePlanUses,
   snapshotRuntimePlanUses,
   prepareAppleRunnerRuntimeUse,
   runtimeCommandRuntimePlanUses,
@@ -968,8 +970,8 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     batchable: true,
     // A duration wait declares no operation and never binds (`waitObservesDevice`); every
-    // observing shape polls the selector family's ordinary capture plan, whose preferred set
-    // carries wait's measured `findText` beside get's `readTextAtPoint`.
+    // observing shape uses the wait-specific capture plan so its conditional native observations
+    // cannot affect capture-only or element-text selector commands.
     //
     // ACCEPTED BEHAVIOUR CHANGE (#1875, ruled rather than assumed): binding the family plan means
     // wait asks the owner whether it can observe a device with no app attached, and the families
@@ -980,7 +982,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     // screen — so `wait stable` and `wait @ref` stopped returning a success that was describing
     // the runner, not the app. Android captures the real launcher in that state, its facts say
     // so, and wait proceeds unchanged. Same plan, opposite outcomes, chosen by the owner.
-    platformExecution: { kind: 'device-runtime', uses: selectorCaptureRuntimePlanUses },
+    platformExecution: { kind: 'device-runtime', uses: waitSelectorCaptureRuntimePlanUses },
   },
   {
     name: 'alert',
@@ -1203,7 +1205,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: { route: 'interaction', refFrameEffect: 'preserve' },
     timeoutPolicy: postActionObservationTimeoutPolicy('get', PRESERVE_DAEMON_TIMEOUT_POLICY),
     batchable: true,
-    platformExecution: { kind: 'device-runtime', uses: selectorCaptureRuntimePlanUses },
+    platformExecution: { kind: 'device-runtime', uses: selectorTextCaptureRuntimePlanUses },
   },
   {
     name: 'is',

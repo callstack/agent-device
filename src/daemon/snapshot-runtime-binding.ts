@@ -23,7 +23,8 @@ import { errorResponse } from './handlers/response.ts';
 import { resolveSnapshotScope } from './handlers/snapshot-capture.ts';
 import { resolveSessionDevice } from './handlers/snapshot-session.ts';
 import {
-  selectSelectorOperations,
+  selectElementTextOperation,
+  selectWaitObservationOperations,
   type BoundElementRead,
   type BoundNativeSelectorRead,
   type BoundNativeTextRead,
@@ -177,11 +178,7 @@ async function bindSnapshotCaptureRuntime(
       return selectActiveAppSnapshot(runtime);
     }
     case 'selector-active-app': {
-      const runtime = await bind(device, plan.use);
-      return {
-        ...selectActiveAppSnapshot(runtime),
-        ...selectSelectorOperations(runtime),
-      };
+      return await bindActiveAppSelectorRuntime(bind, device, plan);
     }
     case 'custom-actions-active-app': {
       const runtime = await bind(device, plan.use);
@@ -192,15 +189,75 @@ async function bindSnapshotCaptureRuntime(
       return selectSnapshotWithoutActiveApp(runtime);
     }
     case 'selector-without-active-app': {
-      const runtime = await bind(device, plan.use);
-      return {
-        ...selectSnapshotWithoutActiveApp(runtime),
-        ...selectSelectorOperations(runtime),
-      };
+      return await bindSelectorRuntimeWithoutActiveApp(bind, device, plan);
     }
     case 'custom-actions-without-active-app': {
       const runtime = await bind(device, plan.use);
       return selectCustomActionsSnapshot(runtime);
+    }
+  }
+}
+
+type ActiveAppSelectorRuntimePlan = Extract<
+  SelectorCaptureRuntimePlan,
+  { kind: 'selector-active-app' }
+>;
+
+async function bindActiveAppSelectorRuntime(
+  bind: BindDeviceRuntime,
+  device: SessionState['device'],
+  plan: ActiveAppSelectorRuntimePlan,
+) {
+  switch (plan.intent) {
+    case 'capture-only': {
+      const runtime = await bind(device, plan.use);
+      return selectActiveAppSnapshot(runtime);
+    }
+    case 'element-text': {
+      const runtime = await bind(device, plan.use);
+      return {
+        ...selectActiveAppSnapshot(runtime),
+        ...selectElementTextOperation(runtime),
+      };
+    }
+    case 'wait-observation': {
+      const runtime = await bind(device, plan.use);
+      return {
+        ...selectActiveAppSnapshot(runtime),
+        ...selectWaitObservationOperations(runtime),
+      };
+    }
+  }
+}
+
+type SelectorRuntimePlanWithoutActiveApp = Extract<
+  SelectorCaptureRuntimePlan,
+  { kind: 'selector-without-active-app' }
+>;
+
+async function bindSelectorRuntimeWithoutActiveApp(
+  bind: BindDeviceRuntime,
+  device: SessionState['device'],
+  plan: SelectorRuntimePlanWithoutActiveApp,
+) {
+  switch (plan.intent) {
+    case 'capture-only': {
+      const runtime = await bind(device, plan.use);
+      return selectSnapshotWithoutActiveApp(runtime);
+    }
+    case 'element-text': {
+      const runtime = await bind(device, plan.use);
+      return {
+        ...selectSnapshotWithoutActiveApp(runtime),
+        ...selectElementTextOperation(runtime),
+      };
+    }
+    case 'wait-observation': {
+      const runtime = await bind(device, plan.use);
+      return {
+        ...selectSnapshotWithoutActiveApp(runtime),
+        ...selectWaitObservationOperations(runtime),
+      };
     }
   }
 }

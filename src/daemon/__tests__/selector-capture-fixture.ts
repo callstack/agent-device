@@ -27,6 +27,7 @@ export function selectorCaptureFixture(
   params: Readonly<{
     capture?: RuntimeOperationFact;
     withoutActiveApp?: RuntimeOperationFact;
+    findText?: RuntimeOperationFact;
     snapshot?: (input: CaptureSnapshotInput, index: number) => SnapshotResult;
   }> = {},
 ): Readonly<{
@@ -54,6 +55,7 @@ export function selectorCaptureFixture(
           customActions: { available: false, reason: 'unsupported-platform-leaf' },
           withoutActiveApp: params.withoutActiveApp ?? params.capture ?? available,
         }),
+        ...(params.findText ? { findText: params.findText } : {}),
       },
     };
   };

@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import {
-  selectorCaptureRuntimePlanUses,
+  waitSelectorCaptureRuntimePlanUses,
   waitObservesDevice,
 } from '@agent-device/contracts/platform';
 import { commandDescriptors } from '../registry.ts';
@@ -12,18 +12,18 @@ test('wait descriptor declares its complete runtime use with no capability bucke
   expect(wait).not.toHaveProperty('dispatch');
   expect(wait?.platformExecution).toEqual({
     kind: 'device-runtime',
-    uses: selectorCaptureRuntimePlanUses,
+    uses: waitSelectorCaptureRuntimePlanUses,
   });
   // wait binds the family plan; its measured reading rides that plan's preferred set.
-  expect(selectorCaptureRuntimePlanUses).toEqual([
+  expect(waitSelectorCaptureRuntimePlanUses).toEqual([
     {
       required: ['captureSnapshot'],
-      preferred: ['readTextAtPoint'],
+      preferred: [],
       conditional: ['findText', 'findSelector'],
     },
     {
       required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp'],
-      preferred: ['readTextAtPoint'],
+      preferred: [],
       conditional: ['findText', 'findSelector'],
     },
   ]);
@@ -40,7 +40,7 @@ test('only the duration shape reaches no device at all', () => {
 // preferred optimizations, while making them unconditionally required would reject owners whose
 // complete semantic path is capture-backed.
 test('wait declares native observations as fact-conditional operations, never optimizations', () => {
-  for (const use of selectorCaptureRuntimePlanUses) {
+  for (const use of waitSelectorCaptureRuntimePlanUses) {
     expect(use.conditional).toContain('findText');
     expect(use.required).not.toContain('findText');
     expect(use.preferred).not.toContain('findText');

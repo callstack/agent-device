@@ -84,22 +84,34 @@ const captureSnapshotWithCustomActionsWithoutActiveAppUse = defineUse({
   ],
 });
 
-/**
- * The selector family's capture uses. Declared ALONGSIDE the snapshot uses above, never in place
- * of them: `snapshot`/`diff` keep binding exactly what they bind today. The only difference is the
- * PREFERRED element read and fact-CONDITIONAL native wait observations. `readTextAtPoint` may
- * improve a capture-backed read without changing correctness. `findText` and `findSelector` are
- * different: where owner facts advertise them, they preserve semantic observations absent from
- * that owner's capture and therefore cannot be classified as optimizations (ADR 0019 §2).
- */
 const selectorCaptureUse = defineUse({
   required: ['captureSnapshot'],
-  preferred: ['readTextAtPoint'],
-  conditional: ['findText', 'findSelector'],
 });
 const selectorCaptureWithoutActiveAppUse = defineUse({
   required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp'],
+});
+
+/** `get` and read-only `find` may improve a captured result with a live element read. */
+const selectorTextCaptureUse = defineUse({
+  required: ['captureSnapshot'],
   preferred: ['readTextAtPoint'],
+});
+const selectorTextCaptureWithoutActiveAppUse = defineUse({
+  required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp'],
+  preferred: ['readTextAtPoint'],
+});
+
+/**
+ * Native wait observations are correctness-bearing only for owners that advertise them. They stay
+ * out of capture-only and element-text uses so an unrelated command cannot be rejected for a wait
+ * operation it never executes (ADR 0019 §2).
+ */
+const waitSelectorCaptureUse = defineUse({
+  required: ['captureSnapshot'],
+  conditional: ['findText', 'findSelector'],
+});
+const waitSelectorCaptureWithoutActiveAppUse = defineUse({
+  required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp'],
   conditional: ['findText', 'findSelector'],
 });
 
@@ -110,6 +122,16 @@ const selectorCaptureWithoutActiveAppUse = defineUse({
 export const selectorCaptureRuntimePlanUses = Object.freeze([
   selectorCaptureUse,
   selectorCaptureWithoutActiveAppUse,
+] as const);
+
+export const selectorTextCaptureRuntimePlanUses = Object.freeze([
+  selectorTextCaptureUse,
+  selectorTextCaptureWithoutActiveAppUse,
+] as const);
+
+export const waitSelectorCaptureRuntimePlanUses = Object.freeze([
+  waitSelectorCaptureUse,
+  waitSelectorCaptureWithoutActiveAppUse,
 ] as const);
 
 export const snapshotRuntimePlanUses = Object.freeze([
@@ -141,40 +163,85 @@ export type SnapshotRuntimePlan =
       use: typeof captureSnapshotWithoutActiveAppUse;
     }>;
 
+const selectorUsesByIntent = Object.freeze({
+  'capture-only': selectorCaptureRuntimePlanUses,
+  'element-text': selectorTextCaptureRuntimePlanUses,
+  'wait-observation': waitSelectorCaptureRuntimePlanUses,
+} as const);
+
+export type SelectorCaptureRuntimeIntent = keyof typeof selectorUsesByIntent;
+
 /**
- * Same two `kind`s the snapshot plan uses for this split — deliberately, so the shared
- * admit-then-bind path keeps ONE set of arms rather than growing a parallel dispatch — but
- * carrying the selector uses, which add the preferred element read and conditional observations.
+ * Same two `kind`s the snapshot plan uses for this split — deliberately, so capture-only,
+ * element-text, and wait-observation callers share one admit-then-bind path.
  */
-export type SelectorCaptureRuntimePlan =
+type SelectorCapturePlanFor<Intent extends SelectorCaptureRuntimeIntent> =
   | Readonly<{
       kind: 'selector-active-app';
+      intent: Intent;
       operation: 'captureSnapshot';
-      use: typeof selectorCaptureUse;
+      use: (typeof selectorUsesByIntent)[Intent][0];
     }>
   | Readonly<{
       kind: 'selector-without-active-app';
+      intent: Intent;
       operation: 'captureSnapshotWithoutActiveApp';
-      use: typeof selectorCaptureWithoutActiveAppUse;
+      use: (typeof selectorUsesByIntent)[Intent][1];
     }>;
+
+export type SelectorCaptureRuntimePlan = {
+  [Intent in SelectorCaptureRuntimeIntent]: SelectorCapturePlanFor<Intent>;
+}[SelectorCaptureRuntimeIntent];
 
 /**
  * The active-app split every selector capture selects from. The selector family exposes no
  * `--actions` surface, so custom actions are outside its declaration.
  */
 export function resolveSelectorCaptureRuntimePlan(
-  input: Readonly<{ hasActiveApp: boolean }>,
+  input: Readonly<{
+    hasActiveApp: boolean;
+    intent: SelectorCaptureRuntimeIntent;
+  }>,
 ): SelectorCaptureRuntimePlan {
-  return input.hasActiveApp
+  switch (input.intent) {
+    case 'capture-only':
+      return selectorCapturePlan(
+        input.hasActiveApp,
+        input.intent,
+        selectorUsesByIntent[input.intent],
+      );
+    case 'element-text':
+      return selectorCapturePlan(
+        input.hasActiveApp,
+        input.intent,
+        selectorUsesByIntent[input.intent],
+      );
+    case 'wait-observation':
+      return selectorCapturePlan(
+        input.hasActiveApp,
+        input.intent,
+        selectorUsesByIntent[input.intent],
+      );
+  }
+}
+
+function selectorCapturePlan<const Intent extends SelectorCaptureRuntimeIntent>(
+  hasActiveApp: boolean,
+  intent: Intent,
+  uses: (typeof selectorUsesByIntent)[Intent],
+): SelectorCapturePlanFor<Intent> {
+  return hasActiveApp
     ? Object.freeze({
         kind: 'selector-active-app',
+        intent,
         operation: 'captureSnapshot',
-        use: selectorCaptureUse,
+        use: uses[0],
       })
     : Object.freeze({
         kind: 'selector-without-active-app',
+        intent,
         operation: 'captureSnapshotWithoutActiveApp',
-        use: selectorCaptureWithoutActiveAppUse,
+        use: uses[1],
       });
 }
 

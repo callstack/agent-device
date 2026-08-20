@@ -8,7 +8,7 @@ import {
   type PlatformRuntimeOperations,
   type RuntimeFacts,
   type RuntimeOperationFact,
-  selectorCaptureRuntimePlanUses,
+  waitSelectorCaptureRuntimePlanUses,
 } from '@agent-device/contracts/platform';
 import { deviceShape } from '@agent-device/kernel/device';
 import { IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
@@ -106,7 +106,10 @@ test('an admitted positive native selector observation satisfies wait without a 
   });
   expect(runtime.inspectFacts).toHaveBeenCalledTimes(1);
   expect(runtime.bindDevice).toHaveBeenCalledTimes(1);
-  expect(runtime.bindDevice).toHaveBeenCalledWith(IOS_SIMULATOR, selectorCaptureRuntimePlanUses[0]);
+  expect(runtime.bindDevice).toHaveBeenCalledWith(
+    IOS_SIMULATOR,
+    waitSelectorCaptureRuntimePlanUses[0],
+  );
   expect(runtime.findSelector).toHaveBeenCalledOnce();
   expect(runtime.findSelector.mock.calls[0]?.[0]).toMatchObject({
     selector: { key: 'id', value: 'runner-only' },
