@@ -15,7 +15,14 @@ import { parseUiHierarchy } from './ui-hierarchy-fixtures.ts';
 type ScopePolicyCase = {
   name: string;
   scope: string;
-  nodes: Array<{ depth: number; label?: string; value?: string; identifier?: string }>;
+  nodes: Array<{
+    depth: number;
+    type?: string;
+    label?: string;
+    value?: string;
+    identifier?: string;
+    presented?: boolean;
+  }>;
   expectedSubtreeIndexes: number[];
 };
 
@@ -28,8 +35,9 @@ const TABLE_PATH = path.resolve(
  * Renders the flat golden list as helper XML. Fixture position rides in the bounds' x origin so
  * the assertion never depends on which text field carried the match. Android reads
  * `label = text || content-desc` and `value = text`, so a fixture value goes to `text` and a
- * label with no value to `content-desc`. Nodes render as `TextView` (non-structural, so regular
- * membership keeps every one of them): the leg measures the scope rule, not membership.
+ * label with no value to `content-desc`. Most cases render as `TextView` so regular membership
+ * keeps every node. Contribution cases declare their Android type and expected membership so the
+ * same table also exercises scope selection after membership.
  */
 function scopePolicyXml(nodes: ScopePolicyCase['nodes']): string {
   const lines: string[] = ['<hierarchy>'];
@@ -40,9 +48,10 @@ function scopePolicyXml(nodes: ScopePolicyCase['nodes']): string {
       lines.push('</node>');
     }
     const attrs = [
-      `class="android.widget.TextView"`,
+      `class="${node.type === 'ViewGroup' ? 'android.view.ViewGroup' : `android.widget.${node.type ?? 'TextView'}`}"`,
       `bounds="[${index},0][${index + 1},1]"`,
       `visible-to-user="true"`,
+      node.type === 'Button' ? `clickable="true"` : '',
       node.value !== undefined ? `text="${node.value}"` : '',
       node.label !== undefined && node.value === undefined ? `content-desc="${node.label}"` : '',
       node.identifier !== undefined ? `resource-id="${node.identifier}"` : '',
@@ -62,18 +71,19 @@ test('the Android projection agrees with every golden scope-policy table case', 
   const cases = JSON.parse(fs.readFileSync(TABLE_PATH, 'utf8')) as ScopePolicyCase[];
   assert.ok(cases.length > 0);
   for (const fixture of cases) {
-    // Raw and regular both keep every rendered node, so each leg measures the scope RULE. There is
-    // no -i leg here on purpose: bare TextViews carry no action, so -i would drop the whole fixture
-    // and the leg would measure membership instead. The scope/membership interplay is pinned by the
-    // two projection tests below, on shapes where -i keeps real content.
-    for (const projection of [{ raw: true }, {}]) {
+    const hasMembershipCase = fixture.nodes.some((node) => node.presented !== undefined);
+    const projections = hasMembershipCase ? [{ interactiveOnly: true }] : [{ raw: true }, {}];
+    for (const projection of projections) {
       const result = parseUiHierarchy(scopePolicyXml(fixture.nodes), undefined, {
         ...projection,
         scope: fixture.scope,
       });
+      const expected = fixture.expectedSubtreeIndexes.filter(
+        (index) => fixture.nodes[index]?.presented !== false,
+      );
       assert.deepEqual(
         result.nodes.map((node) => node.rect?.x),
-        fixture.expectedSubtreeIndexes,
+        expected,
         `${fixture.name} (${JSON.stringify(projection)})`,
       );
       if (result.nodes.length > 0) assert.equal(result.nodes[0]?.depth, 0, fixture.name);

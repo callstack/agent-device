@@ -227,5 +227,56 @@
     ],
     "expectedRootIndex": 2,
     "expectedSubtreeIndexes": [2]
+  },
+  {
+    "name": "a decorative first match is skipped for a later contributing subtree",
+    "scope": "Settings",
+    "nodes": [
+      {
+        "depth": 0,
+        "type": "FrameLayout"
+      },
+      {
+        "depth": 1,
+        "type": "TextView",
+        "label": "Settings",
+        "presented": false
+      },
+      {
+        "depth": 1,
+        "type": "ScrollView",
+        "identifier": "settings-panel"
+      },
+      {
+        "depth": 2,
+        "type": "Button",
+        "label": "Wi-Fi"
+      }
+    ],
+    "expectedRootIndex": 2,
+    "expectedSubtreeIndexes": [2, 3]
+  },
+  {
+    "name": "a dropped matching container contributes through its presented child",
+    "scope": "settings-panel",
+    "nodes": [
+      {
+        "depth": 0,
+        "type": "FrameLayout"
+      },
+      {
+        "depth": 1,
+        "type": "ViewGroup",
+        "identifier": "settings-panel",
+        "presented": false
+      },
+      {
+        "depth": 2,
+        "type": "Button",
+        "label": "Save"
+      }
+    ],
+    "expectedRootIndex": 1,
+    "expectedSubtreeIndexes": [1, 2]
   }
 ]

@@ -197,7 +197,11 @@ enum SnapshotPresentation {
     switch SnapshotScopePolicy.select(
       fromPreorder: rawNodes,
       scope: options.scope,
-      semanticValues: { [$0.label, $0.identifier, $0.value] }
+      depth: \.depth,
+      semanticValues: { [$0.label, $0.identifier, $0.value] },
+      subtreeContributes: { range in
+        options.raw || rawNodes[range].contains(where: isEligibleForRegularPresentation)
+      }
     ) {
     case .unscoped:
       return rawNodes
@@ -205,13 +209,14 @@ enum SnapshotPresentation {
       return []
     case .matched(let startIndex):
       let startDepth = rawNodes[startIndex].depth
-      var endIndex = startIndex + 1
-      while endIndex < rawNodes.count, rawNodes[endIndex].depth > startDepth {
-        endIndex += 1
-      }
+      let range = SnapshotScopePolicy.subtreeRange(
+        from: startIndex,
+        in: rawNodes,
+        depth: \.depth
+      )
       let maxDepth = options.depth ?? Int.max
       return reindex(
-        Array(rawNodes[startIndex..<endIndex]).filter { $0.depth - startDepth <= maxDepth },
+        Array(rawNodes[range]).filter { $0.depth - startDepth <= maxDepth },
         depthOffset: startDepth
       )
     }

@@ -10,7 +10,13 @@ import { matchesSnapshotScope, normalizeSnapshotScope } from './facades/snapshot
 // This file proves the PREDICATE + first-document-order-match rule; subtree slicing is proved by
 // the runtime legs.
 
-type ScopePolicyNode = { depth: number; label?: string; value?: string; identifier?: string };
+type ScopePolicyNode = {
+  depth: number;
+  label?: string;
+  value?: string;
+  identifier?: string;
+  presented?: boolean;
+};
 type ScopePolicyCase = {
   name: string;
   scope: string;
@@ -29,7 +35,7 @@ const TABLE_PATH = path.resolve(
   'snapshot-scope-policy.json',
 );
 
-test('the shared scope predicate picks the golden table root as the first document-order match', () => {
+test('the shared scope policy picks the first matching subtree with presented content', () => {
   const cases = JSON.parse(fs.readFileSync(TABLE_PATH, 'utf8')) as ScopePolicyCase[];
   assert.ok(cases.length > 0, 'scope policy table must not be empty');
   assert.equal(new Set(cases.map((fixture) => fixture.name)).size, cases.length);
@@ -42,7 +48,13 @@ test('the shared scope predicate picks the golden table root as the first docume
       );
       continue;
     }
-    const rootIndex = fixture.nodes.findIndex((node) => matchesSnapshotScope(node, fixture.scope));
+    const rootIndex = fixture.nodes.findIndex(
+      (node, index) =>
+        matchesSnapshotScope(node, fixture.scope) &&
+        subtreeIndexes(fixture.nodes, index).some(
+          (subtreeIndex) => fixture.nodes[subtreeIndex]?.presented !== false,
+        ),
+    );
     assert.equal(rootIndex === -1 ? null : rootIndex, fixture.expectedRootIndex, fixture.name);
     assert.deepEqual(
       subtreeIndexes(fixture.nodes, fixture.expectedRootIndex),

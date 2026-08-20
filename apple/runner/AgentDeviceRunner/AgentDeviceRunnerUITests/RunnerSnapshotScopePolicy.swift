@@ -9,18 +9,23 @@ enum SnapshotScopeSelection: Equatable {
 /// Cross-runtime snapshot scope specification.
 ///
 /// A non-empty scope selects the first node in presentation preorder whose label, identifier, or
-/// value contains the trimmed query case-insensitively. Missing matches publish an empty projection.
+/// value contains the trimmed query case-insensitively and whose subtree contributes to the
+/// requested projection. Missing matches publish an empty projection.
 enum SnapshotScopePolicy {
   static func select<Node>(
     fromPreorder nodes: [Node],
     scope: String?,
-    semanticValues: (Node) -> [String?]
+    depth: (Node) -> Int,
+    semanticValues: (Node) -> [String?],
+    subtreeContributes: (Range<Int>) -> Bool
   ) -> SnapshotScopeSelection {
     guard let query = normalized(scope) else { return .unscoped }
     for (index, node) in nodes.enumerated() {
-      if semanticValues(node).contains(where: { value in
+      guard semanticValues(node).contains(where: { value in
         value?.lowercased().contains(query) == true
-      }) {
+      }) else { continue }
+      let range = subtreeRange(from: index, in: nodes, depth: depth)
+      if subtreeContributes(range) {
         return .matched(index)
       }
     }
@@ -37,6 +42,19 @@ enum SnapshotScopePolicy {
     }
     return query.lowercased()
   }
+
+  static func subtreeRange<Node>(
+    from start: Int,
+    in nodes: [Node],
+    depth: (Node) -> Int
+  ) -> Range<Int> {
+    let rootDepth = depth(nodes[start])
+    var end = start + 1
+    while end < nodes.count, depth(nodes[end]) > rootDepth {
+      end += 1
+    }
+    return start..<end
+  }
 }
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
@@ -46,6 +64,7 @@ private struct SnapshotScopeFixture: Decodable {
     let label: String?
     let identifier: String?
     let value: String?
+    let presented: Bool?
   }
 
   let name: String
@@ -76,7 +95,11 @@ extension RunnerTests {
       let selected = SnapshotScopePolicy.select(
         fromPreorder: fixture.nodes,
         scope: fixture.scope,
-        semanticValues: { [$0.label, $0.identifier, $0.value] }
+        depth: \.depth,
+        semanticValues: { [$0.label, $0.identifier, $0.value] },
+        subtreeContributes: { range in
+          range.contains { fixture.nodes[$0].presented != false }
+        }
       )
       let actual: [Int]
       switch selected {
@@ -85,12 +108,13 @@ extension RunnerTests {
       case .missing:
         actual = []
       case .matched(let start):
-        let rootDepth = fixture.nodes[start].depth
-        var end = start + 1
-        while end < fixture.nodes.count, fixture.nodes[end].depth > rootDepth {
-          end += 1
-        }
-        actual = Array(start..<end)
+        actual = Array(
+          SnapshotScopePolicy.subtreeRange(
+            from: start,
+            in: fixture.nodes,
+            depth: \.depth
+          )
+        )
       }
       XCTAssertEqual(actual, fixture.expectedSubtreeIndexes, fixture.name)
     }
