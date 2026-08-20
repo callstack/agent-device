@@ -26,6 +26,20 @@ type RetryTelemetryEvent = {
   reason?: string;
 };
 
+type RetryOptions = {
+  deadline?: Deadline;
+  phase?: string;
+  signal?: AbortSignal;
+  classifyReason?: (error: unknown) => string | undefined;
+  onEvent?: (event: RetryTelemetryEvent) => void;
+  /**
+   * One-shot evidence that the dependency's startup state changed. It can wake the current retry
+   * delay, but never skips an attempt or changes the retry/deadline policy. The next attempt remains
+   * the authority on whether the dependency is usable.
+   */
+  retryWakeSignal?: AbortSignal;
+};
+
 export function isEnvTruthy(value: string | undefined): boolean {
   return ['1', 'true', 'yes', 'on'].includes((value ?? '').trim().toLowerCase());
 }
@@ -66,13 +80,7 @@ export class Deadline {
 export async function retryWithPolicy<T>(
   fn: (context: RetryAttemptContext) => Promise<T>,
   policy: Partial<RetryPolicy> = {},
-  options: {
-    deadline?: Deadline;
-    phase?: string;
-    signal?: AbortSignal;
-    classifyReason?: (error: unknown) => string | undefined;
-    onEvent?: (event: RetryTelemetryEvent) => void;
-  } = {},
+  options: RetryOptions = {},
 ): Promise<T> {
   const merged: RetryPolicy = {
     maxAttempts: policy.maxAttempts ?? defaultOptions.maxAttempts,
@@ -81,6 +89,7 @@ export async function retryWithPolicy<T>(
     jitter: policy.jitter ?? defaultOptions.jitter,
     shouldRetry: policy.shouldRetry,
   };
+  let retryWakeSignalConsumed = false;
   let lastError: unknown;
   for (let attempt = 1; attempt <= merged.maxAttempts; attempt += 1) {
     if (options.signal?.aborted) {
@@ -143,7 +152,16 @@ export async function retryWithPolicy<T>(
       };
       options.onEvent?.(retryEvent);
       publishRetryEvent(retryEvent);
-      await sleep(boundedDelay, options.signal);
+      if (options.retryWakeSignal && !retryWakeSignalConsumed) {
+        const wakeReason = await waitForRetryDelay(
+          boundedDelay,
+          options.signal,
+          options.retryWakeSignal,
+        );
+        retryWakeSignalConsumed = wakeReason === 'signaled';
+      } else {
+        await sleep(boundedDelay, options.signal);
+      }
     }
   }
   const exhaustedEvent: RetryTelemetryEvent = {
@@ -159,6 +177,34 @@ export async function retryWithPolicy<T>(
   publishRetryEvent(exhaustedEvent);
   if (lastError) throw lastError;
   throw new AppError('COMMAND_FAILED', 'retry failed');
+}
+
+function waitForRetryDelay(
+  ms: number,
+  signal: AbortSignal | undefined,
+  retryWakeSignal: AbortSignal,
+): Promise<'delay' | 'signaled'> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (reason: 'delay' | 'signaled') => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      retryWakeSignal.removeEventListener('abort', onRetryWake);
+      resolve(reason);
+    };
+    const timer = setTimeout(() => finish('delay'), ms);
+    const onAbort = () => finish('delay');
+    const onRetryWake = () => finish('signaled');
+    signal?.addEventListener('abort', onAbort, { once: true });
+    retryWakeSignal.addEventListener('abort', onRetryWake, { once: true });
+    if (signal?.aborted) {
+      finish('delay');
+      return;
+    }
+    if (retryWakeSignal.aborted) finish('signaled');
+  });
 }
 
 function computeDelay(base: number, max: number, jitter: number, attempt: number): number {

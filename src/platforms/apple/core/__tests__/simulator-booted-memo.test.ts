@@ -5,6 +5,7 @@ import {
   markSimulatorBooted,
   shutdownSimulator,
   SIMULATOR_BOOTED_MEMO_TTL_MS,
+  wasSimulatorRecentlyObservedBooted,
 } from '../simulator.ts';
 import { runXcrun } from '../tool-provider.ts';
 
@@ -83,6 +84,8 @@ test('shutdownSimulator forwards cancellation to the native simctl command', asy
 
 test('markSimulatorBooted seeds the memo so the first boot check skips the listing', async () => {
   markSimulatorBooted(simulator);
+
+  expect(wasSimulatorRecentlyObservedBooted(simulator)).toBe(true);
 
   await ensureBootedSimulator(simulator);
   expect(countSimctlListCalls()).toBe(0);

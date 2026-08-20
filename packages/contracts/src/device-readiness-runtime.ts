@@ -18,6 +18,8 @@ export type DeviceReadinessRuntimeHost = Readonly<{
   }>;
   appleAutomation: Readonly<{
     keepHot(device: DeviceInfo): void;
+    /** Reads the bounded memo populated only by a fresh native Booted observation. */
+    wasRecentlyObservedBooted(device: DeviceInfo): Promise<boolean>;
     /**
      * Publishes a FRESH Booted observation. `simctl list devices -j` costs ~0.7s per spawn and one
      * flow makes several boot checks, so the host memoizes what readiness just observed. Callers

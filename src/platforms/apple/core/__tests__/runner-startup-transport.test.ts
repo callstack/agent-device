@@ -134,6 +134,45 @@ test('waitForRunner uses simulator fallback within the attempt for ready session
   ]);
 });
 
+test('waitForRunner wakes a simulator startup retry when the listener reports ready', async () => {
+  vi.useFakeTimers();
+  const readiness = new AbortController();
+  const session: RunnerSession = {
+    ...makeReadyRunnerSession(),
+    ready: false,
+    startupRetryWake: readiness.signal,
+  };
+  let fetchAttempts = 0;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => {
+      fetchAttempts += 1;
+      if (fetchAttempts === 1) throw new Error('ECONNREFUSED');
+      return new Response('{}');
+    }),
+  );
+
+  const response = waitForRunner(
+    iosSimulator,
+    8100,
+    { command: 'uptime' },
+    undefined,
+    5_000,
+    session,
+  );
+  try {
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(fetchAttempts, 1);
+    readiness.abort();
+    assert.equal((await response).status, 200);
+    assert.equal(fetchAttempts, 2);
+  } finally {
+    await vi.runAllTimersAsync();
+    vi.useRealTimers();
+  }
+});
+
 test('waitForRunner invalidates cached tunnel IP when localhost fallback succeeds', async () => {
   mockUsbmuxPostCommand.mockRejectedValue(usbmuxDeviceUnattachedError());
   mockRunCmd.mockImplementation(makeTunnelIpLookupSequence(['fd00::123', 'fd00::456']));

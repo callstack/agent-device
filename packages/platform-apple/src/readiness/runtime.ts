@@ -34,7 +34,8 @@ export async function ensureAppleReady(
   }
   if (device.kind !== 'simulator') return { ...device, booted: true };
 
-  const state = await simulatorState(host, device, signal);
+  const recentlyObservedBooted = await readRecentBootObservation(host, device);
+  const state = recentlyObservedBooted ? 'Booted' : await simulatorState(host, device, signal);
   if (state !== 'Booted') {
     options.onColdBootStart?.();
     host.deviceReadiness.appleAutomation.keepHot(device);
@@ -45,6 +46,17 @@ export async function ensureAppleReady(
   // Publish the fresh observation so the boot checks later in this flow skip their own listing.
   host.deviceReadiness.appleAutomation.markBooted(device);
   return { ...device, booted: true };
+}
+
+async function readRecentBootObservation(
+  host: AppleReadinessHost,
+  device: DeviceInfo,
+): Promise<boolean> {
+  try {
+    return await host.deviceReadiness.appleAutomation.wasRecentlyObservedBooted(device);
+  } catch {
+    return false;
+  }
 }
 
 async function bootSimulator(

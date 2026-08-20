@@ -26,7 +26,11 @@ export function platformRuntimeHostFixture(): PlatformRuntimeHost {
     },
     deviceReadiness: {
       applePhysical: { ensureConnected: async () => {} },
-      appleAutomation: { keepHot: () => {}, markBooted: () => {} },
+      appleAutomation: {
+        keepHot: () => {},
+        markBooted: () => {},
+        wasRecentlyObservedBooted: async () => false,
+      },
       androidEmulator: {
         discover: async () => [],
         launch: () => 1,

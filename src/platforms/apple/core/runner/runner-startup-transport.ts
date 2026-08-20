@@ -34,7 +34,6 @@ const RUNNER_CONNECT_ATTEMPT_INTERVAL_MS = 250;
 const RUNNER_CONNECT_RETRY_BASE_DELAY_MS = 300;
 const RUNNER_CONNECT_RETRY_MAX_DELAY_MS = 2_000;
 const RUNNER_CONNECT_REQUEST_TIMEOUT_MS = 20_000;
-export const RUNNER_DESTINATION_TIMEOUT_SECONDS = 20;
 
 export async function waitForRunner(
   device: DeviceInfo,
@@ -87,7 +86,12 @@ export async function waitForRunner(
         jitter: 0.2,
         shouldRetry: shouldRetryRunnerConnectError,
       },
-      { deadline, phase: 'ios_runner_connect', signal },
+      {
+        deadline,
+        phase: 'ios_runner_connect',
+        signal,
+        retryWakeSignal: device.kind === 'simulator' ? session?.startupRetryWake : undefined,
+      },
     );
   } catch (error) {
     if (signal?.aborted || isRequestCanceledError(error)) {

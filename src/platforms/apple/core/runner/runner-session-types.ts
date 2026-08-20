@@ -24,6 +24,8 @@ export type RunnerSession = {
   testPromise: Promise<ExecResult>;
   child: RunnerProcessHandle;
   ready: boolean;
+  /** Wakes one startup retry when the listener becomes ready or its process exits. */
+  startupRetryWake?: AbortSignal;
   startupTimeoutMs?: number;
   // Records the last allowlisted mutating interaction that the runner confirmed
   // healthy (parsed ok, non-runnerFatal) for a given app bundle. Lives only on

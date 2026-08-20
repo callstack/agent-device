@@ -42,7 +42,7 @@ function simulatorBootedMemoKey(device: DeviceInfo): string {
   return `${device.id}|${device.simulatorSetPath ?? ''}`;
 }
 
-function readSimulatorBootedMemo(device: DeviceInfo): boolean {
+export function wasSimulatorRecentlyObservedBooted(device: DeviceInfo): boolean {
   return simulatorBootedMemo.get(simulatorBootedMemoKey(device)) === true;
 }
 
@@ -85,7 +85,7 @@ export async function ensureBootedSimulator(
   if (device.kind !== 'simulator') return;
   options.signal?.throwIfAborted();
 
-  const state = readSimulatorBootedMemo(device)
+  const state = wasSimulatorRecentlyObservedBooted(device)
     ? 'Booted'
     : await getSimulatorState(device, options.signal);
   if (state === 'Booted') {

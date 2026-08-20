@@ -206,7 +206,11 @@ test('readiness and boot keep the Apple automation helper warm inside the platfo
     },
     deviceReadiness: {
       ...host.deviceReadiness,
-      appleAutomation: { keepHot, markBooted: vi.fn() },
+      appleAutomation: {
+        keepHot,
+        markBooted: vi.fn(),
+        wasRecentlyObservedBooted: vi.fn(async () => false),
+      },
     },
   });
   const device = appleDevice({ booted: false });

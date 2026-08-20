@@ -53,7 +53,11 @@ function deploymentHost(
     },
     deviceReadiness: {
       applePhysical: { ensureConnected: async () => {} },
-      appleAutomation: { keepHot: () => {}, markBooted: () => {} },
+      appleAutomation: {
+        keepHot: () => {},
+        markBooted: () => {},
+        wasRecentlyObservedBooted: async () => false,
+      },
       androidEmulator: { discover: async () => [], launch: () => 1, terminate: async () => {} },
     },
   } as unknown as PlatformRuntimeHost;

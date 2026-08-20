@@ -294,7 +294,11 @@ function host(
     },
     deviceReadiness: {
       applePhysical: { ensureConnected: async () => {} },
-      appleAutomation: { keepHot: () => {}, markBooted: () => {} },
+      appleAutomation: {
+        keepHot: () => {},
+        markBooted: () => {},
+        wasRecentlyObservedBooted: async () => false,
+      },
       androidEmulator: { discover: async () => [], launch: () => 1, terminate: async () => {} },
     },
     localInteractors: { resolve: async () => ({}) as Interactor },

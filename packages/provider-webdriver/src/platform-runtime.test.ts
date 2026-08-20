@@ -313,7 +313,11 @@ function host(run: PlatformRuntimeHost['commands']['run']): PlatformRuntimeHost 
   return {
     deviceReadiness: {
       applePhysical: { ensureConnected: async () => {} },
-      appleAutomation: { keepHot: () => {} },
+      appleAutomation: {
+        keepHot: () => {},
+        markBooted: () => {},
+        wasRecentlyObservedBooted: async () => false,
+      },
       androidEmulator: { discover: async () => [], launch: () => 1, terminate: async () => {} },
     },
     appState: {

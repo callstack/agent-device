@@ -1,9 +1,5 @@
 import { AppError, toAppErrorCode, createRequestCanceledError } from '@agent-device/kernel/errors';
-import {
-  runCmdBackground,
-  type ExecResult,
-  type ExecBackgroundResult,
-} from '../../../../utils/exec.ts';
+import { type ExecResult } from '../../../../utils/exec.ts';
 import { withKeyedLock } from '../../../../utils/keyed-lock.ts';
 import { Deadline } from '../../../../utils/retry.ts';
 import { isIosFamily, isApplePlatform, type DeviceInfo } from '@agent-device/kernel/device';
@@ -13,14 +9,8 @@ import { emitRequestProgress } from '../../../../request/progress.ts';
 import { emitDiagnostic, withDiagnosticTimer } from '../../../../utils/diagnostics.ts';
 import { buildSimctlArgsForDevice } from '../simctl.ts';
 import { runAppleToolCommand, runXcrun } from '../tool-provider.ts';
-import { resolveRunnerDestination } from '../apple-runner-platform.ts';
-import { resolveRunnerMaxConcurrentDestinationsFlag } from './runner-cache-metadata.ts';
-import { getFreePort, logChunk } from './runner-io.ts';
-import {
-  waitForRunner,
-  RUNNER_STARTUP_TIMEOUT_MS,
-  RUNNER_DESTINATION_TIMEOUT_SECONDS,
-} from './runner-startup-transport.ts';
+import { getFreePort } from './runner-io.ts';
+import { waitForRunner, RUNNER_STARTUP_TIMEOUT_MS } from './runner-startup-transport.ts';
 import { sendRunnerCommandOnce } from './runner-transport.ts';
 import {
   acquireXcodebuildSimulatorSetRedirect,
@@ -66,6 +56,7 @@ import {
   normalizeRunnerStartupTimeoutMs,
   type RunnerSession,
 } from './runner-session-types.ts';
+import { launchRunnerProcess, type LaunchedRunnerProcess } from './runner-process-launch.ts';
 
 export type { RunnerSession } from './runner-session-types.ts';
 
@@ -211,29 +202,7 @@ async function startRunnerSessionWithLease(
     'simulator_set_redirect',
     async () => await acquireXcodebuildSimulatorSetRedirect(device),
   );
-  let child: ExecBackgroundResult['child'] | undefined;
-  let testPromise: Promise<ExecResult>;
-  const xcodebuildArgs = [
-    'test-without-building',
-    '-only-testing',
-    'AgentDeviceRunnerUITests/RunnerTests/testCommand',
-    '-parallel-testing-enabled',
-    'NO',
-    '-test-timeouts-enabled',
-    'NO',
-    '-collect-test-diagnostics',
-    'never',
-    resolveRunnerMaxConcurrentDestinationsFlag(device),
-    '1',
-    '-destination-timeout',
-    String(RUNNER_DESTINATION_TIMEOUT_SECONDS),
-    '-xctestrun',
-    xctestrunPath,
-    '-derivedDataPath',
-    xctestrunArtifact.derived,
-    '-destination',
-    resolveRunnerDestination(device),
-  ];
+  let runnerProcess: LaunchedRunnerProcess;
   try {
     if (xctestrunArtifact.buildMs > 0) {
       emitRequestProgress({
@@ -242,33 +211,27 @@ async function startRunnerSessionWithLease(
         message: 'Starting XCTest runner...',
       });
     }
-    ({ child, wait: testPromise } = await measureRunnerStartupStep(
-      startupTimings,
-      'launch_xcodebuild',
-      () =>
-        runCmdBackground('xcodebuild', xcodebuildArgs, {
-          allowFailure: true,
-          env: { ...process.env, AGENT_DEVICE_RUNNER_PORT: String(port) },
-          detached: true,
-          signal,
-        }),
-    ));
+    runnerProcess = await measureRunnerStartupStep(startupTimings, 'launch_xcodebuild', () =>
+      launchRunnerProcess({
+        device,
+        port,
+        xctestrunPath,
+        derivedPath: xctestrunArtifact.derived,
+        signal,
+        logPath: options.logPath,
+        traceLogPath: options.traceLogPath,
+        verbose: options.verbose,
+      }),
+    );
   } catch (error) {
     await simulatorSetRedirect?.release();
     throw error;
   }
-  child.stdout?.on('data', (chunk: string) => {
-    logChunk(chunk, options.logPath, options.traceLogPath, options.verbose);
-  });
-  child.stderr?.on('data', (chunk: string) => {
-    logChunk(chunk, options.logPath, options.traceLogPath, options.verbose);
-  });
-
   const sessionId = buildRunnerSessionId(device.id, port);
   const lease = buildRunnerLease({
     deviceId: device.id,
     sessionId,
-    runnerPid: child.pid,
+    runnerPid: runnerProcess.child.pid,
     port,
     xctestrunPath,
     jsonPath,
@@ -281,9 +244,10 @@ async function startRunnerSessionWithLease(
     xctestrunPath,
     xctestrunArtifact,
     jsonPath,
-    testPromise,
-    child,
+    testPromise: runnerProcess.wait,
+    child: runnerProcess.child,
     ready: false,
+    startupRetryWake: runnerProcess.startupRetryWake,
     startupTimeoutMs: normalizeRunnerStartupTimeoutMs(options.startupTimeoutMs),
     startupTimings,
     logicalLeaseContext,

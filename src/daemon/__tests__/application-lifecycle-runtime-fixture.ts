@@ -142,7 +142,11 @@ function fixtureHost(
           signal.throwIfAborted();
         },
       }),
-      appleAutomation: Object.freeze({ keepHot: () => undefined, markBooted: () => {} }),
+      appleAutomation: Object.freeze({
+        keepHot: () => undefined,
+        markBooted: () => {},
+        wasRecentlyObservedBooted: async () => false,
+      }),
       androidEmulator: Object.freeze({
         discover: async (_request: unknown, signal: AbortSignal) => {
           signal.throwIfAborted();
