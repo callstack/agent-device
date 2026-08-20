@@ -18,6 +18,40 @@ enum TvRemoteButton {
 }
 
 extension RunnerTests {
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
+  func testTvRemoteButtonMappingAcceptsSupportedNamesAndRejectsUnknown() {
+    func buttonName(_ button: TvRemoteButton) -> String {
+      switch button {
+      case .select: return "select"
+      case .menu: return "menu"
+      case .home: return "home"
+      case .up: return "up"
+      case .down: return "down"
+      case .left: return "left"
+      case .right: return "right"
+      }
+    }
+
+    let supported = [
+      ("select", "select"),
+      ("SELECT", "select"),
+      ("menu", "menu"),
+      ("home", "home"),
+      ("up", "up"),
+      ("down", "down"),
+      ("left", "left"),
+      ("right", "right"),
+    ]
+    for (raw, expected) in supported {
+      XCTAssertEqual(tvRemoteButton(from: raw).map(buttonName), expected)
+    }
+
+    for raw in [String?(nil), "", "volumeUp", "select "] {
+      XCTAssertNil(tvRemoteButton(from: raw))
+    }
+  }
+#endif
+
   func resolveTvRemoteDoublePressDelay() -> TimeInterval {
     guard
       let raw = ProcessInfo.processInfo.environment["AGENT_DEVICE_TV_REMOTE_DOUBLE_PRESS_DELAY_MS"],

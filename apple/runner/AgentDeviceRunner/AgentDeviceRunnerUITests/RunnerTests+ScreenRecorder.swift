@@ -261,3 +261,28 @@ extension RunnerTests {
 
   }
 }
+
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
+extension RunnerTests.ScreenRecorder {
+  func startForTesting(image: RunnerImage) throws {
+    try start { image }
+    lock.lock()
+    timer?.cancel()
+    timer = nil
+    lock.unlock()
+  }
+
+  @discardableResult
+  func appendForTesting(image: RunnerImage, timestampValue: Int64) -> Int64 {
+    lock.lock()
+    recordingStartUptime =
+      ProcessInfo.processInfo.systemUptime - Double(timestampValue) / Double(effectiveFps)
+    lock.unlock()
+    append(image: image)
+    lock.lock()
+    let appendedTimestamp = lastTimestampValue
+    lock.unlock()
+    return appendedTimestamp
+  }
+}
+#endif
