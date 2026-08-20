@@ -33,23 +33,23 @@ export type CapabilitiesAdmissionRuntimeOptions = Readonly<{
 }>;
 
 export const legacyCapabilityUses = [
-  { required: [], preferred: ['appLogInspect'], conditional: [] },
-  { required: [], preferred: ['networkDump'], conditional: [] },
-  { required: [], preferred: ['screenRecordingStart'], conditional: [] },
+  { required: [], preferred: ['appLogInspect'] },
+  { required: [], preferred: ['networkDump'] },
+  { required: [], preferred: ['screenRecordingStart'] },
 ];
 
 export function createCapabilitiesAdmissionRuntime(options: CapabilitiesAdmissionRuntimeOptions) {
   const uses: Array<{
     required: readonly string[];
     preferred: readonly string[];
-    conditional: readonly string[];
+    conditional?: readonly string[];
   }> = [];
   const inspections: DeviceInfo[] = [];
   const bindDevice: BindDeviceRuntime = async (device, use) => {
     uses.push({
       required: [...use.required],
       preferred: [...use.preferred],
-      conditional: [...use.conditional],
+      ...(use.conditional === undefined ? {} : { conditional: [...use.conditional] }),
     });
     return narrowDeviceBinding(createAdmissionBinding(device, options), use);
   };

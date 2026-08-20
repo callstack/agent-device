@@ -12,8 +12,7 @@ import type {
 } from './platform-runtime.ts';
 import { screenshotRuntimeOperationFacts } from './screenshot-runtime.ts';
 import { snapshotRuntimeOperationFacts } from './snapshot-runtime.ts';
-import { findTextRuntimeOperationFacts } from './find-text-runtime.ts';
-import { findSelectorRuntimeOperationFacts } from './find-selector-runtime.ts';
+import { selectorObservationRuntimeOperationFacts } from './selector-observation-runtime.ts';
 import { viewportRuntimeOperationFacts } from './viewport-runtime.ts';
 import { elementTextRuntimeOperationFacts } from './element-text-runtime.ts';
 
@@ -110,8 +109,10 @@ export function createUnavailablePlatformRuntimeFacts(
       // The preferred text reading starts unavailable for every family, on the same sentinel as
       // capture: an owner that has a native reading declares it explicitly, and one that does not
       // sends every text wait to the canonical tree.
-      ...findTextRuntimeOperationFacts({ findText: snapshot }),
-      ...findSelectorRuntimeOperationFacts({ findSelector: snapshot }),
+      ...selectorObservationRuntimeOperationFacts({
+        findText: snapshot,
+        findSelector: snapshot,
+      }),
       ...viewportRuntimeOperationFacts({ setViewport: viewport }),
       ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementText }),
       ensureReady: readiness,

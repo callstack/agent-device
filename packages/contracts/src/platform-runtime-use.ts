@@ -4,7 +4,7 @@ export function runtimeUseIdentity(use: RuntimeUseDeclaration): string {
   return JSON.stringify({
     required: [...use.required].sort(),
     preferred: [...use.preferred].sort(),
-    conditional: [...use.conditional].sort(),
+    conditional: [...(use.conditional ?? [])].sort(),
   });
 }
 
@@ -64,12 +64,9 @@ export function runtimeUse<Operations extends object>() {
         }
       }
     }
-    return Object.freeze({ required, preferred, conditional }) as RuntimeUse<
-      Operations,
-      Required,
-      Preferred,
-      Conditional
-    >;
+    return Object.freeze(
+      conditional.length === 0 ? { required, preferred } : { required, preferred, conditional },
+    ) as RuntimeUse<Operations, Required, Preferred, Conditional>;
   };
 }
 

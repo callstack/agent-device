@@ -67,11 +67,17 @@ function hasRuntimeUseDeclaration(value: unknown): boolean {
   const categories = [
     stringArray(use['required']),
     stringArray(use['preferred']),
-    stringArray(use['conditional']),
+    stringArray(use['conditional'] ?? []),
   ];
   if (!hasValidRuntimeUseCategories(categories)) return false;
-  if (!arePairwiseDisjoint(categories)) return false;
-  return sameKeys(Object.keys(use).sort(), ['conditional', 'preferred', 'required']);
+  const operations = categories.flat();
+  if (new Set(operations).size !== operations.length) return false;
+  return sameKeys(
+    Object.keys(use).sort(),
+    use['conditional'] === undefined
+      ? ['preferred', 'required']
+      : ['conditional', 'preferred', 'required'],
+  );
 }
 
 function hasValidRuntimeUseCategories(
@@ -82,17 +88,6 @@ function hasValidRuntimeUseCategories(
   );
 }
 
-function arePairwiseDisjoint(categories: readonly string[][]): boolean {
-  for (let leftIndex = 0; leftIndex < categories.length; leftIndex += 1) {
-    const left = categories[leftIndex];
-    if (!left) return false;
-    for (const right of categories.slice(leftIndex + 1)) {
-      if (!areDisjoint(left, right)) return false;
-    }
-  }
-  return true;
-}
-
 function stringArray(value: unknown): string[] | null {
   if (!Array.isArray(value)) return null;
   return value.every((key): key is string => typeof key === 'string') ? value : null;
@@ -100,11 +95,6 @@ function stringArray(value: unknown): string[] | null {
 
 function hasUniqueValues(values: readonly string[]): boolean {
   return new Set(values).size === values.length;
-}
-
-function areDisjoint(left: readonly string[], right: readonly string[]): boolean {
-  const leftValues = new Set(left);
-  return right.every((value) => !leftValues.has(value));
 }
 
 function sameKeys(actual: readonly string[], expected: readonly string[]): boolean {

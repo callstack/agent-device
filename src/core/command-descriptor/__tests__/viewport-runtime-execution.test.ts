@@ -14,6 +14,5 @@ test('viewport descriptor declares its complete runtime use with no legacy proje
   expect(viewportRuntimeUse).toEqual({
     required: ['setViewport'],
     preferred: [],
-    conditional: [],
   });
 });

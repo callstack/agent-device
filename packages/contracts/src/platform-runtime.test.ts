@@ -53,6 +53,13 @@ function compileTimeDisjointProof(): void {
 }
 void compileTimeDisjointProof;
 
+test('runtime use omits an empty conditional category from shipped declarations', () => {
+  const captureUse = runtimeUse<TestOperations>()({ required: ['inspect'] });
+
+  assert.deepEqual(captureUse, { required: ['inspect'], preferred: [] });
+  assert.equal('conditional' in captureUse, false);
+});
+
 test('runtime use freezes declarations and rejects dynamic overlap or duplicates', () => {
   assert.deepEqual(inspectUse, {
     required: ['inspect'],

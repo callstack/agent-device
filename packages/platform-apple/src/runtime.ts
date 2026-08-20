@@ -14,8 +14,7 @@ import {
   elementTextRuntimeOperationFacts,
   localRuntimeOwner,
   screenshotRuntimeOperationFacts,
-  findTextRuntimeOperationFacts,
-  findSelectorRuntimeOperationFacts,
+  selectorObservationRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
   viewportRuntimeOperationFacts,
 } from '@agent-device/contracts/platform';
@@ -246,8 +245,10 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         screenRecordingCleanup: recordingFacts,
         ...appleSnapshotFacts(device),
         ...screenshotRuntimeOperationFacts({ capture: appleScreenshotFact(device) }),
-        ...findTextRuntimeOperationFacts({ findText: appleSnapshotFact(device) }),
-        ...findSelectorRuntimeOperationFacts({ findSelector: appleFindSelectorFact(device) }),
+        ...selectorObservationRuntimeOperationFacts({
+          findText: appleSnapshotFact(device),
+          findSelector: appleFindSelectorFact(device),
+        }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ...elementTextRuntimeOperationFacts({ readTextAtPoint: appleElementTextFact(device) }),
         ensureReady: readiness,

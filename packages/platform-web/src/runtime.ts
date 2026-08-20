@@ -13,8 +13,7 @@ import {
   elementTextRuntimeOperationFacts,
   localRuntimeOwner,
   screenshotRuntimeOperationFacts,
-  findTextRuntimeOperationFacts,
-  findSelectorRuntimeOperationFacts,
+  selectorObservationRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
   sameRuntimeOwner,
   viewportRuntimeOperationFacts,
@@ -251,8 +250,10 @@ function webRuntimeFacts(
         withoutActiveApp: browserDevice,
       }),
       // No native text reading: every text wait on this owner polls the canonical tree.
-      ...findTextRuntimeOperationFacts({ findText: openTargetKindUnavailable }),
-      ...findSelectorRuntimeOperationFacts({ findSelector: openTargetKindUnavailable }),
+      ...selectorObservationRuntimeOperationFacts({
+        findText: openTargetKindUnavailable,
+        findSelector: openTargetKindUnavailable,
+      }),
       ...viewportRuntimeOperationFacts({
         setViewport: device.kind === 'device' ? available : openTargetKindUnavailable,
       }),

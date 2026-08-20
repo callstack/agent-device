@@ -52,12 +52,10 @@ test('normalizes all seven logs plans with their exact non-superset runtime use'
   assert.deepEqual(appLogDoctorUse, {
     required: ['appLogInspect', 'appLogDoctor'],
     preferred: [],
-    conditional: [],
   });
   assert.deepEqual(startUse, {
     required: ['appLogInspect', 'appLogStart'],
     preferred: [],
-    conditional: [],
   });
 });
 
@@ -65,7 +63,6 @@ test('keeps fact-derived admission separate from every execution plan', () => {
   assert.deepEqual(appLogAdmissionUse, {
     required: [],
     preferred: ['appLogInspect'],
-    conditional: [],
   });
   assert.equal((appLogRuntimePlanUses as readonly object[]).includes(appLogAdmissionUse), false);
 });

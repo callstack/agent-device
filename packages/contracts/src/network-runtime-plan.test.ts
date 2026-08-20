@@ -43,12 +43,10 @@ test('normalizes defaults and retains the requested alias and projection', () =>
   assert.deepEqual(networkDumpUse, {
     required: ['networkDump'],
     preferred: [],
-    conditional: [],
   });
   assert.deepEqual(networkAdmissionUse, {
     required: [],
     preferred: ['networkDump'],
-    conditional: [],
   });
 });
 

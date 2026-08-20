@@ -22,7 +22,7 @@ export function createNetworkRuntime(
   const uses: Array<{
     required: readonly string[];
     preferred: readonly string[];
-    conditional: readonly string[];
+    conditional?: readonly string[];
   }> = [];
   const networkDump = vi.fn(implementation);
   const unavailable = {
@@ -33,7 +33,7 @@ export function createNetworkRuntime(
     uses.push({
       required: [...use.required],
       preferred: [...use.preferred],
-      conditional: [...use.conditional],
+      ...(use.conditional === undefined ? {} : { conditional: [...use.conditional] }),
     });
     return narrowDeviceBinding(
       {

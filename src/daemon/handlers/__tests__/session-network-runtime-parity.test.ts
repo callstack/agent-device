@@ -81,8 +81,8 @@ test.each(NETWORK_RUNTIME_PROJECTION_PARITY)(
     expect(response.data?.include).toBe(include);
     expect(response.data?.notes).toContain('runtime-owned capture');
     expect(runtime.uses).toEqual([
-      { required: [], preferred: ['networkDump'], conditional: [] },
-      { required: ['networkDump'], preferred: [], conditional: [] },
+      { required: [], preferred: ['networkDump'] },
+      { required: ['networkDump'], preferred: [] },
     ]);
     expect(runtime.networkDump).toHaveBeenCalledWith({
       sessionId: sessionName,
@@ -134,7 +134,7 @@ test('network admission remains fail-closed before parsing invalid input', async
       hint: 'Network capture is unavailable for this platform leaf.',
     },
   });
-  expect(runtime.uses).toEqual([{ required: [], preferred: ['networkDump'], conditional: [] }]);
+  expect(runtime.uses).toEqual([{ required: [], preferred: ['networkDump'] }]);
   expect(runtime.networkDump).not.toHaveBeenCalled();
 });
 

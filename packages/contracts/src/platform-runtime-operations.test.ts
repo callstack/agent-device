@@ -63,7 +63,6 @@ test.each([
     {
       required: ['captureSnapshot', 'captureSnapshotWithCustomActions'],
       preferred: [],
-      conditional: [],
     },
   ],
   [
@@ -74,7 +73,6 @@ test.each([
     {
       required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp'],
       preferred: [],
-      conditional: [],
     },
   ],
   [
@@ -89,7 +87,6 @@ test.each([
         'captureSnapshotWithoutActiveApp',
       ],
       preferred: [],
-      conditional: [],
     },
   ],
 ] as const)(

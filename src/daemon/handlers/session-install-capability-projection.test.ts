@@ -24,7 +24,6 @@ test('guards the public source-install alias against descriptor-use drift', () =
   expect(runtimeUse(PUBLIC_COMMANDS.installFromSource)).toEqual({
     required: ['ensureReady', 'materializeAppSource', 'deployMaterializedApp'],
     preferred: [],
-    conditional: [],
   });
   expect(runtimeUse(PUBLIC_COMMANDS.installFromSource)).toEqual(
     runtimeUse(INTERNAL_COMMANDS.installSource),
@@ -32,17 +31,14 @@ test('guards the public source-install alias against descriptor-use drift', () =
   expect(runtimeUse(PUBLIC_COMMANDS.install)).toEqual({
     required: ['deployApp'],
     preferred: [],
-    conditional: [],
   });
   expect(runtimeUse(PUBLIC_COMMANDS.reinstall)).toEqual({
     required: ['deployApp'],
     preferred: [],
-    conditional: [],
   });
   expect(runtimeUse(PUBLIC_COMMANDS.push)).toEqual({
     required: ['ensureReady', 'sendPushNotification'],
     preferred: [],
-    conditional: [],
   });
 });
 

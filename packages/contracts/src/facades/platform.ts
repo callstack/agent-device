@@ -263,20 +263,18 @@ export {
   captureSnapshotSignal,
   snapshotRuntimeOperationFacts,
 } from '../snapshot-runtime.ts';
-export { findTextRuntimeOperationFacts } from '../find-text-runtime.ts';
-export type {
-  FindTextInput,
-  FindTextResult,
-  FindTextRuntimeOperationFacts,
-  FindTextRuntimeOperations,
-} from '../find-text-runtime.ts';
-export { findSelectorRuntimeOperationFacts } from '../find-selector-runtime.ts';
+export { selectorObservationRuntimeOperationFacts } from '../selector-observation-runtime.ts';
 export type {
   FindSelectorInput,
   FindSelectorResult,
-  FindSelectorRuntimeOperationFacts,
   FindSelectorRuntimeOperations,
-} from '../find-selector-runtime.ts';
+  FindTextInput,
+  FindTextResult,
+  FindTextRuntimeOperations,
+  SelectorObservationRuntimeOperationFacts,
+  SelectorObservationRuntimeOperations,
+  SelectorObservationResult,
+} from '../selector-observation-runtime.ts';
 export type {
   CaptureSnapshotInput,
   LocalSnapshotInteractorResolver,

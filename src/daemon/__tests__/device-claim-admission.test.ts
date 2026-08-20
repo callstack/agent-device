@@ -136,7 +136,6 @@ async function claimsWhileBound(command: string, stateDir: string) {
     await scope.bindDevice(ANDROID_EMULATOR, {
       required: [],
       preferred: [],
-      conditional: [],
     });
     return claimedSessions();
   } finally {

@@ -85,7 +85,6 @@ test('boot prefers explicit device selector over active session device', async (
   expect(mockBindDeviceRuntime).toHaveBeenCalledWith(selectedDevice, {
     required: ['bootTarget'],
     preferred: [],
-    conditional: [],
   });
   expect(mockEnsureReadyRuntime).toHaveBeenCalledOnce();
   expect(mockEnsureReadyHeadlessRuntime).not.toHaveBeenCalled();
@@ -133,7 +132,6 @@ test('boot --headless admits a stopped Android emulator through facts and binds 
   expect(mockBindDeviceRuntime).toHaveBeenCalledWith(placeholder, {
     required: ['bootTargetHeadless'],
     preferred: [],
-    conditional: [],
   });
   expect(mockEnsureReadyHeadlessRuntime).toHaveBeenCalledOnce();
   expect(mockEnsureReadyRuntime).not.toHaveBeenCalled();

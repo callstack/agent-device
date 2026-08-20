@@ -59,9 +59,7 @@ test('logs rejects an invalid plan before binding a runtime', async () => {
   const response = await runLogs(sessionStore, sessionName, ['invalid'], {}, runtime.bindDevice);
   expect(response?.ok).toBe(false);
   if (response?.ok === false) expect(response.error.code).toBe('INVALID_ARGS');
-  expect(runtime.boundUses()).toEqual([
-    { required: [], preferred: ['appLogInspect'], conditional: [] },
-  ]);
+  expect(runtime.boundUses()).toEqual([{ required: [], preferred: ['appLogInspect'] }]);
 });
 
 test('logs preserves whole-command unsupported precedence before parsing the action', async () => {
@@ -76,9 +74,7 @@ test('logs preserves whole-command unsupported precedence before parsing the act
       hint: 'Use a runtime with app-log support.',
     },
   });
-  expect(runtime.boundUses()).toEqual([
-    { required: [], preferred: ['appLogInspect'], conditional: [] },
-  ]);
+  expect(runtime.boundUses()).toEqual([{ required: [], preferred: ['appLogInspect'] }]);
 });
 
 test('logs path binds only inspect and preserves public status projection', async () => {
@@ -89,8 +85,8 @@ test('logs path binds only inspect and preserves public status projection', asyn
     data: { active: false, state: 'inactive', backend: 'ios-simulator' },
   });
   expect(runtime.boundUses()).toEqual([
-    { required: [], preferred: ['appLogInspect'], conditional: [] },
-    { required: ['appLogInspect'], preferred: [], conditional: [] },
+    { required: [], preferred: ['appLogInspect'] },
+    { required: ['appLogInspect'], preferred: [] },
   ]);
   expect(runtime.inspect).toHaveBeenCalledOnce();
 });
@@ -115,8 +111,8 @@ test('logs doctor binds only doctor and merges live-state notes', async () => {
     },
   });
   expect(runtime.boundUses()).toEqual([
-    { required: [], preferred: ['appLogInspect'], conditional: [] },
-    { required: ['appLogInspect', 'appLogDoctor'], preferred: [], conditional: [] },
+    { required: [], preferred: ['appLogInspect'] },
+    { required: ['appLogInspect', 'appLogDoctor'], preferred: [] },
   ]);
 });
 
@@ -130,8 +126,8 @@ test.each([
     const response = await runLogs(sessionStore, sessionName, [...action], {}, runtime.bindDevice);
     expect(response).toMatchObject({ ok: true, data: expected });
     expect(runtime.boundUses()).toEqual([
-      { required: [], preferred: ['appLogInspect'], conditional: [] },
-      { required: ['appLogInspect'], preferred: [], conditional: [] },
+      { required: [], preferred: ['appLogInspect'] },
+      { required: ['appLogInspect'], preferred: [] },
     ]);
   },
 );
@@ -143,8 +139,8 @@ test('logs stop uses the adopted handle after the required support bind', async 
   const response = await runLogs(sessionStore, sessionName, ['stop'], {}, runtime.bindDevice);
   expect(response).toMatchObject({ ok: true, data: { stopped: true } });
   expect(runtime.boundUses()).toEqual([
-    { required: [], preferred: ['appLogInspect'], conditional: [] },
-    { required: ['appLogInspect'], preferred: [], conditional: [] },
+    { required: [], preferred: ['appLogInspect'] },
+    { required: ['appLogInspect'], preferred: [] },
   ]);
   expect(runtime.finish).toHaveBeenCalledOnce();
   expect(sessionStore.get(sessionName)?.appLog).toBeUndefined();
@@ -164,8 +160,8 @@ test('logs start persists the durable envelope before adopting the live handle',
     envelope: { lifecycle: 'open', sessionId: sessionName, metadata: { phase: 'active' } },
   });
   expect(runtime.boundUses()).toEqual([
-    { required: [], preferred: ['appLogInspect'], conditional: [] },
-    { required: ['appLogInspect', 'appLogStart'], preferred: [], conditional: [] },
+    { required: [], preferred: ['appLogInspect'] },
+    { required: ['appLogInspect', 'appLogStart'], preferred: [] },
   ]);
 });
 
@@ -193,9 +189,7 @@ test.each([
 
     expect(response).toMatchObject({ ok: false, error: { code: 'INVALID_ARGS' } });
     if (response?.ok === false) expect(response.error.message).toMatch(message);
-    expect(runtime.boundUses()).toEqual([
-      { required: [], preferred: ['appLogInspect'], conditional: [] },
-    ]);
+    expect(runtime.boundUses()).toEqual([{ required: [], preferred: ['appLogInspect'] }]);
     expect(runtime.start).not.toHaveBeenCalled();
   },
 );
@@ -392,7 +386,7 @@ function createRuntimeHarness(options: { inspectAvailable?: boolean } = {}) {
   const uses: Array<{
     required: readonly string[];
     preferred: readonly string[];
-    conditional: readonly string[];
+    conditional?: readonly string[];
   }> = [];
   const bind = vi.fn(
     async (device: DeviceInfo): Promise<DeviceBinding<PlatformRuntimeOperations>> => ({
@@ -446,7 +440,11 @@ function createRuntimeHarness(options: { inspectAvailable?: boolean } = {}) {
     }),
   );
   const bindDevice: BindDeviceRuntime = async (device, use) => {
-    uses.push(use);
+    uses.push({
+      required: use.required,
+      preferred: use.preferred,
+      ...(use.conditional === undefined ? {} : { conditional: use.conditional }),
+    });
     return narrowDeviceBinding(await bind(device), use);
   };
   return {
@@ -456,7 +454,7 @@ function createRuntimeHarness(options: { inspectAvailable?: boolean } = {}) {
       uses.map((use) => ({
         required: [...use.required],
         preferred: [...use.preferred],
-        conditional: [...use.conditional],
+        ...(use.conditional === undefined ? {} : { conditional: [...use.conditional] }),
       })),
     resetUses: () => {
       uses.length = 0;

@@ -91,9 +91,9 @@ test('capabilities reports supported commands for the selected session device', 
   assertAndroidCapabilityHonesty(response.data?.availableCommands);
   expect(runtime.inspections).toHaveLength(1);
   expect(runtime.uses).toEqual([
-    { required: [], preferred: ['appLogInspect'], conditional: [] },
-    { required: [], preferred: ['networkDump'], conditional: [] },
-    { required: [], preferred: ['screenRecordingStart'], conditional: [] },
+    { required: [], preferred: ['appLogInspect'] },
+    { required: [], preferred: ['networkDump'] },
+    { required: [], preferred: ['screenRecordingStart'] },
   ]);
 });
 
@@ -148,9 +148,9 @@ test('capabilities excludes logs from an unavailable provider-mode XCTest runtim
   expect(availableCommands).not.toContain(PUBLIC_COMMANDS.shutdown);
   expect(runtime.inspections).toHaveLength(1);
   expect(runtime.uses).toEqual([
-    { required: [], preferred: ['appLogInspect'], conditional: [] },
-    { required: [], preferred: ['networkDump'], conditional: [] },
-    { required: [], preferred: ['screenRecordingStart'], conditional: [] },
+    { required: [], preferred: ['appLogInspect'] },
+    { required: [], preferred: ['networkDump'] },
+    { required: [], preferred: ['screenRecordingStart'] },
   ]);
 });
 
@@ -507,7 +507,7 @@ function createAdmissionRuntime(options: {
   const uses: Array<{
     required: readonly string[];
     preferred: readonly string[];
-    conditional: readonly string[];
+    conditional?: readonly string[];
   }> = [];
   const inspections: DeviceInfo[] = [];
   const inspectFacts: InspectDeviceRuntimeFacts = vi.fn(async (device: DeviceInfo) => {
@@ -518,7 +518,7 @@ function createAdmissionRuntime(options: {
     uses.push({
       required: [...use.required],
       preferred: [...use.preferred],
-      conditional: [...use.conditional],
+      ...(use.conditional === undefined ? {} : { conditional: [...use.conditional] }),
     });
     return narrowDeviceBinding(createAdmissionBinding(device, options), use);
   };

@@ -27,7 +27,7 @@ declare const runtimeOperations: unique symbol;
 export type RuntimeUseDeclaration = Readonly<{
   required: readonly string[];
   preferred: readonly string[];
-  conditional: readonly string[];
+  conditional?: readonly string[];
 }>;
 
 export type RuntimeUse<
@@ -42,7 +42,7 @@ export type RuntimeUse<
   Readonly<{
     required: Required;
     preferred: Preferred;
-    conditional: Conditional;
+    conditional?: Conditional;
     /** Type-only link to the operation catalog; never emitted in descriptor metadata. */
     readonly [runtimeOperations]?: Operations;
   }>;
@@ -237,7 +237,7 @@ export function narrowDeviceBinding<
     }
   }
 
-  for (const key of use.conditional) {
+  for (const key of use.conditional ?? []) {
     const fact = requireRuntimeFact(binding.facts.operations, key);
     selectedFacts[key] = fact;
     if (fact.available) {

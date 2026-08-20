@@ -12,7 +12,7 @@ test('screenshot descriptor declares its complete runtime uses with no legacy pr
     uses: screenshotRuntimePlanUses,
   });
   expect(screenshotRuntimePlanUses).toEqual([
-    { required: ['captureScreenshot'], preferred: [], conditional: [] },
-    { required: ['captureScreenshot', 'captureSnapshot'], preferred: [], conditional: [] },
+    { required: ['captureScreenshot'], preferred: [] },
+    { required: ['captureScreenshot', 'captureSnapshot'], preferred: [] },
   ]);
 });

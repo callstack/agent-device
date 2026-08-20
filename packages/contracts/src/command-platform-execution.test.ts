@@ -8,6 +8,7 @@ describe('command platform execution declaration', () => {
     { kind: 'none' },
     { kind: 'legacy' },
     { kind: 'inventory', use: inventoryUse },
+    { kind: 'device-runtime', use: { required: ['capture'], preferred: [] } },
     {
       kind: 'device-runtime',
       use: { required: ['capture'], preferred: ['inspect'], conditional: ['observe'] },
@@ -24,16 +25,16 @@ describe('command platform execution declaration', () => {
     { kind: 'inventory', use: inventoryUse, legacy: true },
     {
       kind: 'device-runtime',
-      use: { required: [], preferred: [], conditional: [] },
+      use: { required: [], preferred: [] },
       inventory: true,
     },
     {
       kind: 'device-runtime',
-      use: { required: ['capture', 'capture'], preferred: [], conditional: [] },
+      use: { required: ['capture', 'capture'], preferred: [] },
     },
     {
       kind: 'device-runtime',
-      use: { required: ['capture'], preferred: ['capture'], conditional: [] },
+      use: { required: ['capture'], preferred: ['capture'] },
     },
     {
       kind: 'device-runtime',
@@ -59,7 +60,7 @@ describe('command platform execution declaration', () => {
     { kind: 'device-runtime', uses: [appLogRuntimePlanUses[0], appLogRuntimePlanUses[0]] },
     {
       kind: 'device-runtime',
-      uses: [{ required: ['appLogStart'], preferred: ['appLogStart'], conditional: [] }],
+      uses: [{ required: ['appLogStart'], preferred: ['appLogStart'] }],
     },
   ])('rejects empty, duplicate, overlapping, or both-form runtime uses: %j', (value) => {
     expect(() => assertCommandPlatformExecution(value)).toThrow(/exactly one/);

@@ -14,8 +14,7 @@ import type { ScreenRecordingRuntimeHost } from './screen-recording-runtime-host
 import type { ScreenRecordingRuntimeOperations } from './screen-recording-runtime.ts';
 import type { ScreenshotRuntimeOperations } from './screenshot-runtime.ts';
 import type { SnapshotRuntimeHost, SnapshotRuntimeOperations } from './snapshot-runtime.ts';
-import type { FindTextRuntimeOperations } from './find-text-runtime.ts';
-import type { FindSelectorRuntimeOperations } from './find-selector-runtime.ts';
+import type { SelectorObservationRuntimeOperations } from './selector-observation-runtime.ts';
 import type { ViewportRuntimeOperations } from './viewport-runtime.ts';
 import type { ElementTextRuntimeOperations } from './element-text-runtime.ts';
 import type {
@@ -49,8 +48,7 @@ export type PlatformRuntimeOperations = AppLogRuntimeOperations &
   ScreenRecordingRuntimeOperations &
   ScreenshotRuntimeOperations &
   SnapshotRuntimeOperations &
-  FindTextRuntimeOperations &
-  FindSelectorRuntimeOperations &
+  SelectorObservationRuntimeOperations &
   ViewportRuntimeOperations &
   ElementTextRuntimeOperations &
   DeviceReadinessRuntimeOperations &
