@@ -1,9 +1,14 @@
 import type { Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import type { MaestroSelector } from './program-ir.ts';
 import type { MaestroPlatform } from './runtime-target-policy.ts';
-import { rankMaestroCandidates, selectMaestroSnapshotMatch } from './runtime-target-ranking.ts';
+import {
+  matchMaestroCandidates,
+  rankMaestroCandidates,
+  rankVisibleMaestroMatches,
+  selectMaestroSnapshotMatch,
+} from './runtime-target-ranking.ts';
 import { pointInsideRect, stripUndefined } from './shared.ts';
-import { isDescendantOfSnapshotNode, isMaestroNodeVisible } from './snapshot-policy.ts';
+import { isMaestroNodeVisible } from './snapshot-policy.ts';
 import { buildSnapshotNodeMap } from '@agent-device/contracts/snapshot';
 
 export type MaestroTargetQuery = {
@@ -24,6 +29,7 @@ export type MaestroTargetEvidence = {
 
 type MaestroInteractivePresentation = {
   snapshot: SnapshotState;
+  presentedIndexesBySourceIndex: ReadonlyMap<number, number[]>;
   sourceIndexes: ReadonlyMap<number, number>;
 };
 
@@ -47,15 +53,12 @@ export function resolveMaestroTargetFromSnapshot(
     presentation?: MaestroInteractivePresentation;
   } = {},
 ): MaestroTargetResolution {
-  const rawCandidates = rankMaestroCandidates(snapshot, query.selector, platform, query.childOf);
-  const projection = options.presentation
-    ? createPresentationProjection(snapshot, options.presentation)
+  const presentedNodes = options.presentation
+    ? createPresentedNodeLookup(options.presentation)
     : undefined;
-  const candidates = projection
-    ? rankMaestroCandidates(snapshot, query.selector, platform, query.childOf, {
-        isVisible: projection.isVisible,
-      })
-    : rawCandidates;
+  const candidates = presentedNodes
+    ? rankPresentedMaestroCandidates(snapshot, query, platform, presentedNodes)
+    : rankMaestroCandidates(snapshot, query.selector, platform, query.childOf);
   if (!candidates.parentMatched) {
     return {
       ok: false,
@@ -69,12 +72,9 @@ export function resolveMaestroTargetFromSnapshot(
   if (!target) {
     return failedTargetResolution(query, matches, rankedMatches, evidence);
   }
-  const presentedTarget = projection
-    ? selectMaestroSnapshotMatch(projection.nodesFor(target.node), undefined)
-    : undefined;
-  const representativeTarget = projection
-    ? selectMaestroSnapshotMatch(projection.representativesFor(target.node), undefined)
-    : undefined;
+  const presentedTarget = presentedNodes
+    ? selectMaestroSnapshotMatch(presentedNodes.forSource(target.node), undefined)
+    : null;
   const rect =
     options.interactiveBounds === true ? (presentedTarget?.rect ?? target.rect) : target.rect;
   return {
@@ -83,70 +83,48 @@ export function resolveMaestroTargetFromSnapshot(
     rect,
     matches: rankedMatches.length,
     dispatchCandidates:
-      platform === 'ios' && query.allowAtomicSelectorDispatch && !query.childOf
-        ? countInteractionDispatchCandidates(target, rawCandidates.ranked, representativeTarget)
+      platform === 'ios' && query.allowAtomicSelectorDispatch && !query.childOf && presentedNodes
+        ? countInteractionDispatchCandidates(target, rankedMatches, presentedTarget)
         : 0,
     evidence,
   };
 }
 
-function createPresentationProjection(
-  semanticSnapshot: SnapshotState,
-  presentation: MaestroInteractivePresentation,
-): {
+function createPresentedNodeLookup(presentation: MaestroInteractivePresentation): {
   isVisible: (node: SnapshotNode) => boolean;
-  nodesFor: (node: SnapshotNode) => SnapshotNode[];
-  representativesFor: (node: SnapshotNode) => SnapshotNode[];
+  forSource: (node: SnapshotNode) => SnapshotNode[];
 } {
-  const semanticByIndex = buildSnapshotNodeMap(semanticSnapshot.nodes);
-  const directNodesBySourceIndex = new Map<number, SnapshotNode[]>();
-  for (const presentedNode of presentation.snapshot.nodes) {
-    const sourceIndex = presentation.sourceIndexes.get(presentedNode.index);
-    if (sourceIndex === undefined) continue;
-    const nodes = directNodesBySourceIndex.get(sourceIndex) ?? [];
-    nodes.push(presentedNode);
-    directNodesBySourceIndex.set(sourceIndex, nodes);
-  }
-  const nodesFor = (semanticNode: SnapshotNode): SnapshotNode[] => {
-    return directNodesBySourceIndex.get(semanticNode.index) ?? [];
-  };
-  const representativesFor = (semanticNode: SnapshotNode): SnapshotNode[] => {
-    const direct = nodesFor(semanticNode);
-    if (direct.length > 0) return direct;
-    const descendants: SnapshotNode[] = [];
-    const equivalentAncestors: SnapshotNode[] = [];
-    for (const presentedNode of presentation.snapshot.nodes) {
-      const sourceIndex = presentation.sourceIndexes.get(presentedNode.index);
-      const source = sourceIndex === undefined ? undefined : semanticByIndex.get(sourceIndex);
-      if (!source) continue;
-      if (
-        isDescendantOfSnapshotNode(semanticSnapshot.nodes, source, semanticNode, semanticByIndex)
-      ) {
-        descendants.push(presentedNode);
-      } else if (
-        haveSharedSemanticIdentity(semanticNode, source) &&
-        isDescendantOfSnapshotNode(semanticSnapshot.nodes, semanticNode, source, semanticByIndex)
-      ) {
-        equivalentAncestors.push(presentedNode);
-      }
-    }
-    return descendants.length > 0 ? descendants : equivalentAncestors;
+  const presentedByIndex = buildSnapshotNodeMap(presentation.snapshot.nodes);
+  const forSource = (semanticNode: SnapshotNode): SnapshotNode[] => {
+    return (presentation.presentedIndexesBySourceIndex.get(semanticNode.index) ?? []).flatMap(
+      (presentedIndex) => {
+        const node = presentedByIndex.get(presentedIndex);
+        return node ? [node] : [];
+      },
+    );
   };
   return {
-    nodesFor,
-    representativesFor,
+    forSource,
     isVisible: (node) =>
-      representativesFor(node).some((presentedNode) =>
+      forSource(node).some((presentedNode) =>
         isMaestroNodeVisible(presentedNode, presentation.snapshot.nodes, 'ios'),
       ),
   };
 }
 
-function haveSharedSemanticIdentity(left: SnapshotNode, right: SnapshotNode): boolean {
-  return [left.identifier, left.label, left.value].some(
-    (value, index) =>
-      Boolean(value?.trim()) && value === [right.identifier, right.label, right.value][index],
-  );
+function rankPresentedMaestroCandidates(
+  snapshot: SnapshotState,
+  query: MaestroTargetQuery,
+  platform: MaestroPlatform,
+  presentedNodes: ReturnType<typeof createPresentedNodeLookup>,
+) {
+  const scoped = matchMaestroCandidates(snapshot, query.selector, query.childOf);
+  const visible = scoped.matches.filter(presentedNodes.isVisible);
+  return {
+    ...scoped,
+    visible,
+    ranked: rankVisibleMaestroMatches(snapshot.nodes, visible, query.selector, platform),
+  };
 }
 
 function failedTargetResolution(
@@ -168,10 +146,10 @@ function failedTargetResolution(
 
 function countInteractionDispatchCandidates(
   target: { node: SnapshotNode; rect: Rect },
-  rawCandidates: SnapshotNode[],
-  presentedTarget: { node: SnapshotNode; rect: Rect } | null | undefined,
+  rankedCandidates: SnapshotNode[],
+  presentedTarget: { node: SnapshotNode; rect: Rect } | null,
 ): number {
-  if (rawCandidates.length !== 1) return rawCandidates.length;
+  if (rankedCandidates.length !== 1) return rankedCandidates.length;
   return presentedTarget &&
     presentedTarget.node.hittable !== false &&
     haveSameTapPoint(presentedTarget.rect, target.rect)

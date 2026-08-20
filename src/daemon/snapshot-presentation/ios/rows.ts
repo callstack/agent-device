@@ -3,6 +3,7 @@ import { normalizeType } from '@agent-device/contracts/snapshot';
 import { isSystemScrollIndicatorLabel } from '../../../utils/scroll-indicator.ts';
 import {
   areRectsApproximatelyEqual,
+  associateSnapshotPresentation,
   collectDescendants,
   isDisabledChevronButton,
   mergeReplacement,
@@ -47,6 +48,7 @@ function resolveIosRowLabel(
   }
   mergeReplacement(context.replacements, row, { label: title });
   context.suppressedIndexes.add(titleNode.index);
+  associateSnapshotPresentation(context, titleNode, row);
   return title;
 }
 
@@ -73,7 +75,7 @@ function collectIosRowPresentationForNode(
   const rowType = normalizeType(row.type ?? '');
   if (rowType === 'button') {
     const descendants = collectDescendants(nodes, position);
-    suppressRepeatedRowDescendants(descendants, rowLabel, context.suppressedIndexes, row);
+    suppressRepeatedRowDescendants(descendants, rowLabel, context, row);
     return;
   }
   if (rowType !== 'cell') {
@@ -108,13 +110,8 @@ function collectSwitchRowPresentation(
     mergeReplacement(context.replacements, switchControl, { identifier: promotedIdentifier });
   }
   context.suppressedIndexes.add(row.index);
-  suppressSwitchRowDescendants(
-    descendants,
-    row,
-    rowLabel,
-    switchControl,
-    context.suppressedIndexes,
-  );
+  associateSnapshotPresentation(context, row, switchControl);
+  suppressSwitchRowDescendants(descendants, row, rowLabel, switchControl, context);
   return true;
 }
 
@@ -129,7 +126,7 @@ function collectButtonRowPresentation(
   );
   if (!rowButton) {
     if (descendants.some(isDisabledChevronButton)) {
-      suppressRepeatedRowDescendants(descendants, rowLabel, context.suppressedIndexes, row);
+      suppressRepeatedRowDescendants(descendants, rowLabel, context, row);
     }
     return;
   }
@@ -139,10 +136,11 @@ function collectButtonRowPresentation(
   }
 
   context.suppressedIndexes.add(rowButton.index);
+  associateSnapshotPresentation(context, rowButton, row);
   suppressRepeatedRowDescendants(
     descendants.filter((descendant) => descendant.index !== rowButton.index),
     rowLabel,
-    context.suppressedIndexes,
+    context,
     row,
   );
 }
@@ -152,7 +150,7 @@ function suppressSwitchRowDescendants(
   row: RawSnapshotNode,
   rowLabel: string,
   switchControl: RawSnapshotNode,
-  suppressedIndexes: Set<number>,
+  context: SnapshotTreeRuleContext,
 ): void {
   for (const descendant of descendants) {
     if (descendant.index === switchControl.index) {
@@ -164,7 +162,8 @@ function suppressSwitchRowDescendants(
       isIosSwitchValueDescendant(descendant, switchControl) ||
       shouldSuppressRepeatedTextDescendant(descendant, rowLabel)
     ) {
-      suppressedIndexes.add(descendant.index);
+      context.suppressedIndexes.add(descendant.index);
+      associateSnapshotPresentation(context, descendant, switchControl);
     }
   }
 }
@@ -172,7 +171,7 @@ function suppressSwitchRowDescendants(
 function suppressRepeatedRowDescendants(
   descendants: RawSnapshotNode[],
   rowLabel: string,
-  suppressedIndexes: Set<number>,
+  context: SnapshotTreeRuleContext,
   row?: RawSnapshotNode,
 ): void {
   for (const descendant of descendants) {
@@ -180,7 +179,8 @@ function suppressRepeatedRowDescendants(
       shouldSuppressRepeatedTextDescendant(descendant, rowLabel) ||
       (row && isEmptyRowButtonWrapper(descendant, row))
     ) {
-      suppressedIndexes.add(descendant.index);
+      context.suppressedIndexes.add(descendant.index);
+      if (row) associateSnapshotPresentation(context, descendant, row);
     }
   }
 }

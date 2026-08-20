@@ -10,6 +10,8 @@ import { normalizeType } from '@agent-device/contracts/snapshot';
 import { collectIosScrollIndicatorPresentation } from './scroll.ts';
 import {
   areRectsApproximatelyEqual,
+  associateSnapshotPresentation,
+  collectDescendantsByParentIndex,
   findDescendant,
   findLargestViewportRect,
   forEachDescendant,
@@ -26,17 +28,13 @@ export function collectIosPresentationNoiseSuppression(
 ): void {
   const { suppressedIndexes } = context;
   collectIosOffscreenKeyboardSuppression(nodes, context.sourceNodesByIndex, suppressedIndexes);
-  collectIosStructuralIdentifierSuppression(nodes, suppressedIndexes);
+  collectIosStructuralIdentifierSuppression(nodes, context);
   collectIosScrollIndicatorPresentation(nodes, context);
-  collectIosSearchToolbarSuppression(nodes, context.sourceNodesByIndex, suppressedIndexes);
-  collectIosActionWrapperSuppression(nodes, suppressedIndexes);
+  collectIosSearchToolbarSuppression(nodes, context);
+  collectIosActionWrapperSuppression(nodes, context);
   collectIosReactNativeOverlayActionPresentation(nodes, context.replacements);
-  collectIosReactNativeOverlayWrapperSuppression(nodes, suppressedIndexes);
-  collectIosRepeatedStaticSuppression(
-    nodes,
-    suppressedIndexes,
-    context.semanticRepresentativeIndexes,
-  );
+  collectIosReactNativeOverlayWrapperSuppression(nodes, context);
+  collectIosRepeatedStaticSuppression(nodes, context);
 }
 
 function collectIosReactNativeOverlayActionPresentation(
@@ -111,7 +109,7 @@ function remainingHorizontalPartition(
 
 function collectIosReactNativeOverlayWrapperSuppression(
   nodes: RawSnapshotNode[],
-  suppressedIndexes: Set<number>,
+  context: SnapshotTreeRuleContext,
 ): void {
   forEachOtherNodeWithLabel(nodes, (node, _nodeLabel, position) => {
     if (!isReactNativeCollapsedWarningWrapperCandidate(node)) return;
@@ -121,7 +119,10 @@ function collectIosReactNativeOverlayWrapperSuppression(
         collectDescendantNodes(nodes, position),
       )
     ) {
-      suppressedIndexes.add(node.index);
+      context.suppressedIndexes.add(node.index);
+      for (const descendant of collectDescendantNodes(nodes, position)) {
+        associateSnapshotPresentation(context, node, descendant);
+      }
     }
   });
 }
@@ -136,24 +137,16 @@ function collectDescendantNodes(nodes: RawSnapshotNode[], position: number): Raw
 
 function collectIosRepeatedStaticSuppression(
   nodes: RawSnapshotNode[],
-  suppressedIndexes: Set<number>,
-  semanticRepresentativeIndexes: ReadonlySet<number>,
+  context: SnapshotTreeRuleContext,
 ): void {
   for (let position = 0; position < nodes.length; position += 1) {
     const node = nodes[position];
     const nodeLabel = node?.label?.trim();
-    if (!node || suppressedIndexes.has(node.index) || !nodeLabel) {
+    if (!node || context.suppressedIndexes.has(node.index) || !nodeLabel) {
       continue;
     }
 
-    collectRepeatedStaticSuppressionForNode(
-      nodes,
-      position,
-      node,
-      nodeLabel,
-      suppressedIndexes,
-      semanticRepresentativeIndexes,
-    );
+    collectRepeatedStaticSuppressionForNode(nodes, position, node, nodeLabel, context);
   }
 }
 
@@ -162,72 +155,60 @@ function collectRepeatedStaticSuppressionForNode(
   position: number,
   node: RawSnapshotNode,
   nodeLabel: string,
-  suppressedIndexes: Set<number>,
-  semanticRepresentativeIndexes: ReadonlySet<number>,
+  context: SnapshotTreeRuleContext,
 ): void {
   const type = normalizeType(node.type ?? '');
   if (type === 'statictext' || type === 'link') {
-    suppressRepeatedStaticDescendants(
-      nodes,
-      position,
-      nodeLabel,
-      suppressedIndexes,
-      semanticRepresentativeIndexes,
-    );
+    suppressRepeatedStaticDescendants(nodes, position, nodeLabel, node, context);
     return;
   }
   if (type !== 'other') {
     return;
   }
-  if (hasEquivalentSemanticDescendant(nodes, position, nodeLabel)) {
-    suppressedIndexes.add(node.index);
+  const semanticDescendant = findEquivalentSemanticDescendant(nodes, position, nodeLabel);
+  if (semanticDescendant) {
+    context.suppressedIndexes.add(node.index);
+    associateSnapshotPresentation(context, node, semanticDescendant);
     return;
   }
-  suppressRepeatedStaticDescendants(
-    nodes,
-    position,
-    nodeLabel,
-    suppressedIndexes,
-    semanticRepresentativeIndexes,
-  );
+  suppressRepeatedStaticDescendants(nodes, position, nodeLabel, node, context);
 }
 
-function hasEquivalentSemanticDescendant(
+function findEquivalentSemanticDescendant(
   nodes: RawSnapshotNode[],
   position: number,
   nodeLabel: string,
-): boolean {
-  return Boolean(
-    findDescendant(nodes, position, (descendant) => {
-      const type = normalizeType(descendant.type ?? '');
-      return (
-        (type === 'link' || type === 'searchfield' || isScrollableSnapshotType(descendant.type)) &&
-        descendant.label?.trim() === nodeLabel
-      );
-    }),
-  );
+): RawSnapshotNode | undefined {
+  return findDescendant(nodes, position, (descendant) => {
+    const type = normalizeType(descendant.type ?? '');
+    return (
+      (type === 'link' || type === 'searchfield' || isScrollableSnapshotType(descendant.type)) &&
+      descendant.label?.trim() === nodeLabel
+    );
+  });
 }
 
 function suppressRepeatedStaticDescendants(
   nodes: RawSnapshotNode[],
   position: number,
   label: string,
-  suppressedIndexes: Set<number>,
-  semanticRepresentativeIndexes: ReadonlySet<number>,
+  representative: RawSnapshotNode,
+  context: SnapshotTreeRuleContext,
 ): void {
   forEachDescendant(nodes, position, (descendant) => {
     if (
-      !semanticRepresentativeIndexes.has(descendant.index) &&
+      !context.semanticRepresentativeIndexes.has(descendant.index) &&
       isRepeatedStaticNode(descendant, label)
     ) {
-      suppressedIndexes.add(descendant.index);
+      context.suppressedIndexes.add(descendant.index);
+      associateSnapshotPresentation(context, descendant, representative);
     }
   });
 }
 
 function collectIosActionWrapperSuppression(
   nodes: RawSnapshotNode[],
-  suppressedIndexes: Set<number>,
+  context: SnapshotTreeRuleContext,
 ): void {
   forEachOtherNodeWithLabel(nodes, (node, nodeLabel, position) => {
     const semanticDescendant = findDescendant(nodes, position, (descendant) => {
@@ -239,7 +220,8 @@ function collectIosActionWrapperSuppression(
       );
     });
     if (semanticDescendant) {
-      suppressedIndexes.add(node.index);
+      context.suppressedIndexes.add(node.index);
+      associateSnapshotPresentation(context, node, semanticDescendant);
     }
   });
 }
@@ -330,7 +312,7 @@ function suppressOffscreenKeyboardAncestors(
 
 function collectIosStructuralIdentifierSuppression(
   nodes: RawSnapshotNode[],
-  suppressedIndexes: Set<number>,
+  context: SnapshotTreeRuleContext,
 ): void {
   for (const node of nodes) {
     if (normalizeType(node.type ?? '') !== 'other') {
@@ -342,20 +324,22 @@ function collectIosStructuralIdentifierSuppression(
     if (!node.identifier?.trim()) {
       continue;
     }
-    suppressedIndexes.add(node.index);
+    context.suppressedIndexes.add(node.index);
+    for (const descendant of collectDescendantsByParentIndex(nodes, node.index)) {
+      associateSnapshotPresentation(context, node, descendant);
+    }
   }
 }
 
 function collectIosSearchToolbarSuppression(
   nodes: RawSnapshotNode[],
-  sourceNodesByIndex: ReadonlyMap<number, RawSnapshotNode>,
-  suppressedIndexes: Set<number>,
+  context: SnapshotTreeRuleContext,
 ): void {
   for (let position = 0; position < nodes.length; position += 1) {
     const node = nodes[position];
     if (!node) continue;
     if (isExposedSearchField(node)) {
-      suppressSearchToolbarDescendants(nodes, position, null, suppressedIndexes);
+      suppressSearchToolbarDescendants(nodes, position, node, context);
       continue;
     }
     if (!isSearchToolbar(node)) continue;
@@ -370,9 +354,10 @@ function collectIosSearchToolbarSuppression(
       continue;
     }
 
-    suppressedIndexes.add(node.index);
-    suppressToolbarAncestors(node, sourceNodesByIndex, suppressedIndexes);
-    suppressSearchToolbarDescendants(nodes, position, innerSearch.index, suppressedIndexes);
+    context.suppressedIndexes.add(node.index);
+    associateSnapshotPresentation(context, node, innerSearch);
+    suppressToolbarAncestors(node, innerSearch, context);
+    suppressSearchToolbarDescendants(nodes, position, innerSearch, context);
   }
 }
 
@@ -388,31 +373,33 @@ function isSearchToolbar(node: RawSnapshotNode): boolean {
 function suppressSearchToolbarDescendants(
   nodes: RawSnapshotNode[],
   position: number,
-  keptSearchIndex: number | null,
-  suppressedIndexes: Set<number>,
+  keptSearch: RawSnapshotNode,
+  context: SnapshotTreeRuleContext,
 ): void {
   forEachDescendant(nodes, position, (descendant) => {
-    if (descendant.index === keptSearchIndex) {
+    if (descendant.index === keptSearch.index) {
       return;
     }
     if (shouldSuppressIosSearchToolbarDescendant(descendant)) {
-      suppressedIndexes.add(descendant.index);
+      context.suppressedIndexes.add(descendant.index);
+      associateSnapshotPresentation(context, descendant, keptSearch);
     }
   });
 }
 
 function suppressToolbarAncestors(
   node: RawSnapshotNode,
-  sourceNodesByIndex: ReadonlyMap<number, RawSnapshotNode>,
-  suppressedIndexes: Set<number>,
+  representative: RawSnapshotNode,
+  context: SnapshotTreeRuleContext,
 ): void {
   let current = node;
   while (typeof current.parentIndex === 'number') {
-    const parent = sourceNodesByIndex.get(current.parentIndex);
+    const parent = context.sourceNodesByIndex.get(current.parentIndex);
     if (!parent || parent.label !== 'Toolbar') {
       return;
     }
-    suppressedIndexes.add(parent.index);
+    context.suppressedIndexes.add(parent.index);
+    associateSnapshotPresentation(context, parent, representative);
     current = parent;
   }
 }

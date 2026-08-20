@@ -4,6 +4,7 @@ import {
   isSystemScrollIndicatorLabel,
 } from '../../../utils/scroll-indicator.ts';
 import {
+  associateSnapshotPresentation,
   findNearestScrollableContainer,
   isScrollableSnapshotType,
   updateReplacement,
@@ -45,6 +46,10 @@ function collectIosScrollIndicatorNodePresentation(
   const container = findNearestScrollableContainer(node, byIndex, { includeSelf: true });
   if (!container) {
     return;
+  }
+
+  if (context.suppressedIndexes.has(node.index)) {
+    associateSnapshotPresentation(context, node, container);
   }
 
   applyScrollIndicatorReplacement(context, container, node, directions);

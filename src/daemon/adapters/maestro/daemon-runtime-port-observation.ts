@@ -114,7 +114,11 @@ function resolveTargetFromSnapshot(params: {
     {
       interactiveBounds: params.mode === 'tap',
       presentation: presentation
-        ? { snapshot: interactiveSnapshot, sourceIndexes: presentation.sourceIndexes }
+        ? {
+            snapshot: interactiveSnapshot,
+            sourceIndexes: presentation.sourceIndexes,
+            presentedIndexesBySourceIndex: presentation.presentedIndexesBySourceIndex,
+          }
         : undefined,
     },
   );

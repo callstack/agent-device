@@ -17,33 +17,37 @@ export type MaestroRankedCandidates = {
   readonly parentMatched: boolean;
 };
 
+export type MaestroCandidateMatches = Pick<MaestroRankedCandidates, 'matches' | 'parentMatched'>;
+
 export function rankMaestroCandidates(
   snapshot: SnapshotState,
   selector: MaestroSelector,
   platform: MaestroPlatform,
   childOf?: MaestroSelector,
-  options: {
-    isVisible?: (node: SnapshotNode) => boolean;
-  } = {},
 ): MaestroRankedCandidates {
-  const matches = snapshot.nodes.filter((node) => matchesMaestroTypedSelector(node, selector));
-  const scoped = scopeMatchesByAncestor(snapshot, matches, childOf);
-  const visible = options.isVisible
-    ? scoped.matches.filter(options.isVisible)
-    : filterVisibleMaestroMatches({
-        nodes: snapshot.nodes,
-        matches: scoped.matches,
-        platform,
-      });
-  return {
+  const scoped = matchMaestroCandidates(snapshot, selector, childOf);
+  const visible = filterVisibleMaestroMatches({
+    nodes: snapshot.nodes,
     matches: scoped.matches,
+    platform,
+  });
+  return {
+    ...scoped,
     visible,
-    ranked: normalizeMaestroSnapshotMatches(snapshot.nodes, visible, selector, platform),
-    parentMatched: scoped.parentMatched,
+    ranked: rankVisibleMaestroMatches(snapshot.nodes, visible, selector, platform),
   };
 }
 
-function normalizeMaestroSnapshotMatches(
+export function matchMaestroCandidates(
+  snapshot: SnapshotState,
+  selector: MaestroSelector,
+  childOf?: MaestroSelector,
+): MaestroCandidateMatches {
+  const matches = snapshot.nodes.filter((node) => matchesMaestroTypedSelector(node, selector));
+  return scopeMatchesByAncestor(snapshot, matches, childOf);
+}
+
+export function rankVisibleMaestroMatches(
   nodes: SnapshotNode[],
   matches: SnapshotNode[],
   selector: MaestroSelector,

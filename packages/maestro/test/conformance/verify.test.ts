@@ -10,6 +10,7 @@ import {
   CONFORMANCE_DATA_DIR,
   CORPUS_DIR,
   checkCoverage,
+  checkCorpusSeals,
   checkFixtureSeals,
   checkLayer2,
   classifyAllFlows,
@@ -41,6 +42,15 @@ test('fixture content is sealed against hand editing', () => {
       `${result.file} content does not match its seal. Fixtures are generated: run \`pnpm maestro:conformance:regenerate\` rather than editing them by hand.`,
     );
   }
+});
+
+test('vendored upstream corpus content matches its manifest sha256', () => {
+  const drifted = checkCorpusSeals().filter((result) => !result.sealed);
+  assert.deepEqual(
+    drifted,
+    [],
+    'upstream corpus content drifted — restore the vendored bytes or regenerate from the pinned upstream commit',
+  );
 });
 
 // The seal is only worth having if it actually catches an edit. Prove it does,

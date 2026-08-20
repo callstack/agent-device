@@ -253,6 +253,11 @@ test('iOS target resolution keeps semantic identity bound to presented geometry'
             [0, 0],
             [1, 2],
           ]),
+          presentedIndexesBySourceIndex: new Map([
+            [0, [0]],
+            [1, []],
+            [2, [1]],
+          ]),
         },
       },
     ),
@@ -260,6 +265,55 @@ test('iOS target resolution keeps semantic identity bound to presented geometry'
     ok: true,
     node: { index: 2 },
     rect: { x: 200, y: 100, width: 80, height: 48 },
-    dispatchCandidates: 2,
+    dispatchCandidates: 1,
+  });
+});
+
+test('iOS target resolution uses one presented candidate universe for geometry and dispatch', () => {
+  const semanticSnapshot = makeSnapshot([
+    {
+      index: 0,
+      type: 'Button',
+      identifier: 'save',
+      rect: { x: 0, y: 100, width: 80, height: 48 },
+    },
+    {
+      index: 1,
+      type: 'Button',
+      identifier: 'save',
+      rect: { x: 200, y: 100, width: 80, height: 48 },
+    },
+  ]);
+  const presentationSnapshot = makeSnapshot([
+    {
+      ...semanticSnapshot.nodes[1]!,
+      index: 0,
+      rect: { x: 220, y: 120, width: 80, height: 48 },
+    },
+  ]);
+
+  expect(
+    resolveMaestroTargetFromSnapshot(
+      semanticSnapshot,
+      { selector: { id: 'save' }, allowAtomicSelectorDispatch: true },
+      'ios',
+      {
+        interactiveBounds: true,
+        presentation: {
+          snapshot: presentationSnapshot,
+          sourceIndexes: new Map([[0, 1]]),
+          presentedIndexesBySourceIndex: new Map([
+            [0, []],
+            [1, [0]],
+          ]),
+        },
+      },
+    ),
+  ).toMatchObject({
+    ok: true,
+    node: { index: 1 },
+    rect: { x: 220, y: 120, width: 80, height: 48 },
+    matches: 1,
+    dispatchCandidates: 0,
   });
 });

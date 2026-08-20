@@ -3,12 +3,25 @@ import { normalizeType } from '@agent-device/contracts/snapshot';
 export { areRectsApproximatelyEqual } from '../../utils/rect-center.ts';
 
 export type SnapshotTreeRuleContext = {
+  /** Exact semantic-source relationships declared by the presentation rule that owns them. */
+  representativeSourceIndexesBySourceIndex: Map<number, Set<number>>;
   replacements: Map<number, RawSnapshotNode>;
   /** Projected label owners that repeated-text suppression must retain. */
   semanticRepresentativeIndexes: Set<number>;
   sourceNodesByIndex: ReadonlyMap<number, RawSnapshotNode>;
   suppressedIndexes: Set<number>;
 };
+
+export function associateSnapshotPresentation(
+  context: SnapshotTreeRuleContext,
+  source: RawSnapshotNode,
+  representative: RawSnapshotNode,
+): void {
+  const representatives =
+    context.representativeSourceIndexesBySourceIndex.get(source.index) ?? new Set<number>();
+  representatives.add(representative.index);
+  context.representativeSourceIndexesBySourceIndex.set(source.index, representatives);
+}
 
 export function collectChildrenByParent(nodes: RawSnapshotNode[]): Map<number, RawSnapshotNode[]> {
   const childrenByParent = new Map<number, RawSnapshotNode[]>();
@@ -31,6 +44,23 @@ export function collectDescendants(
   if (!node) return [];
   const endPosition = getDescendantEndPositions(nodes)[startPosition] ?? startPosition + 1;
   return nodes.slice(startPosition + 1, endPosition);
+}
+
+export function collectDescendantsByParentIndex(
+  nodes: RawSnapshotNode[],
+  ancestorIndex: number,
+): RawSnapshotNode[] {
+  const byIndex = new Map(nodes.map((node) => [node.index, node]));
+  return nodes.filter((node) => {
+    let parentIndex = node.parentIndex;
+    const visited = new Set<number>();
+    while (typeof parentIndex === 'number' && !visited.has(parentIndex)) {
+      if (parentIndex === ancestorIndex) return true;
+      visited.add(parentIndex);
+      parentIndex = byIndex.get(parentIndex)?.parentIndex;
+    }
+    return false;
+  });
 }
 
 export function findDescendant(

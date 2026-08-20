@@ -159,7 +159,46 @@ test('matches iOS Maestro ids on semantic nodes suppressed from interactive pres
       dependencies: makeDependencies(),
       platform: 'ios',
     }),
-  ).resolves.toMatchObject({ matched: true, visible: true, candidateCount: 1 });
+  ).resolves.toMatchObject({ matched: true, visible: true, candidateCount: 1, ref: 'e2' });
+});
+
+test('reports iOS Maestro evidence refs in semantic snapshot space after earlier suppression', async () => {
+  const snapshot = makeSnapshot([
+    { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 402, height: 874 } },
+    { index: 1, parentIndex: 0, type: 'Other', identifier: 'discarded-wrapper' },
+    {
+      index: 2,
+      parentIndex: 1,
+      type: 'StaticText',
+      label: 'Earlier content',
+      rect: { x: 20, y: 40, width: 180, height: 32 },
+    },
+    {
+      index: 3,
+      parentIndex: 0,
+      type: 'Other',
+      identifier: 'target-wrapper',
+      rect: { x: 20, y: 100, width: 180, height: 32 },
+    },
+    {
+      index: 4,
+      parentIndex: 3,
+      type: 'StaticText',
+      label: 'Target content',
+      rect: { x: 20, y: 100, width: 180, height: 32 },
+    },
+  ]);
+
+  await expect(
+    observeTypedMaestroCondition({
+      condition: { kind: 'visible', selector: { id: 'target-wrapper' } },
+      timeoutMs: 0,
+      context: { generation: 0, env: {} },
+      snapshot: async () => snapshot,
+      dependencies: makeDependencies(),
+      platform: 'ios',
+    }),
+  ).resolves.toMatchObject({ matched: true, visible: true, candidateCount: 1, ref: 'e4' });
 });
 
 test('compares snapshots before sleeping and captures once beyond a zero settle budget', async () => {

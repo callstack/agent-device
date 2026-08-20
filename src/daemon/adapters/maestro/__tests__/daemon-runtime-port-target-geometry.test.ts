@@ -62,7 +62,7 @@ test('uses canonical iOS presentation only for atomic selector uniqueness', asyn
   expect(requests[1]?.positionals).toEqual(['text="First"']);
 });
 
-test('uses resolved iOS geometry when canonical presentation changes target bounds', async () => {
+test('uses exact iOS representative geometry when presentation suppresses the semantic target', async () => {
   const requests: DaemonRequest[] = [];
   const port = createDaemonMaestroRuntimePort({
     baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
@@ -134,7 +134,7 @@ test('uses resolved iOS geometry when canonical presentation changes target boun
   expect(requests.map(({ command }) => command)).toEqual(['snapshot', 'click']);
   expect(
     requests.filter(({ command }) => command === 'click').map(({ positionals }) => positionals),
-  ).toEqual([['56', '121']]);
+  ).toEqual([['266', '121']]);
 });
 
 test('uses the selected iOS node interactive bounds without changing raw target matching', async () => {

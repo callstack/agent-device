@@ -26,6 +26,8 @@ export function presentIosInteractiveSnapshot(nodes: RawSnapshotNode[]): RawSnap
 
 export type IosInteractiveSnapshotPresentation = {
   nodes: RawSnapshotNode[];
+  /** Presented node indexes for every source index; suppressed noise maps to an empty list. */
+  presentedIndexesBySourceIndex: ReadonlyMap<number, number[]>;
   sourceIndexes: ReadonlyMap<number, number>;
 };
 
@@ -33,16 +35,18 @@ export function buildIosInteractiveSnapshotPresentation(
   nodes: RawSnapshotNode[],
 ): IosInteractiveSnapshotPresentation {
   if (nodes.length === 0) {
-    return { nodes, sourceIndexes: new Map() };
+    return { nodes, presentedIndexesBySourceIndex: new Map(), sourceIndexes: new Map() };
   }
 
   const sourceIndexes = new Map(nodes.map((node) => [node.index, node.index]));
   const replacements = new Map<number, RawSnapshotNode>();
+  const representativeSourceIndexesBySourceIndex = new Map<number, Set<number>>();
   const semanticRepresentativeIndexes = new Set<number>();
   const sourceNodesByIndex = new Map(nodes.map((node) => [node.index, node]));
   const suppressedIndexes = new Set<number>();
   const ruleContext: SnapshotTreeRuleContext = {
     replacements,
+    representativeSourceIndexesBySourceIndex,
     semanticRepresentativeIndexes,
     sourceNodesByIndex,
     suppressedIndexes,
@@ -53,7 +57,11 @@ export function buildIosInteractiveSnapshotPresentation(
   }
 
   if (suppressedIndexes.size === 0 && replacements.size === 0) {
-    return { nodes, sourceIndexes };
+    return {
+      nodes,
+      presentedIndexesBySourceIndex: new Map(nodes.map((node) => [node.index, [node.index]])),
+      sourceIndexes,
+    };
   }
 
   const presentedSourceNodes = nodes
@@ -64,13 +72,47 @@ export function buildIosInteractiveSnapshotPresentation(
     suppressedIndexes,
     nodes,
   );
+  const presentedIndexBySourceIndex = new Map(
+    presentedSourceNodes.map((node, position) => [node.index, presentedNodes[position]!.index]),
+  );
   return {
     nodes: presentedNodes,
-    sourceIndexes: new Map(
-      presentedNodes.map((node, position) => [
+    presentedIndexesBySourceIndex: new Map(
+      nodes.map((node) => [
         node.index,
-        sourceIndexes.get(presentedSourceNodes[position]!.index)!,
+        resolvePresentedIndexes(
+          node.index,
+          presentedIndexBySourceIndex,
+          representativeSourceIndexesBySourceIndex,
+        ),
       ]),
     ),
+    sourceIndexes: new Map(
+      presentedNodes.map((node, position) => [node.index, presentedSourceNodes[position]!.index]),
+    ),
   };
+}
+
+function resolvePresentedIndexes(
+  sourceIndex: number,
+  presentedIndexBySourceIndex: ReadonlyMap<number, number>,
+  representativesBySourceIndex: ReadonlyMap<number, ReadonlySet<number>>,
+  visited = new Set<number>(),
+): number[] {
+  const direct = presentedIndexBySourceIndex.get(sourceIndex);
+  if (direct !== undefined) return [direct];
+  if (visited.has(sourceIndex)) return [];
+  visited.add(sourceIndex);
+  const resolved = new Set<number>();
+  for (const representative of representativesBySourceIndex.get(sourceIndex) ?? []) {
+    for (const presentedIndex of resolvePresentedIndexes(
+      representative,
+      presentedIndexBySourceIndex,
+      representativesBySourceIndex,
+      visited,
+    )) {
+      resolved.add(presentedIndex);
+    }
+  }
+  return [...resolved].sort((left, right) => left - right);
 }
