@@ -348,8 +348,8 @@ agent-device get attrs @e1
   full tree. Under `-i` that means scoping to a layout container returns the actionable elements
   inside it, even when the container itself is filtered out. `--depth` then counts from the scope
   root. `@ref` scopes by that element's label from the last snapshot. Android resolves scope inside
-  its projection; on iOS the runner first narrows capture by label/identifier and the daemon applies
-  the rule to the presented tree.
+  its TypeScript presentation; iOS keeps acquisition broad and resolves scope once inside the
+  runner's Swift presentation. The daemon does not reapply scope after either platform returns.
 - `--actions` names the custom accessibility affordances an element merged away (iOS
   `UIAccessibilityCustomAction`, React Native `accessibilityActions`), so a card whose reply/options
   controls are not separate elements still lists them. It is iOS-simulator-only and exists for
