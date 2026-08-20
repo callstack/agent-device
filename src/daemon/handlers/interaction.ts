@@ -63,22 +63,35 @@ async function dispatchTypeViaRuntime(
   if (!session) return noActiveSessionError();
   const unsupported = requireCommandSupported(PUBLIC_COMMANDS.type, session.device);
   if (unsupported) return unsupported;
-  const recordingRecoveryResponse = await recoverAndroidRecordingDialogForType(session);
-  if (recordingRecoveryResponse) return recordingRecoveryResponse;
+  const recordingRecovery = await recoverAndroidRecordingDialogForType(session);
+  if (recordingRecovery.response) return recordingRecovery.response;
 
-  return await runTypeTextViaRuntime(params, session);
+  return await runTypeTextViaRuntime(params, session, recordingRecovery.warning);
 }
+
+type AndroidRecordingDialogRecovery = {
+  response?: DaemonResponse;
+  warning?: string;
+};
 
 async function recoverAndroidRecordingDialogForType(
   session: SessionState,
-): Promise<DaemonResponse | null> {
+): Promise<AndroidRecordingDialogRecovery> {
   if (session.device.platform === 'android' && session.screenRecording) {
     const androidRecoveryResult = await recoverAndroidBlockingSystemDialog({ session });
     if (androidRecoveryResult.status === 'failed') {
-      return errorResponse('COMMAND_FAILED', 'Android system dialog blocked the recording session');
+      return {
+        response: errorResponse(
+          'COMMAND_FAILED',
+          'Android system dialog blocked the recording session',
+        ),
+      };
+    }
+    if (androidRecoveryResult.status === 'unknown') {
+      return { warning: androidRecoveryResult.warning };
     }
   }
-  return null;
+  return {};
 }
 
 async function runTypeTextViaRuntime(
@@ -86,6 +99,7 @@ async function runTypeTextViaRuntime(
     captureSnapshotForSession: typeof captureSnapshotForSession;
   },
   session: SessionState,
+  recordingRecoveryWarning?: string,
 ): Promise<DaemonResponse> {
   const { req, sessionName, sessionStore } = params;
   const text = (req.positionals ?? []).join(' ');
@@ -114,7 +128,7 @@ async function runTypeTextViaRuntime(
       delayMs: result.delayMs,
       ...successText(result.message ?? `Typed ${Array.from(result.text).length} chars`),
     };
-    if (readiness.status === 'recovered') responseData.warning = readiness.warning;
+    appendTypeReadinessWarnings(responseData, recordingRecoveryWarning, readiness);
     return finalizeTouchInteraction({
       session,
       sessionStore,
@@ -129,4 +143,20 @@ async function runTypeTextViaRuntime(
   } catch (error) {
     return { ok: false, error: normalizeError(error) };
   }
+}
+
+function appendTypeReadinessWarnings(
+  responseData: Record<string, unknown>,
+  recordingRecoveryWarning: string | undefined,
+  readiness: Awaited<ReturnType<typeof ensureAndroidBlockingSystemDialogReady>>,
+): void {
+  const warnings = [
+    typeof responseData.warning === 'string' ? responseData.warning : undefined,
+    recordingRecoveryWarning,
+  ];
+  if (readiness.status === 'recovered') warnings.push(readiness.warning);
+  const composedWarning = warnings
+    .filter((warning): warning is string => typeof warning === 'string' && warning.length > 0)
+    .join(' ');
+  if (composedWarning.length > 0) responseData.warning = composedWarning;
 }

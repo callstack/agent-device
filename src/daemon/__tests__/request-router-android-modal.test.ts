@@ -2,10 +2,12 @@ import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/de
 import { test, expect, vi } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
+import { AppError } from '@agent-device/kernel/errors';
 
 let snapshotCalls = 0;
 const dispatchCalls: string[][] = [];
 let snapshotMode: 'blocking-dialog' | 'throws' = 'blocking-dialog';
+let dispatchResult: Record<string, unknown> = {};
 
 vi.mock('../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../core/dispatch.ts')>();
@@ -13,7 +15,7 @@ vi.mock('../../core/dispatch.ts', async (importOriginal) => {
     ...actual,
     dispatchCommand: vi.fn(async (_device: unknown, command: string, positionals: string[]) => {
       dispatchCalls.push([command, ...positionals]);
-      return {};
+      return dispatchResult;
     }),
   };
 });
@@ -33,7 +35,11 @@ vi.mock('../../platforms/android/snapshot.ts', async (importOriginal) => {
     snapshotAndroid: vi.fn(async () => {
       snapshotCalls += 1;
       if (snapshotMode === 'throws') {
-        throw new Error('Android snapshot helper did not return XML');
+        throw new AppError(
+          'COMMAND_FAILED',
+          'Android snapshot helper is unavailable: helper artifact is missing',
+          { hint: 'Run `pnpm build:android` to build the Android snapshot helper.' },
+        );
       }
       if (snapshotCalls === 1) {
         return {
@@ -108,6 +114,7 @@ function makeAndroidSession(name: string): SessionState {
 test('generic Android gesture commands dismiss blocking system dialogs during recording', async () => {
   snapshotCalls = 0;
   snapshotMode = 'blocking-dialog';
+  dispatchResult = {};
   execCalls.length = 0;
   dispatchCalls.length = 0;
 
@@ -146,6 +153,7 @@ test('generic Android gesture commands dismiss blocking system dialogs during re
 test('generic Android gesture commands continue when recording dialog inspection fails', async () => {
   snapshotCalls = 0;
   snapshotMode = 'throws';
+  dispatchResult = { warning: 'The platform response already carried a warning.' };
   execCalls.length = 0;
   dispatchCalls.length = 0;
 
@@ -177,11 +185,19 @@ test('generic Android gesture commands continue when recording dialog inspection
   expect(execCalls).toEqual([]);
   expect(openAndroidApp).not.toHaveBeenCalled();
   expect(snapshotCalls).toBe(1);
+  if (response.ok) {
+    expect(response.data?.warning).toMatch(
+      /Android blocking-dialog readiness could not be inspected.*command continued/i,
+    );
+    expect(response.data?.warning).toContain('pnpm build:android');
+    expect(response.data?.warning).toContain('The platform response already carried a warning.');
+  }
 });
 
 test('generic Android gesture commands skip local dialog recovery for provider devices', async () => {
   snapshotCalls = 0;
   snapshotMode = 'blocking-dialog';
+  dispatchResult = {};
   execCalls.length = 0;
   dispatchCalls.length = 0;
 

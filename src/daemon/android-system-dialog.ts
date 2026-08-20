@@ -7,7 +7,7 @@ import {
 import { snapshotAndroid } from '../platforms/android/snapshot.ts';
 import { runAndroidAdb } from '../platforms/android/adb.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import { centerOfRect, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import { sleep } from '../utils/timeouts.ts';
 import { buildSnapshotState } from './snapshot-state.ts';
@@ -21,12 +21,15 @@ const ANDROID_MODAL_POLL_MS = 500;
 const ANDROID_MODAL_POLL_ATTEMPTS = 12;
 const ANDROID_BLOCKING_DIALOG_HINT =
   'Wait for Android to recover, close the dialog, restart the app, or reboot the emulator, then retry.';
+const ANDROID_BLOCKING_DIALOG_INSPECTION_WARNING =
+  'Android blocking-dialog readiness could not be inspected; the command continued.';
+const ANDROID_BLOCKING_DIALOG_WARNING_TEXT_LIMIT = 240;
 
 export type AndroidBlockingDialogRecoveryResult =
   | { status: 'absent' }
   | { status: 'recovered' }
   | { status: 'failed'; reason: 'tap-failed' | 'dismiss-failed' | 'relaunch-failed' | 'error' }
-  | { status: 'unknown'; reason: 'inspection-failed' };
+  | { status: 'unknown'; reason: 'inspection-failed'; warning: string };
 export type AndroidBlockingDialogReadinessResult =
   | { status: 'clear' }
   | { status: 'recovered'; warning: string };
@@ -52,6 +55,7 @@ export async function recoverAndroidBlockingSystemDialog(params: {
   try {
     nodes = await readAndroidSnapshotNodes(session);
   } catch (error) {
+    const normalizedError = normalizeError(error);
     emitDiagnostic({
       level: 'warn',
       phase: 'android_blocking_dialog_inspection_failed',
@@ -61,7 +65,11 @@ export async function recoverAndroidBlockingSystemDialog(params: {
         error: error instanceof Error ? error.message : String(error),
       },
     });
-    return { status: 'unknown', reason: 'inspection-failed' };
+    return {
+      status: 'unknown',
+      reason: 'inspection-failed',
+      warning: androidBlockingDialogInspectionWarning(normalizedError),
+    };
   }
 
   const closeAppButton = findCloseAppButton(nodes);
@@ -260,6 +268,18 @@ function androidBlockingDialogError(params: {
 
 function formatAndroidBlockingDialogFocus(focus: AndroidBlockingDialogFocus): string {
   return focus.package ? `${focus.focusedWindow} (package ${focus.package})` : focus.focusedWindow;
+}
+
+function androidBlockingDialogInspectionWarning(error: NormalizedError): string {
+  const details = [`Inspection error: ${boundAndroidWarningText(error.message)}`];
+  if (error.hint) details.push(`Hint: ${boundAndroidWarningText(error.hint)}`);
+  return [ANDROID_BLOCKING_DIALOG_INSPECTION_WARNING, ...details].join(' ');
+}
+
+function boundAndroidWarningText(value: string): string {
+  const singleLine = value.replaceAll(/\s+/g, ' ').trim();
+  if (singleLine.length <= ANDROID_BLOCKING_DIALOG_WARNING_TEXT_LIMIT) return singleLine;
+  return `${singleLine.slice(0, ANDROID_BLOCKING_DIALOG_WARNING_TEXT_LIMIT - 1)}…`;
 }
 
 /**

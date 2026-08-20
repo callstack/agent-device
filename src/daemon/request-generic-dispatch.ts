@@ -79,8 +79,8 @@ export async function dispatchGenericCommand(params: {
   const { req, session, logPath, sessionStore, contextFromFlags } = params;
   const platformCommand = req.command;
 
-  const readinessResponse = await ensureGenericCommandReady(session, platformCommand);
-  if (readinessResponse) return readinessResponse;
+  const commandReadiness = await ensureGenericCommandReady(session, platformCommand);
+  if (commandReadiness.response) return commandReadiness.response;
   // #1638: freeze the settled diff's baseline before anything can mutate the
   // screen or the stored snapshot — including the Android dialog preflight.
   const settlePlan = await planGenericSettleObservation({
@@ -135,7 +135,10 @@ export async function dispatchGenericCommand(params: {
     recorded,
     data,
     actionStartedAt,
-    preflightReadiness,
+    readinessWarnings: [
+      commandReadiness.warning,
+      preflightReadiness.status === 'recovered' ? preflightReadiness.warning : undefined,
+    ],
     observeSettle: settlePlan.observe,
   });
 }
@@ -154,7 +157,7 @@ async function finalizeGenericCommand(params: {
   recorded: RecordedGenericRequest;
   data: Record<string, unknown> | void;
   actionStartedAt: number;
-  preflightReadiness: AndroidDialogReadiness;
+  readinessWarnings: readonly (string | undefined)[];
   observeSettle?: () => Promise<SettleObservation | undefined>;
 }): Promise<DaemonResponse> {
   const { req, session, sessionStore, command } = params;
@@ -165,7 +168,7 @@ async function finalizeGenericCommand(params: {
   );
   if ('response' in postflightReadiness) return postflightReadiness.response;
 
-  let data = withRecoveredDialogWarning(params.data, params.preflightReadiness);
+  let data = withReadinessWarnings(params.data, params.readinessWarnings);
   recordVisualizationAndAction({
     session,
     sessionStore,
@@ -198,14 +201,19 @@ async function finalizeGenericCommand(params: {
   return { ok: true, data: data ?? {} };
 }
 
-/** A dialog the preflight had to dismiss is disclosed on the result it made possible. */
-function withRecoveredDialogWarning(
+/** Readiness warnings are disclosed on the result they made possible without clobbering its data. */
+function withReadinessWarnings(
   data: Record<string, unknown> | void,
-  preflight: AndroidDialogReadiness,
+  warnings: readonly (string | undefined)[],
 ): Record<string, unknown> | void {
-  if (!('status' in preflight) || preflight.status !== 'recovered') return data;
+  const appendedWarnings = warnings.filter(
+    (warning): warning is string => typeof warning === 'string' && warning.length > 0,
+  );
+  if (appendedWarnings.length === 0) return data;
   if (data && typeof data !== 'object') return data;
-  return { ...(data ?? {}), warning: preflight.warning };
+  const existingWarnings =
+    data && typeof data.warning === 'string' && data.warning.length > 0 ? [data.warning] : [];
+  return { ...(data ?? {}), warning: [...existingWarnings, ...appendedWarnings].join(' ') };
 }
 
 /**
@@ -249,6 +257,11 @@ type AndroidDialogReadiness =
   | { status: 'recovered'; warning: string }
   | { response: DaemonResponse };
 
+type GenericCommandReadiness = {
+  response?: DaemonResponse;
+  warning?: string;
+};
+
 async function ensureNoAndroidBlockingDialogReady(
   session: SessionState,
   platformCommand: string,
@@ -274,27 +287,32 @@ async function ensureNoAndroidBlockingDialogReady(
 async function ensureGenericCommandReady(
   session: SessionState,
   platformCommand: string,
-): Promise<DaemonResponse | null> {
+): Promise<GenericCommandReadiness> {
   // A device-runtime command has no capability bucket: its exact owner facts already admitted it
   // (or refused it) before this route was reached.
   const unsupported = commandUsesDeviceRuntimeExecution(platformCommand)
     ? null
     : requireCommandSupported(platformCommand, session.device, { hint: true });
-  if (unsupported) return unsupported;
+  if (unsupported) return { response: unsupported };
   if (
     session.device.platform !== 'android' ||
     isActiveProviderDevice(session.device) ||
     !session.screenRecording ||
-    platformCommand === 'record' ||
-    (await recoverAndroidBlockingSystemDialog({ session })).status !== 'failed'
+    platformCommand === 'record'
   ) {
-    return null;
+    return {};
+  }
+  const recovery = await recoverAndroidBlockingSystemDialog({ session });
+  if (recovery.status !== 'failed') {
+    return recovery.status === 'unknown' ? { warning: recovery.warning } : {};
   }
   return {
-    ok: false,
-    error: {
-      code: 'COMMAND_FAILED',
-      message: 'Android system dialog blocked the recording session',
+    response: {
+      ok: false,
+      error: {
+        code: 'COMMAND_FAILED',
+        message: 'Android system dialog blocked the recording session',
+      },
     },
   };
 }
