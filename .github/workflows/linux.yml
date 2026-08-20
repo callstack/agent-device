@@ -45,10 +45,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      # Unbounded, this step could not fail — it could only stall. On 2026-08-19 a slow mirror
+      # held apt past the job's 30-minute budget on four main-branch runs and several unrelated
+      # PRs, which reported as a red check on branches that never ran a line of project code.
+      # Two bounds fix that: apt retries and times out each mirror request itself (a blip
+      # self-heals without a manual re-run), and `timeout-minutes` is the backstop for a mirror
+      # that drips bytes slowly enough to defeat the socket timeout. A healthy install takes
+      # about a minute, so six is generous.
       - name: Install Linux desktop dependencies
+        timeout-minutes: 6
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq \
+          set -euo pipefail
+          APT_OPTS=(
+            -o Acquire::Retries=2
+            -o Acquire::http::Timeout=15
+            -o Acquire::https::Timeout=15
+            # The runner's own unattended-upgrades timer holds the dpkg lock; wait, don't hang.
+            -o DPkg::Lock::Timeout=60
+          )
+          sudo apt-get update -qq "${APT_OPTS[@]}"
+          sudo apt-get install -y -qq "${APT_OPTS[@]}" \
             xvfb \
             xdotool \
             scrot \
