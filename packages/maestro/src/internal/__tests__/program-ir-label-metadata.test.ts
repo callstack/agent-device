@@ -39,6 +39,10 @@ test('keeps outer labels as command metadata across supported command forms', ()
       '- inputText:',
       '    text: value',
       '    label: field input',
+      '- runFlow:',
+      '    commands:',
+      '      - scroll',
+      '    label: nested flow',
     ].join('\n'),
   );
 
@@ -55,6 +59,7 @@ test('keeps outer labels as command metadata across supported command forms', ()
     'item scroll',
     'card swipe',
     'field input',
+    'nested flow',
   ]);
   expect(program.commands[0]).toMatchObject({
     target: { space: 'target', selector: { text: 'Save' } },
