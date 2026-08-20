@@ -1,4 +1,5 @@
 import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';
+import { resolveBoundFocusRuntime } from './focus-runtime.ts';
 import { resolveScreenshotGenericExecution } from './screenshot-runtime.ts';
 import type { ScreenshotRuntimeBindings } from './screenshot-runtime-binding.ts';
 import type { DaemonRequest, SessionState } from './types.ts';
@@ -15,6 +16,13 @@ export async function resolveGenericRuntimeExecution(
   switch (params.req.command) {
     case 'screenshot':
       return await resolveScreenshotGenericExecution(params);
+    case 'focus':
+      return await resolveBoundFocusRuntime({
+        device: params.session.device,
+        positionals: params.req.positionals ?? [],
+        inspectFacts: params.inspectFacts,
+        bindDevice: params.bindDevice,
+      });
     case 'viewport':
       return await resolveBoundViewportRuntime({
         device: params.session.device,

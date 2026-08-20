@@ -21,6 +21,7 @@ import {
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
+  bindProviderFocusInteractor,
   bindProviderScreenshotInteractor,
   bindProviderSnapshotInteractor,
   createUnavailablePlatformRuntimeFacts,
@@ -28,6 +29,7 @@ import {
   sameRuntimeOwner,
   screenshotRuntimeOperationFacts,
   elementTextRuntimeOperationFacts,
+  focusRuntimeOperationFacts,
   selectorObservationRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
   viewportRuntimeOperationFacts,
@@ -203,6 +205,7 @@ export function createLimrunPlatformRuntimeOwner(
             network: liveSessionUnavailable,
             screenshot: liveSessionUnavailable,
             viewport: liveSessionUnavailable,
+            focus: liveSessionUnavailable,
             elementText: liveSessionUnavailable,
             readiness: liveSessionUnavailable,
             shutdown: liveSessionUnavailable,
@@ -369,6 +372,11 @@ function bindLimrunAppLogs(
       signal,
       resolveInteractor: (runner) => options.getInteractor(device, runner),
     }),
+    ...bindProviderFocusInteractor({
+      device,
+      signal,
+      resolveInteractor: (runner) => options.getInteractor(device, runner),
+    }),
     ...bindProviderScreenshotInteractor({
       device,
       signal,
@@ -461,6 +469,9 @@ function facts(
         findSelector: customSnapshotUnavailable,
       }),
       ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
+      // Focus rides the same provider interactor the captures do, and a live-session Limrun
+      // device always has one, so it is available wherever a capture is.
+      ...focusRuntimeOperationFacts({ focus: available }),
       ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementTextUnavailable }),
       ensureReady: available,
       bootTarget: available,
@@ -506,6 +517,7 @@ function recoveryFacts(
         findSelector: liveSessionUnavailable,
       }),
       ...viewportRuntimeOperationFacts({ setViewport: liveSessionUnavailable }),
+      ...focusRuntimeOperationFacts({ focus: liveSessionUnavailable }),
       ensureReady: liveSessionUnavailable,
       bootTarget: liveSessionUnavailable,
       bootTargetHeadless: liveSessionUnavailable,

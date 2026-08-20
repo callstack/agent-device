@@ -80,6 +80,11 @@ const screenshotUnavailable = vegaUnavailable(
   'screenshot is not supported on Vega OS: the Vega runtime exposes remote navigation only.',
 );
 
+const focusUnavailable = vegaUnavailable(
+  'unsupported-platform-leaf',
+  'focus is not supported on Vega OS: the Vega runtime exposes remote navigation only.',
+);
+
 function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> {
   const supported = device.kind === 'emulator' && device.target === 'tv';
   const openTarget = supported ? lifecycleAvailable : openTargetUnavailable;
@@ -90,6 +95,8 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
     screenshot: screenshotUnavailable,
     snapshot: unsupportedPlatformLeaf,
     viewport: unsupportedPlatformLeaf,
+    // Vega exposes remote navigation only; it never carried a `focus` capability bucket.
+    focus: focusUnavailable,
     elementText: unsupportedPlatformLeaf,
     readiness: unsupportedPlatformLeaf,
     lifecycle: applicationLifecycleOperationFacts({

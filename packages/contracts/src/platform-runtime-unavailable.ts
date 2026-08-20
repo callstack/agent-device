@@ -14,6 +14,7 @@ import { screenshotRuntimeOperationFacts } from './screenshot-runtime.ts';
 import { snapshotRuntimeOperationFacts } from './snapshot-runtime.ts';
 import { selectorObservationRuntimeOperationFacts } from './selector-observation-runtime.ts';
 import { viewportRuntimeOperationFacts } from './viewport-runtime.ts';
+import { focusRuntimeOperationFacts } from './focus-runtime.ts';
 import { elementTextRuntimeOperationFacts } from './element-text-runtime.ts';
 
 /**
@@ -30,6 +31,7 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   screenshot: RuntimeOperationUnavailability;
   snapshot?: RuntimeOperationUnavailability;
   viewport: RuntimeOperationUnavailability;
+  focus: RuntimeOperationUnavailability;
   elementText: RuntimeOperationUnavailability;
   readiness?: RuntimeOperationUnavailability;
   shutdown?: RuntimeOperationUnavailability;
@@ -74,6 +76,7 @@ export function createUnavailablePlatformRuntimeFacts(
     screenshot,
     snapshot,
     viewport,
+    focus,
     elementText,
     readiness,
     shutdown,
@@ -114,6 +117,7 @@ export function createUnavailablePlatformRuntimeFacts(
         findSelector: snapshot,
       }),
       ...viewportRuntimeOperationFacts({ setViewport: viewport }),
+      ...focusRuntimeOperationFacts({ focus }),
       ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementText }),
       ensureReady: readiness,
       bootTarget: readiness,
@@ -142,6 +146,9 @@ function freezeUnavailableFacts(
     screenshot: Object.freeze({ ...unavailable.screenshot }),
     snapshot: orNetwork(unavailable.snapshot),
     viewport: Object.freeze({ ...unavailable.viewport }),
+    // Interaction cells are stated by their owner: a family that can drive touch says so for its
+    // exact kinds, and one that cannot must say why rather than inherit a transport gap.
+    focus: Object.freeze({ ...unavailable.focus }),
     readiness: orNetwork(unavailable.readiness),
     shutdown: orNetwork(unavailable.shutdown),
     elementText: Object.freeze({ ...unavailable.elementText }),

@@ -9,9 +9,11 @@ import type {
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
+  bindLocalFocusInteractor,
   bindLocalScreenshotInteractor,
   bindElementTextRuntime,
   elementTextRuntimeOperationFacts,
+  focusRuntimeOperationFacts,
   localRuntimeOwner,
   screenshotRuntimeOperationFacts,
   selectorObservationRuntimeOperationFacts,
@@ -52,6 +54,16 @@ const viewportUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
   hint: 'viewport resizes web targets only (--platform web). Apple screen geometry is fixed by the selected simulator or device type — open a different simulator to test another screen size.',
+} as const);
+/**
+ * Focus drives touch through the Apple interactor, which exists for the simulator and physical
+ * device kinds only. Parity with the retired `focus` capability bucket
+ * (`{ simulator: true, device: true }`), stated as one fact instead of an admission table.
+ */
+const focusKindUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'focus is supported on Apple simulators and physical devices.',
 } as const);
 const appStateUnavailable = Object.freeze({
   available: false,
@@ -213,6 +225,10 @@ function appInventoryFacts(device: DeviceInfo) {
   return available;
 }
 
+function appleFocusFact(device: DeviceInfo): RuntimeOperationFact {
+  return device.kind === 'simulator' || device.kind === 'device' ? available : focusKindUnavailable;
+}
+
 export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformRuntimeOwner {
   const appLogs = createAppleAppLogRuntime(host);
   const inspectFacts = async (device: DeviceInfo) => {
@@ -250,6 +266,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
           findSelector: appleFindSelectorFact(device),
         }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
+        ...focusRuntimeOperationFacts({ focus: appleFocusFact(device) }),
         ...elementTextRuntimeOperationFacts({ readTextAtPoint: appleElementTextFact(device) }),
         ensureReady: readiness,
         bootTarget: boot,
@@ -297,6 +314,13 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
           ),
           ...whenAdmitted(facts.operations.captureScreenshot, () =>
             bindLocalScreenshotInteractor({
+              device: request.device,
+              signal: request.scope.signal,
+              resolveInteractor: host.localInteractors.resolve,
+            }),
+          ),
+          ...whenAdmitted(facts.operations.focusPoint, () =>
+            bindLocalFocusInteractor({
               device: request.device,
               signal: request.scope.signal,
               resolveInteractor: host.localInteractors.resolve,

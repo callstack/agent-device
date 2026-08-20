@@ -25,8 +25,9 @@ import { retiredDispatchProjectionViolations } from './runtime-command-cutover-d
  * A row id is a report heading, so it must be unique across every stack that adds rows here.
  * `cutoverTableDefects` rejects a duplicate; lifecycle starts at R28 after the accepted
  * shutdown, install/deploy, and application-lifecycle allocations. Snapshot starts at R32;
- * diff follows at R33, viewport at R34, get at R36, and is at R37. R35 stays reserved for
- * find, whose cutover is deferred behind the Wave 5 `focus`/`type` surfaces.
+ * diff follows at R33, viewport at R34, get at R36, is at R37, screenshot at R39, wait at R38,
+ * and focus at R40. R35 stays reserved for find, whose cutover is deferred behind the Wave 5
+ * `type` surface — `focus`, its other blocker, landed at R40.
  */
 export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
   {
@@ -584,6 +585,29 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
         captureSnapshot: ['selectActiveAppSnapshot'],
         captureSnapshotWithoutActiveApp: ['selectSnapshotWithoutActiveApp'],
       },
+    },
+  },
+  {
+    rule: 'R40 focus-runtime-cutover',
+    command: 'focus',
+    subject: 'point focus',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      // The interactor leaf and its dispatch-table arm. `find`'s focus leg keeps its helper
+      // name — what changed is what it calls: the same `resolveBoundFocusRuntime` the generic
+      // route binds, which is why `focusPoint` still has exactly one owner below.
+      routeNames: ['handleFocusCommand'],
+      // `focus` also leaves the two hand-maintained overlays that granted it a capability
+      // bucket on families the descriptor never listed.
+      staticCommandSets: ['HARMONYOS_SUPPORTED_COMMANDS', 'WEB_INTERACTION_COMMANDS'],
+    },
+    runtimeTypeNames: ['FocusRuntimeOperations'],
+    operations: { names: ['focusPoint'] },
+    singularExecution: {
+      routes: ['dispatchGenericCommand'],
+      operations: ['focusPoint'],
+      operationOwners: { focusPoint: ['resolveBoundFocusRuntime'] },
     },
   },
   {

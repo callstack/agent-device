@@ -35,6 +35,7 @@ import {
   screenRecordingRuntimePlanUses,
   screenshotRuntimePlanUses,
   shutdownTargetUse,
+  focusRuntimeUse,
   viewportRuntimeUse,
 } from '@agent-device/contracts/platform';
 import { readDeclaredPlatformExecution } from './platform-execution-entry.ts';
@@ -1348,8 +1349,20 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
-    ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    // R40 retires this command's capability bucket and its `dispatch` leaf together: admission is
+    // the owner's `focusPoint` fact, and the only execution is the bound operation. The remaining
+    // traits are `GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS` minus those two.
+    recordsSessionAction: true,
+    recordingEffect: 'mutates-app',
+    deviceClaimPolicy: 'require-owner',
+    daemon: {
+      route: 'generic',
+      refFrameEffect: 'may-invalidate',
+      androidBlockingDialogGuard: true,
+    },
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: true,
+    platformExecution: { kind: 'device-runtime', uses: [focusRuntimeUse] },
   },
   {
     name: 'screenshot',

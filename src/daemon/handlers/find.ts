@@ -19,6 +19,7 @@ import { withSystemSurfaceDisclosure } from './system-surface-disclosure.ts';
 import { recordSessionAction } from './handler-utils.ts';
 import { stripInternalInteractionFlags } from '../interaction-outcome-policy.ts';
 import { resolveFindMatch } from './find-match-resolution.ts';
+import { resolveBoundFocusRuntime } from '../focus-runtime.ts';
 import { dispatchFindReadOnlyViaRuntime } from '../selector-runtime.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { createFindTargetCapture, sparseFindSnapshotResponse } from './find-target-capture.ts';
@@ -36,6 +37,8 @@ type FindContext = {
   locator: FindLocator;
   query: string;
   publicFlags: Record<string, unknown>;
+  inspectFacts?: InspectDeviceRuntimeFacts;
+  bindDevice?: BindDeviceRuntime;
 };
 
 type ResolvedMatch = {
@@ -120,6 +123,8 @@ export async function handleFindCommands(params: {
     locator,
     query,
     publicFlags: publicFindFlags(req.flags),
+    inspectFacts: params.inspectFacts,
+    bindDevice: params.bindDevice,
   };
 
   const snapshotResult = await readTargetTree();
@@ -306,15 +311,30 @@ async function dispatchFocusForFindMatch(
   // command directly (they do not re-enter the interaction leaf), so expire the
   // frame here before the device op. Pre-seam guards above preserve the frame.
   expireRefFrame(session);
-  const response = await dispatchCommand(
+  // R40: find's focus leg shares `focus`'s bound runtime rather than dispatching the retired
+  // leaf, so `focus x y` and `find <q> focus` reach the device through one admitted operation.
+  const bound = await resolveBoundFocusRuntime({
     device,
-    'focus',
-    [String(coords.x), String(coords.y)],
-    req.flags?.out,
-    {
-      ...contextFromFlags(logPath, req.flags, session.appBundleId, session.trace?.outPath),
-    },
-  );
+    positionals: [String(coords.x), String(coords.y)],
+    inspectFacts: ctx.inspectFacts,
+    bindDevice: ctx.bindDevice,
+  });
+  if (!bound.ok) return bound.response;
+  const response = await bound.execute({
+    session,
+    sessionName: ctx.sessionName,
+    logPath,
+    command: 'focus',
+    request: req,
+    positionals: [String(coords.x), String(coords.y)],
+    out: req.flags?.out,
+    dispatchContext: contextFromFlags(
+      logPath,
+      req.flags,
+      session.appBundleId,
+      session.trace?.outPath,
+    ),
+  });
   return { ok: true, data: response ?? { ref: match.ref } };
 }
 

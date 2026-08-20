@@ -9,10 +9,12 @@ import type {
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
+  bindLocalFocusInteractor,
   bindLocalScreenshotInteractor,
   bindElementTextRuntime,
   bindLocalSnapshotInteractor,
   elementTextRuntimeOperationFacts,
+  focusRuntimeOperationFacts,
   localRuntimeOwner,
   screenshotRuntimeOperationFacts,
   selectorObservationRuntimeOperationFacts,
@@ -36,6 +38,15 @@ const available = Object.freeze({ available: true } as const);
 const elementTextKindUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-device-kind',
+} as const);
+/**
+ * Parity with the retired `focus` capability bucket (`{ emulator, device, unknown }`): every
+ * Android kind drives touch through adb except the synthetic `simulator` row, which has no device.
+ */
+const focusKindUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'focus is supported on Android emulators and physical devices.',
 } as const);
 const headlessUnavailable = Object.freeze({
   available: false,
@@ -160,6 +171,9 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           findSelector: snapshotKindUnavailable,
         }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
+        ...focusRuntimeOperationFacts({
+          focus: device.kind === 'simulator' ? focusKindUnavailable : available,
+        }),
         // uiautomator reads text at a point through the same adb path the snapshot uses, so the
         // synthetic `simulator` row is the only Android kind without a live read.
         ...elementTextRuntimeOperationFacts({
@@ -220,6 +234,13 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
             : {}),
           ...(facts.operations.captureScreenshot.available
             ? bindLocalScreenshotInteractor({
+                device: request.device,
+                signal: request.scope.signal,
+                resolveInteractor: host.localInteractors.resolve,
+              })
+            : {}),
+          ...(facts.operations.focusPoint.available
+            ? bindLocalFocusInteractor({
                 device: request.device,
                 signal: request.scope.signal,
                 resolveInteractor: host.localInteractors.resolve,

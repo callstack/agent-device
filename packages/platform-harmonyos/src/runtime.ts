@@ -3,13 +3,16 @@ import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
   PlatformRuntimeOwner,
+  RuntimeOperationFact,
 } from '@agent-device/contracts/platform';
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
+  bindLocalFocusInteractor,
   bindLocalScreenshotInteractor,
   bindLocalSnapshotInteractor,
   elementTextRuntimeOperationFacts,
+  focusRuntimeOperationFacts,
   localRuntimeOwner,
   screenshotRuntimeOperationFacts,
   selectorObservationRuntimeOperationFacts,
@@ -34,6 +37,15 @@ const elementTextUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
   hint: 'HarmonyOS reads element text from the captured tree only.',
+} as const);
+/**
+ * Parity with the retired `focus` capability bucket, which the HarmonyOS overlay in
+ * `core/capabilities.ts` filled as `{ emulator, device }` — the two kinds hdc can drive.
+ */
+const focusKindUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'focus is supported on HarmonyOS emulators and physical devices.',
 } as const);
 const available = Object.freeze({ available: true } as const);
 const unavailable = Object.freeze({
@@ -116,6 +128,10 @@ function harmonyCloseTargetFact(device: DeviceInfo) {
     : closeTargetKindUnavailable;
 }
 
+function harmonyFocusFact(device: DeviceInfo): RuntimeOperationFact {
+  return device.kind === 'emulator' || device.kind === 'device' ? available : focusKindUnavailable;
+}
+
 export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): PlatformRuntimeOwner {
   const appLogs = createHarmonyAppLogRuntime(host);
   const inspectFacts = async (device: Parameters<typeof appLogs.inspectFacts>[0]) => {
@@ -155,6 +171,7 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
           findSelector: snapshotKindUnavailable,
         }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
+        ...focusRuntimeOperationFacts({ focus: harmonyFocusFact(device) }),
         // HarmonyOS has no point-read tool: `get` answers from the captured tree, which is what
         // the legacy dispatch already did after its Apple-runner attempt failed.
         ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementTextUnavailable }),
@@ -214,6 +231,13 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
             : {}),
           ...(facts.operations.captureScreenshot.available
             ? bindLocalScreenshotInteractor({
+                device: request.device,
+                signal: request.scope.signal,
+                resolveInteractor: host.localInteractors.resolve,
+              })
+            : {}),
+          ...(facts.operations.focusPoint.available
+            ? bindLocalFocusInteractor({
                 device: request.device,
                 signal: request.scope.signal,
                 resolveInteractor: host.localInteractors.resolve,

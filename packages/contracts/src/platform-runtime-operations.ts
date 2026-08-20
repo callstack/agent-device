@@ -16,6 +16,7 @@ import type { ScreenshotRuntimeOperations } from './screenshot-runtime.ts';
 import type { SnapshotRuntimeHost, SnapshotRuntimeOperations } from './snapshot-runtime.ts';
 import type { SelectorObservationRuntimeOperations } from './selector-observation-runtime.ts';
 import type { ViewportRuntimeOperations } from './viewport-runtime.ts';
+import type { FocusRuntimeOperations } from './focus-runtime.ts';
 import type { ElementTextRuntimeOperations } from './element-text-runtime.ts';
 import type {
   DeviceReadinessRuntimeHost,
@@ -50,6 +51,7 @@ export type PlatformRuntimeOperations = AppLogRuntimeOperations &
   SnapshotRuntimeOperations &
   SelectorObservationRuntimeOperations &
   ViewportRuntimeOperations &
+  FocusRuntimeOperations &
   ElementTextRuntimeOperations &
   DeviceReadinessRuntimeOperations &
   DeviceShutdownRuntimeOperations &
@@ -70,6 +72,7 @@ export const bootTargetHeadlessUse = defineUse({
 export const appsRuntimeUse = defineUse({ required: ['ensureReady', 'listApps'] });
 export const captureSnapshotUse = defineUse({ required: ['captureSnapshot'] });
 export const viewportRuntimeUse = defineUse({ required: ['setViewport'] });
+export const focusRuntimeUse = defineUse({ required: ['focusPoint'] });
 const captureSnapshotWithCustomActionsUse = defineUse({
   required: ['captureSnapshot', 'captureSnapshotWithCustomActions'],
 });

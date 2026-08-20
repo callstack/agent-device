@@ -1,10 +1,12 @@
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
+  bindProviderFocusInteractor,
   bindProviderScreenshotInteractor,
   bindProviderSnapshotInteractor,
   createUnavailablePlatformRuntimeFacts,
   sameRuntimeOwner,
+  focusRuntimeOperationFacts,
   screenshotRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
   viewportRuntimeOperationFacts,
@@ -93,6 +95,11 @@ const viewportUnavailable = Object.freeze({
  * read and `get` answers from the captured tree; provider ownership never borrows the local
  * family read.
  */
+const focusUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'This WebDriver provider runtime does not expose focus for this device.',
+} as const);
 const elementTextUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
@@ -228,6 +235,13 @@ function bindWebDriverPlatformRuntime(
           resolveInteractor: (runner) => options.getInteractor?.(device, runner),
         })
       : {}),
+    ...(facts.operations.focusPoint.available
+      ? bindProviderFocusInteractor({
+          device,
+          signal,
+          resolveInteractor: (runner) => options.getInteractor?.(device, runner),
+        })
+      : {}),
     networkDump: async (input) => {
       const recent = await options.host.appLogs.readRecent(input.sessionId, input.maxScanLines);
       const dump = readRecentNetworkTrafficFromText(recent.text, {
@@ -280,6 +294,7 @@ function webDriverFacts(
       screenRecording: inactiveSession,
       screenshot: inactiveSession,
       viewport: inactiveSession,
+      focus: inactiveSession,
       elementText: inactiveSession,
       lifecycle: applicationLifecycleOperationFacts({
         resolveOpenTarget: inactiveSession,
@@ -302,6 +317,7 @@ function webDriverFacts(
     screenRecording: recordingUnavailable,
     screenshot: screenshotUnavailable,
     viewport: viewportUnavailable,
+    focus: focusUnavailable,
     elementText: elementTextUnavailable,
     lifecycle: webDriverLifecycleFacts(device),
   });
@@ -328,6 +344,9 @@ function webDriverFacts(
         withoutActiveApp: snapshotCell,
       }),
       ...screenshotRuntimeOperationFacts({ capture: screenshotCell }),
+      // Focus rides the same provider interactor the captures do, so it needs the same
+      // reachability and nothing more: this provider drives touch wherever it can drive a capture.
+      ...focusRuntimeOperationFacts({ focus: reachable ? available : focusUnavailable }),
       ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
       ensureReady: available,
       bootTarget: available,

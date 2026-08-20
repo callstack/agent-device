@@ -28,7 +28,7 @@ vi.mock('../snapshot-interactor-capture.ts', async () => {
 
 import { dispatchCommand } from '../../../core/dispatch.ts';
 
-import { resetGetRuntimeFixture } from './interaction-get-runtime-fixture.ts';
+import { mockFocusPoint, resetGetRuntimeFixture } from './interaction-get-runtime-fixture.ts';
 import { invokeFindHandler } from './find-handler-fixture.ts';
 
 const mockDispatch = vi.mocked(dispatchCommand);
@@ -742,12 +742,9 @@ test('handleFindCommands focus uses the promoted actionable node center', async 
   });
 
   expect(response.ok).toBe(true);
-  expect(mockDispatch).toHaveBeenLastCalledWith(
-    expect.anything(),
-    'focus',
-    ['176', '132'],
-    undefined,
-    expect.anything(),
+  // R40: find's focus leg reaches the device through the bound `focusPoint`, not a dispatch.
+  expect(mockFocusPoint).toHaveBeenLastCalledWith(
+    expect.objectContaining({ point: { x: 176, y: 132 } }),
   );
 });
 

@@ -32,6 +32,7 @@ import {
   type ScrollEdgeState,
 } from '../utils/scroll-edge-state.ts';
 import { successText, withSuccessText } from '../utils/success-text.ts';
+import { readPointPositionals } from '../utils/validation.ts';
 import { findMistargetedTypeRefToken } from '../utils/type-target-warning.ts';
 import type { DispatchContext } from './dispatch-context.ts';
 import {
@@ -51,7 +52,7 @@ export async function handleLongPressCommand(
   interactor: Interactor,
   positionals: string[],
 ): Promise<Record<string, unknown>> {
-  const { x, y } = readPoint(positionals, 'longpress requires x y [durationMs]', {
+  const { x, y } = readPointPositionals(positionals, 'longpress requires x y [durationMs]', {
     hint: 'Direct platform longpress requires coordinates. In an open daemon session, use agent-device longpress @ref|selector [durationMs]; otherwise run snapshot -i, use the target rect center as x y, then retry longpress x y durationMs.',
   });
   const durationMs = positionals[2] ? Number(positionals[2]) : undefined;
@@ -63,7 +64,7 @@ export async function handleHoverCommand(
   interactor: Interactor,
   positionals: string[],
 ): Promise<Record<string, unknown>> {
-  const { x, y } = readPoint(positionals, 'hover requires x y', {
+  const { x, y } = readPointPositionals(positionals, 'hover requires x y', {
     hint: 'Direct platform hover requires coordinates. In an open daemon session, use agent-device hover @ref|selector; otherwise run snapshot -i, use the target rect center as x y, then retry hover x y.',
   });
   if (!interactor.hover) {
@@ -73,15 +74,6 @@ export async function handleHoverCommand(
   }
   await interactor.hover(x, y);
   return { x, y, ...successText(`Hovered (${x}, ${y})`) };
-}
-
-export async function handleFocusCommand(
-  interactor: Interactor,
-  positionals: string[],
-): Promise<Record<string, unknown>> {
-  const { x, y } = readPoint(positionals, 'focus requires x y');
-  await interactor.focus(x, y);
-  return { x, y, ...successText(`Focused (${x}, ${y})`) };
 }
 
 export async function handleTypeCommand(
@@ -181,7 +173,7 @@ export async function handlePressCommand(
     return await handleDirectElementSelectorPress(interactor, context.directElementSelector);
   }
 
-  const { x, y } = readPoint(positionals, 'press requires x y');
+  const { x, y } = readPointPositionals(positionals, 'press requires x y');
 
   if (isMacOs(device) && context?.surface && context.surface !== 'app') {
     return await handleMacOsSurfacePress(x, y, context);
@@ -222,8 +214,6 @@ async function handleDirectElementSelectorPress(
   };
 }
 
-type Point = { x: number; y: number };
-
 type PressSeriesOptions = {
   count: number;
   intervalMs: number;
@@ -231,19 +221,6 @@ type PressSeriesOptions = {
   jitterPx: number;
   doubleTap: boolean;
 };
-
-function readPoint(
-  positionals: string[],
-  errorMessage: string,
-  details?: Record<string, unknown>,
-): Point {
-  const x = Number(positionals[0]);
-  const y = Number(positionals[1]);
-  if (Number.isNaN(x) || Number.isNaN(y)) {
-    throw new AppError('INVALID_ARGS', errorMessage, details);
-  }
-  return { x, y };
-}
 
 async function handleMacOsSurfacePress(
   x: number,

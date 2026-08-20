@@ -10,11 +10,13 @@ import type {
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
+  bindLocalFocusInteractor,
   bindLocalScreenshotInteractor,
   bindElementTextRuntime,
   captureSnapshotSignal,
   createUnavailablePlatformRuntimeFacts,
   elementTextRuntimeOperationFacts,
+  focusRuntimeOperationFacts,
   localRuntimeOwner,
   sameRuntimeOwner,
   screenshotRuntimeOperationFacts,
@@ -28,6 +30,10 @@ const supported = Object.freeze({ available: true } as const);
 const linuxOwner = localRuntimeOwner('linux');
 const unsupportedPlatformLeaf = unavailableLinuxRuntimeFact('unsupported-platform-leaf');
 const elementTextKindUnavailable = unavailableLinuxRuntimeFact('unsupported-device-kind');
+const focusKindUnavailable = unavailableLinuxRuntimeFact(
+  'unsupported-device-kind',
+  'focus is supported only for the Linux desktop device.',
+);
 const runtimeHintsUnavailable = unavailableLinuxRuntimeFact(
   'unsupported-platform-leaf',
   'Runtime hints are supported only for local iOS-family simulators and Android devices.',
@@ -97,6 +103,13 @@ export function createLinuxPlatformRuntime(host: PlatformRuntimeHost): PlatformR
                 resolveInteractor: host.localInteractors.resolve,
               })
             : {}),
+          ...(facts.operations.focusPoint.available
+            ? bindLocalFocusInteractor({
+                device: request.device,
+                signal: request.scope.signal,
+                resolveInteractor: host.localInteractors.resolve,
+              })
+            : {}),
           ...(facts.operations.readTextAtPoint.available
             ? bindElementTextRuntime({
                 device: request.device,
@@ -121,6 +134,7 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
     screenshot: screenshotKindUnavailable,
     snapshot: snapshotKindUnavailable,
     viewport: unsupportedPlatformLeaf,
+    focus: focusKindUnavailable,
     elementText: elementTextKindUnavailable,
     readiness: unsupportedPlatformLeaf,
     lifecycle: applicationLifecycleOperationFacts({
@@ -146,6 +160,11 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
       }),
       ...screenshotRuntimeOperationFacts({
         capture: device.kind === 'device' ? supported : screenshotKindUnavailable,
+      }),
+      // Parity with the retired `focus` capability bucket (`{ device: true }`): the desktop is
+      // the only Linux cell with a pointer to drive.
+      ...focusRuntimeOperationFacts({
+        focus: device.kind === 'device' ? supported : focusKindUnavailable,
       }),
       // The Linux read is value-first (AXValue/title/description) where the captured tree is
       // label-first, so the desktop row genuinely reads differently from its snapshot text.
