@@ -17,8 +17,8 @@ export type FilesystemBoundaryFixture = {
 
 export type FilesystemBoundaryOwner = (root: string) => FilesystemBoundaryFixture;
 
-export const FILESYSTEM_ERRNOS: readonly FilesystemErrno[] = ['EIO', 'ENOSPC', 'EMFILE'];
-export const FILESYSTEM_FAULT_POINTS: readonly FilesystemFaultPoint[] = ['write', 'rename'];
+const FILESYSTEM_ERRNOS: readonly FilesystemErrno[] = ['EIO', 'ENOSPC', 'EMFILE'];
+const FILESYSTEM_FAULT_POINTS: readonly FilesystemFaultPoint[] = ['write', 'rename'];
 
 /** Registers every fault row for a typed owner table. Missing required owners fail typechecking. */
 export function registerFilesystemBoundaryMatrix(
@@ -63,7 +63,7 @@ export function registerFilesystemBoundaryMatrix(
   }
 }
 
-export function installFilesystemFault(options: {
+function installFilesystemFault(options: {
   faultPoint: FilesystemFaultPoint;
   errno: FilesystemErrno;
   targetPath: string;

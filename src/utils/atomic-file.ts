@@ -64,7 +64,7 @@ export function withAtomicPublishTempPathSync<T>(
 }
 
 /** Returns the canonical same-directory temp path used by atomic publishers. */
-export function createAtomicPublishTempPath(destination: string): string {
+function createAtomicPublishTempPath(destination: string): string {
   return path.join(
     path.dirname(destination),
     `.${path.basename(destination)}.${process.pid}-${crypto.randomUUID()}.tmp`,
