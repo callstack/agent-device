@@ -10,6 +10,15 @@ Use `agent-device/ai-sdk` to give an [AI SDK](https://ai-sdk.dev/) agent a typed
 pnpm add agent-device ai
 ```
 
+Make an iOS simulator or device [available to agent-device](/docs/agent-setup), then configure an AI SDK model. String model IDs use AI Gateway by default:
+
+```env
+AI_GATEWAY_API_KEY=your_api_key
+AI_MODEL=provider/model
+```
+
+Alternatively, pass a model from your configured AI SDK provider. See the AI SDK guide to [choosing a provider](https://ai-sdk.dev/docs/getting-started/choosing-a-provider).
+
 ```ts
 import { ToolLoopAgent } from 'ai';
 import { createAgentDeviceTools } from 'agent-device/ai-sdk';
