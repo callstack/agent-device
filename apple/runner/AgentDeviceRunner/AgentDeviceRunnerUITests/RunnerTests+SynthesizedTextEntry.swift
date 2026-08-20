@@ -184,36 +184,72 @@ extension RunnerTests {
     return expectedText.hasPrefix(observedText) ? .pending : .diverged
   }
 
+  /// How the commit wait ended. Distinct from `SynthesizedTextCommitProgress`, which classifies a
+  /// single observation: this is the whole wait's verdict, and it exists so the deadline can be
+  /// told apart from success. The wait used to return `Void`, which made an expired deadline
+  /// indistinguishable from a committed one — `type` then reported ok with a partial value in the
+  /// field (#1874, #1844).
+  enum SynthesizedTextCommitOutcome: Equatable {
+    /// The app answered: the expected text committed, or the app transformed the input and the
+    /// runner must not second-guess it.
+    case settled
+    /// There was nothing to wait for — no readable baseline, or the text carries a submit key.
+    case unobservable
+    /// The deadline expired with a strict prefix of the expected text still outstanding.
+    case notObserved
+  }
+
+  /// The commit wait's decision, with observation, pacing and the clock injected so the deadline
+  /// branch is exercisable without a simulator (the macOS host lane runs this; the member wrapper
+  /// below binds the real XCUI reads).
+  static func awaitSynthesizedCommitOutcome(
+    expectedText: String,
+    isExpired: () -> Bool,
+    observe: () -> String?,
+    waitForNextObservation: () -> Void
+  ) -> SynthesizedTextCommitOutcome {
+    while !isExpired() {
+      switch synthesizedTextCommitProgress(observedText: observe(), expectedText: expectedText) {
+      case .committed, .diverged:
+        return .settled
+      case .pending:
+        waitForNextObservation()
+      }
+    }
+    return .notObserved
+  }
+
   /// Blocks until the synthesized bare-type text is observable in the target field, so `type`
   /// cannot report ok while trailing characters are still uncommitted on a slow simulator.
   ///
   /// Observation only. A stalled prefix cannot be told apart from a suffix still queued in the
   /// event stream, so re-synthesizing the difference risks committing it twice after the command
-  /// already reported success. Text carrying a submit key is skipped outright: the app may clear
-  /// or rewrite the field on submit, so `textBefore + typedText` is not the value to wait for.
+  /// already reported success (#1676 rejected exactly that repair). Reporting `.notObserved` is
+  /// what the caller does instead: the partial value is the agent's to resolve, and a named
+  /// failure beats a success that misdescribes the field. Text carrying a submit key is skipped
+  /// outright: the app may clear or rewrite the field on submit, so `textBefore + typedText` is
+  /// not the value to wait for.
   func awaitSynthesizedFirstResponderCommit(
     app: XCUIApplication,
     target: TextEntryTarget,
     textBefore: String?,
     typedText: String
-  ) {
+  ) -> SynthesizedTextCommitOutcome {
     guard let textBefore, !typedText.contains("\n"), !typedText.contains("\r") else {
-      return
+      return .unobservable
     }
-    let expectedText = textBefore + typedText
     let deadline = Date().addingTimeInterval(TextEntryTiming.synthesizedCommitTimeout)
-    while Date() < deadline {
-      let observedText = editableTextValue(
-        for: resolveTextEntryElement(app: app, target: target),
-        treatingPlaceholderAsEmpty: true
-      )
-      switch Self.synthesizedTextCommitProgress(observedText: observedText, expectedText: expectedText) {
-      case .committed, .diverged:
-        return
-      case .pending:
-        sleepFor(TextEntryTiming.pollInterval)
-      }
-    }
+    return Self.awaitSynthesizedCommitOutcome(
+      expectedText: textBefore + typedText,
+      isExpired: { Date() >= deadline },
+      observe: {
+        editableTextValue(
+          for: resolveTextEntryElement(app: app, target: target),
+          treatingPlaceholderAsEmpty: true
+        )
+      },
+      waitForNextObservation: { sleepFor(TextEntryTiming.pollInterval) }
+    )
   }
 
   static func shouldUseResolvedCoordinateTextEntryRoute(

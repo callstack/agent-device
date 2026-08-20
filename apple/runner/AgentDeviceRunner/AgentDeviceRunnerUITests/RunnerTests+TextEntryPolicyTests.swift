@@ -90,6 +90,57 @@ extension RunnerTests {
     )
   }
 
+  // The regression behind #1874/#1844: the wait used to return Void, so an expired deadline was
+  // indistinguishable from a commit and `type` reported ok over a partially committed field. The
+  // CI signature was a field holding "h" out of "hardware-keyboard" with the command successful.
+  func testSynthesizedCommitDeadlineIsNotReportedAsACommit() {
+    var observations = 0
+    let outcome = Self.awaitSynthesizedCommitOutcome(
+      expectedText: "hardware-keyboard",
+      isExpired: { observations >= 3 },
+      observe: { "h" },
+      waitForNextObservation: { observations += 1 }
+    )
+    XCTAssertEqual(outcome, .notObserved)
+    XCTAssertEqual(observations, 3, "a pending prefix must keep polling until the deadline")
+  }
+
+  func testSynthesizedCommitStopsAtTheFirstSettledObservation() {
+    for observed in ["hardware-keyboard", "hardwarX", nil] {
+      var polls = 0
+      let outcome = Self.awaitSynthesizedCommitOutcome(
+        expectedText: "hardware-keyboard",
+        isExpired: { false },
+        observe: { observed },
+        waitForNextObservation: { polls += 1 }
+      )
+      // `.diverged` settles the wait too: the app transformed the input and the runner must not
+      // second-guess it. Only an outstanding strict prefix keeps waiting.
+      XCTAssertEqual(outcome, .settled, "observed: \(observed ?? "nil")")
+      XCTAssertEqual(polls, 0, "observed: \(observed ?? "nil")")
+    }
+  }
+
+  func testSynthesizedCommitWalksAPrefixToCompletion() {
+    let steps = ["", "hardware-", "hardware-keyboard"]
+    var index = 0
+    let outcome = Self.awaitSynthesizedCommitOutcome(
+      expectedText: "hardware-keyboard",
+      isExpired: { false },
+      observe: { steps[min(index, steps.count - 1)] },
+      waitForNextObservation: { index += 1 }
+    )
+    XCTAssertEqual(outcome, .settled)
+    XCTAssertEqual(index, 2)
+  }
+
+  func testCommitNotObservedCarriesItsOwnCodeAndRecovery() {
+    XCTAssertEqual(TextEntryFailure.commitNotObserved.rawValue, "TEXT_INPUT_COMMIT_NOT_OBSERVED")
+    // The recovery has to name fill: `type` appends, so retrying it over a partial value would
+    // concatenate onto whatever committed rather than repair it.
+    XCTAssertTrue(TextEntryFailure.commitNotObserved.hint.contains("fill"))
+  }
+
 #if os(iOS)
   func testSynthesizedTextEntryFallsBackOnlyWhenPrivateSynthesisIsUnavailable() {
     XCTAssertEqual(

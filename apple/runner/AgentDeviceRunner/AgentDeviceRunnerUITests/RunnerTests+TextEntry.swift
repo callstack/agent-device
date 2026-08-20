@@ -7,6 +7,7 @@ extension RunnerTests {
   enum TextEntryFailure: String {
     case notFocused = "TEXT_INPUT_NOT_FOCUSED"
     case synthesisUnavailable = "TEXT_INPUT_SYNTHESIS_UNAVAILABLE"
+    case commitNotObserved = "TEXT_INPUT_COMMIT_NOT_OBSERVED"
 
     var message: String {
       switch self {
@@ -14,6 +15,8 @@ extension RunnerTests {
         return "No focused text input was available for typing."
       case .synthesisUnavailable:
         return "Reliable text synthesis is unavailable while the software keyboard is hidden."
+      case .commitNotObserved:
+        return "The app committed only part of the typed text before the commit deadline."
       }
     }
 
@@ -23,6 +26,8 @@ extension RunnerTests {
         return "Focus a visible text input, then retry type or fill. If the input is not exposed by accessibility, use a coordinate focus command before typing."
       case .synthesisUnavailable:
         return "Show the software keyboard, then retry type or fill."
+      case .commitNotObserved:
+        return "The field holds a partial value. Read it back before retrying, and prefer fill, which replaces the whole value, over type, which appends to whatever committed."
       }
     }
   }
