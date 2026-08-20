@@ -4,6 +4,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { assertCatalogComplete, CHECK_CATALOG, resolveCommand } from './checks.ts';
+import { DEFAULT_VITEST_MAX_WORKERS } from '../lib/vitest-concurrency.ts';
 import { ALL_CHECKS, selectChecks, type CheckId, type SelectInput } from './model.ts';
 
 function plan(changedFiles: string[], extra: Partial<SelectInput> = {}) {
@@ -296,6 +297,7 @@ test('vitest-related delegates changed paths to Vitest instead of modeling proje
     'related',
     '--run',
     '--passWithNoTests',
+    `--maxWorkers=${DEFAULT_VITEST_MAX_WORKERS}`,
     'src/a.ts',
     'test/fixture.ts',
   ]);

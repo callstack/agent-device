@@ -190,11 +190,16 @@ export async function runChecks(
   const execute = options.execute ?? streamingExecutor;
   const runnable = plan.checks.map(getCheckSpec).filter((spec: CheckSpec) => spec.localRunnable);
   const skipped = plan.checks.map(getCheckSpec).filter((spec: CheckSpec) => !spec.localRunnable);
+  const relatedSelected = plan.checks.includes('vitest-related');
   const ciJobs = skipped.length > 0 ? ciJobsByCheck() : new Map<CheckId, string[]>();
   for (const spec of skipped) {
     process.stdout.write(`\n[skip] ${spec.id} — ${describeOwner(spec.id, ciJobs)}\n`);
   }
   for (const spec of runnable) {
+    if (isCoveredByRelatedTests(spec, relatedSelected)) {
+      process.stdout.write(`\n[dedupe] ${spec.id} — covered by related tests or GitHub CI\n`);
+      continue;
+    }
     const command = resolveCommand(spec, pkg.scripts, args.base, options.changedFiles ?? []);
     process.stdout.write(`\n[run] ${spec.id}: ${command.join(' ')}\n`);
     const exitCode = await execute(command, cwd);
@@ -213,6 +218,10 @@ function describeOwner(id: CheckId, ciJobs: ReadonlyMap<CheckId, string[]>): str
   const parked = MANUAL_ONLY_OWNERS[id];
   if (parked) return `parked, workflow_dispatch only (${parked.lane})`;
   return `GitHub-authoritative (jobs: ${(ciJobs.get(id) ?? []).join(', ')})`;
+}
+
+function isCoveredByRelatedTests(spec: CheckSpec, relatedSelected: boolean): boolean {
+  return relatedSelected && (spec.id === 'unit' || spec.id === 'provider-integration');
 }
 
 async function main(argv = process.argv.slice(2)): Promise<number> {

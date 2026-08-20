@@ -97,7 +97,7 @@ export const ALL_CHECKS: readonly CheckId[] = [
   'build',
   'package',
   // Real daemon/process integration owns host-global lifecycle state and must
-  // run before the high-parallelism coverage workload heats the host.
+  // run before the related-project workload heats the host.
   'integration-node',
   'vitest-related',
   'unit',

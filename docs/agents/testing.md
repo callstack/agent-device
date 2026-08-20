@@ -224,11 +224,10 @@ docs-only short-circuit its path would otherwise take. If the matrix moves
 again, move that entry with it.
 The plan documents the rule and changed path behind every selected check.
 
-`coverage` (the changed-line coverage gate) is GitHub-authoritative and never runs locally:
-instrumenting Vitest is real overhead on top of an already-run suite, and the CI `coverage` job
-enforces this gate on every PR, so a local rerun only spends time without adding local-only
-signal. `--run` reports it as skipped; `vitest-related`, `unit`, and `provider-integration` run
-locally on their own, uninstrumented, instead of being folded into a coverage pass.
+Coverage is never instrumented by `check:affected --run`. The plan still reports the coverage
+obligation and its authoritative GitHub job, while the local path runs one capped, uninstrumented
+`vitest related` command and deduplicates full unit/provider aggregates. Run the dedicated coverage
+scripts explicitly when diagnosing a red CI result; do not make every pre-push loop pay for LCOV.
 
 Model and catalog live under `scripts/check-affected/`; the derivation is guarded
 by `pnpm check:affected:test` (the `Affected-check Selector` CI job).

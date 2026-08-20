@@ -10,6 +10,7 @@
 // agent reads before skipping a check locally cannot go stale.
 
 import { ALL_CHECKS, type CheckId } from './model.ts';
+import { DEFAULT_VITEST_MAX_WORKERS } from '../lib/vitest-concurrency.ts';
 
 export type CheckKind =
   | { readonly type: 'script'; readonly script: string }
@@ -50,10 +51,8 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
     localRunnable: true,
   },
   gate('unit', 'Unit + smoke suite', 'check:unit'),
-  // Coverage instrumentation adds real overhead on top of an already-run test suite, and the
-  // `coverage` CI job enforces this gate on every PR — so a local rerun only spends time without
-  // adding local-only signal. Report it as GitHub-authoritative instead of running it here.
-  gate('coverage', 'Affected LCOV + changed-line coverage', 'check:coverage-changed', false),
+  // CI owns the default coverage run; the scripts remain available for explicit local diagnosis.
+  gate('coverage', 'Changed-line coverage', 'check:coverage-changed', false),
   gate('provider-integration', 'Provider-backed integration suite', 'test:integration:provider'),
   gate(
     'integration-progress',
@@ -82,9 +81,8 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   // steps; before the registry became canonical, nothing in the repo could name
   // them, so nothing could ask whether they still ran.
   //
-  // `unit-ci` is the CI form of the unit suite, run under coverage instrumentation. Locally you
-  // run `unit` (and `provider-integration`) uninstrumented; the `coverage` job is what actually
-  // repeats this one, on GitHub.
+  // `unit-ci` is the CI form of the unit suite under coverage. Local affected checks use Vitest's
+  // related graph without instrumentation; CI owns the full coverage run and changed-line verdict.
   gate('unit-ci', 'CI unit suite under coverage', 'test:coverage:ci', false),
   gate('affected-selector', 'Affected-check selector model', 'check:affected:test'),
   gate('gate-manifest', 'Gate manifest — every gate owned and wired', 'check:gate-manifest'),
@@ -164,7 +162,16 @@ export function resolveCommand(
   changedFiles: readonly string[] = [],
 ): string[] {
   if (spec.kind.type === 'vitest-related') {
-    return ['pnpm', 'exec', 'vitest', 'related', '--run', '--passWithNoTests', ...changedFiles];
+    return [
+      'pnpm',
+      'exec',
+      'vitest',
+      'related',
+      '--run',
+      '--passWithNoTests',
+      `--maxWorkers=${DEFAULT_VITEST_MAX_WORKERS}`,
+      ...changedFiles,
+    ];
   }
   const { script } = spec.kind;
   if (!(script in scripts)) {
