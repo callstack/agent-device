@@ -28,6 +28,17 @@ export type LegacyRetirementClaim = Readonly<{
   daemonOnlyProviderMethods?: readonly string[];
   /** `PlatformPlugin` facet keys retired with the legacy adapter. */
   pluginFacetKeys?: readonly string[];
+  /**
+   * Static platform command sets this command's admission DATA was removed from — the whole
+   * retirement of a command whose legacy admission was a capability bucket plus set membership,
+   * with no adapter module, route, or dispatch projection to name.
+   *
+   * Every other form above names something that must NOT exist, which a row can satisfy by
+   * inventing a name that never existed. This one is two-sided and cannot: each named set must
+   * still EXIST in production source, and must no longer list the command. A fictional set fails
+   * the first half, a skipped deletion the second.
+   */
+  staticCommandSets?: readonly string[];
 }>;
 
 /**
@@ -157,6 +168,7 @@ const RETIREMENT_FORMS = [
   'daemonOnlyRouteNames',
   'daemonOnlyProviderMethods',
   'pluginFacetKeys',
+  'staticCommandSets',
 ] as const satisfies readonly (keyof LegacyRetirementClaim)[];
 
 /**

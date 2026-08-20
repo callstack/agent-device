@@ -142,31 +142,12 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
       },
       result: { transformed: true },
     },
-    {
-      command: 'ios.runner.querySelector',
-      deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
-      platform: 'apple',
-      request: {
-        command: 'querySelector',
-        selectorKey: 'label',
-        selectorValue: 'General',
-        appBundleId: 'com.apple.Preferences',
-      },
-      result: {
-        found: true,
-        nodes: [
-          {
-            index: 0,
-            type: 'XCUIElementTypeCell',
-            label: 'General',
-            identifier: 'General',
-            rect: { x: 16, y: 100, width: 360, height: 44 },
-            enabled: true,
-            hittable: true,
-          },
-        ],
-      },
-    },
+    // `is visible label=General` answered from a direct `querySelector` here until R37 retired
+    // that shortcut; it now resolves through the bound capture like every other predicate, so it
+    // consumes a snapshot and issues no runner query at all. The second snapshot is
+    // `find attrs by label`. This transcript is the scripted proof that the bypass is gone: an
+    // unexpected `querySelector` would fail the scenario rather than pass unnoticed.
+    runnerSnapshot(),
     runnerSnapshot(),
     {
       command: 'ios.runner.findText',

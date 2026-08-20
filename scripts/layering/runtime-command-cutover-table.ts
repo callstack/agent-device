@@ -25,7 +25,8 @@ import { retiredDispatchProjectionViolations } from './runtime-command-cutover-d
  * A row id is a report heading, so it must be unique across every stack that adds rows here.
  * `cutoverTableDefects` rejects a duplicate; lifecycle starts at R28 after the accepted
  * shutdown, install/deploy, and application-lifecycle allocations. Snapshot starts at R32;
- * diff follows at R33, viewport at R34, and get at R36 (R35 is reserved for find).
+ * diff follows at R33, viewport at R34, get at R36, and is at R37. R35 stays reserved for
+ * find, whose cutover is deferred behind the Wave 5 `focus`/`type` surfaces.
  */
 export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
   {
@@ -545,6 +546,43 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
         captureSnapshot: ['selectActiveAppSnapshot'],
         captureSnapshotWithoutActiveApp: ['selectSnapshotWithoutActiveApp'],
         readTextAtPoint: ['bindElementRead'],
+      },
+    },
+  },
+  {
+    rule: 'R37 is-runtime-cutover',
+    command: 'is',
+    subject: 'element predicate',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    // `is` retired no module, route, or dispatch projection — it had none. Its whole legacy
+    // admission was the capability bucket (rejected by this row's automatic descriptor column)
+    // plus membership in these two static sets, which is a DATA deletion. Naming the sets proves
+    // it from both sides: each must still be declared in production source and must no longer
+    // list `is`, so neither an invented name nor a skipped deletion can satisfy it.
+    legacyRetirement: {
+      staticCommandSets: ['HARMONYOS_SUPPORTED_COMMANDS', 'WEB_QUERY_COMMANDS'],
+    },
+    runtimeTypeNames: ['SnapshotRuntimeOperations'],
+    operations: { names: ['captureSnapshot', 'captureSnapshotWithoutActiveApp'] },
+    singularExecution: {
+      routes: ['dispatchIsViaRuntime'],
+      operations: ['captureSnapshot', 'captureSnapshotWithoutActiveApp'],
+      // `is` executes through the shared selector seam, so its capture owners are the SAME
+      // selectors `snapshot`/`diff`/`get` count. It declares no operation of its own: every
+      // predicate answers from the resolved tree, so `readTextAtPoint` stays R36's alone.
+      //
+      // Scope, stated so this is not read as absolute: the claim covers how a predicate is
+      // EXECUTED. Since the direct-iOS selector shortcut retired, the bound capture is the only
+      // thing that answers one. It does NOT claim the route makes no other device call — the
+      // Android foreground-blocker diagnostic still reaches adb through
+      // `platforms/android/app-lifecycle.ts`, on the FAILURE path only, where it can enrich an
+      // already-failed response's message but can never produce or change a verdict. That edge
+      // is pre-existing, co-owned with `wait`, and recorded as Wave 6 denominator work; R22's
+      // `appState` is its declared replacement.
+      operationOwners: {
+        captureSnapshot: ['selectActiveAppSnapshot'],
+        captureSnapshotWithoutActiveApp: ['selectSnapshotWithoutActiveApp'],
       },
     },
   },

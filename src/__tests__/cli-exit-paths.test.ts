@@ -222,3 +222,39 @@ test('a --debug failure caps the daemon-log-tail dump instead of printing it unb
     'expected the byte cap to drop the oldest lines, not just the 200-line cap',
   );
 });
+
+// The end-to-end half of `is`'s documented contract: "is evaluates UI predicates against a
+// selector expression and exits non-zero on failure" (website/docs/docs/commands.md).
+//
+// This deliberately does NOT know how the daemon decided. It was written when the direct-iOS
+// shortcut answered some predicates itself and returned `{ok: true, pass: false}`, which the CLI
+// rendered as `Passed: is text` with exit 0 (#1739). The shortcut is retired and every predicate
+// now answers from the bound capture, so the guarantee is structural rather than guard-based —
+// and this case survives that change untouched, because a failed assertion must exit non-zero
+// whatever produced the failure.
+test('a failed `is` predicate exits non-zero, whatever answered it', async () => {
+  const restoreEnv = installIsolatedCliTestEnv();
+  const exitSpy = installExitSpy();
+  const stderr = captureStderr();
+  const sendToDaemon = async (): Promise<DaemonResponse> => ({
+    ok: false,
+    error: {
+      code: 'COMMAND_FAILED',
+      message: 'is text failed for selector id=greeting: expected="Welcome" actual="Goodbye"',
+      details: { command: 'is', reason: 'predicate_failed', predicate: 'text' },
+    },
+  });
+
+  try {
+    await runCli(['is', 'text', 'id=greeting', 'Welcome'], { sendToDaemon });
+  } finally {
+    stderr.restore();
+    exitSpy.restore();
+    restoreEnv();
+  }
+
+  assert.deepEqual(exitSpy.calls, [1]);
+  const output = stderr.read();
+  assert.ok(output.includes('COMMAND_FAILED'), 'expected the typed failure on stderr');
+  assert.ok(!output.includes('Passed'), 'a failed assertion must never render as passed');
+});
