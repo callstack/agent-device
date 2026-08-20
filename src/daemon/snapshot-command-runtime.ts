@@ -1,4 +1,5 @@
 import {
+  copySnapshotClickabilityEvidence,
   snapshotCaptureAnnotationsFrom,
   summarizeSnapshotDiagnostics,
   type SnapshotDiffSummary,
@@ -91,14 +92,15 @@ export async function dispatchSnapshotRuntimeCommand(
       sessionStore,
       result: result.record,
     });
+    const data = applyRecoveredWarningLatch({
+      session: sessionStore.get(sessionName),
+      data: result.data,
+      verdict: capturedQuality.value,
+      internalObservation: req.internal?.observationOnly === true,
+    });
     return {
       ok: true,
-      data: applyRecoveredWarningLatch({
-        session: sessionStore.get(sessionName),
-        data: result.data,
-        verdict: capturedQuality.value,
-        internalObservation: req.internal?.observationOnly === true,
-      }),
+      data: copySnapshotClickabilityEvidence(result.data, data),
     };
   });
 }

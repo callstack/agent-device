@@ -11,12 +11,18 @@ import {
 } from './runtime-selector-resolution.ts';
 import { type MaestroPositionRelation } from './runtime-target-position.ts';
 import { filterVisibleMaestroMatches, type MaestroPlatform } from './runtime-target-policy.ts';
+import {
+  orderMaestroClickableFirst,
+  resolveMaestroClickability,
+  type MaestroClickabilityDecision,
+} from './runtime-clickability.ts';
 
 export type MaestroRankedCandidates = {
   readonly matches: SnapshotNode[];
   readonly visible: SnapshotNode[];
   readonly ranked: SnapshotNode[];
   readonly parentMatched: boolean;
+  readonly clickability: MaestroClickabilityDecision;
 };
 
 export type MaestroCandidateMatches = Pick<MaestroRankedCandidates, 'matches' | 'parentMatched'>;
@@ -26,7 +32,8 @@ export function rankMaestroCandidates(
   selector: MaestroSelector,
   platform: MaestroPlatform,
 ): MaestroRankedCandidates {
-  const resolver = createMaestroSnapshotResolver(snapshot);
+  const clickability = resolveMaestroClickability(snapshot, platform);
+  const resolver = createMaestroResolver(snapshot, clickability);
   const scoped = matchMaestroCandidatesWithResolver(selector, resolver);
   const visible = filterVisibleMaestroMatches({
     nodes: snapshot.nodes,
@@ -36,12 +43,14 @@ export function rankMaestroCandidates(
   return {
     ...scoped,
     visible,
+    clickability,
     ranked: rankVisibleMaestroMatches(
       snapshot.nodes,
       visible,
       selector,
       platform,
       resolver.nodeByIndex,
+      clickability,
     ),
   };
 }
@@ -59,43 +68,67 @@ export function matchMaestroCandidatesWithResolver(
 export function selectMaestroSnapshotMatches(
   snapshot: SnapshotState,
   selector: MaestroSelector,
+  platform?: MaestroPlatform,
 ): SnapshotNode[] {
-  return createMaestroSnapshotResolver(snapshot).resolve(selector).indexed;
+  const clickability = platform ? resolveMaestroClickability(snapshot, platform) : undefined;
+  return createMaestroResolver(snapshot, clickability).resolve(selector).indexed;
 }
 
 export function selectMaestroPositionMatches(
   snapshot: SnapshotState,
   relation: MaestroPositionRelation,
   anchor: MaestroSelector,
+  platform?: MaestroPlatform,
 ): SnapshotNode[] {
-  return createMaestroSnapshotResolver(snapshot).resolvePosition(relation, anchor);
+  const clickability = platform ? resolveMaestroClickability(snapshot, platform) : undefined;
+  return createMaestroResolver(snapshot, clickability).resolvePosition(relation, anchor);
 }
+
+function createMaestroResolver(
+  snapshot: SnapshotState,
+  clickability: MaestroClickabilityDecision | undefined,
+): MaestroSnapshotResolver {
+  return createMaestroSnapshotResolver(
+    snapshot,
+    {},
+    clickability
+      ? { orderUnindexed: (matches) => orderMaestroClickableFirst(matches, clickability) }
+      : {},
+  );
+}
+
 export function rankVisibleMaestroMatches(
   nodes: SnapshotNode[],
   matches: SnapshotNode[],
   selector: MaestroSelector,
   platform: MaestroPlatform,
   nodeByIndex: ReadonlyMap<number, SnapshotNode> = buildSnapshotNodeMap(nodes),
+  clickability?: MaestroClickabilityDecision,
 ): SnapshotNode[] {
-  if (platform !== 'ios' || !hasTextualSelector(selector)) return matches;
-  return matches.filter((candidate) => {
-    if (isInteractiveControl(candidate)) return true;
-    const equivalentMatches = matches.filter(
-      (other) => other !== candidate && haveSameSelectorIdentity(candidate, other, selector),
-    );
-    if (
-      equivalentMatches.some(
-        (other) =>
-          isInteractiveControl(other) &&
-          isDescendantOfSnapshotNode(nodes, candidate, other, nodeByIndex),
-      )
-    ) {
-      return false;
-    }
-    return !equivalentMatches.some((other) =>
-      isDescendantOfSnapshotNode(nodes, other, candidate, nodeByIndex),
-    );
-  });
+  const ranked =
+    platform !== 'ios' || !hasTextualSelector(selector)
+      ? matches
+      : matches.filter((candidate) => {
+          if (isInteractiveControl(candidate)) return true;
+          const equivalentMatches = matches.filter(
+            (other) => other !== candidate && haveSameSelectorIdentity(candidate, other, selector),
+          );
+          if (
+            equivalentMatches.some(
+              (other) =>
+                isInteractiveControl(other) &&
+                isDescendantOfSnapshotNode(nodes, candidate, other, nodeByIndex),
+            )
+          ) {
+            return false;
+          }
+          return !equivalentMatches.some((other) =>
+            isDescendantOfSnapshotNode(nodes, other, candidate, nodeByIndex),
+          );
+        });
+  return selector.index === undefined && clickability
+    ? orderMaestroClickableFirst(ranked, clickability)
+    : ranked;
 }
 
 export function selectMaestroSnapshotMatch(

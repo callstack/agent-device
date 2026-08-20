@@ -291,6 +291,112 @@
       "selected": "complete-card"
     },
     {
+      "id": "clickable-first-tristate-stable",
+      "operation": "compose(intersect(id=candidate), clickableFirst()) preserves true/false/absent groups",
+      "selector": {
+        "id": "candidate"
+      },
+      "nodes": [
+        {
+          "key": "false-first",
+          "identifier": "candidate",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          },
+          "clickable": false
+        },
+        {
+          "key": "true-first",
+          "identifier": "candidate",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          },
+          "clickable": true
+        },
+        {
+          "key": "absent",
+          "identifier": "candidate",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "true-second",
+          "identifier": "candidate",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          },
+          "clickable": true
+        },
+        {
+          "key": "false-second",
+          "identifier": "candidate",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          },
+          "clickable": false
+        }
+      ],
+      "matches": ["false-first", "true-first", "absent", "true-second", "false-second"],
+      "selected": "true-first",
+      "clickableFirstMatches": [
+        "true-first",
+        "true-second",
+        "false-first",
+        "false-second",
+        "absent"
+      ]
+    },
+    {
+      "id": "clickable-first-index-bypass",
+      "operation": "compose(intersect(id=candidate), index=0) keeps y/x ordering and bypasses clickableFirst",
+      "selector": {
+        "id": "candidate",
+        "index": 0
+      },
+      "nodes": [
+        {
+          "key": "clickable-later",
+          "identifier": "candidate",
+          "rect": {
+            "x": 0,
+            "y": 200,
+            "width": 40,
+            "height": 30
+          },
+          "clickable": true
+        },
+        {
+          "key": "nonclickable-top",
+          "identifier": "candidate",
+          "rect": {
+            "x": 10,
+            "y": 20,
+            "width": 40,
+            "height": 30
+          },
+          "clickable": false
+        }
+      ],
+      "matches": ["clickable-later", "nonclickable-top"],
+      "selected": "nonclickable-top"
+    },
+    {
       "id": "nested-tree-relations",
       "operation": "intersect(id=card, containsChild(intersect(id=panel, containsChild(id=title), containsDescendants(id=icon))))",
       "selector": {
@@ -1037,5 +1143,5 @@
       "selected": "card"
     }
   ],
-  "contentHash": "6c2fdcdab374ca1ca26d2d7932adff911561ad2c8f9daa2f84eabfe9b0643638"
+  "contentHash": "7061897332fd8ae7c6af126af620dfaf875ebfaa3c3f13df87dee638c4c41bb7"
 }

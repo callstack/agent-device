@@ -1,4 +1,5 @@
 import {
+  copySnapshotClickabilityEvidence,
   publicSnapshotCaptureAnnotations,
   snapshotCaptureAnnotationsFrom,
   type DiffSnapshotCommandResult,
@@ -67,7 +68,7 @@ export const snapshotCommand: RuntimeCommand<
     },
   });
   await runtime.sessions.set(nextSnapshotSession(options.session, capture));
-  return {
+  return copySnapshotClickabilityEvidence(capture.snapshot, {
     nodes: capture.snapshot.nodes,
     truncated: capture.snapshot.truncated ?? false,
     visibility: buildSnapshotVisibility({
@@ -84,7 +85,7 @@ export const snapshotCommand: RuntimeCommand<
       ? { snapshotDiagnostics: capture.result.snapshotDiagnostics }
       : {}),
     ...snapshotAppFields(capture),
-  };
+  });
 };
 
 export const diffSnapshotCommand: RuntimeCommand<
@@ -154,9 +155,10 @@ async function captureRuntimeSnapshot(
       customActions: options.customActions,
     },
   );
-  const snapshot = ensureSnapshotPresentationKey(
-    normalizeBackendSnapshot(result, runtime),
-    options,
+  const normalizedSnapshot = normalizeBackendSnapshot(result, runtime);
+  const snapshot = copySnapshotClickabilityEvidence(
+    normalizedSnapshot,
+    ensureSnapshotPresentationKey(normalizedSnapshot, options),
   );
   const annotations = snapshotCaptureAnnotationsFrom(result);
   const warningTime = now(runtime);

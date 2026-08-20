@@ -1,4 +1,5 @@
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import { attachSnapshotClickabilityEvidence } from '@agent-device/contracts/capture';
 import type { MaestroSelector } from '../../src/internal/program-ir.ts';
 import { resolveMaestroTargetFromSnapshot } from '../../src/internal/runtime-targets.ts';
 import {
@@ -16,11 +17,13 @@ export type Layer2TreeVector = {
     identifier: string;
     label: string | null;
     rect: { x: number; y: number; width: number; height: number } | null;
+    clickable?: boolean;
   }>;
   matches: string[];
   selected?: string;
   intermediateRelation?: 'below' | 'above' | 'leftOf' | 'rightOf';
   intermediate?: string[];
+  clickableFirstMatches?: string[];
 };
 
 export type Layer2TreeResult = {
@@ -34,6 +37,7 @@ export function checkLayer2TreeVector(vector: Layer2TreeVector): Layer2TreeResul
   const snapshot = snapshotFromTreeVector(vector);
   const ranked = rankMaestroCandidates(snapshot, vector.selector, 'android');
   const actualMatches = ranked.matches.map((node) => vector.nodes[node.index]?.key ?? '');
+  const actualOrderedMatches = ranked.ranked.map((node) => vector.nodes[node.index]?.key ?? '');
   const resolution = resolveMaestroTargetFromSnapshot(
     snapshot,
     { selector: vector.selector },
@@ -53,6 +57,8 @@ export function checkLayer2TreeVector(vector: Layer2TreeVector): Layer2TreeResul
     agent: actualMatches.length,
     status:
       JSON.stringify(actualMatches) === JSON.stringify(vector.matches) &&
+      (vector.clickableFirstMatches === undefined ||
+        JSON.stringify(actualOrderedMatches) === JSON.stringify(vector.clickableFirstMatches)) &&
       JSON.stringify(actualSelected) === JSON.stringify(expectedSelected) &&
       JSON.stringify(actualIntermediate) === JSON.stringify(vector.intermediate)
         ? 'match'
@@ -73,5 +79,13 @@ function snapshotFromTreeVector(vector: Layer2TreeVector): SnapshotState {
       ...(node.rect ? { rect: node.rect } : {}),
     };
   });
-  return { createdAt: 0, nodes };
+  const snapshot = { createdAt: 0, nodes };
+  const hasClickabilityEvidence = vector.nodes.some((node) => 'clickable' in node);
+  return hasClickabilityEvidence
+    ? attachSnapshotClickabilityEvidence(snapshot, {
+        kind: 'exact',
+        provider: 'android-helper',
+        clickableByNodeIndex: new Map(vector.nodes.map((node, index) => [index, node.clickable])),
+      })
+    : snapshot;
 }

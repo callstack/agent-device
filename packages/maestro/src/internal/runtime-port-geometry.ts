@@ -84,7 +84,7 @@ function selectMaestroScrollableViewport(
   const candidateByIndex = new Map(
     candidates.map((candidate) => [candidate.node.index, candidate]),
   );
-  for (const target of selectMaestroSnapshotMatches(snapshot, selector)) {
+  for (const target of selectMaestroSnapshotMatches(snapshot, selector, platform)) {
     const container = findScrollContainer(target, byIndex);
     const candidate = container ? candidateByIndex.get(container.index) : undefined;
     if (candidate) return candidate.viewport;

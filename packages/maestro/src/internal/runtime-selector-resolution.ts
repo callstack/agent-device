@@ -12,7 +12,7 @@ import { matchesMaestroTypedSelector } from './runtime-target-policy.ts';
 export type MaestroSelectorResolution = {
   /** Relation-composed matches in snapshot order, before this selector's own index. */
   readonly matches: SnapshotNode[];
-  /** Matches after applying this selector's own y/x-ordered index. */
+  /** Matches after applying this selector's own index or no-index ordering policy. */
   readonly indexed: SnapshotNode[];
 };
 
@@ -20,6 +20,10 @@ export type MaestroResolutionProbe = {
   onNodeMapBuilt?: () => void;
   onSelectorComputed?: (selector: MaestroSelector) => void;
   onPositionComputed?: (relation: MaestroPositionRelation, anchor: MaestroSelector) => void;
+};
+
+export type MaestroResolutionOptions = {
+  orderUnindexed?: (matches: readonly SnapshotNode[]) => SnapshotNode[];
 };
 
 export type MaestroSnapshotResolver = {
@@ -37,6 +41,7 @@ type MaestroPositionResolution = {
 export function createMaestroSnapshotResolver(
   snapshot: SnapshotState,
   probe: MaestroResolutionProbe = {},
+  options: MaestroResolutionOptions = {},
 ): MaestroSnapshotResolver {
   const nodeByIndex = buildSnapshotNodeMap(snapshot.nodes);
   probe.onNodeMapBuilt?.();
@@ -117,7 +122,7 @@ export function createMaestroSnapshotResolver(
       );
       const resolution = {
         matches,
-        indexed: selectMaestroIndexedMatches(matches, selector.index),
+        indexed: selectMaestroIndexedMatches(matches, selector.index, options.orderUnindexed),
       };
       selectorCache.set(selector, resolution);
       return resolution;
@@ -216,8 +221,9 @@ function positionalSelectors(
 function selectMaestroIndexedMatches(
   matches: readonly SnapshotNode[],
   index: number | string | undefined,
+  orderUnindexed: MaestroResolutionOptions['orderUnindexed'],
 ): SnapshotNode[] {
-  if (index === undefined) return [...matches];
+  if (index === undefined) return orderUnindexed ? orderUnindexed(matches) : [...matches];
   const selected = sortMaestroMatchesForIndex(matches)[resolveMaestroSelectorIndex(index)];
   return selected ? [selected] : [];
 }

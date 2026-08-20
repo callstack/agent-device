@@ -52,5 +52,11 @@ export type {
   FindLocator,
   ScreenshotResultData,
 } from '../snapshot-types.ts';
+export {
+  attachSnapshotClickabilityEvidence,
+  copySnapshotClickabilityEvidence,
+  readSnapshotClickabilityEvidence,
+} from '../snapshot-clickability.ts';
+export type { SnapshotClickabilityEvidence } from '../snapshot-clickability.ts';
 export { readViewportDimensions } from '../viewport.ts';
 export type { ViewportCommandResult } from '../viewport.ts';

@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import { attachSnapshotClickabilityEvidence } from '@agent-device/contracts/capture';
 import {
   rankMaestroCandidates,
   selectMaestroSnapshotMatch,
@@ -15,6 +16,94 @@ test('typed target matching preserves snapshot read order', () => {
   expect(
     rankMaestroCandidates(snapshot, { text: 'Save' }, 'ios').matches.map((node) => node.index),
   ).toEqual([1, 2]);
+});
+
+test('supported Android evidence applies stable clickableFirst ordering across all groups', () => {
+  const snapshot = attachSnapshotClickabilityEvidence(
+    makeSnapshot([
+      { index: 0, identifier: 'candidate', rect: { x: 0, y: 0, width: 20, height: 20 } },
+      { index: 1, identifier: 'candidate', rect: { x: 0, y: 20, width: 20, height: 20 } },
+      { index: 2, identifier: 'candidate', rect: { x: 0, y: 40, width: 20, height: 20 } },
+      { index: 3, identifier: 'candidate', rect: { x: 0, y: 60, width: 20, height: 20 } },
+      { index: 4, identifier: 'candidate', rect: { x: 0, y: 80, width: 20, height: 20 } },
+    ]),
+    {
+      kind: 'exact',
+      provider: 'android-helper',
+      clickableByNodeIndex: new Map([
+        [0, false],
+        [1, true],
+        [2, undefined],
+        [3, true],
+        [4, false],
+      ]),
+    },
+  );
+
+  const ranked = rankMaestroCandidates(snapshot, { id: 'candidate' }, 'android');
+
+  expect(ranked.matches.map((node) => node.index)).toEqual([0, 1, 2, 3, 4]);
+  expect(ranked.ranked.map((node) => node.index)).toEqual([1, 3, 0, 4, 2]);
+  expect(ranked.clickability).toMatchObject({ kind: 'exact', provider: 'android-helper' });
+});
+
+test('authored index bypasses clickableFirst and keeps y/x ordering', () => {
+  const snapshot = attachSnapshotClickabilityEvidence(
+    makeSnapshot([
+      {
+        index: 0,
+        identifier: 'candidate',
+        rect: { x: 0, y: 200, width: 20, height: 20 },
+      },
+      {
+        index: 1,
+        identifier: 'candidate',
+        rect: { x: 10, y: 20, width: 20, height: 20 },
+      },
+    ]),
+    {
+      kind: 'exact',
+      provider: 'android-helper',
+      clickableByNodeIndex: new Map([
+        [0, true],
+        [1, false],
+      ]),
+    },
+  );
+
+  const ranked = rankMaestroCandidates(snapshot, { id: 'candidate', index: 0 }, 'android');
+  const resolution = selectMaestroSnapshotMatch(ranked.ranked, 0);
+
+  expect(ranked.ranked.map((node) => node.index)).toEqual([0, 1]);
+  expect(resolution).toMatchObject({ node: { index: 1 } });
+});
+
+test('unsupported iOS evidence is classified and never inferred from hittable or type', () => {
+  const snapshot = makeSnapshot([
+    {
+      index: 0,
+      identifier: 'candidate',
+      type: 'Button',
+      hittable: false,
+      rect: { x: 0, y: 0, width: 20, height: 20 },
+    },
+    {
+      index: 1,
+      identifier: 'candidate',
+      type: 'StaticText',
+      hittable: true,
+      rect: { x: 0, y: 20, width: 20, height: 20 },
+    },
+  ]);
+
+  const ranked = rankMaestroCandidates(snapshot, { id: 'candidate' }, 'ios');
+
+  expect(ranked.ranked.map((node) => node.index)).toEqual([0, 1]);
+  expect(ranked.clickability).toEqual({
+    kind: 'divergence',
+    provider: 'apple-xctest',
+    reason: 'maestro-clickable-not-exposed-by-provider',
+  });
 });
 
 test('target selection preserves snapshot aggregate order when no index is authored', () => {

@@ -1,8 +1,40 @@
 import { expect, test } from 'vitest';
+import {
+  attachSnapshotClickabilityEvidence,
+  readSnapshotClickabilityEvidence,
+} from '@agent-device/contracts/capture';
 import type { DaemonRequest } from '../../../types.ts';
 import { MAESTRO_OBSERVATION_POLL_MS } from '../daemon-runtime-port-observation.ts';
 import { createDaemonMaestroSnapshotSource } from '../daemon-runtime-port-snapshot-source.ts';
 import { makeBaseRequest, makeDependencies } from './daemon-runtime-port-fixtures.ts';
+
+test('carries clickability sidecar through one public snapshot capture without wire fields', async () => {
+  const requests: DaemonRequest[] = [];
+  const data = {
+    nodes: [{ index: 0, identifier: 'save', rect: { x: 0, y: 0, width: 20, height: 20 } }],
+  };
+  const evidence = {
+    kind: 'exact' as const,
+    provider: 'android-helper' as const,
+    clickableByNodeIndex: new Map<number, boolean | undefined>([[0, true]]),
+  };
+  attachSnapshotClickabilityEvidence(data, evidence);
+  const source = createDaemonMaestroSnapshotSource({
+    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    invoke: async (request) => {
+      requests.push(request);
+      return { ok: true, data };
+    },
+    dependencies: makeDependencies(),
+    platform: 'android',
+  });
+
+  const snapshot = await source.capture({ generation: 0, env: {} });
+
+  expect(requests).toHaveLength(1);
+  expect(readSnapshotClickabilityEvidence(snapshot)).toEqual(evidence);
+  expect(JSON.stringify(snapshot)).not.toContain('clickable');
+});
 
 test('reuses bound observations and seeds a pending stability comparison', async () => {
   const requests: DaemonRequest[] = [];

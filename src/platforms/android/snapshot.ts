@@ -15,6 +15,7 @@ import {
   type RawSnapshotNode,
   type SnapshotOptions,
 } from '@agent-device/kernel/snapshot';
+import { attachSnapshotClickabilityEvidence } from '@agent-device/contracts/capture';
 import { deriveMobileSnapshotHiddenContentHints } from '../../snapshot/mobile-snapshot-semantics.ts';
 import {
   buildUiHierarchySnapshot,
@@ -23,6 +24,7 @@ import {
   type AndroidSnapshotAnalysis,
   type AndroidUiHierarchy,
 } from './ui-hierarchy.ts';
+import { buildAndroidSnapshotClickabilityEvidence } from './snapshot-clickability.ts';
 import { resolveAndroidAdbProvider, type AndroidAdbProvider } from './adb-executor.ts';
 import { sleep } from './adb.ts';
 import {
@@ -105,11 +107,15 @@ export async function snapshotAndroid(
     });
   }
   const { sourceNodes: _sourceNodes, ...snapshot } = built;
-  return {
+  const result = {
     ...snapshot,
     ...androidSnapshotTruncationFields(truncated),
     androidSnapshot: withOcclusionScanDisclosure(capture.metadata, tree),
   };
+  return attachSnapshotClickabilityEvidence(
+    result,
+    buildAndroidSnapshotClickabilityEvidence(built),
+  );
 }
 
 /**

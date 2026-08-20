@@ -1,4 +1,5 @@
 import { stripAndroidSystemChromeProvenance } from '@agent-device/contracts/platform';
+import { copySnapshotClickabilityEvidence } from '@agent-device/contracts/capture';
 import { dispatchSnapshotRuntimeCommand } from './snapshot-command-runtime.ts';
 import { captureSparseFallbackScreenshot } from './sparse-fallback-screenshot.ts';
 import type { SnapshotRuntimeRouteParams } from './snapshot-runtime-binding.ts';
@@ -30,8 +31,10 @@ export async function dispatchSnapshotViaRuntime(
         params.sessionStore.get(resolvedSessionName),
       );
       const publicNodes = stripAndroidSystemChromeProvenance(result.nodes);
-      const publicResult =
-        publicNodes === result.nodes ? result : { ...result, nodes: publicNodes };
+      const publicResult = copySnapshotClickabilityEvidence(
+        result,
+        publicNodes === result.nodes ? result : { ...result, nodes: publicNodes },
+      );
       const session = params.sessionStore.get(resolvedSessionName);
       const fallbackScreenshot = await captureSparseFallbackScreenshot({
         req: request,
@@ -42,15 +45,22 @@ export async function dispatchSnapshotViaRuntime(
         inspectFacts: params.inspectFacts,
         bindDevice: params.bindDevice,
       });
-      const published = fallbackScreenshot
-        ? {
-            ...publicResult,
-            fallbackScreenshotPath: fallbackScreenshot.path,
-            artifacts: [fallbackScreenshot.artifact],
-          }
-        : publicResult;
+      const published = copySnapshotClickabilityEvidence(
+        publicResult,
+        fallbackScreenshot
+          ? {
+              ...publicResult,
+              fallbackScreenshotPath: fallbackScreenshot.path,
+              artifacts: [fallbackScreenshot.artifact],
+            }
+          : publicResult,
+      );
+      const data =
+        refsGeneration === undefined
+          ? published
+          : copySnapshotClickabilityEvidence(published, { ...published, refsGeneration });
       return {
-        data: refsGeneration === undefined ? published : { ...published, refsGeneration },
+        data,
         record: {
           kind: 'snapshot',
           nodes: result.nodes.length,

@@ -28,6 +28,7 @@ private data class FixtureNode(
     val identifier: String,
     val label: String?,
     val rect: FixtureRect?,
+    val clickable: Boolean?,
 )
 
 private data class FixtureRect(
@@ -46,6 +47,7 @@ private data class TreeVector(
     val selected: String?,
     val intermediateRelation: String? = null,
     val intermediate: List<String>? = null,
+    val clickableFirstMatches: List<String>? = null,
 )
 
 private data class NodeSpec(
@@ -58,6 +60,7 @@ private data class NodeSpec(
     val hasBounds: Boolean = true,
     val width: Int = 40,
     val height: Int = 30,
+    val clickable: Boolean? = null,
 )
 
 /** Emit vectors from the pinned Filters implementation, never hand-written answers. */
@@ -73,6 +76,9 @@ fun emitTreeVectors(target: ArrayNode) {
         vector.intermediateRelation?.let { node.put("intermediateRelation", it) }
         vector.intermediate?.let { values ->
             node.putArray("intermediate").also { values.forEach(it::add) }
+        }
+        vector.clickableFirstMatches?.let { values ->
+            node.putArray("clickableFirstMatches").also { values.forEach(it::add) }
         }
     }
 }
@@ -130,6 +136,31 @@ private val TREE_VECTORS: List<TreeVector> = listOf(
         ),
         TreeSelector(id = "card", containsDescendants = listOf(TreeSelector(id = "title"), TreeSelector(text = "Badge"))),
         intersect(id("card"), descendants(id("title"), text("Badge"))),
+    ),
+    treeVector(
+        "clickable-first-tristate-stable",
+        "compose(intersect(id=candidate), clickableFirst()) preserves true/false/absent groups",
+        listOf(
+            node("false-first", resourceId = "candidate", clickable = false),
+            node("true-first", resourceId = "candidate", clickable = true),
+            node("absent", resourceId = "candidate"),
+            node("true-second", resourceId = "candidate", clickable = true),
+            node("false-second", resourceId = "candidate", clickable = false),
+        ),
+        TreeSelector(id = "candidate"),
+        id("candidate"),
+        emitClickableOrder = true,
+    ),
+    treeVector(
+        "clickable-first-index-bypass",
+        "compose(intersect(id=candidate), index=0) keeps y/x ordering and bypasses clickableFirst",
+        listOf(
+            node("clickable-later", resourceId = "candidate", x = 0, y = 200, clickable = true),
+            node("nonclickable-top", resourceId = "candidate", x = 10, y = 20, clickable = false),
+        ),
+        TreeSelector(id = "candidate", index = 0),
+        id("candidate"),
+        Filters.compose(id("candidate"), Filters.index(0)),
     ),
     treeVector(
         "nested-tree-relations",
@@ -357,23 +388,22 @@ private fun treeVector(
     selectionFilter: ElementFilter? = null,
     intermediateRelation: String? = null,
     intermediate: List<String>? = null,
+    emitClickableOrder: Boolean = false,
 ): TreeVector {
     val flattened = roots.flatMap { it.toTreeNode().aggregate() }
     val matches = filter(flattened).map { it.attributes.getValue("key") }
-    // RawSnapshotNode has no exact clickable field, so these fixtures leave
-    // TreeNode.clickable null rather than guessing from hittable. Maestro's
-    // clickableFirst therefore preserves fixture order for this Layer2 oracle.
     val finalSelectionFilter = selectionFilter ?: Filters.compose(filter, Filters.clickableFirst())
-    val selected = finalSelectionFilter(flattened).firstOrNull()?.attributes?.get("key")
+    val finalSelection = finalSelectionFilter(flattened).map { it.attributes.getValue("key") }
     return TreeVector(
         id,
         operation,
         selector,
         roots.flatMap { it.toFixtureNodes() },
         matches,
-        selected,
+        finalSelection.firstOrNull(),
         intermediateRelation,
         intermediate,
+        if (emitClickableOrder) finalSelection else null,
     )
 }
 
@@ -400,15 +430,27 @@ private fun node(
     hasBounds: Boolean = true,
     width: Int = 40,
     height: Int = 30,
-): NodeSpec = NodeSpec(key, resourceId, x, y, text, children, hasBounds, width, height)
+    clickable: Boolean? = null,
+): NodeSpec = NodeSpec(key, resourceId, x, y, text, children, hasBounds, width, height, clickable)
 
 private fun NodeSpec.toTreeNode(): TreeNode {
     val attributes = mutableMapOf("key" to key, "resource-id" to resourceId)
     if (hasBounds) attributes["bounds"] = "[$x,$y][${x + width},${y + height}]"
     text?.let { attributes["text"] = it }
-    return TreeNode(attributes = attributes, children = children.map { it.toTreeNode() })
+    return TreeNode(
+        attributes = attributes,
+        children = children.map { it.toTreeNode() },
+        clickable = clickable,
+    )
 }
 
 private fun NodeSpec.toFixtureNodes(parentKey: String? = null): List<FixtureNode> = listOf(
-    FixtureNode(key, parentKey, resourceId, text, if (hasBounds) FixtureRect(x, y, width, height) else null),
+    FixtureNode(
+        key,
+        parentKey,
+        resourceId,
+        text,
+        if (hasBounds) FixtureRect(x, y, width, height) else null,
+        clickable,
+    ),
 ) + children.flatMap { it.toFixtureNodes(key) }
