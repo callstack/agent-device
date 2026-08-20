@@ -54,6 +54,18 @@ const SELECTOR_FIELD_READERS: Readonly<Record<string, SelectorFieldReader>> = {
   childOf: (selector, entry, name, context) => {
     selector.childOf = parseMaestroSelector(entry.value, `${name}.childOf`, context);
   },
+  below: (selector, entry, name, context) => {
+    selector.below = parseMaestroSelector(entry.value, `${name}.below`, context);
+  },
+  above: (selector, entry, name, context) => {
+    selector.above = parseMaestroSelector(entry.value, `${name}.above`, context);
+  },
+  leftOf: (selector, entry, name, context) => {
+    selector.leftOf = parseMaestroSelector(entry.value, `${name}.leftOf`, context);
+  },
+  rightOf: (selector, entry, name, context) => {
+    selector.rightOf = parseMaestroSelector(entry.value, `${name}.rightOf`, context);
+  },
   containsChild: (selector, entry, name, context) => {
     selector.containsChild = parseMaestroSelector(entry.value, `${name}.containsChild`, context);
   },

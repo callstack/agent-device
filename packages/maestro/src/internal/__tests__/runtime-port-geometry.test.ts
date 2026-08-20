@@ -263,3 +263,57 @@ test('uses the complete recursive selector when choosing the scroll container', 
     ),
   ).toMatchObject({ viewport: { x: 0, y: 450, width: 300, height: 400 } });
 });
+
+test('uses positional relations when choosing the scroll container', () => {
+  const snapshot = {
+    createdAt: 0,
+    nodes: [
+      { index: 0, ref: '@e1', type: 'Application', rect: { x: 0, y: 0, width: 402, height: 900 } },
+      {
+        index: 1,
+        ref: '@e2',
+        parentIndex: 0,
+        type: 'ScrollView',
+        rect: { x: 0, y: 0, width: 300, height: 400 },
+      },
+      {
+        index: 2,
+        ref: '@e3',
+        parentIndex: 1,
+        identifier: 'target',
+        rect: { x: 20, y: 40, width: 100, height: 40 },
+      },
+      {
+        index: 3,
+        ref: '@e4',
+        parentIndex: 0,
+        type: 'ScrollView',
+        rect: { x: 0, y: 450, width: 300, height: 400 },
+      },
+      {
+        index: 4,
+        ref: '@e5',
+        parentIndex: 3,
+        identifier: 'target',
+        rect: { x: 20, y: 520, width: 100, height: 80 },
+      },
+      {
+        index: 5,
+        ref: '@e6',
+        parentIndex: 3,
+        identifier: 'caption',
+        rect: { x: 20, y: 470, width: 100, height: 20 },
+      },
+    ],
+  };
+
+  expect(
+    resolveMaestroScrollableGesture(
+      snapshot,
+      { id: 'target', below: { id: 'caption' } },
+      'down',
+      601,
+      'android',
+    ),
+  ).toMatchObject({ viewport: { x: 0, y: 450, width: 300, height: 400 } });
+});

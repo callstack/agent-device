@@ -537,6 +537,14 @@
       }
     },
     {
+      "id": "authored/positional-relations",
+      "file": "authored/positional-relations.yaml",
+      "origin": {
+        "kind": "authored",
+        "note": "Coverage: above, below, leftOf, and rightOf recursively across target, assertion, wait, scroll, and swipe commands."
+      }
+    },
+    {
       "id": "authored/presskey",
       "file": "authored/presskey.yaml",
       "origin": {

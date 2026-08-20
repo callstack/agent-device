@@ -1,0 +1,32 @@
+appId: com.example
+---
+- tapOn:
+    below:
+      text: Email
+- doubleTapOn:
+    above:
+      id: submit
+- longPressOn:
+    leftOf:
+      text: Menu
+- assertVisible:
+    rightOf:
+      id: navigation
+- assertNotVisible:
+    below:
+      id: hidden-caption
+- extendedWaitUntil:
+    visible:
+      above:
+        text: Complete
+- scrollUntilVisible:
+    element:
+      below:
+        text: More
+    direction: DOWN
+    timeout: 20000
+- swipe:
+    from:
+      rightOf:
+        id: rail
+    direction: LEFT

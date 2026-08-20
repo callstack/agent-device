@@ -5,6 +5,11 @@ import { buildSnapshotNodeMap, normalizeType } from '@agent-device/contracts/sna
 import { isDescendantOfSnapshotNode } from './snapshot-policy.ts';
 import { normalizeText } from './shared.ts';
 import type { MaestroSelector } from './program-ir.ts';
+import { hasMaestroLeafSelectorFields } from './selector-relations.ts';
+import {
+  selectMaestroPositionMatches as selectPositionMatches,
+  type MaestroPositionRelation,
+} from './runtime-target-position.ts';
 import {
   filterVisibleMaestroMatches,
   matchesMaestroTypedSelector,
@@ -73,14 +78,21 @@ function matchesMaestroSnapshotSelectorWithoutOwnIndex(
   node: SnapshotNode,
   selector: MaestroSelector,
 ): boolean {
-  const { index: _index, childOf, containsChild, containsDescendants, ...flat } = selector;
-  if (!matchesMaestroTypedSelector(node, flat)) return false;
-  return matchesMaestroAncestorRelations(
-    snapshot,
-    node,
+  const {
+    index: _index,
     childOf,
+    below: _below,
+    above: _above,
+    leftOf: _leftOf,
+    rightOf: _rightOf,
     containsChild,
     containsDescendants,
+    ...flat
+  } = selector;
+  if (hasMaestroLeafSelectorFields(flat) && !matchesMaestroTypedSelector(node, flat)) return false;
+  return (
+    matchesMaestroAncestorRelations(snapshot, node, childOf, containsChild, containsDescendants) &&
+    matchesMaestroPositionRelations(snapshot, node, selector)
   );
 }
 
@@ -103,6 +115,20 @@ function matchesMaestroAncestorRelations(
   }
   if (!matchesMaestroContainsChild(snapshot, node, containsChild)) return false;
   return matchesMaestroContainsDescendants(snapshot, node, containsDescendants, byIndex);
+}
+
+function matchesMaestroPositionRelations(
+  snapshot: SnapshotState,
+  node: SnapshotNode,
+  selector: MaestroSelector,
+): boolean {
+  for (const [relation, anchor] of positionalSelectors(selector)) {
+    const related = selectPositionMatches(snapshot, relation, anchor, (nested) =>
+      selectMaestroSnapshotMatches(snapshot, nested),
+    );
+    if (!related.includes(node)) return false;
+  }
+  return true;
 }
 
 function matchesMaestroContainsChild(
@@ -130,6 +156,27 @@ function matchesMaestroContainsDescendants(
       isDescendantOfSnapshotNode(snapshot.nodes, candidate, node, byIndex),
     );
   });
+}
+
+export function selectMaestroPositionMatches(
+  snapshot: SnapshotState,
+  relation: MaestroPositionRelation,
+  anchor: MaestroSelector,
+): SnapshotNode[] {
+  return selectPositionMatches(snapshot, relation, anchor, (nested) =>
+    selectMaestroSnapshotMatches(snapshot, nested),
+  );
+}
+
+function positionalSelectors(
+  selector: MaestroSelector,
+): Array<[MaestroPositionRelation, MaestroSelector]> {
+  return [
+    ['below', selector.below],
+    ['above', selector.above],
+    ['leftOf', selector.leftOf],
+    ['rightOf', selector.rightOf],
+  ].filter((entry): entry is [MaestroPositionRelation, MaestroSelector] => entry[1] !== undefined);
 }
 export function rankVisibleMaestroMatches(
   nodes: SnapshotNode[],

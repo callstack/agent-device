@@ -1,6 +1,6 @@
 export const MAESTRO_COMPAT_SUPPORTED_CAPABILITIES = [
   'Flows: launchApp; runFlow file/inline with platform, visibility, and limited boolean conditions; onFlowStart/onFlowComplete; repeat.times and retry.',
-  'Interactions: tapOn, doubleTapOn, longPressOn, inputText on the focused element, eraseText, openLink, hideKeyboard, basic pressKey, and back; selector targets poll until available and support recursive index, childOf, containsChild, containsDescendants, points, and optional; outer command labels are metadata, not target selectors.',
+  'Interactions: tapOn, doubleTapOn, longPressOn, inputText on the focused element, eraseText, openLink, hideKeyboard, basic pressKey, and back; selector targets poll until available and support recursive index, childOf, above, below, leftOf, rightOf, containsChild, containsDescendants, points, and optional; outer command labels are metadata, not target selectors.',
   'Assertions and navigation: assertVisible, assertNotVisible, extendedWaitUntil, scroll, scrollUntilVisible, absolute/percentage/target swipe, takeScreenshot, waitForAnimationToEnd, and stopApp.',
   'Scripts: ordered runScript file/env scripts with http.post, json, and output variables.',
 ] as const;

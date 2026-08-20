@@ -1,7 +1,10 @@
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import type { MaestroSelector } from '../../src/internal/program-ir.ts';
 import { resolveMaestroTargetFromSnapshot } from '../../src/internal/runtime-targets.ts';
-import { rankMaestroCandidates } from '../../src/internal/runtime-target-ranking.ts';
+import {
+  rankMaestroCandidates,
+  selectMaestroPositionMatches,
+} from '../../src/internal/runtime-target-ranking.ts';
 
 export type Layer2TreeVector = {
   id: string;
@@ -12,10 +15,12 @@ export type Layer2TreeVector = {
     parentKey: string | null;
     identifier: string;
     label: string | null;
-    rect: { x: number; y: number; width: number; height: number };
+    rect: { x: number; y: number; width: number; height: number } | null;
   }>;
   matches: string[];
   selected?: string;
+  intermediateRelation?: 'below' | 'above' | 'leftOf' | 'rightOf';
+  intermediate?: string[];
 };
 
 export type Layer2TreeResult = {
@@ -35,18 +40,21 @@ export function checkLayer2TreeVector(vector: Layer2TreeVector): Layer2TreeResul
     'android',
   );
   const actualSelected = resolution.ok ? [vector.nodes[resolution.node.index]?.key ?? ''] : [];
-  const expectedSelected =
-    vector.selected === undefined && vector.matches.length === 1
-      ? vector.matches
-      : vector.selected === undefined
-        ? []
-        : [vector.selected];
+  const expectedSelected = vector.selected === undefined ? [] : [vector.selected];
+  const actualIntermediate = vector.intermediateRelation
+    ? selectMaestroPositionMatches(
+        snapshot,
+        vector.intermediateRelation,
+        vector.selector[vector.intermediateRelation]!,
+      ).map((node) => vector.nodes[node.index]?.key ?? '')
+    : undefined;
   return {
     upstream: vector.matches.length,
     agent: actualMatches.length,
     status:
       JSON.stringify(actualMatches) === JSON.stringify(vector.matches) &&
-      JSON.stringify(actualSelected) === JSON.stringify(expectedSelected)
+      JSON.stringify(actualSelected) === JSON.stringify(expectedSelected) &&
+      JSON.stringify(actualIntermediate) === JSON.stringify(vector.intermediate)
         ? 'match'
         : 'mismatch',
   };
@@ -62,7 +70,7 @@ function snapshotFromTreeVector(vector: Layer2TreeVector): SnapshotState {
       identifier: node.identifier,
       ...(node.label === null ? {} : { label: node.label }),
       ...(parentIndex === undefined ? {} : { parentIndex }),
-      rect: node.rect,
+      ...(node.rect ? { rect: node.rect } : {}),
     };
   });
   return { createdAt: 0, nodes };

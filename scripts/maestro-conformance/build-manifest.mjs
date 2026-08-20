@@ -50,6 +50,8 @@ const NOTES = {
     'Coverage: tapOn index accepts a ${VAR} token and projects identically through the canonical model.',
   'authored/tree-relations':
     'Coverage: recursive selector index, childOf, containsChild, and containsDescendants across tapOn and assertVisible.',
+  'authored/positional-relations':
+    'Coverage: above, below, leftOf, and rightOf recursively across target, assertion, wait, scroll, and swipe commands.',
   'authored/numeric-variable-wait':
     'Coverage: waitForAnimationToEnd timeout accepts a ${VAR} token and projects identically through the canonical model.',
   'invalid/bad-swipe-direction': 'Lenient-guard: unknown SwipeDirection enum value.',

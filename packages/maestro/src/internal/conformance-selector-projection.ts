@@ -8,6 +8,10 @@ export type CanonicalSelector = {
   enabled?: boolean;
   selected?: boolean;
   childOf?: CanonicalSelector;
+  below?: CanonicalSelector;
+  above?: CanonicalSelector;
+  leftOf?: CanonicalSelector;
+  rightOf?: CanonicalSelector;
   containsChild?: CanonicalSelector;
   containsDescendants?: CanonicalSelector[];
 };
@@ -56,6 +60,10 @@ export function canonicalizeUpstreamSelector(value: unknown): CanonicalSelector 
     enabled: bool(record.enabled),
     selected: bool(record.selected),
     childOf: canonicalizeUpstreamSelector(record.childOf),
+    below: canonicalizeUpstreamSelector(record.below),
+    above: canonicalizeUpstreamSelector(record.above),
+    leftOf: canonicalizeUpstreamSelector(record.leftOf),
+    rightOf: canonicalizeUpstreamSelector(record.rightOf),
     containsChild: canonicalizeUpstreamSelector(record.containsChild),
     containsDescendants: arraySelectors(record.containsDescendants),
   });
@@ -87,6 +95,10 @@ export function canonicalizeAgentSelector(
     selected: selector.selected,
     index: selector.index,
     childOf: canonicalizeAgentSelector(selector.childOf),
+    below: canonicalizeAgentSelector(selector.below),
+    above: canonicalizeAgentSelector(selector.above),
+    leftOf: canonicalizeAgentSelector(selector.leftOf),
+    rightOf: canonicalizeAgentSelector(selector.rightOf),
     containsChild: canonicalizeAgentSelector(selector.containsChild),
     containsDescendants: selector.containsDescendants
       ?.map(canonicalizeAgentSelector)

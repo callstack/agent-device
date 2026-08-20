@@ -24,6 +24,10 @@ export type MaestroLeafSelector = {
 export type MaestroRelationalSelectorFields = {
   index?: number | string;
   childOf?: MaestroSelector;
+  below?: MaestroSelector;
+  above?: MaestroSelector;
+  leftOf?: MaestroSelector;
+  rightOf?: MaestroSelector;
   containsChild?: MaestroSelector;
   containsDescendants?: MaestroSelector[];
 };

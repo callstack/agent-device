@@ -13,6 +13,7 @@ import {
 import { pointInsideRect, stripUndefined } from './shared.ts';
 import { isMaestroNodeVisible } from './snapshot-policy.ts';
 import { buildSnapshotNodeMap } from '@agent-device/contracts/snapshot';
+import { hasMaestroRecursiveRelations as hasRecursiveRelations } from './selector-relations.ts';
 
 export type MaestroTargetQuery = {
   selector: MaestroSelector;
@@ -99,14 +100,7 @@ export function resolveMaestroTargetFromSnapshot(
   };
 }
 
-export function hasMaestroRecursiveRelations(selector: MaestroSelector): boolean {
-  return (
-    selector.index !== undefined ||
-    selector.childOf !== undefined ||
-    selector.containsChild !== undefined ||
-    selector.containsDescendants !== undefined
-  );
-}
+export const hasMaestroRecursiveRelations = hasRecursiveRelations;
 
 function createPresentedNodeLookup(presentation: MaestroInteractivePresentation): {
   isVisible: (node: SnapshotNode) => boolean;

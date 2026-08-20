@@ -492,7 +492,550 @@
       ],
       "matches": ["card-low-x", "card-high-x"],
       "selected": "card-high-x"
+    },
+    {
+      "id": "position-below-strict-top-left",
+      "operation": "intersect(id=candidate, below(id=anchor))",
+      "selector": {
+        "id": "candidate",
+        "below": {
+          "id": "anchor"
+        }
+      },
+      "nodes": [
+        {
+          "key": "candidate-above",
+          "identifier": "candidate",
+          "rect": {
+            "x": 0,
+            "y": 40,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "candidate-equal",
+          "identifier": "candidate",
+          "rect": {
+            "x": 0,
+            "y": 100,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "candidate-below",
+          "identifier": "candidate",
+          "rect": {
+            "x": 0,
+            "y": 160,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "anchor",
+          "identifier": "anchor",
+          "rect": {
+            "x": 0,
+            "y": 100,
+            "width": 40,
+            "height": 30
+          }
+        }
+      ],
+      "matches": ["candidate-below"],
+      "selected": "candidate-below"
+    },
+    {
+      "id": "position-above-strict-top-left",
+      "operation": "intersect(id=candidate, above(id=anchor))",
+      "selector": {
+        "id": "candidate",
+        "above": {
+          "id": "anchor"
+        }
+      },
+      "nodes": [
+        {
+          "key": "candidate-above",
+          "identifier": "candidate",
+          "rect": {
+            "x": 0,
+            "y": 40,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "candidate-equal",
+          "identifier": "candidate",
+          "rect": {
+            "x": 0,
+            "y": 100,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "candidate-below",
+          "identifier": "candidate",
+          "rect": {
+            "x": 0,
+            "y": 160,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "anchor",
+          "identifier": "anchor",
+          "rect": {
+            "x": 0,
+            "y": 100,
+            "width": 40,
+            "height": 30
+          }
+        }
+      ],
+      "matches": ["candidate-above"],
+      "selected": "candidate-above"
+    },
+    {
+      "id": "position-left-right-strict-top-left",
+      "operation": "leftOf/rightOf use strict candidate-vs-anchor bounds.x",
+      "selector": {
+        "id": "candidate",
+        "leftOf": {
+          "id": "anchor"
+        }
+      },
+      "nodes": [
+        {
+          "key": "left",
+          "identifier": "candidate",
+          "rect": {
+            "x": 20,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "equal",
+          "identifier": "candidate",
+          "rect": {
+            "x": 100,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "right",
+          "identifier": "candidate",
+          "rect": {
+            "x": 180,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "anchor",
+          "identifier": "anchor",
+          "rect": {
+            "x": 100,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        }
+      ],
+      "matches": ["left"],
+      "selected": "left"
+    },
+    {
+      "id": "position-right-strict-top-left",
+      "operation": "intersect(id=candidate, rightOf(id=anchor))",
+      "selector": {
+        "id": "candidate",
+        "rightOf": {
+          "id": "anchor"
+        }
+      },
+      "nodes": [
+        {
+          "key": "left",
+          "identifier": "candidate",
+          "rect": {
+            "x": 20,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "equal",
+          "identifier": "candidate",
+          "rect": {
+            "x": 100,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "right",
+          "identifier": "candidate",
+          "rect": {
+            "x": 180,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "anchor",
+          "identifier": "anchor",
+          "rect": {
+            "x": 100,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        }
+      ],
+      "matches": ["right"],
+      "selected": "right"
+    },
+    {
+      "id": "position-multiple-anchors-distance-intermediate",
+      "operation": "intersect(id=candidate, below(id=anchor)); relativeTo pair order is intermediate",
+      "selector": {
+        "id": "candidate",
+        "below": {
+          "id": "anchor"
+        }
+      },
+      "nodes": [
+        {
+          "key": "far-candidate",
+          "identifier": "candidate",
+          "rect": {
+            "x": 300,
+            "y": 240,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "near-candidate",
+          "identifier": "candidate",
+          "rect": {
+            "x": 40,
+            "y": 140,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "near-anchor",
+          "identifier": "anchor",
+          "rect": {
+            "x": 40,
+            "y": 40,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "far-anchor",
+          "identifier": "anchor",
+          "rect": {
+            "x": 300,
+            "y": 40,
+            "width": 40,
+            "height": 30
+          }
+        }
+      ],
+      "matches": ["far-candidate", "near-candidate"],
+      "selected": "far-candidate",
+      "intermediateRelation": "below",
+      "intermediate": ["near-candidate", "far-candidate", "near-candidate", "far-candidate"]
+    },
+    {
+      "id": "position-unusable-bounds",
+      "operation": "intersect(id=candidate, below(id=anchor)) excludes missing bounds",
+      "selector": {
+        "id": "candidate",
+        "below": {
+          "id": "anchor"
+        }
+      },
+      "nodes": [
+        {
+          "key": "candidate-missing",
+          "identifier": "candidate"
+        },
+        {
+          "key": "candidate-valid",
+          "identifier": "candidate",
+          "rect": {
+            "x": 0,
+            "y": 200,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "anchor-missing",
+          "identifier": "anchor"
+        },
+        {
+          "key": "anchor-valid",
+          "identifier": "anchor",
+          "rect": {
+            "x": 0,
+            "y": 100,
+            "width": 40,
+            "height": 30
+          }
+        }
+      ],
+      "matches": ["candidate-valid"],
+      "selected": "candidate-valid"
+    },
+    {
+      "id": "position-odd-center-integer-distance",
+      "operation": "relativeTo uses Bounds.center integer division and Point.distance Float",
+      "selector": {
+        "id": "candidate",
+        "below": {
+          "id": "anchor"
+        }
+      },
+      "nodes": [
+        {
+          "key": "candidate-odd",
+          "identifier": "candidate",
+          "rect": {
+            "x": 1,
+            "y": 1,
+            "width": 1,
+            "height": 1
+          }
+        },
+        {
+          "key": "candidate-even",
+          "identifier": "candidate",
+          "rect": {
+            "x": 0,
+            "y": 2,
+            "width": 0,
+            "height": 0
+          }
+        },
+        {
+          "key": "anchor",
+          "identifier": "anchor",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          }
+        }
+      ],
+      "matches": ["candidate-odd", "candidate-even"],
+      "selected": "candidate-odd",
+      "intermediateRelation": "below",
+      "intermediate": ["candidate-odd", "candidate-even"]
+    },
+    {
+      "id": "position-zero-size-finite-bounds",
+      "operation": "intersect(id=candidate, below(id=anchor)) keeps zero-sized finite bounds",
+      "selector": {
+        "id": "candidate",
+        "below": {
+          "id": "anchor"
+        }
+      },
+      "nodes": [
+        {
+          "key": "candidate-positive",
+          "identifier": "candidate",
+          "rect": {
+            "x": 20,
+            "y": 180,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "candidate-zero",
+          "identifier": "candidate",
+          "rect": {
+            "x": 10,
+            "y": 200,
+            "width": 0,
+            "height": 0
+          }
+        },
+        {
+          "key": "anchor-zero",
+          "identifier": "anchor",
+          "rect": {
+            "x": 10,
+            "y": 100,
+            "width": 0,
+            "height": 0
+          }
+        }
+      ],
+      "matches": ["candidate-positive", "candidate-zero"],
+      "selected": "candidate-positive"
+    },
+    {
+      "id": "position-composed-intersection-index",
+      "operation": "compose(intersect(id=candidate, below(id=lower), above(id=upper)), index=0)",
+      "selector": {
+        "id": "candidate",
+        "index": 0,
+        "below": {
+          "id": "upper"
+        },
+        "above": {
+          "id": "lower"
+        }
+      },
+      "nodes": [
+        {
+          "key": "candidate-low",
+          "identifier": "candidate",
+          "rect": {
+            "x": 0,
+            "y": 200,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "candidate-high",
+          "identifier": "candidate",
+          "rect": {
+            "x": 100,
+            "y": 120,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "lower",
+          "identifier": "lower",
+          "rect": {
+            "x": 0,
+            "y": 300,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "upper",
+          "identifier": "upper",
+          "rect": {
+            "x": 0,
+            "y": 80,
+            "width": 40,
+            "height": 30
+          }
+        }
+      ],
+      "matches": ["candidate-low", "candidate-high"],
+      "selected": "candidate-high"
+    },
+    {
+      "id": "nested-tree-position-relation",
+      "operation": "intersect(id=card, containsChild(below(id=caption)))",
+      "selector": {
+        "id": "card",
+        "containsChild": {
+          "id": "field",
+          "below": {
+            "id": "caption"
+          }
+        }
+      },
+      "nodes": [
+        {
+          "key": "card",
+          "identifier": "card",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "caption",
+          "parentKey": "card",
+          "identifier": "caption",
+          "rect": {
+            "x": 20,
+            "y": 40,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "field",
+          "parentKey": "card",
+          "identifier": "field",
+          "rect": {
+            "x": 20,
+            "y": 120,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "bad-card",
+          "identifier": "card",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "bad-field",
+          "parentKey": "bad-card",
+          "identifier": "field",
+          "rect": {
+            "x": 20,
+            "y": 20,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "bad-caption",
+          "parentKey": "bad-card",
+          "identifier": "caption",
+          "rect": {
+            "x": 20,
+            "y": 80,
+            "width": 40,
+            "height": 30
+          }
+        }
+      ],
+      "matches": ["card"],
+      "selected": "card"
     }
   ],
-  "contentHash": "ff8993696db8dee9ff9769e44c2b7be3f701951dd2aaa535303d6f11c7d9afa6"
+  "contentHash": "6c2fdcdab374ca1ca26d2d7932adff911561ad2c8f9daa2f84eabfe9b0643638"
 }

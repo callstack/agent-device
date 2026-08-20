@@ -7,6 +7,10 @@ export const MAESTRO_BASE_SELECTOR_KEYS = [
   'selected',
   'index',
   'childOf',
+  'below',
+  'above',
+  'leftOf',
+  'rightOf',
   'containsChild',
   'containsDescendants',
 ] as const;
