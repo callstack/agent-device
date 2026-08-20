@@ -53,6 +53,7 @@ const LOST_RESPONSE_MUTATION_ROWS = [
     request: { command: 'type', text: 'hello', textEntryMode: 'replace' },
   },
 ] as const;
+const REQUIRED_LOST_RESPONSE_ACCEPTANCE_COMMANDS = ['press', 'fill'] as const;
 
 afterEach(async () => {
   await server?.close();
@@ -75,6 +76,13 @@ function seedSession(port: number): RunnerSession {
   ensureRunnerSessionMock.mockResolvedValue(session);
   return session;
 }
+
+test('acceptance matrix declares both lost-response mutation commands', () => {
+  assert.deepEqual(
+    LOST_RESPONSE_MUTATION_ROWS.map((row) => row.acceptanceCommand).sort(),
+    [...REQUIRED_LOST_RESPONSE_ACCEPTANCE_COMMANDS].sort(),
+  );
+});
 
 test.each(LOST_RESPONSE_MUTATION_ROWS)(
   'acceptance row: lost-response-after-mutation for $acceptanceCommand does not replay the mutation',

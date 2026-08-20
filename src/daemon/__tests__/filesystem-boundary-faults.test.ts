@@ -30,6 +30,23 @@ type FaultInjection = { wasInjected: () => boolean };
 
 const FILESYSTEM_ERRNOS: readonly FilesystemErrno[] = ['EIO', 'ENOSPC', 'EMFILE'];
 const FAULT_POINTS: readonly FaultPoint[] = ['write', 'rename'];
+const REQUIRED_DAEMON_MATRIX_MODULES = [
+  'durable-capture-resource-store/screen-recording',
+  'durable-capture-resource-store/app-log',
+  'device-claims',
+  'session-script-writer',
+  'daemon-shutdown-report',
+  'session-store',
+] as const;
+const DURABLE_RESOURCE_CONFIGS = [
+  {
+    resourceKind: 'screen-recording',
+    fileName: 'screen-recording.resource.json',
+    displayName: 'Screen recording',
+  },
+  { resourceKind: 'app-log', fileName: 'app-log.resource.json', displayName: 'App-log' },
+] as const;
+const registeredDaemonMatrixRows: string[] = [];
 
 type BoundaryFixture = {
   targetPath: string;
@@ -44,25 +61,23 @@ afterEach(() => {
   delete process.env.AGENT_DEVICE_CLAIMS_DIR;
 });
 
-registerFilesystemMatrix('durable-capture-resource-store', (root) => {
-  const store = createDurableCaptureResourceStore({
-    resourceKind: 'screen-recording',
-    fileName: 'screen-recording.resource.json',
-    displayName: 'Screen recording',
-  });
-  const targetPath = store.resolvePath(path.join(root, 'sessions', 'default'));
+for (const config of DURABLE_RESOURCE_CONFIGS) {
+  registerFilesystemMatrix(`durable-capture-resource-store/${config.resourceKind}`, (root) => {
+    const store = createDurableCaptureResourceStore(config);
+    const targetPath = store.resolvePath(path.join(root, 'sessions', 'default'));
 
-  return {
-    targetPath,
-    // The durable store opens the temporary path and writes through its file
-    // descriptor, so the write-side fault is identified by the descriptor.
-    // This fixture performs no other writes after the fault is installed.
-    matchesPublishPath: (value) =>
-      typeof value === 'number' || matchesTargetOrTemporary(value, targetPath),
-    run: async () => store.write(targetPath, resourceEnvelope('filesystem-fault')),
-    expected: 'throw',
-  };
-});
+    return {
+      targetPath,
+      // The durable store opens the temporary path and writes through its file
+      // descriptor, so the write-side fault is identified by the descriptor.
+      matchesPublishPath: (value) =>
+        typeof value === 'number' || matchesTargetOrTemporary(value, targetPath),
+      run: async () =>
+        store.write(targetPath, resourceEnvelope(config.resourceKind, 'filesystem-fault')),
+      expected: 'throw',
+    };
+  });
+}
 
 registerFilesystemMatrix('device-claims', (root) => {
   const device: DeviceInfo = {
@@ -153,14 +168,26 @@ registerFilesystemMatrix('session-store', (root) => {
   };
 });
 
+test('filesystem errno matrix declares every scoped daemon row', () => {
+  const expectedRows = REQUIRED_DAEMON_MATRIX_MODULES.flatMap((moduleName) =>
+    FAULT_POINTS.flatMap((faultPoint) =>
+      FILESYSTEM_ERRNOS.map((errno) => `${moduleName}:${faultPoint}:${errno}`),
+    ),
+  );
+  assert.deepEqual([...registeredDaemonMatrixRows].sort(), expectedRows.sort());
+});
+
 function registerFilesystemMatrix(
   moduleName: string,
   createFixture: (root: string) => BoundaryFixture,
 ): void {
   for (const faultPoint of FAULT_POINTS) {
     for (const errno of FILESYSTEM_ERRNOS) {
+      registeredDaemonMatrixRows.push(`${moduleName}:${faultPoint}:${errno}`);
       test(`${moduleName} ${faultPoint} ${errno} leaves no unpublished temporary file`, async () => {
-        const root = mkdtempForTestSync(`agent-device-${moduleName}-boundary-`);
+        const root = mkdtempForTestSync(
+          `agent-device-${moduleName.replaceAll('/', '-')}-boundary-`,
+        );
         const fixture = createFixture(root);
         const fault = installFilesystemFault(faultPoint, errno, fixture.matchesPublishPath);
 
@@ -199,6 +226,7 @@ function installFilesystemFault(
     vi.spyOn(fs, 'writeFileSync').mockImplementation((...args) => {
       if (matchesPublishPath(args[0])) {
         injected = true;
+        Reflect.apply(originalWriteFileSync, fs, args);
         throw failure;
       }
       return Reflect.apply(originalWriteFileSync, fs, args);
@@ -251,9 +279,12 @@ function listTemporaryFiles(root: string): string[] {
   }
 }
 
-function resourceEnvelope(sessionId: string) {
+function resourceEnvelope<ResourceKind extends 'screen-recording' | 'app-log'>(
+  resourceKind: ResourceKind,
+  sessionId: string,
+) {
   return createDurableResourceEnvelope({
-    resourceKind: 'screen-recording',
+    resourceKind,
     sessionId,
     device: { id: 'emulator-5554', family: 'android', kind: 'emulator' },
     owner: localRuntimeOwner('android'),

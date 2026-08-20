@@ -12,9 +12,9 @@ type FaultInjection = { wasInjected: () => boolean };
 
 const FILESYSTEM_ERRNOS: readonly FilesystemErrno[] = ['EIO', 'ENOSPC', 'EMFILE'];
 const FAULT_POINTS: readonly FaultPoint[] = ['write', 'rename'];
+const REQUIRED_RUNNER_LEASE_MODULES = ['runner-lease'] as const;
 const DEVICE_ID = 'filesystem-fault-runner';
-
-let leaseRoot: string;
+const registeredRunnerLeaseRows: string[] = [];
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -23,8 +23,9 @@ afterEach(() => {
 
 for (const faultPoint of FAULT_POINTS) {
   for (const errno of FILESYSTEM_ERRNOS) {
+    registeredRunnerLeaseRows.push(`runner-lease:${faultPoint}:${errno}`);
     test(`runner lease ${faultPoint} ${errno} leaves no unpublished temporary file`, () => {
-      leaseRoot = mkdtempForTestSync(`agent-device-runner-lease-boundary-`);
+      const leaseRoot = mkdtempForTestSync(`agent-device-runner-lease-boundary-`);
       process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR = leaseRoot;
       const targetPath = path.join(leaseRoot, `${DEVICE_ID}.json`);
       const lease = makeRunnerLease({
@@ -49,6 +50,15 @@ for (const faultPoint of FAULT_POINTS) {
   }
 }
 
+test('filesystem errno matrix declares every runner-lease row', () => {
+  const expectedRows = REQUIRED_RUNNER_LEASE_MODULES.flatMap((moduleName) =>
+    FAULT_POINTS.flatMap((faultPoint) =>
+      FILESYSTEM_ERRNOS.map((errno) => `${moduleName}:${faultPoint}:${errno}`),
+    ),
+  );
+  assert.deepEqual([...registeredRunnerLeaseRows].sort(), expectedRows.sort());
+});
+
 function installFilesystemFault(
   faultPoint: FaultPoint,
   errno: FilesystemErrno,
@@ -72,6 +82,7 @@ function installFilesystemFault(
     vi.spyOn(fs, 'writeFileSync').mockImplementation((...args) => {
       if (matchesTarget(args[0])) {
         injected = true;
+        Reflect.apply(originalWriteFileSync, fs, args);
         throw failure;
       }
       return Reflect.apply(originalWriteFileSync, fs, args);

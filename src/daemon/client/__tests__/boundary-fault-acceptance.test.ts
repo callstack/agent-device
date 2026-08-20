@@ -9,10 +9,18 @@ import type { DaemonRequest } from '../../types.ts';
 import { sendRequest } from '../daemon-client-transport.ts';
 
 const PROCESS_DEATH_COMMANDS = ['open', 'close'] as const;
+const REQUIRED_PROCESS_DEATH_COMMANDS = ['open', 'close'] as const;
+
+test('acceptance matrix declares both process-death lifecycle commands', () => {
+  assert.deepEqual([...PROCESS_DEATH_COMMANDS].sort(), [...REQUIRED_PROCESS_DEATH_COMMANDS].sort());
+});
 
 test.each(PROCESS_DEATH_COMMANDS)(
   'acceptance row: process death after %s dispatch is a bounded, non-replayed request',
   async (command) => {
+    // This acceptance row deliberately stops at the transport boundary: a
+    // dead daemon is observed as a closed response socket. Lifecycle teardown
+    // and process-tree cleanup belong to the deferred full fault matrix.
     const endpoint = await startEndpointThatDiesAfterRequest();
     const baseDir = mkdtempForTestSync(`agent-device-process-death-${command}-`);
     const statePaths = daemonPaths(baseDir);
@@ -31,6 +39,8 @@ test.each(PROCESS_DEATH_COMMANDS)(
           assert.ok(error instanceof AppError);
           assert.equal(error.code, 'COMMAND_FAILED');
           assert.match(error.message, /communicate with daemon/i);
+          assert.equal(error.details?.requestId, request.meta?.requestId);
+          assert.match(String(error.details?.hint), /Retry command/i);
           return true;
         },
       );
