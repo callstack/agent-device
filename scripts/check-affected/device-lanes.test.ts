@@ -56,6 +56,10 @@ test('an iOS replay script and the iOS smoke files own the iOS lanes', () => {
   }
 });
 
+test('the macOS coverage gate owns only the macOS replay lane', () => {
+  assert.deepEqual(lanes('test/integration/smoke-macos-coverage.test.ts'), ['replay-macos']);
+});
+
 test('shared runtime surface owns every device lane', () => {
   for (const file of [
     'src/daemon/handlers/session.ts',
