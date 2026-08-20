@@ -41,6 +41,19 @@ vi.mock('../runner/runner-session.ts', async (importOriginal) => {
 
 const { runAppleRunnerCommand } = await import('../runner/runner-client.ts');
 
+const LOST_RESPONSE_MUTATION_ROWS = [
+  {
+    acceptanceCommand: 'press',
+    runnerCommand: 'tap',
+    request: { command: 'tap', x: 5, y: 5 },
+  },
+  {
+    acceptanceCommand: 'fill',
+    runnerCommand: 'type',
+    request: { command: 'type', text: 'hello', textEntryMode: 'replace' },
+  },
+] as const;
+
 afterEach(async () => {
   await server?.close();
   server = undefined;
@@ -63,39 +76,47 @@ function seedSession(port: number): RunnerSession {
   return session;
 }
 
-test('a lost transport response is recovered through the production command path', async () => {
-  // 1st request: the tap, answered by dropping the connection mid-response
-  // (the real "lost response" shape). 2nd: the status probe recovery issues.
-  server = await startFakeRunnerServer({
-    // The tap's response is dropped mid-flight (the real "lost response"
-    // shape); the status probe recovery issues then returns the retained one.
-    tap: [{ kind: 'hangUp' }],
-    status: [
-      {
-        kind: 'ok',
-        data: {
-          lifecycleState: 'completed',
-          lifecycleResponseJson: JSON.stringify({ ok: true, data: { recovered: true } }),
+test.each(LOST_RESPONSE_MUTATION_ROWS)(
+  'acceptance row: lost-response-after-mutation for $acceptanceCommand does not replay the mutation',
+  async ({ runnerCommand, request }) => {
+    // 1st request: the mutation, answered by dropping the connection
+    // mid-response (the real "lost response" shape). 2nd: the status probe.
+    server = await startFakeRunnerServer({
+      // The mutation's response is dropped mid-flight (the real "lost
+      // response" shape); the status probe then returns the retained one.
+      [runnerCommand]: [{ kind: 'hangUp' }],
+      status: [
+        {
+          kind: 'ok',
+          data: {
+            lifecycleState: 'completed',
+            lifecycleResponseJson: JSON.stringify({ ok: true, data: { recovered: true } }),
+          },
         },
-      },
-    ],
-  });
-  seedSession(server.port);
+      ],
+    });
+    seedSession(server.port);
 
-  const result = await runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 5, y: 5 });
+    const result = await runAppleRunnerCommand(IOS_SIMULATOR, { ...request });
 
-  // The recovered payload proves the whole chain ran: classification said
-  // retryable, the callsite invoked recovery, recovery probed status, and the
-  // retained response replaced the lost one.
-  assert.deepEqual(result, { recovered: true });
-  const tap = server.requests.find((request) => request.command === 'tap');
-  const status = server.requests.find((request) => request.command === 'status');
-  assert.ok(tap, 'the tap reached the runner');
-  assert.ok(status, 'recovery probed status');
-  // The probe must reference the exact command id the send assigned.
-  assert.equal(typeof tap.body.commandId, 'string');
-  assert.equal(status.body.statusCommandId, tap.body.commandId);
-});
+    // The recovered payload proves the whole chain ran: classification said
+    // retryable, the callsite invoked recovery, recovery probed status, and
+    // the retained response replaced the lost one.
+    assert.deepEqual(result, { recovered: true });
+    const mutation = server.requests.find((entry) => entry.command === runnerCommand);
+    const status = server.requests.find((entry) => entry.command === 'status');
+    assert.ok(mutation, `${runnerCommand} reached the runner`);
+    assert.ok(status, 'recovery probed status');
+    // The probe must reference the exact command id the send assigned.
+    assert.equal(typeof mutation.body.commandId, 'string');
+    assert.equal(status.body.statusCommandId, mutation.body.commandId);
+    assert.equal(
+      server.requests.filter((entry) => entry.command === runnerCommand).length,
+      1,
+      `${runnerCommand} must not be silently replayed after the response is lost`,
+    );
+  },
+);
 
 test('a runner that reports the command failed surfaces that failure, not the transport error', async () => {
   server = await startFakeRunnerServer({

@@ -371,8 +371,14 @@ function writeClaim(claim: DeviceClaim): void {
   const claimPath = resolveDeviceClaimPath(claim.deviceKey);
   fs.mkdirSync(path.dirname(claimPath), { recursive: true, mode: 0o700 });
   const tmpPath = `${claimPath}.${process.pid}.${Date.now()}.tmp`;
-  fs.writeFileSync(tmpPath, `${JSON.stringify(claim)}\n`, { encoding: 'utf8', mode: 0o600 });
-  fs.renameSync(tmpPath, claimPath);
+  try {
+    fs.writeFileSync(tmpPath, `${JSON.stringify(claim)}\n`, { encoding: 'utf8', mode: 0o600 });
+    fs.renameSync(tmpPath, claimPath);
+  } finally {
+    try {
+      fs.rmSync(tmpPath, { force: true });
+    } catch {}
+  }
 }
 
 async function withDeviceClaimLock<T>(deviceKey: string, task: () => Promise<T>): Promise<T> {

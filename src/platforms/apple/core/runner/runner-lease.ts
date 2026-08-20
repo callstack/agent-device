@@ -310,8 +310,14 @@ export function writeRunnerLease(lease: RunnerLease): void {
   const leasePath = resolveRunnerLeasePath(lease.deviceId);
   fs.mkdirSync(path.dirname(leasePath), { recursive: true });
   const tmpPath = `${leasePath}.${process.pid}.${Date.now()}.tmp`;
-  fs.writeFileSync(tmpPath, JSON.stringify(lease, null, 2), 'utf8');
-  fs.renameSync(tmpPath, leasePath);
+  try {
+    fs.writeFileSync(tmpPath, JSON.stringify(lease, null, 2), 'utf8');
+    fs.renameSync(tmpPath, leasePath);
+  } finally {
+    try {
+      fs.rmSync(tmpPath, { force: true });
+    } catch {}
+  }
 }
 
 function removeRunnerLease(params: {
