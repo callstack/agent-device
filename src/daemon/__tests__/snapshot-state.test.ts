@@ -378,16 +378,13 @@ test('buildSnapshotState leaves raw snapshot hittability untouched', () => {
   ).toBeUndefined();
 });
 
-test('buildSnapshotState returns empty nodes when scoped snapshot has no label match', () => {
+test('buildSnapshotState returns empty nodes when a post-wire scoped snapshot has no match', () => {
   const nodes = [
     { index: 0, depth: 0, type: 'Window', label: 'Root' },
     { index: 1, depth: 1, type: 'Button', label: 'Search' },
   ];
 
-  const state = buildSnapshotState(
-    { nodes, backend: 'xctest' },
-    { snapshotScope: 'zzzz-no-match-token' },
-  );
+  const state = buildSnapshotState({ nodes }, { snapshotScope: 'zzzz-no-match-token' });
 
   expect(state.nodes).toEqual([]);
 });
