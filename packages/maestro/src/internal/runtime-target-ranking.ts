@@ -49,14 +49,6 @@ export function matchMaestroCandidates(
   return { matches, parentMatched };
 }
 
-export function matchesMaestroSnapshotSelector(
-  snapshot: SnapshotState,
-  node: SnapshotNode,
-  selector: MaestroSelector,
-): boolean {
-  return selectMaestroSnapshotMatches(snapshot, selector).includes(node);
-}
-
 export function selectMaestroSnapshotMatches(
   snapshot: SnapshotState,
   selector: MaestroSelector,
