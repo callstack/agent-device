@@ -26,6 +26,12 @@ const EXPECTATION_SCORERS = {
   opensAndCloses,
 };
 
+// The scorer registry itself, so a falsification-fixture completeness gate
+// (scripts/__tests__/help-conformance-expectation-falsification.test.ts) can
+// enumerate every named expectation instead of hand-maintaining a second list
+// that silently drifts from EXPECTATION_SCORERS.
+export const KNOWN_EXPECTATIONS = Object.keys(EXPECTATION_SCORERS);
+
 export function assertCaseDefinitions(cases) {
   assertUniqueIds(
     cases.map(({ id }) => id),

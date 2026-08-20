@@ -42,7 +42,8 @@
     "scripts/maestro-conformance/corpus/**",
     "apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests.xctestplan",
     "scripts/write-xcuitest-cache-metadata.mjs",
-    "scripts/help-conformance-sample-outputs.d.mts"
+    "scripts/help-conformance-sample-outputs.d.mts",
+    "scripts/help-conformance-runner-output.d.mts"
   ],
   "ignoreDependencies": [
     "@theme",

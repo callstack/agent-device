@@ -11,7 +11,7 @@ import {
 } from './help-conformance-case-checks.mjs';
 import { CASES } from './help-conformance-cases.mjs';
 import { validatePlanCommands } from './help-conformance-plan-validator.mjs';
-import { detectRunnerError, extractCommands } from './help-conformance-runner-output.mjs';
+import { classifyRunnerOutput } from './help-conformance-runner-output.mjs';
 import { summarizeResults } from './help-conformance-summary.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -256,18 +256,30 @@ function printResult(result, dryRun, repeat) {
   if (dryRun) return;
   const trial = repeat > 1 ? ` trial=${result.trial}/${repeat}` : '';
   console.log(
-    `${result.passed ? 'PASS' : 'FAIL'} ${result.runner} ${result.caseId}${trial} ${result.score}/${result.total}`,
+    `${resultStatus(result)} ${result.runner} ${result.caseId}${trial} ${resultDetail(result)}`,
   );
+}
+
+function resultStatus(result) {
+  if (result.runnerError) return 'ERROR';
+  return result.passed ? 'PASS' : 'FAIL';
+}
+
+function resultDetail(result) {
+  return result.runnerError
+    ? `${result.runnerErrorReason}: ${result.runnerError}`
+    : `${result.score}/${result.total}`;
 }
 
 function printSummary(summary) {
   console.log('Aggregate stability:');
   for (const group of summary) {
-    const percent = Math.round(group.passRate * 100);
+    const rate =
+      group.passRate === null
+        ? 'N/A'
+        : `${group.passed}/${group.evaluatedTrials} (${Math.round(group.passRate * 100)}%)`;
     const details = summaryDetails(group);
-    console.log(
-      `  ${group.runner} ${group.caseId}: ${group.passed}/${group.evaluatedTrials} (${percent}%)${details ? `; ${details}` : ''}`,
-    );
+    console.log(`  ${group.runner} ${group.caseId}: ${rate}${details ? `; ${details}` : ''}`);
   }
 }
 
@@ -350,40 +362,59 @@ function buildPrompt(testCase, docs) {
   ].join('\n');
 }
 
+// Only a 'success' RunnerOutcome ever reaches validatePlanCommands/
+// scoreExpectations: a runner-error result carries runnerError/
+// runnerErrorReason and nothing else, so infrastructure noise (an empty
+// payload, a codex timeout, a Claude is_error envelope) can never masquerade
+// as a model's failed command plan in the report or the aggregate summary.
 async function runCase(runner, testCase, prompt, outDir, trial, repeat) {
-  const { raw, runnerError } = await runCaseRawOutput(runner, prompt, outDir);
+  const outcome = await runOutcome(runner, prompt, outDir);
   const trialSuffix = repeat > 1 ? `-trial-${trial}` : '';
   const outputPath = join(outDir, `${safeName(runner)}-${testCase.id}${trialSuffix}.txt`);
-  await writeFile(outputPath, raw);
-  const commands = extractCommands(raw);
-  const commandValidation = await validatePlanCommands(commands, {
+  await writeFile(outputPath, outcome.raw);
+  if (outcome.kind === 'runner-error') {
+    return {
+      runner,
+      caseId: testCase.id,
+      trial,
+      passed: false,
+      runnerError: outcome.message,
+      runnerErrorReason: outcome.reason,
+      outputPath,
+    };
+  }
+  const commandValidation = await validatePlanCommands(outcome.commands, {
     allowedExternalCommands: testCase.allowedExternalCommands,
   });
-  const checks = scoreExpectations(testCase, commands, raw, commandValidation);
+  const checks = scoreExpectations(testCase, outcome.commands, outcome.raw, commandValidation);
   const score = countPassingChecks(checks);
   const total = countChecks(testCase);
   return {
     runner,
     caseId: testCase.id,
     trial,
-    commands,
+    commands: outcome.commands,
     commandValidation,
     checks,
     score,
     total,
-    passed: runnerError === undefined && score === total,
-    ...(runnerError ? { runnerError } : {}),
+    passed: score === total,
     outputPath,
   };
 }
 
-async function runCaseRawOutput(runner, prompt, outDir) {
+async function runOutcome(runner, prompt, outDir) {
   const [kind, model] = runner.split(':');
   try {
     const raw = await runModel(kind, model, prompt, outDir);
-    return { raw, runnerError: detectRunnerError(raw) };
+    return classifyRunnerOutput(raw);
   } catch (error) {
-    return { raw: errorOutput(error), runnerError: errorMessage(error) };
+    return {
+      kind: 'runner-error',
+      raw: errorOutput(error),
+      message: errorMessage(error),
+      reason: 'process-failure',
+    };
   }
 }
 

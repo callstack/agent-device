@@ -9,7 +9,8 @@ import { scoreExpectations } from '../help-conformance-case-checks.mjs';
 import { validateAgentDeviceCommand } from '../help-conformance-command-validator.ts';
 import { opensAndCloses, usesValidationPrep } from '../help-conformance-expectations.mjs';
 import { validatePlanCommands } from '../help-conformance-plan-validator.mjs';
-import { detectRunnerError, extractCommands } from '../help-conformance-runner-output.mjs';
+import { classifyRunnerOutput, extractCommands } from '../help-conformance-runner-output.mjs';
+import type { RunnerOutcome } from '../help-conformance-runner-output.mjs';
 import { summarizeResults } from '../help-conformance-summary.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -324,35 +325,52 @@ test('validation prep accepts intervening checks and the Android build path in o
   );
 });
 
-test('runner output distinguishes model commands from infrastructure errors', () => {
+test('runner output classifies model commands as success and infrastructure noise as runner-error', () => {
   const successEnvelope = JSON.stringify({
     is_error: false,
     result: JSON.stringify({ commands: ['agent-device snapshot -i'] }),
   });
   assert.deepEqual(extractCommands(successEnvelope), ['agent-device snapshot -i']);
-  assert.equal(detectRunnerError(successEnvelope), undefined);
+  assert.deepEqual(classifyRunnerOutput(successEnvelope), {
+    kind: 'success',
+    raw: successEnvelope,
+    commands: ['agent-device snapshot -i'],
+  });
 
   const claudeError = JSON.stringify({
     is_error: true,
     result: 'API Error: Unable to connect to API',
   });
-  assert.equal(detectRunnerError(claudeError), 'API Error: Unable to connect to API');
+  assert.deepEqual(classifyRunnerOutput(claudeError), {
+    kind: 'runner-error',
+    raw: claudeError,
+    message: 'API Error: Unable to connect to API',
+    reason: 'error-envelope',
+  });
   assert.deepEqual(extractCommands(claudeError), []);
 
-  assert.equal(
-    detectRunnerError(JSON.stringify({ type: 'error', message: 'rate limit exceeded' })),
-    'rate limit exceeded',
-  );
-  assert.equal(
-    detectRunnerError(
-      JSON.stringify({
-        status: 'failed',
-        commands: ['agent-device snapshot -i'],
-      }),
-    ),
-    undefined,
-  );
-  assert.equal(detectRunnerError(''), 'Runner returned empty output.');
+  const rateLimited = JSON.stringify({ type: 'error', message: 'rate limit exceeded' });
+  const rateLimitedOutcome: RunnerOutcome = classifyRunnerOutput(rateLimited);
+  if (rateLimitedOutcome.kind !== 'runner-error') {
+    throw new Error('expected a runner-error outcome');
+  }
+  assert.equal(rateLimitedOutcome.reason, 'error-envelope');
+  assert.equal(rateLimitedOutcome.message, 'rate limit exceeded');
+
+  // status: 'failed' alone does not shadow a real commands payload.
+  const statusFailedWithCommands = JSON.stringify({
+    status: 'failed',
+    commands: ['agent-device snapshot -i'],
+  });
+  assert.equal(classifyRunnerOutput(statusFailedWithCommands).kind, 'success');
+
+  const empty = classifyRunnerOutput('');
+  assert.deepEqual(empty, {
+    kind: 'runner-error',
+    raw: '',
+    message: 'Runner returned empty output.',
+    reason: 'empty-output',
+  });
 });
 
 test('plan validator rejects shell projection and non-permitted executables', async () => {
@@ -601,20 +619,16 @@ test('aggregate summary exposes stability and failure taxonomy per runner x case
       checks: { validPlanCommands: true, usesSettle: true },
       commandValidation: [],
     },
+    // A runner-error result (see runCase in help-conformance-bench.mjs)
+    // never carries checks/commandValidation alongside runnerError: an
+    // infrastructure failure must not also read as a model validation
+    // failure in the aggregate taxonomy.
     {
       runner: 'claude:haiku',
       caseId: 'metamorphic',
       passed: false,
-      checks: { validPlanCommands: false, usesSettle: true },
-      commandValidation: [
-        {
-          issues: [
-            { kind: 'pseudo-ref', error: 'bad ref' },
-            { kind: 'shell-projection', error: 'bad shell' },
-          ],
-        },
-      ],
       runnerError: 'failed',
+      runnerErrorReason: 'process-failure',
     },
     {
       runner: 'claude:haiku',
@@ -639,6 +653,38 @@ test('aggregate summary exposes stability and failure taxonomy per runner x case
       validationIssues: { 'pseudo-ref': 1 },
       runnerErrors: 1,
       passRate: 0.5,
+    },
+  ]);
+});
+
+test('a group with only runner-error trials reports passRate: null, not 0/0', () => {
+  const summary = summarizeResults([
+    {
+      runner: 'codex:gpt',
+      caseId: 'metamorphic',
+      passed: false,
+      runnerError: 'timed out',
+      runnerErrorReason: 'process-failure',
+    },
+    {
+      runner: 'codex:gpt',
+      caseId: 'metamorphic',
+      passed: false,
+      runnerError: 'Runner returned empty output.',
+      runnerErrorReason: 'empty-output',
+    },
+  ]);
+  assert.deepEqual(summary, [
+    {
+      runner: 'codex:gpt',
+      caseId: 'metamorphic',
+      trials: 2,
+      evaluatedTrials: 0,
+      passed: 0,
+      failedChecks: {},
+      validationIssues: {},
+      runnerErrors: 2,
+      passRate: null,
     },
   ]);
 });

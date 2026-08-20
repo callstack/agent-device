@@ -23,9 +23,12 @@ export function summarizeResults(results) {
     }
     groups.set(key, group);
   }
+  // A group with zero evaluated trials (every trial was a runner error) has
+  // no pass rate to report — 0 would silently read as "0% correct" instead
+  // of "the model was never actually graded".
   return [...groups.values()].map((group) => ({
     ...group,
-    passRate: group.evaluatedTrials === 0 ? 0 : group.passed / group.evaluatedTrials,
+    passRate: group.evaluatedTrials === 0 ? null : group.passed / group.evaluatedTrials,
   }));
 }
 

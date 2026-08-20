@@ -1,3 +1,20 @@
+// Discriminated runner outcome (see the companion .d.mts): a raw-string
+// success/error split let infrastructure noise (an empty codex payload, a
+// Claude is_error envelope) parse as if it were a command plan. Only a
+// 'success' outcome carries `commands`, so a caller cannot accidentally score
+// a runner-error's raw text against the command validator or expectations.
+
+export function classifyRunnerOutput(raw) {
+  if (raw.trim().length === 0) {
+    return runnerError(raw, 'empty-output', 'Runner returned empty output.');
+  }
+  const payload = parseJsonEnvelope(raw);
+  if (isErrorPayload(payload)) {
+    return runnerError(raw, 'error-envelope', errorPayloadMessage(payload));
+  }
+  return { kind: 'success', raw, commands: extractCommands(raw) };
+}
+
 export function extractCommands(raw) {
   const json = parseJsonPayload(raw);
   if (json && Array.isArray(json.commands)) {
@@ -12,11 +29,8 @@ export function extractCommands(raw) {
     );
 }
 
-export function detectRunnerError(raw) {
-  if (raw.trim().length === 0) return 'Runner returned empty output.';
-  const payload = parseJsonEnvelope(raw);
-  if (!isErrorPayload(payload)) return undefined;
-  return errorPayloadMessage(payload);
+function runnerError(raw, reason, message) {
+  return { kind: 'runner-error', raw, message, reason };
 }
 
 function isErrorPayload(payload) {
