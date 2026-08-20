@@ -225,7 +225,9 @@ export function GestureLab() {
     .onBegin(() => {
       panDurationStartRef.current = Date.now();
     })
-    .onFinalize(() => {
+    // `onEnd` only fires after the recognizer reached ACTIVE. `onFinalize` would also run for a
+    // failed or cancelled pan, allowing a long-lived non-gesture to satisfy the duration canary.
+    .onEnd(() => {
       const start = panDurationStartRef.current;
       panDurationStartRef.current = undefined;
       if (start === undefined) return;
