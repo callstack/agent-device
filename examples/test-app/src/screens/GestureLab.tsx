@@ -231,7 +231,9 @@ export function GestureLab() {
       if (start === undefined) return;
       const durationMs = Date.now() - start;
       const bucket =
-        durationMs >= panDurationBucketMs ? `>=${panDurationBucketMs}ms` : `<${panDurationBucketMs}ms`;
+        durationMs >= panDurationBucketMs
+          ? `>=${panDurationBucketMs}ms`
+          : `<${panDurationBucketMs}ms`;
       setPanDurationStatus(bucket);
     });
 
