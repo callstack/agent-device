@@ -83,12 +83,18 @@ press text="Retry" --hold-ms 1500
       { appId: 'com.example.app' },
       [
         'launchApp',
-        { longPressOn: { label: 'Last message' } },
+        { longPressOn: { text: 'Last message' } },
         { longPressOn: { id: 'hold-button' } },
         { longPressOn: { text: 'Retry' } },
       ],
     ]);
     expect(result.warnings).toEqual([
+      {
+        line: 2,
+        action: 'longpress label="Last message" 800',
+        message:
+          'label= selectors export as Maestro text; Maestro text matching is broader than agent-device label-only matching',
+      },
       {
         line: 2,
         action: 'longpress label="Last message" 800',

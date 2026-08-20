@@ -1,6 +1,7 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import { GESTURE_FLING_DURATION_MS } from '@agent-device/contracts/interaction';
 import { AppError } from '@agent-device/kernel/errors';
+import { selectorContainsKey } from '@agent-device/selectors';
 import { formatMaestroPoint } from './export-points.ts';
 import { DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY } from './compatibility-policy.ts';
 import type { MaestroExportCommand, MaestroExportConfig } from './export-types.ts';
@@ -48,6 +49,8 @@ type SwipeGeometry = {
 
 const LONG_PRESS_DURATION_WARNING =
   'long-press duration exports as Maestro longPressOn; Maestro uses its default long-press duration';
+const LABEL_SELECTOR_EXPORT_WARNING =
+  'label= selectors export as Maestro text; Maestro text matching is broader than agent-device label-only matching';
 
 export function exportReplayActionsToMaestro(
   actions: SessionAction[],
@@ -181,7 +184,10 @@ function convertClickAction(
     return {
       kind: 'commands',
       commands: [{ doubleTapOn: tapTarget }],
-      warnings: readIgnoredRepeatedTapOptionWarnings(action, 'doubleTapOn'),
+      warnings: [
+        ...readLabelSelectorWarnings(first),
+        ...readIgnoredRepeatedTapOptionWarnings(action, 'doubleTapOn'),
+      ],
     };
   }
   if (typeof action.flags?.holdMs === 'number') {
@@ -189,13 +195,18 @@ function convertClickAction(
       kind: 'commands',
       commands: [{ longPressOn: tapTarget }],
       warnings: [
+        ...readLabelSelectorWarnings(first),
         formatLongPressDurationWarning(action.flags.holdMs),
         ...readIgnoredRepeatedTapOptionWarnings(action, 'longPressOn'),
       ],
     };
   }
 
-  return { kind: 'commands', commands: [withTapOptions(tapTarget, tapOptions.options)] };
+  return {
+    kind: 'commands',
+    commands: [withTapOptions(tapTarget, tapOptions.options)],
+    warnings: readLabelSelectorWarnings(first),
+  };
 }
 
 function convertLongPressAction(
@@ -210,7 +221,10 @@ function convertLongPressAction(
   return {
     kind: 'commands',
     commands: [{ longPressOn: target }],
-    warnings: readLongPressDuration(action).map(formatLongPressDurationWarning),
+    warnings: [
+      ...readLabelSelectorWarnings(first),
+      ...readLongPressDuration(action).map(formatLongPressDurationWarning),
+    ],
   };
 }
 
@@ -256,6 +270,7 @@ function convertFillAction(
     kind: 'commands',
     commands: [{ tapOn: tapTarget }, { inputText: text }],
     warnings: [
+      ...readLabelSelectorWarnings(target),
       'fill exports as tapOn + inputText; Maestro may append text instead of replacing existing field contents',
     ],
   };
@@ -324,7 +339,12 @@ function convertWaitAction(
         },
       },
     ],
+    warnings: readLabelSelectorWarnings(first),
   };
+}
+
+function readLabelSelectorWarnings(expression: string): string[] {
+  return selectorContainsKey(expression, 'label') ? [LABEL_SELECTOR_EXPORT_WARNING] : [];
 }
 
 function convertFindAction(action: SessionAction): ConvertedAction {

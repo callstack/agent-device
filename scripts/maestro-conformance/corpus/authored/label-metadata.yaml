@@ -1,0 +1,39 @@
+appId: com.example.app
+---
+- tapOn:
+    text: "Login"
+    label: "login tap"
+- tapOn:
+    point: "20,30"
+    label: "coordinate tap"
+- doubleTapOn:
+    text: "Save"
+    label: "save twice"
+- longPressOn:
+    text: "Hold"
+    label: "hold action"
+- assertVisible:
+    text: "Ready"
+    label: "ready assertion"
+- assertNotVisible:
+    text: "Gone"
+    label: "gone assertion"
+- extendedWaitUntil:
+    visible:
+      text: "Loaded"
+    timeout: 1000
+    label: "loaded wait"
+- scrollUntilVisible:
+    element:
+      text: "Item"
+    direction: DOWN
+    timeout: 20000
+    label: "item scroll"
+- swipe:
+    from:
+      text: "Card"
+    direction: LEFT
+    label: "card swipe"
+- inputText:
+    text: "value"
+    label: "field input"

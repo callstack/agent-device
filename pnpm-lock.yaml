@@ -203,6 +203,9 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@agent-device/selectors':
+        specifier: workspace:*
+        version: link:../selectors
       yaml:
         specifier: ^2.9.0
         version: 2.9.0

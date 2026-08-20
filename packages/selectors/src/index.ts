@@ -83,6 +83,7 @@ export {
   resolveReplaySuggestionCandidate,
   selectorFailureHint,
   selectorContainsValue,
+  selectorContainsKey,
   splitSelectorFromArgs,
   validateSelectorExpression,
 };
@@ -114,16 +115,26 @@ export type SelectorProjection = string | Readonly<Record<string, string | boole
  */
 function projectSelectorExpression(
   expression: string,
-  vocabulary: { textKeys: readonly string[]; booleanKeys: readonly string[] },
+  vocabulary: {
+    textKeys: readonly string[];
+    booleanKeys: readonly string[];
+    textAliases?: Readonly<Record<string, string>>;
+  },
 ): SelectorProjection {
   const parsed = tryParseSelectorChain(expression);
   // Not selector-shaped at all: pass plain text through, refuse anything that
   // tried to be a selector and failed.
   if (!parsed) return expression.includes('=') || expression.includes('||') ? null : expression;
   const textKeys = new Set(vocabulary.textKeys);
+  const textAliases = vocabulary.textAliases ?? {};
   return parsed.selectors.length > 1
-    ? readAgreedTextValue(parsed.selectors, textKeys)
-    : projectSelectorTerms(parsed.selectors[0], textKeys, new Set(vocabulary.booleanKeys));
+    ? readAgreedTextValue(parsed.selectors, textKeys, textAliases)
+    : projectSelectorTerms(
+        parsed.selectors[0],
+        textKeys,
+        new Set(vocabulary.booleanKeys),
+        textAliases,
+      );
 }
 
 /**
@@ -134,10 +145,11 @@ function projectSelectorExpression(
 function readAgreedTextValue(
   selectors: readonly Selector[],
   textKeys: ReadonlySet<string>,
+  textAliases: Readonly<Record<string, string>>,
 ): SelectorProjection {
   const values = selectors.map((selector) => {
     const term = selector.terms.length === 1 ? selector.terms[0] : undefined;
-    return term && textKeys.has(term.key) && typeof term.value === 'string'
+    return term && isTextKey(term.key, textKeys, textAliases) && typeof term.value === 'string'
       ? term.value
       : undefined;
   });
@@ -150,16 +162,26 @@ function projectSelectorTerms(
   selector: Selector | undefined,
   textKeys: ReadonlySet<string>,
   booleanKeys: ReadonlySet<string>,
+  textAliases: Readonly<Record<string, string>>,
 ): SelectorProjection {
   if (!selector) return null;
   const result: Record<string, string | boolean> = {};
   let textTerms = 0;
   for (const term of selector.terms) {
-    if (termMatches(term, textKeys, 'string')) textTerms += 1;
+    if (isTextKey(term.key, textKeys, textAliases) && typeof term.value === 'string')
+      textTerms += 1;
     else if (!termMatches(term, booleanKeys, 'boolean')) return null;
-    result[term.key] = term.value;
+    result[textAliases[term.key] ?? term.key] = term.value;
   }
   return textTerms <= 1 && Object.keys(result).length > 0 ? result : null;
+}
+
+function isTextKey(
+  key: string,
+  textKeys: ReadonlySet<string>,
+  textAliases: Readonly<Record<string, string>>,
+): boolean {
+  return textKeys.has(key) || textAliases[key] !== undefined;
 }
 
 function termMatches(
@@ -196,6 +218,14 @@ function selectorContainsValue(expression: string, literal: string): boolean {
         typeof term.value === 'string' &&
         term.value.includes(literal),
     ),
+  );
+}
+
+/** Whether a parsed selector expression contains a term with `key`. */
+function selectorContainsKey(expression: string, key: string): boolean {
+  const parsed = tryParseSelectorChain(expression);
+  return (
+    parsed?.selectors.some((selector) => selector.terms.some((term) => term.key === key)) ?? false
   );
 }
 

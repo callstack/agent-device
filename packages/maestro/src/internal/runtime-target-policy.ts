@@ -13,7 +13,8 @@ export type MaestroPlatform = 'ios' | 'android';
  * Maestro intersects every authored selector field. String values are
  * full-match regular expressions. Text is the visible-text form used by
  * scalar selectors, so it checks label, readable node text, and identifier
- * values. Enabled and selected are independent state constraints.
+ * values; `label` itself is command metadata, never a selector field. Enabled
+ * and selected are independent state constraints.
  */
 export function matchesMaestroTypedSelector(
   node: SnapshotNode,
@@ -24,9 +25,6 @@ export function matchesMaestroTypedSelector(
       ? undefined
       : matchesMaestroSelectorValue(node.identifier, selector.id),
     selector.text === undefined ? undefined : matchesMaestroVisibleText(node, selector.text),
-    selector.label === undefined
-      ? undefined
-      : matchesMaestroSelectorValue(node.label, selector.label),
   ].filter((matched): matched is boolean => matched !== undefined);
   if (textTerms.length === 0 && selector.enabled === undefined && selector.selected === undefined) {
     return false;

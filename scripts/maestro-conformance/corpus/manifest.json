@@ -481,6 +481,14 @@
       }
     },
     {
+      "id": "authored/label-metadata",
+      "file": "authored/label-metadata.yaml",
+      "origin": {
+        "kind": "authored",
+        "note": "Coverage: outer command labels stay metadata across selector, point, assertion, wait, scroll, swipe, and input commands."
+      }
+    },
+    {
       "id": "authored/numeric-variable-doubletap",
       "file": "authored/numeric-variable-doubletap.yaml",
       "origin": {

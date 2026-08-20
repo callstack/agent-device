@@ -29,3 +29,13 @@ test('redacts typed values from progress output', () => {
     { command: 'inputText', value: '<text>' },
   ]);
 });
+
+test('uses command labels for progress values without changing selector meaning', () => {
+  const program = parseMaestroProgram(
+    ['---', '- tapOn:', '    text: Save', '    label: save action'].join('\n'),
+  );
+
+  expect(program.commands.map(formatMaestroCommandProgress)).toEqual([
+    { command: 'tapOn', value: 'save action' },
+  ]);
+});

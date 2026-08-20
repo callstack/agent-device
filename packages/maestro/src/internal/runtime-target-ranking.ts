@@ -93,7 +93,7 @@ function hasUsableRect(node: SnapshotNode): node is SnapshotNode & { rect: Rect 
 }
 
 function hasTextualSelector(selector: MaestroSelector): boolean {
-  return selector.id !== undefined || selector.label !== undefined || selector.text !== undefined;
+  return selector.id !== undefined || selector.text !== undefined;
 }
 
 function haveSameSelectorIdentity(
@@ -102,9 +102,6 @@ function haveSameSelectorIdentity(
   selector: MaestroSelector,
 ): boolean {
   if (selector.id !== undefined && normalize(left.identifier) !== normalize(right.identifier)) {
-    return false;
-  }
-  if (selector.label !== undefined && normalize(left.label) !== normalize(right.label)) {
     return false;
   }
   if (selector.text !== undefined) {

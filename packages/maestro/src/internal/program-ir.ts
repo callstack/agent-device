@@ -16,7 +16,6 @@ export type MaestroCoordinate =
 export type MaestroSelectorMap = {
   text?: string;
   id?: string;
-  label?: string;
   enabled?: boolean;
   selected?: boolean;
   optional?: boolean;
@@ -64,12 +63,14 @@ export type MaestroDoubleTapOnCommand = MaestroOptionalCommand & {
   source: MaestroSourceLocation;
   target: MaestroGestureTarget;
   delay?: number | string;
+  label?: string;
 };
 
 export type MaestroLongPressOnCommand = MaestroOptionalCommand & {
   kind: 'longPressOn';
   source: MaestroSourceLocation;
   target: MaestroGestureTarget;
+  label?: string;
 };
 
 export type MaestroSwipeGesture =
@@ -89,13 +90,13 @@ export type MaestroSwipeGesture =
       from: MaestroSelector;
       direction: MaestroDirection;
       duration?: number | string;
-      label?: string;
     };
 
 export type MaestroSwipeCommand = MaestroOptionalCommand & {
   kind: 'swipe';
   source: MaestroSourceLocation;
   gesture: MaestroSwipeGesture;
+  label?: string;
 };
 
 export type MaestroInputTextCommand = {
@@ -122,6 +123,7 @@ export type MaestroAssertVisibleCommand = MaestroOptionalCommand & {
   source: MaestroSourceLocation;
   target: MaestroSelector;
   childOf?: MaestroSelector;
+  label?: string;
 };
 
 export type MaestroAssertNotVisibleCommand = MaestroOptionalCommand & {
@@ -129,6 +131,7 @@ export type MaestroAssertNotVisibleCommand = MaestroOptionalCommand & {
   source: MaestroSourceLocation;
   target: MaestroSelector;
   childOf?: MaestroSelector;
+  label?: string;
 };
 
 export type MaestroExtendedWaitUntilCommand = MaestroOptionalCommand & {
@@ -137,6 +140,7 @@ export type MaestroExtendedWaitUntilCommand = MaestroOptionalCommand & {
   visible?: MaestroSelector;
   notVisible?: MaestroSelector;
   timeout?: number | string;
+  label?: string;
 };
 
 export type MaestroTakeScreenshotCommand = {
@@ -156,6 +160,7 @@ export type MaestroScrollUntilVisibleCommand = MaestroOptionalCommand & {
   element: MaestroSelector;
   direction?: MaestroDirection;
   timeout?: number | string;
+  label?: string;
 };
 
 export type MaestroHideKeyboardCommand = {

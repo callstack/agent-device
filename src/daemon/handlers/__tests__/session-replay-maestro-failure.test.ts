@@ -338,7 +338,7 @@ test('typed Maestro failure publishes exactly the refs exposed by its divergence
   const command = {
     kind: 'tapOn' as const,
     source: { path: '/flows/actions.yaml', line: 4 },
-    target: { space: 'target' as const, selector: { label: 'Missing' } },
+    target: { space: 'target' as const, selector: { text: 'Missing' } },
   } satisfies Extract<MaestroRuntimeCommand, { kind: 'tapOn' }>;
   const scenario = await buildFailureScenario(command, [
     {
@@ -478,7 +478,7 @@ test('typed Maestro suggestions retain total count before the five-entry cap', a
   const command = {
     kind: 'tapOn' as const,
     source: { path: '/flows/actions.yaml', line: 4 },
-    target: { space: 'target' as const, selector: { label: 'Save' } },
+    target: { space: 'target' as const, selector: { text: 'Save' } },
   } satisfies Extract<MaestroRuntimeCommand, { kind: 'tapOn' }>;
   const response = await buildFailureResponse(command, [
     {

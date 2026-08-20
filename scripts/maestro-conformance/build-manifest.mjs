@@ -28,6 +28,8 @@ const NOTES = {
   'authored/runflow-child': 'Include target for runflow-main (not parsed as a top-level flow).',
   'authored/doubletap':
     'Coverage: doubleTapOn (upstream 101 uses the unsupported retryTapIfNoChange option).',
+  'authored/label-metadata':
+    'Coverage: outer command labels stay metadata across selector, point, assertion, wait, scroll, swipe, and input commands.',
   'authored/scroll-until-visible':
     'Coverage: scrollUntilVisible (upstream 079 uses unsupported speed/visibilityPercentage).',
   'authored/extended-wait':

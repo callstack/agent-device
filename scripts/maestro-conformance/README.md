@@ -97,7 +97,8 @@ failure, not a pass.
   teeth (`invalid/`). To add a flow: drop the `.yaml` in, add a note to `NOTES`
   in `build-manifest.mjs`, and regenerate.
 - [`fixtures/`](./fixtures) — the generated, checked-in layer-1/layer-2 captures.
-- `packages/maestro/src/internal/conformance-normalize.ts` — package-private canonical projection.
+- `packages/maestro/src/internal/conformance-normalize.ts` and
+  `conformance-selector-projection.ts` — package-private canonical projection and selector model.
 - `packages/maestro/test/conformance/` — the deterministic verifier, declared divergences,
   package-private harness, shared fixture seal, and layer-3 differential scenarios. Keeping this
   code under package tests prevents parser/canonicalization tooling from widening the production
@@ -118,7 +119,7 @@ command/option in `packages/maestro/test/conformance/expected-divergence.ts` —
 list is the mechanical parity record. A focused issue is attached only when
 implementation work is planned.
 
-## Regenerate (only on an upstream-pin bump)
+## Regenerate (on an upstream-pin bump or intentional corpus/harness change)
 
 Heavy, manual, needs JDK 17+ (Gradle is provided by the committed wrapper):
 
@@ -128,7 +129,9 @@ pnpm maestro:conformance:regenerate
 
 This resolves the pinned jars, **verifies their SHA-256 against
 `pinned-upstream.json`**, runs the harness over the corpus, and rewrites
-`fixtures/`. Review the diff, then run the verifier. To bump the pin: update
+`fixtures/`. Review the diff, then run the verifier. A pin bump is not required
+when a corpus flow or harness behavior intentionally changes; regenerate from
+the unchanged pin and review the generated diff. To bump the pin: update
 `pinned-upstream.json` (version/tag/commit + the jar SHA-256s from Maven Central),
 refresh the vendored corpus flows and their `manifest.json` `sha256`s, regenerate,
 and reconcile any new divergences.

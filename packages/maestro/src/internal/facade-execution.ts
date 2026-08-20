@@ -308,5 +308,5 @@ function suggestionBasis(
   ) {
     return 'id';
   }
-  return selector.text !== undefined || selector.label !== undefined ? 'label' : 'other';
+  return selector.text !== undefined ? 'label' : 'other';
 }

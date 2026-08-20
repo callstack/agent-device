@@ -322,6 +322,7 @@ test('the real tree parses, declares, and passes R11', () => {
   assert.deepEqual([...maestroPackage.workspaceDependencies].sort(), [
     '@agent-device/contracts',
     '@agent-device/kernel',
+    '@agent-device/selectors',
   ]);
   const adScriptPackage = packages.find((pkg) => pkg.name === '@agent-device/ad-script');
   assert.ok(adScriptPackage, 'ad-script package must exist');

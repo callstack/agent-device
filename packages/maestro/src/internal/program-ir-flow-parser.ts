@@ -23,7 +23,7 @@ import {
   sourceAt,
   type MaestroProgramParseContext,
 } from './program-ir-values.ts';
-import { parseMaestroSelector } from './program-ir-gesture-parser.ts';
+import { parseMaestroSelector } from './program-ir-selector-parser.ts';
 import { stripUndefined } from './shared.ts';
 
 export type MaestroCommandListParser = (

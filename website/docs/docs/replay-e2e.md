@@ -71,7 +71,7 @@ agent-device test ./maestro-flows --maestro --platform android --artifacts-dir .
 Supported subset:
 
 - Flows: `launchApp`; `runFlow` file/inline with platform, visibility, and limited boolean conditions; `onFlowStart`/`onFlowComplete`; `repeat.times` and retry.
-- Interactions: `tapOn`, `doubleTapOn`, `longPressOn`, `inputText` on the focused element, `eraseText`, `openLink`, `hideKeyboard`, basic `pressKey`, and `back`; tap targets poll until available and support `index`, `childOf`, `label`, points, and `optional`.
+- Interactions: `tapOn`, `doubleTapOn`, `longPressOn`, `inputText` on the focused element, `eraseText`, `openLink`, `hideKeyboard`, basic `pressKey`, and `back`; tap targets poll until available and support `index`, `childOf`, points, and `optional`; outer command labels are metadata, not target selectors.
 - Assertions and navigation: `assertVisible`, `assertNotVisible`, `extendedWaitUntil`, `scroll`, `scrollUntilVisible`, absolute/percentage/target `swipe`, `takeScreenshot`, `waitForAnimationToEnd`, and `stopApp`.
 - Scripts: ordered `runScript` file/env scripts with `http.post`, `json`, and `output` variables.
 
@@ -97,7 +97,7 @@ agent-device replay export ./workflows/checkout.ad --out ./maestro/checkout.yaml
 
 `replay export` is a local file transform. It does not start the daemon or contact a device. If `--out` is omitted, the YAML is printed to stdout.
 
-The exporter is intentionally strict. It writes Maestro YAML for compatible flow actions such as app launch, taps, long press, text input, keyboard dismiss/enter, back, text visibility assertions, coordinate swipes, basic scroll, screenshots, and `.ad` `env` directives. Agent-only inspection or maintenance actions such as `snapshot`, `get`, `record`, `trace`, `settings`, and unsupported selector shapes fail with the source line and action instead of being silently dropped. Known semantic differences are reported as warnings; for example, `.ad` `fill` exports as `tapOn` plus `inputText`, which may append text in Maestro rather than replacing existing field contents.
+The exporter is intentionally strict. It writes Maestro YAML for compatible flow actions such as app launch, taps, long press, text input, keyboard dismiss/enter, back, text visibility assertions, coordinate swipes, basic scroll, screenshots, and `.ad` `env` directives. Agent-only inspection or maintenance actions such as `snapshot`, `get`, `record`, `trace`, `settings`, and unsupported selector shapes fail with the source line and action instead of being silently dropped. Known semantic differences are reported as warnings; for example, `.ad` `fill` exports as `tapOn` plus `inputText`, which may append text in Maestro rather than replacing existing field contents. Native `.ad` `label=` selectors export as Maestro `text:` selectors and warn because Maestro text matching is broader than label-only matching.
 
 ## Run a lightweight `.ad` suite
 

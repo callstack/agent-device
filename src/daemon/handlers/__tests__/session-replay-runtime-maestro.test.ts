@@ -1293,7 +1293,7 @@ test('runReplayScriptSource resolves a text-entry target once before typing', as
   );
 });
 
-test('runReplayScriptSource resolves Maestro swipe.label from a labeled element rect', async () => {
+test('runReplayScriptSource resolves scalar Maestro swipe.from to an element rect', async () => {
   const calls: CapturedInvocation[] = [];
   const { response } = await runReplayFixture({
     label: 'maestro-swipe-label',
@@ -1301,7 +1301,7 @@ test('runReplayScriptSource resolves Maestro swipe.label from a labeled element 
       'appId: demo.app',
       '---',
       '- swipe:',
-      '    label: Thread body',
+      '    from: Thread body',
       '    direction: UP',
       '    duration: 400',
       '',
@@ -1350,7 +1350,7 @@ test('runReplayScriptSource resolves Maestro swipe.label from a labeled element 
   );
 });
 
-test('runReplayScriptSource keeps Maestro swipe.label anchored to the matched label rect', async () => {
+test('runReplayScriptSource anchors scalar Maestro swipe.from to the matched element rect', async () => {
   const calls: CapturedInvocation[] = [];
   const { response } = await runReplayFixture({
     label: 'maestro-swipe-label-child-rect',
@@ -1358,7 +1358,7 @@ test('runReplayScriptSource keeps Maestro swipe.label anchored to the matched la
       'appId: demo.app',
       '---',
       '- swipe:',
-      '    label: Article',
+      '    from: Article',
       '    direction: UP',
       '    duration: 400',
       '',

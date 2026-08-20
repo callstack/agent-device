@@ -152,21 +152,6 @@ describe('parseMaestroProgram', () => {
     });
   });
 
-  test('keeps selector-map keys aligned with the supported command subset', () => {
-    const program = parseMaestroProgram(['---', '- tapOn:', '    label: Save'].join('\n'));
-    const tap = commandOfKind(program.commands[0], 'tapOn');
-    assert.deepEqual(tap.target, { space: 'target', selector: { label: 'Save' } });
-
-    assert.throws(
-      () => parseMaestroProgram(['---', '- doubleTapOn:', '    label: Save'].join('\n')),
-      /doubleTapOn field "label" is not supported.*line 3/i,
-    );
-    assert.throws(
-      () => parseMaestroProgram(['---', '- assertVisible:', '    label: Save'].join('\n')),
-      /assertVisible field "label" is not supported.*line 3/i,
-    );
-  });
-
   test('parses optional on assertion and target command maps', () => {
     const program = parseMaestroProgram(
       [

@@ -19,7 +19,7 @@ test('typed Maestro text selectors match visible text and state without expressi
   expect(matchesMaestroTypedSelector(node, { text: 'Subtotal', selected: false })).toBe(false);
 });
 
-test('typed Maestro id and label selectors keep their primary field semantics', () => {
+test('typed Maestro id and text selectors keep their primary field semantics', () => {
   const node = makeSnapshot([
     {
       index: 1,
@@ -30,8 +30,8 @@ test('typed Maestro id and label selectors keep their primary field semantics', 
   ]).nodes[0]!;
 
   expect(matchesMaestroTypedSelector(node, { id: 'checkout-submit' })).toBe(true);
-  expect(matchesMaestroTypedSelector(node, { label: 'Submit' })).toBe(false);
-  expect(matchesMaestroTypedSelector(node, { label: '^Submit.*' })).toBe(true);
+  expect(matchesMaestroTypedSelector(node, { text: 'Submit' })).toBe(false);
+  expect(matchesMaestroTypedSelector(node, { text: '^Submit.*' })).toBe(true);
 });
 
 test('intersects every field in a compound Maestro selector', () => {
@@ -49,7 +49,6 @@ test('intersects every field in a compound Maestro selector', () => {
     matchesMaestroTypedSelector(node, {
       id: 'checkout-submit',
       text: 'Submit order',
-      label: '^Submit.*',
       enabled: true,
     }),
   ).toBe(true);
