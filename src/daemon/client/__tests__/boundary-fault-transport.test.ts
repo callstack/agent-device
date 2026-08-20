@@ -5,6 +5,11 @@ import path from 'node:path';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import { PUBLIC_COMMANDS } from '../../../command-catalog.ts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import {
+  closeLoopbackServer,
+  listenOnLoopback,
+  type LoopbackServer,
+} from '../../../__tests__/test-utils/loopback.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import type { DaemonPaths } from '../../config.ts';
 import type { DaemonRequest } from '../../types.ts';
@@ -28,7 +33,7 @@ const COMMAND_ROWS = {
   'session-lifecycle': { command: PUBLIC_COMMANDS.open, positionals: ['Demo'] },
 } as const;
 
-const openServers: Array<http.Server | net.Server> = [];
+const openServers: LoopbackServer[] = [];
 
 beforeEach(() => {
   mockRunCmdSync.mockReset();
@@ -36,7 +41,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  await Promise.all(openServers.splice(0).map(closeServer));
+  await Promise.all(openServers.splice(0).map(closeLoopbackServer));
 });
 
 for (const [commandClass, row] of Object.entries(COMMAND_ROWS)) {
@@ -225,43 +230,11 @@ function startHttpServer(
 ): Promise<{ port: number }> {
   const server = http.createServer(handler);
   openServers.push(server);
-  return new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') {
-        reject(new Error('failed to bind boundary HTTP server'));
-        return;
-      }
-      resolve({ port: address.port });
-    });
-  });
+  return listenOnLoopback(server).then((port) => ({ port }));
 }
 
 function startNetServer(handler: (socket: net.Socket) => void): Promise<{ port: number }> {
   const server = net.createServer(handler);
   openServers.push(server);
-  return new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') {
-        reject(new Error('failed to bind boundary socket server'));
-        return;
-      }
-      resolve({ port: address.port });
-    });
-  });
-}
-
-async function closeServer(server: http.Server | net.Server): Promise<void> {
-  const closableServer = server as http.Server & { closeAllConnections?: () => void };
-  closableServer.closeAllConnections?.();
-  await new Promise<void>((resolve) => {
-    if (!server.listening) {
-      resolve();
-      return;
-    }
-    server.close(() => resolve());
-  });
+  return listenOnLoopback(server).then((port) => ({ port }));
 }
