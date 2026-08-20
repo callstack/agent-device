@@ -2,7 +2,7 @@ import type { Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/sna
 import type { MaestroSelector } from './program-ir.ts';
 import type { MaestroPlatform } from './runtime-target-policy.ts';
 import {
-  matchMaestroCandidates,
+  matchMaestroCandidatesWithResolver,
   rankMaestroCandidates,
   rankVisibleMaestroMatches,
   selectMaestroSnapshotMatch,
@@ -10,6 +10,7 @@ import {
   usableRect,
   type MaestroRankedCandidates,
 } from './runtime-target-ranking.ts';
+import { createMaestroSnapshotResolver } from './runtime-selector-resolution.ts';
 import { pointInsideRect, stripUndefined } from './shared.ts';
 import { isMaestroNodeVisible } from './snapshot-policy.ts';
 import { buildSnapshotNodeMap } from '@agent-device/contracts/snapshot';
@@ -133,12 +134,19 @@ function rankPresentedMaestroCandidates(
   query: MaestroTargetQuery,
   presentedNodes: ReturnType<typeof createPresentedNodeLookup>,
 ): MaestroRankedCandidates {
-  const scoped = matchMaestroCandidates(snapshot, query.selector);
+  const resolver = createMaestroSnapshotResolver(snapshot);
+  const scoped = matchMaestroCandidatesWithResolver(query.selector, resolver);
   const visible = scoped.matches.filter(presentedNodes.isVisible);
   return {
     ...scoped,
     visible,
-    ranked: rankVisibleMaestroMatches(snapshot.nodes, visible, query.selector, 'ios'),
+    ranked: rankVisibleMaestroMatches(
+      snapshot.nodes,
+      visible,
+      query.selector,
+      'ios',
+      resolver.nodeByIndex,
+    ),
   };
 }
 

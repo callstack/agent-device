@@ -1,9 +1,6 @@
-import type { Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
-import type { MaestroSelector } from './program-ir.ts';
+import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 
 export type MaestroPositionRelation = 'below' | 'above' | 'leftOf' | 'rightOf';
-
-type ResolveSelector = (selector: MaestroSelector) => SnapshotNode[];
 
 /**
  * Reproduces Maestro v2.5.1 `Filters.relativeTo` and its four predicates:
@@ -18,15 +15,13 @@ type ResolveSelector = (selector: MaestroSelector) => SnapshotNode[];
  * pair as the winner.
  */
 export function selectMaestroPositionMatches(
-  snapshot: SnapshotState,
+  nodes: readonly SnapshotNode[],
   relation: MaestroPositionRelation,
-  anchor: MaestroSelector,
-  resolveSelector: ResolveSelector,
+  anchors: readonly SnapshotNode[],
 ): SnapshotNode[] {
-  const anchors = resolveSelector(anchor);
   const pairs: Array<{ node: SnapshotNode; distance: number; order: number }> = [];
   let order = 0;
-  for (const node of snapshot.nodes) {
+  for (const node of nodes) {
     for (const other of anchors) {
       const distance = positionDistance(node.rect, other.rect);
       if (distance === undefined || !qualifies(relation, node.rect!, other.rect!)) continue;
