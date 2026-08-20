@@ -41,6 +41,7 @@ export function AutomationLabScreen(props: {
   const [alertResult, setAlertResult] = useState('none');
   const [lastInput, setLastInput] = useState('none');
   const [longPressCount, setLongPressCount] = useState(0);
+  const [maestroSelection, setMaestroSelection] = useState('none');
   const [microphonePermission, setMicrophonePermission] = useState('checking');
   const [lastPushBroadcast, setLastPushBroadcast] = useState('none');
   const [sheetVisible, setSheetVisible] = useState(false);
@@ -158,6 +159,27 @@ export function AutomationLabScreen(props: {
           onPress={() => setSheetVisible(true)}
           testID="automation-open-sheet"
         />
+      </SectionCard>
+
+      <SectionCard
+        subtitle="The first duplicate is inert; the second duplicate is clickable."
+        title="Maestro clickable ordering"
+      >
+        <View style={styles.maestroTarget} testID="maestro-clickable-first-target">
+          <Text style={styles.maestroTargetLabel}>Inert duplicate target</Text>
+        </View>
+        <Pressable
+          accessibilityLabel="Clickable duplicate target"
+          accessibilityRole="button"
+          onPress={() => setMaestroSelection('clickable')}
+          style={({ pressed }) => [styles.maestroTarget, pressed ? styles.pressed : null]}
+          testID="maestro-clickable-first-target"
+        >
+          <Text style={styles.maestroTargetLabel}>Clickable duplicate target</Text>
+        </Pressable>
+        <Text style={styles.value} testID="maestro-clickable-first-result">
+          Maestro selection: {maestroSelection}
+        </Text>
       </SectionCard>
 
       <SectionCard title="Input canaries">
@@ -282,6 +304,19 @@ function createStyles(colors: AppColors) {
       borderWidth: StyleSheet.hairlineWidth,
       paddingHorizontal: 16,
       paddingVertical: 16,
+    },
+    maestroTarget: {
+      alignItems: 'center',
+      borderColor: colors.lineStrong,
+      borderRadius: 4,
+      borderWidth: StyleSheet.hairlineWidth,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    maestroTargetLabel: {
+      color: colors.text,
+      fontSize: 15,
+      fontWeight: '700',
     },
     pressed: {
       opacity: 0.8,

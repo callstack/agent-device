@@ -7,6 +7,7 @@ import { assertFormInput, assertKeyboardIme } from './live-form-scenario.ts';
 import type { LiveContext } from './live-harness.ts';
 import { assertInventoryAndInstall } from './live-inventory-scenario.ts';
 import { assertLifecycleAndSystem } from './live-lifecycle-scenario.ts';
+import { assertMaestroClickableFirst } from './live-maestro-clickable-first-scenario.ts';
 import { assertObservabilityAndArtifacts } from './live-observability-scenario.ts';
 import { assertFixtureReplays } from './live-replay-scenarios.ts';
 import type { AndroidEmulatorScenarioStart } from './scenario-start.ts';
@@ -70,6 +71,17 @@ export const ANDROID_EMULATOR_LIVE_SCENARIOS = [
       ime: 'system',
       landmark: 'Automation lab',
       url: AUTOMATION_DEEP_LINK,
+    },
+  },
+  {
+    behaviors: ['maestro-clickable-first-selection'],
+    commands: [],
+    id: 'smoke:maestro-clickable-first',
+    run: assertMaestroClickableFirst,
+    start: {
+      ime: 'system',
+      landmark: 'Automation lab',
+      url: 'agent-device-test-app:///automation',
     },
   },
   {

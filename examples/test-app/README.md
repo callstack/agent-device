@@ -88,7 +88,9 @@ The `/automation` route is intentionally JavaScript-only and can be opened from
 **Settings → Open automation lab** or with the
 `agent-device-test-app:///automation` scheme. Its stable `automation-*` ids expose durable
 outcomes for long press, native alert actions, app-event name/payload, app state, appearance,
-window orientation, and microphone permission recovery. CI repacks JavaScript-only changes into the
+window orientation, and microphone permission recovery; the
+`maestro-clickable-first-target` duplicate pair exercises Android Maestro clickable-first
+ordering. CI repacks JavaScript-only changes into the
 cached Release app without starting Metro; native configuration changes intentionally produce one
 new fingerprinted build that all simulator consumers share.
 

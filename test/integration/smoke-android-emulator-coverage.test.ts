@@ -107,6 +107,14 @@ test('Android app scenarios declare deterministic starting surfaces and IME mode
         },
       },
       {
+        id: 'smoke:maestro-clickable-first',
+        start: {
+          ime: 'system',
+          landmark: 'Automation lab',
+          url: 'agent-device-test-app:///automation',
+        },
+      },
+      {
         id: 'smoke:form-input',
         start: {
           ime: 'test',

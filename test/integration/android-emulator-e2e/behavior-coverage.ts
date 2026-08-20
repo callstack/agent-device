@@ -5,6 +5,7 @@ export type AndroidEmulatorBehaviorId =
   | 'home-recents-restoration'
   | 'ime-owned-input-recovery'
   | 'long-list-scroll-recovery'
+  | 'maestro-clickable-first-selection'
   | 'orientation-fixture-state'
   | 'push-broadcast-delivery'
   | 'runtime-permission-recovery'
@@ -62,6 +63,11 @@ export const ANDROID_EMULATOR_BEHAVIOR_COVERAGE = {
     assertion:
       'fixture traversal reaches the footer, returns to the top, and rediscovers the catalog landmark',
     owner: 'full:fixture-replays',
+  },
+  'maestro-clickable-first-selection': {
+    assertion:
+      'one Android helper snapshot exposes two duplicate resource-id nodes and a no-index Maestro tap selects the clickable duplicate first',
+    owner: 'smoke:maestro-clickable-first',
   },
   'safe-back-navigation': {
     assertion: 'Back leaves the fixture automation route through normal in-app navigation',
