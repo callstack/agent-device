@@ -5,6 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { type CliJsonResult, formatResultDebug, runBuiltCliJson } from './cli-json.ts';
 import { assertPngDimensions, assertPngFile } from './provider-scenarios/assertions.ts';
+import { writeCoverageReport } from './web-e2e/coverage-report.ts';
 
 const TEST_NAME = 'live web platform e2e smoke';
 const WEB_E2E_ENABLED = process.env.AGENT_DEVICE_WEB_E2E === '1';
@@ -57,6 +58,7 @@ async function runWebSmoke(context: WebSmokeContext): Promise<void> {
     await assertWebScreenshot(context);
   } finally {
     await cleanupWebSmoke(context, opened);
+    writeCoverageReport(context.artifactDir, context.stepHistory);
   }
 }
 

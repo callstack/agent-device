@@ -46,6 +46,7 @@ on:
       - 'test/integration/android-**'
       - 'test/integration/smoke-android-**'
       - 'test/integration/smoke-web-**'
+      - 'test/integration/web-e2e/**'
   push:
     branches:
       - main
