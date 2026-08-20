@@ -148,6 +148,39 @@ test('snapshot over the injected transport keeps the shared xctest result shape'
   assert.equal(result.nodes?.length, 2);
 });
 
+test('snapshot accepts only structured healthy empty scope results', async () => {
+  const healthyEmptyProvider: AppleRunnerProvider = {
+    runCommand: async () => ({
+      nodes: [],
+      snapshotQuality: { state: 'healthy', backend: 'tree' },
+    }),
+  };
+  const interactor = createAppleInteractor(IOS_SIMULATOR, {}, healthyEmptyProvider);
+
+  const scoped = await interactor.snapshot({ scope: 'missing' });
+  assert.deepEqual(scoped.nodes, []);
+  assert.equal(scoped.backend, 'xctest');
+  assert.equal(scoped.quality?.state, 'healthy');
+  await assert.rejects(
+    interactor.snapshot(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'COMMAND_FAILED' &&
+      error.message === 'XCTest snapshot returned 0 nodes on iOS simulator.',
+  );
+
+  const legacyEmpty = createAppleInteractor(
+    IOS_SIMULATOR,
+    {},
+    {
+      runCommand: async () => ({ nodes: [] }),
+    },
+  );
+  await assert.rejects(legacyEmpty.snapshot({ scope: 'missing' }), {
+    code: 'COMMAND_FAILED',
+  });
+});
+
 // #1634 P2: the backend pin must actually reach the wire — the daemon test
 // stops at the dispatch context and the Swift test starts at the parsed
 // command, so this is the assertion that fails if the interactor stops
