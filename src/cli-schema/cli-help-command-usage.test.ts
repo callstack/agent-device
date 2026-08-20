@@ -106,6 +106,7 @@ test('command help keeps scroll and gesture planning guidance', async () => {
   if (scrollHelp === null) throw new Error('Expected scroll help text');
   assert.match(scrollHelp, /Scroll in a direction/);
   assert.match(scrollHelp, /top\/bottom edge/);
+  assert.match(scrollHelp, /finger-path fraction of the viewport axis/);
 
   const gestureHelp = await usageForCommand('gesture');
   if (gestureHelp === null) throw new Error('Expected gesture help text');

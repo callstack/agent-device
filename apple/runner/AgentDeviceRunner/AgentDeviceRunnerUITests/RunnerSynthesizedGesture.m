@@ -29,6 +29,7 @@ typedef id (*RunnerDragPointerPathFactory)(
   CGPoint,
   double
 );
+typedef double (*RunnerDragProgressFunction)(double);
 
 static NSString * _Nullable RunnerResolveGestureEventBridge(
   id application,
@@ -56,6 +57,21 @@ static id RunnerContinuousDragPointerPath(
   CGPoint end,
   double durationMs
 );
+static id RunnerControlledScrollPointerPath(
+  const RunnerGestureEventBridge *bridge,
+  CGPoint start,
+  CGPoint end,
+  double durationMs
+);
+static id RunnerSampledDragPointerPath(
+  const RunnerGestureEventBridge *bridge,
+  CGPoint start,
+  CGPoint end,
+  double durationMs,
+  RunnerDragProgressFunction progress,
+  double sampleIntervalMs
+);
+static double RunnerSmoothstepProgress(double t);
 static NSString * _Nullable RunnerTrySynthesizeDrag(
   id application,
   CGPoint start,
@@ -109,6 +125,26 @@ static id RunnerTapPointerPath(
       durationMs,
       @"agent-device-continuous-drag",
       RunnerContinuousDragPointerPath
+    );
+  } @catch (NSException *exception) {
+    return RunnerFormatXCTestException(exception, @"private XCTest event synthesis failed");
+  }
+}
+
++ (NSString * _Nullable)synthesizeControlledScrollWithApplication:(id)application
+                                                                x:(double)x
+                                                                y:(double)y
+                                                               x2:(double)x2
+                                                                y2:(double)y2
+                                                        durationMs:(double)durationMs {
+  @try {
+    return RunnerTrySynthesizeDrag(
+      application,
+      CGPointMake(x, y),
+      CGPointMake(x2, y2),
+      durationMs,
+      @"agent-device-controlled-scroll",
+      RunnerControlledScrollPointerPath
     );
   } @catch (NSException *exception) {
     return RunnerFormatXCTestException(exception, @"private XCTest event synthesis failed");
@@ -352,20 +388,43 @@ static id RunnerContinuousDragPointerPath(
   CGPoint end,
   double durationMs
 ) {
+  // This is velocity shaping, not just interpolation density: smoothstep's endpoint slope is zero,
+  // while a planned linear segment reaches lift with nonzero velocity unless a destination hold
+  // follows it. UIKit uses finger-up velocity for scroll deceleration. See ADR 0013 and issue #1586.
+  return RunnerSampledDragPointerPath(bridge, start, end, durationMs, RunnerSmoothstepProgress, 16.0);
+}
+
+static id RunnerControlledScrollPointerPath(
+  const RunnerGestureEventBridge *bridge,
+  CGPoint start,
+  CGPoint end,
+  double durationMs
+) {
+  // A stationary hold is not a reliable zero-velocity release in XCTest. Cubic ease-out decreases
+  // velocity from the first movement and reaches near zero before lift. Profiles that accelerate
+  // after pan recognition can still be classified as flings despite a slow final sample.
+  return RunnerSampledDragPointerPath(bridge, start, end, durationMs, RunnerControlledScrollProgress, 16.0);
+}
+
+static id RunnerSampledDragPointerPath(
+  const RunnerGestureEventBridge *bridge,
+  CGPoint start,
+  CGPoint end,
+  double durationMs,
+  RunnerDragProgressFunction progress,
+  double sampleIntervalMs
+) {
   id path =
     ((RunnerMsgSendInitPath)objc_msgSend)([bridge->core.pathClass alloc], bridge->initPathSelector, start, 0.0);
   if (path == nil) {
     return nil;
   }
 
-  // This is velocity shaping, not just interpolation density: smoothstep's endpoint slope is zero,
-  // while a planned linear segment reaches lift with nonzero velocity unless a destination hold
-  // follows it. UIKit uses finger-up velocity for scroll deceleration. See ADR 0013 and issue #1586.
-  int frameCount = MAX(3, (int)(durationMs / 16.0));
+  NSInteger frameCount = RunnerSampledDragFrameCount(durationMs, sampleIntervalMs);
   NSTimeInterval durationSeconds = durationMs / 1000.0;
-  for (int index = 1; index <= frameCount; index += 1) {
+  for (NSInteger index = 1; index <= frameCount; index += 1) {
     double t = (double)index / (double)frameCount;
-    double easedT = t * t * (3.0 - 2.0 * t);
+    double easedT = progress(t);
     CGPoint point = CGPointMake(
       start.x + (end.x - start.x) * easedT,
       start.y + (end.y - start.y) * easedT
@@ -375,6 +434,19 @@ static id RunnerContinuousDragPointerPath(
 
   ((RunnerMsgSendPathOffset)objc_msgSend)(path, bridge->liftSelector, durationSeconds);
   return path;
+}
+
+static double RunnerSmoothstepProgress(double t) {
+  return t * t * (3.0 - 2.0 * t);
+}
+
+NSInteger RunnerSampledDragFrameCount(double durationMs, double sampleIntervalMs) {
+  return MIN(30, MAX(3, (NSInteger)ceil(durationMs / sampleIntervalMs) - 1));
+}
+
+double RunnerControlledScrollProgress(double t) {
+  double remaining = 1.0 - t;
+  return 1.0 - remaining * remaining * remaining;
 }
 
 static id RunnerTapPointerPath(

@@ -2294,29 +2294,19 @@ extension RunnerTests {
     releaseBehavior: ScrollReleaseBehavior?
   ) -> Response {
 #if os(iOS)
-    let durationMs = min(max(durationMs, 16), 10000)
-    let dragFrame = axFreeDragVisualizationFrame(
+    return executeDragGesture(
+      activeApp: activeApp,
       x: x,
       y: y,
       x2: x2,
       y2: y2,
-      referenceFrame: context.referenceFrame
+      durationMs: durationMs,
+      synthesized: true,
+      message: message,
+      synthesizedContext: context,
+      synthesizedPolicyKind: .scroll,
+      synthesizedProfile: scrollDragProfile(releaseBehavior: releaseBehavior)
     )
-    let (timing, outcome) = performGesture(activeApp) {
-      scrollDragAt(
-        app: activeApp,
-        x: x,
-        y: y,
-        x2: x2,
-        y2: y2,
-        durationMs: durationMs,
-        releaseBehavior: releaseBehavior
-      )
-    }
-    if let response = unsupportedResponse(for: outcome) {
-      return response
-    }
-    return gestureResponse(message: message, timing: timing, frame: .drag(dragFrame))
 #else
     return executeDragGesture(
       activeApp: activeApp,
@@ -2327,7 +2317,7 @@ extension RunnerTests {
       durationMs: durationMs,
       synthesized: false,
       message: message,
-      synthesizedPolicyKind: scrollPolicyKind
+      synthesizedPolicyKind: .scroll
     )
 #endif
   }

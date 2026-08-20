@@ -12,8 +12,6 @@ private enum RunnerInterfaceOrientation {
   static let landscapeLeft = 4
 }
 
-private let runnerControlledScrollDestinationHoldDuration: TimeInterval = 0.1
-
 extension RunnerTests {
   enum PlannedGestureExecution: Equatable {
     case fastSwipe
@@ -22,13 +20,14 @@ extension RunnerTests {
 
   enum SynthesizedDragProfile: Equatable {
     case continuous
+    case controlledScroll
     case fastSwipe
   }
 
-  func scrollDestinationHoldDuration(
+  func scrollDragProfile(
     releaseBehavior: ScrollReleaseBehavior?
-  ) -> TimeInterval {
-    releaseBehavior == .inertial ? 0 : runnerControlledScrollDestinationHoldDuration
+  ) -> SynthesizedDragProfile {
+    releaseBehavior == .inertial ? .fastSwipe : .controlledScroll
   }
 
   struct TouchVisualizationFrame {
@@ -654,6 +653,15 @@ extension RunnerTests {
         y2: Double(end.y),
         durationMs: durationMs
       )
+    case .controlledScroll:
+      RunnerSynthesizedGesture.synthesizeControlledScroll(
+        withApplication: app,
+        x: Double(start.x),
+        y: Double(start.y),
+        x2: Double(end.x),
+        y2: Double(end.y),
+        durationMs: durationMs
+      )
     case .fastSwipe:
       RunnerSynthesizedGesture.synthesizeSwipe(
         withApplication: app,
@@ -681,46 +689,6 @@ extension RunnerTests {
       message: "coordinate drag is not supported on macOS",
       hint: "macOS automation has no touchscreen; use mouse-driven interactions instead."
     )
-#endif
-  }
-
-  func scrollDragAt(
-    app: XCUIApplication,
-    x: Double,
-    y: Double,
-    x2: Double,
-    y2: Double,
-    durationMs: Double,
-    releaseBehavior: ScrollReleaseBehavior?
-  ) -> RunnerInteractionOutcome {
-#if os(iOS)
-    guard x.isFinite, y.isFinite, x2.isFinite, y2.isFinite, durationMs.isFinite,
-      durationMs > 0
-    else {
-      return .unsupported(
-        message: "scroll requires a finite positive distance and duration",
-        hint: "Retry with a direction and duration that produce a non-zero drag."
-      )
-    }
-    let distance = hypot(x2 - x, y2 - y)
-    guard distance.isFinite, distance > 0 else {
-      return .unsupported(
-        message: "scroll requires a non-zero distance",
-        hint: "Retry with a direction and amount that produce a non-zero drag."
-      )
-    }
-    let velocity = XCUIGestureVelocity(
-      rawValue: CGFloat(distance / (durationMs / 1000))
-    )
-    interactionCoordinate(app: app, x: x, y: y).press(
-      forDuration: 0,
-      thenDragTo: interactionCoordinate(app: app, x: x2, y: y2),
-      withVelocity: velocity,
-      thenHoldForDuration: scrollDestinationHoldDuration(releaseBehavior: releaseBehavior)
-    )
-    return .performed
-#else
-    return dragAt(app: app, x: x, y: y, x2: x2, y2: y2, holdDuration: 0)
 #endif
   }
 

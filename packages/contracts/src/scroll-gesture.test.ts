@@ -65,7 +65,6 @@ type ScrollGestureFixture = {
     defaultEdgePaddingFraction: number;
     ordinaryScrollReleaseBehavior: 'controlled';
     edgeScrollReleaseBehavior: 'inertial';
-    controlledScrollDestinationHoldMs: number;
   };
   cases: Array<{
     name: string;
@@ -144,7 +143,6 @@ test('scroll release policy agrees with the cross-platform parity table', () => 
     resolveScrollExecutionOptions({}, 'bottom').releaseBehavior,
     constants.edgeScrollReleaseBehavior,
   );
-  assert.equal(constants.controlledScrollDestinationHoldMs, 100);
 });
 
 test('buildScrollGesturePlan rejects invalid amounts', () => {

@@ -2,8 +2,8 @@ import { AppError } from '@agent-device/kernel/errors';
 
 export const SCROLL_DURATION_MAX_MS = 10_000;
 export const DEFAULT_MOBILE_SCROLL_DURATION_MS = 300;
-export const DEFAULT_IOS_SCROLL_DURATION_MS = 350;
-export const DEFAULT_IOS_SCROLL_AMOUNT = 0.35;
+export const DEFAULT_IOS_SCROLL_DURATION_MS = 400;
+export const DEFAULT_IOS_SCROLL_AMOUNT = 0.65;
 
 export type ScrollReleaseBehavior = 'controlled' | 'inertial';
 

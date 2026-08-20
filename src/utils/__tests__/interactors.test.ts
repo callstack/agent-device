@@ -127,7 +127,7 @@ test('ios scroll sends a single fused scroll command and reports planned pixels'
       command: 'scroll',
       direction: 'down',
       pixels: 120,
-      durationMs: 350,
+      durationMs: 400,
       scrollReleaseBehavior: 'controlled',
       appBundleId: 'com.example.app',
     },
@@ -140,7 +140,7 @@ test('ios scroll sends a single fused scroll command and reports planned pixels'
     referenceWidth: 300,
     referenceHeight: 600,
     pixels: 120,
-    durationMs: 350,
+    durationMs: 400,
   });
 });
 
@@ -168,7 +168,7 @@ test('ios amount-based scroll recomputes pixels from the runner reference frame'
       command: 'scroll',
       direction: 'down',
       amount: 0.5,
-      durationMs: 350,
+      durationMs: 400,
       scrollReleaseBehavior: 'controlled',
       appBundleId: 'com.example.app',
     },

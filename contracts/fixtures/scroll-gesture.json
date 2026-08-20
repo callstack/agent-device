@@ -1,13 +1,12 @@
 {
   "constants": {
-    "defaultIosScrollAmount": 0.35,
+    "defaultIosScrollAmount": 0.65,
     "defaultMobileScrollDurationMs": 300,
-    "defaultIosScrollDurationMs": 350,
+    "defaultIosScrollDurationMs": 400,
     "defaultScrollAmount": 0.6,
     "defaultEdgePaddingFraction": 0.1,
     "ordinaryScrollReleaseBehavior": "controlled",
-    "edgeScrollReleaseBehavior": "inertial",
-    "controlledScrollDestinationHoldMs": 100
+    "edgeScrollReleaseBehavior": "inertial"
   },
   "cases": [
     {
