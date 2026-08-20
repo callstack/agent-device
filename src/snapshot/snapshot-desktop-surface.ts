@@ -72,17 +72,27 @@ function shapeDesktopSurfaceSnapshot(
   options: Pick<SnapshotOptions, 'depth' | 'interactiveOnly' | 'scope'>,
 ): SnapshotResult {
   let nodes = data.nodes ?? [];
-  if (options.scope) nodes = scopeSnapshotNodes(nodes, options.scope);
+  if (options.scope) {
+    nodes = scopeSnapshotNodes(nodes, options.scope, (range) =>
+      options.interactiveOnly
+        ? nodes.slice(range.start, range.end).some(isInteractiveSnapshotNode)
+        : true,
+    );
+  }
   if (options.interactiveOnly) nodes = filterInteractiveSnapshotNodes(nodes);
   if (typeof options.depth === 'number') nodes = filterSnapshotNodesByDepth(nodes, options.depth);
   return { ...data, nodes };
 }
 
 /** The shared scope specification applied post-wire (`@agent-device/contracts/snapshot`). */
-export function scopeSnapshotNodes(nodes: RawSnapshotNode[], scope: string): RawSnapshotNode[] {
+export function scopeSnapshotNodes(
+  nodes: RawSnapshotNode[],
+  scope: string,
+  subtreeContributes?: (range: { start: number; end: number }) => boolean,
+): RawSnapshotNode[] {
   const normalizedScope = normalizeSnapshotScope(scope);
   if (!normalizedScope) return reindexSnapshotNodes(nodes);
-  const range = findSnapshotScopeRange(nodes, normalizedScope);
+  const range = findSnapshotScopeRange(nodes, normalizedScope, subtreeContributes);
   if (!range) return [];
   const slice = nodes.slice(range.start, range.end);
   return reindexSnapshotNodes(slice, slice[0]?.depth ?? 0);

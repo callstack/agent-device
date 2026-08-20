@@ -40,14 +40,18 @@ export function matchesSnapshotScope(node: SnapshotScopeCandidate, scope: string
 export function findSnapshotScopeRange(
   nodes: readonly (SnapshotScopeCandidate & { depth?: number })[],
   scope: string,
+  subtreeContributes: (range: { start: number; end: number }) => boolean = () => true,
 ): { start: number; end: number } | null {
   if (!normalizeSnapshotScope(scope)) return null;
-  const start = nodes.findIndex((node) => matchesSnapshotScope(node, scope));
-  if (start === -1) return null;
-  const rootDepth = nodes[start]?.depth ?? 0;
-  let end = start + 1;
-  while (end < nodes.length && (nodes[end]?.depth ?? 0) > rootDepth) end += 1;
-  return { start, end };
+  for (const [start, node] of nodes.entries()) {
+    if (!matchesSnapshotScope(node, scope)) continue;
+    const rootDepth = node.depth ?? 0;
+    let end = start + 1;
+    while (end < nodes.length && (nodes[end]?.depth ?? 0) > rootDepth) end += 1;
+    const range = { start, end };
+    if (subtreeContributes(range)) return range;
+  }
+  return null;
 }
 
 /** Re-roots a document-order slice: fresh indexes, remapped parents, depth rebased by `depthOffset`. */

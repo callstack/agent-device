@@ -203,7 +203,9 @@ function acceptsEmptyScopedSnapshot(
   quality: SnapshotQualityVerdict | undefined,
 ): boolean {
   return (
-    normalizeSnapshotScope(options?.scope) !== null && quality?.state !== 'sparse' && !!quality
+    normalizeSnapshotScope(options?.scope) !== null &&
+    quality !== undefined &&
+    quality.state !== 'sparse'
   );
 }
 
