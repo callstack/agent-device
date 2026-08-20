@@ -12,7 +12,7 @@ pnpm add agent-device ai
 
 Make an iOS simulator or device [available to agent-device](/docs/agent-setup), then configure an AI SDK model. String model IDs use AI Gateway by default:
 
-```env
+```dotenv
 AI_GATEWAY_API_KEY=your_api_key
 AI_MODEL=provider/model
 ```
