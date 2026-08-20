@@ -10,6 +10,7 @@ import {
 import { resolveRecordedTarget } from '@agent-device/selectors';
 import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
 import type { Point } from '@agent-device/kernel/snapshot';
+import { INTERACTION_ERROR_REASONS } from '@agent-device/contracts/interaction';
 import {
   clickRefE2,
   coveredByTabBarSnapshot,
@@ -85,6 +86,21 @@ test('runtime selector interactions fall back to a full snapshot when interactiv
     { interactiveOnly: true, includeRects: true },
     { interactiveOnly: false, includeRects: true },
   ]);
+});
+
+test('runtime selector misses carry a structured reason for retrying adapters', async () => {
+  const device = createInteractionDevice(makeSnapshotState([]));
+
+  await assert.rejects(
+    () => device.interactions.press(selector('id="profile-button"'), { session: 'default' }),
+    (error: unknown) => {
+      assert.equal(
+        (error as { details?: Record<string, unknown> }).details?.reason,
+        INTERACTION_ERROR_REASONS.selectorNotFound,
+      );
+      return true;
+    },
+  );
 });
 
 test('runtime press refuses a selector that resolves to an off-screen element', async () => {

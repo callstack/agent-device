@@ -248,6 +248,8 @@ const fillCommandFacet = defineCommandFacet({
   name: 'fill',
   text: {
     summary: 'Replace text in a UI input',
+    cliDetail:
+      'When visible label text also matches a non-input element, constrain the target with editable=true, for example fill \'label="Email" editable=true\' "qa@example.com".',
   },
   metadata: metadata('fill'),
   definition: fillCommandDefinition,

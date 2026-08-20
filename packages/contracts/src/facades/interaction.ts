@@ -72,6 +72,7 @@ export {
   INTERACTION_GUARANTEES,
   INTERACTION_PATH_IDS,
 } from '../interaction-guarantees.ts';
+export { INTERACTION_ERROR_REASONS } from '../interaction-error.ts';
 export type {
   GuaranteeEnforcement,
   InteractionGuarantee,

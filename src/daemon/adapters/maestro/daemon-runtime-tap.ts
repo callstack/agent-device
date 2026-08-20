@@ -1,4 +1,5 @@
 import { AppError, asAppError } from '@agent-device/kernel/errors';
+import { INTERACTION_ERROR_REASONS } from '@agent-device/contracts/interaction';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import {
   MAESTRO_RUNTIME_ADAPTER_POLICY,
@@ -242,8 +243,13 @@ async function clickSelector(
 }
 
 function isAtomicSelectorFallbackError(error: unknown): boolean {
-  const code = asAppError(error).code;
-  return code === 'AMBIGUOUS_MATCH' || code === 'ELEMENT_NOT_FOUND' || code === 'ELEMENT_OFFSCREEN';
+  const appError = asAppError(error);
+  return (
+    appError.code === 'AMBIGUOUS_MATCH' ||
+    appError.code === 'ELEMENT_NOT_FOUND' ||
+    appError.code === 'ELEMENT_OFFSCREEN' ||
+    appError.details?.reason === INTERACTION_ERROR_REASONS.selectorNotFound
+  );
 }
 
 export async function clickMaestroTargetPoint(

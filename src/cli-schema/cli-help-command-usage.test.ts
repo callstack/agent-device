@@ -240,6 +240,7 @@ test('command usage describes delayed typing flags', async () => {
   assert.match(typeHelp, /--delay-ms <ms>/);
   assert.match(fillHelp, /--delay-ms <ms>/);
   assert.match(fillHelp, /--record-as <VAR>/);
+  assert.match(fillHelp, /label="Email" editable=true/);
 });
 
 test('snapshot command usage documents diff alias', async () => {

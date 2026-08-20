@@ -48,6 +48,7 @@ import type {
   ResolutionDisclosure,
   ResolvedInteractionTarget,
 } from '@agent-device/contracts/interaction';
+import { INTERACTION_ERROR_REASONS } from '@agent-device/contracts/interaction';
 import type {
   BackendActionResult,
   BackendCommandContext,
@@ -437,7 +438,10 @@ async function selectorInteractionFailure(params: {
   return new AppError(
     'COMMAND_FAILED',
     formatSelectorFailure(selectorExpression, diagnostics, { unique: true }),
-    { hint: selectorFailureHint(diagnostics) },
+    {
+      reason: INTERACTION_ERROR_REASONS.selectorNotFound,
+      hint: selectorFailureHint(diagnostics),
+    },
   );
 }
 

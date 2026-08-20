@@ -103,6 +103,8 @@ test('usageForCommand resolves Maestro compatibility help topic', async () => {
   assert.match(help, /Supported subset:/);
   assert.match(help, /runFlow file\/inline/);
   assert.match(help, /tapOn, doubleTapOn, longPressOn/);
+  assert.match(help, /inputText on the focused element/);
+  assert.match(help, /tap targets poll until available/);
   assert.match(help, /Boundaries:/);
   assert.match(help, /iOS and Android only/);
   assert.match(help, /AD_VAR_\* overrides it/);
@@ -474,6 +476,8 @@ test('usageForCommand resolves manual QA help topic', async () => {
   assert.match(help, /A bare screenshot\/snapshot is not verification/);
   assert.match(help, /use fill <target> <text> --settle to replace/);
   assert.match(help, /use type only to append to an already-focused field/);
+  assert.match(help, /label="Email" editable=true/);
+  assert.match(help, /press 'label="Follow"' --settle/);
   assert.match(help, /Do not use placeholders such as @ref/);
   assert.match(help, /wait_target_absent: a readable capture ran and found no match/);
   assert.match(help, /wait_capture_stalled: no readable capture finished before the deadline/);
