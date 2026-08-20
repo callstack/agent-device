@@ -135,7 +135,8 @@ test('replaying a published script against a reshuffled screen fails closed inst
         phase = 'replay';
         const replay = await world.daemon.callCommand('replay', [scriptPath], world.selection);
         const errorData = assertRpcError(replay, 'REPLAY_DIVERGENCE', /wait/i);
-        const divergence = (errorData.details as Record<string, unknown> | undefined)?.divergence as
+        const divergence = (errorData.details as Record<string, unknown> | undefined)
+          ?.divergence as
           | { kind?: string; targetBinding?: { classification?: string; matchCount?: number } }
           | undefined;
         assert.equal(divergence?.kind, 'identity-mismatch');

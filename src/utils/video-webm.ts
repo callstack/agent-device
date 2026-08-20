@@ -75,7 +75,7 @@ function hasWebmDocumentType(bytes: Buffer, header: EbmlElement): boolean {
 function hasVideoTrackWithMedia(bytes: Buffer, segment: EbmlElement, fileSize: number): boolean {
   const videoTracks = new Set<number>();
   const mediaTracks = new Set<number>();
-  for (let offset = segment.dataStart; offset < segment.dataEnd; ) {
+  for (let offset = segment.dataStart; offset < segment.dataEnd;) {
     const child = readEbmlElement(bytes, offset, segment.dataEnd, fileSize);
     if (!child || !hasPlausibleExtent(child, fileSize)) return false;
     if (child.id === ID.tracks) collectVideoTracks(bytes, child, videoTracks);
@@ -115,7 +115,7 @@ function collectMediaTracks(
   fileSize: number,
   result: Set<number>,
 ): void {
-  for (let offset = cluster.dataStart; offset < cluster.dataEnd; ) {
+  for (let offset = cluster.dataStart; offset < cluster.dataEnd;) {
     const child = readEbmlElement(bytes, offset, cluster.dataEnd, fileSize);
     if (!child || !hasPlausibleExtent(child, fileSize)) return;
     if (child.id === ID.simpleBlock) addMediaTrack(bytes, child, result);
@@ -159,7 +159,7 @@ function readUnsignedChild(
 function readCompleteChildren(bytes: Buffer, parent: EbmlElement): EbmlElement[] | undefined {
   if (!parent.complete || parent.unknownSize) return undefined;
   const children: EbmlElement[] = [];
-  for (let offset = parent.dataStart; offset < parent.dataEnd; ) {
+  for (let offset = parent.dataStart; offset < parent.dataEnd;) {
     const child = readEbmlElement(bytes, offset, parent.dataEnd, bytes.length);
     if (!child || !child.complete || child.unknownSize) return undefined;
     children.push(child);

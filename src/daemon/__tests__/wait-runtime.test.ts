@@ -79,14 +79,13 @@ function waitRuntimeHarness(
   ];
   let pollIndex = 0;
 
-  const captureSnapshot = vi.fn(
-    async (input: CaptureSnapshotInput): Promise<SnapshotResult> =>
-      options.captureSnapshot
-        ? await options.captureSnapshot(input)
-        : {
-            nodes: polls[Math.min(pollIndex++, polls.length - 1)] ?? [],
-            backend: 'web',
-          },
+  const captureSnapshot = vi.fn(async (input: CaptureSnapshotInput): Promise<SnapshotResult> =>
+    options.captureSnapshot
+      ? await options.captureSnapshot(input)
+      : {
+          nodes: polls[Math.min(pollIndex++, polls.length - 1)] ?? [],
+          backend: 'web',
+        },
   );
   const findTextFact = options.findText ?? findTextUnavailable;
   const findText = vi.fn(async (input: FindTextInput) => ({

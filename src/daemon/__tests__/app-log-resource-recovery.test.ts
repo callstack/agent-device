@@ -390,9 +390,9 @@ const unavailableRecording = Object.freeze({
 });
 
 function createHandle(
-  forceCleanup: () => Promise<CleanupOutcome> = vi.fn(
-    async (): Promise<CleanupOutcome> => ({ status: 'cleaned' }),
-  ),
+  forceCleanup: () => Promise<CleanupOutcome> = vi.fn(async (): Promise<CleanupOutcome> => ({
+    status: 'cleaned',
+  })),
 ) {
   return createTestAppLogLiveHandle({
     inspect: () => ({ backend: 'android', state: 'recovering', startedAt: 1 }),

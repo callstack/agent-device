@@ -152,49 +152,47 @@ function makeRecordingGateway(firstStartBlocked: Promise<void>) {
       };
     },
   );
-  const bind = vi.fn(
-    async (): Promise<DeviceBinding<PlatformRuntimeOperations>> => ({
-      device: DEVICE,
-      owner,
-      facts: {
-        device: { family: 'android', kind: 'emulator', providerMode: 'local' },
-        operations: {
-          appLogInspect: unavailable,
-          appLogDoctor: unavailable,
-          appLogStart: unavailable,
-          appLogReattach: unavailable,
-          appLogCleanup: unavailable,
-          appState: unavailable,
-          networkDump: unavailable,
-          screenRecordingStart: { available: true },
-          screenRecordingReattach: { available: true },
-          screenRecordingCleanup: { available: true },
-          ensureReady: unavailable,
-          bootTarget: unavailable,
-          bootTargetHeadless: unavailable,
-          listApps: unavailable,
-          ...unavailableDeploymentSnapshotAndShutdownOperationFacts,
-          ...applicationLifecycleOperationFacts({
-            resolveOpenTarget: unavailable,
-            prepareApplicationOpen: unavailable,
-            openApplication: unavailable,
-            applyRuntimeHints: unavailable,
-            clearRuntimeHints: unavailable,
-            closeApplication: unavailable,
-            finalizeApplicationClose: unavailable,
-            prepareAppleRunner: unavailable,
-            configureProviderPortReverse: unavailable,
-          }),
-        },
-      },
+  const bind = vi.fn(async (): Promise<DeviceBinding<PlatformRuntimeOperations>> => ({
+    device: DEVICE,
+    owner,
+    facts: {
+      device: { family: 'android', kind: 'emulator', providerMode: 'local' },
       operations: {
-        screenRecordingStart: start,
-        screenRecordingReattach: async () => ({ status: 'missing' }),
-        screenRecordingCleanup: async () => ({ status: 'already-missing' }),
+        appLogInspect: unavailable,
+        appLogDoctor: unavailable,
+        appLogStart: unavailable,
+        appLogReattach: unavailable,
+        appLogCleanup: unavailable,
+        appState: unavailable,
+        networkDump: unavailable,
+        screenRecordingStart: { available: true },
+        screenRecordingReattach: { available: true },
+        screenRecordingCleanup: { available: true },
+        ensureReady: unavailable,
+        bootTarget: unavailable,
+        bootTargetHeadless: unavailable,
+        listApps: unavailable,
+        ...unavailableDeploymentSnapshotAndShutdownOperationFacts,
+        ...applicationLifecycleOperationFacts({
+          resolveOpenTarget: unavailable,
+          prepareApplicationOpen: unavailable,
+          openApplication: unavailable,
+          applyRuntimeHints: unavailable,
+          clearRuntimeHints: unavailable,
+          closeApplication: unavailable,
+          finalizeApplicationClose: unavailable,
+          prepareAppleRunner: unavailable,
+          configureProviderPortReverse: unavailable,
+        }),
       },
-      [Symbol.asyncDispose]: async () => {},
-    }),
-  );
+    },
+    operations: {
+      screenRecordingStart: start,
+      screenRecordingReattach: async () => ({ status: 'missing' }),
+      screenRecordingCleanup: async () => ({ status: 'already-missing' }),
+    },
+    [Symbol.asyncDispose]: async () => {},
+  }));
   const gateway: DeviceRuntimeGateway<PlatformRuntimeOperations> = {
     inspectFacts: async () => {
       throw new Error('unused');

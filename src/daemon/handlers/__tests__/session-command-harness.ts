@@ -42,14 +42,12 @@ export const mockEnsureReadyRuntime = vi.fn(
 export const mockEnsureReadyHeadlessRuntime = vi.fn(
   async (_input: EnsureReadyInput): Promise<DeviceInfo | undefined> => undefined,
 );
-export const mockShutdownTargetRuntime = vi.fn(
-  async (): Promise<TargetShutdownResult> => ({
-    success: true,
-    exitCode: 0,
-    stdout: '',
-    stderr: '',
-  }),
-);
+export const mockShutdownTargetRuntime = vi.fn(async (): Promise<TargetShutdownResult> => ({
+  success: true,
+  exitCode: 0,
+  stdout: '',
+  stderr: '',
+}));
 export const mockDeployAppRuntime = vi.fn(
   async (_input: AppDeploymentInput): Promise<AppDeploymentResult> => ({}),
 );

@@ -67,10 +67,12 @@ type CommandFacetDefinitions<TCommands extends readonly CommandFacet[]> = {
 type CommandFacetName<TCommands extends readonly CommandFacet[]> = TCommands[number]['name'];
 
 export type ProjectedCommandOutputSchemas<TDefinitions extends readonly AnyCommandDefinition[]> = {
-  [TDefinition in Extract<
-    TDefinitions[number],
-    { projection: ExecutableCommandProjection }
-  > as TDefinition['name']]: JsonSchema;
+  [
+    TDefinition in Extract<
+      TDefinitions[number],
+      { projection: ExecutableCommandProjection }
+    > as TDefinition['name']
+  ]: JsonSchema;
 };
 
 export function defineCommandFacet<

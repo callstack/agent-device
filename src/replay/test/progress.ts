@@ -322,7 +322,7 @@ function trimToColumns(value: string, columns: ReplayTestProgressFormatOptions['
 
 function visibleLength(value: string): number {
   let length = 0;
-  for (let index = 0; index < value.length; ) {
+  for (let index = 0; index < value.length;) {
     const ansi = readAnsiEscapeAt(value, index);
     if (ansi) {
       index += ansi.length;
@@ -342,7 +342,7 @@ function sliceVisibleColumns(value: string, columns: number): string {
   if (columns <= 0) return '';
   let visibleColumns = 0;
   let output = '';
-  for (let index = 0; index < value.length && visibleColumns < columns; ) {
+  for (let index = 0; index < value.length && visibleColumns < columns;) {
     const ansi = readAnsiEscapeAt(value, index);
     if (ansi) {
       output += ansi;

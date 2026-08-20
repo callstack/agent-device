@@ -140,13 +140,13 @@ export type CommandField<T> = {
 export type CommandFieldMap = Record<string, CommandField<unknown>>;
 
 export type InferCommandFields<TFields extends CommandFieldMap> = {
-  [TKey in keyof TFields as TFields[TKey]['required'] extends true
-    ? TKey
-    : never]: TFields[TKey] extends CommandField<infer TValue> ? TValue : never;
+  [
+    TKey in keyof TFields as TFields[TKey]['required'] extends true ? TKey : never
+  ]: TFields[TKey] extends CommandField<infer TValue> ? TValue : never;
 } & {
-  [TKey in keyof TFields as TFields[TKey]['required'] extends true
-    ? never
-    : TKey]?: TFields[TKey] extends CommandField<infer TValue> ? TValue : never;
+  [
+    TKey in keyof TFields as TFields[TKey]['required'] extends true ? never : TKey
+  ]?: TFields[TKey] extends CommandField<infer TValue> ? TValue : never;
 };
 
 export type InferCommandInput<TFields extends CommandFieldMap> = InferCommandFields<TFields> &

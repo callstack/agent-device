@@ -62,7 +62,7 @@ export async function searchForVisibleElement(
   let stallRetriesLeft = SCROLL_SEARCH_STALL_RETRIES;
   let lastFailure: CliJsonResult | undefined;
 
-  for (let attempt = 1; attempt <= SCROLL_SEARCH_ATTEMPTS; ) {
+  for (let attempt = 1; attempt <= SCROLL_SEARCH_ATTEMPTS;) {
     const probe = await probeVisibility(attempt);
     if (probe.status === 0) return;
     lastFailure = probe;

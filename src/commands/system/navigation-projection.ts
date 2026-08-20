@@ -151,8 +151,7 @@ type ProjectedNavigationCommandMethod<BaseOptions, Projection> =
     : never;
 
 export type ProjectedNavigationCommandClient<BaseOptions> = {
-  [Name in NavigationCommandName as (typeof NAVIGATION_COMMAND_PROJECTIONS)[Name]['clientMethod']]: ProjectedNavigationCommandMethod<
-    BaseOptions,
-    (typeof NAVIGATION_COMMAND_PROJECTIONS)[Name]
-  >;
+  [
+    Name in NavigationCommandName as (typeof NAVIGATION_COMMAND_PROJECTIONS)[Name]['clientMethod']
+  ]: ProjectedNavigationCommandMethod<BaseOptions, (typeof NAVIGATION_COMMAND_PROJECTIONS)[Name]>;
 };

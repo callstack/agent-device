@@ -70,7 +70,7 @@ function parseBinaryManifestPackageName(buffer: Buffer): string | undefined {
   }
 
   let strings: string[] | undefined;
-  for (let offset = buffer.readUInt16LE(2); offset + 8 <= buffer.length; ) {
+  for (let offset = buffer.readUInt16LE(2); offset + 8 <= buffer.length;) {
     const type = buffer.readUInt16LE(offset);
     const headerSize = buffer.readUInt16LE(offset + 2);
     const chunkSize = buffer.readUInt32LE(offset + 4);

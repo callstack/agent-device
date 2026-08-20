@@ -62,19 +62,15 @@ test('install_source materializes and deploys through one admitted runtime bindi
     booted: true,
   });
   store.set(session.name, session);
-  const materialize = vi.fn(
-    async (): Promise<MaterializedAppSource> => ({
-      installablePath: '/tmp/materialized/app.apk',
-      cleanup: async () => {},
-    }),
-  );
-  const deploy = vi.fn(
-    async (): Promise<AppDeploymentResult> => ({
-      packageName: 'com.example.app',
-      appName: 'App',
-      launchTarget: 'com.example.app',
-    }),
-  );
+  const materialize = vi.fn(async (): Promise<MaterializedAppSource> => ({
+    installablePath: '/tmp/materialized/app.apk',
+    cleanup: async () => {},
+  }));
+  const deploy = vi.fn(async (): Promise<AppDeploymentResult> => ({
+    packageName: 'com.example.app',
+    appName: 'App',
+    launchTarget: 'com.example.app',
+  }));
   const runtime = createSourceRuntime(session.device, materialize, deploy);
 
   const response = await handleInstallFromSourceDeploymentCommand({
@@ -114,12 +110,10 @@ test('install_source rejects unavailable facts before binding or materializing',
     booted: true,
   });
   store.set(session.name, session);
-  const materialize = vi.fn(
-    async (): Promise<MaterializedAppSource> => ({
-      installablePath: '/tmp/materialized/app.apk',
-      cleanup: async () => {},
-    }),
-  );
+  const materialize = vi.fn(async (): Promise<MaterializedAppSource> => ({
+    installablePath: '/tmp/materialized/app.apk',
+    cleanup: async () => {},
+  }));
   const runtime = createSourceRuntime(session.device, materialize, async () => ({}), {
     materializationAvailable: false,
   });
@@ -152,12 +146,10 @@ test('install_source fails closed when a provider owner does not expose readines
     booted: true,
   });
   store.set(session.name, session);
-  const localMaterialization = vi.fn(
-    async (): Promise<MaterializedAppSource> => ({
-      installablePath: '/tmp/local-fallback.apk',
-      cleanup: async () => {},
-    }),
-  );
+  const localMaterialization = vi.fn(async (): Promise<MaterializedAppSource> => ({
+    installablePath: '/tmp/local-fallback.apk',
+    cleanup: async () => {},
+  }));
   const runtime = createSourceRuntime(session.device, localMaterialization, async () => ({}), {
     providerMode: 'provider-runtime',
     readinessAvailable: false,

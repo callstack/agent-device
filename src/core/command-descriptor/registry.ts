@@ -82,12 +82,12 @@ export type DescriptorCliCommandName =
   | DescriptorCommandNameForCatalogGroup<'local-cli'>;
 
 export type DescriptorCatalogRecord<Group extends CommandCatalogGroup> = {
-  readonly [Descriptor in Extract<
-    (typeof commandDescriptors)[number],
-    { name: string }
-  > as RawCommandCatalogGroup<Descriptor> extends Group
-    ? RawCommandCatalogKey<Descriptor>
-    : never]: Descriptor['name'];
+  readonly [
+    Descriptor in Extract<
+      (typeof commandDescriptors)[number],
+      { name: string }
+    > as RawCommandCatalogGroup<Descriptor> extends Group ? RawCommandCatalogKey<Descriptor> : never
+  ]: Descriptor['name'];
 };
 
 export type DescriptorDispatchCommandName =
