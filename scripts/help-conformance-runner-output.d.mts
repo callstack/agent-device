@@ -6,3 +6,8 @@ export type RunnerOutcome =
 
 export declare function classifyRunnerOutput(raw: string): RunnerOutcome;
 export declare function extractCommands(raw: string): string[];
+export declare function runnerErrorOutcome(
+  raw: string,
+  message: string,
+  reason: RunnerErrorReason,
+): Extract<RunnerOutcome, { kind: 'runner-error' }>;

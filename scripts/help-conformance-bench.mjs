@@ -11,7 +11,7 @@ import {
 } from './help-conformance-case-checks.mjs';
 import { CASES } from './help-conformance-cases.mjs';
 import { validatePlanCommands } from './help-conformance-plan-validator.mjs';
-import { classifyRunnerOutput } from './help-conformance-runner-output.mjs';
+import { classifyRunnerOutput, runnerErrorOutcome } from './help-conformance-runner-output.mjs';
 import { summarizeResults } from './help-conformance-summary.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -372,15 +372,13 @@ async function runCase(runner, testCase, prompt, outDir, trial, repeat) {
   const trialSuffix = repeat > 1 ? `-trial-${trial}` : '';
   const outputPath = join(outDir, `${safeName(runner)}-${testCase.id}${trialSuffix}.txt`);
   await writeFile(outputPath, outcome.raw);
+  const base = { runner, caseId: testCase.id, trial, outputPath };
   if (outcome.kind === 'runner-error') {
     return {
-      runner,
-      caseId: testCase.id,
-      trial,
+      ...base,
       passed: false,
       runnerError: outcome.message,
       runnerErrorReason: outcome.reason,
-      outputPath,
     };
   }
   const commandValidation = await validatePlanCommands(outcome.commands, {
@@ -390,16 +388,13 @@ async function runCase(runner, testCase, prompt, outDir, trial, repeat) {
   const score = countPassingChecks(checks);
   const total = countChecks(testCase);
   return {
-    runner,
-    caseId: testCase.id,
-    trial,
+    ...base,
     commands: outcome.commands,
     commandValidation,
     checks,
     score,
     total,
     passed: score === total,
-    outputPath,
   };
 }
 
@@ -409,12 +404,7 @@ async function runOutcome(runner, prompt, outDir) {
     const raw = await runModel(kind, model, prompt, outDir);
     return classifyRunnerOutput(raw);
   } catch (error) {
-    return {
-      kind: 'runner-error',
-      raw: errorOutput(error),
-      message: errorMessage(error),
-      reason: 'process-failure',
-    };
+    return runnerErrorOutcome(errorOutput(error), errorMessage(error), 'process-failure');
   }
 }
 

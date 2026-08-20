@@ -10,7 +10,6 @@ import { validateAgentDeviceCommand } from '../help-conformance-command-validato
 import { opensAndCloses, usesValidationPrep } from '../help-conformance-expectations.mjs';
 import { validatePlanCommands } from '../help-conformance-plan-validator.mjs';
 import { classifyRunnerOutput, extractCommands } from '../help-conformance-runner-output.mjs';
-import type { RunnerOutcome } from '../help-conformance-runner-output.mjs';
 import { summarizeResults } from '../help-conformance-summary.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -350,12 +349,12 @@ test('runner output classifies model commands as success and infrastructure nois
   assert.deepEqual(extractCommands(claudeError), []);
 
   const rateLimited = JSON.stringify({ type: 'error', message: 'rate limit exceeded' });
-  const rateLimitedOutcome: RunnerOutcome = classifyRunnerOutput(rateLimited);
-  if (rateLimitedOutcome.kind !== 'runner-error') {
-    throw new Error('expected a runner-error outcome');
-  }
-  assert.equal(rateLimitedOutcome.reason, 'error-envelope');
-  assert.equal(rateLimitedOutcome.message, 'rate limit exceeded');
+  assert.deepEqual(classifyRunnerOutput(rateLimited), {
+    kind: 'runner-error',
+    raw: rateLimited,
+    message: 'rate limit exceeded',
+    reason: 'error-envelope',
+  });
 
   // status: 'failed' alone does not shadow a real commands payload.
   const statusFailedWithCommands = JSON.stringify({

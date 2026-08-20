@@ -6,11 +6,11 @@
 
 export function classifyRunnerOutput(raw) {
   if (raw.trim().length === 0) {
-    return runnerError(raw, 'empty-output', 'Runner returned empty output.');
+    return runnerErrorOutcome(raw, 'Runner returned empty output.', 'empty-output');
   }
   const payload = parseJsonEnvelope(raw);
   if (isErrorPayload(payload)) {
-    return runnerError(raw, 'error-envelope', errorPayloadMessage(payload));
+    return runnerErrorOutcome(raw, errorPayloadMessage(payload), 'error-envelope');
   }
   return { kind: 'success', raw, commands: extractCommands(raw) };
 }
@@ -29,7 +29,11 @@ export function extractCommands(raw) {
     );
 }
 
-function runnerError(raw, reason, message) {
+// The RunnerOutcome union's only 'runner-error' constructor: every caller
+// that classifies a runner failure (a bad envelope here, a spawn/timeout
+// failure in help-conformance-bench.mjs) builds the outcome through this one
+// function, so the shape can't drift between the two error sources.
+export function runnerErrorOutcome(raw, message, reason) {
   return { kind: 'runner-error', raw, message, reason };
 }
 
