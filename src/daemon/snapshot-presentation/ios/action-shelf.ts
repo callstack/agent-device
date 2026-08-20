@@ -38,7 +38,7 @@ export function collectIosReplacedActionShelves(
     );
     if (!transition) continue;
 
-    suppressNodeAndDescendants(nodes, shelfPosition, context.suppressedIndexes);
+    suppressNodeAndDescendants(nodes, shelfPosition, context);
     const shelfBand = expandRect(transition.shelfRect, ACTION_SHELF_EDGE_TOLERANCE);
     for (const sibling of transition.intermediateSiblings) {
       if (
@@ -50,7 +50,7 @@ export function collectIosReplacedActionShelves(
       }
       const position = positions.get(sibling.index);
       if (position !== undefined) {
-        suppressNodeAndDescendants(nodes, position, context.suppressedIndexes);
+        suppressNodeAndDescendants(nodes, position, context);
       }
     }
   }
@@ -214,13 +214,13 @@ function isActionShelfReplacement(
 function suppressNodeAndDescendants(
   nodes: RawSnapshotNode[],
   position: number,
-  suppressedIndexes: Set<number>,
+  context: SnapshotTreeRuleContext,
 ): void {
   const node = nodes[position];
   if (!node) return;
-  suppressedIndexes.add(node.index);
+  context.suppressNode(node, []);
   for (const descendant of collectDescendants(nodes, position)) {
-    suppressedIndexes.add(descendant.index);
+    context.suppressNode(descendant, []);
   }
 }
 

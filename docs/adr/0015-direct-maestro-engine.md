@@ -167,8 +167,8 @@ vector).
 
 ## Performance Contract
 
-The migration cannot switch production routing until Android and iOS satisfy all of these on the pager
-and react-navigation corpora:
+The direct engine preserves these properties on Android and iOS across the pager and react-navigation
+corpora:
 
 - total wall time is no slower than the pre-migration compatibility engine;
 - an observation immediately after a mutation polls its authored condition directly; a later mutation uses
@@ -186,30 +186,10 @@ Android verification must prove the bundled helper backend and version. iOS veri
 runner startup from warm command latency. Both platforms rerun the non-Maestro gesture canaries; their
 two-pointer plans, executor selection, and app-observable effects must remain unchanged.
 
-## Migration
-
-Completed. Production Maestro YAML now uses the typed program, immutable replay plan, and direct
-runtime port exclusively. The `SessionAction` lowering path, private `__maestro*` commands,
-`replayControl`, hidden compatibility caches, positional decoders, and their fallback routing were
-deleted in the same change. Generic `.ad` replay remains independent.
-
-1. Add the typed program, runtime port, direct interpreter, and normalized upstream fixtures without
-   changing production routing.
-2. Differentially compare the old lowering path and direct engine at the typed operation boundary.
-3. Move lifecycle, input, screenshot, and keyboard commands.
-4. Move target queries and assertions, deleting unverified fast-path success and assertion-triggered
-   action replay.
-5. Move single-pointer swipes through ADR 0013's normalized input boundary.
-6. Move hooks, includes, conditions, repeat/retry, and trusted `runScript`.
-7. Switch `--maestro` atomically, then delete private Maestro commands, positional decoding, hidden
-   caches, and obsolete converter/runtime tests.
-
-The old and new engines may coexist only in tests during migration. Shipping two production engines or
-a runtime fallback between them is rejected because it doubles semantic and performance ownership.
-
 ## Consequences
 
-- Maestro remains a supported subset with explicit failures; this refactor does not expand parity.
+- agent-device supports selected Maestro Flow syntax and behavior. Unsupported features return
+  explicit errors, and intentional differences are declared in the conformance fixtures.
 - Source provenance and runtime values stay typed through execution.
 - Compatibility policy remains local while device behavior stays in shared runtimes and backends.
 - Cross-platform correctness may require richer provider query evidence, but not additional round trips.

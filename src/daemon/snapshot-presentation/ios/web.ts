@@ -34,7 +34,7 @@ export function collectIosWebSemanticPresentation(
       childrenByParent,
     );
     if (presentation?.kind === 'suppress') {
-      context.suppressedIndexes.add(node.index);
+      context.suppressNode(node, []);
       continue;
     }
     if (presentation) {

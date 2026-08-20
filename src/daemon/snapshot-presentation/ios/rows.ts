@@ -3,7 +3,6 @@ import { normalizeType } from '@agent-device/contracts/snapshot';
 import { isSystemScrollIndicatorLabel } from '../../../utils/scroll-indicator.ts';
 import {
   areRectsApproximatelyEqual,
-  associateSnapshotPresentation,
   collectDescendants,
   isDisabledChevronButton,
   mergeReplacement,
@@ -47,8 +46,7 @@ function resolveIosRowLabel(
     return rowLabel;
   }
   mergeReplacement(context.replacements, row, { label: title });
-  context.suppressedIndexes.add(titleNode.index);
-  associateSnapshotPresentation(context, titleNode, row);
+  context.suppressNode(titleNode, [row]);
   return title;
 }
 
@@ -109,8 +107,7 @@ function collectSwitchRowPresentation(
   if (promotedIdentifier) {
     mergeReplacement(context.replacements, switchControl, { identifier: promotedIdentifier });
   }
-  context.suppressedIndexes.add(row.index);
-  associateSnapshotPresentation(context, row, switchControl);
+  context.suppressNode(row, [switchControl]);
   suppressSwitchRowDescendants(descendants, row, rowLabel, switchControl, context);
   return true;
 }
@@ -135,8 +132,7 @@ function collectButtonRowPresentation(
     mergeReplacement(context.replacements, row, { identifier: rowButton.identifier });
   }
 
-  context.suppressedIndexes.add(rowButton.index);
-  associateSnapshotPresentation(context, rowButton, row);
+  context.suppressNode(rowButton, [row]);
   suppressRepeatedRowDescendants(
     descendants.filter((descendant) => descendant.index !== rowButton.index),
     rowLabel,
@@ -162,8 +158,7 @@ function suppressSwitchRowDescendants(
       isIosSwitchValueDescendant(descendant, switchControl) ||
       shouldSuppressRepeatedTextDescendant(descendant, rowLabel)
     ) {
-      context.suppressedIndexes.add(descendant.index);
-      associateSnapshotPresentation(context, descendant, switchControl);
+      context.suppressNode(descendant, [switchControl]);
     }
   }
 }
@@ -179,8 +174,7 @@ function suppressRepeatedRowDescendants(
       shouldSuppressRepeatedTextDescendant(descendant, rowLabel) ||
       (row && isEmptyRowButtonWrapper(descendant, row))
     ) {
-      context.suppressedIndexes.add(descendant.index);
-      if (row) associateSnapshotPresentation(context, descendant, row);
+      context.suppressNode(descendant, row ? [row] : []);
     }
   }
 }

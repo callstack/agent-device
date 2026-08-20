@@ -3,25 +3,14 @@ import { normalizeType } from '@agent-device/contracts/snapshot';
 export { areRectsApproximatelyEqual } from '../../utils/rect-center.ts';
 
 export type SnapshotTreeRuleContext = {
-  /** Exact semantic-source relationships declared by the presentation rule that owns them. */
-  representativeSourceIndexesBySourceIndex: Map<number, Set<number>>;
   replacements: Map<number, RawSnapshotNode>;
   /** Projected label owners that repeated-text suppression must retain. */
   semanticRepresentativeIndexes: Set<number>;
   sourceNodesByIndex: ReadonlyMap<number, RawSnapshotNode>;
-  suppressedIndexes: Set<number>;
+  suppressedIndexes: ReadonlySet<number>;
+  /** Suppress a source and declare every presented node that carries its semantic identity. */
+  suppressNode: (source: RawSnapshotNode, representatives: readonly RawSnapshotNode[]) => void;
 };
-
-export function associateSnapshotPresentation(
-  context: SnapshotTreeRuleContext,
-  source: RawSnapshotNode,
-  representative: RawSnapshotNode,
-): void {
-  const representatives =
-    context.representativeSourceIndexesBySourceIndex.get(source.index) ?? new Set<number>();
-  representatives.add(representative.index);
-  context.representativeSourceIndexesBySourceIndex.set(source.index, representatives);
-}
 
 export function collectChildrenByParent(nodes: RawSnapshotNode[]): Map<number, RawSnapshotNode[]> {
   const childrenByParent = new Map<number, RawSnapshotNode[]>();
@@ -273,7 +262,7 @@ function getRectArea(rect: RawSnapshotNode['rect']): number {
 
 export function reindexSnapshotNodesWithSuppressedParents(
   nodes: RawSnapshotNode[],
-  suppressedIndexes: Set<number>,
+  suppressedIndexes: ReadonlySet<number>,
   originalNodes: RawSnapshotNode[],
 ): RawSnapshotNode[] {
   const originalByIndex = new Map(originalNodes.map((node) => [node.index, node]));
@@ -302,7 +291,7 @@ export function reindexSnapshotNodesWithSuppressedParents(
 
 function findNearestKeptAncestorIndex(
   parentIndex: number,
-  suppressedIndexes: Set<number>,
+  suppressedIndexes: ReadonlySet<number>,
   originalByIndex: Map<number, RawSnapshotNode>,
   indexMap: Map<number, number>,
 ): number | undefined {

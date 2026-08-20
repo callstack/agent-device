@@ -2,7 +2,6 @@ import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 import { rectContains } from '@agent-device/kernel/rect';
 import { extractNodeText, normalizeType } from '@agent-device/contracts/snapshot';
 import {
-  associateSnapshotPresentation,
   collectChildrenByParent,
   mergeReplacement,
   type SnapshotTreeRuleContext,
@@ -40,10 +39,8 @@ function collectNavigationTitleAffordances(
       rect: unionRects([image.rect!, field.rect!, title.rect!]),
     });
     context.semanticRepresentativeIndexes.add(field.index);
-    context.suppressedIndexes.add(title.index);
-    context.suppressedIndexes.add(image.index);
-    associateSnapshotPresentation(context, title, field);
-    associateSnapshotPresentation(context, image, field);
+    context.suppressNode(title, [field]);
+    context.suppressNode(image, [field]);
   }
 }
 

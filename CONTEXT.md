@@ -300,9 +300,9 @@ task touches:
 
 ### Maestro compatibility
 
-- Maestro program: source-preserving typed representation of supported Maestro YAML. It is
-  interpreted directly through the compatibility runtime port and never lowered through generic
-  replay action strings. See ADR 0015.
+- Maestro program: source-preserving typed representation of the Maestro Flow syntax and behavior
+  supported by agent-device. The program is interpreted directly through the compatibility runtime
+  port and never lowered through generic replay action strings. See ADR 0015.
 - Maestro observation generation: explicit compatibility-engine state identifying evidence captured
   since the most recent mutation. Queries may share semantic evidence within one generation; every
   mutation attempt invalidates it before dispatch. Interaction geometry is action-local: unique exact

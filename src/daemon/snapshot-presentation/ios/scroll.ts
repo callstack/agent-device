@@ -4,7 +4,6 @@ import {
   isSystemScrollIndicatorLabel,
 } from '../../../utils/scroll-indicator.ts';
 import {
-  associateSnapshotPresentation,
   findNearestScrollableContainer,
   isScrollableSnapshotType,
   updateReplacement,
@@ -35,7 +34,7 @@ function collectIosScrollIndicatorNodePresentation(
   context: SnapshotTreeRuleContext,
 ): void {
   if (!isScrollableSnapshotType(node.type)) {
-    context.suppressedIndexes.add(node.index);
+    context.suppressNode(node, []);
   }
 
   const directions = inferVerticalScrollIndicatorDirections(node.label?.trim() ?? '', node.value);
@@ -49,7 +48,7 @@ function collectIosScrollIndicatorNodePresentation(
   }
 
   if (context.suppressedIndexes.has(node.index)) {
-    associateSnapshotPresentation(context, node, container);
+    context.suppressNode(node, [container]);
   }
 
   applyScrollIndicatorReplacement(context, container, node, directions);

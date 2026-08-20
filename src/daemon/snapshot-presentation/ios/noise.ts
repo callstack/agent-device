@@ -10,7 +10,6 @@ import { normalizeType } from '@agent-device/contracts/snapshot';
 import { collectIosScrollIndicatorPresentation } from './scroll.ts';
 import {
   areRectsApproximatelyEqual,
-  associateSnapshotPresentation,
   collectDescendantsByParentIndex,
   findDescendant,
   findLargestViewportRect,
@@ -26,8 +25,7 @@ export function collectIosPresentationNoiseSuppression(
   nodes: RawSnapshotNode[],
   context: SnapshotTreeRuleContext,
 ): void {
-  const { suppressedIndexes } = context;
-  collectIosOffscreenKeyboardSuppression(nodes, context.sourceNodesByIndex, suppressedIndexes);
+  collectIosOffscreenKeyboardSuppression(nodes, context);
   collectIosStructuralIdentifierSuppression(nodes, context);
   collectIosScrollIndicatorPresentation(nodes, context);
   collectIosSearchToolbarSuppression(nodes, context);
@@ -119,10 +117,7 @@ function collectIosReactNativeOverlayWrapperSuppression(
         collectDescendantNodes(nodes, position),
       )
     ) {
-      context.suppressedIndexes.add(node.index);
-      for (const descendant of collectDescendantNodes(nodes, position)) {
-        associateSnapshotPresentation(context, node, descendant);
-      }
+      context.suppressNode(node, collectDescendantNodes(nodes, position));
     }
   });
 }
@@ -167,8 +162,7 @@ function collectRepeatedStaticSuppressionForNode(
   }
   const semanticDescendant = findEquivalentSemanticDescendant(nodes, position, nodeLabel);
   if (semanticDescendant) {
-    context.suppressedIndexes.add(node.index);
-    associateSnapshotPresentation(context, node, semanticDescendant);
+    context.suppressNode(node, [semanticDescendant]);
     return;
   }
   suppressRepeatedStaticDescendants(nodes, position, nodeLabel, node, context);
@@ -200,8 +194,7 @@ function suppressRepeatedStaticDescendants(
       !context.semanticRepresentativeIndexes.has(descendant.index) &&
       isRepeatedStaticNode(descendant, label)
     ) {
-      context.suppressedIndexes.add(descendant.index);
-      associateSnapshotPresentation(context, descendant, representative);
+      context.suppressNode(descendant, [representative]);
     }
   });
 }
@@ -220,8 +213,7 @@ function collectIosActionWrapperSuppression(
       );
     });
     if (semanticDescendant) {
-      context.suppressedIndexes.add(node.index);
-      associateSnapshotPresentation(context, node, semanticDescendant);
+      context.suppressNode(node, [semanticDescendant]);
     }
   });
 }
@@ -265,8 +257,7 @@ function isFullscreenActionLabelWrapper(
 
 function collectIosOffscreenKeyboardSuppression(
   nodes: RawSnapshotNode[],
-  sourceNodesByIndex: ReadonlyMap<number, RawSnapshotNode>,
-  suppressedIndexes: Set<number>,
+  context: SnapshotTreeRuleContext,
 ): void {
   const viewport = findLargestViewportRect(nodes);
   const screenBottom = viewport ? viewport.y + viewport.height : null;
@@ -278,10 +269,10 @@ function collectIosOffscreenKeyboardSuppression(
     if (!node || !isOffscreenKeyboardNode(node, screenBottom)) {
       continue;
     }
-    suppressedIndexes.add(node.index);
-    suppressOffscreenKeyboardAncestors(node, sourceNodesByIndex, suppressedIndexes, screenBottom);
+    context.suppressNode(node, []);
+    suppressOffscreenKeyboardAncestors(node, context, screenBottom);
     forEachDescendant(nodes, position, (descendant) => {
-      suppressedIndexes.add(descendant.index);
+      context.suppressNode(descendant, []);
     });
   }
 }
@@ -295,17 +286,18 @@ function isOffscreenKeyboardNode(node: RawSnapshotNode, screenBottom: number): b
 
 function suppressOffscreenKeyboardAncestors(
   node: RawSnapshotNode,
-  sourceNodesByIndex: ReadonlyMap<number, RawSnapshotNode>,
-  suppressedIndexes: Set<number>,
+  context: SnapshotTreeRuleContext,
   screenBottom: number,
 ): void {
   let current =
-    typeof node.parentIndex === 'number' ? sourceNodesByIndex.get(node.parentIndex) : undefined;
+    typeof node.parentIndex === 'number'
+      ? context.sourceNodesByIndex.get(node.parentIndex)
+      : undefined;
   while (current?.rect && current.rect.y >= screenBottom) {
-    suppressedIndexes.add(current.index);
+    context.suppressNode(current, []);
     current =
       typeof current.parentIndex === 'number'
-        ? sourceNodesByIndex.get(current.parentIndex)
+        ? context.sourceNodesByIndex.get(current.parentIndex)
         : undefined;
   }
 }
@@ -324,10 +316,7 @@ function collectIosStructuralIdentifierSuppression(
     if (!node.identifier?.trim()) {
       continue;
     }
-    context.suppressedIndexes.add(node.index);
-    for (const descendant of collectDescendantsByParentIndex(nodes, node.index)) {
-      associateSnapshotPresentation(context, node, descendant);
-    }
+    context.suppressNode(node, collectDescendantsByParentIndex(nodes, node.index));
   }
 }
 
@@ -354,8 +343,7 @@ function collectIosSearchToolbarSuppression(
       continue;
     }
 
-    context.suppressedIndexes.add(node.index);
-    associateSnapshotPresentation(context, node, innerSearch);
+    context.suppressNode(node, [innerSearch]);
     suppressToolbarAncestors(node, innerSearch, context);
     suppressSearchToolbarDescendants(nodes, position, innerSearch, context);
   }
@@ -381,8 +369,7 @@ function suppressSearchToolbarDescendants(
       return;
     }
     if (shouldSuppressIosSearchToolbarDescendant(descendant)) {
-      context.suppressedIndexes.add(descendant.index);
-      associateSnapshotPresentation(context, descendant, keptSearch);
+      context.suppressNode(descendant, [keptSearch]);
     }
   });
 }
@@ -398,8 +385,7 @@ function suppressToolbarAncestors(
     if (!parent || parent.label !== 'Toolbar') {
       return;
     }
-    context.suppressedIndexes.add(parent.index);
-    associateSnapshotPresentation(context, parent, representative);
+    context.suppressNode(parent, [representative]);
     current = parent;
   }
 }

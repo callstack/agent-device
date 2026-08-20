@@ -26,7 +26,7 @@ export function presentIosInteractiveSnapshot(nodes: RawSnapshotNode[]): RawSnap
 
 export type IosInteractiveSnapshotPresentation = {
   nodes: RawSnapshotNode[];
-  /** Presented node indexes for every source index; suppressed noise maps to an empty list. */
+  /** Canonical presented representatives for every semantic source index. */
   presentedIndexesBySourceIndex: ReadonlyMap<number, readonly number[]>;
 };
 
@@ -44,10 +44,17 @@ export function buildIosInteractiveSnapshotPresentation(
   const suppressedIndexes = new Set<number>();
   const ruleContext: SnapshotTreeRuleContext = {
     replacements,
-    representativeSourceIndexesBySourceIndex,
     semanticRepresentativeIndexes,
     sourceNodesByIndex,
     suppressedIndexes,
+    suppressNode(source, representatives) {
+      suppressedIndexes.add(source.index);
+      if (representatives.length === 0) return;
+      const indexes =
+        representativeSourceIndexesBySourceIndex.get(source.index) ?? new Set<number>();
+      for (const representative of representatives) indexes.add(representative.index);
+      representativeSourceIndexesBySourceIndex.set(source.index, indexes);
+    },
   };
 
   for (const rule of IOS_PRESENTATION_RULES) {
