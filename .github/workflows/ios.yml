@@ -45,6 +45,8 @@ on:
       - 'test/integration/replays/macos/**'
       - 'test/integration/android-**'
       - 'test/integration/smoke-android-**'
+      - 'test/integration/smoke-linux-**'
+      - 'test/integration/linux-e2e/**'
       - 'test/integration/smoke-web-**'
       - 'test/integration/web-e2e/**'
   push:
