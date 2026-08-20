@@ -190,6 +190,11 @@ One backend attempt's raw accessibility nodes and attempt-level capture facts.
 **Presentation options**:
 The policy input controlling how one snapshot acquisition becomes a public projection.
 
+**Capture hint**:
+The acquisition-facing view of a snapshot request, derived once from presentation options. It names
+the projection a backend must serve and may narrow acquisition only where that backend can prove the
+narrowing complete.
+
 **Snapshot eligibility**:
 Membership in a presented snapshot projection, independent of whether a node is currently hittable.
 

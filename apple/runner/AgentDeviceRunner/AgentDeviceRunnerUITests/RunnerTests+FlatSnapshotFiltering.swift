@@ -108,16 +108,18 @@ extension RunnerTests {
     )
   }
 
+  /// Regular-projection acquisition gate. The raw projection never reaches it: raw acquisition is
+  /// the acquired tree, so it has no visibility filter to consult (#1797 D4).
   func flatSnapshotFilterDecision(
     _ node: FlatSnapshotFilterNode,
-    options: PresentationOptions,
+    hint: CaptureHint,
     visibilityPolicy: FlatSnapshotVisibilityPolicy
   ) -> FlatSnapshotFilterDecision {
     let include: Bool
     if node.isRoot {
       include = true
     } else if !node.visible
-      && (options.interactiveOnly || visibilityPolicy == .viewportProjected)
+      && (hint.interactiveOnly || visibilityPolicy == .viewportProjected)
     {
       include = false
     } else {
@@ -285,6 +287,10 @@ extension RunnerTests {
   }
 
   func testFlatSnapshotFilterDecisionMatrixCoversOptions() {
+    func hint(interactiveOnly: Bool) -> CaptureHint {
+      CaptureHint(
+        projection: .regular, depth: nil, interactiveOnly: interactiveOnly, customActions: false)
+    }
     let visibleContent = FlatSnapshotFilterNode(
       isRoot: false,
       visible: true
@@ -305,42 +311,42 @@ extension RunnerTests {
     XCTAssertTrue(
       flatSnapshotFilterDecision(
         visibleContent,
-        options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
+        hint: hint(interactiveOnly: false),
         visibilityPolicy: .interactiveOnly
       ).include
     )
     XCTAssertFalse(
       flatSnapshotFilterDecision(
         hiddenInteractive,
-        options: PresentationOptions(interactiveOnly: true, depth: nil, scope: nil, raw: false),
+        hint: hint(interactiveOnly: true),
         visibilityPolicy: .interactiveOnly
       ).include
     )
     XCTAssertFalse(
       flatSnapshotFilterDecision(
         hiddenInteractive,
-        options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
+        hint: hint(interactiveOnly: false),
         visibilityPolicy: .viewportProjected
       ).include
     )
     XCTAssertTrue(
       flatSnapshotFilterDecision(
         hiddenInteractive,
-        options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
+        hint: hint(interactiveOnly: false),
         visibilityPolicy: .interactiveOnly
       ).include
     )
     XCTAssertTrue(
       flatSnapshotFilterDecision(
         hiddenRoot,
-        options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
+        hint: hint(interactiveOnly: false),
         visibilityPolicy: .viewportProjected
       ).include
     )
     XCTAssertTrue(
       flatSnapshotFilterDecision(
         decorative,
-        options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
+        hint: hint(interactiveOnly: false),
         visibilityPolicy: .interactiveOnly
       ).include
     )

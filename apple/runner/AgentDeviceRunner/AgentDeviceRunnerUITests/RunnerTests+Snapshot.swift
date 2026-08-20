@@ -133,7 +133,7 @@ extension RunnerTests {
 
   func recursiveTreeSnapshotAcquisition(
     context: SnapshotTraversalContext,
-    options: PresentationOptions
+    hint: CaptureHint
   ) -> SnapshotAcquisition {
     var cachedDescendantElements: [XCUIElement]?
     func collapsedTabDescendants() -> [XCUIElement] {
@@ -205,7 +205,7 @@ extension RunnerTests {
       let parentIndex = entry.parentIndex
       let nearestScrollAnchor = entry.nearestScrollAnchor
       let projectionCursor = entry.projectionCursor
-      if let limit = options.depth, depth > limit { continue }
+      if let limit = hint.depth, depth > limit { continue }
 
       let evaluation = evaluateSnapshot(snapshot, in: context)
       let intersectsViewportAndScrollClip = isVisibleInRegularSnapshot(
@@ -245,7 +245,7 @@ extension RunnerTests {
         label: evaluation.label,
         identifier: evaluation.identifier,
         valueText: evaluation.valueText,
-        options: options,
+        hint: hint,
         hittable: evaluation.hittable,
         visible: projection.presentationVisible,
         regularSnapshot: true
@@ -316,6 +316,7 @@ extension RunnerTests {
     }
 
     return SnapshotAcquisition(
+      hint: hint,
       nodes: applyHiddenContentHints(hiddenContentHintsByNodeIndex, to: nodes),
       truncated: false,
       effectiveDepth: nil
@@ -421,12 +422,12 @@ extension RunnerTests {
 
   func rawTreeSnapshotAcquisition(
     context: SnapshotTraversalContext,
-    options: PresentationOptions
+    hint: CaptureHint
   ) throws -> SnapshotAcquisition {
     var nodes: [RawAXNode] = []
 
     func walk(_ snapshot: XCUIElementSnapshot, depth: Int, parentIndex: Int?) throws {
-      if let limit = options.depth, depth > limit { return }
+      if let limit = hint.depth, depth > limit { return }
 
       let evaluation = evaluateSnapshot(snapshot, in: context)
       let include = shouldAcquireSnapshotNode(
@@ -434,7 +435,7 @@ extension RunnerTests {
         label: evaluation.label,
         identifier: evaluation.identifier,
         valueText: evaluation.valueText,
-        options: options,
+        hint: hint,
         hittable: evaluation.hittable,
         visible: evaluation.visible
       )
@@ -461,24 +462,24 @@ extension RunnerTests {
     }
 
     try walk(context.rootSnapshot, depth: 0, parentIndex: nil)
-    return SnapshotAcquisition(nodes: nodes, truncated: false, effectiveDepth: nil)
+    return SnapshotAcquisition(hint: hint, nodes: nodes, truncated: false, effectiveDepth: nil)
   }
 
   func querySweepSnapshotAcquisition(
     app: XCUIApplication,
-    options: PresentationOptions,
+    hint: CaptureHint,
     planDeadline: Date = .distantFuture
   ) -> SnapshotAcquisition {
     var nodes: [RawAXNode] = [
       interactiveRootNode(rect: .zero)
     ]
-    if options.depth == 0 {
-      return SnapshotAcquisition(nodes: nodes, truncated: false, effectiveDepth: nil)
+    if hint.depth == 0 {
+      return SnapshotAcquisition(hint: hint, nodes: nodes, truncated: false, effectiveDepth: nil)
     }
 
     // Bounded by both its own sweep budget and the umbrella capture-plan deadline, so a
     // chained recovery tier can never push the plan past the main-thread watchdog (#1105).
-    let sweepDeadline = options.interactiveOnly
+    let sweepDeadline = hint.interactiveOnly
       ? Date().addingTimeInterval(Self.flatInteractiveFallbackBudget)
       : Date.distantFuture
     let deadline = min(sweepDeadline, planDeadline)
@@ -498,7 +499,7 @@ extension RunnerTests {
         index: 0,
         parentIndex: 0,
         viewport: viewport,
-        options: options
+        hint: hint
       ) else {
         continue
       }
@@ -544,7 +545,7 @@ extension RunnerTests {
         )
       )
     }
-    return SnapshotAcquisition(nodes: nodes, truncated: truncated, effectiveDepth: nil)
+    return SnapshotAcquisition(hint: hint, nodes: nodes, truncated: truncated, effectiveDepth: nil)
   }
 
   func snapshotAccessibilityUnavailable(failure: SnapshotCaptureFailure) -> DataPayload {
@@ -886,7 +887,7 @@ extension RunnerTests {
     label: String,
     identifier: String,
     valueText: String?,
-    options: PresentationOptions,
+    hint: CaptureHint,
     hittable: Bool,
     visible: Bool,
     regularSnapshot: Bool = false
@@ -900,14 +901,14 @@ extension RunnerTests {
     #endif
     if regularSnapshot {
       #if os(macOS)
-        if options.interactiveOnly && !visible && type != .application {
+        if hint.interactiveOnly && !visible && type != .application {
           return false
         }
       #endif
       if type == .application || type == .window { return true }
       return visible
     }
-    if options.interactiveOnly {
+    if hint.interactiveOnly {
       if isScrollableContainer(snapshot, visible: visible) { return true }
       if interactiveTypes.contains(type) { return true }
       if hittable && type != .other { return true }
@@ -938,7 +939,7 @@ extension RunnerTests {
 
   func makeSnapshotTraversalContext(
     app: XCUIApplication,
-    options: PresentationOptions,
+    hint: CaptureHint,
     captureDeadline: Date = .distantFuture,
     treeCaptureSliceBudgetOverride: TimeInterval? = nil
   ) throws -> SnapshotTraversalContext? {
@@ -963,7 +964,7 @@ extension RunnerTests {
       viewport: viewport,
       flatSnapshots: flatSnapshots,
       snapshotRanges: snapshotRanges,
-      maxDepth: options.depth ?? Int.max
+      maxDepth: hint.depth ?? Int.max
     )
   }
 
@@ -1576,7 +1577,7 @@ extension RunnerTests {
     index: Int,
     parentIndex: Int?,
     viewport: CGRect,
-    options: PresentationOptions
+    hint: CaptureHint
   ) -> RawAXNode? {
     var node: RawAXNode?
     let exceptionMessage = RunnerObjCExceptionCatcher.catchException({
@@ -1584,7 +1585,7 @@ extension RunnerTests {
       let frame = element.frame
       if frame.isNull || frame.isEmpty { return }
       let visible = isVisibleInViewport(frame, viewport)
-      if options.interactiveOnly && !visible { return }
+      if hint.interactiveOnly && !visible { return }
       #if os(macOS)
         if !visible { return }
       #endif
@@ -1600,7 +1601,7 @@ extension RunnerTests {
       )
       if !flatSnapshotFilterDecision(
         filterNode,
-        options: options,
+        hint: hint,
         visibilityPolicy: .interactiveOnly
       ).include {
         return

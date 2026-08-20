@@ -325,7 +325,11 @@ agent-device get text @e1
 agent-device get attrs @e1
 ```
 
-- iOS snapshots use XCTest on simulators and physical devices.
+- iOS snapshots use XCTest on simulators and physical devices. iOS `--raw` is the acquired tree on
+  whichever backend serves the capture: it keeps offscreen nodes, decorations, and structural
+  wrappers the default and `-i` views fold away, so a recovered raw capture shows the same hierarchy
+  a healthy one does. `--depth` still applies to raw (it counts traversal depth there), while `-i`
+  narrows the default projection only — `--raw -i` returns the acquired tree.
 - Android snapshots require the bundled Android snapshot helper. The first snapshot verifies and
   installs the helper APK if it is missing or outdated. Local ADB-backed sessions keep the helper
   process warm over an `adb forward` socket and report `androidSnapshot.helperTransport` as

@@ -151,12 +151,18 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotPresentationPreservesCurrentWireShape \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotPresentationOwnsBackendNeutralEligibility \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotPresentationOwnsScopeAndRelativeDepth \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPresentationRefusesAnAcquisitionCapturedForTheOtherProjection \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCaptureHintIsTheOnlyAcquisitionViewOfARequest \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotScopePolicyMatchesGoldenParityTable \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFlatSnapshotProjectionMatchesElementReverseScrollCapture \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXDepthLimitedRequiresEveryFrontierResolved \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testDeepExtensionCountsMissedFrontiers \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPreferredPrivateAXBackendPlansAsPenalized \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRawDiagnosticPlanCarriesOnlyBackendsThatCanServeRaw \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testProjectionMismatchFailureIsStructuredAndNotAnAxFailure \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXRegularPresentationProjectsToViewportAndKeepsScrollHint \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXRawProjectionKeepsEveryAcquiredNode \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXRawProjectionAppliesRequestedTraversalDepth \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXPresentationKeepsOffscreenSubtreeExcludedWhenChildFramesAreClamped \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXGeometrylessSemanticsAreNeverActionableOrScrollContexts \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXAcquisitionDoesNotInterpretScope \

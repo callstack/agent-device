@@ -55,6 +55,19 @@ enum SnapshotBackendKind: String, CaseIterable {
     }
   }
 
+  /// The raw projection is the acquired tree, so only a backend that enumerates a hierarchy can
+  /// serve it. The query sweep answers an interactive element query: it has no hierarchy to
+  /// return, and planning it for `--raw` is exactly how a raw request gets answered with regular
+  /// membership (#1797 D4).
+  var supportsRawProjection: Bool {
+    switch self {
+    case .recursiveTree, .privateAX:
+      return true
+    case .querySweep:
+      return false
+    }
+  }
+
   var isAvailableOnCurrentPlatform: Bool {
     switch self {
     case .recursiveTree, .querySweep:
@@ -118,7 +131,10 @@ extension RunnerTests {
   // MARK: Plan definitions
 
   static let regularVisiblePlan: [SnapshotBackendKind] = [.recursiveTree, .querySweep, .privateAX]
-  static let rawDiagnosticPlan: [SnapshotBackendKind] = [.recursiveTree, .privateAX]
+  /// Derived from the backend trait rather than hand-listed: a backend that cannot serve the raw
+  /// projection drops out of the raw plan by construction, and a new one joins it by declaring the
+  /// trait instead of by someone remembering this line.
+  static let rawDiagnosticPlan: [SnapshotBackendKind] = regularVisiblePlan.filter(\.supportsRawProjection)
 
   // MARK: XCTest accessibility channel penalty (cross-attempt memory, #1105/#1156)
   //
@@ -459,14 +475,14 @@ extension RunnerTests {
     deadline: Date,
     treeCaptureSliceBudgetOverride: TimeInterval?
   ) throws -> SnapshotBackendCapture? {
-    let acquisitionOptions = SnapshotPresentation.conservativeAcquisitionOptions(for: options)
+    let hint = SnapshotPresentation.captureHint(for: options)
     let acquisition: SnapshotAcquisition?
     switch kind {
     case .recursiveTree:
       guard
         let context = try makeSnapshotTraversalContext(
           app: app,
-          options: acquisitionOptions,
+          hint: hint,
           captureDeadline: deadline,
           treeCaptureSliceBudgetOverride: treeCaptureSliceBudgetOverride
         )
@@ -478,9 +494,9 @@ extension RunnerTests {
         timeout: min(treeCaptureSliceBudget, max(0.5, deadline.timeIntervalSinceNow)),
         timeoutError: snapshotMainThreadTimeoutError("processing tree snapshot")
       ) {
-        acquisitionOptions.raw
-          ? try self.rawTreeSnapshotAcquisition(context: context, options: acquisitionOptions)
-          : self.recursiveTreeSnapshotAcquisition(context: context, options: acquisitionOptions)
+        hint.isRaw
+          ? try self.rawTreeSnapshotAcquisition(context: context, hint: hint)
+          : self.recursiveTreeSnapshotAcquisition(context: context, hint: hint)
       }
     case .querySweep:
       acquisition = try runMainThreadWork(
@@ -490,19 +506,41 @@ extension RunnerTests {
       ) {
         self.querySweepSnapshotAcquisition(
           app: app,
-          options: acquisitionOptions,
+          hint: hint,
           planDeadline: deadline
         )
       }
     case .privateAX:
       acquisition = privateAXSnapshotAcquisition(
         app: app,
-        options: acquisitionOptions,
+        hint: hint,
         deadline: deadline
       )
     }
     guard let acquisition else { return nil }
-    return SnapshotPresentation.present(acquisition, options: options)
+    guard let capture = SnapshotPresentation.present(acquisition, options: options) else {
+      throw Self.snapshotProjectionMismatchFailure(
+        kind,
+        requested: hint.projection,
+        acquired: acquisition.hint.projection
+      )
+    }
+    return capture
+  }
+
+  /// A backend that answers a request with the other projection loses its tier and says why, so
+  /// the miss lands in the quality verdict instead of shipping as a correct-looking capture.
+  static func snapshotProjectionMismatchFailure(
+    _ kind: SnapshotBackendKind,
+    requested: CaptureHint.Projection,
+    acquired: CaptureHint.Projection
+  ) -> SnapshotCaptureFailure {
+    SnapshotCaptureFailure(
+      code: "IOS_SNAPSHOT_PROJECTION_MISMATCH",
+      message:
+        "the \(kind.rawValue) backend returned a \(acquired.rawValue) capture for a \(requested.rawValue) snapshot request",
+      hint: "This is a runner bug: report it with the failing command and the app under test."
+    )
   }
 
   // MARK: Quality classifier (the single source of "is this snapshot degraded")
@@ -818,6 +856,30 @@ extension RunnerTests {
     XCTAssertNil(Self.xcTestChannelStateFirstFailure(.normal))
     XCTAssertEqual(Self.xcTestChannelStateFirstFailure(.deferredToIndependentBackend)?.code, "deferred")
     XCTAssertEqual(Self.xcTestChannelStateFirstFailure(.boundedXCTestProbe)?.code, "budget")
+  }
+
+  /// The raw plan is derived from what each backend can actually serve, not from a second
+  /// hand-maintained list. Non-vacuity: flipping `querySweep.supportsRawProjection` to true adds it
+  /// to the plan and fails the first two assertions — which is exactly the shape of #1797 D4, a
+  /// `--raw` request answered by a backend that has no hierarchy to return.
+  func testRawDiagnosticPlanCarriesOnlyBackendsThatCanServeRaw() {
+    XCTAssertEqual(Self.rawDiagnosticPlan, [.recursiveTree, .privateAX])
+    XCTAssertEqual(
+      SnapshotBackendKind.allCases.filter { !$0.supportsRawProjection }, [.querySweep])
+    XCTAssertTrue(Self.rawDiagnosticPlan.allSatisfy(\.supportsRawProjection))
+    // Tree-first error propagation is the raw plan's other contract (ADR 0004).
+    XCTAssertEqual(Self.rawDiagnosticPlan.first, .recursiveTree)
+  }
+
+  /// A projection mismatch is a runner bug, not an accessibility failure: it must not take the
+  /// AX-failure terminal route (rethrow / fail-closed), just drop its tier with a named reason.
+  func testProjectionMismatchFailureIsStructuredAndNotAnAxFailure() {
+    let failure = Self.snapshotProjectionMismatchFailure(
+      .querySweep, requested: .raw, acquired: .regular)
+    XCTAssertEqual(failure.code, "IOS_SNAPSHOT_PROJECTION_MISMATCH")
+    XCTAssertTrue(failure.message.contains("queries"))
+    XCTAssertTrue(failure.message.contains("raw"))
+    XCTAssertFalse(Self.isAxSnapshotFailure(failure))
   }
 
   /// #1634 P2: the decoded wire field must reach capture options and its

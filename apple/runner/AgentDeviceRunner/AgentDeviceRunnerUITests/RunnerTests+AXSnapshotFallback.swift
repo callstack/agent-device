@@ -105,14 +105,14 @@ extension RunnerTests {
 
   func privateAXSnapshotAcquisition(
     app: XCUIApplication,
-    options: PresentationOptions,
+    hint: CaptureHint,
     deadline: Date = .distantFuture
   ) -> SnapshotAcquisition? {
     #if os(iOS) && targetEnvironment(simulator)
-      let requestedDepth = options.depth ?? 64
+      let requestedDepth = hint.depth ?? 64
       // An explicit --depth request is honored as asked: no accepted-depth
       // memory, no frontier extension past it.
-      let exactDepthRequested = options.depth != nil
+      let exactDepthRequested = hint.depth != nil
       let rememberedDepth =
         exactDepthRequested
         ? nil
@@ -135,12 +135,16 @@ extension RunnerTests {
           NSLog("AGENT_DEVICE_RUNNER_PRIVATE_AX_SNAPSHOT_BUDGET_EXHAUSTED depth=%ld", depth)
           break
         }
+        // Declared residue (#1797): the bridge caps the tree at 5000 nodes while serializing,
+        // BEFORE either projection exists, so a raw capture of a huge screen is bounded rather
+        // than failing the way the tree backend's own raw cap does. The cap is disclosed as
+        // `truncated`, and it applied to the acquired tree before this projection split too.
         response = RunnerAXSnapshotBridge.snapshotTree(
           for: app,
           maxDepth: depth,
           maxNodes: Self.privateAXSnapshotMaxNodes,
           deepExtensionCallLimit: exactDepthRequested ? 0 : Self.privateAXDeepExtensionCallLimit,
-          customActionLimit: options.customActions ? Self.privateAXCustomActionLimit : 0,
+          customActionLimit: hint.customActions ? Self.privateAXCustomActionLimit : 0,
           deadline: deadline
         )
         if response["ok"] as? Bool == true {
@@ -175,9 +179,9 @@ extension RunnerTests {
 
       let rootFrame = privateAXRect(root["frame"])
       let viewport = privateAXSnapshotViewport(app: app, rootFrame: rootFrame)
-      let nodes = privateAXPresentation(
+      let nodes = privateAXAcquisition(
         rawRoot: root,
-        options: options,
+        hint: hint,
         viewport: viewport
       )
       if nodes.count <= 1 {
@@ -203,6 +207,7 @@ extension RunnerTests {
         deepExtension?[RunnerAXSnapshotDeepExtensionNodesAddedKey] as? Int ?? 0
       )
       return SnapshotAcquisition(
+        hint: hint,
         nodes: nodes,
         truncated: (response["truncated"] as? Bool) == true,
         effectiveDepth: depthLimited ? effectiveDepth : nil,
@@ -635,9 +640,10 @@ extension RunnerTests {
         ],
       ],
     ]
-    let nodes = privateAXPresentation(
+    let nodes = privateAXAcquisition(
       rawRoot: tree,
-      options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
+      hint: CaptureHint(
+        projection: .regular, depth: nil, interactiveOnly: false, customActions: false),
       viewport: CGRect(x: 0, y: 0, width: 390, height: 844)
     )
 
@@ -660,13 +666,17 @@ extension RunnerTests {
         ["type": 9, "label": "unrelated sibling", "children": []],
       ],
     ]
-    let nodes = privateAXPresentation(
+    // Scope never reaches acquisition: the hint derived for a scoped request carries no scope,
+    // and the backend has no way to interpret one.
+    let nodes = privateAXAcquisition(
       rawRoot: tree,
-      options: PresentationOptions(
-        interactiveOnly: false,
-        depth: nil,
-        scope: "homeScreen",
-        raw: false
+      hint: SnapshotPresentation.captureHint(
+        for: PresentationOptions(
+          interactiveOnly: false,
+          depth: nil,
+          scope: "homeScreen",
+          raw: false
+        )
       ),
       viewport: .infinite
     )
@@ -742,9 +752,10 @@ extension RunnerTests {
         ]
       ],
     ]
-    let nodes = privateAXPresentation(
+    let nodes = privateAXAcquisition(
       rawRoot: tree,
-      options: PresentationOptions(interactiveOnly: true, depth: nil, scope: nil, raw: false),
+      hint: CaptureHint(
+        projection: .regular, depth: nil, interactiveOnly: true, customActions: false),
       viewport: CGRect(x: 0, y: 0, width: 390, height: 844)
     )
 

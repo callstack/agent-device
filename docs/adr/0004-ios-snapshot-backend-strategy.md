@@ -124,6 +124,31 @@ Scoped iOS acquisition stays broad (including when depth is requested) until an 
 narrowing hint complete. The daemon never reapplies scope after the wire; Android selects its root
 inside its TypeScript presentation and desktop surface runtimes retain their platform projection.
 
+The third semantic layer splits presentation into two projections and gives acquisition one input.
+`SnapshotPresentation.captureHint` derives a `CaptureHint` from the request; backends read the hint,
+never `PresentationOptions`. A hint names the projection the acquisition must serve and may narrow
+acquisition only where the backend can prove the narrowing complete for that projection: scope and
+its relative depth never narrow, raw depth does (raw depth *is* traversal depth), and the raw
+projection never carries `interactiveOnly`. `presentRegular` folds visibility, eligibility, scope,
+and scroll hints; `presentRaw` is the acquired tree, normalized, with scope and depth applied only
+when the request asked for them — so `interactive ⊆ regular ⊆ raw` holds per backend rather than per
+backend implementation. `snapshot --raw -i` therefore returns the acquired tree instead of an
+interactive-filtered one.
+
+Two structural rules keep a backend from answering a request with the other projection, the shape
+that let a recovered `snapshot --raw` return viewport-pruned nodes labeled raw: the raw diagnostic
+plan is derived from `SnapshotBackendKind.supportsRawProjection` rather than hand-listed, so a
+backend with no hierarchy to return (the query sweep) cannot be planned for raw; and presentation
+compares the requested projection with the hint the acquisition was captured under, dropping that
+tier with a structured `IOS_SNAPSHOT_PROJECTION_MISMATCH` failure instead of presenting it under the
+requested label.
+
+Declared residue: a regular-projection `--depth` request still cuts the traversal at that depth,
+while regular presentation emits collapsed depth. A node whose presented depth would be within the
+limit can therefore be dropped when structural wrappers put it deeper in the raw tree. The cut is
+what keeps `--depth 1` probes cheap; making it complete is the outstanding visible-depth frontier
+obligation (#1797), not a property of the current output.
+
 When adding new iOS snapshot behavior, maintainers should first decide which strategy owns it. If a
 change tries to make regular snapshots fast by dropping visible controls behind a node budget, or
 tries to make raw snapshots safe by silently truncating, it is probably crossing strategy

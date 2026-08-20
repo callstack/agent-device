@@ -25,8 +25,10 @@ extension RunnerTests {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
 
-    let capture = SnapshotPresentation.present(
+    let capture = try XCTUnwrap(SnapshotPresentation.present(
       SnapshotAcquisition(
+        hint: CaptureHint(
+          projection: .raw, depth: nil, interactiveOnly: false, customActions: false),
         nodes: [raw],
         truncated: true,
         effectiveDepth: 4,
@@ -43,7 +45,7 @@ extension RunnerTests {
         scope: nil,
         raw: true
       )
-    )
+    ))
     let nodes = try XCTUnwrap(capture.payload.nodes)
     let encoded = try encoder.encode(nodes)
 
@@ -102,14 +104,20 @@ extension RunnerTests {
       node(10, type: "StaticText", label: "Reparented content", depth: 2, parentIndex: 9),
     ]
     let regular = try XCTUnwrap(
-      SnapshotPresentation.present(
-        SnapshotAcquisition(nodes: acquired, truncated: false, effectiveDepth: nil),
+      SnapshotPresentation.presentRegular(
+        SnapshotAcquisition(
+          hint: CaptureHint(
+            projection: .regular, depth: nil, interactiveOnly: false, customActions: false),
+          nodes: acquired, truncated: false, effectiveDepth: nil),
         options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false)
       ).payload.nodes
     )
     let interactive = try XCTUnwrap(
-      SnapshotPresentation.present(
-        SnapshotAcquisition(nodes: acquired, truncated: false, effectiveDepth: nil),
+      SnapshotPresentation.presentRegular(
+        SnapshotAcquisition(
+          hint: CaptureHint(
+            projection: .regular, depth: nil, interactiveOnly: true, customActions: false),
+          nodes: acquired, truncated: false, effectiveDepth: nil),
         options: PresentationOptions(interactiveOnly: true, depth: nil, scope: nil, raw: false)
       ).payload.nodes
     )
@@ -127,8 +135,11 @@ extension RunnerTests {
     XCTAssertEqual(regular.compactMap(\.value), ["3 items"])
 
     let raw = try XCTUnwrap(
-      SnapshotPresentation.present(
-        SnapshotAcquisition(nodes: acquired, truncated: false, effectiveDepth: nil),
+      SnapshotPresentation.presentRaw(
+        SnapshotAcquisition(
+          hint: CaptureHint(
+            projection: .raw, depth: nil, interactiveOnly: false, customActions: false),
+          nodes: acquired, truncated: false, effectiveDepth: nil),
         options: PresentationOptions(interactiveOnly: true, depth: nil, scope: nil, raw: true)
       ).payload.nodes
     )
@@ -166,6 +177,8 @@ extension RunnerTests {
     }
 
     let acquisition = SnapshotAcquisition(
+      hint: CaptureHint(
+        projection: .regular, depth: nil, interactiveOnly: true, customActions: false),
       nodes: [
         node(0, type: "Application", label: "App", depth: 0, parentIndex: nil),
         node(1, type: "Button", label: "Earlier sibling", depth: 1, parentIndex: 0),
@@ -184,7 +197,7 @@ extension RunnerTests {
       scope: " SCOPE-ROOT ",
       raw: false
     )
-    let capture = SnapshotPresentation.present(acquisition, options: options)
+    let capture = try XCTUnwrap(SnapshotPresentation.present(acquisition, options: options))
     let nodes = try XCTUnwrap(capture.payload.nodes)
 
     XCTAssertEqual(nodes.map(\.label), [nil, "Child"])
@@ -195,8 +208,14 @@ extension RunnerTests {
     XCTAssertEqual(capture.qualityPayload?.nodes?.count, 6)
 
     let raw = try XCTUnwrap(
-      SnapshotPresentation.present(
-        acquisition,
+      SnapshotPresentation.presentRaw(
+        SnapshotAcquisition(
+          hint: CaptureHint(
+            projection: .raw, depth: nil, interactiveOnly: false, customActions: false),
+          nodes: acquisition.nodes,
+          truncated: false,
+          effectiveDepth: nil
+        ),
         options: PresentationOptions(
           interactiveOnly: true,
           depth: 1,
@@ -208,12 +227,12 @@ extension RunnerTests {
     XCTAssertEqual(raw.map(\.type), ["Other", "StaticText", "Image"])
     XCTAssertEqual(raw.map(\.depth), [0, 1, 1])
 
-    let hint = SnapshotPresentation.conservativeAcquisitionOptions(for: options)
-    XCTAssertNil(hint.scope)
+    let hint = SnapshotPresentation.captureHint(for: options)
     XCTAssertNil(hint.depth)
     XCTAssertTrue(hint.interactiveOnly)
+    XCTAssertEqual(hint.projection, .regular)
 
-    let missing = SnapshotPresentation.present(
+    let missing = try XCTUnwrap(SnapshotPresentation.present(
       acquisition,
       options: PresentationOptions(
         interactiveOnly: true,
@@ -221,9 +240,76 @@ extension RunnerTests {
         scope: "missing",
         raw: false
       )
-    )
+    ))
     XCTAssertEqual(missing.payload.nodes?.count, 0)
     XCTAssertNil(RunnerTests.sparsePayloadReason(try XCTUnwrap(missing.qualityPayload)))
+  }
+
+  /// #1797 D4: a backend that answers a `--raw` request with a regular capture (or the reverse)
+  /// loses its tier instead of having its output relabeled. Non-vacuity: dropping the projection
+  /// guard makes both `XCTAssertNil` assertions fail, and the raw projection then returns the
+  /// regular capture's four nodes under the raw label.
+  func testPresentationRefusesAnAcquisitionCapturedForTheOtherProjection() throws {
+    func node(_ index: Int, type: String, label: String?, parentIndex: Int?) -> RawAXNode {
+      RawAXNode(
+        index: index, type: type, label: label, identifier: nil, value: nil,
+        rect: SnapshotRect(x: 0, y: Double(index * 20), width: 100, height: 20),
+        enabled: true, focused: nil, selected: nil, hittable: false,
+        depth: parentIndex == nil ? 0 : 1, parentIndex: parentIndex,
+        hiddenContentAbove: nil, hiddenContentBelow: nil
+      )
+    }
+    let nodes = [
+      node(0, type: "Application", label: "App", parentIndex: nil),
+      node(1, type: "Button", label: "Continue", parentIndex: 0),
+    ]
+    let rawRequest = PresentationOptions(
+      interactiveOnly: false, depth: nil, scope: nil, raw: true)
+    let regularRequest = PresentationOptions(
+      interactiveOnly: false, depth: nil, scope: nil, raw: false)
+
+    let regularAcquisition = SnapshotAcquisition(
+      hint: SnapshotPresentation.captureHint(for: regularRequest),
+      nodes: nodes, truncated: false, effectiveDepth: nil)
+    let rawAcquisition = SnapshotAcquisition(
+      hint: SnapshotPresentation.captureHint(for: rawRequest),
+      nodes: nodes, truncated: false, effectiveDepth: nil)
+
+    XCTAssertNil(SnapshotPresentation.present(regularAcquisition, options: rawRequest))
+    XCTAssertNil(SnapshotPresentation.present(rawAcquisition, options: regularRequest))
+    XCTAssertEqual(
+      SnapshotPresentation.present(rawAcquisition, options: rawRequest)?.payload.nodes?.count, 2)
+    XCTAssertEqual(
+      SnapshotPresentation.present(regularAcquisition, options: regularRequest)?
+        .payload.nodes?.count, 2)
+  }
+
+  /// The one derivation every backend reads. Non-vacuity: returning the request's own depth for a
+  /// scoped capture, or keeping `interactiveOnly` on the raw projection, each fails one assertion.
+  func testCaptureHintIsTheOnlyAcquisitionViewOfARequest() {
+    let scoped = SnapshotPresentation.captureHint(
+      for: PresentationOptions(
+        interactiveOnly: true, depth: 2, scope: "Settings", raw: false))
+    // Scope re-roots the tree and depth counts from that root: neither can narrow acquisition.
+    XCTAssertNil(scoped.depth)
+    XCTAssertEqual(scoped.projection, .regular)
+
+    let depthOnly = SnapshotPresentation.captureHint(
+      for: PresentationOptions(interactiveOnly: true, depth: 2, scope: nil, raw: false))
+    XCTAssertEqual(depthOnly.depth, 2)
+
+    // The raw projection is the acquired tree, so `--raw -i` never narrows acquisition either.
+    let raw = SnapshotPresentation.captureHint(
+      for: PresentationOptions(interactiveOnly: true, depth: 3, scope: nil, raw: true))
+    XCTAssertEqual(raw.projection, .raw)
+    XCTAssertFalse(raw.interactiveOnly)
+    XCTAssertEqual(raw.depth, 3)
+    XCTAssertTrue(raw.isRaw)
+
+    let actions = SnapshotPresentation.captureHint(
+      for: PresentationOptions(
+        interactiveOnly: false, depth: nil, scope: nil, raw: false, customActions: true))
+    XCTAssertTrue(actions.customActions)
   }
 }
 #endif

@@ -22,12 +22,49 @@ struct RawAXNode {
   var actions: [String]? = nil
 }
 
+/// The acquisition-facing view of a snapshot request, derived once by
+/// `SnapshotPresentation.captureHint(for:)`.
+///
+/// Backends read a hint, never `PresentationOptions`: presentation owns interpretation, and a hint
+/// may narrow acquisition only where the backend can prove the narrowing complete for the requested
+/// projection (#1797 conservatism). Everything else a hint carries is budget and ordering.
+struct CaptureHint {
+  /// Which projection this acquisition must serve. Backends that cannot serve one are not planned
+  /// for it (`SnapshotBackendKind.supportsRawProjection`), and presentation refuses an acquisition
+  /// captured for the other projection rather than relabeling it, so a `--raw` request can never be
+  /// answered with regular-projection membership (#1797 D4).
+  enum Projection: String {
+    case regular
+    case raw
+  }
+
+  let projection: Projection
+  /// Traversal-depth budget.
+  ///
+  /// Declared residue (#1797): complete for the raw projection, whose presented depth *is*
+  /// traversal depth. Regular presentation emits collapsed depth, so cutting the traversal at this
+  /// limit can still drop a node that would have presented within it — the open "visible-depth
+  /// frontier completeness" obligation, kept as-is here because the cut is also what keeps
+  /// `--depth 1` probes cheap.
+  let depth: Int?
+  /// Regular-projection acquisition budget. The raw projection is the acquired tree, so it never
+  /// carries this: `--raw -i` returns everything the backend serialized.
+  let interactiveOnly: Bool
+  let customActions: Bool
+
+  var isRaw: Bool { projection == .raw }
+}
+
 /// One backend attempt after acquisition and its current backend-specific interpretation.
 ///
-/// Step 2 makes this the only input accepted by snapshot presentation. Later #1797 steps move the
-/// interpretation that still precedes this value into `SnapshotPresentation` without changing the
-/// capture-plan seam.
+/// It is the only input snapshot presentation accepts, and it carries the hint it was captured
+/// under so the two sides of the seam cannot disagree about which projection this is. Later #1797
+/// steps move the interpretation that still precedes this value — the clip fold and hittability —
+/// into `SnapshotPresentation` without changing the capture-plan seam.
 struct SnapshotAcquisition {
+  /// The hint this acquisition was captured under. Presentation compares it with the requested
+  /// projection instead of trusting the backend's label.
+  let hint: CaptureHint
   let nodes: [RawAXNode]
   let truncated: Bool
   let effectiveDepth: Int?
@@ -108,18 +145,76 @@ enum SnapshotPresentation {
 
   /// The capture plan's single presentation route for every snapshot backend.
   ///
-  /// Eligibility is the first intentional step-3 semantic delta: regular presentation keeps a
-  /// root carrier plus nodes with an interactive type or non-empty semantic content. Raw snapshots
-  /// retain their acquired membership until the dedicated raw-projection migration lands.
+  /// Refuses an acquisition captured for the other projection instead of presenting it under the
+  /// requested label: a backend that ignores `--raw` loses its tier and the plan advances, rather
+  /// than returning regular-projection membership called raw (#1797 D4).
   static func present(
     _ acquisition: SnapshotAcquisition,
     options: PresentationOptions
+  ) -> SnapshotBackendCapture? {
+    let requested = captureHint(for: options)
+    guard acquisition.hint.projection == requested.projection else {
+      NSLog(
+        "AGENT_DEVICE_RUNNER_SNAPSHOT_PROJECTION_MISMATCH requested=%@ acquired=%@",
+        requested.projection.rawValue,
+        acquisition.hint.projection.rawValue
+      )
+      return nil
+    }
+    switch requested.projection {
+    case .regular:
+      return presentRegular(acquisition, options: options)
+    case .raw:
+      return presentRaw(acquisition, options: options)
+    }
+  }
+
+  /// Visible projection: eligibility (an interactive type or non-empty semantic content, below the
+  /// root carrier), scope, and the acquired scroll hints. The only interpreter of what a screen
+  /// currently shows.
+  static func presentRegular(
+    _ acquisition: SnapshotAcquisition,
+    options: PresentationOptions
   ) -> SnapshotBackendCapture {
-    let scopedRawNodes = applyScope(to: acquisition.nodes, options: options)
-    let nodes = presentedNodes(from: scopedRawNodes, options: options)
+    project(acquisition, options: options, projection: .regular)
+  }
+
+  /// Diagnostic projection: the acquired tree, normalized. Scope and depth apply when explicitly
+  /// requested; membership is never narrowed, so `interactive ⊆ regular ⊆ raw` holds for every
+  /// backend (ADR 0004's raw contract).
+  static func presentRaw(
+    _ acquisition: SnapshotAcquisition,
+    options: PresentationOptions
+  ) -> SnapshotBackendCapture {
+    project(acquisition, options: options, projection: .raw)
+  }
+
+  /// Derives the one acquisition-facing view of a request, so no backend re-reads
+  /// `PresentationOptions` and reaches its own conclusion about what to capture.
+  ///
+  /// Scope re-roots the presented tree and depth counts from that root, so a scoped request
+  /// narrows neither: acquire broad, select once in presentation.
+  static func captureHint(for options: PresentationOptions) -> CaptureHint {
+    let scoped = SnapshotScopePolicy.isActive(options.scope)
+    let projection: CaptureHint.Projection = options.raw ? .raw : .regular
+    return CaptureHint(
+      projection: projection,
+      depth: scoped ? nil : options.depth,
+      interactiveOnly: projection == .raw ? false : options.interactiveOnly,
+      customActions: options.customActions
+    )
+  }
+
+  private static func project(
+    _ acquisition: SnapshotAcquisition,
+    options: PresentationOptions,
+    projection: CaptureHint.Projection
+  ) -> SnapshotBackendCapture {
+    let scopedRawNodes = applyScope(to: acquisition.nodes, options: options, projection: projection)
+    let nodes = presentedNodes(from: scopedRawNodes, projection: projection)
     let qualityPayload: DataPayload? = SnapshotScopePolicy.isActive(options.scope)
       ? DataPayload(
-        nodes: presentedNodes(from: acquisition.nodes, options: options),
+        nodes: presentedNodes(from: acquisition.nodes, projection: projection),
         truncated: acquisition.truncated
       )
       : nil
@@ -134,20 +229,6 @@ enum SnapshotPresentation {
     )
   }
 
-  /// Scope and depth cannot safely narrow acquisition until a backend proves its hint complete.
-  /// Acquire the broad tree, then apply both relative to the selected presentation subtree.
-  static func conservativeAcquisitionOptions(for options: PresentationOptions) -> PresentationOptions {
-    guard SnapshotScopePolicy.isActive(options.scope) else { return options }
-    return PresentationOptions(
-      interactiveOnly: options.interactiveOnly,
-      depth: nil,
-      scope: nil,
-      raw: options.raw,
-      preferredBackend: options.preferredBackend,
-      customActions: options.customActions
-    )
-  }
-
   /// Explicit carve-out for selector queries and system-modal reads that intentionally return one
   /// already-resolved element instead of traversing a snapshot backend.
   static func singleElementRead(_ node: RawAXNode) -> PresentedNode {
@@ -156,9 +237,9 @@ enum SnapshotPresentation {
 
   private static func presentedNodes(
     from rawNodes: [RawAXNode],
-    options: PresentationOptions
+    projection: CaptureHint.Projection
   ) -> [PresentedNode] {
-    if options.raw {
+    if projection == .raw {
       return rawNodes.map(PresentedNode.init(presenting:))
     }
 
@@ -192,7 +273,8 @@ enum SnapshotPresentation {
 
   private static func applyScope(
     to rawNodes: [RawAXNode],
-    options: PresentationOptions
+    options: PresentationOptions,
+    projection: CaptureHint.Projection
   ) -> [RawAXNode] {
     switch SnapshotScopePolicy.select(
       fromPreorder: rawNodes,
@@ -200,7 +282,7 @@ enum SnapshotPresentation {
       depth: \.depth,
       semanticValues: { [$0.label, $0.identifier, $0.value] },
       subtreeContributes: { range in
-        options.raw || rawNodes[range].contains(where: isEligibleForRegularPresentation)
+        projection == .raw || rawNodes[range].contains(where: isEligibleForRegularPresentation)
       }
     ) {
     case .unscoped:
