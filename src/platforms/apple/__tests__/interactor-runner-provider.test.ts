@@ -48,6 +48,10 @@ const RUNNER_TRANSPORT_METHODS: Record<
     runnerCommand: 'readText',
   },
   findText: { invoke: (i) => i.findText!('Ready'), runnerCommand: 'findText' },
+  findSelector: {
+    invoke: (i) => i.findSelector!({ key: 'id', value: 'ready' }),
+    runnerCommand: 'querySelector',
+  },
   back: { invoke: (i) => i.back(), runnerCommand: 'backInApp' },
   home: { invoke: (i) => i.home(), runnerCommand: 'home' },
   setOrientation: { invoke: (i) => i.setOrientation('portrait'), runnerCommand: 'rotate' },

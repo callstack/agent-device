@@ -545,7 +545,7 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
       operationOwners: {
         captureSnapshot: ['selectActiveAppSnapshot'],
         captureSnapshotWithoutActiveApp: ['selectSnapshotWithoutActiveApp'],
-        readTextAtPoint: ['bindElementRead'],
+        readTextAtPoint: ['bindPreferredElementRead'],
       },
     },
   },
@@ -648,17 +648,29 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
         'AppleRunnerFindTextTarget',
       ],
     },
-    runtimeTypeNames: ['SnapshotRuntimeOperations', 'FindTextRuntimeOperations'],
-    operations: { names: ['captureSnapshot', 'captureSnapshotWithoutActiveApp', 'findText'] },
+    runtimeTypeNames: [
+      'SnapshotRuntimeOperations',
+      'FindTextRuntimeOperations',
+      'FindSelectorRuntimeOperations',
+    ],
+    operations: {
+      names: ['captureSnapshot', 'captureSnapshotWithoutActiveApp', 'findText', 'findSelector'],
+    },
     singularExecution: {
       routes: ['handleSnapshotCommands'],
-      operations: ['captureSnapshot', 'captureSnapshotWithoutActiveApp', 'findText'],
+      operations: [
+        'captureSnapshot',
+        'captureSnapshotWithoutActiveApp',
+        'findText',
+        'findSelector',
+      ],
       // The selector family's shared owners: wait binds through the same admit-then-bind entry
       // as find/get/is, so it introduces no parallel binder for either operation.
       operationOwners: {
         captureSnapshot: ['selectActiveAppSnapshot'],
         captureSnapshotWithoutActiveApp: ['selectSnapshotWithoutActiveApp'],
-        findText: ['bindNativeTextRead'],
+        findText: ['bindPreferredTextRead'],
+        findSelector: ['bindPreferredSelectorRead'],
       },
     },
   },

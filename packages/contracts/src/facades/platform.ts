@@ -270,6 +270,13 @@ export type {
   FindTextRuntimeOperationFacts,
   FindTextRuntimeOperations,
 } from '../find-text-runtime.ts';
+export { findSelectorRuntimeOperationFacts } from '../find-selector-runtime.ts';
+export type {
+  FindSelectorInput,
+  FindSelectorResult,
+  FindSelectorRuntimeOperationFacts,
+  FindSelectorRuntimeOperations,
+} from '../find-selector-runtime.ts';
 export type {
   CaptureSnapshotInput,
   LocalSnapshotInteractorResolver,

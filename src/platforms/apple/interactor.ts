@@ -12,6 +12,7 @@ import { iosRunnerOverrides, resolveAppleBackRunnerCommand } from './interaction
 import { appleRemotePressCommand } from './os/tvos/remote.ts';
 import { runMacOsScreenshotAction } from './os/macos/helper.ts';
 import { runAppleRunnerCommand } from './core/runner/runner-client.ts';
+import { queryAppleRunnerSelector } from './core/runner/runner-selector-query.ts';
 import {
   withAppleRunnerProvider,
   type AppleRunnerCommandExecutor,
@@ -82,6 +83,15 @@ export function createAppleInteractor(
         options?.signal ? { ...runnerOpts, signal: options.signal } : runnerOpts,
       )) as { found?: boolean };
       return { found: result?.found === true };
+    },
+    findSelector: async (selector, options) => {
+      const result = await queryAppleRunnerSelector(
+        device,
+        selector,
+        options?.appBundleId,
+        options?.signal ? { ...runnerOpts, signal: options.signal } : runnerOpts,
+      );
+      return { found: result.found === true };
     },
     back: async (mode) => {
       if (isTvOsDevice(device)) {

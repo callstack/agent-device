@@ -79,6 +79,7 @@ function createAdmissionFacts(
       }),
       ...screenshotRuntimeOperationFacts({ capture: screenshotFact }),
       findText: unavailable,
+      findSelector: unavailable,
       setViewport: unavailable,
       deployApp: cell(options.deployAvailable),
       materializeAppSource: cell(options.sourceAvailable),

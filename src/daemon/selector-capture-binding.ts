@@ -3,6 +3,7 @@ import {
   type CaptureSnapshotInput,
   type ElementTextRuntimeOperations,
   type FindTextRuntimeOperations,
+  type FindSelectorRuntimeOperations,
   type SnapshotResult,
 } from '@agent-device/contracts/platform';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
@@ -37,11 +38,13 @@ export type BoundSelectorRead = ElementTextRuntimeOperations['readTextAtPoint'];
  * captured tree and an owner without it still executes the command completely (ADR 0019 §2).
  */
 export type BoundSelectorFindText = FindTextRuntimeOperations['findText'];
+export type BoundSelectorFindSelector = FindSelectorRuntimeOperations['findSelector'];
 
 export type BoundSelectorOperations = Readonly<{
   capture: BoundSelectorCapture;
   readText?: BoundSelectorRead;
   findText?: BoundSelectorFindText;
+  findSelector?: BoundSelectorFindSelector;
 }>;
 
 export type ResolvedSelectorCapture =
@@ -77,6 +80,7 @@ export async function resolveBoundSelectorCapture(
       capture: bound.capture,
       ...(bound.readTextAtPoint ? { readText: bound.readTextAtPoint } : {}),
       ...(bound.findText ? { findText: bound.findText } : {}),
+      ...(bound.findSelector ? { findSelector: bound.findSelector } : {}),
     },
   };
 }

@@ -16,10 +16,13 @@ test('wait descriptor declares its complete runtime use with no capability bucke
   });
   // wait binds the family plan; its measured reading rides that plan's preferred set.
   expect(selectorCaptureRuntimePlanUses).toEqual([
-    { required: ['captureSnapshot'], preferred: ['readTextAtPoint', 'findText'] },
+    {
+      required: ['captureSnapshot'],
+      preferred: ['readTextAtPoint', 'findText', 'findSelector'],
+    },
     {
       required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp'],
-      preferred: ['readTextAtPoint', 'findText'],
+      preferred: ['readTextAtPoint', 'findText', 'findSelector'],
     },
   ]);
 });
@@ -33,10 +36,12 @@ test('only the duration shape reaches no device at all', () => {
 
 // The measured fast path is declared, and declared as PREFERRED: `findText` must never appear in
 // a required set, or an owner without a native reading would stop being able to run `wait` at all.
-test('wait declares findText as a preferred operation on every plan, never a required one', () => {
+test('wait declares native observations as preferred operations on every plan, never required', () => {
   for (const use of selectorCaptureRuntimePlanUses) {
     expect(use.preferred).toContain('findText');
     expect(use.required).not.toContain('findText');
+    expect(use.preferred).toContain('findSelector');
+    expect(use.required).not.toContain('findSelector');
     expect(use.required).toContain('captureSnapshot');
   }
 });

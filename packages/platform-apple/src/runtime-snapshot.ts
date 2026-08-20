@@ -1,5 +1,7 @@
 import type {
   CaptureSnapshotInput,
+  FindSelectorInput,
+  FindSelectorResult,
   FindTextInput,
   FindTextResult,
   PlatformRuntimeHost,
@@ -84,6 +86,37 @@ export function bindAppleFindTextRuntime(
       });
       if (!interactor.findText) return { found: false };
       return await interactor.findText(input.text, { appBundleId, signal });
+    },
+  });
+}
+
+/** Apple owns the native simple-selector observation; callers never inspect Apple/provider state. */
+export function bindAppleFindSelectorRuntime(
+  host: PlatformRuntimeHost,
+  request: Readonly<{ device: DeviceInfo; signal: AbortSignal }>,
+): Pick<PlatformRuntimeOperations, 'findSelector'> {
+  return Object.freeze({
+    findSelector: async (input: FindSelectorInput): Promise<FindSelectorResult> => {
+      const appBundleId = input.options?.appBundleId;
+      if (appBundleId === undefined) return { found: false };
+      if (
+        isMacOs(request.device) &&
+        input.options?.surface !== undefined &&
+        input.options.surface !== 'app'
+      ) {
+        return { found: false };
+      }
+      const signal = input.signal
+        ? AbortSignal.any([request.signal, input.signal])
+        : request.signal;
+      signal.throwIfAborted();
+      const interactor = await host.localInteractors.resolve(request.device, {
+        ...input.execution,
+        appBundleId,
+        signal,
+      });
+      if (!interactor.findSelector) return { found: false };
+      return await interactor.findSelector(input.selector, { appBundleId, signal });
     },
   });
 }

@@ -135,11 +135,47 @@ async function withDirectSelectorScenario(
   );
 }
 
-// `wait` has no direct-runner probe since its ADR 0019 cutover: a selector wait polls the
-// canonical tree through its one request-bound capture on every platform, and the public
-// response keeps stripping the internal `selectorChain`.
-test('Provider-backed iOS selector wait polls the tree and strips selectorChain', async () => {
+// `wait` asks the admitted Apple owner first for simple selector existence. A positive
+// owner observation avoids a sparse canonical tree; a miss still falls through to the
+// request-bound capture. The public response strips the internal `selectorChain` either way.
+test('Provider-backed iOS selector wait accepts the owner observation and strips selectorChain', async () => {
   const transcript = createProviderTranscript([
+    {
+      command: 'ios.runner.querySelector',
+      deviceId: DEVICE_ID,
+      platform: 'apple',
+      request: {
+        command: 'querySelector',
+        selectorKey: 'label',
+        selectorValue: 'Continue',
+        appBundleId: APP,
+      },
+      result: { found: true, nodes: [] },
+    },
+  ]);
+
+  await withDirectSelectorScenario(transcript, async (daemon) => {
+    const wait = await daemon.callCommand('wait', ['label="Continue"']);
+    const data = assertRpcOk(wait);
+    assert.equal(data.selector, 'label="Continue"');
+    assert.equal('selectorChain' in data, false);
+  });
+});
+
+test('Provider-backed iOS selector wait falls through to capture after an owner miss', async () => {
+  const transcript = createProviderTranscript([
+    {
+      command: 'ios.runner.querySelector',
+      deviceId: DEVICE_ID,
+      platform: 'apple',
+      request: {
+        command: 'querySelector',
+        selectorKey: 'label',
+        selectorValue: 'Continue',
+        appBundleId: APP,
+      },
+      result: { found: false, nodes: [] },
+    },
     snapshotEntry([
       APPLICATION_NODE,
       {

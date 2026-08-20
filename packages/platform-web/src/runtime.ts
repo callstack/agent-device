@@ -14,6 +14,7 @@ import {
   localRuntimeOwner,
   screenshotRuntimeOperationFacts,
   findTextRuntimeOperationFacts,
+  findSelectorRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
   sameRuntimeOwner,
   viewportRuntimeOperationFacts,
@@ -251,6 +252,7 @@ function webRuntimeFacts(
       }),
       // No native text reading: every text wait on this owner polls the canonical tree.
       ...findTextRuntimeOperationFacts({ findText: openTargetKindUnavailable }),
+      ...findSelectorRuntimeOperationFacts({ findSelector: openTargetKindUnavailable }),
       ...viewportRuntimeOperationFacts({
         setViewport: device.kind === 'device' ? available : openTargetKindUnavailable,
       }),

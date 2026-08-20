@@ -29,6 +29,7 @@ import {
   screenshotRuntimeOperationFacts,
   elementTextRuntimeOperationFacts,
   findTextRuntimeOperationFacts,
+  findSelectorRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
   viewportRuntimeOperationFacts,
 } from '@agent-device/contracts/platform';
@@ -457,6 +458,7 @@ function facts(
       // Provider ownership is authoritative: no native text reading is exposed, so text waits
       // on a Limrun-owned device poll the canonical tree rather than borrowing Apple's.
       ...findTextRuntimeOperationFacts({ findText: customSnapshotUnavailable }),
+      ...findSelectorRuntimeOperationFacts({ findSelector: customSnapshotUnavailable }),
       ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
       ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementTextUnavailable }),
       ensureReady: available,
@@ -499,6 +501,7 @@ function recoveryFacts(
       }),
       ...screenshotRuntimeOperationFacts({ capture: liveSessionUnavailable }),
       ...findTextRuntimeOperationFacts({ findText: liveSessionUnavailable }),
+      ...findSelectorRuntimeOperationFacts({ findSelector: liveSessionUnavailable }),
       ...viewportRuntimeOperationFacts({ setViewport: liveSessionUnavailable }),
       ensureReady: liveSessionUnavailable,
       bootTarget: liveSessionUnavailable,

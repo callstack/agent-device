@@ -243,6 +243,11 @@ export type Interactor = {
   ): Promise<{
     found: boolean;
   }>;
+  /** Native one-sided observation for a simple selector; false defers to canonical capture. */
+  findSelector?(
+    selector: Readonly<{ key: ElementSelectorKey; value: string }>,
+    options?: { appBundleId?: string; signal?: AbortSignal },
+  ): Promise<{ found: boolean }>;
   gestureViewport?(): Promise<Rect>;
   back(mode?: BackMode): Promise<void>;
   home(): Promise<void>;

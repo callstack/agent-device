@@ -3,7 +3,7 @@ import { parseWaitPositionals } from '../core/wait-positionals.ts';
 import type { WaitParsed } from '../core/wait-positionals.ts';
 import { AppError, asAppError, normalizeError } from '@agent-device/kernel/errors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { runAppleRunnerCommand } from '../platforms/apple/core/runner/runner-client.ts';
+import { queryAppleRunnerSelector } from '../platforms/apple/core/runner/runner-selector-query.ts';
 import {
   buildAppleRunnerRequestOptions,
   type AppleRunnerRequestOptions,
@@ -56,6 +56,7 @@ import {
   resolveBoundSelectorCapture,
   type BoundSelectorOperations,
 } from './selector-capture-binding.ts';
+import { dispatchPreferredWaitSelector } from './wait-preferred-selector.ts';
 
 export type DirectIosSelectorQueryResult = {
   found: boolean;
@@ -309,6 +310,20 @@ export async function dispatchWaitViaRuntime(
       mintedGeneration: versionedRef.generation,
     });
   }
+  if (waitParsed.kind === 'selector') {
+    const preferredResponse = await dispatchPreferredWaitSelector({
+      selectorExpression: waitParsed.selectorExpression,
+      operation: waitOperations?.findSelector,
+      recordedLandmark,
+      req,
+      session,
+      sessionName,
+      sessionStore,
+      logPath: params.logPath,
+      signal: params.signal,
+    });
+    if (preferredResponse) return preferredResponse;
+  }
   // Wait builds its runtime directly (no createBoundSelectorRuntime), so the consumed-snapshot slot
   // must be initialized here too or sessionless waits have nowhere to report the capture from.
   params.consumedSnapshot ??= {};
@@ -381,14 +396,10 @@ export async function queryDirectIosSelector(
   selector: Pick<DirectIosSelectorTarget, 'key' | 'value'>,
   requestOptions: AppleRunnerRequestOptions,
 ): Promise<DirectIosSelectorQueryResult> {
-  const data = await runAppleRunnerCommand(
+  const data = await queryAppleRunnerSelector(
     session.device,
-    {
-      command: 'querySelector',
-      selectorKey: selector.key,
-      selectorValue: selector.value,
-      appBundleId: session.appBundleId,
-    },
+    selector,
+    session.appBundleId,
     requestOptions,
   );
   const found = data.found === true;

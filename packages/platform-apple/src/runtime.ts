@@ -15,6 +15,7 @@ import {
   localRuntimeOwner,
   screenshotRuntimeOperationFacts,
   findTextRuntimeOperationFacts,
+  findSelectorRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
   viewportRuntimeOperationFacts,
 } from '@agent-device/contracts/platform';
@@ -36,7 +37,11 @@ import {
   appleAppDeploymentFacts,
   createAppleAppDeploymentOperations,
 } from './deployment/runtime.ts';
-import { bindAppleFindTextRuntime, bindAppleSnapshotRuntime } from './runtime-snapshot.ts';
+import {
+  bindAppleFindSelectorRuntime,
+  bindAppleFindTextRuntime,
+  bindAppleSnapshotRuntime,
+} from './runtime-snapshot.ts';
 
 const owner = localRuntimeOwner('apple');
 const available = Object.freeze({ available: true } as const);
@@ -128,6 +133,11 @@ const snapshotActiveAppRequired = Object.freeze({
   available: false,
   reason: 'owner-capability-missing',
   hint: 'Open the app under test before capturing its snapshot.',
+} as const);
+const nativeSelectorUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'Native selector observation is available only on the Apple touch family.',
 } as const);
 
 function unsupportedAppleDeviceKind(hint: string) {
@@ -237,6 +247,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         ...appleSnapshotFacts(device),
         ...screenshotRuntimeOperationFacts({ capture: appleScreenshotFact(device) }),
         ...findTextRuntimeOperationFacts({ findText: appleSnapshotFact(device) }),
+        ...findSelectorRuntimeOperationFacts({ findSelector: appleFindSelectorFact(device) }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ...elementTextRuntimeOperationFacts({ readTextAtPoint: appleElementTextFact(device) }),
         ensureReady: readiness,
@@ -303,6 +314,12 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
               signal: request.scope.signal,
             }),
           ),
+          ...whenAdmitted(facts.operations.findSelector, () =>
+            bindAppleFindSelectorRuntime(host, {
+              device: request.device,
+              signal: request.scope.signal,
+            }),
+          ),
           ...whenAdmitted(facts.operations.ensureReady, () => ({
             ensureReady: async () =>
               await ensureAppleReady(host, request.device, request.scope.signal),
@@ -356,6 +373,10 @@ function appleSnapshotFact(device: DeviceInfo) {
   return device.kind === 'simulator' || device.kind === 'device'
     ? available
     : snapshotKindUnavailable;
+}
+
+function appleFindSelectorFact(device: DeviceInfo) {
+  return isIosFamily(device) ? appleSnapshotFact(device) : nativeSelectorUnavailable;
 }
 
 /**
