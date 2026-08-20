@@ -115,10 +115,11 @@ noise suppressions. When eligibility removes a structural wrapper, presentation 
 surviving descendants to the nearest surviving ancestor and normalizes their indexes and depths.
 
 The second semantic layer makes scope a presentation specification rather than an acquisition or
-daemon-compaction policy. A trimmed non-empty scope selects the first presentation-preorder node
-whose label, identifier, or value contains it case-insensitively; the selected subtree is re-rooted,
-depth is applied relative to that root, and no match publishes an empty healthy projection. Swift
-and TypeScript implementations are pinned by `contracts/fixtures/snapshot-scope-policy.json`.
+daemon-compaction policy. A trimmed non-empty scope selects the first presentation-preorder match
+whose subtree contributes to the requested projection; matching inspects label, identifier, and
+value case-insensitively. The selected subtree is re-rooted, depth is applied relative to that root,
+and no match publishes an empty healthy projection. Swift and TypeScript implementations are pinned
+by `contracts/fixtures/snapshot-scope-policy.json`.
 Scoped iOS acquisition stays broad (including when depth is requested) until an adapter can prove a
 narrowing hint complete. The daemon never reapplies scope after the wire; Android selects its root
 inside its TypeScript presentation and desktop surface runtimes retain their platform projection.
