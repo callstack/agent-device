@@ -106,7 +106,17 @@ test('macOS non-live evidence owners name existing executable repository evidenc
 
 test('macOS capability-denial rows match the owning capability matrix', () => {
   const deniedByCapabilities = Object.values(PUBLIC_COMMANDS)
-    .filter((command) => !isCommandSupportedOnDevice(command, MACOS_DEVICE))
+    .filter((command) => {
+      if (command === PUBLIC_COMMANDS.audio) {
+        assert.equal(
+          isCommandSupportedOnDevice(command, MACOS_DEVICE),
+          process.platform === 'darwin',
+          'macOS audio admission follows host ScreenCaptureKit availability',
+        );
+        return false;
+      }
+      return !isCommandSupportedOnDevice(command, MACOS_DEVICE);
+    })
     .sort();
   const deniedByManifest = Object.entries(MACOS_PLATFORM_COVERAGE)
     .filter(([, entry]) => entry.level === 'capability-denial')
