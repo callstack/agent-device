@@ -7,12 +7,26 @@ type RepositoryEvidence = {
   test: string;
 };
 
+type TvOsCommandContractEntry =
+  | {
+      assertion: string;
+      level: 'command-contract';
+      owner: RepositoryEvidence;
+    }
+  | {
+      assertion: string;
+      level: 'command-contract';
+      owner: RepositoryEvidence;
+      admission: 'host-dependent';
+    };
+
 export type TvOsPlatformCoverageEntry =
   | {
       assertion: string;
-      level: 'live' | 'command-contract';
+      level: 'live';
       owner: RepositoryEvidence;
     }
+  | TvOsCommandContractEntry
   | {
       assertion: string;
       level: 'capability-denial';
@@ -38,6 +52,10 @@ export const TVOS_REMOTE_EVIDENCE: RepositoryEvidence = {
   path: 'test/integration/provider-scenarios/tvos-remote.test.ts',
   test: TVOS_REMOTE_TEST_NAME,
 };
+const TVOS_AUDIO_EVIDENCE: RepositoryEvidence = {
+  path: 'src/core/__tests__/capability-plugin-routing-parity.test.ts',
+  test: '(b.1) isCommandSupportedOnDevice is unchanged across the command x device matrix',
+};
 export const TVOS_REMOTE_SCENARIO_COMMANDS: readonly PublicCommand[] = [
   PUBLIC_COMMANDS.open,
   PUBLIC_COMMANDS.scroll,
@@ -47,10 +65,16 @@ export const TVOS_REMOTE_SCENARIO_COMMANDS: readonly PublicCommand[] = [
 ];
 
 const C = PUBLIC_COMMANDS;
-const contract = (path: string, test: string, assertion: string): TvOsPlatformCoverageEntry => ({
+const contract = (
+  path: string,
+  test: string,
+  assertion: string,
+  admission?: 'host-dependent',
+): TvOsPlatformCoverageEntry => ({
   assertion,
   level: 'command-contract',
   owner: { path, test },
+  ...(admission ? { admission } : {}),
 });
 const denial = (assertion: string): TvOsPlatformCoverageEntry => ({
   assertion,
@@ -67,10 +91,12 @@ const gap = (assertion: string): TvOsPlatformCoverageEntry => ({
  *
  * There is no tvOS CI or live-device lane at HEAD, so the existing provider
  * scenario is contract evidence rather than a live claim. The remaining
- * contract rows cite Apple deployment/inventory tests or the typed Apple
- * interaction policy. Capability denials are limited to whole-command
- * denials; tvOS's narrower multi-touch refusal stays with the gesture contract
- * instead of denying the supported one-contact gesture path.
+ * contract rows cite Apple deployment/inventory tests, the typed Apple
+ * interaction policy, or the executable capability oracle. Capability denials
+ * are limited to whole-command denials; tvOS's narrower multi-touch refusal
+ * stays with the gesture contract instead of denying the supported one-contact
+ * gesture path. Host-dependent contracts retain their oracle admission state
+ * without claiming a stable tvOS capability.
  */
 export const TVOS_PLATFORM_COVERAGE = {
   [C.artifacts]: gap('No tvOS-specific artifact inventory command evidence exists yet'),
@@ -89,7 +115,12 @@ export const TVOS_PLATFORM_COVERAGE = {
   [C.logs]: gap('No tvOS-specific app-log command evidence exists yet'),
   [C.events]: gap('No tvOS-specific session-event command evidence exists yet'),
   [C.network]: gap('No tvOS-specific network command evidence exists yet'),
-  [C.audio]: denial('tvOS audio admission is host-dependent and denied on hosted CI'),
+  [C.audio]: contract(
+    TVOS_AUDIO_EVIDENCE.path,
+    TVOS_AUDIO_EVIDENCE.test,
+    'tvOS audio admission follows the host-dependent ScreenCaptureKit capability oracle',
+    'host-dependent',
+  ),
   [C.replay]: gap('No tvOS-specific replay command evidence exists yet'),
   [C.test]: gap('No tvOS-specific test-suite command evidence exists yet'),
   [C.clipboard]: gap('No tvOS-specific clipboard command evidence exists yet'),

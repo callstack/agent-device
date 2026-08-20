@@ -43,8 +43,8 @@ test('tvOS coverage exhaustively classifies the public catalog', () => {
 
 test('tvOS coverage report has the expected classification counts', () => {
   assert.deepEqual(TVOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY, {
-    capabilityDenial: 4,
-    contract: 12,
+    capabilityDenial: 3,
+    contract: 13,
     gap: 38,
     live: 0,
     total: 54,
@@ -80,25 +80,27 @@ test('tvOS provider contract claims only commands executed by the existing scena
 
 test('tvOS capability denials match the mechanical capability matrix', () => {
   const deniedByCapabilities = publicCommands
-    .filter(
-      (command) =>
-        command !== PUBLIC_COMMANDS.audio && !isCommandSupportedOnDevice(command, TVOS_SIMULATOR),
-    )
+    .filter((command) => !isCommandSupportedOnDevice(command, TVOS_SIMULATOR))
     .sort();
-  const deniedByManifest = Object.entries(TVOS_PLATFORM_COVERAGE)
-    .filter(
-      ([command, entry]) =>
-        command !== PUBLIC_COMMANDS.audio && entry.level === 'capability-denial',
-    )
-    .map(([command]) => command)
+  const manifestCapabilityProjection = Object.entries(TVOS_PLATFORM_COVERAGE)
+    .flatMap(([command, entry]) => {
+      if (entry.level === 'capability-denial') return [command];
+      if (
+        entry.level === 'command-contract' &&
+        'admission' in entry &&
+        entry.admission === 'host-dependent' &&
+        !isCommandSupportedOnDevice(command, TVOS_SIMULATOR)
+      ) {
+        return [command];
+      }
+      return [];
+    })
     .sort();
 
-  assert.deepEqual(deniedByManifest, deniedByCapabilities);
-  assert.equal(
-    isCommandSupportedOnDevice(PUBLIC_COMMANDS.audio, TVOS_SIMULATOR),
-    process.platform === 'darwin',
-    'tvOS simulator audio admission follows host ScreenCaptureKit availability',
-  );
+  assert.deepEqual(manifestCapabilityProjection, deniedByCapabilities);
+  const audio = TVOS_PLATFORM_COVERAGE[PUBLIC_COMMANDS.audio];
+  assert.equal(audio.level, 'command-contract');
+  assert.equal('admission' in audio ? audio.admission : undefined, 'host-dependent');
 });
 
 test('tvOS gesture contract preserves the typed multi-touch denial', () => {
