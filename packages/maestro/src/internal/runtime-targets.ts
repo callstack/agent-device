@@ -29,8 +29,7 @@ export type MaestroTargetEvidence = {
 
 type MaestroInteractivePresentation = {
   snapshot: SnapshotState;
-  presentedIndexesBySourceIndex: ReadonlyMap<number, number[]>;
-  sourceIndexes: ReadonlyMap<number, number>;
+  presentedIndexesBySourceIndex: ReadonlyMap<number, readonly number[]>;
 };
 
 export type MaestroTargetResolution =

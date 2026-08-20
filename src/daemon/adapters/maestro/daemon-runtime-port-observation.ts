@@ -116,7 +116,6 @@ function resolveTargetFromSnapshot(params: {
       presentation: presentation
         ? {
             snapshot: interactiveSnapshot,
-            sourceIndexes: presentation.sourceIndexes,
             presentedIndexesBySourceIndex: presentation.presentedIndexesBySourceIndex,
           }
         : undefined,

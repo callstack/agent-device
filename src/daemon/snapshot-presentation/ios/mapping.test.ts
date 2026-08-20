@@ -58,12 +58,4 @@ test('publishes an exact representative for every semantic source index', () => 
     [4, [3]],
     [5, []],
   ]);
-  expect(presentation.sourceIndexes).toEqual(
-    new Map([
-      [0, 0],
-      [1, 2],
-      [2, 3],
-      [3, 4],
-    ]),
-  );
 });

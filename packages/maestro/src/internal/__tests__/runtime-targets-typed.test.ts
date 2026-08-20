@@ -249,10 +249,6 @@ test('iOS target resolution keeps semantic identity bound to presented geometry'
         interactiveBounds: true,
         presentation: {
           snapshot: presentationSnapshot,
-          sourceIndexes: new Map([
-            [0, 0],
-            [1, 2],
-          ]),
           presentedIndexesBySourceIndex: new Map([
             [0, [0]],
             [1, []],
@@ -301,7 +297,6 @@ test('iOS target resolution uses one presented candidate universe for geometry a
         interactiveBounds: true,
         presentation: {
           snapshot: presentationSnapshot,
-          sourceIndexes: new Map([[0, 1]]),
           presentedIndexesBySourceIndex: new Map([
             [0, []],
             [1, [0]],

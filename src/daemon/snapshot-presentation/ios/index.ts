@@ -27,18 +27,16 @@ export function presentIosInteractiveSnapshot(nodes: RawSnapshotNode[]): RawSnap
 export type IosInteractiveSnapshotPresentation = {
   nodes: RawSnapshotNode[];
   /** Presented node indexes for every source index; suppressed noise maps to an empty list. */
-  presentedIndexesBySourceIndex: ReadonlyMap<number, number[]>;
-  sourceIndexes: ReadonlyMap<number, number>;
+  presentedIndexesBySourceIndex: ReadonlyMap<number, readonly number[]>;
 };
 
 export function buildIosInteractiveSnapshotPresentation(
   nodes: RawSnapshotNode[],
 ): IosInteractiveSnapshotPresentation {
   if (nodes.length === 0) {
-    return { nodes, presentedIndexesBySourceIndex: new Map(), sourceIndexes: new Map() };
+    return { nodes, presentedIndexesBySourceIndex: new Map() };
   }
 
-  const sourceIndexes = new Map(nodes.map((node) => [node.index, node.index]));
   const replacements = new Map<number, RawSnapshotNode>();
   const representativeSourceIndexesBySourceIndex = new Map<number, Set<number>>();
   const semanticRepresentativeIndexes = new Set<number>();
@@ -60,7 +58,6 @@ export function buildIosInteractiveSnapshotPresentation(
     return {
       nodes,
       presentedIndexesBySourceIndex: new Map(nodes.map((node) => [node.index, [node.index]])),
-      sourceIndexes,
     };
   }
 
@@ -86,9 +83,6 @@ export function buildIosInteractiveSnapshotPresentation(
           representativeSourceIndexesBySourceIndex,
         ),
       ]),
-    ),
-    sourceIndexes: new Map(
-      presentedNodes.map((node, position) => [node.index, presentedSourceNodes[position]!.index]),
     ),
   };
 }
