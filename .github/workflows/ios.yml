@@ -47,7 +47,9 @@ on:
       - 'test/integration/smoke-android-**'
       - 'test/integration/smoke-linux-**'
       - 'test/integration/linux-e2e/**'
+      - 'test/integration/smoke-macos-**'
       - 'test/integration/smoke-web-**'
+      - 'test/integration/macos-e2e/**'
       - 'test/integration/web-e2e/**'
   push:
     branches:
