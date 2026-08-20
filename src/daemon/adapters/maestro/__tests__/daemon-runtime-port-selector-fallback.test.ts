@@ -79,15 +79,15 @@ test('falls back to fresh Maestro resolution when nested selector resolution mis
   ]);
 });
 
-test('does not fall back for an unrelated COMMAND_FAILED response', async () => {
+test('does not infer selector fallback from COMMAND_FAILED message text', async () => {
   const { port, requests } = makeSelectorDispatchPort({
     code: 'COMMAND_FAILED',
-    message: 'Keyboard dispatch timed out.',
+    message: 'Selector did not match: id="profile-button"',
   });
 
   await expect(tapProfileButton(port)).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
-    message: 'Keyboard dispatch timed out.',
+    message: 'Selector did not match: id="profile-button"',
   });
   expect(requests.map((request) => request.command)).toEqual(['snapshot', 'click']);
 });
