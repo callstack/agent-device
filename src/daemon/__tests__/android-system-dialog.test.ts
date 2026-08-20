@@ -9,14 +9,12 @@ import { snapshotAndroid } from '../../platforms/android/snapshot.ts';
 import { recoverAndroidBlockingSystemDialog } from '../android-system-dialog.ts';
 
 test('inspection failure is carried as a bounded unknown readiness warning', async () => {
+  const longErrorMessage = `Android snapshot helper is unavailable:\n\t${'message  '.repeat(60)}`;
+  const longHint = `Run pnpm build:android after checking the helper.\n\t${'hint  '.repeat(60)}`;
   vi.mocked(snapshotAndroid).mockRejectedValue(
-    new AppError(
-      'COMMAND_FAILED',
-      'Android snapshot helper is unavailable: helper artifact is missing',
-      {
-        hint: 'Run `pnpm build:android` to build the Android snapshot helper for this source checkout.',
-      },
-    ),
+    new AppError('COMMAND_FAILED', longErrorMessage, {
+      hint: longHint,
+    }),
   );
   const session = makeAndroidSession('inspection-warning');
   session.screenRecording = makeTestScreenRecordingResource(session, {
@@ -33,8 +31,9 @@ test('inspection failure is carried as a bounded unknown readiness warning', asy
     warning: expect.stringContaining('Android blocking-dialog readiness could not be inspected'),
   });
   if (result.status === 'unknown') {
-    expect(result.warning).toMatch(/command continued/i);
-    expect(result.warning).toContain('pnpm build:android');
-    expect(result.warning.length).toBeLessThan(800);
+    expect(result.warning).toMatch(
+      /^Android blocking-dialog readiness could not be inspected; the command continued\. Inspection error: .{239}… Hint: .{239}…$/,
+    );
+    expect(result.warning).not.toMatch(/[\t\r\n]| {2,}/);
   }
 });
