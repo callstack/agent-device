@@ -199,7 +199,8 @@ extension RunnerTests {
       }
       guard input.isReadyForMoreMediaData else { return }
       guard let pixelBuffer = makePixelBuffer(from: cgImage) else { return }
-      let timestampValue = timestampValue(for: ProcessInfo.processInfo.systemUptime)
+      let candidateTimestampValue = timestampCandidateValue(for: ProcessInfo.processInfo.systemUptime)
+      let timestampValue = monotonicTimestampValue(for: candidateTimestampValue)
       let timescale = effectiveFps
       let timestamp = CMTime(value: timestampValue, timescale: timescale)
       if !adaptor.append(pixelBuffer, withPresentationTime: timestamp) {
@@ -213,16 +214,18 @@ extension RunnerTests {
       lastTimestampValue = timestampValue
     }
 
-    private func timestampValue(for nowUptime: TimeInterval) -> Int64 {
-      if recordingStartUptime == nil {
-        recordingStartUptime = nowUptime
-      }
-      let elapsed = max(0, nowUptime - (recordingStartUptime ?? nowUptime))
-      let timestampValue = Int64((elapsed * Double(effectiveFps)).rounded(.down))
-      if timestampValue <= lastTimestampValue {
+    private func timestampCandidateValue(for nowUptime: TimeInterval) -> Int64 {
+      let startUptime = recordingStartUptime ?? nowUptime
+      recordingStartUptime = startUptime
+      let elapsed = max(0, nowUptime - startUptime)
+      return Int64((elapsed * Double(effectiveFps)).rounded(.down))
+    }
+
+    private func monotonicTimestampValue(for candidateTimestampValue: Int64) -> Int64 {
+      if candidateTimestampValue <= lastTimestampValue {
         return lastTimestampValue + 1
       }
-      return timestampValue
+      return candidateTimestampValue
     }
 
     private func shouldStop() -> Bool {
@@ -269,13 +272,10 @@ extension RunnerTests {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 extension RunnerTests.ScreenRecorder {
   @discardableResult
-  func allocateTimestampForTesting(_ requestedTimestampValue: Int64) -> Int64 {
+  func allocateTimestampForTesting(_ candidateTimestampValue: Int64) -> Int64 {
     lock.lock()
     defer { lock.unlock() }
-    let nowUptime = ProcessInfo.processInfo.systemUptime
-    recordingStartUptime =
-      nowUptime - Double(requestedTimestampValue) / Double(effectiveFps)
-    let allocatedTimestamp = timestampValue(for: nowUptime)
+    let allocatedTimestamp = monotonicTimestampValue(for: candidateTimestampValue)
     lastTimestampValue = allocatedTimestamp
     return allocatedTimestamp
   }
