@@ -10,7 +10,6 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { runCmdSync } from '../../src/utils/exec.ts';
 import { CHECK_CATALOG } from './checks.ts';
-import { DEFAULT_VITEST_MAX_WORKERS } from '../lib/vitest-concurrency.ts';
 import { selectChecks } from './model.ts';
 import { type CommandExecutor, readChangedFiles, runChecks } from './run.ts';
 
@@ -171,7 +170,7 @@ test('runChecks skips GitHub-authoritative checks and passes when locals succeed
   }
 });
 
-test('runChecks combines related tests with lightweight changed-line coverage', async () => {
+test('runChecks runs related tests, unit, and provider-integration uninstrumented and leaves coverage to CI', async () => {
   const executed: string[][] = [];
   const execute: CommandExecutor = async (command) => {
     executed.push(command);
@@ -184,13 +183,14 @@ test('runChecks combines related tests with lightweight changed-line coverage', 
   assert.equal(code, 0);
   const related = executed.filter((command) => command.includes('related'));
   assert.equal(related.length, 1);
-  assert.ok(related[0]?.includes('--coverage'));
-  assert.ok(related[0]?.includes('--coverage.reporter=lcov'));
-  assert.ok(related[0]?.includes(`--maxWorkers=${DEFAULT_VITEST_MAX_WORKERS}`));
+  assert.ok(
+    !related[0]?.includes('--coverage'),
+    'coverage instrumentation stays GitHub-authoritative; the local run must not add it',
+  );
   assert.ok(
     executed.findIndex((command) => command.includes('test:integration:node')) <
       executed.findIndex((command) => command.includes('related')),
-    'process-lifecycle integration must run before high-parallelism affected coverage',
+    'process-lifecycle integration must run before the high-parallelism related-test run',
   );
   assert.equal(
     executed.some((command) => command.includes('test:coverage')),
@@ -198,14 +198,17 @@ test('runChecks combines related tests with lightweight changed-line coverage', 
   );
   assert.equal(
     executed.some((command) => command.includes('check:unit')),
-    false,
+    true,
+    'unit must run locally on its own — it is no longer folded into a coverage run',
   );
   assert.equal(
     executed.some((command) => command.includes('test:integration:provider')),
-    false,
+    true,
+    'provider-integration must run locally on its own — it is no longer folded into a coverage run',
   );
   assert.equal(
     executed.some((command) => command.includes('check:coverage-changed')),
-    true,
+    false,
+    'the coverage gate is GitHub-authoritative and must not run locally',
   );
 });

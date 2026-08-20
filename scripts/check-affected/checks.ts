@@ -20,8 +20,9 @@ export type CheckSpec = {
   readonly label: string;
   readonly kind: CheckKind;
   // Whether `--run` should attempt the check locally. Device/emulator lanes,
-  // network/toolchain-gated lanes, and long scheduled sweeps (mutation, fuzz,
-  // torture) stay authoritative on GitHub CI.
+  // network/toolchain-gated lanes, long scheduled sweeps (mutation, fuzz,
+  // torture), and the instrumented coverage run stay authoritative on
+  // GitHub CI.
   readonly localRunnable: boolean;
 };
 
@@ -49,7 +50,10 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
     localRunnable: true,
   },
   gate('unit', 'Unit + smoke suite', 'check:unit'),
-  gate('coverage', 'Affected LCOV + changed-line coverage', 'check:coverage-changed'),
+  // Coverage instrumentation adds real overhead on top of an already-run test suite, and the
+  // `coverage` CI job enforces this gate on every PR — so a local rerun only spends time without
+  // adding local-only signal. Report it as GitHub-authoritative instead of running it here.
+  gate('coverage', 'Affected LCOV + changed-line coverage', 'check:coverage-changed', false),
   gate('provider-integration', 'Provider-backed integration suite', 'test:integration:provider'),
   gate(
     'integration-progress',
@@ -78,8 +82,9 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   // steps; before the registry became canonical, nothing in the repo could name
   // them, so nothing could ask whether they still ran.
   //
-  // `unit-ci` is the CI form of the unit suite. Locally you run `unit` and
-  // `coverage`, which together repeat it.
+  // `unit-ci` is the CI form of the unit suite, run under coverage instrumentation. Locally you
+  // run `unit` (and `provider-integration`) uninstrumented; the `coverage` job is what actually
+  // repeats this one, on GitHub.
   gate('unit-ci', 'CI unit suite under coverage', 'test:coverage:ci', false),
   gate('affected-selector', 'Affected-check selector model', 'check:affected:test'),
   gate('gate-manifest', 'Gate manifest — every gate owned and wired', 'check:gate-manifest'),

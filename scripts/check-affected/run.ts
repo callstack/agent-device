@@ -11,7 +11,6 @@ import { pathToFileURL } from 'node:url';
 import { runCmdStreaming, runCmdSync } from '../../src/utils/exec.ts';
 import { parseScriptArgs } from '../lib/cli-args.ts';
 import { runEntrypoint } from '../lib/cli-entrypoint.ts';
-import { DEFAULT_VITEST_MAX_WORKERS } from '../lib/vitest-concurrency.ts';
 import {
   assertCatalogComplete,
   CHECK_CATALOG,
@@ -191,24 +190,17 @@ export async function runChecks(
   const execute = options.execute ?? streamingExecutor;
   const runnable = plan.checks.map(getCheckSpec).filter((spec: CheckSpec) => spec.localRunnable);
   const skipped = plan.checks.map(getCheckSpec).filter((spec: CheckSpec) => !spec.localRunnable);
-  const coverageSelected = plan.checks.includes('coverage');
   const ciJobs = skipped.length > 0 ? ciJobsByCheck() : new Map<CheckId, string[]>();
   for (const spec of skipped) {
     process.stdout.write(`\n[skip] ${spec.id} — ${describeOwner(spec.id, ciJobs)}\n`);
   }
   for (const spec of runnable) {
-    if (isCoveredByAffectedCoverage(spec, coverageSelected)) {
-      process.stdout.write(`\n[dedupe] ${spec.id} — covered by affected LCOV or GitHub CI\n`);
-      continue;
-    }
-    const commands = resolveCheckCommands(spec, pkg, args, options.changedFiles ?? []);
-    for (const command of commands) {
-      process.stdout.write(`\n[run] ${spec.id}: ${command.join(' ')}\n`);
-      const exitCode = await execute(command, cwd);
-      if (exitCode !== 0) {
-        process.stderr.write(`\ncheck:affected: ${spec.id} failed.\n`);
-        return 1;
-      }
+    const command = resolveCommand(spec, pkg.scripts, args.base, options.changedFiles ?? []);
+    process.stdout.write(`\n[run] ${spec.id}: ${command.join(' ')}\n`);
+    const exitCode = await execute(command, cwd);
+    if (exitCode !== 0) {
+      process.stderr.write(`\ncheck:affected: ${spec.id} failed.\n`);
+      return 1;
     }
   }
   process.stdout.write('\ncheck:affected: all runnable checks passed.\n');
@@ -221,56 +213,6 @@ function describeOwner(id: CheckId, ciJobs: ReadonlyMap<CheckId, string[]>): str
   const parked = MANUAL_ONLY_OWNERS[id];
   if (parked) return `parked, workflow_dispatch only (${parked.lane})`;
   return `GitHub-authoritative (jobs: ${(ciJobs.get(id) ?? []).join(', ')})`;
-}
-
-function isCoveredByAffectedCoverage(spec: CheckSpec, coverageSelected: boolean): boolean {
-  return (
-    coverageSelected &&
-    (spec.id === 'vitest-related' || spec.id === 'unit' || spec.id === 'provider-integration')
-  );
-}
-
-function resolveCheckCommands(
-  spec: CheckSpec,
-  pkg: PackageJson,
-  args: Args,
-  changedFiles: readonly string[],
-): string[][] {
-  return spec.id === 'coverage'
-    ? resolveAffectedCoverageCommands(pkg.scripts, args.base, changedFiles)
-    : [resolveCommand(spec, pkg.scripts, args.base, changedFiles)];
-}
-
-function resolveAffectedCoverageCommands(
-  scripts: Readonly<Record<string, string>>,
-  base: string,
-  changedFiles: readonly string[],
-): string[][] {
-  if (!('check:coverage-changed' in scripts)) {
-    throw new Error('Required package.json script "check:coverage-changed" does not exist.');
-  }
-  return [
-    [
-      'pnpm',
-      'exec',
-      'vitest',
-      'related',
-      '--run',
-      '--passWithNoTests',
-      // `related` spans every configured Vitest project for broad diffs. The
-      // machine-derived default can start enough projects concurrently to
-      // starve otherwise-green subprocess/provider tests past their exact
-      // timeout budgets. Bound this aggregate feedback lane without changing
-      // the suites' own timeout or serialization contracts.
-      `--maxWorkers=${DEFAULT_VITEST_MAX_WORKERS}`,
-      '--coverage',
-      '--coverage.reporter=lcov',
-      '--coverage.thresholds.statements=0',
-      '--coverage.thresholds.lines=0',
-      ...changedFiles,
-    ],
-    ['pnpm', 'run', 'check:coverage-changed', '--base', base],
-  ];
 }
 
 async function main(argv = process.argv.slice(2)): Promise<number> {
