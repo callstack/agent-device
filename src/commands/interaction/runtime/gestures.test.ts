@@ -214,11 +214,16 @@ test('runtime scroll resolves selector targets before calling the backend primit
   assert.deepEqual(calls, [
     {
       target: { kind: 'point', point: { x: 60, y: 40 } },
-      options: { direction: 'down', pixels: 120, durationMs: 50 },
+      options: {
+        direction: 'down',
+        pixels: 120,
+        durationMs: 50,
+        releaseBehavior: 'controlled',
+      },
     },
     {
       target: { kind: 'viewport' },
-      options: { direction: 'up', amount: 0.5 },
+      options: { direction: 'up', amount: 0.5, releaseBehavior: 'controlled' },
     },
   ]);
 });
@@ -331,7 +336,7 @@ test('runtime scroll bottom scrolls only while scoped snapshot confirms hidden c
   assert.deepEqual(calls, [
     {
       target: { kind: 'viewport' },
-      options: { direction: 'down' },
+      options: { direction: 'down', releaseBehavior: 'inertial' },
     },
   ]);
   assert.deepEqual(snapshotScopes, [undefined, 'Messages', 'Messages']);

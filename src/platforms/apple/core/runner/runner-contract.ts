@@ -6,6 +6,7 @@ import type {
   ElementSelectorKey,
   GesturePlan,
   ScrollDirection,
+  ScrollReleaseBehavior,
 } from '@agent-device/contracts/interaction';
 import { getRequestSignal, isRequestCanceled } from '../../../../request/cancel.ts';
 import {
@@ -81,6 +82,7 @@ export type RunnerCommand = {
   direction?: ScrollDirection;
   amount?: number;
   pixels?: number;
+  scrollReleaseBehavior?: ScrollReleaseBehavior;
   orientation?: DeviceRotation;
   /** Canonical pointer samples planned by the portable gesture runtime. */
   gesturePlan?: GesturePlan;

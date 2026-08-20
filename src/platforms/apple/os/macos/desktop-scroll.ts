@@ -30,7 +30,7 @@ export async function runMacosDesktopScroll(
     {
       command: 'desktopScroll',
       direction,
-      ...scrollRunnerFields(options, { includeDuration: true }),
+      ...scrollRunnerFields(options, { includeDuration: true, includeReleaseBehavior: false }),
       appBundleId: ctx.appBundleId,
     },
     runnerOpts,

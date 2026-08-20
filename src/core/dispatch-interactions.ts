@@ -5,12 +5,14 @@ import {
   MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE,
   normalizeScrollDurationMs,
   parseScrollDirection,
+  resolveScrollExecutionOptions,
   resolveClickButton,
   type ClickButton,
   type Interactor,
   type RunnerCallOptions,
   type ScrollCommandOptions,
   type ScrollDirection,
+  type ResolvedScrollExecutionOptions,
 } from '@agent-device/contracts/interaction';
 import { readFillBackendResult } from './fill-backend-result.ts';
 import {
@@ -557,7 +559,7 @@ export async function handleScrollCommand(
   assertScrollCommandInputs(amount, pixels, durationMs);
 
   const target = parseScrollTarget(directionInput);
-  const options = { amount, pixels, durationMs };
+  const options = resolveScrollExecutionOptions({ amount, pixels, durationMs }, target.edge);
   const { interactionResult, completedPasses } = await runDispatchedScroll(
     interactor,
     context,
@@ -592,7 +594,7 @@ async function runDispatchedScroll(
   interactor: Interactor,
   context: DispatchContext | undefined,
   target: ScrollTarget,
-  options: ScrollCommandOptions,
+  options: ResolvedScrollExecutionOptions,
 ): Promise<{ interactionResult: Record<string, unknown>; completedPasses: number }> {
   if (target.edge) {
     const edge = target.edge;

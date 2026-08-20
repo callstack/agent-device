@@ -9,7 +9,12 @@ import {
   buildScrollGesturePlan,
   clampGestureCoordinate,
 } from './scroll-gesture.ts';
-import { DEFAULT_IOS_SCROLL_AMOUNT, DEFAULT_MOBILE_SCROLL_DURATION_MS } from './scroll-command.ts';
+import {
+  DEFAULT_IOS_SCROLL_AMOUNT,
+  DEFAULT_IOS_SCROLL_DURATION_MS,
+  DEFAULT_MOBILE_SCROLL_DURATION_MS,
+  resolveScrollExecutionOptions,
+} from './scroll-command.ts';
 
 test('buildInPageSwipeGesturePlan applies one inset lane policy in every direction', () => {
   const frame = { referenceWidth: 400, referenceHeight: 800 };
@@ -55,8 +60,12 @@ type ScrollGestureFixture = {
   constants: {
     defaultIosScrollAmount: number;
     defaultMobileScrollDurationMs: number;
+    defaultIosScrollDurationMs: number;
     defaultScrollAmount: number;
     defaultEdgePaddingFraction: number;
+    ordinaryScrollReleaseBehavior: 'controlled';
+    edgeScrollReleaseBehavior: 'inertial';
+    controlledScrollDestinationHoldMs: number;
   };
   cases: Array<{
     name: string;
@@ -122,6 +131,20 @@ test('mobile scroll duration agrees with the cross-platform parity table', () =>
   const { constants } = readScrollGestureFixture();
   assert.equal(DEFAULT_IOS_SCROLL_AMOUNT, constants.defaultIosScrollAmount);
   assert.equal(DEFAULT_MOBILE_SCROLL_DURATION_MS, constants.defaultMobileScrollDurationMs);
+  assert.equal(DEFAULT_IOS_SCROLL_DURATION_MS, constants.defaultIosScrollDurationMs);
+});
+
+test('scroll release policy agrees with the cross-platform parity table', () => {
+  const { constants } = readScrollGestureFixture();
+  assert.equal(
+    resolveScrollExecutionOptions({}).releaseBehavior,
+    constants.ordinaryScrollReleaseBehavior,
+  );
+  assert.equal(
+    resolveScrollExecutionOptions({}, 'bottom').releaseBehavior,
+    constants.edgeScrollReleaseBehavior,
+  );
+  assert.equal(constants.controlledScrollDestinationHoldMs, 100);
 });
 
 test('buildScrollGesturePlan rejects invalid amounts', () => {

@@ -1,8 +1,10 @@
 import {
   buildScrollGesturePlan,
   DEFAULT_IOS_SCROLL_AMOUNT,
-  DEFAULT_MOBILE_SCROLL_DURATION_MS,
+  DEFAULT_IOS_SCROLL_DURATION_MS,
   type ScrollDirection,
+  type ScrollExecutionOptions,
+  type ScrollReleaseBehavior,
 } from '@agent-device/contracts/interaction';
 
 export type NormalizedScrollOptions = {
@@ -12,7 +14,7 @@ export type NormalizedScrollOptions = {
   preferProvidedPixels?: boolean;
 };
 
-export type AppleScrollOptions = Omit<NormalizedScrollOptions, 'preferProvidedPixels'>;
+export type AppleScrollOptions = ScrollExecutionOptions;
 
 export function materializeIosScrollOptions(
   options: AppleScrollOptions | undefined,
@@ -21,7 +23,8 @@ export function materializeIosScrollOptions(
   return {
     ...options,
     ...(!hasExplicitDistance ? { amount: DEFAULT_IOS_SCROLL_AMOUNT } : {}),
-    durationMs: options?.durationMs ?? DEFAULT_MOBILE_SCROLL_DURATION_MS,
+    durationMs: options?.durationMs ?? DEFAULT_IOS_SCROLL_DURATION_MS,
+    releaseBehavior: options?.releaseBehavior ?? 'controlled',
   };
 }
 
@@ -56,13 +59,16 @@ export function normalizeAppleScrollResultWithResolvedFrame(
 
 export function scrollRunnerFields(
   options: AppleScrollOptions | undefined,
-  config: { includeDuration?: boolean } = { includeDuration: true },
-): Record<string, number> {
+  config: { includeDuration?: boolean; includeReleaseBehavior?: boolean } = {},
+): Record<string, number | ScrollReleaseBehavior> {
   return {
     ...(options?.amount !== undefined ? { amount: options.amount } : {}),
     ...(options?.pixels !== undefined ? { pixels: options.pixels } : {}),
-    ...(config?.includeDuration && options?.durationMs !== undefined
+    ...(config.includeDuration !== false && options?.durationMs !== undefined
       ? { durationMs: options.durationMs }
+      : {}),
+    ...(config.includeReleaseBehavior !== false && options?.releaseBehavior !== undefined
+      ? { scrollReleaseBehavior: options.releaseBehavior }
       : {}),
   };
 }

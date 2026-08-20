@@ -132,6 +132,7 @@ struct Command: Codable {
   let direction: String?
   let amount: Double?
   let pixels: Double?
+  let scrollReleaseBehavior: ScrollReleaseBehavior?
   let orientation: String?
   let gesturePlan: RunnerGesturePlan?
   let outPath: String?
@@ -146,6 +147,11 @@ struct Command: Codable {
   let inlineScreenshot: Bool?
   let synthesized: Bool?
   let steps: [SequenceStep]?
+}
+
+enum ScrollReleaseBehavior: String, Codable {
+  case controlled
+  case inertial
 }
 
 /// Canonical one- or two-pointer plan produced by the portable TypeScript planner.

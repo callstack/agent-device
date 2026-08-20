@@ -1976,17 +1976,16 @@ extension RunnerTests {
           )
         )
       }
-      return executeDragGesture(
+      return executeScrollDragGesture(
         activeApp: activeApp,
         x: frame.minX + plan.x1,
         y: frame.minY + plan.y1,
         x2: frame.minX + plan.x2,
         y2: frame.minY + plan.y2,
         durationMs: defaults.durationMs,
-        synthesized: shouldUseSynthesizedScrollPath(),
         message: "scrolled",
-        synthesizedContext: scrollContext.withReferenceFrame(frame),
-        synthesizedPolicyKind: scrollPolicyKind
+        context: scrollContext.withReferenceFrame(frame),
+        releaseBehavior: command.scrollReleaseBehavior
       )
     case .desktopScroll:
       guard let direction = command.direction,
@@ -2283,9 +2282,58 @@ extension RunnerTests {
     }
   }
 
-  /// Shared drag execution for `.drag` and the fused `.scroll`. The iOS synthesized lane keeps
-  /// each command's fallback policy explicit: scroll requires private synthesis, while explicit
-  /// synthesized drag can still use the coordinate fallback unless AX is known unavailable.
+  private func executeScrollDragGesture(
+    activeApp: XCUIApplication,
+    x: Double,
+    y: Double,
+    x2: Double,
+    y2: Double,
+    durationMs: Double,
+    message: String,
+    context: SynthesizedCoordinateContext,
+    releaseBehavior: ScrollReleaseBehavior?
+  ) -> Response {
+#if os(iOS)
+    let durationMs = min(max(durationMs, 16), 10000)
+    let dragFrame = axFreeDragVisualizationFrame(
+      x: x,
+      y: y,
+      x2: x2,
+      y2: y2,
+      referenceFrame: context.referenceFrame
+    )
+    let (timing, outcome) = performGesture(activeApp) {
+      scrollDragAt(
+        app: activeApp,
+        x: x,
+        y: y,
+        x2: x2,
+        y2: y2,
+        durationMs: durationMs,
+        releaseBehavior: releaseBehavior
+      )
+    }
+    if let response = unsupportedResponse(for: outcome) {
+      return response
+    }
+    return gestureResponse(message: message, timing: timing, frame: .drag(dragFrame))
+#else
+    return executeDragGesture(
+      activeApp: activeApp,
+      x: x,
+      y: y,
+      x2: x2,
+      y2: y2,
+      durationMs: durationMs,
+      synthesized: false,
+      message: message,
+      synthesizedPolicyKind: scrollPolicyKind
+    )
+#endif
+  }
+
+  /// Shared drag execution for explicit drag commands. The iOS synthesized lane keeps its
+  /// fallback policy explicit; viewport scrolling owns a separate single drag specification.
   private func executeDragGesture(
     activeApp: XCUIApplication,
     x: Double,
@@ -2512,14 +2560,6 @@ extension RunnerTests {
     return synthesizedFrameAvoidingKeyboardWhenAllowed(app: app, context: context)
 #else
     return resolvedTouchReferenceFrame(app: app, appFrame: app.frame)
-#endif
-  }
-
-  private func shouldUseSynthesizedScrollPath() -> Bool {
-#if os(iOS)
-    return true
-#else
-    return false
 #endif
   }
 

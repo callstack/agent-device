@@ -33,7 +33,12 @@ test('dispatch scroll forwards pixels and duration without reporting ignored dur
   assert.deepEqual(calls, [
     {
       direction: 'down',
-      options: { amount: undefined, pixels: 200, durationMs: 50 },
+      options: {
+        amount: undefined,
+        pixels: 200,
+        durationMs: 50,
+        releaseBehavior: 'controlled',
+      },
     },
   ]);
   assert.equal(result.pixels, 200);
@@ -147,7 +152,12 @@ test('dispatch scroll bottom scrolls only while scoped snapshot confirms hidden 
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0], {
     direction: 'down',
-    options: { amount: undefined, pixels: undefined, durationMs: undefined },
+    options: {
+      amount: undefined,
+      pixels: undefined,
+      durationMs: undefined,
+      releaseBehavior: 'inertial',
+    },
   });
   assert.equal(result.passes, 1);
   assert.equal(result.lastPass, 1);

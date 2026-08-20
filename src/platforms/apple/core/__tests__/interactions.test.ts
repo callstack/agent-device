@@ -245,9 +245,9 @@ test('iosRunnerOverrides maps iOS scroll to a single fused scroll command', asyn
   // lifecycle command; no separate interactionFrame request is needed.
   mockRunAppleRunnerCommand.mockResolvedValueOnce({
     x: 200,
-    y: 520,
+    y: 540,
     x2: 200,
-    y2: 280,
+    y2: 260,
     referenceWidth: 400,
     referenceHeight: 800,
   });
@@ -262,19 +262,20 @@ test('iosRunnerOverrides maps iOS scroll to a single fused scroll command', asyn
   assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
     command: 'scroll',
     direction: 'down',
-    amount: 0.3,
+    amount: 0.35,
     durationMs: 50,
+    scrollReleaseBehavior: 'controlled',
     appBundleId: 'com.example.App',
   });
   assert.deepEqual(result, {
     x1: 200,
-    y1: 520,
+    y1: 540,
     x2: 200,
-    y2: 280,
+    y2: 260,
     referenceWidth: 400,
     referenceHeight: 800,
-    amount: 0.3,
-    pixels: 240,
+    amount: 0.35,
+    pixels: 280,
     durationMs: 50,
   });
 });
@@ -299,7 +300,8 @@ test('iosRunnerOverrides keeps explicit iOS scroll distance with the controlled 
     command: 'scroll',
     direction: 'down',
     pixels: 400,
-    durationMs: 300,
+    durationMs: 350,
+    scrollReleaseBehavior: 'controlled',
     appBundleId: 'com.example.App',
   });
 });
@@ -307,9 +309,9 @@ test('iosRunnerOverrides keeps explicit iOS scroll distance with the controlled 
 test('iosRunnerOverrides materializes the controlled iOS default scroll amount', async () => {
   mockRunAppleRunnerCommand.mockResolvedValueOnce({
     x: 200,
-    y: 520,
+    y: 540,
     x2: 200,
-    y2: 280,
+    y2: 260,
     referenceWidth: 400,
     referenceHeight: 800,
   });
@@ -323,20 +325,21 @@ test('iosRunnerOverrides materializes the controlled iOS default scroll amount',
   assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
     command: 'scroll',
     direction: 'down',
-    amount: 0.3,
-    durationMs: 300,
+    amount: 0.35,
+    durationMs: 350,
+    scrollReleaseBehavior: 'controlled',
     appBundleId: 'com.example.App',
   });
   assert.deepEqual(result, {
     x1: 200,
-    y1: 520,
+    y1: 540,
     x2: 200,
-    y2: 280,
+    y2: 260,
     referenceWidth: 400,
     referenceHeight: 800,
-    amount: 0.3,
-    pixels: 240,
-    durationMs: 300,
+    amount: 0.35,
+    pixels: 280,
+    durationMs: 350,
   });
 });
 

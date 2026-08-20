@@ -1,6 +1,7 @@
 import type { BackMode } from './back-mode.ts';
 import type { DeviceRotation } from './device-rotation.ts';
 import type { ScrollDirection } from './scroll-gesture.ts';
+import type { ScrollExecutionOptions } from './scroll-command.ts';
 import type { TvRemoteButton } from './tv-remote.ts';
 import type { GesturePlan } from './gesture-plan-types.ts';
 import type { SettingOptions } from './settings.ts';
@@ -217,7 +218,7 @@ export type Interactor = {
   ): Promise<Record<string, unknown> | void>;
   scroll(
     direction: ScrollDirection,
-    options?: { amount?: number; pixels?: number; durationMs?: number },
+    options?: ScrollExecutionOptions,
   ): Promise<Record<string, unknown> | void>;
   screenshot(outPath: string, options?: ScreenshotOptions): Promise<void>;
   setViewport?(width: number, height: number): Promise<Record<string, unknown> | void>;

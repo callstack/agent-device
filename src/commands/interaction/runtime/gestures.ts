@@ -11,6 +11,7 @@ import {
   buildDragGesturePlan,
   honoredScrollDurationMs,
   normalizeScrollDurationMs,
+  resolveScrollExecutionOptions,
   singlePointerPlanEndpoints,
 } from '@agent-device/contracts/interaction';
 import { AppError } from '@agent-device/kernel/errors';
@@ -428,12 +429,18 @@ export const scrollCommand: RuntimeCommand<ScrollCommandOptions, ScrollCommandRe
       ? { kind: 'viewport' as const }
       : { kind: 'point' as const, point: requireResolvedPoint(resolved) };
   const scrollBackend = runtime.backend.scroll;
-  const runScroll = async () =>
-    await scrollBackend(toBackendContext(runtime, options), backendTarget, {
-      direction: target.direction,
+  const executionOptions = resolveScrollExecutionOptions(
+    {
       ...(amount !== undefined ? { amount } : {}),
       ...(pixels !== undefined ? { pixels } : {}),
       ...(durationMs !== undefined ? { durationMs } : {}),
+    },
+    target.edge,
+  );
+  const runScroll = async () =>
+    await scrollBackend(toBackendContext(runtime, options), backendTarget, {
+      direction: target.direction,
+      ...executionOptions,
     });
   let backendResult: Awaited<ReturnType<NonNullable<typeof runtime.backend.scroll>>> | undefined;
   let completedPasses = 0;

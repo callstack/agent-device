@@ -142,15 +142,20 @@ export type {
 } from '../navigation.ts';
 export {
   DEFAULT_IOS_SCROLL_AMOUNT,
+  DEFAULT_IOS_SCROLL_DURATION_MS,
   DEFAULT_MOBILE_SCROLL_DURATION_MS,
   SCROLL_DURATION_MAX_MS,
   assertExclusiveScrollDistanceInputs,
   honoredScrollDurationMs,
   normalizeScrollDurationMs,
+  resolveScrollExecutionOptions,
 } from '../scroll-command.ts';
 export type {
   ScrollCommandOptions,
   ScrollDistanceOptions,
+  ScrollExecutionOptions,
+  ResolvedScrollExecutionOptions,
+  ScrollReleaseBehavior,
   ScrollTimingOptions,
 } from '../scroll-command.ts';
 export {

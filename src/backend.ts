@@ -13,6 +13,7 @@ import type {
   GesturePlan,
   RepeatedInput,
   ScrollDirection,
+  ResolvedScrollExecutionOptions,
   TvRemoteButton,
 } from '@agent-device/contracts/interaction';
 import type { RecordingExportQuality } from '@agent-device/contracts/recording';
@@ -168,11 +169,8 @@ export type BackendScrollTarget =
       point: Point;
     };
 
-export type BackendScrollOptions = {
+export type BackendScrollOptions = ResolvedScrollExecutionOptions & {
   direction: ScrollDirection;
-  amount?: number;
-  pixels?: number;
-  durationMs?: number;
 };
 
 export type BackendOpenTarget = {
