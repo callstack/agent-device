@@ -72,9 +72,10 @@ Implementation status as of 2026-08:
   plus simulator-deployment evidence.
 - Decision-only support boundary: visionOS discovery and simulator deployment are supported and
   unit-tested (`packages/platform-apple/src/inventory-classification.ts` and
-  `packages/platform-apple/src/deployment/runtime.test.ts`); physical-device deployment is
-  unsupported, and no public-command coverage is claimed for visionOS or watchOS. This boundary is
-  recorded here without creating a command-coverage manifest for either leaf.
+  `packages/platform-apple/src/deployment/runtime.test.ts`); app deployment is also admitted for
+  CoreDevice-backed physical devices, while XCTest-backed physical deployment is unsupported and
+  push remains simulator-only. No public-command coverage is claimed for visionOS or watchOS. This
+  boundary is recorded here without creating a command-coverage manifest for either leaf.
 - Retained compatibility: the public wire still emits `ios`/`macos` leaves through
   `PUBLIC_PLATFORMS`; internal family ownership must not leak into that projection.
 - Deferred: net-new visionOS spatial-input QA.
