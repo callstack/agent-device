@@ -184,10 +184,7 @@ async function captureAppleRunnerSnapshot(
     ),
   );
   const nodes = result.nodes ?? [];
-  const isValidEmptyScope =
-    normalizeSnapshotScope(options?.scope) !== null &&
-    result.quality !== undefined &&
-    result.quality.state !== 'sparse';
+  const isValidEmptyScope = acceptsEmptyScopedSnapshot(options, result.quality);
   if (nodes.length === 0 && device.kind === 'simulator' && !isValidEmptyScope) {
     throw new AppError('COMMAND_FAILED', 'XCTest snapshot returned 0 nodes on iOS simulator.');
   }
@@ -199,6 +196,15 @@ async function captureAppleRunnerSnapshot(
     // Legacy runners without a quality verdict still surface their message text.
     ...(!result.quality && result.message ? { warnings: [result.message] } : {}),
   };
+}
+
+function acceptsEmptyScopedSnapshot(
+  options: SnapshotOptions | undefined,
+  quality: SnapshotQualityVerdict | undefined,
+): boolean {
+  return (
+    normalizeSnapshotScope(options?.scope) !== null && quality?.state !== 'sparse' && !!quality
+  );
 }
 
 function mergeRunnerCallSignal(
