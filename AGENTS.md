@@ -70,6 +70,7 @@ cross-language rules change through golden tables under `contracts/fixtures/`.
 - Apple target changes keep the kernel device model, capability admission, dispatch resolution,
   Apple discovery, and xctestrun preparation in sync.
 - iOS simulator-set scoping must never hide the host macOS desktop target.
+- Skills may carry a minimal start/routing card; command semantics belong in versioned CLI help.
 - Do not add compatibility or fallback behavior without explicit approval. Complete migrations and
   remove superseded paths.
 - Keep changes within one command family or module group unless the task explicitly crosses a

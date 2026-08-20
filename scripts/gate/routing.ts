@@ -7,6 +7,10 @@
 // the YAML a derived artifact: over every tracked path, the lane must start whenever the
 // selector says the change can reach it, and must not start on a path the selector places on
 // another family's device-lane surface or classifies as a unit test.
+//
+// One limit is GitHub's, not this assertion's: path filters examine only the first 300 changed
+// files, so a PR larger than that can skip a routed lane on the strength of its first 300 paths
+// alone. The unfiltered `push` to main is the backstop.
 
 import { deviceLanesFor, isDeviceLaneSurface, isUnitTest } from '../check-affected/device-lanes.ts';
 import { isDocs, selectChecks, type CheckId } from '../check-affected/model.ts';

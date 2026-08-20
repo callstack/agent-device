@@ -28,7 +28,9 @@ test('high-traffic guidance stays within its reviewed context budget', async () 
 
 test('task guidance stays focused instead of growing another handbook', async () => {
   const directory = path.join(ROOT, 'docs', 'agents');
-  const files = (await readdir(directory)).filter((file) => file.endsWith('.md'));
+  const files = (await readdir(directory, { recursive: true })).filter((file) =>
+    file.endsWith('.md'),
+  );
   let totalBytes = 0;
 
   for (const file of files) {

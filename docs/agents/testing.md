@@ -15,6 +15,10 @@ Use three tiers:
 GitHub remains authoritative for provider integration, full coverage, native builds, device lanes,
 and history-backed compatibility. To inspect the current gate catalog or a plan, use:
 
+`check:affected --run` reports coverage obligations but never enables coverage instrumentation. It
+runs one capped `vitest related` command for local feedback; run the dedicated coverage scripts only
+when diagnosing a red CI result.
+
 ```sh
 pnpm check:affected
 pnpm check:affected --json
@@ -40,6 +44,12 @@ following `docs/agents/device-verification.md`. Do not add a CI lane that assume
 Apple runner changes run `pnpm check:xctest-selection` and build the affected target. The source
 `#if` guard is the XCTest lane classification; do not maintain a second test-name list. Pure runner
 decisions use the macOS host lane, while iOS/XCTest semantics require a simulator lane.
+
+Local host-lane XCTest runs hit two snags CI never does. System policy may refuse the unsigned
+bundle (`library load disallowed by system policy`, surfacing as `Early unexpected exit … crashed
+with signal kill`); rebuild signed, with `CODE_SIGN_IDENTITY="Apple Development"` or a manual
+identity from `security find-identity -v -p codesigning`. The first run also needs XCUITest
+automation permission for the host app.
 
 Live smoke commands and their environment contracts live with their harnesses:
 
