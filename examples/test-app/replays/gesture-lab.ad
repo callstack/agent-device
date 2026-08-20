@@ -10,6 +10,7 @@ wait "two-pointer pan activations 0" 5000
 
 gesture pan 110 443 48 0 500
 wait "two-pointer pan activations 0" 5000
+wait text "pan duration >=400ms" 5000
 
 gesture pan 110 443 48 0 500 --pointer-count 2
 wait "two-pointer pan activations 1" 5000
