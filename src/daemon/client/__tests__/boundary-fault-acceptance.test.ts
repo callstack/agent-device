@@ -9,22 +9,26 @@ import type { DaemonPaths } from '../../config.ts';
 import type { DaemonRequest } from '../../types.ts';
 import { sendRequest } from '../daemon-client-transport.ts';
 
-type ProcessDeathCommand = 'open' | 'close';
+type ProcessDeathCommand = 'press' | 'fill' | 'snapshot' | 'screenshot' | 'open' | 'close';
 type ProcessDeathRow = Readonly<{
   command: ProcessDeathCommand;
   positionals: readonly string[];
 }>;
 
 const PROCESS_DEATH_ROWS = {
+  press: { command: 'press', positionals: ['enter'] },
+  fill: { command: 'fill', positionals: ['@e1', 'Ada'] },
+  snapshot: { command: 'snapshot', positionals: [] },
+  screenshot: { command: 'screenshot', positionals: ['/tmp/acceptance.png'] },
   open: { command: 'open', positionals: ['Demo'] },
   close: { command: 'close', positionals: [] },
 } as const satisfies Record<ProcessDeathCommand, ProcessDeathRow>;
 
 for (const row of Object.values(PROCESS_DEATH_ROWS)) {
   test(`acceptance row: process death after ${row.command} dispatch is bounded and non-replayed`, async () => {
-    // This acceptance row deliberately stops at the transport boundary: a
-    // dead daemon is observed as a closed response socket. Lifecycle teardown
-    // and process-tree cleanup belong to the deferred full fault matrix.
+    // A dead daemon is observed as a closed response socket. The command is
+    // sent exactly once because the transport cannot establish whether the
+    // daemon applied it before dying.
     const endpoint = await startEndpointThatDiesAfterRequest();
     const baseDir = mkdtempForTestSync(`agent-device-process-death-${row.command}-`);
     const statePaths = daemonPaths(baseDir);
@@ -83,8 +87,8 @@ async function startEndpointThatDiesAfterRequest(): Promise<DeadEndpoint> {
       const command = parsed.params?.command;
       if (typeof command === 'string') commands.push(command);
       // A daemon process death after dispatch is observed as the accepted
-      // socket closing. There is no response and no safe retry path for either
-      // lifecycle command.
+      // socket closing. There is no response and no safe retry path after any
+      // command has crossed the dispatch boundary.
       request.socket.destroy();
       closePromise ??= new Promise<void>((resolve) => {
         server.close(() => resolve());

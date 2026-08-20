@@ -155,6 +155,13 @@ export function readDaemonSocketProgressResponse(
       if (lineReader.handleLine(line)) return;
     }
   });
+  socket.on('end', () => {
+    if (isSettled()) return;
+    const line = buffer.trim();
+    if (line && lineReader.handleLine(line)) return;
+    clearTimeout();
+    reject(createInvalidDaemonResponseError(req, line));
+  });
 }
 
 export function readDaemonHttpProgressResponse(
