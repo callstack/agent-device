@@ -2,7 +2,8 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-FOUNDATION_EXPORT NSInteger RunnerSampledDragFrameCount(double durationMs, double sampleIntervalMs);
+FOUNDATION_EXPORT NSInteger RunnerContinuousDragFrameCount(double durationMs);
+FOUNDATION_EXPORT NSInteger RunnerControlledScrollFrameCount(double durationMs);
 FOUNDATION_EXPORT double RunnerControlledScrollProgress(double t);
 
 @interface RunnerSynthesizedGesture : NSObject

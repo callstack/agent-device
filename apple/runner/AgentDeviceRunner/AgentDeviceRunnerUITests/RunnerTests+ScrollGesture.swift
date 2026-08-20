@@ -226,11 +226,13 @@ extension RunnerTests {
   }
 
   func testControlledScrollProfileUsesReliableCadenceAndMonotonicDeceleration() {
-    XCTAssertEqual(RunnerSampledDragFrameCount(350, 16), 21)
-    XCTAssertEqual(RunnerSampledDragFrameCount(400, 16), 24)
-    XCTAssertEqual(RunnerSampledDragFrameCount(500, 16), 30)
+    XCTAssertEqual(RunnerControlledScrollFrameCount(350), 21)
+    XCTAssertEqual(RunnerControlledScrollFrameCount(400), 24)
+    XCTAssertEqual(RunnerControlledScrollFrameCount(500), 30)
+    XCTAssertEqual(RunnerControlledScrollFrameCount(1_000), 30)
+    XCTAssertEqual(RunnerControlledScrollFrameCount(10_000), 30)
 
-    let frameCount = RunnerSampledDragFrameCount(400, 16)
+    let frameCount = RunnerControlledScrollFrameCount(400)
     let progress = (0...frameCount).map {
       RunnerControlledScrollProgress(Double($0) / Double(frameCount))
     }
@@ -243,6 +245,11 @@ extension RunnerTests {
     let defaultFingerTravel = iPhoneViewportPoints * 0.65
     let finalSampleTravel = (1 - progress[progress.count - 2]) * defaultFingerTravel
     XCTAssertLessThan(finalSampleTravel, 0.1)
+  }
+
+  func testContinuousDragRetainsSixteenMillisecondSamplingAtLongDurations() {
+    XCTAssertEqual(RunnerContinuousDragFrameCount(1_000), 62)
+    XCTAssertEqual(RunnerContinuousDragFrameCount(10_000), 625)
   }
 
   func testRunnerScrollGesturePlanRejectsUnknownDirection() {
