@@ -120,7 +120,7 @@ type SelectorWaitRuntime = {
     platform: PublicPlatform;
     /**
      * The backend's native text reading, present only when the bound runtime advertised the
-     * preferred `findText` operation. It is consulted first and is authoritative ONLY when it
+     * conditional `findText` operation. It is consulted first and is authoritative ONLY when it
      * answers `true`; see `waitForText`.
      */
     findText?: (context: WaitCommandContext, text: string) => Promise<{ found: boolean }>;

@@ -11,8 +11,10 @@ export type FindSelectorInput = Readonly<{
 }>;
 
 /**
- * A positive native selector observation is authoritative. A negative observation only means the
- * owner did not prove the match; the caller must consult its required canonical capture.
+ * A positive native selector observation is authoritative and preserves matches that an advertising
+ * owner's bulk capture may omit. A negative observation only means the owner did not prove the
+ * match; the caller must consult its required canonical capture. Owners without this semantic
+ * source report the conditional operation unavailable and rely on their parity-proven capture path.
  */
 export type FindSelectorResult = Readonly<{ found: boolean }>;
 

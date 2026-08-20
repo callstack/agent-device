@@ -12,7 +12,7 @@ import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
  * Tries the admitted owner's one-sided native observation for an immediate simple-selector wait.
  * Any non-positive answer returns control to the required canonical capture in the same request.
  */
-export async function dispatchPreferredWaitSelector(
+export async function dispatchConditionalWaitSelector(
   input: Readonly<{
     selectorExpression: string;
     operation: FindSelectorRuntimeOperations['findSelector'] | undefined;

@@ -20,10 +20,16 @@ export type BindDeviceRuntime = <
     RuntimeOperationKey<PlatformRuntimeOperations>,
     Required[number]
   >[],
+  const Conditional extends readonly Exclude<
+    RuntimeOperationKey<PlatformRuntimeOperations>,
+    Required[number] | Preferred[number]
+  >[],
 >(
   device: DeviceInfo,
-  use: RuntimeUse<PlatformRuntimeOperations, Required, Preferred>,
-) => Promise<BoundDeviceRuntime<RuntimeUse<PlatformRuntimeOperations, Required, Preferred>>>;
+  use: RuntimeUse<PlatformRuntimeOperations, Required, Preferred, Conditional>,
+) => Promise<
+  BoundDeviceRuntime<RuntimeUse<PlatformRuntimeOperations, Required, Preferred, Conditional>>
+>;
 
 export type BindExactDeviceRuntime = <
   const Required extends readonly RuntimeOperationKey<PlatformRuntimeOperations>[],
@@ -31,13 +37,19 @@ export type BindExactDeviceRuntime = <
     RuntimeOperationKey<PlatformRuntimeOperations>,
     Required[number]
   >[],
+  const Conditional extends readonly Exclude<
+    RuntimeOperationKey<PlatformRuntimeOperations>,
+    Required[number] | Preferred[number]
+  >[],
 >(
   device: DeviceInfo,
   owner: RuntimeOwnerRef,
   fence: ResourceOwnershipFence,
-  use: RuntimeUse<PlatformRuntimeOperations, Required, Preferred>,
+  use: RuntimeUse<PlatformRuntimeOperations, Required, Preferred, Conditional>,
   scope: PlatformRequestScope,
-) => Promise<BoundDeviceRuntime<RuntimeUse<PlatformRuntimeOperations, Required, Preferred>>>;
+) => Promise<
+  BoundDeviceRuntime<RuntimeUse<PlatformRuntimeOperations, Required, Preferred, Conditional>>
+>;
 
 export type InspectDeviceRuntimeFacts = (
   device: DeviceInfo,

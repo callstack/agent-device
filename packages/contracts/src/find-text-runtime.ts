@@ -18,16 +18,16 @@ export type FindTextInput = Readonly<{
 }>;
 
 /**
- * Deliberately asymmetric, and the reason this is a `preferred` operation rather than a second
- * execution path (ADR 0019 §2/§9):
+ * Deliberately asymmetric and fact-conditional (ADR 0019 §2/§9):
  *
  * - `found: true` is **authoritative** — the owner observed the text and the wait is satisfied.
  * - `found: false` is **not** authoritative. It means "not proven by this owner", and the caller
  *   must still consult the canonical tree in the same poll. An owner that cannot answer at all
  *   reports `false` rather than throwing.
  *
- * So the required tree path remains semantically complete on its own: removing this operation
- * changes how fast a satisfied wait returns, never whether it can be satisfied.
+ * Owners advertising this operation have text observations their bulk capture may omit, so the
+ * positive reading is required for semantic parity in those owner cells. Owners reporting it
+ * unavailable instead rely on their parity-proven capture path.
  */
 export type FindTextResult = Readonly<{ found: boolean }>;
 

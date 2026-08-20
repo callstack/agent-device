@@ -89,17 +89,20 @@ const captureSnapshotWithCustomActionsWithoutActiveAppUse = defineUse({
 /**
  * The selector family's capture uses. Declared ALONGSIDE the snapshot uses above, never in place
  * of them: `snapshot`/`diff` keep binding exactly what they bind today. The only difference is the
- * PREFERRED element read — every selector read's required path answers from the captured tree, so
- * an owner without the read still executes the command completely (ADR 0019 §2), but an owner that
- * has one lets `get text` return the live value a truncated snapshot node cannot.
+ * PREFERRED element read and fact-CONDITIONAL native wait observations. `readTextAtPoint` may
+ * improve a capture-backed read without changing correctness. `findText` and `findSelector` are
+ * different: where owner facts advertise them, they preserve semantic observations absent from
+ * that owner's capture and therefore cannot be classified as optimizations (ADR 0019 §2).
  */
 const selectorCaptureUse = defineUse({
   required: ['captureSnapshot'],
-  preferred: ['readTextAtPoint', 'findText', 'findSelector'],
+  preferred: ['readTextAtPoint'],
+  conditional: ['findText', 'findSelector'],
 });
 const selectorCaptureWithoutActiveAppUse = defineUse({
   required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp'],
-  preferred: ['readTextAtPoint', 'findText', 'findSelector'],
+  preferred: ['readTextAtPoint'],
+  conditional: ['findText', 'findSelector'],
 });
 
 /**
@@ -143,7 +146,7 @@ export type SnapshotRuntimePlan =
 /**
  * Same two `kind`s the snapshot plan uses for this split — deliberately, so the shared
  * admit-then-bind path keeps ONE set of arms rather than growing a parallel dispatch — but
- * carrying the selector uses, which add the preferred element read.
+ * carrying the selector uses, which add the preferred element read and conditional observations.
  */
 export type SelectorCaptureRuntimePlan =
   | Readonly<{

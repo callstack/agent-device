@@ -74,7 +74,7 @@ function harness(options: {
 }
 
 async function run(session: SessionState, runtime: ReturnType<typeof harness>) {
-  const sessionStore = makeSessionStore('wait-preferred-selector-');
+  const sessionStore = makeSessionStore('wait-conditional-selector-');
   sessionStore.set(session.name, session);
   const req = {
     command: 'wait',
@@ -82,12 +82,12 @@ async function run(session: SessionState, runtime: ReturnType<typeof harness>) {
     token: 'token',
     session: session.name,
     flags: {},
-    meta: { requestId: 'wait-preferred-selector' },
+    meta: { requestId: 'wait-conditional-selector' },
   } as unknown as DaemonRequest;
   const response = await handleSnapshotCommands({
     req,
     sessionName: session.name,
-    logPath: '/tmp/wait-preferred-selector.log',
+    logPath: '/tmp/wait-conditional-selector.log',
     sessionStore,
     inspectFacts: runtime.inspectFacts,
     bindDevice: runtime.bindDevice,
@@ -98,7 +98,7 @@ async function run(session: SessionState, runtime: ReturnType<typeof harness>) {
 
 test('an admitted positive native selector observation satisfies wait without a sparse tree', async () => {
   const runtime = harness({ found: true, nodes: [] });
-  const response = await run(makeIosAppSession('wait-preferred-selector'), runtime);
+  const response = await run(makeIosAppSession('wait-conditional-selector'), runtime);
 
   expect(response).toMatchObject({
     ok: true,
@@ -111,7 +111,7 @@ test('an admitted positive native selector observation satisfies wait without a 
   expect(runtime.findSelector.mock.calls[0]?.[0]).toMatchObject({
     selector: { key: 'id', value: 'runner-only' },
     options: { appBundleId: 'com.example.app' },
-    execution: { requestId: 'wait-preferred-selector' },
+    execution: { requestId: 'wait-conditional-selector' },
   });
   expect(runtime.captureSnapshot).not.toHaveBeenCalled();
 });
@@ -121,7 +121,7 @@ test('a negative native observation falls through to the same bound canonical ca
     found: false,
     nodes: [{ index: 0, depth: 0, type: 'Button', identifier: 'runner-only' }],
   });
-  const response = await run(makeIosAppSession('wait-preferred-selector'), runtime);
+  const response = await run(makeIosAppSession('wait-conditional-selector'), runtime);
 
   expect(response.ok).toBe(true);
   expect(runtime.findSelector).toHaveBeenCalledOnce();
@@ -129,12 +129,12 @@ test('a negative native observation falls through to the same bound canonical ca
   expect(runtime.bindDevice).toHaveBeenCalledTimes(1);
 });
 
-test('an unavailable preferred observation never changes admission or binding', async () => {
+test('an unavailable conditional observation preserves the capture-backed owner path', async () => {
   const runtime = harness({
     fact: unavailable,
     nodes: [{ index: 0, depth: 0, type: 'Button', identifier: 'runner-only' }],
   });
-  const response = await run(makeIosAppSession('wait-preferred-selector'), runtime);
+  const response = await run(makeIosAppSession('wait-conditional-selector'), runtime);
 
   expect(response.ok).toBe(true);
   expect(runtime.findSelector).not.toHaveBeenCalled();
@@ -145,10 +145,10 @@ test('an unavailable preferred observation never changes admission or binding', 
 
 test('recording and no-app waits retain capture-owned evidence semantics', async () => {
   for (const session of [
-    makeAuthoringSession('wait-preferred-selector', {
+    makeAuthoringSession('wait-conditional-selector', {
       appBundleId: 'com.example.app',
     }),
-    makeIosSession('wait-preferred-selector'),
+    makeIosSession('wait-conditional-selector'),
   ]) {
     const runtime = harness({
       found: true,

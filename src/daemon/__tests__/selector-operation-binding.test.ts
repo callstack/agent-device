@@ -1,10 +1,10 @@
 import { expect, test, vi } from 'vitest';
-import { selectPreferredSelectorOperations } from '../selector-preferred-operation-binding.ts';
+import { selectSelectorOperations } from '../selector-operation-binding.ts';
 
-test('preferred selector operations are projected by presence and retain their exact bindings', async () => {
+test('selector operations are projected by presence and retain their exact bindings', async () => {
   const findText = vi.fn(async () => ({ found: true }));
   const findSelector = vi.fn(async () => ({ found: true }));
-  const selected = selectPreferredSelectorOperations({ operations: { findText, findSelector } });
+  const selected = selectSelectorOperations({ operations: { findText, findSelector } });
 
   expect(selected.readTextAtPoint).toBeUndefined();
   await expect(selected.findText?.({ text: 'Ready' })).resolves.toEqual({ found: true });

@@ -7,8 +7,9 @@ export type WaitRuntimeTarget = 'sleep' | 'text' | 'ref' | 'selector' | 'stable'
  * shape is stated here rather than left as an incidental branch in the handler.
  *
  * Every other shape polls the selector family's ordinary capture plan
- * (`resolveSelectorCaptureRuntimePlan`); `wait` contributes no plan of its own, and its preferred
- * `findText` rides that plan's preferred set beside `get`'s `readTextAtPoint`.
+ * (`resolveSelectorCaptureRuntimePlan`); `wait` contributes no plan of its own. Its correctness-
+ * bearing native observations ride that plan's conditional set, while `get`'s optimization-only
+ * `readTextAtPoint` remains preferred.
  */
 export function waitObservesDevice(target: WaitRuntimeTarget): boolean {
   return target !== 'sleep';

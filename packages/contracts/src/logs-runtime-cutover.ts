@@ -3,7 +3,7 @@ import {
   type CommandPlatformExecution,
 } from './command-platform-execution.ts';
 import { appLogRuntimePlanUses } from './logs-runtime-plan.ts';
-import type { RuntimeUseDeclaration } from './platform-runtime.ts';
+import { runtimeUseIdentity } from './platform-runtime-use.ts';
 
 /** Joins the input-dependent logs plans to one exhaustive descriptor declaration. */
 export function assertLogsRuntimeExecution(
@@ -16,13 +16,6 @@ export function assertLogsRuntimeExecution(
   if (declared.size !== planned.size || [...declared].some((identity) => !planned.has(identity))) {
     throw invalidLogsExecution();
   }
-}
-
-function runtimeUseIdentity(use: RuntimeUseDeclaration): string {
-  return JSON.stringify({
-    required: [...use.required].sort(),
-    preferred: [...use.preferred].sort(),
-  });
 }
 
 function invalidLogsExecution(): TypeError {

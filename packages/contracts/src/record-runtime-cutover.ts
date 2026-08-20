@@ -3,7 +3,7 @@ import {
   type CommandPlatformExecution,
 } from './command-platform-execution.ts';
 import { screenRecordingRuntimePlanUses } from './screen-recording-runtime-plan.ts';
-import type { RuntimeUseDeclaration } from './platform-runtime.ts';
+import { runtimeUseIdentity } from './platform-runtime-use.ts';
 
 /** Joins every normalized record plan to the descriptor's exhaustive runtime declaration. */
 export function assertRecordRuntimeExecution(
@@ -22,13 +22,6 @@ export function assertRecordRuntimeExecution(
   ) {
     throw invalidRecordExecution();
   }
-}
-
-function runtimeUseIdentity(use: RuntimeUseDeclaration): string {
-  return JSON.stringify({
-    required: [...use.required].sort(),
-    preferred: [...use.preferred].sort(),
-  });
 }
 
 function invalidRecordExecution(): TypeError {

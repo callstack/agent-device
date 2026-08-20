@@ -1,13 +1,10 @@
 import { waitObservesDevice } from '@agent-device/contracts/platform';
 import { parseWaitPositionals } from '../core/wait-positionals.ts';
 import type { WaitParsed } from '../core/wait-positionals.ts';
-import { AppError, asAppError, normalizeError } from '@agent-device/kernel/errors';
+import { AppError, asAppError } from '@agent-device/kernel/errors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { queryAppleRunnerSelector } from '../platforms/apple/core/runner/runner-selector-query.ts';
-import {
-  buildAppleRunnerRequestOptions,
-  type AppleRunnerRequestOptions,
-} from './apple-runner-options.ts';
+import type { AppleRunnerRequestOptions } from './apple-runner-options.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { errorResponse } from './handlers/response.ts';
 import { markSessionPartialRefsIssued, resolveRefStalenessWarning } from './session-snapshot.ts';
@@ -40,12 +37,7 @@ import type { RecordedTargetCapture } from './session-target-evidence.ts';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { maybeWaitTimeoutSurfaceResponse } from './wait-current-surface.ts';
 import { withSystemSurfaceDisclosure } from './handlers/system-surface-disclosure.ts';
-import {
-  isDirectIosSelectorFallbackError,
-  readSimpleIosSelectorTarget,
-  type DirectIosSelectorTarget,
-} from './direct-ios-selector.ts';
-import { isSessionRecording } from './session-script-publication-capability.ts';
+import type { DirectIosSelectorTarget } from './direct-ios-selector.ts';
 import {
   createBoundSelectorRuntime,
   createSelectorRuntimeForDevice,
@@ -56,20 +48,13 @@ import {
   resolveBoundSelectorCapture,
   type BoundSelectorOperations,
 } from './selector-capture-binding.ts';
-import { dispatchPreferredWaitSelector } from './wait-preferred-selector.ts';
+import { dispatchConditionalWaitSelector } from './wait-conditional-selector.ts';
 
 export type DirectIosSelectorQueryResult = {
   found: boolean;
   text?: string;
   node?: SnapshotNode;
 };
-
-type DirectIosSelectorErrorResult = { kind: 'error'; response: DaemonResponse };
-
-type DirectIosSelectorFallbackResult =
-  | DirectIosSelectorQueryResult
-  | DirectIosSelectorErrorResult
-  | null;
 
 export async function dispatchFindReadOnlyViaRuntime(
   params: SelectorRuntimeParams,
@@ -311,7 +296,7 @@ export async function dispatchWaitViaRuntime(
     });
   }
   if (waitParsed.kind === 'selector') {
-    const preferredResponse = await dispatchPreferredWaitSelector({
+    const conditionalResponse = await dispatchConditionalWaitSelector({
       selectorExpression: waitParsed.selectorExpression,
       operation: waitOperations?.findSelector,
       recordedLandmark,
@@ -322,7 +307,7 @@ export async function dispatchWaitViaRuntime(
       logPath: params.logPath,
       signal: params.signal,
     });
-    if (preferredResponse) return preferredResponse;
+    if (conditionalResponse) return conditionalResponse;
   }
   // Wait builds its runtime directly (no createBoundSelectorRuntime), so the consumed-snapshot slot
   // must be initialized here too or sessionless waits have nowhere to report the capture from.
@@ -409,33 +394,6 @@ export async function queryDirectIosSelector(
     ...(typeof data.text === 'string' ? { text: data.text } : {}),
     ...(node ? { node } : {}),
   };
-}
-
-async function queryDirectIosSelectorOrFallback(
-  params: SelectorRuntimeParams,
-  session: SessionState,
-  selector: DirectIosSelectorTarget,
-): Promise<DirectIosSelectorFallbackResult> {
-  try {
-    return await queryDirectIosSelector(
-      session,
-      selector,
-      buildAppleRunnerRequestOptions({
-        req: params.req,
-        logPath: params.logPath,
-        traceLogPath: session.trace?.outPath,
-      }),
-    );
-  } catch (error) {
-    if (isDirectIosSelectorFallbackError(error, { allowElementNotFound: true })) return null;
-    return { kind: 'error', response: { ok: false, error: normalizeError(error) } };
-  }
-}
-
-function isDirectIosSelectorErrorResult(
-  result: DirectIosSelectorFallbackResult,
-): result is DirectIosSelectorErrorResult {
-  return result !== null && 'kind' in result && result.kind === 'error';
 }
 
 function readDirectIosSelectorNode(data: Record<string, unknown>): SnapshotNode | undefined {

@@ -72,10 +72,18 @@ export async function admitRuntimeUse<
     RuntimeOperationKey<PlatformRuntimeOperations>,
     Required[number]
   >[],
+  const Conditional extends readonly Exclude<
+    RuntimeOperationKey<PlatformRuntimeOperations>,
+    Required[number] | Preferred[number]
+  >[],
 >(
   request: Omit<RuntimeAdmissionRequest, 'required'> &
-    Readonly<{ use: RuntimeUse<PlatformRuntimeOperations, Required, Preferred> }>,
-): Promise<RuntimeAdmission<RuntimeUse<PlatformRuntimeOperations, Required, Preferred>>> {
+    Readonly<{
+      use: RuntimeUse<PlatformRuntimeOperations, Required, Preferred, Conditional>;
+    }>,
+): Promise<
+  RuntimeAdmission<RuntimeUse<PlatformRuntimeOperations, Required, Preferred, Conditional>>
+> {
   const admitted = await admitRuntimeOperations({ ...request, required: request.use.required });
   if (admitted.type === 'response') return admitted;
   return { type: 'runtime', runtime: await admitted.bind(request.device, request.use) };

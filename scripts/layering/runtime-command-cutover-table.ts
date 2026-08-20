@@ -545,7 +545,7 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
       operationOwners: {
         captureSnapshot: ['selectActiveAppSnapshot'],
         captureSnapshotWithoutActiveApp: ['selectSnapshotWithoutActiveApp'],
-        readTextAtPoint: ['bindPreferredElementRead'],
+        readTextAtPoint: ['bindElementRead'],
       },
     },
   },
@@ -669,8 +669,8 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
       operationOwners: {
         captureSnapshot: ['selectActiveAppSnapshot'],
         captureSnapshotWithoutActiveApp: ['selectSnapshotWithoutActiveApp'],
-        findText: ['bindPreferredTextRead'],
-        findSelector: ['bindPreferredSelectorRead'],
+        findText: ['bindConditionalTextRead'],
+        findSelector: ['bindConditionalSelectorRead'],
       },
     },
   },

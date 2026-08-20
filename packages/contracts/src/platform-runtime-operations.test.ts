@@ -60,14 +60,22 @@ test.each([
     true,
     'custom-actions-active-app',
     'captureSnapshotWithCustomActions',
-    { required: ['captureSnapshot', 'captureSnapshotWithCustomActions'], preferred: [] },
+    {
+      required: ['captureSnapshot', 'captureSnapshotWithCustomActions'],
+      preferred: [],
+      conditional: [],
+    },
   ],
   [
     false,
     false,
     'without-active-app',
     'captureSnapshotWithoutActiveApp',
-    { required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp'], preferred: [] },
+    {
+      required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp'],
+      preferred: [],
+      conditional: [],
+    },
   ],
   [
     true,
@@ -81,6 +89,7 @@ test.each([
         'captureSnapshotWithoutActiveApp',
       ],
       preferred: [],
+      conditional: [],
     },
   ],
 ] as const)(

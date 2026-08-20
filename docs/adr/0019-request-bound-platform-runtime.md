@@ -38,7 +38,8 @@ those descriptors or authorize a second local/provider chooser.
   tested for the exact platform leaf, device kind/backend, and provider mode; family ownership never
   implies uniform leaf support.
 - Command descriptors declare one typed execution shape: inventory use, or platform-neutral required
-  device operations with separately declared preferred fast paths. Runtime owners report
+  device operations with separately declared preferred optimizations and fact-conditional semantic
+  operations. Runtime owners report
   device-specific facts and expose behavior-bearing facets; platform and provider implementations
   never name commands.
 - `RequestExecutionScope.bindDevice(device, use)` resolves provider ownership, validates the facts
@@ -67,8 +68,9 @@ those descriptors or authorize a second local/provider chooser.
 - Evidence is tiered by what a unit imports: request-scoped device units prove facts, operations,
   and parity cells; only durable-resource units carry the section 4–5 lifecycle evidence.
 - A handler binds once with its execution use. Admission, `capabilities`, and doctor questions use
-  side-effect-free facts inspection; required-only declarations are the default and a preferred
-  operation requires a recorded measurement.
+  side-effect-free facts inspection; required-only declarations are the default, a preferred
+  operation requires a recorded measurement, and a conditional operation requires parity evidence
+  explaining why correctness depends on the owner fact.
 - Cross-cutting facets land with their first consuming command unit. Daemon startup recovery is
   evidence-gated, daemon shutdown is two-phase (detach, then stop), and session-teardown steps
   belong to their owning domains — there is no generic lifecycle-hook API.
@@ -156,11 +158,15 @@ procedure.
 ### 2. Runtime use joins facts and narrows the bound runtime
 
 `CommandDescriptor` remains the command declaration root. Its runtime-use declaration has a typed set
-of required platform-neutral operations and may separately name preferred optimizations. Commands
-whose use depends on normalized input first produce a discriminated execution plan that retains
-literal required/preferred types. Required and preferred operation keys are disjoint, and the
-required-only path is semantically complete; preferred operations may improve execution but are
-never necessary for command correctness.
+of required platform-neutral operations and may separately name preferred optimizations or
+fact-conditional semantic operations. Commands whose use depends on normalized input first produce a
+discriminated execution plan that retains literal required/preferred/conditional types. The three
+operation sets are pairwise disjoint. Preferred operations may improve execution but are never
+necessary for command correctness. A conditional operation is different: an owner that advertises
+it must provide it because that owner's semantically complete path depends on the observation; an
+owner that reports it unavailable must have a parity-proven complete path through the required
+operations. This prevents a correctness-bearing owner variation from being mislabeled as an
+optimization or made unconditionally required across owners without that semantic source.
 
 Inventory commands have a separate `inventoryUse` declaration. `devices` calls the composed
 `DeviceInventoryGateway`, which selects canonical family sources and provider-owned inventory sources
@@ -180,14 +186,15 @@ operations from the same facet.
 `RequestExecutionScope.bindDevice(device, use)` is the trust choke point. It:
 
 1. resolves the exact local or provider runtime owner;
-2. checks every required operation and classifies each preferred operation against facts for the
-   platform leaf, device kind/backend, and provider mode;
+2. checks every required operation and classifies each preferred and conditional operation against
+   facts for the platform leaf, device kind/backend, and provider mode;
 3. creates or reuses one request binding for that ownership-qualified device;
-4. verifies that every required operation and every preferred operation advertised as available has
-   a concrete facet implementation; an advertised operation with no implementation is a
-   runtime-contract error; and
+4. verifies that every required operation and every preferred or conditional operation advertised as
+   available has a concrete facet implementation; an advertised operation with no implementation is
+   a runtime-contract error; and
 5. returns a selected operation projection: required operations are non-optional, declared preferred
-   operations are optional and present only when available, and undeclared operations are inaccessible.
+   and conditional operations are optional and present only when available, and undeclared operations
+   are inaccessible.
 
 The cached broad runtime remains private to `RequestExecutionScope`; narrowing does not intersect a
 wide optional aggregate that would still expose undeclared facets. The descriptor and its specialized
@@ -195,7 +202,7 @@ handler share one non-widened declaration, and a widened generic descriptor carr
 A compile-time contract test proves the selected projection. A structural
 **runtime-facet-narrowing gate** covers every runtime-migrated handler owner and rejects attempts to
 manufacture required-operation proof with assertions or optional admission. Optional access is
-permitted only for descriptor-declared preferred operations. The tracking issue owns the gate
+permitted only for descriptor-declared preferred or conditional operations. The tracking issue owns the gate
 implementation and its required planted violation.
 
 Absence or failure of a preferred path may change optimization/path disclosure, not whether the
@@ -203,6 +210,11 @@ semantic command can execute. Failure falls back to the complete required path o
 reason and an explicit descriptor/ADR 0011 path classification; it is never a generic `catch`
 fallback. Helper/session reuse hidden inside one required operation remains that facet's implementation
 detail and follows ADR 0002 rather than becoming a daemon-visible preferred operation.
+
+Conditional operations do not inherit that fallback rule. Their absence is valid only when the owner
+fact reports them unavailable and parity evidence establishes the required path for that owner cell.
+When the fact reports one available, omission of its implementation is a runtime-contract failure;
+the handler must not silently continue through a path known to lose the observation.
 
 Family registration and support coverage are separate gates. The immutable registry owns each of the
 six canonical families exactly once. Before a command cuts over, an independent parity artifact
@@ -677,6 +689,11 @@ a preferred operation requires a recorded measurement of the fast path's benefit
 review; the direct-selector fast path is the model. A preferred operation declared without a
 measurement is speculative surface and is rejected in review.
 
+Declaring a conditional operation instead requires a parity artifact showing both sides: the owner
+cells whose semantic path depends on the operation and the owner cells whose required path remains
+complete without it. A conditional declaration justified only by speed belongs under `preferred`;
+one justified only by universal correctness belongs under `required`.
+
 ### 10. Process-lifetime and cross-cutting surfaces
 
 A cross-cutting facet — one consumed from more than one command's execution path, such as snapshot
@@ -727,8 +744,8 @@ platform-freedom is structurally enforced rather than measured.
   [ADR 0007](0007-remote-device-leases.md): daemon request-policy traits, lease admission, and lock
   ordering remain daemon-owned. Binding happens only after their admission requirements are met.
 - [ADR 0008](0008-command-descriptor-registry.md): the descriptor registry remains the command root.
-  Device-command capability buckets evolve into typed required/preferred runtime use joined with
-  exact runtime facts; inventory commands declare inventory use.
+  Device-command capability buckets evolve into typed required/preferred/conditional runtime use
+  joined with exact runtime facts; inventory commands declare inventory use.
 - [ADR 0009](0009-apple-platform-consolidation.md): the Apple family and `AppleOS` leaf axis remain.
   The shallow `PlatformPlugin` shape is superseded as command units migrate; physical shared
   mechanics move only through the legal injected substrate transition or after their last legacy

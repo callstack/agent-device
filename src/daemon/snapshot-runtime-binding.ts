@@ -23,11 +23,11 @@ import { errorResponse } from './handlers/response.ts';
 import { resolveSnapshotScope } from './handlers/snapshot-capture.ts';
 import { resolveSessionDevice } from './handlers/snapshot-session.ts';
 import {
-  selectPreferredSelectorOperations,
+  selectSelectorOperations,
   type BoundElementRead,
   type BoundNativeSelectorRead,
   type BoundNativeTextRead,
-} from './selector-preferred-operation-binding.ts';
+} from './selector-operation-binding.ts';
 
 export type SnapshotRuntimeRouteParams = {
   req: DaemonRequest;
@@ -58,14 +58,14 @@ export type AdmittedSnapshotCapture =
       ok: true;
       capture: BoundSnapshotCapture;
       /**
-       * The owner's live element read, present only when the caller's plan declared it PREFERRED
+       * The owner's live element read, present only when the caller's plan declared it preferred
        * and the admitted owner advertised it. `snapshot`/`diff` plans declare no read, so this is
        * simply absent for them — the member is additive and they are unchanged.
        */
       readTextAtPoint?: BoundElementRead;
-      /** The owner's native text reading; present on the same terms as `readTextAtPoint`. */
+      /** A fact-conditional native text observation, present when the owner advertises it. */
       findText?: BoundNativeTextRead;
-      /** Owner-provided one-sided simple-selector observation. */
+      /** A fact-conditional one-sided simple-selector observation. */
       findSelector?: BoundNativeSelectorRead;
     }>
   | Readonly<{ ok: false; response: DaemonResponse }>;
@@ -169,7 +169,7 @@ async function bindSnapshotCaptureRuntime(
   const { device, plan } = unwrapAdmittedRuntimePlan(admission);
   // One switch, one set of operation selectors. The selector arms reuse the SAME
   // `selectActiveAppSnapshot` / `selectSnapshotWithoutActiveApp` the snapshot arms use and only
-  // add the preferred element read; the discriminants differ solely so the compiler can narrow
+  // add selector operation projection; the discriminants differ solely so the compiler can narrow
   // `plan.use` per family. No parallel plan-to-operation dispatch is introduced.
   switch (plan.kind) {
     case 'active-app': {
@@ -180,7 +180,7 @@ async function bindSnapshotCaptureRuntime(
       const runtime = await bind(device, plan.use);
       return {
         ...selectActiveAppSnapshot(runtime),
-        ...selectPreferredSelectorOperations(runtime),
+        ...selectSelectorOperations(runtime),
       };
     }
     case 'custom-actions-active-app': {
@@ -195,7 +195,7 @@ async function bindSnapshotCaptureRuntime(
       const runtime = await bind(device, plan.use);
       return {
         ...selectSnapshotWithoutActiveApp(runtime),
-        ...selectPreferredSelectorOperations(runtime),
+        ...selectSelectorOperations(runtime),
       };
     }
     case 'custom-actions-without-active-app': {

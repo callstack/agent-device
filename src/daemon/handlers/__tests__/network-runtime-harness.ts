@@ -19,14 +19,22 @@ export function createNetworkRuntime(
   networkFact: RuntimeOperationFact = { available: true },
   owner: RuntimeOwnerRef = localRuntimeOwner(device.platform),
 ) {
-  const uses: Array<{ required: readonly string[]; preferred: readonly string[] }> = [];
+  const uses: Array<{
+    required: readonly string[];
+    preferred: readonly string[];
+    conditional: readonly string[];
+  }> = [];
   const networkDump = vi.fn(implementation);
   const unavailable = {
     available: false,
     reason: 'owner-capability-missing',
   } as const;
   const bindDevice: BindDeviceRuntime = async (selected, use) => {
-    uses.push({ required: [...use.required], preferred: [...use.preferred] });
+    uses.push({
+      required: [...use.required],
+      preferred: [...use.preferred],
+      conditional: [...use.conditional],
+    });
     return narrowDeviceBinding(
       {
         device: selected,

@@ -33,9 +33,9 @@ export type BoundSelectorRead = ElementTextRuntimeOperations['readTextAtPoint'];
  * this seam — which is how `readText` arrived, and how `findText` followed.
  */
 /**
- * The owner's native text-presence reading, when its facts advertise one. Optional for the same
- * reason as `readText`: it is a PREFERRED operation, so `wait`'s required path answers from the
- * captured tree and an owner without it still executes the command completely (ADR 0019 §2).
+ * The owner's native text-presence reading, when its facts advertise one. It is fact-conditional:
+ * owners advertising it require the observation for correctness, while owners without that
+ * semantic source execute through their complete capture-backed path (ADR 0019 §2).
  */
 export type BoundSelectorFindText = FindTextRuntimeOperations['findText'];
 export type BoundSelectorFindSelector = FindSelectorRuntimeOperations['findSelector'];

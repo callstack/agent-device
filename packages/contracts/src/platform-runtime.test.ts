@@ -15,19 +15,24 @@ import { runtimeUse } from './platform-runtime-use.ts';
 type TestOperations = {
   inspect: (input: Readonly<{ depth: number }>) => Promise<Readonly<{ nodes: number }>>;
   inspectFast: () => Promise<Readonly<{ nodes: number }>>;
+  inspectConditional: () => Promise<Readonly<{ nodes: number }>>;
   mutate: (input: Readonly<{ value: string }>) => Promise<void>;
 };
 
 const inspectUse = runtimeUse<TestOperations>()({
   required: ['inspect'],
   preferred: ['inspectFast'],
+  conditional: ['inspectConditional'],
 });
 
 function compileTimeNarrowingProof(runtime: BoundDeviceRuntime<typeof inspectUse>): void {
   const required: TestOperations['inspect'] = runtime.operations.inspect;
   const preferred: TestOperations['inspectFast'] | undefined = runtime.operations.inspectFast;
+  const conditional: TestOperations['inspectConditional'] | undefined =
+    runtime.operations.inspectConditional;
   void required;
   void preferred;
+  void conditional;
 
   // @ts-expect-error An undeclared sibling operation cannot cross the selected projection.
   void runtime.operations.mutate;
@@ -39,6 +44,12 @@ void compileTimeNarrowingProof;
 function compileTimeDisjointProof(): void {
   // @ts-expect-error Required and preferred keys are statically disjoint.
   runtimeUse<TestOperations>()({ required: ['inspect'], preferred: ['inspect'] });
+  runtimeUse<TestOperations>()({
+    required: ['inspect'],
+    preferred: ['inspectFast'],
+    // @ts-expect-error Preferred and conditional keys are statically disjoint.
+    conditional: ['inspectFast'],
+  });
 }
 void compileTimeDisjointProof;
 
@@ -46,10 +57,12 @@ test('runtime use freezes declarations and rejects dynamic overlap or duplicates
   assert.deepEqual(inspectUse, {
     required: ['inspect'],
     preferred: ['inspectFast'],
+    conditional: ['inspectConditional'],
   });
   assert.ok(Object.isFrozen(inspectUse));
   assert.ok(Object.isFrozen(inspectUse.required));
   assert.ok(Object.isFrozen(inspectUse.preferred));
+  assert.ok(Object.isFrozen(inspectUse.conditional));
 
   const dynamic = runtimeUse<TestOperations>();
   assert.throws(
@@ -66,6 +79,15 @@ test('runtime use freezes declarations and rejects dynamic overlap or duplicates
         required: ['inspect', 'inspect'] as const,
       }),
     /duplicate required/,
+  );
+  assert.throws(
+    () =>
+      dynamic({
+        required: ['inspect'],
+        preferred: ['inspectFast'],
+        conditional: ['inspectFast'] as unknown as readonly ['inspectConditional'],
+      }),
+    /both preferred and conditional/,
   );
 });
 
@@ -93,12 +115,14 @@ test('binding narrowing proves required operations and omits unavailable preferr
   const binding = testBinding({
     inspect: { available: true },
     inspectFast: { available: false, reason: 'owner-capability-missing' },
+    inspectConditional: { available: false, reason: 'owner-capability-missing' },
     mutate: { available: true },
   });
   const runtime = narrowDeviceBinding(binding, inspectUse);
 
   assert.equal(runtime.operations.inspect, binding.operations.inspect);
   assert.equal(runtime.operations.inspectFast, undefined);
+  assert.equal(runtime.operations.inspectConditional, undefined);
   assert.deepEqual(runtime.facts.inspectFast, {
     available: false,
     reason: 'owner-capability-missing',
@@ -110,6 +134,7 @@ test('binding narrowing fails closed on unsupported or falsely advertised requir
   const unsupported = testBinding({
     inspect: { available: false, reason: 'unsupported-device-kind' },
     inspectFast: { available: false, reason: 'owner-capability-missing' },
+    inspectConditional: { available: false, reason: 'owner-capability-missing' },
     mutate: { available: true },
   });
   assert.throws(
@@ -120,11 +145,31 @@ test('binding narrowing fails closed on unsupported or falsely advertised requir
   const missing = testBinding({
     inspect: { available: true },
     inspectFast: { available: false, reason: 'owner-capability-missing' },
+    inspectConditional: { available: false, reason: 'owner-capability-missing' },
     mutate: { available: true },
   });
   delete (missing.operations as Partial<TestOperations>).inspect;
   assert.throws(
     () => narrowDeviceBinding(missing, inspectUse),
+    (error) => error instanceof AppError && error.details?.reason === 'runtime-contract-invalid',
+  );
+});
+
+test('binding narrowing requires every conditionally available operation implementation', () => {
+  const binding = testBinding({
+    inspect: { available: true },
+    inspectFast: { available: false, reason: 'owner-capability-missing' },
+    inspectConditional: { available: true },
+    mutate: { available: true },
+  });
+  assert.equal(
+    narrowDeviceBinding(binding, inspectUse).operations.inspectConditional,
+    binding.operations.inspectConditional,
+  );
+
+  delete (binding.operations as Partial<TestOperations>).inspectConditional;
+  assert.throws(
+    () => narrowDeviceBinding(binding, inspectUse),
     (error) => error instanceof AppError && error.details?.reason === 'runtime-contract-invalid',
   );
 });
@@ -149,6 +194,7 @@ function testBinding(
     operations: {
       inspect: async () => ({ nodes: 1 }),
       inspectFast: async () => ({ nodes: 1 }),
+      inspectConditional: async () => ({ nodes: 1 }),
       mutate: async () => undefined,
     },
     [Symbol.asyncDispose]: async () => undefined,

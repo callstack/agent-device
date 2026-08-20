@@ -438,7 +438,7 @@ export type AgentDeviceBackend = {
     options?: BackendScreenshotOptions,
   ): Promise<BackendScreenshotResult | void>;
   readText?(context: BackendCommandContext, node: SnapshotNode): Promise<BackendReadTextResult>;
-  /** Present only when the bound runtime advertised the preferred `findText` operation. */
+  /** Present only when the bound runtime advertised the conditional `findText` operation. */
   findText?(context: BackendCommandContext, text: string): Promise<BackendFindTextResult>;
   /**
    * #1542 off-screen refusal double-check: called ONLY at the moment the

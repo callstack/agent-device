@@ -62,6 +62,6 @@ test('network validates the legacy limit after runtime-fact admission', async ()
       message: 'network dump limit must be an integer in range 1..200',
     },
   });
-  expect(runtime.uses).toEqual([{ required: [], preferred: ['networkDump'] }]);
+  expect(runtime.uses).toEqual([{ required: [], preferred: ['networkDump'], conditional: [] }]);
   expect(runtime.networkDump).not.toHaveBeenCalled();
 });

@@ -30,7 +30,7 @@ test.each([
         appLogInspectUse,
         appLogDoctorUse,
         appLogStartUse,
-        { required: ['appLogCleanup'], preferred: [] },
+        { required: ['appLogCleanup'], preferred: [], conditional: [] },
       ],
     },
   },

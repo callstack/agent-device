@@ -320,7 +320,7 @@ test('a timed-out wait decorates its failure through the same single binding', a
 });
 
 // ---------------------------------------------------------------------------
-// The measured preferred operation (ADR 0019 §9). These are the regressions
+// The fact-conditional native observation (ADR 0019 §2). These are the regressions
 // for the iOS Smoke failure this unit's first revision caused:
 // `wait text "Last input: press"`
 // performed 17 readable canonical-tree captures, never observed the target,
@@ -381,7 +381,7 @@ test('a negative native reading is not an answer — the same poll consults the 
 
   expect(response).toMatchObject({ ok: true, data: { text: 'Ready' } });
   expect(harness.findText).toHaveBeenCalled();
-  // The required path stays complete: a `false` never ends the poll, it defers to the tree.
+  // A negative native observation never replaces the capture-backed half of the same poll.
   expect(harness.captureSnapshot).toHaveBeenCalled();
 });
 
@@ -398,7 +398,7 @@ test('an owner that advertises no native reading polls the tree only', async () 
   expect(harness.bindDevice).toHaveBeenCalledTimes(1);
 });
 
-test('the preferred operation never changes admission: an unavailable reading still binds once', async () => {
+test('an unavailable conditional observation preserves the capture-backed owner path', async () => {
   const harness = waitRuntimeHarness({
     findText: findTextUnavailable,
     nodesPerPoll: [[{ index: 0, depth: 0, type: 'Button', label: 'Ready', hittable: true }]],
@@ -412,7 +412,7 @@ test('the preferred operation never changes admission: an unavailable reading st
 });
 
 // ---------------------------------------------------------------------------
-// The preferred reading and the capture it short-circuits must run in the SAME
+// The conditional reading and the capture it short-circuits must run in the SAME
 // runner context. Asserted as an equality against capture's own context rather
 // than field by field, so the check cannot rot into a partial one when a new
 // execution field is added: whatever capture carries, findText must carry too.

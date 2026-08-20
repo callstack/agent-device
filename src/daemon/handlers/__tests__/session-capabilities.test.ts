@@ -91,9 +91,9 @@ test('capabilities reports supported commands for the selected session device', 
   assertAndroidCapabilityHonesty(response.data?.availableCommands);
   expect(runtime.inspections).toHaveLength(1);
   expect(runtime.uses).toEqual([
-    { required: [], preferred: ['appLogInspect'] },
-    { required: [], preferred: ['networkDump'] },
-    { required: [], preferred: ['screenRecordingStart'] },
+    { required: [], preferred: ['appLogInspect'], conditional: [] },
+    { required: [], preferred: ['networkDump'], conditional: [] },
+    { required: [], preferred: ['screenRecordingStart'], conditional: [] },
   ]);
 });
 
@@ -148,9 +148,9 @@ test('capabilities excludes logs from an unavailable provider-mode XCTest runtim
   expect(availableCommands).not.toContain(PUBLIC_COMMANDS.shutdown);
   expect(runtime.inspections).toHaveLength(1);
   expect(runtime.uses).toEqual([
-    { required: [], preferred: ['appLogInspect'] },
-    { required: [], preferred: ['networkDump'] },
-    { required: [], preferred: ['screenRecordingStart'] },
+    { required: [], preferred: ['appLogInspect'], conditional: [] },
+    { required: [], preferred: ['networkDump'], conditional: [] },
+    { required: [], preferred: ['screenRecordingStart'], conditional: [] },
   ]);
 });
 
@@ -504,14 +504,22 @@ function createAdmissionRuntime(options: {
   screenshotAvailable?: boolean;
   providerMode: RuntimeProviderMode;
 }) {
-  const uses: Array<{ required: readonly string[]; preferred: readonly string[] }> = [];
+  const uses: Array<{
+    required: readonly string[];
+    preferred: readonly string[];
+    conditional: readonly string[];
+  }> = [];
   const inspections: DeviceInfo[] = [];
   const inspectFacts: InspectDeviceRuntimeFacts = vi.fn(async (device: DeviceInfo) => {
     inspections.push(device);
     return createAdmissionBinding(device, options).facts;
   });
   const bindDevice: BindDeviceRuntime = async (device, use) => {
-    uses.push({ required: [...use.required], preferred: [...use.preferred] });
+    uses.push({
+      required: [...use.required],
+      preferred: [...use.preferred],
+      conditional: [...use.conditional],
+    });
     return narrowDeviceBinding(createAdmissionBinding(device, options), use);
   };
   return { bindDevice, inspectFacts, inspections, uses };

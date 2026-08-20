@@ -24,7 +24,7 @@ test('rejects incomplete and widened record descriptor declarations', () => {
         kind: 'device-runtime',
         uses: [
           ...screenRecordingRuntimePlanUses,
-          { required: ['screenRecordingCleanup'], preferred: [] },
+          { required: ['screenRecordingCleanup'], preferred: [], conditional: [] },
         ],
       }),
     /exactly one|two runtime-bearing plans/,

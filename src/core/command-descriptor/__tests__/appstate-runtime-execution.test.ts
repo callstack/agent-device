@@ -14,5 +14,6 @@ test('appstate descriptor declares the complete readiness and foreground-state u
   expect(appStateUse).toEqual({
     required: ['ensureReady', 'appState'],
     preferred: [],
+    conditional: [],
   });
 });

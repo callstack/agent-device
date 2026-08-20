@@ -8,7 +8,10 @@ describe('command platform execution declaration', () => {
     { kind: 'none' },
     { kind: 'legacy' },
     { kind: 'inventory', use: inventoryUse },
-    { kind: 'device-runtime', use: { required: ['capture'], preferred: ['inspect'] } },
+    {
+      kind: 'device-runtime',
+      use: { required: ['capture'], preferred: ['inspect'], conditional: ['observe'] },
+    },
   ])('accepts one closed execution shape: %j', (value) => {
     expect(() => assertCommandPlatformExecution(value)).not.toThrow();
   });
@@ -19,9 +22,27 @@ describe('command platform execution declaration', () => {
     { kind: 'legacy', use: inventoryUse },
     { kind: 'inventory' },
     { kind: 'inventory', use: inventoryUse, legacy: true },
-    { kind: 'device-runtime', use: { required: [], preferred: [] }, inventory: true },
-    { kind: 'device-runtime', use: { required: ['capture', 'capture'], preferred: [] } },
-    { kind: 'device-runtime', use: { required: ['capture'], preferred: ['capture'] } },
+    {
+      kind: 'device-runtime',
+      use: { required: [], preferred: [], conditional: [] },
+      inventory: true,
+    },
+    {
+      kind: 'device-runtime',
+      use: { required: ['capture', 'capture'], preferred: [], conditional: [] },
+    },
+    {
+      kind: 'device-runtime',
+      use: { required: ['capture'], preferred: ['capture'], conditional: [] },
+    },
+    {
+      kind: 'device-runtime',
+      use: { required: ['capture'], preferred: [], conditional: ['capture'] },
+    },
+    {
+      kind: 'device-runtime',
+      use: { required: [], preferred: ['capture'], conditional: ['capture'] },
+    },
   ])('rejects neither, mixed, widened, duplicate, or overlapping declarations: %j', (value) => {
     expect(() => assertCommandPlatformExecution(value)).toThrow(/exactly one/);
   });
@@ -36,7 +57,10 @@ describe('command platform execution declaration', () => {
     { kind: 'device-runtime', uses: [] },
     { kind: 'device-runtime', use: appLogRuntimePlanUses[0], uses: appLogRuntimePlanUses },
     { kind: 'device-runtime', uses: [appLogRuntimePlanUses[0], appLogRuntimePlanUses[0]] },
-    { kind: 'device-runtime', uses: [{ required: ['appLogStart'], preferred: ['appLogStart'] }] },
+    {
+      kind: 'device-runtime',
+      uses: [{ required: ['appLogStart'], preferred: ['appLogStart'], conditional: [] }],
+    },
   ])('rejects empty, duplicate, overlapping, or both-form runtime uses: %j', (value) => {
     expect(() => assertCommandPlatformExecution(value)).toThrow(/exactly one/);
   });

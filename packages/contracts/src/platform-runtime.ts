@@ -27,16 +27,22 @@ declare const runtimeOperations: unique symbol;
 export type RuntimeUseDeclaration = Readonly<{
   required: readonly string[];
   preferred: readonly string[];
+  conditional: readonly string[];
 }>;
 
 export type RuntimeUse<
   Operations extends object,
   Required extends readonly RuntimeOperationKey<Operations>[],
   Preferred extends readonly Exclude<RuntimeOperationKey<Operations>, Required[number]>[],
+  Conditional extends readonly Exclude<
+    RuntimeOperationKey<Operations>,
+    Required[number] | Preferred[number]
+  >[],
 > = RuntimeUseDeclaration &
   Readonly<{
     required: Required;
     preferred: Preferred;
+    conditional: Conditional;
     /** Type-only link to the operation catalog; never emitted in descriptor metadata. */
     readonly [runtimeOperations]?: Operations;
   }>;
@@ -165,16 +171,23 @@ export type RuntimePlatformModule<Operations extends object, Host> = PlatformMod
   }>;
 
 type OperationsOf<Use> =
-  Use extends RuntimeUse<infer Operations, infer _Required, infer _Preferred> ? Operations : never;
+  Use extends RuntimeUse<infer Operations, infer _Required, infer _Preferred, infer _Conditional>
+    ? Operations
+    : never;
 
 type RequiredOf<Use> =
-  Use extends RuntimeUse<infer _Operations, infer Required, infer _Preferred>
+  Use extends RuntimeUse<infer _Operations, infer Required, infer _Preferred, infer _Conditional>
     ? Required[number]
     : never;
 
 type PreferredOf<Use> =
-  Use extends RuntimeUse<infer _Operations, infer _Required, infer Preferred>
+  Use extends RuntimeUse<infer _Operations, infer _Required, infer Preferred, infer _Conditional>
     ? Preferred[number]
+    : never;
+
+type ConditionalOf<Use> =
+  Use extends RuntimeUse<infer _Operations, infer _Required, infer _Preferred, infer Conditional>
+    ? Conditional[number]
     : never;
 
 /** The non-disposable operation projection returned to a specialized handler. */
@@ -182,10 +195,14 @@ export type BoundDeviceRuntime<Use> = Readonly<{
   device: DeviceInfo;
   owner: RuntimeOwnerRef;
   facts: Readonly<
-    Pick<RuntimeFacts<OperationsOf<Use>>['operations'], RequiredOf<Use> | PreferredOf<Use>>
+    Pick<
+      RuntimeFacts<OperationsOf<Use>>['operations'],
+      RequiredOf<Use> | PreferredOf<Use> | ConditionalOf<Use>
+    >
   >;
   operations: Readonly<
-    Pick<OperationsOf<Use>, RequiredOf<Use>> & Partial<Pick<OperationsOf<Use>, PreferredOf<Use>>>
+    Pick<OperationsOf<Use>, RequiredOf<Use>> &
+      Partial<Pick<OperationsOf<Use>, PreferredOf<Use> | ConditionalOf<Use>>>
   >;
 }>;
 
@@ -194,10 +211,14 @@ export function narrowDeviceBinding<
   Operations extends object,
   const Required extends readonly RuntimeOperationKey<Operations>[],
   const Preferred extends readonly Exclude<RuntimeOperationKey<Operations>, Required[number]>[],
+  const Conditional extends readonly Exclude<
+    RuntimeOperationKey<Operations>,
+    Required[number] | Preferred[number]
+  >[],
 >(
   binding: DeviceBinding<Operations>,
-  use: RuntimeUse<Operations, Required, Preferred>,
-): BoundDeviceRuntime<RuntimeUse<Operations, Required, Preferred>> {
+  use: RuntimeUse<Operations, Required, Preferred, Conditional>,
+): BoundDeviceRuntime<RuntimeUse<Operations, Required, Preferred, Conditional>> {
   const selectedFacts: Record<string, RuntimeOperationFact> = {};
   const selectedOperations: Record<string, RuntimeOperation> = {};
 
@@ -216,12 +237,20 @@ export function narrowDeviceBinding<
     }
   }
 
+  for (const key of use.conditional) {
+    const fact = requireRuntimeFact(binding.facts.operations, key);
+    selectedFacts[key] = fact;
+    if (fact.available) {
+      selectedOperations[key] = requireRuntimeOperation(binding.operations, key);
+    }
+  }
+
   return Object.freeze({
     device: binding.device,
     owner: binding.owner,
     facts: Object.freeze(selectedFacts),
     operations: Object.freeze(selectedOperations),
-  }) as BoundDeviceRuntime<RuntimeUse<Operations, Required, Preferred>>;
+  }) as BoundDeviceRuntime<RuntimeUse<Operations, Required, Preferred, Conditional>>;
 }
 
 function requireRuntimeFact<Operations extends object>(

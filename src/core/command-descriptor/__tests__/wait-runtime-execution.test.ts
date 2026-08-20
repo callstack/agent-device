@@ -18,11 +18,13 @@ test('wait descriptor declares its complete runtime use with no capability bucke
   expect(selectorCaptureRuntimePlanUses).toEqual([
     {
       required: ['captureSnapshot'],
-      preferred: ['readTextAtPoint', 'findText', 'findSelector'],
+      preferred: ['readTextAtPoint'],
+      conditional: ['findText', 'findSelector'],
     },
     {
       required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp'],
-      preferred: ['readTextAtPoint', 'findText', 'findSelector'],
+      preferred: ['readTextAtPoint'],
+      conditional: ['findText', 'findSelector'],
     },
   ]);
 });
@@ -34,14 +36,17 @@ test('only the duration shape reaches no device at all', () => {
   }
 });
 
-// The measured fast path is declared, and declared as PREFERRED: `findText` must never appear in
-// a required set, or an owner without a native reading would stop being able to run `wait` at all.
-test('wait declares native observations as preferred operations on every plan, never required', () => {
+// Native observations are correctness-bearing where owner facts advertise them. They cannot be
+// preferred optimizations, while making them unconditionally required would reject owners whose
+// complete semantic path is capture-backed.
+test('wait declares native observations as fact-conditional operations, never optimizations', () => {
   for (const use of selectorCaptureRuntimePlanUses) {
-    expect(use.preferred).toContain('findText');
+    expect(use.conditional).toContain('findText');
     expect(use.required).not.toContain('findText');
-    expect(use.preferred).toContain('findSelector');
+    expect(use.preferred).not.toContain('findText');
+    expect(use.conditional).toContain('findSelector');
     expect(use.required).not.toContain('findSelector');
+    expect(use.preferred).not.toContain('findSelector');
     expect(use.required).toContain('captureSnapshot');
   }
 });

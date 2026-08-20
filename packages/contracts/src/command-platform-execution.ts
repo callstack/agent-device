@@ -1,5 +1,6 @@
 import type { InventoryUse } from './platform-module.ts';
 import type { RuntimeUseDeclaration } from './platform-runtime.ts';
+import { runtimeUseIdentity } from './platform-runtime-use.ts';
 
 export type CommandPlatformExecution =
   | Readonly<{ kind: 'none' }>
@@ -11,7 +12,7 @@ export type CommandPlatformExecution =
       uses: readonly [RuntimeUseDeclaration, ...RuntimeUseDeclaration[]];
     }>;
 
-// The discriminated union cannot prove uniqueness or required/preferred disjointness inside
+// The discriminated union cannot prove uniqueness or operation-category disjointness inside
 // readonly arrays. Validate those declaration invariants where descriptors enter the registry.
 export function assertCommandPlatformExecution(
   value: unknown,
@@ -54,13 +55,6 @@ function hasRuntimeUseDeclarations(
   return new Set(identities).size === identities.length;
 }
 
-function runtimeUseIdentity(use: RuntimeUseDeclaration): string {
-  return JSON.stringify({
-    required: [...use.required].sort(),
-    preferred: [...use.preferred].sort(),
-  });
-}
-
 function hasExactInventoryUse(value: unknown): boolean {
   if (value === null || typeof value !== 'object') return false;
   const use = value as Record<string, unknown>;
@@ -70,12 +64,33 @@ function hasExactInventoryUse(value: unknown): boolean {
 function hasRuntimeUseDeclaration(value: unknown): boolean {
   if (value === null || typeof value !== 'object') return false;
   const use = value as Record<string, unknown>;
-  const required = stringArray(use['required']);
-  const preferred = stringArray(use['preferred']);
-  if (!required || !preferred) return false;
-  if (!hasUniqueValues(required) || !hasUniqueValues(preferred)) return false;
-  if (!areDisjoint(required, preferred)) return false;
-  return sameKeys(Object.keys(use).sort(), ['preferred', 'required']);
+  const categories = [
+    stringArray(use['required']),
+    stringArray(use['preferred']),
+    stringArray(use['conditional']),
+  ];
+  if (!hasValidRuntimeUseCategories(categories)) return false;
+  if (!arePairwiseDisjoint(categories)) return false;
+  return sameKeys(Object.keys(use).sort(), ['conditional', 'preferred', 'required']);
+}
+
+function hasValidRuntimeUseCategories(
+  categories: readonly (string[] | null)[],
+): categories is readonly string[][] {
+  return categories.every(
+    (category): category is string[] => category !== null && hasUniqueValues(category),
+  );
+}
+
+function arePairwiseDisjoint(categories: readonly string[][]): boolean {
+  for (let leftIndex = 0; leftIndex < categories.length; leftIndex += 1) {
+    const left = categories[leftIndex];
+    if (!left) return false;
+    for (const right of categories.slice(leftIndex + 1)) {
+      if (!areDisjoint(left, right)) return false;
+    }
+  }
+  return true;
 }
 
 function stringArray(value: unknown): string[] | null {

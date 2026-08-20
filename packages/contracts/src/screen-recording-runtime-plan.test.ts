@@ -17,7 +17,7 @@ test('declares separate start, live-stop, and recovery-stop plans', () => {
   });
   assert.deepEqual(resolveScreenRecordingRuntimePlan({ action: 'stop', hasLiveHandle: true }), {
     kind: 'stop-live',
-    use: { required: [], preferred: [] },
+    use: { required: [], preferred: [], conditional: [] },
   });
   assert.deepEqual(resolveScreenRecordingRuntimePlan({ action: 'stop', hasLiveHandle: false }), {
     kind: 'stop-recovery',
@@ -29,10 +29,12 @@ test('keeps an adopted live stop out of descriptor runtime admission', () => {
   assert.deepEqual(resolveScreenRecordingRuntimePlan({ action: 'stop', hasLiveHandle: true }).use, {
     required: [],
     preferred: [],
+    conditional: [],
   });
   assert.deepEqual(screenRecordingRuntimePlanUses[1], {
     required: ['screenRecordingReattach', 'screenRecordingCleanup'],
     preferred: [],
+    conditional: [],
   });
 });
 
@@ -40,6 +42,7 @@ test('admission prefers start without rejecting an owner that only supports reco
   assert.deepEqual(screenRecordingAdmissionUse, {
     required: [],
     preferred: ['screenRecordingStart'],
+    conditional: [],
   });
 });
 
