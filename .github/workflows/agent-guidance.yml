@@ -40,8 +40,6 @@ jobs:
 
       - name: Setup Node and pnpm
         uses: ./.github/actions/setup-node-pnpm
-        with:
-          install-deps: 'false'
 
       - name: Check agent guidance
         uses: ./.github/actions/run-gate

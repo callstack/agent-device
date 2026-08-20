@@ -108,6 +108,11 @@ separately versioned helpers, persisted artifacts, and released API consumers.
 
 ### Interactions, selectors, and refs
 
+**Interactor**:
+The legacy monolithic interface between dispatch and platform behavior, retained only for commands
+not yet migrated to request-bound runtimes.
+_Avoid_: New or migrated command behavior
+
 **Interaction dispatch path**:
 One concrete route an interaction command takes from a resolved target to device execution.
 

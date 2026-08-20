@@ -8,7 +8,6 @@ const ROOT = path.resolve(import.meta.dirname, '../..');
 const BYTE_BUDGETS = {
   'AGENTS.md': 10_000,
   'CONTEXT.md': 12_000,
-  'docs/agents/testing.md': 10_000,
 } as const;
 const FOCUSED_DOC_BUDGET = 10_000;
 const AGENT_DOCS_TOTAL_BUDGET = 40_000;

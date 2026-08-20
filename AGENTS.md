@@ -65,16 +65,11 @@ cross-language rules change through golden tables under `contracts/fixtures/`.
 
 ## Hard repository rules
 
-- Process execution goes through `src/utils/exec.ts`. Plain packaging fixtures that cannot import
-  TypeScript helpers keep child-process use local and prefer `execFile`.
-- Interactions use daemon sessions: `open` before acting and `close` afterward.
-- `keyboard dismiss` is the iOS dismissal path. It may activate a safe native control such as Done,
-  but it never falls back to system Back.
+- Plain `.mjs` packaging fixtures that cannot import TypeScript execution helpers keep child-process
+  use local and prefer `execFile`.
 - Apple target changes keep the kernel device model, capability admission, dispatch resolution,
   Apple discovery, and xctestrun preparation in sync.
 - iOS simulator-set scoping must never hide the host macOS desktop target.
-- Reuse `inferFillText`, `uniqueStrings`, and `evaluateIsPredicate` rather than recreating them.
-- Do not put command behavior in `skills/**/SKILL.md`; skills route to versioned CLI help.
 - Do not add compatibility or fallback behavior without explicit approval. Complete migrations and
   remove superseded paths.
 - Keep changes within one command family or module group unless the task explicitly crosses a
@@ -145,8 +140,9 @@ translate through the interaction root frame. Prefer selector or ref tests over 
 
 Before adding guidance, decide whether the command surface, CLI grammar/help, MCP projection, daemon
 runtime, ADR, or task procedure owns it. Link to executable registries instead of copying their
-contents. `CONTEXT.md` is glossary-only: no implementation paths, architecture decisions, migration
-state, or workflows.
+contents. Keep a sentence in this file only when no gate, lint rule, versioned help, ADR, or
+decision-site comment can own it. `CONTEXT.md` is glossary-only: no implementation paths,
+architecture decisions, migration state, or workflows.
 
 Behavior changes update their owning help/metadata and user docs when relevant. In the final summary,
 state whether docs or skills changed and why.
