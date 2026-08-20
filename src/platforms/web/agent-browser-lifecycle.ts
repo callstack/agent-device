@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { uniqueStrings } from '@agent-device/kernel/collections';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import {
   expandProcessTree,
@@ -116,7 +117,9 @@ export async function cleanupManagedAgentBrowserOrphans(
   reason: 'daemon-startup' | 'provider-startup',
   options: AgentBrowserCleanupOptions = {},
 ): Promise<AgentBrowserCleanupResult> {
-  const openWebSessionNames = uniqueStrings([...(options.openWebSessionNames ?? [])]);
+  const openWebSessionNames = uniqueStrings(
+    (options.openWebSessionNames ?? []).filter((value) => value.length > 0),
+  );
   if (openWebSessionNames.length > 0) {
     return skippedCleanupResult('open-web-session', { openWebSessionNames });
   }
@@ -200,10 +203,6 @@ function managedBrowserHomeMarkers(status: AgentBrowserToolStatus): string[] {
     path.join(status.homeDir, '.agent-browser', 'browsers'),
     path.join(status.runtimeHomeDir, '.agent-browser', 'browsers'),
   ]);
-}
-
-function uniqueStrings(values: string[]): string[] {
-  return [...new Set(values.filter((value) => value.length > 0))];
 }
 
 function skippedCleanupResult(

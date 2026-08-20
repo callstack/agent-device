@@ -1,3 +1,4 @@
+import { uniqueStrings } from '@agent-device/kernel/collections';
 import { roundOneDecimal, roundPercent } from '../../perf-utils.ts';
 import { parseXmlDocumentSync, type XmlNode } from '@agent-device/xml';
 import {
@@ -274,8 +275,4 @@ function readDirectProcess(element: XmlNode | undefined): { pid?: number; name?:
     pid: pid ?? undefined,
     name: name.length > 0 ? name : undefined,
   };
-}
-
-function uniqueStrings(values: string[]): string[] {
-  return [...new Set(values)];
 }

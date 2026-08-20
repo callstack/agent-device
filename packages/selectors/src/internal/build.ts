@@ -1,3 +1,4 @@
+import { uniqueStrings } from '@agent-device/kernel/collections';
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { isNodeVisible } from './node.ts';
@@ -99,10 +100,6 @@ function selectableId(
   const canonicalId = readNodeLocalIdentity(node).id;
   if (canonicalId === undefined) return id;
   return idMatchCountInTree(nodes, canonicalId) > 1 ? null : id;
-}
-
-function uniqueStrings(values: readonly string[]): string[] {
-  return Array.from(new Set(values));
 }
 
 function quoteSelectorValue(value: string): string {
