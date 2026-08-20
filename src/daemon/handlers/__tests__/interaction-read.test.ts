@@ -99,17 +99,17 @@ describe('readTextForNode', () => {
   });
 
   // ADR 0019 §2: the ONLY fallbacks are the contract's classified reasons.
-  it.each(['no-text-at-point', 'surface-not-readable'] as const)(
-    'falls back to the captured tree for the classified reason %s',
-    async (reason) => {
-      readTextAtPoint.mockResolvedValueOnce({ status: 'unreadable', reason });
-      const text = await readTextForNode({
-        ...baseParams,
-        node: node({ type: 'textfield', value: 'snap' }),
-      });
-      expect(text).toBe('snap');
-    },
-  );
+  it('falls back to the captured tree for the classified reason no-text-at-point', async () => {
+    readTextAtPoint.mockResolvedValueOnce({
+      status: 'unreadable',
+      reason: 'no-text-at-point',
+    });
+    const text = await readTextForNode({
+      ...baseParams,
+      node: node({ type: 'textfield', value: 'snap' }),
+    });
+    expect(text).toBe('snap');
+  });
 
   it('classifies a blank live read as no-text-at-point rather than reading blank text', async () => {
     readTextAtPoint.mockResolvedValueOnce(elementTextRead('   '));

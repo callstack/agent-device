@@ -1,6 +1,7 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Point } from '@agent-device/kernel/snapshot';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
+import { invalidRuntimeContract } from './runtime-contract-error.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { SessionSurface } from './session-surface.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
@@ -26,9 +27,7 @@ export type ReadTextAtPointInput = Readonly<{
  */
 export type ElementTextUnreadableReason =
   /** The owner queried successfully and there is nothing readable at this point. */
-  | 'no-text-at-point'
-  /** The owner's read surface exists but declined this query (unsupported element/surface). */
-  | 'surface-not-readable';
+  'no-text-at-point';
 
 /** The closed outcome of one live element-text read. */
 export type ElementTextReadOutcome =
@@ -99,10 +98,15 @@ export function bindElementTextRuntime(
         appBundleId: input.options?.appBundleId,
         signal,
       });
-      // An owner whose facts advertised the read but whose interactor has none is a runtime
-      // contract error surfaced as a declined read, not a silent empty answer.
-      if (!interactor.readTextAtPoint) {
-        return Object.freeze({ status: 'unreadable', reason: 'surface-not-readable' } as const);
+      // Facts advertised the read but the owner's interactor cannot perform it. That is a
+      // contract violation, not a refusal: classifying it as `surface-not-readable` would put
+      // it inside the closed reason set and license the caller to fall back to already-captured
+      // text, answering from a stale tree because the runtime lied. Fail as the contract bug it
+      // is (ADR 0019 §2) so no consumer can silently degrade.
+      if (typeof interactor.readTextAtPoint !== 'function') {
+        throw invalidRuntimeContract(
+          'Runtime owner advertised readTextAtPoint without an interactor implementation',
+        );
       }
       return elementTextRead(
         await interactor.readTextAtPoint(input.point, {

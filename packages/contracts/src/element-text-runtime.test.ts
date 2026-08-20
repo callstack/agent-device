@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
 import {
+  bindElementTextRuntime,
   elementTextRead,
   type ElementTextReadOutcome,
   type ElementTextUnreadableReason,
 } from './element-text-runtime.ts';
+import type { Interactor } from './interactor-types.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 
 /**
  * The reasons this suite exercises. Kept local on purpose: exhaustiveness is enforced at the
@@ -12,10 +16,7 @@ import {
  * so a second exported runtime list would be an unconsumed parallel source of truth that could
  * silently drift. The annotation is what ties this list back to the union.
  */
-const UNREADABLE_REASONS: readonly ElementTextUnreadableReason[] = [
-  'no-text-at-point',
-  'surface-not-readable',
-];
+const UNREADABLE_REASONS: readonly ElementTextUnreadableReason[] = ['no-text-at-point'];
 
 /**
  * ADR 0019 §2 contract coverage for the preferred element-text read.
@@ -67,4 +68,30 @@ for (const [label, value] of [
 test('read outcomes are frozen so a consumer cannot mutate a classification', () => {
   assert.ok(Object.isFrozen(elementTextRead('value')));
   assert.ok(Object.isFrozen(elementTextRead('')));
+});
+
+/**
+ * A runtime owner whose facts advertised `readTextAtPoint` but whose interactor cannot perform
+ * it is a CONTRACT BUG, not a refusal. Classifying it as an unreadable reason would place it
+ * inside the closed set that licenses falling back to already-captured text — so the command
+ * would answer from a stale tree precisely because the runtime lied about itself.
+ *
+ * Reverting the guard to `{ status: 'unreadable', reason: … }` makes this test fail: the call
+ * resolves instead of rejecting, which is the exact silent degradation it exists to forbid.
+ */
+test('an advertised read with no interactor implementation fails as a contract bug', async () => {
+  const runtime = bindElementTextRuntime({
+    device: { platform: 'ios' } as unknown as DeviceInfo,
+    signal: new AbortController().signal,
+    // An interactor with NO readTextAtPoint — the mismatch the facts promised away.
+    resolveInteractor: async () => ({}) as unknown as Interactor,
+  });
+
+  await assert.rejects(
+    () => runtime.readTextAtPoint({ point: { x: 1, y: 2 } }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'runtime-contract-invalid' &&
+      /advertised readTextAtPoint/.test(error.message),
+  );
 });

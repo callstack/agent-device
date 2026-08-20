@@ -4,6 +4,7 @@ import type {
   ElementTextUnreadableReason,
 } from '@agent-device/contracts/platform';
 import { isIosFamily } from '@agent-device/kernel/device';
+import { runtimeExecutionFromContext } from '../snapshot-runtime-capture-input.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import type { SessionState } from '../types.ts';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
@@ -58,16 +59,7 @@ export async function readTextForNode(params: {
   const outcome = await readTextAtPoint({
     point: center,
     options: { appBundleId, surface },
-    execution: {
-      requestId: context.requestId,
-      verbose: context.verbose,
-      logPath: context.logPath,
-      traceLogPath: context.traceLogPath,
-      iosXctestrunFile: context.iosXctestrunFile,
-      iosXctestDerivedDataPath: context.iosXctestDerivedDataPath,
-      iosXctestEnvDir: context.iosXctestEnvDir,
-      runnerLeaseContext: context.runnerLeaseContext,
-    },
+    execution: runtimeExecutionFromContext(context),
   });
   if (outcome.status === 'read') return outcome.text;
   emitDiagnostic({
@@ -92,8 +84,6 @@ function classifiedFallbackReason(reason: ElementTextUnreadableReason): string {
   switch (reason) {
     case 'no-text-at-point':
       return 'no_text_at_point';
-    case 'surface-not-readable':
-      return 'surface_not_readable';
     default: {
       const unhandled: never = reason;
       return unhandled;

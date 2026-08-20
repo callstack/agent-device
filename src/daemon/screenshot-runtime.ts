@@ -18,6 +18,7 @@ import {
   assertSupportedScreenshotPixelDensity,
   readScreenshotResultMetadata,
 } from '../utils/screenshot-density.ts';
+import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';
 import type { DaemonCommandContext } from './context.ts';
 import { captureSnapshotData } from './handlers/snapshot-capture.ts';
 import { buildSnapshotState } from './snapshot-state.ts';
@@ -123,20 +124,17 @@ export async function captureScreenshotArtifact(
  */
 type CapturedScreenshot = Readonly<{ path: string; message?: string }>;
 
-/** Runner metadata the capture needs; cancellation comes from the request binding, not from here. */
+/**
+ * Runner metadata the capture needs; cancellation comes from the request binding, not from here.
+ *
+ * `ScreenshotRuntimeExecution` and `SnapshotRuntimeExecution` are the same type — both
+ * `Readonly<Omit<RunnerContext, 'appBundleId' | 'signal'>>` — so the projection is shared rather
+ * than restated. Keeping the screenshot-facing name preserves this module's callers.
+ */
 export function screenshotExecutionFromContext(
   context: DaemonCommandContext,
 ): ScreenshotRuntimeExecution {
-  return {
-    requestId: context.requestId,
-    verbose: context.verbose,
-    logPath: context.logPath,
-    traceLogPath: context.traceLogPath,
-    iosXctestrunFile: context.iosXctestrunFile,
-    iosXctestDerivedDataPath: context.iosXctestDerivedDataPath,
-    iosXctestEnvDir: context.iosXctestEnvDir,
-    runnerLeaseContext: context.runnerLeaseContext,
-  };
+  return runtimeExecutionFromContext(context);
 }
 
 async function executeScreenshot(

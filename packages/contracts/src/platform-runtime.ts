@@ -10,6 +10,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { PlatformModuleMetadata } from './platform-module.ts';
 import type { PlatformRequestScope } from './platform-runtime-host.ts';
 import type { ApplicationLifecycleResourceLifecycle } from './application-lifecycle-runtime.ts';
+import { invalidRuntimeContract } from './runtime-contract-error.ts';
 
 type RuntimeOperation = (...args: never[]) => unknown;
 
@@ -281,12 +282,5 @@ function unsupportedRuntimeOperation(key: string, fact: RuntimeOperationUnavaila
   return new AppError('UNSUPPORTED_OPERATION', `Runtime operation ${key} is unavailable`, {
     reason: fact.reason,
     hint: fact.hint,
-  });
-}
-
-function invalidRuntimeContract(message: string): AppError {
-  return new AppError('COMMAND_FAILED', message, {
-    reason: 'runtime-contract-invalid',
-    hint: 'This is an agent-device runtime contract bug; report the selected device and command.',
   });
 }

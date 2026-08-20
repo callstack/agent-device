@@ -1,5 +1,8 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { CaptureSnapshotInput } from '@agent-device/contracts/platform';
+import type {
+  CaptureSnapshotInput,
+  SnapshotRuntimeExecution,
+} from '@agent-device/contracts/platform';
 import { contextFromFlags } from './context.ts';
 import type { DaemonRequest, SessionState } from './types.ts';
 
@@ -45,15 +48,38 @@ export function buildRuntimeCaptureInput(
       includeRects: params.includeRects,
       surface,
     },
-    execution: {
-      requestId: context.requestId,
-      verbose: context.verbose,
-      logPath: context.logPath,
-      traceLogPath: context.traceLogPath,
-      iosXctestrunFile: context.iosXctestrunFile,
-      iosXctestDerivedDataPath: context.iosXctestDerivedDataPath,
-      iosXctestEnvDir: context.iosXctestEnvDir,
-      runnerLeaseContext: context.runnerLeaseContext,
-    },
+    execution: runtimeExecutionFromContext(context),
+  };
+}
+
+/**
+ * Projects the runner execution metadata a platform operation needs out of a resolved command
+ * context. Every request-bound operation — capture and element read alike — must forward the
+ * SAME set: dropping a field silently strips request id, log/trace paths, XCUITest overrides, or
+ * runner lease context, so the operation still answers but runs unconfigured and its diagnostics
+ * land nowhere. One projection means a new field reaches every operation at once and cannot be
+ * forgotten at one call site.
+ */
+export function runtimeExecutionFromContext(
+  context: Readonly<{
+    requestId?: string;
+    verbose?: boolean;
+    logPath?: string;
+    traceLogPath?: string;
+    iosXctestrunFile?: string;
+    iosXctestDerivedDataPath?: string;
+    iosXctestEnvDir?: string;
+    runnerLeaseContext?: SnapshotRuntimeExecution['runnerLeaseContext'];
+  }>,
+): SnapshotRuntimeExecution {
+  return {
+    requestId: context.requestId,
+    verbose: context.verbose,
+    logPath: context.logPath,
+    traceLogPath: context.traceLogPath,
+    iosXctestrunFile: context.iosXctestrunFile,
+    iosXctestDerivedDataPath: context.iosXctestDerivedDataPath,
+    iosXctestEnvDir: context.iosXctestEnvDir,
+    runnerLeaseContext: context.runnerLeaseContext,
   };
 }
