@@ -4,9 +4,9 @@ title: Node.js API
 
 # Node.js API
 
-Use `createAgentDeviceClient()` to give a Node.js agent typed access to device automation instead of shelling out to the CLI. Its methods can be exposed as model tools, called from deterministic orchestration code, or combined with another Node.js agent framework.
+Use `createAgentDeviceClient()` for typed, deterministic device automation from Node.js instead of shelling out to the CLI.
 
-Start with the [AI SDK](/docs/ai-sdk) or [Eve](/docs/eve) integration guide for complete tool-calling examples. The client is framework-neutral, so the same pattern works with other solutions that accept JavaScript or TypeScript functions as tools.
+Building an agent? Start with the dedicated [AI SDK](/docs/ai-sdk) or [Eve](/docs/eve) integration.
 
 ## Runnable examples
 
