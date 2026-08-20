@@ -87,6 +87,16 @@ run the smallest owning test, record the failing test count, then restore it. Ap
 test relocation and structural gates: plant a type error or violation and verify the intended gate
 discovers and names it.
 
+A callback-based canary must observe the subject's semantic success state, not merely lifecycle
+completion. For example, React Native Gesture Handler's
+[`onFinalize`](https://docs.swmansion.com/react-native-gesture-handler/docs/fundamentals/callbacks-events/)
+also runs when recognition fails or is interrupted; use an activation-dependent callback or assert
+the callback's success state before publishing a passing result.
+
+A device replay is automatic regression coverage only when an automatic PR or scheduled lane selects
+and executes it. Name the owning lane and confirm the scenario ran on the exact PR head; placing a
+replay in a manual or otherwise unselected tier is test material, not automatic evidence.
+
 For structured classifiers, pair the positive case with the closest negative case. When an error
 message can be identical with and without a typed reason, the negative test must prove the message
 alone cannot activate retry, fallback, or recovery.
