@@ -313,48 +313,59 @@ test('iOS target resolution uses one presented candidate universe for geometry a
   });
 });
 
-test('iOS target resolution uses presented bounds when the semantic match has none', () => {
-  const semanticSnapshot = makeSnapshot([
-    {
-      index: 0,
-      type: 'Application',
-      rect: { x: 0, y: 0, width: 393, height: 852 },
-    },
-    {
-      index: 1,
-      parentIndex: 0,
-      type: 'Other',
-      identifier: 'email-input',
-    },
-  ]);
-  const presentationSnapshot = makeSnapshot([
-    semanticSnapshot.nodes[0]!,
-    {
-      index: 1,
-      parentIndex: 0,
-      type: 'TextField',
-      rect: { x: 20, y: 100, width: 240, height: 44 },
-    },
-  ]);
-
-  expect(
-    resolveMaestroTargetFromSnapshot(semanticSnapshot, { selector: { id: 'email-input' } }, 'ios', {
-      interactiveBounds: true,
-      presentation: {
-        snapshot: presentationSnapshot,
-        presentedIndexesBySourceIndex: new Map([
-          [0, [0]],
-          [1, [1]],
-        ]),
+test.each([
+  { mode: 'interactive', interactiveBounds: true },
+  { mode: 'non-interactive', interactiveBounds: false },
+])(
+  'iOS $mode target resolution uses presented bounds when the semantic match has none',
+  (options) => {
+    const semanticSnapshot = makeSnapshot([
+      {
+        index: 0,
+        type: 'Application',
+        rect: { x: 0, y: 0, width: 393, height: 852 },
       },
-    }),
-  ).toMatchObject({
-    ok: true,
-    node: { index: 1, identifier: 'email-input' },
-    rect: { x: 20, y: 100, width: 240, height: 44 },
-    matches: 1,
-  });
-});
+      {
+        index: 1,
+        parentIndex: 0,
+        type: 'Other',
+        identifier: 'email-input',
+      },
+    ]);
+    const presentationSnapshot = makeSnapshot([
+      semanticSnapshot.nodes[0]!,
+      {
+        index: 1,
+        parentIndex: 0,
+        type: 'TextField',
+        rect: { x: 20, y: 100, width: 240, height: 44 },
+      },
+    ]);
+
+    expect(
+      resolveMaestroTargetFromSnapshot(
+        semanticSnapshot,
+        { selector: { id: 'email-input' } },
+        'ios',
+        {
+          interactiveBounds: options.interactiveBounds,
+          presentation: {
+            snapshot: presentationSnapshot,
+            presentedIndexesBySourceIndex: new Map([
+              [0, [0]],
+              [1, [1]],
+            ]),
+          },
+        },
+      ),
+    ).toMatchObject({
+      ok: true,
+      node: { index: 1, identifier: 'email-input' },
+      rect: { x: 20, y: 100, width: 240, height: 44 },
+      matches: 1,
+    });
+  },
+);
 
 test('iOS target resolution takes geometry from the representative that proved visibility', () => {
   const semanticSnapshot = makeSnapshot([

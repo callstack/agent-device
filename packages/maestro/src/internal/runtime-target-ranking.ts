@@ -84,6 +84,10 @@ export function selectMaestroSnapshotMatch(
   return { node: selected, rect: selected.rect };
 }
 
+export function usableRect(node: SnapshotNode): Rect | undefined {
+  return hasUsableRect(node) ? node.rect : undefined;
+}
+
 function hasUsableRect(node: SnapshotNode): node is SnapshotNode & { rect: Rect } {
   return isPositiveFiniteRect(node.rect);
 }

@@ -7,7 +7,7 @@ export type SnapshotTreeRuleContext = {
   /** Projected label owners that repeated-text suppression must retain. */
   semanticRepresentativeIndexes: Set<number>;
   sourceNodesByIndex: ReadonlyMap<number, RawSnapshotNode>;
-  suppressedIndexes: ReadonlySet<number>;
+  isSuppressed: (node: RawSnapshotNode) => boolean;
   /** Suppress a source and declare every presented node that carries its semantic identity. */
   suppressNode: (source: RawSnapshotNode, representatives: readonly RawSnapshotNode[]) => void;
 };

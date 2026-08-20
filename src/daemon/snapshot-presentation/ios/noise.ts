@@ -137,7 +137,7 @@ function collectIosRepeatedStaticSuppression(
   for (let position = 0; position < nodes.length; position += 1) {
     const node = nodes[position];
     const nodeLabel = node?.label?.trim();
-    if (!node || context.suppressedIndexes.has(node.index) || !nodeLabel) {
+    if (!node || context.isSuppressed(node) || !nodeLabel) {
       continue;
     }
 

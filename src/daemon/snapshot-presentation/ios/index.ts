@@ -26,7 +26,7 @@ export function presentIosInteractiveSnapshot(nodes: RawSnapshotNode[]): RawSnap
 
 export type IosInteractiveSnapshotPresentation = {
   nodes: RawSnapshotNode[];
-  /** Canonical presented representatives for every semantic source index. */
+  /** Canonical presented representatives for every semantic source index; pure noise maps to []. */
   presentedIndexesBySourceIndex: ReadonlyMap<number, readonly number[]>;
 };
 
@@ -46,7 +46,7 @@ export function buildIosInteractiveSnapshotPresentation(
     replacements,
     semanticRepresentativeIndexes,
     sourceNodesByIndex,
-    suppressedIndexes,
+    isSuppressed: (node) => suppressedIndexes.has(node.index),
     suppressNode(source, representatives) {
       suppressedIndexes.add(source.index);
       if (representatives.length === 0) return;

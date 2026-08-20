@@ -190,6 +190,8 @@ two-pointer plans, executor selection, and app-observable effects must remain un
 
 - agent-device supports selected Maestro Flow syntax and behavior. Unsupported features return
   explicit errors, and intentional differences are declared in the conformance fixtures.
+- Shipping two production engines or a runtime fallback between them is rejected because it doubles
+  semantic and performance ownership.
 - Source provenance and runtime values stay typed through execution.
 - Compatibility policy remains local while device behavior stays in shared runtimes and backends.
 - Cross-platform correctness may require richer provider query evidence, but not additional round trips.
