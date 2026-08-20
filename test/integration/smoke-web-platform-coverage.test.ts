@@ -14,7 +14,7 @@ import {
   WEB_SMOKE_TEST_NAME,
   liveCommandsForWebSmoke,
 } from './web-e2e/coverage-manifest.ts';
-import { writeCoverageReport } from './web-e2e/coverage-report.ts';
+import { runCleanupWithCoverageReport, writeCoverageReport } from './web-e2e/coverage-report.ts';
 
 const publicCommands = Object.values(PUBLIC_COMMANDS).sort();
 
@@ -109,6 +109,41 @@ test('web coverage report persists the manifest rollup and live command list', a
   assert.deepEqual(report.classificationSummary, WEB_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY);
   assert.deepEqual(report.liveCommands.sort(), liveCommandsForWebSmoke().sort());
   assert.deepEqual(report.steps, steps);
+});
+
+test('web coverage report survives a failed close cleanup', async () => {
+  const artifactDir = await mkdtempForTest('agent-device-web-close-failure-');
+  const steps = [{ command: 'agent-device close --platform web', status: 1 }];
+  const closeError = new Error('close failed');
+
+  await assert.rejects(
+    runCleanupWithCoverageReport(artifactDir, steps, async () => {
+      throw closeError;
+    }),
+    (error) => error === closeError,
+  );
+
+  const report = JSON.parse(
+    fs.readFileSync(path.join(artifactDir, 'coverage-report.json'), 'utf8'),
+  ) as { steps: typeof steps };
+  assert.deepEqual(report.steps, steps);
+});
+
+test('web cleanup error is preserved when report writing also fails', async () => {
+  const artifactDir = await mkdtempForTest('agent-device-web-report-failure-');
+  const cleanupError = new Error('close failed');
+
+  await assert.rejects(
+    runCleanupWithCoverageReport(path.join(artifactDir, 'missing-directory'), [], async () => {
+      throw cleanupError;
+    }),
+    (error) => {
+      assert.ok(error instanceof AggregateError);
+      assert.equal(error.errors[0], cleanupError);
+      assert.ok(error.errors[1] instanceof Error);
+      return true;
+    },
+  );
 });
 
 function readCoverageReport(
