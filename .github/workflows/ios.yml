@@ -209,6 +209,17 @@ jobs:
           pnpm gate build
           node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-ios-simulator-coverage.test.ts test/integration/smoke-ios-simulator.test.ts
 
+      # #1584: isolated, cheap automatic guard for the #1562 class of regression (iOS silently
+      # ignoring a `gesture pan` duration). Split out of gesture-lab.ad, which stays full-tier
+      # (dispatch-only via replays-manual.yml) because its multi-touch commands are a separate,
+      # heavier concern. This is the only automatic lane this assertion runs in today.
+      - name: Run gesture pan-duration smoke replay
+        run: |
+          xcrun simctl install "${{ steps.ios-simulator.outputs.simulator-udid }}" "${{ steps.fixture-app.outputs.app-path }}"
+          pnpm clean:daemon
+          node --experimental-strip-types src/bin.ts test examples/test-app/replays/gesture-pan-duration.ad --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --retries 2 --artifacts-dir test/artifacts/replays-ios-gesture-pan-duration --report-junit test/artifacts/replays-ios-gesture-pan-duration.junit.xml
+          pnpm clean:daemon
+
       - name: Assert simulator automation preserved host focus
         if: ${{ always() }}
         run: |

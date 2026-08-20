@@ -1,0 +1,17 @@
+# Isolated pan-duration canary (#1584), split out of gesture-lab.ad so the smoke tier gets a
+# cheap automatic regression guard for #1562 without depending on gesture-lab.ad's multi-touch
+# commands (pinch/rotate/transform/two-pointer pan), which are a separate, heavier full-tier
+# concern.
+context platform=ios kind=simulator timeout=60000
+
+env APP_TARGET="Agent Device Tester"
+env APP_URL=""
+
+open "${APP_TARGET}" --relaunch --launch-url "${APP_URL}"
+wait "Gesture lab" 30000
+wait "gesture canary ready" 5000
+
+gesture pan 110 443 48 0 500
+wait text "pan duration >=400ms" 5000
+
+close

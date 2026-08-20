@@ -251,6 +251,13 @@ two-pointer gesture changes all three semantic states. On Android, these checks
 are intentionally qualitative because recognizers can report non-exact centroid,
 scale, and rotation values for one simultaneous two-finger gesture.
 
+`gesture-pan-duration.ad` is a separate, minimal iOS replay that asserts a single-pointer
+`gesture pan`'s requested duration is actually observed by the app (a bucketed
+`pan duration` status on the Home screen), rather than just that the gesture activated.
+It's split out of `gesture-lab.ad` so it can run as an automatic PR-tier check
+(`.github/workflows/ios.yml`) without depending on `gesture-lab.ad`'s multi-touch commands,
+which stay full-tier only.
+
 To target a specific iOS simulator or an installed Expo development build, run the
 underlying command directly so global flags stay before replay inputs:
 
