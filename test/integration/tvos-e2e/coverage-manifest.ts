@@ -89,7 +89,7 @@ export const TVOS_PLATFORM_COVERAGE = {
   [C.logs]: gap('No tvOS-specific app-log command evidence exists yet'),
   [C.events]: gap('No tvOS-specific session-event command evidence exists yet'),
   [C.network]: gap('No tvOS-specific network command evidence exists yet'),
-  [C.audio]: gap('No tvOS-specific audio command evidence exists yet'),
+  [C.audio]: denial('tvOS audio admission is host-dependent and denied on hosted CI'),
   [C.replay]: gap('No tvOS-specific replay command evidence exists yet'),
   [C.test]: gap('No tvOS-specific test-suite command evidence exists yet'),
   [C.clipboard]: gap('No tvOS-specific clipboard command evidence exists yet'),

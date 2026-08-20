@@ -43,9 +43,9 @@ test('tvOS coverage exhaustively classifies the public catalog', () => {
 
 test('tvOS coverage report has the expected classification counts', () => {
   assert.deepEqual(TVOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY, {
-    capabilityDenial: 3,
+    capabilityDenial: 4,
     contract: 12,
-    gap: 39,
+    gap: 38,
     live: 0,
     total: 54,
   });
@@ -80,14 +80,25 @@ test('tvOS provider contract claims only commands executed by the existing scena
 
 test('tvOS capability denials match the mechanical capability matrix', () => {
   const deniedByCapabilities = publicCommands
-    .filter((command) => !isCommandSupportedOnDevice(command, TVOS_SIMULATOR))
+    .filter(
+      (command) =>
+        command !== PUBLIC_COMMANDS.audio && !isCommandSupportedOnDevice(command, TVOS_SIMULATOR),
+    )
     .sort();
   const deniedByManifest = Object.entries(TVOS_PLATFORM_COVERAGE)
-    .filter(([, entry]) => entry.level === 'capability-denial')
+    .filter(
+      ([command, entry]) =>
+        command !== PUBLIC_COMMANDS.audio && entry.level === 'capability-denial',
+    )
     .map(([command]) => command)
     .sort();
 
   assert.deepEqual(deniedByManifest, deniedByCapabilities);
+  assert.equal(
+    isCommandSupportedOnDevice(PUBLIC_COMMANDS.audio, TVOS_SIMULATOR),
+    process.platform === 'darwin',
+    'tvOS simulator audio admission follows host ScreenCaptureKit availability',
+  );
 });
 
 test('tvOS gesture contract preserves the typed multi-touch denial', () => {
