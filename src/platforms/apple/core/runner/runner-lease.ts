@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { emitDiagnostic } from '../../../../utils/diagnostics.ts';
+import { publishFileSync } from '../../../../utils/atomic-file.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { acquireProcessLock } from '../../../../utils/process-lock.ts';
 import {
@@ -309,15 +310,10 @@ export function releaseRunnerLease(lease: RunnerLease | undefined): void {
 export function writeRunnerLease(lease: RunnerLease): void {
   const leasePath = resolveRunnerLeasePath(lease.deviceId);
   fs.mkdirSync(path.dirname(leasePath), { recursive: true });
-  const tmpPath = `${leasePath}.${process.pid}.${Date.now()}.tmp`;
-  try {
-    fs.writeFileSync(tmpPath, JSON.stringify(lease, null, 2), 'utf8');
-    fs.renameSync(tmpPath, leasePath);
-  } finally {
-    try {
-      fs.rmSync(tmpPath, { force: true });
-    } catch {}
-  }
+  publishFileSync({
+    destination: leasePath,
+    contents: JSON.stringify(lease, null, 2),
+  });
 }
 
 function removeRunnerLease(params: {

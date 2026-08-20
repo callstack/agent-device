@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { resolveRemoteConfigPath, resolveRemoteConfigProfile } from './remote-config-core.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import { publishFileSync } from '../utils/atomic-file.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { LeaseBackend, SessionRuntimeHints } from '@agent-device/kernel/contracts';
@@ -248,17 +249,11 @@ function resolveConnectionProfile(
 }
 
 function writeJsonFile(filePath: string, value: unknown): void {
-  const temporaryPath = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
-  try {
-    fs.writeFileSync(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, {
-      encoding: 'utf8',
-      mode: 0o600,
-    });
-    fs.renameSync(temporaryPath, filePath);
-  } catch (error) {
-    fs.rmSync(temporaryPath, { force: true });
-    throw error;
-  }
+  publishFileSync({
+    destination: filePath,
+    contents: `${JSON.stringify(value, null, 2)}\n`,
+    mode: 0o600,
+  });
 }
 
 function sanitizeDaemonBaseUrl(value: string | undefined): string | undefined {

@@ -3,54 +3,65 @@ import http from 'node:http';
 import path from 'node:path';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
+import { assertRejectsAppError } from '../../../__tests__/test-utils/index.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import type { DaemonPaths } from '../../config.ts';
 import type { DaemonRequest } from '../../types.ts';
 import { sendRequest } from '../daemon-client-transport.ts';
 
-const PROCESS_DEATH_COMMANDS = ['open', 'close'] as const;
-const REQUIRED_PROCESS_DEATH_COMMANDS = ['open', 'close'] as const;
+type ProcessDeathCommand = 'open' | 'close';
+type ProcessDeathRow = Readonly<{
+  command: ProcessDeathCommand;
+  positionals: readonly string[];
+}>;
 
-test('acceptance matrix declares both process-death lifecycle commands', () => {
-  assert.deepEqual([...PROCESS_DEATH_COMMANDS].sort(), [...REQUIRED_PROCESS_DEATH_COMMANDS].sort());
-});
+const PROCESS_DEATH_ROWS = {
+  open: { command: 'open', positionals: ['Demo'] },
+  close: { command: 'close', positionals: [] },
+} as const satisfies Record<ProcessDeathCommand, ProcessDeathRow>;
 
-test.each(PROCESS_DEATH_COMMANDS)(
-  'acceptance row: process death after %s dispatch is a bounded, non-replayed request',
-  async (command) => {
+for (const row of Object.values(PROCESS_DEATH_ROWS)) {
+  test(`acceptance row: process death after ${row.command} dispatch is bounded and non-replayed`, async () => {
     // This acceptance row deliberately stops at the transport boundary: a
     // dead daemon is observed as a closed response socket. Lifecycle teardown
     // and process-tree cleanup belong to the deferred full fault matrix.
     const endpoint = await startEndpointThatDiesAfterRequest();
-    const baseDir = mkdtempForTestSync(`agent-device-process-death-${command}-`);
+    const baseDir = mkdtempForTestSync(`agent-device-process-death-${row.command}-`);
     const statePaths = daemonPaths(baseDir);
-    const request = buildRequest(command);
+    const request = buildRequest(row);
+    let observed: unknown;
 
     try {
-      await assert.rejects(
-        sendRequest(
-          { httpPort: endpoint.port, token: 'test-token', pid: process.pid },
-          request,
-          'http',
-          statePaths,
-          1_000,
-        ),
-        (error: unknown) => {
-          assert.ok(error instanceof AppError);
-          assert.equal(error.code, 'COMMAND_FAILED');
-          assert.match(error.message, /communicate with daemon/i);
-          assert.equal(error.details?.requestId, request.meta?.requestId);
-          assert.match(String(error.details?.hint), /Retry command/i);
-          return true;
+      await assertRejectsAppError(
+        async () => {
+          try {
+            return await sendRequest(
+              { httpPort: endpoint.port, token: 'test-token', pid: process.pid },
+              request,
+              'http',
+              statePaths,
+              1_000,
+            );
+          } catch (error) {
+            observed = error;
+            throw error;
+          }
+        },
+        {
+          code: 'COMMAND_FAILED',
+          message: /communicate with daemon/i,
+          hint: /Retry command/i,
         },
       );
     } finally {
       await endpoint.close();
     }
 
-    assert.deepEqual(endpoint.commands, [command]);
-  },
-);
+    assert.ok(observed instanceof AppError);
+    assert.equal(observed.details?.requestId, request.meta?.requestId);
+    assert.deepEqual(endpoint.commands, [row.command]);
+  });
+}
 
 type DeadEndpoint = {
   port: number;
@@ -100,14 +111,14 @@ async function startEndpointThatDiesAfterRequest(): Promise<DeadEndpoint> {
   };
 }
 
-function buildRequest(command: (typeof PROCESS_DEATH_COMMANDS)[number]): DaemonRequest {
+function buildRequest(row: ProcessDeathRow): DaemonRequest {
   return {
     token: 'test-token',
     session: 'acceptance',
-    command,
-    positionals: command === 'open' ? ['Demo'] : [],
+    command: row.command,
+    positionals: [...row.positionals],
     flags: {},
-    meta: { requestId: `acceptance-process-death-${command}` },
+    meta: { requestId: `acceptance-process-death-${row.command}` },
   };
 }
 

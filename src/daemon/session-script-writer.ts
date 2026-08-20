@@ -17,6 +17,7 @@ import {
   stripRecordedRefGeneration,
 } from '@agent-device/ad-script';
 import { expandSessionPath, safeSessionName } from './session-paths.ts';
+import { publishFileSync } from '../utils/atomic-file.ts';
 import type { SessionState } from './types.ts';
 import {
   NO_SCRIPT_PUBLICATION,
@@ -281,36 +282,19 @@ function publishHealedScriptAtomically(params: {
   force?: boolean;
 }): void {
   const { scriptPath, script, force } = params;
-  const dir = path.dirname(scriptPath);
-  const tempPath = path.join(
-    dir,
-    `.${path.basename(scriptPath)}.${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`,
-  );
   try {
-    fs.writeFileSync(tempPath, script);
-    try {
-      if (force) {
-        fs.renameSync(tempPath, scriptPath);
-        return;
-      }
-      // Atomic create-exclusive: EEXIST iff a file already sits at scriptPath.
-      fs.linkSync(tempPath, scriptPath);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-      throw new AppError(
-        'COMMAND_FAILED',
-        `A file already exists at ${scriptPath}; remove it, pass replay --save-script=<other-path>, or pass --force/--overwrite to replace it.`,
-        { reason: 'script_target_exists', path: scriptPath },
-      );
-    }
-  } finally {
-    // linkSync leaves the temp hard-link behind on success; an error leaves
-    // it too — always clean up whatever of our own temp remains. A `force`
-    // rename already consumed tempPath (it no longer exists at this path),
-    // so this is a harmless no-op in that branch.
-    try {
-      fs.rmSync(tempPath, { force: true });
-    } catch {}
+    publishFileSync({
+      destination: scriptPath,
+      contents: script,
+      publish: force ? 'replace' : 'link-exclusive',
+    });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    throw new AppError(
+      'COMMAND_FAILED',
+      `A file already exists at ${scriptPath}; remove it, pass replay --save-script=<other-path>, or pass --force/--overwrite to replace it.`,
+      { reason: 'script_target_exists', path: scriptPath },
+    );
   }
 }
 

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DeviceLease } from '@agent-device/contracts/device';
+import { publishFileSync } from '../utils/atomic-file.ts';
 
 const SHUTDOWN_REPORT_FILE = 'daemon-shutdown.json';
 
@@ -59,15 +60,16 @@ export function writeDaemonShutdownReport(
     },
   };
   const filePath = shutdownReportPath(stateDir);
-  const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
   try {
-    fs.writeFileSync(temporaryPath, `${JSON.stringify(report)}\n`, { mode: 0o600 });
-    fs.renameSync(temporaryPath, filePath);
+    publishFileSync({
+      destination: filePath,
+      contents: `${JSON.stringify(report)}\n`,
+      mode: 0o600,
+    });
     fs.chmodSync(filePath, 0o600);
   } catch {
-    try {
-      fs.rmSync(temporaryPath, { force: true });
-    } catch {}
+    // Shutdown reporting is best effort; the atomic publisher has already
+    // preserved the primary filesystem failure and cleaned its temp sibling.
   }
 }
 

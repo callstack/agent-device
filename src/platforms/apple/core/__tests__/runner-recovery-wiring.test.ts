@@ -41,19 +41,27 @@ vi.mock('../runner/runner-session.ts', async (importOriginal) => {
 
 const { runAppleRunnerCommand } = await import('../runner/runner-client.ts');
 
-const LOST_RESPONSE_MUTATION_ROWS = [
-  {
+type LostResponseAcceptanceCommand = 'press' | 'fill';
+
+const LOST_RESPONSE_MUTATION_ROWS = {
+  press: {
     acceptanceCommand: 'press',
     runnerCommand: 'tap',
     request: { command: 'tap', x: 5, y: 5 },
   },
-  {
+  fill: {
     acceptanceCommand: 'fill',
     runnerCommand: 'type',
     request: { command: 'type', text: 'hello', textEntryMode: 'replace' },
   },
-] as const;
-const REQUIRED_LOST_RESPONSE_ACCEPTANCE_COMMANDS = ['press', 'fill'] as const;
+} as const satisfies Record<
+  LostResponseAcceptanceCommand,
+  Readonly<{
+    acceptanceCommand: LostResponseAcceptanceCommand;
+    runnerCommand: 'tap' | 'type';
+    request: Readonly<Record<string, unknown>>;
+  }>
+>;
 
 afterEach(async () => {
   await server?.close();
@@ -77,14 +85,7 @@ function seedSession(port: number): RunnerSession {
   return session;
 }
 
-test('acceptance matrix declares both lost-response mutation commands', () => {
-  assert.deepEqual(
-    LOST_RESPONSE_MUTATION_ROWS.map((row) => row.acceptanceCommand).sort(),
-    [...REQUIRED_LOST_RESPONSE_ACCEPTANCE_COMMANDS].sort(),
-  );
-});
-
-test.each(LOST_RESPONSE_MUTATION_ROWS)(
+test.each(Object.values(LOST_RESPONSE_MUTATION_ROWS))(
   'acceptance row: lost-response-after-mutation for $acceptanceCommand does not replay the mutation',
   async ({ runnerCommand, request }) => {
     // 1st request: the mutation, answered by dropping the connection

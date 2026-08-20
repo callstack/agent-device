@@ -10,6 +10,7 @@ import {
 } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform';
+import { publishFileSync } from '../utils/atomic-file.ts';
 import { acquireProcessLock } from '../utils/process-lock.ts';
 import { ownerIdentityMatches, readCurrentOwnerIdentity } from '../utils/owner-identity.ts';
 import { inspectDeviceClaimFile, type InspectedDeviceClaim } from './device-claim-inspection.ts';
@@ -370,15 +371,11 @@ async function settleVerifiedOrphanedClaim(
 function writeClaim(claim: DeviceClaim): void {
   const claimPath = resolveDeviceClaimPath(claim.deviceKey);
   fs.mkdirSync(path.dirname(claimPath), { recursive: true, mode: 0o700 });
-  const tmpPath = `${claimPath}.${process.pid}.${Date.now()}.tmp`;
-  try {
-    fs.writeFileSync(tmpPath, `${JSON.stringify(claim)}\n`, { encoding: 'utf8', mode: 0o600 });
-    fs.renameSync(tmpPath, claimPath);
-  } finally {
-    try {
-      fs.rmSync(tmpPath, { force: true });
-    } catch {}
-  }
+  publishFileSync({
+    destination: claimPath,
+    contents: `${JSON.stringify(claim)}\n`,
+    mode: 0o600,
+  });
 }
 
 async function withDeviceClaimLock<T>(deviceKey: string, task: () => Promise<T>): Promise<T> {

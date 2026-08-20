@@ -5,6 +5,7 @@ import type {
   LeaseLifecycleProvider,
   ProviderExpiredLeaseRecovery,
 } from '@agent-device/contracts/device';
+import { publishFileSync } from '../utils/atomic-file.ts';
 import { releaseExpiredProviderLease } from './lease-lifecycle.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { sleep } from '../utils/timeouts.ts';
@@ -71,13 +72,15 @@ export function createExpiredProviderLeaseReleaser(options: {
         fs.rmSync(filePath, { force: true });
       } else {
         fs.mkdirSync(options.stateDir, { recursive: true, mode: 0o700 });
-        const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
         const record: PersistedExpiredProviderLeases = {
           version: PENDING_RELEASES_VERSION,
           leases: [...pendingRecoveryLeases.values()],
         };
-        fs.writeFileSync(temporaryPath, `${JSON.stringify(record)}\n`, { mode: 0o600 });
-        fs.renameSync(temporaryPath, filePath);
+        publishFileSync({
+          destination: filePath,
+          contents: `${JSON.stringify(record)}\n`,
+          mode: 0o600,
+        });
         fs.chmodSync(filePath, 0o600);
       }
       persistedRecoveryLeaseIds.clear();

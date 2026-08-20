@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
+import { publishFileSync } from './atomic-file.ts';
 import { classifyOwnerLiveness } from './owner-identity.ts';
 import { sleep } from './timeouts.ts';
 
@@ -60,9 +61,10 @@ export async function acquireProcessLock(params: {
 }
 
 function writeProcessLockOwner(ownerFilePath: string, owner: ProcessLockOwner): void {
-  const tmpOwnerFilePath = `${ownerFilePath}.${process.pid}.${Date.now()}.tmp`;
-  fs.writeFileSync(tmpOwnerFilePath, JSON.stringify(owner), 'utf8');
-  fs.renameSync(tmpOwnerFilePath, ownerFilePath);
+  publishFileSync({
+    destination: ownerFilePath,
+    contents: JSON.stringify(owner),
+  });
 }
 
 function clearStaleProcessLock(
