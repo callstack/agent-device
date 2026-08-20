@@ -2,6 +2,7 @@ import { deriveMobileSnapshotHiddenContentHints } from '../snapshot/mobile-snaps
 import {
   isNodeVisibleInEffectiveViewport,
   isScrollableNodeLike,
+  isViewportRootNode,
 } from '@agent-device/contracts/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ScrollDirection } from '@agent-device/contracts/interaction';
@@ -176,28 +177,61 @@ function selectScrollContainer(
 
   const targetPoint = target.point;
   if (targetPoint) {
-    const containing = scrollables
-      .filter((node) => node.rect && containsPoint(node.rect, targetPoint))
-      .sort(compareSpecificScrollContainer);
-    if (containing.length > 0) {
-      const withHiddenEdge = containing.find((node) =>
-        hasHiddenContentAtEdge(node, hiddenHints.get(node.index), edge),
-      );
-      return withHiddenEdge ?? containing[0] ?? null;
-    }
+    const containing = selectPointScrollContainer(scrollables, hiddenHints, edge, targetPoint);
+    if (containing) return containing;
+    return selectBroadScrollContainer(scrollables, hiddenHints, edge, nodes);
   }
 
+  const viewportCenter = inferViewportCenter(nodes);
+  if (viewportCenter) {
+    const centered = selectPointScrollContainer(scrollables, hiddenHints, edge, viewportCenter);
+    if (centered) return centered;
+  }
+
+  return selectBroadScrollContainer(scrollables, hiddenHints, edge, nodes);
+}
+
+function selectBroadScrollContainer(
+  scrollables: SnapshotNode[],
+  hiddenHints: Map<number, HiddenContentHint>,
+  edge: ScrollEdge,
+  nodes: SnapshotNode[],
+): SnapshotNode | null {
   const withHiddenEdge = scrollables
     .filter((node) => hasHiddenContentAtEdge(node, hiddenHints.get(node.index), edge))
     .sort(compareBroadScrollContainer);
-  if (withHiddenEdge.length > 0) {
-    return withHiddenEdge[0] ?? null;
-  }
+  if (withHiddenEdge.length > 0) return withHiddenEdge[0] ?? null;
 
   const visibleScrollables = scrollables
     .filter((node) => isNodeVisibleInEffectiveViewport(node, nodes))
     .sort(compareBroadScrollContainer);
   return visibleScrollables[0] ?? scrollables.sort(compareBroadScrollContainer)[0] ?? null;
+}
+
+function selectPointScrollContainer(
+  scrollables: SnapshotNode[],
+  hiddenHints: Map<number, HiddenContentHint>,
+  edge: ScrollEdge,
+  point: Point,
+): SnapshotNode | null {
+  const containing = scrollables
+    .filter((node) => node.rect && containsPoint(node.rect, point))
+    .sort(compareSpecificScrollContainer);
+  const withHiddenEdge = containing.find((node) =>
+    hasHiddenContentAtEdge(node, hiddenHints.get(node.index), edge),
+  );
+  return withHiddenEdge ?? containing[0] ?? null;
+}
+
+function inferViewportCenter(nodes: SnapshotNode[]): Point | undefined {
+  const viewport = nodes
+    .filter((node) => isViewportRootNode(node) && isUsableRect(node.rect))
+    .sort(compareBroadScrollContainer)[0]?.rect;
+  if (!viewport) return undefined;
+  return {
+    x: viewport.x + viewport.width / 2,
+    y: viewport.y + viewport.height / 2,
+  };
 }
 
 function findNearestScrollableAncestor(

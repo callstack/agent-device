@@ -4,10 +4,11 @@ import {
   augmentScrollVisualizationResult,
   recordTouchVisualizationEvent,
 } from '../recording-gestures.ts';
-import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession, makeMacOsSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSnapshotState } from '../../__tests__/test-utils/snapshot-builders.ts';
 import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
 import type { ScreenRecordingLiveSnapshot } from '@agent-device/contracts/platform';
+import { TVOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 
 function makeSession(recording: Partial<ScreenRecordingLiveSnapshot> = {}) {
   const session = makeIosSession('default', {
@@ -51,7 +52,7 @@ test('scroll records a semantic scroll gesture for visualization telemetry', () 
   assert.equal(event.y, 699);
   assert.equal(event.x2, 201);
   assert.equal(event.y2, 175);
-  assert.equal(event.durationMs, 250);
+  assert.equal(event.durationMs, 300);
   assert.equal(event.contentDirection, 'down');
 });
 
@@ -88,6 +89,17 @@ test('scroll augmentation preserves explicit duration for visualization', () => 
   const event = session.screenRecording?.handle.inspect().gestureEvents[0];
   assert.equal(event?.kind, 'scroll');
   assert.equal(event?.durationMs, 100);
+});
+
+test('scroll augmentation keeps non-mobile recording timing on macOS and tvOS', () => {
+  const sessions = [makeMacOsSession('macos'), makeIosSession('tvos', { device: TVOS_SIMULATOR })];
+
+  for (const session of sessions) {
+    const result = augmentScrollVisualizationResult(session, 'scroll', ['down'], {
+      direction: 'down',
+    });
+    assert.equal(result?.durationMs, 250);
+  }
 });
 
 test('scroll augmentation preserves explicit reference frame from platform result', () => {

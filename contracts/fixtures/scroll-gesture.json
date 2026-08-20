@@ -1,5 +1,7 @@
 {
   "constants": {
+    "defaultIosScrollAmount": 0.35,
+    "defaultMobileScrollDurationMs": 300,
     "defaultScrollAmount": 0.6,
     "defaultEdgePaddingFraction": 0.1
   },

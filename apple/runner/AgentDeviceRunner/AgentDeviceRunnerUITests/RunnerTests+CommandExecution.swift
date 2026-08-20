@@ -1905,13 +1905,14 @@ extension RunnerTests {
       guard let x = command.x, let y = command.y, let x2 = command.x2, let y2 = command.y2 else {
         return Response(ok: false, error: ErrorPayload(message: "drag requires x, y, x2, and y2"))
       }
+      let defaults = runnerDragCommandDefaults(command)
       return executeDragGesture(
         activeApp: activeApp,
         x: x,
         y: y,
         x2: x2,
         y2: y2,
-        durationMs: command.durationMs,
+        durationMs: defaults.durationMs,
         synthesized: command.synthesized == true,
         message: "dragged",
         synthesizedPolicyKind: .synthesizedDrag
@@ -1948,9 +1949,10 @@ extension RunnerTests {
           error: ErrorPayload(message: "scroll could not resolve a usable interaction frame")
         )
       }
+      let defaults = runnerDragCommandDefaults(command)
       guard let plan = runnerScrollGesturePlan(
         direction: direction,
-        amount: command.amount,
+        amount: defaults.scrollAmount,
         pixels: command.pixels,
         referenceWidth: frame.width,
         referenceHeight: frame.height
@@ -1980,7 +1982,7 @@ extension RunnerTests {
         y: frame.minY + plan.y1,
         x2: frame.minX + plan.x2,
         y2: frame.minY + plan.y2,
-        durationMs: command.durationMs,
+        durationMs: defaults.durationMs,
         synthesized: shouldUseSynthesizedScrollPath(),
         message: "scrolled",
         synthesizedContext: scrollContext.withReferenceFrame(frame),
@@ -2297,6 +2299,7 @@ extension RunnerTests {
     synthesizedPolicyKind: SynthesizedGesturePolicyKind,
     synthesizedProfile: SynthesizedDragProfile = .continuous
   ) -> Response {
+    let durationMs = durationMs ?? runnerDefaultDragDurationMs
     let commandName = dragCommandName(message: message)
     guard x.isFinite, y.isFinite, x2.isFinite, y2.isFinite else {
       return Response(
@@ -2328,7 +2331,7 @@ extension RunnerTests {
     )
     var fallback: GestureFallback?
     if synthesized {
-      let durationMs = min(max(durationMs ?? 250, 16), 10000)
+      let durationMs = min(max(durationMs, 16), 10000)
       let context = synthesizedCoordinateContext(
         app: activeApp,
         policy: synthesizedGesturePolicy(synthesizedPolicyKind)
@@ -2351,7 +2354,7 @@ extension RunnerTests {
       fallback = gestureFallback(strategy: "xctest-coordinate-drag", from: outcome)
     }
     let holdDuration = synthesized
-      ? synthesizedSwipeFallbackHoldDuration(durationMs: durationMs ?? 250)
+      ? synthesizedSwipeFallbackHoldDuration(durationMs: durationMs)
       : coordinateDragHoldDuration()
     let (timing, outcome) = performGesture(activeApp) {
       dragAt(
@@ -2380,7 +2383,7 @@ extension RunnerTests {
     y: Double,
     x2: Double,
     y2: Double,
-    durationMs: Double?,
+    durationMs: Double,
     message: String,
     context: SynthesizedCoordinateContext?,
     policyKind: SynthesizedGesturePolicyKind,
@@ -2420,7 +2423,7 @@ extension RunnerTests {
         )
       )
     }
-    let durationMs = min(max(durationMs ?? 250, 16), 10000)
+    let durationMs = min(max(durationMs, 16), 10000)
     let dragFrame = axFreeDragVisualizationFrame(
       x: plan.points.x,
       y: plan.points.y,
@@ -2470,7 +2473,7 @@ extension RunnerTests {
     y: Double,
     x2: Double,
     y2: Double,
-    durationMs: Double?,
+    durationMs: Double,
     message: String,
     fallback: GestureFallback?
   ) -> Response {
@@ -2482,7 +2485,7 @@ extension RunnerTests {
       x2: dragPoints.x2,
       y2: dragPoints.y2
     )
-    let holdDuration = synthesizedSwipeFallbackHoldDuration(durationMs: durationMs ?? 250)
+    let holdDuration = synthesizedSwipeFallbackHoldDuration(durationMs: durationMs)
     let (timing, outcome) = performGesture(activeApp) {
       dragAt(
         app: activeApp,

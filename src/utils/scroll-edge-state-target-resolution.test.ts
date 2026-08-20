@@ -166,6 +166,24 @@ test('selectScrollContainer: target.point outside every scrollable rect falls ba
   assert.equal(state.scope, 'far-away');
 });
 
+test('selectScrollContainer: a point miss with no hidden edge keeps broad selection instead of adopting implicit viewport-center targeting', async () => {
+  const nodes = [
+    windowRoot(),
+    scrollNode(1, {
+      identifier: 'centered-small',
+      rect: { x: 150, y: 350, width: 100, height: 100 },
+    }),
+    scrollNode(2, {
+      identifier: 'broad-large',
+      rect: { x: 0, y: 0, width: 350, height: 300 },
+    }),
+  ];
+
+  const state = await capture(nodes, 'bottom', { point: { x: 999, y: 999 } });
+
+  assert.equal(state.scope, 'broad-large');
+});
+
 // ---------------------------------------------------------------------------
 // containsPoint boundary (inclusive edges, and-of-four rather than or-of-any)
 // ---------------------------------------------------------------------------

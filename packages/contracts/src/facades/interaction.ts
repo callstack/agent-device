@@ -141,6 +141,8 @@ export type {
   TvRemoteCommandResult,
 } from '../navigation.ts';
 export {
+  DEFAULT_IOS_SCROLL_AMOUNT,
+  DEFAULT_MOBILE_SCROLL_DURATION_MS,
   SCROLL_DURATION_MAX_MS,
   assertExclusiveScrollDistanceInputs,
   honoredScrollDurationMs,

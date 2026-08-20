@@ -24,6 +24,27 @@ test('selectScrollContainer (broad): among containers with a hidden edge, the la
   assert.equal(state.scope, 'large-hidden');
 });
 
+test('selectScrollContainer (broad): edge verification follows the viewport-centered gesture instead of an off-center hidden-edge child', async () => {
+  const nodes = [
+    windowRoot(),
+    scrollNode(1, {
+      identifier: 'settings-table',
+      rect: { x: 0, y: 0, width: 400, height: 800 },
+    }),
+    scrollNode(2, {
+      identifier: 'profile-picture-scroll',
+      hiddenContentAbove: true,
+      hiddenContentBelow: true,
+      rect: { x: 300, y: 120, width: 80, height: 80 },
+    }),
+  ];
+
+  const state = await capture(nodes, 'top');
+
+  assert.equal(state.canScroll, false);
+  assert.equal(state.scope, 'settings-table');
+});
+
 test('selectScrollContainer (broad): with no hidden edge anywhere, the LARGEST visible-in-viewport container wins, not just the first visible one', async () => {
   // Declaration order deliberately disagrees with area order (visible-small is
   // declared first) so a sort-less "first visible" implementation would pick

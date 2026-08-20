@@ -9,6 +9,7 @@ import {
   buildScrollGesturePlan,
   clampGestureCoordinate,
 } from './scroll-gesture.ts';
+import { DEFAULT_IOS_SCROLL_AMOUNT, DEFAULT_MOBILE_SCROLL_DURATION_MS } from './scroll-command.ts';
 
 test('buildInPageSwipeGesturePlan applies one inset lane policy in every direction', () => {
   const frame = { referenceWidth: 400, referenceHeight: 800 };
@@ -51,7 +52,12 @@ test('buildInPageSwipeGesturePlan truncates percentage coordinates on odd viewpo
 // XCTest in the same file). Add vectors to the table, never to one suite — drift on either side
 // turns CI red without a simulator.
 type ScrollGestureFixture = {
-  constants: { defaultScrollAmount: number; defaultEdgePaddingFraction: number };
+  constants: {
+    defaultIosScrollAmount: number;
+    defaultMobileScrollDurationMs: number;
+    defaultScrollAmount: number;
+    defaultEdgePaddingFraction: number;
+  };
   cases: Array<{
     name: string;
     direction: 'up' | 'down' | 'left' | 'right';
@@ -110,6 +116,12 @@ test('buildScrollGesturePlan uses the parity table default amount and edge paddi
   assert.equal(defaulted.pixels, 1000 * constants.defaultScrollAmount);
   const saturated = buildScrollGesturePlan({ direction: 'down', amount: 10, ...frame });
   assert.equal(saturated.pixels, 1000 - 2 * 1000 * constants.defaultEdgePaddingFraction);
+});
+
+test('mobile scroll duration agrees with the cross-platform parity table', () => {
+  const { constants } = readScrollGestureFixture();
+  assert.equal(DEFAULT_IOS_SCROLL_AMOUNT, constants.defaultIosScrollAmount);
+  assert.equal(DEFAULT_MOBILE_SCROLL_DURATION_MS, constants.defaultMobileScrollDurationMs);
 });
 
 test('buildScrollGesturePlan rejects invalid amounts', () => {

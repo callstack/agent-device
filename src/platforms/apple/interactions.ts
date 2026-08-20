@@ -23,6 +23,7 @@ import {
   parseRunnerSequenceResult,
 } from './core/runner/runner-sequence.ts';
 import {
+  materializeIosScrollOptions,
   normalizeAppleScrollResult,
   normalizeAppleScrollResultWithResolvedFrame,
   scrollRunnerFields,
@@ -331,17 +332,19 @@ async function runAppleScroll(
     );
   }
 
+  const iosOptions = materializeIosScrollOptions(options);
+
   // Single fused lifecycle command: the runner resolves the interaction frame and runs the drag.
   const runnerResult = await runRunnerCommand(
     device,
     {
       command: 'scroll',
       direction,
-      ...scrollRunnerFields(options),
+      ...scrollRunnerFields(iosOptions),
       appBundleId: ctx.appBundleId,
     },
     runnerOpts,
   );
 
-  return normalizeAppleScrollResultWithResolvedFrame(runnerResult, direction, options);
+  return normalizeAppleScrollResultWithResolvedFrame(runnerResult, direction, iosOptions);
 }

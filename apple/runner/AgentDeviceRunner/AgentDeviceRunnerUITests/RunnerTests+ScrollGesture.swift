@@ -20,9 +20,13 @@ struct RunnerScrollGesturePlan {
 }
 
 private let runnerDefaultScrollAmount = 0.6
-// Both constants are pinned by contracts/fixtures/scroll-gesture.json (`constants`). Scroll gestures
-// stay out of the outer 10% of each axis so a saturated scroll never touches down inside the status
-// bar / Dynamic Island band (#1781 A1).
+private let runnerDefaultIosScrollAmount = 0.35
+private let runnerDefaultMobileScrollDurationMs = 300.0
+let runnerDefaultDragDurationMs = 250.0
+// The platform scroll defaults and planner constants are pinned by
+// contracts/fixtures/scroll-gesture.json (`constants`). Scroll gestures stay out of the outer 10%
+// of each axis so a saturated scroll never touches down inside the status bar / Dynamic Island band
+// (#1781 A1).
 private let runnerDefaultEdgePaddingFraction = 0.1
 
 func runnerScrollGesturePlan(
@@ -66,9 +70,29 @@ func runnerScrollGesturePlan(
   }
 }
 
+struct RunnerDragCommandDefaults {
+  let scrollAmount: Double?
+  let durationMs: Double
+}
+
+func runnerDragCommandDefaults(_ command: Command) -> RunnerDragCommandDefaults {
+  if command.command == .scroll {
+    return RunnerDragCommandDefaults(
+      scrollAmount: command.pixels == nil ? (command.amount ?? runnerDefaultIosScrollAmount) : command.amount,
+      durationMs: command.durationMs ?? runnerDefaultMobileScrollDurationMs
+    )
+  }
+  return RunnerDragCommandDefaults(
+    scrollAmount: nil,
+    durationMs: command.durationMs ?? runnerDefaultDragDurationMs
+  )
+}
+
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 private struct ScrollGestureFixture: Decodable {
   struct Constants: Decodable {
+    let defaultIosScrollAmount: Double
+    let defaultMobileScrollDurationMs: Double
     let defaultScrollAmount: Double
     let defaultEdgePaddingFraction: Double
   }
@@ -136,6 +160,11 @@ extension RunnerTests {
   // 1000px axis where every rounding step is exact.
   func testRunnerScrollGesturePlanUsesParityTableConstants() throws {
     let constants = try loadScrollGestureFixture().constants
+    let defaultScroll = try JSONDecoder().decode(
+      Command.self, from: Data(#"{"command":"scroll"}"#.utf8))
+    let defaults = runnerDragCommandDefaults(defaultScroll)
+    XCTAssertEqual(defaults.durationMs, constants.defaultMobileScrollDurationMs)
+    XCTAssertEqual(defaults.scrollAmount, constants.defaultIosScrollAmount)
     let defaulted = try XCTUnwrap(
       runnerScrollGesturePlan(
         direction: "down", amount: nil, pixels: nil, referenceWidth: 1000, referenceHeight: 1000
@@ -149,6 +178,30 @@ extension RunnerTests {
     )
     XCTAssertEqual(
       saturated.travelPixels, 1000 - 2 * 1000 * constants.defaultEdgePaddingFraction)
+  }
+
+  func testRunnerScrollAndDragCommandDefaultsStayDistinct() throws {
+    func command(_ json: String) throws -> Command {
+      try JSONDecoder().decode(Command.self, from: Data(json.utf8))
+    }
+
+    let pixelScroll = runnerDragCommandDefaults(
+      try command(#"{"command":"scroll","pixels":120}"#))
+    XCTAssertNil(pixelScroll.scrollAmount)
+    XCTAssertEqual(pixelScroll.durationMs, 300)
+
+    let drag = runnerDragCommandDefaults(try command(#"{"command":"drag"}"#))
+    XCTAssertNil(drag.scrollAmount)
+    XCTAssertEqual(drag.durationMs, 250)
+
+    let explicitScroll = runnerDragCommandDefaults(
+      try command(#"{"command":"scroll","amount":0.5,"durationMs":125}"#))
+    XCTAssertEqual(explicitScroll.scrollAmount, 0.5)
+    XCTAssertEqual(explicitScroll.durationMs, 125)
+
+    let explicitDrag = runnerDragCommandDefaults(
+      try command(#"{"command":"drag","durationMs":125}"#))
+    XCTAssertEqual(explicitDrag.durationMs, 125)
   }
 
   func testRunnerScrollGesturePlanRejectsUnknownDirection() {

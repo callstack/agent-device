@@ -2,6 +2,7 @@ import { DEVICE_ROTATION_SURFACE_INDEX, type DeviceRotation } from '@agent-devic
 import {
   buildGesturePlan,
   buildScrollGesturePlan,
+  DEFAULT_MOBILE_SCROLL_DURATION_MS,
   GESTURE_DURATION_MIN_MS,
   toAndroidTvRemoteKeyevent,
   type FillUnconfirmedVerification,
@@ -290,7 +291,10 @@ export async function scrollAndroid(
     x2: viewport.x + relativePlan.x2,
     y2: viewport.y + relativePlan.y2,
   };
-  const durationMs = Math.max(options?.durationMs ?? 300, GESTURE_DURATION_MIN_MS);
+  const durationMs = Math.max(
+    options?.durationMs ?? DEFAULT_MOBILE_SCROLL_DURATION_MS,
+    GESTURE_DURATION_MIN_MS,
+  );
   const backend = await executeAndroidTouchPlan(
     device,
     buildGesturePlan(

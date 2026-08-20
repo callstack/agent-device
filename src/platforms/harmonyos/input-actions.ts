@@ -1,6 +1,7 @@
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import {
   buildScrollGesturePlan,
+  DEFAULT_MOBILE_SCROLL_DURATION_MS,
   type GesturePlan,
   type ScrollDirection,
 } from '@agent-device/contracts/interaction';
@@ -78,7 +79,7 @@ export async function scrollHarmony(
     String(plan.y1),
     String(plan.x2),
     String(plan.y2),
-    String(options?.durationMs ?? 300),
+    String(options?.durationMs ?? DEFAULT_MOBILE_SCROLL_DURATION_MS),
   ]);
   return plan;
 }

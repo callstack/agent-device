@@ -1,4 +1,9 @@
-import { buildScrollGesturePlan, type ScrollDirection } from '@agent-device/contracts/interaction';
+import {
+  buildScrollGesturePlan,
+  DEFAULT_IOS_SCROLL_AMOUNT,
+  DEFAULT_MOBILE_SCROLL_DURATION_MS,
+  type ScrollDirection,
+} from '@agent-device/contracts/interaction';
 
 export type NormalizedScrollOptions = {
   amount?: number;
@@ -8,6 +13,17 @@ export type NormalizedScrollOptions = {
 };
 
 export type AppleScrollOptions = Omit<NormalizedScrollOptions, 'preferProvidedPixels'>;
+
+export function materializeIosScrollOptions(
+  options: AppleScrollOptions | undefined,
+): AppleScrollOptions {
+  const hasExplicitDistance = options?.amount !== undefined || options?.pixels !== undefined;
+  return {
+    ...options,
+    ...(!hasExplicitDistance ? { amount: DEFAULT_IOS_SCROLL_AMOUNT } : {}),
+    durationMs: options?.durationMs ?? DEFAULT_MOBILE_SCROLL_DURATION_MS,
+  };
+}
 
 export function normalizeAppleScrollResultWithResolvedFrame(
   runnerResult: Record<string, unknown>,

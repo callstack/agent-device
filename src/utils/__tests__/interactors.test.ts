@@ -123,7 +123,13 @@ test('ios scroll sends a single fused scroll command and reports planned pixels'
 
   // The common iOS scroll path issues exactly one lifecycle command and NO 'interactionFrame'.
   assert.deepEqual(commands, [
-    { command: 'scroll', direction: 'down', pixels: 120, appBundleId: 'com.example.app' },
+    {
+      command: 'scroll',
+      direction: 'down',
+      pixels: 120,
+      durationMs: 300,
+      appBundleId: 'com.example.app',
+    },
   ]);
   assert.deepEqual(result, {
     x1: 155,
@@ -133,6 +139,7 @@ test('ios scroll sends a single fused scroll command and reports planned pixels'
     referenceWidth: 300,
     referenceHeight: 600,
     pixels: 120,
+    durationMs: 300,
   });
 });
 
@@ -156,7 +163,13 @@ test('ios amount-based scroll recomputes pixels from the runner reference frame'
   const result = await interactor.scroll('down', { amount: 0.5 });
 
   assert.deepEqual(commands, [
-    { command: 'scroll', direction: 'down', amount: 0.5, appBundleId: 'com.example.app' },
+    {
+      command: 'scroll',
+      direction: 'down',
+      amount: 0.5,
+      durationMs: 300,
+      appBundleId: 'com.example.app',
+    },
   ]);
   // amount 0.5 against a 600px vertical axis -> 300 planned pixels.
   const amount =

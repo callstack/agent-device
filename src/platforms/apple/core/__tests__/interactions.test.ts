@@ -262,6 +262,7 @@ test('iosRunnerOverrides maps iOS scroll to a single fused scroll command', asyn
   assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
     command: 'scroll',
     direction: 'down',
+    amount: 0.35,
     durationMs: 50,
     appBundleId: 'com.example.App',
   });
@@ -272,12 +273,13 @@ test('iosRunnerOverrides maps iOS scroll to a single fused scroll command', asyn
     y2: 160,
     referenceWidth: 400,
     referenceHeight: 800,
-    pixels: 480,
+    amount: 0.35,
+    pixels: 280,
     durationMs: 50,
   });
 });
 
-test('iosRunnerOverrides maps iOS scroll without duration to a fused runner scroll', async () => {
+test('iosRunnerOverrides keeps explicit iOS scroll distance with the controlled default duration', async () => {
   mockRunAppleRunnerCommand.mockResolvedValueOnce({
     x: 200,
     y: 640,
@@ -297,7 +299,44 @@ test('iosRunnerOverrides maps iOS scroll without duration to a fused runner scro
     command: 'scroll',
     direction: 'down',
     pixels: 400,
+    durationMs: 300,
     appBundleId: 'com.example.App',
+  });
+});
+
+test('iosRunnerOverrides materializes the controlled iOS default scroll amount', async () => {
+  mockRunAppleRunnerCommand.mockResolvedValueOnce({
+    x: 200,
+    y: 540,
+    x2: 200,
+    y2: 260,
+    referenceWidth: 400,
+    referenceHeight: 800,
+  });
+
+  const { overrides } = iosRunnerOverrides(IOS_TEST_SIMULATOR, {
+    appBundleId: 'com.example.App',
+  });
+
+  const result = await overrides.scroll('down');
+
+  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
+    command: 'scroll',
+    direction: 'down',
+    amount: 0.35,
+    durationMs: 300,
+    appBundleId: 'com.example.App',
+  });
+  assert.deepEqual(result, {
+    x1: 200,
+    y1: 540,
+    x2: 200,
+    y2: 260,
+    referenceWidth: 400,
+    referenceHeight: 800,
+    amount: 0.35,
+    pixels: 280,
+    durationMs: 300,
   });
 });
 

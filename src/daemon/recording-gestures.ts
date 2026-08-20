@@ -10,6 +10,7 @@ import {
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import {
   buildScrollGesturePlan,
+  DEFAULT_MOBILE_SCROLL_DURATION_MS,
   type ScrollDirection,
   type SwipePattern,
 } from '@agent-device/contracts/interaction';
@@ -108,7 +109,8 @@ export function augmentScrollVisualizationResult(
 
   const amountValue = readRecordingNumber(merged.amount) ?? readRecordingNumber(positionals[1]);
   const pixelValue = readRecordingNumber(merged.pixels);
-  const durationMs = readRecordingNumber(merged.durationMs) ?? DEFAULT_SWIPE_DURATION_MS;
+  const durationMs =
+    readRecordingNumber(merged.durationMs) ?? defaultRecordedScrollDurationMs(session);
   const explicitTravel = readTravelCoordinates(merged, []);
   const explicitReferenceWidth = readRecordingNumber(merged.referenceWidth);
   const explicitReferenceHeight = readRecordingNumber(merged.referenceHeight);
@@ -163,6 +165,12 @@ export function augmentScrollVisualizationResult(
     referenceHeight: fallbackReferenceFrame.referenceHeight,
     durationMs,
   };
+}
+
+function defaultRecordedScrollDurationMs(session: SessionState): number {
+  return session.device.target === 'desktop' || session.device.target === 'tv'
+    ? DEFAULT_SWIPE_DURATION_MS
+    : DEFAULT_MOBILE_SCROLL_DURATION_MS;
 }
 
 function buildGestureEvents(
