@@ -1,4 +1,5 @@
 import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
+import { buildCoverageClassificationSummary } from '../support/coverage-classification.ts';
 
 type PublicCommand = (typeof PUBLIC_COMMANDS)[keyof typeof PUBLIC_COMMANDS];
 
@@ -27,14 +28,6 @@ export type LinuxPlatformCoverageEntry =
       level: 'known-gap';
       trackingIssue: number;
     };
-
-export type LinuxPlatformCoverageClassificationSummary = {
-  capabilityDenial: number;
-  contract: number;
-  gap: number;
-  live: number;
-  total: number;
-};
 
 export const LINUX_COVERAGE_GAP_ISSUE = 1915;
 
@@ -251,33 +244,4 @@ export function liveCommandsForLinuxReplay(): PublicCommand[] {
   return Object.entries(LINUX_PLATFORM_COVERAGE)
     .filter(([, entry]) => entry.level === 'live')
     .map(([command]) => command as PublicCommand);
-}
-
-function buildCoverageClassificationSummary(
-  entries: readonly LinuxPlatformCoverageEntry[],
-): LinuxPlatformCoverageClassificationSummary {
-  const summary: LinuxPlatformCoverageClassificationSummary = {
-    capabilityDenial: 0,
-    contract: 0,
-    gap: 0,
-    live: 0,
-    total: entries.length,
-  };
-  for (const entry of entries) {
-    switch (entry.level) {
-      case 'live':
-        summary.live += 1;
-        break;
-      case 'command-contract':
-        summary.contract += 1;
-        break;
-      case 'capability-denial':
-        summary.capabilityDenial += 1;
-        break;
-      case 'known-gap':
-        summary.gap += 1;
-        break;
-    }
-  }
-  return summary;
 }

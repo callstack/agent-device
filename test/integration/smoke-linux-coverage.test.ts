@@ -4,6 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
+import { LINUX_DEVICE } from '../../src/__tests__/test-utils/device-fixtures.ts';
 import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
 import { isCommandSupportedOnDevice } from '../../src/core/capabilities.ts';
 import {
@@ -14,13 +15,6 @@ import {
   liveCommandsForLinuxReplay,
 } from './linux-e2e/coverage-manifest.ts';
 
-const LINUX_DESKTOP = {
-  id: 'ci-linux-desktop',
-  kind: 'device' as const,
-  name: 'CI Linux desktop',
-  platform: 'linux' as const,
-  target: 'desktop' as const,
-};
 const publicCommands = Object.values(PUBLIC_COMMANDS).sort();
 
 test('Linux coverage exhaustively classifies the public catalog', () => {
@@ -90,7 +84,7 @@ test('Linux contract claims name existing executable evidence', () => {
 
 test('Linux capability denials match the owning descriptor matrix', () => {
   const deniedByCapabilities = publicCommands.filter(
-    (command) => !isCommandSupportedOnDevice(command, LINUX_DESKTOP),
+    (command) => !isCommandSupportedOnDevice(command, LINUX_DEVICE),
   );
   const deniedByManifest = Object.entries(LINUX_PLATFORM_COVERAGE)
     .filter(([, entry]) => entry.level === 'capability-denial')

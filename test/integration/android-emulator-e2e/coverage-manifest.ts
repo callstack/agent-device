@@ -2,6 +2,7 @@ import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
 import { ANDROID_AUDIO_CONTRACT_EVIDENCE } from '../../../src/daemon/handlers/__tests__/session-audio.coverage.ts';
 import { ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE } from '../../../src/platforms/__tests__/install-source.coverage.ts';
 import { ANDROID_LIFECYCLE_CONTRACT_EVIDENCE } from '../provider-scenarios/android-lifecycle.coverage.ts';
+import { buildCoverageClassificationSummary } from '../support/coverage-classification.ts';
 import {
   defineAndroidContractEvidence,
   type AndroidContractEvidence,
@@ -17,14 +18,6 @@ export type AndroidEmulatorCoverageEntry =
       level: 'command-contract';
     }
   | { assertion: string; level: 'capability-denial' };
-
-export type AndroidEmulatorCoverageClassificationSummary = {
-  capabilityDenial: number;
-  contract: number;
-  gap: number;
-  live: number;
-  total: number;
-};
 
 const C = PUBLIC_COMMANDS;
 const live = (scenario: string, assertion: string): AndroidEmulatorCoverageEntry => ({
@@ -219,30 +212,4 @@ export function liveCommandsForScenario(scenarioId: string): PublicCommand[] {
   return Object.entries(ANDROID_EMULATOR_E2E_COVERAGE)
     .filter(([, entry]) => entry.level === 'live' && entry.scenario === scenarioId)
     .map(([command]) => command as PublicCommand);
-}
-
-function buildCoverageClassificationSummary(
-  entries: readonly AndroidEmulatorCoverageEntry[],
-): AndroidEmulatorCoverageClassificationSummary {
-  const summary: AndroidEmulatorCoverageClassificationSummary = {
-    capabilityDenial: 0,
-    contract: 0,
-    gap: 0,
-    live: 0,
-    total: entries.length,
-  };
-  for (const entry of entries) {
-    switch (entry.level) {
-      case 'live':
-        summary.live += 1;
-        break;
-      case 'command-contract':
-        summary.contract += 1;
-        break;
-      case 'capability-denial':
-        summary.capabilityDenial += 1;
-        break;
-    }
-  }
-  return summary;
 }

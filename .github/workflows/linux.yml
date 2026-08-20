@@ -79,9 +79,6 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
-      - name: Run Linux desktop catalog coverage contract
-        run: node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-linux-coverage.test.ts
-
       - name: Start Xvfb and D-Bus
         run: |
           # Start virtual framebuffer (1280x1024, 24-bit color)
