@@ -204,9 +204,7 @@ function parseInputText(
   if (!hasEntry(entries, 'text'))
     invalidAt('Maestro inputText requires text.', commandNode, context);
   const text = readRequiredString(entryValue(entries, 'text'), 'inputText.text', context);
-  const label = hasEntry(entries, 'label')
-    ? readOptionalString(entryValue(entries, 'label'), 'inputText.label', context)
-    : undefined;
+  const label = readMaestroCommandLabel(entries, 'inputText', context);
   return stripUndefined({ kind: 'inputText' as const, source, text, label });
 }
 

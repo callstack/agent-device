@@ -18,7 +18,6 @@ import {
   readOptionalBoolean,
   readOptionalEntry,
   readOptionalNumeric,
-  readOptionalString,
   readRequiredNumeric,
   readRequiredString,
   sourceAt,
@@ -146,9 +145,7 @@ export function parseMaestroSwipeCommand(
     context,
   );
   const options = readOptionalCommandOption(entries, 'swipe', context);
-  const label = readOptionalEntry(entries, 'label', (entry) =>
-    readOptionalString(entry, 'swipe.label', context),
-  );
+  const label = readMaestroCommandLabel(entries, 'swipe', context);
   const duration = hasEntry(entries, 'duration')
     ? readOptionalNumeric(entryValue(entries, 'duration'), 'swipe.duration', context)
     : undefined;
@@ -269,9 +266,7 @@ function tapOptions(
     readOptionalNumeric(entry, 'tapOn.delay', context),
   );
   const optional = readOptionalCommandOption(entries, 'tapOn', context).optional;
-  const label = readOptionalEntry(entries, 'label', (entry) =>
-    readOptionalString(entry, 'tapOn.label', context),
-  );
+  const label = readMaestroCommandLabel(entries, 'tapOn', context);
   return stripUndefined({ retryTapIfNoChange, repeat, delay, optional, label });
 }
 

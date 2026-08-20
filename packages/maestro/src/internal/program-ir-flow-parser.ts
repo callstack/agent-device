@@ -15,7 +15,6 @@ import {
   invalidAt,
   readMapEntries,
   readRequiredNumeric,
-  readOptionalString,
   readOptionalEntry,
   readRequiredString,
   readScalarMap,
@@ -23,6 +22,7 @@ import {
   sourceAt,
   type MaestroProgramParseContext,
 } from './program-ir-values.ts';
+import { readMaestroCommandLabel } from './program-ir-command-options.ts';
 import { parseMaestroSelector } from './program-ir-selector-parser.ts';
 import { stripUndefined } from './shared.ts';
 
@@ -101,9 +101,7 @@ export function parseMaestroRunFlowCommand(
   const when = hasEntry(entries, 'when')
     ? parseMaestroRunFlowCondition(entryValue(entries, 'when'), context)
     : undefined;
-  const label = hasEntry(entries, 'label')
-    ? readOptionalString(entryValue(entries, 'label'), 'runFlow.label', context)
-    : undefined;
+  const label = readMaestroCommandLabel(entries, 'runFlow', context);
   return stripUndefined({
     kind: 'runFlow' as const,
     source,
