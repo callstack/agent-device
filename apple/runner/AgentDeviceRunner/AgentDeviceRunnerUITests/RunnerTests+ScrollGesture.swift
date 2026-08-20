@@ -20,7 +20,7 @@ struct RunnerScrollGesturePlan {
 }
 
 private let runnerDefaultScrollAmount = 0.6
-private let runnerDefaultIosScrollAmount = 0.35
+private let runnerDefaultIosScrollAmount = 0.3
 private let runnerDefaultMobileScrollDurationMs = 300.0
 let runnerDefaultDragDurationMs = 250.0
 // The platform scroll defaults and planner constants are pinned by
