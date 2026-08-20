@@ -584,6 +584,14 @@
         "kind": "authored",
         "note": "Coverage: scrollUntilVisible (upstream 079 uses unsupported speed/visibilityPercentage)."
       }
+    },
+    {
+      "id": "authored/tree-relations",
+      "file": "authored/tree-relations.yaml",
+      "origin": {
+        "kind": "authored",
+        "note": "Coverage: recursive selector index, childOf, containsChild, and containsDescendants across tapOn and assertVisible."
+      }
     }
   ]
 }

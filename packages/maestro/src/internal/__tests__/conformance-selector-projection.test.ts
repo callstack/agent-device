@@ -49,3 +49,21 @@ test('selector projection drops metadata-shaped label fields', () => {
   });
   expect(canonicalizeAgentSelector({ text: 'Save' })).toEqual({ text: 'Save' });
 });
+
+test('canonical selector projection preserves recursive tree relations', () => {
+  expect(
+    canonicalizeAgentSelector({
+      id: 'card',
+      index: 1,
+      childOf: { id: 'screen' },
+      containsChild: { id: 'title' },
+      containsDescendants: [{ text: 'Save', childOf: { id: 'body' } }],
+    }),
+  ).toEqual({
+    id: 'card',
+    index: 1,
+    childOf: { id: 'screen' },
+    containsChild: { id: 'title' },
+    containsDescendants: [{ text: 'Save', childOf: { id: 'body' } }],
+  });
+});

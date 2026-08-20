@@ -209,3 +209,57 @@ test('does not associate a selector in an Android hidden scroll subtree', () => 
     resolveMaestroScrollableGesture(snapshot, { id: 'hidden-target' }, 'down', 601, 'android'),
   ).toMatchObject({ viewport: { x: 0, y: 100, width: 402, height: 650 } });
 });
+
+test('uses the complete recursive selector when choosing the scroll container', () => {
+  const snapshot = {
+    createdAt: 0,
+    nodes: [
+      { index: 0, ref: '@e1', type: 'Application', rect: { x: 0, y: 0, width: 402, height: 900 } },
+      {
+        index: 1,
+        ref: '@e2',
+        parentIndex: 0,
+        type: 'ScrollView',
+        rect: { x: 0, y: 0, width: 300, height: 400 },
+      },
+      {
+        index: 2,
+        ref: '@e3',
+        parentIndex: 1,
+        identifier: 'target',
+        rect: { x: 20, y: 40, width: 100, height: 40 },
+      },
+      {
+        index: 3,
+        ref: '@e4',
+        parentIndex: 0,
+        type: 'ScrollView',
+        rect: { x: 0, y: 450, width: 300, height: 400 },
+      },
+      {
+        index: 4,
+        ref: '@e5',
+        parentIndex: 3,
+        identifier: 'target',
+        rect: { x: 20, y: 500, width: 100, height: 80 },
+      },
+      {
+        index: 5,
+        ref: '@e6',
+        parentIndex: 4,
+        identifier: 'marker',
+        rect: { x: 24, y: 504, width: 40, height: 20 },
+      },
+    ],
+  };
+
+  expect(
+    resolveMaestroScrollableGesture(
+      snapshot,
+      { id: 'target', containsChild: { id: 'marker' } },
+      'down',
+      601,
+      'android',
+    ),
+  ).toMatchObject({ viewport: { x: 0, y: 450, width: 300, height: 400 } });
+});

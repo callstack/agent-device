@@ -124,11 +124,21 @@ test('computes expensive target evidence only for the command policies that cons
       includeSurfaceSignature: true,
     },
   });
+  const relational = resolveTypedMaestroTarget({
+    ...base,
+    query: {
+      selector: { id: 'continue', index: 0 },
+      purpose: 'tap',
+      timeoutMs: 0,
+      allowAtomicSelectorDispatch: true,
+    },
+  });
 
   expect(ordinary).not.toHaveProperty('surfaceSignature');
   expect(ordinary).not.toHaveProperty('dispatchSelector');
   expect(atomicRetry.surfaceSignature).toMatch(/^[a-f0-9]{64}$/);
   expect(atomicRetry.dispatchSelector).toEqual({ key: 'id', value: 'continue' });
+  expect(relational).not.toHaveProperty('dispatchSelector');
 });
 
 test('matches iOS Maestro ids on semantic nodes suppressed from interactive presentation', async () => {
@@ -438,8 +448,7 @@ test('assertVisible and assertNotVisible scope duplicate matching children by ch
   const notVisible = observations[1]!;
   expect(visible.matched).toBe(true);
   expect(visible.evidence).toMatchObject({
-    selector: { text: 'child_id' },
-    childOf: { text: 'parent_id_1' },
+    selector: { text: 'child_id', childOf: { text: 'parent_id_1' } },
     candidateCount: 1,
     visible: true,
     ref: 'e3',
@@ -447,8 +456,7 @@ test('assertVisible and assertNotVisible scope duplicate matching children by ch
 
   expect(notVisible.matched).toBe(true);
   expect(notVisible.evidence).toMatchObject({
-    selector: { text: 'child_id' },
-    childOf: { text: 'parent_id_3' },
+    selector: { text: 'child_id', childOf: { text: 'parent_id_3' } },
     candidateCount: 0,
     visible: false,
   });

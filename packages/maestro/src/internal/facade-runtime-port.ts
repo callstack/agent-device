@@ -32,6 +32,7 @@ import type {
 import { literalFromMaestroRegex } from './selector-regex.ts';
 import {
   resolveMaestroTargetFromSnapshot,
+  hasMaestroRecursiveRelations,
   type MaestroTargetQuery as MaestroSnapshotTargetQuery,
   type MaestroTargetResolution,
 } from './runtime-targets.ts';
@@ -101,6 +102,7 @@ export {
   maestroTestFailure,
   resolveMaestroScrollableGesture,
   resolveMaestroTargetFromSnapshot,
+  hasMaestroRecursiveRelations,
 };
 
 export function createMaestroRuntimePort(

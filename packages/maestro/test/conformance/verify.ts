@@ -24,6 +24,7 @@ import {
 } from './harness.ts';
 import { LAYER2_REFERENCE_ONLY, UNVERIFIED_COMMANDS } from './expected-divergence.ts';
 import { checkFixtureSeal } from './fixture-seal.ts';
+import { checkLayer2TreeVector, type Layer2TreeVector } from './layer2-tree.ts';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const CONFORMANCE_DATA_DIR = path.resolve(HERE, '../../../../scripts/maestro-conformance');
@@ -59,6 +60,7 @@ type Layer1Fixture = {
 type Layer2Fixture = {
   constants: Array<{ id: string; symbol: string; value: number }>;
   modelDefaults: Array<{ id: string; value: number }>;
+  treeVectors: Layer2TreeVector[];
 };
 
 function readJson<T>(file: string): T {
@@ -201,7 +203,7 @@ export type Layer2Result = {
 export function checkLayer2(): Layer2Result[] {
   const fixture = loadLayer2();
   const vectors = [...fixture.constants, ...fixture.modelDefaults];
-  return vectors.map((vector) => {
+  const results = vectors.map((vector) => {
     if (LAYER2_REFERENCE_ONLY.has(vector.id)) {
       return { id: vector.id, upstream: vector.value, status: 'reference-only' as const };
     }
@@ -216,6 +218,14 @@ export function checkLayer2(): Layer2Result[] {
       status: agent === vector.value ? ('match' as const) : ('mismatch' as const),
     };
   });
+  for (const vector of fixture.treeVectors) {
+    const tree = checkLayer2TreeVector(vector);
+    results.push({
+      id: vector.id,
+      ...tree,
+    });
+  }
+  return results;
 }
 
 // ---------------------------------------------------------------------------

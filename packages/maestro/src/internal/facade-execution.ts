@@ -185,9 +185,10 @@ export function collectMaestroFailureSuggestions(
   const query = suggestionQuery(failure[failureCommand]);
   const platform = failure[failurePlan].platform;
   if (!query || (platform !== 'android' && platform !== 'ios')) return [];
-  return rankMaestroCandidates(snapshot, query.selector, platform, query.childOf).ranked.map(
-    (node) => ({ node, basis: suggestionBasis(query.selector, node) }),
-  );
+  return rankMaestroCandidates(snapshot, query.selector, platform).ranked.map((node) => ({
+    node,
+    basis: suggestionBasis(query.selector, node),
+  }));
 }
 
 function createObserver(
@@ -264,15 +265,12 @@ function isStaticAppTarget(value: string | undefined): value is string {
 
 type SuggestionQuery = {
   selector: Extract<MaestroCommand, { kind: 'assertVisible' }>['target'];
-  childOf?: Extract<MaestroCommand, { kind: 'tapOn' }>['childOf'];
 };
 
 function suggestionQuery(command: MaestroEngineEvent['command']): SuggestionQuery | undefined {
   switch (command.kind) {
     case 'tapOn':
-      return command.target.space === 'target'
-        ? { selector: command.target.selector, childOf: command.childOf }
-        : undefined;
+      return command.target.space === 'target' ? { selector: command.target.selector } : undefined;
     case 'doubleTapOn':
     case 'longPressOn':
       return command.target.space === 'target' ? { selector: command.target.selector } : undefined;

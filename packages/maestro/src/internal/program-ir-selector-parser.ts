@@ -14,6 +14,8 @@ import {
   readMapEntries,
   readOptionalBoolean,
   readOptionalString,
+  readOptionalNumeric,
+  readSequenceItems,
   readRequiredString,
   sourceAt,
   type MaestroMapEntry,
@@ -43,6 +45,25 @@ const SELECTOR_FIELD_READERS: Readonly<Record<string, SelectorFieldReader>> = {
     assignBooleanSelector(selector, 'enabled', entry, name, context),
   selected: (selector, entry, name, context) =>
     assignBooleanSelector(selector, 'selected', entry, name, context),
+  index: (selector, entry, name, context) => {
+    selector.index = readOptionalNumeric(entry.value, `${name}.index`, context, {
+      integer: true,
+      nonNegative: true,
+    });
+  },
+  childOf: (selector, entry, name, context) => {
+    selector.childOf = parseMaestroSelector(entry.value, `${name}.childOf`, context);
+  },
+  containsChild: (selector, entry, name, context) => {
+    selector.containsChild = parseMaestroSelector(entry.value, `${name}.containsChild`, context);
+  },
+  containsDescendants: (selector, entry, name, context) => {
+    selector.containsDescendants = readSequenceItems(
+      entry.value,
+      `${name}.containsDescendants`,
+      context,
+    ).map((item) => parseMaestroSelector(item, `${name}.containsDescendants`, context));
+  },
   optional: (selector, entry, name, context) =>
     assignBooleanSelector(selector, 'optional', entry, name, context),
 };

@@ -1,4 +1,8 @@
-import type { MaestroSelector } from './program-ir.ts';
+import type { MaestroLeafSelector, MaestroRelationalSelectorFields } from './program-ir.ts';
+
+export type MaestroFlatSelector = MaestroLeafSelector & {
+  [Key in keyof MaestroRelationalSelectorFields]?: never;
+};
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { matchesMaestroRegex } from './selector-regex.ts';
 import { extractNodeText, normalizeText } from './shared.ts';
@@ -18,7 +22,7 @@ export type MaestroPlatform = 'ios' | 'android';
  */
 export function matchesMaestroTypedSelector(
   node: SnapshotNode,
-  selector: MaestroSelector,
+  selector: MaestroFlatSelector,
 ): boolean {
   const textTerms = [
     selector.id === undefined

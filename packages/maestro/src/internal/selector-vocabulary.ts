@@ -1,6 +1,15 @@
 import type { MaestroSelectorMap } from './program-ir.ts';
 
-export const MAESTRO_BASE_SELECTOR_KEYS = ['id', 'text', 'enabled', 'selected'] as const;
+export const MAESTRO_BASE_SELECTOR_KEYS = [
+  'id',
+  'text',
+  'enabled',
+  'selected',
+  'index',
+  'childOf',
+  'containsChild',
+  'containsDescendants',
+] as const;
 const MAESTRO_TEXT_SELECTOR_KEYS = ['id', 'text'] as const;
 const MAESTRO_STATE_SELECTOR_KEYS = ['enabled', 'selected'] as const;
 

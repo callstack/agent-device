@@ -488,7 +488,10 @@ describe('parseMaestroProgram', () => {
     assert.equal(waitForAnimationToEnd.timeout, '${ANIM_TIMEOUT}');
 
     const tapOn = commandOfKind(program.commands[3], 'tapOn');
-    assert.equal(tapOn.index, '${INDEX}');
+    assert.equal(
+      tapOn.target.space === 'target' ? tapOn.target.selector.index : undefined,
+      '${INDEX}',
+    );
     assert.equal(tapOn.repeat, '${REPEAT}');
     assert.equal(tapOn.delay, 50);
 

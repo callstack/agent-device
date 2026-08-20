@@ -290,16 +290,11 @@ export function readOptionalNumeric(
   node: Node | null | undefined,
   name: string,
   context: MaestroProgramParseContext,
+  constraints: NumericScalarConstraints = MAESTRO_NUMERIC_FIELD_CONSTRAINTS[name] ?? {},
 ): number | string | undefined {
   const value = readScalarValue(node, name, context);
   if (value === null) return undefined;
-  return readNumericScalar(
-    value,
-    name,
-    node,
-    context,
-    MAESTRO_NUMERIC_FIELD_CONSTRAINTS[name] ?? {},
-  );
+  return readNumericScalar(value, name, node, context, constraints);
 }
 
 export function readRequiredNumeric(

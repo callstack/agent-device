@@ -13,13 +13,22 @@ export type MaestroCoordinate =
   | { space: 'absolute'; x: number; y: number }
   | { space: 'percent'; x: number; y: number };
 
-export type MaestroSelectorMap = {
+export type MaestroLeafSelector = {
   text?: string;
   id?: string;
   enabled?: boolean;
   selected?: boolean;
   optional?: boolean;
 };
+
+export type MaestroRelationalSelectorFields = {
+  index?: number | string;
+  childOf?: MaestroSelector;
+  containsChild?: MaestroSelector;
+  containsDescendants?: MaestroSelector[];
+};
+
+export type MaestroSelectorMap = MaestroLeafSelector & MaestroRelationalSelectorFields;
 
 export type MaestroSelector = MaestroSelectorMap;
 
@@ -54,8 +63,6 @@ export type MaestroTapOnCommand = MaestroOptionalCommand & {
   repeat?: number | string;
   delay?: number | string;
   label?: string;
-  index?: number | string;
-  childOf?: MaestroSelector;
 };
 
 export type MaestroDoubleTapOnCommand = MaestroOptionalCommand & {
@@ -122,7 +129,6 @@ export type MaestroAssertVisibleCommand = MaestroOptionalCommand & {
   kind: 'assertVisible';
   source: MaestroSourceLocation;
   target: MaestroSelector;
-  childOf?: MaestroSelector;
   label?: string;
 };
 
@@ -130,7 +136,6 @@ export type MaestroAssertNotVisibleCommand = MaestroOptionalCommand & {
   kind: 'assertNotVisible';
   source: MaestroSourceLocation;
   target: MaestroSelector;
-  childOf?: MaestroSelector;
   label?: string;
 };
 

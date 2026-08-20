@@ -5,6 +5,7 @@ import {
   maestroObservationMatches,
   MAESTRO_RUNTIME_ADAPTER_POLICY,
   resolveMaestroTargetFromSnapshot,
+  hasMaestroRecursiveRelations,
   type MaestroDispatchSelector,
   type MaestroObservation,
   type MaestroObservationCondition,
@@ -148,7 +149,7 @@ export async function observeTypedMaestroCondition(params: {
     throwIfAborted(params.context.signal);
     const snapshot = await captureRetriableMaestroSnapshot(params, conditionDeadline);
     const match = resolveTargetFromSnapshot({
-      query: { selector: params.condition.selector, childOf: params.condition.childOf },
+      query: { selector: params.condition.selector },
       context: params.context,
       snapshot,
       platform: params.platform,
@@ -330,8 +331,7 @@ function allowsAtomicIosDispatch(
     platform === 'ios' &&
     mode === 'tap' &&
     query.allowAtomicSelectorDispatch === true &&
-    query.index === undefined &&
-    query.childOf === undefined
+    !hasMaestroRecursiveRelations(query.selector)
   );
 }
 

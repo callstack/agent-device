@@ -8,6 +8,8 @@ export type CanonicalSelector = {
   enabled?: boolean;
   selected?: boolean;
   childOf?: CanonicalSelector;
+  containsChild?: CanonicalSelector;
+  containsDescendants?: CanonicalSelector[];
 };
 
 export type CanonicalTarget = {
@@ -54,21 +56,17 @@ export function canonicalizeUpstreamSelector(value: unknown): CanonicalSelector 
     enabled: bool(record.enabled),
     selected: bool(record.selected),
     childOf: canonicalizeUpstreamSelector(record.childOf),
+    containsChild: canonicalizeUpstreamSelector(record.containsChild),
+    containsDescendants: arraySelectors(record.containsDescendants),
   });
 }
 
 /** Project an agent-device gesture target while keeping selector identity separate from metadata. */
-export function canonicalizeAgentTarget(
-  target: MaestroGestureTarget,
-  index?: number | string,
-  childOf?: MaestroSelector,
-): CanonicalTarget {
+export function canonicalizeAgentTarget(target: MaestroGestureTarget): CanonicalTarget {
   if (target.space === 'target') {
     return {
       selector: dropUndefined({
         ...canonicalizeAgentSelector(target.selector),
-        index,
-        childOf: childOf ? canonicalizeAgentSelector(childOf) : undefined,
       }),
     };
   }
@@ -80,7 +78,6 @@ export function canonicalizeAgentTarget(
 /** Project an agent-device selector and its optional child relation. */
 export function canonicalizeAgentSelector(
   selector: MaestroSelector | undefined,
-  childOf?: MaestroSelector,
 ): CanonicalSelector | undefined {
   if (!selector) return undefined;
   return dropUndefined({
@@ -88,6 +85,18 @@ export function canonicalizeAgentSelector(
     id: selector.id,
     enabled: selector.enabled,
     selected: selector.selected,
-    childOf: childOf ? canonicalizeAgentSelector(childOf) : undefined,
+    index: selector.index,
+    childOf: canonicalizeAgentSelector(selector.childOf),
+    containsChild: canonicalizeAgentSelector(selector.containsChild),
+    containsDescendants: selector.containsDescendants
+      ?.map(canonicalizeAgentSelector)
+      .filter((item): item is CanonicalSelector => item !== undefined),
   });
+}
+function arraySelectors(value: unknown): CanonicalSelector[] | undefined {
+  return Array.isArray(value)
+    ? value
+        .map((item) => canonicalizeUpstreamSelector(item))
+        .filter((item): item is CanonicalSelector => item !== undefined)
+    : undefined;
 }

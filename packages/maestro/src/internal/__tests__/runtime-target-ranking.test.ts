@@ -1,5 +1,9 @@
 import { expect, test } from 'vitest';
-import { rankMaestroCandidates, selectMaestroSnapshotMatch } from '../runtime-target-ranking.ts';
+import {
+  rankMaestroCandidates,
+  selectMaestroSnapshotMatch,
+  selectMaestroSnapshotMatches,
+} from '../runtime-target-ranking.ts';
 import { makeSnapshot } from './runtime-target-fixtures.ts';
 
 test('typed target matching preserves snapshot read order', () => {
@@ -34,7 +38,7 @@ test('target selection preserves snapshot aggregate order when no index is autho
   });
 });
 
-test('target selection preserves authored index identity before usability filtering', () => {
+test('authored index sorts by y then x with missing bounds last', () => {
   const snapshot = makeSnapshot([
     {
       index: 1,
@@ -58,13 +62,29 @@ test('target selection preserves authored index identity before usability filter
   expect(selectMaestroSnapshotMatch(snapshot.nodes, undefined)).toMatchObject({
     node: { index: 2 },
   });
-  expect(selectMaestroSnapshotMatch(snapshot.nodes, 0)).toBeNull();
-  expect(selectMaestroSnapshotMatch(snapshot.nodes, 1)).toMatchObject({
+  expect(selectMaestroSnapshotMatch(snapshot.nodes, 0)).toMatchObject({
     node: { index: 2 },
   });
-  expect(selectMaestroSnapshotMatch(snapshot.nodes, 2)).toMatchObject({
+  expect(selectMaestroSnapshotMatch(snapshot.nodes, 1)).toMatchObject({
     node: { index: 3 },
   });
+  expect(selectMaestroSnapshotMatch(snapshot.nodes, 2)).toBeNull();
+});
+
+test('nested childOf applies its own index before scoping the candidate', () => {
+  const snapshot = makeSnapshot([
+    { index: 0, identifier: 'row', rect: { x: 0, y: 200, width: 200, height: 80 } },
+    { index: 1, identifier: 'row', rect: { x: 0, y: 20, width: 200, height: 80 } },
+    { index: 2, parentIndex: 0, label: 'Delete', rect: { x: 120, y: 220, width: 60, height: 40 } },
+    { index: 3, parentIndex: 1, label: 'Delete', rect: { x: 120, y: 40, width: 60, height: 40 } },
+  ]);
+
+  expect(
+    selectMaestroSnapshotMatches(snapshot, {
+      text: 'Delete',
+      childOf: { id: 'row', index: 1 },
+    }).map((node) => node.index),
+  ).toEqual([2]);
 });
 
 test('target selection never fabricates a rectangle or promotes to an ancestor', () => {

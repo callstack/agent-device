@@ -4356,7 +4356,177 @@
           }
         }
       ]
+    },
+    {
+      "id": "authored/tree-relations",
+      "file": "authored/tree-relations.yaml",
+      "status": "parsed",
+      "commands": [
+        {
+          "type": "ApplyConfigurationCommand",
+          "fields": {
+            "config": {
+              "appId": "com.example",
+              "name": null,
+              "tags": [],
+              "ext": {},
+              "onFlowStart": null,
+              "onFlowComplete": null,
+              "properties": {}
+            },
+            "label": null,
+            "optional": false
+          }
+        },
+        {
+          "type": "TapOnElementCommand",
+          "fields": {
+            "selector": {
+              "textRegex": null,
+              "idRegex": "save",
+              "size": null,
+              "below": null,
+              "above": null,
+              "leftOf": null,
+              "rightOf": null,
+              "containsChild": {
+                "textRegex": "Save",
+                "idRegex": null,
+                "size": null,
+                "below": null,
+                "above": null,
+                "leftOf": null,
+                "rightOf": null,
+                "containsChild": null,
+                "containsDescendants": null,
+                "traits": null,
+                "index": null,
+                "enabled": null,
+                "optional": false,
+                "selected": null,
+                "checked": null,
+                "focused": null,
+                "childOf": null,
+                "css": null
+              },
+              "containsDescendants": [
+                {
+                  "textRegex": null,
+                  "idRegex": "icon",
+                  "size": null,
+                  "below": null,
+                  "above": null,
+                  "leftOf": null,
+                  "rightOf": null,
+                  "containsChild": null,
+                  "containsDescendants": null,
+                  "traits": null,
+                  "index": null,
+                  "enabled": null,
+                  "optional": false,
+                  "selected": null,
+                  "checked": null,
+                  "focused": null,
+                  "childOf": null,
+                  "css": null
+                }
+              ],
+              "traits": null,
+              "index": "${INDEX}",
+              "enabled": null,
+              "optional": false,
+              "selected": null,
+              "checked": null,
+              "focused": null,
+              "childOf": {
+                "textRegex": null,
+                "idRegex": "card",
+                "size": null,
+                "below": null,
+                "above": null,
+                "leftOf": null,
+                "rightOf": null,
+                "containsChild": null,
+                "containsDescendants": null,
+                "traits": null,
+                "index": null,
+                "enabled": null,
+                "optional": false,
+                "selected": null,
+                "checked": null,
+                "focused": null,
+                "childOf": null,
+                "css": null
+              },
+              "css": null
+            },
+            "retryIfNoChange": false,
+            "waitUntilVisible": false,
+            "longPress": false,
+            "repeat": null,
+            "waitToSettleTimeoutMs": null,
+            "relativePoint": null,
+            "label": null,
+            "optional": false
+          }
+        },
+        {
+          "type": "AssertConditionCommand",
+          "fields": {
+            "condition": {
+              "platform": null,
+              "visible": {
+                "textRegex": null,
+                "idRegex": "card",
+                "size": null,
+                "below": null,
+                "above": null,
+                "leftOf": null,
+                "rightOf": null,
+                "containsChild": null,
+                "containsDescendants": [
+                  {
+                    "textRegex": null,
+                    "idRegex": "save",
+                    "size": null,
+                    "below": null,
+                    "above": null,
+                    "leftOf": null,
+                    "rightOf": null,
+                    "containsChild": null,
+                    "containsDescendants": null,
+                    "traits": null,
+                    "index": null,
+                    "enabled": null,
+                    "optional": false,
+                    "selected": null,
+                    "checked": null,
+                    "focused": null,
+                    "childOf": null,
+                    "css": null
+                  }
+                ],
+                "traits": null,
+                "index": null,
+                "enabled": null,
+                "optional": false,
+                "selected": null,
+                "checked": null,
+                "focused": null,
+                "childOf": null,
+                "css": null
+              },
+              "notVisible": null,
+              "scriptCondition": null,
+              "label": null
+            },
+            "timeout": null,
+            "label": null,
+            "optional": false
+          }
+        }
+      ]
     }
   ],
-  "contentHash": "5dd6cb659c4a5c55e53ae9f6170abfdfd32b1a6bc423839cb4f49f7454109e49"
+  "contentHash": "a9b1d25bd0a218e225f67b8817847f0b88aef4f751c0bec568e960eb96c64641"
 }

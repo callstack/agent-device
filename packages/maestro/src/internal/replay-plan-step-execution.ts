@@ -111,7 +111,7 @@ async function executeResolvedCommand(
   switch (command.kind) {
     case 'assertVisible':
       await requireObservation(
-        { kind: 'visible', selector: command.target, childOf: command.childOf },
+        { kind: 'visible', selector: command.target },
         state.timing.assertVisibleTimeoutMs,
         state,
       );
@@ -119,7 +119,7 @@ async function executeResolvedCommand(
       return undefined;
     case 'assertNotVisible':
       await requireObservation(
-        { kind: 'notVisible', selector: command.target, childOf: command.childOf },
+        { kind: 'notVisible', selector: command.target },
         state.timing.assertNotVisibleTimeoutMs,
         state,
       );

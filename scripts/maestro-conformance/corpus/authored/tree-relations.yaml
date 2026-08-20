@@ -1,0 +1,15 @@
+appId: com.example
+---
+- tapOn:
+    id: save
+    index: ${INDEX}
+    childOf:
+      id: card
+    containsChild:
+      text: Save
+    containsDescendants:
+      - id: icon
+- assertVisible:
+    id: card
+    containsDescendants:
+      - id: save

@@ -66,5 +66,433 @@
       "value": 400
     }
   ],
-  "contentHash": "d53c6914979adc45f4ae8146411f078ab2db859a33261fec2546449e3a78b702"
+  "treeVectors": [
+    {
+      "id": "containsChild-direct-only",
+      "operation": "intersect(id=card, containsChild(id=direct))",
+      "selector": {
+        "id": "card",
+        "containsChild": {
+          "id": "direct"
+        }
+      },
+      "nodes": [
+        {
+          "key": "card",
+          "identifier": "card",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "direct",
+          "parentKey": "card",
+          "identifier": "direct",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "nested-parent",
+          "parentKey": "card",
+          "identifier": "nested-parent",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "nested",
+          "parentKey": "nested-parent",
+          "identifier": "nested",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "outside",
+          "identifier": "outside",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "direct-outside",
+          "parentKey": "outside",
+          "identifier": "direct-outside",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        }
+      ],
+      "matches": ["card"],
+      "selected": "card"
+    },
+    {
+      "id": "containsDescendants-any-depth",
+      "operation": "intersect(id=card, containsDescendants(id=nested))",
+      "selector": {
+        "id": "card",
+        "containsDescendants": [
+          {
+            "id": "nested"
+          }
+        ]
+      },
+      "nodes": [
+        {
+          "key": "card",
+          "identifier": "card",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "direct",
+          "parentKey": "card",
+          "identifier": "direct",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "nested-parent",
+          "parentKey": "card",
+          "identifier": "nested-parent",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "nested",
+          "parentKey": "nested-parent",
+          "identifier": "nested",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        }
+      ],
+      "matches": ["card"],
+      "selected": "card"
+    },
+    {
+      "id": "containsDescendants-all-clauses",
+      "operation": "intersect(id=card, containsDescendants(id=title, text=Badge))",
+      "selector": {
+        "id": "card",
+        "containsDescendants": [
+          {
+            "id": "title"
+          },
+          {
+            "text": "Badge"
+          }
+        ]
+      },
+      "nodes": [
+        {
+          "key": "complete-card",
+          "identifier": "card",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "title",
+          "parentKey": "complete-card",
+          "identifier": "title",
+          "label": "Title",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "badge",
+          "parentKey": "complete-card",
+          "identifier": "badge",
+          "label": "Badge",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "badge-icon",
+          "parentKey": "badge",
+          "identifier": "badge-icon",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "partial-card",
+          "identifier": "card",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "title-2",
+          "parentKey": "partial-card",
+          "identifier": "title",
+          "label": "Title",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        }
+      ],
+      "matches": ["complete-card"],
+      "selected": "complete-card"
+    },
+    {
+      "id": "nested-tree-relations",
+      "operation": "intersect(id=card, containsChild(intersect(id=panel, containsChild(id=title), containsDescendants(id=icon))))",
+      "selector": {
+        "id": "card",
+        "containsChild": {
+          "id": "panel",
+          "containsChild": {
+            "id": "title"
+          },
+          "containsDescendants": [
+            {
+              "id": "icon"
+            }
+          ]
+        }
+      },
+      "nodes": [
+        {
+          "key": "card",
+          "identifier": "card",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "panel",
+          "parentKey": "card",
+          "identifier": "panel",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "title",
+          "parentKey": "panel",
+          "identifier": "title",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "panel-icon-wrapper",
+          "parentKey": "panel",
+          "identifier": "panel-icon-wrapper",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "icon",
+          "parentKey": "panel-icon-wrapper",
+          "identifier": "icon",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "unrelated",
+          "parentKey": "card",
+          "identifier": "unrelated",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "card-missing-nested",
+          "identifier": "card",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "panel-missing",
+          "parentKey": "card-missing-nested",
+          "identifier": "panel",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "title",
+          "parentKey": "panel-missing",
+          "identifier": "title",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 30
+          }
+        }
+      ],
+      "matches": ["card"],
+      "selected": "card"
+    },
+    {
+      "id": "tree-composition-index-yx",
+      "operation": "compose(intersect(id=card, containsChild(id=title), containsDescendants(id=icon)), index=0)",
+      "selector": {
+        "id": "card",
+        "index": 0,
+        "containsChild": {
+          "id": "title"
+        },
+        "containsDescendants": [
+          {
+            "id": "icon"
+          }
+        ]
+      },
+      "nodes": [
+        {
+          "key": "card-low-x",
+          "identifier": "card",
+          "rect": {
+            "x": 0,
+            "y": 220,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "title-low-x",
+          "parentKey": "card-low-x",
+          "identifier": "title",
+          "rect": {
+            "x": 8,
+            "y": 228,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "icon-low-x",
+          "parentKey": "card-low-x",
+          "identifier": "icon",
+          "rect": {
+            "x": 8,
+            "y": 260,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "card-high-x",
+          "identifier": "card",
+          "rect": {
+            "x": 160,
+            "y": 80,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "title-high-x",
+          "parentKey": "card-high-x",
+          "identifier": "title",
+          "rect": {
+            "x": 168,
+            "y": 88,
+            "width": 40,
+            "height": 30
+          }
+        },
+        {
+          "key": "icon-high-x",
+          "parentKey": "card-high-x",
+          "identifier": "icon",
+          "rect": {
+            "x": 168,
+            "y": 120,
+            "width": 40,
+            "height": 30
+          }
+        }
+      ],
+      "matches": ["card-low-x", "card-high-x"],
+      "selected": "card-high-x"
+    }
+  ],
+  "contentHash": "ff8993696db8dee9ff9769e44c2b7be3f701951dd2aaa535303d6f11c7d9afa6"
 }

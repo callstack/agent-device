@@ -48,6 +48,8 @@ const NOTES = {
     'Coverage: eraseText charactersToErase accepts a ${VAR} token (upstream rejects as integer-typed; agent-device is lenient).',
   'authored/numeric-variable-tap-index':
     'Coverage: tapOn index accepts a ${VAR} token and projects identically through the canonical model.',
+  'authored/tree-relations':
+    'Coverage: recursive selector index, childOf, containsChild, and containsDescendants across tapOn and assertVisible.',
   'authored/numeric-variable-wait':
     'Coverage: waitForAnimationToEnd timeout accepts a ${VAR} token and projects identically through the canonical model.',
   'invalid/bad-swipe-direction': 'Lenient-guard: unknown SwipeDirection enum value.',

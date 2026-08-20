@@ -235,8 +235,6 @@ async function resolveTapOnTarget(
   const query = {
     purpose: 'tap' as const,
     timeoutMs: targetLookupTimeout(command),
-    index: resolveNumeric(command.index, 'tapOn.index'),
-    childOf: command.childOf,
     allowAtomicSelectorDispatch: command.repeat === undefined && command.delay === undefined,
     ...(command.retryTapIfNoChange === true ? { includeSurfaceSignature: true } : {}),
   };
@@ -481,7 +479,7 @@ function optionalData(
 
 async function resolveInputTarget(
   authored: MaestroGestureTarget,
-  query: Pick<MaestroTargetQuery, 'purpose' | 'timeoutMs' | 'index' | 'childOf'>,
+  query: Pick<MaestroTargetQuery, 'purpose' | 'timeoutMs'>,
   request: MaestroRuntimeRequest,
   operations: MaestroRuntimeOperations,
 ): Promise<MaestroInputTarget> {

@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import { matchesMaestroTypedSelector } from '../runtime-target-policy.ts';
+import type { MaestroSelector } from '../program-ir.ts';
 import { makeSnapshot } from './runtime-target-fixtures.ts';
 
 test('typed Maestro text selectors match visible text and state without expression strings', () => {
@@ -69,4 +70,15 @@ test('treats selector values as full Maestro regex without punctuation inference
   expect(matchesMaestroTypedSelector(node, { text: 'item \\d{2} \\[ready' })).toBe(true);
   expect(matchesMaestroTypedSelector(node, { text: 'Item 2' })).toBe(false);
   expect(matchesMaestroTypedSelector(node, { text: 'Item 22 [ready' })).toBe(true);
+});
+
+test('the node-only matcher rejects full selectors at the type boundary', () => {
+  const node = makeSnapshot([{ index: 1, label: 'Save' }]).nodes[0]!;
+  const recursiveSelector: MaestroSelector = { text: 'Save', childOf: { id: 'card' } };
+
+  void (() => {
+    // @ts-expect-error Recursive selectors require snapshot-aware resolution.
+    matchesMaestroTypedSelector(node, recursiveSelector);
+  });
+  expect(node.label).toBe('Save');
 });

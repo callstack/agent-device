@@ -50,8 +50,6 @@ export function parseMaestroTapOnCommand(
       'delay',
       'optional',
       'label',
-      'index',
-      'childOf',
     ],
     parsePoint: parseMaestroPoint,
   });
@@ -66,20 +64,12 @@ export function parseMaestroTapOnCommand(
       ...tapOptions(parsed.entries, context),
     };
   }
-  const childOf = hasEntry(parsed.entries, 'childOf')
-    ? parseMaestroSelector(entryValue(parsed.entries, 'childOf'), 'tapOn.childOf', context)
-    : undefined;
   const options = tapOptions(parsed.entries, context);
-  const index = hasEntry(parsed.entries, 'index')
-    ? readOptionalNumeric(entryValue(parsed.entries, 'index'), 'tapOn.index', context)
-    : undefined;
   return stripUndefined({
     kind: 'tapOn' as const,
     source: parsed.source,
     target: parsed.target,
     ...options,
-    index,
-    childOf,
   });
 }
 

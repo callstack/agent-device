@@ -1,4 +1,5 @@
 import type { Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import { AppError } from '@agent-device/kernel/errors';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import { buildSnapshotNodeMap, normalizeType } from '@agent-device/contracts/snapshot';
 import { isDescendantOfSnapshotNode } from './snapshot-policy.ts';
@@ -23,9 +24,8 @@ export function rankMaestroCandidates(
   snapshot: SnapshotState,
   selector: MaestroSelector,
   platform: MaestroPlatform,
-  childOf?: MaestroSelector,
 ): MaestroRankedCandidates {
-  const scoped = matchMaestroCandidates(snapshot, selector, childOf);
+  const scoped = matchMaestroCandidates(snapshot, selector);
   const visible = filterVisibleMaestroMatches({
     nodes: snapshot.nodes,
     matches: scoped.matches,
@@ -41,12 +41,104 @@ export function rankMaestroCandidates(
 export function matchMaestroCandidates(
   snapshot: SnapshotState,
   selector: MaestroSelector,
-  childOf?: MaestroSelector,
 ): MaestroCandidateMatches {
-  const matches = snapshot.nodes.filter((node) => matchesMaestroTypedSelector(node, selector));
-  return scopeMatchesByAncestor(snapshot, matches, childOf);
+  const matches = selectMaestroSnapshotMatchesWithoutOwnIndex(snapshot, selector);
+  const parentMatched =
+    selector.childOf === undefined ||
+    selectMaestroSnapshotMatches(snapshot, selector.childOf).length > 0;
+  return { matches, parentMatched };
 }
 
+export function matchesMaestroSnapshotSelector(
+  snapshot: SnapshotState,
+  node: SnapshotNode,
+  selector: MaestroSelector,
+): boolean {
+  return selectMaestroSnapshotMatches(snapshot, selector).includes(node);
+}
+
+export function selectMaestroSnapshotMatches(
+  snapshot: SnapshotState,
+  selector: MaestroSelector,
+): SnapshotNode[] {
+  const matches = selectMaestroSnapshotMatchesWithoutOwnIndex(snapshot, selector);
+  if (selector.index === undefined) return matches;
+  const selected = sortMaestroMatchesForIndex(matches)[resolveMaestroSelectorIndex(selector.index)];
+  return selected ? [selected] : [];
+}
+
+function selectMaestroSnapshotMatchesWithoutOwnIndex(
+  snapshot: SnapshotState,
+  selector: MaestroSelector,
+): SnapshotNode[] {
+  return snapshot.nodes.filter((node) =>
+    matchesMaestroSnapshotSelectorWithoutOwnIndex(snapshot, node, selector),
+  );
+}
+
+function matchesMaestroSnapshotSelectorWithoutOwnIndex(
+  snapshot: SnapshotState,
+  node: SnapshotNode,
+  selector: MaestroSelector,
+): boolean {
+  const { index: _index, childOf, containsChild, containsDescendants, ...flat } = selector;
+  if (!matchesMaestroTypedSelector(node, flat)) return false;
+  return matchesMaestroAncestorRelations(
+    snapshot,
+    node,
+    childOf,
+    containsChild,
+    containsDescendants,
+  );
+}
+
+function matchesMaestroAncestorRelations(
+  snapshot: SnapshotState,
+  node: SnapshotNode,
+  childOf: MaestroSelector | undefined,
+  containsChild: MaestroSelector | undefined,
+  containsDescendants: MaestroSelector[] | undefined,
+): boolean {
+  const byIndex = buildSnapshotNodeMap(snapshot.nodes);
+  if (childOf) {
+    const scopedParents = selectMaestroSnapshotMatches(snapshot, childOf);
+    if (
+      !scopedParents.some((candidate) =>
+        isDescendantOfSnapshotNode(snapshot.nodes, node, candidate, byIndex),
+      )
+    )
+      return false;
+  }
+  if (!matchesMaestroContainsChild(snapshot, node, containsChild)) return false;
+  return matchesMaestroContainsDescendants(snapshot, node, containsDescendants, byIndex);
+}
+
+function matchesMaestroContainsChild(
+  snapshot: SnapshotState,
+  node: SnapshotNode,
+  selector: MaestroSelector | undefined,
+): boolean {
+  if (!selector) return true;
+  const matches = selectMaestroSnapshotMatches(snapshot, selector);
+  return snapshot.nodes.some(
+    (candidate) => candidate.parentIndex === node.index && matches.includes(candidate),
+  );
+}
+
+function matchesMaestroContainsDescendants(
+  snapshot: SnapshotState,
+  node: SnapshotNode,
+  selectors: MaestroSelector[] | undefined,
+  byIndex: ReadonlyMap<number, SnapshotNode>,
+): boolean {
+  if (!selectors) return true;
+  return selectors.every((selector) => {
+    const matches = selectMaestroSnapshotMatches(snapshot, selector);
+    return matches.some((candidate) =>
+      isDescendantOfSnapshotNode(snapshot.nodes, candidate, node, byIndex),
+    );
+  });
+}
 export function rankVisibleMaestroMatches(
   nodes: SnapshotNode[],
   matches: SnapshotNode[],
@@ -77,15 +169,46 @@ export function rankVisibleMaestroMatches(
 
 export function selectMaestroSnapshotMatch(
   matches: SnapshotNode[],
-  index: number | undefined,
+  index: number | string | undefined,
 ): { node: SnapshotNode; rect: Rect } | null {
-  const selected = index === undefined ? matches.find(hasUsableRect) : matches[index];
+  const selected =
+    index === undefined ? matches.find(hasUsableRect) : selectMaestroSnapshotNode(matches, index);
   if (!selected || !hasUsableRect(selected)) return null;
   return { node: selected, rect: selected.rect };
 }
 
+export function selectMaestroSnapshotNode(
+  matches: SnapshotNode[],
+  index: number | string | undefined,
+): SnapshotNode | undefined {
+  return index === undefined
+    ? matches[0]
+    : sortMaestroMatchesForIndex(matches)[resolveMaestroSelectorIndex(index)];
+}
+
 export function usableRect(node: SnapshotNode): Rect | undefined {
   return hasUsableRect(node) ? node.rect : undefined;
+}
+
+function sortMaestroMatchesForIndex(matches: SnapshotNode[]): SnapshotNode[] {
+  return [...matches].sort((left, right) => {
+    const leftY = finiteCoordinate(left.rect?.y);
+    const rightY = finiteCoordinate(right.rect?.y);
+    if (leftY !== rightY) return leftY - rightY;
+    return finiteCoordinate(left.rect?.x) - finiteCoordinate(right.rect?.x);
+  });
+}
+
+function finiteCoordinate(value: number | undefined): number {
+  return value !== undefined && Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER;
+}
+
+function resolveMaestroSelectorIndex(value: number | string): number {
+  const index = typeof value === 'number' ? value : Number(value.trim());
+  if (!Number.isSafeInteger(index) || index < 0) {
+    throw new AppError('INVALID_ARGS', 'Maestro selector.index must be a non-negative integer.');
+  }
+  return index;
 }
 
 function hasUsableRect(node: SnapshotNode): node is SnapshotNode & { rect: Rect } {
@@ -135,23 +258,4 @@ function isInteractiveControl(node: SnapshotNode): boolean {
     type === 'securetextfield' ||
     type === 'textview'
   );
-}
-
-function scopeMatchesByAncestor(
-  snapshot: SnapshotState,
-  matches: SnapshotNode[],
-  childOf: MaestroSelector | undefined,
-): { matches: SnapshotNode[]; parentMatched: boolean } {
-  if (!childOf) return { matches, parentMatched: true };
-  const parents = snapshot.nodes.filter((node) => matchesMaestroTypedSelector(node, childOf));
-  if (parents.length === 0) return { matches: [], parentMatched: false };
-  const nodeByIndex = buildSnapshotNodeMap(snapshot.nodes);
-  return {
-    matches: matches.filter((node) =>
-      parents.some((parent) =>
-        isDescendantOfSnapshotNode(snapshot.nodes, node, parent, nodeByIndex),
-      ),
-    ),
-    parentMatched: true,
-  };
 }

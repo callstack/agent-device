@@ -127,7 +127,6 @@ function maestroFlowForCommand(command: MaestroRuntimeCommand): string {
         ? {
             tapOn: {
               ...command.target.selector,
-              ...(command.childOf ? { childOf: command.childOf } : {}),
             },
           }
         : undefined;
@@ -373,8 +372,7 @@ test('typed Maestro suggestions rank visible childOf candidates and exclude out-
   const command = {
     kind: 'tapOn' as const,
     source: { path: '/flows/actions.yaml', line: 4 },
-    target: { space: 'target' as const, selector: { text: 'save.*' } },
-    childOf: { id: 'actions' },
+    target: { space: 'target' as const, selector: { text: 'save.*', childOf: { id: 'actions' } } },
   } satisfies Extract<MaestroRuntimeCommand, { kind: 'tapOn' }>;
   const response = await buildFailureResponse(command, [
     {

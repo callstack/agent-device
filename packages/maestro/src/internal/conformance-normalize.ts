@@ -313,7 +313,7 @@ function canonicalizeAgentCommand(
           ? (numLike(command.delay) ?? AGENT_REPEAT_DELAY_MS)
           : numLike(command.delay),
         label: command.label,
-        target: canonicalizeAgentTarget(command.target, numLike(command.index), command.childOf),
+        target: canonicalizeAgentTarget(command.target),
       });
     }
     case 'doubleTapOn':
@@ -338,7 +338,7 @@ function canonicalizeAgentCommand(
         mode: 'visible',
         timed: false,
         label: command.label,
-        selector: canonicalizeAgentSelector(command.target, command.childOf),
+        selector: canonicalizeAgentSelector(command.target),
       });
     case 'assertNotVisible':
       return dropUndefined({
@@ -346,7 +346,7 @@ function canonicalizeAgentCommand(
         mode: 'notVisible',
         timed: false,
         label: command.label,
-        selector: canonicalizeAgentSelector(command.target, command.childOf),
+        selector: canonicalizeAgentSelector(command.target),
       });
     case 'extendedWaitUntil':
       return dropUndefined({

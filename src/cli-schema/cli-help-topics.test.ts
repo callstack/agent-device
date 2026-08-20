@@ -104,7 +104,7 @@ test('usageForCommand resolves Maestro compatibility help topic', async () => {
   assert.match(help, /runFlow file\/inline/);
   assert.match(help, /tapOn, doubleTapOn, longPressOn/);
   assert.match(help, /inputText on the focused element/);
-  assert.match(help, /tap targets poll until available/);
+  assert.match(help, /selector targets poll until available/);
   assert.match(help, /Boundaries:/);
   assert.match(help, /iOS and Android only/);
   assert.match(help, /AD_VAR_\* overrides it/);

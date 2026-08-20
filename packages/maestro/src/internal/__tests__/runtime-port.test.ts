@@ -454,7 +454,7 @@ describe('MaestroRuntimePort', () => {
     expect(calls[0]).toMatchObject({ kind: 'doubleTapOn', input: { delay: 100 } });
   });
 
-  test('resolves tapOn.index into the target query', async () => {
+  test('resolves tapOn.index inside the recursive target selector', async () => {
     const resolveTarget = vi.fn(
       async (_input: unknown, context: { generation: number }): Promise<MaestroTargetMatch> => ({
         generation: context.generation,
@@ -475,7 +475,7 @@ describe('MaestroRuntimePort', () => {
     });
 
     expect(resolveTarget).toHaveBeenCalledWith(
-      expect.objectContaining({ index: 2 }),
+      expect.objectContaining({ selector: { id: 'button', index: '2' } }),
       expect.anything(),
     );
     expect(tapOn).toHaveBeenCalled();

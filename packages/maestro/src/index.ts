@@ -43,6 +43,7 @@ export {
   MAESTRO_RUNTIME_ADAPTER_POLICY,
   resolveMaestroScrollableGesture,
   resolveMaestroTargetFromSnapshot,
+  hasMaestroRecursiveRelations,
   type MaestroDispatchSelector,
   type MaestroObservation,
   type MaestroObservationCondition,

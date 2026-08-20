@@ -21,6 +21,7 @@ import {
 } from './program-ir-selector-parser.ts';
 import { readMaestroCommandLabel } from './program-ir-command-options.ts';
 import { stripUndefined } from './shared.ts';
+import { MAESTRO_BASE_SELECTOR_KEYS } from './selector-vocabulary.ts';
 
 export function parseMaestroAssertion(
   kind: 'assertVisible' | 'assertNotVisible',
@@ -33,34 +34,23 @@ export function parseMaestroAssertion(
     return { kind, source, target: parseMaestroSelector(value, kind, context) };
   }
   const entries = readMapEntries(value, kind, context);
-  assertOnlyKeys(
-    entries,
-    kind,
-    ['id', 'text', 'enabled', 'selected', 'optional', 'childOf', 'label'],
-    context,
-  );
+  assertOnlyKeys(entries, kind, [...MAESTRO_BASE_SELECTOR_KEYS, 'optional', 'label'], context);
   const options = readOptionalCommandOption(entries, kind, context);
-  const childOf = hasEntry(entries, 'childOf')
-    ? parseMaestroSelector(entryValue(entries, 'childOf'), `${kind}.childOf`, context)
-    : undefined;
   const label = readMaestroCommandLabel(entries, kind, context);
   return stripUndefined({
     kind,
     source,
     target: parseMaestroSelectorMapEntries(
-      entries.filter(
-        (entry) => entry.key !== 'optional' && entry.key !== 'childOf' && entry.key !== 'label',
-      ),
+      entries.filter((entry) => entry.key !== 'optional' && entry.key !== 'label'),
       kind,
       context,
     ),
     ...options,
-    childOf,
     label,
   });
 }
 
-const OPTIONAL_SELECTOR_KEYS = ['id', 'text', 'enabled', 'selected', 'optional'] as const;
+const OPTIONAL_SELECTOR_KEYS = [...MAESTRO_BASE_SELECTOR_KEYS, 'optional'] as const;
 
 type ParsedOptionalSelector = {
   selector: MaestroSelector;

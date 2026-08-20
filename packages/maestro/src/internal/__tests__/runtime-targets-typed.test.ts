@@ -36,6 +36,37 @@ test('typed target resolution returns target geometry and structured evidence', 
   });
 });
 
+test('recursive tree selectors enforce direct children and descendants', () => {
+  const snapshot = makeSnapshot([
+    { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 320, height: 640 } },
+    { index: 1, identifier: 'card', parentIndex: 0, rect: { x: 0, y: 0, width: 300, height: 200 } },
+    { index: 2, identifier: 'direct', parentIndex: 1, rect: { x: 4, y: 4, width: 80, height: 40 } },
+    { index: 3, identifier: 'nested', parentIndex: 2, rect: { x: 8, y: 8, width: 80, height: 40 } },
+  ]);
+  expect(
+    resolveMaestroTargetFromSnapshot(
+      snapshot,
+      {
+        selector: {
+          id: 'card',
+          containsChild: { id: 'direct' },
+          containsDescendants: [{ id: 'nested' }],
+        },
+      },
+      'android',
+    ),
+  ).toMatchObject({ ok: true, node: { index: 1 } });
+  expect(
+    resolveMaestroTargetFromSnapshot(
+      snapshot,
+      {
+        selector: { id: 'card', containsChild: { id: 'nested' } },
+      },
+      'android',
+    ),
+  ).toMatchObject({ ok: false });
+});
+
 test('typed target resolution applies typed childOf and reports structured misses', () => {
   const snapshot = makeSnapshot([
     { index: 1, identifier: 'row', rect: { x: 0, y: 0, width: 320, height: 80 } },
@@ -50,12 +81,12 @@ test('typed target resolution applies typed childOf and reports structured misse
 
   const result = resolveMaestroTargetFromSnapshot(
     snapshot,
-    { selector: { text: 'Delete' }, childOf: { id: 'row' } },
+    { selector: { text: 'Delete', childOf: { id: 'row' } } },
     'android',
   );
   const missingParent = resolveMaestroTargetFromSnapshot(
     snapshot,
-    { selector: { text: 'Delete' }, childOf: { id: 'missing' } },
+    { selector: { text: 'Delete', childOf: { id: 'missing' } } },
     'android',
   );
 
@@ -83,7 +114,7 @@ test('typed childOf reports a scoped miss when only an outside child matches', (
   expect(
     resolveMaestroTargetFromSnapshot(
       snapshot,
-      { selector: { text: 'Delete' }, childOf: { id: 'row' } },
+      { selector: { text: 'Delete', childOf: { id: 'row' } } },
       'android',
     ),
   ).toMatchObject({
@@ -209,7 +240,7 @@ test('iOS target resolution preserves distinct nested controls matched by one ex
   ]);
 
   expect(
-    resolveMaestroTargetFromSnapshot(snapshot, { selector: { text: 'Save.*' }, index: 1 }, 'ios'),
+    resolveMaestroTargetFromSnapshot(snapshot, { selector: { text: 'Save.*', index: 1 } }, 'ios'),
   ).toMatchObject({ ok: true, node: { index: 1 }, matches: 2 });
 });
 
