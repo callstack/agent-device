@@ -143,6 +143,7 @@
     "check:bundle-owner-files": "node --experimental-strip-types scripts/check-bundle-owner-files.ts",
     "check:package": "node --experimental-strip-types scripts/check-package.ts",
     "check:command-docs": "vitest run --project unit-core src/__tests__/command-doc-coverage.test.ts",
+    "check:agent-guidance": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/__tests__/agent-guidance-contract.test.ts",
     "check:replay-compat": "node --experimental-strip-types scripts/check-replay-compat-provenance.ts",
     "check:daemon-wire-compat": "node --experimental-strip-types scripts/wire-compat/run.ts",
     "check:daemon-wire-compat:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/wire-compat/model.test.ts",

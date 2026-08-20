@@ -67,6 +67,7 @@ export type CheckId =
   | 'fixture-cache'
   | 'fixture-fallback'
   | 'command-docs'
+  | 'agent-guidance'
   | 'xctest-selection'
   // Gates that drive their own runner — declared nowhere, registered here.
   | 'maestro-conformance'
@@ -126,6 +127,7 @@ export const ALL_CHECKS: readonly CheckId[] = [
   'fixture-cache',
   'fixture-fallback',
   'command-docs',
+  'agent-guidance',
   'xctest-selection',
   'maestro-conformance',
   'maestro-differential',
@@ -184,18 +186,8 @@ const ROOT_TOOLING = new Set([
   '.npmrc',
 ]);
 
-// Prose that specifies this selector's own behavior — the Testing Matrix these
-// ownership rules mirror. It is docs by path, but editing it can invalidate the
-// derivation below, and the selector cannot tell whether it did. Keep this in
-// sync when the matrix moves; the docs short-circuit would otherwise treat it as
-// inert Markdown.
-const SELECTOR_OWNING_DOCS = new Set(['docs/agents/testing.md']);
-
 function isSelectorOwning(file: string): boolean {
-  return (
-    SELECTOR_OWNING_DOCS.has(file) ||
-    (file.startsWith('scripts/check-affected/') && !file.endsWith('.md'))
-  );
+  return file.startsWith('scripts/check-affected/') && !file.endsWith('.md');
 }
 
 function isWorkflowTooling(file: string): boolean {
@@ -523,24 +515,36 @@ const buildOwnership: OwnershipRule = ({ file }, input) => {
   return selections;
 };
 
-// Docs with an owning gate (#1420). Most Markdown has no suite, but the command
-// reference is asserted against the CLI in both directions, and ci.yml ignores
-// `website/**` — so a docs-only PR must still be routed to the lane that runs it.
-// Registering `command-docs` as an ordinary check is what lets the gate manifest
-// prove that with no docs-specific machinery.
+// Docs with an owning gate (#1420). Most Markdown has no suite, but these files
+// carry executable contracts and must reach their focused workflow even when the
+// main CI workflow ignores documentation.
 const COMMAND_DOCS = 'website/docs/docs/commands.md';
+const AGENT_GUIDANCE = new Set(['AGENTS.md', 'CONTEXT.md']);
+
+function isAgentGuidance(file: string): boolean {
+  return AGENT_GUIDANCE.has(file) || file.startsWith('docs/agents/');
+}
 
 const docsOwnership: OwnershipRule = ({ file }) =>
-  file === COMMAND_DOCS
+  isAgentGuidance(file)
     ? [
         reason(
-          'command-docs',
+          'agent-guidance',
           file,
-          'own:command-docs',
-          'the command reference is asserted against the CLI in both directions',
+          'own:agent-guidance',
+          'agent guidance is held to glossary, routing, and context-budget contracts',
         ),
       ]
-    : [];
+    : file === COMMAND_DOCS
+      ? [
+          reason(
+            'command-docs',
+            file,
+            'own:command-docs',
+            'the command reference is asserted against the CLI in both directions',
+          ),
+        ]
+      : [];
 
 // Live device lanes, by platform family (device-lanes.ts). Selected here alongside the
 // static gates so a TypeScript-only Apple change carries its iOS/macOS lanes in the plan.

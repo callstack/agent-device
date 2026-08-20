@@ -1,0 +1,48 @@
+name: Agent Guidance
+
+on:
+  pull_request:
+    paths:
+      - 'AGENTS.md'
+      - 'CONTEXT.md'
+      - 'docs/agents/**'
+      - 'scripts/__tests__/agent-guidance-contract.test.ts'
+      - 'scripts/check-affected/**'
+      - 'package.json'
+      - '.github/actions/run-gate/action.yml'
+      - '.github/actions/setup-node-pnpm/action.yml'
+      - '.github/workflows/agent-guidance.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'AGENTS.md'
+      - 'CONTEXT.md'
+      - 'docs/agents/**'
+      - 'scripts/__tests__/agent-guidance-contract.test.ts'
+      - 'scripts/check-affected/**'
+      - 'package.json'
+      - '.github/actions/run-gate/action.yml'
+      - '.github/actions/setup-node-pnpm/action.yml'
+      - '.github/workflows/agent-guidance.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: Ownership and context budgets
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup-node-pnpm
+        with:
+          install-deps: 'false'
+
+      - name: Check agent guidance
+        uses: ./.github/actions/run-gate
+        with: { gate: agent-guidance }

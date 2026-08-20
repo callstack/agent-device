@@ -289,7 +289,7 @@ export function shouldRetryRunnerConnectError(error: unknown): boolean {
 /**
  * Session-fatal classification for a runner response error: when defined, the
  * cached runner session must be invalidated with this reason instead of being
- * reused (see ADR 0005 and the Selector Capture Reliability Contract's
+ * reused (see ADR 0005 and docs/agents/selector-capture.md's
  * runnerFatal rule).
  */
 export function resolveRunnerFatalErrorReason(error: unknown): string | undefined {

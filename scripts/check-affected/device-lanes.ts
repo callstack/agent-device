@@ -35,8 +35,8 @@ export type PlatformFamily = (typeof CANONICAL_PLATFORM_FAMILIES)[number];
 export type Leaf = PlatformFamily | 'ios' | 'macos' | 'fixture-app';
 
 // The one place a family (or Apple leaf) is mapped to the lanes that exercise it. Families
-// with no CI lane (harmonyos, vega — see the HarmonyOS hardware policy in
-// docs/agents/testing.md) own nothing here and fall through to the static gates only.
+// with no CI lane (HarmonyOS and Vega; see the hardware policy in
+// docs/agents/testing.md) own nothing here and fall through to static gates only.
 const LEAF_LANES: Readonly<Record<Leaf, readonly CheckId[]>> = {
   ios: ['replay-ios', 'replay-ios-device'],
   macos: ['replay-macos'],

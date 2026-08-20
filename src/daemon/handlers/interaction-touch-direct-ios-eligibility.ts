@@ -13,7 +13,7 @@ import type { SessionState } from '../types.ts';
 
 /**
  * Whether a click may take the direct iOS selector fast path. The gate is
- * deliberately narrow (CONTEXT.md, Selector Capture Reliability Contract):
+ * deliberately narrow (docs/agents/selector-capture.md):
  * every exclusion here keeps a capture-backed guarantee on the regular path.
  */
 

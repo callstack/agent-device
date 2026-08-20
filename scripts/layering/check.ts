@@ -1,5 +1,5 @@
 // Import-direction lint — enforces the folder DAG established by the Phase-5
-// folder moves (see CONTEXT.md, "Architecture: folder DAG + layering lint").
+// folder moves. The policies and their tests below are the source of truth.
 //
 // Ranked target spine, as rank groups lowest to highest. `A ◄ B` means B may not
 // be outranked by A (the back-edge order the gate rejects), NOT that every displayed import exists:

@@ -95,4 +95,4 @@ modules must move those contracts before their client methods can stop returning
 `CommandRequestResult`.
 
 This ADR owns the decision and its constraints; the roadmap that prototyped it has been retired, with
-the delivered end-state recorded in [CONTEXT.md](../../CONTEXT.md) (Architecture).
+the delivered end-state enforced by the descriptor projections and parity gates below.

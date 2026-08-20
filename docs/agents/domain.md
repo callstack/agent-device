@@ -1,8 +1,8 @@
 # Domain Docs
 
 Single-context repo. Before architecture, diagnosis, TDD, triage, PRD, or roadmap work, read
-`CONTEXT.md` for domain vocabulary and the capture-reliability contract, plus the relevant ADRs in
-`docs/adr/`.
+`CONTEXT.md` for domain vocabulary and the relevant ADRs in `docs/adr/`. Selector-capture work also
+reads `docs/agents/selector-capture.md`.
 
 Use `CONTEXT.md` vocabulary in issue titles, refactor proposals, test names, and architecture notes.
 If a proposed change contradicts an ADR, say so explicitly and explain why the decision should be

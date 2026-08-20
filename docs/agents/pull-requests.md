@@ -71,6 +71,9 @@ asked or when the work is intentionally incomplete.
   A base/sequence problem outranks detail review.
 - Trace the real production route from command surface through daemon/request routing to the platform
   backend. Tests that mock away the router, or exercise only a helper, do not prove the shipped path.
+- Before adding an error classifier, trace every producer through normalization, wrapping,
+  serialization, and transport; inventory sibling consumers and the existing reason-code vocabulary;
+  then repair the deepest shared boundary that loses the signal. Message text is not a reason code.
 - For each key regression test, identify what deletion or revert would make it fail. If reverting the
   implementation still passes, the test is vacuous.
 - For recurring failures, prefer a design that makes the class impossible at the owning interface;

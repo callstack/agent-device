@@ -143,6 +143,14 @@ test('docs-only change selects no checks and records the docs paths', () => {
   assert.equal(result.docsOnlyPaths.length, 3);
 });
 
+test('agent guidance owns its focused contract instead of disappearing as docs-only', () => {
+  for (const file of ['AGENTS.md', 'CONTEXT.md', 'docs/agents/testing.md']) {
+    const result = plan([file]);
+    assert.deepEqual(result.checks, ['agent-guidance']);
+    assert.deepEqual(result.docsOnlyPaths, []);
+  }
+});
+
 test('test app source selects root lint and format plus its isolated typecheck', () => {
   const result = plan(['examples/test-app/app/index.tsx']);
   assert.equal(result.failOpen, false);
@@ -221,7 +229,7 @@ test('a workspace package manifest fails open — it rewires resolution globally
   assert.equal(result.failOpenReasons[0]?.rule, 'workflow-tooling');
 });
 
-test('workflow/tooling and selector-owning changes fail open', () => {
+test('workflow/tooling and selector implementation changes fail open', () => {
   assert.equal(plan(['.github/workflows/ci.yml']).failOpenReasons[0]?.rule, 'workflow-tooling');
   assert.equal(plan(['package.json']).failOpenReasons[0]?.rule, 'workflow-tooling');
   assert.equal(plan(['vitest.config.ts']).failOpenReasons[0]?.rule, 'workflow-tooling');
@@ -229,9 +237,7 @@ test('workflow/tooling and selector-owning changes fail open', () => {
     plan(['scripts/check-affected/model.ts']).failOpenReasons[0]?.rule,
     'selector-owning',
   );
-  // The Testing Matrix lives here; a matrix edit must outrank the docs-only
-  // short-circuit that its `docs/` path would otherwise take.
-  assert.equal(plan(['docs/agents/testing.md']).failOpenReasons[0]?.rule, 'selector-owning');
+  assert.deepEqual(plan(['docs/agents/testing.md']).checks, ['agent-guidance']);
 });
 
 test('a fail-open path in a mixed changeset forces the full set', () => {
