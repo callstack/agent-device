@@ -148,22 +148,47 @@ extension RunnerTests {
     XCTAssertEqual(outcome, .settled)
   }
 
-  // Adversarial-review finding: `treatingPlaceholderAsEmpty` maps a value equal to the field's
-  // placeholder to "", a prefix of everything. Typing a string that equals the placeholder
-  // committed instantly yet read as pending until the deadline. The observation now settles on an
-  // exact raw match, so this is the wait's view of that field.
-  func testValueEqualToThePlaceholderSettlesInsteadOfStallingUntilTheDeadline() {
-    var polls = 0
-    let outcome = Self.awaitSynthesizedCommitOutcome(
-      expectedText: "0.00",
-      isExpired: { polls >= 4 },
-      // What the fixed observe closure yields once the raw value matches: the exact text, not the
-      // placeholder-normalized "" that the prefix walk would treat as still pending.
-      observe: { "0.00" },
-      waitForNextObservation: { polls += 1 }
+  // The production normalization boundary. A committed value equal to the field's placeholder
+  // normalizes to "", a prefix of everything, so the wait read it as pending until the deadline
+  // and failed a `type` that had landed immediately. Reverting `commitObservation` to always
+  // return the normalized reading makes the first case return "" and this test go red — which the
+  // earlier version of this test did NOT do, because it injected an already-resolved observation.
+  func testCommitObservationPrefersAnExactRawMatchOverPlaceholderNormalization() {
+    XCTAssertEqual(
+      Self.commitObservation(rawValue: "0.00", expectedText: "0.00", normalizedValue: { "" }),
+      "0.00",
+      "a committed value equal to the placeholder must not be read as empty"
     )
-    XCTAssertEqual(outcome, .settled)
-    XCTAssertEqual(polls, 0, "an exact match must not poll at all")
+    // Everything that is not an exact match keeps the normalized reading, so a field genuinely
+    // showing its placeholder still reads as empty and the prefix walk still works.
+    XCTAssertEqual(
+      Self.commitObservation(rawValue: "0.00", expectedText: "0.005", normalizedValue: { "" }),
+      ""
+    )
+    XCTAssertEqual(
+      Self.commitObservation(
+        rawValue: "hardware-",
+        expectedText: "hardware-keyboard",
+        normalizedValue: { "hardware-" }
+      ),
+      "hardware-"
+    )
+    XCTAssertNil(Self.commitObservation(rawValue: nil, expectedText: "x", normalizedValue: { nil }))
+  }
+
+  func testCommitObservationDoesNotPayForASecondReadOnAnExactMatch() {
+    var normalizedReads = 0
+    _ = Self.commitObservation(
+      rawValue: "0.00",
+      expectedText: "0.00",
+      normalizedValue: {
+        normalizedReads += 1
+        return ""
+      }
+    )
+    // The wait polls every 20ms for up to three seconds; the exact-match path must stay one
+    // accessibility read, which is why the normalized reading is a closure.
+    XCTAssertEqual(normalizedReads, 0)
   }
 
   // The mapping the command actually refuses on. `.unobservable` must stay a success: it is the

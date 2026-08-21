@@ -222,6 +222,26 @@ extension RunnerTests {
     }
   }
 
+  /// Which reading of the field the commit wait compares against.
+  ///
+  /// The normalized read maps a value equal to the field's placeholder to "" (see
+  /// `isPlaceholderValue`), and "" is a prefix of every expected value — so a commit that happens
+  /// to equal the placeholder (`type "0.00"` into a field placeheld "0.00") reads as still pending
+  /// and is condemned at the deadline despite having landed immediately. An exact raw match wins
+  /// for that reason. Everything else keeps the normalized reading, which is what makes a real
+  /// placeholder read as empty during the prefix walk.
+  ///
+  /// `normalizedValue` is a closure so an exact match costs one accessibility read rather than
+  /// two, on a path that polls every 20ms for up to three seconds.
+  static func commitObservation(
+    rawValue: String?,
+    expectedText: String,
+    normalizedValue: () -> String?
+  ) -> String? {
+    if rawValue == expectedText { return rawValue }
+    return normalizedValue()
+  }
+
   /// The command-level consequence of a commit wait. `.unobservable` is not a failure: there was
   /// no baseline to compare against, which is the pre-existing contract for submit-key text and
   /// unreadable fields, not evidence that anything went wrong.
@@ -262,14 +282,11 @@ extension RunnerTests {
       isExpired: { Date() >= deadline },
       observe: {
         let element = resolveTextEntryElement(app: app, target: target)
-        // `treatingPlaceholderAsEmpty` maps a value equal to the field's placeholder to "", which
-        // is a prefix of every expected value. Typing a string that happens to equal the
-        // placeholder (`type "0.00"` into a field placeheld "0.00") would then read as pending
-        // forever and be condemned at the deadline, having in fact committed immediately. The
-        // exact raw match settles that case; the normalized read still drives the prefix walk,
-        // where placeholder-as-empty is the reading we want.
-        if editableTextValue(for: element) == expectedText { return expectedText }
-        return editableTextValue(for: element, treatingPlaceholderAsEmpty: true)
+        return Self.commitObservation(
+          rawValue: editableTextValue(for: element),
+          expectedText: expectedText,
+          normalizedValue: { editableTextValue(for: element, treatingPlaceholderAsEmpty: true) }
+        )
       },
       waitForNextObservation: { sleepFor(TextEntryTiming.pollInterval) }
     )
