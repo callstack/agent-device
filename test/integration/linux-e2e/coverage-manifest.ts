@@ -181,10 +181,15 @@ export const LINUX_PLATFORM_COVERAGE = {
     LINUX_PROVIDER_EVIDENCE.test,
     'Linux provider scenario presses a snapshot ref and coordinate target',
   ),
-  // Promoted from command-contract to live by the `type` cutover (R41): the desktop replay now
-  // types a digit on real Linux hardware, so the migrated `typeText` path has live changed-path
-  // evidence; the ydotool primitive itself stays pinned by input-actions.test.ts.
-  [C.type]: live('the Linux desktop replay types a digit on real hardware'),
+  // The desktop replay runs the migrated typeText path on real hardware and uploads pixel
+  // evidence of the typed entry each run, but GTK4 gnome-calculator exposes no Text-interface
+  // content to selectors, so no tree-level assertion can hold and the claim stays at the
+  // contract tier until that platform defect is fixed.
+  [C.type]: contract(
+    'src/platforms/linux/__tests__/input-actions.test.ts',
+    'typeLinux uses ydotool type',
+    'Linux type dispatch uses the Wayland ydotool type primitive',
+  ),
   [C.get]: contract(
     LINUX_PROVIDER_EVIDENCE.path,
     LINUX_PROVIDER_EVIDENCE.test,
