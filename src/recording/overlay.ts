@@ -54,6 +54,7 @@ function resolveRecordingScriptPath(scriptName: string): string {
 
 let overlayScriptPath: string | undefined;
 let trimScriptPath: string | undefined;
+let exportSupportScriptPath: string | undefined;
 
 export function getRecordingOverlaySupportWarning(
   hostPlatform: NodeJS.Platform = process.platform,
@@ -74,6 +75,11 @@ function getTrimScriptPath(): string {
   return trimScriptPath;
 }
 
+function getExportSupportScriptPath(): string {
+  exportSupportScriptPath ??= resolveRecordingScriptPath('RecordingExportSupport.swift');
+  return exportSupportScriptPath;
+}
+
 async function exportProcessedVideo(params: {
   videoPath: string;
   scriptPath: string;
@@ -86,7 +92,10 @@ async function exportProcessedVideo(params: {
 
   const outputPath = temporarySiblingVideoPath(videoPath);
   try {
-    const executablePath = await compileSwiftSourceFile({ sourcePath: scriptPath });
+    const executablePath = await compileSwiftSourceFile({
+      sourcePath: scriptPath,
+      extraSourcePaths: [getExportSupportScriptPath()],
+    });
     await runCmd(executablePath, ['--input', videoPath, '--output', outputPath, ...scriptArgs], {
       timeoutMs: 120_000,
       env: buildSwiftToolEnv(),

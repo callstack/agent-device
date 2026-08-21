@@ -1,11 +1,18 @@
 import AVFoundation
 import Foundation
 
-do {
-  try run()
-} catch {
-  fputs("recording-trim: \(error)\n", stderr)
-  exit(1)
+/// Entry point: `@main` because multi-file swiftc compilation reserves top-level statements for
+/// `main.swift`, which cannot be shared per-script.
+@main
+enum RecordingTrim {
+  static func main() {
+    do {
+      try run()
+    } catch {
+      fputs("recording-trim: \(error)\n", stderr)
+      exit(1)
+    }
+  }
 }
 
 func run() throws {

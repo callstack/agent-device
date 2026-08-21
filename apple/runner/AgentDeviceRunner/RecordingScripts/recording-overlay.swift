@@ -35,11 +35,18 @@ enum ExportQuality: String {
   case high
 }
 
-do {
-  try run()
-} catch {
-  fputs("recording-overlay: \(error)\n", stderr)
-  exit(1)
+/// Entry point: `@main` because multi-file swiftc compilation reserves top-level statements for
+/// `main.swift`, which cannot be shared per-script.
+@main
+enum RecordingOverlay {
+  static func main() {
+    do {
+      try run()
+    } catch {
+      fputs("recording-overlay: \(error)\n", stderr)
+      exit(1)
+    }
+  }
 }
 
 func run() throws {
@@ -123,32 +130,17 @@ func run() throws {
   // while avoiding very slow highest-quality exports. Pass --quality high to opt into
   // the slower highest-quality export.
   let presetName = exportPresetName(for: parsedArgs.exportQuality, compatibleWith: composition)
-  guard let exporter = AVAssetExportSession(asset: composition, presetName: presetName) else {
-    throw OverlayError.exportFailed("Failed to create export session.")
-  }
-
-  exporter.outputURL = outputURL
-  exporter.outputFileType = .mp4
-  exporter.videoComposition = videoComposition
-  exporter.shouldOptimizeForNetworkUse = true
-
-  let semaphore = DispatchSemaphore(value: 0)
-  exporter.exportAsynchronously {
-    semaphore.signal()
-  }
-  if semaphore.wait(timeout: .now() + 120) == .timedOut {
-    exporter.cancelExport()
-    throw OverlayError.exportFailed("Touch overlay export timed out.")
-  }
-
-  if exporter.status != .completed {
-    throw OverlayError.exportFailed(exporter.error?.localizedDescription ?? "Touch overlay export failed.")
-  }
-}
-
-enum ExportQuality: String {
-  case medium
-  case high
+  let exporter = try makeRecordingExporter(
+    composition,
+    presetName: presetName,
+    outputURL: outputURL,
+    videoComposition: videoComposition
+  )
+  try runRecordingExport(
+    exporter,
+    timeoutMessage: "Touch overlay export timed out.",
+    failureMessage: "Touch overlay export failed."
+  )
 }
 
 func parseArguments(

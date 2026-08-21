@@ -15,10 +15,17 @@ const SWIFT_TYPECHECK_TIMEOUT_MS = 60_000;
 let swiftCompilerPath = 'swiftc';
 let swiftSdkPath = '';
 
-async function assertSwiftScriptTypechecks(scriptPath: string): Promise<void> {
-  const result = await runCmd(swiftCompilerPath, ['-sdk', swiftSdkPath, '-typecheck', scriptPath], {
-    allowFailure: true,
-  });
+async function assertSwiftScriptTypechecks(
+  scriptPath: string,
+  extraSourcePaths: string[] = [],
+): Promise<void> {
+  const result = await runCmd(
+    swiftCompilerPath,
+    ['-sdk', swiftSdkPath, '-typecheck', scriptPath, ...extraSourcePaths],
+    {
+      allowFailure: true,
+    },
+  );
   assert.equal(
     result.exitCode,
     0,
@@ -43,7 +50,9 @@ test(
       t.skip('Swift recording scripts are only validated on macOS');
     }
 
-    await assertSwiftScriptTypechecks(path.join(recordingScriptsDir, 'recording-trim.swift'));
+    await assertSwiftScriptTypechecks(path.join(recordingScriptsDir, 'recording-trim.swift'), [
+      path.join(recordingScriptsDir, 'RecordingExportSupport.swift'),
+    ]);
   },
   SWIFT_TYPECHECK_TIMEOUT_MS,
 );
@@ -69,7 +78,9 @@ test(
       t.skip('Swift recording scripts are only validated on macOS');
     }
 
-    await assertSwiftScriptTypechecks(path.join(recordingScriptsDir, 'recording-overlay.swift'));
+    await assertSwiftScriptTypechecks(path.join(recordingScriptsDir, 'recording-overlay.swift'), [
+      path.join(recordingScriptsDir, 'RecordingExportSupport.swift'),
+    ]);
   },
   SWIFT_TYPECHECK_TIMEOUT_MS,
 );

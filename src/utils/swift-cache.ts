@@ -25,11 +25,17 @@ export function buildSwiftToolEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.
 
 export async function compileSwiftSourceFile(params: {
   sourcePath: string;
+  /** Additional compilation units (shared helpers) compiled into the same executable. */
+  extraSourcePaths?: string[];
   cacheName?: string;
   timeoutMs?: number;
 }): Promise<string> {
-  const stat = fs.statSync(params.sourcePath);
-  const source = fs.readFileSync(params.sourcePath);
+  const sourcePaths = [params.sourcePath, ...(params.extraSourcePaths ?? [])];
+  const sources = sourcePaths.map((sourcePath) => ({
+    sourcePath,
+    stat: fs.statSync(sourcePath),
+    source: fs.readFileSync(sourcePath),
+  }));
   const cacheName = sanitizeCacheName(
     params.cacheName ?? path.basename(params.sourcePath, path.extname(params.sourcePath)),
   );
@@ -37,13 +43,15 @@ export async function compileSwiftSourceFile(params: {
     SWIFT_CACHE_VERSION,
     process.platform,
     process.arch,
-    path.resolve(params.sourcePath),
-    stat.size,
-    source,
+    ...sources.flatMap(({ sourcePath, stat, source }) => [
+      path.resolve(sourcePath),
+      stat.size,
+      source,
+    ]),
   ]);
   const executablePath = path.join(getSwiftCacheRoot(), 'bin', `${cacheName}-${key}`);
   await ensureSwiftExecutable({
-    sourcePath: params.sourcePath,
+    sourcePaths,
     executablePath,
     timeoutMs: params.timeoutMs,
   });
@@ -61,7 +69,7 @@ export async function compileSwiftSourceText(params: {
   const executablePath = path.join(getSwiftCacheRoot(), 'bin', `${cacheName}-${key}`);
 
   await ensureSwiftExecutable({
-    sourcePath,
+    sourcePaths: [sourcePath],
     executablePath,
     sourceText: params.source,
     timeoutMs: params.timeoutMs,
@@ -78,7 +86,7 @@ function getSwiftCacheRoot(): string {
 }
 
 async function ensureSwiftExecutable(params: {
-  sourcePath: string;
+  sourcePaths: string[];
   executablePath: string;
   sourceText?: string;
   timeoutMs?: number;
@@ -107,11 +115,12 @@ async function ensureSwiftExecutable(params: {
     if (isExecutableFile(params.executablePath)) {
       return;
     }
-    if (params.sourceText !== undefined && !fs.existsSync(params.sourcePath)) {
-      fs.mkdirSync(path.dirname(params.sourcePath), { recursive: true });
-      fs.writeFileSync(params.sourcePath, params.sourceText);
+    const [primarySourcePath] = params.sourcePaths;
+    if (params.sourceText !== undefined && primarySourcePath && !fs.existsSync(primarySourcePath)) {
+      fs.mkdirSync(path.dirname(primarySourcePath), { recursive: true });
+      fs.writeFileSync(primarySourcePath, params.sourceText);
     }
-    await runCmd('xcrun', ['swiftc', params.sourcePath, '-o', tempExecutablePath], {
+    await runCmd('xcrun', ['swiftc', ...params.sourcePaths, '-o', tempExecutablePath], {
       timeoutMs: params.timeoutMs ?? 120_000,
       env: buildSwiftToolEnv(),
     });

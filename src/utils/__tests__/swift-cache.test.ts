@@ -59,6 +59,40 @@ test('concurrent file-backed helper compiles for the same cache key reuse the wi
   );
 });
 
+test('extra source paths participate in the cache key and reach the compiler', async () => {
+  const sourcePath = writeSourceFile();
+  const supportPath = path.join(tmpDir, 'RecordingExportSupport.swift');
+  fs.writeFileSync(supportPath, 'enum Support {}');
+  const changedSupportPath = path.join(tmpDir, 'OtherSupport.swift');
+  fs.writeFileSync(changedSupportPath, 'enum OtherSupport {}');
+
+  const [withSupport, withSupportAgain, withChangedSupport] = await Promise.all([
+    compileSwiftSourceFile({
+      sourcePath,
+      extraSourcePaths: [supportPath],
+      cacheName: 'recording-overlay',
+    }),
+    compileSwiftSourceFile({
+      sourcePath,
+      extraSourcePaths: [supportPath],
+      cacheName: 'recording-overlay',
+    }),
+    compileSwiftSourceFile({
+      sourcePath,
+      extraSourcePaths: [changedSupportPath],
+      cacheName: 'recording-overlay',
+    }),
+  ]);
+
+  expect(withSupportAgain).toBe(withSupport);
+  expect(withChangedSupport).not.toBe(withSupport);
+  const compiledPaths = mockRunCmd.mock.calls.map((call) =>
+    call[1].slice(0, call[1].indexOf('-o')),
+  );
+  expect(compiledPaths).toContainEqual(['swiftc', sourcePath, supportPath]);
+  expect(compiledPaths).toContainEqual(['swiftc', sourcePath, changedSupportPath]);
+});
+
 test('stale cache locks are removed before compiling', async () => {
   const { sourcePath, executablePath, lockDir } = await createBlockedCacheEntry();
   const staleTime = new Date(Date.now() - 1_000);
