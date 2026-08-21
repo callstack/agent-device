@@ -1,9 +1,5 @@
 import { expect, test } from 'vitest';
-import {
-  findRuntimePlanUses,
-  focusRuntimeUse,
-  typeTextRuntimeUse,
-} from '@agent-device/contracts/platform';
+import { findRuntimePlanUses } from '@agent-device/contracts/platform';
 import { commandDescriptors } from '../registry.ts';
 import { BASE_COMMAND_CAPABILITY_MATRIX } from '../../capabilities.ts';
 
@@ -15,17 +11,20 @@ test('find descriptor declares its complete runtime uses with no legacy projecti
     kind: 'device-runtime',
     uses: findRuntimePlanUses,
   });
-  // The complete direct-execution surface: target/read capture with the preferred element read
-  // (shared with `get`), plus the two mutating legs find executes itself. Click/fill legs
-  // re-invoke their own commands and carry that admission themselves.
+  // The complete direct-execution surface, action-selected so the handler binds exactly once
+  // (ADR 0019 §9): the read-only element-text plans shared with `get`, the plain capture pair
+  // for delegated click/fill target resolution, and the combined capture+leg uses for the focus
+  // and type legs find executes itself.
   expect(findRuntimePlanUses.map((use) => use.required)).toEqual([
     ['captureSnapshot'],
     ['captureSnapshot', 'captureSnapshotWithoutActiveApp'],
-    ['focusPoint'],
-    ['typeText'],
+    ['captureSnapshot'],
+    ['captureSnapshot', 'captureSnapshotWithoutActiveApp'],
+    ['captureSnapshot', 'focusPoint'],
+    ['captureSnapshot', 'captureSnapshotWithoutActiveApp', 'focusPoint'],
+    ['captureSnapshot', 'focusPoint', 'typeText'],
+    ['captureSnapshot', 'captureSnapshotWithoutActiveApp', 'focusPoint', 'typeText'],
   ]);
-  expect(findRuntimePlanUses).toContain(focusRuntimeUse);
-  expect(findRuntimePlanUses).toContain(typeTextRuntimeUse);
 });
 
 test('find leaves the capability matrix and both hand-maintained overlays', () => {

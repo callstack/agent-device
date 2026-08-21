@@ -1,5 +1,8 @@
+import type { TypeTextBackendResult } from '@agent-device/contracts/interaction';
 import type {
   ElementTextRuntimeOperations,
+  FocusPointInput,
+  TypeTextInput,
   FindSelectorInput,
   FindSelectorRuntimeOperations,
   FindTextInput,
@@ -59,5 +62,24 @@ export function selectWaitObservationOperations(
             await selectedSelector.operations.findSelector(input),
         }
       : {}),
+  });
+}
+
+/** find's directly-executed mutating operations, projected from its one action-selected bind. */
+export function selectFindMutatingOperations(
+  runtime: Readonly<{
+    operations: Readonly<{
+      focusPoint?: (input: FocusPointInput) => Promise<void>;
+      typeText?: (input: TypeTextInput) => Promise<TypeTextBackendResult | void>;
+    }>;
+  }>,
+): Readonly<{
+  focusPoint?: (input: FocusPointInput) => Promise<void>;
+  typeText?: (input: TypeTextInput) => Promise<TypeTextBackendResult | void>;
+}> {
+  const { focusPoint, typeText } = runtime.operations;
+  return Object.freeze({
+    ...(focusPoint ? { focusPoint } : {}),
+    ...(typeText ? { typeText } : {}),
   });
 }

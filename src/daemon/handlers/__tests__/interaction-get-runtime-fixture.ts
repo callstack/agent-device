@@ -66,6 +66,8 @@ export function resetGetRuntimeFixture(): void {
   mockFocusPoint.mockResolvedValue(undefined);
   mockTypeText.mockReset();
   mockTypeText.mockResolvedValue(undefined);
+  (mockInspectElementReadFacts as unknown as ReturnType<typeof vi.fn>).mockClear();
+  (mockBindElementReadRuntime as unknown as ReturnType<typeof vi.fn>).mockClear();
   elementReadFixtureState.readTextAtPointAvailable = true;
   elementReadFixtureState.captureSnapshotAvailable = true;
   elementReadFixtureState.focusPointAvailable = true;
@@ -158,4 +160,15 @@ export function getRuntimeBindings(): Readonly<{
   bindDevice: BindDeviceRuntime;
 }> {
   return { inspectFacts: mockInspectElementReadFacts, bindDevice: mockBindElementReadRuntime };
+}
+
+/** The binding spies, exposed so handler tests can assert the ADR 0019 §9 one-bind invariant. */
+export function runtimeBindingSpies(): Readonly<{
+  inspectFacts: ReturnType<typeof vi.fn>;
+  bindDevice: ReturnType<typeof vi.fn>;
+}> {
+  return {
+    inspectFacts: mockInspectElementReadFacts as unknown as ReturnType<typeof vi.fn>,
+    bindDevice: mockBindElementReadRuntime as unknown as ReturnType<typeof vi.fn>,
+  };
 }

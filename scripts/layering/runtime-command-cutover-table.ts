@@ -635,7 +635,9 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
     singularExecution: {
       routes: ['dispatchGenericCommand'],
       operations: ['focusPoint'],
-      operationOwners: { focusPoint: ['resolveBoundFocusRuntime'] },
+      // The call moved into the shared executor when find's R35 single bind began passing its
+      // own operations through it; one lexical owner still serves both consumers.
+      operationOwners: { focusPoint: ['executeFocusPoint'] },
     },
   },
   {

@@ -24,6 +24,7 @@ import { resolveSnapshotScope } from './handlers/snapshot-capture.ts';
 import { resolveSessionDevice } from './handlers/snapshot-session.ts';
 import {
   selectElementTextOperation,
+  selectFindMutatingOperations,
   selectWaitObservationOperations,
   type BoundElementRead,
   type BoundNativeSelectorRead,
@@ -68,6 +69,13 @@ export type AdmittedSnapshotCapture =
       findText?: BoundNativeTextRead;
       /** A fact-conditional one-sided simple-selector observation. */
       findSelector?: BoundNativeSelectorRead;
+      /** find's directly-executed mutating legs, present for the find-focus / find-type plans. */
+      focusPoint?: (
+        input: import('@agent-device/contracts/platform').FocusPointInput,
+      ) => Promise<void>;
+      typeText?: (
+        input: import('@agent-device/contracts/platform').TypeTextInput,
+      ) => Promise<import('@agent-device/contracts/interaction').TypeTextBackendResult | void>;
     }>
   | Readonly<{ ok: false; response: DaemonResponse }>;
 
@@ -108,6 +116,8 @@ export async function admitAndBindSnapshotCapture(
     ...(bound.readTextAtPoint ? { readTextAtPoint: bound.readTextAtPoint } : {}),
     ...(bound.findText ? { findText: bound.findText } : {}),
     ...(bound.findSelector ? { findSelector: bound.findSelector } : {}),
+    ...(bound.focusPoint ? { focusPoint: bound.focusPoint } : {}),
+    ...(bound.typeText ? { typeText: bound.typeText } : {}),
   });
 }
 
@@ -164,6 +174,12 @@ async function bindSnapshotCaptureRuntime(
     readTextAtPoint?: BoundElementRead;
     findText?: BoundNativeTextRead;
     findSelector?: BoundNativeSelectorRead;
+    focusPoint?: (
+      input: import('@agent-device/contracts/platform').FocusPointInput,
+    ) => Promise<void>;
+    typeText?: (
+      input: import('@agent-device/contracts/platform').TypeTextInput,
+    ) => Promise<import('@agent-device/contracts/interaction').TypeTextBackendResult | void>;
   }>
 > {
   const bind = requireRuntimeBinding(bindDevice);
@@ -227,6 +243,20 @@ async function bindActiveAppSelectorRuntime(
         ...selectWaitObservationOperations(runtime),
       };
     }
+    case 'find-focus': {
+      const runtime = await bind(device, plan.use);
+      return {
+        ...selectActiveAppSnapshot(runtime),
+        ...selectFindMutatingOperations(runtime),
+      };
+    }
+    case 'find-type': {
+      const runtime = await bind(device, plan.use);
+      return {
+        ...selectActiveAppSnapshot(runtime),
+        ...selectFindMutatingOperations(runtime),
+      };
+    }
   }
 }
 
@@ -257,6 +287,20 @@ async function bindSelectorRuntimeWithoutActiveApp(
       return {
         ...selectSnapshotWithoutActiveApp(runtime),
         ...selectWaitObservationOperations(runtime),
+      };
+    }
+    case 'find-focus': {
+      const runtime = await bind(device, plan.use);
+      return {
+        ...selectSnapshotWithoutActiveApp(runtime),
+        ...selectFindMutatingOperations(runtime),
+      };
+    }
+    case 'find-type': {
+      const runtime = await bind(device, plan.use);
+      return {
+        ...selectSnapshotWithoutActiveApp(runtime),
+        ...selectFindMutatingOperations(runtime),
       };
     }
   }
@@ -292,7 +336,7 @@ function selectSnapshotWithoutActiveApp(
 }
 
 type SnapshotPlanUnavailableParams = {
-  operation: SnapshotRuntimePlan['use']['required'][number];
+  operation: (SnapshotRuntimePlan | SelectorCaptureRuntimePlan)['use']['required'][number];
   fact: RuntimeOperationFact;
   session: SessionState | undefined;
   device: SessionState['device'];
@@ -302,7 +346,13 @@ type SnapshotPlanUnavailableParams = {
 async function snapshotPlanUnavailableResponse(
   params: SnapshotPlanUnavailableParams,
 ): Promise<DaemonResponse> {
-  if (params.operation === 'captureSnapshot') {
+  // find's combined plans add the mutating-leg operations: their refusal is the same
+  // owner-fact wording every runtime admission produces, not the session hint below.
+  if (
+    params.operation === 'captureSnapshot' ||
+    params.operation === 'focusPoint' ||
+    params.operation === 'typeText'
+  ) {
     return unavailableRuntimeOperationResponse(params.command, params.fact)!;
   }
   if (params.operation === 'captureSnapshotWithCustomActions') {

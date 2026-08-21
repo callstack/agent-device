@@ -18,10 +18,15 @@ import { withSystemSurfaceDisclosure } from './system-surface-disclosure.ts';
 import { recordSessionAction } from './handler-utils.ts';
 import { stripInternalInteractionFlags } from '../interaction-outcome-policy.ts';
 import { resolveFindMatch } from './find-match-resolution.ts';
-import { resolveBoundFocusRuntime } from '../focus-runtime.ts';
-import { resolveBoundTypeTextRuntime } from '../type-text-runtime.ts';
+import { executeFocusPoint } from '../focus-runtime.ts';
+import { executeBoundTypeText } from '../type-text-runtime.ts';
 import { dispatchFindReadOnlyViaRuntime } from '../selector-runtime.ts';
-import { resolveBoundSelectorCapture } from '../selector-capture-binding.ts';
+import { admitAndBindSnapshotCapture } from '../snapshot-runtime-binding.ts';
+import {
+  resolveSelectorCaptureRuntimePlan,
+  type FocusPointInput,
+  type TypeTextRuntimeOperations,
+} from '@agent-device/contracts/platform';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { createFindTargetCapture, sparseFindSnapshotResponse } from './find-target-capture.ts';
 import { isSparseSnapshotQualityVerdict } from '../../snapshot-quality/verdict.ts';
@@ -38,8 +43,9 @@ type FindContext = {
   locator: FindLocator;
   query: string;
   publicFlags: Record<string, unknown>;
-  inspectFacts?: InspectDeviceRuntimeFacts;
-  bindDevice?: BindDeviceRuntime;
+  /** The one action-selected bind's directly-executed operations (ADR 0019 §9). */
+  boundFocusPoint?: (input: FocusPointInput) => Promise<void>;
+  boundTypeText?: TypeTextRuntimeOperations['typeText'];
 };
 
 type ResolvedMatch = {
@@ -100,12 +106,18 @@ export async function handleFindCommands(params: {
   const session = sessionStore.get(sessionName);
   if (!session) return noActiveSessionError();
   const device = session.device;
-  // R35: the mutating target capture enters the selector family's shared admit-then-bind path,
-  // so `find click` resolves its target through the same bound capture every selector read uses.
-  const boundSelector = await resolveBoundSelectorCapture({
+  // R35 + ADR 0019 §9: ONE action-selected plan, ONE facts inspection, ONE bind. The plan
+  // carries everything this action executes directly — the target capture always, plus
+  // focusPoint for `find focus` and focusPoint+typeText for `find type` — so a leg can never
+  // re-admit or re-bind mid-handler.
+  const boundSelector = await admitAndBindSnapshotCapture({
     command: 'find',
     device,
     session,
+    plan: resolveSelectorCaptureRuntimePlan({
+      hasActiveApp: session.appBundleId !== undefined,
+      intent: action === 'focus' ? 'find-focus' : action === 'type' ? 'find-type' : 'capture-only',
+    }),
     inspectFacts: params.inspectFacts,
     bindDevice: params.bindDevice,
   });
@@ -120,7 +132,7 @@ export async function handleFindCommands(params: {
     query,
     sessionStore,
     sessionName,
-    capture: boundSelector.operations.capture,
+    capture: boundSelector.capture,
   });
 
   const ctx: FindContext = {
@@ -135,8 +147,8 @@ export async function handleFindCommands(params: {
     locator,
     query,
     publicFlags: publicFindFlags(req.flags),
-    inspectFacts: params.inspectFacts,
-    bindDevice: params.bindDevice,
+    boundFocusPoint: boundSelector.focusPoint,
+    boundTypeText: boundSelector.typeText,
   };
 
   const snapshotResult = await readTargetTree();
@@ -292,7 +304,7 @@ async function handleFindType(
   match: ResolvedMatch,
   value: string | undefined,
 ): Promise<DaemonResponse> {
-  const { req, device, logPath, session } = ctx;
+  const { req, logPath, session } = ctx;
   if (!value) {
     return errorResponse('INVALID_ARGS', 'find type requires text');
   }
@@ -301,16 +313,14 @@ async function handleFindType(
   // The focus above already crossed the seam; expiry is idempotent, but keep it
   // explicit at the type dispatch so it does not rely on the focus-first order.
   expireRefFrame(session);
-  // R41: find's type leg shares `type`'s bound runtime rather than dispatching the retired
-  // leaf, so `type "text"` and `find <q> type "text"` reach the device through one admitted
-  // operation.
-  const bound = await resolveBoundTypeTextRuntime({
-    device,
-    inspectFacts: ctx.inspectFacts,
-    bindDevice: ctx.bindDevice,
-  });
-  if (!bound.ok) return bound.response;
-  const response = await bound.typeText(
+  // R41/R35: the operation came from the handler's ONE action-selected bind; the shared
+  // executor is the single lexical owner of the `typeText` call and of the leaf's parse.
+  const typeText = ctx.boundTypeText;
+  if (!typeText) {
+    return errorResponse('COMMAND_FAILED', 'find type was admitted without a text-entry operation');
+  }
+  const response = await executeBoundTypeText(
+    { operations: { typeText } },
     [value],
     contextFromFlags(logPath, req.flags, session.appBundleId, session.trace?.outPath),
   );
@@ -322,7 +332,7 @@ async function dispatchFocusForFindMatch(
   ctx: FindContext,
   match: ResolvedMatch,
 ): Promise<DaemonResponse> {
-  const { req, device, logPath, session } = ctx;
+  const { req, logPath, session } = ctx;
   const coveredResponse = rejectCoveredFindMatch(match, 'be focused');
   if (coveredResponse) return coveredResponse;
   const coords = match.resolvedNode.rect ? centerOfRect(match.resolvedNode.rect) : null;
@@ -333,30 +343,17 @@ async function dispatchFocusForFindMatch(
   // command directly (they do not re-enter the interaction leaf), so expire the
   // frame here before the device op. Pre-seam guards above preserve the frame.
   expireRefFrame(session);
-  // R40: find's focus leg shares `focus`'s bound runtime rather than dispatching the retired
-  // leaf, so `focus x y` and `find <q> focus` reach the device through one admitted operation.
-  const bound = await resolveBoundFocusRuntime({
-    device,
-    positionals: [String(coords.x), String(coords.y)],
-    inspectFacts: ctx.inspectFacts,
-    bindDevice: ctx.bindDevice,
-  });
-  if (!bound.ok) return bound.response;
-  const response = await bound.execute({
-    session,
-    sessionName: ctx.sessionName,
-    logPath,
-    command: 'focus',
-    request: req,
-    positionals: [String(coords.x), String(coords.y)],
-    out: req.flags?.out,
-    dispatchContext: contextFromFlags(
-      logPath,
-      req.flags,
-      session.appBundleId,
-      session.trace?.outPath,
-    ),
-  });
+  // R40/R35: the operation came from the handler's ONE action-selected bind; the shared
+  // executor is the single lexical owner of the `focusPoint` call.
+  const focusPoint = ctx.boundFocusPoint;
+  if (!focusPoint) {
+    return errorResponse('COMMAND_FAILED', 'find focus was admitted without a focus operation');
+  }
+  const response = await executeFocusPoint(
+    { operations: { focusPoint } },
+    coords,
+    contextFromFlags(logPath, req.flags, session.appBundleId, session.trace?.outPath),
+  );
   return { ok: true, data: response ?? { ref: match.ref } };
 }
 

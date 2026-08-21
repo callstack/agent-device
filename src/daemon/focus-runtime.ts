@@ -42,11 +42,26 @@ export async function resolveBoundFocusRuntime(
     bindDevice: params.bindDevice,
   });
   if (admission.type === 'response') return { ok: false, response: admission.response };
+  const runtime = admission.runtime;
   return {
     ok: true,
-    execute: async ({ dispatchContext }) => {
-      await admission.runtime.operations.focusPoint(focusPointInput(point, dispatchContext));
-      return { x: point.x, y: point.y, ...successText(`Focused (${point.x}, ${point.y})`) };
-    },
+    execute: async ({ dispatchContext }) =>
+      await executeFocusPoint(runtime, point, dispatchContext),
   };
+}
+
+/**
+ * The ONE place a bound `focusPoint` executes (R40; also find's focus leg, which passes the
+ * operations of its own action-selected bind). Keeping the operation call in a single lexical
+ * owner is what lets the cutover gate prove no parallel route exists.
+ */
+export async function executeFocusPoint(
+  runtime: Readonly<{
+    operations: Readonly<{ focusPoint: (input: FocusPointInput) => Promise<void> }>;
+  }>,
+  point: Point,
+  context: DaemonCommandContext,
+): Promise<Record<string, unknown>> {
+  await runtime.operations.focusPoint(focusPointInput(point, context));
+  return { x: point.x, y: point.y, ...successText(`Focused (${point.x}, ${point.y})`) };
 }

@@ -1,9 +1,7 @@
 import {
   typeTextRuntimeUse,
-  type BoundDeviceRuntime,
-  type PlatformRuntimeOperations,
-  type RuntimeUse,
   type TypeTextInput,
+  type TypeTextRuntimeOperations,
 } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -15,9 +13,10 @@ import type { DaemonFailureResponse } from './handlers/response.ts';
 import { admitRuntimeUse, type RuntimeAdmissionBindings } from './runtime-admission.ts';
 import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';
 
-type BoundTypeTextRuntime = BoundDeviceRuntime<
-  RuntimeUse<PlatformRuntimeOperations, readonly ['typeText'], readonly [], readonly []>
->;
+/** What the executor needs: only the bound operation, however broad the bind that carried it. */
+type BoundTypeTextOperations = Readonly<{
+  operations: Readonly<{ typeText: TypeTextRuntimeOperations['typeText'] }>;
+}>;
 
 /**
  * Executes one text entry against an already-admitted binding, byte-for-byte reproducing the
@@ -59,8 +58,8 @@ export async function resolveBoundTypeTextRuntime(
   };
 }
 
-async function executeBoundTypeText(
-  runtime: BoundTypeTextRuntime,
+export async function executeBoundTypeText(
+  runtime: BoundTypeTextOperations,
   positionals: readonly string[],
   context: DaemonCommandContext,
 ): Promise<Record<string, unknown>> {

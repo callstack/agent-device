@@ -136,15 +136,36 @@ export const selectorTextCaptureRuntimePlanUses = Object.freeze([
 ] as const);
 
 /**
- * `find`'s complete use set: the selector-text capture plans it shares with `get` for target
- * resolution and read-only legs, plus the two directly-executed mutating legs. Click/fill legs
- * re-invoke their own commands and carry that admission themselves.
+ * `find`'s action-selected mutating uses (ADR 0019 §9: one bind per handler). A mutating find
+ * resolves its target from a capture AND executes at most one direct leg, so each action's use
+ * carries the complete requirement set and the handler binds exactly once. Click/fill legs
+ * re-invoke their own commands, so their use is the plain capture pair.
+ */
+const findFocusCaptureUse = defineUse({ required: ['captureSnapshot', 'focusPoint'] });
+const findFocusCaptureWithoutActiveAppUse = defineUse({
+  required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp', 'focusPoint'],
+});
+const findTypeCaptureUse = defineUse({
+  required: ['captureSnapshot', 'focusPoint', 'typeText'],
+});
+const findTypeCaptureWithoutActiveAppUse = defineUse({
+  required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp', 'focusPoint', 'typeText'],
+});
+
+/**
+ * `find`'s complete use set: the selector-text plans it shares with `get` for its read-only
+ * legs, the plain capture pair for target resolution ahead of delegated click/fill, and the
+ * action-selected combined uses for the focus and type legs it executes directly.
  */
 export const findRuntimePlanUses = Object.freeze([
   selectorTextCaptureUse,
   selectorTextCaptureWithoutActiveAppUse,
-  focusRuntimeUse,
-  typeTextRuntimeUse,
+  selectorCaptureUse,
+  selectorCaptureWithoutActiveAppUse,
+  findFocusCaptureUse,
+  findFocusCaptureWithoutActiveAppUse,
+  findTypeCaptureUse,
+  findTypeCaptureWithoutActiveAppUse,
 ] as const);
 
 export const waitSelectorCaptureRuntimePlanUses = Object.freeze([
@@ -185,6 +206,9 @@ const selectorUsesByIntent = Object.freeze({
   'capture-only': selectorCaptureRuntimePlanUses,
   'element-text': selectorTextCaptureRuntimePlanUses,
   'wait-observation': waitSelectorCaptureRuntimePlanUses,
+  // find's action-selected mutating intents: one combined use per directly-executed leg.
+  'find-focus': Object.freeze([findFocusCaptureUse, findFocusCaptureWithoutActiveAppUse] as const),
+  'find-type': Object.freeze([findTypeCaptureUse, findTypeCaptureWithoutActiveAppUse] as const),
 } as const);
 
 export type SelectorCaptureRuntimeIntent = keyof typeof selectorUsesByIntent;
@@ -235,6 +259,18 @@ export function resolveSelectorCaptureRuntimePlan(
         selectorUsesByIntent[input.intent],
       );
     case 'wait-observation':
+      return selectorCapturePlan(
+        input.hasActiveApp,
+        input.intent,
+        selectorUsesByIntent[input.intent],
+      );
+    case 'find-focus':
+      return selectorCapturePlan(
+        input.hasActiveApp,
+        input.intent,
+        selectorUsesByIntent[input.intent],
+      );
+    case 'find-type':
       return selectorCapturePlan(
         input.hasActiveApp,
         input.intent,
