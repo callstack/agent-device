@@ -19,6 +19,13 @@ struct RunnerCommandJournalEntry {
 }
 
 final class RunnerCommandJournal {
+  /// Trim-or-nil normalization shared with in-flight coalescing and status lookups.
+  static func normalizedCommandId(_ value: String?) -> String? {
+    guard let value else { return nil }
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+  }
+
   private let lock = NSLock()
   private let maxEntries = 64
   private let maxResponseJsonBytes = 16 * 1024
@@ -26,7 +33,7 @@ final class RunnerCommandJournal {
   private var order: [String] = []
 
   func accept(command: Command) {
-    guard let commandId = normalizedCommandId(command.commandId) else { return }
+    guard let commandId = Self.normalizedCommandId(command.commandId) else { return }
     lock.lock()
     defer { lock.unlock() }
     entries[commandId] = RunnerCommandJournalEntry(
@@ -67,7 +74,7 @@ final class RunnerCommandJournal {
   }
 
   func status(commandId: String) -> DataPayload {
-    guard let normalized = normalizedCommandId(commandId) else {
+    guard let normalized = Self.normalizedCommandId(commandId) else {
       return DataPayload(lifecycleState: RunnerCommandLifecycleState.notAccepted.rawValue)
     }
     lock.lock()
@@ -98,7 +105,7 @@ final class RunnerCommandJournal {
     responseJson: String?,
     error: ErrorPayload?
   ) {
-    guard let commandId = normalizedCommandId(command.commandId) else { return }
+    guard let commandId = Self.normalizedCommandId(command.commandId) else { return }
     lock.lock()
     defer { lock.unlock() }
     var entry = entries[commandId] ?? RunnerCommandJournalEntry(
@@ -124,12 +131,6 @@ final class RunnerCommandJournal {
       let removed = order.removeFirst()
       entries.removeValue(forKey: removed)
     }
-  }
-
-  private func normalizedCommandId(_ value: String?) -> String? {
-    guard let value else { return nil }
-    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? nil : trimmed
   }
 
   private func encodeResponseJson(command: Command, response: Response) -> String? {

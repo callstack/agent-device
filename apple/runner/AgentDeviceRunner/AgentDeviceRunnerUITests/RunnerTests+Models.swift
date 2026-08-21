@@ -236,130 +236,46 @@ extension Response {
 }
 
 struct DataPayload: Codable {
-  let message: String?
-  let imageBase64: String?
-  let text: String?
-  let found: Bool?
-  let items: [String]?
-  let nodes: [PresentedNode]?
-  let truncated: Bool?
-  let snapshotQuality: SnapshotQuality?
-  let gestureStartUptimeMs: Double?
-  let gestureEndUptimeMs: Double?
-  let x: Double?
-  let y: Double?
-  let x2: Double?
-  let y2: Double?
-  let referenceWidth: Double?
-  let referenceHeight: Double?
-  var currentUptimeMs: Double?
-  let commandId: String?
-  let lifecycleState: String?
-  let lifecycleCommand: String?
-  let lifecycleResponseOk: Bool?
-  let lifecycleResponseJson: String?
-  let lifecycleErrorCode: String?
-  let lifecycleErrorMessage: String?
-  let lifecycleErrorHint: String?
-  let visible: Bool?
-  let wasVisible: Bool?
-  let dismissed: Bool?
-  let keyboardDismissMechanism: String?
-  let orientation: String?
-  let gestureFallback: String?
-  let gestureFallbackMessage: String?
-  let gestureFallbackHint: String?
-  let maestroNonHittableCoordinateFallbackUsed: Bool?
-  let textEntryRoute: String?
-  let runnerFatal: Bool?
-  let runnerFatalReason: String?
-  let completedSteps: Int?
-  let failedStepIndex: Int?
-  let sequenceResults: [SequenceStepResult]?
-
-  init(
-    message: String? = nil,
-    imageBase64: String? = nil,
-    text: String? = nil,
-    found: Bool? = nil,
-    items: [String]? = nil,
-    nodes: [PresentedNode]? = nil,
-    truncated: Bool? = nil,
-    snapshotQuality: SnapshotQuality? = nil,
-    gestureStartUptimeMs: Double? = nil,
-    gestureEndUptimeMs: Double? = nil,
-    x: Double? = nil,
-    y: Double? = nil,
-    x2: Double? = nil,
-    y2: Double? = nil,
-    referenceWidth: Double? = nil,
-    referenceHeight: Double? = nil,
-    currentUptimeMs: Double? = nil,
-    commandId: String? = nil,
-    lifecycleState: String? = nil,
-    lifecycleCommand: String? = nil,
-    lifecycleResponseOk: Bool? = nil,
-    lifecycleResponseJson: String? = nil,
-    lifecycleErrorCode: String? = nil,
-    lifecycleErrorMessage: String? = nil,
-    lifecycleErrorHint: String? = nil,
-    visible: Bool? = nil,
-    wasVisible: Bool? = nil,
-    dismissed: Bool? = nil,
-    keyboardDismissMechanism: String? = nil,
-    orientation: String? = nil,
-    gestureFallback: String? = nil,
-    gestureFallbackMessage: String? = nil,
-    gestureFallbackHint: String? = nil,
-    maestroNonHittableCoordinateFallbackUsed: Bool? = nil,
-    textEntryRoute: String? = nil,
-    runnerFatal: Bool? = nil,
-    runnerFatalReason: String? = nil,
-    completedSteps: Int? = nil,
-    failedStepIndex: Int? = nil,
-    sequenceResults: [SequenceStepResult]? = nil
-  ) {
-    self.message = message
-    self.imageBase64 = imageBase64
-    self.text = text
-    self.found = found
-    self.items = items
-    self.nodes = nodes
-    self.truncated = truncated
-    self.snapshotQuality = snapshotQuality
-    self.gestureStartUptimeMs = gestureStartUptimeMs
-    self.gestureEndUptimeMs = gestureEndUptimeMs
-    self.x = x
-    self.y = y
-    self.x2 = x2
-    self.y2 = y2
-    self.referenceWidth = referenceWidth
-    self.referenceHeight = referenceHeight
-    self.currentUptimeMs = currentUptimeMs
-    self.commandId = commandId
-    self.lifecycleState = lifecycleState
-    self.lifecycleCommand = lifecycleCommand
-    self.lifecycleResponseOk = lifecycleResponseOk
-    self.lifecycleResponseJson = lifecycleResponseJson
-    self.lifecycleErrorCode = lifecycleErrorCode
-    self.lifecycleErrorMessage = lifecycleErrorMessage
-    self.lifecycleErrorHint = lifecycleErrorHint
-    self.visible = visible
-    self.wasVisible = wasVisible
-    self.dismissed = dismissed
-    self.keyboardDismissMechanism = keyboardDismissMechanism
-    self.orientation = orientation
-    self.gestureFallback = gestureFallback
-    self.gestureFallbackMessage = gestureFallbackMessage
-    self.gestureFallbackHint = gestureFallbackHint
-    self.maestroNonHittableCoordinateFallbackUsed = maestroNonHittableCoordinateFallbackUsed
-    self.textEntryRoute = textEntryRoute
-    self.runnerFatal = runnerFatal
-    self.runnerFatalReason = runnerFatalReason
-    self.completedSteps = completedSteps
-    self.failedStepIndex = failedStepIndex
-    self.sequenceResults = sequenceResults
-  }
+  var message: String? = nil
+  var imageBase64: String? = nil
+  var text: String? = nil
+  var found: Bool? = nil
+  var items: [String]? = nil
+  var nodes: [PresentedNode]? = nil
+  var truncated: Bool? = nil
+  var snapshotQuality: SnapshotQuality? = nil
+  var gestureStartUptimeMs: Double? = nil
+  var gestureEndUptimeMs: Double? = nil
+  var x: Double? = nil
+  var y: Double? = nil
+  var x2: Double? = nil
+  var y2: Double? = nil
+  var referenceWidth: Double? = nil
+  var referenceHeight: Double? = nil
+  var currentUptimeMs: Double? = nil
+  var commandId: String? = nil
+  var lifecycleState: String? = nil
+  var lifecycleCommand: String? = nil
+  var lifecycleResponseOk: Bool? = nil
+  var lifecycleResponseJson: String? = nil
+  var lifecycleErrorCode: String? = nil
+  var lifecycleErrorMessage: String? = nil
+  var lifecycleErrorHint: String? = nil
+  var visible: Bool? = nil
+  var wasVisible: Bool? = nil
+  var dismissed: Bool? = nil
+  var keyboardDismissMechanism: String? = nil
+  var orientation: String? = nil
+  var gestureFallback: String? = nil
+  var gestureFallbackMessage: String? = nil
+  var gestureFallbackHint: String? = nil
+  var maestroNonHittableCoordinateFallbackUsed: Bool? = nil
+  var textEntryRoute: String? = nil
+  var runnerFatal: Bool? = nil
+  var runnerFatalReason: String? = nil
+  var completedSteps: Int? = nil
+  var failedStepIndex: Int? = nil
+  var sequenceResults: [SequenceStepResult]? = nil
 }
 
 struct ErrorPayload: Codable {

@@ -266,6 +266,23 @@ extension RunnerTests {
     )
   }
 
+  /// Shared ordering for point-hit candidates: smallest area wins, then top-to-bottom,
+  /// left-to-right, then stable element-type order for ties.
+  func smallestElementFirst(_ left: XCUIElement, _ right: XCUIElement) -> Bool {
+    let leftArea = max(1, left.frame.width * left.frame.height)
+    let rightArea = max(1, right.frame.width * right.frame.height)
+    if leftArea != rightArea {
+      return leftArea < rightArea
+    }
+    if left.frame.minY != right.frame.minY {
+      return left.frame.minY < right.frame.minY
+    }
+    if left.frame.minX != right.frame.minX {
+      return left.frame.minX < right.frame.minX
+    }
+    return left.elementType.rawValue < right.elementType.rawValue
+  }
+
   func readTextAt(app: XCUIApplication, x: Double, y: Double) -> String? {
     let point = CGPoint(x: x, y: y)
     let textInputCandidates = textInputCandidatesAt(app: app, point: point)
@@ -279,20 +296,7 @@ extension RunnerTests {
       .filter { element in
         element.exists && !element.frame.isEmpty && element.frame.contains(point)
       }
-      .sorted { left, right in
-        let leftArea = max(1, left.frame.width * left.frame.height)
-        let rightArea = max(1, right.frame.width * right.frame.height)
-        if leftArea != rightArea {
-          return leftArea < rightArea
-        }
-        if left.frame.minY != right.frame.minY {
-          return left.frame.minY < right.frame.minY
-        }
-        if left.frame.minX != right.frame.minX {
-          return left.frame.minX < right.frame.minX
-        }
-        return left.elementType.rawValue < right.elementType.rawValue
-      }
+      .sorted(by: smallestElementFirst)
 
     for element in candidates where prefersExpandedTextRead(element) {
       if let text = readableText(for: element) {
@@ -334,20 +338,7 @@ extension RunnerTests {
             point: point
           )
         }
-        .sorted { left, right in
-          let leftArea = max(1, left.frame.width * left.frame.height)
-          let rightArea = max(1, right.frame.width * right.frame.height)
-          if leftArea != rightArea {
-            return leftArea < rightArea
-          }
-          if left.frame.minY != right.frame.minY {
-            return left.frame.minY < right.frame.minY
-          }
-          if left.frame.minX != right.frame.minX {
-            return left.frame.minX < right.frame.minX
-          }
-          return left.elementType.rawValue < right.elementType.rawValue
-        }
+        .sorted(by: smallestElementFirst)
     }
   }
 
@@ -377,16 +368,6 @@ extension RunnerTests {
     }
   }
 
-  func findScopeElement(app: XCUIApplication, scope: String) -> XCUIElement? {
-    let predicate = NSPredicate(
-      format: "label CONTAINS[c] %@ OR identifier CONTAINS[c] %@",
-      scope,
-      scope
-    )
-    let element = app.descendants(matching: .any).matching(predicate).firstMatch
-    return element.exists ? element : nil
-  }
-
   func tapAt(app: XCUIApplication, x: Double, y: Double) -> RunnerInteractionOutcome {
     if let outcome = selectFocusedTvElement(app: app, point: CGPoint(x: x, y: y), action: "tap") {
       return outcome
@@ -403,30 +384,14 @@ extension RunnerTests {
     case "secondary":
       coordinate.rightClick()
     case "middle":
-      throw NSError(
-        domain: "AgentDeviceRunner",
-        code: 1,
-        userInfo: [NSLocalizedDescriptionKey: "middle mouse button is not supported"]
-      )
+      throw unsupportedOperationError("middle mouse button is not supported")
     default:
-      throw NSError(
-        domain: "AgentDeviceRunner",
-        code: 1,
-        userInfo: [NSLocalizedDescriptionKey: "unsupported mouse button: \(button)"]
-      )
+      throw unsupportedOperationError("unsupported mouse button: \(button)")
     }
 #elseif os(tvOS)
-    throw NSError(
-      domain: "AgentDeviceRunner",
-      code: 1,
-      userInfo: [NSLocalizedDescriptionKey: "mouseClick is not supported on tvOS"]
-    )
+    throw unsupportedOperationError("mouseClick is not supported on tvOS")
 #else
-    throw NSError(
-      domain: "AgentDeviceRunner",
-      code: 1,
-      userInfo: [NSLocalizedDescriptionKey: "mouseClick is only supported on macOS"]
-    )
+    throw unsupportedOperationError("mouseClick is only supported on macOS")
 #endif
   }
 
@@ -444,11 +409,7 @@ extension RunnerTests {
       pixels: pixels,
       durationMs: durationMs
     ) else {
-      throw NSError(
-        domain: "AgentDeviceRunner",
-        code: 1,
-        userInfo: [NSLocalizedDescriptionKey: "unsupported desktop scroll direction: \(direction)"]
-      )
+      throw unsupportedOperationError("unsupported desktop scroll direction: \(direction)")
     }
 
     let coordinate = interactionCoordinate(app: app, x: x, y: y)
@@ -465,17 +426,9 @@ extension RunnerTests {
       }
     }
 #elseif os(tvOS)
-    throw NSError(
-      domain: "AgentDeviceRunner",
-      code: 1,
-      userInfo: [NSLocalizedDescriptionKey: "desktopScroll is not supported on tvOS"]
-    )
+    throw unsupportedOperationError("desktopScroll is not supported on tvOS")
 #else
-    throw NSError(
-      domain: "AgentDeviceRunner",
-      code: 1,
-      userInfo: [NSLocalizedDescriptionKey: "desktopScroll is only supported on macOS"]
-    )
+    throw unsupportedOperationError("desktopScroll is only supported on macOS")
 #endif
   }
 

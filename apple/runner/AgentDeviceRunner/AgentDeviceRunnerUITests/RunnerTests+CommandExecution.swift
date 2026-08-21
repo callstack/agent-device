@@ -963,9 +963,7 @@ extension RunnerTests {
 
   func executeStatus(command: Command) -> Response {
     guard
-      let statusCommandId = command.statusCommandId?
-        .trimmingCharacters(in: .whitespacesAndNewlines),
-      !statusCommandId.isEmpty
+      let statusCommandId = RunnerCommandJournal.normalizedCommandId(command.statusCommandId)
     else {
       return Response(
         ok: false,
@@ -1911,16 +1909,8 @@ extension RunnerTests {
       // Fused frame-resolve + drag scroll for non-tvOS. On iOS this intentionally stays on the
       // AX-free synthesized coordinate lane so scroll keeps working when XCTest cannot serialize
       // the accessibility tree.
-      guard let direction = command.direction,
-        direction == "up" || direction == "down" || direction == "left" || direction == "right"
-      else {
-        return Response(
-          ok: false,
-          error: ErrorPayload(
-            code: "INVALID_ARGS",
-            message: "scroll requires direction up|down|left|right"
-          )
-        )
+      guard let direction = validatedScrollDirection(command.direction) else {
+        return invalidScrollDirectionResponse(commandName: "scroll")
       }
       let scrollPolicyKind = SynthesizedGesturePolicyKind.scroll
       guard let scrollContext = synthesizedCoordinateContext(
@@ -1955,16 +1945,11 @@ extension RunnerTests {
           )
         )
       }
-      if let durationMs = command.durationMs,
-        durationMs.isFinite == false || durationMs < 0 || durationMs > 10000
-      {
-        return Response(
-          ok: false,
-          error: ErrorPayload(
-            code: "INVALID_ARGS",
-            message: "scroll durationMs must be between 0 and 10000"
-          )
-        )
+      if let violation = invalidScrollDurationResponse(
+        command.durationMs,
+        commandName: "scroll"
+      ) {
+        return violation
       }
       return executeScrollDragGesture(
         activeApp: activeApp,
@@ -1978,16 +1963,8 @@ extension RunnerTests {
         releaseBehavior: command.scrollReleaseBehavior
       )
     case .desktopScroll:
-      guard let direction = command.direction,
-        direction == "up" || direction == "down" || direction == "left" || direction == "right"
-      else {
-        return Response(
-          ok: false,
-          error: ErrorPayload(
-            code: "INVALID_ARGS",
-            message: "desktopScroll requires direction up|down|left|right"
-          )
-        )
+      guard let direction = validatedScrollDirection(command.direction) else {
+        return invalidScrollDirectionResponse(commandName: "desktopScroll")
       }
       let appFrame = activeApp.frame
       let frame = resolvedTouchReferenceFrame(app: activeApp, appFrame: appFrame)
@@ -2016,16 +1993,11 @@ extension RunnerTests {
       let y = frame.midY
       let localX = x - (appFrame.isEmpty ? frame.minX : appFrame.minX)
       let localY = y - (appFrame.isEmpty ? frame.minY : appFrame.minY)
-      if let durationMs = command.durationMs,
-        durationMs.isFinite == false || durationMs < 0 || durationMs > 10000
-      {
-        return Response(
-          ok: false,
-          error: ErrorPayload(
-            code: "INVALID_ARGS",
-            message: "desktopScroll durationMs must be between 0 and 10000"
-          )
-        )
+      if let violation = invalidScrollDurationResponse(
+        command.durationMs,
+        commandName: "desktopScroll"
+      ) {
+        return violation
       }
       let touchFrame = resolvedTouchVisualizationFrame(
         app: activeApp,
@@ -2270,6 +2242,38 @@ extension RunnerTests {
     case .sequence:
       return executeSequence(command: command, activeApp: activeApp)
     }
+  }
+
+  /// Shared up|down|left|right admission for scroll/desktopScroll.
+  private func validatedScrollDirection(_ raw: String?) -> String? {
+    guard let raw else { return nil }
+    return ["up", "down", "left", "right"].contains(raw) ? raw : nil
+  }
+
+  private func invalidScrollDirectionResponse(commandName: String) -> Response {
+    Response(
+      ok: false,
+      error: ErrorPayload(
+        code: "INVALID_ARGS",
+        message: "\(commandName) requires direction up|down|left|right"
+      )
+    )
+  }
+
+  private func invalidScrollDurationResponse(
+    _ durationMs: Double?,
+    commandName: String
+  ) -> Response? {
+    guard let durationMs, !durationMs.isFinite || durationMs < 0 || durationMs > 10000 else {
+      return nil
+    }
+    return Response(
+      ok: false,
+      error: ErrorPayload(
+        code: "INVALID_ARGS",
+        message: "\(commandName) durationMs must be between 0 and 10000"
+      )
+    )
   }
 
   private func executeScrollDragGesture(

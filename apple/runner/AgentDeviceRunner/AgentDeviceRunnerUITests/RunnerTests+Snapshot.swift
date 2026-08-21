@@ -40,45 +40,50 @@ extension RunnerTests {
 
   // MARK: - Snapshot Entry
 
+  /// Wire type-name table; the visibility-fold parity test pins it against
+  /// `scrollContainerTypes` so a renamed entry reads as red.
+  static let elementTypeNames: [XCUIElement.ElementType: String] = [
+    .application: "Application",
+    .window: "Window",
+    .button: "Button",
+    .cell: "Cell",
+    .staticText: "StaticText",
+    .textField: "TextField",
+    .textView: "TextView",
+    .secureTextField: "SecureTextField",
+    .switch: "Switch",
+    .slider: "Slider",
+    .link: "Link",
+    .image: "Image",
+    .navigationBar: "NavigationBar",
+    .tabBar: "TabBar",
+    .collectionView: "CollectionView",
+    .table: "Table",
+    .scrollView: "ScrollView",
+    .toolbar: "Toolbar",
+    .searchField: "SearchField",
+    .segmentedControl: "SegmentedControl",
+    .stepper: "Stepper",
+    .picker: "Picker",
+    .activityIndicator: "ActivityIndicator",
+    .progressIndicator: "ProgressIndicator",
+    .checkBox: "CheckBox",
+    .menuItem: "MenuItem",
+    .webView: "WebView",
+    .other: "Other"
+  ]
+
   func elementTypeName(_ type: XCUIElement.ElementType) -> String {
-    switch type {
-    case .application: return "Application"
-    case .window: return "Window"
-    case .button: return "Button"
-    case .cell: return "Cell"
-    case .staticText: return "StaticText"
-    case .textField: return "TextField"
-    case .textView: return "TextView"
-    case .secureTextField: return "SecureTextField"
-    case .switch: return "Switch"
-    case .slider: return "Slider"
-    case .link: return "Link"
-    case .image: return "Image"
-    case .navigationBar: return "NavigationBar"
-    case .tabBar: return "TabBar"
-    case .collectionView: return "CollectionView"
-    case .table: return "Table"
-    case .scrollView: return "ScrollView"
-    case .toolbar: return "Toolbar"
-    case .searchField: return "SearchField"
-    case .segmentedControl: return "SegmentedControl"
-    case .stepper: return "Stepper"
-    case .picker: return "Picker"
-    case .activityIndicator: return "ActivityIndicator"
-    case .progressIndicator: return "ProgressIndicator"
-    case .checkBox: return "CheckBox"
-    case .menuItem: return "MenuItem"
-    case .webView: return "WebView"
-    case .other: return "Other"
+    if let name = Self.elementTypeNames[type] {
+      return name
+    }
+    switch type.rawValue {
+    case 19:
+      return "Keyboard"
+    case 20:
+      return "Key"
     default:
-      switch type.rawValue {
-      case 19:
-        return "Keyboard"
-      case 20:
-        return "Key"
-      default:
-        return "Element(\(type.rawValue))"
-      }
+      return "Element(\(type.rawValue))"
     }
   }
 

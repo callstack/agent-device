@@ -28,6 +28,14 @@ final class RunnerTests: XCTestCase {
     static let objcException = 1
   }
 
+  func unsupportedOperationError(_ message: String) -> NSError {
+    NSError(
+      domain: RunnerErrorDomain.general,
+      code: RunnerErrorCode.noResponseFromMainThread,
+      userInfo: [NSLocalizedDescriptionKey: message]
+    )
+  }
+
   static let springboardBundleId = "com.apple.springboard"
   // SpringBoard hosts blocking system modals on iOS/visionOS; tvOS (PineBoard/HeadBoard)
   // and macOS have no such host, so there is nothing to probe there.
@@ -180,25 +188,6 @@ final class RunnerTests: XCTestCase {
   // issues this session muted, so wedge investigations see the volume without grepping logs.
   let suppressedIssueLock = NSLock()
   var suppressedAxSnapshotIssueCount = 0
-  let interactiveTypes: Set<XCUIElement.ElementType> = [
-    .button,
-    .cell,
-    .checkBox,
-    .collectionView,
-    .link,
-    .menuItem,
-    .picker,
-    .searchField,
-    .segmentedControl,
-    .slider,
-    .stepper,
-    .switch,
-    .tabBar,
-    .textField,
-    .secureTextField,
-    .textView,
-    .webView
-  ]
   // Keep blocker actions narrow to avoid false positives from generic hittable containers.
   let actionableTypes: Set<XCUIElement.ElementType> = [
     .button,

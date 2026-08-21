@@ -190,7 +190,7 @@ extension RunnerTests {
     command: Command,
     completion: @escaping ((data: Data, shouldFinish: Bool)) -> Void
   ) -> Bool {
-    guard let commandId = normalizedInFlightCommandId(command.commandId) else { return false }
+    guard let commandId = RunnerCommandJournal.normalizedCommandId(command.commandId) else { return false }
     inFlightCommandLock.lock()
     if inFlightCommandIds.contains(commandId) {
       inFlightCommandWaiters[commandId, default: []].append(completion)
@@ -213,7 +213,7 @@ extension RunnerTests {
     completion: ((data: Data, shouldFinish: Bool)) -> Void
   ) {
     var waiters: [((data: Data, shouldFinish: Bool)) -> Void] = []
-    if let commandId = normalizedInFlightCommandId(command.commandId) {
+    if let commandId = RunnerCommandJournal.normalizedCommandId(command.commandId) {
       inFlightCommandLock.lock()
       inFlightCommandIds.remove(commandId)
       waiters = inFlightCommandWaiters.removeValue(forKey: commandId) ?? []
@@ -223,15 +223,6 @@ extension RunnerTests {
     for waiter in waiters {
       waiter(result)
     }
-  }
-
-  private func normalizedInFlightCommandId(_ commandId: String?) -> String? {
-    guard let trimmed = commandId?.trimmingCharacters(in: .whitespacesAndNewlines),
-      !trimmed.isEmpty
-    else {
-      return nil
-    }
-    return trimmed
   }
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
