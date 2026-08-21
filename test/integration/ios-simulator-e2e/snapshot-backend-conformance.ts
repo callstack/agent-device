@@ -5,9 +5,9 @@ import path from 'node:path';
 import { normalizeType } from '@agent-device/contracts/snapshot';
 import {
   SNAPSHOT_BACKEND_CAPABILITIES,
+  type SnapshotCaptureBackend,
   type SnapshotConformanceBackend,
 } from '@agent-device/kernel/snapshot';
-import type { SnapshotCaptureBackend } from '@agent-device/kernel/snapshot';
 import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
 import { isSemanticTouchTarget } from '../../../src/core/interaction-targeting.ts';
 
