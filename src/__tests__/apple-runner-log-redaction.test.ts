@@ -12,58 +12,65 @@ const synthesizedTextEntryPath = path.join(
 
 // The synthesized bare-type commit wait polls the target field's live value on the shipped
 // `type` path. That value is user content — a `type` command may carry credentials, tokens, or
-// PII — and runner.log persists across the session. Cadence evidence must stay value-free:
-// lengths, timestamps, and enum names only.
+// PII — and runner.log persists across the session. Cadence evidence must stay value-free.
 //
-// Guard shape: every NSLog format string in the module that interpolates a string (%@) must be
-// on this allowlist of static, non-field-content formats. Reintroducing raw observed text into
-// runner logging requires adding a new %@ format here, which fails this test until a human
-// reviews it.
-const allowedStringInterpolatingFormats = new Set([
-  'AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=%@',
-  'AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=verified-fallback reason=%@',
-  'AGENT_DEVICE_RUNNER_TEXT_ENTRY_PHASE commandId=%@ phase=%@ durationMs=%.1f chars=%d mode=%@',
-  '[DEBUG-1874] wait outcome=%@ elapsedMs=%.0f',
-]);
+// The enforcement is a typed Swift boundary (`logCommitCadence`), whose parameters are Ints
+// only, so observed contents are unrepresentable at the call site; its emitted line is pinned
+// by a sentinel-secret test in the host-lane policy tests. This guard is structural: it fails
+// if the boundary disappears or if the poll path logs any other way. It deliberately does not
+// parse Swift format strings — that review shape let raw values slip through interpolation.
 
-function extractNSLogStatements(source: string): string[] {
-  const statements: string[] = [];
-  let index = source.indexOf('NSLog(');
-  while (index !== -1) {
-    let depth = 0;
-    let cursor = index + 'NSLog'.length;
-    for (; cursor < source.length; cursor += 1) {
-      if (source[cursor] === '(') depth += 1;
-      if (source[cursor] === ')') {
-        depth -= 1;
-        if (depth === 0) break;
-      }
-    }
-    statements.push(source.slice(index, cursor + 1));
-    index = source.indexOf('NSLog(', cursor);
-  }
-  return statements;
+const boundarySignature =
+  /static func commitCadenceLogLine\(\s*elapsedMs: Int,\s*observedLen: Int,\s*expectedPrefixLen: Int\s*\) -> String/;
+const loggingBoundarySignature =
+  /static func logCommitCadence\(\s*elapsedMs: Int,\s*observedLen: Int,\s*expectedPrefixLen: Int\s*\)/;
+
+function extractObserveClosure(source: string): string {
+  const start = source.indexOf('observe: {');
+  assert.ok(start !== -1, 'commit wait must inject an observe closure');
+  const end = source.indexOf('waitForNextObservation:', start);
+  assert.ok(end !== -1, 'commit wait must keep its waitForNextObservation seam');
+  return source.slice(start, end);
 }
 
-test('synthesized text entry logging stays free of observed field contents', () => {
+test('commit-wait cadence logging goes through the typed value-free boundary', () => {
   const source = fs.readFileSync(synthesizedTextEntryPath, 'utf8');
-  const statements = extractNSLogStatements(source);
-  assert.ok(statements.length > 0, 'expected NSLog statements in the module');
 
-  for (const statement of statements) {
-    const format = statement.match(/"((?:[^"\\]|\\.)*)"/)?.[1];
-    assert.ok(format != null, `NSLog without a literal format string: ${statement}`);
-    if (!format.includes('%@')) continue;
-    assert.ok(
-      allowedStringInterpolatingFormats.has(format),
-      `unreviewed string-interpolating log format "${format}" — field contents must never reach runner.log`,
-    );
-  }
-
-  // The invariant this module must keep: cadence evidence names lengths, not contents.
   assert.match(
     source,
-    /poll t=%\.0fms observedLen=%ld expectedPrefixLen=%ld/,
-    'commit-wait polling must log value-free cadence evidence',
+    boundarySignature,
+    'commitCadenceLogLine must accept only lengths/timestamps (Int parameters)',
   );
+  assert.match(
+    source,
+    loggingBoundarySignature,
+    'logCommitCadence is the only sanctioned logging entry for the poll path',
+  );
+
+  const observeClosure = extractObserveClosure(source);
+  const directNSLogs = observeClosure.match(/NSLog\(/g) ?? [];
+  assert.deepEqual(
+    directNSLogs,
+    [],
+    'the poll path must log through logCommitCadence, never through a raw NSLog',
+  );
+  assert.match(
+    observeClosure,
+    /Self\.logCommitCadence\(/,
+    'the poll path must emit its cadence evidence through the typed boundary',
+  );
+
+  // Cheap extra: no NSLog anywhere in the module interpolates the raw observed binding.
+  for (
+    let index = source.indexOf('NSLog(');
+    index !== -1;
+    index = source.indexOf('NSLog(', index + 1)
+  ) {
+    const window = source.slice(index, index + 400);
+    assert.doesNotMatch(
+      window,
+      /NSLog\([^)]*\bobservedText\b/,
+      'raw observedText must never reach NSLog',
+    );
+  }
 });

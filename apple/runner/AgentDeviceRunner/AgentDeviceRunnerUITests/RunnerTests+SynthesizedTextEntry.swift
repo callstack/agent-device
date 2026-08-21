@@ -201,6 +201,35 @@ extension RunnerTests {
     return length
   }
 
+  /// The emitted cadence line, as a pure function so its output is assertable. Only lengths and
+  /// a timestamp are representable here; there is no String parameter, so observed field
+  /// contents cannot reach runner.log through this boundary whatever they contain.
+  static func commitCadenceLogLine(
+    elapsedMs: Int,
+    observedLen: Int,
+    expectedPrefixLen: Int
+  ) -> String {
+    "[DEBUG-1874] poll t=\(elapsedMs)ms observedLen=\(observedLen) expectedPrefixLen=\(expectedPrefixLen)"
+  }
+
+  /// The typed boundary for commit-wait cadence evidence. The poll path must log through this
+  /// function and never through a raw NSLog: every parameter is an Int, so the polled value's
+  /// contents are unrepresentable at the call site.
+  static func logCommitCadence(
+    elapsedMs: Int,
+    observedLen: Int,
+    expectedPrefixLen: Int
+  ) {
+    NSLog(
+      "%@",
+      commitCadenceLogLine(
+        elapsedMs: elapsedMs,
+        observedLen: observedLen,
+        expectedPrefixLen: expectedPrefixLen
+      )
+    )
+  }
+
   /// How the commit wait ended. Distinct from `SynthesizedTextCommitProgress`, which classifies a
   /// single observation: this is the whole wait's verdict, and it exists so the deadline can be
   /// told apart from success. The wait used to return `Void`, which made an expired deadline
@@ -296,11 +325,10 @@ extension RunnerTests {
         // Cadence evidence stays value-free: the polled value is user content typed through
         // `type` and must never reach runner.log. Lengths and the expected-prefix walk are
         // enough to distinguish throttling (prefix grows slowly) from a wedge (it freezes).
-        NSLog(
-          "[DEBUG-1874] poll t=%.0fms observedLen=%ld expectedPrefixLen=%ld",
-          waitStartedAt.timeIntervalSinceNow * -1000,
-          observedText?.count ?? -1,
-          observedText.map { Self.commonPrefixLength($0, expectedText) } ?? -1
+        Self.logCommitCadence(
+          elapsedMs: Int(waitStartedAt.timeIntervalSinceNow * -1000),
+          observedLen: observedText?.count ?? -1,
+          expectedPrefixLen: observedText.map { Self.commonPrefixLength($0, expectedText) } ?? -1
         )
         return observedText
       },

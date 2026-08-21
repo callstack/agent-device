@@ -319,6 +319,20 @@ extension RunnerTests {
     XCTAssertEqual(Self.commonPrefixLength("hx", "hardware-keyboard"), 1)
     XCTAssertEqual(Self.commonPrefixLength("hardware-keyboarx", "hardware-keyboard"), 15)
   }
+
+  func testCommitCadenceLogLineEmitsLengthsOnlyNeverContents() {
+    // Sentinel secret: even when the polled field holds credential-shaped content, the only
+    // channel into runner.log is this line, and its inputs are lengths. The exact-equality
+    // assert fails if any content-bearing parameter or interpolation is ever added.
+    let secret = "hunter2-typed-credential"
+    let line = Self.commitCadenceLogLine(
+      elapsedMs: 42,
+      observedLen: secret.count,
+      expectedPrefixLen: 8
+    )
+    XCTAssertEqual(line, "[DEBUG-1874] poll t=42ms observedLen=24 expectedPrefixLen=8")
+    XCTAssertFalse(line.contains(secret))
+  }
 #endif
 #endif
 }
