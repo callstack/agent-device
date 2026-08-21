@@ -161,26 +161,28 @@ export function AutomationLabScreen(props: {
         />
       </SectionCard>
 
-      <SectionCard
-        subtitle="The first duplicate is inert; the second duplicate is clickable."
-        title="Maestro clickable ordering"
-      >
-        <View style={styles.maestroTarget} testID="maestro-clickable-first-target">
-          <Text style={styles.maestroTargetLabel}>Inert duplicate target</Text>
-        </View>
-        <Pressable
-          accessibilityLabel="Clickable duplicate target"
-          accessibilityRole="button"
-          onPress={() => setMaestroSelection('clickable')}
-          style={({ pressed }) => [styles.maestroTarget, pressed ? styles.pressed : null]}
-          testID="maestro-clickable-first-target"
+      {Platform.OS === 'android' ? (
+        <SectionCard
+          subtitle="The first duplicate is inert; the second duplicate is clickable."
+          title="Maestro clickable ordering"
         >
-          <Text style={styles.maestroTargetLabel}>Clickable duplicate target</Text>
-        </Pressable>
-        <Text style={styles.value} testID="maestro-clickable-first-result">
-          Maestro selection: {maestroSelection}
-        </Text>
-      </SectionCard>
+          <View style={styles.maestroTarget} testID="maestro-clickable-first-target">
+            <Text style={styles.maestroTargetLabel}>Inert duplicate target</Text>
+          </View>
+          <Pressable
+            accessibilityLabel="Clickable duplicate target"
+            accessibilityRole="button"
+            onPress={() => setMaestroSelection('clickable')}
+            style={({ pressed }) => [styles.maestroTarget, pressed ? styles.pressed : null]}
+            testID="maestro-clickable-first-target"
+          >
+            <Text style={styles.maestroTargetLabel}>Clickable duplicate target</Text>
+          </Pressable>
+          <Text style={styles.value} testID="maestro-clickable-first-result">
+            Maestro selection: {maestroSelection}
+          </Text>
+        </SectionCard>
+      ) : null}
 
       <SectionCard title="Input canaries">
         <ActionButton
