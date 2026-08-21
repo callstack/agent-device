@@ -24,9 +24,8 @@ async function cleanupAndroidNativePerfSessionLazy(
 async function stopAndroidSnapshotHelperSessionForDeviceLazy(
   device: SessionState['device'],
 ): Promise<void> {
-  const { stopAndroidSnapshotHelperSessionForDevice } = await import(
-    '../platforms/android/snapshot-helper.ts'
-  );
+  const { stopAndroidSnapshotHelperSessionForDevice } =
+    await import('../platforms/android/snapshot-helper.ts');
   await stopAndroidSnapshotHelperSessionForDevice(device);
 }
 

@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import path from 'node:path';
-import { eagerClosureOf } from '../../__tests__/eager-import-closure.fixtures';
+import { eagerClosureOf } from '../../__tests__/eager-import-closure.fixtures.ts';
 
 /**
  * Session teardown runs for every closed session on every platform, so its eager

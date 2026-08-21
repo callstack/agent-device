@@ -1,10 +1,7 @@
 import { expect, test } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import {
-  eagerClosureOf,
-  eagerlyEvaluatedModules,
-} from './eager-import-closure.fixtures';
+import { eagerClosureOf, eagerlyEvaluatedModules } from './eager-import-closure.fixtures.ts';
 
 /**
  * Every CLI invocation eagerly evaluates the static import closure of
