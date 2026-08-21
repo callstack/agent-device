@@ -28,7 +28,8 @@ extension RunnerTests {
     let capture = try XCTUnwrap(try SnapshotPresentation.present(
       SnapshotAcquisition(
         hint: CaptureHint(
-          projection: .raw, depth: nil, interactiveOnly: false, customActions: false),
+          projection: .raw, depth: nil, regularPresentedDepth: nil,
+          interactiveOnly: false, customActions: false),
         nodes: [raw],
         truncated: true,
         effectiveDepth: 4,
@@ -108,7 +109,8 @@ extension RunnerTests {
       try SnapshotPresentation.presentRegular(
         SnapshotAcquisition(
           hint: CaptureHint(
-            projection: .regular, depth: nil, interactiveOnly: false, customActions: false),
+            projection: .regular, depth: nil, regularPresentedDepth: nil,
+            interactiveOnly: false, customActions: false),
           nodes: acquired, truncated: false, effectiveDepth: nil,
           viewport: CGRect(x: 0, y: 0, width: 1_000, height: 1_000)),
         options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false)
@@ -118,7 +120,8 @@ extension RunnerTests {
       try SnapshotPresentation.presentRegular(
         SnapshotAcquisition(
           hint: CaptureHint(
-            projection: .regular, depth: nil, interactiveOnly: true, customActions: false),
+            projection: .regular, depth: nil, regularPresentedDepth: nil,
+            interactiveOnly: true, customActions: false),
           nodes: acquired, truncated: false, effectiveDepth: nil,
           viewport: CGRect(x: 0, y: 0, width: 1_000, height: 1_000)),
         options: PresentationOptions(interactiveOnly: true, depth: nil, scope: nil, raw: false)
@@ -141,7 +144,8 @@ extension RunnerTests {
       SnapshotPresentation.presentRaw(
         SnapshotAcquisition(
           hint: CaptureHint(
-            projection: .raw, depth: nil, interactiveOnly: false, customActions: false),
+            projection: .raw, depth: nil, regularPresentedDepth: nil,
+            interactiveOnly: false, customActions: false),
           nodes: acquired, truncated: false, effectiveDepth: nil, viewport: .infinite),
         options: PresentationOptions(interactiveOnly: true, depth: nil, scope: nil, raw: true)
       ).payload.nodes
@@ -166,7 +170,8 @@ extension RunnerTests {
     ]
     let acquisition = SnapshotAcquisition(
       hint: CaptureHint(
-        projection: .regular, depth: nil, interactiveOnly: false, customActions: false),
+        projection: .regular, depth: nil, regularPresentedDepth: nil,
+        interactiveOnly: false, customActions: false),
       nodes: nodes,
       truncated: false,
       effectiveDepth: nil,
@@ -267,7 +272,8 @@ extension RunnerTests {
 
     let acquisition = SnapshotAcquisition(
       hint: CaptureHint(
-        projection: .regular, depth: nil, interactiveOnly: true, customActions: false),
+        projection: .regular, depth: nil, regularPresentedDepth: nil,
+        interactiveOnly: true, customActions: false),
       nodes: [
         node(0, type: "Application", label: "App", depth: 0, parentIndex: nil),
         node(1, type: "Button", label: "Earlier sibling", depth: 1, parentIndex: 0),
@@ -301,7 +307,8 @@ extension RunnerTests {
       SnapshotPresentation.presentRaw(
         SnapshotAcquisition(
           hint: CaptureHint(
-            projection: .raw, depth: nil, interactiveOnly: false, customActions: false),
+            projection: .raw, depth: nil, regularPresentedDepth: nil,
+            interactiveOnly: false, customActions: false),
           nodes: acquisition.nodes,
           truncated: false,
           effectiveDepth: nil,
@@ -388,24 +395,99 @@ extension RunnerTests {
         interactiveOnly: true, depth: 2, scope: "Settings", raw: false))
     // Scope re-roots the tree and depth counts from that root: neither can narrow acquisition.
     XCTAssertNil(scoped.depth)
+    XCTAssertNil(scoped.regularPresentedDepth)
     XCTAssertEqual(scoped.projection, .regular)
 
     let depthOnly = SnapshotPresentation.captureHint(
       for: PresentationOptions(interactiveOnly: true, depth: 2, scope: nil, raw: false))
-    XCTAssertEqual(depthOnly.depth, 2)
+    XCTAssertNil(depthOnly.depth)
+    XCTAssertEqual(depthOnly.regularPresentedDepth, 2)
 
     // The raw projection is the acquired tree, so `--raw -i` never narrows acquisition either.
     let raw = SnapshotPresentation.captureHint(
       for: PresentationOptions(interactiveOnly: true, depth: 3, scope: nil, raw: true))
     XCTAssertEqual(raw.projection, .raw)
     XCTAssertFalse(raw.interactiveOnly)
-    XCTAssertEqual(raw.depth, 3)
+    XCTAssertEqual(raw.rawTraversalDepth, 3)
+    XCTAssertNil(raw.regularPresentedDepth)
+    XCTAssertTrue(
+      SnapshotPresentation.shouldAcquireChildren(
+        for: raw, rawDepth: 0, regularPresentedDepth: 0))
+    XCTAssertFalse(
+      SnapshotPresentation.shouldAcquireChildren(
+        for: raw, rawDepth: 3, regularPresentedDepth: 0))
     XCTAssertTrue(raw.isRaw)
 
     let actions = SnapshotPresentation.captureHint(
       for: PresentationOptions(
         interactiveOnly: false, depth: nil, scope: nil, raw: false, customActions: true))
     XCTAssertTrue(actions.customActions)
+  }
+
+  /// #1797 visible-depth frontier: a regular depth is measured after structural
+  /// wrappers collapse, so the acquisition hint cannot present it as a raw
+  /// traversal cap. The root -> wrapper -> button fixture is the smallest tree
+  /// that distinguishes those two meanings at the public boundary.
+  func testRegularDepthFrontierSurvivesStructuralWrapperCollapse() throws {
+    func node(
+      _ index: Int,
+      type: String,
+      label: String?,
+      depth: Int,
+      parentIndex: Int?
+    ) -> RawAXNode {
+      RawAXNode(
+        index: index,
+        type: type,
+        label: label,
+        identifier: nil,
+        value: nil,
+        rect: SnapshotRect(x: 0, y: Double(index * 20), width: 100, height: 20),
+        enabled: true,
+        focused: nil,
+        selected: nil,
+        hittable: type == "Button",
+        depth: depth,
+        parentIndex: parentIndex,
+        hiddenContentAbove: nil,
+        hiddenContentBelow: nil
+      )
+    }
+
+    let options = PresentationOptions(
+      interactiveOnly: false, depth: 1, scope: nil, raw: false)
+    let hint = SnapshotPresentation.captureHint(for: options)
+    let capture = try XCTUnwrap(
+      SnapshotPresentation.present(
+        SnapshotAcquisition(
+          hint: hint,
+          nodes: [
+            node(0, type: "Application", label: "App", depth: 0, parentIndex: nil),
+            node(1, type: "Other", label: nil, depth: 1, parentIndex: 0),
+            node(2, type: "Button", label: "Save", depth: 2, parentIndex: 1),
+            node(3, type: "Button", label: "More", depth: 3, parentIndex: 2),
+          ],
+          truncated: false,
+          effectiveDepth: nil,
+          viewport: CGRect(x: 0, y: 0, width: 100, height: 100)
+        ),
+        options: options
+      )
+    )
+
+    XCTAssertEqual(hint.regularPresentedDepth, 1)
+    XCTAssertNil(hint.rawTraversalDepth)
+    XCTAssertTrue(
+      SnapshotPresentation.shouldAcquireChildren(
+        for: hint, rawDepth: 0, regularPresentedDepth: 0))
+    XCTAssertTrue(
+      SnapshotPresentation.shouldAcquireChildren(
+        for: hint, rawDepth: 1, regularPresentedDepth: 0))
+    XCTAssertFalse(
+      SnapshotPresentation.shouldAcquireChildren(
+        for: hint, rawDepth: 2, regularPresentedDepth: 1))
+    XCTAssertEqual(capture.payload.nodes?.map(\.label), ["App", "Save"])
+    XCTAssertEqual(capture.payload.nodes?.map(\.depth), [0, 1])
   }
 }
 #endif

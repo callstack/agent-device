@@ -44,13 +44,21 @@ struct CaptureHint {
   }
 
   let projection: Projection
-  /// Traversal-depth budget. Regular presentation's collapsed depth retains the visible-depth
-  /// frontier residue described by #1797; this cut stays cheap for depth probes.
+  /// Raw traversal-depth budget. This is populated only for raw captures, where
+  /// presented depth is raw acquisition depth by contract.
   let depth: Int?
+  /// Requested regular depth after presentation collapses structural wrappers.
+  /// It is populated only for unscoped regular captures; scoped depth is applied
+  /// after the scope root is selected and therefore cannot narrow acquisition.
+  let regularPresentedDepth: Int?
   /// Regular-projection acquisition budget. Raw projection is the acquired tree and never carries
   /// this narrowing.
   let interactiveOnly: Bool
   let customActions: Bool
+
+  var rawTraversalDepth: Int? {
+    projection == .raw ? depth : nil
+  }
 
   var isRaw: Bool { projection == .raw }
 }

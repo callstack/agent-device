@@ -192,8 +192,12 @@ The policy input controlling how one snapshot acquisition becomes a public proje
 
 **Capture hint**:
 The acquisition-facing view of a snapshot request, derived once from presentation options. It names
-the projection a backend must serve and may narrow acquisition only where that backend can prove the
-narrowing complete.
+the projection a backend must serve, keeps raw traversal depth separate from regular presented depth,
+and may narrow acquisition only where that backend can prove the narrowing complete.
+
+**Regular presented-depth frontier**:
+The acquisition boundary for an unscoped regular snapshot, measured against regular presented depth
+after structural wrappers collapse. It is distinct from raw traversal depth.
 
 **Snapshot eligibility**:
 Membership in a presented snapshot projection, independent of whether a node is currently hittable.

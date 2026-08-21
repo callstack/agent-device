@@ -5,6 +5,16 @@ enum SnapshotBackendEnvironment {
   case physicalDevice
 }
 
+enum SnapshotRegularDepthCapability: String {
+  /// The backend can stop acquisition at the requested regular presented-depth frontier.
+  case presentedFrontier = "presented-frontier"
+  /// The backend is flat; it can answer the root and one presented level, but has no hierarchy
+  /// from which to prove deeper regular depth.
+  case flat
+  /// The backend can return raw traversal depth, but cannot prove regular presented depth.
+  case rawOnly = "raw-only"
+}
+
 enum SnapshotBackendKind: String, CaseIterable {
   case recursiveTree = "tree"
   case querySweep = "queries"
@@ -45,6 +55,29 @@ enum SnapshotBackendKind: String, CaseIterable {
     }
   }
 
+  var regularDepthCapability: SnapshotRegularDepthCapability {
+    switch self {
+    case .recursiveTree:
+      return .presentedFrontier
+    case .querySweep:
+      return .flat
+    case .privateAX:
+      return .rawOnly
+    }
+  }
+
+  func canServeRegularPresentedDepth(_ requestedDepth: Int?) -> Bool {
+    guard let requestedDepth else { return true }
+    switch regularDepthCapability {
+    case .presentedFrontier:
+      return true
+    case .flat:
+      return requestedDepth <= 1
+    case .rawOnly:
+      return false
+    }
+  }
+
   var isAvailableOnCurrentPlatform: Bool {
     #if os(iOS) && targetEnvironment(simulator)
       return isAvailable(on: .simulator)
@@ -74,6 +107,7 @@ private struct SnapshotBackendParityFixture: Decodable {
     let name: String
     let forceable: Bool
     let supportsRawProjection: Bool
+    let regularDepth: String
     let hittable: String
     let availability: Availability
   }
@@ -99,7 +133,7 @@ extension RunnerTests {
   }
 
   /// The JSON table is the cross-runtime declaration used by the TypeScript capability registry
-  /// and this runner. A backend case, forceability branch, raw projection claim, or availability
+  /// and this runner. A backend case, forceability branch, projection/depth claim, or availability
   /// change that is not classified in both implementations fails before an iOS smoke can drift.
   func testSnapshotBackendDeclarationsMatchCapabilityFixture() throws {
     let fixture = try loadSnapshotBackendParityFixture()
@@ -116,6 +150,11 @@ extension RunnerTests {
       XCTAssertEqual(backend.isForceable, expected.forceable, expected.name)
       XCTAssertEqual(backend.supportsRawProjection, expected.supportsRawProjection, expected.name)
       XCTAssertEqual(
+        backend.regularDepthCapability.rawValue,
+        expected.regularDepth,
+        "regular depth capability: \(expected.name)"
+      )
+      XCTAssertEqual(
         backend.hittableSemantics,
         expected.hittable,
         "hittable semantics: \(expected.name)"
@@ -131,6 +170,15 @@ extension RunnerTests {
         "physical-device availability: \(expected.name)"
       )
     }
+  }
+
+  func testRegularDepthCapabilityDoesNotClaimFlatOrRawOnlyParity() {
+    XCTAssertTrue(SnapshotBackendKind.recursiveTree.canServeRegularPresentedDepth(8))
+    XCTAssertTrue(SnapshotBackendKind.querySweep.canServeRegularPresentedDepth(0))
+    XCTAssertTrue(SnapshotBackendKind.querySweep.canServeRegularPresentedDepth(1))
+    XCTAssertFalse(SnapshotBackendKind.querySweep.canServeRegularPresentedDepth(2))
+    XCTAssertFalse(SnapshotBackendKind.privateAX.canServeRegularPresentedDepth(1))
+    XCTAssertTrue(SnapshotBackendKind.privateAX.canServeRegularPresentedDepth(nil))
   }
 }
 #endif

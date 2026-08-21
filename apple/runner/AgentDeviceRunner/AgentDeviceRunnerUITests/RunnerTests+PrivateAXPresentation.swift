@@ -34,7 +34,7 @@ extension RunnerTests {
   private func appendPrivateAXNode(_ raw: [String: Any], to nodes: inout [RawAXNode],
     hint: CaptureHint, viewport: CGRect, depth: Int, parentIndex: Int?)
   {
-    if let limit = hint.depth, depth > limit { return }
+    if let limit = hint.rawTraversalDepth, depth > limit { return }
     let fields = privateAXFields(raw)
     let index = nodes.count
     nodes.append(
@@ -134,7 +134,8 @@ extension RunnerTests {
     interactiveOnly: Bool = false
   ) throws -> [PresentedNode] {
     let hint = CaptureHint(
-      projection: .regular, depth: nil, interactiveOnly: interactiveOnly, customActions: false)
+      projection: .regular, depth: nil, regularPresentedDepth: nil,
+      interactiveOnly: interactiveOnly, customActions: false)
     let acquired = privateAXAcquisition(rawRoot: rawRoot, hint: hint, viewport: viewport)
     return try SnapshotPresentation.presentRegular(
       SnapshotAcquisition(
@@ -164,7 +165,9 @@ extension RunnerTests {
     let regular = try privateAXRegularPresentation(rawRoot: root, viewport: viewport,
       interactiveOnly: true)
     let raw = privateAXAcquisition(rawRoot: root,
-      hint: CaptureHint(projection: .raw, depth: nil, interactiveOnly: false, customActions: false),
+      hint: CaptureHint(
+        projection: .raw, depth: nil, regularPresentedDepth: nil,
+        interactiveOnly: false, customActions: false),
       viewport: viewport)
 
     XCTAssertEqual(raw.map(\.type), ["Application", "ScrollView", "Button", "Image", "Button"])
@@ -190,7 +193,9 @@ extension RunnerTests {
   /// can prove complete.
   func testPrivateAXRawProjectionAppliesRequestedTraversalDepth() {
     let raw = privateAXAcquisition(rawRoot: Self.privateAXScrolledFixture,
-      hint: CaptureHint(projection: .raw, depth: 2, interactiveOnly: false, customActions: false),
+      hint: CaptureHint(
+        projection: .raw, depth: 2, regularPresentedDepth: nil,
+        interactiveOnly: false, customActions: false),
       viewport: CGRect(x: 0, y: 0, width: 402, height: 874))
     XCTAssertEqual(raw.map(\.type), ["Application", "ScrollView", "Button", "Button"])
     XCTAssertEqual(raw.map(\.depth), [0, 1, 2, 2])

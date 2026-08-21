@@ -422,6 +422,22 @@ extension RunnerTests {
   ) throws -> SnapshotBackendAttempt {
     let hint = SnapshotPresentation.captureHint(for: options)
     var timer = SnapshotPhaseTimer()
+    // Scoped depth is relative to a presentation-selected root, so its hint stays broad and the
+    // backend capability gate applies only to an unscoped regular frontier.
+    let requestedRegularDepth = options.raw || SnapshotScopePolicy.isActive(options.scope)
+      ? nil
+      : options.depth
+    guard kind.canServeRegularPresentedDepth(requestedRegularDepth) else {
+      NSLog(
+        "AGENT_DEVICE_RUNNER_SNAPSHOT_BACKEND_DEPTH_UNSUPPORTED backend=%@ depth=%ld",
+        kind.rawValue,
+        requestedRegularDepth ?? -1
+      )
+      return SnapshotBackendAttempt(
+        outcome: .noCapture,
+        timing: timer.timing
+      )
+    }
     let acquisition: SnapshotAcquisition?
     do {
       acquisition = try timer.measure(.acquisition) {

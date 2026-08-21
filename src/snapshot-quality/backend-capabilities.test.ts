@@ -10,6 +10,7 @@ type SnapshotBackendParityFixture = {
     name: string;
     forceable: boolean;
     supportsRawProjection: boolean;
+    regularDepth: string;
     hittable: string;
     deepExtension: string;
     depthLadder: string;
@@ -87,6 +88,7 @@ test('iOS snapshot registry classifies every backend and conformance target', ()
   expect(SNAPSHOT_BACKEND_CAPABILITIES.tree).toMatchObject({
     forceable: true,
     supportsRawProjection: true,
+    regularDepth: 'presented-frontier',
     hittable: 'geometric-actionability',
     deepExtension: 'no',
     depthLadder: 'n/a',
@@ -94,6 +96,7 @@ test('iOS snapshot registry classifies every backend and conformance target', ()
   expect(SNAPSHOT_BACKEND_CAPABILITIES['private-ax']).toMatchObject({
     forceable: true,
     supportsRawProjection: true,
+    regularDepth: 'raw-only',
     hittable: 'geometric-actionability',
     deepExtension: 'yes',
     depthLadder: 'yes',
@@ -101,6 +104,7 @@ test('iOS snapshot registry classifies every backend and conformance target', ()
   expect(SNAPSHOT_BACKEND_CAPABILITIES.queries).toMatchObject({
     forceable: false,
     supportsRawProjection: false,
+    regularDepth: 'flat',
     hittable: 'geometric-actionability',
   });
 });
@@ -116,6 +120,7 @@ test('Swift and TypeScript snapshot backend declarations match the parity table'
     expect(capability).toMatchObject({
       forceable: backend.forceable,
       supportsRawProjection: backend.supportsRawProjection,
+      regularDepth: backend.regularDepth,
       hittable: backend.hittable,
       deepExtension: backend.deepExtension,
       depthLadder: backend.depthLadder,

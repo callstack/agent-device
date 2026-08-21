@@ -21,7 +21,7 @@ const snapshotCommandDescription =
 const snapshotBackendCapabilityHelp = Object.entries(SNAPSHOT_BACKEND_CAPABILITIES)
   .map(([backend, capability]) => {
     const gaps = capability.knownGaps.map((gap) => `known gap ${gap}`);
-    return `${backend}: hittable=${capability.hittable}, deep-extension=${capability.deepExtension}, depth-ladder=${capability.depthLadder}${gaps.length > 0 ? `, ${gaps.join(', ')}` : ''}`;
+    return `${backend}: hittable=${capability.hittable}, regular-depth=${capability.regularDepth}, deep-extension=${capability.deepExtension}, depth-ladder=${capability.depthLadder}${gaps.length > 0 ? `, ${gaps.join(', ')}` : ''}`;
   })
   .join('; ');
 

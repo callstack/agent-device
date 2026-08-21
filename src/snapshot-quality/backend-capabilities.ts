@@ -6,9 +6,11 @@ import type {
 /** #1933: every iOS backend publishes this shared predicate in the wire `hittable` field. */
 type SnapshotBackendHittable = 'geometric-actionability';
 type SnapshotBackendSupport = 'yes' | 'no' | 'n/a';
+type SnapshotRegularDepthCapability = 'presented-frontier' | 'flat' | 'raw-only';
 
 type SnapshotBackendCapability = {
   supportsRawProjection: boolean;
+  regularDepth: SnapshotRegularDepthCapability;
   hittable: SnapshotBackendHittable;
   deepExtension: SnapshotBackendSupport;
   depthLadder: SnapshotBackendSupport;
@@ -29,6 +31,7 @@ export const SNAPSHOT_BACKEND_CAPABILITIES = {
   tree: {
     forceable: true,
     supportsRawProjection: true,
+    regularDepth: 'presented-frontier',
     hittable: 'geometric-actionability',
     deepExtension: 'no',
     depthLadder: 'n/a',
@@ -37,6 +40,7 @@ export const SNAPSHOT_BACKEND_CAPABILITIES = {
   queries: {
     forceable: false,
     supportsRawProjection: false,
+    regularDepth: 'flat',
     hittable: 'geometric-actionability',
     deepExtension: 'n/a',
     depthLadder: 'n/a',
@@ -45,6 +49,7 @@ export const SNAPSHOT_BACKEND_CAPABILITIES = {
   'private-ax': {
     forceable: true,
     supportsRawProjection: true,
+    regularDepth: 'raw-only',
     hittable: 'geometric-actionability',
     deepExtension: 'yes',
     depthLadder: 'yes',

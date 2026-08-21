@@ -162,16 +162,26 @@ degenerate semantic carriers stay
 eligible but are never actionable, while raw projection remains exempt by contract. A violation is
 a typed `IOS_SNAPSHOT_PRESENTATION_FAILED` capture failure with the named `presentation-failed`
 snapshot-quality reason, preserved through recovery and the existing TypeScript verdict/warning
-contract. The remaining acquisition-side narrowings are declared:
-traversal-depth budget cut, the flat query sweep's frameless-element drop (a flat query has no
-hierarchy for geometryless semantics to attach to), and the private-AX bridge's device-side node
-cap.
+contract.
 
-Declared residue: a regular-projection `--depth` request still cuts the traversal at that depth,
-while regular presentation emits collapsed depth. A node whose presented depth would be within the
-limit can therefore be dropped when structural wrappers put it deeper in the raw tree. The cut is
-what keeps `--depth 1` probes cheap; making it complete is the outstanding visible-depth frontier
-obligation (#1797), not a property of the current output.
+The visible-depth frontier completes that migration for unscoped regular captures. `CaptureHint`
+keeps raw traversal depth (`--raw --depth`) separate from regular presented depth. A
+hierarchy-capable tree capture walks through structural wrappers until each branch ends or reaches
+the requested presented depth; regular presentation then applies the depth limit after the shared
+fold and eligibility collapse. This keeps shallow probes bounded by the requested presented
+frontier without inventing a raw-depth multiplier. Scoped captures remain broad because depth is
+relative to the scope root selected in presentation.
+
+Backend capability declarations are part of the contract: recursive tree supports the presented
+frontier, the flat query sweep supports only its root and one presented level, and private AX is
+raw-depth-only for regular depth requests until it has an equivalent hierarchy-aware frontier.
+The capture plan does not claim deeper regular-depth completeness from a backend that cannot prove
+it. Raw depth remains acquisition depth for every backend.
+
+Acquisition-side limits remain explicit: raw private-AX captures still disclose their bridge-side
+node cap, the flat query sweep still drops frameless elements because it has no hierarchy to attach
+geometryless semantics to, and the recursive tree still has no raw-depth extension for deep XCTest
+trees. Presentation cannot repair any of those acquisition limits.
 
 When adding new iOS snapshot behavior, maintainers should first decide which strategy owns it. If a
 change tries to make regular snapshots fast by dropping visible controls behind a node budget, or

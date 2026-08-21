@@ -109,10 +109,10 @@ extension RunnerTests {
     deadline: Date = .distantFuture
   ) -> SnapshotAcquisition? {
     #if os(iOS) && targetEnvironment(simulator)
-      let requestedDepth = hint.depth ?? 64
+      let requestedDepth = hint.rawTraversalDepth ?? 64
       // An explicit --depth request is honored as asked: no accepted-depth
       // memory, no frontier extension past it.
-      let exactDepthRequested = hint.depth != nil
+      let exactDepthRequested = hint.rawTraversalDepth != nil
       let rememberedDepth =
         exactDepthRequested
         ? nil
@@ -645,7 +645,8 @@ extension RunnerTests {
     let nodes = privateAXAcquisition(
       rawRoot: tree,
       hint: CaptureHint(
-        projection: .regular, depth: nil, interactiveOnly: false, customActions: false),
+        projection: .regular, depth: nil, regularPresentedDepth: nil,
+        interactiveOnly: false, customActions: false),
       viewport: CGRect(x: 0, y: 0, width: 390, height: 844)
     )
 
@@ -756,7 +757,8 @@ extension RunnerTests {
     ]
     let viewport = CGRect(x: 0, y: 0, width: 390, height: 844)
     let hint = CaptureHint(
-      projection: .regular, depth: nil, interactiveOnly: true, customActions: false)
+      projection: .regular, depth: nil, regularPresentedDepth: nil,
+      interactiveOnly: true, customActions: false)
     let acquired = privateAXAcquisition(rawRoot: tree, hint: hint, viewport: viewport)
     // Acquisition serializes the drawer too; the shared fold is what hides it (#1797).
     XCTAssertTrue(acquired.compactMap(\.label).contains("Admin settings"))

@@ -170,10 +170,41 @@ enum SnapshotPresentation {
     let projection: CaptureHint.Projection = options.raw ? .raw : .regular
     return CaptureHint(
       projection: projection,
-      depth: scoped ? nil : options.depth,
+      depth: scoped || projection == .regular ? nil : options.depth,
+      regularPresentedDepth: scoped || projection == .raw ? nil : options.depth,
       interactiveOnly: projection == .raw ? false : options.interactiveOnly,
       customActions: options.customActions
     )
+  }
+
+  /// Raw depth is an acquisition limit. Regular depth is a presentation limit,
+  /// so hierarchy-capable backends acquire through the structural-wrapper
+  /// frontier until this presented depth is complete.
+  static func shouldAcquireChildren(
+    for hint: CaptureHint,
+    rawDepth: Int,
+    regularPresentedDepth: Int
+  ) -> Bool {
+    if let rawLimit = hint.rawTraversalDepth {
+      return rawDepth < rawLimit
+    }
+    if let presentedLimit = hint.regularPresentedDepth {
+      return regularPresentedDepth < presentedLimit
+    }
+    return true
+  }
+
+  /// Shared depth accounting for the acquisition frontier. It uses the same
+  /// eligibility predicate as regular presentation; visibility and geometry
+  /// remain owned by the clip fold and are not reimplemented by a backend.
+  static func regularPresentedDepth(
+    for raw: RawAXNode,
+    parentPresentedDepth: Int
+  ) -> Int {
+    guard raw.parentIndex != nil else { return 0 }
+    return isEligibleForRegularPresentation(raw)
+      ? parentPresentedDepth + 1
+      : parentPresentedDepth
   }
 
   private static func project(
@@ -183,10 +214,14 @@ enum SnapshotPresentation {
     projection: CaptureHint.Projection
   ) -> SnapshotBackendCapture {
     let scopedRawNodes = applyScope(to: projectionNodes, options: options, projection: projection)
-    let nodes = presentedNodes(from: scopedRawNodes, projection: projection)
+    let nodes = presentedNodes(
+      from: scopedRawNodes,
+      projection: projection,
+      maximumDepth: projection == .regular ? options.depth : nil
+    )
     let qualityPayload: DataPayload? = SnapshotScopePolicy.isActive(options.scope)
       ? DataPayload(
-        nodes: presentedNodes(from: projectionNodes, projection: projection),
+        nodes: presentedNodes(from: projectionNodes, projection: projection, maximumDepth: nil),
         truncated: acquisition.truncated
       )
       : nil
@@ -209,7 +244,8 @@ enum SnapshotPresentation {
 
   private static func presentedNodes(
     from rawNodes: [SnapshotPresentationNode],
-    projection: CaptureHint.Projection
+    projection: CaptureHint.Projection,
+    maximumDepth: Int? = nil
   ) -> [PresentedNode] {
     if projection == .raw {
       return rawNodes.map { PresentedNode(presenting: $0) }
@@ -231,6 +267,12 @@ enum SnapshotPresentation {
 
       let presentedIndex = nodes.count
       let presentedDepth = presentedParent.map { $0.depth + 1 } ?? 0
+      if let maximumDepth, presentedDepth > maximumDepth {
+        if let presentedParent {
+          nearestPresentedNodeByRawIndex[raw.index] = presentedParent
+        }
+        continue
+      }
       nearestPresentedNodeByRawIndex[raw.index] = (presentedIndex, presentedDepth)
       nodes.append(
         PresentedNode(
@@ -272,10 +314,10 @@ enum SnapshotPresentation {
         depth: { $0.raw.depth }
       )
       let maxDepth = options.depth ?? Int.max
-      return reindex(
-        Array(rawNodes[range]).filter { $0.raw.depth - startDepth <= maxDepth },
-        depthOffset: startDepth
-      )
+      let scopedNodes = projection == .raw
+        ? Array(rawNodes[range]).filter { $0.raw.depth - startDepth <= maxDepth }
+        : Array(rawNodes[range])
+      return reindex(scopedNodes, depthOffset: startDepth)
     }
   }
 

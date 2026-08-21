@@ -15,7 +15,6 @@ extension RunnerTests {
     let queryRoot: XCUIElement
     let rootSnapshot: XCUIElementSnapshot
     let viewport: CGRect
-    let maxDepth: Int
   }
 
   private struct SnapshotEvaluation {
@@ -30,6 +29,7 @@ extension RunnerTests {
     let snapshot: XCUIElementSnapshot
     let depth: Int
     let parentIndex: Int?
+    let parentPresentedDepth: Int
   }
 
   struct SnapshotCaptureFailure: Error {
@@ -146,9 +146,9 @@ extension RunnerTests {
 
     // Acquisition serializes facts: every traversed node is emitted at raw traversal depth, and
     // the regular projection's clip fold runs once inside `SnapshotPresentation` (#1797). The two
-    // walks this backend keeps are budget and augmentation, never membership: the traversal-depth
-    // cut (declared residue -- regular presentation emits collapsed depth) and the collapsed-tab
-    // expansion, which needs live element handles.
+    // walks this backend keeps are the raw budget or regular presented-depth frontier, plus
+    // collapsed-tab augmentation which needs live element handles; neither walk publishes a
+    // presentation node.
     var nodes: [RawAXNode] = []
     let rootEvaluation = evaluateSnapshot(context.rootSnapshot)
     nodes.append(
@@ -161,7 +161,12 @@ extension RunnerTests {
         viewport: context.viewport
       )
     )
-    if context.maxDepth > 0 {
+    let shouldVisitRootChildren = SnapshotPresentation.shouldAcquireChildren(
+      for: hint,
+      rawDepth: 0,
+      regularPresentedDepth: 0
+    )
+    if shouldVisitRootChildren {
       appendCollapsedTabFallbackNodes(
         to: &nodes,
         containerSnapshot: context.rootSnapshot,
@@ -173,21 +178,37 @@ extension RunnerTests {
     }
 
     var seen = Set<String>()
-    var stack: [SnapshotTraversalEntry] = context.rootSnapshot.children.map {
-      SnapshotTraversalEntry(
-        snapshot: $0,
-        depth: 1,
-        parentIndex: 0
-      )
+    var stack: [SnapshotTraversalEntry] = []
+    if shouldVisitRootChildren {
+      stack = context.rootSnapshot.children.map {
+        SnapshotTraversalEntry(
+          snapshot: $0,
+          depth: 1,
+          parentIndex: 0,
+          parentPresentedDepth: 0
+        )
+      }
     }
 
     while let entry = stack.popLast() {
       let snapshot = entry.snapshot
       let depth = entry.depth
       let parentIndex = entry.parentIndex
-      if let limit = hint.depth, depth > limit { continue }
+      if let limit = hint.rawTraversalDepth, depth > limit { continue }
 
       let evaluation = evaluateSnapshot(snapshot)
+      let node = makeSnapshotNode(
+        snapshot: snapshot,
+        evaluation: evaluation,
+        depth: depth,
+        index: nodes.count,
+        parentIndex: parentIndex,
+        viewport: context.viewport
+      )
+      let presentedDepth = SnapshotPresentation.regularPresentedDepth(
+        for: node,
+        parentPresentedDepth: entry.parentPresentedDepth
+      )
       let key = Self.snapshotTraversalIdentity(
         elementType: snapshot.elementType,
         label: evaluation.label,
@@ -200,13 +221,26 @@ extension RunnerTests {
       }
 
       let currentIndex = !isDuplicate ? nodes.count : parentIndex
-      if depth < context.maxDepth {
+      // A duplicate is not emitted, so its descendants are reparented to the
+      // duplicate's parent. Keep the frontier at that parent too; counting a
+      // skipped duplicate would make the acquisition less complete than the
+      // presentation tree it will produce.
+      let currentPresentedDepth = isDuplicate
+        ? entry.parentPresentedDepth
+        : presentedDepth
+      let shouldVisitChildren = SnapshotPresentation.shouldAcquireChildren(
+        for: hint,
+        rawDepth: depth,
+        regularPresentedDepth: currentPresentedDepth
+      )
+      if shouldVisitChildren {
         for child in snapshot.children.reversed() {
           stack.append(
             SnapshotTraversalEntry(
               snapshot: child,
               depth: depth + 1,
-              parentIndex: currentIndex
+              parentIndex: currentIndex,
+              parentPresentedDepth: currentPresentedDepth
             )
           )
         }
@@ -214,24 +248,14 @@ extension RunnerTests {
 
       if isDuplicate { continue }
 
-      let index = nodes.count
-      nodes.append(
-        makeSnapshotNode(
-          snapshot: snapshot,
-          evaluation: evaluation,
-          depth: depth,
-          index: index,
-          parentIndex: parentIndex,
-          viewport: context.viewport
-        )
-      )
-      if depth < context.maxDepth {
+      nodes.append(node)
+      if shouldVisitChildren {
         appendCollapsedTabFallbackNodes(
           to: &nodes,
           containerSnapshot: snapshot,
           resolveElements: collapsedTabDescendants,
           depth: depth + 1,
-          parentIndex: index,
+          parentIndex: node.index,
           viewport: context.viewport
         )
       }
@@ -349,7 +373,7 @@ extension RunnerTests {
     var nodes: [RawAXNode] = []
 
     func walk(_ snapshot: XCUIElementSnapshot, depth: Int, parentIndex: Int?) throws {
-      if let limit = hint.depth, depth > limit { return }
+      if let limit = hint.rawTraversalDepth, depth > limit { return }
 
       let evaluation = evaluateSnapshot(snapshot)
       if nodes.count >= Self.rawSnapshotMaxNodes {
@@ -391,7 +415,7 @@ extension RunnerTests {
     var nodes: [RawAXNode] = [
       interactiveRootNode(rect: .zero)
     ]
-    if hint.depth == 0 {
+    if hint.rawTraversalDepth == 0 || hint.regularPresentedDepth == 0 {
       return SnapshotAcquisition(
         hint: hint,
         nodes: nodes,
@@ -831,8 +855,7 @@ extension RunnerTests {
     return SnapshotTraversalContext(
       queryRoot: app,
       rootSnapshot: rootSnapshot,
-      viewport: viewport,
-      maxDepth: hint.depth ?? Int.max
+      viewport: viewport
     )
   }
 

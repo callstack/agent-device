@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- iOS regular `snapshot --depth` now measures depth after structural accessibility wrappers
+  collapse. The recursive-tree backend follows a bounded presented-depth frontier, so controls
+  that fit the requested regular depth are no longer lost behind raw wrappers; raw `--depth`
+  remains a traversal-depth limit. Flat query recovery is limited to one presented level, and
+  private AX does not claim deeper regular-depth completeness until it has a hierarchy-aware
+  frontier (#1797).
 - iOS regular snapshot nodes now publish presentation-owned effective geometry through the existing
   `rect` field: backend-reported frames remain available to acquisition, while regular output uses
   the viewport and declared scroll-clip intersection. Raw snapshots and direct element reads retain
