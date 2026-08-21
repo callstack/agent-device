@@ -238,7 +238,6 @@ extension RunnerTests {
     }
     do {
       let viewport = try runMainThreadWork(
-        command: nil,
         timeout: 1,
         timeoutError: snapshotMainThreadTimeoutError("reading private AX viewport")
       ) {

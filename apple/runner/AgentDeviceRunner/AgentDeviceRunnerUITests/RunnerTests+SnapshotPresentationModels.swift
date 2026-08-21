@@ -112,16 +112,6 @@ struct PresentedNode: Codable {
     )
   }
 
-  init(presenting raw: RawAXNode, index: Int, depth: Int, parentIndex: Int?) {
-    self.init(
-      presenting: raw,
-      rect: raw.rect,
-      index: index,
-      depth: depth,
-      parentIndex: parentIndex
-    )
-  }
-
   init(
     presenting raw: RawAXNode,
     rect: SnapshotRect,

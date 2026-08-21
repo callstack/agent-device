@@ -5,7 +5,9 @@ import CoreGraphics
 #endif
 
 private enum RunnerInterfaceOrientation {
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
   static let unknown = 0
+#endif
   static let portrait = 1
   static let portraitUpsideDown = 2
   static let landscapeRight = 3

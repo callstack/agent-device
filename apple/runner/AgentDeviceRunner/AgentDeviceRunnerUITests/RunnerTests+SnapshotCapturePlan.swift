@@ -490,7 +490,6 @@ extension RunnerTests {
         return nil
       }
       acquisition = try runMainThreadWork(
-        command: nil,
         timeout: min(treeCaptureSliceBudget, max(0.5, deadline.timeIntervalSinceNow)),
         timeoutError: snapshotMainThreadTimeoutError("processing tree snapshot")
       ) {
@@ -500,7 +499,6 @@ extension RunnerTests {
       }
     case .querySweep:
       acquisition = try runMainThreadWork(
-        command: nil,
         timeout: min(Self.flatInteractiveFallbackBudget, max(0.1, deadline.timeIntervalSinceNow)),
         timeoutError: snapshotMainThreadTimeoutError("running query-sweep snapshot")
       ) {

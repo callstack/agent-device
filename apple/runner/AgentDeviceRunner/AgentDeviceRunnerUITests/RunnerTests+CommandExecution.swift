@@ -845,7 +845,6 @@ extension RunnerTests {
     DispatchQueue(label: "agent-device.runner.tests.off-main").async {
       do {
         box.observedMainThread = try self.runMainThreadWork(
-          command: nil,
           timeout: 1,
           timeoutError: self.mainThreadExecutionTimeoutError
         ) {
@@ -879,7 +878,6 @@ extension RunnerTests {
     DispatchQueue(label: "agent-device.runner.tests.timeout").async {
       do {
         _ = try self.runMainThreadWork(
-          command: nil,
           timeout: 0,
           timeoutError: self.mainThreadExecutionTimeoutError,
           onAbandoned: {
@@ -938,6 +936,7 @@ extension RunnerTests {
   }
 #endif
 
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
   func execute(command: Command) throws -> Response {
     if command.command == .status {
       return executeStatus(command: command)
@@ -948,6 +947,7 @@ extension RunnerTests {
     commandJournal.accept(command: command)
     return try executeAccepted(command: command)
   }
+#endif
 
   func executeAccepted(command: Command) throws -> Response {
     commandJournal.start(command: command)
@@ -1107,7 +1107,6 @@ extension RunnerTests {
     }
     if command.command == .alert, let deadline = alertDeadline {
       return try runMainThreadWork(
-        command: command,
         timeout: max(0.001, deadline.timeIntervalSinceNow),
         timeoutError: mainThreadExecutionTimeoutError
       ) {
@@ -1119,7 +1118,6 @@ extension RunnerTests {
       }
     }
     return try runMainThreadWork(
-      command: command,
       timeout: mainThreadExecutionTimeout,
       timeoutError: mainThreadExecutionTimeoutError
     ) {
@@ -1128,7 +1126,6 @@ extension RunnerTests {
   }
 
   func runMainThreadWork<T>(
-    command: Command?,
     timeout: TimeInterval,
     timeoutError: @escaping () -> Error,
     onAbandoned: (() -> Void)? = nil,
@@ -1300,7 +1297,6 @@ extension RunnerTests {
     var hasRetried = false
     while true {
       let failureCountBefore = try runMainThreadWork(
-        command: command,
         timeout: mainThreadExecutionTimeout,
         timeoutError: mainThreadExecutionTimeoutError
       ) {
@@ -1317,7 +1313,6 @@ extension RunnerTests {
         return response
       }
       let recordedFailureResponse = try runMainThreadWork(
-        command: command,
         timeout: mainThreadExecutionTimeout,
         timeoutError: mainThreadExecutionTimeoutError
       ) {
@@ -1327,7 +1322,6 @@ extension RunnerTests {
       }
       if let recordedFailureResponse {
         try runMainThreadWork(
-          command: command,
           timeout: mainThreadExecutionTimeout,
           timeoutError: mainThreadExecutionTimeoutError
         ) {
@@ -1342,7 +1336,6 @@ extension RunnerTests {
         )
         hasRetried = true
         try runMainThreadWork(
-          command: command,
           timeout: mainThreadExecutionTimeout,
           timeoutError: mainThreadExecutionTimeoutError
         ) {
@@ -1357,7 +1350,6 @@ extension RunnerTests {
 
   private func executeSnapshotDispatchedOnce(command: Command) throws -> Response {
     let preparation = try runMainThreadWork(
-      command: command,
       timeout: mainThreadExecutionTimeout,
       timeoutError: mainThreadExecutionTimeoutError
     ) {
@@ -1424,7 +1416,6 @@ extension RunnerTests {
     }
     do {
       try runMainThreadWork(
-        command: nil,
         timeout: 1,
         timeoutError: mainThreadExecutionTimeoutError
       ) {
@@ -1442,7 +1433,6 @@ extension RunnerTests {
     }
     do {
       try runMainThreadWork(
-        command: nil,
         timeout: 1,
         timeoutError: mainThreadExecutionTimeoutError
       ) {
@@ -2583,9 +2573,11 @@ extension RunnerTests {
     )
   }
 
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
   func runnerCommandFixture(_ json: String) throws -> Command {
     try JSONDecoder().decode(Command.self, from: Data(json.utf8))
   }
+#endif
 
   private func shouldSkipAppActivationPreflight(_ command: Command) -> Bool {
 #if os(iOS)

@@ -5,6 +5,17 @@ import { execFileSync } from 'node:child_process';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
+import {
+  formatBytes,
+  formatDiff,
+  formatMaybeBytes,
+  formatSignedBytes,
+} from './size-report-format.mjs';
+import {
+  collectNpmPack,
+  formatPackageComponents,
+  formatPackedFiles,
+} from './size-report-package.mjs';
 
 const COMMENT_MARKER = '<!-- agent-device-size-report -->';
 const GITHUB_REQUEST_ATTEMPTS = 4;
@@ -24,37 +35,6 @@ const VALUE_ARGS = new Map([
 const STARTUP_BENCHMARKS = [
   { name: 'CLI --version', args: ['--version'] },
   { name: 'CLI --help', args: ['--help'] },
-];
-
-const PACKAGE_COMPONENTS = [
-  {
-    id: 'js',
-    label: 'JS / dist source',
-    matches: (entryPath) => entryPath === 'dist/src' || entryPath.startsWith('dist/src/'),
-  },
-  {
-    id: 'apple-runner',
-    label: 'Apple runner source/project',
-    matches: (entryPath) =>
-      entryPath === 'dist/apple/runner' || entryPath.startsWith('dist/apple/runner/'),
-  },
-  {
-    id: 'macos-helper',
-    label: 'macOS helper source',
-    matches: (entryPath) =>
-      entryPath === 'apple/macos-helper' || entryPath.startsWith('apple/macos-helper/'),
-  },
-  {
-    id: 'android-helpers',
-    label: 'Android helper artifacts',
-    matches: (entryPath) =>
-      /^android\/(?:snapshot-helper|ime-helper)\/dist(?:\/|$)/.test(entryPath),
-  },
-  {
-    id: 'other',
-    label: 'Other package files',
-    matches: () => true,
-  },
 ];
 
 if (isMainModule()) {
@@ -249,97 +229,6 @@ function walk(root) {
   });
 }
 
-function collectNpmPack(root) {
-  const cachePath = path.join(root, '.tmp', 'npm-cache');
-  fs.mkdirSync(cachePath, { recursive: true });
-  const stdout = execFileSync(
-    'npm',
-    ['pack', '--dry-run', '--ignore-scripts', '--json', '--cache', cachePath],
-    { cwd: root, encoding: 'utf8' },
-  );
-  const pack = parseNpmPackOutput(stdout);
-  const entries = normalizeNpmPackEntries(pack);
-  return {
-    filename: pack.filename,
-    tarballBytes: pack.size,
-    unpackedBytes: pack.unpackedSize,
-    files: entries.length,
-    entries,
-    components: summarizeNpmPackComponents({ ...pack, files: entries }),
-  };
-}
-
-function parseNpmPackOutput(stdout) {
-  const parsed = JSON.parse(stdout);
-  return Array.isArray(parsed) ? parsed[0] : parsed;
-}
-
-function normalizeNpmPackEntries(pack) {
-  if (!Array.isArray(pack.files)) {
-    throw new Error('npm pack did not return per-file path/size data in files[]');
-  }
-  return pack.files.map((entry) => {
-    if (
-      !entry ||
-      typeof entry.path !== 'string' ||
-      !Number.isSafeInteger(entry.size) ||
-      entry.size < 0
-    ) {
-      throw new Error(`npm pack returned an invalid file entry: ${JSON.stringify(entry)}`);
-    }
-    return { path: entry.path, size: entry.size };
-  });
-}
-
-function classifyNpmPackEntry(entry) {
-  const matches = PACKAGE_COMPONENTS.filter(
-    (component) => component.id !== 'other' && component.matches(entry.path),
-  );
-  if (matches.length > 1) {
-    throw new Error(
-      `Package entry ${JSON.stringify(entry.path)} matched ${matches.length} size components`,
-    );
-  }
-  return { ...entry, component: matches[0]?.id ?? 'other' };
-}
-
-function summarizeNpmPackComponents(pack) {
-  if (!Number.isSafeInteger(pack.unpackedSize) || pack.unpackedSize < 0) {
-    throw new Error(`npm pack returned an invalid unpackedSize: ${pack.unpackedSize}`);
-  }
-  const entries = normalizeNpmPackEntries(pack).map(classifyNpmPackEntry);
-  const bytesByComponent = new Map(PACKAGE_COMPONENTS.map((component) => [component.id, 0]));
-  const filesByComponent = new Map(PACKAGE_COMPONENTS.map((component) => [component.id, 0]));
-
-  for (const entry of entries) {
-    bytesByComponent.set(
-      entry.component,
-      bytesByComponent.get(entry.component) + entry.size,
-    );
-    filesByComponent.set(
-      entry.component,
-      filesByComponent.get(entry.component) + 1,
-    );
-  }
-
-  const components = PACKAGE_COMPONENTS.map((component) => ({
-    id: component.id,
-    label: component.label,
-    files: filesByComponent.get(component.id),
-    unpackedBytes: bytesByComponent.get(component.id),
-  }));
-  const componentBytes = components.reduce(
-    (total, component) => total + component.unpackedBytes,
-    0,
-  );
-  if (componentBytes !== pack.unpackedSize) {
-    throw new Error(
-      `Package component byte sum ${componentBytes} does not match npm pack unpackedSize ${pack.unpackedSize}`,
-    );
-  }
-  return components;
-}
-
 function formatMarkdown(report, baseReport) {
   const rows = [
     metricRow('JS raw', baseReport?.js.rawBytes, report.js.rawBytes),
@@ -353,9 +242,10 @@ function formatMarkdown(report, baseReport) {
     : formatTopChunks(report.chunks);
   const components = formatPackageComponents(report.npmPack, baseReport?.npmPack);
   const startup = formatStartupBenchmarks(report.startup, baseReport?.startup);
-  const packedFiles = baseReport
-    ? formatChangedPackedFiles(report.npmPack.entries, baseReport.npmPack?.entries ?? [])
-    : formatTopPackedFiles(report.npmPack.entries);
+  const packedFiles = formatPackedFiles(
+    report.npmPack.entries,
+    baseReport ? (baseReport.npmPack?.entries ?? []) : undefined,
+  );
 
   return `${COMMENT_MARKER}
 ## Size Report
@@ -417,76 +307,6 @@ ${rows.join('\n')}
 `;
 }
 
-function formatPackageComponents(currentPack, basePack) {
-  const currentById = new Map(
-    (currentPack.components ?? []).map((component) => [component.id, component]),
-  );
-  const baseById = new Map(
-    (basePack?.components ?? []).map((component) => [component.id, component]),
-  );
-  const rows = PACKAGE_COMPONENTS.map((component) => {
-    const current = currentById.get(component.id)?.unpackedBytes ?? 0;
-    const base = baseById.get(component.id)?.unpackedBytes;
-    return `| ${component.label} | ${formatMaybeBytes(base)} | ${formatBytes(current)} | ${formatDiff(base, current)} |`;
-  });
-  return `### npm unpacked components
-
-| Component | Base | Current | Diff |
-|---|---:|---:|---:|
-${rows.join('\n')}
-`;
-}
-
-function formatTopPackedFiles(entries) {
-  const rows = [...entries]
-    .sort((left, right) => right.size - left.size)
-    .slice(0, 10)
-    .map((entry) => `| \`${entry.path}\` | ${formatBytes(entry.size)} |`);
-  return `### Top packed files
-
-| Packed file | Unpacked |
-|---|---:|
-${rows.join('\n')}
-`;
-}
-
-function formatChangedPackedFiles(currentEntries, baseEntries) {
-  const currentByPath = new Map(currentEntries.map((entry) => [entry.path, entry.size]));
-  const baseByPath = new Map(baseEntries.map((entry) => [entry.path, entry.size]));
-  const paths = new Set([...currentByPath.keys(), ...baseByPath.keys()]);
-  const rows = [...paths]
-    .map((filePath) => {
-      const current = currentByPath.get(filePath) ?? 0;
-      const base = baseByPath.get(filePath) ?? 0;
-      return { path: filePath, base, current, diff: current - base };
-    })
-    .filter((entry) => entry.diff !== 0)
-    .sort((left, right) => Math.abs(right.diff) - Math.abs(left.diff))
-    .slice(0, 10)
-    .map(
-      (entry) =>
-        `| \`${entry.path}\` | ${formatBytes(entry.base)} | ${formatBytes(entry.current)} | ${formatSignedBytes(entry.diff)} |`,
-    );
-
-  if (rows.length === 0) {
-    return '### Top changed packed files\n\nNo changed packed files.\n';
-  }
-  return `### Top changed packed files
-
-| Packed file | Base | Current | Diff |
-|---|---:|---:|---:|
-${rows.join('\n')}
-`;
-}
-
-function formatMaybeBytes(value) {
-  return typeof value === 'number' ? formatBytes(value) : '-';
-}
-
-function formatDiff(base, current) {
-  return typeof base === 'number' ? formatSignedBytes(current - base) : '-';
-}
-
 function formatStartupBenchmarks(startup, baseStartup) {
   if (!startup) return '';
   const baseByName = new Map(
@@ -519,19 +339,6 @@ function formatMsDiff(base, current) {
 
 function formatMs(value) {
   return value < 1000 ? `${value.toFixed(1)} ms` : `${(value / 1000).toFixed(2)} s`;
-}
-
-function formatBytes(value) {
-  const absoluteValue = Math.abs(value);
-  if (absoluteValue < 1000) return `${value} B`;
-  if (absoluteValue < 1000 * 1000) return `${(value / 1000).toFixed(1)} kB`;
-  return `${(value / (1000 * 1000)).toFixed(2)} MB`;
-}
-
-function formatSignedBytes(value) {
-  if (value === 0) return '0 B';
-  const sign = value > 0 ? '+' : '-';
-  return `${sign}${formatBytes(Math.abs(value))}`;
 }
 
 function writeFile(filePath, contents) {
@@ -685,4 +492,4 @@ function isTransientGitHubStatus(status) {
   return status === 429 || status >= 500;
 }
 
-export { classifyNpmPackEntry, formatMarkdown, summarizeNpmPackComponents };
+export { formatMarkdown };

@@ -294,7 +294,6 @@ extension RunnerTests {
     let startedAt = Date()
     do {
       return try runMainThreadWork(
-        command: nil,
         timeout: slice,
         timeoutError: {
           SnapshotCaptureFailure(
@@ -813,7 +812,6 @@ extension RunnerTests {
     treeCaptureSliceBudgetOverride: TimeInterval? = nil
   ) throws -> SnapshotTraversalContext? {
     let viewport = try runMainThreadWork(
-      command: nil,
       timeout: min(1.0, max(0.1, captureDeadline.timeIntervalSinceNow)),
       timeoutError: snapshotMainThreadTimeoutError("preparing tree snapshot")
     ) {
@@ -869,7 +867,6 @@ extension RunnerTests {
       return try captureSnapshotRoot(element)
     }
     return try runMainThreadWork(
-      command: nil,
       timeout: sliceSeconds,
       timeoutError: treeCaptureTimeoutError(sliceSeconds: sliceSeconds),
       onAbandoned: {
