@@ -123,19 +123,19 @@ jobs:
           echo "=== xdotool ==="
           xdotool version
 
-      # TEMPORARY — diagnostic-only, removed before this branch's fix lands. Gathers hard
-      # evidence (raw AT-SPI interfaces/actions, raw xdotool behavior) for three tracked Linux
-      # defects (#1935 click-miss / typed-'=' / GTK4-no-text) instead of guessing at root cause.
-      # NOTE: GH Actions runs `run:` blocks under `bash -e` — every command here that may
-      # legitimately fail (pkill with nothing to kill, a python probe with no app yet) MUST be
-      # explicitly guarded with `|| true`, or the whole step silently stops at that line.
+      # TEMPORARY — diagnostic-only, removed before this branch's fix lands. Round 3: prior
+      # evidence proved Component.get_extents(SCREEN) returns (0,0) for every non-toplevel
+      # widget, and Text.get_text() throws (binding shadowing with the deprecated 1-arg
+      # Accessible.get_text — see https://discourse.gnome.org/t/how-can-i-explicitly-call-atspi-text-get-text/36684).
+      # This round tests the two candidate fixes directly: CoordType.WINDOW + frame-offset
+      # for extents, and the unbound Atspi.Text.get_text(accessible, ...) static-call form.
       - name: DIAGNOSTIC linux input investigation
         continue-on-error: true
         run: |
           set -x
           mkdir -p /tmp/diag
 
-          cat > /tmp/diag/inspect.py <<'PYEOF'
+          cat > /tmp/diag/inspect2.py <<'PYEOF'
           import sys, json, time
           import gi
           gi.require_version("Atspi", "2.0")
@@ -152,66 +152,53 @@ jobs:
                   name = accessible.get_name() or ""
               except Exception:
                   name = ""
-              rect = None
+              rect_screen = None
+              rect_window = None
               try:
                   comp = accessible.get_component_iface()
                   if comp:
                       e = comp.get_extents(Atspi.CoordType.SCREEN)
-                      if e and e.width > 0 and e.height > 0:
-                          rect = {"x": e.x, "y": e.y, "width": e.width, "height": e.height}
+                      if e:
+                          rect_screen = {"x": e.x, "y": e.y, "width": e.width, "height": e.height}
+                      ew = comp.get_extents(Atspi.CoordType.WINDOW)
+                      if ew:
+                          rect_window = {"x": ew.x, "y": ew.y, "width": ew.width, "height": ew.height}
               except Exception as ex:
-                  rect = {"error": str(ex)}
-              n_actions = None
-              action_names = []
-              try:
-                  act = accessible.get_action_iface()
-                  if act:
-                      n_actions = act.get_n_actions()
-                      for i in range(n_actions):
-                          try:
-                              action_names.append(act.get_action_name(i))
-                          except Exception:
-                              pass
-              except Exception as ex:
-                  n_actions = "ERR:" + str(ex)
-              text_val = None
+                  rect_screen = {"error": str(ex)}
+              text_bound = None
+              text_static = None
+              char_count = None
               try:
                   t = accessible.get_text_iface()
                   if t:
-                      c = t.get_character_count()
-                      text_val = t.get_text(0, c) if c > 0 else ("(empty count=%d)" % c)
-              except Exception as ex:
-                  text_val = "ERR:" + str(ex)
-              value_text = None
-              value_num = None
-              try:
-                  v = accessible.get_value_iface()
-                  if v:
                       try:
-                          value_text = v.get_text()
+                          char_count = Atspi.Text.get_character_count(accessible)
                       except Exception as ex:
-                          value_text = "ERR:" + str(ex)
+                          char_count = "ERR:" + str(ex)
                       try:
-                          value_num = v.get_current_value()
+                          c = t.get_character_count()
+                          text_bound = t.get_text(0, c) if c > 0 else ("(empty count=%d)" % c)
                       except Exception as ex:
-                          value_num = "ERR:" + str(ex)
+                          text_bound = "ERR:" + str(ex)
+                      try:
+                          cc = char_count if isinstance(char_count, int) else 0
+                          text_static = Atspi.Text.get_text(accessible, 0, cc) if cc > 0 else ("(empty count=%r)" % char_count)
+                      except Exception as ex:
+                          text_static = "ERR:" + str(ex)
               except Exception as ex:
-                  value_text = "OUTER_ERR:" + str(ex)
-              try:
-                  editable = bool(accessible.get_editable_text_iface())
-              except Exception:
-                  editable = False
+                  text_bound = "OUTER_ERR:" + str(ex)
               out.append({
-                  "depth": depth, "role": role, "name": name, "rect": rect,
-                  "n_actions": n_actions, "action_names": action_names,
-                  "text_iface_value": text_val, "value_iface_text": value_text,
-                  "value_iface_number": value_num, "has_editable_text_iface": editable,
+                  "depth": depth, "role": role, "name": name,
+                  "rect_screen": rect_screen, "rect_window": rect_window,
+                  "char_count_static": char_count,
+                  "text_get_text_BOUND": text_bound,
+                  "text_get_text_STATIC": text_static,
               })
               try:
-                  cc = accessible.get_child_count()
+                  cc2 = accessible.get_child_count()
               except Exception:
-                  cc = 0
-              for i in range(cc):
+                  cc2 = 0
+              for i in range(cc2):
                   try:
                       child = accessible.get_child_at_index(i)
                       if child:
@@ -245,115 +232,33 @@ jobs:
               main()
           PYEOF
 
-          cat > /tmp/diag/rectfor.py <<'PYEOF2'
-          import sys, json
-          data = json.load(open(sys.argv[1]))
-          target = sys.argv[2]
-          if not isinstance(data, list):
-              print("NOTFOUND:" + json.dumps(data), file=sys.stderr)
-              sys.exit(1)
-          for n in data:
-              if n.get("name") == target and "button" in n.get("role", "").lower():
-                  r = n["rect"]
-                  print(r["x"], r["y"], r["width"], r["height"])
-                  sys.exit(0)
-          print("NOTFOUND: no matching button node", file=sys.stderr)
-          sys.exit(1)
-          PYEOF2
-
-          echo "############ ROUND A: fresh launch, full a11y tree (interfaces/actions) ############"
+          echo "############ fresh launch, typed 155, dump extents(SCREEN vs WINDOW) + text(bound vs static) ############"
           gnome-calculator &
-          python3 /tmp/diag/inspect.py > /tmp/diag/a-tree-fresh.json 2>/tmp/diag/a-tree-fresh.err || true
-          scrot /tmp/diag/a-fresh.png || true
-          (python3 -c "
-          import json
-          d = json.load(open('/tmp/diag/a-tree-fresh.json'))
-          print('nodes:', len(d) if isinstance(d, list) else d)
-          " || true) | tee /tmp/diag/a-summary.txt
-
-          echo "############ ROUND A2: nodes named '1' ############"
-          (python3 -c "
-          import json
-          d = json.load(open('/tmp/diag/a-tree-fresh.json'))
-          if isinstance(d, list):
-              for n in d:
-                  if n.get('name') == '1':
-                      print(json.dumps(n))
-          " || true) > /tmp/diag/a2-nodes-named-1.txt
-          cat /tmp/diag/a2-nodes-named-1.txt
-
-          echo "############ ROUND B: click button '1' at ITS OWN rect (bypass our promotion code) ############"
-          RECT="$(python3 /tmp/diag/rectfor.py /tmp/diag/a-tree-fresh.json 1 2>/tmp/diag/b-rectfor.err || true)"
-          echo "rect: $RECT" | tee /tmp/diag/b-rect.txt
-          cat /tmp/diag/b-rectfor.err || true
-          if [ -n "$RECT" ]; then
-            read -r BX BY BW BH <<< "$RECT"
-            CX=$(( BX + BW/2 )); CY=$(( BY + BH/2 ))
-            echo "button '1' own rect: x=$BX y=$BY w=$BW h=$BH -> center=($CX,$CY)" | tee -a /tmp/diag/b-rect.txt
-            xdotool getmouselocation --shell > /tmp/diag/b-mouse-before.txt || true
-            timeout 10 xdotool mousemove --sync "$CX" "$CY" || true
-            xdotool getmouselocation --shell > /tmp/diag/b-mouse-after-move.txt || true
-            xdotool click 1 || true
-            sleep 0.5
-            scrot /tmp/diag/b-after-click-own-rect.png || true
-            python3 /tmp/diag/inspect.py > /tmp/diag/b-tree-after-click.json 2>/tmp/diag/b-tree-after-click.err || true
-          else
-            echo "no rect found, skipping click test" | tee -a /tmp/diag/b-rect.txt
-          fi
-
-          pkill -f gnome-calculator || true
-          sleep 1
-
-          echo "############ ROUND C: xkb / keymap facts ############"
-          setxkbmap -query > /tmp/diag/c-xkb-query.txt 2>&1 || true
-          xmodmap -pke > /tmp/diag/c-xmodmap-full.txt 2>&1 || true
-          grep -iw "equal\|plus" /tmp/diag/c-xmodmap-full.txt > /tmp/diag/c-xmodmap-equal-plus.txt || true
-
-          echo "############ ROUND D: isolate '=' behavior ############"
-          gnome-calculator &
-          python3 /tmp/diag/inspect.py > /tmp/diag/d0-ready.json 2>&1 || true
-          xdotool type --clearmodifiers -- "100+55=" || true
-          sleep 0.5
-          scrot /tmp/diag/d1-full-expression.png || true
-          pkill -f gnome-calculator || true; sleep 1
-
-          gnome-calculator &
-          python3 /tmp/diag/inspect.py > /dev/null 2>&1 || true
-          xdotool type --clearmodifiers -- "=" || true
-          sleep 0.5
-          scrot /tmp/diag/d2-equals-alone.png || true
-          pkill -f gnome-calculator || true; sleep 1
-
-          gnome-calculator &
-          python3 /tmp/diag/inspect.py > /dev/null 2>&1 || true
-          xdotool key --clearmodifiers equal || true
-          sleep 0.5
-          scrot /tmp/diag/d3-key-equal.png || true
-          pkill -f gnome-calculator || true; sleep 1
-
-          gnome-calculator &
-          python3 /tmp/diag/inspect.py > /dev/null 2>&1 || true
-          xdotool type --clearmodifiers -- "5=5" || true
-          sleep 0.5
-          scrot /tmp/diag/d4-equals-midstring.png || true
-          pkill -f gnome-calculator || true; sleep 1
-
-          gnome-calculator &
-          python3 /tmp/diag/inspect.py > /dev/null 2>&1 || true
-          xdotool type --delay 150 --clearmodifiers -- "100+55=" || true
-          sleep 0.5
-          scrot /tmp/diag/d5-slow-delay.png || true
-          pkill -f gnome-calculator || true; sleep 1
-
-          echo "############ ROUND E: GTK4 text exposure — dump entry-ish nodes ############"
-          gnome-calculator &
-          python3 /tmp/diag/inspect.py > /dev/null 2>&1 || true
+          python3 /tmp/diag/inspect2.py > /dev/null 2>&1 || true
           xdotool type --clearmodifiers -- "155" || true
           sleep 0.5
-          python3 /tmp/diag/inspect.py > /tmp/diag/e-tree-typed-155.json 2>/tmp/diag/e-tree-typed-155.err || true
-          scrot /tmp/diag/e-typed-155.png || true
-          pkill -f gnome-calculator || true; sleep 1
+          python3 /tmp/diag/inspect2.py > /tmp/diag/f-tree.json 2>/tmp/diag/f-tree.err || true
+          scrot /tmp/diag/f-typed-155.png || true
 
+          echo "############ summary: button '1', its label, the frame, and any text/entry nodes ############"
+          (python3 -c "
+          import json
+          d = json.load(open('/tmp/diag/f-tree.json'))
+          if isinstance(d, list):
+              for n in d:
+                  interesting = (
+                      n.get('name') == '1'
+                      or n.get('depth') == 1
+                      or n.get('char_count_static') not in (None, 0)
+                      or (isinstance(n.get('text_get_text_STATIC'), str) and 'empty' not in n.get('text_get_text_STATIC', ''))
+                  )
+                  if interesting:
+                      print(json.dumps(n))
+          else:
+              print('NOT A LIST:', d)
+          " || true) | tee /tmp/diag/f-summary.txt
+
+          pkill -f gnome-calculator || true; sleep 1
           echo "DONE" > /tmp/diag/DONE.txt
 
       - name: Upload diagnostic artifacts
