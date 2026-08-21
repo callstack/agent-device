@@ -159,8 +159,8 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularFoldKeepsWindowCarriersButNeverHittableOutsideClip \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularFoldDropsSubPixelContentlessDecorationOnEveryBackend \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPlainViewportPolicyFoldsWithoutAncestorCursor \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularPresentationRoutesThroughVisibilityFold \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotScopePolicyMatchesGoldenParityTable \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFlatSnapshotProjectionMatchesElementReverseScrollCapture \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testScrollContainerTypeNamesMatchElementTypeSet \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXDepthLimitedRequiresEveryFrontierResolved \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testDeepExtensionCountsMissedFrontiers \

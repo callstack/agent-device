@@ -106,14 +106,6 @@ extension RunnerTests {
     .table
   ]
 
-  /// `RawAXNode.type` vocabulary for the presentation fold; pinned to `scrollContainerTypes`
-  /// through `elementTypeName` by a unit test.
-  static let scrollContainerTypeNames: Set<String> = [
-    "CollectionView",
-    "ScrollView",
-    "Table",
-  ]
-
   static let flatInteractiveFallbackBudget: TimeInterval = 1.0
 
   // The single production entry point -- always compiled, no unit-test overload. A unit test
@@ -1133,16 +1125,6 @@ extension RunnerTests {
     return rect.intersects(viewport)
   }
 
-  static func isVisibleInRegularSnapshot(
-    _ rect: CGRect,
-    viewport: CGRect,
-    scrollContainerAnchor: (index: Int, rect: CGRect)?
-  ) -> Bool {
-    if !isVisibleInViewport(rect, viewport) { return false }
-    guard let scrollContainerAnchor else { return true }
-    return isVisibleInViewport(rect, scrollContainerAnchor.rect)
-  }
-
   private func appendCollapsedTabFallbackNodes(
     to nodes: inout [RawAXNode],
     containerSnapshot: XCUIElementSnapshot,
@@ -1158,66 +1140,6 @@ extension RunnerTests {
       parentIndex: parentIndex
     )
     nodes.append(contentsOf: fallbackNodes)
-  }
-
-  static func scrollContainerAnchor(
-    forTypeName typeName: String,
-    hasChildren: Bool,
-    visible: Bool,
-    frame: CGRect,
-    nodeIndex: Int?
-  ) -> (index: Int, rect: CGRect)? {
-    guard let nodeIndex else { return nil }
-    guard visible, hasChildren, Self.scrollContainerTypeNames.contains(typeName) else {
-      return nil
-    }
-    return (nodeIndex, frame)
-  }
-
-  static func rememberHiddenContentHint(
-    for frame: CGRect,
-    relativeTo scrollContainerAnchor: (index: Int, rect: CGRect),
-    hints: inout [Int: (above: Bool, below: Bool)]
-  ) {
-    if frame.isNull || frame.isEmpty { return }
-    var hint = hints[scrollContainerAnchor.index] ?? (above: false, below: false)
-    if frame.maxY <= scrollContainerAnchor.rect.minY {
-      hint.above = true
-    } else if frame.minY >= scrollContainerAnchor.rect.maxY {
-      hint.below = true
-    } else {
-      return
-    }
-    hints[scrollContainerAnchor.index] = hint
-  }
-
-  static func applyHiddenContentHints(
-    _ hints: [Int: (above: Bool, below: Bool)],
-    to nodes: [RawAXNode]
-  ) -> [RawAXNode] {
-    if hints.isEmpty { return nodes }
-    return nodes.map { node in
-      guard let hint = hints[node.index] else { return node }
-      let hiddenContentAbove: Bool? = (node.hiddenContentAbove == true || hint.above) ? true : nil
-      let hiddenContentBelow: Bool? = (node.hiddenContentBelow == true || hint.below) ? true : nil
-      return RawAXNode(
-        index: node.index,
-        type: node.type,
-        label: node.label,
-        identifier: node.identifier,
-        value: node.value,
-        rect: node.rect,
-        enabled: node.enabled,
-        focused: node.focused,
-        selected: node.selected,
-        hittable: node.hittable,
-        depth: node.depth,
-        parentIndex: node.parentIndex,
-        hiddenContentAbove: hiddenContentAbove,
-        hiddenContentBelow: hiddenContentBelow,
-        actions: node.actions
-      )
-    }
   }
 
   private func collapsedTabFallbackNodes(

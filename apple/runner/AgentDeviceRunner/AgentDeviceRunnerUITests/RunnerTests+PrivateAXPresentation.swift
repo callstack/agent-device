@@ -15,7 +15,6 @@ struct PrivateAXFields {
   let actions: [String]?
   let children: [[String: Any]]
 
-  var hasSemanticContent: Bool { [label, identifier, value].contains { !$0.isEmpty } }
   var hasFrame: Bool { !rect.isNull && !rect.isEmpty }
 }
 
@@ -58,7 +57,7 @@ extension RunnerTests {
       identifier: privateAXPresentationString(raw["identifier"]),
       value: privateAXPresentationString(raw["value"]),
       rawType: rawType,
-      elementType: flatSnapshotElementType(rawElementType: rawType),
+      elementType: privateAXElementType(rawElementType: rawType),
       enabled: privateAXPresentationBool(raw["enabled"]) ?? true,
       focused: privateAXPresentationBool(raw["focused"]) == true ? true : nil,
       selected: privateAXPresentationBool(raw["selected"]) == true ? true : nil,
