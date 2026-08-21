@@ -40,9 +40,14 @@ extension RunnerTests {
       replacingExistingText: Bool
     ) -> SynthesizedTextEntryAction {
 #if os(iOS)
+      let postStartedAt = Date()
       let result = replacingExistingText
         ? RunnerSynthesizedTextEntry.replaceText(withApplication: app, text: text)
         : RunnerSynthesizedTextEntry.synthesizeText(withApplication: app, text: text)
+      NSLog(
+        "[DEBUG-1874] synthesize posted %d chars status=%d tookMs=%.0f",
+        text.count, result.status.rawValue, postStartedAt.timeIntervalSinceNow * -1000
+      )
       return Self.action(status: result.status, message: result.message)
 #else
       return .fallback
@@ -265,20 +270,30 @@ extension RunnerTests {
     let expectedText = textBefore + typedText
     let placeholder = resolveTextEntryElement(app: app, target: target)?.placeholderValue
     let deadline = Date().addingTimeInterval(TextEntryTiming.synthesizedCommitTimeout)
-    return Self.awaitSynthesizedCommitOutcome(
+    let waitStartedAt = Date()
+    NSLog("[DEBUG-1874] wait start expected=%d chars", expectedText.count)
+    let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: expectedText,
       placeholder: placeholder,
       isExpired: { Date() >= deadline },
       observe: {
-        editableTextValue(
+        let observedText = editableTextValue(
           for: resolveTextEntryElement(app: app, target: target),
           treatingPlaceholderAsEmpty: true
         )
+        NSLog(
+          "[DEBUG-1874] poll t=%.0fms observed=%@",
+          waitStartedAt.timeIntervalSinceNow * -1000,
+          observedText.map { String($0.prefix(40)) } ?? "nil"
+        )
+        return observedText
       },
       // XCUI resolution shares the automation channel with the in-flight synthesized event.
       // Sparse reads let the target consume that event instead of continuously interrupting it.
       waitForNextObservation: { sleepFor(TextEntryTiming.synthesizedCommitPollInterval) }
     )
+    NSLog("[DEBUG-1874] wait outcome=%@ elapsedMs=%.0f", String(describing: outcome), waitStartedAt.timeIntervalSinceNow * -1000)
+    return outcome
   }
 
   static func shouldUseResolvedCoordinateTextEntryRoute(
