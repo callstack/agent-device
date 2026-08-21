@@ -1,134 +1,5 @@
 import Foundation
 
-/// Backend-owned snapshot output before it crosses the presentation seam.
-///
-/// The incremental #1797 migration still carries derived fields that later semantic layers move
-/// behind `SnapshotPresentation`. Eligibility is no longer one of those backend-owned decisions.
-struct RawAXNode {
-  let index: Int
-  let type: String
-  let label: String?
-  let identifier: String?
-  let value: String?
-  let rect: SnapshotRect
-  let enabled: Bool
-  let focused: Bool?
-  let selected: Bool?
-  let hittable: Bool
-  let depth: Int
-  let parentIndex: Int?
-  let hiddenContentAbove: Bool?
-  let hiddenContentBelow: Bool?
-  var actions: [String]? = nil
-
-  var hasSemanticContent: Bool {
-    [label, identifier, value].contains {
-      !($0?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
-    }
-  }
-}
-
-/// The acquisition-facing view of a snapshot request, derived once by
-/// `SnapshotPresentation.captureHint(for:)`.
-///
-/// Backends read a hint, never `PresentationOptions`: presentation owns interpretation, and a hint
-/// may narrow acquisition only where the backend can prove the narrowing complete for the requested
-/// projection (#1797 conservatism). Everything else a hint carries is budget and ordering.
-struct CaptureHint {
-  /// Which projection this acquisition must serve. Backends that cannot serve one are not planned
-  /// for it (`SnapshotBackendKind.supportsRawProjection`), and presentation refuses an acquisition
-  /// captured for the other projection rather than relabeling it, so a `--raw` request can never be
-  /// answered with regular-projection membership (#1797 D4).
-  enum Projection: String {
-    case regular
-    case raw
-  }
-
-  let projection: Projection
-  /// Traversal-depth budget.
-  ///
-  /// Declared residue (#1797): complete for the raw projection, whose presented depth *is*
-  /// traversal depth. Regular presentation emits collapsed depth, so cutting the traversal at this
-  /// limit can still drop a node that would have presented within it — the open "visible-depth
-  /// frontier completeness" obligation, kept as-is here because the cut is also what keeps
-  /// `--depth 1` probes cheap.
-  let depth: Int?
-  /// Regular-projection acquisition budget. The raw projection is the acquired tree, so it never
-  /// carries this: `--raw -i` returns everything the backend serialized.
-  let interactiveOnly: Bool
-  let customActions: Bool
-
-  var isRaw: Bool { projection == .raw }
-}
-
-/// One backend attempt after acquisition and its current backend-specific interpretation.
-///
-/// It is the only input snapshot presentation accepts, and it carries the hint it was captured
-/// under so the two sides of the seam cannot disagree about which projection this is. Later #1797
-/// steps move the interpretation that still precedes this value — the clip fold and hittability —
-/// into `SnapshotPresentation` without changing the capture-plan seam.
-struct SnapshotAcquisition {
-  /// The hint this acquisition was captured under. Presentation compares it with the requested
-  /// projection instead of trusting the backend's label.
-  let hint: CaptureHint
-  let nodes: [RawAXNode]
-  let truncated: Bool
-  let effectiveDepth: Int?
-  var customActions: SnapshotCustomActionCoverage? = nil
-  /// Viewport the regular projection's clip fold runs against. `.infinite` disables the fold --
-  /// legitimate only for raw acquisitions and depth-0 probes, where no fold applies.
-  let viewport: CGRect
-}
-
-/// The only snapshot node shape accepted by response payload assembly.
-///
-/// Its initializer is private so a backend cannot bypass `SnapshotPresentation`. The encoded shape
-/// intentionally remains byte-for-byte compatible with the former `SnapshotNode` wire model.
-struct PresentedNode: Codable {
-  let index: Int
-  let type: String
-  let label: String?
-  let identifier: String?
-  let value: String?
-  let rect: SnapshotRect
-  let enabled: Bool
-  let focused: Bool?
-  let selected: Bool?
-  let hittable: Bool
-  let depth: Int
-  let parentIndex: Int?
-  let hiddenContentAbove: Bool?
-  let hiddenContentBelow: Bool?
-  let actions: [String]?
-
-  fileprivate init(presenting raw: RawAXNode) {
-    self.init(
-      presenting: raw,
-      index: raw.index,
-      depth: raw.depth,
-      parentIndex: raw.parentIndex
-    )
-  }
-
-  fileprivate init(presenting raw: RawAXNode, index: Int, depth: Int, parentIndex: Int?) {
-    self.index = index
-    type = raw.type
-    label = raw.label
-    identifier = raw.identifier
-    value = raw.value
-    rect = raw.rect
-    enabled = raw.enabled
-    focused = raw.focused
-    selected = raw.selected
-    hittable = raw.hittable
-    self.depth = depth
-    self.parentIndex = parentIndex
-    hiddenContentAbove = raw.hiddenContentAbove
-    hiddenContentBelow = raw.hiddenContentBelow
-    actions = raw.actions
-  }
-}
-
 enum SnapshotPresentation {
   private static let eligibleInteractiveTypes: Set<String> = [
     "Button",
@@ -207,7 +78,12 @@ enum SnapshotPresentation {
     _ acquisition: SnapshotAcquisition,
     options: PresentationOptions
   ) -> SnapshotBackendCapture {
-    project(acquisition.nodes, acquisition: acquisition, options: options, projection: .raw)
+    project(
+      acquisition.nodes.map(SnapshotPresentationNode.reported),
+      acquisition: acquisition,
+      options: options,
+      projection: .raw
+    )
   }
 
   /// Derives the one acquisition-facing view of a request, so no backend re-reads
@@ -227,7 +103,7 @@ enum SnapshotPresentation {
   }
 
   private static func project(
-    _ projectionNodes: [RawAXNode],
+    _ projectionNodes: [SnapshotPresentationNode],
     acquisition: SnapshotAcquisition,
     options: PresentationOptions,
     projection: CaptureHint.Projection
@@ -258,16 +134,17 @@ enum SnapshotPresentation {
   }
 
   private static func presentedNodes(
-    from rawNodes: [RawAXNode],
+    from rawNodes: [SnapshotPresentationNode],
     projection: CaptureHint.Projection
   ) -> [PresentedNode] {
     if projection == .raw {
-      return rawNodes.map(PresentedNode.init(presenting:))
+      return rawNodes.map { PresentedNode(presenting: $0) }
     }
 
     var nodes: [PresentedNode] = []
     var nearestPresentedNodeByRawIndex: [Int: (index: Int, depth: Int)] = [:]
-    for raw in rawNodes {
+    for node in rawNodes {
+      let raw = node.raw
       let presentedParent = raw.parentIndex.flatMap {
         nearestPresentedNodeByRawIndex[$0]
       }
@@ -284,6 +161,7 @@ enum SnapshotPresentation {
       nodes.append(
         PresentedNode(
           presenting: raw,
+          rect: node.effectiveRect,
           index: presentedIndex,
           depth: presentedDepth,
           parentIndex: presentedParent?.index
@@ -294,17 +172,18 @@ enum SnapshotPresentation {
   }
 
   private static func applyScope(
-    to rawNodes: [RawAXNode],
+    to rawNodes: [SnapshotPresentationNode],
     options: PresentationOptions,
     projection: CaptureHint.Projection
-  ) -> [RawAXNode] {
+  ) -> [SnapshotPresentationNode] {
     switch SnapshotScopePolicy.select(
       fromPreorder: rawNodes,
       scope: options.scope,
-      depth: \.depth,
-      semanticValues: { [$0.label, $0.identifier, $0.value] },
+      depth: { $0.raw.depth },
+      semanticValues: { [$0.raw.label, $0.raw.identifier, $0.raw.value] },
       subtreeContributes: { range in
-        projection == .raw || rawNodes[range].contains(where: isEligibleForRegularPresentation)
+        projection == .raw
+          || rawNodes[range].contains { isEligibleForRegularPresentation($0.raw) }
       }
     ) {
     case .unscoped:
@@ -312,39 +191,47 @@ enum SnapshotPresentation {
     case .missing:
       return []
     case .matched(let startIndex):
-      let startDepth = rawNodes[startIndex].depth
+      let startDepth = rawNodes[startIndex].raw.depth
       let range = SnapshotScopePolicy.subtreeRange(
         from: startIndex,
         in: rawNodes,
-        depth: \.depth
+        depth: { $0.raw.depth }
       )
       let maxDepth = options.depth ?? Int.max
       return reindex(
-        Array(rawNodes[range]).filter { $0.depth - startDepth <= maxDepth },
+        Array(rawNodes[range]).filter { $0.raw.depth - startDepth <= maxDepth },
         depthOffset: startDepth
       )
     }
   }
 
-  private static func reindex(_ rawNodes: [RawAXNode], depthOffset: Int) -> [RawAXNode] {
-    let indexMap = Dictionary(uniqueKeysWithValues: rawNodes.enumerated().map { ($0.element.index, $0.offset) })
-    return rawNodes.enumerated().map { offset, raw in
-      RawAXNode(
-        index: offset,
-        type: raw.type,
-        label: raw.label,
-        identifier: raw.identifier,
-        value: raw.value,
-        rect: raw.rect,
-        enabled: raw.enabled,
-        focused: raw.focused,
-        selected: raw.selected,
-        hittable: raw.hittable,
-        depth: max(0, raw.depth - depthOffset),
-        parentIndex: raw.parentIndex.flatMap { indexMap[$0] },
-        hiddenContentAbove: raw.hiddenContentAbove,
-        hiddenContentBelow: raw.hiddenContentBelow,
-        actions: raw.actions
+  private static func reindex(
+    _ nodes: [SnapshotPresentationNode],
+    depthOffset: Int
+  ) -> [SnapshotPresentationNode] {
+    let indexMap = Dictionary(
+      uniqueKeysWithValues: nodes.enumerated().map { ($0.element.raw.index, $0.offset) })
+    return nodes.enumerated().map { offset, node in
+      let raw = node.raw
+      return SnapshotPresentationNode(
+        raw: RawAXNode(
+          index: offset,
+          type: raw.type,
+          label: raw.label,
+          identifier: raw.identifier,
+          value: raw.value,
+          rect: raw.rect,
+          enabled: raw.enabled,
+          focused: raw.focused,
+          selected: raw.selected,
+          hittable: raw.hittable,
+          depth: max(0, raw.depth - depthOffset),
+          parentIndex: raw.parentIndex.flatMap { indexMap[$0] },
+          hiddenContentAbove: raw.hiddenContentAbove,
+          hiddenContentBelow: raw.hiddenContentBelow,
+          actions: raw.actions
+        ),
+        effectiveRect: node.effectiveRect
       )
     }
   }

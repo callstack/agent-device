@@ -83,7 +83,7 @@ enum SnapshotVisibilityFold {
     viewport: CGRect,
     interactiveOnly: Bool,
     policy: Policy
-  ) -> [RawAXNode] {
+  ) -> [SnapshotPresentationNode] {
     var hasChildren = [Bool](repeating: false, count: nodes.count)
     for node in nodes {
       if let parentIndex = node.parentIndex, parentIndex >= 0, parentIndex < nodes.count {
@@ -92,17 +92,22 @@ enum SnapshotVisibilityFold {
     }
 
     var states = [BranchState?](repeating: nil, count: nodes.count)
-    var kept: [RawAXNode] = []
+    var kept: [SnapshotPresentationNode] = []
     var hints: [Int: (above: Bool, below: Bool)] = [:]
 
     for (offset, node) in nodes.enumerated() {
       let parentState = node.parentIndex.flatMap { states[$0] }
       let parentCursor = parentState?.cursor ?? .root
-      let parentAnchor = parentState?.anchor
+      let parentAnchor = policy == .cursorProjected ? parentState?.anchor : nil
       let rect = CGRect(
         x: node.rect.x, y: node.rect.y, width: node.rect.width, height: node.rect.height
       )
-      let intersects = intersectsClip(rect, viewport: viewport, scrollAnchor: parentAnchor)
+      let effectiveFrame = SnapshotGeometry.effectiveFrame(
+        reportedFrame: rect,
+        viewport: viewport,
+        ancestorClip: parentAnchor?.rect
+      )
+      let intersects = !effectiveFrame.isNull && !effectiveFrame.isEmpty
       let transition = projectionTransition(
         frame: rect,
         intersectsClip: intersects,
@@ -136,22 +141,26 @@ enum SnapshotVisibilityFold {
         let outIndex = kept.count
         let outDepth = keptDepth + 1
         kept.append(
-          RawAXNode(
-            index: outIndex,
-            type: node.type,
-            label: node.label,
-            identifier: node.identifier,
-            value: node.value,
-            rect: node.rect,
-            enabled: node.enabled,
-            focused: node.focused,
-            selected: node.selected,
-            hittable: node.hittable && intersects,
-            depth: outDepth,
-            parentIndex: keptIndex,
-            hiddenContentAbove: node.hiddenContentAbove,
-            hiddenContentBelow: node.hiddenContentBelow,
-            actions: node.actions
+          SnapshotPresentationNode(
+            raw: RawAXNode(
+              index: outIndex,
+              type: node.type,
+              label: node.label,
+              identifier: node.identifier,
+              value: node.value,
+              rect: node.rect,
+              enabled: node.enabled,
+              focused: node.focused,
+              selected: node.selected,
+              hittable: node.hittable && intersects,
+              depth: outDepth,
+              parentIndex: keptIndex,
+              hiddenContentAbove: node.hiddenContentAbove,
+              hiddenContentBelow: node.hiddenContentBelow,
+              actions: node.actions
+            ),
+            effectiveRect: SnapshotGeometry.snapshotRect(
+              from: effectiveFrame, reportedFrame: rect)
           )
         )
         keptIndex = outIndex
@@ -159,12 +168,13 @@ enum SnapshotVisibilityFold {
       }
 
       var anchor = parentAnchor
-      if include,
+      if policy == .cursorProjected,
+        include,
         let newAnchor = scrollContainerAnchor(
           forTypeName: node.type,
           hasChildren: hasChildren[offset],
           visible: intersects,
-          frame: rect,
+          frame: effectiveFrame,
           nodeIndex: keptIndex
         )
       {
@@ -224,16 +234,6 @@ enum SnapshotVisibilityFold {
     return visibilityExemptCarrierTypes.contains(node.type) || visible
   }
 
-  private static func intersectsClip(
-    _ rect: CGRect,
-    viewport: CGRect,
-    scrollAnchor: (index: Int, rect: CGRect)?
-  ) -> Bool {
-    guard !rect.isNull, !rect.isEmpty, rect.intersects(viewport) else { return false }
-    guard let scrollAnchor else { return true }
-    return rect.intersects(scrollAnchor.rect)
-  }
-
   private static func scrollContainerAnchor(
     forTypeName typeName: String,
     hasChildren: Bool,
@@ -267,27 +267,31 @@ enum SnapshotVisibilityFold {
 
   private static func applyHiddenContentHints(
     _ hints: [Int: (above: Bool, below: Bool)],
-    to nodes: [RawAXNode]
-  ) -> [RawAXNode] {
+    to nodes: [SnapshotPresentationNode]
+  ) -> [SnapshotPresentationNode] {
     if hints.isEmpty { return nodes }
-    return nodes.map { node in
-      guard let hint = hints[node.index] else { return node }
-      return RawAXNode(
-        index: node.index,
-        type: node.type,
-        label: node.label,
-        identifier: node.identifier,
-        value: node.value,
-        rect: node.rect,
-        enabled: node.enabled,
-        focused: node.focused,
-        selected: node.selected,
-        hittable: node.hittable,
-        depth: node.depth,
-        parentIndex: node.parentIndex,
-        hiddenContentAbove: node.hiddenContentAbove == true || hint.above ? true : nil,
-        hiddenContentBelow: node.hiddenContentBelow == true || hint.below ? true : nil,
-        actions: node.actions
+    return nodes.map { presentationNode in
+      let node = presentationNode.raw
+      guard let hint = hints[node.index] else { return presentationNode }
+      return SnapshotPresentationNode(
+        raw: RawAXNode(
+          index: node.index,
+          type: node.type,
+          label: node.label,
+          identifier: node.identifier,
+          value: node.value,
+          rect: node.rect,
+          enabled: node.enabled,
+          focused: node.focused,
+          selected: node.selected,
+          hittable: node.hittable,
+          depth: node.depth,
+          parentIndex: node.parentIndex,
+          hiddenContentAbove: node.hiddenContentAbove == true || hint.above ? true : nil,
+          hiddenContentBelow: node.hiddenContentBelow == true || hint.below ? true : nil,
+          actions: node.actions
+        ),
+        effectiveRect: presentationNode.effectiveRect
       )
     }
   }

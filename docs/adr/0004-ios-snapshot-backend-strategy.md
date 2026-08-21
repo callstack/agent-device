@@ -145,7 +145,10 @@ requested label.
 
 The fourth semantic layer moves the clip fold itself into presentation. Acquisition backends are
 fact serializers: every traversed node is emitted at raw traversal depth with its reported frame,
-and `SnapshotAcquisition` carries the viewport. `presentRegular` runs the one visibility
+and `SnapshotAcquisition` carries the viewport. The fold returns a typed carrier with both values:
+`raw.rect` remains runner-internal reported geometry, while regular presentation writes the
+carrier's effective rectangle through the existing wire `rect` field; raw projections and direct
+single-element reads retain reported geometry. `presentRegular` runs the one visibility
 interpreter for every backend — viewport ∩ scroll-container clip, the ancestor projection cursor
 (an out-of-clip Cell or scroll container hides descendants whose clamped frames would otherwise
 leak back into the viewport), the sub-pixel decoration rule, hidden-content hints booked onto

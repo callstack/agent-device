@@ -23,7 +23,7 @@ extension RunnerTests {
     viewport: CGRect,
     interactiveOnly: Bool = false,
     policy: SnapshotVisibilityFold.Policy = .cursorProjected
-  ) -> [RawAXNode] {
+  ) -> [SnapshotPresentationNode] {
     SnapshotVisibilityFold.fold(
       nodes, viewport: viewport, interactiveOnly: interactiveOnly, policy: policy)
   }
@@ -54,12 +54,14 @@ extension RunnerTests {
     let folded = Self.folded(nodes, viewport: CGRect(x: 0, y: 0, width: 402, height: 874))
 
     XCTAssertEqual(
-      folded.map(\.type), ["Application", "ScrollView", "Cell", "StaticText", "StaticText"])
+      folded.map { $0.raw.type },
+      ["Application", "ScrollView", "Cell", "StaticText", "StaticText"])
     XCTAssertEqual(
-      folded.compactMap(\.label), ["App", "Visible row", "Detail", "Visible overlay"])
-    XCTAssertEqual(folded.map(\.depth), [0, 1, 2, 3, 2])
-    XCTAssertEqual(folded.map(\.parentIndex), [nil, 0, 1, 2, 1])
-    XCTAssertEqual(folded.first { $0.type == "ScrollView" }?.hiddenContentBelow, true)
+      folded.compactMap { $0.raw.label },
+      ["App", "Visible row", "Detail", "Visible overlay"])
+    XCTAssertEqual(folded.map { $0.raw.depth }, [0, 1, 2, 3, 2])
+    XCTAssertEqual(folded.map { $0.raw.parentIndex }, [nil, 0, 1, 2, 1])
+    XCTAssertEqual(folded.first { $0.raw.type == "ScrollView" }?.raw.hiddenContentBelow, true)
   }
 
   func testRegularFoldKeepsWindowCarriersButNeverHittableOutsideClip() {
@@ -75,9 +77,13 @@ extension RunnerTests {
     ]
     let folded = Self.folded(nodes, viewport: CGRect(x: 0, y: 0, width: 402, height: 874))
 
-    XCTAssertEqual(folded.map(\.type), ["Application", "Window"])
-    XCTAssertEqual(folded.last?.hittable, false)
-    XCTAssertFalse(folded.contains { $0.label == "Gone" })
+    XCTAssertEqual(folded.map { $0.raw.type }, ["Application", "Window"])
+    XCTAssertEqual(folded.last?.raw.hittable, false)
+    XCTAssertEqual(folded.last?.effectiveRect.x, 402)
+    XCTAssertEqual(folded.last?.effectiveRect.y, 0)
+    XCTAssertEqual(folded.last?.effectiveRect.width, 0)
+    XCTAssertEqual(folded.last?.effectiveRect.height, 0)
+    XCTAssertFalse(folded.contains { $0.raw.label == "Gone" })
   }
 
   func testRegularFoldDropsSubPixelContentlessDecorationOnEveryBackend() {
@@ -95,9 +101,11 @@ extension RunnerTests {
     ]
     let folded = Self.folded(nodes, viewport: CGRect(x: 0, y: 0, width: 402, height: 874))
 
-    XCTAssertEqual(folded.compactMap(\.label), ["App", "Hairline caption", "Frameless semantics"])
-    XCTAssertFalse(folded.contains { $0.type == "Button" })
-    XCTAssertEqual(folded.first { $0.label == "Frameless semantics" }?.hittable, false)
+    XCTAssertEqual(
+      folded.compactMap { $0.raw.label },
+      ["App", "Hairline caption", "Frameless semantics"])
+    XCTAssertFalse(folded.contains { $0.raw.type == "Button" })
+    XCTAssertEqual(folded.first { $0.raw.label == "Frameless semantics" }?.raw.hittable, false)
   }
 
   func testPlainViewportPolicyFoldsWithoutAncestorCursor() {
@@ -114,11 +122,30 @@ extension RunnerTests {
     let viewport = CGRect(x: 0, y: 0, width: 800, height: 600)
 
     let regular = Self.folded(nodes, viewport: viewport, policy: .plainViewport)
-    XCTAssertEqual(regular.compactMap(\.label), ["App", "Offscreen window", "Clamped child"])
+    XCTAssertEqual(
+      regular.compactMap { $0.raw.label }, ["App", "Offscreen window", "Clamped child"])
 
     let interactive = Self.folded(
       nodes, viewport: viewport, interactiveOnly: true, policy: .plainViewport)
-    XCTAssertFalse(interactive.contains { $0.label == "Offscreen window" })
+    XCTAssertFalse(interactive.contains { $0.raw.label == "Offscreen window" })
+  }
+
+  func testPlainViewportPolicyDoesNotClipToScrollAncestor() {
+    let nodes = [
+      Self.foldNode(0, type: "Application", label: "App",
+        rect: SnapshotRect(x: 0, y: 0, width: 800, height: 600), depth: 0, parentIndex: nil),
+      Self.foldNode(1, type: "ScrollView", label: "Scroll",
+        rect: SnapshotRect(x: 0, y: 100, width: 800, height: 100), depth: 1, parentIndex: 0),
+      Self.foldNode(2, type: "StaticText", label: "Outside scroll clip",
+        rect: SnapshotRect(x: 16, y: 240, width: 100, height: 20), depth: 2, parentIndex: 1),
+    ]
+    let viewport = CGRect(x: 0, y: 0, width: 800, height: 600)
+
+    let plain = Self.folded(nodes, viewport: viewport, policy: .plainViewport)
+    XCTAssertTrue(plain.contains { $0.raw.label == "Outside scroll clip" })
+
+    let cursorProjected = Self.folded(nodes, viewport: viewport, policy: .cursorProjected)
+    XCTAssertFalse(cursorProjected.contains { $0.raw.label == "Outside scroll clip" })
   }
 
   func testScrollContainerTypeNamesMatchElementTypeSet() {

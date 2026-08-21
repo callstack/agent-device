@@ -182,6 +182,61 @@ extension RunnerTests {
     XCTAssertEqual(presented?.compactMap(\.label), ["App"])
   }
 
+  func testRegularPresentationPublishesEffectiveRectWhileRawKeepsReportedFrame() throws {
+    let acquired = [
+      RawAXNode(
+        index: 0, type: "Application", label: "App", identifier: nil, value: nil,
+        rect: SnapshotRect(x: 0, y: 0, width: 402, height: 874), enabled: true,
+        focused: nil, selected: nil, hittable: false, depth: 0, parentIndex: nil,
+        hiddenContentAbove: nil, hiddenContentBelow: nil),
+      RawAXNode(
+        index: 1, type: "Button", label: "Partially clipped", identifier: nil, value: nil,
+        rect: SnapshotRect(x: 350, y: 120, width: 100, height: 44), enabled: true,
+        focused: nil, selected: nil, hittable: true, depth: 1, parentIndex: 0,
+        hiddenContentAbove: nil, hiddenContentBelow: nil),
+    ]
+    let viewport = CGRect(x: 0, y: 0, width: 402, height: 874)
+    let regularOptions = PresentationOptions(
+      interactiveOnly: false, depth: nil, scope: nil, raw: false)
+    let regular = try XCTUnwrap(
+      SnapshotPresentation.presentRegular(
+        SnapshotAcquisition(
+          hint: SnapshotPresentation.captureHint(for: regularOptions),
+          nodes: acquired,
+          truncated: false,
+          effectiveDepth: nil,
+          viewport: viewport
+        ),
+        options: regularOptions
+      ).payload.nodes
+    )
+    let regularButton = try XCTUnwrap(regular.first { $0.label == "Partially clipped" })
+    XCTAssertEqual(regularButton.rect.x, 350)
+    XCTAssertEqual(regularButton.rect.y, 120)
+    XCTAssertEqual(regularButton.rect.width, 52)
+    XCTAssertEqual(regularButton.rect.height, 44)
+
+    let rawOptions = PresentationOptions(
+      interactiveOnly: false, depth: nil, scope: nil, raw: true)
+    let raw = try XCTUnwrap(
+      SnapshotPresentation.presentRaw(
+        SnapshotAcquisition(
+          hint: SnapshotPresentation.captureHint(for: rawOptions),
+          nodes: acquired,
+          truncated: false,
+          effectiveDepth: nil,
+          viewport: .infinite
+        ),
+        options: rawOptions
+      ).payload.nodes
+    )
+    let rawButton = try XCTUnwrap(raw.first { $0.label == "Partially clipped" })
+    XCTAssertEqual(rawButton.rect.x, 350)
+    XCTAssertEqual(rawButton.rect.y, 120)
+    XCTAssertEqual(rawButton.rect.width, 100)
+    XCTAssertEqual(rawButton.rect.height, 44)
+  }
+
   func testSnapshotPresentationOwnsScopeAndRelativeDepth() throws {
     // Non-vacuity: disconnecting applyScope produces eight scope, depth, and raw-projection failures.
     func node(

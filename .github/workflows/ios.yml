@@ -151,6 +151,7 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrainForSnapshotRaw \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotTraversalIdentityPreservesSameOriginNodesWithDifferentBounds \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotPresentationPreservesCurrentWireShape \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularPresentationPublishesEffectiveRectWhileRawKeepsReportedFrame \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotPresentationOwnsBackendNeutralEligibility \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotPresentationOwnsScopeAndRelativeDepth \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPresentationRefusesAnAcquisitionCapturedForTheOtherProjection \
@@ -159,6 +160,9 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularFoldKeepsWindowCarriersButNeverHittableOutsideClip \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularFoldDropsSubPixelContentlessDecorationOnEveryBackend \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPlainViewportPolicyFoldsWithoutAncestorCursor \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPlainViewportPolicyDoesNotClipToScrollAncestor \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testEffectiveGeometryIntersectsViewportAndAncestorClip \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testEffectiveGeometryKeepsReportedOriginWhenFullyClipped \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularPresentationRoutesThroughVisibilityFold \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotScopePolicyMatchesGoldenParityTable \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testScrollContainerTypeNamesMatchElementTypeSet \
