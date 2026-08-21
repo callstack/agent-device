@@ -41,7 +41,9 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Preserve report scripts
-        run: cp scripts/size-report*.mjs /tmp/
+        run: |
+          mkdir -p /tmp/agent-device-size-report
+          cp scripts/size-report*.mjs /tmp/agent-device-size-report/
 
       # dist is fully determined by the base commit, so reuse it across PR runs
       # against the same base. Startup medians are still measured fresh on this
@@ -60,7 +62,7 @@ jobs:
           if [ "${{ steps.base-dist-cache.outputs.cache-hit }}" != "true" ]; then
             pnpm build
           fi
-          node /tmp/agent-device-size-report.mjs \
+          node /tmp/agent-device-size-report/size-report.mjs \
             --startup-runs 7 \
             --json /tmp/agent-device-size-base.json
 

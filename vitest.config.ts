@@ -97,6 +97,9 @@ export default defineConfig({
             'scripts/__tests__/size-report-package.test.ts',
             // Parses CI configuration only, so this action guard needs no device or subprocess lane.
             'test/ci/upload-agent-device-artifacts.test.ts',
+            // The size reporter is preserved across a base checkout; its entrypoint and imported
+            // modules must move as one directory or the Bundle Size lane fails before measuring.
+            'test/ci/size-workflow.test.ts',
             // #1781 A9: pins the root-doc paths-ignore entries directly against the
             // real workflow YAML, parse-only like its sibling above.
             'test/ci/root-docs-paths-ignore.test.ts',
