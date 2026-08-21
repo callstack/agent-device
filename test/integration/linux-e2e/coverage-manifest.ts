@@ -218,11 +218,10 @@ export const LINUX_PLATFORM_COVERAGE = {
     'Linux scroll dispatch uses the Wayland ydotool wheel primitive',
   ),
   [C.swipe]: gap('No Linux-specific public swipe command evidence exists yet'),
-  [C.focus]: contract(
-    LINUX_PROVIDER_EVIDENCE.path,
-    LINUX_PROVIDER_EVIDENCE.test,
-    'Linux provider scenario focuses a coordinate target',
-  ),
+  // Promoted from command-contract to live by #1925: the desktop replay now runs a coordinate
+  // focus on real Linux hardware, so the migrated `focusPoint` path has live changed-path
+  // evidence rather than only the provider scenario at LINUX_PROVIDER_EVIDENCE.
+  [C.focus]: live('the Linux desktop replay focuses a coordinate on real hardware'),
   [C.screenshot]: live('the existing Linux replay creates a screenshot artifact'),
   [C.viewport]: contract(
     LINUX_RUNTIME_EVIDENCE.path,

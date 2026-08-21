@@ -40,9 +40,10 @@ test('Linux coverage exhaustively classifies the public catalog', () => {
 test('Linux coverage report has the expected classification counts', () => {
   assert.deepEqual(LINUX_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY, {
     capabilityDenial: 11,
-    contract: 20,
+    // focus moved contract -> live in #1925: the replay now runs it on real hardware.
+    contract: 19,
     gap: 18,
-    live: 5,
+    live: 6,
     total: 54,
   });
 
@@ -59,7 +60,7 @@ test('Linux live claims reference commands in the existing smoke replay', () => 
     parseReplayScriptDetailed(replaySource).actions.map((action) => action.command),
   );
   const liveCommands = liveCommandsForLinuxReplay();
-  assert.deepEqual(liveCommands.length, 5);
+  assert.deepEqual(liveCommands.length, 6);
   for (const command of liveCommands) {
     assert.equal(
       replayCommands.has(command),

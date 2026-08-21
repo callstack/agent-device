@@ -10,3 +10,9 @@ snapshot
 # or digit buttons that only a calculator app would expose.
 is exists "appname=gnome-calculator || windowtitle=Calculator || label=Calculator || label=0 || label=1 || label=5"
 snapshot -i
+# R40 (#1739): `focus` executes through the bound `focusPoint` operation rather than the retired
+# interactor leaf. A coordinate focus, not a selector one, so this step cannot fail on match
+# ambiguity or layout drift — it exists to prove the migrated path runs on real Linux hardware.
+focus 100 100
+# The session survives the focus: a crashed desktop would fail here, not silently pass above.
+is exists "appname=gnome-calculator || windowtitle=Calculator || label=Calculator || label=0 || label=1 || label=5"
