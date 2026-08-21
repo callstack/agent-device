@@ -22,24 +22,24 @@ enum SnapshotVisibilityFold {
   /// Wire-name vocabulary corresponding to XCTest's scroll-container element types.
   static let scrollContainerTypeNames: Set<String> = ["CollectionView", "ScrollView", "Table"]
 
-  private enum Geometry {
+  fileprivate enum Geometry {
     case geometryless
     case framed(intersectsClip: Bool)
   }
 
-  private enum DescendantVisibility {
+  fileprivate enum DescendantVisibility {
     case independent
     case owned
   }
 
-  private struct ProjectionCursor {
+  fileprivate struct ProjectionCursor {
     static let root = ProjectionCursor(ancestorProjectedOut: false)
 
     private let ancestorProjectedOut: Bool
 
     var isProjectedOut: Bool { ancestorProjectedOut }
 
-    func project(
+    fileprivate func project(
       geometry: Geometry,
       descendantVisibility: DescendantVisibility
     ) -> ProjectionDecision {
@@ -60,16 +60,45 @@ enum SnapshotVisibilityFold {
     }
   }
 
-  private struct ProjectionDecision {
+  fileprivate struct ProjectionDecision {
     let presentationVisible: Bool
     let descendants: ProjectionCursor
   }
-  private struct ProjectionTransition {
+  fileprivate struct ProjectionTransition {
     let decision: ProjectionDecision
     let hiddenContentFrame: CGRect?
   }
+
+  /// The fold's traversal state is also consumed by acquisition when a regular depth frontier is
+  /// requested. It carries only projection facts; presentation remains the owner of membership
+  /// and output construction.
+  struct TraversalState {
+    fileprivate let cursor: ProjectionCursor
+    fileprivate let ancestorClip: CGRect?
+
+    fileprivate init(cursor: ProjectionCursor, ancestorClip: CGRect?) {
+      self.cursor = cursor
+      self.ancestorClip = ancestorClip
+    }
+
+    static let root = TraversalState(cursor: .root, ancestorClip: nil)
+
+    var descendantsMayBeVisible: Bool { !cursor.isProjectedOut }
+  }
+
+  struct TraversalDecision {
+    /// Whether the shared fold would retain this raw node before regular semantic eligibility.
+    let isIncluded: Bool
+    /// Whether any descendant can remain visible under the same projection cursor.
+    let descendantsMayBeVisible: Bool
+    let descendants: TraversalState
+    fileprivate let effectiveFrame: CGRect
+    fileprivate let hiddenContentFrame: CGRect?
+    fileprivate let establishesScrollAnchor: Bool
+  }
+
   private struct BranchState {
-    let cursor: ProjectionCursor
+    let traversal: TraversalState
     let anchor: (index: Int, rect: CGRect)?
     let keptIndex: Int?
     let keptDepth: Int
@@ -77,6 +106,64 @@ enum SnapshotVisibilityFold {
 
   private static let negligibleDecorationTolerance = 1.0
   private static let visibilityExemptCarrierTypes: Set<String> = ["Application", "Window"]
+
+  static func traversalDecision(
+    for node: RawAXNode,
+    parent: TraversalState,
+    viewport: CGRect,
+    interactiveOnly: Bool,
+    hasChildren: Bool,
+    policy: Policy
+  ) -> TraversalDecision {
+    let ancestorClip = policy == .cursorProjected ? parent.ancestorClip : nil
+    let rect = CGRect(
+      x: node.rect.x, y: node.rect.y, width: node.rect.width, height: node.rect.height
+    )
+    let effectiveFrame = SnapshotGeometry.effectiveFrame(
+      reportedFrame: rect,
+      viewport: viewport,
+      ancestorClip: ancestorClip
+    )
+    let intersects = !effectiveFrame.isNull && !effectiveFrame.isEmpty
+    let transition = projectionTransition(
+      frame: rect,
+      intersectsClip: intersects,
+      typeName: node.type,
+      hasChildren: hasChildren,
+      cursor: parent.cursor,
+      policy: policy
+    )
+    let negligibleDecoration = policy == .cursorProjected
+      && node.parentIndex != nil
+      && !node.hasSemanticContent
+      && (rect.isEmpty
+        || rect.width <= negligibleDecorationTolerance
+        || rect.height <= negligibleDecorationTolerance)
+    let visible = transition.decision.presentationVisible && !negligibleDecoration
+    let isIncluded = shouldInclude(
+      node,
+      visible: visible,
+      interactiveOnly: interactiveOnly,
+      policy: policy
+    )
+    let establishesScrollAnchor = policy == .cursorProjected
+      && isIncluded
+      && intersects
+      && hasChildren
+      && scrollContainerTypeNames.contains(node.type)
+    let descendants = TraversalState(
+      cursor: transition.decision.descendants,
+      ancestorClip: establishesScrollAnchor ? effectiveFrame : ancestorClip
+    )
+    return TraversalDecision(
+      isIncluded: isIncluded,
+      descendantsMayBeVisible: !transition.decision.descendants.isProjectedOut,
+      descendants: descendants,
+      effectiveFrame: effectiveFrame,
+      hiddenContentFrame: transition.hiddenContentFrame,
+      establishesScrollAnchor: establishesScrollAnchor
+    )
+  }
 
   static func fold(
     _ nodes: [RawAXNode],
@@ -97,47 +184,27 @@ enum SnapshotVisibilityFold {
 
     for (offset, node) in nodes.enumerated() {
       let parentState = node.parentIndex.flatMap { states[$0] }
-      let parentCursor = parentState?.cursor ?? .root
+      let parentTraversal = parentState?.traversal ?? .root
       let parentAnchor = policy == .cursorProjected ? parentState?.anchor : nil
       let rect = CGRect(
         x: node.rect.x, y: node.rect.y, width: node.rect.width, height: node.rect.height
       )
-      let effectiveFrame = SnapshotGeometry.effectiveFrame(
-        reportedFrame: rect,
+      let decision = traversalDecision(
+        for: node,
+        parent: parentTraversal,
         viewport: viewport,
-        ancestorClip: parentAnchor?.rect
-      )
-      let intersects = !effectiveFrame.isNull && !effectiveFrame.isEmpty
-      let transition = projectionTransition(
-        frame: rect,
-        intersectsClip: intersects,
-        typeName: node.type,
-        hasChildren: hasChildren[offset],
-        cursor: parentCursor,
-        policy: policy
-      )
-
-      let negligibleDecoration = policy == .cursorProjected
-        && node.parentIndex != nil
-        && !node.hasSemanticContent
-        && (rect.isEmpty
-          || rect.width <= negligibleDecorationTolerance
-          || rect.height <= negligibleDecorationTolerance)
-      let visible = transition.decision.presentationVisible && !negligibleDecoration
-      let include = shouldInclude(
-        node,
-        visible: visible,
         interactiveOnly: interactiveOnly,
+        hasChildren: hasChildren[offset],
         policy: policy
       )
 
-      if let hiddenFrame = transition.hiddenContentFrame, let parentAnchor {
+      if let hiddenFrame = decision.hiddenContentFrame, let parentAnchor {
         rememberHiddenContentHint(for: hiddenFrame, relativeTo: parentAnchor, hints: &hints)
       }
 
       var keptIndex = parentState?.keptIndex
       var keptDepth = parentState?.keptDepth ?? -1
-      if include {
+      if decision.isIncluded {
         let outIndex = kept.count
         let outDepth = keptDepth + 1
         kept.append(
@@ -154,7 +221,7 @@ enum SnapshotVisibilityFold {
               selected: node.selected,
               hittable: node.parentIndex != nil && SnapshotGeometry.isGeometricallyActionable(
                 enabled: node.enabled,
-                frame: effectiveFrame,
+                frame: decision.effectiveFrame,
                 viewport: viewport
               ),
               depth: outDepth,
@@ -164,7 +231,9 @@ enum SnapshotVisibilityFold {
               actions: node.actions
             ),
             effectiveRect: SnapshotGeometry.snapshotRect(
-              from: effectiveFrame, reportedFrame: rect)
+              from: decision.effectiveFrame,
+              reportedFrame: rect
+            )
           )
         )
         keptIndex = outIndex
@@ -172,20 +241,11 @@ enum SnapshotVisibilityFold {
       }
 
       var anchor = parentAnchor
-      if policy == .cursorProjected,
-        include,
-        let newAnchor = scrollContainerAnchor(
-          forTypeName: node.type,
-          hasChildren: hasChildren[offset],
-          visible: intersects,
-          frame: effectiveFrame,
-          nodeIndex: keptIndex
-        )
-      {
-        anchor = newAnchor
+      if decision.establishesScrollAnchor, let keptIndex {
+        anchor = (index: keptIndex, rect: decision.effectiveFrame)
       }
       states[offset] = BranchState(
-        cursor: transition.decision.descendants,
+        traversal: decision.descendants,
         anchor: anchor,
         keptIndex: keptIndex,
         keptDepth: keptDepth
@@ -236,21 +296,6 @@ enum SnapshotVisibilityFold {
       return false
     }
     return visibilityExemptCarrierTypes.contains(node.type) || visible
-  }
-
-  private static func scrollContainerAnchor(
-    forTypeName typeName: String,
-    hasChildren: Bool,
-    visible: Bool,
-    frame: CGRect,
-    nodeIndex: Int?
-  ) -> (index: Int, rect: CGRect)? {
-    guard let nodeIndex,
-      visible,
-      hasChildren,
-      scrollContainerTypeNames.contains(typeName)
-    else { return nil }
-    return (nodeIndex, frame)
   }
 
   private static func rememberHiddenContentHint(

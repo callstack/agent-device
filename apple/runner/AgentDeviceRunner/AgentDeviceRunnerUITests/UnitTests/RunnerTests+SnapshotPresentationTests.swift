@@ -489,5 +489,134 @@ extension RunnerTests {
     XCTAssertEqual(capture.payload.nodes?.map(\.label), ["App", "Save"])
     XCTAssertEqual(capture.payload.nodes?.map(\.depth), [0, 1])
   }
+
+  /// #1797 P1: an eligible parent outside the viewport is removed by the shared visibility fold,
+  /// while an independently projected child remains visible and must occupy the requested depth.
+  /// The public presentation/capture-hint boundary must not let the removed parent stop acquisition.
+  func testRegularDepthFrontierKeepsVisibleIndependentChildPastClippedParent() throws {
+    func node(
+      _ index: Int,
+      type: String,
+      label: String?,
+      rect: SnapshotRect,
+      depth: Int,
+      parentIndex: Int?
+    ) -> RawAXNode {
+      RawAXNode(
+        index: index,
+        type: type,
+        label: label,
+        identifier: nil,
+        value: nil,
+        rect: rect,
+        enabled: true,
+        focused: nil,
+        selected: nil,
+        hittable: type == "Button",
+        depth: depth,
+        parentIndex: parentIndex,
+        hiddenContentAbove: nil,
+        hiddenContentBelow: nil
+      )
+    }
+
+    let viewport = CGRect(x: 0, y: 0, width: 100, height: 100)
+    let options = PresentationOptions(
+      interactiveOnly: false, depth: 1, scope: nil, raw: false)
+    let hint = SnapshotPresentation.captureHint(for: options)
+    let nodes = [
+      node(
+        0,
+        type: "Application",
+        label: "App",
+        rect: SnapshotRect(x: 0, y: 0, width: 100, height: 100),
+        depth: 0,
+        parentIndex: nil
+      ),
+      node(
+        1,
+        type: "Other",
+        label: "Clipped parent",
+        rect: SnapshotRect(x: 200, y: 20, width: 40, height: 40),
+        depth: 1,
+        parentIndex: 0
+      ),
+      node(
+        2,
+        type: "Button",
+        label: "Projected child",
+        rect: SnapshotRect(x: 20, y: 20, width: 40, height: 40),
+        depth: 2,
+        parentIndex: 1
+      ),
+    ]
+    let acquisition = SnapshotAcquisition(
+      hint: hint,
+      nodes: nodes,
+      truncated: false,
+      effectiveDepth: nil,
+      viewport: viewport
+    )
+    let presented = try XCTUnwrap(
+      SnapshotPresentation.present(acquisition, options: options)?.payload.nodes)
+
+    XCTAssertEqual(presented.map(\.label), ["App", "Projected child"])
+
+    let clippedParentVisibility = SnapshotVisibilityFold.traversalDecision(
+      for: nodes[1],
+      parent: .root,
+      viewport: viewport,
+      interactiveOnly: options.interactiveOnly,
+      hasChildren: true,
+      policy: .platformDefault
+    )
+    let clippedParentPresentedDepth = SnapshotPresentation.regularPresentedDepth(
+      for: nodes[1],
+      parentPresentedDepth: 0,
+      visibility: clippedParentVisibility
+    )
+    XCTAssertFalse(clippedParentVisibility.isIncluded)
+    XCTAssertTrue(clippedParentVisibility.descendantsMayBeVisible)
+    XCTAssertEqual(clippedParentPresentedDepth, 0)
+    XCTAssertTrue(
+      SnapshotPresentation.shouldAcquireChildren(
+        for: hint,
+        rawDepth: 1,
+        regularPresentedDepth: clippedParentPresentedDepth
+      )
+    )
+
+    let childVisibility = SnapshotVisibilityFold.traversalDecision(
+      for: nodes[2],
+      parent: clippedParentVisibility.descendants,
+      viewport: viewport,
+      interactiveOnly: options.interactiveOnly,
+      hasChildren: false,
+      policy: .platformDefault
+    )
+    let childPresentedDepth = SnapshotPresentation.regularPresentedDepth(
+      for: nodes[2],
+      parentPresentedDepth: clippedParentPresentedDepth,
+      visibility: childVisibility
+    )
+    XCTAssertEqual(childPresentedDepth, 1)
+    XCTAssertFalse(
+      SnapshotPresentation.shouldAcquireChildren(
+        for: hint,
+        rawDepth: 2,
+        regularPresentedDepth: childPresentedDepth
+      )
+    )
+
+    let rawHint = SnapshotPresentation.captureHint(
+      for: PresentationOptions(interactiveOnly: false, depth: 1, scope: nil, raw: true))
+    XCTAssertFalse(
+      SnapshotPresentation.shouldAcquireChildren(
+        for: rawHint,
+        rawDepth: 1,
+        regularPresentedDepth: 0
+      )
+    )
+  }
 }
 #endif

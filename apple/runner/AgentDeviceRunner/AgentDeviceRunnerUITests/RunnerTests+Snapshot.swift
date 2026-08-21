@@ -30,6 +30,7 @@ extension RunnerTests {
     let depth: Int
     let parentIndex: Int?
     let parentPresentedDepth: Int
+    let parentTraversal: SnapshotVisibilityFold.TraversalState
   }
 
   struct SnapshotCaptureFailure: Error {
@@ -185,7 +186,8 @@ extension RunnerTests {
           snapshot: $0,
           depth: 1,
           parentIndex: 0,
-          parentPresentedDepth: 0
+          parentPresentedDepth: 0,
+          parentTraversal: .root
         )
       }
     }
@@ -205,10 +207,26 @@ extension RunnerTests {
         parentIndex: parentIndex,
         viewport: context.viewport
       )
-      let presentedDepth = SnapshotPresentation.regularPresentedDepth(
-        for: node,
-        parentPresentedDepth: entry.parentPresentedDepth
-      )
+      let visibilityDecision: SnapshotVisibilityFold.TraversalDecision?
+      if hint.regularPresentedDepth != nil {
+        visibilityDecision = SnapshotVisibilityFold.traversalDecision(
+          for: node,
+          parent: entry.parentTraversal,
+          viewport: context.viewport,
+          interactiveOnly: hint.interactiveOnly,
+          hasChildren: !snapshot.children.isEmpty,
+          policy: .platformDefault
+        )
+      } else {
+        visibilityDecision = nil
+      }
+      let presentedDepth = visibilityDecision.map {
+        SnapshotPresentation.regularPresentedDepth(
+          for: node,
+          parentPresentedDepth: entry.parentPresentedDepth,
+          visibility: $0
+        )
+      } ?? entry.parentPresentedDepth
       let key = Self.snapshotTraversalIdentity(
         elementType: snapshot.elementType,
         label: evaluation.label,
@@ -228,11 +246,17 @@ extension RunnerTests {
       let currentPresentedDepth = isDuplicate
         ? entry.parentPresentedDepth
         : presentedDepth
+      let currentTraversal = isDuplicate
+        ? entry.parentTraversal
+        : visibilityDecision?.descendants ?? entry.parentTraversal
+      let descendantsMayBeVisible = isDuplicate
+        ? entry.parentTraversal.descendantsMayBeVisible
+        : visibilityDecision?.descendantsMayBeVisible ?? true
       let shouldVisitChildren = SnapshotPresentation.shouldAcquireChildren(
         for: hint,
         rawDepth: depth,
         regularPresentedDepth: currentPresentedDepth
-      )
+      ) && (visibilityDecision == nil || descendantsMayBeVisible)
       if shouldVisitChildren {
         for child in snapshot.children.reversed() {
           stack.append(
@@ -240,7 +264,8 @@ extension RunnerTests {
               snapshot: child,
               depth: depth + 1,
               parentIndex: currentIndex,
-              parentPresentedDepth: currentPresentedDepth
+              parentPresentedDepth: currentPresentedDepth,
+              parentTraversal: currentTraversal
             )
           )
         }

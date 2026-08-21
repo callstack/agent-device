@@ -194,15 +194,16 @@ enum SnapshotPresentation {
     return true
   }
 
-  /// Shared depth accounting for the acquisition frontier. It uses the same
-  /// eligibility predicate as regular presentation; visibility and geometry
-  /// remain owned by the clip fold and are not reimplemented by a backend.
+  /// Shared depth accounting for the acquisition frontier. The fold supplies the same visibility
+  /// decision used by regular presentation; this method adds only the presentation-owned semantic
+  /// eligibility predicate.
   static func regularPresentedDepth(
     for raw: RawAXNode,
-    parentPresentedDepth: Int
+    parentPresentedDepth: Int,
+    visibility: SnapshotVisibilityFold.TraversalDecision
   ) -> Int {
     guard raw.parentIndex != nil else { return 0 }
-    return isEligibleForRegularPresentation(raw)
+    return visibility.isIncluded && isEligibleForRegularPresentation(raw)
       ? parentPresentedDepth + 1
       : parentPresentedDepth
   }
