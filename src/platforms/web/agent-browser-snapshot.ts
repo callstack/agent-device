@@ -169,8 +169,18 @@ function extractQuotedText(line: string): string | undefined {
 }
 
 function isLineMarkedDisabled(line: string): boolean {
-  const withoutQuotedText = line.replace(/"[^"]*"/g, '').replace(/'[^']*'/g, '');
-  return /\[[^\]]*\bdisabled\b[^\]]*\]/i.test(withoutQuotedText);
+  // The structural annotation sits outside quoted label text, so strip
+  // strings first (escape-aware) — a label may itself embed ref-shaped
+  // bracket groups. The node's own annotation is the last remaining
+  // ref-bearing group; anything after it is the optional value.
+  const outsideQuotedText = line
+    .replace(/"(?:[^"\\]|\\.)*"/g, '""')
+    .replace(/'(?:[^'\\]|\\.)*'/g, "''");
+  const refGroups = (outsideQuotedText.match(/\[[^\]]*\]/g) ?? []).filter((group) =>
+    /\bref\s*=\s*['"]?@?e\d+/i.test(group),
+  );
+  const structuralAnnotation = refGroups.at(-1);
+  return structuralAnnotation !== undefined && /\bdisabled\b/i.test(structuralAnnotation);
 }
 
 function extractValue(line: string): string | undefined {

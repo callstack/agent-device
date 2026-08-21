@@ -31,6 +31,28 @@ describe('normalizeAgentBrowserSnapshot', () => {
     expect(result.nodes[0]?.label).toBe('Shows [disabled] in its label');
   });
 
+  test('does not read disabled from a trailing value outside the annotation group', async () => {
+    const result = await normalizeAgentBrowserSnapshot({
+      snapshot: '  - textbox "Status" [ref=e1]: [disabled]',
+      refs: { e1: { name: 'Status', role: 'textbox' } },
+    });
+
+    expect(result.nodes[0]?.enabled).toBeUndefined();
+    expect(result.nodes[0]?.value).toBe('[disabled]');
+  });
+
+  test('does not read disabled from a label that embeds a ref-shaped annotation', async () => {
+    // Live-derived from the pinned agent-browser: an enabled button whose
+    // aria-label is "Shows [disabled, ref=e1]" emits exactly this line.
+    const result = await normalizeAgentBrowserSnapshot({
+      snapshot: '  - button "Shows [disabled, ref=e1]" [ref=e1]',
+      refs: { e1: { name: 'Shows [disabled, ref=e1]', role: 'button' } },
+    });
+
+    expect(result.nodes[0]?.enabled).toBeUndefined();
+    expect(result.nodes[0]?.label).toBe('Shows [disabled, ref=e1]');
+  });
+
   test('metadata enabled still wins over the text annotation', async () => {
     const result = await normalizeAgentBrowserSnapshot({
       snapshot: '  - button "Odd" [disabled, ref=e1]',
