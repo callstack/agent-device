@@ -1,26 +1,6 @@
 import AVFoundation
 import Foundation
 
-enum TrimError: Error, CustomStringConvertible {
-  case invalidArgs(String)
-  case invalidTrimRange
-  case missingVideoTrack
-  case exportFailed(String)
-
-  var description: String {
-    switch self {
-    case .invalidArgs(let message):
-      return message
-    case .invalidTrimRange:
-      return "Trim start must be before the end of the recording."
-    case .missingVideoTrack:
-      return "Input video does not contain a video track."
-    case .exportFailed(let message):
-      return message
-    }
-  }
-}
-
 do {
   try run()
 } catch {
@@ -34,69 +14,39 @@ func run() throws {
   let inputURL = URL(fileURLWithPath: parsedArgs.inputPath)
   let outputURL = URL(fileURLWithPath: parsedArgs.outputPath)
 
-  if FileManager.default.fileExists(atPath: outputURL.path) {
-    try FileManager.default.removeItem(at: outputURL)
-  }
+  try removeStaleOutput(outputURL)
 
   let asset = AVURLAsset(url: inputURL)
-  guard let sourceVideoTrack = asset.tracks(withMediaType: .video).first else {
-    throw TrimError.missingVideoTrack
-  }
-
+  let videoTrack = try sourceVideoTrack(of: asset)
   let trimStart = CMTime(seconds: parsedArgs.trimStartMs / 1000.0, preferredTimescale: 600)
   guard CMTimeCompare(trimStart, asset.duration) < 0 else {
-    throw TrimError.invalidTrimRange
+    throw RecordingScriptError.invalidTrimRange
   }
 
   let trimmedDuration = CMTimeSubtract(asset.duration, trimStart)
   guard CMTimeCompare(trimmedDuration, .zero) > 0 else {
-    throw TrimError.invalidTrimRange
+    throw RecordingScriptError.invalidTrimRange
   }
 
-  let composition = AVMutableComposition()
-  let trimmedRange = CMTimeRange(start: trimStart, duration: trimmedDuration)
+  let composition = try makeRecordingComposition(
+    asset: asset,
+    videoTrack: videoTrack,
+    timeRange: CMTimeRange(start: trimStart, duration: trimmedDuration)
+  )
+  composition.tracks(withMediaType: .video).first?.preferredTransform = videoTrack.preferredTransform
 
-  guard let compositionVideoTrack = composition.addMutableTrack(
-    withMediaType: .video,
-    preferredTrackID: kCMPersistentTrackID_Invalid
-  ) else {
-    throw TrimError.exportFailed("Failed to create composition video track.")
-  }
-  try compositionVideoTrack.insertTimeRange(trimmedRange, of: sourceVideoTrack, at: .zero)
-  compositionVideoTrack.preferredTransform = sourceVideoTrack.preferredTransform
-
-  if let sourceAudioTrack = asset.tracks(withMediaType: .audio).first,
-     let compositionAudioTrack = composition.addMutableTrack(
-       withMediaType: .audio,
-       preferredTrackID: kCMPersistentTrackID_Invalid
-     ) {
-    try? compositionAudioTrack.insertTimeRange(trimmedRange, of: sourceAudioTrack, at: .zero)
-  }
-
+  // Passthrough keeps the trim lossless when the composition supports it; otherwise re-encode at
+  // highest quality.
   let presetName = AVAssetExportSession.exportPresets(compatibleWith: composition)
     .contains(AVAssetExportPresetPassthrough)
     ? AVAssetExportPresetPassthrough
     : AVAssetExportPresetHighestQuality
-  guard let exporter = AVAssetExportSession(asset: composition, presetName: presetName) else {
-    throw TrimError.exportFailed("Failed to create export session.")
-  }
-
-  exporter.outputURL = outputURL
-  exporter.outputFileType = .mp4
-  exporter.shouldOptimizeForNetworkUse = true
-
-  let semaphore = DispatchSemaphore(value: 0)
-  exporter.exportAsynchronously {
-    semaphore.signal()
-  }
-  if semaphore.wait(timeout: .now() + 120) == .timedOut {
-    exporter.cancelExport()
-    throw TrimError.exportFailed("Trim export timed out.")
-  }
-
-  if exporter.status != .completed {
-    throw TrimError.exportFailed(exporter.error?.localizedDescription ?? "Trim export failed.")
-  }
+  let exporter = try makeRecordingExporter(composition, presetName: presetName, outputURL: outputURL)
+  try runRecordingExport(
+    exporter,
+    timeoutMessage: "Trim export timed out.",
+    failureMessage: "Trim export failed."
+  )
 }
 
 func parseArguments(_ arguments: [String]) throws -> (inputPath: String, outputPath: String, trimStartMs: Double) {
@@ -110,29 +60,25 @@ func parseArguments(_ arguments: [String]) throws -> (inputPath: String, outputP
     let nextIndex = index + 1
     switch argument {
     case "--input":
-      guard nextIndex < arguments.count else { throw TrimError.invalidArgs("--input requires a value") }
-      inputPath = arguments[nextIndex]
+      inputPath = try recordingOptionValue(arguments, nextIndex, "--input")
       index += 2
     case "--output":
-      guard nextIndex < arguments.count else { throw TrimError.invalidArgs("--output requires a value") }
-      outputPath = arguments[nextIndex]
+      outputPath = try recordingOptionValue(arguments, nextIndex, "--output")
       index += 2
     case "--trim-start-ms":
-      guard nextIndex < arguments.count else {
-        throw TrimError.invalidArgs("--trim-start-ms requires a value")
-      }
-      guard let parsed = Double(arguments[nextIndex]), parsed >= 0 else {
-        throw TrimError.invalidArgs("--trim-start-ms must be a non-negative number")
+      let rawValue = try recordingOptionValue(arguments, nextIndex, "--trim-start-ms")
+      guard let parsed = Double(rawValue), parsed >= 0 else {
+        throw RecordingScriptError.invalidArgs("--trim-start-ms must be a non-negative number")
       }
       trimStartMs = parsed
       index += 2
     default:
-      throw TrimError.invalidArgs("Unknown argument: \(argument)")
+      throw RecordingScriptError.invalidArgs("Unknown argument: \(argument)")
     }
   }
 
   guard let inputPath, let outputPath, let trimStartMs else {
-    throw TrimError.invalidArgs(
+    throw RecordingScriptError.invalidArgs(
       "Usage: recording-trim.swift --input <video> --output <video> --trim-start-ms <ms>"
     )
   }
