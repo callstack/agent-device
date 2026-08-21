@@ -174,6 +174,35 @@ test('socket partial response fails at end-of-stream instead of waiting for the 
   assert.ok(Date.now() - startedAt < 500, 'EOF should reject before the injected deadline');
 });
 
+test('socket empty response fails at end-of-stream with request context', async () => {
+  const endpoint = await startNetServer((socket) => {
+    socket.once('data', () => {
+      socket.end();
+    });
+  });
+  const request = buildRequest(COMMAND_ROWS.read, 'socket-empty');
+  const startedAt = Date.now();
+
+  await assert.rejects(
+    sendRequest(
+      { port: endpoint.port, token: 'test-token', pid: process.pid },
+      request,
+      'socket',
+      daemonPaths(),
+      1_000,
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.message, 'Invalid daemon response');
+      assert.equal(error.details?.requestId, request.meta?.requestId);
+      return true;
+    },
+  );
+
+  assert.ok(Date.now() - startedAt < 500, 'EOF should reject before the injected deadline');
+});
+
 test('socket malformed response stays typed at the daemon client seam', async () => {
   const endpoint = await startNetServer((socket) => {
     socket.once('data', () => {

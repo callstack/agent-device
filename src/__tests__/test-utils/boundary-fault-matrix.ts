@@ -123,22 +123,22 @@ export const BOUNDARY_FAULT_MATRIX = {
     mutation: {
       kind: 'covered',
       evidence: ['src/daemon/client/__tests__/boundary-fault-acceptance.test.ts'],
-      invariants: ['bounded-deadline', 'no-mutation-replay', 'typed-error-identity'],
+      invariants: ['bounded-deadline', 'no-mutation-replay'],
     },
     read: {
       kind: 'covered',
       evidence: ['src/daemon/client/__tests__/boundary-fault-acceptance.test.ts'],
-      invariants: ['bounded-deadline', 'typed-error-identity'],
+      invariants: ['bounded-deadline'],
     },
     'artifact-producing': {
       kind: 'covered',
       evidence: ['src/daemon/client/__tests__/boundary-fault-acceptance.test.ts'],
-      invariants: ['bounded-deadline', 'typed-error-identity'],
+      invariants: ['bounded-deadline'],
     },
     'session-lifecycle': {
       kind: 'covered',
       evidence: ['src/daemon/client/__tests__/boundary-fault-acceptance.test.ts'],
-      invariants: ['bounded-deadline', 'typed-error-identity'],
+      invariants: ['bounded-deadline'],
     },
   },
   'lost-response-after-mutation': {
