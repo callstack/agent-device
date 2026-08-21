@@ -152,14 +152,7 @@ def traverse_node(accessible, depth, parent_index, ctx, app_info, window_title=N
     selected = has_state(state_set, Atspi.StateType.SELECTED) if state_set else None
     visible = has_state(state_set, Atspi.StateType.VISIBLE) if state_set else True
     showing = has_state(state_set, Atspi.StateType.SHOWING) if state_set else True
-    # role "label" is excluded even when geometrically valid: it's AT-SPI's own convention for a
-    # passive caption, and GTK4 buttons wrap their caption in a same-rect "label" child (confirmed
-    # live: every digit button on gnome-calculator has one) — leaving it hittable lets the
-    # same-rect descendant promotion in interaction-targeting.ts silently retarget a click from
-    # the button onto its non-interactive label.
-    hittable = (
-        (enabled is not False) and visible and showing and (rect is not None) and role_name != "label"
-    )
+    hittable = (enabled is not False) and visible and showing and (rect is not None)
 
     current_window_title = window_title
     if current_window_title is None and is_frame:

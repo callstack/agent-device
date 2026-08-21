@@ -24,12 +24,13 @@ is exists "appname=gnome-calculator || windowtitle=Calculator || label=Calculato
 # toplevel frame's own screen origin (linux/atspi-dump.py).
 click "role=button label=1"
 # R41 (#1739): `type` executes through the bound `typeText` operation rather than the retired
-# interactor leaf. The keystrokes spell a full calculation: the typed-state screenshot below is
-# pixel evidence the digits and the shift-composed '+' landed, and the trailing '=' is the
-# formerly-dropped keystroke — a lone synthetic keystroke sent right after a focus change was
-# unreliably delivered, fixed by a settle margin before dispatch (typeLinux/sendKey in
-# input-actions.ts). The clicked 1 plus the typed 00+55= can only produce a 155 result if every
-# keystroke actually landed: no calculator button is labelled 155.
+# interactor leaf. The keystrokes spell a full calculation: the clicked 1 plus the typed 00+55=
+# can only produce a 155 result if every keystroke — digits, the shift-composed '+', and the
+# trailing '=' — actually landed; no calculator button is labelled 155. (Run 32487868346's
+# "100+55" without '=' motivated a keystroke-loss investigation, but the diagnostic evidence for
+# that (CI run 32503838660) turned out to show '=' delivered correctly in every multi-character
+# burst tested; the run's own attempt-3 hit the already-fixed mousemove --sync hang, which is the
+# more likely explanation for that screenshot. No keyboard-dispatch change was needed here.)
 type "00+55="
 screenshot "./test/screenshots/replays/linux-calculator-typed.png"
 # GTK4 gnome-calculator's entry widget did not expose its content to selectors: AT-SPI's
