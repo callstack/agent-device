@@ -92,6 +92,11 @@ test('snapshot backend conformance rejects every promised control invariant', ()
     /omitted its structured hittable result/,
   );
   expectFailure(
+    'geometric actionability',
+    { ...base, nodes: updateControl('field-name', { hittable: false }) },
+    /did not expose field-name as geometrically actionable/,
+  );
+  expectFailure(
     'seeded field value',
     { ...base, nodes: updateControl('field-email', { value: 'wrong@example.test' }) },
     /value drift/,

@@ -19,6 +19,10 @@ enum SnapshotBackendKind: String, CaseIterable {
     }
   }
 
+  var hittableSemantics: String {
+    "geometric-actionability"
+  }
+
   var usesXCTestAccessibilityChannel: Bool {
     switch self {
     case .recursiveTree, .querySweep:
@@ -70,6 +74,7 @@ private struct SnapshotBackendParityFixture: Decodable {
     let name: String
     let forceable: Bool
     let supportsRawProjection: Bool
+    let hittable: String
     let availability: Availability
   }
 
@@ -110,6 +115,11 @@ extension RunnerTests {
       }
       XCTAssertEqual(backend.isForceable, expected.forceable, expected.name)
       XCTAssertEqual(backend.supportsRawProjection, expected.supportsRawProjection, expected.name)
+      XCTAssertEqual(
+        backend.hittableSemantics,
+        expected.hittable,
+        "hittable semantics: \(expected.name)"
+      )
       XCTAssertEqual(
         backend.isAvailable(on: .simulator),
         expected.availability.simulator,

@@ -87,20 +87,21 @@ test('iOS snapshot registry classifies every backend and conformance target', ()
   expect(SNAPSHOT_BACKEND_CAPABILITIES.tree).toMatchObject({
     forceable: true,
     supportsRawProjection: true,
-    hittable: 'hit-tested',
+    hittable: 'geometric-actionability',
     deepExtension: 'no',
     depthLadder: 'n/a',
   });
   expect(SNAPSHOT_BACKEND_CAPABILITIES['private-ax']).toMatchObject({
     forceable: true,
     supportsRawProjection: true,
-    hittable: 'approximated',
+    hittable: 'geometric-actionability',
     deepExtension: 'yes',
     depthLadder: 'yes',
   });
   expect(SNAPSHOT_BACKEND_CAPABILITIES.queries).toMatchObject({
     forceable: false,
     supportsRawProjection: false,
+    hittable: 'geometric-actionability',
   });
 });
 

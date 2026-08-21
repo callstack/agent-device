@@ -20,7 +20,7 @@ export function buildSnapshotBackendConformanceBase(): SnapshotBackendConformanc
         type: 'TextField',
         value: 'Ada Lovelace',
         enabled: true,
-        hittable: false,
+        hittable: true,
         rect: { x: 0, y: 0, width: 100, height: 20 },
       },
       {
@@ -31,7 +31,7 @@ export function buildSnapshotBackendConformanceBase(): SnapshotBackendConformanc
         type: 'TextField',
         value: 'ada@example.test',
         enabled: true,
-        hittable: false,
+        hittable: true,
         rect: { x: 0, y: 20, width: 100, height: 20 },
       },
       { index: 2, ref: 'e3', type: 'ScrollView' },

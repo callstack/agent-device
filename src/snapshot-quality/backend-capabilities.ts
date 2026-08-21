@@ -3,7 +3,8 @@ import type {
   SnapshotPreferredBackend,
 } from '@agent-device/kernel/snapshot';
 
-type SnapshotBackendHittable = 'hit-tested' | 'approximated' | 'n/a';
+/** #1933: every iOS backend publishes this shared predicate in the wire `hittable` field. */
+type SnapshotBackendHittable = 'geometric-actionability';
 type SnapshotBackendSupport = 'yes' | 'no' | 'n/a';
 
 type SnapshotBackendCapability = {
@@ -28,7 +29,7 @@ export const SNAPSHOT_BACKEND_CAPABILITIES = {
   tree: {
     forceable: true,
     supportsRawProjection: true,
-    hittable: 'hit-tested',
+    hittable: 'geometric-actionability',
     deepExtension: 'no',
     depthLadder: 'n/a',
     knownGaps: ['deep-extension'],
@@ -36,7 +37,7 @@ export const SNAPSHOT_BACKEND_CAPABILITIES = {
   queries: {
     forceable: false,
     supportsRawProjection: false,
-    hittable: 'hit-tested',
+    hittable: 'geometric-actionability',
     deepExtension: 'n/a',
     depthLadder: 'n/a',
     knownGaps: [],
@@ -44,9 +45,9 @@ export const SNAPSHOT_BACKEND_CAPABILITIES = {
   'private-ax': {
     forceable: true,
     supportsRawProjection: true,
-    hittable: 'approximated',
+    hittable: 'geometric-actionability',
     deepExtension: 'yes',
     depthLadder: 'yes',
-    knownGaps: ['hittable-approximation'],
+    knownGaps: [],
   },
 } as const satisfies SnapshotBackendCapabilityRegistry;

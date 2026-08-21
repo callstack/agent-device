@@ -109,11 +109,9 @@ export function assertSnapshotBackendConformance(
     );
     assert.equal(node.enabled, true, `${backend} did not mark ${expected.identifier} enabled`);
     if (expected.interactive) {
-      // The repository's iOS contract explicitly treats XCTest/AX hittable flags as advisory:
-      // deep RN controls can report false while fill/press still dispatches successfully. The
-      // stable interactivity signal is the canonical semantic role plus enabled, positive hit
-      // geometry; retain the backend-reported flag as structured evidence rather than turning
-      // this fixture into a false negative for the known tree approximation.
+      // #1933 makes iOS snapshot hittable a backend-independent geometric-actionability
+      // predicate: enabled, non-empty geometry whose center lies inside the viewport. It is not
+      // native hit-testing or occlusion evidence, but it is still a promised control invariant.
       assert.equal(
         isSemanticTouchTarget(node),
         true,
@@ -127,6 +125,11 @@ export function assertSnapshotBackendConformance(
         typeof node.hittable,
         'boolean',
         `${backend} omitted its structured hittable result for ${expected.identifier}`,
+      );
+      assert.equal(
+        node.hittable,
+        true,
+        `${backend} did not expose ${expected.identifier} as geometrically actionable`,
       );
     }
     if (expected.value !== undefined) {

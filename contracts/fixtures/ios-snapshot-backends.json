@@ -4,7 +4,7 @@
       "name": "tree",
       "forceable": true,
       "supportsRawProjection": true,
-      "hittable": "hit-tested",
+      "hittable": "geometric-actionability",
       "deepExtension": "no",
       "depthLadder": "n/a",
       "availability": {
@@ -24,7 +24,7 @@
       "name": "queries",
       "forceable": false,
       "supportsRawProjection": false,
-      "hittable": "hit-tested",
+      "hittable": "geometric-actionability",
       "deepExtension": "n/a",
       "depthLadder": "n/a",
       "availability": {
@@ -37,21 +37,14 @@
       "name": "private-ax",
       "forceable": true,
       "supportsRawProjection": true,
-      "hittable": "approximated",
+      "hittable": "geometric-actionability",
       "deepExtension": "yes",
       "depthLadder": "yes",
       "availability": {
         "simulator": true,
         "physicalDevice": false
       },
-      "knownGaps": [
-        {
-          "id": "hittable-approximation",
-          "owner": "iOS snapshot maintainers",
-          "trackingIssue": 1797,
-          "expiresOn": "2027-03-31"
-        }
-      ]
+      "knownGaps": []
     }
   ]
 }
