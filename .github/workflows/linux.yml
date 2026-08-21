@@ -123,6 +123,216 @@ jobs:
           echo "=== xdotool ==="
           xdotool version
 
+      # TEMPORARY — diagnostic-only, removed before this branch's fix lands. Gathers hard
+      # evidence (raw AT-SPI interfaces/actions, raw xdotool behavior) for three tracked Linux
+      # defects (#1935 click-miss / typed-'=' / GTK4-no-text) instead of guessing at root cause.
+      - name: DIAGNOSTIC linux input investigation
+        continue-on-error: true
+        run: |
+          set -x
+          mkdir -p /tmp/diag
+
+          cat > /tmp/diag/inspect.py <<'PYEOF'
+          import sys, json
+          import gi
+          gi.require_version("Atspi", "2.0")
+          from gi.repository import Atspi
+
+          def describe(accessible, depth=0, out=None):
+              if out is None:
+                  out = []
+              try:
+                  role = accessible.get_role_name() or "unknown"
+              except Exception:
+                  role = "ERR"
+              try:
+                  name = accessible.get_name() or ""
+              except Exception:
+                  name = ""
+              rect = None
+              try:
+                  comp = accessible.get_component_iface()
+                  if comp:
+                      e = comp.get_extents(Atspi.CoordType.SCREEN)
+                      if e and e.width > 0 and e.height > 0:
+                          rect = {"x": e.x, "y": e.y, "width": e.width, "height": e.height}
+              except Exception as ex:
+                  rect = {"error": str(ex)}
+              n_actions = None
+              action_names = []
+              try:
+                  act = accessible.get_action_iface()
+                  if act:
+                      n_actions = act.get_n_actions()
+                      for i in range(n_actions):
+                          try:
+                              action_names.append(act.get_action_name(i))
+                          except Exception:
+                              pass
+              except Exception as ex:
+                  n_actions = f"ERR:{ex}"
+              text_val = None
+              try:
+                  t = accessible.get_text_iface()
+                  if t:
+                      c = t.get_character_count()
+                      text_val = t.get_text(0, c) if c > 0 else f"(empty, count={c})"
+              except Exception as ex:
+                  text_val = f"ERR:{ex}"
+              value_text = None
+              value_num = None
+              try:
+                  v = accessible.get_value_iface()
+                  if v:
+                      try:
+                          value_text = v.get_text()
+                      except Exception as ex:
+                          value_text = f"ERR:{ex}"
+                      try:
+                          value_num = v.get_current_value()
+                      except Exception as ex:
+                          value_num = f"ERR:{ex}"
+              except Exception as ex:
+                  value_text = f"OUTER_ERR:{ex}"
+              try:
+                  editable = bool(accessible.get_editable_text_iface())
+              except Exception:
+                  editable = False
+              out.append({
+                  "depth": depth, "role": role, "name": name, "rect": rect,
+                  "n_actions": n_actions, "action_names": action_names,
+                  "text_iface_value": text_val, "value_iface_text": value_text,
+                  "value_iface_number": value_num, "has_editable_text_iface": editable,
+              })
+              try:
+                  cc = accessible.get_child_count()
+              except Exception:
+                  cc = 0
+              for i in range(cc):
+                  try:
+                      child = accessible.get_child_at_index(i)
+                      if child:
+                          describe(child, depth + 1, out)
+                  except Exception:
+                      pass
+              return out
+
+          def find_app(desktop, name_substr):
+              for i in range(desktop.get_child_count()):
+                  app = desktop.get_child_at_index(i)
+                  if app and name_substr in (app.get_name() or ""):
+                      return app
+              return None
+
+          desktop = Atspi.get_desktop(0)
+          app = find_app(desktop, "Calculator") or find_app(desktop, "gnome-calculator")
+          if not app:
+              print(json.dumps({"error": "calculator app not found"}))
+              sys.exit(0)
+          nodes = describe(app)
+          json.dump(nodes, sys.stdout, indent=2)
+          PYEOF
+          # de-indent (heredoc above is indented to match YAML; strip common leading spaces)
+          python3 - <<'FIXEOF'
+          import re
+          p = "/tmp/diag/inspect.py"
+          lines = open(p).read().splitlines()
+          indents = [len(l) - len(l.lstrip(" ")) for l in lines if l.strip()]
+          n = min(indents) if indents else 0
+          open(p, "w").write("\n".join(l[n:] if len(l) >= n else l for l in lines) + "\n")
+          FIXEOF
+
+          echo "############ ROUND A: fresh launch, full a11y tree (interfaces/actions) ############"
+          gnome-calculator &
+          sleep 2
+          python3 /tmp/diag/inspect.py > /tmp/diag/a-tree-fresh.json 2>/tmp/diag/a-tree-fresh.err || true
+          scrot /tmp/diag/a-fresh.png || true
+
+          echo "############ ROUND B: click button '1' at ITS OWN rect (bypass our promotion code) ############"
+          python3 - <<'PYEOF2' > /tmp/diag/b-button-rect.txt
+          import json
+          nodes = json.load(open("/tmp/diag/a-tree-fresh.json"))
+          for n in nodes:
+              if n["name"] == "1":
+                  print(n["role"], n["rect"], "n_actions=", n["n_actions"], n["action_names"])
+          PYEOF2
+          cat /tmp/diag/b-button-rect.txt
+
+          read -r BX BY BW BH <<< "$(python3 - <<'PYEOF3'
+          import json
+          nodes = json.load(open("/tmp/diag/a-tree-fresh.json"))
+          for n in nodes:
+              if n["name"] == "1" and "button" in n["role"].lower():
+                  r = n["rect"]
+                  print(r["x"], r["y"], r["width"], r["height"])
+                  break
+          PYEOF3
+          )"
+          CX=$(( BX + BW/2 )); CY=$(( BY + BH/2 ))
+          echo "button '1' own rect: x=$BX y=$BY w=$BW h=$BH -> center=($CX,$CY)"
+          xdotool mousemove --sync "$CX" "$CY"
+          xdotool getmouselocation --shell
+          xdotool click 1
+          sleep 0.5
+          scrot /tmp/diag/b-after-click-own-rect.png || true
+          python3 /tmp/diag/inspect.py > /tmp/diag/b-tree-after-click.json 2>/tmp/diag/b-tree-after-click.err || true
+
+          pkill -f gnome-calculator || true; sleep 1
+
+          echo "############ ROUND C: xkb / keymap facts ############"
+          setxkbmap -query > /tmp/diag/c-xkb-query.txt 2>&1 || echo "setxkbmap exit=$?" >> /tmp/diag/c-xkb-query.txt
+          xmodmap -pke > /tmp/diag/c-xmodmap-full.txt 2>&1 || echo "xmodmap exit=$?" >> /tmp/diag/c-xmodmap-full.txt
+          grep -iw "equal\|plus" /tmp/diag/c-xmodmap-full.txt > /tmp/diag/c-xmodmap-equal-plus.txt || echo "NONE FOUND" > /tmp/diag/c-xmodmap-equal-plus.txt
+
+          echo "############ ROUND D: isolate '=' behavior ############"
+          gnome-calculator & sleep 2
+          xdotool type --clearmodifiers -- "100+55="
+          sleep 0.5
+          scrot /tmp/diag/d1-full-expression.png || true
+          pkill -f gnome-calculator || true; sleep 1
+
+          gnome-calculator & sleep 2
+          xdotool type --clearmodifiers -- "="
+          sleep 0.5
+          scrot /tmp/diag/d2-equals-alone.png || true
+          pkill -f gnome-calculator || true; sleep 1
+
+          gnome-calculator & sleep 2
+          xdotool key --clearmodifiers equal
+          sleep 0.5
+          scrot /tmp/diag/d3-key-equal.png || true
+          pkill -f gnome-calculator || true; sleep 1
+
+          gnome-calculator & sleep 2
+          xdotool type --clearmodifiers -- "5=5"
+          sleep 0.5
+          scrot /tmp/diag/d4-equals-midstring.png || true
+          pkill -f gnome-calculator || true; sleep 1
+
+          gnome-calculator & sleep 2
+          xdotool type --delay 150 --clearmodifiers -- "100+55="
+          sleep 0.5
+          scrot /tmp/diag/d5-slow-delay.png || true
+          pkill -f gnome-calculator || true; sleep 1
+
+          echo "############ ROUND E: GTK4 text exposure — dump entry-ish nodes ############"
+          gnome-calculator & sleep 2
+          xdotool type --clearmodifiers -- "155"
+          sleep 0.5
+          python3 /tmp/diag/inspect.py > /tmp/diag/e-tree-typed-155.json 2>/tmp/diag/e-tree-typed-155.err || true
+          scrot /tmp/diag/e-typed-155.png || true
+          pkill -f gnome-calculator || true; sleep 1
+
+          echo "DONE" > /tmp/diag/DONE.txt
+
+      - name: Upload diagnostic artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: linux-diag
+          if-no-files-found: warn
+          path: /tmp/diag/**
+
       - name: Run Linux replay smoke test
         run: pnpm clean:daemon
 
