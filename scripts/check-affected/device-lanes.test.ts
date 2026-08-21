@@ -13,7 +13,9 @@ function lanes(file: string): CheckId[] {
   const plan = selectChecks({ changedFiles: [file] });
   assert.equal(plan.failOpen, false, `${file} must not fail open`);
   return plan.checks.filter((id) =>
-    /^replay-|^web-smoke$|^swift-runner-|^macos-helper$|^android-helpers$/.test(id),
+    /^macos-coverage$|^replay-|^web-smoke$|^swift-runner-|^macos-helper$|^android-helpers$/.test(
+      id,
+    ),
   );
 }
 
@@ -56,8 +58,15 @@ test('an iOS replay script and the iOS smoke files own the iOS lanes', () => {
   }
 });
 
-test('the macOS coverage gate owns only the macOS replay lane', () => {
-  assert.deepEqual(lanes('test/integration/smoke-macos-coverage.test.ts'), ['replay-macos']);
+test('the macOS coverage manifest selects its executable gate and macOS replay lane', () => {
+  assert.deepEqual(lanes('test/integration/smoke-macos-coverage.test.ts'), [
+    'macos-coverage',
+    'replay-macos',
+  ]);
+  assert.deepEqual(lanes('test/integration/macos-e2e/coverage-manifest.ts'), [
+    'macos-coverage',
+    'replay-macos',
+  ]);
 });
 
 test('shared runtime surface owns every device lane', () => {

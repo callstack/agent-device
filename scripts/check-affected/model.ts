@@ -44,6 +44,7 @@ export type CheckId =
   | 'coverage'
   | 'provider-integration'
   | 'integration-node'
+  | 'macos-coverage'
   | 'integration-progress'
   | 'swift-runner-ios'
   | 'swift-runner-macos'
@@ -100,6 +101,7 @@ export const ALL_CHECKS: readonly CheckId[] = [
   // Real daemon/process integration owns host-global lifecycle state and must
   // run before the related-project workload heats the host.
   'integration-node',
+  'macos-coverage',
   'vitest-related',
   'unit',
   'unit-ci',
@@ -355,6 +357,19 @@ const nodeIntegrationOwnership: OwnershipRule = ({ file }) =>
     ? [reason('integration-node', file, 'node-integration', 'node --test integration smoke')]
     : [];
 
+const macosCoverageOwnership: OwnershipRule = ({ file }) =>
+  file === 'test/integration/smoke-macos-coverage.test.ts' ||
+  file.startsWith('test/integration/macos-e2e/')
+    ? [
+        reason(
+          'macos-coverage',
+          file,
+          'own:macos-coverage',
+          'the macOS lane executes the command coverage manifest contract',
+        ),
+      ]
+    : [];
+
 const testAppOwnership: OwnershipRule = ({ file }) => {
   if (!file.startsWith('examples/test-app/')) return [];
   if (!/\.(?:[cm]?[jt]sx?|json)$/.test(file)) return [];
@@ -558,6 +573,7 @@ const OWNERSHIP_RULES: readonly OwnershipRule[] = [
   workspacePackageOwnership,
   platformPackageScenarioOwnership,
   nodeIntegrationOwnership,
+  macosCoverageOwnership,
   testAppOwnership,
   replayCompatOwnership,
   daemonWireCompatOwnership,

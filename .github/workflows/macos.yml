@@ -42,6 +42,10 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
+      - name: Run macOS command coverage contract
+        uses: ./.github/actions/run-gate
+        with: { gate: macos-coverage }
+
       - name: Restore and build macOS XCTest runner
         uses: ./.github/actions/setup-apple-runner-build
         with:

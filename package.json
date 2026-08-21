@@ -184,6 +184,7 @@
     "test:smoke:web": "pnpm build && node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-web-platform.test.ts",
     "test:smoke": "node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-*.test.ts",
     "test:integration:node": "node --experimental-strip-types scripts/node-test-tmpdir.ts --test --experimental-test-isolation=none test/integration/*.test.ts",
+    "test:integration:macos-coverage": "node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-macos-coverage.test.ts",
     "test:integration": "pnpm test:integration:node && pnpm test:integration:provider",
     "test:concurrency-torture": "node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/nightly/concurrency-torture.test.ts",
     "test:replay:ios": "node --experimental-strip-types src/bin.ts test test/integration/replays/ios/simulator",
