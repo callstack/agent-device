@@ -222,25 +222,56 @@ extension RunnerTests {
     }
   }
 
-  /// Whether the field's placeholder makes this commit impossible to observe.
+  /// How the field's placeholder bears on observing this particular commit.
   ///
-  /// An empty text field renders its placeholder AS its accessibility value, and
-  /// `editableTextValue(treatingPlaceholderAsEmpty:)` classifies that value as empty for exactly
-  /// that reason. When the expected final text IS the placeholder, both states — nothing
-  /// committed, and everything committed — produce the identical read, before and after dispatch.
-  /// Raw equality is therefore not evidence: accepting it would report success over a field that
-  /// may have received nothing, which is the failure this whole wait exists to remove.
+  /// An empty text field renders its placeholder AS its accessibility value, which is why
+  /// `editableTextValue(treatingPlaceholderAsEmpty:)` classifies that value as empty. That
+  /// normalization is correct for the baseline and is what makes the expected value computable at
+  /// all — but it also hides a committed value that happens to equal the placeholder.
   ///
-  /// No read can resolve the ambiguity, so the wait does not spend its deadline discovering that.
-  /// It reports the commit unobserved immediately, which is what the caller refuses on.
-  static func placeholderMakesCommitUnobservable(
+  /// Whether a raw read equal to the placeholder is evidence depends entirely on what the field
+  /// held before dispatch, which is the distinction these three cases carry.
+  enum PlaceholderCommitEvidence: Equatable {
+    /// The expected value differs from the placeholder, so the normalized read observes the
+    /// commit and the placeholder never enters into it. The ordinary case.
+    case normalRead
+    /// The expected value IS the placeholder and the field was empty beforehand, so the
+    /// placeholder was what rendered. Every read is byte-identical whether or not anything
+    /// committed, before and after dispatch. No observation can resolve this, so accepting a raw
+    /// match would report success over a field that may have received nothing — the failure this
+    /// wait exists to remove.
+    case indistinguishable
+    /// The expected value IS the placeholder, but the field held content beforehand, so the
+    /// placeholder is NOT what is rendering. A raw read equal to it is therefore real commit
+    /// evidence, and refusing here would fail a `type` that worked (value "0", `type ".00"`).
+    case rawValueIsEvidence
+  }
+
+  static func placeholderCommitEvidence(
     placeholder: String?,
-    expectedText: String
-  ) -> Bool {
-    guard let placeholder else { return false }
-    let trimmedPlaceholder = placeholder.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmedPlaceholder.isEmpty else { return false }
-    return trimmedPlaceholder == expectedText.trimmingCharacters(in: .whitespacesAndNewlines)
+    expectedText: String,
+    baselineWasEmpty: Bool
+  ) -> PlaceholderCommitEvidence {
+    let trimmedPlaceholder = placeholder?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard !trimmedPlaceholder.isEmpty,
+      trimmedPlaceholder == expectedText.trimmingCharacters(in: .whitespacesAndNewlines)
+    else {
+      return .normalRead
+    }
+    return baselineWasEmpty ? .indistinguishable : .rawValueIsEvidence
+  }
+
+  /// The reading the commit wait compares against, given what the placeholder can prove here.
+  /// Both readings are closures so the ordinary case stays at one accessibility read on a path
+  /// that polls every 20ms for up to three seconds.
+  static func commitObservation(
+    evidence: PlaceholderCommitEvidence,
+    expectedText: String,
+    rawValue: () -> String?,
+    normalizedValue: () -> String?
+  ) -> String? {
+    if evidence == .rawValueIsEvidence, rawValue() == expectedText { return expectedText }
+    return normalizedValue()
   }
 
   /// The command-level consequence of a commit wait. `.unobservable` is not a failure: there was
@@ -277,20 +308,27 @@ extension RunnerTests {
       return .unobservable
     }
     let expectedText = textBefore + typedText
-    if Self.placeholderMakesCommitUnobservable(
+    let evidence = Self.placeholderCommitEvidence(
       placeholder: resolveTextEntryElement(app: app, target: target)?.placeholderValue,
-      expectedText: expectedText
-    ) {
-      return .notObserved
-    }
+      expectedText: expectedText,
+      baselineWasEmpty: textBefore.isEmpty
+    )
+    // Nothing to wait for: no read distinguishes committed from untouched here, so the deadline
+    // would only add latency to a verdict already determined.
+    if evidence == .indistinguishable { return .notObserved }
     let deadline = Date().addingTimeInterval(TextEntryTiming.synthesizedCommitTimeout)
     return Self.awaitSynthesizedCommitOutcome(
       expectedText: expectedText,
       isExpired: { Date() >= deadline },
       observe: {
-        editableTextValue(
-          for: resolveTextEntryElement(app: app, target: target),
-          treatingPlaceholderAsEmpty: true
+        let element = resolveTextEntryElement(app: app, target: target)
+        return Self.commitObservation(
+          evidence: evidence,
+          expectedText: expectedText,
+          rawValue: { editableTextValue(for: element) },
+          normalizedValue: {
+            editableTextValue(for: element, treatingPlaceholderAsEmpty: true)
+          }
         )
       },
       waitForNextObservation: { sleepFor(TextEntryTiming.pollInterval) }
