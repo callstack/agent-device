@@ -37,6 +37,7 @@ export function readSnapshotQualityVerdict(value: unknown): SnapshotQualityVerdi
   ) {
     return undefined;
   }
+  const timing = readSnapshotQualityTiming(raw.timing);
   return {
     state: raw.state as SnapshotQualityVerdict['state'],
     backend: raw.backend as SnapshotQualityVerdict['backend'],
@@ -55,6 +56,19 @@ export function readSnapshotQualityVerdict(value: unknown): SnapshotQualityVerdi
     collapsedLeafIndexes: Array.isArray(raw.collapsedLeafIndexes)
       ? raw.collapsedLeafIndexes.filter((entry): entry is number => typeof entry === 'number')
       : undefined,
+    ...(timing ? { timing } : {}),
+  };
+}
+
+function readSnapshotQualityTiming(value: unknown): SnapshotQualityVerdict['timing'] | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const raw = value as Record<string, unknown>;
+  if (typeof raw.acquisitionMs !== 'number' || typeof raw.presentationMs !== 'number') {
+    return undefined;
+  }
+  return {
+    acquisitionMs: raw.acquisitionMs,
+    presentationMs: raw.presentationMs,
   };
 }
 

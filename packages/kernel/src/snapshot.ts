@@ -18,6 +18,11 @@ export type SnapshotCaptureBackend = 'tree' | 'queries' | 'private-ax';
 /** Internal backends that evidence probes may select explicitly. */
 export type SnapshotPreferredBackend = 'tree' | 'private-ax';
 
+export type SnapshotQualityTiming = {
+  acquisitionMs: number;
+  presentationMs: number;
+};
+
 export type SnapshotQualityVerdict = {
   state: 'healthy' | 'recovered' | 'sparse';
   backend: SnapshotCaptureBackend;
@@ -45,6 +50,8 @@ export type SnapshotQualityVerdict = {
    * pass has to be disclosed rather than left to look complete.
    */
   customActions?: { read: number; candidates: number; truncated: number; blocked: boolean };
+  /** Response-level phase timing for the backend named by `backend`. */
+  timing?: SnapshotQualityTiming;
 };
 
 export type Rect = {

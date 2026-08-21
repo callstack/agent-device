@@ -25,6 +25,8 @@ struct SnapshotQuality: Codable {
   let collapsedLeafIndexes: [Int]?
   /// Coverage of the bounded custom-action pass, when the capture asked for one.
   let customActions: SnapshotCustomActionCoverage?
+  /// Response-level timing for the accepted backend attempt, never repeated per node.
+  var timing: SnapshotCaptureTiming? = nil
 }
 
 /// How much of the merged-element set the custom-action pass actually read. An
@@ -76,6 +78,9 @@ struct SnapshotBackendCapture {
   /// Broad presentation used only by the quality classifier when a scope narrows publication.
   /// A legitimate missing scope is an empty healthy projection, not backend failure evidence.
   var qualityPayload: DataPayload? = nil
+  /// Set by the capture plan after measuring acquisition and presentation separately. Direct
+  /// presentation fixtures do not claim a plan timing.
+  var timing: SnapshotCaptureTiming? = nil
 }
 
 extension RunnerTests {
@@ -327,42 +332,19 @@ extension RunnerTests {
         }
         continue
       }
-      let capture: SnapshotBackendCapture
-      let backendStartedAt = Date()
-      do {
-        guard
-          let result = try captureWithBackend(
-            kind,
-            app: app,
-            options: options,
-            deadline: deadline,
-            treeCaptureSliceBudgetOverride: effective.treeCaptureSliceBudgetOverride
-          )
-        else {
-          recordSlowXCTestSnapshotBackendIfNeeded(
-            kind,
-            startedAt: backendStartedAt,
-            penaltySuppressed: suppressXCTestPenalty
-          )
-          continue
-        }
-        capture = result
-        recordSlowXCTestSnapshotBackendIfNeeded(
-          kind,
-          startedAt: backendStartedAt,
-          penaltySuppressed: suppressXCTestPenalty
-        )
-      } catch let failure as SnapshotCaptureFailure {
-        recordXCTestSnapshotBackendFailureIfNeeded(
-          kind,
-          failure: failure,
-          penaltySuppressed: suppressXCTestPenalty
-        )
-        recordSlowXCTestSnapshotBackendIfNeeded(
-          kind,
-          startedAt: backendStartedAt,
-          penaltySuppressed: suppressXCTestPenalty
-        )
+      let attempt = try captureWithBackend(
+        kind,
+        app: app,
+        options: options,
+        deadline: deadline,
+        treeCaptureSliceBudgetOverride: effective.treeCaptureSliceBudgetOverride
+      )
+      recordXCTestSnapshotBackendAttemptIfNeeded(
+        kind,
+        attempt: attempt,
+        penaltySuppressed: suppressXCTestPenalty
+      )
+      if case let .failed(failure, phase: _) = attempt.outcome {
         if Self.isAxSnapshotFailure(failure) { axFailure = failure }
         if firstFailure == nil {
           firstFailure = (failure.message, Self.isAxSnapshotFailure(failure) ? "ax-rejected" : "capture-failed")
@@ -374,6 +356,7 @@ extension RunnerTests {
         )
         continue
       }
+      guard case let .captured(capture) = attempt.outcome else { continue }
 
       if let sparseReason = Self.sparsePayloadReason(capture.qualityPayload ?? capture.payload) {
         if firstFailure == nil { firstFailure = sparseReason }
@@ -429,92 +412,96 @@ extension RunnerTests {
     return fallbackPayload
   }
 
-  /// Marks XCTest-backed snapshot tiers as penalized when one attempt ground past the slow-capture
-  /// threshold — even a successful one: the next capture of this screen must not re-grind.
-  private func recordSlowXCTestSnapshotBackendIfNeeded(
-    _ kind: SnapshotBackendKind,
-    startedAt: Date,
-    penaltySuppressed: Bool
-  ) {
-    guard !penaltySuppressed else { return }
-    guard kind.usesXCTestAccessibilityChannel else { return }
-    let elapsed = Date().timeIntervalSince(startedAt)
-    guard elapsed > snapshotXCTestSlowCaptureThreshold else { return }
-    penalizeSnapshotXCTestChannel(
-      bundleId: currentBundleId,
-      reason: "slow_\(kind.rawValue)_capture_\(Int(elapsed * 1000))ms"
-    )
-  }
-
-  private func recordXCTestSnapshotBackendFailureIfNeeded(
-    _ kind: SnapshotBackendKind,
-    failure: SnapshotCaptureFailure,
-    penaltySuppressed: Bool
-  ) {
-    guard !penaltySuppressed else { return }
-    guard kind.usesXCTestAccessibilityChannel, failure.code == Self.xCTestSnapshotTimeoutCode else { return }
-    penalizeSnapshotXCTestChannel(
-      bundleId: currentBundleId,
-      reason: "\(kind.rawValue)_backend_timeout"
-    )
-  }
-
   private func captureWithBackend(
     _ kind: SnapshotBackendKind,
     app: XCUIApplication,
     options: PresentationOptions,
     deadline: Date,
     treeCaptureSliceBudgetOverride: TimeInterval?
-  ) throws -> SnapshotBackendCapture? {
+  ) throws -> SnapshotBackendAttempt {
     let hint = SnapshotPresentation.captureHint(for: options)
+    var timer = SnapshotPhaseTimer()
     let acquisition: SnapshotAcquisition?
-    switch kind {
-    case .recursiveTree:
-      guard
-        let context = try makeSnapshotTraversalContext(
-          app: app,
-          hint: hint,
-          captureDeadline: deadline,
-          treeCaptureSliceBudgetOverride: treeCaptureSliceBudgetOverride
-        )
-      else {
-        return nil
+    do {
+      acquisition = try timer.measure(.acquisition) {
+        switch kind {
+        case .recursiveTree:
+          guard
+            let context = try self.makeSnapshotTraversalContext(
+              app: app,
+              hint: hint,
+              captureDeadline: deadline,
+              treeCaptureSliceBudgetOverride: treeCaptureSliceBudgetOverride
+            )
+          else {
+            return nil
+          }
+          return try self.runMainThreadWork(
+            timeout: min(self.treeCaptureSliceBudget, max(0.5, deadline.timeIntervalSinceNow)),
+            timeoutError: self.snapshotMainThreadTimeoutError("processing tree snapshot")
+          ) {
+            hint.isRaw
+              ? try self.rawTreeSnapshotAcquisition(context: context, hint: hint)
+              : self.recursiveTreeSnapshotAcquisition(context: context, hint: hint)
+          }
+        case .querySweep:
+          return try self.runMainThreadWork(
+            timeout: min(Self.flatInteractiveFallbackBudget, max(0.1, deadline.timeIntervalSinceNow)),
+            timeoutError: self.snapshotMainThreadTimeoutError("running query-sweep snapshot")
+          ) {
+            self.querySweepSnapshotAcquisition(
+              app: app,
+              hint: hint,
+              planDeadline: deadline
+            )
+          }
+        case .privateAX:
+          return self.privateAXSnapshotAcquisition(
+            app: app,
+            hint: hint,
+            deadline: deadline
+          )
+        }
       }
-      acquisition = try runMainThreadWork(
-        timeout: min(treeCaptureSliceBudget, max(0.5, deadline.timeIntervalSinceNow)),
-        timeoutError: snapshotMainThreadTimeoutError("processing tree snapshot")
-      ) {
-        hint.isRaw
-          ? try self.rawTreeSnapshotAcquisition(context: context, hint: hint)
-          : self.recursiveTreeSnapshotAcquisition(context: context, hint: hint)
-      }
-    case .querySweep:
-      acquisition = try runMainThreadWork(
-        timeout: min(Self.flatInteractiveFallbackBudget, max(0.1, deadline.timeIntervalSinceNow)),
-        timeoutError: snapshotMainThreadTimeoutError("running query-sweep snapshot")
-      ) {
-        self.querySweepSnapshotAcquisition(
-          app: app,
-          hint: hint,
-          planDeadline: deadline
-        )
-      }
-    case .privateAX:
-      acquisition = privateAXSnapshotAcquisition(
-        app: app,
-        hint: hint,
-        deadline: deadline
+    } catch let failure as SnapshotCaptureFailure {
+      return SnapshotBackendAttempt(
+        outcome: .failed(failure, phase: .acquisition),
+        timing: timer.timing
       )
     }
-    guard let acquisition else { return nil }
-    guard let capture = SnapshotPresentation.present(acquisition, options: options) else {
-      throw Self.snapshotProjectionMismatchFailure(
-        kind,
-        requested: hint.projection,
-        acquired: acquisition.hint.projection
+
+    guard let acquisition else {
+      return SnapshotBackendAttempt(
+        outcome: .noCapture,
+        timing: timer.timing
       )
     }
-    return capture
+
+    let presented: SnapshotBackendCapture
+    do {
+      presented = try timer.measure(.presentation) {
+        guard let capture = SnapshotPresentation.present(acquisition, options: options) else {
+          throw Self.snapshotProjectionMismatchFailure(
+            kind,
+            requested: hint.projection,
+            acquired: acquisition.hint.projection
+          )
+        }
+        return capture
+      }
+    } catch let failure as SnapshotCaptureFailure {
+      return SnapshotBackendAttempt(
+        outcome: .failed(failure, phase: .presentation),
+        timing: timer.timing
+      )
+    }
+
+    var capture = presented
+    capture.timing = timer.timing
+    return SnapshotBackendAttempt(
+      outcome: .captured(capture),
+      timing: timer.timing
+    )
   }
 
   /// A backend that answers a request with the other projection loses its tier and says why, so
@@ -632,7 +619,8 @@ extension RunnerTests {
       reasonCode: reason?.code,
       effectiveDepth: capture.effectiveDepth,
       collapsedLeafIndexes: Self.collapsedLeafIndexes(payload.nodes ?? []),
-      customActions: capture.customActions
+      customActions: capture.customActions,
+      timing: capture.timing
     )
     return DataPayload(
       // Legacy human text for older daemons that read message instead of snapshotQuality.
@@ -845,6 +833,27 @@ extension RunnerTests {
     XCTAssertNil(Self.xcTestChannelStateFirstFailure(.normal))
     XCTAssertEqual(Self.xcTestChannelStateFirstFailure(.deferredToIndependentBackend)?.code, "deferred")
     XCTAssertEqual(Self.xcTestChannelStateFirstFailure(.boundedXCTestProbe)?.code, "budget")
+  }
+
+  func testSnapshotQualityCarriesPhaseTimingAtResponseLevel() {
+    let timing = SnapshotCaptureTiming(acquisitionMs: 12, presentationMs: 34)
+    let capture = SnapshotBackendCapture(
+      payload: DataPayload(
+        nodes: [planTestNode(index: 0, type: "Application", label: "App")],
+        truncated: false
+      ),
+      effectiveDepth: nil
+    )
+
+    let payload = stampedSnapshotPayload(
+      capture,
+      backend: .recursiveTree,
+      state: "healthy",
+      reason: nil
+    )
+
+    XCTAssertEqual(payload.snapshotQuality?.timing, timing)
+    XCTAssertEqual(payload.nodes?.count, 1)
   }
 
   /// The raw plan is derived from what each backend can actually serve, not from a second

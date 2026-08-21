@@ -16,6 +16,7 @@ test('readSnapshotQualityVerdict accepts a well-formed verdict', () => {
     effectiveDepth: 56,
     collapsedLeafIndexes: [3],
     customActions: { read: 12, candidates: 19, truncated: 1, blocked: false },
+    timing: { acquisitionMs: 12.5, presentationMs: 34.75 },
   });
   assert.deepEqual(verdict, {
     state: 'recovered',
@@ -25,7 +26,18 @@ test('readSnapshotQualityVerdict accepts a well-formed verdict', () => {
     effectiveDepth: 56,
     collapsedLeafIndexes: [3],
     customActions: { read: 12, candidates: 19, truncated: 1, blocked: false },
+    timing: { acquisitionMs: 12.5, presentationMs: 34.75 },
   });
+});
+
+test('readSnapshotQualityVerdict drops incomplete phase timing without dropping the verdict', () => {
+  const verdict = readSnapshotQualityVerdict({
+    state: 'healthy',
+    backend: 'tree',
+    timing: { acquisitionMs: 12.5 },
+  });
+  assert.equal(verdict?.state, 'healthy');
+  assert.equal(verdict?.timing, undefined);
 });
 
 test('readSnapshotQualityVerdict rejects unknown state or backend as verdict-absent', () => {
