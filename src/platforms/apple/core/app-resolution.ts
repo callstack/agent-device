@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { promises as fs } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -13,6 +14,7 @@ import { listMacApps, resolveMacOsApp } from '../os/macos/apps.ts';
 import { runAppleToolCommand } from './tool-provider.ts';
 import { runSimctl } from './apps-simctl.ts';
 import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
+import { createTtlMemo } from '../../../utils/ttl-memo.ts';
 
 const ALIASES: Record<string, string> = {
   settings: 'com.apple.Preferences',
@@ -312,7 +314,42 @@ function resolveSimulatorAppPath(info: { Bundle?: string; Path?: string }): stri
   }
 }
 
+// One plutil spawn per installed app per deep-link lookup dominates open
+// scheme:// latency; schemes only change when the bundle is reinstalled, so
+// the mtime-keyed memo absorbs the per-lookup cost. Only successful parses are
+// cacheable — a transient probe failure must not pin empty schemes until TTL
+// expiry — and expiry is scheduled so abandoned install paths do not
+// accumulate in a long-lived daemon.
+const IOS_SIMULATOR_APP_URL_SCHEME_MEMO_TTL_MS = 30 * 60_000;
+const iosSimulatorAppUrlSchemeMemo = createTtlMemo<string, Set<string>>({
+  ttlMs: IOS_SIMULATOR_APP_URL_SCHEME_MEMO_TTL_MS,
+  scheduleExpiry: true,
+});
+
 async function readIosSimulatorAppUrlSchemes(infoPlistPath: string): Promise<Set<string>> {
+  let cacheKey: string | undefined;
+  try {
+    cacheKey = `${infoPlistPath}:${(await fs.stat(infoPlistPath)).mtimeMs}`;
+  } catch {
+    cacheKey = undefined;
+  }
+  if (cacheKey === undefined) {
+    return (await readIosSimulatorAppUrlSchemesUncached(infoPlistPath)) ?? new Set();
+  }
+  const cached = iosSimulatorAppUrlSchemeMemo.get(cacheKey);
+  if (cached) return cached;
+  const schemes = await readIosSimulatorAppUrlSchemesUncached(infoPlistPath);
+  if (schemes) iosSimulatorAppUrlSchemeMemo.set(cacheKey, schemes);
+  return schemes ?? new Set();
+}
+
+/**
+ * Returns the bundle's URL schemes, or `undefined` when the probe failed
+ * (nonzero exit or malformed output) and the result must not be cached.
+ */
+async function readIosSimulatorAppUrlSchemesUncached(
+  infoPlistPath: string,
+): Promise<Set<string> | undefined> {
   const result = await runAppleToolCommand(
     'plutil',
     ['-convert', 'json', '-o', '-', infoPlistPath],
@@ -320,7 +357,7 @@ async function readIosSimulatorAppUrlSchemes(infoPlistPath: string): Promise<Set
       allowFailure: true,
     },
   );
-  if (result.exitCode !== 0) return new Set();
+  if (result.exitCode !== 0) return undefined;
   try {
     const parsed = JSON.parse(result.stdout) as {
       CFBundleURLTypes?: Array<{ CFBundleURLSchemes?: unknown }>;
@@ -336,6 +373,6 @@ async function readIosSimulatorAppUrlSchemes(infoPlistPath: string): Promise<Set
     }
     return schemes;
   } catch {
-    return new Set();
+    return undefined;
   }
 }
