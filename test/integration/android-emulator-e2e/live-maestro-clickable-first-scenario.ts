@@ -45,7 +45,7 @@ name: Android clickable-first selector
 - tapOn:
     id: ${TARGET_ID}
 - assertVisible:
-    text: Maestro selection: clickable
+    text: "Maestro selection: clickable"
 `,
   );
   const replay = await runStep(context, 'resolve duplicate target through no-index Maestro tapOn', [
