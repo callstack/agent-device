@@ -70,7 +70,6 @@ function buildFlags(options: InternalRequestOptions): CommandFlags {
     snapshotDepth: options.depth,
     snapshotScope: options.scope,
     snapshotRaw: options.raw,
-    snapshotPreferredBackend: options.preferredBackend,
     snapshotCustomActions: options.customActions,
     snapshotForceFull: options.forceFull,
     ...screenshotFlagsFromOptions(options),

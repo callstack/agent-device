@@ -1,0 +1,43 @@
+{
+  "backends": [
+    {
+      "name": "tree",
+      "forceable": true,
+      "supportsRawProjection": true,
+      "hittable": "hit-tested",
+      "deepExtension": "no",
+      "depthLadder": "n/a",
+      "fixtureConformance": "required",
+      "availability": {
+        "simulator": true,
+        "physicalDevice": true
+      }
+    },
+    {
+      "name": "queries",
+      "forceable": false,
+      "supportsRawProjection": false,
+      "hittable": "hit-tested",
+      "deepExtension": "n/a",
+      "depthLadder": "n/a",
+      "fixtureConformance": "not-applicable",
+      "availability": {
+        "simulator": true,
+        "physicalDevice": true
+      }
+    },
+    {
+      "name": "private-ax",
+      "forceable": true,
+      "supportsRawProjection": true,
+      "hittable": "approximated",
+      "deepExtension": "yes",
+      "depthLadder": "yes",
+      "fixtureConformance": "required",
+      "availability": {
+        "simulator": true,
+        "physicalDevice": false
+      }
+    }
+  ]
+}

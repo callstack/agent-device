@@ -2,13 +2,17 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import type {
+  AgentDeviceDaemonTransport,
+  CaptureSnapshotResult,
+} from '@agent-device/contracts/client';
 import { normalizeType } from '@agent-device/contracts/snapshot';
 import {
   SNAPSHOT_BACKEND_CAPABILITIES,
   type SnapshotCaptureBackend,
   type SnapshotConformanceBackend,
+  type SnapshotPreferredBackend,
 } from '@agent-device/kernel/snapshot';
-import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
 import { isSemanticTouchTarget } from '../../../src/core/interaction-targeting.ts';
 
 export type SnapshotBackendConformanceFixture = {
@@ -28,6 +32,30 @@ type SnapshotBackendControl = {
 export const SNAPSHOT_BACKEND_CONFORMANCE_TARGETS = Object.entries(SNAPSHOT_BACKEND_CAPABILITIES)
   .filter(([, capability]) => capability.fixtureConformance === 'required')
   .map(([backend]) => backend as SnapshotConformanceBackend);
+
+/**
+ * Test-owned transport seam for the backend conformance probe. The public SDK deliberately has
+ * no backend-selection option; this wrapper adds the internal daemon flag after the public client
+ * has projected its ordinary snapshot request. Keeping the force field here makes it impossible
+ * for a published CaptureSnapshotOptions or generic CommandExecutionOptions value to leak this
+ * evidence-only control.
+ */
+export function createSnapshotBackendConformanceTransport(
+  backend: SnapshotPreferredBackend,
+  transport: AgentDeviceDaemonTransport,
+): AgentDeviceDaemonTransport {
+  return async (request, context) =>
+    await transport(
+      {
+        ...request,
+        flags: {
+          ...(request.flags ?? {}),
+          snapshotPreferredBackend: backend,
+        },
+      },
+      context,
+    );
+}
 
 export function loadSnapshotBackendConformanceFixture(
   fixturePath = path.resolve('contracts/fixtures/ios-snapshot-backend-conformance.json'),

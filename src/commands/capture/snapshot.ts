@@ -1,4 +1,5 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { SNAPSHOT_BACKEND_CAPABILITIES } from '@agent-device/kernel/snapshot';
 import { SNAPSHOT_FLAGS } from '../cli-grammar/flag-groups.ts';
 import { booleanField, integerField, stringField } from '../command-input.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
@@ -16,6 +17,16 @@ const SNAPSHOT_COMMAND_NAME = 'snapshot';
 
 const snapshotCommandDescription =
   'Capture the accessibility tree or compare it with the previous session baseline. Use the returned refs for subsequent semantic interactions and the diff option to verify UI changes.';
+
+const snapshotBackendCapabilityHelp = Object.entries(SNAPSHOT_BACKEND_CAPABILITIES)
+  .map(([backend, capability]) => {
+    const gaps = capability.knownGaps.map(
+      (gap) =>
+        `known gap ${gap.id} (owner ${gap.owner}, #${gap.trackingIssue}, expires ${gap.expiresOn})`,
+    );
+    return `${backend}: hittable=${capability.hittable}, deep-extension=${capability.deepExtension}, depth-ladder=${capability.depthLadder}${gaps.length > 0 ? `, ${gaps.join(', ')}` : ''}`;
+  })
+  .join('; ');
 
 const snapshotCommandMetadata = defineFieldCommandMetadata(
   SNAPSHOT_COMMAND_NAME,
@@ -77,8 +88,7 @@ export const snapshotCommandFacet = defineCommandFacet({
   name: SNAPSHOT_COMMAND_NAME,
   text: {
     summary: 'Capture or diff the accessibility tree',
-    cliDetail:
-      'For iOS raw-coordinate fallback after a no-op ref press, inspect rects with snapshot -i --json, press the rect center, then verify with diff snapshot -i or snapshot --diff.',
+    cliDetail: `For iOS raw-coordinate fallback after a no-op ref press, inspect rects with snapshot -i --json, press the rect center, then verify with diff snapshot -i or snapshot --diff. iOS backend capability contract: ${snapshotBackendCapabilityHelp}.`,
   },
   metadata: snapshotCommandMetadata,
   definition: snapshotCommandDefinition,

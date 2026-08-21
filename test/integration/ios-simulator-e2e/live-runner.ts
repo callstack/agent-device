@@ -3,7 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import type { AgentDeviceDaemonTransport } from '@agent-device/contracts/client';
 import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
+import { sendToDaemon } from '../../../src/daemon/client/daemon-client.ts';
 import { assertPngFile } from '../provider-scenarios/assertions.ts';
 import {
   assertFilesDiffer,
@@ -34,6 +36,7 @@ import {
 import { bindIosSimulatorScenarios } from './scenarios.ts';
 import {
   assertSnapshotBackendConformance,
+  createSnapshotBackendConformanceTransport,
   SNAPSHOT_BACKEND_CONFORMANCE_TARGETS,
   loadSnapshotBackendConformanceFixture,
   snapshotBackendEvidence,
@@ -42,6 +45,13 @@ import {
 const C = PUBLIC_COMMANDS;
 
 type AgentDeviceSdk = typeof import('../../../src/sdk/index.ts');
+
+const sendToDaemonTransport: AgentDeviceDaemonTransport = async (request, context) => {
+  if (request.session === undefined) {
+    throw new Error('Snapshot conformance transport requires an explicit session.');
+  }
+  return await sendToDaemon({ ...request, session: request.session }, context);
+};
 
 async function loadBuiltAgentDeviceClient() {
   // The live harness drives the built CLI, so use the built SDK entry as well. Importing the
@@ -257,18 +267,20 @@ async function assertSnapshotBackendConformanceLive(context: LiveContext): Promi
   ]);
   const fixture = loadSnapshotBackendConformanceFixture();
   const createAgentDeviceClient = await loadBuiltAgentDeviceClient();
-  const client = createAgentDeviceClient({
-    session: context.session,
-    stateDir: context.stateDir,
-  });
   const evidence = [];
 
   for (const backend of SNAPSHOT_BACKEND_CONFORMANCE_TARGETS) {
+    const client = createAgentDeviceClient(
+      {
+        session: context.session,
+        stateDir: context.stateDir,
+      },
+      { transport: createSnapshotBackendConformanceTransport(backend, sendToDaemonTransport) },
+    );
     const snapshot = await client.capture.snapshot({
       interactiveOnly: true,
       platform: 'ios',
       udid: context.udid,
-      preferredBackend: backend,
     });
     assertSnapshotBackendConformance(snapshot, backend, fixture);
     if (backend === 'tree') {

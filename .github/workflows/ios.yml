@@ -175,6 +175,7 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPreferredPrivateAXBackendPlansAsPenalized \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPreferredTreeBackendPinsRegularPlanAndLeavesStructuredEvidence \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRawDiagnosticPlanCarriesOnlyBackendsThatCanServeRaw \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotBackendDeclarationsMatchCapabilityFixture \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testProjectionMismatchFailureIsStructuredAndNotAnAxFailure \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXRegularPresentationProjectsToViewportAndKeepsScrollHint \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXRawProjectionKeepsEveryAcquiredNode \

@@ -5,7 +5,6 @@ import type { PublicSnapshotCaptureAnnotations } from './snapshot-capture-annota
 import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
 import type {
   SnapshotNode,
-  SnapshotPreferredBackend,
   SnapshotUnchanged,
   SnapshotVisibility,
 } from '@agent-device/kernel/snapshot';
@@ -23,8 +22,6 @@ export type CaptureSnapshotOptions = AgentDeviceRequestOverrides &
     depth?: number;
     scope?: string;
     raw?: boolean;
-    /** Internal (no CLI flag): select an iOS snapshot backend for conformance evidence. */
-    preferredBackend?: SnapshotPreferredBackend;
     /** List accessibility custom actions on merged elements (iOS simulator). */
     customActions?: boolean;
     forceFull?: boolean;
