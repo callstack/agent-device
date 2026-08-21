@@ -35,7 +35,10 @@ import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { withMethodScope } from '../../utils/method-scope.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
-import { snapshotCaptureAnnotationsFrom } from '@agent-device/contracts/capture';
+import {
+  copySnapshotClickabilityEvidence,
+  snapshotCaptureAnnotationsFrom,
+} from '@agent-device/contracts/capture';
 
 export function createAndroidInteractor(
   device: DeviceInfo,
@@ -89,12 +92,12 @@ export function createAndroidInteractor(
           }),
         { backend: 'android' },
       );
-      return {
+      return copySnapshotClickabilityEvidence(result, {
         nodes: result.nodes ?? [],
         truncated: result.truncated ?? false,
         backend: 'android',
         ...snapshotCaptureAnnotationsFrom(result),
-      };
+      });
     },
     back: (_mode) => backAndroid(device),
     home: () => homeAndroid(device),
