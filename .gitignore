@@ -9,6 +9,11 @@ dist/
 coverage/
 .tmp/
 .DS_Store
+
+# Host-local Codex state and embedded worktree clones
+/.codex/
+/.worktrees/
+
 __pycache__/
 *.pyc
 *.log

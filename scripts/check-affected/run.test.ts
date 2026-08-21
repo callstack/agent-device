@@ -91,6 +91,30 @@ test('readChangedFiles unions staged and unstaged so a net diff cannot hide a fi
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 
+test('readChangedFiles excludes repository-owned host-local workspace roots', () => {
+  const dir = makeRepo();
+  try {
+    fs.copyFileSync(path.join(repoRoot, '.gitignore'), path.join(dir, '.gitignore'));
+    fs.writeFileSync(path.join(dir, 'seed.ts'), 'export const seed = true;\n');
+    git(dir, 'add', '.gitignore', 'seed.ts');
+    git(dir, 'commit', '-q', '-m', 'base');
+    const base = runCmdSync('git', ['rev-parse', 'HEAD'], { cwd: dir }).stdout.trim();
+
+    fs.mkdirSync(path.join(dir, '.codex'), { recursive: true });
+    fs.mkdirSync(path.join(dir, '.worktrees', 'embedded-clone'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '.codex', 'config.local.toml'), 'model = "local"\n');
+    fs.writeFileSync(
+      path.join(dir, '.worktrees', 'embedded-clone', 'package.json'),
+      '{"private":true}\n',
+    );
+    fs.writeFileSync(path.join(dir, 'untracked.ts'), 'export const visible = true;\n');
+
+    assert.deepEqual(readChangedFiles(base, 'HEAD', dir), ['untracked.ts']);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // The real package scripts: a fixture map has to be hand-extended for every new
 // gate, which is the drift the registry exists to remove.
 const ALL_SCRIPTS: Record<string, string> = (
