@@ -16,7 +16,7 @@ extension RunnerTests {
       case .synthesisUnavailable:
         return "Reliable text synthesis is unavailable while the software keyboard is hidden."
       case .commitNotObserved:
-        return "The runner could not confirm the typed text committed before its deadline."
+        return "The runner could not confirm the typed text reached the field."
       }
     }
 

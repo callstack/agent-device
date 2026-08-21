@@ -222,24 +222,25 @@ extension RunnerTests {
     }
   }
 
-  /// Which reading of the field the commit wait compares against.
+  /// Whether the field's placeholder makes this commit impossible to observe.
   ///
-  /// The normalized read maps a value equal to the field's placeholder to "" (see
-  /// `isPlaceholderValue`), and "" is a prefix of every expected value — so a commit that happens
-  /// to equal the placeholder (`type "0.00"` into a field placeheld "0.00") reads as still pending
-  /// and is condemned at the deadline despite having landed immediately. An exact raw match wins
-  /// for that reason. Everything else keeps the normalized reading, which is what makes a real
-  /// placeholder read as empty during the prefix walk.
+  /// An empty text field renders its placeholder AS its accessibility value, and
+  /// `editableTextValue(treatingPlaceholderAsEmpty:)` classifies that value as empty for exactly
+  /// that reason. When the expected final text IS the placeholder, both states — nothing
+  /// committed, and everything committed — produce the identical read, before and after dispatch.
+  /// Raw equality is therefore not evidence: accepting it would report success over a field that
+  /// may have received nothing, which is the failure this whole wait exists to remove.
   ///
-  /// `normalizedValue` is a closure so an exact match costs one accessibility read rather than
-  /// two, on a path that polls every 20ms for up to three seconds.
-  static func commitObservation(
-    rawValue: String?,
-    expectedText: String,
-    normalizedValue: () -> String?
-  ) -> String? {
-    if rawValue == expectedText { return rawValue }
-    return normalizedValue()
+  /// No read can resolve the ambiguity, so the wait does not spend its deadline discovering that.
+  /// It reports the commit unobserved immediately, which is what the caller refuses on.
+  static func placeholderMakesCommitUnobservable(
+    placeholder: String?,
+    expectedText: String
+  ) -> Bool {
+    guard let placeholder else { return false }
+    let trimmedPlaceholder = placeholder.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedPlaceholder.isEmpty else { return false }
+    return trimmedPlaceholder == expectedText.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   /// The command-level consequence of a commit wait. `.unobservable` is not a failure: there was
@@ -276,16 +277,20 @@ extension RunnerTests {
       return .unobservable
     }
     let expectedText = textBefore + typedText
+    if Self.placeholderMakesCommitUnobservable(
+      placeholder: resolveTextEntryElement(app: app, target: target)?.placeholderValue,
+      expectedText: expectedText
+    ) {
+      return .notObserved
+    }
     let deadline = Date().addingTimeInterval(TextEntryTiming.synthesizedCommitTimeout)
     return Self.awaitSynthesizedCommitOutcome(
       expectedText: expectedText,
       isExpired: { Date() >= deadline },
       observe: {
-        let element = resolveTextEntryElement(app: app, target: target)
-        return Self.commitObservation(
-          rawValue: editableTextValue(for: element),
-          expectedText: expectedText,
-          normalizedValue: { editableTextValue(for: element, treatingPlaceholderAsEmpty: true) }
+        editableTextValue(
+          for: resolveTextEntryElement(app: app, target: target),
+          treatingPlaceholderAsEmpty: true
         )
       },
       waitForNextObservation: { sleepFor(TextEntryTiming.pollInterval) }

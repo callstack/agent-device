@@ -148,47 +148,38 @@ extension RunnerTests {
     XCTAssertEqual(outcome, .settled)
   }
 
-  // The production normalization boundary. A committed value equal to the field's placeholder
-  // normalizes to "", a prefix of everything, so the wait read it as pending until the deadline
-  // and failed a `type` that had landed immediately. Reverting `commitObservation` to always
-  // return the normalized reading makes the first case return "" and this test go red — which the
-  // earlier version of this test did NOT do, because it injected an already-resolved observation.
-  func testCommitObservationPrefersAnExactRawMatchOverPlaceholderNormalization() {
-    XCTAssertEqual(
-      Self.commitObservation(rawValue: "0.00", expectedText: "0.00", normalizedValue: { "" }),
-      "0.00",
-      "a committed value equal to the placeholder must not be read as empty"
+  // Review [P1]: an empty field renders its placeholder AS its accessibility value, so when the
+  // requested text IS the placeholder, the raw read equals the expected text BEFORE anything
+  // commits. An earlier revision treated that equality as evidence and reported ok with zero
+  // characters delivered — the success-misdescribes-the-device failure this PR removes. The state
+  // is structurally indeterminate: no read distinguishes "placeholder rendering" from "committed
+  // value", so it must not be a success.
+  func testTextEqualToThePlaceholderIsNeverEvidenceOfACommit() {
+    XCTAssertTrue(
+      Self.placeholderMakesCommitUnobservable(placeholder: "0.00", expectedText: "0.00"),
+      "the requested text equals the placeholder — a raw match proves nothing committed"
     )
-    // Everything that is not an exact match keeps the normalized reading, so a field genuinely
-    // showing its placeholder still reads as empty and the prefix walk still works.
-    XCTAssertEqual(
-      Self.commitObservation(rawValue: "0.00", expectedText: "0.005", normalizedValue: { "" }),
-      ""
+    // Both sides are compared trimmed, matching how isPlaceholderValue classifies the field.
+    XCTAssertTrue(
+      Self.placeholderMakesCommitUnobservable(placeholder: " 0.00 ", expectedText: "0.00")
     )
-    XCTAssertEqual(
-      Self.commitObservation(
-        rawValue: "hardware-",
-        expectedText: "hardware-keyboard",
-        normalizedValue: { "hardware-" }
-      ),
-      "hardware-"
-    )
-    XCTAssertNil(Self.commitObservation(rawValue: nil, expectedText: "x", normalizedValue: { nil }))
+    // And the command consequence: this state refuses rather than reporting success.
+    XCTAssertEqual(Self.textEntryFailure(forCommitOutcome: .notObserved), .commitNotObserved)
   }
 
-  func testCommitObservationDoesNotPayForASecondReadOnAnExactMatch() {
-    var normalizedReads = 0
-    _ = Self.commitObservation(
-      rawValue: "0.00",
-      expectedText: "0.00",
-      normalizedValue: {
-        normalizedReads += 1
-        return ""
-      }
+  // The guard must stay narrow: it fires only when the WHOLE expected value is the placeholder.
+  // Widening it would refuse ordinary typing into any placeheld field, which is most of them.
+  func testPlaceholderGuardDoesNotFireOnOrdinaryTyping() {
+    XCTAssertFalse(
+      Self.placeholderMakesCommitUnobservable(placeholder: "0.00", expectedText: "0.005"),
+      "a distinguishable value must still be observed rather than refused"
     )
-    // The wait polls every 20ms for up to three seconds; the exact-match path must stay one
-    // accessibility read, which is why the normalized reading is a closure.
-    XCTAssertEqual(normalizedReads, 0)
+    XCTAssertFalse(
+      Self.placeholderMakesCommitUnobservable(placeholder: "Email", expectedText: "ada@example.test")
+    )
+    XCTAssertFalse(Self.placeholderMakesCommitUnobservable(placeholder: nil, expectedText: "0.00"))
+    XCTAssertFalse(Self.placeholderMakesCommitUnobservable(placeholder: "", expectedText: ""))
+    XCTAssertFalse(Self.placeholderMakesCommitUnobservable(placeholder: "   ", expectedText: ""))
   }
 
   // The mapping the command actually refuses on. `.unobservable` must stay a success: it is the
