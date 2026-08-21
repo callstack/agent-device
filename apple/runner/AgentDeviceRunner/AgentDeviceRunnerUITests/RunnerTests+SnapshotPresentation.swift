@@ -69,6 +69,29 @@ struct SnapshotAcquisition {
   let truncated: Bool
   let effectiveDepth: Int?
   var customActions: SnapshotCustomActionCoverage? = nil
+  /// Viewport the regular projection's clip fold runs against. `.infinite` disables the fold --
+  /// legitimate only for raw acquisitions and depth-0 probes, where no fold applies.
+  var viewport: CGRect = .infinite
+}
+
+/// Platform policy for the regular projection's visibility fold (#1797: macOS is a policy input
+/// to the shared algorithm, never a backend exception).
+enum SnapshotFoldPolicy {
+  /// iOS: ancestor projection cursor -- an out-of-clip Cell or scroll container hides the
+  /// descendants whose clamped frames would otherwise leak back into the viewport -- plus the
+  /// sub-pixel decoration rule.
+  case cursorProjected
+  /// macOS / tvOS: plain viewport intersection per node, no ancestor cursor, and interactive-only
+  /// requests additionally drop out-of-viewport Window carriers.
+  case plainViewport
+
+  static var platformDefault: SnapshotFoldPolicy {
+    #if os(iOS)
+      return .cursorProjected
+    #else
+      return .plainViewport
+    #endif
+  }
 }
 
 /// The only snapshot node shape accepted by response payload assembly.
@@ -169,14 +192,26 @@ enum SnapshotPresentation {
     }
   }
 
-  /// Visible projection: eligibility (an interactive type or non-empty semantic content, below the
-  /// root carrier), scope, and the acquired scroll hints. The only interpreter of what a screen
-  /// currently shows.
+  /// Visible projection: the clip fold (viewport ∩ scroll clip, ancestor cursor, scroll hints),
+  /// eligibility (an interactive type or non-empty semantic content, below the root carrier), and
+  /// scope. The only interpreter of what a screen currently shows -- no backend folds its own
+  /// visibility (#1797).
   static func presentRegular(
     _ acquisition: SnapshotAcquisition,
-    options: PresentationOptions
+    options: PresentationOptions,
+    policy: SnapshotFoldPolicy = .platformDefault
   ) -> SnapshotBackendCapture {
-    project(acquisition, options: options, projection: .regular)
+    project(
+      foldRegularVisibility(
+        acquisition.nodes,
+        viewport: acquisition.viewport,
+        interactiveOnly: options.interactiveOnly,
+        policy: policy
+      ),
+      acquisition: acquisition,
+      options: options,
+      projection: .regular
+    )
   }
 
   /// Diagnostic projection: the acquired tree, normalized. Scope and depth apply when explicitly
@@ -186,7 +221,7 @@ enum SnapshotPresentation {
     _ acquisition: SnapshotAcquisition,
     options: PresentationOptions
   ) -> SnapshotBackendCapture {
-    project(acquisition, options: options, projection: .raw)
+    project(acquisition.nodes, acquisition: acquisition, options: options, projection: .raw)
   }
 
   /// Derives the one acquisition-facing view of a request, so no backend re-reads
@@ -206,15 +241,16 @@ enum SnapshotPresentation {
   }
 
   private static func project(
-    _ acquisition: SnapshotAcquisition,
+    _ projectionNodes: [RawAXNode],
+    acquisition: SnapshotAcquisition,
     options: PresentationOptions,
     projection: CaptureHint.Projection
   ) -> SnapshotBackendCapture {
-    let scopedRawNodes = applyScope(to: acquisition.nodes, options: options, projection: projection)
+    let scopedRawNodes = applyScope(to: projectionNodes, options: options, projection: projection)
     let nodes = presentedNodes(from: scopedRawNodes, projection: projection)
     let qualityPayload: DataPayload? = SnapshotScopePolicy.isActive(options.scope)
       ? DataPayload(
-        nodes: presentedNodes(from: acquisition.nodes, projection: projection),
+        nodes: presentedNodes(from: projectionNodes, projection: projection),
         truncated: acquisition.truncated
       )
       : nil
@@ -227,6 +263,156 @@ enum SnapshotPresentation {
       customActions: acquisition.customActions,
       qualityPayload: qualityPayload
     )
+  }
+
+  /// A decoration this small carries no information a user could act on: sub-pixel separators and
+  /// spacer views. Content-carrying nodes are exempt regardless of size.
+  private static let negligibleDecorationTolerance = 1.0
+  private static let visibilityExemptCarrierTypes: Set<String> = ["Application", "Window"]
+
+  /// The regular projection's clip fold -- the ONE visibility interpreter for every backend
+  /// (#1797). Consumes reported facts (frames at raw traversal depth), drops out-of-clip and
+  /// negligible-decoration nodes, reparents survivors to their nearest kept ancestor with
+  /// collapsed depth, books scroll hints onto the anchors that hide the dropped content, and
+  /// narrows `hittable` to the clip: a node outside its clip -- or with no geometry at all --
+  /// is never actionable, whatever the backend reported.
+  static func foldRegularVisibility(
+    _ nodes: [RawAXNode],
+    viewport: CGRect,
+    interactiveOnly: Bool,
+    policy: SnapshotFoldPolicy
+  ) -> [RawAXNode] {
+    struct BranchState {
+      let cursor: FlatSnapshotProjectionCursor
+      let anchor: (index: Int, rect: CGRect)?
+      let keptIndex: Int?
+      let keptDepth: Int
+    }
+
+    var hasChildren = [Bool](repeating: false, count: nodes.count)
+    for node in nodes {
+      if let parentIndex = node.parentIndex, parentIndex >= 0, parentIndex < nodes.count {
+        hasChildren[parentIndex] = true
+      }
+    }
+
+    var states = [BranchState?](repeating: nil, count: nodes.count)
+    var kept: [RawAXNode] = []
+    var hints: [Int: (above: Bool, below: Bool)] = [:]
+
+    for (offset, node) in nodes.enumerated() {
+      let parentState = node.parentIndex.flatMap { states[$0] }
+      let parentCursor = parentState?.cursor ?? .root
+      let parentAnchor = parentState?.anchor
+      let rect = CGRect(
+        x: node.rect.x, y: node.rect.y, width: node.rect.width, height: node.rect.height
+      )
+      let intersects = RunnerTests.isVisibleInRegularSnapshot(
+        rect,
+        viewport: viewport,
+        scrollContainerAnchor: parentAnchor
+      )
+
+      let transition: FlatSnapshotProjectionTransition
+      switch policy {
+      case .cursorProjected:
+        transition = RunnerTests.flatSnapshotProjectionTransition(
+          frame: rect,
+          intersectsViewportAndScrollClip: intersects,
+          typeName: node.type,
+          hasChildren: hasChildren[offset],
+          cursor: parentCursor
+        )
+      case .plainViewport:
+        transition = FlatSnapshotProjectionTransition(
+          decision: FlatSnapshotProjectionDecision(
+            presentationVisible: intersects,
+            descendants: .root
+          ),
+          hiddenContentFrame: !intersects ? rect : nil
+        )
+      }
+
+      let negligibleDecoration = policy == .cursorProjected
+        && node.parentIndex != nil
+        && !hasSemanticContent(node)
+        && (rect.isEmpty
+          || rect.width <= Self.negligibleDecorationTolerance
+          || rect.height <= Self.negligibleDecorationTolerance)
+      let visible = transition.decision.presentationVisible && !negligibleDecoration
+
+      let include: Bool
+      if node.parentIndex == nil {
+        include = true
+      } else {
+        switch policy {
+        case .cursorProjected:
+          include = visibilityExemptCarrierTypes.contains(node.type) || visible
+        case .plainViewport:
+          if interactiveOnly && !visible && node.type != "Application" {
+            include = false
+          } else {
+            include = visibilityExemptCarrierTypes.contains(node.type) || visible
+          }
+        }
+      }
+
+      if let hiddenFrame = transition.hiddenContentFrame, let parentAnchor {
+        RunnerTests.rememberHiddenContentHint(
+          for: hiddenFrame,
+          relativeTo: parentAnchor,
+          hints: &hints
+        )
+      }
+
+      var keptIndex = parentState?.keptIndex
+      var keptDepth = parentState?.keptDepth ?? -1
+      if include {
+        let outIndex = kept.count
+        let outDepth = keptDepth + 1
+        kept.append(
+          RawAXNode(
+            index: outIndex,
+            type: node.type,
+            label: node.label,
+            identifier: node.identifier,
+            value: node.value,
+            rect: node.rect,
+            enabled: node.enabled,
+            focused: node.focused,
+            selected: node.selected,
+            hittable: node.hittable && intersects,
+            depth: outDepth,
+            parentIndex: keptIndex,
+            hiddenContentAbove: node.hiddenContentAbove,
+            hiddenContentBelow: node.hiddenContentBelow,
+            actions: node.actions
+          )
+        )
+        keptIndex = outIndex
+        keptDepth = outDepth
+      }
+
+      var anchor = parentAnchor
+      if include,
+        let newAnchor = RunnerTests.scrollContainerAnchor(
+          forTypeName: node.type,
+          hasChildren: hasChildren[offset],
+          visible: intersects,
+          frame: rect,
+          nodeIndex: keptIndex
+        )
+      {
+        anchor = newAnchor
+      }
+      states[offset] = BranchState(
+        cursor: transition.decision.descendants,
+        anchor: anchor,
+        keptIndex: keptIndex,
+        keptDepth: keptDepth
+      )
+    }
+    return RunnerTests.applyHiddenContentHints(hints, to: kept)
   }
 
   /// Explicit carve-out for selector queries and system-modal reads that intentionally return one

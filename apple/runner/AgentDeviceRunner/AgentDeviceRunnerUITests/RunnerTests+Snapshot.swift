@@ -27,16 +27,12 @@ extension RunnerTests {
     let hittable: Bool
     let focused: Bool
     let selected: Bool
-    let visible: Bool
   }
 
   private struct SnapshotTraversalEntry {
     let snapshot: XCUIElementSnapshot
     let depth: Int
-    let visibleDepth: Int
     let parentIndex: Int?
-    let nearestScrollAnchor: (index: Int, rect: CGRect)?
-    let projectionCursor: FlatSnapshotProjectionCursor
   }
 
   struct SnapshotCaptureFailure: Error {
@@ -110,6 +106,14 @@ extension RunnerTests {
     .table
   ]
 
+  /// `RawAXNode.type` vocabulary for the presentation fold; pinned to `scrollContainerTypes`
+  /// through `elementTypeName` by a unit test.
+  static let scrollContainerTypeNames: Set<String> = [
+    "CollectionView",
+    "ScrollView",
+    "Table",
+  ]
+
   static let flatInteractiveFallbackBudget: TimeInterval = 1.0
 
   // The single production entry point -- always compiled, no unit-test overload. A unit test
@@ -147,8 +151,12 @@ extension RunnerTests {
       return result.elements
     }
 
+    // Acquisition serializes facts: every traversed node is emitted at raw traversal depth, and
+    // the regular projection's clip fold runs once inside `SnapshotPresentation` (#1797). The two
+    // walks this backend keeps are budget and augmentation, never membership: the traversal-depth
+    // cut (declared residue -- regular presentation emits collapsed depth) and the collapsed-tab
+    // expansion, which needs live element handles.
     var nodes: [RawAXNode] = []
-    var hiddenContentHintsByNodeIndex: [Int: (above: Bool, below: Bool)] = [:]
     let rootEvaluation = evaluateSnapshot(context.rootSnapshot, in: context)
     nodes.append(
       makeSnapshotNode(
@@ -170,87 +178,21 @@ extension RunnerTests {
     }
 
     var seen = Set<String>()
-    let rootScrollAnchor = scrollContainerAnchor(
-      for: context.rootSnapshot,
-      visible: rootEvaluation.visible,
-      nodeIndex: 0
-    )
-    #if os(iOS)
-      let rootProjection = flatSnapshotProjectionTransition(
-        frame: context.rootSnapshot.frame,
-        intersectsViewportAndScrollClip: rootEvaluation.visible,
-        elementType: context.rootSnapshot.elementType,
-        hasChildren: !context.rootSnapshot.children.isEmpty,
-        cursor: .root
-      )
-      let rootDescendantProjectionCursor = rootProjection.decision.descendants
-    #else
-      let rootDescendantProjectionCursor = FlatSnapshotProjectionCursor.root
-    #endif
     var stack: [SnapshotTraversalEntry] = context.rootSnapshot.children.map {
       SnapshotTraversalEntry(
         snapshot: $0,
         depth: 1,
-        visibleDepth: 1,
-        parentIndex: 0,
-        nearestScrollAnchor: rootScrollAnchor,
-        projectionCursor: rootDescendantProjectionCursor
+        parentIndex: 0
       )
     }
 
     while let entry = stack.popLast() {
       let snapshot = entry.snapshot
       let depth = entry.depth
-      let visibleDepth = entry.visibleDepth
       let parentIndex = entry.parentIndex
-      let nearestScrollAnchor = entry.nearestScrollAnchor
-      let projectionCursor = entry.projectionCursor
       if let limit = hint.depth, depth > limit { continue }
 
       let evaluation = evaluateSnapshot(snapshot, in: context)
-      let intersectsViewportAndScrollClip = isVisibleInRegularSnapshot(
-        snapshot.frame,
-        viewport: context.viewport,
-        scrollContainerAnchor: nearestScrollAnchor
-      )
-      #if os(iOS)
-        let projectionTransition = flatSnapshotProjectionTransition(
-          frame: snapshot.frame,
-          intersectsViewportAndScrollClip: intersectsViewportAndScrollClip,
-          elementType: snapshot.elementType,
-          hasChildren: !snapshot.children.isEmpty,
-          cursor: projectionCursor
-        )
-        let projection = projectionTransition.decision
-      #else
-        let projectionTransition = FlatSnapshotProjectionTransition(
-          decision: FlatSnapshotProjectionDecision(
-            presentationVisible: intersectsViewportAndScrollClip,
-            descendants: .root
-          ),
-          hiddenContentFrame: !intersectsViewportAndScrollClip ? snapshot.frame : nil
-        )
-        let projection = projectionTransition.decision
-      #endif
-      if let hiddenFrame = projectionTransition.hiddenContentFrame, let nearestScrollAnchor
-      {
-        rememberHiddenContentHint(
-          for: hiddenFrame,
-          relativeTo: nearestScrollAnchor,
-          hints: &hiddenContentHintsByNodeIndex
-        )
-      }
-      let include = shouldAcquireSnapshotNode(
-        snapshot: snapshot,
-        label: evaluation.label,
-        identifier: evaluation.identifier,
-        valueText: evaluation.valueText,
-        hint: hint,
-        hittable: evaluation.hittable,
-        visible: projection.presentationVisible,
-        regularSnapshot: true
-      )
-
       let key = Self.snapshotTraversalIdentity(
         elementType: snapshot.elementType,
         label: evaluation.label,
@@ -262,64 +204,48 @@ extension RunnerTests {
         seen.insert(key)
       }
 
-      let currentIndex = include && !isDuplicate ? nodes.count : parentIndex
+      let currentIndex = !isDuplicate ? nodes.count : parentIndex
       if depth < context.maxDepth {
-        let nextVisibleDepth = include && !isDuplicate ? visibleDepth + 1 : visibleDepth
-        let nextScrollContainerAnchor: (index: Int, rect: CGRect)?
-        if include && !isDuplicate {
-          nextScrollContainerAnchor =
-            scrollContainerAnchor(
-              for: snapshot,
-              visible: intersectsViewportAndScrollClip,
-              nodeIndex: currentIndex
-            )
-            ?? nearestScrollAnchor
-        } else {
-          nextScrollContainerAnchor = nearestScrollAnchor
-        }
         for child in snapshot.children.reversed() {
           stack.append(
             SnapshotTraversalEntry(
               snapshot: child,
               depth: depth + 1,
-              visibleDepth: nextVisibleDepth,
-              parentIndex: currentIndex,
-              nearestScrollAnchor: nextScrollContainerAnchor,
-              projectionCursor: projection.descendants
+              parentIndex: currentIndex
             )
           )
         }
       }
 
-      if !include || isDuplicate { continue }
+      if isDuplicate { continue }
 
       let index = nodes.count
       nodes.append(
         makeSnapshotNode(
           snapshot: snapshot,
           evaluation: evaluation,
-          depth: min(context.maxDepth, visibleDepth),
+          depth: depth,
           index: index,
           parentIndex: parentIndex
         )
       )
-      if visibleDepth < context.maxDepth {
+      if depth < context.maxDepth {
         appendCollapsedTabFallbackNodes(
           to: &nodes,
           containerSnapshot: snapshot,
           resolveElements: collapsedTabDescendants,
-          depth: visibleDepth + 1,
+          depth: depth + 1,
           parentIndex: index
         )
       }
-
     }
 
     return SnapshotAcquisition(
       hint: hint,
-      nodes: applyHiddenContentHints(hiddenContentHintsByNodeIndex, to: nodes),
+      nodes: nodes,
       truncated: false,
-      effectiveDepth: nil
+      effectiveDepth: nil,
+      viewport: context.viewport
     )
   }
 
@@ -430,30 +356,19 @@ extension RunnerTests {
       if let limit = hint.depth, depth > limit { return }
 
       let evaluation = evaluateSnapshot(snapshot, in: context)
-      let include = shouldAcquireSnapshotNode(
-        snapshot: snapshot,
-        label: evaluation.label,
-        identifier: evaluation.identifier,
-        valueText: evaluation.valueText,
-        hint: hint,
-        hittable: evaluation.hittable,
-        visible: evaluation.visible
-      )
-      let currentIndex = include ? nodes.count : parentIndex
-      if include {
-        if nodes.count >= Self.rawSnapshotMaxNodes {
-          throw rawSnapshotTooLargeFailure(nodeCount: nodes.count + 1)
-        }
-        nodes.append(
-          makeSnapshotNode(
-            snapshot: snapshot,
-            evaluation: evaluation,
-            depth: depth,
-            index: nodes.count,
-            parentIndex: parentIndex
-          )
-        )
+      if nodes.count >= Self.rawSnapshotMaxNodes {
+        throw rawSnapshotTooLargeFailure(nodeCount: nodes.count + 1)
       }
+      let currentIndex = nodes.count
+      nodes.append(
+        makeSnapshotNode(
+          snapshot: snapshot,
+          evaluation: evaluation,
+          depth: depth,
+          index: currentIndex,
+          parentIndex: parentIndex
+        )
+      )
 
       let children = snapshot.children
       for child in children {
@@ -462,7 +377,13 @@ extension RunnerTests {
     }
 
     try walk(context.rootSnapshot, depth: 0, parentIndex: nil)
-    return SnapshotAcquisition(hint: hint, nodes: nodes, truncated: false, effectiveDepth: nil)
+    return SnapshotAcquisition(
+      hint: hint,
+      nodes: nodes,
+      truncated: false,
+      effectiveDepth: nil,
+      viewport: context.viewport
+    )
   }
 
   func querySweepSnapshotAcquisition(
@@ -474,7 +395,13 @@ extension RunnerTests {
       interactiveRootNode(rect: .zero)
     ]
     if hint.depth == 0 {
-      return SnapshotAcquisition(hint: hint, nodes: nodes, truncated: false, effectiveDepth: nil)
+      return SnapshotAcquisition(
+        hint: hint,
+        nodes: nodes,
+        truncated: false,
+        effectiveDepth: nil,
+        viewport: .infinite
+      )
     }
 
     // Bounded by both its own sweep budget and the umbrella capture-plan deadline, so a
@@ -498,8 +425,7 @@ extension RunnerTests {
         element: element,
         index: 0,
         parentIndex: 0,
-        viewport: viewport,
-        hint: hint
+        viewport: viewport
       ) else {
         continue
       }
@@ -545,7 +471,13 @@ extension RunnerTests {
         )
       )
     }
-    return SnapshotAcquisition(hint: hint, nodes: nodes, truncated: truncated, effectiveDepth: nil)
+    return SnapshotAcquisition(
+      hint: hint,
+      nodes: nodes,
+      truncated: truncated,
+      effectiveDepth: nil,
+      viewport: viewport
+    )
   }
 
   func snapshotAccessibilityUnavailable(failure: SnapshotCaptureFailure) -> DataPayload {
@@ -880,44 +812,6 @@ extension RunnerTests {
 
   // MARK: - Snapshot Filtering
 
-  /// Conservative acquisition gate. Regular capture keeps every node its visibility policy can
-  /// supply; `SnapshotPresentation` alone decides eligibility after the backend returns.
-  private func shouldAcquireSnapshotNode(
-    snapshot: XCUIElementSnapshot,
-    label: String,
-    identifier: String,
-    valueText: String?,
-    hint: CaptureHint,
-    hittable: Bool,
-    visible: Bool,
-    regularSnapshot: Bool = false
-  ) -> Bool {
-    let type = snapshot.elementType
-    let hasContent = !label.isEmpty || !identifier.isEmpty || (valueText != nil)
-    #if os(iOS)
-      if regularSnapshot && !visible && type != .application && type != .window {
-        return false
-      }
-    #endif
-    if regularSnapshot {
-      #if os(macOS)
-        if hint.interactiveOnly && !visible && type != .application {
-          return false
-        }
-      #endif
-      if type == .application || type == .window { return true }
-      return visible
-    }
-    if hint.interactiveOnly {
-      if isScrollableContainer(snapshot, visible: visible) { return true }
-      if interactiveTypes.contains(type) { return true }
-      if hittable && type != .other { return true }
-      if hasContent { return true }
-      return false
-    }
-    return true
-  }
-
   private func computedSnapshotHittable(
     _ snapshot: XCUIElementSnapshot,
     viewport: CGRect,
@@ -1119,8 +1013,7 @@ extension RunnerTests {
       valueText: valueText,
       hittable: computedSnapshotHittable(snapshot, viewport: context.viewport, laterNodes: laterNodes),
       focused: snapshotHasFocus(snapshot),
-      selected: snapshotIsSelected(snapshot),
-      visible: isVisibleInViewport(snapshot.frame, context.viewport)
+      selected: snapshotIsSelected(snapshot)
     )
   }
 
@@ -1235,12 +1128,12 @@ extension RunnerTests {
     return nil
   }
 
-  func isVisibleInViewport(_ rect: CGRect, _ viewport: CGRect) -> Bool {
+  static func isVisibleInViewport(_ rect: CGRect, _ viewport: CGRect) -> Bool {
     if rect.isNull || rect.isEmpty { return false }
     return rect.intersects(viewport)
   }
 
-  func isVisibleInRegularSnapshot(
+  static func isVisibleInRegularSnapshot(
     _ rect: CGRect,
     viewport: CGRect,
     scrollContainerAnchor: (index: Int, rect: CGRect)?
@@ -1267,37 +1160,21 @@ extension RunnerTests {
     nodes.append(contentsOf: fallbackNodes)
   }
 
-  private func scrollContainerAnchor(
-    for snapshot: XCUIElementSnapshot,
-    visible: Bool,
-    nodeIndex: Int?
-  ) -> (index: Int, rect: CGRect)? {
-    return scrollContainerAnchor(
-      for: snapshot.elementType,
-      hasChildren: !snapshot.children.isEmpty,
-      visible: visible,
-      frame: snapshot.frame,
-      nodeIndex: nodeIndex
-    )
-  }
-
-  func scrollContainerAnchor(
-    for elementType: XCUIElement.ElementType,
+  static func scrollContainerAnchor(
+    forTypeName typeName: String,
     hasChildren: Bool,
     visible: Bool,
     frame: CGRect,
     nodeIndex: Int?
   ) -> (index: Int, rect: CGRect)? {
     guard let nodeIndex else { return nil }
-    if !isScrollableContainer(
-      elementType: elementType,
-      hasChildren: hasChildren,
-      visible: visible
-    ) { return nil }
+    guard visible, hasChildren, Self.scrollContainerTypeNames.contains(typeName) else {
+      return nil
+    }
     return (nodeIndex, frame)
   }
 
-  func rememberHiddenContentHint(
+  static func rememberHiddenContentHint(
     for frame: CGRect,
     relativeTo scrollContainerAnchor: (index: Int, rect: CGRect),
     hints: inout [Int: (above: Bool, below: Bool)]
@@ -1314,7 +1191,7 @@ extension RunnerTests {
     hints[scrollContainerAnchor.index] = hint
   }
 
-  func applyHiddenContentHints(
+  static func applyHiddenContentHints(
     _ hints: [Int: (above: Bool, below: Bool)],
     to nodes: [RawAXNode]
   ) -> [RawAXNode] {
@@ -1576,36 +1453,22 @@ extension RunnerTests {
     element: XCUIElement,
     index: Int,
     parentIndex: Int?,
-    viewport: CGRect,
-    hint: CaptureHint
+    viewport: CGRect
   ) -> RawAXNode? {
     var node: RawAXNode?
     let exceptionMessage = RunnerObjCExceptionCatcher.catchException({
       if !element.exists { return }
+      // Declared residue: a flat element query has no hierarchy for geometryless semantics to
+      // attach to, so frameless elements are dropped at acquisition rather than presented.
       let frame = element.frame
       if frame.isNull || frame.isEmpty { return }
-      let visible = isVisibleInViewport(frame, viewport)
-      if hint.interactiveOnly && !visible { return }
-      #if os(macOS)
-        if !visible { return }
-      #endif
+      let visible = Self.isVisibleInViewport(frame, viewport)
       let label = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
       let identifier = element.identifier.trimmingCharacters(in: .whitespacesAndNewlines)
       let valueText = snapshotValueText(element)
       let elementType = element.elementType
       let enabled = element.isEnabled
       let hittable = visible && enabled && element.isHittable
-      let filterNode = FlatSnapshotFilterNode(
-        isRoot: false,
-        visible: visible
-      )
-      if !flatSnapshotFilterDecision(
-        filterNode,
-        hint: hint,
-        visibilityPolicy: .interactiveOnly
-      ).include {
-        return
-      }
 
       node = RawAXNode(
         index: index,
@@ -1631,19 +1494,4 @@ extension RunnerTests {
     return node
   }
 
-  private func isScrollableContainer(_ snapshot: XCUIElementSnapshot, visible: Bool) -> Bool {
-    return isScrollableContainer(
-      elementType: snapshot.elementType,
-      hasChildren: !snapshot.children.isEmpty,
-      visible: visible
-    )
-  }
-
-  private func isScrollableContainer(
-    elementType: XCUIElement.ElementType,
-    hasChildren: Bool,
-    visible: Bool
-  ) -> Bool {
-    return visible && hasChildren && Self.scrollContainerTypes.contains(elementType)
-  }
 }

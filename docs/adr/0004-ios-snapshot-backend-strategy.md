@@ -143,6 +143,21 @@ compares the requested projection with the hint the acquisition was captured und
 tier with a structured `IOS_SNAPSHOT_PROJECTION_MISMATCH` failure instead of presenting it under the
 requested label.
 
+The fourth semantic layer moves the clip fold itself into presentation. Acquisition backends are
+fact serializers: every traversed node is emitted at raw traversal depth with its reported frame,
+and `SnapshotAcquisition` carries the viewport. `presentRegular` runs the one visibility
+interpreter for every backend — viewport ∩ scroll-container clip, the ancestor projection cursor
+(an out-of-clip Cell or scroll container hides descendants whose clamped frames would otherwise
+leak back into the viewport), the sub-pixel decoration rule, hidden-content hints booked onto
+scroll anchors, and reparenting of survivors with collapsed depth. The fold also narrows the
+emitted `hittable` to the clip: nothing outside its clip, and nothing without geometry, is ever
+hittable regardless of what a backend reported. Platform differences are a `SnapshotFoldPolicy`
+input to the shared algorithm (iOS cursor-projected; macOS/tvOS plain viewport intersection),
+never a backend exception. The remaining acquisition-side narrowings are declared: the
+traversal-depth budget cut, the flat query sweep's frameless-element drop (a flat query has no
+hierarchy for geometryless semantics to attach to), and the private-AX bridge's device-side node
+cap.
+
 Declared residue: a regular-projection `--depth` request still cuts the traversal at that depth,
 while regular presentation emits collapsed depth. A node whose presented depth would be within the
 limit can therefore be dropped when structural wrappers put it deeper in the raw tree. The cut is

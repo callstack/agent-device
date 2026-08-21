@@ -245,6 +245,153 @@ extension RunnerTests {
     XCTAssertNil(RunnerTests.sparsePayloadReason(try XCTUnwrap(missing.qualityPayload)))
   }
 
+  private static func foldNode(
+    _ index: Int,
+    type: String,
+    label: String? = nil,
+    rect: SnapshotRect,
+    hittable: Bool = false,
+    depth: Int,
+    parentIndex: Int?
+  ) -> RawAXNode {
+    RawAXNode(
+      index: index,
+      type: type,
+      label: label,
+      identifier: nil,
+      value: nil,
+      rect: rect,
+      enabled: true,
+      focused: nil,
+      selected: nil,
+      hittable: hittable,
+      depth: depth,
+      parentIndex: parentIndex,
+      hiddenContentAbove: nil,
+      hiddenContentBelow: nil
+    )
+  }
+
+  private static func presentedRegular(
+    _ nodes: [RawAXNode],
+    viewport: CGRect,
+    interactiveOnly: Bool = false,
+    policy: SnapshotFoldPolicy = .cursorProjected
+  ) -> [PresentedNode] {
+    let hint = CaptureHint(
+      projection: .regular, depth: nil, interactiveOnly: interactiveOnly, customActions: false)
+    return SnapshotPresentation.presentRegular(
+      SnapshotAcquisition(
+        hint: hint, nodes: nodes, truncated: false, effectiveDepth: nil, viewport: viewport),
+      options: PresentationOptions(
+        interactiveOnly: interactiveOnly, depth: nil, scope: nil, raw: false),
+      policy: policy
+    ).payload.nodes ?? []
+  }
+
+  /// The clip fold is presentation's, fed by any backend's reported facts: out-of-clip rows are
+  /// dropped, owned containers hide their clamped descendants, the scroll anchor books the hint,
+  /// and survivors are reparented with collapsed depth. Non-vacuity: bypassing
+  /// `foldRegularVisibility` in `presentRegular` fails every assertion below except the raw count.
+  func testRegularFoldClipsScrollOverflowReparentsAndBooksHints() throws {
+    let nodes = [
+      Self.foldNode(0, type: "Application", label: "App",
+        rect: SnapshotRect(x: 0, y: 0, width: 402, height: 874), depth: 0, parentIndex: nil),
+      Self.foldNode(1, type: "ScrollView",
+        rect: SnapshotRect(x: 0, y: 96, width: 402, height: 700), depth: 1, parentIndex: 0),
+      Self.foldNode(2, type: "Cell", label: "Visible row",
+        rect: SnapshotRect(x: 0, y: 120, width: 402, height: 52), hittable: true,
+        depth: 2, parentIndex: 1),
+      Self.foldNode(3, type: "StaticText", label: "Detail",
+        rect: SnapshotRect(x: 16, y: 130, width: 200, height: 20), depth: 3, parentIndex: 2),
+      Self.foldNode(4, type: "Cell", label: "Offscreen row",
+        rect: SnapshotRect(x: 0, y: 900, width: 402, height: 52), hittable: true,
+        depth: 2, parentIndex: 1),
+      // Element reports the offscreen row's child clamped back inside the viewport; the owned
+      // container's projection is what keeps it hidden (#1784's leak, now fold-owned).
+      Self.foldNode(5, type: "StaticText", label: "Clamped child",
+        rect: SnapshotRect(x: 16, y: 96, width: 100, height: 20), depth: 3, parentIndex: 4),
+    ]
+    let presented = Self.presentedRegular(
+      nodes, viewport: CGRect(x: 0, y: 0, width: 402, height: 874))
+
+    XCTAssertEqual(presented.map(\.type), ["Application", "ScrollView", "Cell", "StaticText"])
+    XCTAssertEqual(presented.compactMap(\.label), ["App", "Visible row", "Detail"])
+    XCTAssertEqual(presented.map(\.depth), [0, 1, 2, 3])
+    XCTAssertEqual(presented.map(\.parentIndex), [nil, 0, 1, 2])
+    XCTAssertEqual(presented.first { $0.type == "ScrollView" }?.hiddenContentBelow, true)
+  }
+
+  /// Application/Window carriers survive the fold off-clip (they carry geometry other layers
+  /// need), but nothing outside its clip is ever hittable, whatever the backend reported.
+  func testRegularFoldKeepsWindowCarriersButNeverHittableOutsideClip() throws {
+    let nodes = [
+      Self.foldNode(0, type: "Application", label: "App",
+        rect: SnapshotRect(x: 0, y: 0, width: 402, height: 874), depth: 0, parentIndex: nil),
+      Self.foldNode(1, type: "Window", label: "Second screen",
+        rect: SnapshotRect(x: 402, y: 0, width: 402, height: 874), hittable: true,
+        depth: 1, parentIndex: 0),
+      Self.foldNode(2, type: "Button", label: "Gone",
+        rect: SnapshotRect(x: 500, y: 100, width: 100, height: 44), hittable: true,
+        depth: 2, parentIndex: 1),
+    ]
+    let presented = Self.presentedRegular(
+      nodes, viewport: CGRect(x: 0, y: 0, width: 402, height: 874))
+
+    XCTAssertEqual(presented.map(\.type), ["Application", "Window"])
+    XCTAssertEqual(presented.last?.hittable, false)
+    XCTAssertFalse(presented.contains { $0.label == "Gone" })
+  }
+
+  /// The sub-pixel decoration rule is fold-owned and backend-neutral: a contentless separator is
+  /// dropped even when its type is interactive (eligibility alone would keep it), while
+  /// content-carrying degenerate and geometryless nodes survive -- never hittable.
+  func testRegularFoldDropsSubPixelContentlessDecorationOnEveryBackend() throws {
+    let nodes = [
+      Self.foldNode(0, type: "Application", label: "App",
+        rect: SnapshotRect(x: 0, y: 0, width: 402, height: 874), depth: 0, parentIndex: nil),
+      Self.foldNode(1, type: "Button",
+        rect: SnapshotRect(x: 0, y: 100, width: 402, height: 1), hittable: true,
+        depth: 1, parentIndex: 0),
+      Self.foldNode(2, type: "StaticText", label: "Hairline caption",
+        rect: SnapshotRect(x: 0, y: 200, width: 402, height: 1), depth: 1, parentIndex: 0),
+      Self.foldNode(3, type: "StaticText", label: "Frameless semantics",
+        rect: SnapshotRect(x: 0, y: 0, width: 0, height: 0), hittable: true,
+        depth: 1, parentIndex: 0),
+    ]
+    let presented = Self.presentedRegular(
+      nodes, viewport: CGRect(x: 0, y: 0, width: 402, height: 874))
+
+    XCTAssertEqual(
+      presented.compactMap(\.label), ["App", "Hairline caption", "Frameless semantics"])
+    XCTAssertFalse(presented.contains { $0.type == "Button" })
+    XCTAssertEqual(presented.first { $0.label == "Frameless semantics" }?.hittable, false)
+  }
+
+  /// The platform split is a policy input, not a backend exception: plain-viewport platforms have
+  /// no ancestor cursor (a clamped child of an offscreen row stays visible) and drop offscreen
+  /// Window carriers only for interactive-only requests.
+  func testPlainViewportPolicyFoldsWithoutAncestorCursor() throws {
+    let nodes = [
+      Self.foldNode(0, type: "Application", label: "App",
+        rect: SnapshotRect(x: 0, y: 0, width: 800, height: 600), depth: 0, parentIndex: nil),
+      Self.foldNode(1, type: "Window", label: "Offscreen window",
+        rect: SnapshotRect(x: 900, y: 0, width: 800, height: 600), depth: 1, parentIndex: 0),
+      Self.foldNode(2, type: "Cell", label: "Offscreen row",
+        rect: SnapshotRect(x: 0, y: 900, width: 800, height: 52), depth: 1, parentIndex: 0),
+      Self.foldNode(3, type: "StaticText", label: "Clamped child",
+        rect: SnapshotRect(x: 16, y: 100, width: 100, height: 20), depth: 2, parentIndex: 2),
+    ]
+    let viewport = CGRect(x: 0, y: 0, width: 800, height: 600)
+
+    let regular = Self.presentedRegular(nodes, viewport: viewport, policy: .plainViewport)
+    XCTAssertEqual(regular.compactMap(\.label), ["App", "Offscreen window", "Clamped child"])
+
+    let interactive = Self.presentedRegular(
+      nodes, viewport: viewport, interactiveOnly: true, policy: .plainViewport)
+    XCTAssertFalse(interactive.contains { $0.label == "Offscreen window" })
+  }
+
   /// #1797 D4: a backend that answers a `--raw` request with a regular capture (or the reverse)
   /// loses its tier instead of having its output relabeled. Non-vacuity: dropping the projection
   /// guard makes both `XCTAssertNil` assertions fail, and the raw projection then returns the

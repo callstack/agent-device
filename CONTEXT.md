@@ -198,6 +198,11 @@ narrowing complete.
 **Snapshot eligibility**:
 Membership in a presented snapshot projection, independent of whether a node is currently hittable.
 
+**Clip fold**:
+The regular projection's single visibility interpreter, run inside presentation for every backend:
+viewport and scroll-container clipping, ancestor projection, scroll hints, and collapsed depth.
+Platform differences enter as a fold policy, never as a backend exception.
+
 **Presented node**:
 A wire-facing snapshot value produced at the presentation boundary.
 

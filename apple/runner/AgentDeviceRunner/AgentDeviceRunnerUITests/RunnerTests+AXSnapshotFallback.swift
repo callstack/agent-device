@@ -184,6 +184,8 @@ extension RunnerTests {
         hint: hint,
         viewport: viewport
       )
+      // Serialization-level emptiness only: an acquired-but-fully-clipped tree is presentation's
+      // verdict now, surfaced by the plan's sparse classifier on the presented payload (#1797).
       if nodes.count <= 1 {
         NSLog("AGENT_DEVICE_RUNNER_PRIVATE_AX_SNAPSHOT_SPARSE=%ld", nodes.count)
         return nil
@@ -213,7 +215,8 @@ extension RunnerTests {
         effectiveDepth: depthLimited ? effectiveDepth : nil,
         customActions: Self.privateAXCustomActionCoverage(
           response[RunnerAXSnapshotCustomActionsKey]
-        )
+        ),
+        viewport: viewport
       )
     #else
       return nil
@@ -752,14 +755,20 @@ extension RunnerTests {
         ]
       ],
     ]
-    let nodes = privateAXAcquisition(
-      rawRoot: tree,
-      hint: CaptureHint(
-        projection: .regular, depth: nil, interactiveOnly: true, customActions: false),
-      viewport: CGRect(x: 0, y: 0, width: 390, height: 844)
-    )
+    let viewport = CGRect(x: 0, y: 0, width: 390, height: 844)
+    let hint = CaptureHint(
+      projection: .regular, depth: nil, interactiveOnly: true, customActions: false)
+    let acquired = privateAXAcquisition(rawRoot: tree, hint: hint, viewport: viewport)
+    // Acquisition serializes the drawer too; the shared fold is what hides it (#1797).
+    XCTAssertTrue(acquired.compactMap(\.label).contains("Admin settings"))
 
-    let labels = nodes.compactMap { $0.label }
+    let capture = SnapshotPresentation.presentRegular(
+      SnapshotAcquisition(
+        hint: hint, nodes: acquired, truncated: false, effectiveDepth: nil, viewport: viewport),
+      options: PresentationOptions(interactiveOnly: true, depth: nil, scope: nil, raw: false),
+      policy: .cursorProjected
+    )
+    let labels = (capture.payload.nodes ?? []).compactMap { $0.label }
     XCTAssertEqual(
       labels,
       ["Blue Sky", "Callstack", "Welcome back", "Email", "Password", "Sign in", "Forgot password?"]

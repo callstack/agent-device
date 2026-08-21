@@ -1,19 +1,5 @@
 import XCTest
 
-struct FlatSnapshotFilterNode {
-  let isRoot: Bool
-  let visible: Bool
-}
-
-struct FlatSnapshotFilterDecision {
-  let include: Bool
-}
-
-enum FlatSnapshotVisibilityPolicy {
-  case interactiveOnly
-  case viewportProjected
-}
-
 enum FlatSnapshotGeometry {
   case geometryless
   case framed(intersectsViewportAndScrollClip: Bool)
@@ -65,7 +51,7 @@ struct FlatSnapshotProjectionTransition {
 }
 
 extension RunnerTests {
-  func flatSnapshotGeometry(
+  static func flatSnapshotGeometry(
     frame: CGRect,
     intersectsViewportAndScrollClip: Bool
   ) -> FlatSnapshotGeometry {
@@ -73,21 +59,23 @@ extension RunnerTests {
     return .framed(intersectsViewportAndScrollClip: intersectsViewportAndScrollClip)
   }
 
-  func flatSnapshotDescendantVisibility(
-    elementType: XCUIElement.ElementType?,
+  /// Wire-name variant: the presentation fold works on `RawAXNode.type` strings, the one node
+  /// vocabulary every backend already shares (#1797 — backend-neutral by construction).
+  static func flatSnapshotDescendantVisibility(
+    typeName: String?,
     hasChildren: Bool
   ) -> FlatSnapshotDescendantVisibility {
-    guard hasChildren, let elementType else { return .independent }
-    if elementType == .cell || Self.scrollContainerTypes.contains(elementType) {
+    guard hasChildren, let typeName else { return .independent }
+    if typeName == "Cell" || Self.scrollContainerTypeNames.contains(typeName) {
       return .owned
     }
     return .independent
   }
 
-  func flatSnapshotProjectionTransition(
+  static func flatSnapshotProjectionTransition(
     frame: CGRect,
     intersectsViewportAndScrollClip: Bool,
-    elementType: XCUIElement.ElementType?,
+    typeName: String?,
     hasChildren: Bool,
     cursor: FlatSnapshotProjectionCursor
   ) -> FlatSnapshotProjectionTransition {
@@ -99,34 +87,13 @@ extension RunnerTests {
           intersectsViewportAndScrollClip: intersectsViewportAndScrollClip
         ),
         descendantVisibility: flatSnapshotDescendantVisibility(
-          elementType: elementType,
+          typeName: typeName,
           hasChildren: hasChildren
         )
       ),
       hiddenContentFrame: !cursor.isProjectedOut && hasFrame
         && !intersectsViewportAndScrollClip ? frame : nil
     )
-  }
-
-  /// Regular-projection acquisition gate. The raw projection never reaches it: raw acquisition is
-  /// the acquired tree, so it has no visibility filter to consult (#1797 D4).
-  func flatSnapshotFilterDecision(
-    _ node: FlatSnapshotFilterNode,
-    hint: CaptureHint,
-    visibilityPolicy: FlatSnapshotVisibilityPolicy
-  ) -> FlatSnapshotFilterDecision {
-    let include: Bool
-    if node.isRoot {
-      include = true
-    } else if !node.visible
-      && (hint.interactiveOnly || visibilityPolicy == .viewportProjected)
-    {
-      include = false
-    } else {
-      include = true
-    }
-
-    return FlatSnapshotFilterDecision(include: include)
   }
 
   func privateAXInteractiveCandidate(rawElementType: Int) -> Bool {
@@ -146,6 +113,17 @@ extension RunnerTests {
   }
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
+  /// The fold's string vocabulary must track the XCUIElement type sets it mirrors: a scroll
+  /// container renamed or added in one place but not the other silently changes which subtrees
+  /// own their descendants' visibility.
+  func testScrollContainerTypeNamesMatchElementTypeSet() {
+    XCTAssertEqual(
+      Self.scrollContainerTypeNames,
+      Set(Self.scrollContainerTypes.map(elementTypeName))
+    )
+    XCTAssertEqual(elementTypeName(.cell), "Cell")
+  }
+
   func testFlatSnapshotProjectionMatchesElementReverseScrollCapture() {
     struct FixtureNode {
       let label: String
@@ -167,21 +145,21 @@ extension RunnerTests {
       cursor: FlatSnapshotProjectionCursor,
       scrollAnchor: (index: Int, rect: CGRect)?
     ) {
-      let intersects = isVisibleInRegularSnapshot(
+      let intersects = Self.isVisibleInRegularSnapshot(
         node.frame,
         viewport: CGRect(x: 0, y: 0, width: 402, height: 874),
         scrollContainerAnchor: scrollAnchor
       )
-      let transition = flatSnapshotProjectionTransition(
+      let transition = Self.flatSnapshotProjectionTransition(
         frame: node.frame,
         intersectsViewportAndScrollClip: intersects,
-        elementType: node.type,
+        typeName: elementTypeName(node.type),
         hasChildren: !node.children.isEmpty,
         cursor: cursor
       )
       if transition.decision.presentationVisible { visibleLabels.append(node.label) }
       if let hiddenFrame = transition.hiddenContentFrame, let scrollAnchor {
-        rememberHiddenContentHint(
+        Self.rememberHiddenContentHint(
           for: hiddenFrame,
           relativeTo: scrollAnchor,
           hints: &hints
@@ -269,87 +247,21 @@ extension RunnerTests {
     XCTAssertEqual(hints[0]?.above, false)
     XCTAssertEqual(hints[0]?.below, true)
 
-    let scopedRoot = flatSnapshotProjectionTransition(
+    let scopedRoot = Self.flatSnapshotProjectionTransition(
       frame: offscreenThemeRowFrame,
       intersectsViewportAndScrollClip: false,
-      elementType: .cell,
+      typeName: "Cell",
       hasChildren: true,
       cursor: .root
     )
-    let scopedClampedChild = flatSnapshotProjectionTransition(
+    let scopedClampedChild = Self.flatSnapshotProjectionTransition(
       frame: clampedThemeFrame,
       intersectsViewportAndScrollClip: true,
-      elementType: .staticText,
+      typeName: "StaticText",
       hasChildren: false,
       cursor: scopedRoot.decision.descendants
     )
     XCTAssertFalse(scopedClampedChild.decision.presentationVisible)
-  }
-
-  func testFlatSnapshotFilterDecisionMatrixCoversOptions() {
-    func hint(interactiveOnly: Bool) -> CaptureHint {
-      CaptureHint(
-        projection: .regular, depth: nil, interactiveOnly: interactiveOnly, customActions: false)
-    }
-    let visibleContent = FlatSnapshotFilterNode(
-      isRoot: false,
-      visible: true
-    )
-    let hiddenInteractive = FlatSnapshotFilterNode(
-      isRoot: false,
-      visible: false
-    )
-    let decorative = FlatSnapshotFilterNode(
-      isRoot: false,
-      visible: true
-    )
-    let hiddenRoot = FlatSnapshotFilterNode(
-      isRoot: true,
-      visible: false
-    )
-
-    XCTAssertTrue(
-      flatSnapshotFilterDecision(
-        visibleContent,
-        hint: hint(interactiveOnly: false),
-        visibilityPolicy: .interactiveOnly
-      ).include
-    )
-    XCTAssertFalse(
-      flatSnapshotFilterDecision(
-        hiddenInteractive,
-        hint: hint(interactiveOnly: true),
-        visibilityPolicy: .interactiveOnly
-      ).include
-    )
-    XCTAssertFalse(
-      flatSnapshotFilterDecision(
-        hiddenInteractive,
-        hint: hint(interactiveOnly: false),
-        visibilityPolicy: .viewportProjected
-      ).include
-    )
-    XCTAssertTrue(
-      flatSnapshotFilterDecision(
-        hiddenInteractive,
-        hint: hint(interactiveOnly: false),
-        visibilityPolicy: .interactiveOnly
-      ).include
-    )
-    XCTAssertTrue(
-      flatSnapshotFilterDecision(
-        hiddenRoot,
-        hint: hint(interactiveOnly: false),
-        visibilityPolicy: .viewportProjected
-      ).include
-    )
-    XCTAssertTrue(
-      flatSnapshotFilterDecision(
-        decorative,
-        hint: hint(interactiveOnly: false),
-        visibilityPolicy: .interactiveOnly
-      ).include
-    )
   }
 
   func testPrivateAXInteractiveCandidatesPreserveBackendInputs() {

@@ -1,7 +1,7 @@
 import XCTest
 
-/// Reported facts for one private-AX element, read once so both projections describe a node the
-/// same way. Only membership and clip-derived state differ between them.
+/// Reported facts for one private-AX element, read once so every consumer describes a node the
+/// same way.
 struct PrivateAXFields {
   let rect: CGRect
   let label: String
@@ -20,113 +20,33 @@ struct PrivateAXFields {
 }
 
 extension RunnerTests {
-  private static let privateAXProjectionTolerance: CGFloat = 1
-
-  /// Acquisition entry point for the private AX backend.
-  ///
-  /// The regular projection folds the viewport and scroll clips and records scroll hints; the raw
-  /// projection is the acquired tree, so it drops nothing and keeps traversal depth (#1797 D4 — a
-  /// recovered `snapshot --raw` used to return viewport-pruned nodes labeled raw).
+  /// Private-AX acquisition: ONE serializer for both projections. Reported facts at traversal
+  /// depth -- membership, the clip fold, scroll hints, and collapsed depth are
+  /// `SnapshotPresentation`'s alone (#1797). The traversal-depth cut is the backend's one
+  /// narrowing, complete for raw (raw depth *is* traversal depth) and a declared residue for
+  /// regular; `hittable` is the pre-clip geometric fact the fold narrows per projection.
   func privateAXAcquisition(rawRoot: [String: Any], hint: CaptureHint, viewport: CGRect)
     -> [RawAXNode]
   {
     var nodes: [RawAXNode] = []
-    switch hint.projection {
-    case .raw:
-      appendPrivateAXRawNode(rawRoot, to: &nodes, hint: hint, viewport: viewport,
-        depth: 0, parentIndex: nil)
-      return nodes
-    case .regular:
-      var hints: [Int: (above: Bool, below: Bool)] = [:]
-      appendPrivateAXNode(rawRoot, to: &nodes, hints: &hints, hint: hint, viewport: viewport,
-        depth: 0, parentIndex: nil, scrollContext: nil,
-        projectionCursor: .root)
-      return applyHiddenContentHints(hints, to: nodes)
-    }
+    appendPrivateAXNode(rawRoot, to: &nodes, hint: hint, viewport: viewport,
+      depth: 0, parentIndex: nil)
+    return nodes
   }
 
-  /// Raw projection: every serialized node, in traversal order, at traversal depth. Depth is the
-  /// one narrowing a raw acquisition can prove complete, because raw depth *is* traversal depth.
-  private func appendPrivateAXRawNode(_ raw: [String: Any], to nodes: inout [RawAXNode],
+  private func appendPrivateAXNode(_ raw: [String: Any], to nodes: inout [RawAXNode],
     hint: CaptureHint, viewport: CGRect, depth: Int, parentIndex: Int?)
   {
     if let limit = hint.depth, depth > limit { return }
     let fields = privateAXFields(raw)
-    // No clip fold outside the regular projection: hittability stays the reported geometric fact.
-    let onScreen = fields.hasFrame && isVisibleInViewport(fields.rect, viewport)
+    let onScreen = fields.hasFrame && Self.isVisibleInViewport(fields.rect, viewport)
     let index = nodes.count
     nodes.append(
       privateAXNode(fields, index: index, depth: depth, parentIndex: parentIndex, onScreen: onScreen)
     )
     for child in fields.children {
-      appendPrivateAXRawNode(child, to: &nodes, hint: hint, viewport: viewport,
+      appendPrivateAXNode(child, to: &nodes, hint: hint, viewport: viewport,
         depth: depth + 1, parentIndex: index)
-    }
-  }
-
-  private func appendPrivateAXNode(_ raw: [String: Any], to nodes: inout [RawAXNode],
-    hints: inout [Int: (above: Bool, below: Bool)], hint: CaptureHint, viewport: CGRect,
-    depth: Int, parentIndex: Int?,
-    scrollContext: (index: Int, rect: CGRect)?, projectionCursor: FlatSnapshotProjectionCursor)
-  {
-    if let limit = hint.depth, depth > limit { return }
-    let fields = privateAXFields(raw)
-    let rect = fields.rect
-    let children = fields.children
-    let elementType = fields.elementType
-    let negligibleDecoration = parentIndex != nil
-      && !fields.hasSemanticContent
-      && (!fields.hasFrame
-        || rect.width <= Self.privateAXProjectionTolerance
-        || rect.height <= Self.privateAXProjectionTolerance)
-    let onScreen = fields.hasFrame
-      && isVisibleInRegularSnapshot(
-        rect,
-        viewport: viewport,
-        scrollContainerAnchor: scrollContext
-      )
-    let projectionTransition = flatSnapshotProjectionTransition(
-      frame: rect,
-      intersectsViewportAndScrollClip: onScreen,
-      elementType: elementType,
-      hasChildren: !children.isEmpty,
-      cursor: projectionCursor
-    )
-    let projection = projectionTransition.decision
-    let presentationVisible = projection.presentationVisible && !negligibleDecoration
-    let decision = flatSnapshotFilterDecision(
-      FlatSnapshotFilterNode(isRoot: parentIndex == nil, visible: presentationVisible),
-      hint: hint, visibilityPolicy: .viewportProjected)
-    let include = decision.include
-
-    if let hiddenFrame = projectionTransition.hiddenContentFrame, let scrollContext {
-      rememberHiddenContentHint(for: hiddenFrame, relativeTo: scrollContext, hints: &hints)
-    }
-
-    let currentIndex: Int?
-    if include {
-      currentIndex = nodes.count
-      nodes.append(
-        privateAXNode(
-          fields, index: nodes.count, depth: depth, parentIndex: parentIndex, onScreen: onScreen)
-      )
-    } else { currentIndex = parentIndex }
-
-    let nextScrollContext: (index: Int, rect: CGRect)?
-    if include, let elementType, let currentIndex {
-      nextScrollContext = scrollContainerAnchor(
-        for: elementType,
-        hasChildren: !children.isEmpty,
-        visible: onScreen,
-        frame: rect,
-        nodeIndex: currentIndex
-      ) ?? scrollContext
-    } else { nextScrollContext = scrollContext }
-    for child in children {
-      appendPrivateAXNode(child, to: &nodes, hints: &hints, hint: hint, viewport: viewport,
-        depth: depth + 1, parentIndex: currentIndex,
-        scrollContext: nextScrollContext,
-        projectionCursor: projection.descendants)
     }
   }
 
@@ -201,10 +121,28 @@ extension RunnerTests {
             "frame": frame(16, 900, 360, 44)]]]]]
   }
 
+  /// Acquire with the private-AX serializer, then present through the shared regular fold --
+  /// the production route for this backend since the fold moved into presentation (#1797).
+  fileprivate func privateAXRegularPresentation(
+    rawRoot: [String: Any],
+    viewport: CGRect,
+    interactiveOnly: Bool = false
+  ) -> [PresentedNode] {
+    let hint = CaptureHint(
+      projection: .regular, depth: nil, interactiveOnly: interactiveOnly, customActions: false)
+    let acquired = privateAXAcquisition(rawRoot: rawRoot, hint: hint, viewport: viewport)
+    return SnapshotPresentation.presentRegular(
+      SnapshotAcquisition(
+        hint: hint, nodes: acquired, truncated: false, effectiveDepth: nil, viewport: viewport),
+      options: PresentationOptions(
+        interactiveOnly: interactiveOnly, depth: nil, scope: nil, raw: false),
+      policy: .cursorProjected
+    ).payload.nodes ?? []
+  }
+
   func testPrivateAXRegularPresentationProjectsToViewportAndKeepsScrollHint() {
-    let nodes = privateAXAcquisition(rawRoot: Self.privateAXScrolledFixture,
-      hint: CaptureHint(projection: .regular, depth: nil, interactiveOnly: false,
-        customActions: false),
+    let nodes = privateAXRegularPresentation(
+      rawRoot: Self.privateAXScrolledFixture,
       viewport: CGRect(x: 0, y: 0, width: 402, height: 874))
     XCTAssertEqual(nodes.compactMap(\.label), ["Element", "Profile picture"])
     let scrollView = nodes.first { $0.type == "ScrollView" }
@@ -214,14 +152,12 @@ extension RunnerTests {
 
   /// #1797 D4: the raw projection is the acquired tree. The offscreen row and the sub-pixel
   /// decoration the regular projection folds away are both present, at traversal depth, and every
-  /// regular node still appears — `regular ⊆ raw` on the same capture.
+  /// regular node still appears -- `regular ⊆ raw` on the same capture.
   func testPrivateAXRawProjectionKeepsEveryAcquiredNode() {
     let viewport = CGRect(x: 0, y: 0, width: 402, height: 874)
     let root = Self.privateAXScrolledFixture
-    let regular = privateAXAcquisition(rawRoot: root,
-      hint: CaptureHint(projection: .regular, depth: nil, interactiveOnly: true,
-        customActions: false),
-      viewport: viewport)
+    let regular = privateAXRegularPresentation(rawRoot: root, viewport: viewport,
+      interactiveOnly: true)
     let raw = privateAXAcquisition(rawRoot: root,
       hint: CaptureHint(projection: .raw, depth: nil, interactiveOnly: false, customActions: false),
       viewport: viewport)
@@ -267,10 +203,8 @@ extension RunnerTests {
           ["type": Int(XCUIElement.ElementType.switch.rawValue),
             "label": "Theme", "frame": frame(340, 96, 46, 44)]]]]]]]
 
-    let nodes = privateAXAcquisition(rawRoot: root,
-      hint: CaptureHint(projection: .regular, depth: nil, interactiveOnly: false,
-        customActions: false),
-      viewport: CGRect(x: 0, y: 0, width: 402, height: 874))
+    let nodes = privateAXRegularPresentation(
+      rawRoot: root, viewport: CGRect(x: 0, y: 0, width: 402, height: 874))
 
     XCTAssertEqual(nodes.compactMap(\.label), ["Element"])
     XCTAssertEqual(nodes.first { $0.type == "Table" }?.hiddenContentBelow, true)
@@ -284,10 +218,9 @@ extension RunnerTests {
         "label": "Settings semantics", "frame": zero, "children": [[
           "type": Int(XCUIElement.ElementType.button.rawValue), "label": "Theme", "frame": zero],
         ["type": Int(XCUIElement.ElementType.other.rawValue), "frame": zero]]]]]
-    let nodes = privateAXAcquisition(rawRoot: root,
-      hint: CaptureHint(projection: .regular, depth: nil, interactiveOnly: true,
-        customActions: false),
-      viewport: CGRect(x: 0, y: 0, width: 402, height: 874))
+    let nodes = privateAXRegularPresentation(
+      rawRoot: root, viewport: CGRect(x: 0, y: 0, width: 402, height: 874),
+      interactiveOnly: true)
     XCTAssertEqual(nodes.compactMap(\.label), ["Element", "Settings semantics", "Theme"])
     XCTAssertEqual(nodes.filter { $0.index != 0 }.map(\.hittable), [false, false])
     XCTAssertFalse(nodes.contains { $0.type == "Other" })
