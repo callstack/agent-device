@@ -1,16 +1,3 @@
-import type {
-  SnapshotCaptureBackend,
-  SnapshotPreferredBackend,
-} from './snapshot-backend-capabilities.ts';
-
-export { SNAPSHOT_BACKEND_CAPABILITIES } from './snapshot-backend-capabilities.ts';
-
-export type {
-  SnapshotCaptureBackend,
-  SnapshotConformanceBackend,
-  SnapshotPreferredBackend,
-} from './snapshot-backend-capabilities.ts';
-
 /**
  * Structured quality verdict computed once by the iOS runner's snapshot capture plan.
  * The daemon renders it; it never re-derives degradation from node shapes.
@@ -26,6 +13,11 @@ export type {
  * change strategy mid-sequence, and two strategies do not return comparable
  * views of one screen (#1569).
  */
+export type SnapshotCaptureBackend = 'tree' | 'queries' | 'private-ax';
+
+/** Internal backends that evidence probes may select explicitly. */
+export type SnapshotPreferredBackend = 'tree' | 'private-ax';
+
 export type SnapshotQualityVerdict = {
   state: 'healthy' | 'recovered' | 'sparse';
   backend: SnapshotCaptureBackend;

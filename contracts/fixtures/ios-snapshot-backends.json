@@ -7,11 +7,18 @@
       "hittable": "hit-tested",
       "deepExtension": "no",
       "depthLadder": "n/a",
-      "fixtureConformance": "required",
       "availability": {
         "simulator": true,
         "physicalDevice": true
-      }
+      },
+      "knownGaps": [
+        {
+          "id": "deep-extension",
+          "owner": "iOS snapshot maintainers",
+          "trackingIssue": 1635,
+          "expiresOn": "2027-03-31"
+        }
+      ]
     },
     {
       "name": "queries",
@@ -20,11 +27,11 @@
       "hittable": "hit-tested",
       "deepExtension": "n/a",
       "depthLadder": "n/a",
-      "fixtureConformance": "not-applicable",
       "availability": {
         "simulator": true,
         "physicalDevice": true
-      }
+      },
+      "knownGaps": []
     },
     {
       "name": "private-ax",
@@ -33,11 +40,18 @@
       "hittable": "approximated",
       "deepExtension": "yes",
       "depthLadder": "yes",
-      "fixtureConformance": "required",
       "availability": {
         "simulator": true,
         "physicalDevice": false
-      }
+      },
+      "knownGaps": [
+        {
+          "id": "hittable-approximation",
+          "owner": "iOS snapshot maintainers",
+          "trackingIssue": 1797,
+          "expiresOn": "2027-03-31"
+        }
+      ]
     }
   ]
 }

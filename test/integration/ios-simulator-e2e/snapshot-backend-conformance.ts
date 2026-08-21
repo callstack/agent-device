@@ -8,11 +8,10 @@ import type {
 } from '@agent-device/contracts/client';
 import { normalizeType } from '@agent-device/contracts/snapshot';
 import {
-  SNAPSHOT_BACKEND_CAPABILITIES,
   type SnapshotCaptureBackend,
-  type SnapshotConformanceBackend,
   type SnapshotPreferredBackend,
 } from '@agent-device/kernel/snapshot';
+import { SNAPSHOT_BACKEND_CAPABILITIES } from '../../../src/snapshot-quality/backend-capabilities.ts';
 import { isSemanticTouchTarget } from '../../../src/core/interaction-targeting.ts';
 
 export type SnapshotBackendConformanceFixture = {
@@ -30,8 +29,8 @@ type SnapshotBackendControl = {
 };
 
 export const SNAPSHOT_BACKEND_CONFORMANCE_TARGETS = Object.entries(SNAPSHOT_BACKEND_CAPABILITIES)
-  .filter(([, capability]) => capability.fixtureConformance === 'required')
-  .map(([backend]) => backend as SnapshotConformanceBackend);
+  .filter(([, capability]) => capability.forceable)
+  .map(([backend]) => backend as SnapshotPreferredBackend);
 
 /**
  * Test-owned transport seam for the backend conformance probe. The public SDK deliberately has
@@ -70,7 +69,7 @@ export function loadSnapshotBackendConformanceFixture(
  */
 export function assertSnapshotBackendConformance(
   snapshot: Pick<CaptureSnapshotResult, 'nodes' | 'snapshotQuality' | 'truncated'>,
-  backend: SnapshotConformanceBackend,
+  backend: SnapshotPreferredBackend,
   fixture: SnapshotBackendConformanceFixture,
 ): void {
   const quality = snapshot.snapshotQuality;

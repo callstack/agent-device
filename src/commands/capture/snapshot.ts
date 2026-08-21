@@ -1,5 +1,5 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import { SNAPSHOT_BACKEND_CAPABILITIES } from '@agent-device/kernel/snapshot';
+import { SNAPSHOT_BACKEND_CAPABILITIES } from '../../snapshot-quality/backend-capabilities.ts';
 import { SNAPSHOT_FLAGS } from '../cli-grammar/flag-groups.ts';
 import { booleanField, integerField, stringField } from '../command-input.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
@@ -20,10 +20,7 @@ const snapshotCommandDescription =
 
 const snapshotBackendCapabilityHelp = Object.entries(SNAPSHOT_BACKEND_CAPABILITIES)
   .map(([backend, capability]) => {
-    const gaps = capability.knownGaps.map(
-      (gap) =>
-        `known gap ${gap.id} (owner ${gap.owner}, #${gap.trackingIssue}, expires ${gap.expiresOn})`,
-    );
+    const gaps = capability.knownGaps.map((gap) => `known gap ${gap}`);
     return `${backend}: hittable=${capability.hittable}, deep-extension=${capability.deepExtension}, depth-ladder=${capability.depthLadder}${gaps.length > 0 ? `, ${gaps.join(', ')}` : ''}`;
   })
   .join('; ');
