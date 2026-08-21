@@ -1,8 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
-import { cleanupAppleXctracePerfCapture } from '../platforms/apple/core/perf-xctrace.ts';
-import { cleanupAndroidNativePerfSession } from '../platforms/android/perf.ts';
-import { stopAndroidSnapshotHelperSessionForDevice } from '../platforms/android/snapshot-helper.ts';
 import { cleanupRetainedMaterializedPathsForSession } from './materialized-path-registry.ts';
 import { stopSessionAudioProbe } from './audio-probe.ts';
 import type { SessionState } from './types.ts';
@@ -10,6 +7,25 @@ import type { SessionStore } from './session-store.ts';
 import { forceCleanupSessionAppLog } from './app-log-session-resource.ts';
 import { appLogResourceStore } from './app-log-resource-store.ts';
 import { finishLiveScreenRecording } from './screen-recording-session-resource.ts';
+
+// Platform cleanup helpers stay behind dynamic imports: every teardown caller pays this module's
+// graph, while the helpers only matter when the corresponding capture actually ran on the session.
+// The guards below match register-builtins' interactor lazy pattern.
+async function cleanupAndroidNativePerfSessionLazy(
+  device: SessionState['device'],
+  active: NonNullable<NonNullable<SessionState['nativePerf']>['android']>,
+): Promise<void> {
+  const { cleanupAndroidNativePerfSession } = await import('../platforms/android/perf.ts');
+  await cleanupAndroidNativePerfSession(device, active);
+}
+
+async function stopAndroidSnapshotHelperSessionForDeviceLazy(
+  device: SessionState['device'],
+): Promise<void> {
+  const { stopAndroidSnapshotHelperSessionForDevice } =
+    await import('../platforms/android/snapshot-helper.ts');
+  await stopAndroidSnapshotHelperSessionForDevice(device);
+}
 
 export { stopSessionAudioProbe } from './audio-probe.ts';
 
@@ -30,6 +46,8 @@ export async function stopSessionAppLog(params: {
 
 export async function stopSessionApplePerfCapture(session: SessionState): Promise<void> {
   if (!session.applePerf?.active) return;
+  const { cleanupAppleXctracePerfCapture } =
+    await import('../platforms/apple/core/perf-xctrace.ts');
   await cleanupAppleXctracePerfCapture(session.applePerf.active);
   session.applePerf = { ...(session.applePerf ?? {}), active: undefined };
 }
@@ -37,13 +55,13 @@ export async function stopSessionApplePerfCapture(session: SessionState): Promis
 export async function stopSessionAndroidNativePerfCapture(session: SessionState): Promise<void> {
   const active = session.nativePerf?.android;
   if (!active) return;
-  await cleanupAndroidNativePerfSession(session.device, active);
+  await cleanupAndroidNativePerfSessionLazy(session.device, active);
   session.nativePerf = { ...(session.nativePerf ?? {}), android: undefined };
 }
 
 export async function stopSessionAndroidSnapshotHelper(session: SessionState): Promise<void> {
   if (session.device.platform !== 'android') return;
-  await stopAndroidSnapshotHelperSessionForDevice(session.device);
+  await stopAndroidSnapshotHelperSessionForDeviceLazy(session.device);
 }
 
 type SessionCleanupStep = { step: string; run: () => Promise<void> };
