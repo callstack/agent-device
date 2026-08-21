@@ -221,6 +221,7 @@ export {
   selectorTextCaptureRuntimePlanUses,
   snapshotRuntimePlanUses,
   waitSelectorCaptureRuntimePlanUses,
+  findRuntimePlanUses,
   focusRuntimeUse,
   typeTextRuntimeUse,
   viewportRuntimeUse,

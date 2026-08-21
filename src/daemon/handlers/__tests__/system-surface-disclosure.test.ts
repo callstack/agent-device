@@ -82,6 +82,7 @@ test('mutating find on a system-surface capture discloses the occlusion on the f
     logPath: '/tmp/test.log',
     sessionStore,
     invoke: async () => ({ ok: true, data: {} }) as DaemonResponse,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);

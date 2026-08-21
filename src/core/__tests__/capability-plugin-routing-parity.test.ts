@@ -265,7 +265,6 @@ test('HarmonyOS static capabilities omit runtime-backed command admissions', () 
     'back',
     'click',
     'fill',
-    'find',
     'gesture',
     'home',
     'keyboard',

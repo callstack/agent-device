@@ -29,10 +29,10 @@ export type SelectorCaptureRuntimeParams = {
   consumedSnapshot?: { state?: SnapshotState };
   /**
    * The request-bound capture from `resolveBoundSelectorCapture`: every cache tier, recovery
-   * re-capture, and poll below reaches the platform through it. Selector commands still on
-   * legacy admission pass nothing; the last one to migrate makes this required.
+   * re-capture, and poll below reaches the platform through it. Required since find (R35) —
+   * every selector command admits before it captures, so there is no legacy branch left.
    */
-  capture?: BoundSelectorCapture;
+  capture: BoundSelectorCapture;
 };
 
 /**
@@ -192,26 +192,22 @@ async function runCapture(
     snapshotScope,
     includeRects: request.includeRects,
     signal: request.signal,
-    ...(boundCapture === undefined
-      ? {}
-      : {
-          captureData: async () =>
-            await boundCapture(
-              buildRuntimeCaptureInput({
-                flags,
-                logPath: params.logPath ?? '',
-                meta: params.req.meta,
-                session: params.session,
-                snapshotScope,
-                includeRects: request.includeRects,
-                // The POLL's remaining budget, not the request's. A binding's signal is fixed at
-                // bind time and `wait` binds once and polls many times, so without this the
-                // deadline never reaches the platform: a stalled capture would consume the whole
-                // request instead of producing the `capture-stalled` verdict.
-                signal: request.signal,
-              }),
-            ),
+    captureData: async () =>
+      await boundCapture(
+        buildRuntimeCaptureInput({
+          flags,
+          logPath: params.logPath ?? '',
+          meta: params.req.meta,
+          session: params.session,
+          snapshotScope,
+          includeRects: request.includeRects,
+          // The POLL's remaining budget, not the request's. A binding's signal is fixed at
+          // bind time and `wait` binds once and polls many times, so without this the
+          // deadline never reaches the platform: a stalled capture would consume the whole
+          // request instead of producing the `capture-stalled` verdict.
+          signal: request.signal,
         }),
+      ),
   });
   return capture.snapshot;
 }

@@ -1,4 +1,5 @@
 import type { FindLocator } from '@agent-device/selectors';
+import type { BoundSelectorCapture } from '../selector-capture-binding.ts';
 import type { SnapshotQualityVerdict, SnapshotState } from '@agent-device/kernel/snapshot';
 import { createSelectorCaptureRuntime } from '../selector-capture-runtime.ts';
 import { SessionStore } from '../session-store.ts';
@@ -27,6 +28,7 @@ export function createFindTargetCapture(
     query: string;
     sessionStore: SessionStore;
     sessionName: string;
+    capture: BoundSelectorCapture;
   }>,
 ): () => Promise<FindTargetTree> {
   const { device, session, req, logPath, locator, query, sessionStore, sessionName } = params;
@@ -37,6 +39,7 @@ export function createFindTargetCapture(
     sessionName,
     req,
     logPath,
+    capture: params.capture,
   });
   return async () => {
     // Interaction targets need the full interactive tree so duplicate labels can

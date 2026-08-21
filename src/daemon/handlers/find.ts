@@ -21,6 +21,7 @@ import { resolveFindMatch } from './find-match-resolution.ts';
 import { resolveBoundFocusRuntime } from '../focus-runtime.ts';
 import { resolveBoundTypeTextRuntime } from '../type-text-runtime.ts';
 import { dispatchFindReadOnlyViaRuntime } from '../selector-runtime.ts';
+import { resolveBoundSelectorCapture } from '../selector-capture-binding.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { createFindTargetCapture, sparseFindSnapshotResponse } from './find-target-capture.ts';
 import { isSparseSnapshotQualityVerdict } from '../../snapshot-quality/verdict.ts';
@@ -99,6 +100,16 @@ export async function handleFindCommands(params: {
   const session = sessionStore.get(sessionName);
   if (!session) return noActiveSessionError();
   const device = session.device;
+  // R35: the mutating target capture enters the selector family's shared admit-then-bind path,
+  // so `find click` resolves its target through the same bound capture every selector read uses.
+  const boundSelector = await resolveBoundSelectorCapture({
+    command: 'find',
+    device,
+    session,
+    inspectFacts: params.inspectFacts,
+    bindDevice: params.bindDevice,
+  });
+  if (!boundSelector.ok) return boundSelector.response;
   const selectorExpression = parseFindSelectorExpression(locator, query);
   const readTargetTree = createFindTargetCapture({
     device,
@@ -109,6 +120,7 @@ export async function handleFindCommands(params: {
     query,
     sessionStore,
     sessionName,
+    capture: boundSelector.operations.capture,
   });
 
   const ctx: FindContext = {

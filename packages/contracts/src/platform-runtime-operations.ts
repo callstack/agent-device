@@ -135,6 +135,18 @@ export const selectorTextCaptureRuntimePlanUses = Object.freeze([
   selectorTextCaptureWithoutActiveAppUse,
 ] as const);
 
+/**
+ * `find`'s complete use set: the selector-text capture plans it shares with `get` for target
+ * resolution and read-only legs, plus the two directly-executed mutating legs. Click/fill legs
+ * re-invoke their own commands and carry that admission themselves.
+ */
+export const findRuntimePlanUses = Object.freeze([
+  selectorTextCaptureUse,
+  selectorTextCaptureWithoutActiveAppUse,
+  focusRuntimeUse,
+  typeTextRuntimeUse,
+] as const);
+
 export const waitSelectorCaptureRuntimePlanUses = Object.freeze([
   waitSelectorCaptureUse,
   waitSelectorCaptureWithoutActiveAppUse,

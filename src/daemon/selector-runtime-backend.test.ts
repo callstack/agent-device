@@ -1,23 +1,12 @@
 import path from 'node:path';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vitest';
+import type { CaptureSnapshotInput, SnapshotResult } from '@agent-device/contracts/platform';
 import { createSelectorRuntimeForDevice } from './selector-runtime-backend.ts';
 import { SessionStore } from './session-store.ts';
 import type { SessionState } from './types.ts';
 import { mkdtempForTestSync } from '../__tests__/test-utils/tmp-dir.ts';
 import { makeSnapshotState } from '../__tests__/test-utils/index.ts';
 
-vi.mock('../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../platforms/apple/core/runner/runner-client.ts')>();
-  return {
-    ...actual,
-    runAppleRunnerCommand: vi.fn(async () => ({ found: false })),
-  };
-});
-
-import { runAppleRunnerCommand } from '../platforms/apple/core/runner/runner-client.ts';
-
-const mockRunnerCommand = vi.mocked(runAppleRunnerCommand);
 const device: SessionState['device'] = {
   platform: 'apple',
   id: 'sim-1',
@@ -25,10 +14,6 @@ const device: SessionState['device'] = {
   kind: 'simulator',
   booted: true,
 };
-
-beforeEach(() => {
-  mockRunnerCommand.mockReset();
-});
 
 test('wait text passes its poll deadline signal to the Apple runner fast path', async () => {
   const sessionName = 'ios-wait-deadline';
@@ -44,15 +29,19 @@ test('wait text passes its poll deadline signal to the Apple runner fast path', 
   };
   sessionStore.set(sessionName, session);
   let observedSignal: AbortSignal | undefined;
-  mockRunnerCommand.mockImplementation(
-    async (_device, _command, options) =>
+  // R35: every selector runtime is bound, so the poll deadline must reach the platform through
+  // the bound capture's per-capture signal — the seam the runner used to be reached through.
+  const capture = vi.fn(
+    async (input: CaptureSnapshotInput): Promise<SnapshotResult> =>
       await new Promise((resolve) => {
-        observedSignal = options?.signal;
-        if (options?.signal?.aborted) {
-          resolve({ found: false });
+        observedSignal = input.signal;
+        if (input.signal?.aborted) {
+          resolve({ backend: 'xctest', nodes: [] });
           return;
         }
-        options?.signal?.addEventListener('abort', () => resolve({ found: false }), { once: true });
+        input.signal?.addEventListener('abort', () => resolve({ backend: 'xctest', nodes: [] }), {
+          once: true,
+        });
       }),
   );
   const runtime = createSelectorRuntimeForDevice({
@@ -67,6 +56,7 @@ test('wait text passes its poll deadline signal to the Apple runner fast path', 
     sessionStore,
     session,
     device,
+    bound: { capture },
   });
 
   await expect(
@@ -104,17 +94,15 @@ test('daemon wait stable pins private-ax on emitted snapshot runner requests', a
     snapshot,
   };
   sessionStore.set(sessionName, session);
-  mockRunnerCommand.mockImplementation(async (_device, command) => {
-    if (command.command !== 'snapshot') return {};
-    return {
-      nodes,
-      snapshotQuality: {
-        state: 'recovered',
-        backend: 'private-ax',
-        reasonCode: 'requested-backend',
-      },
-    };
-  });
+  const capture = vi.fn(async (_input: CaptureSnapshotInput): Promise<SnapshotResult> => ({
+    backend: 'xctest',
+    nodes,
+    quality: {
+      state: 'recovered',
+      backend: 'private-ax',
+      reasonCode: 'requested-backend',
+    },
+  }));
   const runtime = createSelectorRuntimeForDevice({
     req: {
       token: 't',
@@ -127,6 +115,7 @@ test('daemon wait stable pins private-ax on emitted snapshot runner requests', a
     sessionStore,
     session,
     device,
+    bound: { capture },
   });
 
   await runtime.selectors.wait({
@@ -134,9 +123,8 @@ test('daemon wait stable pins private-ax on emitted snapshot runner requests', a
     target: { kind: 'stable', quietMs: 25, timeoutMs: 1_000 },
   });
 
-  const snapshotCommands = mockRunnerCommand.mock.calls
-    .map(([, command]) => command)
-    .filter((command) => command.command === 'snapshot');
-  expect(snapshotCommands.length).toBeGreaterThanOrEqual(2);
-  expect(snapshotCommands.every((command) => command.preferredBackend === 'private-ax')).toBe(true);
+  expect(capture.mock.calls.length).toBeGreaterThanOrEqual(2);
+  expect(
+    capture.mock.calls.every(([input]) => input.options?.preferredBackend === 'private-ax'),
+  ).toBe(true);
 });

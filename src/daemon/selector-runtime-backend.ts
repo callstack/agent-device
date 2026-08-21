@@ -45,9 +45,13 @@ export type SelectorRuntimeParams = {
 export type SelectorRuntimeDeviceParams = SelectorRuntimeParams & {
   session: SessionState | undefined;
   device: SessionState['device'];
-  /** The request-bound operations this runtime executes through. Absent for selector
-   * commands still on legacy admission, until their own ADR 0019 unit lands. */
-  bound?: BoundSelectorOperations;
+  /**
+   * The request-bound operations this runtime executes through. Required to STATE since find
+   * (R35): every selector command admits before it constructs this runtime, and the only
+   * declared absence is the observation-free duration wait (`wait 400`), which never captures —
+   * its runtime carries no capture backend at all, so an accidental capture fails loudly.
+   */
+  bound: BoundSelectorOperations | undefined;
 };
 
 type ResolvedSelectorRuntime =
@@ -149,41 +153,47 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
     session,
     snapshotScope: undefined,
   }).execution;
-  const captureRuntime = createSelectorCaptureRuntime({
-    device,
-    session,
-    sessionStore,
-    sessionName,
-    req,
-    consumedSnapshot: params.consumedSnapshot,
-    logPath,
-    capture: params.bound?.capture,
-  });
+  const boundOperations = params.bound;
+  const captureRuntime =
+    boundOperations === undefined
+      ? undefined
+      : createSelectorCaptureRuntime({
+          device,
+          session,
+          sessionStore,
+          sessionName,
+          req,
+          consumedSnapshot: params.consumedSnapshot,
+          logPath,
+          capture: boundOperations.capture,
+        });
   return {
     platform: publicPlatformString(device),
-    captureSnapshot: async (context, options): Promise<BackendSnapshotResult> => {
-      const flags = {
-        ...req.flags,
-        ...snapshotOptionsToFlags(options),
-      };
-      const includeRects = options?.includeRects === true;
-      const snapshotScope = options?.scope ?? req.flags?.snapshotScope;
-      const needsFreshSnapshot =
-        req.command === 'wait' ||
-        req.command === 'find' ||
-        (includeRects && device.platform === 'web');
-      return await captureRuntime.capture({
-        flags,
-        signal: context.signal,
-        snapshotScope,
-        includeRects,
-        cache: {
-          forceFresh: needsFreshSnapshot,
-          useSessionSnapshot: true,
-          bypassForPostGestureStabilization: true,
-        },
-      });
-    },
+    captureSnapshot:
+      captureRuntime &&
+      (async (context, options): Promise<BackendSnapshotResult> => {
+        const flags = {
+          ...req.flags,
+          ...snapshotOptionsToFlags(options),
+        };
+        const includeRects = options?.includeRects === true;
+        const snapshotScope = options?.scope ?? req.flags?.snapshotScope;
+        const needsFreshSnapshot =
+          req.command === 'wait' ||
+          req.command === 'find' ||
+          (includeRects && device.platform === 'web');
+        return await captureRuntime.capture({
+          flags,
+          signal: context.signal,
+          snapshotScope,
+          includeRects,
+          cache: {
+            forceFresh: needsFreshSnapshot,
+            useSessionSnapshot: true,
+            bypassForPostGestureStabilization: true,
+          },
+        });
+      }),
     readText: async (_context, node: SnapshotNode) => ({
       text: await readTextForNode({
         readTextAtPoint,

@@ -42,7 +42,6 @@ const HARMONYOS_SUPPORTED_COMMANDS = new Set<string>([
   'app-switcher',
   'click',
   'fill',
-  'find',
   'home',
   'gesture',
   'keyboard',
@@ -52,7 +51,7 @@ const HARMONYOS_SUPPORTED_COMMANDS = new Set<string>([
   'settings',
   'swipe',
 ]);
-const WEB_QUERY_COMMANDS = ['audio', 'find'] as const;
+const WEB_QUERY_COMMANDS = ['audio'] as const;
 const WEB_INTERACTION_COMMANDS = ['click', 'fill', 'hover', 'press', 'scroll'] as const;
 const WEB_SUPPORTED_COMMANDS = new Set<string>([
   ...WEB_QUERY_COMMANDS,

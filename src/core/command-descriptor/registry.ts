@@ -35,6 +35,7 @@ import {
   screenRecordingRuntimePlanUses,
   screenshotRuntimePlanUses,
   shutdownTargetUse,
+  findRuntimePlanUses,
   focusRuntimeUse,
   typeTextRuntimeUse,
   viewportRuntimeUse,
@@ -1079,10 +1080,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
     recordsSessionAction: true,
     recordingEffect: findRecordingEffect,
     daemon: { route: 'find', refFrameEffect: 'may-invalidate' },
-    capability: ALL_DEVICE_COMMAND_CAPABILITY,
     timeoutPolicy: PRESERVE_DAEMON_TIMEOUT_POLICY,
     batchable: true,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    platformExecution: { kind: 'device-runtime', uses: findRuntimePlanUses },
   },
 
   // -- interaction (route: interaction) --

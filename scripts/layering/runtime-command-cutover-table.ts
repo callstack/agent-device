@@ -25,9 +25,8 @@ import { retiredDispatchProjectionViolations } from './runtime-command-cutover-d
  * A row id is a report heading, so it must be unique across every stack that adds rows here.
  * `cutoverTableDefects` rejects a duplicate; lifecycle starts at R28 after the accepted
  * shutdown, install/deploy, and application-lifecycle allocations. Snapshot starts at R32;
- * diff follows at R33, viewport at R34, get at R36, is at R37, screenshot at R39, wait at R38,
- * focus at R40, and type at R41. R35 stays reserved for find, whose blockers (`focus` R40,
- * `type` R41) have both landed; its atomic cutover is the next selector-family unit.
+ * diff follows at R33, find at R35, get at R36, is at R37, screenshot at R39, wait at R38,
+ * focus at R40, and type at R41 — the Wave 4 observation family is complete.
  */
 export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
   {
@@ -507,6 +506,35 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
       },
     },
     extensions: [diffRetiredDispatchProjectionProof],
+  },
+  {
+    rule: 'R35 find-runtime-cutover',
+    command: 'find',
+    subject: 'find target resolution',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      // The whole retirement is admission data: the capability bucket plus the two overlay set
+      // memberships. Every route name survived — what changed is that the mutating target
+      // capture now enters resolveBoundSelectorCapture like every selector read, which is why
+      // the shared owners below carry find's captures too.
+      staticCommandSets: ['HARMONYOS_SUPPORTED_COMMANDS', 'WEB_QUERY_COMMANDS'],
+    },
+    runtimeTypeNames: ['SnapshotRuntimeOperations', 'ElementTextRuntimeOperations'],
+    operations: {
+      names: ['captureSnapshot', 'captureSnapshotWithoutActiveApp', 'readTextAtPoint'],
+    },
+    singularExecution: {
+      routes: ['handleFindCommands'],
+      operations: ['captureSnapshot', 'captureSnapshotWithoutActiveApp', 'readTextAtPoint'],
+      // Find shares every owner with `get`: its captures enter the same admit-then-bind
+      // selectors and its read-only get-text leg consumes the same preferred read owner.
+      operationOwners: {
+        captureSnapshot: ['selectActiveAppSnapshot'],
+        captureSnapshotWithoutActiveApp: ['selectSnapshotWithoutActiveApp'],
+        readTextAtPoint: ['selectElementTextOperation'],
+      },
+    },
   },
   {
     rule: 'R36 get-runtime-cutover',
