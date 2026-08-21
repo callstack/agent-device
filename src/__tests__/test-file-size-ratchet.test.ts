@@ -48,7 +48,7 @@ const PINNED_TEST_FILE_LINES: Readonly<Record<string, number>> = Object.freeze({
   'src/platforms/apple/core/__tests__/runner-command-retry.test.ts': 1327,
   'src/__tests__/cli-client-commands.test.ts': 1317,
   'src/__tests__/cli-config.test.ts': 1282,
-  'src/daemon/handlers/__tests__/find.test.ts': 1207,
+  'src/daemon/handlers/__tests__/find.test.ts': 1204,
   'src/platforms/apple/core/__tests__/perf.test.ts': 1222,
   'src/mcp/__tests__/command-tools.test.ts': 1218,
   'src/daemon/handlers/__tests__/session-replay-divergence.test.ts': 1215,
