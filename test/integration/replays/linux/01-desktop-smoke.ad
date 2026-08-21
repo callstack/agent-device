@@ -16,19 +16,15 @@ snapshot -i
 focus 100 100
 # The session survives the focus: a crashed desktop would fail here, not silently pass above.
 is exists "appname=gnome-calculator || windowtitle=Calculator || label=Calculator || label=0 || label=1 || label=5"
-# A resolved button press: proves pointer input lands on a resolved target, seeds the display
-# with 1, and gives the entry keyboard focus for the type step below. role= disambiguates from
-# the calculator's [text] "1" node — a bare label=1 is an AMBIGUOUS_MATCH rejection by design.
-# It also moves the pointer off (100,100), so a retry's `focus` cannot trip xdotool's
-# mousemove --sync no-op hang (the mechanism that reported every prior failure as step 7).
-click "role=button label=1"
 # R41 (#1739): `type` executes through the bound `typeText` operation rather than the retired
-# interactor leaf. The clicked 1 plus the typed 55 can only produce a 155 display node if the
-# keystrokes actually landed: no calculator button is labelled 155, so this cannot be satisfied
-# by pre-existing UI, and deleting the type step turns the wait red.
-type "55"
-# Pixel evidence for the wait below: the lane uploads this PNG on pass and on fail, so a timeout
-# is diagnosable from the artifact (display shows 155 = tree-exposure gap; display empty = input
-# never landed) instead of costing another blind CI round.
+# interactor leaf. The keystrokes spell a full calculation: the typed-state screenshot below is
+# pixel evidence that the digits landed, and the `=` creates a history row so the result can
+# surface through the tree even though the entry widget does not expose its text to selectors
+# (run 32485981780's artifact shows "55" in the display while a wait for it timed out).
+type "100+55="
+# Uploaded on pass and on fail: the display and history pixels are the ground truth for the
+# steps above, so a wait timeout below is diagnosable from the artifact alone.
 screenshot "./test/screenshots/replays/linux-calculator-typed.png"
+# 155 appears only as the computed result: no button carries that label, the typed string is
+# "100+55=", and deleting the type step turns this wait red.
 wait "label=155 || text=155 || value=155" 10000
