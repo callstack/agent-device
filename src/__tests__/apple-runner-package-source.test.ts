@@ -54,13 +54,13 @@ test('package apple runner source strips unit-test blocks without mutating check
   );
 });
 
-test('package apple runner source drops skeleton test files and keeps non-skeleton siblings', async () => {
-  const root = mkdtempForTestSync('agent-device-runner-package-skeleton-');
+test('package apple runner source skips the explicit unit-test directory', async () => {
+  const root = mkdtempForTestSync('agent-device-runner-package-unit-tests-');
   onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
   const uitestsDir = 'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests';
   writeFixtureFile(
     root,
-    `${uitestsDir}/RunnerTests+SkeletonOnly.swift`,
+    `${uitestsDir}/UnitTests/RunnerTests+SkeletonOnly.swift`,
     [
       'import XCTest',
       '',
@@ -81,9 +81,9 @@ test('package apple runner source drops skeleton test files and keeps non-skelet
   await runCmd(process.execPath, [packageScript, '--root', root, '--quiet']);
 
   assert.equal(
-    fs.existsSync(path.join(root, `dist/${uitestsDir}/RunnerTests+SkeletonOnly.swift`)),
+    fs.existsSync(path.join(root, `dist/${uitestsDir}/UnitTests/RunnerTests+SkeletonOnly.swift`)),
     false,
-    'a file whose unit-test blocks were its whole body must not ship as an empty translation unit',
+    'the package boundary must omit checkout-only unit-test sources',
   );
   assert.ok(
     fs.existsSync(path.join(root, `dist/${uitestsDir}/RunnerTests+RuntimeSibling.swift`)),

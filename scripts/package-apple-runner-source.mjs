@@ -14,7 +14,7 @@ const LEGACY_OUTPUT_DIRS = [
   path.join('dist', 'apple-runner'),
   path.join('dist', 'apple', 'apple-runner'),
 ];
-const SKIPPED_DIR_NAMES = new Set(['.build', '.swiftpm', 'xcuserdata']);
+const SKIPPED_DIR_NAMES = new Set(['.build', '.swiftpm', 'UnitTests', 'xcuserdata']);
 const SKIPPED_ROOT_FILES = new Set(['README.md', 'RUNNER_PROTOCOL.md']);
 // XCTest discovers instance methods named test*; anything matching this that survives stripping
 // would ship to (and compile on) every user's machine. Only the runner's command-loop entrypoint
@@ -41,7 +41,6 @@ function packageAppleRunnerSource(options = {}) {
     copiedFiles: 0,
     strippedFiles: 0,
     strippedBlocks: 0,
-    skippedSkeletonFiles: 0,
   };
 
   processDirectory(sourceRoot, options.checkOnly ? undefined : outputRoot, '', summary);
@@ -151,31 +150,8 @@ function copyFile(sourcePath, outputPath, relativePath, summary) {
   }
 
   const stripped = validateSwiftFile(sourcePath, relativePath, summary);
-  if (isSkeletonSwiftContents(stripped.contents)) {
-    // A file whose unit-test blocks were its whole body would otherwise ship (and compile on every
-    // user's machine) as an empty translation unit. The synchronized project group in the checkout
-    // still compiles it for unit-test builds; only the packaged copy drops it.
-    summary.skippedSkeletonFiles += 1;
-    return;
-  }
   fs.writeFileSync(outputPath, stripped.contents);
   summary.copiedFiles += 1;
-}
-
-/**
- * True when nothing executable survives stripping: no declarations at all, or just import lines
- * and empty `extension RunnerTests {}` wrappers left behind by block stripping.
- */
-function isSkeletonSwiftContents(contents) {
-  const compact = contents
-    .split('\n')
-    .filter((line) => !/^\s*\/\//.test(line))
-    .join('\n')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return (
-    compact === '' || /^(?:import\s+[\w.]+\s*)+(?:extension\s+[\w.]+\s*\{\s*\}\s*)*$/.test(compact)
-  );
 }
 
 function validateFile(sourcePath, relativePath, summary) {
@@ -293,8 +269,7 @@ if (isMainModule()) {
       const relativeOutput = path.relative(path.resolve(options.root), summary.outputRoot);
       console.log(
         `Packaged Apple runner source at ${relativeOutput} ` +
-          `(${summary.copiedFiles} files, stripped ${summary.strippedBlocks} unit-test blocks` +
-          `, skipped ${summary.skippedSkeletonFiles} skeleton test files).`,
+          `(${summary.copiedFiles} files, stripped ${summary.strippedBlocks} unit-test blocks).`,
       );
     }
   }

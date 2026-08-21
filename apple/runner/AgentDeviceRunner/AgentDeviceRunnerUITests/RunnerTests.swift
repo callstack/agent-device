@@ -28,14 +28,6 @@ final class RunnerTests: XCTestCase {
     static let objcException = 1
   }
 
-  func unsupportedOperationError(_ message: String) -> NSError {
-    NSError(
-      domain: RunnerErrorDomain.general,
-      code: RunnerErrorCode.noResponseFromMainThread,
-      userInfo: [NSLocalizedDescriptionKey: message]
-    )
-  }
-
   static let springboardBundleId = "com.apple.springboard"
   // SpringBoard hosts blocking system modals on iOS/visionOS; tvOS (PineBoard/HeadBoard)
   // and macOS have no such host, so there is nothing to probe there.

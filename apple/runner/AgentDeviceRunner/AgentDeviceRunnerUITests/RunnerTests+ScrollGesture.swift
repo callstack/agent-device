@@ -19,6 +19,17 @@ struct RunnerScrollGesturePlan {
   let travelPixels: Double
 }
 
+enum RunnerScrollDirection: String {
+  case up
+  case down
+  case left
+  case right
+
+  var isVertical: Bool {
+    self == .up || self == .down
+  }
+}
+
 private let runnerDefaultScrollAmount = 0.6
 private let runnerDefaultIosScrollAmount = 0.65
 private let runnerDefaultIosScrollDurationMs = 400.0
@@ -30,7 +41,7 @@ let runnerDefaultDragDurationMs = 250.0
 private let runnerDefaultEdgePaddingFraction = 0.1
 
 func runnerScrollGesturePlan(
-  direction: String,
+  direction: RunnerScrollDirection,
   amount: Double?,
   pixels: Double?,
   referenceWidth: Double,
@@ -41,7 +52,7 @@ func runnerScrollGesturePlan(
   // this only triggers for non-daemon wire clients.
   if let amount, !(amount.isFinite && amount > 0) { return nil }
   if let pixels, !(pixels.isFinite && pixels > 0) { return nil }
-  let axisLength = (direction == "up" || direction == "down") ? referenceHeight : referenceWidth
+  let axisLength = direction.isVertical ? referenceHeight : referenceWidth
   let requestedAmount = amount ?? runnerDefaultScrollAmount
   let requestedPixels: Double =
     pixels.map { max(1, $0.rounded()) } ?? (axisLength * requestedAmount).rounded()
@@ -57,16 +68,14 @@ func runnerScrollGesturePlan(
   }
 
   switch direction {
-  case "up":
+  case .up:
     return plan(centerX, centerY - halfTravel, centerX, centerY + halfTravel)
-  case "down":
+  case .down:
     return plan(centerX, centerY + halfTravel, centerX, centerY - halfTravel)
-  case "left":
+  case .left:
     return plan(centerX - halfTravel, centerY, centerX + halfTravel, centerY)
-  case "right":
+  case .right:
     return plan(centerX + halfTravel, centerY, centerX - halfTravel, centerY)
-  default:
-    return nil
   }
 }
 
@@ -143,7 +152,7 @@ extension RunnerTests {
     for testCase in fixture.cases {
       let plan = try XCTUnwrap(
         runnerScrollGesturePlan(
-          direction: testCase.direction,
+          direction: try XCTUnwrap(RunnerScrollDirection(rawValue: testCase.direction)),
           amount: testCase.amount,
           pixels: testCase.pixels,
           referenceWidth: testCase.referenceWidth,
@@ -170,13 +179,13 @@ extension RunnerTests {
     XCTAssertEqual(defaults.scrollAmount, constants.defaultIosScrollAmount)
     let defaulted = try XCTUnwrap(
       runnerScrollGesturePlan(
-        direction: "down", amount: nil, pixels: nil, referenceWidth: 1000, referenceHeight: 1000
+        direction: .down, amount: nil, pixels: nil, referenceWidth: 1000, referenceHeight: 1000
       )
     )
     XCTAssertEqual(defaulted.travelPixels, 1000 * constants.defaultScrollAmount)
     let saturated = try XCTUnwrap(
       runnerScrollGesturePlan(
-        direction: "down", amount: 10, pixels: nil, referenceWidth: 1000, referenceHeight: 1000
+        direction: .down, amount: 10, pixels: nil, referenceWidth: 1000, referenceHeight: 1000
       )
     )
     XCTAssertEqual(
@@ -253,21 +262,13 @@ extension RunnerTests {
   }
 
   func testRunnerScrollGesturePlanRejectsUnknownDirection() {
-    XCTAssertNil(
-      runnerScrollGesturePlan(
-        direction: "sideways",
-        amount: nil,
-        pixels: 100,
-        referenceWidth: 300,
-        referenceHeight: 600
-      )
-    )
+    XCTAssertNil(RunnerScrollDirection(rawValue: "sideways"))
   }
 
   func testRunnerScrollGesturePlanRejectsInvalidAmountAndPixels() {
     XCTAssertNil(
       runnerScrollGesturePlan(
-        direction: "down",
+        direction: .down,
         amount: 0,
         pixels: nil,
         referenceWidth: 300,
@@ -276,7 +277,7 @@ extension RunnerTests {
     )
     XCTAssertNil(
       runnerScrollGesturePlan(
-        direction: "down",
+        direction: .down,
         amount: nil,
         pixels: -10,
         referenceWidth: 300,
@@ -285,7 +286,7 @@ extension RunnerTests {
     )
     XCTAssertNil(
       runnerScrollGesturePlan(
-        direction: "down",
+        direction: .down,
         amount: .infinity,
         pixels: nil,
         referenceWidth: 300,

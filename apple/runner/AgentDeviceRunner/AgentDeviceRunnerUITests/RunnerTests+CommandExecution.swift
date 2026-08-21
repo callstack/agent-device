@@ -963,7 +963,7 @@ extension RunnerTests {
 
   func executeStatus(command: Command) -> Response {
     guard
-      let statusCommandId = RunnerCommandJournal.normalizedCommandId(command.statusCommandId)
+      let statusCommandId = command.statusCommandId?.trimmedNonEmpty
     else {
       return Response(
         ok: false,
@@ -974,7 +974,7 @@ extension RunnerTests {
         )
       )
     }
-    return Response(ok: true, data: commandJournal.status(commandId: statusCommandId))
+    return Response(ok: true, data: commandJournal.status(normalizedCommandId: statusCommandId))
   }
 
   func executeUptime() -> Response {
@@ -1909,7 +1909,9 @@ extension RunnerTests {
       // Fused frame-resolve + drag scroll for non-tvOS. On iOS this intentionally stays on the
       // AX-free synthesized coordinate lane so scroll keeps working when XCTest cannot serialize
       // the accessibility tree.
-      guard let direction = validatedScrollDirection(command.direction) else {
+      guard let rawDirection = command.direction,
+        let direction = RunnerScrollDirection(rawValue: rawDirection)
+      else {
         return invalidScrollDirectionResponse(commandName: "scroll")
       }
       let scrollPolicyKind = SynthesizedGesturePolicyKind.scroll
@@ -1945,11 +1947,8 @@ extension RunnerTests {
           )
         )
       }
-      if let violation = invalidScrollDurationResponse(
-        command.durationMs,
-        commandName: "scroll"
-      ) {
-        return violation
+      guard scrollDurationIsValid(command.durationMs) else {
+        return invalidScrollDurationResponse(commandName: "scroll")
       }
       return executeScrollDragGesture(
         activeApp: activeApp,
@@ -1963,7 +1962,9 @@ extension RunnerTests {
         releaseBehavior: command.scrollReleaseBehavior
       )
     case .desktopScroll:
-      guard let direction = validatedScrollDirection(command.direction) else {
+      guard let rawDirection = command.direction,
+        let direction = RunnerScrollDirection(rawValue: rawDirection)
+      else {
         return invalidScrollDirectionResponse(commandName: "desktopScroll")
       }
       let appFrame = activeApp.frame
@@ -1993,11 +1994,8 @@ extension RunnerTests {
       let y = frame.midY
       let localX = x - (appFrame.isEmpty ? frame.minX : appFrame.minX)
       let localY = y - (appFrame.isEmpty ? frame.minY : appFrame.minY)
-      if let violation = invalidScrollDurationResponse(
-        command.durationMs,
-        commandName: "desktopScroll"
-      ) {
-        return violation
+      guard scrollDurationIsValid(command.durationMs) else {
+        return invalidScrollDurationResponse(commandName: "desktopScroll")
       }
       let touchFrame = resolvedTouchVisualizationFrame(
         app: activeApp,
@@ -2244,12 +2242,6 @@ extension RunnerTests {
     }
   }
 
-  /// Shared up|down|left|right admission for scroll/desktopScroll.
-  private func validatedScrollDirection(_ raw: String?) -> String? {
-    guard let raw else { return nil }
-    return ["up", "down", "left", "right"].contains(raw) ? raw : nil
-  }
-
   private func invalidScrollDirectionResponse(commandName: String) -> Response {
     Response(
       ok: false,
@@ -2260,13 +2252,12 @@ extension RunnerTests {
     )
   }
 
-  private func invalidScrollDurationResponse(
-    _ durationMs: Double?,
-    commandName: String
-  ) -> Response? {
-    guard let durationMs, !durationMs.isFinite || durationMs < 0 || durationMs > 10000 else {
-      return nil
-    }
+  private func scrollDurationIsValid(_ durationMs: Double?) -> Bool {
+    guard let durationMs else { return true }
+    return durationMs.isFinite && durationMs >= 0 && durationMs <= 10000
+  }
+
+  private func invalidScrollDurationResponse(commandName: String) -> Response {
     return Response(
       ok: false,
       error: ErrorPayload(

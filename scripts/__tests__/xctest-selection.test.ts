@@ -115,13 +115,15 @@ describe('the real tree', () => {
     // tautological, and a name-based filter is exactly the bug it caught
     // (RunnerTapPointPolicy.swift declares a test and does not start with "RunnerTests").
     const directory = path.join(repoRoot, RUNNER_TESTS_DIR);
-    const counted = fs
-      .readdirSync(directory)
-      .filter((entry) => entry.endsWith('.swift'))
-      .reduce((total, entry) => {
-        const text = fs.readFileSync(path.join(directory, entry), 'utf8');
+    const countAddressableMethods = (sourceDirectory: string): number =>
+      fs.readdirSync(sourceDirectory, { withFileTypes: true }).reduce((total, entry) => {
+        const entryPath = path.join(sourceDirectory, entry.name);
+        if (entry.isDirectory()) return total + countAddressableMethods(entryPath);
+        if (!entry.isFile() || !entry.name.endsWith('.swift')) return total;
+        const text = fs.readFileSync(entryPath, 'utf8');
         return total + (text.match(/^ {2}(?:[\w@]+ )*func test/gm)?.length ?? 0);
       }, 0);
+    const counted = countAddressableMethods(directory);
 
     expect(counted).toBeGreaterThan(0);
     expect(loadReport(repoRoot).declared).toHaveLength(counted);

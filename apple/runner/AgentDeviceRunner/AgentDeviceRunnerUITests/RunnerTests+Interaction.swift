@@ -4,6 +4,12 @@ import XCTest
 import CoreGraphics
 #endif
 
+private struct RunnerUnsupportedOperationError: LocalizedError {
+  let message: String
+
+  var errorDescription: String? { message }
+}
+
 private enum RunnerInterfaceOrientation {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
   static let unknown = 0
@@ -384,14 +390,14 @@ extension RunnerTests {
     case "secondary":
       coordinate.rightClick()
     case "middle":
-      throw unsupportedOperationError("middle mouse button is not supported")
+      throw RunnerUnsupportedOperationError(message: "middle mouse button is not supported")
     default:
-      throw unsupportedOperationError("unsupported mouse button: \(button)")
+      throw RunnerUnsupportedOperationError(message: "unsupported mouse button: \(button)")
     }
 #elseif os(tvOS)
-    throw unsupportedOperationError("mouseClick is not supported on tvOS")
+    throw RunnerUnsupportedOperationError(message: "mouseClick is not supported on tvOS")
 #else
-    throw unsupportedOperationError("mouseClick is only supported on macOS")
+    throw RunnerUnsupportedOperationError(message: "mouseClick is only supported on macOS")
 #endif
   }
 
@@ -399,18 +405,16 @@ extension RunnerTests {
     app: XCUIApplication,
     x: Double,
     y: Double,
-    direction: String,
+    direction: RunnerScrollDirection,
     pixels: Double,
     durationMs: Double?
   ) throws {
 #if os(macOS)
-    guard let events = desktopScrollWheelDeltaEvents(
+    let events = desktopScrollWheelDeltaEvents(
       direction: direction,
       pixels: pixels,
       durationMs: durationMs
-    ) else {
-      throw unsupportedOperationError("unsupported desktop scroll direction: \(direction)")
-    }
+    )
 
     let coordinate = interactionCoordinate(app: app, x: x, y: y)
     let interval = desktopScrollEventIntervalSeconds(durationMs: durationMs, eventCount: events.count)
@@ -426,36 +430,35 @@ extension RunnerTests {
       }
     }
 #elseif os(tvOS)
-    throw unsupportedOperationError("desktopScroll is not supported on tvOS")
+    throw RunnerUnsupportedOperationError(message: "desktopScroll is not supported on tvOS")
 #else
-    throw unsupportedOperationError("desktopScroll is only supported on macOS")
+    throw RunnerUnsupportedOperationError(message: "desktopScroll is only supported on macOS")
 #endif
   }
 
-  func desktopScrollWheelDeltas(direction: String, pixels: Double) -> (vertical: Int32, horizontal: Int32)? {
+  func desktopScrollWheelDeltas(
+    direction: RunnerScrollDirection,
+    pixels: Double
+  ) -> (vertical: Int32, horizontal: Int32) {
     let magnitude = Int32(max(1, min(Double(Int32.max), pixels.rounded())))
     switch direction {
-    case "up":
+    case .up:
       return (vertical: magnitude, horizontal: 0)
-    case "down":
+    case .down:
       return (vertical: -magnitude, horizontal: 0)
-    case "left":
+    case .left:
       return (vertical: 0, horizontal: magnitude)
-    case "right":
+    case .right:
       return (vertical: 0, horizontal: -magnitude)
-    default:
-      return nil
     }
   }
 
   func desktopScrollWheelDeltaEvents(
-    direction: String,
+    direction: RunnerScrollDirection,
     pixels: Double,
     durationMs: Double?
-  ) -> [(vertical: Int32, horizontal: Int32)]? {
-    guard let totalDeltas = desktopScrollWheelDeltas(direction: direction, pixels: pixels) else {
-      return nil
-    }
+  ) -> [(vertical: Int32, horizontal: Int32)] {
+    let totalDeltas = desktopScrollWheelDeltas(direction: direction, pixels: pixels)
     let magnitude = max(abs(Int(totalDeltas.vertical)), abs(Int(totalDeltas.horizontal)))
     let duration = max(0, durationMs ?? 0)
     let requestedEventCount = duration > 0 ? Int(ceil(duration / 16.0)) : 1
@@ -1411,24 +1414,23 @@ extension RunnerTests {
     )
   }
 
-  func testDesktopScrollWheelDeltasMapDirections() throws {
-    XCTAssertEqual(try XCTUnwrap(desktopScrollWheelDeltas(direction: "up", pixels: 120)).vertical, 120)
-    XCTAssertEqual(try XCTUnwrap(desktopScrollWheelDeltas(direction: "down", pixels: 120)).vertical, -120)
-    XCTAssertEqual(try XCTUnwrap(desktopScrollWheelDeltas(direction: "left", pixels: 120)).horizontal, 120)
-    XCTAssertEqual(try XCTUnwrap(desktopScrollWheelDeltas(direction: "right", pixels: 120)).horizontal, -120)
-    XCTAssertNil(desktopScrollWheelDeltas(direction: "diagonal", pixels: 120))
+  func testDesktopScrollWheelDeltasMapDirections() {
+    XCTAssertEqual(desktopScrollWheelDeltas(direction: .up, pixels: 120).vertical, 120)
+    XCTAssertEqual(desktopScrollWheelDeltas(direction: .down, pixels: 120).vertical, -120)
+    XCTAssertEqual(desktopScrollWheelDeltas(direction: .left, pixels: 120).horizontal, 120)
+    XCTAssertEqual(desktopScrollWheelDeltas(direction: .right, pixels: 120).horizontal, -120)
   }
 
-  func testDesktopScrollWheelDeltaEventsHonorDurationAndPreservePixels() throws {
-    let events = try XCTUnwrap(desktopScrollWheelDeltaEvents(direction: "down", pixels: 200, durationMs: 50))
+  func testDesktopScrollWheelDeltaEventsHonorDurationAndPreservePixels() {
+    let events = desktopScrollWheelDeltaEvents(direction: .down, pixels: 200, durationMs: 50)
     XCTAssertEqual(events.count, 4)
     XCTAssertEqual(events.map(\.vertical).reduce(0, +), -200)
     XCTAssertEqual(events.map(\.horizontal).reduce(0, +), 0)
     XCTAssertEqual(desktopScrollEventIntervalSeconds(durationMs: 50, eventCount: events.count), 0.05 / 3.0)
   }
 
-  func testDesktopScrollWheelDeltaEventsKeepInstantScrollSingleEvent() throws {
-    let events = try XCTUnwrap(desktopScrollWheelDeltaEvents(direction: "down", pixels: 200, durationMs: 0))
+  func testDesktopScrollWheelDeltaEventsKeepInstantScrollSingleEvent() {
+    let events = desktopScrollWheelDeltaEvents(direction: .down, pixels: 200, durationMs: 0)
     XCTAssertEqual(events.count, 1)
     XCTAssertEqual(events.first?.vertical, -200)
   }

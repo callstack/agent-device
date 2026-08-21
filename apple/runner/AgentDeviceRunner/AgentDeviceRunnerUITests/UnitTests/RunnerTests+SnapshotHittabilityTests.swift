@@ -110,6 +110,7 @@ extension RunnerTests {
   func testSnapshotAcquisitionDoesNotReintroduceRunnerOcclusionScan() throws {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
+      .deletingLastPathComponent()
       .appendingPathComponent("RunnerTests+Snapshot.swift")
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 

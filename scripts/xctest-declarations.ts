@@ -13,7 +13,7 @@ import { activeSource, PLATFORMS, type Platform } from './swift-conditional-comp
 /** The XCTest target directory; its basename is the target name the identifiers use. */
 export const RUNNER_TESTS_DIR = 'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests';
 
-// Every .swift file in the target directory is a member: the Xcode project uses a
+// Every .swift file below the target directory is a member: the Xcode project uses a
 // PBXFileSystemSynchronizedRootGroup, so membership is the directory, not a file list. A
 // `RunnerTests*` name filter would miss RunnerTapPointPolicy.swift, which declares a real
 // addressable test inside `extension RunnerTests`.
@@ -38,14 +38,24 @@ export type DeclaredTest = {
 };
 
 export function readSwiftSources(directory: string): SwiftSource[] {
-  return fs
-    .readdirSync(directory)
-    .filter((entry) => SWIFT_SOURCE.test(entry))
-    .sort()
-    .map((entry) => ({
-      file: entry,
-      text: fs.readFileSync(path.join(directory, entry), 'utf8'),
-    }));
+  const files: string[] = [];
+  collectSwiftSourcePaths(directory, '', files);
+  return files.sort().map((file) => ({
+    file,
+    text: fs.readFileSync(path.join(directory, file), 'utf8'),
+  }));
+}
+
+function collectSwiftSourcePaths(directory: string, relativeDirectory: string, files: string[]) {
+  const currentDirectory = path.join(directory, relativeDirectory);
+  for (const entry of fs.readdirSync(currentDirectory, { withFileTypes: true })) {
+    const relativePath = path.join(relativeDirectory, entry.name);
+    if (entry.isDirectory()) {
+      collectSwiftSourcePaths(directory, relativePath, files);
+    } else if (entry.isFile() && SWIFT_SOURCE.test(entry.name)) {
+      files.push(relativePath);
+    }
+  }
 }
 
 /** Every `Target/Class/method` identifier the sources declare, sorted, guards ignored. */

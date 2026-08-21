@@ -19,13 +19,6 @@ struct RunnerCommandJournalEntry {
 }
 
 final class RunnerCommandJournal {
-  /// Trim-or-nil normalization shared with in-flight coalescing and status lookups.
-  static func normalizedCommandId(_ value: String?) -> String? {
-    guard let value else { return nil }
-    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? nil : trimmed
-  }
-
   private let lock = NSLock()
   private let maxEntries = 64
   private let maxResponseJsonBytes = 16 * 1024
@@ -33,7 +26,7 @@ final class RunnerCommandJournal {
   private var order: [String] = []
 
   func accept(command: Command) {
-    guard let commandId = Self.normalizedCommandId(command.commandId) else { return }
+    guard let commandId = command.commandId?.trimmedNonEmpty else { return }
     lock.lock()
     defer { lock.unlock() }
     entries[commandId] = RunnerCommandJournalEntry(
@@ -73,16 +66,13 @@ final class RunnerCommandJournal {
     )
   }
 
-  func status(commandId: String) -> DataPayload {
-    guard let normalized = Self.normalizedCommandId(commandId) else {
-      return DataPayload(lifecycleState: RunnerCommandLifecycleState.notAccepted.rawValue)
-    }
+  func status(normalizedCommandId commandId: String) -> DataPayload {
     lock.lock()
-    let entry = entries[normalized]
+    let entry = entries[commandId]
     lock.unlock()
     guard let entry else {
       return DataPayload(
-        commandId: normalized,
+        commandId: commandId,
         lifecycleState: RunnerCommandLifecycleState.notAccepted.rawValue
       )
     }
@@ -105,7 +95,7 @@ final class RunnerCommandJournal {
     responseJson: String?,
     error: ErrorPayload?
   ) {
-    guard let commandId = Self.normalizedCommandId(command.commandId) else { return }
+    guard let commandId = command.commandId?.trimmedNonEmpty else { return }
     lock.lock()
     defer { lock.unlock() }
     var entry = entries[commandId] ?? RunnerCommandJournalEntry(
@@ -160,7 +150,7 @@ extension RunnerTests {
     let command = runnerJournalCommand("uptime", id: "uptime-probe")
 
     let response = try execute(command: command)
-    let status = commandJournal.status(commandId: "uptime-probe")
+    let status = commandJournal.status(normalizedCommandId: "uptime-probe")
 
     XCTAssertEqual(response.ok, true)
     XCTAssertNotNil(response.data?.currentUptimeMs)
@@ -202,7 +192,7 @@ extension RunnerTests {
       response: Response(ok: true, data: DataPayload(message: "recording started"))
     )
 
-    let status = journal.status(commandId: "record-start-anchor")
+    let status = journal.status(normalizedCommandId: "record-start-anchor")
     let responseJson = try XCTUnwrap(status.lifecycleResponseJson)
     XCTAssertFalse(responseJson.contains("currentUptimeMs"))
   }
@@ -217,7 +207,7 @@ extension RunnerTests {
       response: Response(ok: true, data: DataPayload(currentUptimeMs: 12.5))
     )
 
-    let scalarStatus = journal.status(commandId: "small-scalar")
+    let scalarStatus = journal.status(normalizedCommandId: "small-scalar")
     XCTAssertEqual(scalarStatus.lifecycleState, RunnerCommandLifecycleState.completed.rawValue)
     XCTAssertEqual(scalarStatus.lifecycleResponseOk, true)
     XCTAssertNotNil(scalarStatus.lifecycleResponseJson)
@@ -231,7 +221,7 @@ extension RunnerTests {
       response: Response(ok: true, data: DataPayload(found: true, nodes: [runnerJournalNode()]))
     )
 
-    let objectStatus = journal.status(commandId: "small-object")
+    let objectStatus = journal.status(normalizedCommandId: "small-object")
     XCTAssertNotNil(objectStatus.lifecycleResponseJson)
     let objectResponse = try decodeRunnerJournalResponse(objectStatus.lifecycleResponseJson)
     XCTAssertEqual(objectResponse.data?.found, true)
@@ -244,7 +234,7 @@ extension RunnerTests {
       response: Response(ok: true, data: DataPayload(nodes: [runnerJournalNode()], truncated: false))
     )
 
-    let snapshotStatus = journal.status(commandId: "snapshot-tree")
+    let snapshotStatus = journal.status(normalizedCommandId: "snapshot-tree")
     XCTAssertEqual(snapshotStatus.lifecycleState, RunnerCommandLifecycleState.completed.rawValue)
     XCTAssertEqual(snapshotStatus.lifecycleResponseOk, true)
     XCTAssertNil(snapshotStatus.lifecycleResponseJson)
@@ -256,7 +246,7 @@ extension RunnerTests {
       response: Response(ok: true, data: DataPayload(message: "tmp/screenshot-1.png"))
     )
 
-    let screenshotStatus = journal.status(commandId: "screenshot-artifact")
+    let screenshotStatus = journal.status(normalizedCommandId: "screenshot-artifact")
     XCTAssertEqual(screenshotStatus.lifecycleState, RunnerCommandLifecycleState.completed.rawValue)
     XCTAssertEqual(screenshotStatus.lifecycleResponseOk, true)
     XCTAssertNil(screenshotStatus.lifecycleResponseJson)
@@ -281,7 +271,7 @@ extension RunnerTests {
       )
     )
 
-    let scrollStatus = journal.status(commandId: "scroll-drag")
+    let scrollStatus = journal.status(normalizedCommandId: "scroll-drag")
     XCTAssertEqual(scrollStatus.lifecycleState, RunnerCommandLifecycleState.completed.rawValue)
     XCTAssertEqual(scrollStatus.lifecycleResponseOk, true)
     XCTAssertNotNil(scrollStatus.lifecycleResponseJson)
@@ -300,7 +290,7 @@ extension RunnerTests {
       response: Response(ok: true, data: DataPayload(text: String(repeating: "x", count: 17 * 1024)))
     )
 
-    let largeReadStatus = journal.status(commandId: "large-read")
+    let largeReadStatus = journal.status(normalizedCommandId: "large-read")
     XCTAssertEqual(largeReadStatus.lifecycleState, RunnerCommandLifecycleState.completed.rawValue)
     XCTAssertEqual(largeReadStatus.lifecycleResponseOk, true)
     XCTAssertNil(largeReadStatus.lifecycleResponseJson)
@@ -324,7 +314,7 @@ extension RunnerTests {
       )
     )
 
-    let status = journal.status(commandId: "snapshot-error")
+    let status = journal.status(normalizedCommandId: "snapshot-error")
     XCTAssertEqual(status.lifecycleState, RunnerCommandLifecycleState.failed.rawValue)
     XCTAssertEqual(status.lifecycleResponseOk, false)
     XCTAssertNil(status.lifecycleResponseJson)
@@ -364,7 +354,7 @@ extension RunnerTests {
       )
     )
 
-    let status = journal.status(commandId: "sequence-completed")
+    let status = journal.status(normalizedCommandId: "sequence-completed")
     XCTAssertEqual(status.lifecycleState, RunnerCommandLifecycleState.completed.rawValue)
     XCTAssertEqual(status.lifecycleResponseOk, true)
     let json = try XCTUnwrap(status.lifecycleResponseJson)
@@ -402,7 +392,7 @@ extension RunnerTests {
       )
     )
 
-    let status = journal.status(commandId: "sequence-failed")
+    let status = journal.status(normalizedCommandId: "sequence-failed")
     XCTAssertEqual(status.lifecycleState, RunnerCommandLifecycleState.completed.rawValue)
     let decoded = try decodeRunnerJournalResponse(status.lifecycleResponseJson)
     XCTAssertEqual(decoded.data?.completedSteps, 2)

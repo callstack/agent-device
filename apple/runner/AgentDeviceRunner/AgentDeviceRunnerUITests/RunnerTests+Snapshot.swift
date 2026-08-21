@@ -40,51 +40,42 @@ extension RunnerTests {
 
   // MARK: - Snapshot Entry
 
-  /// Wire type-name table; the visibility-fold parity test pins it against
-  /// `scrollContainerTypes` so a renamed entry reads as red.
-  static let elementTypeNames: [XCUIElement.ElementType: String] = [
-    .application: "Application",
-    .window: "Window",
-    .button: "Button",
-    .cell: "Cell",
-    .staticText: "StaticText",
-    .textField: "TextField",
-    .textView: "TextView",
-    .secureTextField: "SecureTextField",
-    .switch: "Switch",
-    .slider: "Slider",
-    .link: "Link",
-    .image: "Image",
-    .navigationBar: "NavigationBar",
-    .tabBar: "TabBar",
-    .collectionView: "CollectionView",
-    .table: "Table",
-    .scrollView: "ScrollView",
-    .toolbar: "Toolbar",
-    .searchField: "SearchField",
-    .segmentedControl: "SegmentedControl",
-    .stepper: "Stepper",
-    .picker: "Picker",
-    .activityIndicator: "ActivityIndicator",
-    .progressIndicator: "ProgressIndicator",
-    .checkBox: "CheckBox",
-    .menuItem: "MenuItem",
-    .webView: "WebView",
-    .other: "Other"
+  /// One raw-value table covers public XCTest cases and the SDK-hidden Keyboard/Key values.
+  static let elementTypeNamesByRawValue = [
+    XCUIElement.ElementType.application.rawValue: "Application",
+    XCUIElement.ElementType.window.rawValue: "Window",
+    XCUIElement.ElementType.button.rawValue: "Button",
+    XCUIElement.ElementType.cell.rawValue: "Cell",
+    XCUIElement.ElementType.staticText.rawValue: "StaticText",
+    XCUIElement.ElementType.textField.rawValue: "TextField",
+    XCUIElement.ElementType.textView.rawValue: "TextView",
+    XCUIElement.ElementType.secureTextField.rawValue: "SecureTextField",
+    XCUIElement.ElementType.switch.rawValue: "Switch",
+    XCUIElement.ElementType.slider.rawValue: "Slider",
+    XCUIElement.ElementType.link.rawValue: "Link",
+    XCUIElement.ElementType.image.rawValue: "Image",
+    XCUIElement.ElementType.navigationBar.rawValue: "NavigationBar",
+    XCUIElement.ElementType.tabBar.rawValue: "TabBar",
+    XCUIElement.ElementType.collectionView.rawValue: "CollectionView",
+    XCUIElement.ElementType.table.rawValue: "Table",
+    XCUIElement.ElementType.scrollView.rawValue: "ScrollView",
+    XCUIElement.ElementType.toolbar.rawValue: "Toolbar",
+    XCUIElement.ElementType.searchField.rawValue: "SearchField",
+    XCUIElement.ElementType.segmentedControl.rawValue: "SegmentedControl",
+    XCUIElement.ElementType.stepper.rawValue: "Stepper",
+    XCUIElement.ElementType.picker.rawValue: "Picker",
+    XCUIElement.ElementType.activityIndicator.rawValue: "ActivityIndicator",
+    XCUIElement.ElementType.progressIndicator.rawValue: "ProgressIndicator",
+    XCUIElement.ElementType.checkBox.rawValue: "CheckBox",
+    XCUIElement.ElementType.menuItem.rawValue: "MenuItem",
+    XCUIElement.ElementType.webView.rawValue: "WebView",
+    XCUIElement.ElementType.other.rawValue: "Other",
+    19: "Keyboard",
+    20: "Key"
   ]
 
   func elementTypeName(_ type: XCUIElement.ElementType) -> String {
-    if let name = Self.elementTypeNames[type] {
-      return name
-    }
-    switch type.rawValue {
-    case 19:
-      return "Keyboard"
-    case 20:
-      return "Key"
-    default:
-      return "Element(\(type.rawValue))"
-    }
+    Self.elementTypeNamesByRawValue[type.rawValue] ?? "Element(\(type.rawValue))"
   }
 
   static let structuralOnlyNodeTypes: Set<String> = [

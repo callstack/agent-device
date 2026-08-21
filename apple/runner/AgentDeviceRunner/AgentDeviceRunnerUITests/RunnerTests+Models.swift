@@ -213,14 +213,8 @@ struct SequenceStepResult: Codable {
 
 struct Response: Codable {
   let ok: Bool
-  let data: DataPayload?
-  let error: ErrorPayload?
-
-  init(ok: Bool, data: DataPayload? = nil, error: ErrorPayload? = nil) {
-    self.ok = ok
-    self.data = data
-    self.error = error
-  }
+  var data: DataPayload?
+  var error: ErrorPayload?
 }
 
 extension Response {
@@ -236,58 +230,52 @@ extension Response {
 }
 
 struct DataPayload: Codable {
-  var message: String? = nil
-  var imageBase64: String? = nil
-  var text: String? = nil
-  var found: Bool? = nil
-  var items: [String]? = nil
-  var nodes: [PresentedNode]? = nil
-  var truncated: Bool? = nil
-  var snapshotQuality: SnapshotQuality? = nil
-  var gestureStartUptimeMs: Double? = nil
-  var gestureEndUptimeMs: Double? = nil
-  var x: Double? = nil
-  var y: Double? = nil
-  var x2: Double? = nil
-  var y2: Double? = nil
-  var referenceWidth: Double? = nil
-  var referenceHeight: Double? = nil
-  var currentUptimeMs: Double? = nil
-  var commandId: String? = nil
-  var lifecycleState: String? = nil
-  var lifecycleCommand: String? = nil
-  var lifecycleResponseOk: Bool? = nil
-  var lifecycleResponseJson: String? = nil
-  var lifecycleErrorCode: String? = nil
-  var lifecycleErrorMessage: String? = nil
-  var lifecycleErrorHint: String? = nil
-  var visible: Bool? = nil
-  var wasVisible: Bool? = nil
-  var dismissed: Bool? = nil
-  var keyboardDismissMechanism: String? = nil
-  var orientation: String? = nil
-  var gestureFallback: String? = nil
-  var gestureFallbackMessage: String? = nil
-  var gestureFallbackHint: String? = nil
-  var maestroNonHittableCoordinateFallbackUsed: Bool? = nil
-  var textEntryRoute: String? = nil
-  var runnerFatal: Bool? = nil
-  var runnerFatalReason: String? = nil
-  var completedSteps: Int? = nil
-  var failedStepIndex: Int? = nil
-  var sequenceResults: [SequenceStepResult]? = nil
+  var message: String?
+  var imageBase64: String?
+  var text: String?
+  var found: Bool?
+  var items: [String]?
+  var nodes: [PresentedNode]?
+  var truncated: Bool?
+  var snapshotQuality: SnapshotQuality?
+  var gestureStartUptimeMs: Double?
+  var gestureEndUptimeMs: Double?
+  var x: Double?
+  var y: Double?
+  var x2: Double?
+  var y2: Double?
+  var referenceWidth: Double?
+  var referenceHeight: Double?
+  var currentUptimeMs: Double?
+  var commandId: String?
+  var lifecycleState: String?
+  var lifecycleCommand: String?
+  var lifecycleResponseOk: Bool?
+  var lifecycleResponseJson: String?
+  var lifecycleErrorCode: String?
+  var lifecycleErrorMessage: String?
+  var lifecycleErrorHint: String?
+  var visible: Bool?
+  var wasVisible: Bool?
+  var dismissed: Bool?
+  var keyboardDismissMechanism: String?
+  var orientation: String?
+  var gestureFallback: String?
+  var gestureFallbackMessage: String?
+  var gestureFallbackHint: String?
+  var maestroNonHittableCoordinateFallbackUsed: Bool?
+  var textEntryRoute: String?
+  var runnerFatal: Bool?
+  var runnerFatalReason: String?
+  var completedSteps: Int?
+  var failedStepIndex: Int?
+  var sequenceResults: [SequenceStepResult]?
 }
 
 struct ErrorPayload: Codable {
-  let code: String?
+  var code: String?
   let message: String
-  let hint: String?
-
-  init(code: String? = nil, message: String, hint: String? = nil) {
-    self.code = code
-    self.message = message
-    self.hint = hint
-  }
+  var hint: String?
 }
 
 struct SnapshotRect: Codable {
