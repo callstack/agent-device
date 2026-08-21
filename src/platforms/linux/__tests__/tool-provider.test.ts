@@ -29,7 +29,31 @@ test('scoped Linux tool provider handles input discovery and command execution',
   });
 
   assert.deepEqual(commands, [
+    // The position probe guards the --sync move: a no-op move emits no motion event and hangs.
+    ['xdotool', ['getmouselocation', '--shell']],
     ['xdotool', ['mousemove', '--sync', '100', '200']],
+    ['xdotool', ['click', '1']],
+  ]);
+});
+
+test('xdotool press skips the --sync move when the pointer already sits on the target', async () => {
+  const commands: Array<[string, string[]]> = [];
+  const provider = createLocalLinuxToolProvider({
+    whichCommand: async (cmd) => cmd === 'xdotool',
+    runCommand: async (cmd, args) => {
+      commands.push([cmd, args]);
+      const stdout = args[0] === 'getmouselocation' ? 'X=100\nY=200\nSCREEN=0\nWINDOW=1' : '';
+      return { exitCode: 0, stdout, stderr: '' };
+    },
+  });
+
+  await withLinuxToolProvider(provider, async () => {
+    await pressLinux(100, 200);
+  });
+
+  // No mousemove: moving to the current position would wait forever for a motion event.
+  assert.deepEqual(commands, [
+    ['xdotool', ['getmouselocation', '--shell']],
     ['xdotool', ['click', '1']],
   ]);
 });

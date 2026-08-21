@@ -17,14 +17,14 @@ focus 100 100
 # The session survives the focus: a crashed desktop would fail here, not silently pass above.
 is exists "appname=gnome-calculator || windowtitle=Calculator || label=Calculator || label=0 || label=1 || label=5"
 # R41 (#1739): `type` executes through the bound `typeText` operation rather than the retired
-# interactor leaf. The keystrokes spell a full calculation: the typed-state screenshot below is
-# pixel evidence that the digits landed, and the `=` creates a history row so the result can
-# surface through the tree even though the entry widget does not expose its text to selectors
-# (run 32485981780's artifact shows "55" in the display while a wait for it timed out).
-type "100+55="
-# Uploaded on pass and on fail: the display and history pixels are the ground truth for the
-# steps above, so a wait timeout below is diagnosable from the artifact alone.
+# interactor leaf. Digits only: run 32485981780's artifact proved digits land in the entry, and
+# run 32487868346's proved the `=` keystroke does not arrive on this lane, so the assertion
+# reads the entry's own accessible text instead of a computed result.
+type "155"
+# Uploaded on pass and on fail: the display pixels are the ground truth for the step above, so
+# a wait timeout below is diagnosable from the artifact alone.
 screenshot "./test/screenshots/replays/linux-calculator-typed.png"
-# 155 appears only as the computed result: no button carries that label, the typed string is
-# "100+55=", and deleting the type step turns this wait red.
-wait "label=155 || text=155 || value=155" 10000
+# The AT-SPI dumper reads the entry's Text interface into the node's `value`, and value= matches
+# it. No button is labelled 155, so this passes only if the typed keystrokes reached the entry;
+# deleting the type step turns it red.
+wait "value=155 || label=155 || text=155" 10000

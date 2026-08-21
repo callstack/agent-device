@@ -26,13 +26,43 @@ function resolveLinuxInputProvider() {
   return resolveLinuxToolProvider().input;
 }
 
-/** Move the pointer to (x, y) using the detected input tool. */
+/**
+ * Move the pointer to (x, y) using the detected input tool.
+ *
+ * The no-op guard is load-bearing: `xdotool mousemove --sync` waits for a pointer-motion event,
+ * and a move to the point the pointer already occupies emits none — the call hangs until the
+ * action timeout kills it. Observed on the CI Smoke lane (#1935): a failed replay attempt parks
+ * the pointer on its last coordinate action, and every retry of that action then dies in this
+ * hang, reporting the retry's first coordinate step instead of the attempt's real failure.
+ */
 async function moveTo(x: number, y: number): Promise<void> {
   const { tool } = await ensureInputTool();
   if (tool === 'xdotool') {
+    if (await pointerAlreadyAt(x, y)) return;
     await xdotool('mousemove', '--sync', String(x), String(y));
   } else {
     await ydotool('mousemove', '--absolute', '-x', String(x), '-y', String(y));
+  }
+}
+
+/** True when the X pointer already sits exactly on (x, y); a failed probe never blocks the move. */
+async function pointerAlreadyAt(x: number, y: number): Promise<boolean> {
+  try {
+    const result = await resolveLinuxToolProvider().runCommand(
+      'xdotool',
+      ['getmouselocation', '--shell'],
+      { allowFailure: true, timeoutMs: INPUT_TIMEOUT_MS },
+    );
+    const location = new Map(
+      result.stdout
+        .split('\n')
+        .map((line) => line.trim().split('='))
+        .filter((pair): pair is [string, string] => pair.length === 2)
+        .map(([key, value]) => [key, Number(value)] as const),
+    );
+    return location.get('X') === Math.round(x) && location.get('Y') === Math.round(y);
+  } catch {
+    return false;
   }
 }
 
