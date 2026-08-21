@@ -27,4 +27,8 @@ click "role=button label=1"
 # keystrokes actually landed: no calculator button is labelled 155, so this cannot be satisfied
 # by pre-existing UI, and deleting the type step turns the wait red.
 type "55"
+# Pixel evidence for the wait below: the lane uploads this PNG on pass and on fail, so a timeout
+# is diagnosable from the artifact (display shows 155 = tree-exposure gap; display empty = input
+# never landed) instead of costing another blind CI round.
+screenshot "./test/screenshots/replays/linux-calculator-typed.png"
 wait "label=155 || text=155 || value=155" 10000
