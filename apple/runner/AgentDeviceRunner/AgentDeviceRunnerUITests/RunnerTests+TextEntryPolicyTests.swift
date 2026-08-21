@@ -97,6 +97,7 @@ extension RunnerTests {
     var observations = 0
     let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: "hardware-keyboard",
+      placeholder: nil,
       isExpired: { observations >= 3 },
       observe: { "h" },
       waitForNextObservation: { observations += 1 }
@@ -110,6 +111,7 @@ extension RunnerTests {
       var polls = 0
       let outcome = Self.awaitSynthesizedCommitOutcome(
         expectedText: "hardware-keyboard",
+        placeholder: nil,
         isExpired: { false },
         observe: { observed },
         waitForNextObservation: { polls += 1 }
@@ -126,6 +128,7 @@ extension RunnerTests {
     var index = 0
     let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: "hardware-keyboard",
+      placeholder: nil,
       isExpired: { false },
       observe: { steps[min(index, steps.count - 1)] },
       waitForNextObservation: { index += 1 }
@@ -141,6 +144,7 @@ extension RunnerTests {
     var polls = 0
     let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: "hardware-keyboard",
+      placeholder: nil,
       isExpired: { polls >= 1 },
       observe: { polls == 0 ? "hardware-" : "hardware-keyboard" },
       waitForNextObservation: { polls += 1 }
@@ -148,132 +152,51 @@ extension RunnerTests {
     XCTAssertEqual(outcome, .settled)
   }
 
-  // Review [P1]: an empty field renders its placeholder AS its accessibility value, so when the
-  // requested text IS the placeholder, the raw read equals the expected text BEFORE anything
-  // commits. Treating that equality as evidence reported ok with zero characters delivered — the
-  // success-misdescribes-the-device failure this PR removes.
-  func testTextEqualToThePlaceholderOverAnEmptyFieldIsNeverEvidence() {
-    XCTAssertEqual(
-      Self.placeholderCommitEvidence(
-        placeholder: "0.00",
-        expectedText: "0.00",
-        baselineWasEmpty: true
-      ),
-      .indistinguishable,
-      "an empty field renders the placeholder, so a raw match proves nothing committed"
-    )
-    // Compared trimmed on both sides, matching how isPlaceholderValue classifies the field.
-    XCTAssertEqual(
-      Self.placeholderCommitEvidence(
-        placeholder: " 0.00 ",
-        expectedText: "0.00",
-        baselineWasEmpty: true
-      ),
-      .indistinguishable
-    )
-    // And the command consequence: this state refuses rather than reporting success.
-    XCTAssertEqual(Self.textEntryFailure(forCommitOutcome: .notObserved), .commitNotObserved)
-  }
-
-  // Review [P1], the other half: a NON-empty baseline proves the placeholder is not what is
-  // rendering, so the same raw read is real evidence. Refusing here would fail a `type` that
-  // worked. Reverting to a baseline-blind guard makes this return .indistinguishable and go red.
-  func testTextEqualToThePlaceholderOverExistingContentIsEvidence() {
-    XCTAssertEqual(
-      Self.placeholderCommitEvidence(
-        placeholder: "0.00",
-        expectedText: "0.00",
-        baselineWasEmpty: false
-      ),
-      .rawValueIsEvidence
-    )
-  }
-
-  // The end-to-end shape of that case: value "0", `type ".00"`, placeholder "0.00". It must reach
-  // the observation path and settle, not refuse before reading. The normalized reading stays ""
-  // throughout — it is the placeholder-equal value being normalized away — so only the
-  // evidence-scoped raw match can settle this, which is what makes the test discriminate.
-  func testAppendWhoseResultEqualsThePlaceholderSettlesThroughTheObservation() {
-    let evidence = Self.placeholderCommitEvidence(
-      placeholder: "0.00",
-      expectedText: "0.00",
-      baselineWasEmpty: false
-    )
-    XCTAssertEqual(evidence, .rawValueIsEvidence)
-
-    var polls = 0
+  // A pre-dispatch value cannot identify what a later placeholder-equal AX value represents.
+  // Here the field starts at "0", but its input handler clears it after `type ".00"`; the empty
+  // field then renders its "0.00" placeholder. Reporting success would describe an empty field as
+  // committed text.
+  func testClearAfterDispatchCannotTurnThePlaceholderIntoCommitEvidence() {
+    let textBeforeDispatch = "0"
+    let expectedText = textBeforeDispatch + ".00"
+    var observations = 0
     let outcome = Self.awaitSynthesizedCommitOutcome(
-      expectedText: "0.00",
-      isExpired: { polls >= 5 },
+      expectedText: expectedText,
+      placeholder: "0.00",
+      isExpired: { false },
       observe: {
-        Self.commitObservation(
-          evidence: evidence,
-          expectedText: "0.00",
-          // The commit lands after the first poll: "0" -> "0.00".
-          rawValue: { polls == 0 ? "0" : "0.00" },
-          normalizedValue: { "" }
-        )
+        observations += 1
+        return "0.00"
       },
-      waitForNextObservation: { polls += 1 }
+      waitForNextObservation: {}
     )
-    XCTAssertEqual(outcome, .settled, "the append committed and must be observed as such")
-    XCTAssertEqual(polls, 1)
+    XCTAssertEqual(
+      Self.textEntryFailure(forCommitOutcome: outcome)?.rawValue,
+      "TEXT_INPUT_COMMIT_NOT_OBSERVED"
+    )
+    XCTAssertEqual(observations, 0, "no post-dispatch read can resolve this collision")
   }
 
   // The guard must stay narrow: it fires only when the WHOLE expected value is the placeholder.
   // Widening it would refuse ordinary typing into any placeheld field, which is most of them.
-  func testPlaceholderEvidenceDoesNotFireOnOrdinaryTyping() {
-    for baselineWasEmpty in [true, false] {
-      XCTAssertEqual(
-        Self.placeholderCommitEvidence(
-          placeholder: "0.00",
-          expectedText: "0.005",
-          baselineWasEmpty: baselineWasEmpty
-        ),
-        .normalRead
+  func testPlaceholderGuardDoesNotFireOnOrdinaryTyping() {
+    let cases: [(placeholder: String?, expectedText: String)] = [
+      ("0.00", "0.005"),
+      ("Email", "ada@example.test"),
+      (nil, "0.00"),
+      ("", ""),
+      ("   ", ""),
+    ]
+    for testCase in cases {
+      let outcome = Self.awaitSynthesizedCommitOutcome(
+        expectedText: testCase.expectedText,
+        placeholder: testCase.placeholder,
+        isExpired: { false },
+        observe: { testCase.expectedText },
+        waitForNextObservation: {}
       )
-      XCTAssertEqual(
-        Self.placeholderCommitEvidence(
-          placeholder: "Email",
-          expectedText: "ada@example.test",
-          baselineWasEmpty: baselineWasEmpty
-        ),
-        .normalRead
-      )
-      XCTAssertEqual(
-        Self.placeholderCommitEvidence(
-          placeholder: nil,
-          expectedText: "0.00",
-          baselineWasEmpty: baselineWasEmpty
-        ),
-        .normalRead
-      )
-      XCTAssertEqual(
-        Self.placeholderCommitEvidence(
-          placeholder: "   ",
-          expectedText: "",
-          baselineWasEmpty: baselineWasEmpty
-        ),
-        .normalRead
-      )
+      XCTAssertEqual(outcome, .settled, "placeholder: \(testCase.placeholder ?? "nil")")
     }
-  }
-
-  // A normalRead observation never pays for the raw read, so the ordinary path stays at one
-  // accessibility read per poll.
-  func testOrdinaryObservationDoesNotPayForTheRawRead() {
-    var rawReads = 0
-    let observed = Self.commitObservation(
-      evidence: .normalRead,
-      expectedText: "hardware-keyboard",
-      rawValue: {
-        rawReads += 1
-        return "hardware-keyboard"
-      },
-      normalizedValue: { "hardware-" }
-    )
-    XCTAssertEqual(rawReads, 0)
-    XCTAssertEqual(observed, "hardware-")
   }
 
   // The mapping the command actually refuses on. `.unobservable` must stay a success: it is the

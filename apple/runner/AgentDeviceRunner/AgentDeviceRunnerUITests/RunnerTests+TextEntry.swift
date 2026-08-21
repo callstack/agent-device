@@ -521,19 +521,25 @@ extension RunnerTests {
   }
 
   private func isPlaceholderValue(_ value: String, for element: XCUIElement) -> Bool {
+    if Self.textMatchesPlaceholder(value, placeholder: element.placeholderValue) {
+      return true
+    }
     let normalizedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !normalizedValue.isEmpty else {
       return false
-    }
-    let placeholder = element.placeholderValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if !placeholder.isEmpty && normalizedValue == placeholder {
-      return true
     }
     if isGenericTextInputLabel(normalizedValue) {
       return true
     }
     let normalizedLabel = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
     return normalizedLabel == normalizedValue && isGenericTextInputLabel(normalizedLabel)
+  }
+
+  static func textMatchesPlaceholder(_ text: String, placeholder: String?) -> Bool {
+    let normalizedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !normalizedText.isEmpty else { return false }
+    let normalizedPlaceholder = placeholder?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return !normalizedPlaceholder.isEmpty && normalizedText == normalizedPlaceholder
   }
 
   private func isGenericTextInputLabel(_ value: String) -> Bool {
