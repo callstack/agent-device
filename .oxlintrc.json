@@ -57,5 +57,5 @@
       }
     }
   ],
-  "ignorePatterns": ["dist/**", "node_modules/**", "examples/test-app/**"]
+  "ignorePatterns": ["dist/**", "node_modules/**"]
 }
