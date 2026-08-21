@@ -189,6 +189,18 @@ extension RunnerTests {
     return expectedText.hasPrefix(observedText) ? .pending : .diverged
   }
 
+  /// Length of the shared prefix of two strings. Feeds value-free commit-wait logging: the
+  /// expected-prefix walk over time distinguishes throttled delivery (grows slowly) from a
+  /// wedged pipeline (freezes) without ever logging the field's contents.
+  static func commonPrefixLength(_ lhs: String, _ rhs: String) -> Int {
+    var length = 0
+    for (l, r) in zip(lhs, rhs) {
+      if l != r { break }
+      length += 1
+    }
+    return length
+  }
+
   /// How the commit wait ended. Distinct from `SynthesizedTextCommitProgress`, which classifies a
   /// single observation: this is the whole wait's verdict, and it exists so the deadline can be
   /// told apart from success. The wait used to return `Void`, which made an expired deadline
@@ -271,7 +283,7 @@ extension RunnerTests {
     let placeholder = resolveTextEntryElement(app: app, target: target)?.placeholderValue
     let deadline = Date().addingTimeInterval(TextEntryTiming.synthesizedCommitTimeout)
     let waitStartedAt = Date()
-    NSLog("[DEBUG-1874] wait start expected=%d chars", expectedText.count)
+    NSLog("[DEBUG-1874] wait start expectedLen=%ld", expectedText.count)
     let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: expectedText,
       placeholder: placeholder,
@@ -281,10 +293,14 @@ extension RunnerTests {
           for: resolveTextEntryElement(app: app, target: target),
           treatingPlaceholderAsEmpty: true
         )
+        // Cadence evidence stays value-free: the polled value is user content typed through
+        // `type` and must never reach runner.log. Lengths and the expected-prefix walk are
+        // enough to distinguish throttling (prefix grows slowly) from a wedge (it freezes).
         NSLog(
-          "[DEBUG-1874] poll t=%.0fms observed=%@",
+          "[DEBUG-1874] poll t=%.0fms observedLen=%ld expectedPrefixLen=%ld",
           waitStartedAt.timeIntervalSinceNow * -1000,
-          observedText.map { String($0.prefix(40)) } ?? "nil"
+          observedText?.count ?? -1,
+          observedText.map { Self.commonPrefixLength($0, expectedText) } ?? -1
         )
         return observedText
       },
@@ -292,7 +308,11 @@ extension RunnerTests {
       // Sparse reads let the target consume that event instead of continuously interrupting it.
       waitForNextObservation: { sleepFor(TextEntryTiming.synthesizedCommitPollInterval) }
     )
-    NSLog("[DEBUG-1874] wait outcome=%@ elapsedMs=%.0f", String(describing: outcome), waitStartedAt.timeIntervalSinceNow * -1000)
+    NSLog(
+      "[DEBUG-1874] wait outcome=%@ elapsedMs=%.0f",
+      String(describing: outcome),
+      waitStartedAt.timeIntervalSinceNow * -1000
+    )
     return outcome
   }
 

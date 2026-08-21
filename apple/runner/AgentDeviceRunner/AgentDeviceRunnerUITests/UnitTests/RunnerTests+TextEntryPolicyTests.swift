@@ -308,6 +308,17 @@ extension RunnerTests {
     XCTAssertFalse(result.repaired)
     XCTAssertEqual(result.textEntryRoute, "synthesized-first-responder-replacement")
   }
+
+  func testCommonPrefixLengthWalksTheExpectedPrefixOnly() {
+    XCTAssertEqual(Self.commonPrefixLength("hardware-keyboard", "hardware-keyboard"), 17)
+    XCTAssertEqual(Self.commonPrefixLength("h", "hardware-keyboard"), 1)
+    XCTAssertEqual(Self.commonPrefixLength("ha", "hardware-keyboard"), 2)
+    XCTAssertEqual(Self.commonPrefixLength("", "hardware-keyboard"), 0)
+    // Divergence stops the count: the app transformed the input, and the walk must not
+    // resume matching after the first differing character.
+    XCTAssertEqual(Self.commonPrefixLength("hx", "hardware-keyboard"), 1)
+    XCTAssertEqual(Self.commonPrefixLength("hardware-keyboarx", "hardware-keyboard"), 15)
+  }
 #endif
 #endif
 }
