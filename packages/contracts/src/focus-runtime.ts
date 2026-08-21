@@ -1,6 +1,11 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
 import type { Point } from '@agent-device/kernel/snapshot';
+import {
+  localInteractorSource,
+  providerInteractorSource,
+  type LocalInteractorOperationResolver,
+  type ProviderInteractorOperationResolver,
+} from './interactor-operation-binding.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { SessionSurface } from './session-surface.ts';
@@ -58,10 +63,7 @@ function bindFocusPoint(
   });
 }
 
-export type LocalFocusInteractorResolver = (
-  device: DeviceInfo,
-  runner: RunnerContext,
-) => Promise<Interactor>;
+export type LocalFocusInteractorResolver = LocalInteractorOperationResolver;
 
 export function bindLocalFocusInteractor(
   params: Readonly<{
@@ -70,13 +72,10 @@ export function bindLocalFocusInteractor(
     resolveInteractor: LocalFocusInteractorResolver;
   }>,
 ): FocusRuntimeOperations {
-  return bindFocusPoint(
-    params.signal,
-    async (runner) => await params.resolveInteractor(params.device, runner),
-  );
+  return bindFocusPoint(params.signal, localInteractorSource(params));
 }
 
-export type ProviderFocusInteractorResolver = (runner: RunnerContext) => Interactor | undefined;
+export type ProviderFocusInteractorResolver = ProviderInteractorOperationResolver;
 
 /** Provider bindings fail closed when their exact owner no longer exposes its interactor. */
 export function bindProviderFocusInteractor(
@@ -86,13 +85,5 @@ export function bindProviderFocusInteractor(
     resolveInteractor: ProviderFocusInteractorResolver;
   }>,
 ): FocusRuntimeOperations {
-  return bindFocusPoint(params.signal, async (runner) => {
-    const interactor = params.resolveInteractor(runner);
-    if (interactor) return interactor;
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
-      'Provider-owned focus operation has no bound provider interactor.',
-      { reason: 'provider-runtime-interactor-missing', deviceId: params.device.id },
-    );
-  });
+  return bindFocusPoint(params.signal, providerInteractorSource({ ...params, operation: 'focus' }));
 }

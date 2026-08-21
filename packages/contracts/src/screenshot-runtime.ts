@@ -1,5 +1,10 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import {
+  localInteractorSource,
+  providerInteractorSource,
+  type LocalInteractorOperationResolver,
+  type ProviderInteractorOperationResolver,
+} from './interactor-operation-binding.ts';
 import type { Interactor, RunnerContext, ScreenshotOptions } from './interactor-types.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 
@@ -59,13 +64,10 @@ export function bindLocalScreenshotInteractor(
   params: Readonly<{
     device: DeviceInfo;
     signal: AbortSignal;
-    resolveInteractor: (device: DeviceInfo, runner: RunnerContext) => Promise<Interactor>;
+    resolveInteractor: LocalInteractorOperationResolver;
   }>,
 ): ScreenshotRuntimeOperations {
-  return bindScreenshotCapture(
-    params.signal,
-    async (runner) => await params.resolveInteractor(params.device, runner),
-  );
+  return bindScreenshotCapture(params.signal, localInteractorSource(params));
 }
 
 /** Provider bindings fail closed when their exact owner no longer exposes its interactor. */
@@ -73,16 +75,11 @@ export function bindProviderScreenshotInteractor(
   params: Readonly<{
     device: DeviceInfo;
     signal: AbortSignal;
-    resolveInteractor: (runner: RunnerContext) => Interactor | undefined;
+    resolveInteractor: ProviderInteractorOperationResolver;
   }>,
 ): ScreenshotRuntimeOperations {
-  return bindScreenshotCapture(params.signal, async (runner) => {
-    const interactor = params.resolveInteractor(runner);
-    if (interactor) return interactor;
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
-      'Provider-owned screenshot operation has no bound provider interactor.',
-      { reason: 'provider-runtime-interactor-missing', deviceId: params.device.id },
-    );
-  });
+  return bindScreenshotCapture(
+    params.signal,
+    providerInteractorSource({ ...params, operation: 'screenshot' }),
+  );
 }

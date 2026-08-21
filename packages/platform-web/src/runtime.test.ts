@@ -58,6 +58,11 @@ test('preserves a narrow web provider dump including empty successful entries', 
   // legacy `read` dispatch had no web arm at all and threw on every call before falling back.
   expect(binding.facts.operations.readTextAtPoint.available).toBe(false);
   expect(binding.operations.readTextAtPoint).toBeUndefined();
+  // R40/R41: the browser device drives touch and text through the one web interactor.
+  expect(binding.facts.operations.focusPoint).toEqual({ available: true });
+  expect(binding.facts.operations.typeText).toEqual({ available: true });
+  expect(binding.operations.focusPoint).toBeTypeOf('function');
+  expect(binding.operations.typeText).toBeTypeOf('function');
   expect(binding.operations.captureSnapshot).toBeTypeOf('function');
   expectLifecycleFacts(binding);
 });
@@ -145,6 +150,10 @@ test.each([
     expect(binding.operations.setViewport).toBeUndefined();
     expect(binding.facts.operations.captureScreenshot.available).toBe(false);
     expect(binding.operations.captureScreenshot).toBeUndefined();
+    expect(binding.facts.operations.focusPoint.available).toBe(false);
+    expect(binding.operations.focusPoint).toBeUndefined();
+    expect(binding.facts.operations.typeText.available).toBe(false);
+    expect(binding.operations.typeText).toBeUndefined();
     expect(binding.operations.captureSnapshot).toBeUndefined();
   },
 );

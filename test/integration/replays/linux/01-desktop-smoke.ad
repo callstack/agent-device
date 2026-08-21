@@ -17,8 +17,8 @@ focus 100 100
 # The session survives the focus: a crashed desktop would fail here, not silently pass above.
 is exists "appname=gnome-calculator || windowtitle=Calculator || label=Calculator || label=0 || label=1 || label=5"
 # R41 (#1739): `type` executes through the bound `typeText` operation rather than the retired
-# interactor leaf. gnome-calculator accepts keyboard digits, so this types through the same
-# ydotool primitive the contract test pins — and the session-survival assertion below fails
-# loudly if the desktop crashed instead of silently passing.
-type "5"
-is exists "appname=gnome-calculator || windowtitle=Calculator || label=Calculator || label=0 || label=1 || label=5"
+# interactor leaf. The digits are chosen so the assertion cannot be satisfied by pre-existing
+# UI: no calculator button is labelled 555, so "555" exists in the tree only if the typed
+# keystrokes actually landed in the display. Deleting the type step turns the wait red.
+type "555"
+wait "label=555 || text=555 || value=555" 10000

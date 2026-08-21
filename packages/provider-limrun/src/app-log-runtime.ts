@@ -1,6 +1,10 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import type { AppsFilter, ProviderPortReverseOptions } from '@agent-device/contracts/device';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
+import {
+  bindLimrunInteractionOperations,
+  limrunInteractionOperationFacts,
+} from './interaction-operations.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { parseLimrunDeviceId } from './device.ts';
 import type {
@@ -21,17 +25,11 @@ import {
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
-  bindProviderFocusInteractor,
-  bindProviderScreenshotInteractor,
-  bindProviderTypeTextInteractor,
-  bindProviderSnapshotInteractor,
   createUnavailablePlatformRuntimeFacts,
   providerRuntimeOwner,
   sameRuntimeOwner,
   screenshotRuntimeOperationFacts,
   elementTextRuntimeOperationFacts,
-  focusRuntimeOperationFacts,
-  typeTextRuntimeOperationFacts,
   selectorObservationRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
   viewportRuntimeOperationFacts,
@@ -370,26 +368,7 @@ function bindLimrunAppLogs(
       }),
       runtimeFacts.operations,
     ),
-    ...bindProviderSnapshotInteractor({
-      device,
-      signal,
-      resolveInteractor: (runner) => options.getInteractor(device, runner),
-    }),
-    ...bindProviderFocusInteractor({
-      device,
-      signal,
-      resolveInteractor: (runner) => options.getInteractor(device, runner),
-    }),
-    ...bindProviderTypeTextInteractor({
-      device,
-      signal,
-      resolveInteractor: (runner) => options.getInteractor(device, runner),
-    }),
-    ...bindProviderScreenshotInteractor({
-      device,
-      signal,
-      resolveInteractor: (runner) => options.getInteractor(device, runner),
-    }),
+    ...bindLimrunInteractionOperations({ device, signal, getInteractor: options.getInteractor }),
     ...createLimrunAppDeploymentOperations(
       deploymentOptions(options),
       device,
@@ -479,8 +458,7 @@ function facts(
       ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
       // Focus rides the same provider interactor the captures do, and a live-session Limrun
       // device always has one, so it is available wherever a capture is.
-      ...focusRuntimeOperationFacts({ focus: available }),
-      ...typeTextRuntimeOperationFacts({ type: available }),
+      ...limrunInteractionOperationFacts(),
       ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementTextUnavailable }),
       ensureReady: available,
       bootTarget: available,
@@ -526,8 +504,7 @@ function recoveryFacts(
         findSelector: liveSessionUnavailable,
       }),
       ...viewportRuntimeOperationFacts({ setViewport: liveSessionUnavailable }),
-      ...focusRuntimeOperationFacts({ focus: liveSessionUnavailable }),
-      ...typeTextRuntimeOperationFacts({ type: liveSessionUnavailable }),
+      ...limrunInteractionOperationFacts(liveSessionUnavailable),
       ensureReady: liveSessionUnavailable,
       bootTarget: liveSessionUnavailable,
       bootTargetHeadless: liveSessionUnavailable,

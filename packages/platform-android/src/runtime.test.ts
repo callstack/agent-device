@@ -105,6 +105,12 @@ test.each([
   expect(facts.operations.setViewport).toMatchObject({ available: false });
   expect(binding.operations.setViewport).toBeUndefined();
   expect(facts.operations.captureScreenshot).toEqual({ available: true });
+  // Interaction cells (R40/R41): every real Android kind drives touch and text through adb;
+  // only the synthetic `simulator` row (covered below) lacks a device behind it.
+  expect(facts.operations.focusPoint).toEqual({ available: true });
+  expect(facts.operations.typeText).toEqual({ available: true });
+  expect(binding.operations.focusPoint).toBeTypeOf('function');
+  expect(binding.operations.typeText).toBeTypeOf('function');
   expect(binding.operations.captureScreenshot).toBeTypeOf('function');
   expect(binding.operations.captureSnapshot).toBeTypeOf('function');
   expect(binding.operations.readTextAtPoint).toBeTypeOf('function');
@@ -276,6 +282,15 @@ test.each([
     expect(facts.operations.bootTargetHeadless.available).toBe(runtimeDevice.kind === 'emulator');
     expect(facts.operations.captureSnapshot.available).toBe(runtimeDevice.kind !== 'simulator');
     expect(facts.operations.readTextAtPoint.available).toBe(runtimeDevice.kind !== 'simulator');
+    // R40/R41: the synthetic simulator row is the one Android cell with no adb touch or text.
+    expect(facts.operations.focusPoint.available).toBe(runtimeDevice.kind !== 'simulator');
+    expect(facts.operations.typeText.available).toBe(runtimeDevice.kind !== 'simulator');
+    expect(binding.operations.focusPoint).toBeTypeOf(
+      runtimeDevice.kind === 'simulator' ? 'undefined' : 'function',
+    );
+    expect(binding.operations.typeText).toBeTypeOf(
+      runtimeDevice.kind === 'simulator' ? 'undefined' : 'function',
+    );
     expect(binding.operations.captureSnapshot).toBeTypeOf(
       runtimeDevice.kind === 'simulator' ? 'undefined' : 'function',
     );

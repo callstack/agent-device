@@ -239,6 +239,11 @@ test('captures through only the active exact WebDriver interactor', async () => 
   expect(binding.operations.setViewport).toBeUndefined();
   expect(binding.facts.operations.captureScreenshot).toEqual({ available: true });
   expect(binding.operations.captureScreenshot).toBeTypeOf('function');
+  // R40/R41: interaction cells share the captures' reachability gate and interactor.
+  expect(binding.facts.operations.focusPoint).toEqual({ available: true });
+  expect(binding.facts.operations.typeText).toEqual({ available: true });
+  expect(binding.operations.focusPoint).toBeTypeOf('function');
+  expect(binding.operations.typeText).toBeTypeOf('function');
   // Provider ownership is authoritative and fails closed: a WebDriver owner's transport carries
   // no local point-read tool, so it advertises none and never borrows the local family read.
   expect(binding.facts.operations.readTextAtPoint).toMatchObject({
@@ -280,6 +285,11 @@ test.each([
   expect(facts.operations.captureSnapshotWithoutActiveApp.available).toBe(false);
   expect(facts.operations.setViewport.available).toBe(false);
   expect(facts.operations.captureScreenshot.available).toBe(false);
+  // R40/R41: interaction cells gate on interactor reachability, not on the capture
+  // capability declarations — a provider that can drive its interactor can touch and type
+  // even when it declares no snapshot/screenshot. Only a dead session closes them.
+  expect(facts.operations.focusPoint.available).toBe(state.isSessionActive());
+  expect(facts.operations.typeText.available).toBe(state.isSessionActive());
   expect(facts.operations.readTextAtPoint.available).toBe(false);
   if (state.isSessionActive()) {
     const binding = await owner.bind({

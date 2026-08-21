@@ -30,12 +30,6 @@ import { confirmIosOffscreenTargetVisible } from '../offscreen-target-probe.ts';
 type InteractionRuntimeParams = InteractionHandlerParams & {
   captureSnapshotForSession: CaptureSnapshotForSession;
   pairedGestureViewport?: Rect;
-  /**
-   * R41: `type` executes only through its admitted request-bound runtime. The member exists
-   * exactly when the `type` handler admitted and bound one — no caller can fall back to legacy
-   * dispatch, and every other interaction command simply has no text-entry backend.
-   */
-  boundTypeText?: (text: string) => Promise<Record<string, unknown> | void>;
 };
 
 export function createInteractionRuntime(params: InteractionRuntimeParams) {
@@ -204,12 +198,6 @@ function createInteractionBackend(
         ),
       );
     },
-    typeText: params.boundTypeText
-      ? async (_context, text): Promise<BackendActionResult> => {
-          expireRefFrame(session);
-          return toBackendActionResult(await params.boundTypeText?.(text));
-        }
-      : undefined,
   };
 }
 

@@ -110,6 +110,15 @@ test.each([
     );
     expect(binding.facts.operations.setViewport).toMatchObject({ available: false });
     expect(binding.operations.setViewport).toBeUndefined();
+    // R40/R41: the desktop is the only Linux cell with a pointer and keyboard to drive.
+    expect(binding.facts.operations.focusPoint.available).toBe(device.kind === 'device');
+    expect(binding.facts.operations.typeText.available).toBe(device.kind === 'device');
+    expect(binding.operations.focusPoint).toBeTypeOf(
+      device.kind === 'device' ? 'function' : 'undefined',
+    );
+    expect(binding.operations.typeText).toBeTypeOf(
+      device.kind === 'device' ? 'function' : 'undefined',
+    );
     expect(binding.facts.operations.captureScreenshot.available).toBe(device.kind === 'device');
     expect(binding.operations.captureScreenshot).toBeTypeOf(
       device.kind === 'device' ? 'function' : 'undefined',

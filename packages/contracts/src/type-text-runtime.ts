@@ -1,5 +1,10 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import {
+  localInteractorSource,
+  providerInteractorSource,
+  type LocalInteractorOperationResolver,
+  type ProviderInteractorOperationResolver,
+} from './interactor-operation-binding.ts';
 import type { Interactor, RunnerContext, TypeTextBackendResult } from './interactor-types.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { SessionSurface } from './session-surface.ts';
@@ -60,10 +65,7 @@ function bindTypeText(
   });
 }
 
-export type LocalTypeTextInteractorResolver = (
-  device: DeviceInfo,
-  runner: RunnerContext,
-) => Promise<Interactor>;
+export type LocalTypeTextInteractorResolver = LocalInteractorOperationResolver;
 
 export function bindLocalTypeTextInteractor(
   params: Readonly<{
@@ -72,13 +74,10 @@ export function bindLocalTypeTextInteractor(
     resolveInteractor: LocalTypeTextInteractorResolver;
   }>,
 ): TypeTextRuntimeOperations {
-  return bindTypeText(
-    params.signal,
-    async (runner) => await params.resolveInteractor(params.device, runner),
-  );
+  return bindTypeText(params.signal, localInteractorSource(params));
 }
 
-export type ProviderTypeTextInteractorResolver = (runner: RunnerContext) => Interactor | undefined;
+export type ProviderTypeTextInteractorResolver = ProviderInteractorOperationResolver;
 
 /** Provider bindings fail closed when their exact owner no longer exposes its interactor. */
 export function bindProviderTypeTextInteractor(
@@ -88,13 +87,5 @@ export function bindProviderTypeTextInteractor(
     resolveInteractor: ProviderTypeTextInteractorResolver;
   }>,
 ): TypeTextRuntimeOperations {
-  return bindTypeText(params.signal, async (runner) => {
-    const interactor = params.resolveInteractor(runner);
-    if (interactor) return interactor;
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
-      'Provider-owned type operation has no bound provider interactor.',
-      { reason: 'provider-runtime-interactor-missing', deviceId: params.device.id },
-    );
-  });
+  return bindTypeText(params.signal, providerInteractorSource({ ...params, operation: 'type' }));
 }

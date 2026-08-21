@@ -135,6 +135,19 @@ test.each([
       reason: 'unsupported-platform-leaf',
     });
     expect(binding.operations.captureSnapshot).toBeUndefined();
+    // R40/R41: Vega exposes remote navigation only; touch and text refuse with the owner hint.
+    expect(binding.facts.operations.focusPoint).toMatchObject({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+      hint: expect.stringContaining('remote navigation only'),
+    });
+    expect(binding.facts.operations.typeText).toMatchObject({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+      hint: expect.stringContaining('remote navigation only'),
+    });
+    expect(binding.operations.focusPoint).toBeUndefined();
+    expect(binding.operations.typeText).toBeUndefined();
     expect(binding.facts.operations.readTextAtPoint.available).toBe(false);
     expect(binding.operations.readTextAtPoint).toBeUndefined();
     expect(binding.facts.operations.setViewport).toMatchObject({ available: false });

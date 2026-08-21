@@ -72,6 +72,13 @@ test.each([
   expect(facts.operations.listApps.available).toBe(
     device.appleOs !== 'watchos' && device.iosPhysicalDeviceBackend !== 'xctest',
   );
+  // R40/R41: touch and text ride the Apple interactor, which exists for the simulator and
+  // physical device kinds — every leaf in this table is one of those two, so both cells are
+  // available across it (parity with the retired buckets).
+  expect(facts.operations.focusPoint).toEqual({ available: true });
+  expect(facts.operations.typeText).toEqual({ available: true });
+  expect(binding.operations.focusPoint).toBeTypeOf('function');
+  expect(binding.operations.typeText).toBeTypeOf('function');
   for (const operation of ['appLogInspect', 'appLogDoctor', 'appLogStart'] as const) {
     const fact = facts.operations[operation];
     expect(fact.available).toBe(available);

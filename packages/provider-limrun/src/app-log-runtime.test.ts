@@ -283,6 +283,11 @@ test.each([
   expect(binding.operations.setViewport).toBeUndefined();
   expect(binding.facts.operations.captureScreenshot).toEqual({ available: true });
   expect(binding.operations.captureScreenshot).toBeTypeOf('function');
+  // R40/R41: interaction cells ride the same provider interactor the captures do.
+  expect(binding.facts.operations.focusPoint).toEqual({ available: true });
+  expect(binding.facts.operations.typeText).toEqual({ available: true });
+  expect(binding.operations.focusPoint).toBeTypeOf('function');
+  expect(binding.operations.typeText).toBeTypeOf('function');
   expect(binding.operations.captureSnapshot).toBeTypeOf('function');
   // Limrun owns the device remotely and exposes no local point-read tool, so the live read is
   // unavailable and `get` answers from the captured tree — never by borrowing the local runtime.
@@ -349,6 +354,8 @@ test('fails closed for a stale Android identity before exposing facts or binding
   expect(facts.operations.captureSnapshotWithoutActiveApp).toMatchObject({ available: false });
   expect(facts.operations.setViewport).toMatchObject({ available: false });
   expect(facts.operations.captureScreenshot).toMatchObject({ available: false });
+  expect(facts.operations.focusPoint).toMatchObject({ available: false });
+  expect(facts.operations.typeText).toMatchObject({ available: false });
   await expect(
     owner.bind({ device: staleDevice, intent: { kind: 'ordinary' }, scope }),
   ).rejects.toMatchObject({

@@ -76,6 +76,11 @@ test.each([
   // legacy dispatch already did once its Apple-runner fall-through failed.
   expect(facts.operations.readTextAtPoint).toMatchObject({ available: false });
   expect(binding.operations.readTextAtPoint).toBeUndefined();
+  // R40/R41: hdc drives touch and text on both real kinds this table enumerates.
+  expect(facts.operations.focusPoint).toEqual({ available: true });
+  expect(facts.operations.typeText).toEqual({ available: true });
+  expect(binding.operations.focusPoint).toBeTypeOf('function');
+  expect(binding.operations.typeText).toBeTypeOf('function');
   await expect(binding.operations.ensureReady?.({})).resolves.toMatchObject({ booted: true });
   await expect(
     binding.operations.listApps?.({ device: runtimeDevice, filter: 'all' }),

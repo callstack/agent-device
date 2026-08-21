@@ -4,12 +4,11 @@ import { handleTouchInteractionCommands } from './interaction-touch.ts';
 import { captureSnapshotForSession } from './interaction-snapshot.ts';
 import { refSnapshotFlagGuardResponse } from './interaction-flags.ts';
 import { dispatchGetViaRuntime, dispatchIsViaRuntime } from '../selector-runtime.ts';
-import { createInteractionRuntime } from './interaction-runtime.ts';
 import { finalizeTouchInteraction } from './interaction-common.ts';
+import { expireRefFrame } from '../ref-frame.ts';
 import { errorResponse, noActiveSessionError } from './response.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { normalizeError } from '@agent-device/kernel/errors';
-import { successText } from '../../utils/success-text.ts';
 import {
   ensureAndroidBlockingSystemDialogReady,
   recoverAndroidBlockingSystemDialog,
@@ -102,23 +101,12 @@ async function recoverAndroidRecordingDialogForType(
 }
 
 async function runTypeTextViaRuntime(
-  params: InteractionHandlerParams & {
-    captureSnapshotForSession: typeof captureSnapshotForSession;
-  },
+  params: InteractionHandlerParams,
   session: SessionState,
   boundTypeText: BoundTypeTextExecutor,
   recordingRecoveryWarning?: string,
 ): Promise<DaemonResponse> {
-  const { req, sessionName, sessionStore } = params;
-  const text = (req.positionals ?? []).join(' ');
-  const runtime = createInteractionRuntime({
-    ...params,
-    boundTypeText: async (typedText) =>
-      await boundTypeText(
-        [typedText],
-        params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
-      ),
-  });
+  const { req, sessionStore } = params;
   const actionStartedAt = Date.now();
   try {
     const readiness = await ensureAndroidBlockingSystemDialogReady({
@@ -126,23 +114,21 @@ async function runTypeTextViaRuntime(
       command: req.command,
       phase: 'before-command',
     });
-    const result = await runtime.interactions.typeText(text, {
-      session: sessionName,
-      requestId: req.meta?.requestId,
-      delayMs: req.flags?.delayMs,
-    });
+    // ADR 0014 side-effect seam: the entry mutates the focused field; expire the frame before
+    // executing so a later step cannot reuse it. R41: the bound executor already validates and
+    // composes the retired leaf's exact result, so nothing here re-validates or re-formats it.
+    expireRefFrame(session);
+    const result = await boundTypeText(
+      req.positionals ?? [],
+      params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
+    );
     await ensureAndroidBlockingSystemDialogReady({
       session,
       command: req.command,
       phase: 'after-command',
     });
     const actionFinishedAt = Date.now();
-    const responseData: Record<string, unknown> = {
-      ...(result.backendResult ?? {}),
-      text: result.text,
-      delayMs: result.delayMs,
-      ...successText(result.message ?? `Typed ${Array.from(result.text).length} chars`),
-    };
+    const responseData: Record<string, unknown> = { ...result };
     appendTypeReadinessWarnings(responseData, recordingRecoveryWarning, readiness);
     return finalizeTouchInteraction({
       session,
