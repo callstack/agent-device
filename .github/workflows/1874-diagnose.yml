@@ -6,7 +6,7 @@ on:
       iterations:
         description: 'Loop iterations per job'
         required: false
-        default: '12'
+        default: '25'
   push:
     branches:
       - diagnose/1874-commit-stall
@@ -60,7 +60,7 @@ jobs:
           XCTESTRUN_PATH="$(find "$AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH/Build/Products" -maxdepth 1 -name '*.xctestrun' -print -quit)"
           test -n "$XCTESTRUN_PATH"
           UDID="${{ steps.ios-simulator.outputs.simulator-udid }}"
-          ITER="${{ github.event.inputs.iterations || '12' }}"
+          ITER="${{ github.event.inputs.iterations || '25' }}"
 
           if [ "${{ matrix.mode }}" = "pair" ]; then
             EXTRA_ONLY_TESTING=(-only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareDelayedTypeFailsWhenTappedInputDisappearsMidCommand)
@@ -79,7 +79,7 @@ jobs:
               -xctestrun "$XCTESTRUN_PATH" \
               -destination "platform=iOS Simulator,id=$UDID" \
               -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareTypeUsesTappedInputWhenSoftwareKeyboardIsHidden \
-              "${EXTRA_ONLY_TESTING[@]}" \
+              ${EXTRA_ONLY_TESTING[@]+"${EXTRA_ONLY_TESTING[@]}"} \
               > "$LOG" 2>&1
             rc=$?
             set -e
