@@ -275,7 +275,9 @@ extension RunnerTests {
           treatingPlaceholderAsEmpty: true
         )
       },
-      waitForNextObservation: { sleepFor(TextEntryTiming.pollInterval) }
+      // XCUI resolution shares the automation channel with the in-flight synthesized event.
+      // Sparse reads let the target consume that event instead of continuously interrupting it.
+      waitForNextObservation: { sleepFor(TextEntryTiming.synthesizedCommitPollInterval) }
     )
   }
 
