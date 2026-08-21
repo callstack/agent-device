@@ -153,6 +153,11 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrainForSnapshotRaw \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotTraversalIdentityPreservesSameOriginNodesWithDifferentBounds \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotPresentationPreservesCurrentWireShape \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularPresentationKeepsNestedClipGeometryCumulative \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularPresentationKeepsFramelessSemanticCarriersNonActionableAndNonClipping \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRawPresentationKeepsReportedOffscreenAndFramelessFacts \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFixedSeedRegularPresentationMaintainsCumulativeClipInvariant \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPresentationFailureKeepsItsNamedSnapshotQualityReason \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularPresentationPublishesEffectiveRectWhileRawKeepsReportedFrame \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotPresentationOwnsBackendNeutralEligibility \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotPresentationOwnsScopeAndRelativeDepth \

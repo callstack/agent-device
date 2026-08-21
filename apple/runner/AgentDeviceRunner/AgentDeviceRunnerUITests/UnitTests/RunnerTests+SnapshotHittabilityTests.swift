@@ -90,7 +90,7 @@ extension RunnerTests {
     ]
     let options = PresentationOptions(
       interactiveOnly: false, depth: nil, scope: nil, raw: false)
-    let capture = SnapshotPresentation.presentRegular(
+    let capture = try SnapshotPresentation.presentRegular(
       SnapshotAcquisition(
         hint: SnapshotPresentation.captureHint(for: options),
         nodes: nodes,

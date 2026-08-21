@@ -132,11 +132,11 @@ extension RunnerTests {
     rawRoot: [String: Any],
     viewport: CGRect,
     interactiveOnly: Bool = false
-  ) -> [PresentedNode] {
+  ) throws -> [PresentedNode] {
     let hint = CaptureHint(
       projection: .regular, depth: nil, interactiveOnly: interactiveOnly, customActions: false)
     let acquired = privateAXAcquisition(rawRoot: rawRoot, hint: hint, viewport: viewport)
-    return SnapshotPresentation.presentRegular(
+    return try SnapshotPresentation.presentRegular(
       SnapshotAcquisition(
         hint: hint, nodes: acquired, truncated: false, effectiveDepth: nil, viewport: viewport),
       options: PresentationOptions(
@@ -145,8 +145,8 @@ extension RunnerTests {
     ).payload.nodes ?? []
   }
 
-  func testPrivateAXRegularPresentationProjectsToViewportAndKeepsScrollHint() {
-    let nodes = privateAXRegularPresentation(
+  func testPrivateAXRegularPresentationProjectsToViewportAndKeepsScrollHint() throws {
+    let nodes = try privateAXRegularPresentation(
       rawRoot: Self.privateAXScrolledFixture,
       viewport: CGRect(x: 0, y: 0, width: 402, height: 874))
     XCTAssertEqual(nodes.compactMap(\.label), ["Element", "Profile picture"])
@@ -158,10 +158,10 @@ extension RunnerTests {
   /// #1797 D4: the raw projection is the acquired tree. The offscreen row and the sub-pixel
   /// decoration the regular projection folds away are both present, at traversal depth, and every
   /// regular node still appears -- `regular ⊆ raw` on the same capture.
-  func testPrivateAXRawProjectionKeepsEveryAcquiredNode() {
+  func testPrivateAXRawProjectionKeepsEveryAcquiredNode() throws {
     let viewport = CGRect(x: 0, y: 0, width: 402, height: 874)
     let root = Self.privateAXScrolledFixture
-    let regular = privateAXRegularPresentation(rawRoot: root, viewport: viewport,
+    let regular = try privateAXRegularPresentation(rawRoot: root, viewport: viewport,
       interactiveOnly: true)
     let raw = privateAXAcquisition(rawRoot: root,
       hint: CaptureHint(projection: .raw, depth: nil, interactiveOnly: false, customActions: false),
@@ -196,7 +196,7 @@ extension RunnerTests {
     XCTAssertEqual(raw.map(\.depth), [0, 1, 2, 2])
   }
 
-  func testPrivateAXPresentationKeepsOffscreenSubtreeExcludedWhenChildFramesAreClamped() {
+  func testPrivateAXPresentationKeepsOffscreenSubtreeExcludedWhenChildFramesAreClamped() throws {
     let frame = Self.privateAXFrame
     let root: [String: Any] = ["type": Int(XCUIElement.ElementType.application.rawValue),
       "label": "Element", "frame": frame(0, 0, 402, 874), "children": [[
@@ -208,14 +208,14 @@ extension RunnerTests {
           ["type": Int(XCUIElement.ElementType.switch.rawValue),
             "label": "Theme", "frame": frame(340, 96, 46, 44)]]]]]]]
 
-    let nodes = privateAXRegularPresentation(
+    let nodes = try privateAXRegularPresentation(
       rawRoot: root, viewport: CGRect(x: 0, y: 0, width: 402, height: 874))
 
     XCTAssertEqual(nodes.compactMap(\.label), ["Element"])
     XCTAssertEqual(nodes.first { $0.type == "Table" }?.hiddenContentBelow, true)
   }
 
-  func testPrivateAXGeometrylessSemanticsAreNeverActionableOrScrollContexts() {
+  func testPrivateAXGeometrylessSemanticsAreNeverActionableOrScrollContexts() throws {
     let zero = ["x": 0, "y": 0, "width": 0, "height": 0]
     let root: [String: Any] = ["type": Int(XCUIElement.ElementType.application.rawValue),
       "label": "Element", "frame": ["x": 0, "y": 0, "width": 402, "height": 874],
@@ -223,7 +223,7 @@ extension RunnerTests {
         "label": "Settings semantics", "frame": zero, "children": [[
           "type": Int(XCUIElement.ElementType.button.rawValue), "label": "Theme", "frame": zero],
         ["type": Int(XCUIElement.ElementType.other.rawValue), "frame": zero]]]]]
-    let nodes = privateAXRegularPresentation(
+    let nodes = try privateAXRegularPresentation(
       rawRoot: root, viewport: CGRect(x: 0, y: 0, width: 402, height: 874),
       interactiveOnly: true)
     XCTAssertEqual(nodes.compactMap(\.label), ["Element", "Settings semantics", "Theme"])

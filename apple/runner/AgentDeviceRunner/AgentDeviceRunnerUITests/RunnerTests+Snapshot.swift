@@ -36,6 +36,7 @@ extension RunnerTests {
     let code: String
     let message: String
     let hint: String
+    let qualityReasonCode: String? = nil
   }
 
   // MARK: - Snapshot Entry

@@ -25,7 +25,7 @@ extension RunnerTests {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
 
-    let capture = try XCTUnwrap(SnapshotPresentation.present(
+    let capture = try XCTUnwrap(try SnapshotPresentation.present(
       SnapshotAcquisition(
         hint: CaptureHint(
           projection: .raw, depth: nil, interactiveOnly: false, customActions: false),
@@ -105,7 +105,7 @@ extension RunnerTests {
       node(10, type: "StaticText", label: "Reparented content", depth: 2, parentIndex: 9),
     ]
     let regular = try XCTUnwrap(
-      SnapshotPresentation.presentRegular(
+      try SnapshotPresentation.presentRegular(
         SnapshotAcquisition(
           hint: CaptureHint(
             projection: .regular, depth: nil, interactiveOnly: false, customActions: false),
@@ -115,7 +115,7 @@ extension RunnerTests {
       ).payload.nodes
     )
     let interactive = try XCTUnwrap(
-      SnapshotPresentation.presentRegular(
+      try SnapshotPresentation.presentRegular(
         SnapshotAcquisition(
           hint: CaptureHint(
             projection: .regular, depth: nil, interactiveOnly: true, customActions: false),
@@ -151,7 +151,7 @@ extension RunnerTests {
     XCTAssertEqual(raw.last?.parentIndex, 9)
   }
 
-  func testRegularPresentationRoutesThroughVisibilityFold() {
+  func testRegularPresentationRoutesThroughVisibilityFold() throws {
     let nodes = [
       RawAXNode(
         index: 0, type: "Application", label: "App", identifier: nil, value: nil,
@@ -173,7 +173,7 @@ extension RunnerTests {
       viewport: CGRect(x: 0, y: 0, width: 100, height: 100)
     )
 
-    let presented = SnapshotPresentation.presentRegular(
+    let presented = try SnapshotPresentation.presentRegular(
       acquisition,
       options: PresentationOptions(
         interactiveOnly: false, depth: nil, scope: nil, raw: false)
@@ -199,7 +199,7 @@ extension RunnerTests {
     let regularOptions = PresentationOptions(
       interactiveOnly: false, depth: nil, scope: nil, raw: false)
     let regular = try XCTUnwrap(
-      SnapshotPresentation.presentRegular(
+      try SnapshotPresentation.presentRegular(
         SnapshotAcquisition(
           hint: SnapshotPresentation.captureHint(for: regularOptions),
           nodes: acquired,
@@ -287,7 +287,7 @@ extension RunnerTests {
       scope: " SCOPE-ROOT ",
       raw: false
     )
-    let capture = try XCTUnwrap(SnapshotPresentation.present(acquisition, options: options))
+    let capture = try XCTUnwrap(try SnapshotPresentation.present(acquisition, options: options))
     let nodes = try XCTUnwrap(capture.payload.nodes)
 
     XCTAssertEqual(nodes.map(\.label), [nil, "Child"])
@@ -323,7 +323,7 @@ extension RunnerTests {
     XCTAssertTrue(hint.interactiveOnly)
     XCTAssertEqual(hint.projection, .regular)
 
-    let missing = try XCTUnwrap(SnapshotPresentation.present(
+    let missing = try XCTUnwrap(try SnapshotPresentation.present(
       acquisition,
       options: PresentationOptions(
         interactiveOnly: true,
@@ -367,13 +367,17 @@ extension RunnerTests {
       hint: SnapshotPresentation.captureHint(for: rawRequest),
       nodes: nodes, truncated: false, effectiveDepth: nil, viewport: .infinite)
 
-    XCTAssertNil(SnapshotPresentation.present(regularAcquisition, options: rawRequest))
-    XCTAssertNil(SnapshotPresentation.present(rawAcquisition, options: regularRequest))
-    XCTAssertEqual(
-      SnapshotPresentation.present(rawAcquisition, options: rawRequest)?.payload.nodes?.count, 2)
-    XCTAssertEqual(
-      SnapshotPresentation.present(regularAcquisition, options: regularRequest)?
-        .payload.nodes?.count, 2)
+    let regularCaptureForRawRequest = try SnapshotPresentation.present(
+      regularAcquisition, options: rawRequest)
+    let rawCaptureForRegularRequest = try SnapshotPresentation.present(
+      rawAcquisition, options: regularRequest)
+    let rawCapture = try SnapshotPresentation.present(rawAcquisition, options: rawRequest)
+    let regularCapture = try SnapshotPresentation.present(
+      regularAcquisition, options: regularRequest)
+    XCTAssertNil(regularCaptureForRawRequest)
+    XCTAssertNil(rawCaptureForRegularRequest)
+    XCTAssertEqual(rawCapture?.payload.nodes?.count, 2)
+    XCTAssertEqual(regularCapture?.payload.nodes?.count, 2)
   }
 
   /// The one derivation every backend reads. Non-vacuity: returning the request's own depth for a

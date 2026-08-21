@@ -98,7 +98,7 @@ enum SnapshotPresentation {
   static func present(
     _ acquisition: SnapshotAcquisition,
     options: PresentationOptions
-  ) -> SnapshotBackendCapture? {
+  ) throws -> SnapshotBackendCapture? {
     let requested = captureHint(for: options)
     guard acquisition.hint.projection == requested.projection else {
       NSLog(
@@ -110,7 +110,7 @@ enum SnapshotPresentation {
     }
     switch requested.projection {
     case .regular:
-      return presentRegular(acquisition, options: options)
+      return try presentRegular(acquisition, options: options)
     case .raw:
       return presentRaw(acquisition, options: options)
     }
@@ -119,19 +119,26 @@ enum SnapshotPresentation {
   /// Visible projection: the clip fold (viewport ∩ scroll clip, ancestor cursor, scroll hints),
   /// eligibility (an interactive type or non-empty semantic content, below the root carrier), and
   /// scope. The only interpreter of what a screen currently shows -- no backend folds its own
-  /// visibility (#1797).
+  /// visibility (#1797). Throws a typed `SnapshotPresentationFailure` if the folded result would
+  /// violate the regular projection's geometry or actionability contract.
   static func presentRegular(
     _ acquisition: SnapshotAcquisition,
     options: PresentationOptions,
     policy: SnapshotVisibilityFold.Policy = .platformDefault
-  ) -> SnapshotBackendCapture {
-    project(
-      SnapshotVisibilityFold.fold(
-        acquisition.nodes,
-        viewport: acquisition.viewport,
-        interactiveOnly: options.interactiveOnly,
-        policy: policy
-      ),
+  ) throws -> SnapshotBackendCapture {
+    let folded = SnapshotVisibilityFold.fold(
+      acquisition.nodes,
+      viewport: acquisition.viewport,
+      interactiveOnly: options.interactiveOnly,
+      policy: policy
+    )
+    try SnapshotPresentation.validateRegularInvariant(
+      folded,
+      viewport: acquisition.viewport,
+      policy: policy
+    )
+    return project(
+      folded,
       acquisition: acquisition,
       options: options,
       projection: .regular

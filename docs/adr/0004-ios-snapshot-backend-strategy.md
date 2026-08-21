@@ -156,7 +156,13 @@ scroll anchors, and reparenting of survivors with collapsed depth. The fold also
 emitted `hittable` to the clip: nothing outside its clip, and nothing without geometry, is ever
 hittable regardless of what a backend reported. Platform differences are a `SnapshotFoldPolicy`
 input to the shared algorithm (iOS cursor-projected; macOS/tvOS plain viewport intersection),
-never a backend exception. The remaining acquisition-side narrowings are declared: the
+never a backend exception. The presentation owner validates every framed regular node against its
+cumulative effective clip before constructing `SnapshotPresentation.PresentedNode`; frameless and
+degenerate semantic carriers stay
+eligible but are never actionable, while raw projection remains exempt by contract. A violation is
+a typed `IOS_SNAPSHOT_PRESENTATION_FAILED` capture failure with the named `presentation-failed`
+snapshot-quality reason, preserved through recovery and the existing TypeScript verdict/warning
+contract. The remaining acquisition-side narrowings are declared:
 traversal-depth budget cut, the flat query sweep's frameless-element drop (a flat query has no
 hierarchy for geometryless semantics to attach to), and the private-AX bridge's device-side node
 cap.

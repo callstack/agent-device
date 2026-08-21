@@ -17,7 +17,8 @@ struct SnapshotQuality: Codable {
   /// Why recovery ran (first failure), why the payload is degraded, or why an internal backend
   /// selection was honored.
   let reason: String?
-  /// Machine-readable reason: ax-rejected | sparse-tree | budget | no-nodes | requested-backend.
+  /// Machine-readable reason: ax-rejected | sparse-tree | budget | no-nodes | capture-failed |
+  /// presentation-failed | deferred | requested-backend.
   let reasonCode: String?
   /// Private AX ladder cap when the accepted tree is shallower than requested.
   let effectiveDepth: Int?
@@ -347,7 +348,7 @@ extension RunnerTests {
       if case let .failed(failure, phase: _) = attempt.outcome {
         if Self.isAxSnapshotFailure(failure) { axFailure = failure }
         if firstFailure == nil {
-          firstFailure = (failure.message, Self.isAxSnapshotFailure(failure) ? "ax-rejected" : "capture-failed")
+          firstFailure = (failure.message, Self.snapshotQualityReasonCode(for: failure))
         }
         NSLog(
           "AGENT_DEVICE_RUNNER_SNAPSHOT_BACKEND_FAILED backend=%@ error=%@",
@@ -469,7 +470,6 @@ extension RunnerTests {
         timing: timer.timing
       )
     }
-
     guard let acquisition else {
       return SnapshotBackendAttempt(
         outcome: .noCapture,
@@ -489,6 +489,11 @@ extension RunnerTests {
         }
         return capture
       }
+    } catch let failure as SnapshotPresentationFailure {
+      return SnapshotBackendAttempt(
+        outcome: .failed(Self.snapshotCaptureFailure(for: failure), phase: .presentation),
+        timing: timer.timing
+      )
     } catch let failure as SnapshotCaptureFailure {
       return SnapshotBackendAttempt(
         outcome: .failed(failure, phase: .presentation),
@@ -668,9 +673,15 @@ extension RunnerTests {
     else { return nil }
     var parts: [String] = []
     if quality.state == "recovered" {
-      let meaning = quality.reasonCode == "budget" || quality.reasonCode == "deferred"
-        ? " The primary capture ran out of its time budget (busy app or simulator); the recovered tree is authoritative for this screen."
-        : " This usually means the app publishes an unhealthy accessibility tree — fixing the app's accessibility is the real cure. Treat screenshot as visual truth when this warning appears."
+      let meaning: String
+      switch quality.reasonCode {
+      case "budget", "deferred":
+        meaning = " The primary capture ran out of its time budget (busy app or simulator); the recovered tree is authoritative for this screen."
+      case "presentation-failed":
+        meaning = " The runner rejected a regular presentation because its cumulative clip invariant failed; report this as a runner bug and treat screenshot as visual truth."
+      default:
+        meaning = " This usually means the app publishes an unhealthy accessibility tree — fixing the app's accessibility is the real cure. Treat screenshot as visual truth when this warning appears."
+      }
       parts.append(
         "Detected an overly complex or slow accessibility tree. Fell back to the \(quality.backend) snapshot backend"
           + (quality.reason.map { " after: \($0)." } ?? ".")

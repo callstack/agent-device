@@ -60,6 +60,17 @@ test('readSnapshotQualityVerdict keeps the verdict but drops an unknown reasonCo
   assert.equal(verdict?.reasonCode, undefined);
 });
 
+test('readSnapshotQualityVerdict preserves a presentation failure reason', () => {
+  const verdict = readSnapshotQualityVerdict({
+    state: 'sparse',
+    backend: 'tree',
+    reason: 'regular snapshot node 7 escaped its cumulative clip',
+    reasonCode: 'presentation-failed',
+  });
+
+  assert.equal(verdict?.reasonCode, 'presentation-failed');
+});
+
 test('isSparseSnapshotQualityVerdict identifies sparse captures', () => {
   assert.equal(isSparseSnapshotQualityVerdict({ state: 'sparse', backend: 'private-ax' }), true);
   assert.equal(isSparseSnapshotQualityVerdict({ state: 'healthy', backend: 'tree' }), false);

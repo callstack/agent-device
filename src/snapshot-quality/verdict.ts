@@ -15,6 +15,7 @@ const SNAPSHOT_QUALITY_REASON_CODES = new Set<NonNullable<SnapshotQualityVerdict
   'budget',
   'no-nodes',
   'capture-failed',
+  'presentation-failed',
   'deferred',
   'requested-backend',
 ]);

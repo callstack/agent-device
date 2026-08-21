@@ -39,6 +39,7 @@ export type SnapshotQualityVerdict = {
     | 'budget'
     | 'no-nodes'
     | 'capture-failed'
+    | 'presentation-failed'
     | 'deferred'
     | 'requested-backend';
   effectiveDepth?: number;

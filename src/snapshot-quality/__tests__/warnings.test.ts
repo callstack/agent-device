@@ -73,7 +73,13 @@ test('renderSnapshotQualityWarnings rejects semantic targets from a sparse tree'
 });
 
 test('sparse warnings blame the app only when the backends reached the screen', () => {
-  for (const reasonCode of ['ax-rejected', 'budget', 'no-nodes', 'capture-failed'] as const) {
+  for (const reasonCode of [
+    'ax-rejected',
+    'budget',
+    'no-nodes',
+    'capture-failed',
+    'presentation-failed',
+  ] as const) {
     const warnings = renderSnapshotQualityWarnings(
       { state: 'sparse', backend: 'tree', reason: 'capture gave up', reasonCode },
       [],

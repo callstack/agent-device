@@ -690,7 +690,7 @@ extension RunnerTests {
     XCTAssertTrue(labels.contains("unrelated sibling"))
   }
 
-  func testPrivateAXInteractiveFiltersLoginLikeHiddenDrawer() {
+  func testPrivateAXInteractiveFiltersLoginLikeHiddenDrawer() throws {
     let tree: [String: Any] = [
       "type": Int(XCUIElement.ElementType.application.rawValue),
       "label": "Blue Sky",
@@ -761,7 +761,7 @@ extension RunnerTests {
     // Acquisition serializes the drawer too; the shared fold is what hides it (#1797).
     XCTAssertTrue(acquired.compactMap(\.label).contains("Admin settings"))
 
-    let capture = SnapshotPresentation.presentRegular(
+    let capture = try SnapshotPresentation.presentRegular(
       SnapshotAcquisition(
         hint: hint, nodes: acquired, truncated: false, effectiveDepth: nil, viewport: viewport),
       options: PresentationOptions(interactiveOnly: true, depth: nil, scope: nil, raw: false),
