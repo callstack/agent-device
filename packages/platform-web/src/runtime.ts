@@ -254,9 +254,6 @@ function webRuntimeFacts(
         findText: openTargetKindUnavailable,
         findSelector: openTargetKindUnavailable,
       }),
-      ...viewportRuntimeOperationFacts({
-        setViewport: device.kind === 'device' ? available : openTargetKindUnavailable,
-      }),
       ...screenshotRuntimeOperationFacts({ capture: browserDevice }),
       ...viewportRuntimeOperationFacts({ setViewport: browserDevice }),
       // The web backend has no point-addressed read: `get` answers from the captured DOM tree,
