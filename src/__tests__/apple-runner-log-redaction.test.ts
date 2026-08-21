@@ -51,9 +51,8 @@ test('synthesized text entry logging stays free of observed field contents', () 
   assert.ok(statements.length > 0, 'expected NSLog statements in the module');
 
   for (const statement of statements) {
-    const formatMatch = statement.match(/"((?:[^"\\]|\\.)*)"/);
-    assert.ok(formatMatch, `NSLog without a literal format string: ${statement}`);
-    const format = formatMatch[1];
+    const format = statement.match(/"((?:[^"\\]|\\.)*)"/)?.[1];
+    assert.ok(format != null, `NSLog without a literal format string: ${statement}`);
     if (!format.includes('%@')) continue;
     assert.ok(
       allowedStringInterpolatingFormats.has(format),
