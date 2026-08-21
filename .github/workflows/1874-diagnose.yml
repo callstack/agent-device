@@ -20,17 +20,19 @@ concurrency:
 
 jobs:
   stall-loop:
-    name: ${{ matrix.mode }} stall loop
+    name: ${{ matrix.arch }} ${{ matrix.mode }} stall loop
     runs-on: macos-26
     timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
         mode: [isolated, pair]
+        arch: [x86_64, arm64]
     env:
       IOS_RUNTIME_VERSION: '26.2'
       AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ github.workspace }}/.tmp/ios-runner-derived
       AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS: '1'
+      AGENT_DEVICE_XCUITEST_ARCHS: ${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v4
 
@@ -42,7 +44,7 @@ jobs:
         with:
           derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}
           cache-key-prefix: ios-runner-prebuilt
-          cache-key-suffix: -ios-${{ env.IOS_RUNTIME_VERSION }}-1874
+          cache-key-suffix: -ios-${{ env.IOS_RUNTIME_VERSION }}-1874-${{ matrix.arch }}
           gate: swift-runner-ios
           xcuitest-platform: ios
           xcuitest-destination: generic/platform=iOS Simulator
@@ -97,13 +99,13 @@ jobs:
             fi
           done
 
-          echo "RESULT mode=${{ matrix.mode }}: $pass passed, $fail stalled of $ITER" | tee -a stall-summary.txt
+          echo "RESULT arch=${{ matrix.arch }} mode=${{ matrix.mode }}: $pass passed, $fail stalled of $ITER" | tee -a stall-summary.txt
 
       - name: Upload stall evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: stall-evidence-${{ matrix.mode }}
+          name: stall-evidence-${{ matrix.arch }}-${{ matrix.mode }}
           path: |
             stall-summary.txt
             .tmp/stall-failure-*.log

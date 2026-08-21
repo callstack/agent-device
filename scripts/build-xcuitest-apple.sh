@@ -138,6 +138,14 @@ if is_truthy "${AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS:-}"; then
   SWIFT_FLAGS="$SWIFT_FLAGS -D AGENT_DEVICE_RUNNER_UNIT_TESTS"
 fi
 
+# Optional arch override. A generic simulator destination leaves the active arch
+# undefined; Xcode versions differ on the default (26.6 picks x86_64, which runs
+# under Rosetta on arm64 hosts). Set AGENT_DEVICE_XCUITEST_ARCHS=arm64 to pin it.
+ARCH_BUILD_SETTINGS=""
+if [ -n "${AGENT_DEVICE_XCUITEST_ARCHS:-}" ]; then
+  ARCH_BUILD_SETTINGS="ARCHS=$AGENT_DEVICE_XCUITEST_ARCHS"
+fi
+
 node --experimental-strip-types scripts/swift-toolchain-tmpdir.ts xcodebuild build-for-testing \
   -project "$PROJECT_PATH" \
   -scheme "$SCHEME" \
@@ -154,6 +162,7 @@ node --experimental-strip-types scripts/swift-toolchain-tmpdir.ts xcodebuild bui
   -IDEPackageSupportDisablePluginExecutionSandbox=1 \
   ENABLE_USER_SCRIPT_SANDBOXING=NO \
   OTHER_SWIFT_FLAGS="$SWIFT_FLAGS" \
+  $ARCH_BUILD_SETTINGS \
   $SIGNING_BUILD_SETTINGS
 
 node --experimental-strip-types scripts/patch-xcuitest-runner-icon.ts "$DERIVED_PATH"
