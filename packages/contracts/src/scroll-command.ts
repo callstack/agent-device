@@ -1,4 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
+import type { SettleObservation } from './interaction.ts';
+import type { ScrollDirection } from './scroll-gesture.ts';
 
 export const SCROLL_DURATION_MAX_MS = 10_000;
 export const DEFAULT_MOBILE_SCROLL_DURATION_MS = 300;
@@ -67,3 +69,26 @@ export function honoredScrollDurationMs(
 ): number | undefined {
   return typeof result?.durationMs === 'number' ? result.durationMs : undefined;
 }
+
+/**
+ * `scroll` — the generic-route result built by `buildDispatchedScrollResult`
+ * (src/core/dispatch-interactions.ts): the resolved direction, the edge-pass
+ * bookkeeping for `top`/`bottom` scrolls, the honored distance/timing echo,
+ * and the success message. Platform leaves add gesture-plan coordinates
+ * (`x1`/`y1`/`x2`/`y2`, reference frame) on top; the output schema stays
+ * non-strict so those additive fields validate. The one field the dispatcher
+ * itself may add: `settle`, the opt-in `--settle` observation (#1638),
+ * attached after the command — same shape as `BackCommandResult`.
+ */
+export type ScrollCommandResult = {
+  direction: ScrollDirection;
+  /** Set for `top`/`bottom` requests: the extreme being scrolled to. */
+  edge?: 'top' | 'bottom';
+  /** Edge scrolls only: how many scroll-and-check passes ran. */
+  passes?: number;
+  amount?: number;
+  pixels?: number;
+  durationMs?: number;
+  message?: string;
+  settle?: SettleObservation;
+};

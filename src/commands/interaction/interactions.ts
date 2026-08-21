@@ -30,7 +30,6 @@ import {
   request,
   requiredDaemonString,
   selectorSnapshotInputFromFlags,
-  settleInputFromFlags,
   targetInputFromClientTarget,
 } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
@@ -41,7 +40,6 @@ export const interactionCliReaders = {
     ...commonInputFromFlags(flags),
     ...selectorSnapshotInputFromFlags(flags),
     ...repeatedInputFromFlags(flags),
-    ...settleInputFromFlags(flags),
     target: targetInputFromClientTarget(readInteractionTargetFromPositionals(positionals)),
     button: flags.clickButton,
     verify: flags.verify,
@@ -50,7 +48,6 @@ export const interactionCliReaders = {
     ...commonInputFromFlags(flags),
     ...selectorSnapshotInputFromFlags(flags),
     ...repeatedInputFromFlags(flags),
-    ...settleInputFromFlags(flags),
     target: targetInputFromClientTarget(readInteractionTargetFromPositionals(positionals)),
     verify: flags.verify,
   }),
@@ -59,7 +56,6 @@ export const interactionCliReaders = {
     return {
       ...commonInputFromFlags(flags),
       ...selectorSnapshotInputFromFlags(flags),
-      ...settleInputFromFlags(flags),
       target: targetInputFromClientTarget(decoded),
       durationMs: decoded.durationMs,
     };
@@ -67,7 +63,6 @@ export const interactionCliReaders = {
   hover: (positionals, flags) => ({
     ...commonInputFromFlags(flags),
     ...selectorSnapshotInputFromFlags(flags),
-    ...settleInputFromFlags(flags),
     target: targetInputFromClientTarget(readInteractionTargetFromPositionals(positionals)),
   }),
   swipe: (positionals, flags) => ({
@@ -93,7 +88,6 @@ export const interactionCliReaders = {
     return {
       ...commonInputFromFlags(flags),
       ...selectorSnapshotInputFromFlags(flags),
-      ...settleInputFromFlags(flags),
       target: targetInputFromClientTarget(decoded.target),
       text: decoded.text,
       delayMs: flags.delayMs,
@@ -103,7 +97,6 @@ export const interactionCliReaders = {
   },
   scroll: (positionals, flags) => ({
     ...commonInputFromFlags(flags),
-    ...settleInputFromFlags(flags),
     direction: readScrollDirection(positionals[0]),
     amount: optionalCliNumber(positionals[1]),
     pixels: flags.pixels,

@@ -5,11 +5,12 @@ import { displayLabel, formatRole } from '../../snapshot/snapshot-lines.ts';
 import { readCommandMessage } from '../../utils/success-text.ts';
 import {
   messageCliOutput,
+  messageOutput,
   pinnedRefText,
   resultOutput,
   type CliOutputFormatter,
 } from '../output-common.ts';
-import { appendResponseNotes, messageWithSettleOutput } from '../settle-output.ts';
+import { withSettleCapableNotes } from '../settle-output.ts';
 
 function getCliOutput(params: { result: CommandRequestResult; format?: string }): CliOutput {
   const data = params.result as Record<string, unknown>;
@@ -73,19 +74,21 @@ function tapCliOutput(result: CommandRequestResult): CliOutput {
   const x = data.x;
   const y = data.y;
   if (!ref || typeof x !== 'number' || typeof y !== 'number') {
-    const output = defaultCommandCliOutput(data);
-    return { data: output.data, text: appendResponseNotes(output.text, data) };
+    return defaultCommandCliOutput(data);
   }
-  return { data, text: appendResponseNotes(`Tapped @${ref} (${x}, ${y})`, data) };
+  return { data, text: `Tapped @${ref} (${x}, ${y})` };
 }
 
-export const interactionCliOutputFormatters = {
+// #1652: settle-capable entries (click, press, fill, longpress, hover, scroll)
+// get the warning/settle notes appended by the trait-derived wrapper; the rest
+// of the map is returned untouched.
+export const interactionCliOutputFormatters = withSettleCapableNotes({
   click: resultOutput(tapCliOutput),
   press: resultOutput(tapCliOutput),
-  fill: messageWithSettleOutput,
-  longpress: messageWithSettleOutput,
-  hover: messageWithSettleOutput,
-  scroll: messageWithSettleOutput,
+  fill: messageOutput,
+  longpress: messageOutput,
+  hover: messageOutput,
+  scroll: messageOutput,
   get: ({ input, result }) =>
     getCliOutput({
       result: result as CommandRequestResult,
@@ -93,7 +96,7 @@ export const interactionCliOutputFormatters = {
     }),
   is: resultOutput(isCliOutput),
   find: resultOutput(findCliOutput),
-} as const satisfies Record<string, CliOutputFormatter>;
+} satisfies Record<string, CliOutputFormatter>);
 
 function defaultCommandCliOutput(result: CommandRequestResult): CliOutput {
   return messageCliOutput(result as Record<string, unknown>);

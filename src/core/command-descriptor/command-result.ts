@@ -22,6 +22,7 @@ import type {
   LongPressCommandResponseData,
   OrientationCommandResult,
   PressCommandResponseData,
+  ScrollCommandResult,
   TvRemoteCommandResult,
   WaitCommandResult,
 } from '@agent-device/contracts/interaction';
@@ -45,7 +46,11 @@ import type { ReplayCommandResult, ReplaySuiteResult } from '@agent-device/contr
  * `appstate` (a closed `platform` union — Apple session state with the iOS-only
  * device locators, or Android package/activity). Batch 4 adds `keyboard` (a
  * closed flat shape). Batch 5 adds the compact daemon projections for `wait`,
- * `prepare`, `push`, and `trigger-app-event`. Each entry is grounded in a
+ * `prepare`, `push`, and `trigger-app-event`. #1652 adds `scroll`
+ * (ScrollCommandResult): the shared dispatch vocabulary plus the opt-in
+ * settle observation, so the settle-capable generic-route pair (`back`,
+ * `scroll`) is fully typed and its MCP output schema derives from the trait.
+ * Each entry is grounded in a
  * re-read of the handler's literal return; see the per-type docstrings.
  */
 export interface CommandResultMap {
@@ -67,6 +72,7 @@ export interface CommandResultMap {
   keyboard: KeyboardCommandResult;
   'tv-remote': TvRemoteCommandResult;
   wait: WaitCommandResult;
+  scroll: ScrollCommandResult;
   prepare: PrepareCommandResult;
   push: PushCommandResult;
   'trigger-app-event': TriggerAppEventCommandResult;

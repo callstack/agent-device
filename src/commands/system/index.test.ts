@@ -7,6 +7,7 @@ import type {
   TvRemoteCommandOptions,
 } from '../../client/client-types.ts';
 import type { CommandResult } from '../../core/command-descriptor/command-result.ts';
+import { readInputFromCli } from '../cli-grammar/registry.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import {
   appStateCliReader,
@@ -119,17 +120,23 @@ describe('system command interface', () => {
     ).toBeUndefined();
   });
 
-  // #1638: --settle has to survive BOTH back seams — the reader that builds the
-  // input and the writer that turns it into daemon request options.
+  // #1638: --settle has to survive BOTH back seams — the reader seam that
+  // builds the input (`readInputFromCli`, which merges the trait-derived
+  // settle triple since #1652) and the writer that turns it into daemon
+  // request options.
   test('back reader and writer carry the settle request through to daemon flags', () => {
-    const input = backCliReader([], flags({ settle: true, settleQuietMs: 250, timeoutMs: 8_000 }));
+    const input = readInputFromCli(
+      'back',
+      [],
+      flags({ settle: true, settleQuietMs: 250, timeoutMs: 8_000 }),
+    );
     expect(input).toMatchObject({ settle: true, settleQuietMs: 250, timeoutMs: 8_000 });
     expect(backDaemonWriter(input).options).toMatchObject({
       settle: true,
       settleQuietMs: 250,
       timeoutMs: 8_000,
     });
-    expect(backCliReader([], flags()).settle).toBeUndefined();
+    expect(readInputFromCli('back', [], flags()).settle).toBeUndefined();
   });
 
   test('back CLI output renders the settled observation', () => {

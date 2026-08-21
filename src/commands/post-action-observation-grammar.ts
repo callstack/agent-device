@@ -1,20 +1,22 @@
+import type { CliFlags } from '@agent-device/contracts/command';
 import type { PostActionObservationSupportFor } from '../core/command-descriptor/post-action-observation.ts';
 import {
   commandSupportsSettleObservation,
   commandSupportsVerifyEvidence,
 } from '../core/command-descriptor/registry.ts';
+import { settleInputFromFlags } from './cli-grammar/common.ts';
 import { SETTLE_FLAGS } from './cli-grammar/flag-groups.ts';
 import type { FlagKey } from './cli-grammar/flag-types.ts';
 import { booleanField, integerField } from './command-input.ts';
 
 /**
- * The two caller-facing surfaces a command's post-action observation trait
+ * The caller-facing surfaces a command's post-action observation trait
  * entitles it to (`--verify` / `--settle`, #1047/#1101): the metadata input
- * fields (Node SDK options + MCP tool schema) and the CLI allowed flags. Both
- * are materialized from the descriptor registry rather than hand-listed per
- * command. This lives outside the interaction family because the trait does
- * too: `scroll` and `back` carry it on the generic daemon route (#1638), and
- * `back` is a system command.
+ * fields (Node SDK options + MCP tool schema), the CLI allowed flags, and the
+ * CLI reader input (#1652). All are materialized from the descriptor registry
+ * rather than hand-listed per command. This lives outside the interaction
+ * family because the trait does too: `scroll` and `back` carry it on the
+ * generic daemon route (#1638), and `back` is a system command.
  *
  * A descriptor gate (`post-action-observation.test.ts`) asserts, over every
  * descriptor, that both surfaces are present exactly when the trait is — so a
@@ -59,4 +61,15 @@ export function postActionObservationCliFlags(command: string): readonly FlagKey
   if (commandSupportsVerifyEvidence(command)) flags.push('verify');
   if (commandSupportsSettleObservation(command)) flags.push(...SETTLE_FLAGS);
   return flags;
+}
+
+/**
+ * #1652: the settle triple a command's reader owes the daemon, merged at the
+ * `readInputFromCli` seam so no reader can forget it (the pre-seam per-reader
+ * spreads silently no-op'd when dropped). Non-settle commands get `{}` — and
+ * their parsers refuse `--settle` anyway via `postActionObservationCliFlags`.
+ */
+export function settleInputForCommand(command: string, flags: CliFlags): Record<string, unknown> {
+  if (!commandSupportsSettleObservation(command)) return {};
+  return settleInputFromFlags(flags);
 }

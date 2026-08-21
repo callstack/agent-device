@@ -970,7 +970,7 @@ Rules:
   Findings must come from observed runtime behavior, not source reads.
   After each mutation, use the --settle diff as evidence when available; otherwise re-snapshot.
   Wait timeouts are integer milliseconds in the trailing positional: agent-device wait 'role=tab' 10000. Do not write duration suffixes such as 10s.
-  scroll takes direction then amount and does not support a selector or --settle: agent-device scroll down 3.
+  scroll takes a selector-less direction+amount form: agent-device scroll down 3. Use --settle to wait for the UI to go quiet and get the settled diff.
   Keep commands in the report reproducible; use selectors or refs from fresh snapshots, not guessed coordinates.
   Prefer refs for exploration and selectors for deterministic replay.
   Use logs, network, screenshot --overlay-refs, trace, perf frames, perf memory, native profiles, or react-devtools only when they add evidence to a specific issue.

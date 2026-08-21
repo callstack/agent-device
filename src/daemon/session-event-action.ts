@@ -3,6 +3,7 @@ import { RECORDING_SCOPE_VALUES } from '@agent-device/contracts/recording';
 import { SESSION_SURFACES, type SessionAction } from '@agent-device/contracts/session';
 import { DEVICE_TARGETS, PLATFORM_SELECTORS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../command-catalog.ts';
+import { commandSupportsSettleObservation } from '../core/command-descriptor/registry.ts';
 import {
   buildInstallActionSummary,
   buildStructuredActionDetails,
@@ -288,6 +289,15 @@ const COMMON_SAFE_FLAG_SPEC = {
   ],
 } as const satisfies SafeFlagSpec;
 
+// #1652: the settle triple's safe projection derives from the descriptor
+// post-action observation trait instead of being re-listed inside every
+// per-command spec — a settle-capable command that forgot its entries would
+// otherwise record the flag but never display it.
+const SETTLE_SAFE_FLAG_SPEC = {
+  booleans: [{ source: 'settle' }],
+  numbers: [{ source: 'settleQuietMs' }],
+} as const satisfies SafeFlagSpec;
+
 const SAFE_ACTION_FLAG_SPECS: Record<string, SafeFlagSpec> = {
   [PUBLIC_COMMANDS.open]: {
     booleans: [{ source: 'relaunch' }, { source: 'testIme' }],
@@ -300,8 +310,7 @@ const SAFE_ACTION_FLAG_SPECS: Record<string, SafeFlagSpec> = {
   [PUBLIC_COMMANDS.fill]: textEntrySafeFlagSpec(),
   [PUBLIC_COMMANDS.type]: textEntrySafeFlagSpec(),
   [PUBLIC_COMMANDS.scroll]: {
-    booleans: [{ source: 'settle' }],
-    numbers: [{ source: 'pixels' }, { source: 'durationMs' }, { source: 'settleQuietMs' }],
+    numbers: [{ source: 'pixels' }, { source: 'durationMs' }],
   },
   [PUBLIC_COMMANDS.gesture]: gestureSafeFlagSpec(),
   [PUBLIC_COMMANDS.swipe]: gestureSafeFlagSpec(),
@@ -328,8 +337,6 @@ const SAFE_ACTION_FLAG_SPECS: Record<string, SafeFlagSpec> = {
     numbers: [{ source: 'snapshotDepth', output: 'depth' }],
   },
   [PUBLIC_COMMANDS.back]: {
-    booleans: [{ source: 'settle' }],
-    numbers: [{ source: 'settleQuietMs' }],
     enums: [{ source: 'backMode', output: 'mode', values: BACK_MODES }],
   },
   [PUBLIC_COMMANDS.record]: {
@@ -356,18 +363,22 @@ function buildSafeActionFlags(action: SessionAction): Record<string, unknown> | 
     : undefined;
   projectSafeFlags(safeFlags, flags, COMMON_SAFE_FLAG_SPEC);
   projectSafeFlags(safeFlags, flags, commandFlagSpec);
+  projectSafeFlags(safeFlags, flags, settleSafeFlagSpec(action.command));
   return Object.keys(safeFlags).length > 0 ? safeFlags : undefined;
+}
+
+function settleSafeFlagSpec(command: string): SafeFlagSpec | undefined {
+  return commandSupportsSettleObservation(command) ? SETTLE_SAFE_FLAG_SPEC : undefined;
 }
 
 function touchSafeFlagSpec(): SafeFlagSpec {
   return {
-    booleans: [{ source: 'doubleTap' }, { source: 'settle' }],
+    booleans: [{ source: 'doubleTap' }],
     numbers: [
       { source: 'count' },
       { source: 'intervalMs' },
       { source: 'holdMs' },
       { source: 'jitterPx' },
-      { source: 'settleQuietMs' },
     ],
     enums: [{ source: 'clickButton', values: CLICK_BUTTONS }],
   };
@@ -375,8 +386,7 @@ function touchSafeFlagSpec(): SafeFlagSpec {
 
 function textEntrySafeFlagSpec(): SafeFlagSpec {
   return {
-    booleans: [{ source: 'settle' }],
-    numbers: [{ source: 'delayMs' }, { source: 'settleQuietMs' }],
+    numbers: [{ source: 'delayMs' }],
   };
 }
 

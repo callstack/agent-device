@@ -1,10 +1,5 @@
-import type { CliOutput } from './command-contract.ts';
-import {
-  messageCliOutput,
-  pinnedRefText,
-  resultOutput,
-  type CliOutputFormatter,
-} from './output-common.ts';
+import { commandSupportsSettleObservation } from '../core/command-descriptor/registry.ts';
+import { pinnedRefText, type CliOutputFormatter } from './output-common.ts';
 
 /**
  * Compact `--settle` (#1101) rendering appended to a command's own success
@@ -30,15 +25,37 @@ type SettleTextView = {
   refsGeneration?: number;
 };
 
-/** `messageCliOutput` plus the response's warning and settle notes. */
-export const messageWithSettleOutput: CliOutputFormatter = resultOutput(
-  (result: Record<string, unknown>): CliOutput => {
-    const output = messageCliOutput(result);
-    return { data: output.data, text: appendResponseNotes(output.text, result) };
-  },
-);
+/** A formatter's own success line plus the response's warning and settle notes. */
+function messageWithSettledNotes(formatter: CliOutputFormatter): CliOutputFormatter {
+  return ({ input, result }) => {
+    const output = formatter({ input, result });
+    return {
+      data: output.data,
+      text: appendResponseNotes(output.text, output.data as Record<string, unknown>),
+    };
+  };
+}
 
-export function appendResponseNotes(
+/**
+ * #1652: whether a formatter renders the settle notes derives from the
+ * command's descriptor post-action observation trait instead of hand-picking
+ * the note-appending wrapper per entry. Wrap a whole family map; settle-capable
+ * entries come back with the notes appended, everything else is returned
+ * untouched — deliberately, because appending notes to outputs like
+ * `get --format attrs` JSON would corrupt them.
+ */
+export function withSettleCapableNotes<Formatters extends Record<string, CliOutputFormatter>>(
+  formatters: Formatters,
+): Formatters {
+  const derived: Record<string, CliOutputFormatter> = { ...formatters };
+  for (const [command, formatter] of Object.entries(formatters)) {
+    if (!commandSupportsSettleObservation(command)) continue;
+    derived[command] = messageWithSettledNotes(formatter);
+  }
+  return derived as Formatters;
+}
+
+function appendResponseNotes(
   text: string | null | undefined,
   data: Record<string, unknown>,
 ): string {

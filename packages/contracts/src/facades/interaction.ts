@@ -152,6 +152,7 @@ export {
 } from '../scroll-command.ts';
 export type {
   ScrollCommandOptions,
+  ScrollCommandResult,
   ScrollDistanceOptions,
   ScrollExecutionOptions,
   ResolvedScrollExecutionOptions,

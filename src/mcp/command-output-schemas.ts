@@ -1,6 +1,7 @@
 import type { JsonSchema } from '../commands/command-contract.ts';
 import { projectedSystemCommandOutputSchemas } from '../commands/system/index.ts';
 import type { CommandResultMap } from '../core/command-descriptor/command-result.ts';
+import { commandSupportsSettleObservation } from '../core/command-descriptor/registry.ts';
 import { booleanSchema, looseObjectSchema, stringSchema } from '../commands/command-input.ts';
 import { SESSION_SURFACES } from '@agent-device/contracts/session';
 import { DEVICE_TARGETS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
@@ -25,6 +26,11 @@ import { DEVICE_TARGETS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
  *    fields ride into `structuredContent` and still validate.
  *  - Accurate, never invented: required-vs-optional, enums, `const` discriminants
  *    and discriminated-union branches mirror the source contract types.
+ *
+ * The opt-in `--settle` observation (#1101) is not hand-listed per entry: the
+ * base map carries none and `deriveSettleObservationSchemas` grafts it onto
+ * exactly the entries whose descriptor declares the post-action observation
+ * trait (#1652).
  */
 
 export const DEVICE_KINDS = ['simulator', 'emulator', 'device'] as const;
@@ -308,18 +314,42 @@ const targetShutdownResultSchema: JsonSchema = objectSchema(
   ['success', 'exitCode', 'stdout', 'stderr'],
 );
 
-/** Grafts the opt-in `--settle` observation onto an otherwise closed schema. */
+/** Grafts the opt-in `--settle` observation onto a closed schema or union branch. */
 function withSettleObservation(schema: JsonSchema): JsonSchema {
+  // Union-shaped results (fill) carry the observation in EACH branch, never
+  // next to the oneOf.
+  if (schema.oneOf) {
+    return { ...schema, oneOf: schema.oneOf.map(withSettleObservation) };
+  }
   return {
     ...schema,
     properties: { ...(schema.properties ?? {}), settle: settleObservationSchema },
   };
 }
 
+/**
+ * #1652: whether a command's output schema advertises `settle` derives from
+ * its descriptor post-action observation trait instead of hand-listed
+ * properties per schema. The base map below carries no settle property
+ * anywhere; this pass grafts it onto exactly the trait-capable entries.
+ * Copies only — press and click share one base schema object, so an in-place
+ * graft would leak across them, and non-trait entries must stay the SAME
+ * object identity their projection tests pin.
+ */
+function deriveSettleObservationSchemas(
+  schemas: Record<keyof CommandResultMap, JsonSchema>,
+): Record<keyof CommandResultMap, JsonSchema> {
+  const derived: Record<keyof CommandResultMap, JsonSchema> = { ...schemas };
+  for (const command of Object.keys(derived) as Array<keyof CommandResultMap>) {
+    if (!commandSupportsSettleObservation(command)) continue;
+    derived[command] = withSettleObservation(derived[command]);
+  }
+  return derived;
+}
+
 const tapInteractionResponseDataSchema = interactionResponseDataSchema({
   properties: {
     evidence: interactionEvidenceSchema,
-    settle: settleObservationSchema,
     button: enumSchema(['secondary', 'middle']),
     count: numberSchema('Number of press/click repetitions.'),
     intervalMs: numberSchema('Delay between repeated press/click actions.'),
@@ -333,7 +363,6 @@ const fillResponseProperties = {
   text: stringSchema('Text submitted to the field.'),
   delayMs: numberSchema('Delay between typed characters in milliseconds.'),
   evidence: interactionEvidenceSchema,
-  settle: settleObservationSchema,
 };
 
 const fillVerificationTargetSchema = objectSchema(
@@ -379,8 +408,10 @@ const unconfirmedFillResponseSchema = interactionResponseDataSchema({
   required: ['text', 'verification', 'requested', 'before', 'after', 'target'],
 });
 
-export const COMMAND_OUTPUT_SCHEMAS = {
+const BASE_COMMAND_OUTPUT_SCHEMAS = {
   // buildInteractionResponseData public payloads for interaction commands.
+  // #1652: the opt-in `settle` observation is NOT listed here — the trait
+  // derivation pass grafts it onto settle-capable entries below.
   press: tapInteractionResponseDataSchema,
   click: tapInteractionResponseDataSchema,
   fill: {
@@ -392,13 +423,11 @@ export const COMMAND_OUTPUT_SCHEMAS = {
   longpress: interactionResponseDataSchema({
     properties: {
       durationMs: numberSchema(),
-      settle: settleObservationSchema,
       gesture: constSchema('longpress'),
     },
   }),
   hover: interactionResponseDataSchema({
     properties: {
-      settle: settleObservationSchema,
       gesture: constSchema('hover'),
     },
   }),
@@ -420,7 +449,6 @@ export const COMMAND_OUTPUT_SCHEMAS = {
       x: numberSchema('Resolved x coordinate for mutating find actions.'),
       y: numberSchema('Resolved y coordinate for mutating find actions.'),
       message: stringSchema('Diagnostic message for mutating find actions.'),
-      settle: settleObservationSchema,
       cost: responseCostSchema,
     },
     [],
@@ -444,12 +472,8 @@ export const COMMAND_OUTPUT_SCHEMAS = {
   ),
 
   // packages/contracts/src/navigation.ts, projected from executable command contracts.
+  // The `back` settle observation is grafted by the derivation pass below.
   ...projectedSystemCommandOutputSchemas,
-  // #1638: the projected navigation schema is the closed dispatch shape. `back`
-  // is settle-capable on the generic route, so the opt-in observation is added
-  // here — the projection layer sits below this module and cannot reach
-  // `settleObservationSchema`.
-  back: withSettleObservation(projectedSystemCommandOutputSchemas.back),
 
   // packages/contracts/src/wait.ts — compact public daemon projection.
   wait: objectSchema(
@@ -464,6 +488,23 @@ export const COMMAND_OUTPUT_SCHEMAS = {
       warning: stringSchema(),
     },
     ['waitedMs'],
+  ),
+
+  // packages/contracts/src/scroll-command.ts — ScrollCommandResult. The
+  // settle-capable generic-route pair must both be typed so the trait
+  // derivation grafts the observation onto each (#1652); platform leaves add
+  // gesture-plan coordinates on top, which the non-strict schema admits.
+  scroll: objectSchema(
+    {
+      direction: enumSchema(['up', 'down', 'left', 'right']),
+      edge: enumSchema(['top', 'bottom']),
+      passes: numberSchema('Edge scrolls only: how many scroll-and-check passes ran.'),
+      amount: numberSchema(),
+      pixels: numberSchema(),
+      durationMs: numberSchema(),
+      message: stringSchema(),
+    },
+    ['direction'],
   ),
 
   // packages/contracts/src/prepare.ts — prepare is not MCP-exposed, but the schema stays
@@ -772,3 +813,5 @@ export const COMMAND_OUTPUT_SCHEMAS = {
     ],
   },
 } satisfies Record<keyof CommandResultMap, JsonSchema>;
+
+export const COMMAND_OUTPUT_SCHEMAS = deriveSettleObservationSchemas(BASE_COMMAND_OUTPUT_SCHEMAS);

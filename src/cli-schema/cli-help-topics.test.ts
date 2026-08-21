@@ -521,10 +521,8 @@ test('usageForCommand resolves dogfood help topic', async () => {
   assert.match(help, /direct Android localhost URL opens with a port auto-configure/);
   assert.match(help, /Keep stateful commands serial within the same session/);
   assert.match(help, /agent-device wait 'role=tab' 10000/);
-  assert.match(
-    help,
-    /scroll takes direction then amount and does not support a selector or --settle/,
-  );
+  assert.match(help, /scroll takes a selector-less direction\+amount form/);
+  assert.match(help, /Use --settle to wait for the UI to go quiet/);
   assert.match(help, /prefer agent-device open "Expo Go" <url>/);
   assert.match(help, /dogfood-output\/report\.md/);
   assert.match(help, /ID, severity, category, title, affected flow\/screen/);

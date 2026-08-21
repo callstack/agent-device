@@ -153,6 +153,7 @@ test('CommandResultMap is seeded only from already-existing contract result type
     | 'keyboard'
     | 'tv-remote'
     | 'wait'
+    | 'scroll'
     | 'prepare'
     | 'push'
     | 'trigger-app-event'

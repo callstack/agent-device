@@ -16,7 +16,6 @@ import {
   optionalString,
   request,
   requiredDaemonString,
-  settleInputFromFlags,
 } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
@@ -216,7 +215,6 @@ export const appSwitcherCliReader: CliReader = (_positionals, flags) => commonIn
 
 export const backCliReader: CliReader = (_positionals, flags) => ({
   ...commonInputFromFlags(flags),
-  ...settleInputFromFlags(flags),
   mode: flags.backMode,
 });
 

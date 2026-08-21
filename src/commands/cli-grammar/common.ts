@@ -140,6 +140,8 @@ export function selectorSnapshotOptionsFromFlags(flags: CliFlags): SelectorSnaps
 // Descriptor post-action observation commands use --settle (#1101).
 // --timeout doubles as the settle deadline only when --settle is present; a
 // bare --timeout stays compatible and is ignored by touch commands.
+// #1652: readers do NOT spread this themselves — `readInputFromCli` merges
+// `settleInputForCommand` at the one seam every reader passes through.
 export function settleInputFromFlags(flags: CliFlags): Record<string, unknown> {
   return compactRecord({
     settle: flags.settle,
