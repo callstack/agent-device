@@ -8,7 +8,6 @@ import {
   longPressCommand,
   pressCommand,
   scrollCommand,
-  typeTextCommand,
   type ClickCommandOptions,
   type FillCommandOptions,
   type FillCommandResult,
@@ -23,8 +22,6 @@ import {
   type PressCommandResult,
   type ScrollCommandOptions,
   type ScrollCommandResult,
-  type TypeTextCommandOptions,
-  type TypeTextCommandResult,
 } from './interactions.ts';
 import {
   findCommand,
@@ -78,7 +75,6 @@ export type InteractionCommands = {
   click: RuntimeCommand<ClickCommandOptions, PressCommandResult>;
   press: RuntimeCommand<PressCommandOptions, PressCommandResult>;
   fill: RuntimeCommand<FillCommandOptions, FillCommandResult>;
-  typeText: RuntimeCommand<TypeTextCommandOptions, TypeTextCommandResult>;
   focus: RuntimeCommand<FocusCommandOptions, FocusCommandResult>;
   longPress: RuntimeCommand<LongPressCommandOptions, LongPressCommandResult>;
   hover: RuntimeCommand<HoverCommandOptions, HoverCommandResult>;
@@ -134,10 +130,6 @@ export type BoundInteractionCommands = {
     text: string,
     options?: Omit<FillCommandOptions, 'target' | 'text'>,
   ) => Promise<FillCommandResult>;
-  typeText: (
-    text: string,
-    options?: Omit<TypeTextCommandOptions, 'text'>,
-  ) => Promise<TypeTextCommandResult>;
   focus: (
     target: InteractionTarget,
     options?: Omit<FocusCommandOptions, 'target'>,
@@ -171,7 +163,6 @@ export const interactionCommands: InteractionCommands = {
   click: clickCommand,
   press: pressCommand,
   fill: fillCommand,
-  typeText: typeTextCommand,
   focus: focusCommand,
   longPress: longPressCommand,
   hover: hoverCommand,
@@ -202,7 +193,6 @@ export function bindInteractionCommands(runtime: AgentDeviceRuntime): BoundInter
     press: (target, options = {}) => interactionCommands.press(runtime, { ...options, target }),
     fill: (target, text, options = {}) =>
       interactionCommands.fill(runtime, { ...options, target, text }),
-    typeText: (text, options = {}) => interactionCommands.typeText(runtime, { ...options, text }),
     focus: (target, options = {}) => interactionCommands.focus(runtime, { ...options, target }),
     longPress: (target, options = {}) =>
       interactionCommands.longPress(runtime, { ...options, target }),

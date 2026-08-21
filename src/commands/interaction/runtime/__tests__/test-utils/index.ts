@@ -324,7 +324,6 @@ export function createInteractionDevice(
       | 'tapTarget'
       | 'fill'
       | 'fillTarget'
-      | 'typeText'
       | 'focus'
       | 'longPress'
       | 'scroll'
@@ -352,7 +351,6 @@ export function createInteractionDevice(
       fillTarget: overrides.fillTarget
         ? async (...args) => await overrides.fillTarget?.(...args)
         : undefined,
-      typeText: async (...args) => await overrides.typeText?.(...args),
       focus: overrides.focus ? async (...args) => await overrides.focus?.(...args) : undefined,
       longPress: overrides.longPress
         ? async (...args) => await overrides.longPress?.(...args)

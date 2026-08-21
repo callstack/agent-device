@@ -7,7 +7,6 @@ import {
 } from './interactor-operation-binding.ts';
 import type { Interactor, RunnerContext, TypeTextBackendResult } from './interactor-types.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
-import type { SessionSurface } from './session-surface.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
 
 /**
@@ -19,7 +18,7 @@ import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
 export type TypeTextInput = Readonly<{
   text: string;
   delayMs: number;
-  options?: Readonly<{ appBundleId?: string; surface?: SessionSurface }>;
+  options?: Readonly<{ appBundleId?: string }>;
   /** Same runner metadata a capture needs; reuses that type rather than restating it. */
   execution?: SnapshotRuntimeExecution;
 }>;

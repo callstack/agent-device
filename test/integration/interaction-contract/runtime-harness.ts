@@ -42,7 +42,6 @@ export function createContractDevice(
       tapTarget: overrides.tapTarget,
       fill: async (...args) => await overrides.fill?.(...args),
       fillTarget: overrides.fillTarget,
-      typeText: async () => {},
       performGesture: overrides.performGesture,
       resolveGestureViewport: overrides.resolveGestureViewport,
     } satisfies AgentDeviceBackend,

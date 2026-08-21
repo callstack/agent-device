@@ -620,7 +620,7 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
       // The interactor leaf and its dispatch-table arm. The interaction backend's `typeText`
       // member and find's type leg keep their names — what changed is what they call: the same
       // `resolveBoundTypeTextRuntime`, which is why `typeText` has exactly one owner below.
-      routeNames: ['handleTypeCommand'],
+      routeNames: ['handleTypeCommand', 'typeTextCommand'],
       // `type` also leaves the two hand-maintained overlays that granted it a capability
       // bucket on families the descriptor never listed.
       staticCommandSets: ['HARMONYOS_SUPPORTED_COMMANDS', 'WEB_INTERACTION_COMMANDS'],

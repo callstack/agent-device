@@ -75,7 +75,6 @@ function createSettleDevice(params: {
       tap: async () => (params.tap ? await params.tap() : { ok: true }),
       fill: async () => ({ ok: true }),
       longPress: async () => ({ ok: true }),
-      typeText: async () => {},
     } satisfies AgentDeviceBackend,
     artifacts: createLocalArtifactAdapter(),
     sessions: createMemorySessionStore([
@@ -227,7 +226,6 @@ test('press --settle pins an already-established private-ax observation backend'
       tap: async () => ({ ok: true }),
       fill: async () => ({ ok: true }),
       longPress: async () => ({ ok: true }),
-      typeText: async () => {},
     } satisfies AgentDeviceBackend,
     artifacts: createLocalArtifactAdapter(),
     sessions: createMemorySessionStore([{ name: 'default', snapshot: established }]),

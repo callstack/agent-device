@@ -491,11 +491,6 @@ export type AgentDeviceBackend = {
     text: string,
     options?: BackendFillOptions,
   ): Promise<BackendActionResult>;
-  typeText?(
-    context: BackendCommandContext,
-    text: string,
-    options?: { delayMs?: number },
-  ): Promise<BackendActionResult>;
   focus?(context: BackendCommandContext, point: Point): Promise<BackendActionResult>;
   longPress?(
     context: BackendCommandContext,

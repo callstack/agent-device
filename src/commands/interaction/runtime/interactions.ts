@@ -11,16 +11,9 @@ import { SELECTOR_PIPELINE_POLICIES } from '../../../core/selector-pipeline-poli
 import type { Point } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { isFillableType } from '@agent-device/contracts/snapshot';
-import { successText } from '../../../utils/success-text.ts';
-import { findMistargetedTypeRefToken } from '../../../utils/type-target-warning.ts';
-import { requireIntInRange } from '../../../utils/validation.ts';
 import { attachResolvedInteractionTarget } from '../../../contracts/interaction-outcome.ts';
 import { toBackendContext } from '../../runtime-common.ts';
-import {
-  toBackendResult,
-  type BackendResultEnvelope,
-  type RuntimeCommand,
-} from '../../runtime-types.ts';
+import { toBackendResult, type RuntimeCommand } from '../../runtime-types.ts';
 import {
   applyPostActionObservation,
   planPostActionObservation,
@@ -71,17 +64,6 @@ export type FillCommandOptions = CommandContext & {
   /** #1654: a mutating `find`'s already-resolved node; see resolution.ts. */
   preresolvedTarget?: PreresolvedInteractionTarget;
 } & PostActionObservationOptions;
-
-export type TypeTextCommandOptions = CommandContext & {
-  text: string;
-  delayMs?: number;
-};
-
-export type TypeTextCommandResult = {
-  kind: 'text';
-  text: string;
-  delayMs: number;
-} & BackendResultEnvelope;
 
 export const pressCommand: RuntimeCommand<PressCommandOptions, PressCommandResult> = async (
   runtime,
@@ -148,39 +130,6 @@ export const fillCommand: RuntimeCommand<FillCommandOptions, FillCommandResult> 
     },
     observation,
   );
-};
-
-export const typeTextCommand: RuntimeCommand<
-  TypeTextCommandOptions,
-  TypeTextCommandResult
-> = async (runtime, options): Promise<TypeTextCommandResult> => {
-  const text = options.text;
-  if (!text) throw new AppError('INVALID_ARGS', 'type requires text');
-  const mistargetedRef = findMistargetedTypeRef(text);
-  if (mistargetedRef) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `type does not accept a target ref like "${mistargetedRef}"`,
-      {
-        hint: `Use fill ${mistargetedRef} "text" to target that field, or press ${mistargetedRef} then type "text" to append.`,
-      },
-    );
-  }
-  if (!runtime.backend.typeText) {
-    throw new AppError('UNSUPPORTED_OPERATION', 'type is not supported by this backend');
-  }
-  const delayMs = requireIntInRange(options.delayMs ?? 0, 'delay-ms', 0, 10_000);
-  const backendResult = await runtime.backend.typeText(toBackendContext(runtime, options), text, {
-    delayMs,
-  });
-  const formattedBackendResult = toBackendResult(backendResult);
-  return {
-    kind: 'text',
-    text,
-    delayMs,
-    ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
-    ...successText(`Typed ${Array.from(text).length} chars`),
-  };
 };
 
 async function tapCommand(
@@ -314,8 +263,4 @@ function formatTargetForWarning(result: {
   if (result.target?.kind === 'ref') return result.target.ref;
   if (result.target?.kind === 'selector') return result.target.selector;
   return 'point';
-}
-
-function findMistargetedTypeRef(text: string): string | null {
-  return findMistargetedTypeRefToken(text);
 }

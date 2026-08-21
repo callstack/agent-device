@@ -258,7 +258,6 @@ test('native ref fast path proceeds untouched when the session has no snapshot',
         throw new Error('native ref preflight must not capture a snapshot');
       },
       tap: async () => {},
-      typeText: async () => {},
       tapTarget: async (_context, target) => {
         calls.push(target.ref);
         return { ref: target.ref.replace(/^@/, '') };
@@ -287,7 +286,6 @@ test('runtime interactions pass runtime signal to backend primitives', async () 
       tap: async (context) => {
         signal = context.signal;
       },
-      typeText: async () => {},
     } satisfies AgentDeviceBackend,
     artifacts: createLocalArtifactAdapter(),
     policy: localCommandPolicy(),
@@ -588,31 +586,6 @@ test('runtime fill warns when the resolved target is not a text input', async ()
   });
 
   assert.match(result.warning ?? '', /attempting fill anyway/);
-});
-
-test('runtime typeText validates refs and forwards text to the backend primitive', async () => {
-  const calls: Array<{ text: string; delayMs?: number }> = [];
-  const device = createInteractionDevice(selectorSnapshot(), {
-    typeText: async (_context, text, options) => {
-      calls.push({ text, delayMs: options?.delayMs });
-    },
-  });
-
-  const result = await device.interactions.typeText('hello', {
-    session: 'default',
-    delayMs: 25,
-  });
-
-  assert.deepEqual(calls, [{ text: 'hello', delayMs: 25 }]);
-  assert.equal(result.kind, 'text');
-  assert.equal(result.text, 'hello');
-  assert.equal(result.delayMs, 25);
-  assert.equal(result.message, 'Typed 5 chars');
-
-  await assert.rejects(
-    () => device.interactions.typeText('@e1 hello', { session: 'default' }),
-    /type does not accept a target ref/,
-  );
 });
 
 test('coordinate tap with out-of-bounds point warns when session has viewport', async () => {

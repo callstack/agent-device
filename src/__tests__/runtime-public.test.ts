@@ -23,7 +23,6 @@ import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 const backend = {
   platform: 'ios',
   captureScreenshot: async () => {},
-  typeText: async () => {},
   openApp: async () => {},
   closeApp: async () => {},
   listApps: async () => [{ id: 'com.example.app', name: 'Example', bundleId: 'com.example.app' }],
@@ -250,7 +249,6 @@ test('internal backend, commands, and io modules are usable', () => {
   assert.equal(typeof commands.interactions.click, 'function');
   assert.equal(typeof commands.interactions.press, 'function');
   assert.equal(typeof commands.interactions.fill, 'function');
-  assert.equal(typeof commands.interactions.typeText, 'function');
   assert.equal(typeof commands.interactions.focus, 'function');
   assert.equal(typeof commands.interactions.longPress, 'function');
   assert.equal(typeof commands.interactions.scroll, 'function');
