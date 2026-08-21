@@ -54,6 +54,43 @@ test('package apple runner source strips unit-test blocks without mutating check
   );
 });
 
+test('package apple runner source drops skeleton test files and keeps non-skeleton siblings', async () => {
+  const root = mkdtempForTestSync('agent-device-runner-package-skeleton-');
+  onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
+  const uitestsDir = 'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests';
+  writeFixtureFile(
+    root,
+    `${uitestsDir}/RunnerTests+SkeletonOnly.swift`,
+    [
+      'import XCTest',
+      '',
+      'extension RunnerTests {',
+      '#if AGENT_DEVICE_RUNNER_UNIT_TESTS',
+      '  func testSkeletonWholeBody() {}',
+      '#endif',
+      '}',
+      '',
+    ].join('\n'),
+  );
+  writeFixtureFile(
+    root,
+    `${uitestsDir}/RunnerTests+RuntimeSibling.swift`,
+    ['extension RunnerTests {', '  func runtimeSiblingHelper() {}', '}', ''].join('\n'),
+  );
+
+  await runCmd(process.execPath, [packageScript, '--root', root, '--quiet']);
+
+  assert.equal(
+    fs.existsSync(path.join(root, `dist/${uitestsDir}/RunnerTests+SkeletonOnly.swift`)),
+    false,
+    'a file whose unit-test blocks were its whole body must not ship as an empty translation unit',
+  );
+  assert.ok(
+    fs.existsSync(path.join(root, `dist/${uitestsDir}/RunnerTests+RuntimeSibling.swift`)),
+    'the skeleton skip must not drop files with shippable runtime content',
+  );
+});
+
 test('package apple runner source check rejects unit tests without writing dist', async () => {
   const root = mkdtempForTestSync('agent-device-runner-package-testgate-');
   onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
