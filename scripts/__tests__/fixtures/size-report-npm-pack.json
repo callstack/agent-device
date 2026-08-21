@@ -1,0 +1,12 @@
+{
+  "unpackedSize": 1701,
+  "files": [
+    { "path": "dist/src/index.js", "size": 401 },
+    { "path": "dist/src/index.d.ts", "size": 102 },
+    { "path": "dist/apple/runner/RunnerTests.swift", "size": 503 },
+    { "path": "apple/macos-helper/Sources/main.swift", "size": 211 },
+    { "path": "android/snapshot-helper/dist/helper.apk", "size": 307 },
+    { "path": "package.json", "size": 99 },
+    { "path": "vendor/unknown.bin", "size": 78 }
+  ]
+}
