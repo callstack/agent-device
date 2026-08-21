@@ -842,7 +842,8 @@ extension RunnerTests {
         nodes: [planTestNode(index: 0, type: "Application", label: "App")],
         truncated: false
       ),
-      effectiveDepth: nil
+      effectiveDepth: nil,
+      timing: timing
     )
 
     let payload = stampedSnapshotPayload(
@@ -854,6 +855,34 @@ extension RunnerTests {
 
     XCTAssertEqual(payload.snapshotQuality?.timing, timing)
     XCTAssertEqual(payload.nodes?.count, 1)
+  }
+
+  func testDirectPresentationDoesNotClaimPlanTiming() {
+    let options = PresentationOptions(
+      interactiveOnly: false,
+      depth: nil,
+      scope: nil,
+      raw: true
+    )
+    let capture = SnapshotPresentation.presentRaw(
+      SnapshotAcquisition(
+        hint: SnapshotPresentation.captureHint(for: options),
+        nodes: [],
+        truncated: false,
+        effectiveDepth: nil,
+        viewport: .infinite
+      ),
+      options: options
+    )
+
+    let payload = stampedSnapshotPayload(
+      capture,
+      backend: .recursiveTree,
+      state: "healthy",
+      reason: nil
+    )
+
+    XCTAssertNil(payload.snapshotQuality?.timing)
   }
 
   /// The raw plan is derived from what each backend can actually serve, not from a second
