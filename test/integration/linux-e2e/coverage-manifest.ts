@@ -181,11 +181,10 @@ export const LINUX_PLATFORM_COVERAGE = {
     LINUX_PROVIDER_EVIDENCE.test,
     'Linux provider scenario presses a snapshot ref and coordinate target',
   ),
-  [C.type]: contract(
-    'src/platforms/linux/__tests__/input-actions.test.ts',
-    'typeLinux uses ydotool type',
-    'Linux type dispatch uses the Wayland ydotool type primitive',
-  ),
+  // Promoted from command-contract to live by the `type` cutover (R41): the desktop replay now
+  // types a digit on real Linux hardware, so the migrated `typeText` path has live changed-path
+  // evidence; the ydotool primitive itself stays pinned by input-actions.test.ts.
+  [C.type]: live('the Linux desktop replay types a digit on real hardware'),
   [C.get]: contract(
     LINUX_PROVIDER_EVIDENCE.path,
     LINUX_PROVIDER_EVIDENCE.test,

@@ -36,6 +36,7 @@ import {
   screenshotRuntimePlanUses,
   shutdownTargetUse,
   focusRuntimeUse,
+  typeTextRuntimeUse,
   viewportRuntimeUse,
 } from '@agent-device/contracts/platform';
 import { readDeclaredPlatformExecution } from './platform-execution-entry.ts';
@@ -1188,11 +1189,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
       refFrameEffect: 'may-invalidate',
       androidBlockingDialogGuard: true,
     },
-    dispatch: {},
-    capability: ALL_DEVICE_COMMAND_CAPABILITY,
     timeoutPolicy: postActionObservationTimeoutPolicy('type', PRESERVE_DAEMON_TIMEOUT_POLICY),
     batchable: true,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    platformExecution: { kind: 'device-runtime', uses: [typeTextRuntimeUse] },
   },
   {
     name: 'get',

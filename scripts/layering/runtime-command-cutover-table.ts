@@ -26,8 +26,8 @@ import { retiredDispatchProjectionViolations } from './runtime-command-cutover-d
  * `cutoverTableDefects` rejects a duplicate; lifecycle starts at R28 after the accepted
  * shutdown, install/deploy, and application-lifecycle allocations. Snapshot starts at R32;
  * diff follows at R33, viewport at R34, get at R36, is at R37, screenshot at R39, wait at R38,
- * and focus at R40. R35 stays reserved for find, whose cutover is deferred behind the Wave 5
- * `type` surface — `focus`, its other blocker, landed at R40.
+ * focus at R40, and type at R41. R35 stays reserved for find, whose blockers (`focus` R40,
+ * `type` R41) have both landed; its atomic cutover is the next selector-family unit.
  */
 export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
   {
@@ -608,6 +608,29 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
       routes: ['dispatchGenericCommand'],
       operations: ['focusPoint'],
       operationOwners: { focusPoint: ['resolveBoundFocusRuntime'] },
+    },
+  },
+  {
+    rule: 'R41 type-runtime-cutover',
+    command: 'type',
+    subject: 'text entry',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      // The interactor leaf and its dispatch-table arm. The interaction backend's `typeText`
+      // member and find's type leg keep their names — what changed is what they call: the same
+      // `resolveBoundTypeTextRuntime`, which is why `typeText` has exactly one owner below.
+      routeNames: ['handleTypeCommand'],
+      // `type` also leaves the two hand-maintained overlays that granted it a capability
+      // bucket on families the descriptor never listed.
+      staticCommandSets: ['HARMONYOS_SUPPORTED_COMMANDS', 'WEB_INTERACTION_COMMANDS'],
+    },
+    runtimeTypeNames: ['TypeTextRuntimeOperations'],
+    operations: { names: ['typeText'] },
+    singularExecution: {
+      routes: ['handleInteractionCommands'],
+      operations: ['typeText'],
+      operationOwners: { typeText: ['executeBoundTypeText'] },
     },
   },
   {

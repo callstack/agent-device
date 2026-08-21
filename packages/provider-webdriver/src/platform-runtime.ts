@@ -3,11 +3,13 @@ import {
   availableApplicationLifecycleOperations,
   bindProviderFocusInteractor,
   bindProviderScreenshotInteractor,
+  bindProviderTypeTextInteractor,
   bindProviderSnapshotInteractor,
   createUnavailablePlatformRuntimeFacts,
   sameRuntimeOwner,
   focusRuntimeOperationFacts,
   screenshotRuntimeOperationFacts,
+  typeTextRuntimeOperationFacts,
   snapshotRuntimeOperationFacts,
   viewportRuntimeOperationFacts,
   type AppDeploymentInput,
@@ -19,6 +21,8 @@ import {
   type PlatformRuntimeOperations,
   type PlatformRuntimeOwner,
   type RuntimeFacts,
+  type RuntimeOperationFact,
+  type RuntimeOperationUnavailability,
   type RuntimeOwnerRef,
 } from '@agent-device/contracts/platform';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
@@ -99,6 +103,11 @@ const focusUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
   hint: 'This WebDriver provider runtime does not expose focus for this device.',
+} as const);
+const typeUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'This WebDriver provider runtime does not expose text entry for this device.',
 } as const);
 const elementTextUnavailable = Object.freeze({
   available: false,
@@ -242,6 +251,13 @@ function bindWebDriverPlatformRuntime(
           resolveInteractor: (runner) => options.getInteractor?.(device, runner),
         })
       : {}),
+    ...(facts.operations.typeText.available
+      ? bindProviderTypeTextInteractor({
+          device,
+          signal,
+          resolveInteractor: (runner) => options.getInteractor?.(device, runner),
+        })
+      : {}),
     networkDump: async (input) => {
       const recent = await options.host.appLogs.readRecent(input.sessionId, input.maxScanLines);
       const dump = readRecentNetworkTrafficFromText(recent.text, {
@@ -282,6 +298,14 @@ function bindWebDriverPlatformRuntime(
   });
 }
 
+/** A cell this provider serves through its own interactor: reachability is the whole gate. */
+function interactorCell(
+  reachable: boolean,
+  whenUnreachable: RuntimeOperationUnavailability,
+): RuntimeOperationFact {
+  return reachable ? available : whenUnreachable;
+}
+
 function webDriverFacts(
   options: Omit<WebDriverPlatformRuntimeOptions, 'host'>,
   device: DeviceInfo,
@@ -295,6 +319,7 @@ function webDriverFacts(
       screenshot: inactiveSession,
       viewport: inactiveSession,
       focus: inactiveSession,
+      typeText: inactiveSession,
       elementText: inactiveSession,
       lifecycle: applicationLifecycleOperationFacts({
         resolveOpenTarget: inactiveSession,
@@ -318,6 +343,7 @@ function webDriverFacts(
     screenshot: screenshotUnavailable,
     viewport: viewportUnavailable,
     focus: focusUnavailable,
+    typeText: typeUnavailable,
     elementText: elementTextUnavailable,
     lifecycle: webDriverLifecycleFacts(device),
   });
@@ -346,7 +372,8 @@ function webDriverFacts(
       ...screenshotRuntimeOperationFacts({ capture: screenshotCell }),
       // Focus rides the same provider interactor the captures do, so it needs the same
       // reachability and nothing more: this provider drives touch wherever it can drive a capture.
-      ...focusRuntimeOperationFacts({ focus: reachable ? available : focusUnavailable }),
+      ...focusRuntimeOperationFacts({ focus: interactorCell(reachable, focusUnavailable) }),
+      ...typeTextRuntimeOperationFacts({ type: interactorCell(reachable, typeUnavailable) }),
       ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
       ensureReady: available,
       bootTarget: available,

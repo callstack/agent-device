@@ -354,6 +354,7 @@ function sourceRuntimeFacts(
       findSelector: unavailable,
       setViewport: unavailable,
       focusPoint: unavailable,
+      typeText: unavailable,
       readTextAtPoint: unavailable,
       deployApp: unavailable,
       materializeAppSource: materializationAvailable ? { available: true } : unavailable,

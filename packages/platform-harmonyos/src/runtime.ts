@@ -10,9 +10,11 @@ import {
   availableApplicationLifecycleOperations,
   bindLocalFocusInteractor,
   bindLocalScreenshotInteractor,
+  bindLocalTypeTextInteractor,
   bindLocalSnapshotInteractor,
   elementTextRuntimeOperationFacts,
   focusRuntimeOperationFacts,
+  typeTextRuntimeOperationFacts,
   localRuntimeOwner,
   screenshotRuntimeOperationFacts,
   selectorObservationRuntimeOperationFacts,
@@ -172,6 +174,8 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ...focusRuntimeOperationFacts({ focus: harmonyFocusFact(device) }),
+        // Text entry shares focus's cell: hdc drives both on the same two kinds.
+        ...typeTextRuntimeOperationFacts({ type: harmonyFocusFact(device) }),
         // HarmonyOS has no point-read tool: `get` answers from the captured tree, which is what
         // the legacy dispatch already did after its Apple-runner attempt failed.
         ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementTextUnavailable }),
@@ -238,6 +242,13 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
             : {}),
           ...(facts.operations.focusPoint.available
             ? bindLocalFocusInteractor({
+                device: request.device,
+                signal: request.scope.signal,
+                resolveInteractor: host.localInteractors.resolve,
+              })
+            : {}),
+          ...(facts.operations.typeText.available
+            ? bindLocalTypeTextInteractor({
                 device: request.device,
                 signal: request.scope.signal,
                 resolveInteractor: host.localInteractors.resolve,

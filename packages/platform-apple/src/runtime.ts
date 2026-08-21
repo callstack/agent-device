@@ -11,9 +11,11 @@ import {
   availableApplicationLifecycleOperations,
   bindLocalFocusInteractor,
   bindLocalScreenshotInteractor,
+  bindLocalTypeTextInteractor,
   bindElementTextRuntime,
   elementTextRuntimeOperationFacts,
   focusRuntimeOperationFacts,
+  typeTextRuntimeOperationFacts,
   localRuntimeOwner,
   screenshotRuntimeOperationFacts,
   selectorObservationRuntimeOperationFacts,
@@ -267,6 +269,9 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ...focusRuntimeOperationFacts({ focus: appleFocusFact(device) }),
+        // Text entry rides the same interactor authority the point focus does, so it shares the
+        // exact kind cell (parity with the retired `type` bucket, `{ simulator, device }`).
+        ...typeTextRuntimeOperationFacts({ type: appleFocusFact(device) }),
         ...elementTextRuntimeOperationFacts({ readTextAtPoint: appleElementTextFact(device) }),
         ensureReady: readiness,
         bootTarget: boot,
@@ -321,6 +326,13 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
           ),
           ...whenAdmitted(facts.operations.focusPoint, () =>
             bindLocalFocusInteractor({
+              device: request.device,
+              signal: request.scope.signal,
+              resolveInteractor: host.localInteractors.resolve,
+            }),
+          ),
+          ...whenAdmitted(facts.operations.typeText, () =>
+            bindLocalTypeTextInteractor({
               device: request.device,
               signal: request.scope.signal,
               resolveInteractor: host.localInteractors.resolve,

@@ -11,10 +11,12 @@ import {
   availableApplicationLifecycleOperations,
   bindLocalFocusInteractor,
   bindLocalScreenshotInteractor,
+  bindLocalTypeTextInteractor,
   bindElementTextRuntime,
   bindLocalSnapshotInteractor,
   elementTextRuntimeOperationFacts,
   focusRuntimeOperationFacts,
+  typeTextRuntimeOperationFacts,
   localRuntimeOwner,
   screenshotRuntimeOperationFacts,
   selectorObservationRuntimeOperationFacts,
@@ -142,6 +144,11 @@ function androidRuntimeHintsFact(device: DeviceInfo) {
     : runtimeHintsUnavailable;
 }
 
+/** adb drives every interaction cell the same way; only the synthetic `simulator` row lacks a device. */
+function androidTouchFact(device: DeviceInfo) {
+  return device.kind === 'simulator' ? focusKindUnavailable : available;
+}
+
 export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): PlatformRuntimeOwner {
   const appLogs = createAndroidAppLogRuntime(host);
   const inspectFacts = async (device: Parameters<typeof appLogs.inspectFacts>[0]) => {
@@ -171,9 +178,10 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           findSelector: snapshotKindUnavailable,
         }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
-        ...focusRuntimeOperationFacts({
-          focus: device.kind === 'simulator' ? focusKindUnavailable : available,
-        }),
+        ...focusRuntimeOperationFacts({ focus: androidTouchFact(device) }),
+        // Text entry shares focus's cell: adb drives both, and only the synthetic `simulator`
+        // row has no device behind it (parity with the retired `type` bucket).
+        ...typeTextRuntimeOperationFacts({ type: androidTouchFact(device) }),
         // uiautomator reads text at a point through the same adb path the snapshot uses, so the
         // synthetic `simulator` row is the only Android kind without a live read.
         ...elementTextRuntimeOperationFacts({
@@ -241,6 +249,13 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
             : {}),
           ...(facts.operations.focusPoint.available
             ? bindLocalFocusInteractor({
+                device: request.device,
+                signal: request.scope.signal,
+                resolveInteractor: host.localInteractors.resolve,
+              })
+            : {}),
+          ...(facts.operations.typeText.available
+            ? bindLocalTypeTextInteractor({
                 device: request.device,
                 signal: request.scope.signal,
                 resolveInteractor: host.localInteractors.resolve,

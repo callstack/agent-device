@@ -90,6 +90,7 @@ function createAdmissionFacts(
       findSelector: unavailable,
       setViewport: unavailable,
       focusPoint: unavailable,
+      typeText: unavailable,
       deployApp: cell(options.deployAvailable),
       materializeAppSource: cell(options.sourceAvailable),
       deployMaterializedApp: cell(options.sourceAvailable),

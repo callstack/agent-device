@@ -222,6 +222,7 @@ export {
   snapshotRuntimePlanUses,
   waitSelectorCaptureRuntimePlanUses,
   focusRuntimeUse,
+  typeTextRuntimeUse,
   viewportRuntimeUse,
 } from '../platform-runtime-operations.ts';
 export type {
@@ -301,6 +302,18 @@ export type {
   LocalFocusInteractorResolver,
   ProviderFocusInteractorResolver,
 } from '../focus-runtime.ts';
+export {
+  bindLocalTypeTextInteractor,
+  bindProviderTypeTextInteractor,
+  typeTextRuntimeOperationFacts,
+} from '../type-text-runtime.ts';
+export type {
+  LocalTypeTextInteractorResolver,
+  ProviderTypeTextInteractorResolver,
+  TypeTextInput,
+  TypeTextRuntimeOperationFacts,
+  TypeTextRuntimeOperations,
+} from '../type-text-runtime.ts';
 export { viewportRuntimeOperationFacts } from '../viewport-runtime.ts';
 export type {
   SetViewportInput,

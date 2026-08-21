@@ -5,6 +5,11 @@ import { makeTestScreenRecordingResource } from '../../../__tests__/test-utils/s
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { handleInteractionCommands } from '../interaction.ts';
 import { contextFromFlags } from './interaction-touch-fixtures.ts';
+import {
+  getRuntimeBindings,
+  mockTypeText,
+  resetGetRuntimeFixture,
+} from './interaction-get-runtime-fixture.ts';
 
 const { mockDispatch } = vi.hoisted(() => ({ mockDispatch: vi.fn() }));
 
@@ -28,8 +33,9 @@ vi.mock('../../../platforms/android/app-lifecycle.ts', async (importOriginal) =>
 import { snapshotAndroid } from '../../../platforms/android/snapshot.ts';
 
 beforeEach(() => {
+  resetGetRuntimeFixture();
   mockDispatch.mockReset();
-  mockDispatch.mockResolvedValue({ warning: 'The type response already carried a warning.' });
+  mockDispatch.mockResolvedValue({});
   vi.mocked(snapshotAndroid).mockReset();
   vi.mocked(snapshotAndroid).mockRejectedValue(
     new AppError(
@@ -62,14 +68,17 @@ test('type continues and composes the recording readiness warning', async () => 
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
-  expect(mockDispatch).toHaveBeenCalledWith(
-    expect.objectContaining({ platform: 'android' }),
+  // R41: the text reaches the device through the bound operation, never through dispatch.
+  expect(mockTypeText).toHaveBeenCalledWith(expect.objectContaining({ text: 'hello' }));
+  expect(mockDispatch).not.toHaveBeenCalledWith(
+    expect.anything(),
     'type',
-    ['hello'],
-    undefined,
+    expect.anything(),
+    expect.anything(),
     expect.anything(),
   );
   if (response?.ok) {
@@ -77,6 +86,5 @@ test('type continues and composes the recording readiness warning', async () => 
       /Android blocking-dialog readiness could not be inspected.*command continued/i,
     );
     expect(response.data?.warning).toContain('pnpm build:android');
-    expect(response.data?.warning).toContain('The type response already carried a warning.');
   }
 });

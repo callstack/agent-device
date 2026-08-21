@@ -15,6 +15,7 @@ import { snapshotRuntimeOperationFacts } from './snapshot-runtime.ts';
 import { selectorObservationRuntimeOperationFacts } from './selector-observation-runtime.ts';
 import { viewportRuntimeOperationFacts } from './viewport-runtime.ts';
 import { focusRuntimeOperationFacts } from './focus-runtime.ts';
+import { typeTextRuntimeOperationFacts } from './type-text-runtime.ts';
 import { elementTextRuntimeOperationFacts } from './element-text-runtime.ts';
 
 /**
@@ -32,6 +33,7 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   snapshot?: RuntimeOperationUnavailability;
   viewport: RuntimeOperationUnavailability;
   focus: RuntimeOperationUnavailability;
+  typeText: RuntimeOperationUnavailability;
   elementText: RuntimeOperationUnavailability;
   readiness?: RuntimeOperationUnavailability;
   shutdown?: RuntimeOperationUnavailability;
@@ -77,6 +79,7 @@ export function createUnavailablePlatformRuntimeFacts(
     snapshot,
     viewport,
     focus,
+    typeText,
     elementText,
     readiness,
     shutdown,
@@ -118,6 +121,7 @@ export function createUnavailablePlatformRuntimeFacts(
       }),
       ...viewportRuntimeOperationFacts({ setViewport: viewport }),
       ...focusRuntimeOperationFacts({ focus }),
+      ...typeTextRuntimeOperationFacts({ type: typeText }),
       ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementText }),
       ensureReady: readiness,
       bootTarget: readiness,
@@ -149,6 +153,7 @@ function freezeUnavailableFacts(
     // Interaction cells are stated by their owner: a family that can drive touch says so for its
     // exact kinds, and one that cannot must say why rather than inherit a transport gap.
     focus: Object.freeze({ ...unavailable.focus }),
+    typeText: Object.freeze({ ...unavailable.typeText }),
     readiness: orNetwork(unavailable.readiness),
     shutdown: orNetwork(unavailable.shutdown),
     elementText: Object.freeze({ ...unavailable.elementText }),

@@ -10,9 +10,11 @@ import {
   availableApplicationLifecycleOperations,
   bindLocalFocusInteractor,
   bindLocalScreenshotInteractor,
+  bindLocalTypeTextInteractor,
   bindLocalSnapshotInteractor,
   elementTextRuntimeOperationFacts,
   focusRuntimeOperationFacts,
+  typeTextRuntimeOperationFacts,
   localRuntimeOwner,
   screenshotRuntimeOperationFacts,
   selectorObservationRuntimeOperationFacts,
@@ -193,6 +195,13 @@ function bindWebRuntime(
           resolveInteractor: host.localInteractors.resolve,
         })
       : {}),
+    ...(facts.operations.typeText.available
+      ? bindLocalTypeTextInteractor({
+          device,
+          signal,
+          resolveInteractor: host.localInteractors.resolve,
+        })
+      : {}),
     ...(facts.operations.setViewport.available
       ? {
           setViewport: async (input) => {
@@ -268,6 +277,9 @@ function webRuntimeFacts(
       // `core/capabilities.ts` filled as `{ device: true }`: the browser device is the only
       // web cell with an interactor to drive.
       ...focusRuntimeOperationFacts({ focus: browserDevice }),
+      // Text entry shares focus's cell: the browser device is the only web cell with an
+      // interactor to drive (parity with the retired `type` overlay membership).
+      ...typeTextRuntimeOperationFacts({ type: browserDevice }),
       ...viewportRuntimeOperationFacts({ setViewport: browserDevice }),
       // The web backend has no point-addressed read: `get` answers from the captured DOM tree,
       // which is what the legacy dispatch already did once its Apple-runner attempt failed.

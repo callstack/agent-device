@@ -32,6 +32,7 @@ test('generic unavailable binding preserves exact provider ownership and mode', 
     screenshot: { available: false, reason: 'unsupported-device-kind' },
     viewport: { available: false, reason: 'unsupported-platform-leaf' },
     focus: { available: false, reason: 'unsupported-provider-mode' },
+    typeText: { available: false, reason: 'unsupported-provider-mode' },
     elementText: { available: false, reason: 'unsupported-provider-mode' },
     lifecycle,
   });
@@ -44,6 +45,10 @@ test('generic unavailable binding preserves exact provider ownership and mode', 
   });
   // Interaction is owner-stated too: it never inherits the transport gap's reason.
   assert.deepEqual(binding.facts.operations.focusPoint, {
+    available: false,
+    reason: 'unsupported-provider-mode',
+  });
+  assert.deepEqual(binding.facts.operations.typeText, {
     available: false,
     reason: 'unsupported-provider-mode',
   });

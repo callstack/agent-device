@@ -12,11 +12,13 @@ import {
   availableApplicationLifecycleOperations,
   bindLocalFocusInteractor,
   bindLocalScreenshotInteractor,
+  bindLocalTypeTextInteractor,
   bindElementTextRuntime,
   captureSnapshotSignal,
   createUnavailablePlatformRuntimeFacts,
   elementTextRuntimeOperationFacts,
   focusRuntimeOperationFacts,
+  typeTextRuntimeOperationFacts,
   localRuntimeOwner,
   sameRuntimeOwner,
   screenshotRuntimeOperationFacts,
@@ -33,6 +35,10 @@ const elementTextKindUnavailable = unavailableLinuxRuntimeFact('unsupported-devi
 const focusKindUnavailable = unavailableLinuxRuntimeFact(
   'unsupported-device-kind',
   'focus is supported only for the Linux desktop device.',
+);
+const typeKindUnavailable = unavailableLinuxRuntimeFact(
+  'unsupported-device-kind',
+  'type is supported only for the Linux desktop device.',
 );
 const runtimeHintsUnavailable = unavailableLinuxRuntimeFact(
   'unsupported-platform-leaf',
@@ -110,6 +116,13 @@ export function createLinuxPlatformRuntime(host: PlatformRuntimeHost): PlatformR
                 resolveInteractor: host.localInteractors.resolve,
               })
             : {}),
+          ...(facts.operations.typeText.available
+            ? bindLocalTypeTextInteractor({
+                device: request.device,
+                signal: request.scope.signal,
+                resolveInteractor: host.localInteractors.resolve,
+              })
+            : {}),
           ...(facts.operations.readTextAtPoint.available
             ? bindElementTextRuntime({
                 device: request.device,
@@ -135,6 +148,7 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
     snapshot: snapshotKindUnavailable,
     viewport: unsupportedPlatformLeaf,
     focus: focusKindUnavailable,
+    typeText: typeKindUnavailable,
     elementText: elementTextKindUnavailable,
     readiness: unsupportedPlatformLeaf,
     lifecycle: applicationLifecycleOperationFacts({
@@ -165,6 +179,10 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
       // the only Linux cell with a pointer to drive.
       ...focusRuntimeOperationFacts({
         focus: device.kind === 'device' ? supported : focusKindUnavailable,
+      }),
+      // Text entry shares focus's cell: ydotool drives both on the desktop device only.
+      ...typeTextRuntimeOperationFacts({
+        type: device.kind === 'device' ? supported : typeKindUnavailable,
       }),
       // The Linux read is value-first (AXValue/title/description) where the captured tree is
       // label-first, so the desktop row genuinely reads differently from its snapshot text.

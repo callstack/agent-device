@@ -18,7 +18,6 @@ import {
   handleLongPressCommand,
   handlePressCommand,
   handleScrollCommand,
-  handleTypeCommand,
 } from './dispatch-interactions.ts';
 import { getInteractor } from './interactors.ts';
 
@@ -144,8 +143,6 @@ const DISPATCH_HANDLERS: Record<DispatchCommand, DispatchHandler> = {
     handlePressCommand(device, interactor, positionals, context),
   longpress: ({ interactor, positionals }) => handleLongPressCommand(interactor, positionals),
   hover: ({ interactor, positionals }) => handleHoverCommand(interactor, positionals),
-  type: ({ interactor, positionals, context }) =>
-    handleTypeCommand(interactor, positionals, context),
   fill: ({ interactor, positionals, context }) =>
     handleFillCommand(interactor, positionals, context),
   scroll: ({ interactor, positionals, context }) =>

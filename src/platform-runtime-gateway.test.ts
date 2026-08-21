@@ -51,6 +51,7 @@ describe('composed platform runtime gateway', () => {
       elementText: unavailable,
       viewport: unavailable,
       focus: unavailable,
+      typeText: unavailable,
       lifecycle: applicationLifecycleOperationFacts({
         resolveOpenTarget: unavailable,
         prepareApplicationOpen: unavailable,
@@ -128,6 +129,7 @@ describe('composed platform runtime gateway', () => {
       screenshot: unavailable,
       viewport: unavailable,
       focus: unavailable,
+      typeText: unavailable,
       elementText: unavailable,
       lifecycle: applicationLifecycleOperationFacts({
         resolveOpenTarget: unavailable,

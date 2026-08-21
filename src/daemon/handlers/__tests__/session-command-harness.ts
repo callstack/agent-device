@@ -146,6 +146,7 @@ function readinessFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperati
       findSelector: unavailable,
       setViewport: unavailable,
       focusPoint: unavailable,
+      typeText: unavailable,
       readTextAtPoint: unavailable,
       deployApp: operationAvailability(deployment.deploy),
       materializeAppSource: operationAvailability(deployment.source),

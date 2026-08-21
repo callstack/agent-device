@@ -37,6 +37,7 @@ export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.fre
   findSelector: unavailable,
   setViewport: unavailable,
   focusPoint: unavailable,
+  typeText: unavailable,
   ...elementTextRuntimeOperationFacts({ readTextAtPoint: unavailable }),
 });
 

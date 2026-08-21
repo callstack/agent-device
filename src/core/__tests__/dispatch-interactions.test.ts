@@ -11,11 +11,7 @@ vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOrigi
   return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
 });
 
-import {
-  handleFillCommand,
-  handlePressCommand,
-  handleTypeCommand,
-} from '../dispatch-interactions.ts';
+import { handleFillCommand, handlePressCommand } from '../dispatch-interactions.ts';
 import type { Interactor } from '@agent-device/contracts/interaction';
 import type { RunnerCommand } from '../../platforms/apple/core/runner/runner-contract.ts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -149,28 +145,6 @@ test('handleFillCommand preserves validated unconfirmed fill evidence', async ()
 });
 
 // The backend result is a typed TypeTextBackendResult, not a bag: the route is
-// the only passenger, and the runner payload's other keys are dropped at the
-// Apple boundary (readTypeTextBackendResult, src/platforms/apple/interactions.ts,
-// covered in src/platforms/apple/core/__tests__/interactions.test.ts).
-test('handleTypeCommand preserves structured backend route evidence', async () => {
-  const interactor: Interactor = {
-    ...makeUnusedInteractor(),
-    type: async () => ({ textEntryRoute: 'synthesized-first-responder' }),
-  };
-
-  const result = await handleTypeCommand(interactor, ['hello'], { delayMs: 25 });
-
-  assert.equal(result.textEntryRoute, 'synthesized-first-responder');
-});
-
-test('handleTypeCommand omits textEntryRoute when the backend reports none', async () => {
-  const interactor: Interactor = { ...makeUnusedInteractor(), type: async () => {} };
-
-  const result = await handleTypeCommand(interactor, ['hello'], undefined);
-
-  assert.equal('textEntryRoute' in result, false);
-});
-
 test('handlePressCommand fuses an iOS hold series into longPress sequence steps', async () => {
   mockRunAppleRunnerCommand.mockResolvedValueOnce({
     completedSteps: 3,

@@ -33,7 +33,6 @@ import {
 } from '../utils/scroll-edge-state.ts';
 import { successText, withSuccessText } from '../utils/success-text.ts';
 import { readPointPositionals } from '../utils/validation.ts';
-import { findMistargetedTypeRefToken } from '../utils/type-target-warning.ts';
 import type { DispatchContext } from './dispatch-context.ts';
 import {
   chunkRunnerSequenceStepsByBudget,
@@ -74,34 +73,6 @@ export async function handleHoverCommand(
   }
   await interactor.hover(x, y);
   return { x, y, ...successText(`Hovered (${x}, ${y})`) };
-}
-
-export async function handleTypeCommand(
-  interactor: Interactor,
-  positionals: string[],
-  context: DispatchContext | undefined,
-): Promise<Record<string, unknown>> {
-  const mistargetedRef = findMistargetedTypeRef(positionals);
-  if (mistargetedRef) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `type does not accept a target ref like "${mistargetedRef}"`,
-      {
-        hint: `Use fill ${mistargetedRef} "text" to target that field, or press ${mistargetedRef} then type "text" to append.`,
-      },
-    );
-  }
-  const text = positionals.join(' ');
-  if (!text) throw new AppError('INVALID_ARGS', 'type requires text');
-  const delayMs = requireIntInRange(context?.delayMs ?? 0, 'delay-ms', 0, 10_000);
-  const backendResult = await interactor.type(text, delayMs);
-  const textEntryRoute = backendResult?.textEntryRoute;
-  return {
-    ...(textEntryRoute === undefined ? {} : { textEntryRoute }),
-    text,
-    delayMs,
-    ...successText(formatTextLengthMessage('Typed', text)),
-  };
 }
 
 export async function handleFillCommand(
@@ -643,10 +614,6 @@ function parseScrollTarget(input: string): {
   if (input === 'bottom') return { direction: 'down', edge: 'bottom' };
   if (input === 'top') return { direction: 'up', edge: 'top' };
   return { direction: parseScrollDirection(input) };
-}
-
-function findMistargetedTypeRef(positionals: string[]): string | null {
-  return findMistargetedTypeRefToken(positionals[0]);
 }
 
 function formatPressMessage(params: { x: number; y: number; button?: ClickButton }): string {

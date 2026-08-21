@@ -1,4 +1,3 @@
-import { dispatchCommand } from '../../core/dispatch.ts';
 import type { PreresolvedInteractionTarget } from '@agent-device/contracts/interaction';
 import {
   isReadOnlyFindAction,
@@ -20,6 +19,7 @@ import { recordSessionAction } from './handler-utils.ts';
 import { stripInternalInteractionFlags } from '../interaction-outcome-policy.ts';
 import { resolveFindMatch } from './find-match-resolution.ts';
 import { resolveBoundFocusRuntime } from '../focus-runtime.ts';
+import { resolveBoundTypeTextRuntime } from '../type-text-runtime.ts';
 import { dispatchFindReadOnlyViaRuntime } from '../selector-runtime.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { createFindTargetCapture, sparseFindSnapshotResponse } from './find-target-capture.ts';
@@ -289,9 +289,19 @@ async function handleFindType(
   // The focus above already crossed the seam; expiry is idempotent, but keep it
   // explicit at the type dispatch so it does not rely on the focus-first order.
   expireRefFrame(session);
-  const response = await dispatchCommand(device, 'type', [value], req.flags?.out, {
-    ...contextFromFlags(logPath, req.flags, session.appBundleId, session.trace?.outPath),
+  // R41: find's type leg shares `type`'s bound runtime rather than dispatching the retired
+  // leaf, so `type "text"` and `find <q> type "text"` reach the device through one admitted
+  // operation.
+  const bound = await resolveBoundTypeTextRuntime({
+    device,
+    inspectFacts: ctx.inspectFacts,
+    bindDevice: ctx.bindDevice,
   });
+  if (!bound.ok) return bound.response;
+  const response = await bound.typeText(
+    [value],
+    contextFromFlags(logPath, req.flags, session.appBundleId, session.trace?.outPath),
+  );
   recordFindAction(ctx, match, 'type');
   return { ok: true, data: response ?? { ref: match.ref } };
 }

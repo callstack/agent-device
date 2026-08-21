@@ -306,6 +306,7 @@ function unavailableProviderBinding(
     screenshot: unavailable,
     viewport: unavailable,
     focus: unavailable,
+    typeText: unavailable,
     elementText: unavailable,
     lifecycle: unavailableProviderLifecycleFacts(unavailable),
   });
@@ -326,6 +327,7 @@ function unavailableProviderFacts(runtime: ProviderDeviceRuntime, device: Device
       screenshot: unavailable,
       viewport: unavailable,
       focus: unavailable,
+      typeText: unavailable,
       elementText: unavailable,
       readiness: unavailable,
       lifecycle: unavailableProviderLifecycleFacts(unavailable),

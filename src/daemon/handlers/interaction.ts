@@ -6,7 +6,7 @@ import { refSnapshotFlagGuardResponse } from './interaction-flags.ts';
 import { dispatchGetViaRuntime, dispatchIsViaRuntime } from '../selector-runtime.ts';
 import { createInteractionRuntime } from './interaction-runtime.ts';
 import { finalizeTouchInteraction } from './interaction-common.ts';
-import { errorResponse, noActiveSessionError, requireCommandSupported } from './response.ts';
+import { errorResponse, noActiveSessionError } from './response.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { successText } from '../../utils/success-text.ts';
@@ -15,6 +15,7 @@ import {
   recoverAndroidBlockingSystemDialog,
 } from '../android-system-dialog.ts';
 import { dispatchGestureViaRuntime, dispatchSwipeViaRuntime } from './interaction-gesture.ts';
+import { resolveBoundTypeTextRuntime, type BoundTypeTextExecutor } from '../type-text-runtime.ts';
 
 export async function handleInteractionCommands(
   params: InteractionHandlerParams,
@@ -61,12 +62,18 @@ async function dispatchTypeViaRuntime(
   const { sessionName, sessionStore } = params;
   const session = sessionStore.get(sessionName);
   if (!session) return noActiveSessionError();
-  const unsupported = requireCommandSupported(PUBLIC_COMMANDS.type, session.device);
-  if (unsupported) return unsupported;
+  // R41: exact-owner facts admission replaces the capability bucket, and the one binding made
+  // here is the only way this request's text can reach a device.
+  const bound = await resolveBoundTypeTextRuntime({
+    device: session.device,
+    inspectFacts: params.inspectFacts,
+    bindDevice: params.bindDevice,
+  });
+  if (!bound.ok) return bound.response;
   const recordingRecovery = await recoverAndroidRecordingDialogForType(session);
   if (recordingRecovery.response) return recordingRecovery.response;
 
-  return await runTypeTextViaRuntime(params, session, recordingRecovery.warning);
+  return await runTypeTextViaRuntime(params, session, bound.typeText, recordingRecovery.warning);
 }
 
 type AndroidRecordingDialogRecovery = {
@@ -99,11 +106,19 @@ async function runTypeTextViaRuntime(
     captureSnapshotForSession: typeof captureSnapshotForSession;
   },
   session: SessionState,
+  boundTypeText: BoundTypeTextExecutor,
   recordingRecoveryWarning?: string,
 ): Promise<DaemonResponse> {
   const { req, sessionName, sessionStore } = params;
   const text = (req.positionals ?? []).join(' ');
-  const runtime = createInteractionRuntime(params);
+  const runtime = createInteractionRuntime({
+    ...params,
+    boundTypeText: async (typedText) =>
+      await boundTypeText(
+        [typedText],
+        params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
+      ),
+  });
   const actionStartedAt = Date.now();
   try {
     const readiness = await ensureAndroidBlockingSystemDialogReady({

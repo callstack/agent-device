@@ -1,4 +1,5 @@
 import { vi } from 'vitest';
+import type { TypeTextBackendResult } from '@agent-device/contracts/interaction';
 import {
   createUnavailablePlatformRuntimeFacts,
   localRuntimeOwner,
@@ -9,6 +10,7 @@ import {
   type PlatformRuntimeOperations,
   type ElementTextReadOutcome,
   type FocusPointInput,
+  type TypeTextInput,
   type ReadTextAtPointInput,
   type RuntimeFacts,
 } from '@agent-device/contracts/platform';
@@ -36,6 +38,14 @@ export const mockReadTextAtPoint = vi.fn(
 export const mockFocusPoint = vi.fn(async (_input: FocusPointInput): Promise<void> => undefined);
 
 /**
+ * `type` and `find <q> type` share the `type` unit's bound operation (R41), exactly as focus
+ * does: mutating handlers bind the same runtime the interaction route admits.
+ */
+export const mockTypeText = vi.fn(
+  async (_input: TypeTextInput): Promise<TypeTextBackendResult | void> => undefined,
+);
+
+/**
  * Flip to model an exact owner cell: no live element read (web, HarmonyOS, provider), no capture
  * at all (the watchOS sentinel, an inactive provider), which refuses admission outright, or no
  * touch (a device kind whose family cannot drive a point focus).
@@ -44,6 +54,7 @@ export const elementReadFixtureState = {
   readTextAtPointAvailable: true,
   captureSnapshotAvailable: true,
   focusPointAvailable: true,
+  typeTextAvailable: true,
 };
 
 export function resetGetRuntimeFixture(): void {
@@ -53,9 +64,12 @@ export function resetGetRuntimeFixture(): void {
   );
   mockFocusPoint.mockReset();
   mockFocusPoint.mockResolvedValue(undefined);
+  mockTypeText.mockReset();
+  mockTypeText.mockResolvedValue(undefined);
   elementReadFixtureState.readTextAtPointAvailable = true;
   elementReadFixtureState.captureSnapshotAvailable = true;
   elementReadFixtureState.focusPointAvailable = true;
+  elementReadFixtureState.typeTextAvailable = true;
 }
 
 const available = Object.freeze({ available: true } as const);
@@ -70,6 +84,7 @@ function elementReadFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOpera
     network: unavailable,
     viewport: unavailable,
     focus: unavailable,
+    typeText: unavailable,
     elementText: unavailable,
     screenshot: unavailable,
     lifecycle: applicationLifecycleOperationFacts({
@@ -95,6 +110,7 @@ function elementReadFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOpera
         : unavailable,
       readTextAtPoint: elementReadFixtureState.readTextAtPointAvailable ? available : unavailable,
       focusPoint: elementReadFixtureState.focusPointAvailable ? available : unavailable,
+      typeText: elementReadFixtureState.typeTextAvailable ? available : unavailable,
     },
   });
 }
@@ -126,6 +142,7 @@ const mockBindElementReadRuntime: BindDeviceRuntime = vi.fn(async (device: Devic
         ? { readTextAtPoint: mockReadTextAtPoint }
         : {}),
       ...(elementReadFixtureState.focusPointAvailable ? { focusPoint: mockFocusPoint } : {}),
+      ...(elementReadFixtureState.typeTextAvailable ? { typeText: mockTypeText } : {}),
     }),
     [Symbol.asyncDispose]: async () => undefined,
   }) as DeviceBinding<PlatformRuntimeOperations>;

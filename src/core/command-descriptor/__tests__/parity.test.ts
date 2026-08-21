@@ -75,6 +75,7 @@ const NO_CAPABILITY_PUBLIC_COMMANDS = new Set<string>([
   PUBLIC_COMMANDS.snapshot,
   PUBLIC_COMMANDS.test,
   PUBLIC_COMMANDS.trace,
+  PUBLIC_COMMANDS.type,
   PUBLIC_COMMANDS.viewport,
   PUBLIC_COMMANDS.wait,
 ]);
