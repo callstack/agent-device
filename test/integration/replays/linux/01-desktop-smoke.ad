@@ -11,14 +11,19 @@ snapshot
 is exists "appname=gnome-calculator || windowtitle=Calculator || label=Calculator || label=0 || label=1 || label=5"
 snapshot -i
 # R40 (#1739): `focus` executes through the bound `focusPoint` operation rather than the retired
-# interactor leaf. A coordinate focus, not a selector one, so this step cannot fail on match
-# ambiguity or layout drift — it exists to prove the migrated path runs on real Linux hardware.
+# interactor leaf. A coordinate focus, deliberately at a desktop point: it proves the migrated
+# path drives a real click without depending on window placement.
 focus 100 100
 # The session survives the focus: a crashed desktop would fail here, not silently pass above.
 is exists "appname=gnome-calculator || windowtitle=Calculator || label=Calculator || label=0 || label=1 || label=5"
+# The desktop click above took focus AWAY from the calculator, so re-enter it through a resolved
+# button press — this both proves pointer input lands inside the window and restores keyboard
+# focus. (It also moves the pointer off (100,100), so a retry's `focus` cannot trip xdotool's
+# mousemove --sync no-op hang.)
+click "label=1"
 # R41 (#1739): `type` executes through the bound `typeText` operation rather than the retired
-# interactor leaf. The digits are chosen so the assertion cannot be satisfied by pre-existing
-# UI: no calculator button is labelled 555, so "555" exists in the tree only if the typed
-# keystrokes actually landed in the display. Deleting the type step turns the wait red.
-type "555"
-wait "label=555 || text=555 || value=555" 10000
+# interactor leaf. The clicked 1 plus the typed 55 can only produce a 155 display node if the
+# keystrokes actually landed: no calculator button is labelled 155, so this cannot be satisfied
+# by pre-existing UI, and deleting the type step turns the wait red.
+type "55"
+wait "label=155 || text=155 || value=155" 10000
