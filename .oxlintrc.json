@@ -49,6 +49,12 @@
       "rules": {
         "eslint/no-restricted-imports": "off"
       }
+    },
+    {
+      "files": ["examples/test-app/app.config.js"],
+      "rules": {
+        "typescript/no-var-requires": "off"
+      }
     }
   ],
   "ignorePatterns": ["dist/**", "node_modules/**", "examples/test-app/**"]
