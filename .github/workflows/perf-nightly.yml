@@ -32,6 +32,7 @@ jobs:
     timeout-minutes: 80
     env:
       IOS_RUNTIME_VERSION: '26.2'
+      AGENT_DEVICE_XCUITEST_ARCHS: 'arm64'
       AGENT_DEVICE_STATE_DIR: ${{ github.workspace }}/.tmp/agent-device-state
       AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ github.workspace }}/.tmp/ios-runner-derived
       AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS: '420000'
@@ -47,7 +48,7 @@ jobs:
         with:
           derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}
           cache-key-prefix: ios-runner-prebuilt
-          cache-key-suffix: -ios-${{ env.IOS_RUNTIME_VERSION }}
+          cache-key-suffix: -ios-${{ env.IOS_RUNTIME_VERSION }}-arm64
           gate: swift-runner-ios
           xcuitest-platform: ios
           xcuitest-destination: generic/platform=iOS Simulator

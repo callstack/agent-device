@@ -74,6 +74,11 @@ jobs:
       AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ github.workspace }}/.tmp/ios-runner-derived
       AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS: '420000'
       AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS: '1'
+      # A generic simulator destination leaves the active arch undefined and Xcode 26.6
+      # defaults it to x86_64, which runs the whole runner under Rosetta on arm64 hosts.
+      # Pin the native slice: measured ~30% faster commits on identical CI hardware
+      # (#1874 diagnosis, PR #1941).
+      AGENT_DEVICE_XCUITEST_ARCHS: 'arm64'
       AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE: agent-device-test-app:///automation?event={event}&payload={payload}
     steps:
       - name: Checkout
@@ -113,7 +118,7 @@ jobs:
         with:
           derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}
           cache-key-prefix: ios-runner-prebuilt
-          cache-key-suffix: -ios-${{ env.IOS_RUNTIME_VERSION }}
+          cache-key-suffix: -ios-${{ env.IOS_RUNTIME_VERSION }}-arm64
           gate: swift-runner-ios
           xcuitest-platform: ios
           xcuitest-destination: generic/platform=iOS Simulator

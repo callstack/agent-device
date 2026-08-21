@@ -78,8 +78,10 @@ jobs:
       # methods exist at all. Dropping it would build a different variant (cache miss) whose
       # bundle contains no tests, and `xcodebuild` reports running zero tests as success — the
       # "silent 0-test green" this lane would then be. The test-count assertion below is the
-      # backstop for exactly that.
+      # backstop for exactly that. AGENT_DEVICE_XCUITEST_ARCHS rides the cache key too: dropping
+      # it silently reverts the runner to Xcode's x86_64 default under Rosetta.
       IOS_RUNTIME_VERSION: '26.2'
+      AGENT_DEVICE_XCUITEST_ARCHS: 'arm64'
       AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS: '1'
       AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ github.workspace }}/.tmp/ios-runner-derived
       RESULT_BUNDLE_PATH: ${{ github.workspace }}/.tmp/xctest-nightly/RunnerTests.xcresult
@@ -103,7 +105,7 @@ jobs:
         with:
           derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}
           cache-key-prefix: ios-runner-prebuilt
-          cache-key-suffix: -ios-${{ env.IOS_RUNTIME_VERSION }}
+          cache-key-suffix: -ios-${{ env.IOS_RUNTIME_VERSION }}-arm64
           gate: swift-runner-ios
           xcuitest-platform: ios
           xcuitest-destination: generic/platform=iOS Simulator
