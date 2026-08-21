@@ -1,5 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
+import { cleanupAppleXctracePerfCapture } from '../platforms/apple/core/perf-xctrace.ts';
 import { cleanupRetainedMaterializedPathsForSession } from './materialized-path-registry.ts';
 import { stopSessionAudioProbe } from './audio-probe.ts';
 import type { SessionState } from './types.ts';
@@ -8,9 +9,10 @@ import { forceCleanupSessionAppLog } from './app-log-session-resource.ts';
 import { appLogResourceStore } from './app-log-resource-store.ts';
 import { finishLiveScreenRecording } from './screen-recording-session-resource.ts';
 
-// Platform cleanup helpers stay behind dynamic imports: every teardown caller pays this module's
+// Android cleanup helpers stay behind dynamic imports: every teardown caller pays this module's
 // graph, while the helpers only matter when the corresponding capture actually ran on the session.
-// The guards below match register-builtins' interactor lazy pattern.
+// The guards below match register-builtins' interactor lazy pattern; the seam is pinned by
+// src/daemon/__tests__/session-teardown-import-closure.test.ts.
 async function cleanupAndroidNativePerfSessionLazy(
   device: SessionState['device'],
   active: NonNullable<NonNullable<SessionState['nativePerf']>['android']>,
@@ -22,8 +24,9 @@ async function cleanupAndroidNativePerfSessionLazy(
 async function stopAndroidSnapshotHelperSessionForDeviceLazy(
   device: SessionState['device'],
 ): Promise<void> {
-  const { stopAndroidSnapshotHelperSessionForDevice } =
-    await import('../platforms/android/snapshot-helper.ts');
+  const { stopAndroidSnapshotHelperSessionForDevice } = await import(
+    '../platforms/android/snapshot-helper.ts'
+  );
   await stopAndroidSnapshotHelperSessionForDevice(device);
 }
 
@@ -46,8 +49,6 @@ export async function stopSessionAppLog(params: {
 
 export async function stopSessionApplePerfCapture(session: SessionState): Promise<void> {
   if (!session.applePerf?.active) return;
-  const { cleanupAppleXctracePerfCapture } =
-    await import('../platforms/apple/core/perf-xctrace.ts');
   await cleanupAppleXctracePerfCapture(session.applePerf.active);
   session.applePerf = { ...(session.applePerf ?? {}), active: undefined };
 }
