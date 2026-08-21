@@ -1,13 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { SNAPSHOT_BACKEND_CONFORMANCE_TARGETS } from '@agent-device/kernel/snapshot-backend-capabilities';
 
-// The live harness drives the built CLI, so use the built SDK entry as well. Importing the
-// source SDK here would intentionally take over the daemon on code-signature mismatch and make
-// the forced-backend evidence come from a different runtime than the rest of the scenario.
-import { createAgentDeviceClient } from '../../../dist/src/index.js';
 import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
 import { assertPngFile } from '../provider-scenarios/assertions.ts';
 import {
@@ -44,6 +41,19 @@ import {
 } from './snapshot-backend-conformance.ts';
 
 const C = PUBLIC_COMMANDS;
+
+type AgentDeviceSdk = typeof import('../../../src/sdk/index.ts');
+
+async function loadBuiltAgentDeviceClient() {
+  // The live harness drives the built CLI, so use the built SDK entry as well. Importing the
+  // source SDK here would intentionally take over the daemon on code-signature mismatch and make
+  // the forced-backend evidence come from a different runtime than the rest of the scenario.
+  const builtSdk = (await import(
+    pathToFileURL(path.resolve('dist/src/index.js')).href
+  )) as AgentDeviceSdk;
+  return builtSdk.createAgentDeviceClient;
+}
+
 const LIVE_SCENARIOS = bindIosSimulatorScenarios<LiveContext>({
   automationInput: assertAutomationInput,
   captureClose: async (context) => {
@@ -247,6 +257,7 @@ async function assertSnapshotBackendConformanceLive(context: LiveContext): Promi
     'dismiss',
   ]);
   const fixture = loadSnapshotBackendConformanceFixture();
+  const createAgentDeviceClient = await loadBuiltAgentDeviceClient();
   const client = createAgentDeviceClient({
     session: context.session,
     stateDir: context.stateDir,
