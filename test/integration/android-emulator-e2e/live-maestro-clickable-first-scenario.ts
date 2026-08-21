@@ -8,7 +8,7 @@ import { type LiveContext, runStep, verifyBehavior } from './live-harness.ts';
 const TARGET_ID = 'maestro-clickable-first-target';
 
 export async function assertMaestroClickableFirst(context: LiveContext): Promise<void> {
-  await runStep(context, 'reveal duplicate Maestro targets', ['scroll', 'down', '0.7']);
+  await runStep(context, 'reveal duplicate Maestro targets', ['scroll', 'down', '0.3']);
   const snapshot = await runStep(
     context,
     'capture duplicate Maestro targets through Android helper',
