@@ -2,18 +2,21 @@ import { describe, expect, test } from 'vitest';
 
 import {
   SNAPSHOT_BACKEND_CAPABILITIES,
-  SNAPSHOT_BACKEND_CONFORMANCE_TARGETS,
   validateSnapshotBackendCapabilities,
 } from './snapshot-backend-capabilities.ts';
 
 describe('iOS snapshot backend capability registry', () => {
-  test('classifies every backend and exposes independent conformance targets', () => {
+  test('classifies every backend and derives independent conformance targets', () => {
     expect(Object.keys(SNAPSHOT_BACKEND_CAPABILITIES).sort()).toEqual([
       'private-ax',
       'queries',
       'tree',
     ]);
-    expect(SNAPSHOT_BACKEND_CONFORMANCE_TARGETS).toEqual(['tree', 'private-ax']);
+    expect(
+      Object.entries(SNAPSHOT_BACKEND_CAPABILITIES)
+        .filter(([, capability]) => capability.fixtureConformance === 'required')
+        .map(([backend]) => backend),
+    ).toEqual(['tree', 'private-ax']);
 
     expect(SNAPSHOT_BACKEND_CAPABILITIES.tree).toMatchObject({
       forceable: true,

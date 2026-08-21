@@ -3,10 +3,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { normalizeType } from '@agent-device/contracts/snapshot';
-import type {
-  SnapshotCaptureBackend,
-  SnapshotConformanceBackend,
-} from '@agent-device/kernel/snapshot-backend-capabilities';
+import {
+  SNAPSHOT_BACKEND_CAPABILITIES,
+  type SnapshotConformanceBackend,
+} from '@agent-device/kernel/snapshot';
+import type { SnapshotCaptureBackend } from '@agent-device/kernel/snapshot';
 import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
 import { isSemanticTouchTarget } from '../../../src/core/interaction-targeting.ts';
 
@@ -23,6 +24,10 @@ type SnapshotBackendControl = {
   value?: string;
   interactive: boolean;
 };
+
+export const SNAPSHOT_BACKEND_CONFORMANCE_TARGETS = Object.entries(SNAPSHOT_BACKEND_CAPABILITIES)
+  .filter(([, capability]) => capability.fixtureConformance === 'required')
+  .map(([backend]) => backend as SnapshotConformanceBackend);
 
 export function loadSnapshotBackendConformanceFixture(
   fixturePath = path.resolve('contracts/fixtures/ios-snapshot-backend-conformance.json'),

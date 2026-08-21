@@ -90,10 +90,6 @@ export type SnapshotConformanceBackend = {
     : never;
 }[SnapshotCaptureBackend];
 
-export const SNAPSHOT_BACKEND_CONFORMANCE_TARGETS = Object.entries(SNAPSHOT_BACKEND_CAPABILITIES)
-  .filter(([, capability]) => capability.fixtureConformance === 'required')
-  .map(([backend]) => backend as SnapshotConformanceBackend);
-
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 function validateSnapshotBackendGap(

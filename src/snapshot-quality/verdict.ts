@@ -1,5 +1,7 @@
-import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
-import { SNAPSHOT_BACKEND_CAPABILITIES } from '@agent-device/kernel/snapshot-backend-capabilities';
+import {
+  SNAPSHOT_BACKEND_CAPABILITIES,
+  type SnapshotQualityVerdict,
+} from '@agent-device/kernel/snapshot';
 
 const SNAPSHOT_QUALITY_STATES = new Set<SnapshotQualityVerdict['state']>([
   'healthy',

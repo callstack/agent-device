@@ -17,10 +17,6 @@
       "types": "./src/snapshot.ts",
       "default": "./src/snapshot.ts"
     },
-    "./snapshot-backend-capabilities": {
-      "types": "./src/snapshot-backend-capabilities.ts",
-      "default": "./src/snapshot-backend-capabilities.ts"
-    },
     "./contracts": {
       "types": "./src/contracts.ts",
       "default": "./src/contracts.ts"

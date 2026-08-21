@@ -3,8 +3,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { SNAPSHOT_BACKEND_CONFORMANCE_TARGETS } from '@agent-device/kernel/snapshot-backend-capabilities';
-
 import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
 import { assertPngFile } from '../provider-scenarios/assertions.ts';
 import {
@@ -36,6 +34,7 @@ import {
 import { bindIosSimulatorScenarios } from './scenarios.ts';
 import {
   assertSnapshotBackendConformance,
+  SNAPSHOT_BACKEND_CONFORMANCE_TARGETS,
   loadSnapshotBackendConformanceFixture,
   snapshotBackendEvidence,
 } from './snapshot-backend-conformance.ts';

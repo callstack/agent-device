@@ -3,8 +3,11 @@ import type {
   SnapshotPreferredBackend,
 } from './snapshot-backend-capabilities.ts';
 
+export { SNAPSHOT_BACKEND_CAPABILITIES } from './snapshot-backend-capabilities.ts';
+
 export type {
   SnapshotCaptureBackend,
+  SnapshotConformanceBackend,
   SnapshotPreferredBackend,
 } from './snapshot-backend-capabilities.ts';
 

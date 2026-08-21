@@ -165,6 +165,11 @@
       "exports": ["SUPPORTED_MAESTRO_COMMAND_NAMES"]
     },
     {
+      "comment": "Snapshot capability validation is a fail-closed unit-test gate for the typed registry; production consumes the registry itself, while the validator is intentionally not a runtime/public API.",
+      "file": "packages/kernel/src/snapshot-backend-capabilities.ts",
+      "exports": ["validateSnapshotBackendCapabilities"]
+    },
+    {
       "comment": "Published type surface: re-exported by src/sdk/limrun.ts to agent-device/limrun, where test/integration/limrun-public-types.test.ts pins that consumers can import it. Its only importer compiles in a temp checkout, so no static in-repo edge reaches it — the same reason src/sdk/*.ts is exempt above.",
       "file": "packages/provider-limrun/src/index.ts",
       "exports": ["LimrunIosCommandExecution"]
