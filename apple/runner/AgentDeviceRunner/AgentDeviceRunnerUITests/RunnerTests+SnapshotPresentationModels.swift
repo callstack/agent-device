@@ -70,69 +70,7 @@ struct SnapshotAcquisition {
   let viewport: CGRect
 }
 
-/// The only snapshot node shape accepted by response payload assembly.
-///
-/// It has no memberwise initializer, so response assembly has to choose one of the explicit
-/// presentation constructors. The encoded shape intentionally remains byte-for-byte compatible
-/// with the former `SnapshotNode` wire model.
-struct PresentedNode: Codable {
-  let index: Int
-  let type: String
-  let label: String?
-  let identifier: String?
-  let value: String?
-  let rect: SnapshotRect
-  let enabled: Bool
-  let focused: Bool?
-  let selected: Bool?
-  let hittable: Bool
-  let depth: Int
-  let parentIndex: Int?
-  let hiddenContentAbove: Bool?
-  let hiddenContentBelow: Bool?
-  let actions: [String]?
-
-  init(presenting raw: RawAXNode) {
-    self.init(
-      presenting: raw,
-      rect: raw.rect,
-      index: raw.index,
-      depth: raw.depth,
-      parentIndex: raw.parentIndex
-    )
-  }
-
-  init(presenting node: SnapshotPresentationNode) {
-    self.init(
-      presenting: node.raw,
-      rect: node.effectiveRect,
-      index: node.raw.index,
-      depth: node.raw.depth,
-      parentIndex: node.raw.parentIndex
-    )
-  }
-
-  init(
-    presenting raw: RawAXNode,
-    rect: SnapshotRect,
-    index: Int,
-    depth: Int,
-    parentIndex: Int?
-  ) {
-    self.index = index
-    type = raw.type
-    label = raw.label
-    identifier = raw.identifier
-    value = raw.value
-    self.rect = rect
-    enabled = raw.enabled
-    focused = raw.focused
-    selected = raw.selected
-    hittable = raw.hittable
-    self.depth = depth
-    self.parentIndex = parentIndex
-    hiddenContentAbove = raw.hiddenContentAbove
-    hiddenContentBelow = raw.hiddenContentBelow
-    actions = raw.actions
-  }
-}
+/// Keep the wire payload's existing spelling while making the presented-node type owned by the
+/// presentation module. Its constructors live in `RunnerTests+SnapshotPresentation.swift` and are
+/// file-private there, so acquisition backends can carry a `PresentedNode` but cannot construct one.
+typealias PresentedNode = SnapshotPresentation.PresentedNode

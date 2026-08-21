@@ -1,6 +1,73 @@
 import Foundation
 
 enum SnapshotPresentation {
+  /// The only snapshot node shape accepted by response payload assembly.
+  ///
+  /// The encoded shape intentionally remains byte-for-byte compatible with the former
+  /// `SnapshotNode` wire model. Construction stays file-private to this presentation module:
+  /// acquisition backends can return `RawAXNode` values, but cannot recreate a presented node.
+  struct PresentedNode: Codable {
+    let index: Int
+    let type: String
+    let label: String?
+    let identifier: String?
+    let value: String?
+    let rect: SnapshotRect
+    let enabled: Bool
+    let focused: Bool?
+    let selected: Bool?
+    let hittable: Bool
+    let depth: Int
+    let parentIndex: Int?
+    let hiddenContentAbove: Bool?
+    let hiddenContentBelow: Bool?
+    let actions: [String]?
+
+    fileprivate init(presenting raw: RawAXNode) {
+      self.init(
+        presenting: raw,
+        rect: raw.rect,
+        index: raw.index,
+        depth: raw.depth,
+        parentIndex: raw.parentIndex
+      )
+    }
+
+    fileprivate init(presenting node: SnapshotPresentationNode) {
+      self.init(
+        presenting: node.raw,
+        rect: node.effectiveRect,
+        index: node.raw.index,
+        depth: node.raw.depth,
+        parentIndex: node.raw.parentIndex
+      )
+    }
+
+    fileprivate init(
+      presenting raw: RawAXNode,
+      rect: SnapshotRect,
+      index: Int,
+      depth: Int,
+      parentIndex: Int?
+    ) {
+      self.index = index
+      type = raw.type
+      label = raw.label
+      identifier = raw.identifier
+      value = raw.value
+      self.rect = rect
+      enabled = raw.enabled
+      focused = raw.focused
+      selected = raw.selected
+      hittable = raw.hittable
+      self.depth = depth
+      self.parentIndex = parentIndex
+      hiddenContentAbove = raw.hiddenContentAbove
+      hiddenContentBelow = raw.hiddenContentBelow
+      actions = raw.actions
+    }
+  }
+
   private static let eligibleInteractiveTypes: Set<String> = [
     "Button",
     "Cell",
