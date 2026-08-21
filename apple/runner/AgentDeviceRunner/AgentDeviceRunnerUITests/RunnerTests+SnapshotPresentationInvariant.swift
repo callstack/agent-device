@@ -29,18 +29,59 @@ enum SnapshotPresentationFailure: Error {
 /// nodes, not raw acquisition facts, so replacing the fold with reported geometry cannot silently
 /// reach `PresentedNode` construction.
 extension SnapshotPresentation {
+  private struct InvariantValidationMetrics {
+    var parentClipLookups = 0
+  }
+
   static func validateRegularInvariant(
     _ nodes: [SnapshotPresentationNode],
     viewport: CGRect,
     policy: SnapshotVisibilityFold.Policy
   ) throws {
-    var nodesByIndex: [Int: SnapshotPresentationNode] = [:]
-    for node in nodes {
-      nodesByIndex[node.raw.index] = node
-    }
+    var metrics = InvariantValidationMetrics()
+    try validateRegularInvariant(
+      nodes,
+      viewport: viewport,
+      policy: policy,
+      metrics: &metrics
+    )
+  }
+
+  private static func validateRegularInvariant(
+    _ nodes: [SnapshotPresentationNode],
+    viewport: CGRect,
+    policy: SnapshotVisibilityFold.Policy,
+    metrics: inout InvariantValidationMetrics
+  ) throws {
+    // SnapshotVisibilityFold emits preorder, so every parent clip is available when its child is
+    // visited. The effective frame already contains the fold's viewport/ancestor clipping. Cache
+    // a scroll node's effective frame for descendants; the node itself is checked against its
+    // parent's context.
+    var clipIncludingNodeByIndex: [Int: CGRect] = [:]
+    clipIncludingNodeByIndex.reserveCapacity(nodes.count)
 
     for node in nodes {
+      let ancestorClip: CGRect
+      if let parentIndex = node.raw.parentIndex {
+        metrics.parentClipLookups += 1
+        ancestorClip = clipIncludingNodeByIndex[parentIndex] ?? viewport
+      } else {
+        ancestorClip = viewport
+      }
+
       let frame = cgRect(from: node.effectiveRect)
+      let clipIncludingNode: CGRect
+      if policy == .cursorProjected,
+        SnapshotVisibilityFold.scrollContainerTypeNames.contains(node.raw.type),
+        !frame.isNull,
+        !frame.isEmpty
+      {
+        clipIncludingNode = frame
+      } else {
+        clipIncludingNode = ancestorClip
+      }
+      clipIncludingNodeByIndex[node.raw.index] = clipIncludingNode
+
       guard !frame.isNull, !frame.isEmpty else {
         if node.raw.hittable {
           throw SnapshotPresentationFailure.regularDegenerateNodeIsActionable(
@@ -51,45 +92,14 @@ extension SnapshotPresentation {
         continue
       }
 
-      let clip = cumulativeClip(
-        for: node,
-        nodesByIndex: nodesByIndex,
-        viewport: viewport,
-        policy: policy
-      )
-      guard contains(frame, in: clip) else {
+      guard contains(frame, in: ancestorClip) else {
         throw SnapshotPresentationFailure.regularNodeOutsideCumulativeClip(
           index: node.raw.index,
           frame: node.effectiveRect,
-          clip: snapshotRect(from: clip)
+          clip: snapshotRect(from: ancestorClip)
         )
       }
     }
-  }
-
-  private static func cumulativeClip(
-    for node: SnapshotPresentationNode,
-    nodesByIndex: [Int: SnapshotPresentationNode],
-    viewport: CGRect,
-    policy: SnapshotVisibilityFold.Policy
-  ) -> CGRect {
-    guard policy == .cursorProjected else { return viewport }
-
-    var clip = viewport
-    var parentIndex = node.raw.parentIndex
-    var visited = Set<Int>()
-    while let currentIndex = parentIndex, visited.insert(currentIndex).inserted,
-      let parent = nodesByIndex[currentIndex]
-    {
-      if SnapshotVisibilityFold.scrollContainerTypeNames.contains(parent.raw.type) {
-        let parentFrame = cgRect(from: parent.effectiveRect)
-        if !parentFrame.isNull, !parentFrame.isEmpty {
-          clip = clip.intersection(parentFrame)
-        }
-      }
-      parentIndex = parent.raw.parentIndex
-    }
-    return clip
   }
 
   private static func contains(_ frame: CGRect, in clip: CGRect) -> Bool {
@@ -113,6 +123,27 @@ extension SnapshotPresentation {
       height: Double(rect.height)
     )
   }
+
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
+  struct InvariantValidationStats {
+    let parentClipLookups: Int
+  }
+
+  static func validateRegularInvariantForTesting(
+    _ nodes: [SnapshotPresentationNode],
+    viewport: CGRect,
+    policy: SnapshotVisibilityFold.Policy
+  ) throws -> InvariantValidationStats {
+    var metrics = InvariantValidationMetrics()
+    try validateRegularInvariant(
+      nodes,
+      viewport: viewport,
+      policy: policy,
+      metrics: &metrics
+    )
+    return InvariantValidationStats(parentClipLookups: metrics.parentClipLookups)
+  }
+#endif
 }
 
 extension RunnerTests {

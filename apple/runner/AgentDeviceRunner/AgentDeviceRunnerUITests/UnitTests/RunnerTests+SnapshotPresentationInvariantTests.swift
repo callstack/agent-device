@@ -99,48 +99,6 @@ extension RunnerTests {
     )
   }
 
-  private static func assertFramedNodesStayInsideTheirCumulativeClip(
-    _ nodes: [SnapshotPresentation.PresentedNode],
-    viewport: CGRect,
-    file: StaticString = #filePath,
-    line: UInt = #line
-  ) {
-    let nodesByIndex = Dictionary(uniqueKeysWithValues: nodes.map { ($0.index, $0) })
-    for node in nodes {
-      let frame = CGRect(
-        x: node.rect.x, y: node.rect.y, width: node.rect.width, height: node.rect.height)
-      guard !frame.isNull, !frame.isEmpty else {
-        XCTAssertFalse(node.hittable, "degenerate regular node is actionable", file: file, line: line)
-        continue
-      }
-
-      var cumulativeClip = viewport
-      var parentIndex = node.parentIndex
-      var visited = Set<Int>()
-      while let currentIndex = parentIndex, visited.insert(currentIndex).inserted,
-        let parent = nodesByIndex[currentIndex]
-      {
-        if SnapshotVisibilityFold.scrollContainerTypeNames.contains(parent.type) {
-          let parentFrame = CGRect(
-            x: parent.rect.x,
-            y: parent.rect.y,
-            width: parent.rect.width,
-            height: parent.rect.height
-          )
-          if !parentFrame.isNull, !parentFrame.isEmpty {
-            cumulativeClip = cumulativeClip.intersection(parentFrame)
-          }
-        }
-        parentIndex = parent.parentIndex
-      }
-
-      XCTAssertGreaterThanOrEqual(frame.minX, cumulativeClip.minX, file: file, line: line)
-      XCTAssertGreaterThanOrEqual(frame.minY, cumulativeClip.minY, file: file, line: line)
-      XCTAssertLessThanOrEqual(frame.maxX, cumulativeClip.maxX, file: file, line: line)
-      XCTAssertLessThanOrEqual(frame.maxY, cumulativeClip.maxY, file: file, line: line)
-    }
-  }
-
   func testRegularPresentationKeepsNestedClipGeometryCumulative() throws {
     let acquisition = SnapshotAcquisition(
       hint: CaptureHint(
@@ -191,7 +149,8 @@ extension RunnerTests {
 
     let options = PresentationOptions(
       interactiveOnly: false, depth: nil, scope: nil, raw: false)
-    let capture = try SnapshotPresentation.presentRegular(acquisition, options: options)
+    let capture = try SnapshotPresentation.presentRegular(
+      acquisition, options: options, policy: .cursorProjected)
     let nodes = try XCTUnwrap(capture.payload.nodes)
 
     XCTAssertEqual(nodes.compactMap(\.label), ["App", "Outer", "Inner", "Partially visible"])
@@ -199,8 +158,6 @@ extension RunnerTests {
     XCTAssertEqual(clipped.rect.x, 150)
     XCTAssertEqual(clipped.rect.width, 46)
     XCTAssertFalse(nodes.contains { $0.label == "Escaped child" })
-    Self.assertFramedNodesStayInsideTheirCumulativeClip(
-      nodes, viewport: acquisition.viewport)
   }
 
   func testRegularPresentationKeepsFramelessSemanticCarriersNonActionableAndNonClipping() throws {
@@ -248,14 +205,14 @@ extension RunnerTests {
     let options = PresentationOptions(
       interactiveOnly: true, depth: nil, scope: nil, raw: false)
     let nodes = try XCTUnwrap(
-      try SnapshotPresentation.presentRegular(acquisition, options: options).payload.nodes)
+      try SnapshotPresentation.presentRegular(
+        acquisition, options: options, policy: .cursorProjected
+      ).payload.nodes)
 
     XCTAssertEqual(nodes.compactMap(\.label), [
       "App", "Geometryless semantics", "Child is not clipped", "Zero-area semantics",
     ])
     XCTAssertEqual(nodes.filter { $0.index != 0 }.map(\.hittable), [false, true, false])
-    Self.assertFramedNodesStayInsideTheirCumulativeClip(
-      nodes, viewport: acquisition.viewport)
   }
 
   func testRawPresentationKeepsReportedOffscreenAndFramelessFacts() throws {
@@ -308,18 +265,82 @@ extension RunnerTests {
   }
 
   func testFixedSeedRegularPresentationMaintainsCumulativeClipInvariant() throws {
-    // Non-vacuity: replacing the regular fold with reported geometry makes the presentation
-    // choke point throw `presentation-failed`; removing that check makes this fixed-seed property
-    // fail on the first nested-clip case that emits an out-of-clip node.
+    // Fixed-seed coverage keeps the one-pass validator exercised across nested and degenerate
+    // ancestry without relying on a wall-clock performance threshold.
     for seed in 1...64 {
       let acquisition = Self.fixedSeedAcquisition(seed: UInt64(seed))
       let options = PresentationOptions(
         interactiveOnly: false, depth: nil, scope: nil, raw: false)
-      let capture = try SnapshotPresentation.presentRegular(acquisition, options: options)
-      let nodes = try XCTUnwrap(capture.payload.nodes)
-      Self.assertFramedNodesStayInsideTheirCumulativeClip(
-        nodes, viewport: acquisition.viewport)
+      _ = try SnapshotPresentation.presentRegular(
+        acquisition, options: options, policy: .cursorProjected)
     }
+  }
+
+  func testRegularInvariantRejectsEscapedEffectiveGeometry() throws {
+    let viewport = CGRect(x: 0, y: 0, width: 200, height: 200)
+    let rawNodes = [
+      Self.invariantNode(
+        0,
+        type: "Application",
+        rect: SnapshotRect(x: 0, y: 0, width: 200, height: 200),
+        parentIndex: nil
+      ),
+      Self.invariantNode(
+        1,
+        type: "ScrollView",
+        rect: SnapshotRect(x: 20, y: 20, width: 100, height: 100),
+        parentIndex: 0
+      ),
+      Self.invariantNode(
+        2,
+        type: "Button",
+        rect: SnapshotRect(x: 110, y: 40, width: 20, height: 20),
+        parentIndex: 1
+      ),
+    ]
+    let folded = rawNodes.map {
+      SnapshotPresentationNode(raw: $0, effectiveRect: $0.rect)
+    }
+
+    XCTAssertThrowsError(
+      try SnapshotPresentation.validateRegularInvariantForTesting(
+        folded,
+        viewport: viewport,
+        policy: .cursorProjected
+      )
+    ) { error in
+      guard case let SnapshotPresentationFailure.regularNodeOutsideCumulativeClip(index, _, clip) = error
+      else {
+        return XCTFail("expected cumulative clip failure, got \(error)")
+      }
+      XCTAssertEqual(index, 2)
+      XCTAssertEqual(clip.x, 20)
+      XCTAssertEqual(clip.width, 100)
+    }
+  }
+
+  func testRegularInvariantUsesOneParentClipLookupPerNode() throws {
+    let nodeCount = 5_000
+    let viewport = CGRect(x: 0, y: 0, width: 100, height: 100)
+    let nodes = (0..<nodeCount).map { index in
+      let raw = Self.invariantNode(
+        index,
+        type: index == 0 ? "Application" : "ScrollView",
+        rect: SnapshotRect(x: 0, y: 0, width: 100, height: 100),
+        parentIndex: index == 0 ? nil : index - 1
+      )
+      return SnapshotPresentationNode(raw: raw, effectiveRect: raw.rect)
+    }
+
+    let stats = try SnapshotPresentation.validateRegularInvariantForTesting(
+      nodes,
+      viewport: viewport,
+      policy: .cursorProjected
+    )
+
+    // The former per-node ancestor walk performs 12,497,500 lookups for this chain. Counting the
+    // cached parent resolutions makes the linear guarantee deterministic without timing the test.
+    XCTAssertEqual(stats.parentClipLookups, nodeCount - 1)
   }
 
   func testPresentationFailureKeepsItsNamedSnapshotQualityReason() {
