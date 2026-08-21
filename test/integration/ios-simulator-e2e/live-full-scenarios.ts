@@ -150,18 +150,40 @@ export async function assertLifecycleAndSystem(context: LiveContext): Promise<vo
   const switcherNodes = Array.isArray(switcherSurface.json?.data?.nodes)
     ? switcherSurface.json.data.nodes
     : [];
-  const coveredFixtureControl = switcherNodes.find(
+  const fixtureControl = switcherNodes.find(
     (node: { identifier?: unknown }) => node.identifier === 'automation-press',
   );
-  assert.ok(coveredFixtureControl, JSON.stringify(switcherSurface.json));
-  assert.equal(coveredFixtureControl.hittable, false, JSON.stringify(coveredFixtureControl));
+  assert.ok(fixtureControl, JSON.stringify(switcherSurface.json));
+  // The system app switcher is outside the app accessibility tree. Its screenshot proves the
+  // visual cover, while this tree must retain geometric actionability and must not invent a
+  // structured daemon occlusion reason for an overlay the runner never captured.
+  assert.equal(fixtureControl.hittable, true, JSON.stringify(fixtureControl));
+  assert.equal(fixtureControl.interactionBlocked, undefined, JSON.stringify(fixtureControl));
   assert.equal(
     switcherNodes.some(
       (node: { hittable?: unknown; type?: unknown }) =>
         node.type === 'Button' && node.hittable === true,
     ),
-    false,
-    'app switcher should cover every fixture button',
+    true,
+    'app switcher must not turn geometric actionability into runner-side occlusion',
+  );
+  const rawSwitcherSurface = await runStep(context, 'inspect raw fixture in app switcher', [
+    'snapshot',
+    '--raw',
+  ]);
+  const rawSwitcherNodes = Array.isArray(rawSwitcherSurface.json?.data?.nodes)
+    ? rawSwitcherSurface.json.data.nodes
+    : [];
+  const rawFixtureControl = rawSwitcherNodes.find(
+    (node: { identifier?: unknown }) => node.identifier === 'automation-press',
+  );
+  assert.ok(rawFixtureControl, JSON.stringify(rawSwitcherSurface.json));
+  assert.equal(rawFixtureControl.hittable, true, JSON.stringify(rawFixtureControl));
+  assert.equal(rawFixtureControl.interactionBlocked, undefined, JSON.stringify(rawFixtureControl));
+  assert.equal(rawSwitcherSurface.json?.data?.snapshotQuality?.backend, 'tree');
+  assert.ok(
+    Number(rawSwitcherSurface.json?.data?.snapshotDiagnostics?.stats?.backends?.xctest) > 0,
+    JSON.stringify(rawSwitcherSurface.json),
   );
   const switcherPath = path.join(context.artifactDir, 'system-app-switcher.png');
   await capturePng(context, 'capture app switcher', switcherPath);
@@ -174,7 +196,7 @@ export async function assertLifecycleAndSystem(context: LiveContext): Promise<vo
   verifyCommand(
     context,
     C.appSwitcher,
-    'app switcher covers fixture controls and differs from Home and foreground pixels',
+    'app switcher visibly covers the app while regular/raw trees retain geometric actionability',
   );
   verifyBehavior(
     context,

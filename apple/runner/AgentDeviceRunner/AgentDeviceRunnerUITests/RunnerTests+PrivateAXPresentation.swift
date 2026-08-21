@@ -14,8 +14,6 @@ struct PrivateAXFields {
   let selected: Bool?
   let actions: [String]?
   let children: [[String: Any]]
-
-  var hasFrame: Bool { !rect.isNull && !rect.isEmpty }
 }
 
 extension RunnerTests {
@@ -23,7 +21,7 @@ extension RunnerTests {
   /// depth -- membership, the clip fold, scroll hints, and collapsed depth are
   /// `SnapshotPresentation`'s alone (#1797). The traversal-depth cut is the backend's one
   /// narrowing, complete for raw (raw depth *is* traversal depth) and a declared residue for
-  /// regular; `hittable` is the pre-clip geometric fact the fold narrows per projection.
+  /// regular; `hittable` is the shared geometric fact the fold recomputes for effective geometry.
   func privateAXAcquisition(rawRoot: [String: Any], hint: CaptureHint, viewport: CGRect)
     -> [RawAXNode]
   {
@@ -38,10 +36,15 @@ extension RunnerTests {
   {
     if let limit = hint.depth, depth > limit { return }
     let fields = privateAXFields(raw)
-    let onScreen = fields.hasFrame && Self.isVisibleInViewport(fields.rect, viewport)
     let index = nodes.count
     nodes.append(
-      privateAXNode(fields, index: index, depth: depth, parentIndex: parentIndex, onScreen: onScreen)
+      privateAXNode(
+        fields,
+        index: index,
+        depth: depth,
+        parentIndex: parentIndex,
+        viewport: viewport
+      )
     )
     for child in fields.children {
       appendPrivateAXNode(child, to: &nodes, hint: hint, viewport: viewport,
@@ -67,7 +70,7 @@ extension RunnerTests {
   }
 
   private func privateAXNode(_ fields: PrivateAXFields, index: Int, depth: Int, parentIndex: Int?,
-    onScreen: Bool) -> RawAXNode
+    viewport: CGRect) -> RawAXNode
   {
     RawAXNode(index: index,
       type: fields.elementType.map(elementTypeName) ?? "Element(\(fields.rawType))",
@@ -76,8 +79,11 @@ extension RunnerTests {
       value: fields.value.isEmpty ? nil : fields.value,
       rect: snapshotRect(from: fields.rect), enabled: fields.enabled,
       focused: fields.focused, selected: fields.selected,
-      hittable: onScreen && fields.enabled
-        && privateAXInteractiveCandidate(rawElementType: fields.rawType),
+      hittable: parentIndex != nil && SnapshotGeometry.isGeometricallyActionable(
+        enabled: fields.enabled,
+        frame: fields.rect,
+        viewport: viewport
+      ),
       depth: depth, parentIndex: parentIndex, hiddenContentAbove: nil, hiddenContentBelow: nil,
       actions: fields.actions)
   }

@@ -15,8 +15,6 @@ extension RunnerTests {
     let queryRoot: XCUIElement
     let rootSnapshot: XCUIElementSnapshot
     let viewport: CGRect
-    let flatSnapshots: [XCUIElementSnapshot]
-    let snapshotRanges: [ObjectIdentifier: (Int, Int)]
     let maxDepth: Int
   }
 
@@ -24,7 +22,6 @@ extension RunnerTests {
     let label: String
     let identifier: String
     let valueText: String?
-    let hittable: Bool
     let focused: Bool
     let selected: Bool
   }
@@ -149,14 +146,15 @@ extension RunnerTests {
     // cut (declared residue -- regular presentation emits collapsed depth) and the collapsed-tab
     // expansion, which needs live element handles.
     var nodes: [RawAXNode] = []
-    let rootEvaluation = evaluateSnapshot(context.rootSnapshot, in: context)
+    let rootEvaluation = evaluateSnapshot(context.rootSnapshot)
     nodes.append(
       makeSnapshotNode(
         snapshot: context.rootSnapshot,
         evaluation: rootEvaluation,
         depth: 0,
         index: 0,
-        parentIndex: nil
+        parentIndex: nil,
+        viewport: context.viewport
       )
     )
     if context.maxDepth > 0 {
@@ -165,7 +163,8 @@ extension RunnerTests {
         containerSnapshot: context.rootSnapshot,
         resolveElements: collapsedTabDescendants,
         depth: 1,
-        parentIndex: 0
+        parentIndex: 0,
+        viewport: context.viewport
       )
     }
 
@@ -184,7 +183,7 @@ extension RunnerTests {
       let parentIndex = entry.parentIndex
       if let limit = hint.depth, depth > limit { continue }
 
-      let evaluation = evaluateSnapshot(snapshot, in: context)
+      let evaluation = evaluateSnapshot(snapshot)
       let key = Self.snapshotTraversalIdentity(
         elementType: snapshot.elementType,
         label: evaluation.label,
@@ -218,7 +217,8 @@ extension RunnerTests {
           evaluation: evaluation,
           depth: depth,
           index: index,
-          parentIndex: parentIndex
+          parentIndex: parentIndex,
+          viewport: context.viewport
         )
       )
       if depth < context.maxDepth {
@@ -227,7 +227,8 @@ extension RunnerTests {
           containerSnapshot: snapshot,
           resolveElements: collapsedTabDescendants,
           depth: depth + 1,
-          parentIndex: index
+          parentIndex: index,
+          viewport: context.viewport
         )
       }
     }
@@ -347,7 +348,7 @@ extension RunnerTests {
     func walk(_ snapshot: XCUIElementSnapshot, depth: Int, parentIndex: Int?) throws {
       if let limit = hint.depth, depth > limit { return }
 
-      let evaluation = evaluateSnapshot(snapshot, in: context)
+      let evaluation = evaluateSnapshot(snapshot)
       if nodes.count >= Self.rawSnapshotMaxNodes {
         throw rawSnapshotTooLargeFailure(nodeCount: nodes.count + 1)
       }
@@ -358,7 +359,8 @@ extension RunnerTests {
           evaluation: evaluation,
           depth: depth,
           index: currentIndex,
-          parentIndex: parentIndex
+          parentIndex: parentIndex,
+          viewport: context.viewport
         )
       )
 
@@ -804,25 +806,6 @@ extension RunnerTests {
 
   // MARK: - Snapshot Filtering
 
-  private func computedSnapshotHittable(
-    _ snapshot: XCUIElementSnapshot,
-    viewport: CGRect,
-    laterNodes: ArraySlice<XCUIElementSnapshot>
-  ) -> Bool {
-    guard snapshot.isEnabled else { return false }
-    let frame = snapshot.frame
-    if frame.isNull || frame.isEmpty { return false }
-    let center = CGPoint(x: frame.midX, y: frame.midY)
-    if !viewport.contains(center) { return false }
-    for node in laterNodes {
-      if !isOccludingType(node.elementType) { continue }
-      let nodeFrame = node.frame
-      if nodeFrame.isNull || nodeFrame.isEmpty { continue }
-      if nodeFrame.contains(center) { return false }
-    }
-    return true
-  }
-
   func makeSnapshotTraversalContext(
     app: XCUIApplication,
     hint: CaptureHint,
@@ -843,13 +826,10 @@ extension RunnerTests {
       return nil
     }
 
-    let (flatSnapshots, snapshotRanges) = flattenedSnapshots(rootSnapshot)
     return SnapshotTraversalContext(
       queryRoot: app,
       rootSnapshot: rootSnapshot,
       viewport: viewport,
-      flatSnapshots: flatSnapshots,
-      snapshotRanges: snapshotRanges,
       maxDepth: hint.depth ?? Int.max
     )
   }
@@ -987,23 +967,14 @@ extension RunnerTests {
     failure.code == Self.axSnapshotErrorCode || isAxIllegalArgument(failure.message)
   }
 
-  private func evaluateSnapshot(
-    _ snapshot: XCUIElementSnapshot,
-    in context: SnapshotTraversalContext
-  ) -> SnapshotEvaluation {
+  private func evaluateSnapshot(_ snapshot: XCUIElementSnapshot) -> SnapshotEvaluation {
     let label = aggregatedLabel(for: snapshot) ?? snapshot.label.trimmingCharacters(in: .whitespacesAndNewlines)
     let identifier = snapshot.identifier.trimmingCharacters(in: .whitespacesAndNewlines)
     let valueText = snapshotValueText(snapshot)
-    let laterNodes = laterSnapshots(
-      for: snapshot,
-      in: context.flatSnapshots,
-      ranges: context.snapshotRanges
-    )
     return SnapshotEvaluation(
       label: label,
       identifier: identifier,
       valueText: valueText,
-      hittable: computedSnapshotHittable(snapshot, viewport: context.viewport, laterNodes: laterNodes),
       focused: snapshotHasFocus(snapshot),
       selected: snapshotIsSelected(snapshot)
     )
@@ -1014,7 +985,8 @@ extension RunnerTests {
     evaluation: SnapshotEvaluation,
     depth: Int,
     index: Int,
-    parentIndex: Int?
+    parentIndex: Int?,
+    viewport: CGRect
   ) -> RawAXNode {
     return RawAXNode(
       index: index,
@@ -1026,58 +998,16 @@ extension RunnerTests {
       enabled: snapshot.isEnabled,
       focused: evaluation.focused ? true : nil,
       selected: evaluation.selected ? true : nil,
-      hittable: evaluation.hittable,
+      hittable: parentIndex != nil && SnapshotGeometry.isGeometricallyActionable(
+        enabled: snapshot.isEnabled,
+        frame: snapshot.frame,
+        viewport: viewport
+      ),
       depth: depth,
       parentIndex: parentIndex,
       hiddenContentAbove: nil,
       hiddenContentBelow: nil
     )
-  }
-
-  private func isOccludingType(_ type: XCUIElement.ElementType) -> Bool {
-    switch type {
-    case .application, .window:
-      return false
-    default:
-      return true
-    }
-  }
-
-  private func flattenedSnapshots(
-    _ root: XCUIElementSnapshot
-  ) -> ([XCUIElementSnapshot], [ObjectIdentifier: (Int, Int)]) {
-    var ordered: [XCUIElementSnapshot] = []
-    var ranges: [ObjectIdentifier: (Int, Int)] = [:]
-
-    @discardableResult
-    func visit(_ snapshot: XCUIElementSnapshot) -> Int {
-      let start = ordered.count
-      ordered.append(snapshot)
-      var end = start
-      for child in snapshot.children {
-        end = max(end, visit(child))
-      }
-      ranges[ObjectIdentifier(snapshot)] = (start, end)
-      return end
-    }
-
-    _ = visit(root)
-    return (ordered, ranges)
-  }
-
-  private func laterSnapshots(
-    for snapshot: XCUIElementSnapshot,
-    in ordered: [XCUIElementSnapshot],
-    ranges: [ObjectIdentifier: (Int, Int)]
-  ) -> ArraySlice<XCUIElementSnapshot> {
-    guard let (_, subtreeEnd) = ranges[ObjectIdentifier(snapshot)] else {
-      return ordered.suffix(from: ordered.count)
-    }
-    let nextIndex = subtreeEnd + 1
-    if nextIndex >= ordered.count {
-      return ordered.suffix(from: ordered.count)
-    }
-    return ordered.suffix(from: nextIndex)
   }
 
   private func snapshotValueText(_ snapshot: XCUIElementSnapshot) -> String? {
@@ -1120,24 +1050,21 @@ extension RunnerTests {
     return nil
   }
 
-  static func isVisibleInViewport(_ rect: CGRect, _ viewport: CGRect) -> Bool {
-    if rect.isNull || rect.isEmpty { return false }
-    return rect.intersects(viewport)
-  }
-
   private func appendCollapsedTabFallbackNodes(
     to nodes: inout [RawAXNode],
     containerSnapshot: XCUIElementSnapshot,
     resolveElements: () -> [XCUIElement],
     depth: Int,
-    parentIndex: Int
+    parentIndex: Int,
+    viewport: CGRect
   ) {
     let fallbackNodes = collapsedTabFallbackNodes(
       for: containerSnapshot,
       resolveElements: resolveElements,
       startingIndex: nodes.count,
       depth: depth,
-      parentIndex: parentIndex
+      parentIndex: parentIndex,
+      viewport: viewport
     )
     nodes.append(contentsOf: fallbackNodes)
   }
@@ -1147,7 +1074,8 @@ extension RunnerTests {
     resolveElements: () -> [XCUIElement],
     startingIndex: Int,
     depth: Int,
-    parentIndex: Int
+    parentIndex: Int,
+    viewport: CGRect
   ) -> [RawAXNode] {
     if !containerSnapshot.children.isEmpty { return [] }
     guard shouldExpandCollapsedTabContainer(containerSnapshot) else { return [] }
@@ -1161,7 +1089,8 @@ extension RunnerTests {
       collapsedTabCandidateNode(
         element: element,
         containerSnapshot: containerSnapshot,
-        containerFrame: containerFrame
+        containerFrame: containerFrame,
+        viewport: viewport
       )
     }
     .sorted { left, right in
@@ -1209,7 +1138,8 @@ extension RunnerTests {
   private func collapsedTabCandidateNode(
     element: XCUIElement,
     containerSnapshot: XCUIElementSnapshot,
-    containerFrame: CGRect
+    containerFrame: CGRect,
+    viewport: CGRect
   ) -> RawAXNode? {
     var node: RawAXNode?
     let exceptionMessage = RunnerObjCExceptionCatcher.catchException({
@@ -1249,7 +1179,11 @@ extension RunnerTests {
         enabled: element.isEnabled,
         focused: elementHasFocus(element) ? true : nil,
         selected: element.isSelected ? true : nil,
-        hittable: element.isHittable,
+        hittable: SnapshotGeometry.isGeometricallyActionable(
+          enabled: element.isEnabled,
+          frame: frame,
+          viewport: viewport
+        ),
         depth: 0,
         parentIndex: nil,
         hiddenContentAbove: nil,
@@ -1384,13 +1318,16 @@ extension RunnerTests {
       // attach to, so frameless elements are dropped at acquisition rather than presented.
       let frame = element.frame
       if frame.isNull || frame.isEmpty { return }
-      let visible = Self.isVisibleInViewport(frame, viewport)
       let label = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
       let identifier = element.identifier.trimmingCharacters(in: .whitespacesAndNewlines)
       let valueText = snapshotValueText(element)
       let elementType = element.elementType
       let enabled = element.isEnabled
-      let hittable = visible && enabled && element.isHittable
+      let hittable = SnapshotGeometry.isGeometricallyActionable(
+        enabled: enabled,
+        frame: frame,
+        viewport: viewport
+      )
 
       node = RawAXNode(
         index: index,

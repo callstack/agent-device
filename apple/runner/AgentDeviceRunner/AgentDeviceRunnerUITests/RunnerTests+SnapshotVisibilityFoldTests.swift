@@ -7,13 +7,12 @@ extension RunnerTests {
     type: String,
     label: String? = nil,
     rect: SnapshotRect,
-    hittable: Bool = false,
     depth: Int,
     parentIndex: Int?
   ) -> RawAXNode {
     RawAXNode(
       index: index, type: type, label: label, identifier: nil, value: nil, rect: rect,
-      enabled: true, focused: nil, selected: nil, hittable: hittable, depth: depth,
+      enabled: true, focused: nil, selected: nil, hittable: false, depth: depth,
       parentIndex: parentIndex, hiddenContentAbove: nil, hiddenContentBelow: nil
     )
   }
@@ -35,12 +34,12 @@ extension RunnerTests {
       Self.foldNode(1, type: "ScrollView",
         rect: SnapshotRect(x: 0, y: 96, width: 402, height: 700), depth: 1, parentIndex: 0),
       Self.foldNode(2, type: "Cell", label: "Visible row",
-        rect: SnapshotRect(x: 0, y: 120, width: 402, height: 52), hittable: true,
+        rect: SnapshotRect(x: 0, y: 120, width: 402, height: 52),
         depth: 2, parentIndex: 1),
       Self.foldNode(3, type: "StaticText", label: "Detail",
         rect: SnapshotRect(x: 16, y: 130, width: 200, height: 20), depth: 3, parentIndex: 2),
       Self.foldNode(4, type: "Cell", label: "Offscreen row",
-        rect: SnapshotRect(x: 0, y: 900, width: 402, height: 52), hittable: true,
+        rect: SnapshotRect(x: 0, y: 900, width: 402, height: 52),
         depth: 2, parentIndex: 1),
       Self.foldNode(5, type: "StaticText", label: "Clamped child",
         rect: SnapshotRect(x: 16, y: 96, width: 100, height: 20), depth: 3, parentIndex: 4),
@@ -69,10 +68,10 @@ extension RunnerTests {
       Self.foldNode(0, type: "Application", label: "App",
         rect: SnapshotRect(x: 0, y: 0, width: 402, height: 874), depth: 0, parentIndex: nil),
       Self.foldNode(1, type: "Window", label: "Second screen",
-        rect: SnapshotRect(x: 402, y: 0, width: 402, height: 874), hittable: true,
+        rect: SnapshotRect(x: 402, y: 0, width: 402, height: 874),
         depth: 1, parentIndex: 0),
       Self.foldNode(2, type: "Button", label: "Gone",
-        rect: SnapshotRect(x: 500, y: 100, width: 100, height: 44), hittable: true,
+        rect: SnapshotRect(x: 500, y: 100, width: 100, height: 44),
         depth: 2, parentIndex: 1),
     ]
     let folded = Self.folded(nodes, viewport: CGRect(x: 0, y: 0, width: 402, height: 874))
@@ -91,12 +90,12 @@ extension RunnerTests {
       Self.foldNode(0, type: "Application", label: "App",
         rect: SnapshotRect(x: 0, y: 0, width: 402, height: 874), depth: 0, parentIndex: nil),
       Self.foldNode(1, type: "Button",
-        rect: SnapshotRect(x: 0, y: 100, width: 402, height: 1), hittable: true,
+        rect: SnapshotRect(x: 0, y: 100, width: 402, height: 1),
         depth: 1, parentIndex: 0),
       Self.foldNode(2, type: "StaticText", label: "Hairline caption",
         rect: SnapshotRect(x: 0, y: 200, width: 402, height: 1), depth: 1, parentIndex: 0),
       Self.foldNode(3, type: "StaticText", label: "Frameless semantics",
-        rect: SnapshotRect(x: 0, y: 0, width: 0, height: 0), hittable: true,
+        rect: SnapshotRect(x: 0, y: 0, width: 0, height: 0),
         depth: 1, parentIndex: 0),
     ]
     let folded = Self.folded(nodes, viewport: CGRect(x: 0, y: 0, width: 402, height: 874))
