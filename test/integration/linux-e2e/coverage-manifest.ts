@@ -160,11 +160,11 @@ export const LINUX_PLATFORM_COVERAGE = {
   [C.record]: gap('No Linux-specific recording command evidence exists yet'),
   [C.trace]: gap('No Linux-specific trace command evidence exists yet'),
   [C.find]: gap('No Linux-specific find command evidence exists yet'),
-  [C.click]: contract(
-    LINUX_PROVIDER_EVIDENCE.path,
-    LINUX_PROVIDER_EVIDENCE.test,
-    'Linux provider scenario executes primary, secondary, middle, and double clicks',
-  ),
+  // Promoted from command-contract to live: the desktop replay now clicks a resolved digit
+  // button on real Linux hardware and the downstream wait only passes if the click landed
+  // (formerly missed — AT-SPI extents were computed screen-absolute-wrong under GTK4; see
+  // linux/atspi-dump.py).
+  [C.click]: live('the Linux desktop replay clicks a resolved calculator digit button'),
   [C.fill]: contract(
     LINUX_PROVIDER_EVIDENCE.path,
     LINUX_PROVIDER_EVIDENCE.test,
@@ -181,15 +181,11 @@ export const LINUX_PLATFORM_COVERAGE = {
     LINUX_PROVIDER_EVIDENCE.test,
     'Linux provider scenario presses a snapshot ref and coordinate target',
   ),
-  // The desktop replay runs the migrated typeText path on real hardware and uploads pixel
-  // evidence of the typed entry each run, but GTK4 gnome-calculator exposes no Text-interface
-  // content to selectors, so no tree-level assertion can hold and the claim stays at the
-  // contract tier until that platform defect is fixed.
-  [C.type]: contract(
-    'src/platforms/linux/__tests__/input-actions.test.ts',
-    'typeLinux uses ydotool type',
-    'Linux type dispatch uses the Wayland ydotool type primitive',
-  ),
+  // Promoted from command-contract to live: GTK4 gnome-calculator's entry previously exposed no
+  // Text-interface content to selectors (a PyGObject binding call-pattern bug — see
+  // linux/atspi-dump.py), so no tree-level assertion could hold. Fixed, so the desktop replay's
+  // typed calculation now has a real wait assertion on the computed result.
+  [C.type]: live('the Linux desktop replay types a calculation and its result is selectable'),
   [C.get]: contract(
     LINUX_PROVIDER_EVIDENCE.path,
     LINUX_PROVIDER_EVIDENCE.test,

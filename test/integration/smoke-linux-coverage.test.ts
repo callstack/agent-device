@@ -40,11 +40,12 @@ test('Linux coverage exhaustively classifies the public catalog', () => {
 test('Linux coverage report has the expected classification counts', () => {
   assert.deepEqual(LINUX_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY, {
     capabilityDenial: 11,
-    // focus (#1925) is live via the replay; type runs there too but GTK4 blocks a tree-level
-    // assertion, so its claim stays contract-tier (see the manifest entry).
-    contract: 19,
+    // focus (#1925), click, and type are live via the replay: click resolves and lands on a
+    // digit button, and the typed calculation's result is now selectable (see the manifest
+    // entries for the platform defects this fixed).
+    contract: 17,
     gap: 18,
-    live: 6,
+    live: 8,
     total: 54,
   });
 
@@ -61,7 +62,7 @@ test('Linux live claims reference commands in the existing smoke replay', () => 
     parseReplayScriptDetailed(replaySource).actions.map((action) => action.command),
   );
   const liveCommands = liveCommandsForLinuxReplay();
-  assert.deepEqual(liveCommands.length, 6);
+  assert.deepEqual(liveCommands.length, 8);
   for (const command of liveCommands) {
     assert.equal(
       replayCommands.has(command),

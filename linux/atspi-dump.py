@@ -22,7 +22,13 @@ MAX_DESKTOP_APPS = 24
 VALID_SURFACES = ("desktop", "frontmost-app")
 
 
-def get_rect(accessible):
+def get_screen_origin(accessible):
+    """The screen-absolute (x, y) of a top-level frame/window's own Component extents.
+
+    Unlike descendant widgets (see get_rect), a top-level's own SCREEN-coordinate extents are
+    correct — GTK4's AT-SPI bridge only loses the translation when walking from a widget up
+    through its ancestor chain to the root, not for the root itself.
+    """
     try:
         component = accessible.get_component_iface()
         if not component:
@@ -30,11 +36,34 @@ def get_rect(accessible):
         extents = component.get_extents(Atspi.CoordType.SCREEN)
         if not extents:
             return None
+        return (extents.x, extents.y)
+    except Exception:
+        return None
+
+
+def get_rect(accessible, frame_origin):
+    """A node's screen-absolute rect.
+
+    GTK4's AT-SPI bridge returns (0, 0) as the origin of Component.get_extents(SCREEN) for every
+    non-toplevel widget — confirmed live (CI run 32503838660): a raw xdotool click at the
+    computed center of a digit button's "screen" rect landed on the window's own header-bar
+    button instead. CoordType.WINDOW gives correct, distinct per-widget offsets, so the
+    screen-absolute rect is that offset plus the enclosing top-level frame's own (correct)
+    screen origin.
+    """
+    try:
+        component = accessible.get_component_iface()
+        if not component:
+            return None
+        extents = component.get_extents(Atspi.CoordType.WINDOW)
+        if not extents:
+            return None
         if extents.width <= 0 or extents.height <= 0:
             return None
+        origin_x, origin_y = frame_origin if frame_origin else (0, 0)
         return {
-            "x": extents.x,
-            "y": extents.y,
+            "x": extents.x + origin_x,
+            "y": extents.y + origin_y,
             "width": extents.width,
             "height": extents.height,
         }
@@ -43,14 +72,24 @@ def get_rect(accessible):
 
 
 def get_text_value(accessible):
+    """The Text interface's content, if any.
+
+    Must call Atspi.Text.get_text(accessible, ...) as an unbound/static call, NOT
+    accessible.get_text_iface().get_text(...) — the bound form resolves to the deprecated
+    1-argument Atspi.Accessible.get_text() instead (a documented PyGObject binding collision:
+    https://discourse.gnome.org/t/how-can-i-explicitly-call-atspi-text-get-text/36684), raising
+    "takes exactly 1 argument (3 given)" for every node, silently swallowed as "no text" by the
+    except-Exception below. Confirmed live (CI run 32505154107): the static form correctly
+    returns typed text ("155") where the bound form threw on the same node.
+    """
     try:
         text_iface = accessible.get_text_iface()
         if not text_iface:
             return None
-        count = text_iface.get_character_count()
+        count = Atspi.Text.get_character_count(accessible)
         if count <= 0:
             return None
-        value = text_iface.get_text(0, count)
+        value = Atspi.Text.get_text(accessible, 0, count)
         return value if value else None
     except Exception:
         return None
@@ -76,7 +115,7 @@ def has_state(state_set, state_type):
         return False
 
 
-def traverse_node(accessible, depth, parent_index, ctx, app_info, window_title=None):
+def traverse_node(accessible, depth, parent_index, ctx, app_info, window_title=None, frame_origin=None):
     if len(ctx["nodes"]) >= ctx["max_nodes"] or depth > ctx["max_depth"] or not accessible:
         return
 
@@ -96,7 +135,13 @@ def traverse_node(accessible, depth, parent_index, ctx, app_info, window_title=N
         description = ""
 
     label = name or description or None
-    rect = get_rect(accessible)
+
+    # Entering a new top-level resets the frame origin used to translate its descendants'
+    # WINDOW-relative extents to screen-absolute (see get_rect) — each frame/dialog is a
+    # separate X11 top-level with its own screen position.
+    is_frame = role_name in ("frame", "window", "dialog")
+    effective_frame_origin = (get_screen_origin(accessible) or frame_origin) if is_frame else frame_origin
+    rect = get_rect(accessible, effective_frame_origin)
 
     try:
         state_set = accessible.get_state_set()
@@ -107,10 +152,17 @@ def traverse_node(accessible, depth, parent_index, ctx, app_info, window_title=N
     selected = has_state(state_set, Atspi.StateType.SELECTED) if state_set else None
     visible = has_state(state_set, Atspi.StateType.VISIBLE) if state_set else True
     showing = has_state(state_set, Atspi.StateType.SHOWING) if state_set else True
-    hittable = (enabled is not False) and visible and showing and (rect is not None)
+    # role "label" is excluded even when geometrically valid: it's AT-SPI's own convention for a
+    # passive caption, and GTK4 buttons wrap their caption in a same-rect "label" child (confirmed
+    # live: every digit button on gnome-calculator has one) — leaving it hittable lets the
+    # same-rect descendant promotion in interaction-targeting.ts silently retarget a click from
+    # the button onto its non-interactive label.
+    hittable = (
+        (enabled is not False) and visible and showing and (rect is not None) and role_name != "label"
+    )
 
     current_window_title = window_title
-    if current_window_title is None and role_name in ("frame", "window", "dialog"):
+    if current_window_title is None and is_frame:
         current_window_title = label
 
     nodes = ctx["nodes"]
@@ -147,7 +199,7 @@ def traverse_node(accessible, depth, parent_index, ctx, app_info, window_title=N
             if child:
                 traverse_node(
                     child, depth + 1, node_index, ctx, app_info,
-                    current_window_title
+                    current_window_title, effective_frame_origin
                 )
         except Exception:
             pass

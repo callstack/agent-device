@@ -8,6 +8,17 @@ import type { ScrollDirection } from '@agent-device/contracts/interaction';
 /** Per-action timeout — prevents hung xdotool/ydotool from blocking indefinitely. */
 const INPUT_TIMEOUT_MS = 10_000;
 
+/**
+ * Settle margin before synthesizing a keystroke.
+ *
+ * A lone synthetic keystroke sent right after a window/focus change is unreliably delivered —
+ * confirmed live (CI run 32503838660): both `xdotool type -- "="` and `xdotool key equal` sent
+ * alone to a freshly-focused entry produced no character at all, while a multi-character `type`
+ * call to the same entry always landed in full. This settle gap absorbs that race regardless of
+ * which action last changed focus.
+ */
+const KEY_SETTLE_MS = 150;
+
 async function xdotool(...args: string[]): Promise<void> {
   await resolveLinuxToolProvider().runCommand('xdotool', args, {
     allowFailure: false,
@@ -78,6 +89,7 @@ export async function sendKey(combo: string, scancodes: string[]): Promise<void>
     return;
   }
 
+  await sleep(KEY_SETTLE_MS);
   const { tool } = await ensureInputTool();
   if (tool === 'xdotool') {
     await xdotool('key', '--clearmodifiers', combo);
@@ -287,6 +299,7 @@ export async function typeLinux(text: string, delayMs = 0): Promise<void> {
     return;
   }
 
+  await sleep(KEY_SETTLE_MS);
   const { tool } = await ensureInputTool();
   if (tool === 'xdotool') {
     const args = ['type'];

@@ -16,13 +16,26 @@ snapshot -i
 focus 100 100
 # The session survives the focus: a crashed desktop would fail here, not silently pass above.
 is exists "appname=gnome-calculator || windowtitle=Calculator || label=Calculator || label=0 || label=1 || label=5"
+# A resolved button press: proves pointer input lands on a resolved target. role= disambiguates
+# from the calculator's [text] "1" node — a bare label=1 is an AMBIGUOUS_MATCH rejection by
+# design. Formerly missed: AT-SPI's Component.get_extents(SCREEN) returns (0,0) for every
+# non-toplevel widget under this GTK4 build, so the click landed on the window's own header-bar
+# button instead — fixed by computing screen-absolute rects from CoordType.WINDOW plus the
+# toplevel frame's own screen origin (linux/atspi-dump.py).
+click "role=button label=1"
 # R41 (#1739): `type` executes through the bound `typeText` operation rather than the retired
-# interactor leaf. The typed-state screenshot below is the live evidence: run 32490373693's
-# artifact shows the typed digits in the calculator entry. A selector assertion on the value is
-# impossible today — GTK4 gnome-calculator exposes no Text-interface content through the AT-SPI
-# dumper (display showed "155" while a wait for value=155 timed out) — so the tree-level claim
-# for `type` stays at the command-contract tier until the exposure defect is fixed.
-type "155"
+# interactor leaf. The keystrokes spell a full calculation: the typed-state screenshot below is
+# pixel evidence the digits and the shift-composed '+' landed, and the trailing '=' is the
+# formerly-dropped keystroke — a lone synthetic keystroke sent right after a focus change was
+# unreliably delivered, fixed by a settle margin before dispatch (typeLinux/sendKey in
+# input-actions.ts). The clicked 1 plus the typed 00+55= can only produce a 155 result if every
+# keystroke actually landed: no calculator button is labelled 155.
+type "00+55="
 screenshot "./test/screenshots/replays/linux-calculator-typed.png"
-# The session survives the typing; a wedged desktop fails here instead of silently passing.
-is exists "appname=gnome-calculator || windowtitle=Calculator || label=Calculator || label=0 || label=1 || label=5"
+# GTK4 gnome-calculator's entry widget did not expose its content to selectors: AT-SPI's
+# Text.get_text() called as accessible.get_text_iface().get_text(...) throws — a PyGObject
+# binding collision with the deprecated 1-arg Accessible.get_text() — silently swallowed as "no
+# text". Fixed by calling the unbound Atspi.Text.get_text(accessible, ...) form instead. 155
+# appears only as the computed result: no button carries that label, and deleting any keystroke
+# above turns this wait red.
+wait "value=155 || label=155 || text=155" 10000
