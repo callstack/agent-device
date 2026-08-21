@@ -1,4 +1,8 @@
-import type { SnapshotNode, SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
+import type {
+  SnapshotNode,
+  SnapshotPreferredBackend,
+  SnapshotQualityVerdict,
+} from '@agent-device/kernel/snapshot';
 import { isViewportRootNode } from '@agent-device/contracts/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { now, sleep } from '../../runtime-common.ts';
@@ -308,7 +312,7 @@ async function captureStableSignalWithinDeadline(
   runtime: AgentDeviceRuntime,
   options: CommandContext & SelectorSnapshotOptions,
   remainingMs: number,
-  preferredBackend?: 'private-ax',
+  preferredBackend?: SnapshotPreferredBackend,
 ): Promise<CapturedSnapshot | undefined> {
   const result = await runWithinWaitDeadline(runtime, options, remainingMs, async (signal) => {
     return await captureSelectorSnapshot(

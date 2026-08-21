@@ -4,6 +4,7 @@ import type { BackMode } from './back-mode.ts';
 import type { ClickButton } from './click-button.ts';
 import type { SwipePattern } from './scroll-gesture.ts';
 import type { DeviceTarget, PlatformSelector } from '@agent-device/kernel/device';
+import type { SnapshotPreferredBackend } from '@agent-device/kernel/snapshot';
 import type {
   DaemonInstallSource,
   DaemonServerMode,
@@ -74,7 +75,7 @@ export type CliFlags = CloudProviderProfileFields &
     responseLevel?: ResponseLevel;
     snapshotInteractiveOnly?: boolean;
     /** Internal (no CLI flag): pin the capture backend for same-backend evidence probes. */
-    snapshotPreferredBackend?: 'private-ax';
+    snapshotPreferredBackend?: SnapshotPreferredBackend;
     snapshotDiff?: boolean;
     snapshotDepth?: number;
     snapshotScope?: string;

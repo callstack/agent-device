@@ -4,7 +4,11 @@ import type {
   CommandSessionRecord,
 } from '../../../runtime-contract.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type {
+  SnapshotNode,
+  SnapshotPreferredBackend,
+  SnapshotState,
+} from '@agent-device/kernel/snapshot';
 import { findNodeByRef, normalizeRef } from '@agent-device/kernel/snapshot';
 import { isSparseSnapshotQualityVerdict } from '../../../snapshot-quality/verdict.ts';
 import { extractReadableText } from '../../../utils/text-surface.ts';
@@ -52,7 +56,7 @@ export async function captureSelectorSnapshot(
     includeRects?: boolean;
     interactiveOnly?: boolean;
     includeHiddenContentHints?: boolean;
-    preferredBackend?: 'private-ax';
+    preferredBackend?: SnapshotPreferredBackend;
   } = {
     updateSession: true,
   },

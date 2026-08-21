@@ -14,9 +14,10 @@ struct SnapshotQuality: Codable {
   let state: String
   /// Backend that produced the returned payload: tree | queries | private-ax.
   let backend: String
-  /// Why recovery ran (first failure) or why the payload is degraded.
+  /// Why recovery ran (first failure), why the payload is degraded, or why an internal backend
+  /// selection was honored.
   let reason: String?
-  /// Machine-readable reason: ax-rejected | sparse-tree | budget | no-nodes.
+  /// Machine-readable reason: ax-rejected | sparse-tree | budget | no-nodes | requested-backend.
   let reasonCode: String?
   /// Private AX ladder cap when the accepted tree is shallower than requested.
   let effectiveDepth: Int?
@@ -92,6 +93,9 @@ struct EffectiveSnapshotCapturePlan {
   let plan: [SnapshotBackendKind]
   let xCTestChannelState: SnapshotXCTestChannelPlanState
   let treeCaptureSliceBudgetOverride: TimeInterval?
+  /// Non-nil only when the plan was narrowed by an explicit internal backend preference. This
+  /// keeps the quality marker tied to the plan decision rather than to an untrusted request field.
+  let preferredBackend: SnapshotBackendKind?
 }
 
 /// What the plan runner does when every backend failed or stayed sparse.
@@ -194,8 +198,15 @@ extension RunnerTests {
   /// cause that does not exist.
   static func xcTestChannelStateFirstFailure(
     _ state: SnapshotXCTestChannelPlanState,
-    requestPinnedBackend: Bool = false
+    requestPinnedBackend: Bool = false,
+    preferredBackend: String? = nil
   ) -> (reason: String, code: String)? {
+    if state == .normal && preferredBackend == SnapshotBackendKind.recursiveTree.rawValue {
+      return (
+        "the recursive XCTest tree backend was explicitly selected for this capture",
+        "requested-backend"
+      )
+    }
     switch state {
     case .normal:
       return nil
@@ -229,19 +240,36 @@ extension RunnerTests {
     penalized || preferredBackend == SnapshotBackendKind.privateAX.rawValue
   }
 
-  /// Pure plan-reorder rule: a penalized XCTest accessibility channel uses independent backends
-  /// when the platform has one, otherwise it keeps XCTest work on a short probe. The raw
-  /// diagnostic plan keeps tree-first errors, and unknown plans are left untouched.
+  /// Pure plan-reorder rule: an internal preferred backend pins the regular plan to that backend;
+  /// this is the only force seam used by same-backend evidence and conformance captures. A
+  /// penalized XCTest accessibility channel uses independent backends when the platform has one,
+  /// otherwise it keeps XCTest work on a short probe. The raw diagnostic plan keeps tree-first
+  /// errors, and unknown plans are left untouched.
   static func effectiveSnapshotCapturePlan(
     _ plan: [SnapshotBackendKind],
     xCTestChannelPenalized: Bool,
-    availableBackends: Set<SnapshotBackendKind> = Set(SnapshotBackendKind.allCases)
+    availableBackends: Set<SnapshotBackendKind> = Set(SnapshotBackendKind.allCases),
+    preferredBackend: String? = nil
   ) -> EffectiveSnapshotCapturePlan {
+    if
+      plan == Self.regularVisiblePlan,
+      let preferred = preferredBackend.flatMap(SnapshotBackendKind.init(rawValue:)),
+      preferred != .querySweep,
+      availableBackends.contains(preferred)
+    {
+      return EffectiveSnapshotCapturePlan(
+        plan: [preferred],
+        xCTestChannelState: preferred == .privateAX ? .deferredToIndependentBackend : .normal,
+        treeCaptureSliceBudgetOverride: nil,
+        preferredBackend: preferred
+      )
+    }
     guard xCTestChannelPenalized, plan == Self.regularVisiblePlan else {
       return EffectiveSnapshotCapturePlan(
         plan: plan,
         xCTestChannelState: .normal,
-        treeCaptureSliceBudgetOverride: nil
+        treeCaptureSliceBudgetOverride: nil,
+        preferredBackend: nil
       )
     }
     let availablePlan = plan.filter { availableBackends.contains($0) }
@@ -250,13 +278,15 @@ extension RunnerTests {
       return EffectiveSnapshotCapturePlan(
         plan: recoveryPlan,
         xCTestChannelState: .deferredToIndependentBackend,
-        treeCaptureSliceBudgetOverride: nil
+        treeCaptureSliceBudgetOverride: nil,
+        preferredBackend: nil
       )
     }
     return EffectiveSnapshotCapturePlan(
       plan: availablePlan.filter(\.usesXCTestAccessibilityChannel),
       xCTestChannelState: .boundedXCTestProbe,
-      treeCaptureSliceBudgetOverride: Self.penalizedXCTestProbeTreeSliceBudget
+      treeCaptureSliceBudgetOverride: Self.penalizedXCTestProbeTreeSliceBudget,
+      preferredBackend: nil
     )
   }
 
@@ -298,14 +328,16 @@ extension RunnerTests {
     let effective = Self.effectiveSnapshotCapturePlan(
       plan,
       xCTestChannelPenalized: xCTestChannelPenalized,
-      availableBackends: Set(SnapshotBackendKind.allCases.filter(\.isAvailableOnCurrentPlatform))
+      availableBackends: Set(SnapshotBackendKind.allCases.filter(\.isAvailableOnCurrentPlatform)),
+      preferredBackend: options.preferredBackend
     )
     let effectivePlan = effective.plan
     // Only a customActions-implied pin is request-pinned; the daemon's
     // same-backend evidence probe pins for its own reasons and keeps 'deferred'.
     firstFailure = Self.xcTestChannelStateFirstFailure(
       effective.xCTestChannelState,
-      requestPinnedBackend: options.customActions && !xCTestChannelPenalizedByBreaker
+      requestPinnedBackend: options.customActions && !xCTestChannelPenalizedByBreaker,
+      preferredBackend: effective.preferredBackend?.rawValue
     )
     switch effective.xCTestChannelState {
     case .normal:
@@ -404,7 +436,7 @@ extension RunnerTests {
         capture,
         backend: kind,
         state: recovered ? "recovered" : "healthy",
-        reason: recovered ? firstFailure : nil
+        reason: recovered || firstFailure?.code == "requested-backend" ? firstFailure : nil
       )
     }
 
@@ -897,18 +929,44 @@ extension RunnerTests {
     let treated = Self.snapshotXCTestChannelTreatedAsPenalized(
       penalized: false, preferredBackend: options.preferredBackend)
     let pinned = Self.effectiveSnapshotCapturePlan(
-      Self.regularVisiblePlan, xCTestChannelPenalized: treated)
+      Self.regularVisiblePlan,
+      xCTestChannelPenalized: treated,
+      preferredBackend: options.preferredBackend
+    )
     XCTAssertEqual(pinned.plan, [.privateAX])
     XCTAssertEqual(pinned.xCTestChannelState, .deferredToIndependentBackend)
 
     let raw = Self.effectiveSnapshotCapturePlan(
-      Self.rawDiagnosticPlan, xCTestChannelPenalized: treated)
+      Self.rawDiagnosticPlan,
+      xCTestChannelPenalized: treated,
+      preferredBackend: options.preferredBackend
+    )
     XCTAssertEqual(raw.plan, Self.rawDiagnosticPlan)
 
     // A command without the field decodes to no pin and a normal plan.
     let bare = try JSONDecoder().decode(
       Command.self, from: Data(#"{"command":"snapshot"}"#.utf8))
     XCTAssertNil(Self.presentationOptions(from: bare).preferredBackend)
+  }
+
+  /// #1635: the force seam must select the recursive tree even when the XCTest
+  /// channel is currently penalized. Without the preferred-backend argument,
+  /// this call returns the independent private-AX recovery plan instead.
+  func testPreferredTreeBackendPinsRegularPlanAndLeavesStructuredEvidence() {
+    let forced = Self.effectiveSnapshotCapturePlan(
+      Self.regularVisiblePlan,
+      xCTestChannelPenalized: true,
+      preferredBackend: SnapshotBackendKind.recursiveTree.rawValue
+    )
+    XCTAssertEqual(forced.plan, [.recursiveTree])
+    XCTAssertEqual(forced.xCTestChannelState, .normal)
+    XCTAssertEqual(
+      Self.xcTestChannelStateFirstFailure(
+        forced.xCTestChannelState,
+        preferredBackend: forced.preferredBackend?.rawValue
+      )?.code,
+      "requested-backend"
+    )
   }
 
   /// Same-backend evidence probes: a daemon-pinned private-AX capture takes the
@@ -929,7 +987,9 @@ extension RunnerTests {
     let pinned = Self.effectiveSnapshotCapturePlan(
       Self.regularVisiblePlan,
       xCTestChannelPenalized: Self.snapshotXCTestChannelTreatedAsPenalized(
-        penalized: false, preferredBackend: "private-ax")
+        penalized: false, preferredBackend: "private-ax"
+      ),
+      preferredBackend: "private-ax"
     )
     XCTAssertEqual(pinned.plan, [.privateAX])
     XCTAssertEqual(pinned.xCTestChannelState, .deferredToIndependentBackend)

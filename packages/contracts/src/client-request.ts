@@ -17,6 +17,7 @@ import type {
 import type { DaemonBatchStep } from './batch-step.ts';
 import type { ReplayRequestFields } from './replay-request-fields.ts';
 import type { AgentDeviceClientConfig, AgentDeviceSelectionOptions } from './client-connection.ts';
+import type { SnapshotPreferredBackend } from '@agent-device/kernel/snapshot';
 
 export type CommandExecutionOptions = Partial<ScreenshotRequestFlags> &
   ReplayRequestFields & {
@@ -30,6 +31,8 @@ export type CommandExecutionOptions = Partial<ScreenshotRequestFlags> &
     depth?: number;
     scope?: string;
     raw?: boolean;
+    /** Internal (no CLI flag): select an iOS snapshot backend for conformance evidence. */
+    preferredBackend?: SnapshotPreferredBackend;
     customActions?: boolean;
     forceFull?: boolean;
     count?: number;

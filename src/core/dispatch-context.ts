@@ -10,7 +10,7 @@ import type {
 } from '@agent-device/contracts/interaction';
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/platform';
 import type { SessionSurface } from '@agent-device/contracts/session';
-import type { Point } from '@agent-device/kernel/snapshot';
+import type { Point, SnapshotPreferredBackend } from '@agent-device/kernel/snapshot';
 
 export type DispatchContext = ScreenshotDispatchFlags & {
   requestId?: string;
@@ -32,7 +32,7 @@ export type DispatchContext = ScreenshotDispatchFlags & {
   runnerLeaseContext?: RunnerLogicalLeaseContext;
   screenshotCaptureBackend?: 'runner';
   snapshotInteractiveOnly?: boolean;
-  snapshotPreferredBackend?: 'private-ax';
+  snapshotPreferredBackend?: SnapshotPreferredBackend;
   snapshotDepth?: number;
   snapshotScope?: string;
   snapshotRaw?: boolean;

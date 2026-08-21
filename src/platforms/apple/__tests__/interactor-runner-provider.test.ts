@@ -196,16 +196,16 @@ test('snapshot accepts only structured healthy empty scope results', async () =>
 // stops at the dispatch context and the Swift test starts at the parsed
 // command, so this is the assertion that fails if the interactor stops
 // forwarding preferredBackend into the emitted RunnerCommand.
-test('snapshot forwards preferredBackend into the emitted runner command', async () => {
+test('snapshot forwards either forceable preferredBackend into the emitted runner command', async () => {
   const calls: RecordedRunnerCall[] = [];
   const interactor = createAppleInteractor(IOS_SIMULATOR, {}, recordingRunnerProvider(calls));
 
-  await interactor.snapshot({ preferredBackend: 'private-ax' });
+  await interactor.snapshot({ preferredBackend: 'tree' });
   await interactor.snapshot();
 
   const snapshots = calls.filter((call) => call.command.command === 'snapshot');
   assert.equal(snapshots.length, 2);
-  assert.equal(snapshots[0]?.command.preferredBackend, 'private-ax');
+  assert.equal(snapshots[0]?.command.preferredBackend, 'tree');
   assert.equal(snapshots[1]?.command.preferredBackend, undefined);
 });
 

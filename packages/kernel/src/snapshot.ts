@@ -1,3 +1,13 @@
+import type {
+  SnapshotCaptureBackend,
+  SnapshotPreferredBackend,
+} from './snapshot-backend-capabilities.ts';
+
+export type {
+  SnapshotCaptureBackend,
+  SnapshotPreferredBackend,
+} from './snapshot-backend-capabilities.ts';
+
 /**
  * Structured quality verdict computed once by the iOS runner's snapshot capture plan.
  * The daemon renders it; it never re-derives degradation from node shapes.
@@ -13,8 +23,6 @@
  * change strategy mid-sequence, and two strategies do not return comparable
  * views of one screen (#1569).
  */
-export type SnapshotCaptureBackend = 'tree' | 'queries' | 'private-ax';
-
 export type SnapshotQualityVerdict = {
   state: 'healthy' | 'recovered' | 'sparse';
   backend: SnapshotCaptureBackend;
@@ -67,7 +75,7 @@ export type SnapshotOptions = {
    * are not comparable views of a screen), so a corroboration probe must be
    * captured the way its baseline was.
    */
-  preferredBackend?: 'private-ax';
+  preferredBackend?: SnapshotPreferredBackend;
   /**
    * Read accessibility custom actions for elements that merge their children
    * away. Opt-in because each such element costs its own accessibility round

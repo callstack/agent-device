@@ -1,0 +1,20 @@
+{
+  "screen": "checkout-form-after-text-entry",
+  "minimumNodeCount": 3,
+  "requiredControls": [
+    {
+      "identifier": "field-name",
+      "label": "Full name",
+      "role": "text-field",
+      "value": "Ada Lovelace",
+      "interactive": true
+    },
+    {
+      "identifier": "field-email",
+      "label": "Email",
+      "role": "text-field",
+      "value": "ada@example.test",
+      "interactive": true
+    }
+  ]
+}

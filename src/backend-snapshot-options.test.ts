@@ -11,7 +11,7 @@ test('snapshot options map every backend preference into command flags', () => {
       raw: true,
       customActions: true,
       includeHiddenContentHints: true,
-      preferredBackend: 'private-ax',
+      preferredBackend: 'tree',
     }),
     {
       snapshotInteractiveOnly: true,
@@ -20,7 +20,7 @@ test('snapshot options map every backend preference into command flags', () => {
       snapshotRaw: true,
       snapshotCustomActions: true,
       snapshotIncludeHiddenContentHints: true,
-      snapshotPreferredBackend: 'private-ax',
+      snapshotPreferredBackend: 'tree',
     },
   );
 });

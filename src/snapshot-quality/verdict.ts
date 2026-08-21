@@ -1,15 +1,14 @@
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
+import { SNAPSHOT_BACKEND_CAPABILITIES } from '@agent-device/kernel/snapshot-backend-capabilities';
 
 const SNAPSHOT_QUALITY_STATES = new Set<SnapshotQualityVerdict['state']>([
   'healthy',
   'recovered',
   'sparse',
 ]);
-const SNAPSHOT_QUALITY_BACKENDS = new Set<SnapshotQualityVerdict['backend']>([
-  'tree',
-  'queries',
-  'private-ax',
-]);
+const SNAPSHOT_QUALITY_BACKENDS = new Set<SnapshotQualityVerdict['backend']>(
+  Object.keys(SNAPSHOT_BACKEND_CAPABILITIES) as SnapshotQualityVerdict['backend'][],
+);
 const SNAPSHOT_QUALITY_REASON_CODES = new Set<NonNullable<SnapshotQualityVerdict['reasonCode']>>([
   'ax-rejected',
   'sparse-tree',

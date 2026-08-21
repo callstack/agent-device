@@ -1179,6 +1179,19 @@ test('client capture.snapshot forwards force-full as snapshotForceFull flag', as
   assert.equal(setup.calls[0]?.flags?.snapshotForceFull, true);
 });
 
+test('client capture.snapshot forwards an internal tree backend preference', async () => {
+  const setup = createTransport(async () => ({
+    ok: true,
+    data: { nodes: [], truncated: false },
+  }));
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  await client.capture.snapshot({ preferredBackend: 'tree' });
+
+  assert.equal(setup.calls[0]?.command, 'snapshot');
+  assert.equal(setup.calls[0]?.flags?.snapshotPreferredBackend, 'tree');
+});
+
 test('client capture.screenshot normalizes overlay refs from daemon response data', async () => {
   const setup = createTransport(async () => ({
     ok: true,

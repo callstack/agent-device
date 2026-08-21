@@ -1,6 +1,7 @@
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import crypto from 'node:crypto';
 import type { DeviceRotation } from '@agent-device/contracts/device';
+import type { SnapshotPreferredBackend } from '@agent-device/kernel/snapshot';
 import type {
   ClickButton,
   ElementSelectorKey,
@@ -90,7 +91,7 @@ export type RunnerCommand = {
   fps?: number;
   interactiveOnly?: boolean;
   /** Pin the snapshot capture backend (same-backend evidence probes). */
-  preferredBackend?: 'private-ax';
+  preferredBackend?: SnapshotPreferredBackend;
   /**
    * Read accessibility custom actions for merged leaves. Opt-in: each element
    * costs its own AX round trip, and the runner pins the private-AX backend

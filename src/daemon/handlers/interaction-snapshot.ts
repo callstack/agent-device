@@ -1,7 +1,7 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../types.ts';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotPreferredBackend, SnapshotState } from '@agent-device/kernel/snapshot';
 import type { ContextFromFlags } from './interaction-common.ts';
 import { captureSnapshot } from './snapshot-capture.ts';
 import { setSessionSnapshot } from '../session-snapshot.ts';
@@ -15,7 +15,7 @@ export type CaptureSnapshotForSession = (
   contextFromFlags: ContextFromFlags,
   options: {
     interactiveOnly: boolean;
-    preferredBackend?: 'private-ax';
+    preferredBackend?: SnapshotPreferredBackend;
     androidFreshnessMode?: 'ref-refresh';
     includeRects?: boolean;
     signal?: AbortSignal;
@@ -29,7 +29,7 @@ export async function captureSnapshotForSession(
   contextFromFlags: ContextFromFlags,
   options: {
     interactiveOnly: boolean;
-    preferredBackend?: 'private-ax';
+    preferredBackend?: SnapshotPreferredBackend;
     androidFreshnessMode?: 'ref-refresh';
     includeRects?: boolean;
     signal?: AbortSignal;
