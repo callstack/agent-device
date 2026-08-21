@@ -35,23 +35,6 @@ export function collectDescendants(
   return nodes.slice(startPosition + 1, endPosition);
 }
 
-export function collectDescendantsByParentIndex(
-  nodes: RawSnapshotNode[],
-  ancestorIndex: number,
-): RawSnapshotNode[] {
-  const byIndex = new Map(nodes.map((node) => [node.index, node]));
-  return nodes.filter((node) => {
-    let parentIndex = node.parentIndex;
-    const visited = new Set<number>();
-    while (typeof parentIndex === 'number' && !visited.has(parentIndex)) {
-      if (parentIndex === ancestorIndex) return true;
-      visited.add(parentIndex);
-      parentIndex = byIndex.get(parentIndex)?.parentIndex;
-    }
-    return false;
-  });
-}
-
 export function findDescendant(
   nodes: RawSnapshotNode[],
   startPosition: number,
