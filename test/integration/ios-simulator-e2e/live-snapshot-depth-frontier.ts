@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { assertWaitText } from './live-assertions.ts';
+import { assertWaitSelector, assertWaitText } from './live-assertions.ts';
 import { acceptDeepLinkConfirmationIfPresent } from './live-automation-scenario.ts';
 import { type LiveContext, runStep, verifyBehavior } from './live-harness.ts';
 
@@ -27,6 +27,9 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
   ]);
   await acceptDeepLinkConfirmationIfPresent(context);
   await assertWaitText(context, 'Regular visible depth frontier');
+  // The route title can publish before React Native exposes the descendant AX subtree. Wait for
+  // the target itself so the following depth assertion is about the frontier, not route readiness.
+  await assertWaitSelector(context, `id="${CHILD_ID}"`);
 
   const regular = await runStep(context, 'capture regular visible-depth frontier', [
     'snapshot',

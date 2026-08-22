@@ -14,10 +14,12 @@ import { type LiveContext, runStep, verifyCommand } from './live-harness.ts';
 
 export { assertFilesDiffer, assertJsonContains, assertMp4File, assertNonEmptyFile };
 
-export const { assertElementText, assertWaitText, capturePng } = createLiveDeviceAssertions<
-  IosSimulatorBehaviorId,
-  LiveContext
->(runStep, verifyCommand, PUBLIC_COMMANDS.wait);
+export const { assertElementText, assertWaitSelector, assertWaitText, capturePng } =
+  createLiveDeviceAssertions<IosSimulatorBehaviorId, LiveContext>(
+    runStep,
+    verifyCommand,
+    PUBLIC_COMMANDS.wait,
+  );
 
 const SCROLL_SEARCH_ATTEMPTS = 4;
 // A stalled capture says nothing about where the element is, so it must not consume the scroll
