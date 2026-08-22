@@ -1,10 +1,8 @@
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
+import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test } from 'vitest';
-import {
-  bindLimrunNavigationOperations,
-  limrunNavigationOperationFacts,
-} from './interaction-operations.ts';
+import { limrunNavigationOperationFacts } from './interaction-operations.ts';
 
 const iosDevice: DeviceInfo = {
   platform: 'apple',
@@ -94,11 +92,12 @@ test('binds only the operations the facts admitted, driving the resolved interac
   const getInteractor = (_device: DeviceInfo, _runner?: RunnerContext) => interactor;
   const facts = limrunNavigationOperationFacts(androidTvDevice);
 
-  const operations = bindLimrunNavigationOperations({
+  const operations = bindAdmittedProviderInteractorOperations({
     device: androidTvDevice,
     signal: new AbortController().signal,
+    resolveInteractor: (runner) => getInteractor(androidTvDevice, runner),
     facts,
-    getInteractor,
+    operations: ['back', 'home', 'setOrientation', 'tvRemote'],
   });
 
   expect(operations.back).toBeTypeOf('function');
@@ -116,11 +115,12 @@ test('binds only the operations the facts admitted, driving the resolved interac
 
 test('binding omits every operation an unavailable fact refused', () => {
   const facts = limrunNavigationOperationFacts(iosDevice);
-  const operations = bindLimrunNavigationOperations({
+  const operations = bindAdmittedProviderInteractorOperations({
     device: iosDevice,
     signal: new AbortController().signal,
+    resolveInteractor: () => ({}) as unknown as Interactor,
     facts,
-    getInteractor: () => ({}) as unknown as Interactor,
+    operations: ['back', 'home', 'setOrientation', 'tvRemote'],
   });
 
   expect(operations.back).toBeTypeOf('function');

@@ -8,23 +8,15 @@ import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
 } from '@agent-device/contracts/application-lifecycle-runtime';
-import {
-  bindProviderBackInteractor,
-  backRuntimeOperationFacts,
-} from '@agent-device/contracts/back-runtime';
+import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import {
   bindProviderFocusInteractor,
   focusRuntimeOperationFacts,
 } from '@agent-device/contracts/focus-runtime';
-import {
-  bindProviderHomeInteractor,
-  homeRuntimeOperationFacts,
-} from '@agent-device/contracts/home-runtime';
+import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
+import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
-import {
-  bindProviderOrientationInteractor,
-  orientationRuntimeOperationFacts,
-} from '@agent-device/contracts/orientation-runtime';
+import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
 import {
   type DeviceBinding,
@@ -291,11 +283,11 @@ function webDriverInteractionOperations(
       : {}),
     ...(facts.operations.focusPoint.available ? bindProviderFocusInteractor(resolver) : {}),
     ...(facts.operations.typeText.available ? bindProviderTypeTextInteractor(resolver) : {}),
-    ...(facts.operations.back.available ? bindProviderBackInteractor(resolver) : {}),
-    ...(facts.operations.home.available ? bindProviderHomeInteractor(resolver) : {}),
-    ...(facts.operations.setOrientation.available
-      ? bindProviderOrientationInteractor(resolver)
-      : {}),
+    ...bindAdmittedProviderInteractorOperations({
+      ...resolver,
+      facts: facts.operations,
+      operations: ['back', 'home', 'setOrientation'],
+    }),
   };
 }
 

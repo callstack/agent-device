@@ -156,6 +156,10 @@
       "types": "./src/interaction-guarantees.ts",
       "default": "./src/interaction-guarantees.ts"
     },
+    "./interactor-operation-catalog": {
+      "types": "./src/interactor-operation-catalog.ts",
+      "default": "./src/interactor-operation-catalog.ts"
+    },
     "./interactor-types": {
       "types": "./src/interactor-types.ts",
       "default": "./src/interactor-types.ts"

@@ -3,12 +3,11 @@ import type { AppsFilter, ProviderPortReverseOptions } from '@agent-device/contr
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
 import {
   bindLimrunInteractionOperations,
-  bindLimrunKeyboardOperations,
-  bindLimrunNavigationOperations,
   limrunInteractionOperationFacts,
   limrunKeyboardOperationFacts,
   limrunNavigationOperationFacts,
 } from './interaction-operations.ts';
+import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import { AppError } from '@agent-device/kernel/errors';
 import { parseLimrunDeviceId } from './device.ts';
 import type {
@@ -384,26 +383,20 @@ function bindLimrunAppLogs(
       runtimeFacts.operations,
     ),
     ...bindLimrunInteractionOperations({ device, signal, getInteractor: options.getInteractor }),
-    ...bindLimrunNavigationOperations({
+    ...bindAdmittedProviderInteractorOperations({
       device,
       signal,
-      facts: {
-        back: runtimeFacts.operations.back,
-        home: runtimeFacts.operations.home,
-        setOrientation: runtimeFacts.operations.setOrientation,
-        tvRemote: runtimeFacts.operations.tvRemote,
-      },
-      getInteractor: options.getInteractor,
-    }),
-    ...bindLimrunKeyboardOperations({
-      device,
-      signal,
-      facts: {
-        keyboardStatus: runtimeFacts.operations.keyboardStatus,
-        keyboardDismiss: runtimeFacts.operations.keyboardDismiss,
-        keyboardEnter: runtimeFacts.operations.keyboardEnter,
-      },
-      getInteractor: options.getInteractor,
+      resolveInteractor: (runner) => options.getInteractor(device, runner),
+      facts: runtimeFacts.operations,
+      operations: [
+        'back',
+        'home',
+        'setOrientation',
+        'tvRemote',
+        'keyboardStatus',
+        'keyboardDismiss',
+        'keyboardEnter',
+      ],
     }),
     ...createLimrunAppDeploymentOperations(
       deploymentOptions(options),

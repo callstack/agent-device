@@ -1,37 +1,20 @@
-import {
-  bindProviderBackInteractor,
-  backRuntimeOperationFacts,
-} from '@agent-device/contracts/back-runtime';
+import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import {
   bindProviderFocusInteractor,
   focusRuntimeOperationFacts,
 } from '@agent-device/contracts/focus-runtime';
-import {
-  bindProviderHomeInteractor,
-  homeRuntimeOperationFacts,
-} from '@agent-device/contracts/home-runtime';
-import {
-  bindProviderKeyboardDismissInteractor,
-  bindProviderKeyboardEnterInteractor,
-  bindProviderKeyboardStatusInteractor,
-  keyboardRuntimeOperationFacts,
-} from '@agent-device/contracts/keyboard-runtime';
-import {
-  bindProviderOrientationInteractor,
-  orientationRuntimeOperationFacts,
-} from '@agent-device/contracts/orientation-runtime';
+import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
+import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
+import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
 import { bindProviderScreenshotInteractor } from '@agent-device/contracts/screenshot-runtime';
 import { bindProviderSnapshotInteractor } from '@agent-device/contracts/snapshot-runtime';
-import {
-  bindProviderTvRemoteInteractor,
-  tvRemoteRuntimeOperationFacts,
-} from '@agent-device/contracts/tv-remote-runtime';
+import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
 import {
   bindProviderTypeTextInteractor,
   typeTextRuntimeOperationFacts,
 } from '@agent-device/contracts/type-text-runtime';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
-import type { RuntimeOperationUnavailability } from '@agent-device/contracts/platform';
+import type { RuntimeOperationUnavailability } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 const available = Object.freeze({ available: true } as const);
@@ -134,38 +117,6 @@ export function limrunNavigationOperationFacts(
   });
 }
 
-/** Binds whichever navigation operations {@link limrunNavigationOperationFacts} admitted. */
-export function bindLimrunNavigationOperations(
-  params: Readonly<{
-    device: DeviceInfo;
-    signal: AbortSignal;
-    facts: Readonly<{
-      back: RuntimeOperationUnavailability | { available: true };
-      home: RuntimeOperationUnavailability | { available: true };
-      setOrientation: RuntimeOperationUnavailability | { available: true };
-      tvRemote: RuntimeOperationUnavailability | { available: true };
-    }>;
-    getInteractor(device: DeviceInfo, runner?: RunnerContext): Interactor | undefined;
-  }>,
-) {
-  const { device, signal, facts } = params;
-  const resolveInteractor = (runner: RunnerContext) => params.getInteractor(device, runner);
-  return Object.freeze({
-    ...(facts.back.available
-      ? bindProviderBackInteractor({ device, signal, resolveInteractor })
-      : {}),
-    ...(facts.home.available
-      ? bindProviderHomeInteractor({ device, signal, resolveInteractor })
-      : {}),
-    ...(facts.setOrientation.available
-      ? bindProviderOrientationInteractor({ device, signal, resolveInteractor })
-      : {}),
-    ...(facts.tvRemote.available
-      ? bindProviderTvRemoteInteractor({ device, signal, resolveInteractor })
-      : {}),
-  });
-}
-
 /**
  * `keyboard` (status/dismiss/enter) shares one cell per session: the Android leg rides the same
  * interactor factory `limrunNavigationOperationFacts` above describes; the iOS leg has no tested
@@ -182,30 +133,3 @@ export function limrunKeyboardOperationFacts(
   });
 }
 
-/** Binds whichever keyboard operations {@link limrunKeyboardOperationFacts} admitted. */
-export function bindLimrunKeyboardOperations(
-  params: Readonly<{
-    device: DeviceInfo;
-    signal: AbortSignal;
-    facts: Readonly<{
-      keyboardStatus: RuntimeOperationUnavailability | { available: true };
-      keyboardDismiss: RuntimeOperationUnavailability | { available: true };
-      keyboardEnter: RuntimeOperationUnavailability | { available: true };
-    }>;
-    getInteractor(device: DeviceInfo, runner?: RunnerContext): Interactor | undefined;
-  }>,
-) {
-  const { device, signal, facts } = params;
-  const resolveInteractor = (runner: RunnerContext) => params.getInteractor(device, runner);
-  return Object.freeze({
-    ...(facts.keyboardStatus.available
-      ? bindProviderKeyboardStatusInteractor({ device, signal, resolveInteractor })
-      : {}),
-    ...(facts.keyboardDismiss.available
-      ? bindProviderKeyboardDismissInteractor({ device, signal, resolveInteractor })
-      : {}),
-    ...(facts.keyboardEnter.available
-      ? bindProviderKeyboardEnterInteractor({ device, signal, resolveInteractor })
-      : {}),
-  });
-}

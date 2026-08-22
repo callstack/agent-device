@@ -1,5 +1,6 @@
 import type { HomeInput } from '@agent-device/contracts/home-runtime';
 import { homeRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
+import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { successText } from '../utils/success-text.ts';
 import type { DaemonCommandContext } from './context.ts';
@@ -37,9 +38,12 @@ export async function resolveBoundHomeRuntime(
   );
 }
 
-/** The ONE place a bound `home` executes (R43). */
+/**
+ * The ONE place a bound `home` executes (R43). Typed off `typeof homeRuntimeUse` rather than a
+ * hand-restated operations shape, so a change to what `home` binds can't silently drift here.
+ */
 async function executeHome(
-  runtime: Readonly<{ operations: Readonly<{ home: (input: HomeInput) => Promise<void> }> }>,
+  runtime: BoundDeviceRuntime<typeof homeRuntimeUse>,
   context: DaemonCommandContext,
 ): Promise<Record<string, unknown>> {
   await runtime.operations.home(homeInput(context));

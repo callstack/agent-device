@@ -1,20 +1,23 @@
+import type { DeviceBinding, RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import type {
-  DeviceBinding,
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
   PlatformRuntimeOwner,
-  RuntimeFacts,
-  RuntimeOperationFact,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-operations';
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
 } from '@agent-device/contracts/application-lifecycle-runtime';
+import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/element-text-runtime';
 import {
   bindLocalFocusInteractor,
   focusRuntimeOperationFacts,
 } from '@agent-device/contracts/focus-runtime';
+import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
+import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
+import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
+import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import {
   bindLocalScreenshotInteractor,
@@ -25,26 +28,12 @@ import {
   bindLocalSnapshotInteractor,
   snapshotRuntimeOperationFacts,
 } from '@agent-device/contracts/snapshot-runtime';
+import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
 import {
   bindLocalTypeTextInteractor,
   typeTextRuntimeOperationFacts,
 } from '@agent-device/contracts/type-text-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
-import {
-  bindLocalBackInteractor,
-  backRuntimeOperationFacts,
-} from '@agent-device/contracts/back-runtime';
-import {
-  bindLocalHomeInteractor,
-  homeRuntimeOperationFacts,
-} from '@agent-device/contracts/home-runtime';
-import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
-import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
-import {
-  bindLocalKeyboardDismissInteractor,
-  bindLocalKeyboardEnterInteractor,
-  keyboardRuntimeOperationFacts,
-} from '@agent-device/contracts/keyboard-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createHarmonyAppLogRuntime } from './logs/runtime.ts';
 import {
@@ -176,33 +165,6 @@ const harmonyKeyboardStatusUnavailable = Object.freeze({
   hint: 'keyboard status/get is not available through the public HarmonyOS HDC API; use keyboard dismiss or enter',
 } as const);
 
-/**
- * The four navigation/keyboard operations HarmonyOS admits, each gated by its own fact. The
- * Android runtime binds a near-identical shape (its own operation subset), but ADR 0019 forbids a
- * `platform-common` package for two implementations to share — each family owns its own copy
- * rather than tunnel through root or a sibling platform package.
- */
-function harmonyNavigationAndKeyboardOperations(
-  // fallow-ignore-next-line code-duplication
-  host: PlatformRuntimeHost,
-  request: Parameters<PlatformRuntimeOwner['bind']>[0],
-  facts: RuntimeFacts<PlatformRuntimeOperations>,
-): Partial<DeviceBinding<PlatformRuntimeOperations>['operations']> {
-  const resolver = {
-    device: request.device,
-    signal: request.scope.signal,
-    resolveInteractor: host.localInteractors.resolve,
-  };
-  return {
-    ...(facts.operations.back.available ? bindLocalBackInteractor(resolver) : {}),
-    ...(facts.operations.home.available ? bindLocalHomeInteractor(resolver) : {}),
-    ...(facts.operations.keyboardDismiss.available
-      ? bindLocalKeyboardDismissInteractor(resolver)
-      : {}),
-    ...(facts.operations.keyboardEnter.available ? bindLocalKeyboardEnterInteractor(resolver) : {}),
-  };
-}
-
 export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): PlatformRuntimeOwner {
   const appLogs = createHarmonyAppLogRuntime(host);
   const inspectFacts = async (device: Parameters<typeof appLogs.inspectFacts>[0]) => {
@@ -332,7 +294,13 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
                 resolveInteractor: host.localInteractors.resolve,
               })
             : {}),
-          ...harmonyNavigationAndKeyboardOperations(host, request, facts),
+          ...bindAdmittedLocalInteractorOperations({
+            device: request.device,
+            signal: request.scope.signal,
+            resolveInteractor: host.localInteractors.resolve,
+            facts: facts.operations,
+            operations: ['back', 'home', 'keyboardDismiss', 'keyboardEnter'],
+          }),
           listApps: async (input: { device: DeviceInfo; filter: 'all' | 'user-installed' }) =>
             await host.appInventory.harmonyos.listApps(
               input.device,

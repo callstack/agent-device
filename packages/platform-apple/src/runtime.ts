@@ -300,7 +300,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
       const logs = await appLogs.bind(request);
       const facts = await inspectFacts(request.device);
       const recordingFacts = facts.operations.screenRecordingStart;
-      const captureOperations: Partial<DeviceBinding<PlatformRuntimeOperations>['operations']> = {
+      const operations: DeviceBinding<PlatformRuntimeOperations>['operations'] = {
         ...logs.operations,
         ...createAppleAppDeploymentOperations({
           host,
@@ -363,14 +363,11 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
             signal: request.scope.signal,
           }),
         ),
-      };
-      const navigationOperations: Partial<DeviceBinding<PlatformRuntimeOperations>['operations']> =
-        createAppleNavigationOperations({
+        ...createAppleNavigationOperations({
           host,
           device: request.device,
           signal: request.scope.signal,
-        });
-      const lifecycleOperations: Partial<DeviceBinding<PlatformRuntimeOperations>['operations']> = {
+        }),
         ...whenAdmitted(facts.operations.ensureReady, () => ({
           ensureReady: async () =>
             await ensureAppleReady(host, request.device, request.scope.signal),
@@ -399,11 +396,6 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
           shutdownTarget: async () =>
             await host.deviceShutdown.apple.shutdownTarget(request.device, request.scope.signal),
         })),
-      };
-      const operations: DeviceBinding<PlatformRuntimeOperations>['operations'] = {
-        ...captureOperations,
-        ...navigationOperations,
-        ...lifecycleOperations,
       };
       return Object.freeze({
         device: logs.device,

@@ -1,6 +1,7 @@
 import type { BackInput } from '@agent-device/contracts/back-runtime';
 import type { BackMode } from '@agent-device/contracts/interaction';
 import { backRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
+import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { successText } from '../utils/success-text.ts';
 import type { DaemonCommandContext } from './context.ts';
@@ -39,9 +40,12 @@ export async function resolveBoundBackRuntime(
   );
 }
 
-/** The ONE place a bound `back` executes (R42). */
+/**
+ * The ONE place a bound `back` executes (R42). Typed off `typeof backRuntimeUse` rather than a
+ * hand-restated operations shape, so a change to what `back` binds can't silently drift here.
+ */
 async function executeBack(
-  runtime: Readonly<{ operations: Readonly<{ back: (input: BackInput) => Promise<void> }> }>,
+  runtime: BoundDeviceRuntime<typeof backRuntimeUse>,
   context: DaemonCommandContext,
 ): Promise<Record<string, unknown>> {
   await runtime.operations.back(backInput(context.backMode, context));

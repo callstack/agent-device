@@ -25,7 +25,7 @@ export type RuntimeAdmission<Use> =
   | Readonly<{ type: 'response'; response: DaemonFailureResponse }>
   | Readonly<{ type: 'runtime'; runtime: BoundDeviceRuntime<Use> }>;
 
-type RuntimeAdmissionRequest = Readonly<{
+export type RuntimeAdmissionRequest = Readonly<{
   /** Command wording for the default unsupported message, e.g. `open`, `runtime port-reverse`. */
   command: string;
   device: DeviceInfo;

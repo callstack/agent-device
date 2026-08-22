@@ -1,9 +1,7 @@
-import type {
-  SetOrientationInput,
-  SetOrientationResult,
-} from '@agent-device/contracts/orientation-runtime';
+import type { SetOrientationInput } from '@agent-device/contracts/orientation-runtime';
 import { parseDeviceRotation, type DeviceRotation } from '@agent-device/contracts/device';
 import { orientationRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
+import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { successText } from '../utils/success-text.ts';
 import type { DaemonCommandContext } from './context.ts';
@@ -52,13 +50,13 @@ export async function resolveBoundOrientationRuntime(
   );
 }
 
-/** The ONE place a bound `setOrientation` executes (R44). */
+/**
+ * The ONE place a bound `setOrientation` executes (R44). Typed off `typeof orientationRuntimeUse`
+ * rather than a hand-restated operations shape, so a change to what `setOrientation` binds can't
+ * silently drift here.
+ */
 async function executeSetOrientation(
-  runtime: Readonly<{
-    operations: Readonly<{
-      setOrientation: (input: SetOrientationInput) => Promise<SetOrientationResult | void>;
-    }>;
-  }>,
+  runtime: BoundDeviceRuntime<typeof orientationRuntimeUse>,
   requestedRotation: DeviceRotation,
   context: DaemonCommandContext,
 ): Promise<Record<string, unknown>> {

@@ -83,6 +83,7 @@ const CONTRACT_EXPORTS = [
   '@agent-device/contracts/interaction',
   '@agent-device/contracts/interaction-error',
   '@agent-device/contracts/interaction-guarantees',
+  '@agent-device/contracts/interactor-operation-catalog',
   '@agent-device/contracts/interactor-types',
   '@agent-device/contracts/keyboard-runtime',
   '@agent-device/contracts/logs-runtime-plan',

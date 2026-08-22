@@ -1,5 +1,6 @@
 import type { TvRemoteInput } from '@agent-device/contracts/tv-remote-runtime';
 import { tvRemoteRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
+import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import { parseTvRemoteButton, type TvRemoteButton } from '@agent-device/contracts/tv-remote';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -61,11 +62,13 @@ export async function resolveBoundTvRemoteRuntime(
   );
 }
 
-/** The ONE place a bound `tvRemote` executes (R45). */
+/**
+ * The ONE place a bound `tvRemote` executes (R45). Typed off `typeof tvRemoteRuntimeUse` rather
+ * than a hand-restated operations shape, so a change to what `tvRemote` binds can't silently
+ * drift here.
+ */
 async function executeTvRemote(
-  runtime: Readonly<{
-    operations: Readonly<{ tvRemote: (input: TvRemoteInput) => Promise<void> }>;
-  }>,
+  runtime: BoundDeviceRuntime<typeof tvRemoteRuntimeUse>,
   button: TvRemoteButton,
   durationMs: number | undefined,
   context: DaemonCommandContext,

@@ -1,29 +1,23 @@
 import type {
   DeviceBinding,
+  RuntimeFacts,
+  RuntimeOperationUnavailability,
+} from '@agent-device/contracts/platform-runtime';
+import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
   PlatformRuntimeOwner,
-  RuntimeFacts,
-  RuntimeOperationUnavailability,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-operations';
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
 } from '@agent-device/contracts/application-lifecycle-runtime';
+import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
+import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
+import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import { localRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
-import {
-  bindLocalBackInteractor,
-  backRuntimeOperationFacts,
-} from '@agent-device/contracts/back-runtime';
-import {
-  bindLocalHomeInteractor,
-  homeRuntimeOperationFacts,
-} from '@agent-device/contracts/home-runtime';
-import {
-  bindLocalTvRemoteInteractor,
-  tvRemoteRuntimeOperationFacts,
-} from '@agent-device/contracts/tv-remote-runtime';
+import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { bindVegaApplicationLifecycle } from './lifecycle.ts';
@@ -78,27 +72,13 @@ export function createVegaPlatformRuntime(host: PlatformRuntimeHost): PlatformRu
         facts,
         operations: Object.freeze({
           ...availableApplicationLifecycleOperations(lifecycle, facts.operations),
-          ...(facts.operations.back.available
-            ? bindLocalBackInteractor({
-                device: request.device,
-                signal: request.scope.signal,
-                resolveInteractor: host.localInteractors.resolve,
-              })
-            : {}),
-          ...(facts.operations.home.available
-            ? bindLocalHomeInteractor({
-                device: request.device,
-                signal: request.scope.signal,
-                resolveInteractor: host.localInteractors.resolve,
-              })
-            : {}),
-          ...(facts.operations.tvRemote.available
-            ? bindLocalTvRemoteInteractor({
-                device: request.device,
-                signal: request.scope.signal,
-                resolveInteractor: host.localInteractors.resolve,
-              })
-            : {}),
+          ...bindAdmittedLocalInteractorOperations({
+            device: request.device,
+            signal: request.scope.signal,
+            resolveInteractor: host.localInteractors.resolve,
+            facts: facts.operations,
+            operations: ['back', 'home', 'tvRemote'],
+          }),
         }),
         [Symbol.asyncDispose]: async () => undefined,
       }) satisfies DeviceBinding<PlatformRuntimeOperations>;

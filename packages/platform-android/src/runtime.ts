@@ -1,13 +1,11 @@
+import type { EnsureReadyInput } from '@agent-device/contracts/device-readiness-runtime';
+import type { NetworkDumpInput } from '@agent-device/contracts/network-runtime';
+import type { DeviceBinding, RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import type {
-  DeviceBinding,
-  NetworkDumpInput,
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
   PlatformRuntimeOwner,
-  EnsureReadyInput,
-  RuntimeFacts,
-  RuntimeOperationFact,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-operations';
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
@@ -35,28 +33,12 @@ import {
   typeTextRuntimeOperationFacts,
 } from '@agent-device/contracts/type-text-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
-import {
-  bindLocalBackInteractor,
-  backRuntimeOperationFacts,
-} from '@agent-device/contracts/back-runtime';
-import {
-  bindLocalHomeInteractor,
-  homeRuntimeOperationFacts,
-} from '@agent-device/contracts/home-runtime';
-import {
-  bindLocalOrientationInteractor,
-  orientationRuntimeOperationFacts,
-} from '@agent-device/contracts/orientation-runtime';
-import {
-  bindLocalTvRemoteInteractor,
-  tvRemoteRuntimeOperationFacts,
-} from '@agent-device/contracts/tv-remote-runtime';
-import {
-  bindLocalKeyboardStatusInteractor,
-  bindLocalKeyboardDismissInteractor,
-  bindLocalKeyboardEnterInteractor,
-  keyboardRuntimeOperationFacts,
-} from '@agent-device/contracts/keyboard-runtime';
+import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
+import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
+import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
+import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
+import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
+import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createAndroidAppLogRuntime } from './logs/runtime.ts';
 import { dumpAndroidNetworkTraffic } from './network/runtime.ts';
@@ -197,38 +179,6 @@ function androidTvRemoteFact(device: DeviceInfo): RuntimeOperationFact {
   return device.kind !== 'simulator' && device.target === 'tv' ? available : tvRemoteUnavailable;
 }
 
-/**
- * The seven navigation/keyboard operations, each independently gated by its own admitted fact.
- * HarmonyOS's runtime binds a near-identical shape (its own operation subset), but ADR 0019
- * forbids a `platform-common` package for two implementations to share — each family owns its
- * own copy rather than tunnel through root or a sibling platform package.
- */
-function androidNavigationAndKeyboardOperations(
-  // fallow-ignore-next-line code-duplication
-  host: PlatformRuntimeHost,
-  request: Parameters<PlatformRuntimeOwner['bind']>[0],
-  facts: RuntimeFacts<PlatformRuntimeOperations>,
-): Partial<DeviceBinding<PlatformRuntimeOperations>['operations']> {
-  const resolver = {
-    device: request.device,
-    signal: request.scope.signal,
-    resolveInteractor: host.localInteractors.resolve,
-  };
-  return {
-    ...(facts.operations.back.available ? bindLocalBackInteractor(resolver) : {}),
-    ...(facts.operations.home.available ? bindLocalHomeInteractor(resolver) : {}),
-    ...(facts.operations.setOrientation.available ? bindLocalOrientationInteractor(resolver) : {}),
-    ...(facts.operations.tvRemote.available ? bindLocalTvRemoteInteractor(resolver) : {}),
-    ...(facts.operations.keyboardStatus.available
-      ? bindLocalKeyboardStatusInteractor(resolver)
-      : {}),
-    ...(facts.operations.keyboardDismiss.available
-      ? bindLocalKeyboardDismissInteractor(resolver)
-      : {}),
-    ...(facts.operations.keyboardEnter.available ? bindLocalKeyboardEnterInteractor(resolver) : {}),
-  };
-}
-
 export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): PlatformRuntimeOwner {
   const appLogs = createAndroidAppLogRuntime(host);
   const inspectFacts = async (device: Parameters<typeof appLogs.inspectFacts>[0]) => {
@@ -359,7 +309,21 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
                 resolveInteractor: host.localInteractors.resolve,
               })
             : {}),
-          ...androidNavigationAndKeyboardOperations(host, request, facts),
+          ...bindAdmittedLocalInteractorOperations({
+            device: request.device,
+            signal: request.scope.signal,
+            resolveInteractor: host.localInteractors.resolve,
+            facts: facts.operations,
+            operations: [
+              'back',
+              'home',
+              'setOrientation',
+              'tvRemote',
+              'keyboardStatus',
+              'keyboardDismiss',
+              'keyboardEnter',
+            ],
+          }),
           ensureReady: async (input: EnsureReadyInput) =>
             await ensureAndroidReady(
               host,

@@ -1,26 +1,11 @@
-import {
-  backRuntimeOperationFacts,
-  bindLocalBackInteractor,
-} from '@agent-device/contracts/back-runtime';
-import {
-  bindLocalHomeInteractor,
-  homeRuntimeOperationFacts,
-} from '@agent-device/contracts/home-runtime';
-import {
-  bindLocalKeyboardDismissInteractor,
-  bindLocalKeyboardEnterInteractor,
-  keyboardRuntimeOperationFacts,
-} from '@agent-device/contracts/keyboard-runtime';
-import {
-  bindLocalOrientationInteractor,
-  orientationRuntimeOperationFacts,
-} from '@agent-device/contracts/orientation-runtime';
+import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
+import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
+import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
+import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
+import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
-import {
-  bindLocalTvRemoteInteractor,
-  tvRemoteRuntimeOperationFacts,
-} from '@agent-device/contracts/tv-remote-runtime';
+import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
 import { isTvOsDevice, resolveDeviceAppleOs, type DeviceInfo } from '@agent-device/kernel/device';
 
 const available = Object.freeze({ available: true } as const);
@@ -146,22 +131,11 @@ export function createAppleNavigationOperations(params: {
   signal: AbortSignal;
 }) {
   const { host, device, signal } = params;
-  const facts = appleNavigationFacts(device);
-  const resolveInteractor = host.localInteractors.resolve;
-  return Object.freeze({
-    ...(facts.back.available ? bindLocalBackInteractor({ device, signal, resolveInteractor }) : {}),
-    ...(facts.home.available ? bindLocalHomeInteractor({ device, signal, resolveInteractor }) : {}),
-    ...(facts.setOrientation.available
-      ? bindLocalOrientationInteractor({ device, signal, resolveInteractor })
-      : {}),
-    ...(facts.tvRemote.available
-      ? bindLocalTvRemoteInteractor({ device, signal, resolveInteractor })
-      : {}),
-    ...(facts.keyboardDismiss.available
-      ? bindLocalKeyboardDismissInteractor({ device, signal, resolveInteractor })
-      : {}),
-    ...(facts.keyboardEnter.available
-      ? bindLocalKeyboardEnterInteractor({ device, signal, resolveInteractor })
-      : {}),
+  return bindAdmittedLocalInteractorOperations({
+    device,
+    signal,
+    resolveInteractor: host.localInteractors.resolve,
+    facts: appleNavigationFacts(device),
+    operations: ['back', 'home', 'setOrientation', 'tvRemote', 'keyboardDismiss', 'keyboardEnter'],
   });
 }

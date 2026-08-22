@@ -1,20 +1,25 @@
-import type {
-  KeyboardActionInput,
-  KeyboardDismissResult,
-  KeyboardEnterResult,
-  KeyboardStatusResult,
-} from '@agent-device/contracts/keyboard-runtime';
+import type { KeyboardActionInput } from '@agent-device/contracts/keyboard-runtime';
 import {
   keyboardDismissUse,
   keyboardEnterUse,
   keyboardStatusUse,
 } from '@agent-device/contracts/platform-runtime-operations';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import type {
+  BoundDeviceRuntime,
+  RuntimeOperationKey,
+  RuntimeUse,
+} from '@agent-device/contracts/platform-runtime';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { isKeyboardAction, type KeyboardAction } from '../utils/keyboard-actions.ts';
 import { successText } from '../utils/success-text.ts';
 import type { DaemonCommandContext } from './context.ts';
-import { admitRuntimeUse, type RuntimeAdmissionBindings } from './runtime-admission.ts';
+import {
+  admitRuntimeUse,
+  type RuntimeAdmissionBindings,
+  type RuntimeAdmissionRequest,
+} from './runtime-admission.ts';
 import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';
 import type { DaemonFailureResponse } from './handlers/response.ts';
 
@@ -69,74 +74,45 @@ function keyboardActionInput(context: DaemonCommandContext): KeyboardActionInput
 }
 
 /**
- * The one place `keyboard` reaches a device (ADR 0019 §9). Exactly one action-selected use is
- * admitted and bound — `status`, `dismiss`, or `enter`, never all three — mirroring R35's find
- * closure: resolve one use per action, bind once.
+ * The one place any of `keyboard`'s three action-selected uses admits and binds (R46): one
+ * `admitRuntimeUse` call, deferred to the caller's `execute` closure exactly like
+ * `resolveBoundGenericRuntime` does for the generic route — `runtime`'s type there is inferred
+ * from the resolved `use` instantiation, never restated by hand. Kept local to this file rather
+ * than folded into `resolveBoundGenericRuntime` itself: keyboard's execution shape
+ * (`(context) => …`) is the session route's, not the generic dispatcher's
+ * (`GenericPlatformExecution`) the other four leaves share.
  */
-export async function resolveBoundKeyboardRuntime(
-  params: {
-    device: DeviceInfo;
-  } & RuntimeAdmissionBindings & { positionals: readonly string[] },
+async function admitKeyboardAction<
+  const Required extends readonly RuntimeOperationKey<PlatformRuntimeOperations>[],
+  const Preferred extends readonly Exclude<
+    RuntimeOperationKey<PlatformRuntimeOperations>,
+    Required[number]
+  >[],
+  const Conditional extends readonly Exclude<
+    RuntimeOperationKey<PlatformRuntimeOperations>,
+    Required[number] | Preferred[number]
+  >[],
+>(
+  request: Omit<RuntimeAdmissionRequest, 'required'> &
+    Readonly<{ use: RuntimeUse<PlatformRuntimeOperations, Required, Preferred, Conditional> }>,
+  execute: (
+    runtime: BoundDeviceRuntime<RuntimeUse<PlatformRuntimeOperations, Required, Preferred, Conditional>>,
+    context: DaemonCommandContext,
+  ) => Promise<Record<string, unknown> | void>,
 ): Promise<ResolvedKeyboardExecution> {
-  const action = readKeyboardAction(params.positionals);
-  const platform = keyboardPlatformLabel(params.device);
-  if (action === 'status') {
-    const admission = await admitRuntimeUse({
-      command: 'keyboard status',
-      device: params.device,
-      use: keyboardStatusUse,
-      inspectFacts: params.inspectFacts,
-      bindDevice: params.bindDevice,
-    });
-    if (admission.type === 'response') return { ok: false, response: admission.response };
-    const runtime = admission.runtime;
-    return {
-      ok: true,
-      execute: async (context) => await executeKeyboardStatus(runtime, platform, context),
-    };
-  }
-  if (action === 'dismiss') {
-    const admission = await admitRuntimeUse({
-      command: 'keyboard dismiss',
-      device: params.device,
-      use: keyboardDismissUse,
-      inspectFacts: params.inspectFacts,
-      bindDevice: params.bindDevice,
-    });
-    if (admission.type === 'response') return { ok: false, response: admission.response };
-    const runtime = admission.runtime;
-    return {
-      ok: true,
-      execute: async (context) => await executeKeyboardDismiss(runtime, platform, context),
-    };
-  }
-  const admission = await admitRuntimeUse({
-    command: 'keyboard enter',
-    device: params.device,
-    use: keyboardEnterUse,
-    inspectFacts: params.inspectFacts,
-    bindDevice: params.bindDevice,
-  });
+  const admission = await admitRuntimeUse(request);
   if (admission.type === 'response') return { ok: false, response: admission.response };
   const runtime = admission.runtime;
-  return {
-    ok: true,
-    execute: async (context) => await executeKeyboardEnter(runtime, platform, context),
-  };
+  return { ok: true, execute: (context) => execute(runtime, context) };
 }
 
-/** The ONE place a bound `keyboardStatus` executes (R46). Android-only; every other owner refuses. */
-async function executeKeyboardStatus(
-  runtime: Readonly<{
-    operations: Readonly<{
-      keyboardStatus: (input: KeyboardActionInput) => Promise<KeyboardStatusResult>;
-    }>;
-  }>,
+/** `keyboard status` — Android-only; every other owner refuses. */
+function executeKeyboardStatus(
+  runtime: BoundDeviceRuntime<typeof keyboardStatusUse>,
   platform: 'android' | 'harmonyos' | 'ios',
   context: DaemonCommandContext,
 ): Promise<Record<string, unknown>> {
-  const state = await runtime.operations.keyboardStatus(keyboardActionInput(context));
-  return {
+  return runtime.operations.keyboardStatus(keyboardActionInput(context)).then((state) => ({
     platform,
     action: 'status',
     visible: state.visible,
@@ -146,16 +122,12 @@ async function executeKeyboardStatus(
     focusedPackage: state.focusedPackage,
     focusedResourceId: state.focusedResourceId,
     inputOwner: state.inputOwner,
-  };
+  }));
 }
 
-/** The ONE place a bound `keyboardDismiss` executes (R46). */
+/** `keyboard dismiss`. */
 async function executeKeyboardDismiss(
-  runtime: Readonly<{
-    operations: Readonly<{
-      keyboardDismiss: (input: KeyboardActionInput) => Promise<KeyboardDismissResult>;
-    }>;
-  }>,
+  runtime: BoundDeviceRuntime<typeof keyboardDismissUse>,
   platform: 'android' | 'harmonyos' | 'ios',
   context: DaemonCommandContext,
 ): Promise<Record<string, unknown>> {
@@ -190,13 +162,9 @@ async function executeKeyboardDismiss(
   };
 }
 
-/** The ONE place a bound `keyboardEnter` executes (R46). */
+/** `keyboard enter`. */
 async function executeKeyboardEnter(
-  runtime: Readonly<{
-    operations: Readonly<{
-      keyboardEnter: (input: KeyboardActionInput) => Promise<KeyboardEnterResult>;
-    }>;
-  }>,
+  runtime: BoundDeviceRuntime<typeof keyboardEnterUse>,
   platform: 'android' | 'harmonyos' | 'ios',
   context: DaemonCommandContext,
 ): Promise<Record<string, unknown>> {
@@ -211,6 +179,37 @@ async function executeKeyboardEnter(
     };
   }
   return { platform, action: 'enter', ...successText('Keyboard enter pressed') };
+}
+
+/**
+ * The one place `keyboard` reaches a device (ADR 0019 §9). Exactly one action-selected use is
+ * admitted and bound — `status`, `dismiss`, or `enter`, never all three — mirroring R35's find
+ * closure: resolve one use per action, bind once.
+ */
+export async function resolveBoundKeyboardRuntime(
+  params: {
+    device: DeviceInfo;
+  } & RuntimeAdmissionBindings & { positionals: readonly string[] },
+): Promise<ResolvedKeyboardExecution> {
+  const action = readKeyboardAction(params.positionals);
+  const platform = keyboardPlatformLabel(params.device);
+  const { device, inspectFacts, bindDevice } = params;
+  if (action === 'status') {
+    return await admitKeyboardAction(
+      { command: 'keyboard status', device, use: keyboardStatusUse, inspectFacts, bindDevice },
+      (runtime, context) => executeKeyboardStatus(runtime, platform, context),
+    );
+  }
+  if (action === 'dismiss') {
+    return await admitKeyboardAction(
+      { command: 'keyboard dismiss', device, use: keyboardDismissUse, inspectFacts, bindDevice },
+      (runtime, context) => executeKeyboardDismiss(runtime, platform, context),
+    );
+  }
+  return await admitKeyboardAction(
+    { command: 'keyboard enter', device, use: keyboardEnterUse, inspectFacts, bindDevice },
+    (runtime, context) => executeKeyboardEnter(runtime, platform, context),
+  );
 }
 
 // Discloses which mechanism actually resigned the keyboard (#1598): a bare "dismissed" would

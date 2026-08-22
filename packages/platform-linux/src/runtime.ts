@@ -1,17 +1,19 @@
 import type {
   DeviceBinding,
-  CaptureSnapshotInput,
-  PlatformRuntimeHost,
-  PlatformRuntimeOperations,
-  PlatformRuntimeOwner,
   RuntimeFacts,
   RuntimeOperationFact,
   RuntimeOperationUnavailability,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime';
+import type {
+  PlatformRuntimeHost,
+  PlatformRuntimeOperations,
+  PlatformRuntimeOwner,
+} from '@agent-device/contracts/platform-runtime-operations';
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
 } from '@agent-device/contracts/application-lifecycle-runtime';
+import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import {
   bindElementTextRuntime,
   elementTextRuntimeOperationFacts,
@@ -20,6 +22,8 @@ import {
   bindLocalFocusInteractor,
   focusRuntimeOperationFacts,
 } from '@agent-device/contracts/focus-runtime';
+import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
+import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import { localRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
 import {
@@ -29,19 +33,12 @@ import {
 import {
   captureSnapshotSignal,
   snapshotRuntimeOperationFacts,
+  type CaptureSnapshotInput,
 } from '@agent-device/contracts/snapshot-runtime';
 import {
   bindLocalTypeTextInteractor,
   typeTextRuntimeOperationFacts,
 } from '@agent-device/contracts/type-text-runtime';
-import {
-  bindLocalBackInteractor,
-  backRuntimeOperationFacts,
-} from '@agent-device/contracts/back-runtime';
-import {
-  bindLocalHomeInteractor,
-  homeRuntimeOperationFacts,
-} from '@agent-device/contracts/home-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { bindLinuxApplicationLifecycle } from './lifecycle.ts';
@@ -158,8 +155,11 @@ function linuxInteractionOperations(
     ...(facts.operations.focusPoint.available ? bindLocalFocusInteractor(resolver) : {}),
     ...(facts.operations.typeText.available ? bindLocalTypeTextInteractor(resolver) : {}),
     ...(facts.operations.readTextAtPoint.available ? bindElementTextRuntime(resolver) : {}),
-    ...(facts.operations.back.available ? bindLocalBackInteractor(resolver) : {}),
-    ...(facts.operations.home.available ? bindLocalHomeInteractor(resolver) : {}),
+    ...bindAdmittedLocalInteractorOperations({
+      ...resolver,
+      facts: facts.operations,
+      operations: ['back', 'home'],
+    }),
   };
 }
 
