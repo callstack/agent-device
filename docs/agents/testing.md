@@ -180,6 +180,5 @@ There is no unit-test retry layer—fix or remove flakes.
 - Keep Vitest isolation enabled and the pool on forks. Both alternatives were measured and did not
   improve the suite; importing the module under test rather than a platform barrel is the useful
   optimization.
-- A solo local run that owns the machine can raise the default two-worker cap with
-  `AGENT_DEVICE_VITEST_MAX_WORKERS=<n>`; it is clamped to the host's CPU count and ignored in CI,
-  which derives its own count.
+- Raise the two-worker local cap only for a solo run: `AGENT_DEVICE_VITEST_MAX_WORKERS=<n>`,
+  clamped to host CPUs, ignored in CI.
