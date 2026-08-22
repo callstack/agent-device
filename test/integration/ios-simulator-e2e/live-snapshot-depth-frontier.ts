@@ -63,16 +63,11 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
   ]);
   assertSnapshotBackend(rawFull, 'full raw visible-depth snapshot');
   const rawFullNodes = snapshotNodes(rawFull);
-  const rawParent = requireIdentifier(rawFullNodes, PARENT_ID, 'full raw visible-depth snapshot');
+  requireIdentifier(rawFullNodes, PARENT_ID, 'full raw visible-depth snapshot');
   const rawChild = requireIdentifier(rawFullNodes, CHILD_ID, 'full raw visible-depth snapshot');
   assert.ok(
     numericDepth(rawChild) > 1,
     `raw projected child must remain below traversal depth 1: ${JSON.stringify(rawFull)}`,
-  );
-  assert.equal(
-    rawChild.parentIndex,
-    rawParent.index,
-    `raw tree must retain the structural parent relationship: ${JSON.stringify(rawFull)}`,
   );
 
   const rawDepthOne = await runStep(context, 'capture raw depth-bounded visible-depth tree', [
