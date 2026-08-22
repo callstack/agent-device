@@ -10,6 +10,8 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noEmit": true,
+    "incremental": true,
+    "tsBuildInfoFile": ".tmp/tsconfig.tsbuildinfo",
     "allowImportingTsExtensions": true,
     "erasableSyntaxOnly": true,
     "rewriteRelativeImportExtensions": true,
