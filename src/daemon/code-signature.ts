@@ -17,6 +17,15 @@ import { findProjectRoot } from '../utils/version.ts';
 const RELATIVE_SPECIFIER_RE = /(['"])(\.\.?\/[^'"]*)\1/g;
 const RESOLVABLE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'] as const;
 
+/**
+ * One visited module's contribution to the fingerprint: the label it is
+ * recorded under (repository-relative where possible) and the `size:mtime`
+ * pair that stands in for its contents. Contents are never hashed — a
+ * same-length rewrite inside one filesystem timestamp tick is deliberately
+ * out of scope, and `code-signature-cache.ts` reuses exactly this bound.
+ */
+export type DaemonCodeFileStamp = readonly [label: string, size: number, mtimeMs: number];
+
 export function resolveDaemonCodeSignature(): string {
   const entryPath = process.argv[1];
   if (!entryPath) return 'unknown';
@@ -28,38 +37,57 @@ export function computeDaemonCodeSignature(
   root: string = findProjectRoot(),
 ): string {
   try {
-    const normalizedRoot = path.resolve(root);
-    const normalizedEntryPath = path.resolve(entryPath);
-    const queue = [normalizedEntryPath];
-    const visited = new Set<string>();
-    const fingerprintParts: string[] = [];
-
-    while (queue.length > 0) {
-      const currentPath = queue.pop();
-      if (!currentPath || visited.has(currentPath)) continue;
-      visited.add(currentPath);
-
-      const stat = fs.statSync(currentPath);
-      if (!stat.isFile()) continue;
-
-      const relativePath = path.relative(normalizedRoot, currentPath) || currentPath;
-      fingerprintParts.push(`${relativePath}:${stat.size}:${Math.trunc(stat.mtimeMs)}`);
-
-      const content = fs.readFileSync(currentPath, 'utf8');
-      for (const specifier of collectRelativeImportSpecifiers(content)) {
-        const dependencyPath = resolveRelativeImportPath(currentPath, specifier);
-        if (dependencyPath) {
-          queue.push(dependencyPath);
-        }
-      }
-    }
-
-    const fingerprint = fingerprintParts.sort().join('|');
-    const hash = crypto.createHash('sha1').update(fingerprint).digest('hex');
-    return `graph:${fingerprintParts.length}:${hash}`;
+    return formatDaemonCodeSignature(walkDaemonCodeGraph(entryPath, root));
   } catch {
     return 'unknown';
   }
+}
+
+/**
+ * Stamps every module reachable from `entryPath` through relative import
+ * specifiers. Throws when the entry itself cannot be read; callers decide
+ * whether that is an `'unknown'` signature or a cache miss.
+ */
+export function walkDaemonCodeGraph(entryPath: string, root: string): DaemonCodeFileStamp[] {
+  const normalizedRoot = path.resolve(root);
+  const queue = [path.resolve(entryPath)];
+  const visited = new Set<string>();
+  const stamps: DaemonCodeFileStamp[] = [];
+
+  while (queue.length > 0) {
+    const currentPath = queue.pop();
+    if (!currentPath || visited.has(currentPath)) continue;
+    visited.add(currentPath);
+
+    const stat = fs.statSync(currentPath);
+    if (!stat.isFile()) continue;
+
+    stamps.push([
+      path.relative(normalizedRoot, currentPath) || currentPath,
+      stat.size,
+      Math.trunc(stat.mtimeMs),
+    ]);
+
+    const content = fs.readFileSync(currentPath, 'utf8');
+    for (const specifier of collectRelativeImportSpecifiers(content)) {
+      const dependencyPath = resolveRelativeImportPath(currentPath, specifier);
+      if (dependencyPath) {
+        queue.push(dependencyPath);
+      }
+    }
+  }
+
+  return stamps;
+}
+
+/** The wire form of a signature; identical for a walked and a cache-validated stamp list. */
+export function formatDaemonCodeSignature(stamps: readonly DaemonCodeFileStamp[]): string {
+  const fingerprint = stamps
+    .map(([label, size, mtimeMs]) => `${label}:${size}:${mtimeMs}`)
+    .sort()
+    .join('|');
+  const hash = crypto.createHash('sha1').update(fingerprint).digest('hex');
+  return `graph:${stamps.length}:${hash}`;
 }
 
 function collectRelativeImportSpecifiers(content: string): string[] {
