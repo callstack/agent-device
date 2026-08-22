@@ -4,7 +4,8 @@ export type AndroidBlockingDialogFocus = {
   raw: string;
 };
 
-const ANDROID_FOCUS_MARKERS = [
+/** The line prefixes a `dumpsys` dump uses to name the focused window or resumed activity. */
+export const ANDROID_FOCUS_MARKERS = [
   'mCurrentFocus=Window{',
   'mFocusedApp=AppWindowToken{',
   'mResumedActivity:',

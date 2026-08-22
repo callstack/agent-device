@@ -1,10 +1,11 @@
-import { test } from 'vitest';
+import { beforeEach, test } from 'vitest';
 import assert from 'node:assert/strict';
 import { withFakeAdb } from '../../../__tests__/test-utils/fake-adb.ts';
 import {
   createAndroidWindowDumpReader,
   getAndroidAppState,
   getAndroidBlockingDialogFocus,
+  resetAndroidWindowDumpFocusMemoForTests,
 } from '../window-state.ts';
 
 // One `dumpsys` text answers every window question the daemon asks about a device: which app is
@@ -21,6 +22,10 @@ const ANR_FOCUS_DUMP =
 
 const dumpsysWindowWindows = ['shell', 'dumpsys', 'window', 'windows'].join(' ');
 const dumpsysWindow = ['shell', 'dumpsys', 'window'].join(' ');
+
+beforeEach(() => {
+  resetAndroidWindowDumpFocusMemoForTests();
+});
 
 test('a focused-window dump answers the blocking-dialog question without a second dumpsys variant', async () => {
   const { calls, focus } = await withFakeAdb(
@@ -109,5 +114,73 @@ test('foreground resolution still falls through to the activity dumps behind a s
   assert.deepEqual(
     calls.map((args) => args.join(' ')),
     [dumpsysWindowWindows, dumpsysWindow, 'shell dumpsys activity activities'],
+  );
+});
+
+test('a variant observed to print no focus section stops being asked first', async () => {
+  // Android 16: `dumpsys window windows` has no `mCurrentFocus`, so asking it first buys nothing
+  // on every later check.
+  const script = (args: string[]) =>
+    args.join(' ') === dumpsysWindow ? NORMAL_FOCUS_DUMP : 'WINDOW MANAGER WINDOWS\n  Window #0';
+
+  const { calls } = await withFakeAdb(script, async ({ calls, device }) => {
+    await getAndroidBlockingDialogFocus(device);
+    await getAndroidBlockingDialogFocus(device);
+    await getAndroidBlockingDialogFocus(device);
+    return { calls };
+  });
+
+  assert.deepEqual(
+    calls.map((args) => args.join(' ')),
+    [dumpsysWindowWindows, dumpsysWindow, dumpsysWindow, dumpsysWindow],
+  );
+});
+
+test('a demoted variant is still asked when nothing ahead of it answers', async () => {
+  let phase: 'learn' | 'flipped' = 'learn';
+  const { calls, focus } = await withFakeAdb(
+    (args) => {
+      const isWindows = args.join(' ') === dumpsysWindowWindows;
+      if (phase === 'learn') return isWindows ? 'WINDOW MANAGER WINDOWS' : NORMAL_FOCUS_DUMP;
+      return isWindows ? ANR_FOCUS_DUMP : 'WINDOW MANAGER';
+    },
+    async ({ calls, device }) => {
+      // The first read teaches the memo that `dumpsys window windows` printed no focus section.
+      await getAndroidBlockingDialogFocus(device);
+      phase = 'flipped';
+      return { calls, focus: await getAndroidBlockingDialogFocus(device) };
+    },
+  );
+
+  assert.equal(focus?.package, 'com.agentdevice.tester');
+  assert.deepEqual(
+    calls.map((args) => args.join(' ')),
+    [dumpsysWindowWindows, dumpsysWindow, dumpsysWindow, dumpsysWindowWindows],
+  );
+});
+
+test('a variant that has answered once is not demoted by a silent window transition', async () => {
+  let transition = false;
+  const { calls } = await withFakeAdb(
+    (args) => {
+      const isWindows = args.join(' ') === dumpsysWindowWindows;
+      if (isWindows) return 'WINDOW MANAGER WINDOWS';
+      return transition ? 'no focused window mid-transition' : NORMAL_FOCUS_DUMP;
+    },
+    async ({ calls, device }) => {
+      await getAndroidBlockingDialogFocus(device);
+      transition = true;
+      await getAndroidBlockingDialogFocus(device);
+      transition = false;
+      await getAndroidBlockingDialogFocus(device);
+      return { calls };
+    },
+  );
+
+  // The transition read asks both variants because neither answered, but it must not cost
+  // `dumpsys window` its promotion for every later check.
+  assert.deepEqual(
+    calls.map((args) => args.join(' ')),
+    [dumpsysWindowWindows, dumpsysWindow, dumpsysWindow, dumpsysWindowWindows, dumpsysWindow],
   );
 });
