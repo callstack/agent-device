@@ -183,3 +183,36 @@ test('hostile nested Android presentation stays under a deterministic linear wor
     true,
   );
 });
+
+test('broad Android presentation rejects an oversized descendant footprint budget', () => {
+  const siblingCount = 24;
+  const buttons = (offset: number) =>
+    Array.from({ length: siblingCount }, (_, index) => {
+      const x = offset + index * 16;
+      const y = 16 + index * 16;
+      return `<node class="android.widget.Button" text="${offset}-${index}" bounds="[${x},${y}][${x + 8},${y + 8}]" clickable="true" visible-to-user="true" />`;
+    }).join('');
+  const tree = parseUiHierarchyTree(
+    `<hierarchy><node class="android.widget.FrameLayout" bounds="[0,0][512,512]" visible-to-user="true">
+      <node class="android.view.ViewGroup" drawing-order="1" bounds="[0,0][512,512]" visible-to-user="true">${buttons(0)}</node>
+      <node class="android.view.ViewGroup" drawing-order="2" bounds="[0,0][512,512]" visible-to-user="true">${buttons(0)}</node>
+    </node></hierarchy>`,
+  );
+
+  assert.throws(
+    () =>
+      buildUiHierarchySnapshot(tree, undefined, {
+        androidPresentation: {
+          deadlineAtMs: Number.POSITIVE_INFINITY,
+          maxWorkUnits: 1024,
+        },
+      }),
+    (error: unknown) => {
+      assert.equal(isAndroidSnapshotPresentationFailure(error), true);
+      assert(error instanceof AndroidSnapshotPresentationFailure);
+      assert.equal(error.details.phase, 'complexity');
+      assert(error.details.workUnits > 1024);
+      return true;
+    },
+  );
+});

@@ -83,7 +83,11 @@ export class AndroidSnapshotPresentationBudget {
 
   check(phase: 'deadline' | 'complexity' | 'regular-invariant' | 'work'): void {
     void phase;
-    this.workUnits += 1;
+    this.consume(1);
+  }
+
+  consume(units: number): void {
+    this.workUnits += units;
     const maxWorkUnits = this.options.maxWorkUnits ?? this.defaultMaxWorkUnits;
     if (this.workUnits > maxWorkUnits) {
       throw new AndroidSnapshotPresentationFailure(

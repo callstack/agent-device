@@ -173,13 +173,16 @@ function unionCoverage(
   ]);
   const covering = markCells(coveringRects, xs, ys, presentationBudget);
   const covered = markCells(coveredRects, xs, ys, presentationBudget);
+  const rows = ys.length - 1;
+  const columns = xs.length - 1;
+  presentationBudget?.consume(columns * rows);
   let coveredArea = 0;
   let overlapArea = 0;
-  for (let column = 0; column < xs.length - 1; column += 1) {
+  for (let column = 0; column < columns; column += 1) {
     presentationBudget?.check('work');
     const width = xs[column + 1]! - xs[column]!;
-    for (let row = 0; row < ys.length - 1; row += 1) {
-      const cell = column * (ys.length - 1) + row;
+    for (let row = 0; row < rows; row += 1) {
+      const cell = column * rows + row;
       if (!covered[cell]) continue;
       const area = width * (ys[row + 1]! - ys[row]!);
       coveredArea += area;
@@ -200,7 +203,10 @@ function markCells(
   presentationBudget?: AndroidSnapshotPresentationBudget,
 ): Uint8Array {
   const rows = ys.length - 1;
-  const cells = new Uint8Array((xs.length - 1) * rows);
+  const columns = xs.length - 1;
+  const cellCount = columns * rows;
+  presentationBudget?.consume(cellCount);
+  const cells = new Uint8Array(cellCount);
   for (const rect of rects) {
     presentationBudget?.check('work');
     const firstColumn = xs.indexOf(rect.x);
@@ -209,6 +215,7 @@ function markCells(
     const lastRow = ys.indexOf(rect.y + rect.height);
     for (let column = firstColumn; column < lastColumn; column += 1) {
       presentationBudget?.check('work');
+      presentationBudget?.consume(lastRow - firstRow);
       cells.fill(1, column * rows + firstRow, column * rows + lastRow);
     }
   }
