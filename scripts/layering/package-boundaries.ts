@@ -255,6 +255,36 @@ export function rootExternalDependencyRanges(repoRoot: string): Map<string, stri
   return new Map(Object.entries(manifest.dependencies ?? {}));
 }
 
+/**
+ * Every workspace-package entry surface, repo-root-relative and sorted: whatever a package
+ * manifest's `exports` map points at, plus every production source file under a `src/facades/`
+ * directory.
+ *
+ * The single owner of that question. R11's façade gates and the ADR-0019 eager-closure budget
+ * table (`src/__tests__/eager-closure-budgets.ts`) both consume this, so the two cannot drift
+ * into disagreeing about what counts as a façade — a gate that scanned a narrower set would
+ * silently exempt files the other one covers, which is exactly the hole #1960 review found (a
+ * one-level `readdir` missed both nested façade files and the six `packages/platform-*`
+ * manifest façades, which have no `facades/` directory at all).
+ *
+ * The `src/facades/` walk is recursive and skips test sources, matching the production-file
+ * scope every other layering scan uses.
+ */
+export function facadeEntryFiles(repoRoot: string): string[] {
+  const found = new Set<string>();
+  for (const pkg of readWorkspacePackages(repoRoot)) {
+    for (const target of pkg.exportTargets.values()) found.add(target);
+  }
+  for (const root of ['src', 'packages']) {
+    for (const file of walkTsFiles(repoRoot, root)) {
+      if (!file.includes('/src/facades/')) continue;
+      if (/(?:^|\/)__tests__\//.test(file) || file.endsWith('.test.ts')) continue;
+      found.add(file);
+    }
+  }
+  return [...found].filter((file) => fs.existsSync(path.join(repoRoot, file))).sort();
+}
+
 function walkTsFiles(repoRoot: string, relativeDir: string): string[] {
   const absolute = path.join(repoRoot, relativeDir);
   if (!fs.existsSync(absolute)) return [];

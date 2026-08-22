@@ -10,6 +10,7 @@ import { listSourceFiles } from './check.ts';
 import { readDirectNamedExports, readNamedExports, readReExportSources } from './facade-exports.ts';
 import {
   checkPackageBoundaries,
+  facadeEntryFiles,
   checkPackageInternalSites,
   checkRootSites,
   readWorkspacePackages,
@@ -144,17 +145,17 @@ test('every workspace package façade names its exports explicitly (no bare `exp
   // the façade file itself IS the pin — a widening shows up in the diff of the file that grew,
   // not in a table two files away that only a gate failure would surface. This structural gate is
   // what keeps that property true: every façade a package manifest declares (`exportTargets`),
-  // plus every file under a `packages/*/src/facades/` directory, must parse through
+  // plus every production file under a `src/facades/` directory, must parse through
   // `readNamedExports` without hitting the bare-`export *`/`export default` rejection it already
   // implements — reusing that check rather than writing a second, regex-based one that would have
   // to independently rediscover every export form to be trustworthy.
-  const packages = readWorkspacePackages(repoRoot);
-  const facadeFiles = new Set<string>(packages.flatMap((pkg) => [...pkg.exportTargets.values()]));
-  for (const file of listSourceFiles()) {
-    if (file.includes('/src/facades/')) facadeFiles.add(file);
-  }
-  assert.ok(facadeFiles.size > 0, 'expected at least one workspace package façade to check');
-  for (const file of [...facadeFiles].sort()) {
+  //
+  // The façade set comes from `facadeEntryFiles`, the single owner of "what is an entry surface".
+  // The ADR-0019 eager-closure budget table consumes the same function, so a file this gate holds
+  // to an explicit export list is necessarily a file that gate holds to a loading-shape budget.
+  const facadeFiles = facadeEntryFiles(repoRoot);
+  assert.ok(facadeFiles.length > 0, 'expected at least one workspace package façade to check');
+  for (const file of facadeFiles) {
     const source = fs.readFileSync(path.join(repoRoot, file), 'utf8');
     try {
       readNamedExports(source);
