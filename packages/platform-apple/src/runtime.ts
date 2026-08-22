@@ -258,10 +258,19 @@ const backKindUnavailable = Object.freeze({
   reason: 'unsupported-device-kind',
   hint: 'back is supported on Apple simulators and physical devices.',
 } as const);
-/** No apple-family closure ever gated `back` beyond device kind: every Apple OS, tvOS included
- * (the interactor drives the remote's Menu button there), supports it. */
+/** watchOS has no XCUITest-driveable UI (ADR-0009): no Apple interactor can be constructed for
+ * it, so every interactor-backed operation below stays unavailable there regardless of what the
+ * retired per-command capability table said for it — facts are the support authority (ADR 0019),
+ * not a mirror of a table that never modeled interactor constructibility. */
+const backOsUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+} as const);
+/** No apple-family closure ever gated `back` beyond device kind: every other Apple OS, tvOS
+ * included (the interactor drives the remote's Menu button there), supports it. */
 function appleBackFact(device: DeviceInfo): RuntimeOperationFact {
-  return device.kind === 'simulator' || device.kind === 'device' ? available : backKindUnavailable;
+  if (device.kind !== 'simulator' && device.kind !== 'device') return backKindUnavailable;
+  return resolveDeviceAppleOs(device) === 'watchos' ? backOsUnavailable : available;
 }
 
 const homeKindUnavailable = Object.freeze({
@@ -269,27 +278,30 @@ const homeKindUnavailable = Object.freeze({
   reason: 'unsupported-device-kind',
   hint: 'home is supported on Apple simulators and physical devices.',
 } as const);
-/** Parity with the retired `supportsAppAndDeviceLifecycle` closure: unavailable only on macOS,
- * which drives an already-running app with no springboard home. */
+/** Parity with the retired `supportsAppAndDeviceLifecycle` closure: unavailable on macOS, which
+ * drives an already-running app with no springboard home; also unavailable on watchOS, whose
+ * interactor cannot be constructed at all (see {@link backOsUnavailable}). */
 const homeLifecycleUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
 } as const);
 function appleHomeFact(device: DeviceInfo): RuntimeOperationFact {
   if (device.kind !== 'simulator' && device.kind !== 'device') return homeKindUnavailable;
-  return isMacOs(device) ? homeLifecycleUnavailable : available;
+  const os = resolveDeviceAppleOs(device);
+  return os === 'macos' || os === 'watchos' ? homeLifecycleUnavailable : available;
 }
 
 /**
  * The per-AppleOS mobile-input eligibility `orientation` and `keyboard` (dismiss/enter) share:
- * unavailable only on tvOS (focus-only XCUIRemote navigation, no orientation or keyboard) and
- * macOS (an AppKit desktop host, no device orientation or software keyboard). Parity with the
- * retired `supportsOrientation`/`supportsKeyboard` closures, which read the same per-OS table.
+ * unavailable on tvOS (focus-only XCUIRemote navigation, no orientation or keyboard), macOS (an
+ * AppKit desktop host, no device orientation or software keyboard), and watchOS (no constructible
+ * interactor at all, see {@link backOsUnavailable}). Parity with the retired
+ * `supportsOrientation`/`supportsKeyboard` closures, which read the same per-OS table.
  */
 function appleMobileInputEligible(device: DeviceInfo): boolean {
   if (device.kind !== 'simulator' && device.kind !== 'device') return false;
   const os = resolveDeviceAppleOs(device);
-  return os !== 'tvos' && os !== 'macos';
+  return os !== 'tvos' && os !== 'macos' && os !== 'watchos';
 }
 
 const orientationKindUnavailable = Object.freeze({

@@ -179,6 +179,71 @@ test('rejects an unavailable exact-owner fact before binding', async () => {
   expect(harness.bindDevice).not.toHaveBeenCalled();
 });
 
+// Pins the wire response for a non-TV target on the two platforms that keep their own capability
+// hint text (`packages/platform-apple/src/runtime.test.ts` and
+// `packages/platform-android/src/runtime.test.ts` prove these are the exact strings those owners'
+// facts produce). Before this migration, the daemon's own generic capability gate
+// (`requireCommandSupported(command, device, { hint: true })` in the retired
+// `ensureGenericCommandReady`) produced the identical shape — a generic "<command> is not
+// supported on this device" message plus the owner-specific hint — for every device that reached
+// dispatch; `handleTvRemoteCommand`'s own internal `device.target !== 'tv'` check with the unified
+// "supported only on TV targets" message was unreachable from that gate and only ever exercised by
+// a test calling `dispatchCommand` directly, bypassing the daemon layer entirely.
+test.each([
+  [
+    'iOS simulator (not tvOS)',
+    { id: 'ios-sim', name: 'iPhone', platform: 'apple', kind: 'simulator', booted: true } as const,
+    'tv-remote is supported only on tvOS devices.',
+  ],
+  [
+    'Android emulator (mobile target)',
+    {
+      id: 'emulator-5554',
+      name: 'Pixel',
+      platform: 'android',
+      kind: 'emulator',
+      target: 'mobile',
+      booted: true,
+    } as const,
+    'tv-remote is supported only on Android TV targets.',
+  ],
+])(
+  'rejects %s with its owner-specific hint, generic message preserved',
+  async (_name, device, hint) => {
+    const fact: RuntimeOperationFact = Object.freeze({
+      available: false,
+      reason: 'unsupported-device-kind',
+      hint,
+    });
+    const facts: RuntimeFacts<PlatformRuntimeOperations> = {
+      device: { ...deviceShape(device), providerMode: 'local' },
+      operations: { tvRemote: fact } as RuntimeFacts<PlatformRuntimeOperations>['operations'],
+    };
+    const inspectFacts: InspectDeviceRuntimeFacts = vi.fn(async () => facts);
+    const bindDevice = vi.fn() as unknown as BindDeviceRuntime;
+
+    const resolved = await resolveBoundTvRemoteRuntime({
+      device,
+      positionals: ['down'],
+      inspectFacts,
+      bindDevice,
+    });
+
+    expect(resolved).toEqual({
+      ok: false,
+      response: {
+        ok: false,
+        error: {
+          code: 'UNSUPPORTED_OPERATION',
+          message: 'tv-remote is not supported on this device',
+          hint,
+        },
+      },
+    });
+    expect(bindDevice).not.toHaveBeenCalled();
+  },
+);
+
 test('request router joins tv-remote admission to execution and ref invalidation', async () => {
   const harness = runtimeHarness();
   const sessionStore = makeSessionStore('agent-device-tv-remote-generic-');
