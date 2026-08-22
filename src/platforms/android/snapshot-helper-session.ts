@@ -76,6 +76,38 @@ const disabledSessionIdentities = new Map<string, string>();
 export async function captureAndroidSnapshotWithHelperSession(
   options: AndroidSnapshotHelperCaptureOptions,
 ): Promise<AndroidSnapshotHelperOutput | undefined> {
+  const acquired = await acquireAndroidSnapshotHelperSession(options);
+  if (!acquired) return undefined;
+  return await captureFromAndroidSnapshotHelperSession({
+    session: acquired.session,
+    deviceKey: acquired.deviceKey,
+    options,
+    resolved: acquired.resolved,
+  });
+}
+
+/**
+ * Starts (or reuses) the session without capturing, so a helper-backed read that is not a snapshot
+ * — the gesture viewport — can leave a warm session behind for the gesture that follows instead of
+ * paying its own one-shot instrumentation. Answers whether a session is live; `false` means the
+ * caller must use the one-shot transport, exactly as when a capture cannot use the session.
+ */
+export async function ensureAndroidSnapshotHelperSession(
+  options: AndroidSnapshotHelperCaptureOptions,
+): Promise<boolean> {
+  return (await acquireAndroidSnapshotHelperSession(options)) !== undefined;
+}
+
+async function acquireAndroidSnapshotHelperSession(
+  options: AndroidSnapshotHelperCaptureOptions,
+): Promise<
+  | {
+      session: AndroidSnapshotHelperSession;
+      resolved: AndroidSnapshotHelperResolvedCaptureOptions;
+      deviceKey: string;
+    }
+  | undefined
+> {
   const deviceKey = options.deviceKey ?? 'android:default';
   await recoverAndroidSnapshotHelperRetirement({
     deviceKey,
@@ -95,13 +127,7 @@ export async function captureAndroidSnapshotWithHelperSession(
     options,
     resolved,
   });
-  if (!session) return undefined;
-  return await captureFromAndroidSnapshotHelperSession({
-    session,
-    deviceKey,
-    options,
-    resolved,
-  });
+  return session ? { session, resolved, deviceKey } : undefined;
 }
 
 async function resolveAndroidSnapshotHelperSession(params: {
@@ -294,6 +320,10 @@ export async function stopAndroidSnapshotHelperSession(
   const processExit = observeAndroidSnapshotHelperProcessExit(session.process);
   const force = options.force === true || options.signal?.aborted === true;
   const graceful = await requestGracefulSessionExit(session, processExit, force, options.signal);
+  // The helper releases UiAutomation inside its own quit handling, so an acknowledged quit whose
+  // process exit was then observed IS the release evidence. Anything less — including an ack whose
+  // exit never arrived — still needs the device-side stop.
+  const runtimeReleaseConfirmed = graceful.acknowledged && graceful.exited;
   const cleanupTimeoutMs = !force
     ? FORWARD_TIMEOUT_MS
     : options.signal?.aborted === true
@@ -315,6 +345,7 @@ export async function stopAndroidSnapshotHelperSession(
       port: session.port,
       packageName: session.helper.packageName,
       timeoutMs: cleanupTimeoutMs,
+      forceStopRuntime: !runtimeReleaseConfirmed,
     }),
   ]);
   emitDiagnostic({
@@ -325,6 +356,7 @@ export async function stopAndroidSnapshotHelperSession(
       capturedCount: session.capturedCount,
       lifetimeMs: Date.now() - session.startedAtMs,
       quitAcknowledged: graceful.acknowledged,
+      runtimeReleaseConfirmed,
       forceKilled: !graceful.exited && processStopped,
       forced: force || options.signal?.aborted === true,
       runtimeForceStopped: cleanup.runtimeForceStopped,
@@ -467,6 +499,9 @@ async function startAndroidSnapshotHelperSession(params: {
         port: session.port,
         packageName: session.helper.packageName,
         timeoutMs: ANDROID_SNAPSHOT_HELPER_DEVICE_RETIREMENT_TIMEOUT_MS,
+        // Startup failed before the helper could acknowledge anything, so nothing proves it
+        // released UiAutomation.
+        forceStopRuntime: true,
       }),
     ]);
     if (!cleanup.runtimeForceStopped) {

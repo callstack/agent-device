@@ -14,6 +14,12 @@ import {
   readAndroidTextAtPointInHierarchy,
   verifyAndroidFilledTextInHierarchy,
 } from '../fill-verification.ts';
+import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session.ts';
+import {
+  createPersistentSnapshotHelperProvider,
+  isAndroidHelperForwardRemoval,
+  type FakeAndroidProcess,
+} from './snapshot-helper-session.fixtures.ts';
 
 test('fillAndroid reports when the IME captures input instead of the app field', async () => {
   const calls: string[][] = [];
@@ -401,6 +407,50 @@ test('readAndroidTextAtPointInHierarchy reads the EditText under the requested p
 
   assert.equal(readAndroidTextAtPointInHierarchy(hierarchy, 100, 50), 'Ada Lovelace');
   assert.equal(readAndroidTextAtPointInHierarchy(hierarchy, 100, 250), 'fallback@example.com');
+});
+
+test('fillAndroid runs the whole attempt on one warm daemon-session helper', async () => {
+  const calls: string[][] = [];
+  const spawnArgs: string[][] = [];
+  const processes: FakeAndroidProcess[] = [];
+  let typed = '';
+  let captureCount = 0;
+  const provider = createPersistentSnapshotHelperProvider({
+    calls,
+    spawnArgs,
+    processes,
+    sessionXml: () => {
+      captureCount += 1;
+      return androidInputXml({ text: typed });
+    },
+  });
+
+  await resetAndroidSnapshotHelperSessions();
+  await withAndroidAdbProvider(
+    {
+      ...provider,
+      exec: async (args, options) => {
+        if (isDeleteKey(args)) typed = '';
+        if (isTextInput(args)) typed = args[3] ?? '';
+        if (args[0] === 'shell' && args[1] !== 'am') return adbResult('');
+        return await provider.exec(args, options);
+      },
+      snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+    },
+    { serial: ANDROID_EMULATOR.id },
+    async () => {
+      await fillAndroid(ANDROID_EMULATOR, 10, 10, 'chips', 0, {
+        helperSessionScope: 'daemon-session',
+      });
+    },
+  );
+
+  // One pre-action target read plus the three settling samples.
+  assert.equal(captureCount, 4);
+  assert.equal(spawnArgs.length, 1);
+  assert.equal(calls.filter(isAndroidHelperForwardRemoval).length, 0);
+  assert.equal(processes[0]?.exitCode, null);
+  await resetAndroidSnapshotHelperSessions();
 });
 
 const IME_RESOURCE_ID = 'com.google.android.inputmethod.latin:id/0_resource_name_obfuscated';

@@ -13,6 +13,7 @@ import { sleep } from './adb.ts';
 import { getAndroidKeyboardState } from './device-input-state.ts';
 import { isAndroidInputMethodOwnedNode } from '@agent-device/contracts/android-input-ownership';
 import { captureAndroidUiHierarchyXml } from './snapshot.ts';
+import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
 import { androidUiNodes, type AndroidUiNodeMetadata } from './ui-hierarchy.ts';
 import type {
   FillUnconfirmedVerification,
@@ -45,6 +46,7 @@ export async function verifyAndroidFilledText(
   x: number,
   y: number,
   expected: string,
+  helper: AndroidHelperSessionOptions = {},
 ): Promise<AndroidFillVerification> {
   const verificationDelaysMs = [0, 150, 350];
   let lastVerification: AndroidFillVerification | null = null;
@@ -55,7 +57,7 @@ export async function verifyAndroidFilledText(
     if (delayMs > 0) {
       await sleep(delayMs);
     }
-    const verification = await inspectAndroidFilledText(device, x, y, expected, context);
+    const verification = await inspectAndroidFilledText(device, x, y, expected, context, helper);
     lastVerification = verification;
     if (verification.reason === 'ime_capture') {
       return verification;
@@ -83,18 +85,24 @@ export async function readAndroidTextAtPoint(
   device: DeviceInfo,
   x: number,
   y: number,
+  helper: AndroidHelperSessionOptions = {},
 ): Promise<string | null> {
-  return readAndroidTextAtPointInHierarchy(await captureAndroidUiHierarchyXml(device), x, y);
+  return readAndroidTextAtPointInHierarchy(
+    await captureAndroidUiHierarchyXml(device, helper),
+    x,
+    y,
+  );
 }
 
 async function readAndroidFillTargetAtPoint(
   device: DeviceInfo,
   x: number,
   y: number,
+  helper: AndroidHelperSessionOptions,
 ): Promise<AndroidFillVerificationNode | null> {
   const context = await readAndroidFillVerificationContext(device);
   return inspectAndroidTextAtPointInHierarchy(
-    await captureAndroidUiHierarchyXml(device),
+    await captureAndroidUiHierarchyXml(device, helper),
     x,
     y,
     context,
@@ -105,9 +113,10 @@ export async function readAndroidFillTargetBeforeMutation(
   device: DeviceInfo,
   x: number,
   y: number,
+  helper: AndroidHelperSessionOptions = {},
 ): Promise<AndroidFillVerification['targetInput']> {
   try {
-    return await readAndroidFillTargetAtPoint(device, x, y);
+    return await readAndroidFillTargetAtPoint(device, x, y, helper);
   } catch (error) {
     emitDiagnostic({
       level: 'warn',
@@ -233,9 +242,12 @@ async function inspectAndroidFilledText(
   y: number,
   expected: string,
   context: AndroidFillVerificationContext,
+  helper: AndroidHelperSessionOptions,
 ): Promise<AndroidFillVerification> {
+  // Each delay samples the live hierarchy again — settling is what the samples observe, so they
+  // share the helper session but never a capture.
   return verifyAndroidFilledTextInHierarchy(
-    await captureAndroidUiHierarchyXml(device),
+    await captureAndroidUiHierarchyXml(device, helper),
     x,
     y,
     expected,

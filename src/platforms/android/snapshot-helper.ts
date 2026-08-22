@@ -12,7 +12,6 @@ export {
   ensureAndroidSnapshotHelper,
   forgetAndroidSnapshotHelperInstall,
 } from './snapshot-helper-install.ts';
-export { ANDROID_SNAPSHOT_HELPER_WAIT_FOR_IDLE_TIMEOUT_MS } from './snapshot-helper-types.ts';
 
 export type {
   AndroidAdbExecutor,

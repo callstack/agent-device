@@ -100,15 +100,24 @@ export async function settleAndroidSnapshotHelperSessionCleanup(params: {
   port: number;
   packageName: string;
   timeoutMs: number;
+  /**
+   * Whether the device runtime still needs `am force-stop`. Only a quit the helper acknowledged
+   * AND whose process exit was observed proves UiAutomation was released; every forced, timed-out,
+   * or aborted teardown must still stop the runtime, because a daemon that dies without sending
+   * `quit` would otherwise leave the helper squatting UiAutomation for the next command.
+   */
+  forceStopRuntime: boolean;
 }): Promise<{ timedOut: boolean; runtimeForceStopped: boolean }> {
   const signal = AbortSignal.timeout(params.timeoutMs);
   const results = await Promise.allSettled([
-    forceStopAndroidSnapshotHelperRuntime({
-      adb: params.adb,
-      packageName: params.packageName,
-      timeoutMs: params.timeoutMs,
-      signal,
-    }),
+    params.forceStopRuntime
+      ? forceStopAndroidSnapshotHelperRuntime({
+          adb: params.adb,
+          packageName: params.packageName,
+          timeoutMs: params.timeoutMs,
+          signal,
+        })
+      : Promise.resolve(false),
     removeAndroidSnapshotHelperSessionForward({ ...params, signal }),
   ] as const);
   const [runtimeStopResult] = results;

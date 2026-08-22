@@ -6,12 +6,28 @@ import {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createAndroidInteractor } from './android.ts';
 import { snapshotAndroid } from '../../platforms/android/snapshot.ts';
+import { fillAndroid, scrollAndroid } from '../../platforms/android/input-actions.ts';
 
 vi.mock('../../platforms/android/snapshot.ts', () => ({
   snapshotAndroid: vi.fn(),
 }));
+vi.mock('../../platforms/android/input-actions.ts', () => ({
+  fillAndroid: vi.fn(),
+  scrollAndroid: vi.fn(),
+  appSwitcherAndroid: vi.fn(),
+  backAndroid: vi.fn(),
+  focusAndroid: vi.fn(),
+  homeAndroid: vi.fn(),
+  longPressAndroid: vi.fn(),
+  pressAndroid: vi.fn(),
+  pressAndroidTvRemote: vi.fn(),
+  setAndroidOrientation: vi.fn(),
+  typeAndroid: vi.fn(),
+}));
 
 const snapshotAndroidMock = vi.mocked(snapshotAndroid);
+const fillAndroidMock = vi.mocked(fillAndroid);
+const scrollAndroidMock = vi.mocked(scrollAndroid);
 const device: DeviceInfo = {
   platform: 'android',
   id: 'emulator-5554',
@@ -42,4 +58,35 @@ test('preserves Android clickability evidence through the interactor snapshot ad
 
   expect(readSnapshotClickabilityEvidence(result)).toEqual(evidence);
   expect(JSON.stringify(result)).not.toContain('clickable');
+});
+
+test('an app-backed session keeps the helper warm across fill and scroll', async () => {
+  const interactor = createAndroidInteractor(device, undefined, {
+    appBundleId: 'com.example.app',
+  });
+
+  await interactor.fill(10, 20, 'chips');
+  await interactor.scroll('down', { amount: 1 });
+
+  expect(fillAndroidMock).toHaveBeenCalledWith(device, 10, 20, 'chips', undefined, {
+    helperSessionScope: 'daemon-session',
+  });
+  expect(scrollAndroidMock).toHaveBeenCalledWith(device, 'down', {
+    amount: 1,
+    helperSessionScope: 'daemon-session',
+  });
+});
+
+test('a device-only session releases the helper after fill and scroll', async () => {
+  const interactor = createAndroidInteractor(device);
+
+  await interactor.fill(10, 20, 'chips');
+  await interactor.scroll('down');
+
+  expect(fillAndroidMock).toHaveBeenCalledWith(device, 10, 20, 'chips', undefined, {
+    helperSessionScope: 'command',
+  });
+  expect(scrollAndroidMock).toHaveBeenCalledWith(device, 'down', {
+    helperSessionScope: 'command',
+  });
 });

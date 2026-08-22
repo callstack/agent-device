@@ -34,6 +34,7 @@ import {
 } from './ime-helper.ts';
 import { isAndroidTestImeActive } from './ime-lifecycle.ts';
 import { executeAndroidTouchPlan, readAndroidGestureViewport } from './touch-executor.ts';
+import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
 
 export { readAndroidTextAtPoint } from './fill-verification.ts';
 
@@ -148,17 +149,18 @@ export async function fillAndroid(
   y: number,
   text: string,
   delayMs = 0,
+  helper: AndroidHelperSessionOptions = {},
 ): Promise<FillUnconfirmedVerification | void> {
-  const beforeTarget = await readAndroidFillTargetBeforeMutation(device, x, y);
+  const beforeTarget = await readAndroidFillTargetBeforeMutation(device, x, y, helper);
   const providerText = resolveAndroidTextInjector(device);
   if (providerText) {
     await providerText({ action: 'fill', target: { x, y }, text, delayMs });
     emitAndroidTextDiagnostic('fill', 'provider-native', text);
-    const verification = await verifyAndroidFilledText(device, x, y, text);
+    const verification = await verifyAndroidFilledText(device, x, y, text, helper);
     return completeAndroidFillVerification(text, beforeTarget, verification);
   }
   if (isAndroidTestImeActive(device)) {
-    const verification = await fillAndroidTestIme(device, x, y, text, beforeTarget);
+    const verification = await fillAndroidTestIme(device, x, y, text, beforeTarget, helper);
     return completeAndroidFillVerification(text, beforeTarget, verification);
   }
   assertAndroidShellTextSupported(text);
@@ -204,7 +206,7 @@ export async function fillAndroid(
       chunkSize: attempt.chunkSize,
       delayMs: attempt.inputDelayMs,
     });
-    const verification = await verifyAndroidFilledText(device, x, y, text);
+    const verification = await verifyAndroidFilledText(device, x, y, text, helper);
     lastVerification = verification;
     if (verification.ok) return;
     if (verification.reason === 'ime_capture') {
@@ -247,6 +249,7 @@ async function fillAndroidTestIme(
   y: number,
   text: string,
   beforeTarget: AndroidFillVerification['targetInput'],
+  helper: AndroidHelperSessionOptions,
 ): Promise<AndroidFillVerification> {
   const adb = resolveAndroidAdbExecutor(device);
   const artifact = await selectAndroidImeHelperArtifact(resolveAndroidAdbProvider(device));
@@ -257,7 +260,7 @@ async function fillAndroidTestIme(
     await focusAndroid(device, x, y);
     await clearAndroidImeHelperText(adb, packageName);
     if (text) await sendAndroidImeHelperText(adb, packageName, text);
-    const verification = await verifyAndroidFilledText(device, x, y, text);
+    const verification = await verifyAndroidFilledText(device, x, y, text, helper);
     lastVerification = verification;
     if (verification.ok) break;
     if (buildAndroidFillUnconfirmedVerification(text, beforeTarget, verification)) break;
@@ -269,9 +272,13 @@ async function fillAndroidTestIme(
 export async function scrollAndroid(
   device: DeviceInfo,
   direction: ScrollDirection,
-  options?: { amount?: number; pixels?: number; durationMs?: number },
+  options?: { amount?: number; pixels?: number; durationMs?: number } & AndroidHelperSessionOptions,
 ): Promise<Record<string, unknown>> {
-  const viewport = await readAndroidGestureViewport(device);
+  // The viewport read and the gesture are two helper calls one command apart: giving the read the
+  // command's session scope keeps both on the same instrumentation.
+  const viewport = await readAndroidGestureViewport(device, {
+    helperSessionScope: options?.helperSessionScope,
+  });
   const relativePlan = buildScrollGesturePlan({
     direction,
     amount: options?.amount,

@@ -281,7 +281,7 @@ test('restarts the helper session when capture options change', async () => {
   );
 });
 
-test('allows an acknowledged helper quit to release UiAutomation before forcing termination', async () => {
+test('a quit acknowledged and followed by process exit skips the force-stop round trip', async () => {
   const calls: string[][] = [];
   const processes: FakeAndroidProcess[] = [];
   const provider = createSessionProvider({ calls, processes, quitExitDelayMs: 25 });
@@ -295,12 +295,9 @@ test('allows an acknowledged helper quit to release UiAutomation before forcing 
 
   assert.equal(processes.length, 1);
   assert.equal(processes[0]?.killed, false);
-  assert.equal(
-    calls.some(
-      (args) => args.join(' ') === 'shell am force-stop com.callstack.agentdevice.snapshothelper',
-    ),
-    true,
-  );
+  // Acknowledged quit plus an observed exit IS the release evidence, so the extra adb round trip
+  // buys nothing.
+  assert.equal(calls.some(isHelperRuntimeForceStop), false);
 });
 
 test('force terminates the helper when quit is not acknowledged', async () => {
@@ -317,7 +314,13 @@ test('force terminates the helper when quit is not acknowledged', async () => {
 
   assert.equal(processes.length, 1);
   assert.equal(processes[0]?.killed, true);
+  // Nothing proved the helper released UiAutomation, so the device-side stop must still run.
+  assert.equal(calls.some(isHelperRuntimeForceStop), true);
 });
+
+function isHelperRuntimeForceStop(args: string[]): boolean {
+  return args.join(' ') === 'shell am force-stop com.callstack.agentdevice.snapshothelper';
+}
 
 test('failed whole-module reset preserves quarantine until recovery is confirmed', async () => {
   const options: SessionProviderOptions = {

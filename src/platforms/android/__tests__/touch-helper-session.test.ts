@@ -205,6 +205,107 @@ test('touch helper does not run one-shot while snapshot retirement is unconfirme
   assert.equal(oneShotCalled, false);
 });
 
+test('a daemon-session viewport read starts the session so the gesture reuses it', async () => {
+  const device = makeIsolatedDevice();
+  let viewportCommands = 0;
+  let gestureCommands = 0;
+  const provider = createFakeTouchHelperSessionProvider((command, requestId) => {
+    if (command.startsWith('viewport')) {
+      viewportCommands += 1;
+      return sessionHeaderResponse({
+        agentDeviceProtocol: 'android-snapshot-helper-v1',
+        requestId,
+        ok: 'true',
+        x: '0',
+        y: '0',
+        width: '400',
+        height: '800',
+      });
+    }
+    if (command.startsWith('gesture')) {
+      gestureCommands += 1;
+      return sessionHeaderResponse({
+        agentDeviceProtocol: 'android-snapshot-helper-v1',
+        requestId,
+        ok: 'true',
+        kind: 'swipe',
+        injectedEvents: '6',
+        elapsedMs: '9',
+      });
+    }
+    return sessionHeaderResponse({
+      agentDeviceProtocol: 'android-snapshot-helper-v1',
+      requestId,
+      ok: 'true',
+    });
+  });
+
+  const oneShotArgs: string[][] = [];
+  const result = await withAndroidAdbProvider(
+    {
+      ...provider,
+      exec: currentVersionAdb(async (args) => {
+        if (args.includes('instrument')) oneShotArgs.push(args);
+        return { exitCode: 0, stdout: '', stderr: '' };
+      }),
+    },
+    { serial: device.id },
+    async () => {
+      const viewport = await readAndroidTouchHelperViewport(device, {
+        helperSessionScope: 'daemon-session',
+      });
+      const gesture = await executeAndroidTouchHelperPlan(
+        device,
+        lowerAndroidTouchPlan(flingPlan()),
+      );
+      return { viewport, gesture };
+    },
+  );
+
+  assert.deepEqual(result.viewport, { x: 0, y: 0, width: 400, height: 800 });
+  assert.equal(result.gesture.helperTransport, 'persistent-session');
+  assert.equal(viewportCommands, 1);
+  assert.equal(gestureCommands, 1);
+  assert.deepEqual(oneShotArgs, [], 'viewport and gesture share the session instrumentation');
+});
+
+test('a command-scoped viewport read stays one-shot and starts no session', async () => {
+  const device = makeIsolatedDevice();
+  let sessionCommands = 0;
+  const provider = createFakeTouchHelperSessionProvider((_command, requestId) => {
+    sessionCommands += 1;
+    return sessionHeaderResponse({
+      agentDeviceProtocol: 'android-snapshot-helper-v1',
+      requestId,
+      ok: 'true',
+    });
+  });
+
+  let oneShotArgs: string[] | undefined;
+  const viewport = await withAndroidAdbProvider(
+    {
+      ...provider,
+      exec: currentVersionAdb(async (args) => {
+        oneShotArgs = args;
+        return {
+          exitCode: 0,
+          stdout: [
+            resultRecord({ ok: 'true', x: '5', y: '6', width: '300', height: '400' }),
+            'INSTRUMENTATION_CODE: 0',
+          ].join('\n'),
+          stderr: '',
+        };
+      }),
+    },
+    { serial: device.id },
+    async () => await readAndroidTouchHelperViewport(device),
+  );
+
+  assert.deepEqual(viewport, { x: 5, y: 6, width: 300, height: 400 });
+  assert.ok(oneShotArgs?.includes('viewport'));
+  assert.equal(sessionCommands, 0);
+});
+
 async function startFakeTouchHelperSession(
   device: DeviceInfo,
   handleCommand: TouchSessionCommandHandler,

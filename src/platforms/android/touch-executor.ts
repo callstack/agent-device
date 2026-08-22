@@ -4,6 +4,7 @@ import { resolveAndroidTouchProvider } from './adb-executor.ts';
 import { executeAndroidTouchHelperPlan, readAndroidTouchHelperViewport } from './touch-helper.ts';
 import { validateAndroidGestureViewport } from './gesture-viewport.ts';
 import { lowerAndroidTouchPlan, type AndroidTouchPlan } from './touch-plan.ts';
+import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
 
 export async function executeAndroidTouchPlan(
   device: DeviceInfo,
@@ -25,8 +26,11 @@ export async function executeAndroidTouchPlan(
   return await executeAndroidTouchHelperPlan(device, loweredPlan);
 }
 
-export async function readAndroidGestureViewport(device: DeviceInfo): Promise<Rect> {
+export async function readAndroidGestureViewport(
+  device: DeviceInfo,
+  helper: AndroidHelperSessionOptions = {},
+): Promise<Rect> {
   const provider = resolveAndroidTouchProvider(device);
   if (provider) return validateAndroidGestureViewport(await provider.gestureViewport());
-  return await readAndroidTouchHelperViewport(device);
+  return await readAndroidTouchHelperViewport(device, helper);
 }

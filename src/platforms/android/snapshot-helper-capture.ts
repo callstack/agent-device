@@ -6,7 +6,9 @@ import {
   readInstrumentationResultNumber,
 } from './instrumentation-helper.ts';
 import {
+  ANDROID_SNAPSHOT_HELPER_CAPTURE_TIMEOUT_MS,
   ANDROID_SNAPSHOT_HELPER_COMMAND_OVERHEAD_MS,
+  ANDROID_SNAPSHOT_HELPER_COMMAND_TIMEOUT_MS,
   ANDROID_SNAPSHOT_HELPER_OUTPUT_FORMAT,
   ANDROID_SNAPSHOT_HELPER_PACKAGE,
   ANDROID_SNAPSHOT_HELPER_PROTOCOL,
@@ -14,10 +16,13 @@ import {
   ANDROID_SNAPSHOT_HELPER_WAIT_FOR_IDLE_TIMEOUT_MS,
 } from './snapshot-helper-types.ts';
 import type {
+  AndroidAdbExecutor,
+  AndroidSnapshotHelperArtifact,
   AndroidSnapshotHelperCaptureOptions,
   AndroidSnapshotHelperMetadata,
   AndroidSnapshotHelperOutput,
 } from './snapshot-helper-types.ts';
+import type { AndroidAdbProvider } from './adb-executor.ts';
 import {
   recoverAndroidSnapshotHelperRetirement,
   retireCanceledAndroidSnapshotHelperCapture,
@@ -96,6 +101,36 @@ export async function captureAndroidSnapshotWithHelper(
     );
   }
   return output;
+}
+
+/**
+ * The single construction path for a helper call's capture options.
+ *
+ * A persistent session is keyed by the resolved options (see `createSessionIdentity`), so two
+ * callers that build these fields apart would each restart the other's session instead of sharing
+ * it. Snapshot capture and the gesture viewport read therefore build them here.
+ */
+export function buildAndroidSnapshotHelperCaptureOptions(params: {
+  adb: AndroidAdbExecutor;
+  adbProvider: AndroidAdbProvider;
+  artifact: AndroidSnapshotHelperArtifact;
+  deviceKey: string;
+  signal?: AbortSignal;
+}): AndroidSnapshotHelperCaptureOptions {
+  return {
+    adb: params.adb,
+    adbProvider: params.adbProvider,
+    deviceKey: params.deviceKey,
+    helperVersion: params.artifact.manifest.version,
+    helperVersionCode: params.artifact.manifest.versionCode,
+    helperSha256: params.artifact.manifest.sha256,
+    packageName: params.artifact.manifest.packageName,
+    instrumentationRunner: params.artifact.manifest.instrumentationRunner,
+    waitForIdleTimeoutMs: ANDROID_SNAPSHOT_HELPER_WAIT_FOR_IDLE_TIMEOUT_MS,
+    timeoutMs: ANDROID_SNAPSHOT_HELPER_CAPTURE_TIMEOUT_MS,
+    commandTimeoutMs: ANDROID_SNAPSHOT_HELPER_COMMAND_TIMEOUT_MS,
+    ...(params.signal ? { signal: params.signal } : {}),
+  };
 }
 
 export function resolveAndroidSnapshotHelperCaptureOptions(

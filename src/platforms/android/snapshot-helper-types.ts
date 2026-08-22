@@ -20,6 +20,23 @@ export const ANDROID_SNAPSHOT_HELPER_OUTPUT_FORMAT = 'uiautomator-xml';
 export const ANDROID_SNAPSHOT_HELPER_WAIT_FOR_IDLE_TIMEOUT_MS = 500;
 export const ANDROID_SNAPSHOT_HELPER_WAIT_FOR_IDLE_QUIET_MS = 100;
 export const ANDROID_SNAPSHOT_HELPER_COMMAND_OVERHEAD_MS = 5_000;
+export const ANDROID_SNAPSHOT_HELPER_CAPTURE_TIMEOUT_MS = 5_000;
+export const ANDROID_SNAPSHOT_HELPER_COMMAND_TIMEOUT_MS = 30_000;
+
+/**
+ * Who releases the helper's persistent instrumentation session.
+ *
+ * Android permits ONE UiAutomation owner, so a `command`-scoped call stops the session when it
+ * finishes and the next helper call pays a fresh `am instrument` start plus the UiAutomation
+ * connect wait. `daemon-session` hands that release to session teardown
+ * (`stopSessionAndroidSnapshotHelper`), which every Android session runs, so consecutive commands
+ * in one session share one warm helper. Device-scoped work stays `command` so nothing squats
+ * UiAutomation once the command returns.
+ */
+export type AndroidHelperSessionScope = 'command' | 'daemon-session';
+
+/** Threaded by every helper-backed read a session command performs (capture, viewport). */
+export type AndroidHelperSessionOptions = { helperSessionScope?: AndroidHelperSessionScope };
 
 export type { AndroidAdbExecutor } from './adb-executor.ts';
 

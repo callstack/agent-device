@@ -30,6 +30,7 @@ import {
 } from '../../platforms/android/device-input-state.ts';
 import { setAndroidSetting } from '../../platforms/android/settings.ts';
 import { snapshotAndroid } from '../../platforms/android/snapshot.ts';
+import type { AndroidHelperSessionScope } from '../../platforms/android/snapshot-helper-types.ts';
 import { screenshotAndroid } from '../../platforms/android/screenshot.ts';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { withMethodScope } from '../../utils/method-scope.ts';
@@ -40,11 +41,21 @@ import {
   snapshotCaptureAnnotationsFrom,
 } from '@agent-device/contracts/capture';
 
+/**
+ * `appBundleId` is present exactly for app-backed daemon sessions, whose teardown releases the
+ * helper. Standalone device work has no such owner, so it releases the helper per command and
+ * leaves nothing squatting UiAutomation.
+ */
+function androidHelperSessionScope(appBundleId: string | undefined): AndroidHelperSessionScope {
+  return appBundleId ? 'daemon-session' : 'command';
+}
+
 export function createAndroidInteractor(
   device: DeviceInfo,
   provider?: AndroidAdbProvider,
-  runnerContext?: Pick<RunnerContext, 'signal'>,
+  runnerContext?: Pick<RunnerContext, 'signal' | 'appBundleId'>,
 ): Interactor {
+  const helperSessionScope = androidHelperSessionScope(runnerContext?.appBundleId);
   const interactor: Interactor = {
     open: (app, options) =>
       openAndroidApp(device, app, {
@@ -63,15 +74,19 @@ export function createAndroidInteractor(
     longPress: (x, y, durationMs) => longPressAndroid(device, x, y, durationMs),
     focus: (x, y) => focusAndroid(device, x, y),
     type: (text, delayMs) => typeAndroid(device, text, delayMs),
-    fill: (x, y, text, delayMs) => fillAndroid(device, x, y, text, delayMs),
-    scroll: (direction, options) => scrollAndroid(device, direction, options),
+    fill: (x, y, text, delayMs) => fillAndroid(device, x, y, text, delayMs, { helperSessionScope }),
+    scroll: (direction, options) =>
+      scrollAndroid(device, direction, { ...options, helperSessionScope }),
     performGesture: (plan) => executeAndroidTouchPlan(device, plan),
-    gestureViewport: () => readAndroidGestureViewport(device),
+    gestureViewport: () => readAndroidGestureViewport(device, { helperSessionScope }),
     screenshot: (outPath, options) => screenshotAndroid(device, outPath, options),
     // uiautomator reads the node covering a point; `undefined` means nothing covers it.
-    readTextAtPoint: async (point) => {
+    readTextAtPoint: async (point, options) => {
       const { readAndroidTextAtPoint } = await import('../../platforms/android/input-actions.ts');
-      return (await readAndroidTextAtPoint(device, point.x, point.y)) ?? undefined;
+      const read = await readAndroidTextAtPoint(device, point.x, point.y, {
+        helperSessionScope: androidHelperSessionScope(options?.appBundleId),
+      });
+      return read ?? undefined;
     },
     snapshot: async (options) => {
       const snapshotOptions = options ?? {};
@@ -86,9 +101,7 @@ export function createAndroidInteractor(
             scope: snapshotOptions.scope,
             raw: snapshotOptions.raw,
             includeHiddenContentHints: snapshotOptions.includeHiddenContentHints,
-            // appBundleId is present for app-backed daemon sessions; keep the helper warm there,
-            // but release it after standalone device snapshots so UiAutomation is not squatted.
-            helperSessionScope: snapshotOptions.appBundleId ? 'daemon-session' : 'command',
+            helperSessionScope: androidHelperSessionScope(snapshotOptions.appBundleId),
           }),
         { backend: 'android' },
       );

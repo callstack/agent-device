@@ -4,7 +4,11 @@ import type { Rect } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails } from '../../utils/exec.ts';
 import { emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts';
-import { resolveAndroidAdbProvider, type AndroidAdbExecutor } from './adb-executor.ts';
+import {
+  resolveAndroidAdbProvider,
+  type AndroidAdbExecutor,
+  type AndroidAdbProvider,
+} from './adb-executor.ts';
 import {
   parseInstrumentationRecords,
   readInstrumentationResultNumber,
@@ -15,13 +19,16 @@ import { resolveAndroidHelperArtifact } from './helper-package-install.ts';
 import { parseAndroidSnapshotHelperManifest } from './snapshot-helper-artifact.ts';
 import { ensureAndroidSnapshotHelper } from './snapshot-helper-install.ts';
 import {
+  ensureAndroidSnapshotHelperSession,
   getAndroidSnapshotHelperSessionDeviceKey,
   recoverAndroidSnapshotHelperRetirement,
   runAndroidSnapshotHelperSessionTouchCommand,
   stopAndroidSnapshotHelperSession,
 } from './snapshot-helper-session.ts';
+import { buildAndroidSnapshotHelperCaptureOptions } from './snapshot-helper-capture.ts';
 import {
   ANDROID_SNAPSHOT_HELPER_PROTOCOL,
+  type AndroidHelperSessionOptions,
   type AndroidSnapshotHelperArtifact,
   type AndroidSnapshotHelperInstallResult,
 } from './snapshot-helper-types.ts';
@@ -47,6 +54,7 @@ type AndroidTouchHelperGestureRequest = {
 
 type PreparedAndroidTouchHelper = {
   adb: AndroidAdbExecutor;
+  adbProvider: AndroidAdbProvider;
   artifact: AndroidSnapshotHelperArtifact;
   install: AndroidSnapshotHelperInstallResult;
   deviceKey: string;
@@ -105,8 +113,24 @@ export async function executeAndroidTouchHelperPlan(
   };
 }
 
-export async function readAndroidTouchHelperViewport(device: DeviceInfo): Promise<Rect> {
+export async function readAndroidTouchHelperViewport(
+  device: DeviceInfo,
+  helper: AndroidHelperSessionOptions = {},
+): Promise<Rect> {
   const prepared = await prepareAndroidTouchHelper(device);
+  if (helper.helperSessionScope === 'daemon-session') {
+    // Without a live session both this read and the gesture that follows would each start their
+    // own `am instrument`. The session outlives the command under this scope, so warming it here
+    // makes the pair share one instrumentation; session teardown still owns the release.
+    await ensureAndroidSnapshotHelperSession(
+      buildAndroidSnapshotHelperCaptureOptions({
+        adb: prepared.adb,
+        adbProvider: prepared.adbProvider,
+        artifact: prepared.artifact,
+        deviceKey: prepared.deviceKey,
+      }),
+    );
+  }
   try {
     const sessionHeaders = await runAndroidSnapshotHelperSessionTouchCommand({
       deviceKey: prepared.deviceKey,
@@ -188,7 +212,7 @@ async function prepareAndroidTouchHelper(device: DeviceInfo): Promise<PreparedAn
     // against the previous binary must not serve this command; the next snapshot restarts it.
     await stopAndroidSnapshotHelperSession(deviceKey);
   }
-  return { adb: adbProvider.exec, artifact, install, deviceKey };
+  return { adb: adbProvider.exec, adbProvider, artifact, install, deviceKey };
 }
 
 async function resolveAndroidTouchHelperArtifact(): Promise<AndroidSnapshotHelperArtifact> {
