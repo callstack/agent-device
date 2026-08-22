@@ -1,7 +1,11 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { parseSelectorChain } from './parse.ts';
-import { findSelectorChainMatch, resolveSelectorChain } from './resolve.ts';
+import {
+  findSelectorChainMatch,
+  resolveSelectorChain,
+  resolveSelectorChainDomain,
+} from './resolve.ts';
 import { loginFormNodes } from './__tests__/login-form-nodes.ts';
 
 test('resolveSelectorChain resolves unique match', () => {
@@ -35,6 +39,46 @@ test('resolveSelectorChain keeps strict ambiguity behavior by default', () => {
     requireUnique: true,
   });
   assert.equal(resolved, null);
+});
+
+test("resolveSelectorChainDomain reports the winning alternative's matched nodes", () => {
+  const chain = parseSelectorChain('label="Continue" || id=auth_continue');
+  const domain = resolveSelectorChainDomain(loginFormNodes, chain, {
+    platform: 'ios',
+    requireRect: true,
+    requireUnique: true,
+  });
+  // The winner comes from the SECOND alternative, so its domain must be that
+  // alternative's single match — not the first alternative's two "Continue"s.
+  assert.equal(domain.resolution?.selectorIndex, 1);
+  assert.deepEqual(
+    domain.matchedNodes.map((node) => node.ref),
+    ['e2'],
+  );
+});
+
+test('resolveSelectorChainDomain reports the first matching alternative when nothing resolves', () => {
+  const domain = resolveSelectorChainDomain(
+    loginFormNodes,
+    parseSelectorChain('label="Continue"'),
+    {
+      platform: 'ios',
+      requireRect: true,
+      requireUnique: true,
+    },
+  );
+  assert.equal(domain.resolution, null);
+  assert.deepEqual(
+    domain.matchedNodes.map((node) => node.ref),
+    ['e2', 'e3'],
+  );
+
+  const missing = resolveSelectorChainDomain(loginFormNodes, parseSelectorChain('id=absent'), {
+    platform: 'ios',
+    requireRect: true,
+    requireUnique: true,
+  });
+  assert.deepEqual(missing, { resolution: null, matchedNodes: [] });
 });
 
 test('findSelectorChainMatch returns first matching selector for existence checks', () => {

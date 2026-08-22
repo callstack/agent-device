@@ -27,44 +27,74 @@ export type AstSelectorResolution = {
   disambiguation?: SelectorDisambiguationDisclosure;
 };
 
+/**
+ * A resolution together with the matched-node domain the SAME pass decided it
+ * over, so a caller that needs both stops re-deriving the second one.
+ *
+ * `matchedNodes` describes the winning alternative when `resolution` is
+ * non-null. When no alternative resolved, it describes the first alternative
+ * that matched anything — the set `listSelectorChainMatches` reports, computed
+ * here by the pass that already visited those nodes.
+ */
+export type AstSelectorChainResolutionDomain = {
+  resolution: AstSelectorResolution | null;
+  matchedNodes: SnapshotNode[];
+};
+
+export function resolveSelectorChainDomain(
+  nodes: SnapshotState['nodes'],
+  chain: SelectorChain,
+  options: SelectorResolutionOptions,
+): AstSelectorChainResolutionDomain {
+  const requireRect = options.requireRect ?? false;
+  const requireUnique = options.requireUnique ?? true;
+  const diagnostics: SelectorDiagnostics[] = [];
+  let firstMatchedNodes: SnapshotNode[] | null = null;
+  for (const [i, selector] of chain.selectors.entries()) {
+    const summary = analyzeSelectorMatches(nodes, selector, options.platform, requireRect);
+    diagnostics.push({ selector: selector.raw, matches: summary.count });
+    if (summary.count === 0 || !summary.firstNode) continue;
+    firstMatchedNodes ??= summary.candidates;
+    if (requireUnique && summary.count !== 1) {
+      if (!options.disambiguateAmbiguous || !summary.disambiguated || !summary.tiebreak) continue;
+      return {
+        matchedNodes: summary.candidates,
+        resolution: {
+          node: summary.disambiguated,
+          selector,
+          selectorIndex: i,
+          matches: summary.count,
+          diagnostics,
+          disambiguation: {
+            matchCount: summary.count,
+            tiebreak: summary.tiebreak,
+            alternatives: summary.candidates.filter(
+              (candidate) => candidate !== summary.disambiguated,
+            ),
+          },
+        },
+      };
+    }
+    return {
+      matchedNodes: summary.candidates,
+      resolution: {
+        node: summary.firstNode,
+        selector,
+        selectorIndex: i,
+        matches: summary.count,
+        diagnostics,
+      },
+    };
+  }
+  return { resolution: null, matchedNodes: firstMatchedNodes ?? [] };
+}
+
 export function resolveSelectorChain(
   nodes: SnapshotState['nodes'],
   chain: SelectorChain,
   options: SelectorResolutionOptions,
 ): AstSelectorResolution | null {
-  const requireRect = options.requireRect ?? false;
-  const requireUnique = options.requireUnique ?? true;
-  const diagnostics: SelectorDiagnostics[] = [];
-  for (const [i, selector] of chain.selectors.entries()) {
-    const summary = analyzeSelectorMatches(nodes, selector, options.platform, requireRect);
-    diagnostics.push({ selector: selector.raw, matches: summary.count });
-    if (summary.count === 0 || !summary.firstNode) continue;
-    if (requireUnique && summary.count !== 1) {
-      if (!options.disambiguateAmbiguous || !summary.disambiguated || !summary.tiebreak) continue;
-      return {
-        node: summary.disambiguated,
-        selector,
-        selectorIndex: i,
-        matches: summary.count,
-        diagnostics,
-        disambiguation: {
-          matchCount: summary.count,
-          tiebreak: summary.tiebreak,
-          alternatives: summary.candidates.filter(
-            (candidate) => candidate !== summary.disambiguated,
-          ),
-        },
-      };
-    }
-    return {
-      node: summary.firstNode,
-      selector,
-      selectorIndex: i,
-      matches: summary.count,
-      diagnostics,
-    };
-  }
-  return null;
+  return resolveSelectorChainDomain(nodes, chain, options).resolution;
 }
 
 /** The parser-side twin of the façade's `SelectorChainMatchList`. */

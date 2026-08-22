@@ -127,6 +127,48 @@ test('recorded-target resolution keeps the matched domain from the alternative t
   assert.equal(permissive.matchCount, 3);
 });
 
+/**
+ * Counts whole-array traversals of the snapshot tree: `for...of` passes through
+ * the iterator, plus any `filter`/`map` scan layered on top of them. Functions
+ * are bound to the target so a counted traversal cannot re-enter the proxy.
+ */
+function observeTreeTraversals(nodes: SnapshotNode[]): {
+  observed: SnapshotNode[];
+  passes: { iterated: number; filter: number; map: number };
+} {
+  const passes = { iterated: 0, filter: 0, map: 0 };
+  const observed = new Proxy(nodes, {
+    get(target, property) {
+      if (property === Symbol.iterator) passes.iterated += 1;
+      if (property === 'filter' || property === 'map') passes[property] += 1;
+      const value = Reflect.get(target, property) as unknown;
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  return { observed, passes };
+}
+
+test('recorded-target resolution reads the tree once per selector alternative', () => {
+  const nodes: SnapshotNode[] = [
+    { ...saveNode, ref: 'e1', label: 'Decoy', identifier: undefined, depth: 1 },
+    { ...saveNode, ref: 'e2', label: 'Decoy', identifier: undefined, depth: 1 },
+    { ...saveNode, ref: 'e4', label: 'Save', identifier: 'save', depth: 1 },
+  ];
+
+  const resolved = observeTreeTraversals(nodes);
+  resolveRecordedTarget('id="missing" || id="save"', resolved.observed, policy());
+  // One pass per alternative tried, and no further pass rebuilding the winner's
+  // matched-node domain that the deciding pass already collected.
+  assert.deepEqual(resolved.passes, { iterated: 2, filter: 0, map: 0 });
+
+  const unresolved = observeTreeTraversals(nodes);
+  resolveRecordedTarget('label="Decoy"', unresolved.observed, policy());
+  // The ambiguous leg reports that same domain instead of re-listing the
+  // chain's matches. The one `map` is the deciding pass's own lazily-built
+  // visibility index, which only ambiguous candidates pay for.
+  assert.deepEqual(unresolved.passes, { iterated: 1, filter: 0, map: 1 });
+});
+
 test('recorded-target resolution applies requireRect to both winner and domain', () => {
   const rectless: SnapshotNode = { ...saveNode, label: 'Ghost row', rect: undefined };
   const required = resolveRecordedTarget('label="Ghost row"', [rectless], policy());

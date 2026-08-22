@@ -4,10 +4,9 @@ import type { DisambiguationTiebreak } from '@agent-device/contracts/interaction
 import type { ReplayDivergenceSuggestionBasis } from '@agent-device/contracts/divergence';
 import { splitIsSelectorArgs, splitSelectorFromArgs } from './arguments.ts';
 import { buildSelectorChainForNode } from './build.ts';
-import { matchesSelector } from './match.ts';
 import { tryParseSelectorChain } from './parse.ts';
 import { selectorResolutionKnobs } from './resolution-policy.ts';
-import { listSelectorChainMatches, resolveSelectorChain } from './resolve.ts';
+import { resolveSelectorChain, resolveSelectorChainDomain } from './resolve.ts';
 
 /**
  * Which selector-bearing positional grammar a replay action uses. `is` puts a
@@ -104,33 +103,32 @@ export function resolveRecordedTarget(
 ): ReplayRecordedTargetResolution {
   const chain = tryParseSelectorChain(expression);
   if (!chain) return { kind: 'unresolved', reason: 'parse-invalid', matchedNodes: [] };
-  const resolved = resolveSelectorChain(nodes, chain, recordedTargetResolutionOptions(policy));
-  if (resolved) {
-    const matchedNodes = nodes.filter((node) => {
-      if (policy.requireRect && !node.rect) return false;
-      return matchesSelector(node, resolved.selector, policy.platform);
-    });
+  // One matching pass answers both legs. The winner's alternative and the
+  // recorded-identity set it must be checked against are the same question
+  // asked of the same tree, so resolution reports the domain it decided over
+  // instead of the caller re-deriving it node by node.
+  const { resolution, matchedNodes } = resolveSelectorChainDomain(
+    nodes,
+    chain,
+    recordedTargetResolutionOptions(policy),
+  );
+  if (resolution) {
     return {
       kind: 'resolved',
-      winner: resolved.node,
+      winner: resolution.node,
       matchedNodes,
       matchCount: matchedNodes.length,
-      ...(resolved.disambiguation
+      ...(resolution.disambiguation
         ? {
             disambiguation: {
-              tiebreak: resolved.disambiguation.tiebreak,
-              matchCount: resolved.disambiguation.matchCount,
-              alternatives: resolved.disambiguation.alternatives,
+              tiebreak: resolution.disambiguation.tiebreak,
+              matchCount: resolution.disambiguation.matchCount,
+              alternatives: resolution.disambiguation.alternatives,
             },
           }
         : {}),
     };
   }
-  const matchList = listSelectorChainMatches(nodes, chain, {
-    platform: policy.platform,
-    requireRect: policy.requireRect,
-  });
-  const matchedNodes = matchList?.matchedNodes ?? [];
   return {
     kind: 'unresolved',
     reason: matchedNodes.length > 0 ? 'ambiguous' : 'no-match',
