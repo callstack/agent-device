@@ -11,10 +11,14 @@ import {
 import {
   bindProviderBackInteractor,
   bindProviderHomeInteractor,
+  bindProviderKeyboardDismissInteractor,
+  bindProviderKeyboardEnterInteractor,
+  bindProviderKeyboardStatusInteractor,
   bindProviderOrientationInteractor,
   bindProviderTvRemoteInteractor,
   backRuntimeOperationFacts,
   homeRuntimeOperationFacts,
+  keyboardRuntimeOperationFacts,
   orientationRuntimeOperationFacts,
   tvRemoteRuntimeOperationFacts,
 } from '@agent-device/contracts/platform';
@@ -37,6 +41,18 @@ const tvRemoteUnavailableAndroid = Object.freeze({
   available: false,
   reason: 'unsupported-device-kind',
   hint: 'tv-remote is supported only on Android TV targets.',
+} as const);
+/**
+ * The retired leaf never routed `keyboard` through provider resolution at all — it dispatched
+ * directly by device platform, bypassing the interactor/provider seam entirely. The Android leg
+ * genuinely carries it (the same `createAndroidInteractor` factory the local family binds); the
+ * iOS leg has no such reuse, so it stays honestly unavailable rather than guessing at untested
+ * provider behavior.
+ */
+const keyboardUnavailableIos = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'Limrun iOS direct sessions do not expose keyboard actions.',
 } as const);
 
 /**
@@ -138,6 +154,50 @@ export function bindLimrunNavigationOperations(
       : {}),
     ...(facts.tvRemote.available
       ? bindProviderTvRemoteInteractor({ device, signal, resolveInteractor })
+      : {}),
+  });
+}
+
+/**
+ * `keyboard` (status/dismiss/enter) shares one cell per session: the Android leg rides the same
+ * interactor factory `limrunNavigationOperationFacts` above describes; the iOS leg has no tested
+ * provider keyboard behavior, so it stays unavailable.
+ */
+export function limrunKeyboardOperationFacts(
+  device: DeviceInfo,
+  liveSessionUnavailable?: RuntimeOperationUnavailability,
+) {
+  const cell =
+    liveSessionUnavailable ?? (device.platform === 'android' ? available : keyboardUnavailableIos);
+  return Object.freeze({
+    ...keyboardRuntimeOperationFacts({ status: cell, dismiss: cell, enter: cell }),
+  });
+}
+
+/** Binds whichever keyboard operations {@link limrunKeyboardOperationFacts} admitted. */
+export function bindLimrunKeyboardOperations(
+  params: Readonly<{
+    device: DeviceInfo;
+    signal: AbortSignal;
+    facts: Readonly<{
+      keyboardStatus: RuntimeOperationUnavailability | { available: true };
+      keyboardDismiss: RuntimeOperationUnavailability | { available: true };
+      keyboardEnter: RuntimeOperationUnavailability | { available: true };
+    }>;
+    getInteractor(device: DeviceInfo, runner?: RunnerContext): Interactor | undefined;
+  }>,
+) {
+  const { device, signal, facts } = params;
+  const resolveInteractor = (runner: RunnerContext) => params.getInteractor(device, runner);
+  return Object.freeze({
+    ...(facts.keyboardStatus.available
+      ? bindProviderKeyboardStatusInteractor({ device, signal, resolveInteractor })
+      : {}),
+    ...(facts.keyboardDismiss.available
+      ? bindProviderKeyboardDismissInteractor({ device, signal, resolveInteractor })
+      : {}),
+    ...(facts.keyboardEnter.available
+      ? bindProviderKeyboardEnterInteractor({ device, signal, resolveInteractor })
       : {}),
   });
 }

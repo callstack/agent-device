@@ -1,4 +1,19 @@
 import { expect, test, vi } from 'vitest';
+
+// `orientation` carries `androidBlockingDialogGuard: true` (like every other generic-route leaf
+// in this migration), so this file's Android device reaching the real request router below hits
+// the real `adb`-backed `ensureNoAndroidBlockingDialogReady` check. Stub the owner-level dialog
+// probe the same way `request-router-android-modal.test.ts` does, so that check short-circuits to
+// "clear" without spawning `adb` — matching the daemon's own real guard seam instead of dodging
+// the device platform this test is named for (#1955 review).
+vi.mock('../../platforms/android/app-lifecycle.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../platforms/android/app-lifecycle.ts')>();
+  return {
+    ...actual,
+    getAndroidBlockingDialogFocus: vi.fn(async () => null),
+  };
+});
+
 import {
   localRuntimeOwner,
   narrowDeviceBinding,
@@ -25,21 +40,14 @@ import {
 } from '../orientation-runtime.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 
-// Apple, not Android: `orientation` carries `androidBlockingDialogGuard: true` (like every
-// other generic-route leaf in this migration), so an `'android'`-platform device reaching the
-// real request router here would hit the real `adb`-backed
-// `ensureNoAndroidBlockingDialogReady` check — unmocked, since this test only stubs the
-// runtime gateway, not the platform ADB layer. On a host with no `adb` binary at all (CI's
-// Coverage job) that subprocess spawn throws instead of failing closed, which is what CI's
-// `orientation-runtime.test.ts` failure actually was (#1955 review) — this fixture's
-// admission/execution facts are fully synthetic regardless of platform, so Apple proves the
-// same wiring without going anywhere near that guard.
+// File-scoped id, not a shared literal: this owner binding's `local-family` kind reaches the
+// real on-disk device-claim admission (`require-owner` policy), so a shared id risks a
+// cross-file claim collision under parallel test-file execution (#1955 review).
 const testDevice = {
   id: 'orientation-runtime-device',
-  name: 'iPhone',
-  platform: 'apple',
-  appleOs: 'ios',
-  kind: 'simulator',
+  name: 'Pixel',
+  platform: 'android',
+  kind: 'emulator',
   target: 'mobile',
   booted: true,
 } as const;
@@ -76,7 +84,7 @@ function runtimeHarness(
   };
   const binding = {
     device: testDevice,
-    owner: localRuntimeOwner('apple'),
+    owner: localRuntimeOwner('android'),
     facts,
     operations: { setOrientation },
     [Symbol.asyncDispose]: async () => {},

@@ -3,8 +3,10 @@ import type { AppsFilter, ProviderPortReverseOptions } from '@agent-device/contr
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
 import {
   bindLimrunInteractionOperations,
+  bindLimrunKeyboardOperations,
   bindLimrunNavigationOperations,
   limrunInteractionOperationFacts,
+  limrunKeyboardOperationFacts,
   limrunNavigationOperationFacts,
 } from './interaction-operations.ts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -35,12 +37,6 @@ import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screens
 import { selectorObservationRuntimeOperationFacts } from '@agent-device/contracts/selector-observation-runtime';
 import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
-import {
-  keyboardRuntimeOperationFacts,
-  bindProviderKeyboardStatusInteractor,
-  bindProviderKeyboardDismissInteractor,
-  bindProviderKeyboardEnterInteractor,
-} from '@agent-device/contracts/platform';
 import {
   createLimrunAppLogEnvelope,
   limrunAppLogDescriptorCodec,
@@ -132,18 +128,6 @@ const prepareUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
   hint: 'Apple runner preparation is unavailable for Limrun-owned devices.',
-} as const);
-/**
- * The retired leaf never routed `keyboard` through provider resolution at all — it dispatched
- * directly by device platform, bypassing the interactor/provider seam entirely. The Android leg
- * genuinely carries it (the same `createAndroidInteractor` factory the local family binds, added
- * in this unit); the iOS leg has no such reuse, so it stays honestly unavailable rather than
- * guessing at untested provider behavior.
- */
-const keyboardUnavailableIos = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Limrun iOS direct sessions do not expose keyboard actions.',
 } as const);
 const iosAppStateUnavailable = Object.freeze({
   available: false,
@@ -411,27 +395,16 @@ function bindLimrunAppLogs(
       },
       getInteractor: options.getInteractor,
     }),
-    ...(runtimeFacts.operations.keyboardStatus.available
-      ? bindProviderKeyboardStatusInteractor({
-          device,
-          signal,
-          resolveInteractor: (runner) => options.getInteractor(device, runner),
-        })
-      : {}),
-    ...(runtimeFacts.operations.keyboardDismiss.available
-      ? bindProviderKeyboardDismissInteractor({
-          device,
-          signal,
-          resolveInteractor: (runner) => options.getInteractor(device, runner),
-        })
-      : {}),
-    ...(runtimeFacts.operations.keyboardEnter.available
-      ? bindProviderKeyboardEnterInteractor({
-          device,
-          signal,
-          resolveInteractor: (runner) => options.getInteractor(device, runner),
-        })
-      : {}),
+    ...bindLimrunKeyboardOperations({
+      device,
+      signal,
+      facts: {
+        keyboardStatus: runtimeFacts.operations.keyboardStatus,
+        keyboardDismiss: runtimeFacts.operations.keyboardDismiss,
+        keyboardEnter: runtimeFacts.operations.keyboardEnter,
+      },
+      getInteractor: options.getInteractor,
+    }),
     ...createLimrunAppDeploymentOperations(
       deploymentOptions(options),
       device,
@@ -474,7 +447,6 @@ function facts(
 ): RuntimeFacts<PlatformRuntimeOperations> {
   const deployment = limrunAppDeploymentFacts(deploymentOptions(options), device);
   const isAndroid = device.platform === 'android';
-  const keyboardFact = isAndroid ? available : keyboardUnavailableIos;
   const customSnapshotFact =
     isIosFamily(device) && device.kind === 'simulator' ? available : customSnapshotUnavailable;
   return Object.freeze({
@@ -518,11 +490,7 @@ function facts(
       ...limrunInteractionOperationFacts(),
       ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementTextUnavailable }),
       ...limrunNavigationOperationFacts(device),
-      ...keyboardRuntimeOperationFacts({
-        status: keyboardFact,
-        dismiss: keyboardFact,
-        enter: keyboardFact,
-      }),
+      ...limrunKeyboardOperationFacts(device),
       ensureReady: available,
       bootTarget: available,
       bootTargetHeadless: headlessUnavailable,
@@ -569,11 +537,7 @@ function recoveryFacts(
       ...viewportRuntimeOperationFacts({ setViewport: liveSessionUnavailable }),
       ...limrunInteractionOperationFacts(liveSessionUnavailable),
       ...limrunNavigationOperationFacts(device, liveSessionUnavailable),
-      ...keyboardRuntimeOperationFacts({
-        status: liveSessionUnavailable,
-        dismiss: liveSessionUnavailable,
-        enter: liveSessionUnavailable,
-      }),
+      ...limrunKeyboardOperationFacts(device, liveSessionUnavailable),
       ensureReady: liveSessionUnavailable,
       bootTarget: liveSessionUnavailable,
       bootTargetHeadless: liveSessionUnavailable,
