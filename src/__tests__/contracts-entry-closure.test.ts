@@ -72,20 +72,23 @@ test('the hubs behind the contracts clump never evaluate either wide facade', ()
 
 test('no source file value-imports the wide contracts facades', () => {
   const offenders: string[] = [];
-  let narrowEntryImports = 0;
+  let typeOnlyImporters = 0;
   for (const file of sourceFiles()) {
-    for (const specifier of eagerlyEvaluatedModules(file, fs.readFileSync(file, 'utf8'))) {
-      if (CLUMP_ENTRIES.includes(specifier as (typeof CLUMP_ENTRIES)[number])) {
-        offenders.push(`${path.relative(repoRoot, file)} -> ${specifier}`);
-      } else if (specifier.startsWith('@agent-device/contracts/')) {
-        narrowEntryImports += 1;
-      }
+    const source = fs.readFileSync(file, 'utf8');
+    // Text-filter before parsing: a file that never names the specifier cannot import
+    // it, and parsing all ~3000 sources costs more than the unit lane's budget allows.
+    const mentions = CLUMP_ENTRIES.filter((entry) => source.includes(`${entry}'`));
+    if (mentions.length === 0) continue;
+    const evaluated = new Set(eagerlyEvaluatedModules(file, source));
+    for (const entry of mentions) {
+      if (evaluated.has(entry)) offenders.push(`${path.relative(repoRoot, file)} -> ${entry}`);
+      else typeOnlyImporters += 1;
     }
   }
 
-  // Non-vacuity: a walker that returned nothing would pass the assertion below while
-  // proving nothing, so require that it still sees the narrow imports that replaced these.
-  expect(narrowEntryImports).toBeGreaterThan(100);
+  // Non-vacuity: an empty offender list also describes a scan that parsed nothing, so
+  // require that the surviving type-only importers were seen and classified as erased.
+  expect(typeOnlyImporters).toBeGreaterThan(300);
   expect(
     offenders.sort(),
     'Value-importing these facades evaluates every module they re-export from. Each of those ' +
