@@ -59,18 +59,16 @@ import { Worker } from 'node:worker_threads';
 import { PNG } from '../../../utils/png.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../types.ts';
 import { SessionStore } from '../../session-store.ts';
-import {
-  makeAndroidSession,
-  makeIosSession,
-} from '../../../__tests__/test-utils/session-factories.ts';
 import { runReplayScriptSource } from '../session-replay-runtime.ts';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import {
   maestroScriptSourceBundleFor,
   replayScriptSourceBundleFor,
 } from '../../../__tests__/test-utils/replay-script-source.ts';
+import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
+import { seedReplayFixtureSession } from './session-replay-runtime.fixtures.ts';
 
 vi.mocked(captureSnapshotWithInteractor).mockImplementation(
   captureSnapshotThroughLegacyDispatchFixture,
@@ -104,7 +102,7 @@ async function runReplayFixture(params: {
   const calls: CapturedInvocation[] = [];
   const invoke = createFixtureInvoke({ calls, delegate: params.invoke, isMaestro });
   const sessionStore = new SessionStore(path.join(root, 'state'));
-  seedFixtureSession(sessionStore, params.sessionPlatform);
+  seedReplayFixtureSession(sessionStore, params.sessionPlatform);
   const scriptSource = isMaestro
     ? await maestroScriptSourceBundleFor(scriptPath)
     : replayScriptSourceBundleFor(scriptPath);
@@ -141,14 +139,6 @@ function createFixtureInvoke(params: {
       ? { ok: true, data: { createdAt: 0, nodes: [] } }
       : { ok: true, data: {} };
   };
-}
-
-function seedFixtureSession(
-  sessionStore: SessionStore,
-  platform: 'android' | 'ios' | undefined,
-): void {
-  if (platform === 'android') sessionStore.set('s', makeAndroidSession('s'));
-  if (platform === 'ios') sessionStore.set('s', makeIosSession('s'));
 }
 
 function fixtureReplayRequest(params: {

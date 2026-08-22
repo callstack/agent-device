@@ -1,6 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {
+  makeAndroidSession,
+  makeIosSession,
+} from '../../../__tests__/test-utils/session-factories.ts';
 import { replayScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
+import type { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest } from '../../types.ts';
 
 export function writeReplayFile(root: string, lines: string[]): string {
@@ -41,4 +46,12 @@ export function baseReplayRequest(overrides: Partial<DaemonRequest> = {}): Daemo
         }
       : {}),
   };
+}
+
+export function seedReplayFixtureSession(
+  sessionStore: SessionStore,
+  platform: 'android' | 'ios' | undefined,
+): void {
+  if (platform === 'android') sessionStore.set('s', makeAndroidSession('s'));
+  if (platform === 'ios') sessionStore.set('s', makeIosSession('s'));
 }
