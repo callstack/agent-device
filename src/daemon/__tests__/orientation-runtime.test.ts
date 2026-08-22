@@ -25,11 +25,21 @@ import {
 } from '../orientation-runtime.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 
-const androidDevice = {
-  id: 'emulator-5554',
-  name: 'Pixel',
-  platform: 'android',
-  kind: 'emulator',
+// Apple, not Android: `orientation` carries `androidBlockingDialogGuard: true` (like every
+// other generic-route leaf in this migration), so an `'android'`-platform device reaching the
+// real request router here would hit the real `adb`-backed
+// `ensureNoAndroidBlockingDialogReady` check — unmocked, since this test only stubs the
+// runtime gateway, not the platform ADB layer. On a host with no `adb` binary at all (CI's
+// Coverage job) that subprocess spawn throws instead of failing closed, which is what CI's
+// `orientation-runtime.test.ts` failure actually was (#1955 review) — this fixture's
+// admission/execution facts are fully synthetic regardless of platform, so Apple proves the
+// same wiring without going anywhere near that guard.
+const testDevice = {
+  id: 'orientation-runtime-device',
+  name: 'iPhone',
+  platform: 'apple',
+  appleOs: 'ios',
+  kind: 'simulator',
   target: 'mobile',
   booted: true,
 } as const;
@@ -43,7 +53,7 @@ function orientationExecutionParams(
   positionals: string[],
   dispatchContext: GenericPlatformExecutionParams['dispatchContext'] = {},
 ): GenericPlatformExecutionParams {
-  const session = makeSession('orientation-runtime', { device: androidDevice });
+  const session = makeSession('orientation-runtime', { device: testDevice });
   return {
     session,
     sessionName: session.name,
@@ -61,12 +71,12 @@ function runtimeHarness(
   setOrientation = vi.fn<() => Promise<SetOrientationResult | void>>(async () => undefined),
 ) {
   const facts: RuntimeFacts<PlatformRuntimeOperations> = {
-    device: { ...deviceShape(androidDevice), providerMode: 'local' },
+    device: { ...deviceShape(testDevice), providerMode: 'local' },
     operations: { setOrientation: fact } as RuntimeFacts<PlatformRuntimeOperations>['operations'],
   };
   const binding = {
-    device: androidDevice,
-    owner: localRuntimeOwner('android'),
+    device: testDevice,
+    owner: localRuntimeOwner('apple'),
     facts,
     operations: { setOrientation },
     [Symbol.asyncDispose]: async () => {},
@@ -98,7 +108,7 @@ test('resolves one admitted binding and reports the owner-observed rotation', as
   );
 
   const resolved = await resolveBoundOrientationRuntime({
-    device: androidDevice,
+    device: testDevice,
     positionals: ['landscape-left'],
     inspectFacts: harness.inspectFacts,
     bindDevice: harness.bindDevice,
@@ -106,7 +116,7 @@ test('resolves one admitted binding and reports the owner-observed rotation', as
 
   expect(resolved.ok).toBe(true);
   if (!resolved.ok) return;
-  expect(harness.bindDevice).toHaveBeenCalledWith(androidDevice, orientationRuntimeUse);
+  expect(harness.bindDevice).toHaveBeenCalledWith(testDevice, orientationRuntimeUse);
   expect(await resolved.execute(orientationExecutionParams(['landscape-left']))).toEqual({
     action: 'orientation',
     orientation: 'landscape-left',
@@ -118,7 +128,7 @@ test('falls back to the requested rotation when the owner reports nothing', asyn
   const harness = runtimeHarness();
 
   const resolved = await resolveBoundOrientationRuntime({
-    device: androidDevice,
+    device: testDevice,
     positionals: ['portrait'],
     inspectFacts: harness.inspectFacts,
     bindDevice: harness.bindDevice,
@@ -137,7 +147,7 @@ test('rejects an invalid rotation before inspection or binding', async () => {
 
   await expect(
     resolveBoundOrientationRuntime({
-      device: androidDevice,
+      device: testDevice,
       positionals: ['sideways'],
       inspectFacts: harness.inspectFacts,
       bindDevice: harness.bindDevice,
@@ -151,7 +161,7 @@ test('rejects an unavailable exact-owner fact before binding', async () => {
   const harness = runtimeHarness(unavailable);
 
   const resolved = await resolveBoundOrientationRuntime({
-    device: androidDevice,
+    device: testDevice,
     positionals: ['landscape-left'],
     inspectFacts: harness.inspectFacts,
     bindDevice: harness.bindDevice,
@@ -177,7 +187,7 @@ test('request router joins orientation admission to execution and ref invalidati
     setOrientation,
   );
   const sessionStore = makeSessionStore('agent-device-orientation-generic-');
-  const session = makeSession('orientation-runtime', { device: androidDevice });
+  const session = makeSession('orientation-runtime', { device: testDevice });
   activateCompleteRefFrame(session);
   sessionStore.set(session.name, session);
   const handler = createRequestHandler({

@@ -18,8 +18,12 @@ import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { resolveBoundKeyboardRuntime } from '../keyboard-runtime.ts';
 
+// File-scoped ids, not the widely shared 'emulator-5554'/'ios-simulator' literals: these owner
+// bindings' `local-family` kind reaches the real on-disk device-claim admission (`require-owner`
+// policy), so a shared id risks a cross-file claim collision under parallel test-file execution
+// (#1955 review).
 const androidDevice: DeviceInfo = {
-  id: 'emulator-5554',
+  id: 'keyboard-runtime-5554',
   name: 'Pixel',
   platform: 'android',
   kind: 'emulator',
@@ -35,7 +39,7 @@ const harmonyDevice: DeviceInfo = {
   booted: true,
 };
 const iosDevice: DeviceInfo = {
-  id: 'ios-simulator',
+  id: 'keyboard-runtime-ios-simulator',
   name: 'iPhone',
   platform: 'apple',
   appleOs: 'ios',
