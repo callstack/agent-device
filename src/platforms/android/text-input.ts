@@ -26,6 +26,7 @@ import {
 } from './fill-verification.ts';
 import {
   clearAndroidImeHelperText,
+  isAndroidImeHelperPackage,
   selectAndroidImeHelperArtifact,
   sendAndroidImeHelperText,
 } from './ime-helper.ts';
@@ -33,6 +34,11 @@ import { isAndroidTestImeActive } from './ime-lifecycle.ts';
 import { focusAndroid } from './input-actions.ts';
 import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
 
+/**
+ * `input text` truncates long strings in some app/IME states (#531), so ASCII is written in short
+ * chunks rather than one command. Do not raise this to buy back spawns — the IME helper's batch
+ * broadcast is the lever for that, and it does not truncate.
+ */
 const ANDROID_INPUT_TEXT_CHUNK_SIZE = 8;
 
 export async function typeAndroid(device: DeviceInfo, text: string, delayMs = 0): Promise<void> {
@@ -43,11 +49,25 @@ export async function typeAndroid(device: DeviceInfo, text: string, delayMs = 0)
     return;
   }
   if (isAndroidTestImeActive(device)) {
-    await typeAndroidTestIme(device, text, delayMs);
+    await typeAndroidImeHelper(
+      device,
+      await activatedAndroidImeHelperPackage(device),
+      text,
+      delayMs,
+    );
     return;
   }
   assertAndroidShellTextSupported(text);
-  await assertAndroidShellInputIsAppOwned(device, 'type');
+  // The shell path needs the input-method read anyway, and it also names the device's active IME.
+  // If that is the helper, its batch channel writes the whole string in one broadcast instead of
+  // ceil(n/8) `input text` spawns — no flag, no IME switch, nothing this process had to arrange.
+  const inputState = await readAndroidShellTextInputState(device, 'type');
+  const helperPackage = androidImeHelperInputMethod(inputState);
+  if (helperPackage) {
+    await typeAndroidImeHelper(device, helperPackage, text, delayMs);
+    return;
+  }
+  assertAndroidShellInputIsAppOwned(inputState, 'type');
   if (delayMs > 0 && Array.from(text).length > 1) {
     await typeAndroidShell(device, { action: 'type', text, chunkSize: 1, delayMs });
     return;
@@ -77,7 +97,15 @@ export async function fillAndroid(
     return completeAndroidFillVerification(text, beforeTarget, verification);
   }
   if (isAndroidTestImeActive(device)) {
-    const verification = await fillAndroidTestIme(device, x, y, text, beforeTarget, helper);
+    const verification = await fillAndroidImeHelper(
+      device,
+      await activatedAndroidImeHelperPackage(device),
+      x,
+      y,
+      text,
+      beforeTarget,
+      helper,
+    );
     return completeAndroidFillVerification(text, beforeTarget, verification);
   }
   assertAndroidShellTextSupported(text);
@@ -110,7 +138,23 @@ export async function fillAndroid(
 
   for (const attempt of attempts) {
     await focusAndroid(device, x, y);
-    await assertAndroidShellInputIsAppOwned(device, 'fill');
+    // Same read, same reason as `typeAndroid`: when the helper is the active IME its channel
+    // replaces both the delete-key clear and the chunked write for the rest of this fill.
+    const inputState = await readAndroidShellTextInputState(device, 'fill');
+    const helperPackage = androidImeHelperInputMethod(inputState);
+    if (helperPackage) {
+      const verification = await fillAndroidImeHelper(
+        device,
+        helperPackage,
+        x,
+        y,
+        text,
+        beforeTarget,
+        helper,
+      );
+      return completeAndroidFillVerification(text, beforeTarget, verification);
+    }
+    assertAndroidShellInputIsAppOwned(inputState, 'fill');
     const clearCount = clampCount(
       textCodePointLength + attempt.clearPadding,
       attempt.minClear,
@@ -136,14 +180,27 @@ export async function fillAndroid(
   return completeAndroidFillVerification(text, beforeTarget, lastVerification);
 }
 
-async function typeAndroidTestIme(
+/**
+ * The helper package this process switched the device to. The observed-IME route reads the package
+ * off the device instead, so it never depends on a packaged artifact being present.
+ */
+async function activatedAndroidImeHelperPackage(device: DeviceInfo): Promise<string> {
+  const artifact = await selectAndroidImeHelperArtifact(resolveAndroidAdbProvider(device));
+  return artifact.manifest.packageName;
+}
+
+function androidImeHelperInputMethod(state: AndroidKeyboardState | null): string | undefined {
+  const packageName = state?.inputMethodPackage;
+  return isAndroidImeHelperPackage(packageName) ? packageName : undefined;
+}
+
+async function typeAndroidImeHelper(
   device: DeviceInfo,
+  packageName: string,
   text: string,
   delayMs: number,
 ): Promise<void> {
   const adb = resolveAndroidAdbExecutor(device);
-  const artifact = await selectAndroidImeHelperArtifact(resolveAndroidAdbProvider(device));
-  const packageName = artifact.manifest.packageName;
   const parts = text.split('\n');
   for (const [partIndex, part] of parts.entries()) {
     const chunks = delayMs > 0 ? chunkAndroidInputText(part, 1) : [part];
@@ -160,8 +217,9 @@ async function typeAndroidTestIme(
   emitAndroidTextDiagnostic('type', 'test-ime', text);
 }
 
-async function fillAndroidTestIme(
+async function fillAndroidImeHelper(
   device: DeviceInfo,
+  packageName: string,
   x: number,
   y: number,
   text: string,
@@ -169,8 +227,6 @@ async function fillAndroidTestIme(
   helper: AndroidHelperSessionOptions,
 ): Promise<AndroidFillVerification> {
   const adb = resolveAndroidAdbExecutor(device);
-  const artifact = await selectAndroidImeHelperArtifact(resolveAndroidAdbProvider(device));
-  const packageName = artifact.manifest.packageName;
   let lastVerification: AndroidFillVerification | null = null;
   // One retry covers the rare not-yet-bound InputConnection right after focus.
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -241,13 +297,17 @@ async function clearFocusedText(device: DeviceInfo, count: number): Promise<void
   }
 }
 
-async function assertAndroidShellInputIsAppOwned(
+/**
+ * Reads the device's input-method state for a text-entry decision, or `null` when the probe itself
+ * fails. A failed probe is not a refusal: the shell path has always continued without this evidence
+ * rather than blocking text entry on a diagnostic read.
+ */
+async function readAndroidShellTextInputState(
   device: DeviceInfo,
   action: AndroidTextInputAction,
-): Promise<void> {
-  let state: AndroidKeyboardState;
+): Promise<AndroidKeyboardState | null> {
   try {
-    state = await getAndroidKeyboardState(device);
+    return await getAndroidKeyboardState(device);
   } catch (error) {
     emitDiagnostic({
       level: 'warn',
@@ -257,9 +317,15 @@ async function assertAndroidShellInputIsAppOwned(
         error: error instanceof Error ? error.message : String(error),
       },
     });
-    return;
+    return null;
   }
-  if (state.inputOwner !== 'ime') return;
+}
+
+function assertAndroidShellInputIsAppOwned(
+  state: AndroidKeyboardState | null,
+  action: AndroidTextInputAction,
+): void {
+  if (!state || state.inputOwner !== 'ime') return;
   throw new AppError(
     'COMMAND_FAILED',
     'KEYBOARD_OVERLAY_BLOCKING: Android text input is blocked because the focused input belongs to the active keyboard/IME.',

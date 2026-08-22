@@ -121,6 +121,16 @@ export function getAndroidImeHelperDeviceKey(device: DeviceInfo): string {
   return `${device.platform}:${device.id}`;
 }
 
+/**
+ * Whether a device's active input method IS this helper. The batch broadcast channel below works
+ * whenever that holds — which is not the same as "this daemon process switched the IME". A crashed
+ * run, a second daemon on the same emulator, or an `open --no-test-ime` onto a device that already
+ * carries the helper all leave the channel available with an empty activation cache.
+ */
+export function isAndroidImeHelperPackage(packageName: string | undefined): boolean {
+  return packageName === ANDROID_IME_HELPER_PACKAGE;
+}
+
 // --- Broadcast text-entry channel -----------------------------------------------------------
 // The IME's receiver requires the WRITE_SECURE_SETTINGS sender permission, which adb shell holds
 // but a co-installed third-party app cannot — that permission gate (not the transport) is the
