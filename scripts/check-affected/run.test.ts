@@ -9,6 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { runCmdSync } from '../../src/utils/exec.ts';
+import { STALE_NODE_MODULES_MESSAGE } from '../../src/utils/lockfile-install-sync.ts';
 import { CHECK_CATALOG } from './checks.ts';
 import { DEFAULT_VITEST_MAX_WORKERS } from '../lib/vitest-concurrency.ts';
 import { selectChecks } from './model.ts';
@@ -246,4 +247,108 @@ test('runChecks leaves coverage to CI and runs capped related tests once', async
     false,
     'the coverage gate is GitHub-authoritative and must not run locally',
   );
+});
+
+test('runChecks fails fast on a stale install before running format or any other check', async () => {
+  const executed: string[][] = [];
+  const execute: CommandExecutor = async (command) => {
+    executed.push(command);
+    return 0;
+  };
+  const plan = selectChecks({
+    changedFiles: ['packages/selectors/src/index.ts'],
+    packageEntryFiles: [],
+  });
+  const code = await runChecks(plan, { scripts: ALL_SCRIPTS }, ARGS, {
+    execute,
+    cwd: '.',
+    checkLockfileSync: () => ({ inSync: false, reason: 'stale' }),
+  });
+  assert.equal(code, 1);
+  assert.deepEqual(executed, [], 'no check — including format — may run against a stale install');
+});
+
+test('runChecks fails fast when node_modules was never installed in this checkout', async () => {
+  const executed: string[][] = [];
+  const execute: CommandExecutor = async (command) => {
+    executed.push(command);
+    return 0;
+  };
+  const plan = selectChecks({
+    changedFiles: ['packages/selectors/src/index.ts'],
+    packageEntryFiles: [],
+  });
+  const code = await runChecks(plan, { scripts: ALL_SCRIPTS }, ARGS, {
+    execute,
+    cwd: '.',
+    checkLockfileSync: () => ({ inSync: false, reason: 'install-missing' }),
+  });
+  assert.equal(code, 1);
+  assert.deepEqual(executed, []);
+});
+
+test('runChecks does not block on a missing lockfile — that is a different failure than a stale install', async () => {
+  const executed: string[][] = [];
+  const execute: CommandExecutor = async (command) => {
+    executed.push(command);
+    return 0;
+  };
+  const plan = selectChecks({
+    changedFiles: ['packages/selectors/src/index.ts'],
+    packageEntryFiles: [],
+  });
+  const code = await runChecks(plan, { scripts: ALL_SCRIPTS }, ARGS, {
+    execute,
+    cwd: '.',
+    checkLockfileSync: () => ({ inSync: false, reason: 'lockfile-missing' }),
+  });
+  assert.equal(code, 0);
+  assert.ok(executed.length > 0, 'checks still run when there is nothing to compare against');
+});
+
+test('runChecks proceeds normally when the install is in sync', async () => {
+  const executed: string[][] = [];
+  const execute: CommandExecutor = async (command) => {
+    executed.push(command);
+    return 0;
+  };
+  const plan = selectChecks({
+    changedFiles: ['packages/selectors/src/index.ts'],
+    packageEntryFiles: [],
+  });
+  const code = await runChecks(plan, { scripts: ALL_SCRIPTS }, ARGS, {
+    execute,
+    cwd: '.',
+    checkLockfileSync: () => ({ inSync: true }),
+  });
+  assert.equal(code, 0);
+  assert.ok(executed.some((command) => command.includes('format:check')));
+});
+
+test('runChecks names the real cause on stderr instead of surfacing as an unrelated failure', async () => {
+  const stderrChunks: string[] = [];
+  const originalWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    stderrChunks.push(chunk.toString());
+    return true;
+  }) as typeof process.stderr.write;
+
+  try {
+    const plan = selectChecks({
+      changedFiles: ['packages/selectors/src/index.ts'],
+      packageEntryFiles: [],
+    });
+    const code = await runChecks(plan, { scripts: ALL_SCRIPTS }, ARGS, {
+      execute: async () => 0,
+      cwd: '.',
+      checkLockfileSync: () => ({ inSync: false, reason: 'stale' }),
+    });
+    assert.equal(code, 1);
+    assert.ok(
+      stderrChunks.some((chunk) => chunk.includes(STALE_NODE_MODULES_MESSAGE)),
+      `expected stderr to name the stale-install cause, got: ${stderrChunks.join('')}`,
+    );
+  } finally {
+    process.stderr.write = originalWrite;
+  }
 });

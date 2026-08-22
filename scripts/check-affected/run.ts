@@ -9,6 +9,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runCmdStreaming, runCmdSync } from '../../src/utils/exec.ts';
+import {
+  checkLockfileInstallSync,
+  STALE_NODE_MODULES_MESSAGE,
+  type LockfileInstallSyncResult,
+} from '../../src/utils/lockfile-install-sync.ts';
 import { parseScriptArgs } from '../lib/cli-args.ts';
 import { runEntrypoint } from '../lib/cli-entrypoint.ts';
 import {
@@ -184,9 +189,24 @@ export async function runChecks(
   plan: CheckPlan,
   pkg: PackageJson,
   args: Args,
-  options: { cwd?: string; execute?: CommandExecutor; changedFiles?: readonly string[] } = {},
+  options: {
+    cwd?: string;
+    execute?: CommandExecutor;
+    changedFiles?: readonly string[];
+    checkLockfileSync?: (cwd: string) => LockfileInstallSyncResult;
+  } = {},
 ): Promise<number> {
   const cwd = options.cwd ?? repoRoot;
+  const checkLockfileSync = options.checkLockfileSync ?? checkLockfileInstallSync;
+  // Fast preflight, before format (first in the catalog) or any other check gets a
+  // chance to run: a stale install (#1956) makes oxfmt/oxlint/tsc misbehave in ways
+  // that look like real diffs/failures on files the change never touched. Naming the
+  // real cause here means an agent never "fixes" formatting that was never wrong.
+  const lockfileSync = checkLockfileSync(cwd);
+  if (!lockfileSync.inSync && lockfileSync.reason !== 'lockfile-missing') {
+    reportStaleInstall(lockfileSync.reason);
+    return 1;
+  }
   const execute = options.execute ?? streamingExecutor;
   const runnable = plan.checks.map(getCheckSpec).filter((spec: CheckSpec) => spec.localRunnable);
   const skipped = plan.checks.map(getCheckSpec).filter((spec: CheckSpec) => !spec.localRunnable);
@@ -210,6 +230,16 @@ export async function runChecks(
   }
   process.stdout.write('\ncheck:affected: all runnable checks passed.\n');
   return 0;
+}
+
+function reportStaleInstall(reason: 'install-missing' | 'stale'): void {
+  process.stderr.write(`\ncheck:affected: ${STALE_NODE_MODULES_MESSAGE}\n`);
+  process.stderr.write(
+    reason === 'install-missing'
+      ? '(no node_modules/.pnpm/lock.yaml found — this checkout was never installed)\n'
+      : '(node_modules/.pnpm/lock.yaml disagrees with pnpm-lock.yaml)\n',
+  );
+  process.stderr.write('Run `agent-device doctor` for more detail.\n');
 }
 
 // Where a check the local run skips is authoritative. A parked check has no automatic

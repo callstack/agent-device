@@ -15,6 +15,7 @@ import {
   resolveDoctorDeviceForAppCheck,
 } from './session-doctor-device.ts';
 import { probeMetro } from './session-doctor-metro.ts';
+import { nodeModulesLockfileCheck } from './session-doctor-node-modules.ts';
 import {
   readDoctorOptions,
   remoteConnectionChecks,
@@ -65,6 +66,7 @@ export async function handleDoctorCommand(params: {
       summary: `agent-device ${readVersion()} using ${stateDir}`,
       evidence: { version: readVersion(), stateDir },
     },
+    nodeModulesLockfileCheck(),
     ...remoteConnectionChecks(req, { required: options.remote }),
     ...sessionChecks(sessionStore, sessionName, session, { remote: options.remote }),
   );
