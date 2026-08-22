@@ -274,7 +274,12 @@ const GENERIC_MUTATING_COMMAND_TRAITS = {
   batchable: true,
 } as const satisfies Pick<
   Extract<CommandDescriptor, { recordsSessionAction: true }>,
-  'recordsSessionAction' | 'recordingEffect' | 'deviceClaimPolicy' | 'daemon' | 'timeoutPolicy' | 'batchable'
+  | 'recordsSessionAction'
+  | 'recordingEffect'
+  | 'deviceClaimPolicy'
+  | 'daemon'
+  | 'timeoutPolicy'
+  | 'batchable'
 >;
 
 /**

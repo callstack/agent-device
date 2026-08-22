@@ -1,12 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import {
-  bindLocalBackInteractor,
-  bindProviderBackInteractor,
-} from './back-runtime.ts';
-import {
-  bindLocalHomeInteractor,
-  bindProviderHomeInteractor,
-} from './home-runtime.ts';
+import { bindLocalBackInteractor, bindProviderBackInteractor } from './back-runtime.ts';
+import { bindLocalHomeInteractor, bindProviderHomeInteractor } from './home-runtime.ts';
 import {
   bindLocalKeyboardDismissInteractor,
   bindLocalKeyboardEnterInteractor,
@@ -58,7 +52,10 @@ type ProviderBinderParams = Readonly<{
 }>;
 
 const LOCAL_BINDERS: Readonly<
-  Record<NavigationInteractorOperation, (params: LocalBinderParams) => Partial<PlatformRuntimeOperations>>
+  Record<
+    NavigationInteractorOperation,
+    (params: LocalBinderParams) => Partial<PlatformRuntimeOperations>
+  >
 > = Object.freeze({
   back: bindLocalBackInteractor,
   home: bindLocalHomeInteractor,
@@ -91,15 +88,22 @@ const PROVIDER_BINDERS: Readonly<
  * `limrunNavigationOperationFacts`), that flat map directly — which may cover only the subset of
  * operations the owner admits at all, so a missing key here is simply never bindable.
  */
-type NavigationOperationFacts = Readonly<Partial<Record<NavigationInteractorOperation, RuntimeOperationFact>>>;
+type NavigationOperationFacts = Readonly<
+  Partial<Record<NavigationInteractorOperation, RuntimeOperationFact>>
+>;
 
 /** Walks the requested operations against one binder table, binding each the facts admitted. */
 function bindAdmittedInteractorOperations<Resolver>(
-  binders: Readonly<Record<NavigationInteractorOperation, (params: {
-    device: DeviceInfo;
-    signal: AbortSignal;
-    resolveInteractor: Resolver;
-  }) => Partial<PlatformRuntimeOperations>>>,
+  binders: Readonly<
+    Record<
+      NavigationInteractorOperation,
+      (params: {
+        device: DeviceInfo;
+        signal: AbortSignal;
+        resolveInteractor: Resolver;
+      }) => Partial<PlatformRuntimeOperations>
+    >
+  >,
   params: Readonly<{
     device: DeviceInfo;
     signal: AbortSignal;

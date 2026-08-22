@@ -96,7 +96,9 @@ async function admitKeyboardAction<
   request: Omit<RuntimeAdmissionRequest, 'required'> &
     Readonly<{ use: RuntimeUse<PlatformRuntimeOperations, Required, Preferred, Conditional> }>,
   execute: (
-    runtime: BoundDeviceRuntime<RuntimeUse<PlatformRuntimeOperations, Required, Preferred, Conditional>>,
+    runtime: BoundDeviceRuntime<
+      RuntimeUse<PlatformRuntimeOperations, Required, Preferred, Conditional>
+    >,
     context: DaemonCommandContext,
   ) => Promise<Record<string, unknown> | void>,
 ): Promise<ResolvedKeyboardExecution> {

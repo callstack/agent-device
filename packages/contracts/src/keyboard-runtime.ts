@@ -100,50 +100,59 @@ async function resolveKeyboardInteractor(
   });
 }
 
-function bindKeyboardStatus(
-  signal: AbortSignal,
-  resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
-): KeyboardStatusRuntimeOperations {
-  return Object.freeze({
-    keyboardStatus: async (input: KeyboardActionInput) => {
-      const interactor = await resolveKeyboardInteractor(signal, resolveInteractor, input);
-      return await requireKeyboardMethod(interactor.keyboardStatus, 'keyboard status').call(
-        interactor,
-      );
-    },
-  });
-}
+const KEYBOARD_ACTION_LABELS = {
+  keyboardStatus: 'keyboard status',
+  keyboardDismiss: 'keyboard dismiss',
+  keyboardEnter: 'keyboard enter',
+} as const satisfies Record<keyof KeyboardRuntimeOperations, string>;
 
-function bindKeyboardDismiss(
+/**
+ * Binds whichever keyboard action `key` names against one resolved interactor. The three actions
+ * differ only by which `Interactor` method they call and what it returns — both read off `key`
+ * itself, so one generic body replaces three copies that differed by nothing else.
+ */
+function bindKeyboardAction<Key extends keyof KeyboardRuntimeOperations>(
+  key: Key,
   signal: AbortSignal,
   resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
-): KeyboardDismissRuntimeOperations {
-  return Object.freeze({
-    keyboardDismiss: async (input: KeyboardActionInput) => {
-      const interactor = await resolveKeyboardInteractor(signal, resolveInteractor, input);
-      return await requireKeyboardMethod(interactor.keyboardDismiss, 'keyboard dismiss').call(
-        interactor,
-      );
-    },
-  });
-}
-
-function bindKeyboardEnter(
-  signal: AbortSignal,
-  resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
-): KeyboardEnterRuntimeOperations {
-  return Object.freeze({
-    keyboardEnter: async (input: KeyboardActionInput) => {
-      const interactor = await resolveKeyboardInteractor(signal, resolveInteractor, input);
-      return await requireKeyboardMethod(interactor.keyboardEnter, 'keyboard enter').call(
-        interactor,
-      );
-    },
-  });
+): Pick<KeyboardRuntimeOperations, Key> {
+  const action = async (input: KeyboardActionInput) => {
+    const interactor = await resolveKeyboardInteractor(signal, resolveInteractor, input);
+    const method = requireKeyboardMethod(interactor[key], KEYBOARD_ACTION_LABELS[key]);
+    return await (method as () => Promise<unknown>).call(interactor);
+  };
+  return Object.freeze({ [key]: action }) as Pick<KeyboardRuntimeOperations, Key>;
 }
 
 export type LocalKeyboardInteractorResolver = LocalInteractorOperationResolver;
 export type ProviderKeyboardInteractorResolver = ProviderInteractorOperationResolver;
+
+function bindLocalKeyboardAction<Key extends keyof KeyboardRuntimeOperations>(
+  key: Key,
+  params: Readonly<{
+    device: DeviceInfo;
+    signal: AbortSignal;
+    resolveInteractor: LocalKeyboardInteractorResolver;
+  }>,
+): Pick<KeyboardRuntimeOperations, Key> {
+  return bindKeyboardAction(key, params.signal, localInteractorSource(params));
+}
+
+/** Provider bindings fail closed when their exact owner no longer exposes its interactor. */
+function bindProviderKeyboardAction<Key extends keyof KeyboardRuntimeOperations>(
+  key: Key,
+  params: Readonly<{
+    device: DeviceInfo;
+    signal: AbortSignal;
+    resolveInteractor: ProviderKeyboardInteractorResolver;
+  }>,
+): Pick<KeyboardRuntimeOperations, Key> {
+  return bindKeyboardAction(
+    key,
+    params.signal,
+    providerInteractorSource({ ...params, operation: KEYBOARD_ACTION_LABELS[key] }),
+  );
+}
 
 export function bindLocalKeyboardStatusInteractor(
   params: Readonly<{
@@ -152,10 +161,9 @@ export function bindLocalKeyboardStatusInteractor(
     resolveInteractor: LocalKeyboardInteractorResolver;
   }>,
 ): KeyboardStatusRuntimeOperations {
-  return bindKeyboardStatus(params.signal, localInteractorSource(params));
+  return bindLocalKeyboardAction('keyboardStatus', params);
 }
 
-/** Provider bindings fail closed when their exact owner no longer exposes its interactor. */
 export function bindProviderKeyboardStatusInteractor(
   params: Readonly<{
     device: DeviceInfo;
@@ -163,10 +171,7 @@ export function bindProviderKeyboardStatusInteractor(
     resolveInteractor: ProviderKeyboardInteractorResolver;
   }>,
 ): KeyboardStatusRuntimeOperations {
-  return bindKeyboardStatus(
-    params.signal,
-    providerInteractorSource({ ...params, operation: 'keyboard status' }),
-  );
+  return bindProviderKeyboardAction('keyboardStatus', params);
 }
 
 export function bindLocalKeyboardDismissInteractor(
@@ -176,10 +181,9 @@ export function bindLocalKeyboardDismissInteractor(
     resolveInteractor: LocalKeyboardInteractorResolver;
   }>,
 ): KeyboardDismissRuntimeOperations {
-  return bindKeyboardDismiss(params.signal, localInteractorSource(params));
+  return bindLocalKeyboardAction('keyboardDismiss', params);
 }
 
-/** Provider bindings fail closed when their exact owner no longer exposes its interactor. */
 export function bindProviderKeyboardDismissInteractor(
   params: Readonly<{
     device: DeviceInfo;
@@ -187,10 +191,7 @@ export function bindProviderKeyboardDismissInteractor(
     resolveInteractor: ProviderKeyboardInteractorResolver;
   }>,
 ): KeyboardDismissRuntimeOperations {
-  return bindKeyboardDismiss(
-    params.signal,
-    providerInteractorSource({ ...params, operation: 'keyboard dismiss' }),
-  );
+  return bindProviderKeyboardAction('keyboardDismiss', params);
 }
 
 export function bindLocalKeyboardEnterInteractor(
@@ -200,10 +201,9 @@ export function bindLocalKeyboardEnterInteractor(
     resolveInteractor: LocalKeyboardInteractorResolver;
   }>,
 ): KeyboardEnterRuntimeOperations {
-  return bindKeyboardEnter(params.signal, localInteractorSource(params));
+  return bindLocalKeyboardAction('keyboardEnter', params);
 }
 
-/** Provider bindings fail closed when their exact owner no longer exposes its interactor. */
 export function bindProviderKeyboardEnterInteractor(
   params: Readonly<{
     device: DeviceInfo;
@@ -211,8 +211,5 @@ export function bindProviderKeyboardEnterInteractor(
     resolveInteractor: ProviderKeyboardInteractorResolver;
   }>,
 ): KeyboardEnterRuntimeOperations {
-  return bindKeyboardEnter(
-    params.signal,
-    providerInteractorSource({ ...params, operation: 'keyboard enter' }),
-  );
+  return bindProviderKeyboardAction('keyboardEnter', params);
 }
