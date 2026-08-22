@@ -20,7 +20,10 @@ export function resolveVitestMaxWorkers(env: NodeJS.ProcessEnv = process.env): n
   const override = parsePositiveInt(env[VITEST_MAX_WORKERS_OVERRIDE_ENV]);
   // Clamp rather than trust the override literally: a typo like `999` must not
   // oversubscribe the host the way the default cap above exists to prevent.
-  if (override !== undefined) return Math.min(override, os.cpus().length);
+  // availableParallelism(), not cpus().length: Node documents the latter as
+  // unfit for sizing parallelism because it ignores CPU affinity and cgroup
+  // limits, which would inflate the ceiling this clamp exists to enforce.
+  if (override !== undefined) return Math.min(override, os.availableParallelism());
 
   return DEFAULT_VITEST_MAX_WORKERS;
 }

@@ -18,16 +18,18 @@ test('CI ignores the override even when both signals are present', () => {
   );
 });
 
-test('a valid override below the core count is honored as-is', () => {
-  // Below any real host's core count, so the resolver takes the override
-  // branch rather than clamping it back down.
+test('a valid override within the available parallelism is honored as-is', () => {
+  // 1 is <= availableParallelism() on every host, so the resolver takes the
+  // override branch rather than clamping it back down.
   assert.equal(resolveVitestMaxWorkers({ [VITEST_MAX_WORKERS_OVERRIDE_ENV]: '1' }), 1);
 });
 
-test('an override above the available core count is clamped down to it', () => {
+// availableParallelism() is the clamp ceiling on purpose: it honors CPU affinity
+// and cgroup limits that cpus().length reports straight past.
+test('an override above the available parallelism is clamped down to it', () => {
   assert.equal(
     resolveVitestMaxWorkers({ [VITEST_MAX_WORKERS_OVERRIDE_ENV]: '999' }),
-    os.cpus().length,
+    os.availableParallelism(),
   );
 });
 
