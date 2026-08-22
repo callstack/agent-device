@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { walkFiles } from '../../scripts/lib/walk-files.ts';
-import { runCmdSync } from '../utils/exec.ts';
+import { walkFiles } from '../lib/walk-files.ts';
+import { runCmdSync } from '../../src/utils/exec.ts';
 
 /**
  * Test-file size ratchet (AGENTS.md "Scope & shape": past 1,000 lines is architecture debt,

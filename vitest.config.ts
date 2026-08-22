@@ -73,6 +73,13 @@ export default defineConfig({
             'scripts/__tests__/help-conformance-expectation-falsification.test.ts',
             'scripts/__tests__/help-conformance-sample-outputs.test.ts',
             'scripts/__tests__/help-conformance-topic-coverage.test.ts',
+            // Lives here rather than under src/ on purpose: it measures the repository's own
+            // files and git history, which Stryker's sandbox copy cannot answer (the copies are
+            // rewritten, and there is no origin/main). The mutation lane admits only root/package
+            // `src` tests, so this address makes it unreachable there by construction instead of
+            // by a classifier that has to recognise it — see KERNEL_TEST_FILE_RE in
+            // scripts/mutation/modules.ts.
+            'scripts/__tests__/test-file-size-ratchet.test.ts',
             'scripts/__tests__/agent-setup-startup-contract.test.ts',
             'scripts/__tests__/npm-skills-exclusion.test.ts',
             'scripts/__tests__/simulator-skills-contract.test.ts',
