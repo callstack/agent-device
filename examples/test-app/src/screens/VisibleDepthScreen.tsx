@@ -14,11 +14,7 @@ export function VisibleDepthScreen() {
 
   return (
     <View accessible={false} style={styles.frame}>
-      <View
-        accessible={false}
-        style={styles.clippedParent}
-        testID="visible-depth-clipped-parent"
-      >
+      <View accessible={false} style={styles.clippedParent} testID="visible-depth-clipped-parent">
         <Pressable
           accessibilityRole="button"
           style={styles.projectedChild}

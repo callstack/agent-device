@@ -63,11 +63,14 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
   ]);
   assertSnapshotBackend(rawFull, 'full raw visible-depth snapshot');
   const rawFullNodes = snapshotNodes(rawFull);
-  requireIdentifier(rawFullNodes, PARENT_ID, 'full raw visible-depth snapshot');
   const rawChild = requireIdentifier(rawFullNodes, CHILD_ID, 'full raw visible-depth snapshot');
   assert.ok(
     numericDepth(rawChild) > 1,
     `raw projected child must remain below traversal depth 1: ${JSON.stringify(rawFull)}`,
+  );
+  assert.ok(
+    hasAncestorIdentifier(rawFullNodes, rawChild, PARENT_ID),
+    `raw projected child must descend from the clipped structural parent: ${JSON.stringify(rawFull)}`,
   );
 
   const rawDepthOne = await runStep(context, 'capture raw depth-bounded visible-depth tree', [
@@ -132,6 +135,30 @@ function numericDepth(node: SnapshotNode): number {
     `snapshot node has no numeric depth: ${JSON.stringify(node)}`,
   );
   return node.depth as number;
+}
+
+function hasAncestorIdentifier(
+  nodes: SnapshotNode[],
+  node: SnapshotNode,
+  identifier: string,
+): boolean {
+  const nodesByIndex = new Map(
+    nodes
+      .filter((candidate) => typeof candidate.index === 'number')
+      .map((candidate) => [candidate.index as number, candidate] as const),
+  );
+  const visited = new Set<number>();
+  let parentIndex = node.parentIndex;
+
+  while (typeof parentIndex === 'number' && !visited.has(parentIndex)) {
+    visited.add(parentIndex);
+    const parent = nodesByIndex.get(parentIndex);
+    if (!parent) return false;
+    if (parent.identifier === identifier) return true;
+    parentIndex = parent.parentIndex;
+  }
+
+  return false;
 }
 
 function assertSnapshotBackend(result: { json?: any }, description: string): void {
