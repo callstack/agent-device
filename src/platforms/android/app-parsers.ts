@@ -38,10 +38,26 @@ export function parseAndroidUserInstalledPackages(stdout: string): string[] {
     .filter(Boolean);
 }
 
-export function parseAndroidBlockingDialogFocus(text: string): AndroidBlockingDialogFocus | null {
-  return parseAndroidFocusSegment(text, (segment, raw) =>
-    parseAndroidBlockingDialogFromSegment(segment, raw),
-  );
+/**
+ * What one window dump can say about a blocking system dialog.
+ *
+ * `focusObserved` separates "this dump does not show a blocking dialog" from "this dump does not
+ * show the focused window at all". Only the second is a miss worth spending another `dumpsys`
+ * variant on: a dump that names the focused window and no ANR title has already answered the
+ * question. The marker order itself is unchanged (#1832).
+ */
+export type AndroidBlockingDialogRead = {
+  focusObserved: boolean;
+  focus: AndroidBlockingDialogFocus | null;
+};
+
+export function readAndroidBlockingDialogFocus(text: string): AndroidBlockingDialogRead {
+  let focusObserved = false;
+  const focus = parseAndroidFocusSegment(text, (segment, raw) => {
+    focusObserved = true;
+    return parseAndroidBlockingDialogFromSegment(segment, raw);
+  });
+  return { focusObserved, focus };
 }
 
 function parseAndroidFocusSegment<T>(

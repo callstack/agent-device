@@ -34,9 +34,9 @@ vi.mock('../../../platforms/android/input-actions.ts', async (importOriginal) =>
   return { ...actual, getAndroidScreenSize: vi.fn(async () => ({ width: 1344, height: 2992 })) };
 });
 
-vi.mock('../../../platforms/android/app-lifecycle.ts', async (importOriginal) => {
+vi.mock('../../../platforms/android/window-state.ts', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../../platforms/android/app-lifecycle.ts')>();
+    await importOriginal<typeof import('../../../platforms/android/window-state.ts')>();
   return {
     ...actual,
     getAndroidAppState: vi.fn(async () => ({})),
@@ -65,7 +65,7 @@ vi.mock('../../android-system-dialog.ts', async (importOriginal) => {
 import {
   getAndroidAppState,
   getAndroidBlockingDialogFocus,
-} from '../../../platforms/android/app-lifecycle.ts';
+} from '../../../platforms/android/window-state.ts';
 import { getAndroidScreenSize } from '../../../platforms/android/input-actions.ts';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);

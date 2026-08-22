@@ -19,13 +19,10 @@ import {
   resolveAndroidApp,
 } from './app-deployment-resolution.ts';
 import {
-  parseAndroidBlockingDialogFocus,
   parseAndroidLaunchablePackages,
   parseAndroidUserInstalledPackages,
-  type AndroidBlockingDialogFocus,
 } from './app-parsers.ts';
-
-export type { AndroidBlockingDialogFocus } from './app-parsers.ts';
+import { getAndroidAppState } from './window-state.ts';
 
 const ANDROID_LAUNCHER_CATEGORY = 'android.intent.category.LAUNCHER';
 const ANDROID_LEANBACK_CATEGORY = 'android.intent.category.LEANBACK_LAUNCHER';
@@ -36,14 +33,6 @@ const ANDROID_CLOSE_FOCUS_POLL_MS = 50;
 const ANDROID_CLOSE_PROCESS_TIMEOUT_MS = 2_000;
 const ANDROID_CLOSE_PROCESS_POLL_MS = 50;
 const ANDROID_CLOSE_PROCESS_GONE_STABLE_MS = 150;
-const ANDROID_FOREGROUND_COMMANDS = [
-  ['shell', 'dumpsys', 'window', 'windows'],
-  ['shell', 'dumpsys', 'window'],
-  ['shell', 'dumpsys', 'activity', 'activities'],
-  ['shell', 'dumpsys', 'activity'],
-] as const;
-const ANDROID_FOCUS_LINE =
-  /(?:(mCurrentFocus=Window\{)|(mFocusedApp=AppWindowToken\{)|(mResumedActivity:)|(ResumedActivity:))(.*)$/gm;
 
 export async function listAndroidApps(
   device: DeviceInfo,
@@ -112,36 +101,6 @@ function resolveAndroidLaunchCategories(
 async function listAndroidUserInstalledPackages(device: DeviceInfo): Promise<string[]> {
   const result = await runAndroidAdb(device, ['shell', 'pm', 'list', 'packages', '-3']);
   return parseAndroidUserInstalledPackages(result.stdout);
-}
-
-export async function getAndroidAppState(device: DeviceInfo): Promise<AppStateRuntimeResult> {
-  for (const args of ANDROID_FOREGROUND_COMMANDS) {
-    const result = await runAndroidAdb(device, [...args], { allowFailure: true });
-    const state = parseLegacyAndroidForegroundApp(result.stdout ?? '');
-    if (state) return state;
-  }
-  return {};
-}
-
-export async function getAndroidBlockingDialogFocus(
-  device: DeviceInfo,
-): Promise<AndroidBlockingDialogFocus | null> {
-  return await readAndroidBlockingDialogFocus(device, [
-    ['shell', 'dumpsys', 'window', 'windows'],
-    ['shell', 'dumpsys', 'window'],
-  ]);
-}
-
-async function readAndroidBlockingDialogFocus(
-  device: DeviceInfo,
-  commands: string[][],
-): Promise<AndroidBlockingDialogFocus | null> {
-  for (const args of commands) {
-    const result = await runAndroidAdb(device, args, { allowFailure: true });
-    const parsed = parseAndroidBlockingDialogFocus(result.stdout ?? '');
-    if (parsed) return parsed;
-  }
-  return null;
 }
 
 function androidLocalhostReverseEndpoint(target: string): AndroidPortReverseEndpoint | null {
@@ -563,19 +522,6 @@ async function waitForAndroidPackageNotForeground(
 async function readAndroidForegroundApp(device: DeviceInfo): Promise<AppStateRuntimeResult | null> {
   const foreground = await getAndroidAppState(device);
   return foreground.package ? foreground : null;
-}
-
-function parseLegacyAndroidForegroundApp(text: string): AppStateRuntimeResult | null {
-  for (const match of text.matchAll(ANDROID_FOCUS_LINE)) {
-    const segment = match[5];
-    const component = segment?.match(
-      /\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\/([A-Za-z0-9_.$]+)/,
-    );
-    if (component?.[1] && component[2]) {
-      return { package: component[1], activity: component[2] };
-    }
-  }
-  return null;
 }
 
 async function waitForAndroidPackageProcessGone(

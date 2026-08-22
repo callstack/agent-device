@@ -1,9 +1,14 @@
+import { openAndroidApp } from '../platforms/android/app-lifecycle.ts';
+import type { AndroidBlockingDialogFocus } from '../platforms/android/app-parsers.ts';
 import {
+  createAndroidWindowDumpReader,
   getAndroidAppState,
   getAndroidBlockingDialogFocus,
-  openAndroidApp,
-  type AndroidBlockingDialogFocus,
-} from '../platforms/android/app-lifecycle.ts';
+} from '../platforms/android/window-state.ts';
+import {
+  isAndroidDialogReadinessObserved,
+  recordAndroidDialogReadinessObservation,
+} from './android-dialog-readiness-observation.ts';
 import { snapshotAndroid } from '../platforms/android/snapshot.ts';
 import { androidSnapshotPublicationInput } from '../platforms/android/snapshot-capture.ts';
 import { runAndroidAdb } from '../platforms/android/adb.ts';
@@ -158,9 +163,15 @@ export async function ensureAndroidBlockingSystemDialogReady(params: {
 }): Promise<AndroidBlockingDialogReadinessResult> {
   const { session, command } = params;
   if (session.device.platform !== 'android') return { status: 'clear' };
+  if (params.phase === 'before-command' && isAndroidDialogReadinessObserved(session)) {
+    return { status: 'clear' };
+  }
 
   const focus = await getAndroidBlockingDialogFocus(session.device);
-  if (!focus) return { status: 'clear' };
+  if (!focus) {
+    if (params.phase === 'after-command') recordAndroidDialogReadinessObservation(session);
+    return { status: 'clear' };
+  }
 
   if (isSessionAppAnr(session, focus)) {
     const recovered = await recoverAppOwnedAndroidBlockingSystemDialogSafely(session);
@@ -375,15 +386,24 @@ async function waitForAndroidAppFocus(
   return await isAndroidAppFocused(session, appBundleId, options);
 }
 
+/**
+ * One window read per poll tick answers both questions this asks, so the loop samples the device
+ * once instead of running a dialog probe and a foreground probe an adb round trip apart — which
+ * could otherwise report a package read after the dialog check that saw a different screen.
+ */
 async function isAndroidAppFocused(
   session: SessionState,
   appBundleId: string,
   options: { requireNoBlockingDialog?: boolean },
 ): Promise<boolean> {
-  if (options.requireNoBlockingDialog && (await getAndroidBlockingDialogFocus(session.device))) {
+  const readWindowDump = createAndroidWindowDumpReader(session.device);
+  if (
+    options.requireNoBlockingDialog &&
+    (await getAndroidBlockingDialogFocus(session.device, readWindowDump))
+  ) {
     return false;
   }
-  const state = await getAndroidAppState(session.device);
+  const state = await getAndroidAppState(session.device, readWindowDump);
   return state.package === appBundleId;
 }
 

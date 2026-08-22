@@ -203,7 +203,7 @@ export async function inferAndroidPackageAfterOpen(
     return currentAppBundleId;
   }
   try {
-    const { getAndroidAppState } = await import('./platforms/android/app-lifecycle.ts');
+    const { getAndroidAppState } = await import('./platforms/android/window-state.ts');
     const foreground = await getAndroidAppState(device);
     return foreground.package?.trim() || currentAppBundleId;
   } catch {

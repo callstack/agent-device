@@ -1,4 +1,4 @@
-import { getAndroidAppState } from '../../platforms/android/app-lifecycle.ts';
+import { getAndroidAppState } from '../../platforms/android/window-state.ts';
 import { isAndroidPermissionPackage } from '../../platforms/android/alert-detection.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { SessionState } from '../types.ts';

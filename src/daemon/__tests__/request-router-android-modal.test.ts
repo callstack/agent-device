@@ -87,9 +87,13 @@ vi.mock('../../platforms/android/snapshot.ts', async (importOriginal) => {
 
 vi.mock('../../platforms/android/app-lifecycle.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../platforms/android/app-lifecycle.ts')>();
+  return { ...actual, openAndroidApp: vi.fn(async () => {}) };
+});
+
+vi.mock('../../platforms/android/window-state.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../platforms/android/window-state.ts')>();
   return {
     ...actual,
-    openAndroidApp: vi.fn(async () => {}),
     getAndroidAppState: vi.fn(async () => ({ package: 'com.android.settings' })),
     getAndroidBlockingDialogFocus: vi.fn(async () => null),
   };
