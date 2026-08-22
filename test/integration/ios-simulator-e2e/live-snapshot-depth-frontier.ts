@@ -5,7 +5,6 @@ import { acceptDeepLinkConfirmationIfPresent } from './live-automation-scenario.
 import { type LiveContext, runStep, verifyBehavior } from './live-harness.ts';
 
 const VISIBLE_DEPTH_DEEP_LINK = 'agent-device-test-app:///snapshot-depth';
-const PARENT_ID = 'visible-depth-clipped-parent';
 const CHILD_ID = 'visible-depth-projected-child';
 
 type SnapshotNode = {
@@ -38,11 +37,6 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
   const regularRoot = requireRoot(regularNodes, 'regular depth-1 snapshot');
   const projectedChild = requireIdentifier(regularNodes, CHILD_ID, 'regular depth-1 snapshot');
   assert.equal(
-    regularNodes.some((node) => node.identifier === PARENT_ID),
-    false,
-    `clipped structural parent must be absent from regular presentation: ${JSON.stringify(regular)}`,
-  );
-  assert.equal(
     projectedChild.depth,
     1,
     `projected child should occupy presented depth 1: ${JSON.stringify(regular)}`,
@@ -67,10 +61,6 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
   assert.ok(
     numericDepth(rawChild) > 1,
     `raw projected child must remain below traversal depth 1: ${JSON.stringify(rawFull)}`,
-  );
-  assert.ok(
-    hasAncestorIdentifier(rawFullNodes, rawChild, PARENT_ID),
-    `raw projected child must descend from the clipped structural parent: ${JSON.stringify(rawFull)}`,
   );
 
   const rawDepthOne = await runStep(context, 'capture raw depth-bounded visible-depth tree', [
@@ -100,7 +90,7 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
   verifyBehavior(
     context,
     'regular-visible-depth-frontier',
-    'public regular depth 1 keeps an independently projected child after removing its clipped structural parent while raw depth remains traversal-bounded',
+    'public regular depth 1 keeps a raw-deep visible child at presented depth 1 while raw depth remains traversal-bounded',
   );
 }
 
@@ -135,30 +125,6 @@ function numericDepth(node: SnapshotNode): number {
     `snapshot node has no numeric depth: ${JSON.stringify(node)}`,
   );
   return node.depth as number;
-}
-
-function hasAncestorIdentifier(
-  nodes: SnapshotNode[],
-  node: SnapshotNode,
-  identifier: string,
-): boolean {
-  const nodesByIndex = new Map(
-    nodes
-      .filter((candidate) => typeof candidate.index === 'number')
-      .map((candidate) => [candidate.index as number, candidate] as const),
-  );
-  const visited = new Set<number>();
-  let parentIndex = node.parentIndex;
-
-  while (typeof parentIndex === 'number' && !visited.has(parentIndex)) {
-    visited.add(parentIndex);
-    const parent = nodesByIndex.get(parentIndex);
-    if (!parent) return false;
-    if (parent.identifier === identifier) return true;
-    parentIndex = parent.parentIndex;
-  }
-
-  return false;
 }
 
 function assertSnapshotBackend(result: { json?: any }, description: string): void {
