@@ -85,8 +85,8 @@ cross-language rules change through golden tables under `contracts/fixtures/`.
 - Tests mirror source topology one-to-one. Split a source module and its test together; do not add to
   the legacy `interaction.test.ts` or platform `index.test.ts` aggregations.
 - Shared fixtures are named exports in a sibling fixture module, not repeated inline literals.
-- `src/daemon/handlers/session.ts` and `src/platforms/apple/core/apps.ts` are already over budget;
-  extract the relevant platform-specific concept before adding behavior.
+- `src/daemon/handlers/session.ts` is already over budget; extract the relevant platform-specific
+  concept before adding behavior.
 
 ## Toolchain and worktree traps
 
