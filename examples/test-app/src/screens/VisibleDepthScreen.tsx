@@ -1,11 +1,12 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { useAppColors, type AppColors } from '../theme';
 
 /**
  * Keeps the structural wrapper outside the viewport while its independent child projects into
- * it. The wrapper must stay an `Other` node in XCTest: it is semantic enough to be acquisition-
- * eligible, but it is not a scroll/container type that owns descendant visibility.
+ * it. Its stable test ID makes the wrapper acquisition-eligible without turning its ancestors into
+ * labeled structural nodes; it must stay an `Other` node in XCTest rather than a scroll/container
+ * type that owns descendant visibility.
  */
 export function VisibleDepthScreen() {
   const colors = useAppColors();
@@ -15,18 +16,14 @@ export function VisibleDepthScreen() {
     <View accessible={false} style={styles.frame}>
       <View
         accessible={false}
-        accessibilityLabel="Clipped structural parent"
         style={styles.clippedParent}
         testID="visible-depth-clipped-parent"
       >
         <Pressable
-          accessibilityLabel="Projected child"
           accessibilityRole="button"
           style={styles.projectedChild}
           testID="visible-depth-projected-child"
-        >
-          <Text style={styles.projectedChildLabel}>Projected child</Text>
-        </Pressable>
+        />
       </View>
     </View>
   );
@@ -58,11 +55,6 @@ function createStyles(colors: AppColors) {
       position: 'absolute',
       top: 0,
       width: 220,
-    },
-    projectedChildLabel: {
-      color: '#ffffff',
-      fontSize: 16,
-      fontWeight: '700',
     },
   });
 }
