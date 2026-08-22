@@ -1,9 +1,9 @@
+import { isAndroidInputMethodNode } from '@agent-device/contracts/android-input-ownership';
 import {
   ANDROID_SYSTEM_CHROME_PACKAGE,
   hasAndroidSystemChromeProvenance,
-  isAndroidInputMethodNode,
   isAndroidSystemChromeWindowResourceId,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/android-system-chrome';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { normalizeType } from '@agent-device/contracts/snapshot';
 

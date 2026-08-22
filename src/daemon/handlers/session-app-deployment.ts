@@ -1,9 +1,9 @@
 import fs from 'node:fs';
+import type { AppDeploymentResult } from '@agent-device/contracts/app-deployment-runtime';
 import {
   deployAppUse,
   readySendPushNotificationUse,
-  type AppDeploymentResult,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/app-deployment-runtime-plan';
 import { isIosFamily, publicPlatformString } from '@agent-device/kernel/device';
 import { readNotificationPayload } from '../../core/dispatch-payload.ts';
 import { cleanupUploadedArtifact, prepareUploadedArtifact } from '../artifact-tracking.ts';

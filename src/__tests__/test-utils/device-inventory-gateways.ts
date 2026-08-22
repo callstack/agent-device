@@ -10,7 +10,7 @@ import type {
   InventoryPlatformModule,
   PlatformRequestScope,
 } from '@agent-device/contracts/platform';
-import { createPlatformModuleRegistry } from '@agent-device/contracts/platform';
+import { createPlatformModuleRegistry } from '@agent-device/contracts/platform-module';
 import type { DeviceInfo, Platform } from '@agent-device/kernel/device';
 import { withDeviceInventoryContext } from '../../core/device-inventory-context.ts';
 import { createComposedDeviceInventoryGateways } from '../../platform-runtime-device-inventory.ts';

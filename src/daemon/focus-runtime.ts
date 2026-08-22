@@ -1,4 +1,5 @@
-import { focusRuntimeUse, type FocusPointInput } from '@agent-device/contracts/platform';
+import type { FocusPointInput } from '@agent-device/contracts/focus-runtime';
+import { focusRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Point } from '@agent-device/kernel/snapshot';
 import { successText } from '../utils/success-text.ts';

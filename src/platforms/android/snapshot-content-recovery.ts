@@ -1,8 +1,6 @@
-import {
-  hasAndroidSystemChromeProvenance,
-  isAndroidInputMethodOwnedNode,
-  type AndroidContentRecoveryReason,
-} from '@agent-device/contracts/platform';
+import { isAndroidInputMethodOwnedNode } from '@agent-device/contracts/android-input-ownership';
+import type { AndroidContentRecoveryReason } from '@agent-device/contracts/android-snapshot-quality';
+import { hasAndroidSystemChromeProvenance } from '@agent-device/contracts/android-system-chrome';
 import { classifyAndroidAlertIdentifier } from './alert-detection.ts';
 import type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';
 import { androidUiNodes, type AndroidUiNodeMetadata } from './ui-hierarchy.ts';

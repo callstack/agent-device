@@ -1,10 +1,8 @@
 import type { AppsFilter } from '@agent-device/contracts/device';
-import {
-  appsRuntimeUse,
-  type BoundDeviceRuntime,
-  type EnsureReadyInput,
-  type InstalledAppInfo,
-} from '@agent-device/contracts/platform';
+import type { InstalledAppInfo } from '@agent-device/contracts/app-inventory-runtime';
+import type { EnsureReadyInput } from '@agent-device/contracts/device-readiness-runtime';
+import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
+import { appsRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 export function ensureAppsRuntimeReady(

@@ -8,20 +8,27 @@ import type {
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
+} from '@agent-device/contracts/application-lifecycle-runtime';
+import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/element-text-runtime';
+import {
   bindLocalFocusInteractor,
-  bindLocalScreenshotInteractor,
-  bindLocalTypeTextInteractor,
-  bindLocalSnapshotInteractor,
-  elementTextRuntimeOperationFacts,
   focusRuntimeOperationFacts,
-  typeTextRuntimeOperationFacts,
-  localRuntimeOwner,
+} from '@agent-device/contracts/focus-runtime';
+import { localRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import {
+  bindLocalScreenshotInteractor,
   screenshotRuntimeOperationFacts,
-  selectorObservationRuntimeOperationFacts,
+} from '@agent-device/contracts/screenshot-runtime';
+import { selectorObservationRuntimeOperationFacts } from '@agent-device/contracts/selector-observation-runtime';
+import {
+  bindLocalSnapshotInteractor,
   snapshotRuntimeOperationFacts,
-  sameRuntimeOwner,
-  viewportRuntimeOperationFacts,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/snapshot-runtime';
+import {
+  bindLocalTypeTextInteractor,
+  typeTextRuntimeOperationFacts,
+} from '@agent-device/contracts/type-text-runtime';
+import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { bindWebScreenRecordingRuntime } from './recording/runtime.ts';

@@ -15,31 +15,35 @@ import { resolvePostActionObservationSupport } from './post-action-observation.t
 import type { PostActionObservationSupport } from './post-action-observation.ts';
 import {
   deployAppUse,
-  appLogRuntimePlanUses,
-  appsRuntimeUse,
-  appStateRuntimeUses,
-  assertRecordRuntimeExecution,
-  deviceBootRuntimeUses,
-  inventoryUse,
-  networkDumpUse,
   readyMaterializeAndDeployAppUse,
   readySendPushNotificationUse,
-  openApplicationRuntimePlanUses,
+} from '@agent-device/contracts/app-deployment-runtime-plan';
+import {
   closeApplicationRuntimePlanUses,
-  selectorCaptureRuntimePlanUses,
-  selectorTextCaptureRuntimePlanUses,
-  waitSelectorCaptureRuntimePlanUses,
-  snapshotRuntimePlanUses,
+  openApplicationRuntimePlanUses,
   prepareAppleRunnerRuntimeUse,
   runtimeCommandRuntimePlanUses,
-  screenRecordingRuntimePlanUses,
-  screenshotRuntimePlanUses,
-  shutdownTargetUse,
+} from '@agent-device/contracts/application-lifecycle-runtime-plan';
+import { appLogRuntimePlanUses } from '@agent-device/contracts/logs-runtime-plan';
+import { networkDumpUse } from '@agent-device/contracts/network-runtime-plan';
+import { inventoryUse } from '@agent-device/contracts/platform-module';
+import {
+  appsRuntimeUse,
+  appStateRuntimeUses,
+  deviceBootRuntimeUses,
   findRuntimePlanUses,
   focusRuntimeUse,
+  screenshotRuntimePlanUses,
+  selectorCaptureRuntimePlanUses,
+  selectorTextCaptureRuntimePlanUses,
+  shutdownTargetUse,
+  snapshotRuntimePlanUses,
   typeTextRuntimeUse,
   viewportRuntimeUse,
-} from '@agent-device/contracts/platform';
+  waitSelectorCaptureRuntimePlanUses,
+} from '@agent-device/contracts/platform-runtime-operations';
+import { assertRecordRuntimeExecution } from '@agent-device/contracts/record-runtime-cutover';
+import { screenRecordingRuntimePlanUses } from '@agent-device/contracts/screen-recording-runtime-plan';
 import { readDeclaredPlatformExecution } from './platform-execution-entry.ts';
 import type {
   CommandCatalogGroup,

@@ -7,10 +7,10 @@ import type {
 import {
   bindLocalApplicationLifecycleInteractor,
   followUpRuntimeLaunchUrl,
-  hasRuntimeTransportHintValues,
   invokeApplicationClose,
   invokeApplicationOpen,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/application-lifecycle-interaction';
+import { hasRuntimeTransportHintValues } from '@agent-device/contracts/application-lifecycle-runtime';
 import { ensureAndroidReady } from './readiness/runtime.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';

@@ -1,15 +1,13 @@
 import { DEVICE_ROTATIONS, type DeviceRotation } from '@agent-device/contracts/device';
-import {
-  BACK_MODES,
-  TV_REMOTE_BUTTONS,
-  type AppSwitcherCommandResult,
-  type BackCommandResult,
-  type HomeCommandResult,
-  type OrientationCommandResult,
-  type TvRemoteCommandResult,
-  type BackMode,
-  type TvRemoteButton,
-} from '@agent-device/contracts/interaction';
+import { BACK_MODES, type BackMode } from '@agent-device/contracts/back-mode';
+import type {
+  AppSwitcherCommandResult,
+  BackCommandResult,
+  HomeCommandResult,
+  OrientationCommandResult,
+  TvRemoteCommandResult,
+} from '@agent-device/contracts/navigation';
+import { TV_REMOTE_BUTTONS, type TvRemoteButton } from '@agent-device/contracts/tv-remote';
 import type { SettleCommandOptions } from '@agent-device/contracts/client';
 import type { ExecutableCommandProjection } from '../command-contract.ts';
 

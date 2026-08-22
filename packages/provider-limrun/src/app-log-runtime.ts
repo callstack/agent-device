@@ -25,15 +25,14 @@ import {
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
-  createUnavailablePlatformRuntimeFacts,
-  providerRuntimeOwner,
-  sameRuntimeOwner,
-  screenshotRuntimeOperationFacts,
-  elementTextRuntimeOperationFacts,
-  selectorObservationRuntimeOperationFacts,
-  snapshotRuntimeOperationFacts,
-  viewportRuntimeOperationFacts,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/application-lifecycle-runtime';
+import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/element-text-runtime';
+import { providerRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
+import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
+import { selectorObservationRuntimeOperationFacts } from '@agent-device/contracts/selector-observation-runtime';
+import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
+import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
 import {
   createLimrunAppLogEnvelope,
   limrunAppLogDescriptorCodec,

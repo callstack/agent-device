@@ -1,12 +1,14 @@
+import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import {
-  resolveSnapshotRuntimePlan,
-  type CaptureSnapshotInput,
-  type RuntimeOperationFact,
   type SelectorCaptureRuntimePlan,
-  type SnapshotResult,
-  type SnapshotRuntimeOperations,
   type SnapshotRuntimePlan,
-} from '@agent-device/contracts/platform';
+  resolveSnapshotRuntimePlan,
+} from '@agent-device/contracts/platform-runtime-operations';
+import type {
+  CaptureSnapshotInput,
+  SnapshotResult,
+  SnapshotRuntimeOperations,
+} from '@agent-device/contracts/snapshot-runtime';
 import { buildIosOpenCommandHint } from './ios-app-session-hint.ts';
 import { buildRuntimeCaptureInput } from './snapshot-runtime-capture-input.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';

@@ -1,5 +1,5 @@
 import type { SessionAction } from '@agent-device/contracts/session';
-import { GESTURE_FLING_DURATION_MS } from '@agent-device/contracts/interaction';
+import { GESTURE_FLING_DURATION_MS } from '@agent-device/contracts/gesture-plan';
 import { AppError } from '@agent-device/kernel/errors';
 import { selectorContainsKey } from '@agent-device/selectors';
 import { formatMaestroPoint } from './export-points.ts';

@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { providerRuntimeOwner } from '@agent-device/contracts/platform';
+import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { BindDeviceRuntime } from '../../request-runtime-binding.ts';
 import { handleSessionCommands } from './session-command-harness.ts';
 import {

@@ -2,10 +2,8 @@ import {
   createDurableResourceEnvelope,
   createScreenRecordingLiveHandle,
 } from '@agent-device/capture-kit';
-import {
-  localRuntimeOwner,
-  type ScreenRecordingLiveSnapshot,
-} from '@agent-device/contracts/platform';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import type { ScreenRecordingLiveSnapshot } from '@agent-device/contracts/screen-recording-runtime';
 import { deviceIdentity } from '@agent-device/kernel/device';
 import type { SessionState } from '../../daemon/types.ts';
 

@@ -39,7 +39,7 @@ import type {
   PlatformRuntimeOwner,
   PlatformRuntimeProviderModule,
 } from '@agent-device/contracts/platform';
-import { providerRuntimeOwner } from '@agent-device/contracts/platform';
+import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { LimrunAppLogDescriptor } from './app-log-descriptor.ts';
 import type { LimrunAppLogReader } from './app-log-poller.ts';
 import { buildLimrunClientOptions, LIMRUN_CLIENT_HEADER } from './client-options.ts';

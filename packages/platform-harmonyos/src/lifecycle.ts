@@ -5,7 +5,7 @@ import type {
 import {
   bindDirectApplicationLifecycle,
   bindLocalApplicationLifecycleInteractor,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/application-lifecycle-interaction';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 type HarmonyLifecycleParams = Readonly<{

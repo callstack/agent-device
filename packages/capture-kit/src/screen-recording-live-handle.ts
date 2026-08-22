@@ -1,13 +1,15 @@
 import { AppError } from '@agent-device/kernel/errors';
 import {
-  isConfirmedCleanup,
   type CleanupOutcome,
   type FinishOutcome,
-  type RecordingGestureEvent,
-  type ScreenRecordingCompletion,
-  type ScreenRecordingLiveHandle,
-  type ScreenRecordingLiveSnapshot,
-} from '@agent-device/contracts/platform';
+  isConfirmedCleanup,
+} from '@agent-device/contracts/durable-resource';
+import type {
+  RecordingGestureEvent,
+  ScreenRecordingCompletion,
+  ScreenRecordingLiveHandle,
+  ScreenRecordingLiveSnapshot,
+} from '@agent-device/contracts/screen-recording-runtime';
 import type { GestureReferenceFrame } from '@agent-device/contracts/interaction';
 
 type ScreenRecordingLiveHandleImplementation = Readonly<{

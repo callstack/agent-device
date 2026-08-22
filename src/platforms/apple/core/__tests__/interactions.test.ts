@@ -5,7 +5,8 @@ import path from 'node:path';
 import { iosRunnerOverrides, performGestureApple } from '../../interactions.ts';
 import { runAppleRunnerCommand } from '../runner/runner-client.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { TEXT_ENTRY_ROUTES, type GesturePlan } from '@agent-device/contracts/interaction';
+import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
+import { TEXT_ENTRY_ROUTES } from '@agent-device/contracts/interactor-types';
 import { requireGestureSupported } from '../../../../core/capabilities.ts';
 import {
   IOS_TEST_DEVICE,

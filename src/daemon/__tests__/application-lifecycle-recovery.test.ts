@@ -1,15 +1,15 @@
 import { expect, test, vi } from 'vitest';
+import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
-  applicationLifecycleOperationFacts,
-  localRuntimeOwner,
-  providerRuntimeOwner,
   type DeviceBinding,
   type DeviceRuntimeGateway,
-  type PlatformRequestScope,
-  type PlatformRuntimeOperations,
-  type RuntimeOperationFact,
   type RuntimeFacts,
-} from '@agent-device/contracts/platform';
+  type RuntimeOperationFact,
+  localRuntimeOwner,
+  providerRuntimeOwner,
+} from '@agent-device/contracts/platform-runtime';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';
 import type { SessionState } from '../types.ts';

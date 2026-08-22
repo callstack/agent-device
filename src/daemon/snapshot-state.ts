@@ -1,6 +1,6 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { snapshotCaptureAnnotationsFrom } from '@agent-device/contracts/capture';
-import { isAndroidInputMethodNode } from '@agent-device/contracts/platform';
+import { isAndroidInputMethodNode } from '@agent-device/contracts/android-input-ownership';
 import {
   attachRefs,
   buildSnapshotPresentationKey,

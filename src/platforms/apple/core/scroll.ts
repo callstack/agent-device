@@ -1,11 +1,13 @@
 import {
-  buildScrollGesturePlan,
   DEFAULT_IOS_SCROLL_AMOUNT,
   DEFAULT_IOS_SCROLL_DURATION_MS,
-  type ScrollDirection,
   type ScrollExecutionOptions,
   type ScrollReleaseBehavior,
-} from '@agent-device/contracts/interaction';
+} from '@agent-device/contracts/scroll-command';
+import {
+  type ScrollDirection,
+  buildScrollGesturePlan,
+} from '@agent-device/contracts/scroll-gesture';
 
 export type NormalizedScrollOptions = {
   amount?: number;

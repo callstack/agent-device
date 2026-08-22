@@ -1,9 +1,7 @@
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
-import {
-  openApplicationRuntimeUse,
-  type BoundDeviceRuntime,
-  type RuntimeHintsApplicationInput,
-} from '@agent-device/contracts/platform';
+import type { RuntimeHintsApplicationInput } from '@agent-device/contracts/application-lifecycle-runtime';
+import { openApplicationRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
+import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest, DaemonResponse, SessionRuntimeHints, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';

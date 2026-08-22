@@ -1,4 +1,4 @@
-import { stripAndroidSystemChromeProvenance } from '@agent-device/contracts/platform';
+import { stripAndroidSystemChromeProvenance } from '@agent-device/contracts/android-system-chrome';
 import { copySnapshotClickabilityEvidence } from '@agent-device/contracts/capture';
 import { dispatchSnapshotRuntimeCommand } from './snapshot-command-runtime.ts';
 import { captureSparseFallbackScreenshot } from './sparse-fallback-screenshot.ts';

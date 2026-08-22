@@ -1,5 +1,5 @@
 import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
-import { buildGesturePlan } from '@agent-device/contracts/interaction';
+import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AndroidAdbExecutor } from '../adb-executor.ts';
 import type { AndroidLongPressTouchPlan } from '../touch-plan.ts';

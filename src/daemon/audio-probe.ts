@@ -1,10 +1,10 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {
+  type AudioProbeResult,
   emptyAudioProbeResult,
   normalizeAudioProbeRecord,
-  type AudioProbeResult,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/audio-probe-result';
 import type { HostAudioProbeBackend } from '../platforms/audio-probe-backend.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { sleep } from '../utils/timeouts.ts';

@@ -1,4 +1,4 @@
-import { localRuntimeOwner } from '@agent-device/contracts/platform';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { expect, test, vi } from 'vitest';
 import { startAppleAppLogs } from './start.ts';
 import { appleDevice, hostFixture } from './runtime.fixtures.ts';

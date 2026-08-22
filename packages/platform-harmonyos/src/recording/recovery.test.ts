@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import { localRuntimeOwner } from '@agent-device/contracts/platform';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createHarmonyScreenRecordingOperations } from './runtime.ts';
 import {
   harmonyCommandSuccess,

@@ -3,7 +3,7 @@ import { resolveCommandRecordingEffect } from '../core/command-descriptor/regist
 import { parseWaitPositionals } from '../core/wait-positionals.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { isTouchTargetCommand } from '@agent-device/ad-script';
-import { dragGesturePayloadFromPositionals } from '@agent-device/contracts/interaction';
+import { dragGesturePayloadFromPositionals } from '@agent-device/contracts/gesture-normalization';
 import { isValidSelectorExpression } from '@agent-device/selectors';
 
 export function validateActivePublicationActions(actions: SessionAction[]): void {

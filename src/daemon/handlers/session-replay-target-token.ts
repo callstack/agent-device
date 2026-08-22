@@ -1,6 +1,6 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import { isTouchTargetCommand } from '@agent-device/ad-script';
-import { dragGesturePayloadFromPositionals } from '@agent-device/contracts/interaction';
+import { dragGesturePayloadFromPositionals } from '@agent-device/contracts/gesture-normalization';
 import { readSelectorExpression } from '@agent-device/selectors';
 
 /** Returns the resolved-target token carried by an eligible replay action. */

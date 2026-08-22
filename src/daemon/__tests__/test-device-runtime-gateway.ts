@@ -1,12 +1,14 @@
 import {
+  type ApplicationLifecycleOperationFacts,
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
+} from '@agent-device/contracts/application-lifecycle-runtime';
+import {
+  type DeviceRuntimeGateway,
   localRuntimeOwner,
   narrowDeviceBinding,
-  type ApplicationLifecycleOperationFacts,
-  type DeviceRuntimeGateway,
-  type PlatformRuntimeOperations,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import {
   createRequestHandler as createProductionRequestHandler,
   type RequestRouterDeps,

@@ -1,15 +1,19 @@
 import { expect, test, vi } from 'vitest';
 import {
-  localRuntimeOwner,
-  narrowDeviceBinding,
-  typeTextRuntimeOperationFacts,
-  typeTextRuntimeUse,
   type DeviceBinding,
-  type PlatformRuntimeOperations,
   type RuntimeFacts,
   type RuntimeOperationFact,
+  localRuntimeOwner,
+  narrowDeviceBinding,
+} from '@agent-device/contracts/platform-runtime';
+import {
+  type PlatformRuntimeOperations,
+  typeTextRuntimeUse,
+} from '@agent-device/contracts/platform-runtime-operations';
+import {
   type TypeTextInput,
-} from '@agent-device/contracts/platform';
+  typeTextRuntimeOperationFacts,
+} from '@agent-device/contracts/type-text-runtime';
 import { deviceShape } from '@agent-device/kernel/device';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { resolveBoundTypeTextRuntime } from '../type-text-runtime.ts';

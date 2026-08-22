@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { appsRuntimeUse } from '@agent-device/contracts/platform';
+import { appsRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
 import { commandDescriptors } from '../registry.ts';
 
 test('apps declares the complete request-scoped runtime use', () => {

@@ -1,6 +1,6 @@
 import type { AppDeploymentResult, MaterializedAppSource } from '@agent-device/contracts/platform';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import { readyMaterializeAndDeployAppUse } from '@agent-device/contracts/platform';
+import { readyMaterializeAndDeployAppUse } from '@agent-device/contracts/app-deployment-runtime-plan';
 import { isIosFamily } from '@agent-device/kernel/device';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {

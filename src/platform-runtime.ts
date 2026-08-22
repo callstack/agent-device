@@ -2,17 +2,21 @@ import type {
   ProviderDeviceInventorySource,
   ProviderDeviceRuntime,
 } from '@agent-device/contracts/device';
+import type { AppLogSessionArtifacts } from '@agent-device/contracts/app-log-runtime';
+import type {
+  AppStateRuntimeHost,
+  AppStateRuntimeResult,
+} from '@agent-device/contracts/app-state-runtime';
+import type { DeviceShutdownRuntimeDependencies } from '@agent-device/contracts/device-shutdown-runtime';
 import {
-  createPlatformModuleRegistry,
-  type AppLogSessionArtifacts,
-  type AppStateRuntimeHost,
-  type AppStateRuntimeResult,
   type ComposedDeviceInventoryGateways,
-  type DeviceRuntimeGateway,
-  type DeviceShutdownRuntimeDependencies,
-  type PlatformRuntimeModule,
-  type PlatformRuntimeOperations,
-} from '@agent-device/contracts/platform';
+  createPlatformModuleRegistry,
+} from '@agent-device/contracts/platform-module';
+import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
+import type {
+  PlatformRuntimeModule,
+  PlatformRuntimeOperations,
+} from '@agent-device/contracts/platform-runtime-operations';
 import {
   inventoryModule as appleInventoryModule,
   loadShutdownRuntime as loadAppleShutdownRuntime,

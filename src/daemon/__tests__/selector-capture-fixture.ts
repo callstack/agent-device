@@ -1,14 +1,16 @@
 import {
+  type RuntimeFacts,
+  type RuntimeOperationFact,
   localRuntimeOwner,
   narrowDeviceBinding,
   providerRuntimeOwner,
-  snapshotRuntimeOperationFacts,
+} from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import {
   type CaptureSnapshotInput,
-  type PlatformRuntimeOperations,
-  type RuntimeFacts,
-  type RuntimeOperationFact,
   type SnapshotResult,
-} from '@agent-device/contracts/platform';
+  snapshotRuntimeOperationFacts,
+} from '@agent-device/contracts/snapshot-runtime';
 import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';

@@ -10,7 +10,7 @@ import type {
   SnapshotResult,
   TvRemoteButton,
 } from '@agent-device/contracts/interaction';
-import { buildScrollGesturePlan } from '@agent-device/contracts/interaction';
+import { buildScrollGesturePlan } from '@agent-device/contracts/scroll-gesture';
 import type { SettingOptions } from '@agent-device/contracts/settings';
 import { AppError } from '@agent-device/kernel/errors';
 import {

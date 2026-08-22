@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { screenshotRuntimePlanUses } from '@agent-device/contracts/platform';
+import { screenshotRuntimePlanUses } from '@agent-device/contracts/platform-runtime-operations';
 import { commandDescriptors } from '../registry.ts';
 
 test('screenshot descriptor declares its complete runtime uses with no legacy projection', () => {

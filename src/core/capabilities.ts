@@ -8,7 +8,7 @@ import type {
   GestureCommandInput,
   GestureSemanticInput,
 } from '@agent-device/contracts/interaction';
-import { assertAppleMultiTouchSupported } from '@agent-device/contracts/platform';
+import { assertAppleMultiTouchSupported } from '@agent-device/contracts/apple-multitouch-support';
 
 // Populate the PlatformPlugin registry once at module load (idempotent; registers
 // only lazy closures, so no leaf code is imported and CLI cold-start is unaffected

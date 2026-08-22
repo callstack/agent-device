@@ -1,30 +1,44 @@
+import type {
+  AppDeploymentInput,
+  DeployMaterializedAppInput,
+  MaterializeAppSourceInput,
+  MaterializedAppSource,
+} from '@agent-device/contracts/app-deployment-runtime';
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
+} from '@agent-device/contracts/application-lifecycle-runtime';
+import {
   bindProviderFocusInteractor,
-  bindProviderScreenshotInteractor,
-  bindProviderTypeTextInteractor,
-  bindProviderSnapshotInteractor,
-  createUnavailablePlatformRuntimeFacts,
-  sameRuntimeOwner,
   focusRuntimeOperationFacts,
-  screenshotRuntimeOperationFacts,
-  typeTextRuntimeOperationFacts,
-  snapshotRuntimeOperationFacts,
-  viewportRuntimeOperationFacts,
-  type AppDeploymentInput,
-  type DeployMaterializedAppInput,
+} from '@agent-device/contracts/focus-runtime';
+import {
   type DeviceBinding,
-  type MaterializeAppSourceInput,
-  type MaterializedAppSource,
-  type PlatformRuntimeHost,
-  type PlatformRuntimeOperations,
-  type PlatformRuntimeOwner,
   type RuntimeFacts,
   type RuntimeOperationFact,
   type RuntimeOperationUnavailability,
   type RuntimeOwnerRef,
-} from '@agent-device/contracts/platform';
+  sameRuntimeOwner,
+} from '@agent-device/contracts/platform-runtime';
+import type {
+  PlatformRuntimeHost,
+  PlatformRuntimeOperations,
+  PlatformRuntimeOwner,
+} from '@agent-device/contracts/platform-runtime-operations';
+import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
+import {
+  bindProviderScreenshotInteractor,
+  screenshotRuntimeOperationFacts,
+} from '@agent-device/contracts/screenshot-runtime';
+import {
+  bindProviderSnapshotInteractor,
+  snapshotRuntimeOperationFacts,
+} from '@agent-device/contracts/snapshot-runtime';
+import {
+  bindProviderTypeTextInteractor,
+  typeTextRuntimeOperationFacts,
+} from '@agent-device/contracts/type-text-runtime';
+import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
 import { readRecentNetworkTrafficFromText } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';

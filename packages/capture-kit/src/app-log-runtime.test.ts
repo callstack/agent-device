@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  type AppLogCompletion,
-  type AppLogBackgroundProcessRequest,
-  type AppLogProcessOwnership,
-  type AppLogProcessTransport,
-  type AppLogRuntimeHost,
-  type DurableDescriptorCodec,
-} from '@agent-device/contracts/platform';
+import type {
+  AppLogBackgroundProcessRequest,
+  AppLogCompletion,
+  AppLogProcessOwnership,
+  AppLogProcessTransport,
+  AppLogRuntimeHost,
+} from '@agent-device/contracts/app-log-runtime';
+import type { DurableDescriptorCodec } from '@agent-device/contracts/durable-resource-envelope';
 import { APP_LOG_ENVELOPE_FIXTURE } from './durable-resource-envelope.fixtures.ts';
 import { createAppLogLiveHandle } from './app-log-live-handle.ts';
 import {

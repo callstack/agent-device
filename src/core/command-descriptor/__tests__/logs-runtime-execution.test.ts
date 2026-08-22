@@ -1,4 +1,4 @@
-import { appLogRuntimePlanUses } from '@agent-device/contracts/platform';
+import { appLogRuntimePlanUses } from '@agent-device/contracts/logs-runtime-plan';
 import { expect, test } from 'vitest';
 import { commandDescriptors } from '../registry.ts';
 

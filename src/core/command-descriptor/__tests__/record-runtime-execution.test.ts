@@ -1,8 +1,6 @@
 import { expect, test } from 'vitest';
-import {
-  assertRecordRuntimeExecution,
-  screenRecordingRuntimePlanUses,
-} from '@agent-device/contracts/platform';
+import { assertRecordRuntimeExecution } from '@agent-device/contracts/record-runtime-cutover';
+import { screenRecordingRuntimePlanUses } from '@agent-device/contracts/screen-recording-runtime-plan';
 import { commandDescriptors } from '../registry.ts';
 
 test('record descriptor declares exactly the distinct uses selected by all three plans', () => {

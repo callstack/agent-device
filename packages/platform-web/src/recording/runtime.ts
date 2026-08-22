@@ -7,10 +7,8 @@ import type {
   ScreenRecordingRuntimeOperations,
   ScreenRecordingStartInput,
 } from '@agent-device/contracts/platform';
-import {
-  PendingTransferGuard,
-  SCREEN_RECORDING_RESOURCE_KIND,
-} from '@agent-device/contracts/platform';
+import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
+import { SCREEN_RECORDING_RESOURCE_KIND } from '@agent-device/contracts/screen-recording-runtime';
 import {
   assertScreenRecordingOptionsSupported,
   createScreenRecordingCompletion,

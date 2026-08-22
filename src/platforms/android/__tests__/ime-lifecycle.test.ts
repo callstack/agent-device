@@ -48,7 +48,7 @@ import {
 import {
   resetStartupRecoveryFencesForTests,
   runStartupRecoveryFence,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/startup-recovery-fence';
 import {
   readAndroidTestImeRecoveryMarkers,
   writeAndroidTestImeRecoveryMarker,

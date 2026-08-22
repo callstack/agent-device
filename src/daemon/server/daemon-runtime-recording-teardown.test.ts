@@ -1,10 +1,10 @@
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
-import {
-  localRuntimeOwner,
-  type ScreenRecordingCompletion,
-  type ScreenRecordingLiveHandle,
-} from '@agent-device/contracts/platform';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import type {
+  ScreenRecordingCompletion,
+  ScreenRecordingLiveHandle,
+} from '@agent-device/contracts/screen-recording-runtime';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { screenRecordingResourceStore } from '../screen-recording-resource-store.ts';

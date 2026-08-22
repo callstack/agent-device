@@ -1,9 +1,9 @@
 import {
-  isConfirmedCleanup,
   type CleanupOutcome,
   type FinishOutcome,
   type LiveResourceHandle,
-} from '@agent-device/contracts/platform';
+  isConfirmedCleanup,
+} from '@agent-device/contracts/durable-resource';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import {

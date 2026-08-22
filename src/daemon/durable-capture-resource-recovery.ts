@@ -5,7 +5,7 @@ import type {
   PlatformRequestScope,
   ResourceUnreattachableReason,
 } from '@agent-device/contracts/platform';
-import { isConfirmedCleanup } from '@agent-device/contracts/platform';
+import { isConfirmedCleanup } from '@agent-device/contracts/durable-resource';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import {
   acquireDurableCaptureRecoveryAuthorityBeforeDeadline,

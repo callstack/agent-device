@@ -1,12 +1,12 @@
 import path from 'node:path';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
+import type { ScreenRecordingStartInput } from '@agent-device/contracts/screen-recording-runtime';
 import {
   resolveScreenRecordingRuntimePlan,
   screenRecordingAdmissionUse,
-  screenRecordingStartUse,
   screenRecordingRecoveryUse,
-  type PlatformRequestScope,
-  type ScreenRecordingStartInput,
-} from '@agent-device/contracts/platform';
+  screenRecordingStartUse,
+} from '@agent-device/contracts/screen-recording-runtime-plan';
 import { isWholeScreenRecordingScope } from '@agent-device/contracts/recording';
 import { deviceIdentity, sameDeviceIdentity } from '@agent-device/kernel/device';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';

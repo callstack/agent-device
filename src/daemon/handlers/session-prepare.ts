@@ -1,7 +1,5 @@
-import {
-  prepareAppleRunnerRuntimeUse,
-  type BoundDeviceRuntime,
-} from '@agent-device/contracts/platform';
+import { prepareAppleRunnerRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
+import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { PREPARE_REQUEST_TIMEOUT_MS } from '../../core/command-descriptor/timeout-policy.ts';
 import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';

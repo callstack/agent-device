@@ -11,7 +11,7 @@ import {
 } from './fill-diagnostics.ts';
 import { sleep } from './adb.ts';
 import { getAndroidKeyboardState } from './device-input-state.ts';
-import { isAndroidInputMethodOwnedNode } from '@agent-device/contracts/platform';
+import { isAndroidInputMethodOwnedNode } from '@agent-device/contracts/android-input-ownership';
 import { captureAndroidUiHierarchyXml } from './snapshot.ts';
 import { androidUiNodes, type AndroidUiNodeMetadata } from './ui-hierarchy.ts';
 import type {

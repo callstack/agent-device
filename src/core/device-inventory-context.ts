@@ -1,11 +1,11 @@
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
-import {
-  type DeviceInventoryDiscovery,
-  type DeviceInventoryGateway,
-  type PlatformRequestScope,
-  type ProviderAwareDeviceInventoryGateway,
-} from '@agent-device/contracts/platform';
+import type {
+  DeviceInventoryDiscovery,
+  DeviceInventoryGateway,
+  ProviderAwareDeviceInventoryGateway,
+} from '@agent-device/contracts/platform-module';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AsyncLocalStorage } from 'node:async_hooks';
 

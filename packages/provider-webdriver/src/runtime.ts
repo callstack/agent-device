@@ -17,7 +17,7 @@ import type {
   PlatformRuntimeOwner,
   PlatformRuntimeProviderModule,
 } from '@agent-device/contracts/platform';
-import { providerRuntimeOwner } from '@agent-device/contracts/platform';
+import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   createCloudWebDriverCapabilities,

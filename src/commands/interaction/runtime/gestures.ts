@@ -7,13 +7,15 @@ import type {
   ScrollInputDirection,
 } from '@agent-device/contracts/interaction';
 import {
-  assertExclusiveScrollDistanceInputs,
   buildDragGesturePlan,
+  singlePointerPlanEndpoints,
+} from '@agent-device/contracts/gesture-plan';
+import {
+  assertExclusiveScrollDistanceInputs,
   honoredScrollDurationMs,
   normalizeScrollDurationMs,
   resolveScrollExecutionOptions,
-  singlePointerPlanEndpoints,
-} from '@agent-device/contracts/interaction';
+} from '@agent-device/contracts/scroll-command';
 import { AppError } from '@agent-device/kernel/errors';
 import { SELECTOR_PIPELINE_POLICIES } from '../../../core/selector-pipeline-policy.ts';
 import type { Point, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
@@ -130,7 +132,7 @@ export type GestureDirection = ScrollDirection;
 export {
   SCROLL_INPUT_DIRECTIONS,
   type ScrollInputDirection,
-} from '@agent-device/contracts/interaction';
+} from '@agent-device/contracts/scroll-gesture';
 
 export type ScrollTarget =
   | InteractionTarget

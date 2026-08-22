@@ -10,20 +10,29 @@ import type {
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
-  bindLocalFocusInteractor,
-  bindLocalScreenshotInteractor,
-  bindLocalTypeTextInteractor,
+} from '@agent-device/contracts/application-lifecycle-runtime';
+import {
   bindElementTextRuntime,
-  captureSnapshotSignal,
-  createUnavailablePlatformRuntimeFacts,
   elementTextRuntimeOperationFacts,
+} from '@agent-device/contracts/element-text-runtime';
+import {
+  bindLocalFocusInteractor,
   focusRuntimeOperationFacts,
-  typeTextRuntimeOperationFacts,
-  localRuntimeOwner,
-  sameRuntimeOwner,
+} from '@agent-device/contracts/focus-runtime';
+import { localRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
+import {
+  bindLocalScreenshotInteractor,
   screenshotRuntimeOperationFacts,
+} from '@agent-device/contracts/screenshot-runtime';
+import {
+  captureSnapshotSignal,
   snapshotRuntimeOperationFacts,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/snapshot-runtime';
+import {
+  bindLocalTypeTextInteractor,
+  typeTextRuntimeOperationFacts,
+} from '@agent-device/contracts/type-text-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { bindLinuxApplicationLifecycle } from './lifecycle.ts';

@@ -1,6 +1,6 @@
 import { parseDeviceRotation } from '@agent-device/contracts/device';
 import type { GesturePlan, Interactor, RunnerContext } from '@agent-device/contracts/interaction';
-import { parseTvRemoteButton } from '@agent-device/contracts/interaction';
+import { parseTvRemoteButton } from '@agent-device/contracts/tv-remote';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { Rect } from '@agent-device/kernel/snapshot';

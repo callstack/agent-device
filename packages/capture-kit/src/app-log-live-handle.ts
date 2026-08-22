@@ -1,12 +1,14 @@
 import { AppError } from '@agent-device/kernel/errors';
+import type {
+  AppLogCompletion,
+  AppLogLiveHandle,
+  AppLogLiveSnapshot,
+} from '@agent-device/contracts/app-log-runtime';
 import {
-  isConfirmedCleanup,
-  type AppLogCompletion,
-  type AppLogLiveHandle,
-  type AppLogLiveSnapshot,
   type CleanupOutcome,
   type FinishOutcome,
-} from '@agent-device/contracts/platform';
+  isConfirmedCleanup,
+} from '@agent-device/contracts/durable-resource';
 
 type AppLogLiveHandleImplementation = Readonly<{
   inspect(): AppLogLiveSnapshot;

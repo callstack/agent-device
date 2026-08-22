@@ -1,7 +1,7 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { sleep } from '../../utils/timeouts.ts';
-import { isUnreadableCaptureContentError } from '@agent-device/contracts/platform';
+import { isUnreadableCaptureContentError } from '@agent-device/contracts/android-snapshot-quality';
 import { isSparseSnapshotQualityVerdict } from '../../snapshot-quality/verdict.ts';
 import { displayLabel, formatRole } from '../../snapshot/snapshot-lines.ts';
 import type { ResponseLevel } from '@agent-device/kernel/contracts';

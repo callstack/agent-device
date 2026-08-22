@@ -2,12 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
+import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
-  applicationLifecycleOperationFacts,
-  localRuntimeOwner,
   type DeviceRuntimeGateway,
-  type PlatformRuntimeOperations,
-} from '@agent-device/contracts/platform';
+  localRuntimeOwner,
+} from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { createTestAppLogLiveHandle } from '../../__tests__/test-utils/app-log-live-handle.ts';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';

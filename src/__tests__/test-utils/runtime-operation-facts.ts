@@ -1,10 +1,8 @@
-import {
-  applicationLifecycleOperationFacts,
-  screenshotRuntimeOperationFacts,
-  elementTextRuntimeOperationFacts,
-  snapshotRuntimeOperationFacts,
-  type RuntimeOperationFact,
-} from '@agent-device/contracts/platform';
+import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
+import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/element-text-runtime';
+import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
+import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
+import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
 
 const unavailable: RuntimeOperationFact = Object.freeze({
   available: false,

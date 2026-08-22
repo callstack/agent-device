@@ -1,5 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { WAIT_REASONS } from '@agent-device/contracts/interaction';
+import { WAIT_REASONS } from '@agent-device/contracts/wait';
 import { findNodeByRef, normalizeRef, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import { annotationLocalIdentity, readNodeLocalIdentity } from '@agent-device/ad-script';
 import {

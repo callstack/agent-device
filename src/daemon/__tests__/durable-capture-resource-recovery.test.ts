@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
-import { localRuntimeOwner } from '@agent-device/contracts/platform';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { appLogDurableResource } from '../app-log-session-resource.ts';
 

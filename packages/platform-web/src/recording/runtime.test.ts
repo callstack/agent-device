@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { expect, test, vi } from 'vitest';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/platform';
-import { localRuntimeOwner } from '@agent-device/contracts/platform';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { bindWebScreenRecordingRuntime } from './runtime.ts';
 
 const device = {

@@ -1,6 +1,7 @@
 import { expect, test, vi } from 'vitest';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
-import { localRuntimeOwner, type AppLogLiveHandle } from '@agent-device/contracts/platform';
+import type { AppLogLiveHandle } from '@agent-device/contracts/app-log-runtime';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createTestAppLogLiveHandle } from '../../__tests__/test-utils/app-log-live-handle.ts';
 import {
   acquireDurableCaptureRecoveryAuthorityBeforeDeadline,

@@ -4,7 +4,7 @@ import {
   buttonTag,
   getClickButtonValidationError,
   resolveClickButton,
-} from '@agent-device/contracts/interaction';
+} from '@agent-device/contracts/click-button';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { resolveRefStalenessWarning } from '../session-snapshot.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';

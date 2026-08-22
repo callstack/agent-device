@@ -1,15 +1,15 @@
 import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
 import {
+  type DeviceBinding,
+  type RuntimeFacts,
+  type RuntimeProviderMode,
   localRuntimeOwner,
   narrowDeviceBinding,
   providerRuntimeOwner,
-  screenshotRuntimeOperationFacts,
-  snapshotRuntimeOperationFacts,
-  type DeviceBinding,
-  type PlatformRuntimeOperations,
-  type RuntimeFacts,
-  type RuntimeProviderMode,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
+import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,

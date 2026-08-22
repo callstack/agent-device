@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
-import { shutdownTargetUse } from '@agent-device/contracts/platform';
+import { shutdownTargetUse } from '@agent-device/contracts/platform-runtime-operations';
 import { commandDescriptors } from '../registry.ts';
 
 const sessionStateSource = readFileSync(

@@ -16,7 +16,7 @@ import type {
   RuntimeFacts,
   RuntimeOwnerRef,
 } from '@agent-device/contracts/platform';
-import { localRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform';
+import { localRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { LogBackend } from '@agent-device/contracts/observability';
 import { createAppLogRecoveryOperations, createAppLogStartResult } from './app-log-runtime.ts';
 import {

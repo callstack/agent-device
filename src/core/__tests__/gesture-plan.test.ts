@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'vitest';
 import {
-  buildGesturePlan,
   GESTURE_INITIAL_ANGLE_DEGREES,
-} from '@agent-device/contracts/interaction';
+  buildGesturePlan,
+} from '@agent-device/contracts/gesture-plan';
 import {
   centroid,
   distance,

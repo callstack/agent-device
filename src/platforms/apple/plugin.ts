@@ -1,7 +1,7 @@
 import { appleOsCapabilities } from './capabilities.ts';
 import type { PlatformPlugin } from '@agent-device/contracts/platform';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import { isAudioProbeSupportedDevice } from '@agent-device/contracts/platform';
+import { isAudioProbeSupportedDevice } from '@agent-device/contracts/audio-probe-support';
 import { isTvOsDevice, resolveDeviceAppleOs, type DeviceInfo } from '@agent-device/kernel/device';
 import type { RunnerContext } from '@agent-device/contracts/interaction';
 

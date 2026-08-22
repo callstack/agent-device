@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
-import { localRuntimeOwner, type CleanupOutcome } from '@agent-device/contracts/platform';
+import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { createTestAppLogLiveHandle } from '../../__tests__/test-utils/app-log-live-handle.ts';
 import { AppError } from '@agent-device/kernel/errors';

@@ -1,19 +1,21 @@
 import { vi } from 'vitest';
 import type { TypeTextBackendResult } from '@agent-device/contracts/interaction';
+import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
+import type {
+  ElementTextReadOutcome,
+  ReadTextAtPointInput,
+} from '@agent-device/contracts/element-text-runtime';
+import type { FocusPointInput } from '@agent-device/contracts/focus-runtime';
 import {
-  createUnavailablePlatformRuntimeFacts,
+  type DeviceBinding,
+  type RuntimeFacts,
   localRuntimeOwner,
   narrowDeviceBinding,
-  applicationLifecycleOperationFacts,
-  type CaptureSnapshotInput,
-  type DeviceBinding,
-  type PlatformRuntimeOperations,
-  type ElementTextReadOutcome,
-  type FocusPointInput,
-  type TypeTextInput,
-  type ReadTextAtPointInput,
-  type RuntimeFacts,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
+import type { CaptureSnapshotInput } from '@agent-device/contracts/snapshot-runtime';
+import type { TypeTextInput } from '@agent-device/contracts/type-text-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type {
   BindDeviceRuntime,

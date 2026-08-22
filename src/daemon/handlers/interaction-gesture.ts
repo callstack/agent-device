@@ -1,19 +1,22 @@
 import { readOptionalInteger } from '@agent-device/contracts/command';
+import { type GesturePayload, readGesturePayload } from '@agent-device/contracts/gesture-input';
 import {
+  type SwipePayload,
   assertNoRemovedSwipeInput,
-  GESTURE_FLING_DURATION_MS,
   gesturePayloadToPositionals,
   normalizeGestureCommandInput,
   normalizePublicSwipeMotion,
-  readGesturePayload,
+} from '@agent-device/contracts/gesture-normalization';
+import { GESTURE_FLING_DURATION_MS } from '@agent-device/contracts/gesture-plan';
+import type {
+  GestureCommandInput,
+  GestureExecutionProfile,
+} from '@agent-device/contracts/gesture-plan-types';
+import {
   SWIPE_PAUSE_MAX_MS,
   SWIPE_REPETITION_MAX,
   SWIPE_SERIES_MAX_SCHEDULED_DURATION_MS,
-  type GestureExecutionProfile,
-  type GesturePayload,
-  type GestureCommandInput,
-  type SwipePayload,
-} from '@agent-device/contracts/interaction';
+} from '@agent-device/contracts/scroll-gesture';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {
   REF_GRAMMAR_HINT,

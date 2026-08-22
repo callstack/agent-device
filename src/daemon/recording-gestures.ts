@@ -8,12 +8,12 @@ import {
   resolveTapVisualizationOffsetMs,
 } from './recording-timing.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
+import { DEFAULT_MOBILE_SCROLL_DURATION_MS } from '@agent-device/contracts/scroll-command';
 import {
-  buildScrollGesturePlan,
-  DEFAULT_MOBILE_SCROLL_DURATION_MS,
   type ScrollDirection,
   type SwipePattern,
-} from '@agent-device/contracts/interaction';
+  buildScrollGesturePlan,
+} from '@agent-device/contracts/scroll-gesture';
 import {
   getSnapshotReferenceFrame,
   type TouchReferenceFrame as ReferenceFrame,

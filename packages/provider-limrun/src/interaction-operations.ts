@@ -1,11 +1,13 @@
 import {
   bindProviderFocusInteractor,
-  bindProviderScreenshotInteractor,
-  bindProviderSnapshotInteractor,
-  bindProviderTypeTextInteractor,
   focusRuntimeOperationFacts,
+} from '@agent-device/contracts/focus-runtime';
+import { bindProviderScreenshotInteractor } from '@agent-device/contracts/screenshot-runtime';
+import { bindProviderSnapshotInteractor } from '@agent-device/contracts/snapshot-runtime';
+import {
+  bindProviderTypeTextInteractor,
   typeTextRuntimeOperationFacts,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/type-text-runtime';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
 import type { RuntimeOperationUnavailability } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';

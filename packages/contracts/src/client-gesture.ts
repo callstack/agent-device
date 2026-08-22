@@ -1,7 +1,7 @@
 // The public API vocabulary for the gesture and text-entry commands.
 
 import type { ClickButton } from './click-button.ts';
-import type { GesturePointerCount } from './gesture-plan.ts';
+import type { GesturePointerCount } from './gesture-plan-types.ts';
 import type {
   ScrollDirection,
   ScrollInputDirection,

@@ -2,7 +2,7 @@ import type { SessionAction } from '@agent-device/contracts/session';
 import fs from 'node:fs';
 import path from 'node:path';
 import { publicPlatformString } from '@agent-device/kernel/device';
-import { dragGesturePayloadFromPositionals } from '@agent-device/contracts/interaction';
+import { dragGesturePayloadFromPositionals } from '@agent-device/contracts/gesture-normalization';
 import { inferFillText } from './action-utils.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { AppError } from '@agent-device/kernel/errors';

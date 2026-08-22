@@ -1,19 +1,23 @@
+import type { BackMode } from '@agent-device/contracts/back-mode';
+import { singlePointerPlanEndpoints } from '@agent-device/contracts/gesture-plan';
+import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import {
-  assertScrollGestureInput,
-  normalizeScrollDurationMs,
-  SCROLL_DURATION_MAX_MS,
-  singlePointerPlanEndpoints,
-  TEXT_ENTRY_ROUTES,
-  type BackMode,
-  type GesturePlan,
   type Interactor,
   type RunnerCallOptions,
   type RunnerContext,
-  type ScrollDirection,
+  TEXT_ENTRY_ROUTES,
   type TextEntryRoute,
   type TypeTextBackendResult,
-} from '@agent-device/contracts/interaction';
-import { assertAppleMultiTouchSupported } from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/interactor-types';
+import {
+  SCROLL_DURATION_MAX_MS,
+  normalizeScrollDurationMs,
+} from '@agent-device/contracts/scroll-command';
+import {
+  type ScrollDirection,
+  assertScrollGestureInput,
+} from '@agent-device/contracts/scroll-gesture';
+import { assertAppleMultiTouchSupported } from '@agent-device/contracts/apple-multitouch-support';
 import { isIosFamily, isMacOs, isTvOsDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { runAppleRunnerCommand } from './core/runner/runner-client.ts';

@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import type { Point, Rect } from '@agent-device/kernel/snapshot';
-import {
-  buildGesturePlan,
-  type GesturePlan,
-  type MultiTouchGesturePlan,
-} from '@agent-device/contracts/interaction';
+import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
+import type {
+  GesturePlan,
+  MultiTouchGesturePlan,
+} from '@agent-device/contracts/gesture-plan-types';
 
 export const PORTRAIT: Rect = { x: 0, y: 0, width: 390, height: 844 };
 export const LANDSCAPE: Rect = { x: 0, y: 0, width: 844, height: 390 };

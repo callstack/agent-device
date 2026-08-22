@@ -5,7 +5,7 @@ import {
   openApplicationWithRuntimeHintApplyUse,
   openApplicationWithRuntimeHintClearUse,
   resolveOpenApplicationRuntimePlan,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';

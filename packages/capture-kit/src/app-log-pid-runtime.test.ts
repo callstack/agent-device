@@ -1,10 +1,10 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test, vi } from 'vitest';
-import {
-  type AppLogBackgroundProcess,
-  type AppLogRuntimeHost,
-  type DurableDescriptorCodec,
-} from '@agent-device/contracts/platform';
+import type {
+  AppLogBackgroundProcess,
+  AppLogRuntimeHost,
+} from '@agent-device/contracts/app-log-runtime';
+import type { DurableDescriptorCodec } from '@agent-device/contracts/durable-resource-envelope';
 import {
   createDurableResourceEnvelope,
   encodeDurableDescriptor,

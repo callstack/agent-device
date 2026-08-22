@@ -1,5 +1,5 @@
 import { AppError, asAppError } from '@agent-device/kernel/errors';
-import { INTERACTION_ERROR_REASONS } from '@agent-device/contracts/interaction';
+import { INTERACTION_ERROR_REASONS } from '@agent-device/contracts/interaction-error';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import {
   MAESTRO_RUNTIME_ADAPTER_POLICY,

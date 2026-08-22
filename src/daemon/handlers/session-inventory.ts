@@ -25,16 +25,18 @@ import {
 } from './session-device-utils.ts';
 import { errorResponse } from './response.ts';
 import { resolveImplicitSessionScope, sessionMatchesScope } from '../session-routing.ts';
+import { appLogAdmissionUse } from '@agent-device/contracts/logs-runtime-plan';
+import { networkAdmissionUse } from '@agent-device/contracts/network-runtime-plan';
+import type {
+  BoundDeviceRuntime,
+  RuntimeFacts,
+  RuntimeOperationKey,
+} from '@agent-device/contracts/platform-runtime';
 import {
-  appLogAdmissionUse,
-  appsRuntimeUse,
-  networkAdmissionUse,
-  screenRecordingAdmissionUse,
   type PlatformRuntimeOperations,
-  type RuntimeFacts,
-  type BoundDeviceRuntime,
-  type RuntimeOperationKey,
-} from '@agent-device/contracts/platform';
+  appsRuntimeUse,
+} from '@agent-device/contracts/platform-runtime-operations';
+import { screenRecordingAdmissionUse } from '@agent-device/contracts/screen-recording-runtime-plan';
 import { ensureAppsRuntimeReady, listAppsFromRuntime } from '../apps-runtime.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { installFamilyCapabilityAvailable } from './session-install-capability-projection.ts';

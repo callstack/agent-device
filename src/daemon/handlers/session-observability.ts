@@ -12,14 +12,16 @@ import {
   type PerfArea,
   type PerfKind,
 } from '@agent-device/contracts/observability';
+import type {
+  AppLogFailure,
+  AppLogRuntimeOperations,
+} from '@agent-device/contracts/app-log-runtime';
 import {
+  type LogsRuntimePlan,
   appLogAdmissionUse,
   resolveLogsRuntimePlan,
-  type AppLogFailure,
-  type AppLogRuntimeOperations,
-  type LogsRuntimePlan,
-  type RuntimeOwnerRef,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/logs-runtime-plan';
+import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import { uniqueStrings } from '@agent-device/kernel/collections';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';

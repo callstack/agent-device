@@ -6,13 +6,13 @@ import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../request-runtime-binding.ts';
+import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
-  applicationLifecycleOperationFacts,
+  type RuntimeFacts,
   localRuntimeOwner,
   narrowDeviceBinding,
-  type PlatformRuntimeOperations,
-  type RuntimeFacts,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
 import { handleDoctorCommand } from '../session-doctor.ts';
 

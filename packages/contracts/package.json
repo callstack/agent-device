@@ -8,6 +8,82 @@
     "@agent-device/kernel": "workspace:*"
   },
   "exports": {
+    "./alert-contract": {
+      "types": "./src/alert-contract.ts",
+      "default": "./src/alert-contract.ts"
+    },
+    "./android-input-ownership": {
+      "types": "./src/android-input-ownership.ts",
+      "default": "./src/android-input-ownership.ts"
+    },
+    "./android-snapshot-quality": {
+      "types": "./src/android-snapshot-quality.ts",
+      "default": "./src/android-snapshot-quality.ts"
+    },
+    "./android-system-chrome": {
+      "types": "./src/android-system-chrome.ts",
+      "default": "./src/android-system-chrome.ts"
+    },
+    "./app-deployment-runtime": {
+      "types": "./src/app-deployment-runtime.ts",
+      "default": "./src/app-deployment-runtime.ts"
+    },
+    "./app-deployment-runtime-plan": {
+      "types": "./src/app-deployment-runtime-plan.ts",
+      "default": "./src/app-deployment-runtime-plan.ts"
+    },
+    "./app-inventory-runtime": {
+      "types": "./src/app-inventory-runtime.ts",
+      "default": "./src/app-inventory-runtime.ts"
+    },
+    "./app-log-runtime": {
+      "types": "./src/app-log-runtime.ts",
+      "default": "./src/app-log-runtime.ts"
+    },
+    "./app-state-runtime": {
+      "types": "./src/app-state-runtime.ts",
+      "default": "./src/app-state-runtime.ts"
+    },
+    "./apple-multitouch-support": {
+      "types": "./src/apple-multitouch-support.ts",
+      "default": "./src/apple-multitouch-support.ts"
+    },
+    "./application-lifecycle-interaction": {
+      "types": "./src/application-lifecycle-interaction.ts",
+      "default": "./src/application-lifecycle-interaction.ts"
+    },
+    "./application-lifecycle-runtime": {
+      "types": "./src/application-lifecycle-runtime.ts",
+      "default": "./src/application-lifecycle-runtime.ts"
+    },
+    "./application-lifecycle-runtime-plan": {
+      "types": "./src/application-lifecycle-runtime-plan.ts",
+      "default": "./src/application-lifecycle-runtime-plan.ts"
+    },
+    "./async-lifecycle": {
+      "types": "./src/async-lifecycle.ts",
+      "default": "./src/async-lifecycle.ts"
+    },
+    "./audio-probe-result": {
+      "types": "./src/audio-probe-result.ts",
+      "default": "./src/audio-probe-result.ts"
+    },
+    "./audio-probe-support": {
+      "types": "./src/audio-probe-support.ts",
+      "default": "./src/audio-probe-support.ts"
+    },
+    "./back-mode": {
+      "types": "./src/back-mode.ts",
+      "default": "./src/back-mode.ts"
+    },
+    "./capture": {
+      "types": "./src/facades/capture.ts",
+      "default": "./src/facades/capture.ts"
+    },
+    "./click-button": {
+      "types": "./src/click-button.ts",
+      "default": "./src/click-button.ts"
+    },
     "./client": {
       "types": "./src/facades/client.ts",
       "default": "./src/facades/client.ts"
@@ -16,37 +92,129 @@
       "types": "./src/facades/command.ts",
       "default": "./src/facades/command.ts"
     },
+    "./command-platform-execution": {
+      "types": "./src/command-platform-execution.ts",
+      "default": "./src/command-platform-execution.ts"
+    },
     "./device": {
       "types": "./src/facades/device.ts",
       "default": "./src/facades/device.ts"
+    },
+    "./device-readiness-runtime": {
+      "types": "./src/device-readiness-runtime.ts",
+      "default": "./src/device-readiness-runtime.ts"
+    },
+    "./device-shutdown-runtime": {
+      "types": "./src/device-shutdown-runtime.ts",
+      "default": "./src/device-shutdown-runtime.ts"
+    },
+    "./divergence": {
+      "types": "./src/facades/divergence.ts",
+      "default": "./src/facades/divergence.ts"
+    },
+    "./durable-resource": {
+      "types": "./src/durable-resource.ts",
+      "default": "./src/durable-resource.ts"
+    },
+    "./durable-resource-envelope": {
+      "types": "./src/durable-resource-envelope.ts",
+      "default": "./src/durable-resource-envelope.ts"
+    },
+    "./element-text-runtime": {
+      "types": "./src/element-text-runtime.ts",
+      "default": "./src/element-text-runtime.ts"
+    },
+    "./focus-runtime": {
+      "types": "./src/focus-runtime.ts",
+      "default": "./src/focus-runtime.ts"
+    },
+    "./gesture-input": {
+      "types": "./src/gesture-input.ts",
+      "default": "./src/gesture-input.ts"
+    },
+    "./gesture-normalization": {
+      "types": "./src/gesture-normalization.ts",
+      "default": "./src/gesture-normalization.ts"
+    },
+    "./gesture-plan": {
+      "types": "./src/gesture-plan.ts",
+      "default": "./src/gesture-plan.ts"
+    },
+    "./gesture-plan-types": {
+      "types": "./src/gesture-plan-types.ts",
+      "default": "./src/gesture-plan-types.ts"
     },
     "./interaction": {
       "types": "./src/facades/interaction.ts",
       "default": "./src/facades/interaction.ts"
     },
-    "./capture": {
-      "types": "./src/facades/capture.ts",
-      "default": "./src/facades/capture.ts"
+    "./interaction-error": {
+      "types": "./src/interaction-error.ts",
+      "default": "./src/interaction-error.ts"
+    },
+    "./interaction-guarantees": {
+      "types": "./src/interaction-guarantees.ts",
+      "default": "./src/interaction-guarantees.ts"
+    },
+    "./interactor-types": {
+      "types": "./src/interactor-types.ts",
+      "default": "./src/interactor-types.ts"
+    },
+    "./logs-runtime-plan": {
+      "types": "./src/logs-runtime-plan.ts",
+      "default": "./src/logs-runtime-plan.ts"
+    },
+    "./navigation": {
+      "types": "./src/navigation.ts",
+      "default": "./src/navigation.ts"
+    },
+    "./network-runtime": {
+      "types": "./src/network-runtime.ts",
+      "default": "./src/network-runtime.ts"
+    },
+    "./network-runtime-plan": {
+      "types": "./src/network-runtime-plan.ts",
+      "default": "./src/network-runtime-plan.ts"
+    },
+    "./observability": {
+      "types": "./src/facades/observability.ts",
+      "default": "./src/facades/observability.ts"
     },
     "./platform": {
       "types": "./src/facades/platform.ts",
       "default": "./src/facades/platform.ts"
     },
-    "./settings": {
-      "types": "./src/settings.ts",
-      "default": "./src/settings.ts"
+    "./platform-module": {
+      "types": "./src/platform-module.ts",
+      "default": "./src/platform-module.ts"
     },
-    "./session": {
-      "types": "./src/facades/session.ts",
-      "default": "./src/facades/session.ts"
+    "./platform-runtime": {
+      "types": "./src/platform-runtime.ts",
+      "default": "./src/platform-runtime.ts"
+    },
+    "./platform-runtime-host": {
+      "types": "./src/platform-runtime-host.ts",
+      "default": "./src/platform-runtime-host.ts"
+    },
+    "./platform-runtime-operations": {
+      "types": "./src/platform-runtime-operations.ts",
+      "default": "./src/platform-runtime-operations.ts"
+    },
+    "./platform-runtime-unavailable": {
+      "types": "./src/platform-runtime-unavailable.ts",
+      "default": "./src/platform-runtime-unavailable.ts"
+    },
+    "./progress": {
+      "types": "./src/facades/progress.ts",
+      "default": "./src/facades/progress.ts"
+    },
+    "./record-runtime-cutover": {
+      "types": "./src/record-runtime-cutover.ts",
+      "default": "./src/record-runtime-cutover.ts"
     },
     "./recording": {
       "types": "./src/facades/recording.ts",
       "default": "./src/facades/recording.ts"
-    },
-    "./observability": {
-      "types": "./src/facades/observability.ts",
-      "default": "./src/facades/observability.ts"
     },
     "./remote": {
       "types": "./src/facades/remote.ts",
@@ -56,17 +224,69 @@
       "types": "./src/facades/replay.ts",
       "default": "./src/facades/replay.ts"
     },
+    "./screen-recording-runtime": {
+      "types": "./src/screen-recording-runtime.ts",
+      "default": "./src/screen-recording-runtime.ts"
+    },
+    "./screen-recording-runtime-plan": {
+      "types": "./src/screen-recording-runtime-plan.ts",
+      "default": "./src/screen-recording-runtime-plan.ts"
+    },
+    "./screenshot-runtime": {
+      "types": "./src/screenshot-runtime.ts",
+      "default": "./src/screenshot-runtime.ts"
+    },
+    "./scroll-command": {
+      "types": "./src/scroll-command.ts",
+      "default": "./src/scroll-command.ts"
+    },
+    "./scroll-gesture": {
+      "types": "./src/scroll-gesture.ts",
+      "default": "./src/scroll-gesture.ts"
+    },
+    "./selector-observation-runtime": {
+      "types": "./src/selector-observation-runtime.ts",
+      "default": "./src/selector-observation-runtime.ts"
+    },
+    "./session": {
+      "types": "./src/facades/session.ts",
+      "default": "./src/facades/session.ts"
+    },
+    "./settings": {
+      "types": "./src/settings.ts",
+      "default": "./src/settings.ts"
+    },
     "./snapshot": {
       "types": "./src/facades/snapshot.ts",
       "default": "./src/facades/snapshot.ts"
     },
-    "./divergence": {
-      "types": "./src/facades/divergence.ts",
-      "default": "./src/facades/divergence.ts"
+    "./snapshot-runtime": {
+      "types": "./src/snapshot-runtime.ts",
+      "default": "./src/snapshot-runtime.ts"
     },
-    "./progress": {
-      "types": "./src/facades/progress.ts",
-      "default": "./src/facades/progress.ts"
+    "./startup-recovery-fence": {
+      "types": "./src/startup-recovery-fence.ts",
+      "default": "./src/startup-recovery-fence.ts"
+    },
+    "./tv-remote": {
+      "types": "./src/tv-remote.ts",
+      "default": "./src/tv-remote.ts"
+    },
+    "./type-text-runtime": {
+      "types": "./src/type-text-runtime.ts",
+      "default": "./src/type-text-runtime.ts"
+    },
+    "./viewport-runtime": {
+      "types": "./src/viewport-runtime.ts",
+      "default": "./src/viewport-runtime.ts"
+    },
+    "./wait": {
+      "types": "./src/wait.ts",
+      "default": "./src/wait.ts"
+    },
+    "./wait-runtime-plan": {
+      "types": "./src/wait-runtime-plan.ts",
+      "default": "./src/wait-runtime-plan.ts"
     }
   }
 }

@@ -1,4 +1,7 @@
-import { normalizeAudioProbeRecord, type AudioProbeResult } from '@agent-device/contracts/platform';
+import {
+  type AudioProbeResult,
+  normalizeAudioProbeRecord,
+} from '@agent-device/contracts/audio-probe-result';
 import { isJsonObject, type JsonObject } from './json-utils.ts';
 import type { WebAudioProbeOptions, WebAudioProbeResult } from './provider.ts';
 

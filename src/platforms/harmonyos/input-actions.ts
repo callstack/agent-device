@@ -1,10 +1,10 @@
 import type { DeviceRotation } from '@agent-device/contracts/device';
+import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
+import { DEFAULT_MOBILE_SCROLL_DURATION_MS } from '@agent-device/contracts/scroll-command';
 import {
-  buildScrollGesturePlan,
-  DEFAULT_MOBILE_SCROLL_DURATION_MS,
-  type GesturePlan,
   type ScrollDirection,
-} from '@agent-device/contracts/interaction';
+  buildScrollGesturePlan,
+} from '@agent-device/contracts/scroll-gesture';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { sleep } from '../../utils/timeouts.ts';

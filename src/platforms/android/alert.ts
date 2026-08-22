@@ -3,7 +3,7 @@ import {
   ALERT_ACTION_RETRY_MS,
   ALERT_POLL_INTERVAL_MS,
   DEFAULT_ALERT_TIMEOUT_MS,
-} from '@agent-device/contracts/interaction';
+} from '@agent-device/contracts/alert-contract';
 import { AppError } from '@agent-device/kernel/errors';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { successText } from '../../utils/success-text.ts';

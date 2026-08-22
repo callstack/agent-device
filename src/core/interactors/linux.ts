@@ -17,7 +17,7 @@ import {
   swipeLinux,
   typeLinux,
 } from '../../platforms/linux/input-actions.ts';
-import { singlePointerPlanEndpoints } from '@agent-device/contracts/interaction';
+import { singlePointerPlanEndpoints } from '@agent-device/contracts/gesture-plan';
 import { screenshotLinux } from '../../platforms/linux/screenshot.ts';
 import { captureLinuxSurfaceSnapshot } from '../../snapshot/snapshot-desktop-surface.ts';
 import type { Interactor } from '@agent-device/contracts/interaction';

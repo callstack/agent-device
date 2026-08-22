@@ -13,8 +13,8 @@ import type {
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
-  providerRuntimeOwner,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/application-lifecycle-runtime';
+import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from './__tests__/test-utils/runtime-operation-facts.ts';

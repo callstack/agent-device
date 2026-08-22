@@ -1,11 +1,13 @@
-import {
-  resolveSelectorCaptureRuntimePlan,
-  type CaptureSnapshotInput,
-  type ElementTextRuntimeOperations,
-  type FindTextRuntimeOperations,
-  type FindSelectorRuntimeOperations,
-  type SnapshotResult,
-} from '@agent-device/contracts/platform';
+import type { ElementTextRuntimeOperations } from '@agent-device/contracts/element-text-runtime';
+import { resolveSelectorCaptureRuntimePlan } from '@agent-device/contracts/platform-runtime-operations';
+import type {
+  FindSelectorRuntimeOperations,
+  FindTextRuntimeOperations,
+} from '@agent-device/contracts/selector-observation-runtime';
+import type {
+  CaptureSnapshotInput,
+  SnapshotResult,
+} from '@agent-device/contracts/snapshot-runtime';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
 import { admitAndBindSnapshotCapture } from './snapshot-runtime-binding.ts';
 import type { DaemonResponse, SessionState } from './types.ts';

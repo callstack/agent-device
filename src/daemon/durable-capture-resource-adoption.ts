@@ -1,10 +1,10 @@
+import type { LiveResourceHandle } from '@agent-device/contracts/durable-resource';
+import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import {
-  runtimeOwnerKey,
-  type DurableResourceEnvelope,
-  type LiveResourceHandle,
   type ResourceOwnershipFence,
   type RuntimeOwnerRef,
-} from '@agent-device/contracts/platform';
+  runtimeOwnerKey,
+} from '@agent-device/contracts/platform-runtime';
 import {
   createDurableResourceEnvelope,
   decodeDurableResourceEnvelope,

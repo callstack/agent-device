@@ -2,13 +2,13 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import type { DaemonRequest } from '../../types.ts';
 import { makeSession, makeSessionStore } from './session-test-harness.ts';
 import { handleSessionInventoryCommands } from '../session-inventory.ts';
+import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
-  applicationLifecycleOperationFacts,
+  type RuntimeFacts,
   localRuntimeOwner,
   narrowDeviceBinding,
-  type PlatformRuntimeOperations,
-  type RuntimeFacts,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
 import type {
   BindDeviceRuntime,

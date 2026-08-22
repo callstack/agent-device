@@ -9,17 +9,19 @@ import {
   type Platform,
 } from '@agent-device/kernel/device';
 import type { JsonObject } from '@agent-device/contracts/client';
+import type {
+  DurableDescriptorCodec,
+  DurableEnvelopeDecodeOutcome,
+  DurableResourceEnvelope,
+  DurableResourceLifecycleState,
+  EncodedDurableDescriptor,
+} from '@agent-device/contracts/durable-resource-envelope';
 import {
-  localRuntimeOwner,
-  providerRuntimeOwner,
-  type DurableDescriptorCodec,
-  type DurableEnvelopeDecodeOutcome,
-  type DurableResourceEnvelope,
-  type DurableResourceLifecycleState,
-  type EncodedDurableDescriptor,
   type ResourceOwnershipFence,
   type RuntimeOwnerRef,
-} from '@agent-device/contracts/platform';
+  localRuntimeOwner,
+  providerRuntimeOwner,
+} from '@agent-device/contracts/platform-runtime';
 import { freezeJsonObject, isBoundedJsonObject } from './durable-json.ts';
 
 const DURABLE_RESOURCE_ENVELOPE_VERSION = 1 as const;

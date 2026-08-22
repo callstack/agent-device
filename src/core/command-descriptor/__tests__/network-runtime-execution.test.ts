@@ -1,4 +1,7 @@
-import { networkDumpUse, resolveNetworkRuntimePlan } from '@agent-device/contracts/platform';
+import {
+  networkDumpUse,
+  resolveNetworkRuntimePlan,
+} from '@agent-device/contracts/network-runtime-plan';
 import { expect, test } from 'vitest';
 import { commandDescriptors } from '../registry.ts';
 

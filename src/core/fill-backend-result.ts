@@ -3,7 +3,7 @@ import {
   type CloudTextEntryReadiness,
   type FillBackendResult,
   type FillVerificationTarget,
-} from '@agent-device/contracts/interaction';
+} from '@agent-device/contracts/interactor-types';
 
 type RawUnconfirmedVerification = Record<string, unknown> & {
   requested: string;

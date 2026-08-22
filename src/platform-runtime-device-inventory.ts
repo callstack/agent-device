@@ -4,17 +4,19 @@ import {
   projectProviderDeviceInventoryRequest,
   type ProviderDeviceInventorySource,
 } from '@agent-device/contracts/device';
-import {
-  type ComposedDeviceInventoryGateways,
-  type DeviceInventoryGateway,
-  type DeviceInventoryHost,
-  type DeviceInventoryHostFor,
-  type DeviceInventorySource,
-  type InventoryPlatformModule,
-  type PlatformModuleRegistry,
-  type PlatformRequestScope,
-  type ProviderAwareDeviceInventoryGateway,
-} from '@agent-device/contracts/platform';
+import type {
+  ComposedDeviceInventoryGateways,
+  DeviceInventoryGateway,
+  DeviceInventorySource,
+  InventoryPlatformModule,
+  PlatformModuleRegistry,
+  ProviderAwareDeviceInventoryGateway,
+} from '@agent-device/contracts/platform-module';
+import type {
+  DeviceInventoryHost,
+  DeviceInventoryHostFor,
+  PlatformRequestScope,
+} from '@agent-device/contracts/platform-runtime-host';
 import {
   isApplePlatform,
   type DeviceInfo,

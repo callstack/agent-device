@@ -16,7 +16,7 @@ import {
   readAndroidTestImeRecoveryMarkers,
   writeAndroidTestImeRecoveryMarker,
 } from './ime-recovery-marker.ts';
-import { waitForStartupRecoveryFence } from '@agent-device/contracts/platform';
+import { waitForStartupRecoveryFence } from '@agent-device/contracts/startup-recovery-fence';
 
 // Previous-IME record lives on the device (a custom `settings secure` key), not in a host-side
 // file, so any daemon/state-dir can recover it.

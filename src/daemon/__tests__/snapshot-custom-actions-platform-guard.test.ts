@@ -15,11 +15,11 @@ import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import type { SessionState } from '../types.ts';
+import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
 import {
-  captureSnapshotUse,
-  type DeviceRuntimeGateway,
   type PlatformRuntimeOperations,
-} from '@agent-device/contracts/platform';
+  captureSnapshotUse,
+} from '@agent-device/contracts/platform-runtime-operations';
 import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
 
 function snapshotDeviceRuntimeGateway(): DeviceRuntimeGateway<PlatformRuntimeOperations> {

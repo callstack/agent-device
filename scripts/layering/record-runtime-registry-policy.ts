@@ -31,7 +31,14 @@ function importedRecordRuntimeAssertionName(node: unknown): string | undefined {
   visitAst(node, (candidate) => {
     if (candidate.type !== 'ImportDeclaration') return;
     const source = candidate.source as Record<string, unknown> | undefined;
-    if (source?.type !== 'Literal' || source.value !== '@agent-device/contracts/platform') return;
+    // Any contracts entry, not one named subpath: the assertion's provenance is what
+    // this rule pins, and #1959 splits that vocabulary across per-module entries.
+    if (
+      source?.type !== 'Literal' ||
+      !String(source.value).startsWith('@agent-device/contracts/')
+    ) {
+      return;
+    }
     const specifiers = candidate.specifiers as readonly Record<string, unknown>[] | undefined;
     const assertion = specifiers?.find((specifier) => {
       const imported = specifier.imported as Record<string, unknown> | undefined;

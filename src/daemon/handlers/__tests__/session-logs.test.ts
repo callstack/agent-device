@@ -1,13 +1,13 @@
 import { beforeEach, expect, test, vi } from 'vitest';
+import type { AppLogRuntimeOperations } from '@agent-device/contracts/app-log-runtime';
+import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
+import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
 import {
-  applicationLifecycleOperationFacts,
+  type DeviceBinding,
   localRuntimeOwner,
   narrowDeviceBinding,
-  type AppLogRuntimeOperations,
-  type CleanupOutcome,
-  type DeviceBinding,
-  type PlatformRuntimeOperations,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
 import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { createTestAppLogLiveHandle } from '../../../__tests__/test-utils/app-log-live-handle.ts';

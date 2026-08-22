@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { typeTextRuntimeUse } from '@agent-device/contracts/platform';
+import { typeTextRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
 import { commandDescriptors } from '../registry.ts';
 import { BASE_COMMAND_CAPABILITY_MATRIX, isCommandSupportedOnDevice } from '../../capabilities.ts';
 

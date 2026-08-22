@@ -1,16 +1,20 @@
 import {
-  localRuntimeOwner,
-  narrowDeviceBinding,
-  screenshotRuntimeOperationFacts,
-  snapshotRuntimeOperationFacts,
-  type CaptureScreenshotInput,
-  type CaptureSnapshotInput,
   type DeviceRuntimeGateway,
-  type PlatformRuntimeOperations,
   type RuntimeFacts,
   type RuntimeOperationFact,
+  localRuntimeOwner,
+  narrowDeviceBinding,
+} from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import {
+  type CaptureScreenshotInput,
+  screenshotRuntimeOperationFacts,
+} from '@agent-device/contracts/screenshot-runtime';
+import {
+  type CaptureSnapshotInput,
   type SnapshotResult,
-} from '@agent-device/contracts/platform';
+  snapshotRuntimeOperationFacts,
+} from '@agent-device/contracts/snapshot-runtime';
 import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
 import fs from 'node:fs';
 import { vi, type Mock } from 'vitest';

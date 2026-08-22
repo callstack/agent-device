@@ -48,7 +48,7 @@ import type {
   ResolutionDisclosure,
   ResolvedInteractionTarget,
 } from '@agent-device/contracts/interaction';
-import { INTERACTION_ERROR_REASONS } from '@agent-device/contracts/interaction';
+import { INTERACTION_ERROR_REASONS } from '@agent-device/contracts/interaction-error';
 import type {
   BackendActionResult,
   BackendCommandContext,

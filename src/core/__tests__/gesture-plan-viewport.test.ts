@@ -1,9 +1,8 @@
 import {
-  buildGesturePlan,
-  GESTURE_SAMPLE_INTERVAL_MS,
   gesturePayloadFromPositionals,
   normalizePublicGesture,
-} from '@agent-device/contracts/interaction';
+} from '@agent-device/contracts/gesture-normalization';
+import { GESTURE_SAMPLE_INTERVAL_MS, buildGesturePlan } from '@agent-device/contracts/gesture-plan';
 import { PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import fc from 'fast-check';

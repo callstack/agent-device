@@ -23,8 +23,6 @@ import type {
   SinglePointerTrajectory,
 } from './gesture-plan-types.ts';
 
-export * from './gesture-plan-types.ts';
-
 export const GESTURE_SAMPLE_INTERVAL_MS = 16;
 export const GESTURE_INITIAL_ANGLE_DEGREES = -90;
 const GESTURE_FLING_DEFAULT_DISTANCE = 180;

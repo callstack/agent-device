@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import {
-  elementTextRead,
   type ElementTextReadOutcome,
   type ReadTextAtPointInput,
-} from '@agent-device/contracts/platform';
+  elementTextRead,
+} from '@agent-device/contracts/element-text-runtime';
 import { readTextForNode } from '../interaction-read.ts';
 
 /**

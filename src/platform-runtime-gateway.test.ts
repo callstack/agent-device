@@ -4,14 +4,11 @@ import type {
   PlatformRuntimeOperations,
   PlatformRuntimeOwner,
 } from '@agent-device/contracts/platform';
-import {
-  applicationLifecycleOperationFacts,
-  createUnavailablePlatformRuntimeFacts,
-  localRuntimeOwner,
-  providerRuntimeOwner,
-  screenshotRuntimeOperationFacts,
-  viewportRuntimeOperationFacts,
-} from '@agent-device/contracts/platform';
+import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
+import { localRuntimeOwner, providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
+import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
+import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createLimrunRuntime } from '@agent-device/provider-limrun';
 import { describe, expect, test, vi } from 'vitest';

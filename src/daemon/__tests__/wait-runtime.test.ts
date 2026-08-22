@@ -1,19 +1,23 @@
 import { expect, test, vi } from 'vitest';
-import { WAIT_REASONS } from '@agent-device/contracts/interaction';
+import { WAIT_REASONS } from '@agent-device/contracts/wait';
 import {
+  type DeviceBinding,
+  type RuntimeFacts,
+  type RuntimeOperationFact,
   localRuntimeOwner,
   narrowDeviceBinding,
   providerRuntimeOwner,
-  snapshotRuntimeOperationFacts,
-  type CaptureSnapshotInput,
-  type DeviceBinding,
+} from '@agent-device/contracts/platform-runtime';
+import {
   type PlatformRuntimeOperations,
-  type RuntimeFacts,
-  type RuntimeOperationFact,
   waitSelectorCaptureRuntimePlanUses,
-  type FindTextInput,
+} from '@agent-device/contracts/platform-runtime-operations';
+import type { FindTextInput } from '@agent-device/contracts/selector-observation-runtime';
+import {
+  type CaptureSnapshotInput,
   type SnapshotResult,
-} from '@agent-device/contracts/platform';
+  snapshotRuntimeOperationFacts,
+} from '@agent-device/contracts/snapshot-runtime';
 import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
 import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';

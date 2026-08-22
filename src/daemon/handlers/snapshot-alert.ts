@@ -2,9 +2,9 @@ import { isIosFamily, isMacOs } from '@agent-device/kernel/device';
 import {
   ALERT_ACTION_RETRY_MS,
   ALERT_POLL_INTERVAL_MS as POLL_INTERVAL_MS,
-  DEFAULT_ALERT_TIMEOUT_MS as DEFAULT_TIMEOUT_MS,
   type AlertAction,
-} from '@agent-device/contracts/interaction';
+  DEFAULT_ALERT_TIMEOUT_MS as DEFAULT_TIMEOUT_MS,
+} from '@agent-device/contracts/alert-contract';
 import { sleep } from '../../utils/timeouts.ts';
 import { runAppleRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
 import { runMacOsAlertAction } from '../../platforms/apple/os/macos/helper.ts';

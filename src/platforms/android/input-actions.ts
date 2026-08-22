@@ -1,14 +1,13 @@
 import { DEVICE_ROTATION_SURFACE_INDEX, type DeviceRotation } from '@agent-device/contracts/device';
+import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
+import { GESTURE_DURATION_MIN_MS } from '@agent-device/contracts/gesture-plan-types';
+import type { FillUnconfirmedVerification } from '@agent-device/contracts/interactor-types';
+import { DEFAULT_MOBILE_SCROLL_DURATION_MS } from '@agent-device/contracts/scroll-command';
 import {
-  buildGesturePlan,
-  buildScrollGesturePlan,
-  DEFAULT_MOBILE_SCROLL_DURATION_MS,
-  GESTURE_DURATION_MIN_MS,
-  toAndroidTvRemoteKeyevent,
-  type FillUnconfirmedVerification,
   type ScrollDirection,
-  type TvRemoteButton,
-} from '@agent-device/contracts/interaction';
+  buildScrollGesturePlan,
+} from '@agent-device/contracts/scroll-gesture';
+import { type TvRemoteButton, toAndroidTvRemoteKeyevent } from '@agent-device/contracts/tv-remote';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';

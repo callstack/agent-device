@@ -1,7 +1,7 @@
 import {
-  inferGestureReferenceFrame,
   type GestureReferenceFrame,
-} from '@agent-device/contracts/interaction';
+  inferGestureReferenceFrame,
+} from '@agent-device/contracts/scroll-gesture';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 
 export type TouchReferenceFrame = GestureReferenceFrame;

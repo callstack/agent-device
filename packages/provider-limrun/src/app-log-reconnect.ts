@@ -2,7 +2,7 @@ import type Limrun from '@limrun/api';
 import { NotFoundError } from '@limrun/api';
 import { createInstanceClient as createAndroidInstanceClient } from '@limrun/api/instance-client';
 import { createInstanceClient as createIosInstanceClient } from '@limrun/api/ios-client';
-import { AsyncCleanupStack } from '@agent-device/contracts/platform';
+import { AsyncCleanupStack } from '@agent-device/contracts/async-lifecycle';
 import type { LimrunAppLogDescriptor } from './app-log-descriptor.ts';
 import type { LimrunAppLogReader } from './app-log-poller.ts';
 import type { LimrunAppLogReconnectOutcome } from './app-log-runtime.ts';

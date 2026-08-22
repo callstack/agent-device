@@ -4,14 +4,13 @@ import {
   createDurableResourceEnvelope,
   createScreenRecordingLiveHandle,
 } from '@agent-device/capture-kit';
-import {
-  localRuntimeOwner,
-  PendingTransferGuard,
-  type CleanupOutcome,
-  type ReattachOutcome,
-  type ScreenRecordingCompletion,
-  type ScreenRecordingLiveHandle,
-} from '@agent-device/contracts/platform';
+import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
+import type { CleanupOutcome, ReattachOutcome } from '@agent-device/contracts/durable-resource';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import type {
+  ScreenRecordingCompletion,
+  ScreenRecordingLiveHandle,
+} from '@agent-device/contracts/screen-recording-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';

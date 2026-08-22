@@ -4,16 +4,18 @@ import { handleSessionStateCommands } from '../session-state.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { withTestDeviceInventory } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
+import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
-  appStateUse,
-  applicationLifecycleOperationFacts,
-  createUnavailablePlatformRuntimeFacts,
+  type DeviceBinding,
+  type RuntimeFacts,
   localRuntimeOwner,
   narrowDeviceBinding,
-  type DeviceBinding,
+} from '@agent-device/contracts/platform-runtime';
+import {
   type PlatformRuntimeOperations,
-  type RuntimeFacts,
-} from '@agent-device/contracts/platform';
+  appStateUse,
+} from '@agent-device/contracts/platform-runtime-operations';
+import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
 import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
 import type { BindDeviceRuntime } from '../../request-runtime-binding.ts';
 

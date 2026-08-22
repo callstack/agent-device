@@ -22,11 +22,9 @@ import { executeFocusPoint } from '../focus-runtime.ts';
 import { executeBoundTypeText } from '../type-text-runtime.ts';
 import { dispatchFindReadOnlyViaRuntime } from '../selector-runtime.ts';
 import { admitAndBindSnapshotCapture } from '../snapshot-runtime-binding.ts';
-import {
-  resolveSelectorCaptureRuntimePlan,
-  type FocusPointInput,
-  type TypeTextRuntimeOperations,
-} from '@agent-device/contracts/platform';
+import type { FocusPointInput } from '@agent-device/contracts/focus-runtime';
+import { resolveSelectorCaptureRuntimePlan } from '@agent-device/contracts/platform-runtime-operations';
+import type { TypeTextRuntimeOperations } from '@agent-device/contracts/type-text-runtime';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { createFindTargetCapture, sparseFindSnapshotResponse } from './find-target-capture.ts';
 import { isSparseSnapshotQualityVerdict } from '../../snapshot-quality/verdict.ts';

@@ -18,7 +18,7 @@ import {
   type AppleRunnerCommandExecutor,
   type AppleRunnerProvider,
 } from './core/runner/runner-provider.ts';
-import { toAppleTvRemoteButton } from '@agent-device/contracts/interaction';
+import { toAppleTvRemoteButton } from '@agent-device/contracts/tv-remote';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import { DEVICE_ROTATIONS, type DeviceRotation } from '@agent-device/contracts/device';
 import { normalizeSnapshotScope } from '@agent-device/contracts/snapshot';

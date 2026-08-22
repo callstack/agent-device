@@ -1,15 +1,15 @@
 import { expect, vi } from 'vitest';
+import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
+import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
+import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
 import {
-  applicationLifecycleOperationFacts,
+  type DeviceBinding,
+  type RuntimeOperationUnavailability,
   localRuntimeOwner,
   narrowDeviceBinding,
-  PendingTransferGuard,
-  type CleanupOutcome,
-  type DeviceBinding,
-  type PlatformRuntimeOperations,
-  type RuntimeOperationUnavailability,
-  type ScreenRecordingLiveHandle,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';

@@ -4,7 +4,7 @@ import type {
   ScreenRecordingRuntimeOperations,
   ScreenRecordingStartInput,
 } from '@agent-device/contracts/platform';
-import { SCREEN_RECORDING_RESOURCE_KIND } from '@agent-device/contracts/platform';
+import { SCREEN_RECORDING_RESOURCE_KIND } from '@agent-device/contracts/screen-recording-runtime';
 import {
   completionMatchesDescriptor,
   isValidAndroidRecordingDescriptor,

@@ -7,7 +7,7 @@ import {
   INTERACTION_DISPATCH_PATHS,
   INTERACTION_GUARANTEES,
   INTERACTION_PATH_IDS,
-} from '@agent-device/contracts/interaction';
+} from '@agent-device/contracts/interaction-guarantees';
 
 // ADR 0011 Layer-1 root gate: the matrix must stay complete (typed) AND honest
 // (referenced implementations exist, waivers carry reasons). A cell that

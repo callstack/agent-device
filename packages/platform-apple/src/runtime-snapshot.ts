@@ -10,7 +10,7 @@ import type {
 import {
   bindLocalSnapshotInteractor,
   captureSnapshotSignal,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/snapshot-runtime';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 
 /** Apple-owned selection between app snapshots and explicit macOS surface snapshots. */

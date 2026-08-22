@@ -4,7 +4,7 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import { commonInputFromFlags, request } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { readGestureInput } from './metadata.ts';
-import { gesturePayloadFromPositionals } from '@agent-device/contracts/interaction';
+import { gesturePayloadFromPositionals } from '@agent-device/contracts/gesture-normalization';
 
 export const gestureCliReaders = {
   gesture: gestureInputFromCli,

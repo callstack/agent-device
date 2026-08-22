@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { findRuntimePlanUses } from '@agent-device/contracts/platform';
+import { findRuntimePlanUses } from '@agent-device/contracts/platform-runtime-operations';
 import { commandDescriptors } from '../registry.ts';
 import { BASE_COMMAND_CAPABILITY_MATRIX } from '../../capabilities.ts';
 

@@ -2,7 +2,7 @@ import {
   closeApplicationRuntimePlanUses,
   closeApplicationRuntimeUse,
   closeApplicationWithRuntimeHintClearUse,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import { expect, test } from 'vitest';
 import { commandDescriptors } from '../registry.ts';
 

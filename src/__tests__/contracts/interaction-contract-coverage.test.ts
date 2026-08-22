@@ -4,7 +4,7 @@ import {
   INTERACTION_DISPATCH_PATHS,
   INTERACTION_GUARANTEES,
   INTERACTION_PATH_IDS,
-} from '@agent-device/contracts/interaction';
+} from '@agent-device/contracts/interaction-guarantees';
 import { CONTRACT_COVERAGE } from '../../../test/integration/interaction-contract/index.ts';
 
 // ADR 0011 Layer-3 root gate: the contract scenario suite is registry-driven. Every

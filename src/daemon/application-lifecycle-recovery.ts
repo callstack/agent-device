@@ -1,16 +1,20 @@
 import {
-  finalizeApplicationCloseWithRuntimeHintClearUse,
-  finalizeApplicationCloseRuntimeUse,
+  type RuntimeHintValues,
   hasRuntimeTransportHintValues,
-  narrowDeviceBinding,
+} from '@agent-device/contracts/application-lifecycle-runtime';
+import {
+  finalizeApplicationCloseRuntimeUse,
+  finalizeApplicationCloseWithRuntimeHintClearUse,
+} from '@agent-device/contracts/application-lifecycle-runtime-plan';
+import {
   type DeviceBinding,
   type DeviceRuntimeGateway,
-  type PlatformRequestScope,
-  type PlatformRuntimeOperations,
   type RuntimeFacts,
-  type RuntimeHintValues,
   type RuntimeOperationKey,
-} from '@agent-device/contracts/platform';
+  narrowDeviceBinding,
+} from '@agent-device/contracts/platform-runtime';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { AppError } from '@agent-device/kernel/errors';
 import type { SessionState } from './types.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';

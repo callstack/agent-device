@@ -15,7 +15,7 @@ export type { AndroidUiHierarchy } from './ui-hierarchy-node.ts';
 import {
   type AndroidSystemChromeProvenance,
   isAndroidSystemChromeWindowResourceId,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/android-system-chrome';
 
 type AndroidRawSnapshotNode = RawSnapshotNode & AndroidSystemChromeProvenance;
 

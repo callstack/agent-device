@@ -1,14 +1,16 @@
 import { expect, test, vi } from 'vitest';
 import {
+  type DeviceBinding,
+  type RuntimeFacts,
   localRuntimeOwner,
   narrowDeviceBinding,
-  snapshotRuntimeOperationFacts,
+} from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import {
   type CaptureSnapshotInput,
-  type DeviceBinding,
-  type PlatformRuntimeOperations,
-  type RuntimeFacts,
   type SnapshotResult,
-} from '@agent-device/contracts/platform';
+  snapshotRuntimeOperationFacts,
+} from '@agent-device/contracts/snapshot-runtime';
 import { deviceShape } from '@agent-device/kernel/device';
 import { makeAndroidSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';

@@ -1,16 +1,17 @@
-import {
-  PendingTransferGuard,
-  type AppLogCompletion,
-  type AppLogLiveHandle,
-  type AppLogProcessMarkerReadOutcome,
-  type AppLogRuntimeOperations,
-  type AppLogStartResult,
-  type CleanupOutcome,
-  type DurableDescriptorCodec,
-  type DurableResourceEnvelope,
-  type ReattachOutcome,
-  type ResourceOwnershipFence,
-} from '@agent-device/contracts/platform';
+import type {
+  AppLogCompletion,
+  AppLogLiveHandle,
+  AppLogProcessMarkerReadOutcome,
+  AppLogRuntimeOperations,
+  AppLogStartResult,
+} from '@agent-device/contracts/app-log-runtime';
+import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
+import type { CleanupOutcome, ReattachOutcome } from '@agent-device/contracts/durable-resource';
+import type {
+  DurableDescriptorCodec,
+  DurableResourceEnvelope,
+} from '@agent-device/contracts/durable-resource-envelope';
+import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
 import { decodeDurableDescriptor } from './durable-descriptor-codec.ts';
 
 const APP_LOG_RESOURCE_KIND = 'app-log' as const;

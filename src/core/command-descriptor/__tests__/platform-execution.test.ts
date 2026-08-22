@@ -1,4 +1,4 @@
-import { inventoryUse } from '@agent-device/contracts/platform';
+import { inventoryUse } from '@agent-device/contracts/platform-module';
 import { describe, expect, test } from 'vitest';
 import { commandDescriptors } from '../registry.ts';
 import { deriveDaemonCommandDescriptors } from '../derive.ts';

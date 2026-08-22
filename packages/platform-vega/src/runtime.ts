@@ -9,10 +9,9 @@ import type {
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
-  createUnavailablePlatformRuntimeFacts,
-  localRuntimeOwner,
-  sameRuntimeOwner,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/application-lifecycle-runtime';
+import { localRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { bindVegaApplicationLifecycle } from './lifecycle.ts';

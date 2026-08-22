@@ -1,5 +1,5 @@
 import { readViewportDimensions } from '@agent-device/contracts/capture';
-import { viewportRuntimeUse } from '@agent-device/contracts/platform';
+import { viewportRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';
 import { admitRuntimeUse, type RuntimeAdmissionBindings } from './runtime-admission.ts';

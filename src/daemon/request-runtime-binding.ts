@@ -1,18 +1,18 @@
 import { deviceIdentity, deviceIdentityKey, type DeviceInfo } from '@agent-device/kernel/device';
+import { AsyncCleanupStack } from '@agent-device/contracts/async-lifecycle';
 import {
-  AsyncCleanupStack,
-  narrowDeviceBinding,
   type BoundDeviceRuntime,
   type DeviceBinding,
   type DeviceRuntimeGateway,
-  type PlatformRuntimeOperations,
-  type PlatformRequestScope,
   type ResourceOwnershipFence,
+  type RuntimeFacts,
   type RuntimeOperationKey,
   type RuntimeOwnerRef,
-  type RuntimeFacts,
   type RuntimeUse,
-} from '@agent-device/contracts/platform';
+  narrowDeviceBinding,
+} from '@agent-device/contracts/platform-runtime';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 
 export type BindDeviceRuntime = <
   const Required extends readonly RuntimeOperationKey<PlatformRuntimeOperations>[],

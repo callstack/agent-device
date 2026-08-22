@@ -1,15 +1,19 @@
 import {
+  type RuntimeFacts,
   localRuntimeOwner,
   narrowDeviceBinding,
   providerRuntimeOwner,
-  screenshotRuntimeOperationFacts,
-  snapshotRuntimeOperationFacts,
+} from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import {
   type CaptureScreenshotInput,
+  screenshotRuntimeOperationFacts,
+} from '@agent-device/contracts/screenshot-runtime';
+import {
   type CaptureSnapshotInput,
-  type PlatformRuntimeOperations,
-  type RuntimeFacts,
   type SnapshotResult,
-} from '@agent-device/contracts/platform';
+  snapshotRuntimeOperationFacts,
+} from '@agent-device/contracts/snapshot-runtime';
 import { deviceShape, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { dispatchCommand, type DispatchContext } from '../../core/dispatch.ts';
 import { getRequestSignal } from '../../request/cancel.ts';

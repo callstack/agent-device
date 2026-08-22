@@ -1,9 +1,8 @@
 import {
   COORDINATE_GESTURE_KINDS,
-  SCROLL_DIRECTIONS,
-  SWIPE_PRESETS,
   type GesturePayload,
-} from '@agent-device/contracts/interaction';
+} from '@agent-device/contracts/gesture-input';
+import { SCROLL_DIRECTIONS, SWIPE_PRESETS } from '@agent-device/contracts/scroll-gesture';
 import {
   attachRefs,
   type Point,

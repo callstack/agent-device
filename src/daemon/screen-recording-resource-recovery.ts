@@ -1,14 +1,16 @@
+import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import {
-  narrowDeviceBinding,
-  screenRecordingRecoveryUse,
   type BoundDeviceRuntime,
   type DeviceRuntimeGateway,
-  type DurableResourceEnvelope,
-  type PlatformRequestScope,
-  type PlatformRuntimeOperations,
-  type ScreenRecordingCompletion,
-  type ScreenRecordingLiveHandle,
-} from '@agent-device/contracts/platform';
+  narrowDeviceBinding,
+} from '@agent-device/contracts/platform-runtime';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import type {
+  ScreenRecordingCompletion,
+  ScreenRecordingLiveHandle,
+} from '@agent-device/contracts/screen-recording-runtime';
+import { screenRecordingRecoveryUse } from '@agent-device/contracts/screen-recording-runtime-plan';
 import type { DurableCaptureRecoveryControl } from './durable-capture-recovery-authority.ts';
 import { acquireExactDurableCaptureRecoveryControl } from './durable-capture-runtime-recovery.ts';
 import type { DurableCaptureRecoveryDiagnostic } from './durable-capture-resource-recovery.ts';

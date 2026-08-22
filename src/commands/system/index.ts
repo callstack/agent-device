@@ -1,13 +1,13 @@
 import type { ClipboardCommandOptions } from '@agent-device/contracts/client';
 import { DEVICE_ROTATIONS, parseDeviceRotation } from '@agent-device/contracts/device';
 import type { BackMode } from '@agent-device/contracts/interaction';
+import { BACK_MODES } from '@agent-device/contracts/back-mode';
 import {
-  BACK_MODES,
-  parseTvRemoteButton,
-  TV_REMOTE_BUTTON_USAGE,
   TV_REMOTE_BUTTONS,
+  TV_REMOTE_BUTTON_USAGE,
+  parseTvRemoteButton,
   tvRemoteDurationMode,
-} from '@agent-device/contracts/interaction';
+} from '@agent-device/contracts/tv-remote';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import {

@@ -36,11 +36,9 @@ import {
 } from '../../platforms/apple/core/runner/runner-client.ts';
 import { appendWebBrowserLifecycleCheck } from './session-doctor-web.ts';
 import { resolveAndroidSerialAllowlist } from '../../utils/device-isolation.ts';
-import {
-  appsRuntimeUse,
-  type BoundDeviceRuntime,
-  type InstalledAppInfo,
-} from '@agent-device/contracts/platform';
+import type { InstalledAppInfo } from '@agent-device/contracts/app-inventory-runtime';
+import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
+import { appsRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { ensureAppsRuntimeReady, listAppsFromRuntime } from '../apps-runtime.ts';
 

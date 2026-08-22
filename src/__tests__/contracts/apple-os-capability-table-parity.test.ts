@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { isAudioProbeSupportedDevice } from '@agent-device/contracts/platform';
+import { isAudioProbeSupportedDevice } from '@agent-device/contracts/audio-probe-support';
 import {
   isIosFamily,
   isMacOs,

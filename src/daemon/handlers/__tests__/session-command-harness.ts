@@ -2,25 +2,27 @@ import {
   handleSessionCommands as handleProductionSessionCommands,
   type SessionCommandInput,
 } from '../session.ts';
+import type {
+  AppDeploymentInput,
+  AppDeploymentResult,
+  DeployMaterializedAppInput,
+  MaterializeAppSourceInput,
+  MaterializedAppSource,
+  PushNotificationInput,
+  PushNotificationResult,
+} from '@agent-device/contracts/app-deployment-runtime';
+import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
+import type { EnsureReadyInput } from '@agent-device/contracts/device-readiness-runtime';
 import {
-  applicationLifecycleOperationFacts,
-  localRuntimeOwner,
-  narrowDeviceBinding,
-  screenshotRuntimeOperationFacts,
-  snapshotRuntimeOperationFacts,
-  type AppDeploymentInput,
-  type AppDeploymentResult,
   type DeviceBinding,
   type DeviceRuntimeGateway,
-  type DeployMaterializedAppInput,
-  type EnsureReadyInput,
-  type MaterializeAppSourceInput,
-  type MaterializedAppSource,
-  type PlatformRuntimeOperations,
-  type PushNotificationInput,
-  type PushNotificationResult,
   type RuntimeFacts,
-} from '@agent-device/contracts/platform';
+  localRuntimeOwner,
+  narrowDeviceBinding,
+} from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
+import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import { deviceShape, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { beforeEach, vi } from 'vitest';

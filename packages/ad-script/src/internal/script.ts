@@ -1,6 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { recordingQualityInputToExportQuality } from '@agent-device/contracts/recording';
-import { describeReplayGestureArityError } from '@agent-device/contracts/interaction';
+import { describeReplayGestureArityError } from '@agent-device/contracts/gesture-normalization';
 import {
   RETIRED_SCREENSHOT_MAX_SIZE,
   readScreenshotScriptFlag,

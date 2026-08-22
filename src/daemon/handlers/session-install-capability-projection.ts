@@ -1,9 +1,9 @@
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { commandDescriptors } from '../../core/command-descriptor/registry.ts';
-import {
-  type RuntimeOperationFact,
-  type RuntimeUseDeclaration,
-} from '@agent-device/contracts/platform';
+import type {
+  RuntimeOperationFact,
+  RuntimeUseDeclaration,
+} from '@agent-device/contracts/platform-runtime';
 import type { InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 
 type InstallFamilyRuntimeUse = RuntimeUseDeclaration;

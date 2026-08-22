@@ -9,12 +9,12 @@ import {
   type AndroidAdbExecutor,
 } from './adb-executor.ts';
 import {
+  type AndroidInputOwner,
   classifyAndroidInputOwner,
   isFallbackAndroidInputMethodPackage,
   isFallbackAndroidInputMethodResource,
   readAndroidActiveInputMethodPackage,
-  type AndroidInputOwner,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/android-input-ownership';
 
 const ANDROID_INPUT_TYPE_CLASS_MASK = 0x0000000f;
 const ANDROID_INPUT_TYPE_CLASS_TEXT = 0x00000001;

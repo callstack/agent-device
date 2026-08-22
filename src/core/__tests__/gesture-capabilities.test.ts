@@ -7,7 +7,7 @@ import type {
 import {
   normalizePublicGesture,
   normalizePublicSwipeMotion,
-} from '@agent-device/contracts/interaction';
+} from '@agent-device/contracts/gesture-normalization';
 import { requireGestureSupported } from '../capabilities.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';

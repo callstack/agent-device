@@ -1,11 +1,11 @@
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
+import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import {
-  resolveDeviceReadinessRuntimePlan,
   appStateUse,
+  resolveDeviceReadinessRuntimePlan,
   shutdownTargetUse,
-  type RuntimeOperationFact,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-operations';
 import {
   isApplePlatform,
   isIosFamily,

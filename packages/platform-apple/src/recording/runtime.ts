@@ -8,7 +8,7 @@ import type {
   ScreenRecordingRuntimeOperations,
   ScreenRecordingStartInput,
 } from '@agent-device/contracts/platform';
-import { PendingTransferGuard } from '@agent-device/contracts/platform';
+import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import { createScreenRecordingLiveHandle } from '@agent-device/capture-kit';
 import { completeAppleRecording as completion } from './completion.ts';
 import {

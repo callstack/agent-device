@@ -1,9 +1,9 @@
+import { narrowDeviceBinding } from '@agent-device/contracts/platform-runtime';
 import {
   appStateUse,
   appsRuntimeUse,
   bootTargetUse,
-  narrowDeviceBinding,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test, vi } from 'vitest';
 import { createLimrunAppLogEnvelope } from './app-log-descriptor.ts';

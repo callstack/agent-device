@@ -1,9 +1,7 @@
 import { expect, test, vi } from 'vitest';
-import {
-  localRuntimeOwner,
-  PendingTransferGuard,
-  type ScreenRecordingLiveHandle,
-} from '@agent-device/contracts/platform';
+import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { createScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';

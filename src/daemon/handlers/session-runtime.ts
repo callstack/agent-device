@@ -1,8 +1,8 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
-  hasRuntimeTransportHintValues,
   type RuntimeHintValues,
-} from '@agent-device/contracts/platform';
+  hasRuntimeTransportHintValues,
+} from '@agent-device/contracts/application-lifecycle-runtime';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest, SessionRuntimeHints, SessionState } from '../types.ts';

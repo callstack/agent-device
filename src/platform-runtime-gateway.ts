@@ -1,22 +1,26 @@
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
+import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
-  applicationLifecycleOperationFacts,
-  createUnavailablePlatformRuntimeBinding,
-  createUnavailablePlatformRuntimeFacts,
-  providerRuntimeOwner,
-  runStartupRecoveryFence,
-  runtimeOwnerKey,
-  sameRuntimeOwner,
   type DeviceBinding,
   type DeviceBindingRequest,
   type DeviceRuntimeGateway,
-  type PlatformRuntimeHost,
-  type PlatformRuntimeModule,
-  type PlatformRuntimeOperations,
-  type PlatformRuntimeOwner,
-  type PlatformRuntimeProviderModule,
   type RuntimeOwnerRef,
-} from '@agent-device/contracts/platform';
+  providerRuntimeOwner,
+  runtimeOwnerKey,
+  sameRuntimeOwner,
+} from '@agent-device/contracts/platform-runtime';
+import type {
+  PlatformRuntimeHost,
+  PlatformRuntimeModule,
+  PlatformRuntimeOperations,
+  PlatformRuntimeOwner,
+  PlatformRuntimeProviderModule,
+} from '@agent-device/contracts/platform-runtime-operations';
+import {
+  createUnavailablePlatformRuntimeBinding,
+  createUnavailablePlatformRuntimeFacts,
+} from '@agent-device/contracts/platform-runtime-unavailable';
+import { runStartupRecoveryFence } from '@agent-device/contracts/startup-recovery-fence';
 import {
   deviceIdentity,
   deviceShape,

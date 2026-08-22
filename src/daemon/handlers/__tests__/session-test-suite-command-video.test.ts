@@ -21,10 +21,8 @@ import {
 import { createScreenRecordingAdmissionLedger } from '../../screen-recording-admission-ledger.ts';
 import type { RecordRuntimeHandlerParams } from '../record-runtime.ts';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
-import {
-  localRuntimeOwner,
-  type ScreenRecordingLiveHandle,
-} from '@agent-device/contracts/platform';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
 
 const recordRuntimeMocks = vi.hoisted(() => ({
   handleRecordCommand: vi.fn(),

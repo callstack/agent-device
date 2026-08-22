@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
-import { localRuntimeOwner } from '@agent-device/contracts/platform';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createHarmonyScreenRecordingOperations, harmonyScreenRecordingFacts } from './runtime.ts';
 import {
   harmonyCommandSuccess as success,

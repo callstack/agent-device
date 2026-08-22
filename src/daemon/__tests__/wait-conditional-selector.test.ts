@@ -1,15 +1,17 @@
 import { expect, test, vi } from 'vitest';
 import {
-  localRuntimeOwner,
-  narrowDeviceBinding,
-  snapshotRuntimeOperationFacts,
   type DeviceBinding,
-  type FindSelectorInput,
-  type PlatformRuntimeOperations,
   type RuntimeFacts,
   type RuntimeOperationFact,
+  localRuntimeOwner,
+  narrowDeviceBinding,
+} from '@agent-device/contracts/platform-runtime';
+import {
+  type PlatformRuntimeOperations,
   waitSelectorCaptureRuntimePlanUses,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-operations';
+import type { FindSelectorInput } from '@agent-device/contracts/selector-observation-runtime';
+import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
 import { deviceShape } from '@agent-device/kernel/device';
 import { IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import {

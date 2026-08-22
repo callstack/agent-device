@@ -2,7 +2,7 @@ import {
   bootTargetHeadlessUse,
   bootTargetUse,
   deviceBootRuntimeUses,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-operations';
 import { expect, test } from 'vitest';
 import { commandDescriptors } from '../registry.ts';
 

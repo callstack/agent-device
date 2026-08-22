@@ -11,7 +11,7 @@ import type {
   RuntimeOwnerRef,
 } from '@agent-device/contracts/platform';
 import type { LogBackend } from '@agent-device/contracts/observability';
-import { AsyncCleanupStack } from '@agent-device/contracts/platform';
+import { AsyncCleanupStack } from '@agent-device/contracts/async-lifecycle';
 import {
   assertAppLogSessionArtifacts,
   createAppLogLiveHandleFromFinish,

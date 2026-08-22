@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { expect, test, vi } from 'vitest';
 import type { AppleScreenRecordingRunnerRequest } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { localRuntimeOwner } from '@agent-device/contracts/platform';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createAppleScreenRecordingOperations, appleScreenRecordingFacts } from './runtime.ts';
 import {
   appleRecordingHost as appleHost,

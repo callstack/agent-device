@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict';
 import { expectTypeOf, test } from 'vitest';
-import {
-  buildDragGesturePlan,
-  buildGesturePlan,
-  type SinglePointerGesturePlan,
-} from '@agent-device/contracts/interaction';
+import { buildDragGesturePlan, buildGesturePlan } from '@agent-device/contracts/gesture-plan';
+import type { SinglePointerGesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import { lowerAndroidTouchPlan, type AndroidLoweredTouchPlan } from '../touch-plan.ts';
 import { longPressPlan } from './touch-helper.fixtures.ts';
 

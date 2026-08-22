@@ -1,11 +1,7 @@
 import { vi } from 'vitest';
-import {
-  localRuntimeOwner,
-  type AppLogCompletion,
-  type AppLogLiveHandle,
-  type CleanupOutcome,
-  type FinishOutcome,
-} from '@agent-device/contracts/platform';
+import type { AppLogCompletion, AppLogLiveHandle } from '@agent-device/contracts/app-log-runtime';
+import type { CleanupOutcome, FinishOutcome } from '@agent-device/contracts/durable-resource';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';

@@ -9,19 +9,27 @@ import type {
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
-  bindLocalFocusInteractor,
-  bindLocalScreenshotInteractor,
-  bindLocalTypeTextInteractor,
+} from '@agent-device/contracts/application-lifecycle-runtime';
+import {
   bindElementTextRuntime,
   elementTextRuntimeOperationFacts,
+} from '@agent-device/contracts/element-text-runtime';
+import {
+  bindLocalFocusInteractor,
   focusRuntimeOperationFacts,
-  typeTextRuntimeOperationFacts,
-  localRuntimeOwner,
+} from '@agent-device/contracts/focus-runtime';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import {
+  bindLocalScreenshotInteractor,
   screenshotRuntimeOperationFacts,
-  selectorObservationRuntimeOperationFacts,
-  snapshotRuntimeOperationFacts,
-  viewportRuntimeOperationFacts,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/screenshot-runtime';
+import { selectorObservationRuntimeOperationFacts } from '@agent-device/contracts/selector-observation-runtime';
+import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
+import {
+  bindLocalTypeTextInteractor,
+  typeTextRuntimeOperationFacts,
+} from '@agent-device/contracts/type-text-runtime';
+import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
 import {
   isIosFamily,
   isMacOs,

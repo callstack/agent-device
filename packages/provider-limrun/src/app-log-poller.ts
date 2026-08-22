@@ -5,7 +5,7 @@ import type {
   AppLogRuntimeHost,
   FinishOutcome,
 } from '@agent-device/contracts/platform';
-import { AsyncCleanupStack } from '@agent-device/contracts/platform';
+import { AsyncCleanupStack } from '@agent-device/contracts/async-lifecycle';
 import { createAppLogLiveHandleFromFinish } from '@agent-device/capture-kit';
 import type { LogBackend } from '@agent-device/contracts/observability';
 import { awaitLimrunOperation } from './request-cancellation.ts';

@@ -7,7 +7,7 @@ import type {
   ScreenRecordingRuntimeHost,
   ScreenRecordingStartInput,
 } from '@agent-device/contracts/platform';
-import { SCREEN_RECORDING_RESOURCE_KIND } from '@agent-device/contracts/platform';
+import { SCREEN_RECORDING_RESOURCE_KIND } from '@agent-device/contracts/screen-recording-runtime';
 import { createDurableResourceEnvelope, encodeDurableDescriptor } from '@agent-device/capture-kit';
 
 export type AppleScreenRecordingOperationHost = Readonly<{

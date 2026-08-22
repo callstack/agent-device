@@ -1,4 +1,6 @@
-import { BACK_MODES, CLICK_BUTTONS, SWIPE_PATTERNS } from '@agent-device/contracts/interaction';
+import { BACK_MODES } from '@agent-device/contracts/back-mode';
+import { CLICK_BUTTONS } from '@agent-device/contracts/click-button';
+import { SWIPE_PATTERNS } from '@agent-device/contracts/scroll-gesture';
 import { RECORDING_SCOPE_VALUES } from '@agent-device/contracts/recording';
 import { SESSION_SURFACES, type SessionAction } from '@agent-device/contracts/session';
 import { DEVICE_TARGETS, PLATFORM_SELECTORS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';

@@ -1,6 +1,6 @@
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { publicPlatformString } from '@agent-device/kernel/device';
-import { clearRuntimeHintsRuntimeUse } from '@agent-device/contracts/platform';
+import { clearRuntimeHintsRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import { SessionStore } from '../session-store.ts';
 import { errorResponse } from './response.ts';
 import { expireRefFrame } from '../ref-frame.ts';

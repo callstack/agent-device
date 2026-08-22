@@ -1,13 +1,17 @@
+import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import {
-  resolveScreenshotRuntimePlan,
-  type CaptureScreenshotInput,
-  type CaptureSnapshotInput,
-  type RuntimeOperationFact,
-  type ScreenshotRuntimeOperations,
   type ScreenshotRuntimePlan,
-  type SnapshotResult,
-  type SnapshotRuntimeOperations,
-} from '@agent-device/contracts/platform';
+  resolveScreenshotRuntimePlan,
+} from '@agent-device/contracts/platform-runtime-operations';
+import type {
+  CaptureScreenshotInput,
+  ScreenshotRuntimeOperations,
+} from '@agent-device/contracts/screenshot-runtime';
+import type {
+  CaptureSnapshotInput,
+  SnapshotResult,
+  SnapshotRuntimeOperations,
+} from '@agent-device/contracts/snapshot-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { errorResponse } from './handlers/response.ts';
 import {

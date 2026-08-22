@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { focusRuntimeUse } from '@agent-device/contracts/platform';
+import { focusRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
 import { commandDescriptors } from '../registry.ts';
 import {
   BASE_COMMAND_CAPABILITY_MATRIX,

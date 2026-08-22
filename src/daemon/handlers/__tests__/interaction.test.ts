@@ -57,7 +57,7 @@ vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOr
   };
 });
 
-import { elementTextRead } from '@agent-device/contracts/platform';
+import { elementTextRead } from '@agent-device/contracts/element-text-runtime';
 import {
   elementReadFixtureState,
   getRuntimeBindings,

@@ -2,7 +2,7 @@ import type { ApplicationLifecycleRuntimeOperations } from '@agent-device/contra
 import {
   bindDirectApplicationLifecycle,
   bindProviderApplicationLifecycleInteractor,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/application-lifecycle-interaction';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
 import type { ProviderPortReverseOptions } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';

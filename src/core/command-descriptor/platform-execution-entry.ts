@@ -1,7 +1,7 @@
 import {
   assertCommandPlatformExecution,
   type CommandPlatformExecution,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/command-platform-execution';
 
 /**
  * Structural on purpose: the gate must see an *absent* discriminator, and the

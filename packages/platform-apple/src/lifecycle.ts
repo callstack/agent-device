@@ -10,10 +10,10 @@ import type {
 } from '@agent-device/contracts/platform';
 import {
   bindLocalApplicationLifecycleInteractor,
-  hasRuntimeTransportHintValues,
   invokeApplicationClose,
   invokeApplicationOpen,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/application-lifecycle-interaction';
+import { hasRuntimeTransportHintValues } from '@agent-device/contracts/application-lifecycle-runtime';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import { ensureAppleReady } from './readiness/runtime.ts';
 import { isApplePlatform, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';

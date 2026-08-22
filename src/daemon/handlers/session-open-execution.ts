@@ -2,8 +2,8 @@ import {
   openApplicationRuntimeUse,
   openApplicationWithRuntimeHintApplyUse,
   openApplicationWithRuntimeHintClearUse,
-  type BoundDeviceRuntime,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/application-lifecycle-runtime-plan';
+import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';

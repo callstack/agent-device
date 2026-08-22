@@ -3,12 +3,14 @@ import type {
   ProviderDeviceInventorySource,
 } from '@agent-device/contracts/device';
 import {
-  createPlatformModuleRegistry,
-  type DeviceInventoryHost,
   type DeviceInventorySource,
   type InventoryPlatformModule,
-  type PlatformRequestScope,
-} from '@agent-device/contracts/platform';
+  createPlatformModuleRegistry,
+} from '@agent-device/contracts/platform-module';
+import type {
+  DeviceInventoryHost,
+  PlatformRequestScope,
+} from '@agent-device/contracts/platform-runtime-host';
 import { PLATFORMS, type DeviceInfo, type Platform } from '@agent-device/kernel/device';
 import { describe, expect, test, vi } from 'vitest';
 import { createComposedDeviceInventoryGateways } from './platform-runtime-device-inventory.ts';

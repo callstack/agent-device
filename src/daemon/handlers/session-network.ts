@@ -1,8 +1,8 @@
+import type { NetworkDumpResult } from '@agent-device/contracts/network-runtime';
 import {
   networkAdmissionUse,
   resolveNetworkRuntimePlan,
-  type NetworkDumpResult,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/network-runtime-plan';
 import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '@agent-device/kernel/contracts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { BindDeviceRuntime } from '../request-runtime-binding.ts';

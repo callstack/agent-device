@@ -1,13 +1,14 @@
+import type { AppLogCompletion, AppLogLiveHandle } from '@agent-device/contracts/app-log-runtime';
+import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import {
-  defineUse,
-  narrowDeviceBinding,
-  type AppLogCompletion,
-  type AppLogLiveHandle,
   type DeviceRuntimeGateway,
-  type DurableResourceEnvelope,
-  type PlatformRequestScope,
+  narrowDeviceBinding,
+} from '@agent-device/contracts/platform-runtime';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
+import {
   type PlatformRuntimeOperations,
-} from '@agent-device/contracts/platform';
+  defineUse,
+} from '@agent-device/contracts/platform-runtime-operations';
 import { appLogDurableResource } from './app-log-session-resource.ts';
 import { acquireExactDurableCaptureRecoveryControl } from './durable-capture-runtime-recovery.ts';
 import type { DurableCaptureRecoveryControl } from './durable-capture-recovery-authority.ts';

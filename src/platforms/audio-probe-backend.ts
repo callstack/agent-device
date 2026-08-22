@@ -1,5 +1,5 @@
 import type { AudioProbeSource } from '@agent-device/contracts/platform';
-import { isHostSystemAudioProbeDevice } from '@agent-device/contracts/platform';
+import { isHostSystemAudioProbeDevice } from '@agent-device/contracts/audio-probe-support';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { ExecBackgroundResult } from '../utils/exec.ts';
 

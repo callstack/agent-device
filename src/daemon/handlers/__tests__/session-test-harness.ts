@@ -1,7 +1,8 @@
 import { isMacOs } from '@agent-device/kernel/device';
 import { expect, vi, beforeEach } from 'vitest';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
-import { localRuntimeOwner, type AppLogLiveState } from '@agent-device/contracts/platform';
+import type { AppLogLiveState } from '@agent-device/contracts/app-log-runtime';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { createTestAppLogLiveHandle } from '../../../__tests__/test-utils/app-log-live-handle.ts';
 import type { LogBackend } from '@agent-device/contracts/observability';

@@ -1,21 +1,23 @@
+import { CLICK_BUTTONS } from '@agent-device/contracts/click-button';
 import {
-  CLICK_BUTTONS,
-  GESTURE_KINDS,
-  readGesturePayload,
-  SCROLL_DIRECTIONS,
-  SCROLL_DURATION_MAX_MS,
-  SWIPE_PATTERNS,
-  SWIPE_PAUSE_MAX_MS,
-  SWIPE_PRESETS,
-  SWIPE_REPETITION_MAX,
-  type FlingGesturePayload,
   type DragGesturePayload,
+  type FlingGesturePayload,
+  GESTURE_KINDS,
   type PanGesturePayload,
   type PinchGesturePayload,
   type RotateGesturePayload,
   type SwipeGesturePayload,
   type TransformGesturePayload,
-} from '@agent-device/contracts/interaction';
+  readGesturePayload,
+} from '@agent-device/contracts/gesture-input';
+import { SCROLL_DURATION_MAX_MS } from '@agent-device/contracts/scroll-command';
+import {
+  SCROLL_DIRECTIONS,
+  SWIPE_PATTERNS,
+  SWIPE_PAUSE_MAX_MS,
+  SWIPE_PRESETS,
+  SWIPE_REPETITION_MAX,
+} from '@agent-device/contracts/scroll-gesture';
 import { FIND_LOCATORS } from '@agent-device/selectors';
 import { defineCommandMetadata } from '../command-contract.ts';
 import {

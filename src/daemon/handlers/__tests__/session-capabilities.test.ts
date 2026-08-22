@@ -11,17 +11,17 @@ import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts
 import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
-  applicationLifecycleOperationFacts,
+  type DeviceBinding,
+  type RuntimeOperationFact,
+  type RuntimeProviderMode,
   localRuntimeOwner,
   narrowDeviceBinding,
   providerRuntimeOwner,
-  screenshotRuntimeOperationFacts,
-  type DeviceBinding,
-  type PlatformRuntimeOperations,
-  type RuntimeOperationFact,
-  type RuntimeProviderMode,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,

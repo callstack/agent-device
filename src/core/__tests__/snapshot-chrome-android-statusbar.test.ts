@@ -8,7 +8,7 @@ import {
   walkInteractiveOnlyAndroidFixture,
   walkNonRawAndroidFixture,
 } from '../../__tests__/test-utils/android-ui-hierarchy-fixtures.ts';
-import { isAndroidSystemChromeWindowResourceId } from '@agent-device/contracts/platform';
+import { isAndroidSystemChromeWindowResourceId } from '@agent-device/contracts/android-system-chrome';
 
 /**
  * The `walk*AndroidFixture` helpers run a real `--raw` device capture through

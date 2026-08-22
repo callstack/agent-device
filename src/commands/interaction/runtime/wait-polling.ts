@@ -1,6 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { WAIT_REASONS } from '@agent-device/contracts/interaction';
-import { isUnreadableCaptureContentError } from '@agent-device/contracts/platform';
+import { WAIT_REASONS } from '@agent-device/contracts/wait';
+import { isUnreadableCaptureContentError } from '@agent-device/contracts/android-snapshot-quality';
 import { selectorPollBudget } from '../../../core/selector-pipeline.ts';
 import {
   SELECTOR_PIPELINE_POLICIES,

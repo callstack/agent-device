@@ -11,7 +11,7 @@ import {
 import {
   resetStartupRecoveryFencesForTests,
   runStartupRecoveryFence,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/startup-recovery-fence';
 
 const HELPER_SERVICE = 'com.callstack.agentdevice.imehelper/.TestInputMethodService';
 const LATIN_IME = 'com.google.android.inputmethod.latin/.LatinIME';

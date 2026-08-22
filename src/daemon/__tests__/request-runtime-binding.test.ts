@@ -1,15 +1,17 @@
 import { expect, test, vi } from 'vitest';
+import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
-  applicationLifecycleOperationFacts,
   appLogAdmissionUse,
-  localRuntimeOwner,
-  networkDumpUse,
   resolveLogsRuntimePlan,
-  screenRecordingRecoveryUse,
+} from '@agent-device/contracts/logs-runtime-plan';
+import { networkDumpUse } from '@agent-device/contracts/network-runtime-plan';
+import {
   type DeviceBinding,
   type DeviceRuntimeGateway,
-  type PlatformRuntimeOperations,
-} from '@agent-device/contracts/platform';
+  localRuntimeOwner,
+} from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import { screenRecordingRecoveryUse } from '@agent-device/contracts/screen-recording-runtime-plan';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';

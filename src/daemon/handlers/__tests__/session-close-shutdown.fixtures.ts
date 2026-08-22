@@ -68,13 +68,13 @@ import { acquireDeviceClaim } from '../../device-claims.ts';
 import { inspectDeviceClaims } from '../../device-claim-inspection.ts';
 import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../../utils/diagnostics.ts';
 import {
+  type DeviceBinding,
   localRuntimeOwner,
   narrowDeviceBinding,
   providerRuntimeOwner,
-  type DeviceBinding,
-  type PlatformRuntimeOperations,
-  type ScreenRecordingLiveHandle,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { screenRecordingResourceStore } from '../../screen-recording-resource-store.ts';
 import { lifecycleRuntimeFacts } from './application-lifecycle-runtime-harness.ts';

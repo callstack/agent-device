@@ -1,4 +1,4 @@
-import { waitObservesDevice } from '@agent-device/contracts/platform';
+import { waitObservesDevice } from '@agent-device/contracts/wait-runtime-plan';
 import { parseWaitPositionals } from '../core/wait-positionals.ts';
 import type { WaitParsed } from '../core/wait-positionals.ts';
 import { AppError, asAppError } from '@agent-device/kernel/errors';

@@ -1,19 +1,22 @@
 import {
-  assertExclusiveScrollDistanceInputs,
-  getClickButtonValidationError,
-  honoredScrollDurationMs,
-  MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE,
-  normalizeScrollDurationMs,
-  parseScrollDirection,
-  resolveScrollExecutionOptions,
-  resolveClickButton,
   type ClickButton,
+  getClickButtonValidationError,
+  resolveClickButton,
+} from '@agent-device/contracts/click-button';
+import {
   type Interactor,
+  MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE,
   type RunnerCallOptions,
-  type ScrollCommandOptions,
-  type ScrollDirection,
+} from '@agent-device/contracts/interactor-types';
+import {
   type ResolvedScrollExecutionOptions,
-} from '@agent-device/contracts/interaction';
+  type ScrollCommandOptions,
+  assertExclusiveScrollDistanceInputs,
+  honoredScrollDurationMs,
+  normalizeScrollDurationMs,
+  resolveScrollExecutionOptions,
+} from '@agent-device/contracts/scroll-command';
+import { type ScrollDirection, parseScrollDirection } from '@agent-device/contracts/scroll-gesture';
 import { readFillBackendResult } from './fill-backend-result.ts';
 import {
   isIosFamily,
