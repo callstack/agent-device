@@ -2,14 +2,16 @@ import { expect, test, vi } from 'vitest';
 import {
   localRuntimeOwner,
   narrowDeviceBinding,
-  tvRemoteRuntimeOperationFacts,
-  tvRemoteRuntimeUse,
   type DeviceBinding,
   type DeviceRuntimeGateway,
-  type PlatformRuntimeOperations,
   type RuntimeFacts,
   type RuntimeOperationFact,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime';
+import {
+  tvRemoteRuntimeUse,
+  type PlatformRuntimeOperations,
+} from '@agent-device/contracts/platform-runtime-operations';
+import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
 import { deviceShape } from '@agent-device/kernel/device';
 import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';

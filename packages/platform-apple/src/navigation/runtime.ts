@@ -1,18 +1,26 @@
 import {
   backRuntimeOperationFacts,
   bindLocalBackInteractor,
+} from '@agent-device/contracts/back-runtime';
+import {
   bindLocalHomeInteractor,
+  homeRuntimeOperationFacts,
+} from '@agent-device/contracts/home-runtime';
+import {
   bindLocalKeyboardDismissInteractor,
   bindLocalKeyboardEnterInteractor,
-  bindLocalOrientationInteractor,
-  bindLocalTvRemoteInteractor,
-  homeRuntimeOperationFacts,
   keyboardRuntimeOperationFacts,
+} from '@agent-device/contracts/keyboard-runtime';
+import {
+  bindLocalOrientationInteractor,
   orientationRuntimeOperationFacts,
+} from '@agent-device/contracts/orientation-runtime';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
+import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
+import {
+  bindLocalTvRemoteInteractor,
   tvRemoteRuntimeOperationFacts,
-  type PlatformRuntimeHost,
-  type RuntimeOperationFact,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/tv-remote-runtime';
 import { isTvOsDevice, resolveDeviceAppleOs, type DeviceInfo } from '@agent-device/kernel/device';
 
 const available = Object.freeze({ available: true } as const);

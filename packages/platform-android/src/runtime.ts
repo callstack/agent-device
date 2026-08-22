@@ -35,8 +35,14 @@ import {
   typeTextRuntimeOperationFacts,
 } from '@agent-device/contracts/type-text-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
-import { bindLocalBackInteractor, backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
-import { bindLocalHomeInteractor, homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
+import {
+  bindLocalBackInteractor,
+  backRuntimeOperationFacts,
+} from '@agent-device/contracts/back-runtime';
+import {
+  bindLocalHomeInteractor,
+  homeRuntimeOperationFacts,
+} from '@agent-device/contracts/home-runtime';
 import {
   bindLocalOrientationInteractor,
   orientationRuntimeOperationFacts,

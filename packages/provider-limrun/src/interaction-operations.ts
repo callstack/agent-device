@@ -1,27 +1,35 @@
 import {
+  bindProviderBackInteractor,
+  backRuntimeOperationFacts,
+} from '@agent-device/contracts/back-runtime';
+import {
   bindProviderFocusInteractor,
   focusRuntimeOperationFacts,
 } from '@agent-device/contracts/focus-runtime';
+import {
+  bindProviderHomeInteractor,
+  homeRuntimeOperationFacts,
+} from '@agent-device/contracts/home-runtime';
+import {
+  bindProviderKeyboardDismissInteractor,
+  bindProviderKeyboardEnterInteractor,
+  bindProviderKeyboardStatusInteractor,
+  keyboardRuntimeOperationFacts,
+} from '@agent-device/contracts/keyboard-runtime';
+import {
+  bindProviderOrientationInteractor,
+  orientationRuntimeOperationFacts,
+} from '@agent-device/contracts/orientation-runtime';
 import { bindProviderScreenshotInteractor } from '@agent-device/contracts/screenshot-runtime';
 import { bindProviderSnapshotInteractor } from '@agent-device/contracts/snapshot-runtime';
+import {
+  bindProviderTvRemoteInteractor,
+  tvRemoteRuntimeOperationFacts,
+} from '@agent-device/contracts/tv-remote-runtime';
 import {
   bindProviderTypeTextInteractor,
   typeTextRuntimeOperationFacts,
 } from '@agent-device/contracts/type-text-runtime';
-import {
-  bindProviderBackInteractor,
-  bindProviderHomeInteractor,
-  bindProviderKeyboardDismissInteractor,
-  bindProviderKeyboardEnterInteractor,
-  bindProviderKeyboardStatusInteractor,
-  bindProviderOrientationInteractor,
-  bindProviderTvRemoteInteractor,
-  backRuntimeOperationFacts,
-  homeRuntimeOperationFacts,
-  keyboardRuntimeOperationFacts,
-  orientationRuntimeOperationFacts,
-  tvRemoteRuntimeOperationFacts,
-} from '@agent-device/contracts/platform';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
 import type { RuntimeOperationUnavailability } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';

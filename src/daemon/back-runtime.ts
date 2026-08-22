@@ -1,5 +1,6 @@
-import { backRuntimeUse, type BackInput } from '@agent-device/contracts/platform';
+import type { BackInput } from '@agent-device/contracts/back-runtime';
 import type { BackMode } from '@agent-device/contracts/interaction';
+import { backRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { successText } from '../utils/success-text.ts';
 import type { DaemonCommandContext } from './context.ts';

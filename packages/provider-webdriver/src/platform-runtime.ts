@@ -8,12 +8,18 @@ import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
 } from '@agent-device/contracts/application-lifecycle-runtime';
-import { bindProviderBackInteractor, backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
+import {
+  bindProviderBackInteractor,
+  backRuntimeOperationFacts,
+} from '@agent-device/contracts/back-runtime';
 import {
   bindProviderFocusInteractor,
   focusRuntimeOperationFacts,
 } from '@agent-device/contracts/focus-runtime';
-import { bindProviderHomeInteractor, homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
+import {
+  bindProviderHomeInteractor,
+  homeRuntimeOperationFacts,
+} from '@agent-device/contracts/home-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import {
   bindProviderOrientationInteractor,

@@ -12,8 +12,14 @@ import {
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import { localRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
-import { bindLocalBackInteractor, backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
-import { bindLocalHomeInteractor, homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
+import {
+  bindLocalBackInteractor,
+  backRuntimeOperationFacts,
+} from '@agent-device/contracts/back-runtime';
+import {
+  bindLocalHomeInteractor,
+  homeRuntimeOperationFacts,
+} from '@agent-device/contracts/home-runtime';
 import {
   bindLocalTvRemoteInteractor,
   tvRemoteRuntimeOperationFacts,

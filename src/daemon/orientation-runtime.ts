@@ -1,9 +1,9 @@
-import {
-  orientationRuntimeUse,
-  type SetOrientationInput,
-  type SetOrientationResult,
-} from '@agent-device/contracts/platform';
+import type {
+  SetOrientationInput,
+  SetOrientationResult,
+} from '@agent-device/contracts/orientation-runtime';
 import { parseDeviceRotation, type DeviceRotation } from '@agent-device/contracts/device';
+import { orientationRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { successText } from '../utils/success-text.ts';
 import type { DaemonCommandContext } from './context.ts';

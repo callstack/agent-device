@@ -15,17 +15,21 @@ vi.mock('../../platforms/android/app-lifecycle.ts', async (importOriginal) => {
 });
 
 import {
+  orientationRuntimeOperationFacts,
+  type SetOrientationResult,
+} from '@agent-device/contracts/orientation-runtime';
+import {
   localRuntimeOwner,
   narrowDeviceBinding,
-  orientationRuntimeOperationFacts,
-  orientationRuntimeUse,
   type DeviceBinding,
   type DeviceRuntimeGateway,
-  type PlatformRuntimeOperations,
   type RuntimeFacts,
   type RuntimeOperationFact,
-  type SetOrientationResult,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime';
+import {
+  orientationRuntimeUse,
+  type PlatformRuntimeOperations,
+} from '@agent-device/contracts/platform-runtime-operations';
 import { deviceShape } from '@agent-device/kernel/device';
 import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';

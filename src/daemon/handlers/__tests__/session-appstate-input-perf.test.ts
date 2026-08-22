@@ -3,14 +3,14 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
+import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import {
-  keyboardRuntimeOperationFacts,
   localRuntimeOwner,
   narrowDeviceBinding,
   type DeviceBinding,
-  type PlatformRuntimeOperations,
   type RuntimeFacts,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
 import type {
   BindDeviceRuntime,

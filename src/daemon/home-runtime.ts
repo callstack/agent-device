@@ -1,4 +1,5 @@
-import { homeRuntimeUse, type HomeInput } from '@agent-device/contracts/platform';
+import type { HomeInput } from '@agent-device/contracts/home-runtime';
+import { homeRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { successText } from '../utils/success-text.ts';
 import type { DaemonCommandContext } from './context.ts';

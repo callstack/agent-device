@@ -1,19 +1,23 @@
 import { expect, test, vi } from 'vitest';
 import {
-  keyboardDismissUse,
-  keyboardEnterUse,
-  keyboardStatusUse,
   keyboardRuntimeOperationFacts,
-  localRuntimeOwner,
-  narrowDeviceBinding,
-  type DeviceBinding,
   type KeyboardDismissResult,
   type KeyboardEnterResult,
   type KeyboardStatusResult,
-  type PlatformRuntimeOperations,
+} from '@agent-device/contracts/keyboard-runtime';
+import {
+  localRuntimeOwner,
+  narrowDeviceBinding,
+  type DeviceBinding,
   type RuntimeFacts,
   type RuntimeOperationFact,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime';
+import {
+  keyboardDismissUse,
+  keyboardEnterUse,
+  keyboardStatusUse,
+  type PlatformRuntimeOperations,
+} from '@agent-device/contracts/platform-runtime-operations';
 import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { resolveBoundKeyboardRuntime } from '../keyboard-runtime.ts';

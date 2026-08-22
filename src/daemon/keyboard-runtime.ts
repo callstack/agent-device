@@ -1,12 +1,14 @@
+import type {
+  KeyboardActionInput,
+  KeyboardDismissResult,
+  KeyboardEnterResult,
+  KeyboardStatusResult,
+} from '@agent-device/contracts/keyboard-runtime';
 import {
   keyboardDismissUse,
   keyboardEnterUse,
   keyboardStatusUse,
-  type KeyboardActionInput,
-  type KeyboardDismissResult,
-  type KeyboardEnterResult,
-  type KeyboardStatusResult,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-operations';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { isKeyboardAction, type KeyboardAction } from '../utils/keyboard-actions.ts';

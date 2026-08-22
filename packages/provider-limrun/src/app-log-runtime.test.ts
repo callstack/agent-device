@@ -1,9 +1,8 @@
-import { narrowDeviceBinding } from '@agent-device/contracts/platform-runtime';
+import { narrowDeviceBinding, type DeviceBinding } from '@agent-device/contracts/platform-runtime';
 import {
   appStateUse,
   appsRuntimeUse,
   bootTargetUse,
-  type DeviceBinding,
   type PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';

@@ -1,5 +1,6 @@
-import { tvRemoteRuntimeUse, type TvRemoteInput } from '@agent-device/contracts/platform';
-import { parseTvRemoteButton, type TvRemoteButton } from '@agent-device/contracts/interaction';
+import type { TvRemoteInput } from '@agent-device/contracts/tv-remote-runtime';
+import { tvRemoteRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
+import { parseTvRemoteButton, type TvRemoteButton } from '@agent-device/contracts/tv-remote';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { successText } from '../utils/success-text.ts';

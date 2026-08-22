@@ -1,15 +1,17 @@
 import { expect, test, vi } from 'vitest';
+import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import {
-  backRuntimeOperationFacts,
-  backRuntimeUse,
   localRuntimeOwner,
   narrowDeviceBinding,
   type DeviceBinding,
   type DeviceRuntimeGateway,
-  type PlatformRuntimeOperations,
   type RuntimeFacts,
   type RuntimeOperationFact,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime';
+import {
+  backRuntimeUse,
+  type PlatformRuntimeOperations,
+} from '@agent-device/contracts/platform-runtime-operations';
 import { deviceShape } from '@agent-device/kernel/device';
 import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
