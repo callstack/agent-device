@@ -203,7 +203,7 @@ export async function runChecks(
   // that look like real diffs/failures on files the change never touched. Naming the
   // real cause here means an agent never "fixes" formatting that was never wrong.
   const lockfileSync = checkLockfileSync(cwd);
-  if (!lockfileSync.inSync && lockfileSync.reason !== 'lockfile-missing') {
+  if (lockfileSync.status === 'out-of-sync') {
     reportStaleInstall(lockfileSync.reason);
     return 1;
   }

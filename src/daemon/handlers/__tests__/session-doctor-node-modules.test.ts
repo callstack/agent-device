@@ -22,9 +22,9 @@ test('node-modules doctor check passes when the installed snapshot matches the c
   writeInstalledSnapshot(root, 'lockfileVersion: 9.0\n');
 
   const check = nodeModulesLockfileCheck(root);
-  assert.equal(check.id, 'node-modules');
-  assert.equal(check.status, 'pass');
-  assert.match(check.summary, /matches pnpm-lock\.yaml/);
+  assert.equal(check?.id, 'node-modules');
+  assert.equal(check?.status, 'pass');
+  assert.match(check?.summary ?? '', /matches pnpm-lock\.yaml/);
 });
 
 test('node-modules doctor check fails with the stale-install message when hashes disagree', () => {
@@ -33,34 +33,37 @@ test('node-modules doctor check fails with the stale-install message when hashes
   writeInstalledSnapshot(root, 'lockfileVersion: 9.0\n');
 
   const check = nodeModulesLockfileCheck(root);
-  assert.equal(check.status, 'fail');
-  assert.equal(check.summary, STALE_NODE_MODULES_MESSAGE);
-  assert.equal(check.command, 'pnpm install');
-  assert.deepEqual(check.evidence, { repoRoot: root, reason: 'stale' });
+  assert.equal(check?.status, 'fail');
+  assert.equal(check?.summary, STALE_NODE_MODULES_MESSAGE);
+  assert.equal(check?.command, 'pnpm install');
+  assert.deepEqual(check?.evidence, { repoRoot: root, reason: 'stale' });
 });
 
-test('node-modules doctor check fails with the stale-install message when node_modules was never installed here', () => {
+test('node-modules doctor check fails when a source checkout was never installed', () => {
   const root = mkdtempForTestSync('agent-device-doctor-node-modules-missing-install-');
   writeLockfile(root, 'lockfileVersion: 9.0\n');
 
   const check = nodeModulesLockfileCheck(root);
-  assert.equal(check.status, 'fail');
-  assert.equal(check.summary, STALE_NODE_MODULES_MESSAGE);
-  assert.deepEqual(check.evidence, { repoRoot: root, reason: 'install-missing' });
+  assert.equal(check?.status, 'fail');
+  assert.equal(check?.summary, STALE_NODE_MODULES_MESSAGE);
+  assert.deepEqual(check?.evidence, { repoRoot: root, reason: 'install-missing' });
 });
 
-test('node-modules doctor check stays informational when the checkout has no lockfile at all', () => {
-  const root = mkdtempForTestSync('agent-device-doctor-node-modules-missing-lockfile-');
+test('node-modules doctor check is omitted entirely for a packaged install with no source checkout', () => {
+  // The defect this guards: a published agent-device ships neither pnpm-lock.yaml nor an
+  // installed snapshot, so an unconditional probe gave every end user a spurious
+  // node-modules line and dragged the overall doctor status down with it.
+  const root = mkdtempForTestSync('agent-device-doctor-node-modules-packaged-');
+  fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'package.json'), '{"name":"agent-device"}\n');
 
-  const check = nodeModulesLockfileCheck(root);
-  assert.equal(check.status, 'warn');
-  assert.match(check.summary, /pnpm-lock\.yaml not found/);
+  assert.equal(nodeModulesLockfileCheck(root), undefined);
 });
 
 test("node-modules doctor check defaults to this checkout's own root, matching real doctor wiring", () => {
   // session-doctor.ts calls nodeModulesLockfileCheck() with no argument; this repo's own
   // install is expected to be in sync while the suite runs (pnpm install was run for it).
   const check = nodeModulesLockfileCheck();
-  assert.equal(check.id, 'node-modules');
-  assert.equal(check.status, 'pass');
+  assert.equal(check?.id, 'node-modules');
+  assert.equal(check?.status, 'pass');
 });

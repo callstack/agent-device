@@ -20,38 +20,49 @@ export const STALE_NODE_MODULES_MESSAGE =
   'node_modules was installed from a different lockfile; run pnpm install';
 
 export type LockfileInstallSyncResult =
-  | { readonly inSync: true }
+  // The root holds no pnpm-lock.yaml, so there is no source checkout here to diagnose.
+  // A published agent-device install is exactly this: package.json `files` ships bin/,
+  // dist/ and the helper artifacts, never the lockfile, and an npm tarball never carries
+  // node_modules. Callers must treat this as "question does not apply", not as a defect
+  // — reporting a stale install here would fire on every end user's packaged `doctor`.
+  | { readonly status: 'no-source-checkout' }
+  | { readonly status: 'in-sync' }
   | {
-      readonly inSync: false;
-      // 'lockfile-missing': no pnpm-lock.yaml in the checkout — a broken checkout, not a
-      // stale install, but the caller has nothing to compare against either way.
-      // 'install-missing': no node_modules/.pnpm/lock.yaml — never installed here, which
-      // is exactly the "fresh worktree" trap: without its own install, module resolution
-      // silently walks up to another checkout's node_modules.
+      readonly status: 'out-of-sync';
+      // 'install-missing': pnpm-lock.yaml is present but node_modules/.pnpm/lock.yaml is
+      // not — a source checkout that was never installed, which is exactly the fresh-worktree
+      // trap: without its own install, module resolution silently walks up to another
+      // checkout's node_modules.
       // 'stale': both files exist but their contents (and therefore hashes) disagree —
       // node_modules was installed from a different pnpm-lock.yaml than the one checked out.
-      readonly reason: 'lockfile-missing' | 'install-missing' | 'stale';
+      readonly reason: 'install-missing' | 'stale';
     };
 
 /**
  * Compares the lockfile a checkout's node_modules was installed from against the
  * lockfile currently checked out, using a content hash of each — no subprocess.
+ *
+ * Whether this is a source checkout at all is decided by the presence of
+ * `pnpm-lock.yaml` under `repoRoot`, not by any heuristic about where the code was
+ * installed from: the lockfile is committed in every worktree and shipped in no
+ * published package, so its presence is the fact itself rather than a proxy for it.
+ *
  * Works from any worktree: both paths are resolved under the given repoRoot, so a
  * worktree's own node_modules is checked against its own pnpm-lock.yaml, never another
  * checkout's.
  */
 export function checkLockfileInstallSync(repoRoot: string): LockfileInstallSyncResult {
   const lockfileHash = hashFileIfExists(path.join(repoRoot, LOCKFILE_BASENAME));
-  if (!lockfileHash) return { inSync: false, reason: 'lockfile-missing' };
+  if (!lockfileHash) return { status: 'no-source-checkout' };
 
   const installedSnapshotHash = hashFileIfExists(
     path.join(repoRoot, ...INSTALLED_SNAPSHOT_RELATIVE_PATH),
   );
-  if (!installedSnapshotHash) return { inSync: false, reason: 'install-missing' };
+  if (!installedSnapshotHash) return { status: 'out-of-sync', reason: 'install-missing' };
 
   return lockfileHash === installedSnapshotHash
-    ? { inSync: true }
-    : { inSync: false, reason: 'stale' };
+    ? { status: 'in-sync' }
+    : { status: 'out-of-sync', reason: 'stale' };
 }
 
 function hashFileIfExists(filePath: string): string | undefined {

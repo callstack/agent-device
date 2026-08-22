@@ -262,7 +262,7 @@ test('runChecks fails fast on a stale install before running format or any other
   const code = await runChecks(plan, { scripts: ALL_SCRIPTS }, ARGS, {
     execute,
     cwd: '.',
-    checkLockfileSync: () => ({ inSync: false, reason: 'stale' }),
+    checkLockfileSync: () => ({ status: 'out-of-sync', reason: 'stale' }),
   });
   assert.equal(code, 1);
   assert.deepEqual(executed, [], 'no check — including format — may run against a stale install');
@@ -281,13 +281,13 @@ test('runChecks fails fast when node_modules was never installed in this checkou
   const code = await runChecks(plan, { scripts: ALL_SCRIPTS }, ARGS, {
     execute,
     cwd: '.',
-    checkLockfileSync: () => ({ inSync: false, reason: 'install-missing' }),
+    checkLockfileSync: () => ({ status: 'out-of-sync', reason: 'install-missing' }),
   });
   assert.equal(code, 1);
   assert.deepEqual(executed, []);
 });
 
-test('runChecks does not block on a missing lockfile — that is a different failure than a stale install', async () => {
+test('runChecks does not block when there is no source checkout to compare against', async () => {
   const executed: string[][] = [];
   const execute: CommandExecutor = async (command) => {
     executed.push(command);
@@ -300,7 +300,7 @@ test('runChecks does not block on a missing lockfile — that is a different fai
   const code = await runChecks(plan, { scripts: ALL_SCRIPTS }, ARGS, {
     execute,
     cwd: '.',
-    checkLockfileSync: () => ({ inSync: false, reason: 'lockfile-missing' }),
+    checkLockfileSync: () => ({ status: 'no-source-checkout' }),
   });
   assert.equal(code, 0);
   assert.ok(executed.length > 0, 'checks still run when there is nothing to compare against');
@@ -319,7 +319,7 @@ test('runChecks proceeds normally when the install is in sync', async () => {
   const code = await runChecks(plan, { scripts: ALL_SCRIPTS }, ARGS, {
     execute,
     cwd: '.',
-    checkLockfileSync: () => ({ inSync: true }),
+    checkLockfileSync: () => ({ status: 'in-sync' }),
   });
   assert.equal(code, 0);
   assert.ok(executed.some((command) => command.includes('format:check')));
@@ -341,7 +341,7 @@ test('runChecks names the real cause on stderr instead of surfacing as an unrela
     const code = await runChecks(plan, { scripts: ALL_SCRIPTS }, ARGS, {
       execute: async () => 0,
       cwd: '.',
-      checkLockfileSync: () => ({ inSync: false, reason: 'stale' }),
+      checkLockfileSync: () => ({ status: 'out-of-sync', reason: 'stale' }),
     });
     assert.equal(code, 1);
     assert.ok(
