@@ -194,6 +194,65 @@ enum SnapshotPresentation {
     return true
   }
 
+  /// Computes one regular-tree frontier transition for both acquisition and its tests. The fold
+  /// remains the sole visibility interpreter; this helper only carries its decision into the
+  /// presentation-owned depth budget and the next traversal state.
+  static func regularTraversalTransition(
+    for raw: RawAXNode,
+    parentPresentedDepth: Int,
+    parentTraversal: SnapshotVisibilityFold.TraversalState,
+    hint: CaptureHint,
+    rawDepth: Int,
+    viewport: CGRect,
+    hasChildren: Bool,
+    isDuplicate: Bool,
+    policy: SnapshotVisibilityFold.Policy = .platformDefault
+  ) -> (
+    presentedDepth: Int,
+    traversal: SnapshotVisibilityFold.TraversalState,
+    shouldVisitChildren: Bool
+  ) {
+    guard hint.regularPresentedDepth != nil else {
+      return (
+        parentPresentedDepth,
+        parentTraversal,
+        shouldAcquireChildren(
+          for: hint,
+          rawDepth: rawDepth,
+          regularPresentedDepth: parentPresentedDepth
+        )
+      )
+    }
+
+    let visibility = SnapshotVisibilityFold.traversalDecision(
+      for: raw,
+      parent: parentTraversal,
+      viewport: viewport,
+      interactiveOnly: hint.interactiveOnly,
+      hasChildren: hasChildren,
+      policy: policy
+    )
+    let presentedDepth = regularPresentedDepth(
+      for: raw,
+      parentPresentedDepth: parentPresentedDepth,
+      visibility: visibility
+    )
+    let nextPresentedDepth = isDuplicate ? parentPresentedDepth : presentedDepth
+    let nextTraversal = isDuplicate ? parentTraversal : visibility.descendants
+    let descendantsMayBeVisible = isDuplicate
+      ? parentTraversal.descendantsMayBeVisible
+      : visibility.descendantsMayBeVisible
+    return (
+      nextPresentedDepth,
+      nextTraversal,
+      shouldAcquireChildren(
+        for: hint,
+        rawDepth: rawDepth,
+        regularPresentedDepth: nextPresentedDepth
+      ) && descendantsMayBeVisible
+    )
+  }
+
   /// Shared depth accounting for the acquisition frontier. The fold supplies the same visibility
   /// decision used by regular presentation; this method adds only the presentation-owned semantic
   /// eligibility predicate.

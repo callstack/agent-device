@@ -561,52 +561,37 @@ extension RunnerTests {
       SnapshotPresentation.present(acquisition, options: options)?.payload.nodes)
 
     XCTAssertEqual(presented.map(\.label), ["App", "Projected child"])
+    XCTAssertEqual(presented.map(\.depth), [0, 1])
+    XCTAssertEqual(presented.map(\.parentIndex), [nil, 0])
 
-    let clippedParentVisibility = SnapshotVisibilityFold.traversalDecision(
-      for: nodes[1],
-      parent: .root,
-      viewport: viewport,
-      interactiveOnly: options.interactiveOnly,
-      hasChildren: true,
-      policy: .platformDefault
-    )
-    let clippedParentPresentedDepth = SnapshotPresentation.regularPresentedDepth(
+    let clippedParentTransition = SnapshotPresentation.regularTraversalTransition(
       for: nodes[1],
       parentPresentedDepth: 0,
-      visibility: clippedParentVisibility
-    )
-    XCTAssertFalse(clippedParentVisibility.isIncluded)
-    XCTAssertTrue(clippedParentVisibility.descendantsMayBeVisible)
-    XCTAssertEqual(clippedParentPresentedDepth, 0)
-    XCTAssertTrue(
-      SnapshotPresentation.shouldAcquireChildren(
-        for: hint,
-        rawDepth: 1,
-        regularPresentedDepth: clippedParentPresentedDepth
-      )
-    )
-
-    let childVisibility = SnapshotVisibilityFold.traversalDecision(
-      for: nodes[2],
-      parent: clippedParentVisibility.descendants,
+      parentTraversal: .root,
+      hint: hint,
+      rawDepth: 1,
       viewport: viewport,
-      interactiveOnly: options.interactiveOnly,
-      hasChildren: false,
-      policy: .platformDefault
+      hasChildren: true,
+      isDuplicate: false,
+      policy: .cursorProjected
     )
-    let childPresentedDepth = SnapshotPresentation.regularPresentedDepth(
+    XCTAssertEqual(clippedParentTransition.presentedDepth, 0)
+    XCTAssertTrue(clippedParentTransition.traversal.descendantsMayBeVisible)
+    XCTAssertTrue(clippedParentTransition.shouldVisitChildren)
+
+    let childTransition = SnapshotPresentation.regularTraversalTransition(
       for: nodes[2],
-      parentPresentedDepth: clippedParentPresentedDepth,
-      visibility: childVisibility
+      parentPresentedDepth: clippedParentTransition.presentedDepth,
+      parentTraversal: clippedParentTransition.traversal,
+      hint: hint,
+      rawDepth: 2,
+      viewport: viewport,
+      hasChildren: false,
+      isDuplicate: false,
+      policy: .cursorProjected
     )
-    XCTAssertEqual(childPresentedDepth, 1)
-    XCTAssertFalse(
-      SnapshotPresentation.shouldAcquireChildren(
-        for: hint,
-        rawDepth: 2,
-        regularPresentedDepth: childPresentedDepth
-      )
-    )
+    XCTAssertEqual(childTransition.presentedDepth, 1)
+    XCTAssertFalse(childTransition.shouldVisitChildren)
 
     let rawHint = SnapshotPresentation.captureHint(
       for: PresentationOptions(interactiveOnly: false, depth: 1, scope: nil, raw: true))

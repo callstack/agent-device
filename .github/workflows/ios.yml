@@ -163,6 +163,8 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotPresentationOwnsScopeAndRelativeDepth \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPresentationRefusesAnAcquisitionCapturedForTheOtherProjection \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCaptureHintIsTheOnlyAcquisitionViewOfARequest \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularDepthFrontierSurvivesStructuralWrapperCollapse \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularDepthFrontierKeepsVisibleIndependentChildPastClippedParent \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularFoldClipsScrollOverflowReparentsAndBooksHints \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularFoldKeepsWindowCarriersButNeverHittableOutsideClip \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularFoldDropsSubPixelContentlessDecorationOnEveryBackend \

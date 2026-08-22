@@ -207,26 +207,6 @@ extension RunnerTests {
         parentIndex: parentIndex,
         viewport: context.viewport
       )
-      let visibilityDecision: SnapshotVisibilityFold.TraversalDecision?
-      if hint.regularPresentedDepth != nil {
-        visibilityDecision = SnapshotVisibilityFold.traversalDecision(
-          for: node,
-          parent: entry.parentTraversal,
-          viewport: context.viewport,
-          interactiveOnly: hint.interactiveOnly,
-          hasChildren: !snapshot.children.isEmpty,
-          policy: .platformDefault
-        )
-      } else {
-        visibilityDecision = nil
-      }
-      let presentedDepth = visibilityDecision.map {
-        SnapshotPresentation.regularPresentedDepth(
-          for: node,
-          parentPresentedDepth: entry.parentPresentedDepth,
-          visibility: $0
-        )
-      } ?? entry.parentPresentedDepth
       let key = Self.snapshotTraversalIdentity(
         elementType: snapshot.elementType,
         label: evaluation.label,
@@ -239,33 +219,26 @@ extension RunnerTests {
       }
 
       let currentIndex = !isDuplicate ? nodes.count : parentIndex
-      // A duplicate is not emitted, so its descendants are reparented to the
-      // duplicate's parent. Keep the frontier at that parent too; counting a
-      // skipped duplicate would make the acquisition less complete than the
-      // presentation tree it will produce.
-      let currentPresentedDepth = isDuplicate
-        ? entry.parentPresentedDepth
-        : presentedDepth
-      let currentTraversal = isDuplicate
-        ? entry.parentTraversal
-        : visibilityDecision?.descendants ?? entry.parentTraversal
-      let descendantsMayBeVisible = isDuplicate
-        ? entry.parentTraversal.descendantsMayBeVisible
-        : visibilityDecision?.descendantsMayBeVisible ?? true
-      let shouldVisitChildren = SnapshotPresentation.shouldAcquireChildren(
-        for: hint,
+      let transition = SnapshotPresentation.regularTraversalTransition(
+        for: node,
+        parentPresentedDepth: entry.parentPresentedDepth,
+        parentTraversal: entry.parentTraversal,
+        hint: hint,
         rawDepth: depth,
-        regularPresentedDepth: currentPresentedDepth
-      ) && (visibilityDecision == nil || descendantsMayBeVisible)
-      if shouldVisitChildren {
+        viewport: context.viewport,
+        hasChildren: !snapshot.children.isEmpty,
+        isDuplicate: isDuplicate,
+        policy: .platformDefault
+      )
+      if transition.shouldVisitChildren {
         for child in snapshot.children.reversed() {
           stack.append(
             SnapshotTraversalEntry(
               snapshot: child,
               depth: depth + 1,
               parentIndex: currentIndex,
-              parentPresentedDepth: currentPresentedDepth,
-              parentTraversal: currentTraversal
+              parentPresentedDepth: transition.presentedDepth,
+              parentTraversal: transition.traversal
             )
           )
         }
@@ -274,7 +247,7 @@ extension RunnerTests {
       if isDuplicate { continue }
 
       nodes.append(node)
-      if shouldVisitChildren {
+      if transition.shouldVisitChildren {
         appendCollapsedTabFallbackNodes(
           to: &nodes,
           containerSnapshot: snapshot,
