@@ -4,6 +4,7 @@ import {
   applyReplayDivergenceLevelCaps,
   boundReplayDivergence,
   measureReplayDivergenceBytes,
+  readReplayDivergenceResume,
   sanitizeReplayDivergenceField,
   REPLAY_DIVERGENCE_DEFAULT_REF_LIMIT,
   REPLAY_DIVERGENCE_DIGEST_REF_LIMIT,
@@ -886,3 +887,44 @@ test('formatReplayDivergenceReport OMITS the diagnostics clause for manual when 
   assert.ok(report);
   assert.doesNotMatch(report!, /Read-only inspection/);
 });
+
+// --- readReplayDivergenceResume: the one narrowing of `details.divergence.resume`
+// (ADR 0012 decision 6). The daemon stamps `resume.repairSessionHeld` through
+// this reader and the client keys its keep-alive on the record it returns, so
+// both ends admit exactly the same payloads. ---
+
+test('readReplayDivergenceResume returns the live record so an in-place stamp is observable', () => {
+  const divergence = { resume: { allowed: true, from: 3, planDigest: 'digest-abc' } };
+
+  const resume = readReplayDivergenceResume(divergence);
+  assert.ok(resume);
+  assert.equal(resume, divergence.resume);
+
+  resume.repairSessionHeld = true;
+  assert.equal(readReplayDivergenceResume(divergence)?.repairSessionHeld, true);
+});
+
+test('readReplayDivergenceResume accepts a non-resumable divergence carrying its reason', () => {
+  const resume = readReplayDivergenceResume({
+    resume: { allowed: false, from: 2, planDigest: 'digest-x', reason: 'output-env-skip' },
+  });
+
+  assert.equal(resume?.allowed, false);
+});
+
+const UNREADABLE_DIVERGENCE_PAYLOADS: [label: string, payload: unknown][] = [
+  ['undefined', undefined],
+  ['a non-record', 'REPLAY_DIVERGENCE'],
+  ['a divergence without resume', { kind: 'selector-miss' }],
+  ['a non-record resume', { resume: 'held' }],
+  ['a resume without allowed', { resume: { from: 1, planDigest: 'd' } }],
+  ['a fractional from', { resume: { allowed: true, from: 1.5, planDigest: 'd' } }],
+  ['a missing planDigest', { resume: { allowed: true, from: 1 } }],
+  ['a blocked resume without reason', { resume: { allowed: false, from: 1, planDigest: 'd' } }],
+];
+
+for (const [label, payload] of UNREADABLE_DIVERGENCE_PAYLOADS) {
+  test(`readReplayDivergenceResume rejects ${label}`, () => {
+    assert.equal(readReplayDivergenceResume(payload), undefined);
+  });
+}

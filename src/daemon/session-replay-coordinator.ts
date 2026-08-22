@@ -1,9 +1,12 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import path from 'node:path';
-import type { ReplayDivergenceResume, ReplayRepairHint } from '@agent-device/contracts/divergence';
+import {
+  readReplayDivergenceResume,
+  type ReplayDivergenceResume,
+  type ReplayRepairHint,
+} from '@agent-device/contracts/divergence';
 import type { DaemonResponse, SessionState } from './types.ts';
 import type { SessionStore } from './session-store.ts';
-import { isRecord } from '../utils/parsing.ts';
 import {
   armRepairStep,
   isUncommittedRepairSession,
@@ -151,7 +154,7 @@ export function createReplayCoordinator(params: {
       // per R2) is therefore still held on divergence and stays in the
       // transaction.
       if (!isUncommittedRepairSession(current())) return response;
-      const resume = readDivergenceResumeRecord(response);
+      const resume = readReplayDivergenceResume(response.error.details?.divergence);
       if (resume) resume.repairSessionHeld = true;
       return response;
     },
@@ -176,21 +179,6 @@ export function healedScriptSiblingPath(sourcePath: string): string {
   const dir = path.dirname(sourcePath);
   const base = path.basename(sourcePath, path.extname(sourcePath));
   return path.join(dir, `${base}.healed.ad`);
-}
-
-/** The mutable `details.divergence.resume` record on a failed response, or `undefined`. */
-function readDivergenceResumeRecord(
-  response: Extract<DaemonResponse, { ok: false }>,
-): ReplayDivergenceResume | undefined {
-  const divergence = response.error.details?.divergence;
-  if (!isRecord(divergence) || !isReplayDivergenceResume(divergence.resume)) return undefined;
-  return divergence.resume;
-}
-
-function isReplayDivergenceResume(value: unknown): value is ReplayDivergenceResume {
-  if (!isRecord(value) || typeof value.allowed !== 'boolean') return false;
-  if (!Number.isInteger(value.from) || typeof value.planDigest !== 'string') return false;
-  return value.allowed || typeof value.reason === 'string';
 }
 
 /**

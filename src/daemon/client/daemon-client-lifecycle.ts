@@ -3,6 +3,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { readReplayDivergenceResume } from '@agent-device/contracts/divergence';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { runCmdDetachedMonitored, type ExecDetachedExit } from '../../utils/exec.ts';
 import { readVersion } from '../../utils/version.ts';
@@ -458,11 +459,8 @@ function surfaceUnrecoveredRepairCommitFailure(
 export function isHeldRepairDivergence(response: DaemonResponse | undefined): boolean {
   if (!response || response.ok) return false;
   if (response.error.code !== 'REPLAY_DIVERGENCE') return false;
-  const divergence = response.error.details?.divergence;
-  if (!divergence || typeof divergence !== 'object') return false;
-  const resume = (divergence as Record<string, unknown>).resume;
-  if (!resume || typeof resume !== 'object') return false;
-  return (resume as Record<string, unknown>).repairSessionHeld === true;
+  const resume = readReplayDivergenceResume(response.error.details?.divergence);
+  return resume?.repairSessionHeld === true;
 }
 
 /**

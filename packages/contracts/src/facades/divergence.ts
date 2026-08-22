@@ -8,6 +8,7 @@ export {
   createReplayDivergenceSanitizer,
   formatReplayDivergenceReport,
   measureReplayDivergenceBytes,
+  readReplayDivergenceResume,
   sanitizeReplayDivergenceField,
   scrubReplayVarValues,
   truncateUtf8Field,

@@ -1,5 +1,6 @@
 import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import { redactDiagnosticData } from '@agent-device/kernel/redaction';
+import { isRecord } from './json.ts';
 
 /**
  * ADR 0012 migration steps 2 + 4: structured replay divergence report.
@@ -175,6 +176,28 @@ export type ReplayDivergenceResume =
       repairSessionHeld?: true;
     }
   | { allowed: false; from: number; planDigest: string; reason: string; repairSessionHeld?: true };
+
+/**
+ * The `resume` record carried by a divergence-shaped payload, or `undefined`
+ * when the payload does not carry a contract-shaped one.
+ *
+ * Returns the LIVE record rather than a copy: the daemon stamps
+ * `repairSessionHeld` onto it in place (`session-replay-coordinator.ts`)
+ * through this same reader. That is what lets the client key its keep-alive
+ * on the narrowed record too — a payload this reader rejects cannot be
+ * carrying the R7 liveness signal, because the stamp is only ever written to
+ * a record it accepted.
+ */
+export function readReplayDivergenceResume(
+  divergence: unknown,
+): ReplayDivergenceResume | undefined {
+  if (!isRecord(divergence) || !isRecord(divergence.resume)) return undefined;
+  const resume = divergence.resume;
+  if (typeof resume.allowed !== 'boolean') return undefined;
+  if (!Number.isInteger(resume.from) || typeof resume.planDigest !== 'string') return undefined;
+  if (!resume.allowed && typeof resume.reason !== 'string') return undefined;
+  return resume as ReplayDivergenceResume;
+}
 
 export type ReplayDivergenceOverflow = {
   omittedBytes: number;
