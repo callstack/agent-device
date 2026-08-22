@@ -13,6 +13,7 @@ import {
   attachRefs,
   type HiddenContentHint,
   type RawSnapshotNode,
+  type SnapshotQualityVerdict,
   type SnapshotOptions,
 } from '@agent-device/kernel/snapshot';
 import { attachSnapshotClickabilityEvidence } from '@agent-device/contracts/capture';
@@ -22,6 +23,7 @@ import {
   parseUiHierarchyTree,
   type AndroidBuiltSnapshot,
   type AndroidSnapshotAnalysis,
+  type AndroidUiHierarchySnapshotOptions,
   type AndroidUiHierarchy,
 } from './ui-hierarchy.ts';
 import { buildAndroidSnapshotClickabilityEvidence } from './snapshot-clickability.ts';
@@ -53,6 +55,12 @@ import {
   resetAndroidSnapshotHelperRuntime,
   retireAndroidSnapshotHelperAfterContentFailure,
 } from './snapshot-helper-runtime.ts';
+import {
+  ANDROID_SNAPSHOT_PRESENTATION_DEFAULT_DEADLINE_MS,
+  isAndroidSnapshotPresentationFailure,
+  type AndroidSnapshotPresentationFailure,
+  type AndroidSnapshotPresentationOptions,
+} from './snapshot-presentation.ts';
 
 const HELPER_INSTALL_TIMEOUT_MS = 30_000;
 const HELPER_CAPTURE_TIMEOUT_MS = 5_000;
@@ -73,6 +81,7 @@ export type AndroidSnapshotOptions = SnapshotOptions & {
   helperSessionScope?: 'command' | 'daemon-session';
   helperAdb?: AndroidAdbExecutor | AndroidAdbProvider;
   includeHiddenContentHints?: boolean;
+  androidPresentation?: AndroidSnapshotPresentationOptions;
 };
 
 export async function captureAndroidUiHierarchyXml(
@@ -91,30 +100,78 @@ export async function snapshotAndroid(
   truncated?: boolean;
   analysis: AndroidSnapshotAnalysis;
   androidSnapshot: AndroidSnapshotBackendMetadata;
+  quality?: SnapshotQualityVerdict;
 }> {
   const adb = resolveAndroidAdbProvider(device, options.helperAdb).exec;
   const capture = await captureAndroidUiHierarchy(device, options, adb);
   const xml = capture.xml;
   const tree = parseUiHierarchyTree(xml);
-  const built = buildUiHierarchySnapshot(tree, undefined, options);
-  const truncated = mergeAndroidSnapshotTruncation(built.truncated, capture.metadata);
-  if (options.interactiveOnly && options.includeHiddenContentHints !== false) {
-    applyHiddenContentHintsToInteractiveSnapshot({
-      options,
-      tree,
-      xml,
-      interactiveSnapshot: built,
+  const androidSnapshot = withOcclusionScanDisclosure(capture.metadata, tree);
+  const presentationOptions: AndroidUiHierarchySnapshotOptions = {
+    ...options,
+    androidPresentation: {
+      ...options.androidPresentation,
+      deadlineAtMs:
+        options.androidPresentation?.deadlineAtMs ??
+        Date.now() + ANDROID_SNAPSHOT_PRESENTATION_DEFAULT_DEADLINE_MS,
+    },
+  };
+
+  try {
+    const built = buildUiHierarchySnapshot(tree, undefined, presentationOptions);
+    const truncated = mergeAndroidSnapshotTruncation(built.truncated, capture.metadata);
+    if (options.interactiveOnly && options.includeHiddenContentHints !== false) {
+      applyHiddenContentHintsToInteractiveSnapshot({
+        options: presentationOptions,
+        tree,
+        xml,
+        interactiveSnapshot: built,
+      });
+    }
+    const { sourceNodes: _sourceNodes, ...snapshot } = built;
+    const result = {
+      ...snapshot,
+      ...androidSnapshotTruncationFields(truncated),
+      androidSnapshot,
+      quality: { state: 'healthy', backend: 'android-helper' } as const,
+    };
+    return attachSnapshotClickabilityEvidence(
+      result,
+      buildAndroidSnapshotClickabilityEvidence(built),
+    );
+  } catch (error) {
+    if (!isAndroidSnapshotPresentationFailure(error)) throw error;
+    return attachAndroidPresentationFailureEvidence({
+      failure: error,
+      androidSnapshot,
     });
   }
-  const { sourceNodes: _sourceNodes, ...snapshot } = built;
-  const result = {
-    ...snapshot,
-    ...androidSnapshotTruncationFields(truncated),
-    androidSnapshot: withOcclusionScanDisclosure(capture.metadata, tree),
-  };
+}
+
+function attachAndroidPresentationFailureEvidence(params: {
+  failure: AndroidSnapshotPresentationFailure;
+  androidSnapshot: AndroidSnapshotBackendMetadata;
+}): {
+  nodes: RawSnapshotNode[];
+  truncated: true;
+  analysis: AndroidSnapshotAnalysis;
+  androidSnapshot: AndroidSnapshotBackendMetadata;
+  quality: SnapshotQualityVerdict;
+} {
   return attachSnapshotClickabilityEvidence(
-    result,
-    buildAndroidSnapshotClickabilityEvidence(built),
+    {
+      nodes: [],
+      truncated: true,
+      analysis: params.failure.analysis ?? { rawNodeCount: 0, maxDepth: 0 },
+      androidSnapshot: params.androidSnapshot,
+      quality: {
+        state: 'sparse',
+        backend: 'android-helper',
+        reason: params.failure.message,
+        reasonCode: params.failure.qualityReasonCode,
+      },
+    },
+    { kind: 'exact', provider: 'android-helper', clickableByNodeIndex: new Map() },
   );
 }
 

@@ -3,7 +3,10 @@ import path from 'node:path';
 
 import { expect, test } from 'vitest';
 
-import { SNAPSHOT_BACKEND_CAPABILITIES } from './backend-capabilities.ts';
+import {
+  ANDROID_SNAPSHOT_BACKEND_CAPABILITIES,
+  SNAPSHOT_BACKEND_CAPABILITIES,
+} from './backend-capabilities.ts';
 
 type SnapshotBackendParityFixture = {
   backends: Array<{
@@ -105,6 +108,15 @@ test('iOS snapshot registry classifies every backend and conformance target', ()
     forceable: false,
     supportsRawProjection: false,
     regularDepth: 'flat',
+    hittable: 'geometric-actionability',
+  });
+});
+
+test('Android helper quality is classified outside the iOS CLI registry', () => {
+  expect(ANDROID_SNAPSHOT_BACKEND_CAPABILITIES['android-helper']).toMatchObject({
+    forceable: false,
+    supportsRawProjection: true,
+    regularDepth: 'presented-frontier',
     hittable: 'geometric-actionability',
   });
 });

@@ -29,6 +29,7 @@ test('preserves Android clickability evidence through the interactor snapshot ad
     nodes: [{ index: 0, identifier: 'target', rect: { x: 0, y: 0, width: 20, height: 20 } }],
     analysis: { rawNodeCount: 1, maxDepth: 0 },
     androidSnapshot: { backend: 'android-helper' as const },
+    quality: { state: 'healthy' as const, backend: 'android-helper' as const },
   };
   const evidence = {
     kind: 'exact' as const,
@@ -41,5 +42,6 @@ test('preserves Android clickability evidence through the interactor snapshot ad
   const result = await createAndroidInteractor(device).snapshot({});
 
   expect(readSnapshotClickabilityEvidence(result)).toEqual(evidence);
+  expect(result.quality).toEqual({ state: 'healthy', backend: 'android-helper' });
   expect(JSON.stringify(result)).not.toContain('clickable');
 });

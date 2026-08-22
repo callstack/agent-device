@@ -123,6 +123,23 @@ test('resolveRecoveredWarningLatch transitions', () => {
   expect(switched.latch).toEqual({ appBundleId: 'com.example.other' });
 });
 
+test('Android helper quality never mutates the iOS penalty latch', () => {
+  const latch = { appBundleId: 'com.example.app' };
+  for (const state of ['healthy', 'recovered', 'sparse'] as const) {
+    const decision = resolveRecoveredWarningLatch({
+      verdict: {
+        state,
+        backend: 'android-helper',
+        reasonCode: state === 'recovered' ? 'presentation-failed' : undefined,
+      },
+      appBundleId: 'com.example.app',
+      latch,
+    });
+    expect(decision.warning).toBeUndefined();
+    expect(decision.latch).toBe(latch);
+  }
+});
+
 test('internal observation responses neither consume nor clear the latch', () => {
   const session = makeIosSession('default', { appBundleId: 'com.example.app' });
 

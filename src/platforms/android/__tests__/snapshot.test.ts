@@ -692,6 +692,43 @@ test('snapshotAndroid resolves helper adb through scoped provider', async () => 
   assert.equal(mockRunCmd.mock.calls.length, 0);
 });
 
+test('snapshotAndroid publishes an Android helper quality verdict', async () => {
+  const result = await snapshotAndroidWithHelper(
+    androidSnapshotHelperAdb(
+      '<hierarchy><node text="quality" bounds="[0,0][10,10]" /></hierarchy>',
+    ),
+  );
+
+  assert.deepEqual((result as typeof result & { quality?: unknown }).quality, {
+    state: 'healthy',
+    backend: 'android-helper',
+  });
+});
+
+test('snapshotAndroid discards the whole projection after a presentation deadline failure', async () => {
+  const options = {
+    helperAdb: androidSnapshotHelperAdb(
+      '<hierarchy><node text="deadline" bounds="[0,0][10,10]" /></hierarchy>',
+    ),
+    helperArtifact,
+    androidPresentation: {
+      deadlineAtMs: 100,
+      now: () => 100,
+    },
+  } as Parameters<typeof snapshotAndroid>[1];
+
+  const result = await snapshotAndroid(device, options);
+
+  assert.deepEqual(result.nodes, []);
+  assert.equal(result.truncated, true);
+  assert.deepEqual((result as typeof result & { quality?: unknown }).quality, {
+    state: 'sparse',
+    backend: 'android-helper',
+    reason: 'Android snapshot presentation exceeded its cooperative deadline',
+    reasonCode: 'presentation-failed',
+  });
+});
+
 test('snapshotAndroid stops command-scoped persistent helper session after capture', async () => {
   const adbCalls: string[][] = [];
   const spawnArgs: string[][] = [];

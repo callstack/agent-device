@@ -1,5 +1,5 @@
 /**
- * Structured quality verdict computed once by the iOS runner's snapshot capture plan.
+ * Structured quality verdict computed once by a platform snapshot capture/presentation plan.
  * The daemon renders it; it never re-derives degradation from node shapes.
  *
  * Defined here (the foundational snapshot type module) rather than in
@@ -9,11 +9,11 @@
 /**
  * Which capture STRATEGY produced a snapshot, within one platform's plan —
  * distinct from `SnapshotBackend`, which names the platform channel
- * (`xctest`/`android`/…). The iOS plan walks these in order, so one session can
- * change strategy mid-sequence, and two strategies do not return comparable
- * views of one screen (#1569).
+ * (`xctest`/`android`/…). A platform plan may change strategy mid-sequence, and two strategies do
+ * not return comparable views of one screen (#1569). Android's helper presentation is included
+ * here so its quality verdict uses the same typed contract as the iOS strategy chain.
  */
-export type SnapshotCaptureBackend = 'tree' | 'queries' | 'private-ax';
+export type SnapshotCaptureBackend = 'tree' | 'queries' | 'private-ax' | 'android-helper';
 
 /** Internal backends that evidence probes may select explicitly. */
 export type SnapshotPreferredBackend = 'tree' | 'private-ax';

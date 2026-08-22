@@ -43,6 +43,9 @@ export function resolveRecoveredWarningLatch(params: {
 }): LatchDecision {
   const { verdict, appBundleId, latch } = params;
   if (!verdict) return { latch };
+  // Android helper quality is a platform-local verdict. It must not arm, clear, or otherwise
+  // mutate the iOS XCTest penalty latch, which is session state for a different capture channel.
+  if (verdict.backend === 'android-helper') return { latch };
   if (verdict.state === 'healthy') return { latch: undefined };
   if (verdict.state !== 'recovered') return { latch };
   // A request-pinned backend never degraded anything, so it neither warns nor

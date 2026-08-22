@@ -71,6 +71,16 @@ test('readSnapshotQualityVerdict preserves a presentation failure reason', () =>
   assert.equal(verdict?.reasonCode, 'presentation-failed');
 });
 
+test('readSnapshotQualityVerdict accepts the Android helper backend', () => {
+  const verdict = readSnapshotQualityVerdict({
+    state: 'healthy',
+    backend: 'android-helper',
+  });
+
+  assert.equal(verdict?.state, 'healthy');
+  assert.equal(verdict?.backend, 'android-helper');
+});
+
 test('isSparseSnapshotQualityVerdict identifies sparse captures', () => {
   assert.equal(isSparseSnapshotQualityVerdict({ state: 'sparse', backend: 'private-ax' }), true);
   assert.equal(isSparseSnapshotQualityVerdict({ state: 'healthy', backend: 'tree' }), false);
