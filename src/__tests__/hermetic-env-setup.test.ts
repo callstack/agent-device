@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_VITEST_MAX_WORKERS,
   resolveVitestMaxWorkers,
+  VITEST_MAX_WORKERS_OVERRIDE_ENV,
 } from '../../scripts/lib/vitest-concurrency.ts';
 import vitestConfig from '../../vitest.config.ts';
 
@@ -21,6 +22,35 @@ test('vitest caps aggregate worker concurrency for parallel worktrees', () => {
   assert.equal(vitestConfig.test?.maxWorkers, resolveVitestMaxWorkers());
   assert.equal(resolveVitestMaxWorkers({}), DEFAULT_VITEST_MAX_WORKERS);
   assert.equal(resolveVitestMaxWorkers({ CI: 'true' }), undefined);
+});
+
+// The opt-in solo-run escape hatch (#1962). These live here rather than beside the
+// resolver so the mutation lane's `vitest related` graph is not widened by a new
+// test file: this one is already in the unit-core suite and already imports it.
+test('a solo run may raise the local worker cap, clamped and CI-ignored', () => {
+  // Clamped to availableParallelism(), never honored literally: cpus().length would
+  // ignore CPU affinity and cgroup limits and inflate the ceiling this enforces.
+  assert.equal(
+    resolveVitestMaxWorkers({ [VITEST_MAX_WORKERS_OVERRIDE_ENV]: '999' }),
+    os.availableParallelism(),
+  );
+  // 1 is <= availableParallelism() on every host, so this takes the override branch.
+  assert.equal(resolveVitestMaxWorkers({ [VITEST_MAX_WORKERS_OVERRIDE_ENV]: '1' }), 1);
+  // CI derives its own count, so the override is inert there even when both are set.
+  assert.equal(
+    resolveVitestMaxWorkers({ CI: 'true', [VITEST_MAX_WORKERS_OVERRIDE_ENV]: '8' }),
+    undefined,
+  );
+});
+
+test('an unusable worker override falls through to the default cap', () => {
+  for (const value of ['not-a-number', '0', '-4', '2.5', '', '  ']) {
+    assert.equal(
+      resolveVitestMaxWorkers({ [VITEST_MAX_WORKERS_OVERRIDE_ENV]: value }),
+      DEFAULT_VITEST_MAX_WORKERS,
+      `${JSON.stringify(value)} must degrade to the default cap rather than throw`,
+    );
+  }
 });
 
 // Wiring: the scrub only helps if every project loads it as a setup file. CI runs with the

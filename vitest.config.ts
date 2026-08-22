@@ -61,9 +61,6 @@ export default defineConfig({
           include: [
             'src/**/*.test.ts',
             'packages/*/src/**/*.test.ts',
-            // Pure resolver logic (no subprocess, no device), imported by this
-            // config itself and by scripts/check-affected — belongs in the fast lane.
-            'scripts/lib/vitest-concurrency.test.ts',
             // The validation fuzz generators' expectation gates (#1781 B2): in-process, no
             // subprocess or worker, so they ride the fast lane unlike their serialized siblings.
             'scripts/fuzz/validation-arbitraries.test.ts',
