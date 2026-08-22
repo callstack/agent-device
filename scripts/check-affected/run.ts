@@ -13,7 +13,7 @@ import {
   checkLockfileInstallSync,
   STALE_NODE_MODULES_MESSAGE,
   type LockfileInstallSyncResult,
-} from '../../src/utils/lockfile-install-sync.ts';
+} from './lockfile-install-sync.ts';
 import { parseScriptArgs } from '../lib/cli-args.ts';
 import { runEntrypoint } from '../lib/cli-entrypoint.ts';
 import {
@@ -198,13 +198,10 @@ export async function runChecks(
 ): Promise<number> {
   const cwd = options.cwd ?? repoRoot;
   const checkLockfileSync = options.checkLockfileSync ?? checkLockfileInstallSync;
-  // Fast preflight, before format (first in the catalog) or any other check gets a
-  // chance to run: a stale install (#1956) makes oxfmt/oxlint/tsc misbehave in ways
-  // that look like real diffs/failures on files the change never touched. Naming the
-  // real cause here means an agent never "fixes" formatting that was never wrong.
+  // Fail before any gate can misdiagnose a stale worktree install (#1956).
   const lockfileSync = checkLockfileSync(cwd);
   if (lockfileSync.status === 'out-of-sync') {
-    reportStaleInstall(lockfileSync.reason);
+    reportStaleInstall(lockfileSync.reason, cwd);
     return 1;
   }
   const execute = options.execute ?? streamingExecutor;
@@ -232,14 +229,15 @@ export async function runChecks(
   return 0;
 }
 
-function reportStaleInstall(reason: 'install-missing' | 'stale'): void {
+function reportStaleInstall(reason: 'install-missing' | 'stale', cwd: string): void {
   process.stderr.write(`\ncheck:affected: ${STALE_NODE_MODULES_MESSAGE}\n`);
   process.stderr.write(
     reason === 'install-missing'
       ? '(no node_modules/.pnpm/lock.yaml found — this checkout was never installed)\n'
       : '(node_modules/.pnpm/lock.yaml disagrees with pnpm-lock.yaml)\n',
   );
-  process.stderr.write('Run `agent-device doctor` for more detail.\n');
+  process.stderr.write(`Worktree: ${cwd}\n`);
+  process.stderr.write('Run `pnpm install --frozen-lockfile` in this worktree, then retry.\n');
 }
 
 // Where a check the local run skips is authoritative. A parked check has no automatic

@@ -130,7 +130,7 @@
     "fallow:baseline": "fallow dead-code --save-baseline fallow-baselines/dead-code.json --summary && fallow health --report-only --save-baseline fallow-baselines/health.json --summary",
     "check:fallow": "fallow audit",
     "check:affected": "node --experimental-strip-types scripts/check-affected/run.ts",
-    "check:affected:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/check-affected/model.test.ts scripts/check-affected/platform-packages.test.ts scripts/check-affected/device-lanes.test.ts scripts/check-affected/run.test.ts",
+    "check:affected:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/check-affected/model.test.ts scripts/check-affected/platform-packages.test.ts scripts/check-affected/device-lanes.test.ts scripts/check-affected/lockfile-install-sync.test.ts scripts/check-affected/run.test.ts",
     "gate": "node --experimental-strip-types scripts/gate/run.ts",
     "check:gate-manifest": "node --experimental-strip-types scripts/gate/check.ts",
     "check:gate-manifest:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/gate/*.test.ts",

@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { runCmdSync } from '../../src/utils/exec.ts';
-import { STALE_NODE_MODULES_MESSAGE } from '../../src/utils/lockfile-install-sync.ts';
+import { STALE_NODE_MODULES_MESSAGE } from './lockfile-install-sync.ts';
 import { CHECK_CATALOG } from './checks.ts';
 import { DEFAULT_VITEST_MAX_WORKERS } from '../lib/vitest-concurrency.ts';
 import { selectChecks } from './model.ts';
@@ -348,6 +348,10 @@ test('runChecks names the real cause on stderr instead of surfacing as an unrela
       stderrChunks.some((chunk) => chunk.includes(STALE_NODE_MODULES_MESSAGE)),
       `expected stderr to name the stale-install cause, got: ${stderrChunks.join('')}`,
     );
+    const stderr = stderrChunks.join('');
+    assert.match(stderr, /Worktree: \.\n/);
+    assert.match(stderr, /pnpm install --frozen-lockfile/);
+    assert.doesNotMatch(stderr, /agent-device doctor/);
   } finally {
     process.stderr.write = originalWrite;
   }

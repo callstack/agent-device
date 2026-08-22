@@ -15,7 +15,6 @@ import {
   resolveDoctorDeviceForAppCheck,
 } from './session-doctor-device.ts';
 import { probeMetro } from './session-doctor-metro.ts';
-import { nodeModulesLockfileCheck } from './session-doctor-node-modules.ts';
 import {
   readDoctorOptions,
   remoteConnectionChecks,
@@ -73,14 +72,6 @@ export async function handleDoctorCommand(params: {
   if (options.remote) {
     return doctorResponse(checks, options);
   }
-
-  // Local-only from here down. The worktree/lockfile probe must stay below this
-  // return: under --remote the daemon's own root describes the server deployment,
-  // not the caller's checkout, so the answer could not address #1963 anyway. The
-  // probe also returns undefined when there is no source checkout (a packaged
-  // install), leaving no check line rather than a meaningless one.
-  const nodeModules = nodeModulesLockfileCheck();
-  if (nodeModules) appendDoctorCheck(checks, nodeModules);
 
   const inventory = await appendDeviceInventoryCheck(checks, req, session);
   await appendToolchainChecks(checks, session?.device.platform ?? inventory?.platform);
