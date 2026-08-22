@@ -237,7 +237,7 @@ async function assertClearStateLaunchUrl(context: LiveContext): Promise<void> {
   await assertElementText(context, 'id="automation-event-payload"', '{"source":"deep-link"}');
 }
 
-async function acceptDeepLinkConfirmationIfPresent(context: LiveContext): Promise<void> {
+export async function acceptDeepLinkConfirmationIfPresent(context: LiveContext): Promise<void> {
   const destination = await runStep(
     context,
     'wait for deep-link destination before inspecting system UI',

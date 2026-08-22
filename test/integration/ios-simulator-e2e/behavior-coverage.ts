@@ -6,6 +6,7 @@ export type IosSimulatorBehaviorId =
   | 'long-list-scroll-recovery'
   | 'modal-open-close'
   | 'permission-state-recovery'
+  | 'regular-visible-depth-frontier'
   | 'text-entry-keyboard-lifecycle';
 
 type BehaviorCoverageEntry =
@@ -53,6 +54,12 @@ export const IOS_SIMULATOR_BEHAVIOR_COVERAGE = {
       'microphone reset, grant, denial, and second reset produce exact app-observed states',
     level: 'live',
     owner: 'full:lifecycle-system',
+  },
+  'regular-visible-depth-frontier': {
+    assertion:
+      'regular depth 1 retains an independently projected child after its clipped structural parent is removed, while raw depth remains traversal-bounded',
+    level: 'live',
+    owner: 'smoke:regular-visible-depth-frontier',
   },
   'interrupted-system-ui-flow': {
     assertion: 'Home and app switcher expose distinct system pixels before fixture restoration',

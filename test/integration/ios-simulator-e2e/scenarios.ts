@@ -11,7 +11,8 @@ type ScenarioRunnerKey =
   | 'formInput'
   | 'inventoryInstall'
   | 'lifecycleSystem'
-  | 'observabilityArtifacts';
+  | 'observabilityArtifacts'
+  | 'snapshotDepthFrontier';
 
 type ScenarioDefinition = IosSimulatorScenario & {
   runner: ScenarioRunnerKey;
@@ -21,6 +22,11 @@ const SCENARIO_DEFINITIONS: readonly ScenarioDefinition[] = [
   { id: 'smoke:inventory-install', runner: 'inventoryInstall', tier: 'smoke' },
   { id: 'smoke:automation-input', runner: 'automationInput', tier: 'smoke' },
   { id: 'smoke:form-input', runner: 'formInput', tier: 'smoke' },
+  {
+    id: 'smoke:regular-visible-depth-frontier',
+    runner: 'snapshotDepthFrontier',
+    tier: 'smoke',
+  },
   { id: 'smoke:capture-close', runner: 'captureClose', tier: 'smoke' },
   { id: 'full:lifecycle-system', runner: 'lifecycleSystem', tier: 'full' },
   {
