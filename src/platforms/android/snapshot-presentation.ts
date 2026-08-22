@@ -57,11 +57,12 @@ function intersectRect(left: Rect, right: Rect): Rect {
   const y = Math.max(left.y, right.y);
   const maxX = Math.min(left.x + left.width, right.x + right.width);
   const maxY = Math.min(left.y + left.height, right.y + right.height);
+  const hasIntersection = maxX > x && maxY > y;
   return {
-    x: maxX > x ? x : left.x,
-    y: maxY > y ? y : left.y,
-    width: maxX > x ? maxX - x : 0,
-    height: maxY > y ? maxY - y : 0,
+    x: hasIntersection ? x : left.x,
+    y: hasIntersection ? y : left.y,
+    width: hasIntersection ? maxX - x : 0,
+    height: hasIntersection ? maxY - y : 0,
   };
 }
 

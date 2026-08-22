@@ -380,6 +380,23 @@ test('regular Android snapshots publish cumulative effective geometry while raw 
   });
 });
 
+test('regular Android snapshots clip descendants to their owning window', () => {
+  const xml = `<hierarchy>
+  <node class="android.widget.FrameLayout" bounds="[0,0][400,800]" window-bounds="[0,0][400,800]" window-index="0" window-type="1" window-layer="1" window-active="true" window-focused="true" visible-to-user="true">
+    <node class="android.widget.Button" text="Main action" bounds="[20,20][180,80]" clickable="true" visible-to-user="true" />
+  </node>
+  <node class="android.widget.FrameLayout" bounds="[100,100][300,300]" window-bounds="[100,100][300,300]" window-index="1" window-type="2" window-layer="2" window-active="true" window-focused="true" visible-to-user="true">
+    <node class="android.widget.Button" text="Outside dialog" bounds="[120,320][180,380]" clickable="true" visible-to-user="true" />
+  </node>
+</hierarchy>`;
+
+  const regular = parseUiHierarchy(xml, 800, {});
+  const dialogAction = regular.nodes.find((node) => node.label === 'Outside dialog');
+
+  expect(dialogAction).toMatchObject({ rect: { x: 120, y: 320, width: 0, height: 0 } });
+  expect(dialogAction?.hittable).toBeUndefined();
+});
+
 test('parseUiHierarchy prunes descendants of Android nodes that are not visible to the user', () => {
   const xml = `<hierarchy>
   <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" enabled="true" visible-to-user="true">

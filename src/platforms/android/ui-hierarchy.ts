@@ -183,10 +183,12 @@ function walkUiHierarchyNode(
   ancestorHittable: boolean = false,
   ancestorCollection: boolean = false,
   ancestorSystemChrome: boolean = false,
+  ancestorWindowRect?: Rect,
   ancestorClip?: Rect,
 ): void {
   if (shouldStopAndroidWalk(state, node, depth)) return;
-  const effectiveRect = resolveAndroidEffectiveRect(state, node, ancestorClip);
+  const currentWindowRect = node.windowRect ?? ancestorWindowRect ?? state.viewport;
+  const effectiveRect = resolveAndroidEffectiveRect(state, node, ancestorClip, currentWindowRect);
   const currentIndex = appendAndroidNodeIfPresented(
     state,
     node,
@@ -207,6 +209,7 @@ function walkUiHierarchyNode(
     nextAncestorHittable,
     nextAncestorCollection,
     ancestorSystemChrome || isAndroidSystemChromeWindowResourceId(node.identifier),
+    currentWindowRect,
     nextAncestorClip,
   );
 }
@@ -227,10 +230,9 @@ function resolveAndroidEffectiveRect(
   state: AndroidSnapshotBuildState,
   node: AndroidNode,
   ancestorClip: Rect | undefined,
+  windowRect: Rect | undefined,
 ): Rect | undefined {
-  return state.options.raw
-    ? node.rect
-    : effectiveAndroidRect(node.rect, node.windowRect ?? state.viewport, ancestorClip);
+  return state.options.raw ? node.rect : effectiveAndroidRect(node.rect, windowRect, ancestorClip);
 }
 
 function appendAndroidNodeIfPresented(
@@ -277,6 +279,7 @@ function walkAndroidChildren(
   ancestorHittable: boolean,
   ancestorCollection: boolean,
   ancestorSystemChrome: boolean,
+  ancestorWindowRect: Rect | undefined,
   ancestorClip: Rect | undefined,
 ): void {
   for (const child of node.children) {
@@ -288,6 +291,7 @@ function walkAndroidChildren(
       ancestorHittable,
       ancestorCollection,
       ancestorSystemChrome,
+      ancestorWindowRect,
       ancestorClip,
     );
     if (state.truncated) return;
