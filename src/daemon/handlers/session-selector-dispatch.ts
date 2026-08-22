@@ -223,7 +223,12 @@ export async function handleTriggerAppEventCommand(params: {
     sessionStore,
     command: PUBLIC_COMMANDS.triggerAppEvent,
     positionals,
-    prepare: legacySessionDispatchExecute(PUBLIC_COMMANDS.triggerAppEvent, positionals, req, logPath),
+    prepare: legacySessionDispatchExecute(
+      PUBLIC_COMMANDS.triggerAppEvent,
+      positionals,
+      req,
+      logPath,
+    ),
     deriveNextSession: async (session, result) => {
       const eventUrl = typeof result?.eventUrl === 'string' ? result.eventUrl : undefined;
       const nextAppBundleId = eventUrl
