@@ -480,7 +480,7 @@ extension RunnerTests {
     let presented: SnapshotBackendCapture
     do {
       presented = try timer.measure(.presentation) {
-        guard let capture = SnapshotPresentation.present(acquisition, options: options) else {
+        guard let capture = try SnapshotPresentation.present(acquisition, options: options) else {
           throw Self.snapshotProjectionMismatchFailure(
             kind,
             requested: hint.projection,
