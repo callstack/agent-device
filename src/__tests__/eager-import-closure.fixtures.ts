@@ -98,12 +98,6 @@ function collectEagerDynamicImports(node: unknown, eager: boolean, found: string
   visitChildren(record, eager, found);
 }
 
-export { FUNCTION_NODES };
-
-export function parseEagerModule(fileName: string, source: string): ParsedModuleRecord {
-  return parseSync(fileName, source).module;
-}
-
 /** Every specifier this file evaluates at load time, static or dynamic. */
 export function eagerlyEvaluatedModules(fileName: string, source: string): string[] {
   const parsed = parseSync(fileName, source);
@@ -112,7 +106,7 @@ export function eagerlyEvaluatedModules(fileName: string, source: string): strin
   return [...new Set([...staticEvaluatedRefs(parsed.module), ...dynamic])];
 }
 
-export function resolveRelative(fromFile: string, specifier: string): string | null {
+function resolveRelative(fromFile: string, specifier: string): string | null {
   const candidate = path.resolve(path.dirname(fromFile), specifier);
   if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return candidate;
   for (const suffix of ['.ts', '.tsx', '/index.ts']) {
