@@ -1,6 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { AppFrame } from '../components';
 import { useAppColors, type AppColors } from '../theme';
 
 /**
@@ -13,7 +12,7 @@ export function VisibleDepthScreen() {
   const styles = createStyles(colors);
 
   return (
-    <AppFrame>
+    <View accessible={false} style={styles.frame}>
       <Text style={[styles.title, styles.titleSpacing]} testID="visible-depth-title">
         Regular visible depth frontier
       </Text>
@@ -35,7 +34,7 @@ export function VisibleDepthScreen() {
           <Text style={styles.projectedChildLabel}>Projected child</Text>
         </Pressable>
       </View>
-    </AppFrame>
+    </View>
   );
 }
 
@@ -45,6 +44,11 @@ function createStyles(colors: AppColors) {
       color: colors.textSoft,
       fontSize: 16,
       lineHeight: 23,
+    },
+    frame: {
+      flex: 1,
+      paddingHorizontal: 18,
+      paddingTop: 24,
     },
     clippedParent: {
       height: 64,
