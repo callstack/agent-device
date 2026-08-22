@@ -7,6 +7,7 @@ import {
   scrollingContainerTypeArb,
 } from '../__tests__/test-utils/property-arbitraries.ts';
 import { makeSnapshotState } from '../__tests__/test-utils/snapshot-builders.ts';
+import { buildActionableTouchTopology } from './actionable-touch-topology.ts';
 import {
   classifyActionableTouchCandidates,
   resolveActionableTouchResolution,
@@ -14,6 +15,7 @@ import {
 import {
   ELEMENT14_DISTINCT_SUBTREE_NODES,
   EQUIVALENT_WRAPPER_CHAIN_NODES,
+  INDEXED_PARITY_POLICY_NODES,
 } from './interaction-targeting.fixtures.ts';
 
 test('collapses one same-label wrapper chain to its shared actionable node', () => {
@@ -200,4 +202,36 @@ test('falls back to the original node when no usable touch target exists', () =>
 
   assert.equal(resolution.reason, 'original');
   assert.equal(resolution.node.label, 'Virtual item');
+});
+
+test('a prebuilt topology answers every policy branch exactly as the unindexed walk does', () => {
+  const snapshot = makeSnapshotState(INDEXED_PARITY_POLICY_NODES);
+  const topology = buildActionableTouchTopology(snapshot.nodes);
+
+  const unindexed = snapshot.nodes.map((node) =>
+    resolveActionableTouchResolution(snapshot.nodes, node),
+  );
+  const indexed = snapshot.nodes.map((node) =>
+    resolveActionableTouchResolution(snapshot.nodes, node, topology),
+  );
+
+  assert.deepEqual(indexed, unindexed);
+  // Pinned rather than merely equal: two identically broken implementations
+  // would also be deeply equal to each other.
+  assert.deepEqual(
+    indexed.map((resolution) => [resolution.node.index, resolution.reason]),
+    [
+      [0, 'hittable-ancestor'],
+      [2, 'same-rect-descendant'],
+      [2, 'hittable-ancestor'],
+      [3, 'semantic-target'],
+      [4, 'semantic-target'],
+      [4, 'hittable-ancestor'],
+      [6, 'hittable-ancestor'],
+      [7, 'overly-broad-ancestor'],
+      [8, 'covered'],
+      [9, 'original'],
+      [10, 'overly-broad-ancestor'],
+    ],
+  );
 });

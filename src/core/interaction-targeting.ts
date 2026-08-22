@@ -6,6 +6,10 @@ import {
   normalizeType,
   isViewportRootNode,
 } from '@agent-device/contracts/snapshot';
+import {
+  buildActionableTouchTopology,
+  type ActionableTouchTopology,
+} from './actionable-touch-topology.ts';
 import { isSnapshotNodeInteractionBlocked } from '../snapshot/snapshot-occlusion.ts';
 import {
   areRectsApproximatelyEqual,
@@ -57,13 +61,17 @@ export function classifyActionableTouchCandidates(
 ): ActionableTouchCandidateClassification {
   const first = candidates[0];
   if (!first) return { kind: 'ambiguous', candidates };
-  const byIndex = new Map(nodes.map((node) => [node.index, node]));
-  if (!candidatesFormSingleAncestryChain(candidates, byIndex)) {
+  // One index for the whole classification: the ancestry chain and every
+  // candidate's resolution ask the same tree the same three questions.
+  const topology = buildActionableTouchTopology(nodes);
+  if (!candidatesFormSingleAncestryChain(candidates, topology.nodesByIndex)) {
     return { kind: 'ambiguous', candidates };
   }
-  const actionable = resolveActionableTouchResolution(nodes, first).node;
+  const actionable = resolveActionableTouchResolution(nodes, first, topology).node;
   for (const candidate of candidates.slice(1)) {
-    if (resolveActionableTouchResolution(nodes, candidate).node.index !== actionable.index) {
+    if (
+      resolveActionableTouchResolution(nodes, candidate, topology).node.index !== actionable.index
+    ) {
       return { kind: 'ambiguous', candidates };
     }
   }
@@ -124,28 +132,36 @@ export function isRootInteractionContainer(
   );
 }
 
-/** @internal Exposed for focused policy tests. */
+/**
+ * @internal Exposed for focused policy tests.
+ *
+ * `topology` is an optional prebuilt index over THIS `nodes` array. It changes
+ * only how the three whole-tree lookups below are answered, never which node or
+ * reason comes back — a caller resolving one target may keep omitting it rather
+ * than pay for an index it uses once.
+ */
 export function resolveActionableTouchResolution(
   nodes: SnapshotNode[],
   node: SnapshotNode,
+  topology?: ActionableTouchTopology,
 ): ActionableTouchResolution {
   if (isSnapshotNodeInteractionBlocked(node)) {
     return { node, reason: 'covered' };
   }
-  const descendant = findPreferredActionableDescendant(nodes, node);
+  const descendant = findPreferredActionableDescendant(nodes, node, topology);
   if (descendant?.rect && resolveRectCenter(descendant.rect)) {
     return { node: descendant, reason: 'same-rect-descendant' };
   }
   if (isSemanticTouchTarget(node) && node.rect && resolveRectCenter(node.rect)) {
     return { node, reason: 'semantic-target' };
   }
-  const ancestor = findNearestHittableAncestor(nodes, node);
+  const ancestor = findNearestHittableAncestor(nodes, node, topology);
   if (
     ancestor?.rect &&
     !isSnapshotNodeInteractionBlocked(ancestor) &&
     resolveRectCenter(ancestor.rect)
   ) {
-    if (isOverlyBroadAncestor(node, ancestor, nodes)) {
+    if (isOverlyBroadAncestor(node, ancestor, nodes, topology)) {
       return { node, reason: 'overly-broad-ancestor' };
     }
     return { node: ancestor, reason: 'hittable-ancestor' };
@@ -156,14 +172,21 @@ export function resolveActionableTouchResolution(
 function findNearestHittableAncestor(
   nodes: SnapshotNode[],
   node: SnapshotNode,
+  topology: ActionableTouchTopology | undefined,
 ): SnapshotNode | null {
   if (node.hittable) return node;
-  return findNearestAncestor(nodes, node, (parent) => parent.hittable === true);
+  return findNearestAncestor(
+    nodes,
+    node,
+    (parent) => parent.hittable === true,
+    topology?.nodesByIndex,
+  );
 }
 
 function findPreferredActionableDescendant(
   nodes: SnapshotNode[],
   node: SnapshotNode,
+  topology: ActionableTouchTopology | undefined,
 ): SnapshotNode | null {
   const targetRect = normalizeRect(node.rect);
   if (!targetRect) return null;
@@ -172,14 +195,11 @@ function findPreferredActionableDescendant(
   const visited = new Set<string>();
   while (!visited.has(current.ref)) {
     visited.add(current.ref);
-    const sameRectChildren = nodes.filter((candidate) => {
-      if (
-        candidate.parentIndex !== current.index ||
-        !candidate.hittable ||
-        isSnapshotNodeInteractionBlocked(candidate)
-      ) {
-        return false;
-      }
+    const children = topology
+      ? (topology.childrenByParentIndex.get(current.index) ?? [])
+      : nodes.filter((candidate) => candidate.parentIndex === current.index);
+    const sameRectChildren = children.filter((candidate) => {
+      if (!candidate.hittable || isSnapshotNodeInteractionBlocked(candidate)) return false;
       const candidateRect = normalizeRect(candidate.rect);
       return candidateRect ? areRectsApproximatelyEqual(candidateRect, targetRect) : false;
     });
@@ -215,6 +235,7 @@ function isOverlyBroadAncestor(
   node: SnapshotNode,
   ancestor: SnapshotNode,
   nodes: SnapshotNode[],
+  topology: ActionableTouchTopology | undefined,
 ): boolean {
   const nodeRect = normalizeRect(node.rect);
   const ancestorRect = normalizeRect(ancestor.rect);
@@ -222,7 +243,7 @@ function isOverlyBroadAncestor(
   if (isScrollingContainer(ancestor) && !areRectsApproximatelyEqual(nodeRect, ancestorRect)) {
     return true;
   }
-  const rootViewportRect = resolveRootViewportRect(nodes, nodeRect);
+  const rootViewportRect = resolveRootViewportRect(nodes, nodeRect, topology);
   if (!rootViewportRect) return false;
   if (!isRectViewportSized(ancestorRect, rootViewportRect)) return false;
   return !areRectsApproximatelyEqual(nodeRect, ancestorRect);
@@ -242,12 +263,18 @@ function isScrollingContainer(node: SnapshotNode): boolean {
   );
 }
 
-function resolveRootViewportRect(nodes: SnapshotNode[], targetRect: Rect): Rect | null {
+function resolveRootViewportRect(
+  nodes: SnapshotNode[],
+  targetRect: Rect,
+  topology: ActionableTouchTopology | undefined,
+): Rect | null {
   const targetCenter = centerOfRect(targetRect);
-  const viewportRects = nodes
-    .filter(isViewportRootNode)
-    .map((node) => normalizeRect(node.rect))
-    .filter((rect): rect is Rect => rect !== null);
+  const viewportRects =
+    topology?.viewportRootRects ??
+    nodes
+      .filter(isViewportRootNode)
+      .map((node) => normalizeRect(node.rect))
+      .filter((rect): rect is Rect => rect !== null);
   if (viewportRects.length === 0) return null;
 
   const containingRects = viewportRects.filter((rect) =>

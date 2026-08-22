@@ -1,5 +1,9 @@
 import { centerOfRect, type SnapshotState } from '@agent-device/kernel/snapshot';
 import {
+  buildActionableTouchTopology,
+  type ActionableTouchTopology,
+} from '../../core/actionable-touch-topology.ts';
+import {
   isRootInteractionContainer,
   resolveActionableTouchResolution,
 } from '../../core/interaction-targeting.ts';
@@ -27,16 +31,21 @@ export function preferOnscreenMatches(
       center.y <= viewport.y + viewport.height
     );
   });
-  return rankInteractiveMatches(onscreen.length > 0 ? onscreen : matches, nodes);
+  const preferred = onscreen.length > 0 ? onscreen : matches;
+  // The only topology build site for the pass, and only once there is really
+  // something to order: one candidate answers no comparative question, so it
+  // must not pay for an index over the whole capture.
+  if (preferred.length < 2) return preferred;
+  return rankInteractiveMatches(preferred, nodes, buildActionableTouchTopology(nodes));
 }
 
 function rankInteractiveMatches(
   matches: SnapshotState['nodes'],
   nodes: SnapshotState['nodes'],
+  topology: ActionableTouchTopology,
 ): SnapshotState['nodes'] {
-  if (matches.length < 2) return matches;
   return matches
-    .map((node, index) => ({ node, index, score: interactiveMatchScore(node, nodes) }))
+    .map((node, index) => ({ node, index, score: interactiveMatchScore(node, nodes, topology) }))
     .sort((left, right) => {
       if (right.score !== left.score) return right.score - left.score;
       return rectArea(left.node) - rectArea(right.node) || left.index - right.index;
@@ -47,8 +56,9 @@ function rankInteractiveMatches(
 function interactiveMatchScore(
   node: SnapshotState['nodes'][number],
   nodes: SnapshotState['nodes'],
+  topology: ActionableTouchTopology,
 ): number {
-  const resolution = resolveActionableTouchResolution(nodes, node);
+  const resolution = resolveActionableTouchResolution(nodes, node, topology);
   if (resolution.reason === 'covered') return 0;
   const resolved = resolvedTouchScore(resolution, nodes[0]);
   if (resolved > 0) return resolved;

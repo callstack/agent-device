@@ -33,13 +33,22 @@ export function findSnapshotAncestor<T>(
 
 /**
  * Returns the nearest ancestor matching `predicate`; false means keep walking.
+ *
+ * Pass `nodeByIndex` when the caller already holds an index over this exact
+ * node array — a batch asking about many nodes otherwise rebuilds the whole map
+ * per lookup. Omitting it keeps the one-off call shape, which is what an
+ * ordinary single-target interaction wants.
  */
 export function findNearestAncestor(
   nodes: SnapshotNode[],
   node: SnapshotNode,
   predicate: (ancestor: SnapshotNode) => boolean,
+  nodeByIndex?: ReadonlyMap<number, SnapshotNode>,
 ): SnapshotNode | null {
-  return findSnapshotAncestor(nodes, node, buildSnapshotNodeMap(nodes), (ancestor) =>
-    predicate(ancestor) ? ancestor : null,
+  return findSnapshotAncestor(
+    nodes,
+    node,
+    nodeByIndex ?? buildSnapshotNodeMap(nodes),
+    (ancestor) => (predicate(ancestor) ? ancestor : null),
   );
 }
