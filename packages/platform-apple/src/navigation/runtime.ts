@@ -136,6 +136,5 @@ export function createAppleNavigationOperations(params: {
     signal,
     resolveInteractor: host.localInteractors.resolve,
     facts: appleNavigationFacts(device),
-    operations: ['back', 'home', 'setOrientation', 'tvRemote', 'keyboardDismiss', 'keyboardEnter'],
   });
 }

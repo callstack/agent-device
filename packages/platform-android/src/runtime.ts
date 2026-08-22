@@ -314,15 +314,6 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
             signal: request.scope.signal,
             resolveInteractor: host.localInteractors.resolve,
             facts: facts.operations,
-            operations: [
-              'back',
-              'home',
-              'setOrientation',
-              'tvRemote',
-              'keyboardStatus',
-              'keyboardDismiss',
-              'keyboardEnter',
-            ],
           }),
           ensureReady: async (input: EnsureReadyInput) =>
             await ensureAndroidReady(

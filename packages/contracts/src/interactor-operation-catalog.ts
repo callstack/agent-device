@@ -27,9 +27,8 @@ import {
 /**
  * The seven navigation/keyboard operations every owner admits from the same shape: one fact,
  * one bind call, no owner mechanics in between. Naming the set here — rather than at each of the
- * seven owner call sites — is what lets an owner request a subset (`operations: [...]`) instead
- * of hand-writing the same `facts.operations.<key>.available ? bind…(resolver) : {}` ternary
- * seven times over.
+ * seven owner call sites — is what lets an owner hand in its own facts instead of hand-writing the
+ * same `facts.operations.<key>.available ? bind…(resolver) : {}` ternary seven times over.
  */
 export type NavigationInteractorOperation =
   | 'back'
@@ -39,6 +38,26 @@ export type NavigationInteractorOperation =
   | 'keyboardStatus'
   | 'keyboardDismiss'
   | 'keyboardEnter';
+
+/**
+ * The fixed set every bind call walks. Not caller-supplied: an owner naming its own subset here
+ * (`operations: [...]`) alongside its own `facts` was a second source of truth that could drift
+ * from what the facts actually admit (#1955 review) — an operation present and admitted in
+ * `facts` but missing from a hand-maintained list would silently never bind. `facts[operation]`
+ * is the only thing that decides whether an operation binds; a key this list names but the
+ * caller's facts never define is simply never available (`facts[operation]?.available` reads
+ * `undefined`), which is exactly how a caller passing a narrower, dedicated facts object (e.g.
+ * Limrun's keyboard-less navigation facts) already opts a subset out today.
+ */
+const NAVIGATION_INTERACTOR_OPERATIONS: readonly NavigationInteractorOperation[] = [
+  'back',
+  'home',
+  'setOrientation',
+  'tvRemote',
+  'keyboardStatus',
+  'keyboardDismiss',
+  'keyboardEnter',
+];
 
 type LocalBinderParams = Readonly<{
   device: DeviceInfo;
@@ -92,7 +111,7 @@ type NavigationOperationFacts = Readonly<
   Partial<Record<NavigationInteractorOperation, RuntimeOperationFact>>
 >;
 
-/** Walks the requested operations against one binder table, binding each the facts admitted. */
+/** Walks every navigation operation against one binder table, binding each the facts admitted. */
 function bindAdmittedInteractorOperations<Resolver>(
   binders: Readonly<
     Record<
@@ -109,12 +128,11 @@ function bindAdmittedInteractorOperations<Resolver>(
     signal: AbortSignal;
     resolveInteractor: Resolver;
     facts: NavigationOperationFacts;
-    operations: readonly NavigationInteractorOperation[];
   }>,
 ): Partial<PlatformRuntimeOperations> {
-  const { device, signal, resolveInteractor, facts, operations } = params;
+  const { device, signal, resolveInteractor, facts } = params;
   const bound: Partial<PlatformRuntimeOperations> = {};
-  for (const operation of operations) {
+  for (const operation of NAVIGATION_INTERACTOR_OPERATIONS) {
     if (facts[operation]?.available) {
       Object.assign(bound, binders[operation]({ device, signal, resolveInteractor }));
     }
@@ -123,8 +141,8 @@ function bindAdmittedInteractorOperations<Resolver>(
 }
 
 /**
- * Binds whichever of the named local operations the owner's own facts admitted. The owner keeps
- * full authority — its facts still decide what binds — this only removes the seven-times-repeated
+ * Binds whichever local operations the owner's own facts admitted. The owner keeps full
+ * authority — its facts alone decide what binds — this only removes the seven-times-repeated
  * ternary that read them.
  */
 export function bindAdmittedLocalInteractorOperations(
@@ -133,16 +151,15 @@ export function bindAdmittedLocalInteractorOperations(
     signal: AbortSignal;
     resolveInteractor: LocalInteractorOperationResolver;
     facts: NavigationOperationFacts;
-    operations: readonly NavigationInteractorOperation[];
   }>,
 ): Partial<PlatformRuntimeOperations> {
   return bindAdmittedInteractorOperations(LOCAL_BINDERS, params);
 }
 
 /**
- * Binds whichever of the named provider operations the owner's own facts admitted. Provider
- * bindings fail closed when their exact owner no longer exposes its interactor (see the
- * individual `bindProvider…Interactor` functions this table dispatches to).
+ * Binds whichever provider operations the owner's own facts admitted. Provider bindings fail
+ * closed when their exact owner no longer exposes its interactor (see the individual
+ * `bindProvider…Interactor` functions this table dispatches to).
  */
 export function bindAdmittedProviderInteractorOperations(
   params: Readonly<{
@@ -150,7 +167,6 @@ export function bindAdmittedProviderInteractorOperations(
     signal: AbortSignal;
     resolveInteractor: ProviderInteractorOperationResolver;
     facts: NavigationOperationFacts;
-    operations: readonly NavigationInteractorOperation[];
   }>,
 ): Partial<PlatformRuntimeOperations> {
   return bindAdmittedInteractorOperations(PROVIDER_BINDERS, params);

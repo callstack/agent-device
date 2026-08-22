@@ -299,7 +299,6 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
             signal: request.scope.signal,
             resolveInteractor: host.localInteractors.resolve,
             facts: facts.operations,
-            operations: ['back', 'home', 'keyboardDismiss', 'keyboardEnter'],
           }),
           listApps: async (input: { device: DeviceInfo; filter: 'all' | 'user-installed' }) =>
             await host.appInventory.harmonyos.listApps(

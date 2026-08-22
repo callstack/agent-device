@@ -272,15 +272,6 @@ function bindLimrunAppLogs(
       signal,
       resolveInteractor: (runner) => options.getInteractor(device, runner),
       facts: runtimeFacts.operations,
-      operations: [
-        'back',
-        'home',
-        'setOrientation',
-        'tvRemote',
-        'keyboardStatus',
-        'keyboardDismiss',
-        'keyboardEnter',
-      ],
     }),
     ...createLimrunAppDeploymentOperations(
       deploymentOptions(options),

@@ -286,7 +286,6 @@ function webDriverInteractionOperations(
     ...bindAdmittedProviderInteractorOperations({
       ...resolver,
       facts: facts.operations,
-      operations: ['back', 'home', 'setOrientation'],
     }),
   };
 }

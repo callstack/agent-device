@@ -77,7 +77,6 @@ export function createVegaPlatformRuntime(host: PlatformRuntimeHost): PlatformRu
             signal: request.scope.signal,
             resolveInteractor: host.localInteractors.resolve,
             facts: facts.operations,
-            operations: ['back', 'home', 'tvRemote'],
           }),
         }),
         [Symbol.asyncDispose]: async () => undefined,

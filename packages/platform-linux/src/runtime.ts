@@ -158,7 +158,6 @@ function linuxInteractionOperations(
     ...bindAdmittedLocalInteractorOperations({
       ...resolver,
       facts: facts.operations,
-      operations: ['back', 'home'],
     }),
   };
 }

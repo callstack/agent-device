@@ -3,7 +3,10 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
+import {
+  keyboardRuntimeOperationFacts,
+  type KeyboardDismissResult,
+} from '@agent-device/contracts/keyboard-runtime';
 import {
   localRuntimeOwner,
   narrowDeviceBinding,
@@ -29,8 +32,13 @@ import { handleSessionCommands } from './session-command-harness.ts';
 
 const available = Object.freeze({ available: true } as const);
 
-/** Admits every keyboard operation so the ADR 0014 seam runs on real admission, not a rejection. */
-function keyboardCapableRuntime(device: DeviceInfo) {
+/** Admits every keyboard operation so the ADR 0014 seam runs on real admission, not a rejection.
+ * `keyboardDismiss` is overridable so a test can force the invocation itself to reject, proving
+ * the frame expires before the mutating call runs rather than only after it resolves. */
+function keyboardCapableRuntime(
+  device: DeviceInfo,
+  overrides?: Readonly<{ keyboardDismiss?: () => Promise<KeyboardDismissResult> }>,
+) {
   const facts: RuntimeFacts<PlatformRuntimeOperations> = {
     device: { ...deviceShape(device), providerMode: 'local' },
     operations: keyboardRuntimeOperationFacts({
@@ -45,7 +53,9 @@ function keyboardCapableRuntime(device: DeviceInfo) {
     facts,
     operations: {
       keyboardStatus: async () => ({ visible: false }),
-      keyboardDismiss: async () => ({ kind: 'ime-probe', dismissed: true, visible: false }),
+      keyboardDismiss:
+        overrides?.keyboardDismiss ??
+        (async () => ({ kind: 'ime-probe', dismissed: true, visible: false })),
       keyboardEnter: async () => ({}),
     },
     [Symbol.asyncDispose]: async () => {},
@@ -250,6 +260,47 @@ test('keyboard dismiss crosses the ADR 0014 seam while keyboard status preserves
     bindDevice,
   });
   expect(sessionStore.get(sessionName)?.refFrameState).toBeUndefined();
+});
+
+// #1955 review: `runSessionOrSelectorDispatch` used to expire the frame only after a successful
+// `execute`, so a rejecting/timed-out invocation left a stale frame active. ADR 0014 requires
+// expiry immediately before the mutating call, with no success-only rollback — prove a rejection
+// still lands the expiry.
+test('keyboard dismiss expires the frame even when the invocation rejects', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'kb-reject';
+  const device: SessionState['device'] = {
+    platform: 'apple',
+    id: 'sim-2',
+    name: 'iPhone 17 Pro',
+    kind: 'simulator',
+    booted: true,
+  };
+  mockResolveTargetDevice.mockResolvedValue(device);
+  const logPath = path.join(os.tmpdir(), 'daemon.log');
+  const { inspectFacts, bindDevice } = keyboardCapableRuntime(device, {
+    keyboardDismiss: () => Promise.reject(new AppError('COMMAND_FAILED', 'runner timed out')),
+  });
+
+  sessionStore.set(sessionName, makeSession(sessionName, device));
+  await expect(
+    handleSessionCommands({
+      req: {
+        token: 't',
+        session: sessionName,
+        command: 'keyboard',
+        positionals: ['dismiss'],
+        flags: {},
+      },
+      sessionName,
+      logPath,
+      sessionStore,
+      invoke: noopInvoke,
+      inspectFacts,
+      bindDevice,
+    }),
+  ).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
+  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
 });
 
 test('appstate without session on iOS selector returns SESSION_NOT_FOUND', async () => {

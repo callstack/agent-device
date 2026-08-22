@@ -97,7 +97,6 @@ test('binds only the operations the facts admitted, driving the resolved interac
     signal: new AbortController().signal,
     resolveInteractor: (runner) => getInteractor(androidTvDevice, runner),
     facts,
-    operations: ['back', 'home', 'setOrientation', 'tvRemote'],
   });
 
   expect(operations.back).toBeTypeOf('function');
@@ -120,7 +119,6 @@ test('binding omits every operation an unavailable fact refused', () => {
     signal: new AbortController().signal,
     resolveInteractor: () => ({}) as unknown as Interactor,
     facts,
-    operations: ['back', 'home', 'setOrientation', 'tvRemote'],
   });
 
   expect(operations.back).toBeTypeOf('function');
