@@ -13,12 +13,6 @@ export function VisibleDepthScreen() {
 
   return (
     <View accessible={false} style={styles.frame}>
-      <Text style={[styles.title, styles.titleSpacing]} testID="visible-depth-title">
-        Regular visible depth frontier
-      </Text>
-      <Text style={styles.body}>
-        The projected child remains visible when its clipped structural parent is collapsed.
-      </Text>
       <View
         accessible={false}
         accessibilityLabel="Clipped structural parent"
@@ -40,11 +34,6 @@ export function VisibleDepthScreen() {
 
 function createStyles(colors: AppColors) {
   return StyleSheet.create({
-    body: {
-      color: colors.textSoft,
-      fontSize: 16,
-      lineHeight: 23,
-    },
     frame: {
       flex: 1,
       paddingHorizontal: 18,
@@ -74,15 +63,6 @@ function createStyles(colors: AppColors) {
       color: '#ffffff',
       fontSize: 16,
       fontWeight: '700',
-    },
-    title: {
-      color: colors.text,
-      fontSize: 28,
-      fontWeight: '700',
-      lineHeight: 34,
-    },
-    titleSpacing: {
-      marginBottom: 16,
     },
   });
 }

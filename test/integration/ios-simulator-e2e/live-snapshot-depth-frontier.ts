@@ -5,7 +5,6 @@ import { acceptDeepLinkConfirmationIfPresent } from './live-automation-scenario.
 import { type LiveContext, runStep, verifyBehavior } from './live-harness.ts';
 
 const VISIBLE_DEPTH_DEEP_LINK = 'agent-device-test-app:///snapshot-depth';
-const TITLE_ID = 'visible-depth-title';
 const PARENT_ID = 'visible-depth-clipped-parent';
 const CHILD_ID = 'visible-depth-projected-child';
 
@@ -26,9 +25,7 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
     VISIBLE_DEPTH_DEEP_LINK,
   ]);
   await acceptDeepLinkConfirmationIfPresent(context);
-  await assertWaitText(context, 'Regular visible depth frontier');
-  // The route title can publish before React Native exposes the descendant AX subtree. Wait for
-  // the target itself so the following depth assertion is about the frontier, not route readiness.
+  // Wait for the target itself so the depth assertion is about the frontier, not route readiness.
   await assertWaitSelector(context, `id="${CHILD_ID}"`);
 
   const regular = await runStep(context, 'capture regular visible-depth frontier', [
@@ -39,13 +36,7 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
   assertSnapshotBackend(regular, 'regular depth-1 snapshot');
   const regularNodes = snapshotNodes(regular);
   const regularRoot = requireRoot(regularNodes, 'regular depth-1 snapshot');
-  const regularTitle = requireIdentifier(regularNodes, TITLE_ID, 'regular depth-1 snapshot');
   const projectedChild = requireIdentifier(regularNodes, CHILD_ID, 'regular depth-1 snapshot');
-  assert.equal(
-    regularTitle.label,
-    'Regular visible depth frontier',
-    `regular title should remain observable: ${JSON.stringify(regular)}`,
-  );
   assert.equal(
     regularNodes.some((node) => node.identifier === PARENT_ID),
     false,
