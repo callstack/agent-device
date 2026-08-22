@@ -3,7 +3,7 @@ import Foundation
 import XCTest
 
 extension RunnerTests {
-  func testRegularPresentationPreservesAcquiredActionabilityWhileApplyingGeometry() throws {
+  func testRegularPresentationPublishesGeometricActionabilityWithoutOcclusionOrTypeGate() throws {
     // Non-vacuity: dropping the acquired `hittable` check would upgrade the covered button and
     // labeled image, while dropping the enabled check would make the disabled button true.
     let nodes = [
