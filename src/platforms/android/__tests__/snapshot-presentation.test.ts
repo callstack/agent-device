@@ -216,3 +216,62 @@ test('broad Android presentation rejects an oversized descendant footprint budge
     },
   );
 });
+
+test('hostile equal-order same-rect siblings charge the broad candidate scan', () => {
+  const siblingCount = 72;
+  const siblings = Array.from(
+    { length: siblingCount },
+    (_, index) =>
+      `<node class="android.widget.Button" text="Sibling ${index}" bounds="[0,0][100,100]" clickable="true" drawing-order="1" visible-to-user="true" />`,
+  ).join('');
+  const tree = parseUiHierarchyTree(
+    `<hierarchy><node class="android.widget.FrameLayout" bounds="[0,0][100,100]" visible-to-user="true">${siblings}</node></hierarchy>`,
+  );
+
+  assert.throws(
+    () =>
+      buildUiHierarchySnapshot(tree, undefined, {
+        androidPresentation: {
+          deadlineAtMs: Number.POSITIVE_INFINITY,
+          maxWorkUnits: 2000,
+        },
+      }),
+    (error: unknown) => {
+      assert.equal(isAndroidSnapshotPresentationFailure(error), true);
+      assert(error instanceof AndroidSnapshotPresentationFailure);
+      assert.equal(error.details.phase, 'complexity');
+      return true;
+    },
+  );
+});
+
+test('one-axis footprint indexing remains inside the deterministic work budget', () => {
+  const childCount = 80;
+  const labels = Array.from(
+    { length: childCount },
+    (_, index) =>
+      `<node class="android.widget.TextView" text="Label ${index}" bounds="[${index * 3},0][${index * 3 + 2},10]" visible-to-user="true" />`,
+  ).join('');
+  const tree = parseUiHierarchyTree(
+    `<hierarchy><node class="android.widget.FrameLayout" bounds="[0,0][240,20]" visible-to-user="true">
+      <node class="android.widget.Button" text="Cover" bounds="[0,0][240,10]" clickable="true" drawing-order="2" visible-to-user="true" />
+      <node class="android.view.ViewGroup" bounds="[0,0][240,10]" drawing-order="1" visible-to-user="true">${labels}</node>
+    </node></hierarchy>`,
+  );
+
+  assert.throws(
+    () =>
+      buildUiHierarchySnapshot(tree, undefined, {
+        androidPresentation: {
+          deadlineAtMs: Number.POSITIVE_INFINITY,
+          maxWorkUnits: 1650,
+        },
+      }),
+    (error: unknown) => {
+      assert.equal(isAndroidSnapshotPresentationFailure(error), true);
+      assert(error instanceof AndroidSnapshotPresentationFailure);
+      assert.equal(error.details.phase, 'complexity');
+      return true;
+    },
+  );
+});

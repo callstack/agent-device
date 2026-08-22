@@ -12,7 +12,12 @@ import { isCollectionContainerType, shouldIncludeAndroidNode } from './ui-hierar
 import {
   createAndroidSnapshotPresentationNode,
   effectiveAndroidRect,
+  isAndroidSnapshotPresentationFailure,
   serializeAndroidRegularPresentationNode,
+  validateAndroidRegularPresentation,
+  createAndroidSnapshotPresentationBudget,
+  type AndroidSnapshotPresentationBudget,
+  type AndroidSnapshotPresentationOptions,
 } from './snapshot-presentation.ts';
 
 type AndroidRawSnapshotNode = RawSnapshotNode & AndroidSystemChromeProvenance;
@@ -20,6 +25,10 @@ type AndroidRawSnapshotNode = RawSnapshotNode & AndroidSystemChromeProvenance;
 export type AndroidSnapshotAnalysis = {
   rawNodeCount: number;
   maxDepth: number;
+};
+
+export type AndroidUiHierarchySnapshotOptions = SnapshotOptions & {
+  androidPresentation?: AndroidSnapshotPresentationOptions;
 };
 
 export type AndroidBuiltSnapshot = {
@@ -34,24 +43,30 @@ type AndroidSnapshotBuildState = {
   sourceNodes: AndroidUiHierarchy[];
   maxNodes?: number;
   maxDepth: number;
-  options: SnapshotOptions;
+  options: AndroidUiHierarchySnapshotOptions;
   analysis: AndroidSnapshotAnalysis;
   interactiveDescendantMemo: Map<AndroidNode, boolean>;
   /** Subtrees the regular projection hides (invisible / stale window / covered). Empty for raw. */
   hidden: ReadonlySet<AndroidNode>;
   /** Largest helper-reported application/window frame, used as the regular viewport fallback. */
   viewport?: Rect;
+  presentationBudget: AndroidSnapshotPresentationBudget;
+  presentationNodes: ReturnType<typeof createAndroidSnapshotPresentationNode>[];
   truncated: boolean;
 };
 
 export function buildUiHierarchySnapshot(
   tree: AndroidUiHierarchy,
   maxNodes: number | undefined,
-  options: SnapshotOptions,
+  options: AndroidUiHierarchySnapshotOptions,
 ): AndroidBuiltSnapshot {
   const requestedDepth = options.depth ?? Number.POSITIVE_INFINITY;
   const scope = normalizeSnapshotScope(options.scope);
-  const viewport = resolveAndroidSnapshotViewport(tree);
+  const analysis = analyzeAndroidTree(tree);
+  const presentationBudget = createAndroidSnapshotPresentationBudget(
+    options.androidPresentation,
+    Math.max(1024, analysis.rawNodeCount * 64),
+  );
   const state: AndroidSnapshotBuildState = {
     nodes: [],
     sourceNodes: [],
@@ -60,18 +75,37 @@ export function buildUiHierarchySnapshot(
     // presented: walk unbounded and cut after scoping.
     maxDepth: scope ? Number.POSITIVE_INFINITY : requestedDepth,
     options,
-    analysis: analyzeAndroidTree(tree),
+    analysis,
     interactiveDescendantMemo: new Map(),
     // C3: raw is the acquired tree (normalization only); regular additionally hides what Android
     // marks invisible, stale application windows, and covered same-window surfaces.
-    hidden: options.raw ? new Set() : collectAndroidHiddenNodes(tree),
-    ...(viewport ? { viewport } : {}),
+    hidden: new Set(),
+    presentationBudget,
+    presentationNodes: [],
     truncated: false,
   };
 
-  for (const root of tree.children) {
-    walkUiHierarchyNode(state, root, 0);
-    if (state.truncated) break;
+  try {
+    presentationBudget.check('work');
+    state.viewport = resolveAndroidSnapshotViewport(tree, presentationBudget);
+    state.hidden = options.raw ? new Set() : collectAndroidHiddenNodes(tree, presentationBudget);
+    for (const root of tree.children) {
+      walkUiHierarchyNode(state, root, 0);
+      if (state.truncated) break;
+    }
+    if (!options.raw) {
+      validateAndroidRegularPresentation(
+        state.presentationNodes,
+        state.viewport,
+        presentationBudget,
+      );
+    }
+  } catch (error) {
+    if (isAndroidSnapshotPresentationFailure(error)) {
+      error.analysis ??= state.analysis;
+      throw error;
+    }
+    throw error;
   }
 
   const { nodes, sourceNodes } = scope
@@ -102,6 +136,7 @@ function walkUiHierarchyNode(
   ancestorWindowRect?: Rect,
   ancestorClip?: Rect,
 ): void {
+  state.presentationBudget.check('work');
   if (shouldStopAndroidWalk(state, node, depth)) return;
   const currentWindowRect = node.windowRect ?? ancestorWindowRect ?? state.viewport;
   const effectiveRect = resolveAndroidEffectiveRect(state, node, ancestorClip, currentWindowRect);
@@ -227,8 +262,19 @@ function appendAndroidSnapshotNode(
   // fixed sibling that follows scroll content can be re-parented under the last
   // retained row by normalizeSnapshotTree's depth fallback (#1377).
   state.sourceNodes.push(node);
-  const rawNode: AndroidRawSnapshotNode = {
-    index: currentIndex,
+  const rawNode = createAndroidRawSnapshotNode(state, node, parentIndex, systemChrome);
+  publishAndroidPresentationNode(state, node, rawNode, effectiveRect);
+  return currentIndex;
+}
+
+function createAndroidRawSnapshotNode(
+  state: AndroidSnapshotBuildState,
+  node: AndroidNode,
+  parentIndex: number | undefined,
+  systemChrome: boolean,
+): AndroidRawSnapshotNode {
+  return {
+    index: state.nodes.length,
     type: node.type ?? undefined,
     label: node.label ?? undefined,
     value: node.value ?? undefined,
@@ -244,19 +290,35 @@ function appendAndroidSnapshotNode(
     ...androidScrollActionHints(node, state.hidden),
     ...(systemChrome ? { systemChrome: true } : {}),
   };
-  const presentationNode = createAndroidSnapshotPresentationNode(rawNode, effectiveRect);
+}
+
+function publishAndroidPresentationNode(
+  state: AndroidSnapshotBuildState,
+  node: AndroidNode,
+  rawNode: AndroidRawSnapshotNode,
+  effectiveRect: Rect | undefined,
+): void {
+  const presentationNode = createAndroidSnapshotPresentationNode(
+    rawNode,
+    effectiveRect,
+    !state.options.raw && isAndroidScrollClipNode(node),
+  );
+  state.presentationNodes.push(presentationNode);
   state.nodes.push(
     state.options.raw
       ? presentationNode.raw
       : serializeAndroidRegularPresentationNode(presentationNode),
   );
-  return currentIndex;
 }
 
-function resolveAndroidSnapshotViewport(root: AndroidUiHierarchy): Rect | undefined {
+function resolveAndroidSnapshotViewport(
+  root: AndroidUiHierarchy,
+  budget: AndroidSnapshotPresentationBudget,
+): Rect | undefined {
   const windowRects: Rect[] = [];
   const stack = [...root.children];
   while (stack.length > 0) {
+    budget.check('work');
     const node = stack.pop()!;
     if (isPositiveFiniteRect(node.windowRect)) windowRects.push(node.windowRect);
     stack.push(...node.children);

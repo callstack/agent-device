@@ -9,7 +9,11 @@ import type { AndroidNode, AndroidUiHierarchy } from './ui-hierarchy-node.ts';
 
 export type { AndroidUiHierarchy } from './ui-hierarchy-node.ts';
 export { buildUiHierarchySnapshot } from './ui-hierarchy-builder.ts';
-export type { AndroidBuiltSnapshot, AndroidSnapshotAnalysis } from './ui-hierarchy-builder.ts';
+export type {
+  AndroidBuiltSnapshot,
+  AndroidSnapshotAnalysis,
+  AndroidUiHierarchySnapshotOptions,
+} from './ui-hierarchy-builder.ts';
 
 /** Parsed node metadata plus status/navigation subtree provenance when present. */
 export type AndroidUiNodeMetadata = {

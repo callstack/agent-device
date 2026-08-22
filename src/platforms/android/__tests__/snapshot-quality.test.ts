@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'vitest';
 import { snapshotAndroid } from '../snapshot.ts';
+import { findAndroidAlertCandidate } from '../alert-detection.ts';
 import {
   androidSnapshotQualityDevice,
   androidSnapshotQualityHelperAdb,
@@ -52,4 +53,28 @@ test('snapshotAndroid discards the whole projection after a presentation deadlin
     reason: 'Android snapshot presentation exceeded its cooperative deadline',
     reasonCode: 'presentation-failed',
   });
+});
+
+test('snapshotAndroid preserves a focused native dialog for alert detection', async () => {
+  const result = await snapshotAndroid(androidSnapshotQualityDevice, {
+    helperAdb: androidSnapshotQualityHelperAdb(`
+      <hierarchy>
+        <node package="com.example.app" class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true" window-index="0" window-type="1" window-layer="0" window-active="false" window-focused="false">
+          <node class="android.widget.Button" text="Underlying" bounds="[20,100][200,160]" clickable="true" visible-to-user="true" />
+        </node>
+        <node package="com.example.app" class="android.app.AlertDialog" bounds="[40,240][350,600]" visible-to-user="true" window-index="1" window-type="1" window-layer="1" window-active="true" window-focused="true">
+          <node class="android.widget.FrameLayout" resource-id="android:id/parentPanel" bounds="[40,240][350,600]" visible-to-user="true">
+            <node class="android.widget.TextView" resource-id="android:id/alertTitle" text="Automation confirmation" bounds="[60,280][330,330]" visible-to-user="true" />
+            <node class="android.widget.Button" resource-id="android:id/button1" text="OK" bounds="[220,520][320,570]" clickable="true" visible-to-user="true" />
+          </node>
+        </node>
+      </hierarchy>
+    `),
+    helperArtifact: androidSnapshotQualityHelperArtifact,
+  });
+
+  assert.deepEqual(result.quality, { state: 'healthy', backend: 'android-helper' });
+  const candidate = findAndroidAlertCandidate(result.nodes);
+  assert.equal(candidate?.alert.title, 'Automation confirmation');
+  assert.deepEqual(candidate?.alert.buttons, ['OK']);
 });

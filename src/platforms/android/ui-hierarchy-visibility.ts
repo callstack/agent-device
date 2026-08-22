@@ -171,8 +171,10 @@ function unionCoverage(
     rect.y,
     rect.y + rect.height,
   ]);
-  const covering = markCells(coveringRects, xs, ys, presentationBudget);
-  const covered = markCells(coveredRects, xs, ys, presentationBudget);
+  const xIndex = createEdgeIndex(xs, presentationBudget);
+  const yIndex = createEdgeIndex(ys, presentationBudget);
+  const covering = markCells(coveringRects, xIndex, yIndex, presentationBudget);
+  const covered = markCells(coveredRects, xIndex, yIndex, presentationBudget);
   const rows = ys.length - 1;
   const columns = xs.length - 1;
   presentationBudget?.consume(columns * rows);
@@ -196,23 +198,31 @@ function compressedEdges(rects: Rect[], edgesOf: (rect: Rect) => [number, number
   return [...new Set(rects.flatMap(edgesOf))].sort((left, right) => left - right);
 }
 
+function createEdgeIndex(
+  edges: number[],
+  presentationBudget?: AndroidSnapshotPresentationBudget,
+): ReadonlyMap<number, number> {
+  presentationBudget?.consume(edges.length);
+  return new Map(edges.map((edge, index) => [edge, index]));
+}
+
 function markCells(
   rects: Rect[],
-  xs: number[],
-  ys: number[],
+  xIndex: ReadonlyMap<number, number>,
+  yIndex: ReadonlyMap<number, number>,
   presentationBudget?: AndroidSnapshotPresentationBudget,
 ): Uint8Array {
-  const rows = ys.length - 1;
-  const columns = xs.length - 1;
+  const rows = yIndex.size - 1;
+  const columns = xIndex.size - 1;
   const cellCount = columns * rows;
   presentationBudget?.consume(cellCount);
   const cells = new Uint8Array(cellCount);
   for (const rect of rects) {
     presentationBudget?.check('work');
-    const firstColumn = xs.indexOf(rect.x);
-    const lastColumn = xs.indexOf(rect.x + rect.width);
-    const firstRow = ys.indexOf(rect.y);
-    const lastRow = ys.indexOf(rect.y + rect.height);
+    const firstColumn = xIndex.get(rect.x)!;
+    const lastColumn = xIndex.get(rect.x + rect.width)!;
+    const firstRow = yIndex.get(rect.y)!;
+    const lastRow = yIndex.get(rect.y + rect.height)!;
     for (let column = firstColumn; column < lastColumn; column += 1) {
       presentationBudget?.check('work');
       presentationBudget?.consume(lastRow - firstRow);
@@ -277,6 +287,7 @@ function isCoveredByHigherDrawingOrderSibling(
   const shows = subtreeFootprint(node, state).shows;
   const coveredRects = shows.length > 0 ? shows : [node.rect];
   for (const candidate of coveringCandidates) {
+    state.presentationBudget?.check('work');
     if (candidate.node === node || candidate.drawingOrder <= node.drawingOrder) {
       continue;
     }
