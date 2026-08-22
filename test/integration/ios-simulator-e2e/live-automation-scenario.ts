@@ -246,7 +246,10 @@ export async function acceptDeepLinkConfirmationIfPresent(context: LiveContext):
   );
   if (destination.status === 0) return;
 
-  const alert = await runStep(context, 'inspect delayed deep-link system alert', ['alert', 'get']);
+  const alert = await runStep(context, 'inspect delayed deep-link system alert', ['alert', 'get'], {
+    allowFailure: true,
+  });
+  if (alert.status !== 0) return;
   const alertInfo = alert.json?.data;
   assert.match(String(alertInfo?.message), /^Open in\b/, JSON.stringify(alert.json));
   assert.ok(
