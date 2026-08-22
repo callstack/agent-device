@@ -155,21 +155,63 @@ function resolveWorkspace(specifier: string, packageDirs: Map<string, string>): 
   return fs.existsSync(resolved) ? resolved : null;
 }
 
-/** Every repo file evaluated as a consequence of importing `entryFile`. */
-export function eagerClosureOf(entryFile: string): string[] {
+/**
+ * The repo files `file` evaluates directly, already resolved to absolute paths.
+ *
+ * Memoized: the budget table in `eager-closure-budgets.ts` walks ~100 entries whose
+ * subtrees overlap heavily (every contracts entry bottoms out in the same kernel
+ * modules), so without this each shared file is re-read and re-parsed once per entry
+ * that reaches it. Source files do not change during a run, so the cache is safe for
+ * the lifetime of the worker.
+ */
+const directEdgeCache = new Map<string, string[]>();
+
+function directEagerEdges(file: string, packageDirs: Map<string, string>): string[] {
+  const cached = directEdgeCache.get(file);
+  if (cached) return cached;
+  const resolvedEdges: string[] = [];
+  for (const specifier of eagerlyEvaluatedModules(file, fs.readFileSync(file, 'utf8'))) {
+    const resolved = specifier.startsWith('.')
+      ? resolveRelative(file, specifier)
+      : resolveWorkspace(specifier, packageDirs);
+    if (resolved) resolvedEdges.push(resolved);
+  }
+  directEdgeCache.set(file, resolvedEdges);
+  return resolvedEdges;
+}
+
+/**
+ * Every repo file evaluated as a consequence of importing `entryFile`, mapped to the
+ * file that first pulled it in (`null` for the entry itself).
+ *
+ * `eagerClosureOf` answers "how much evaluates"; this answers "and through what",
+ * which is what a violation message needs to be actionable (#1960): a flat set names
+ * the offender but leaves the reader to rediscover which import chain reaches it.
+ * Breadth-first, so following the links back yields the SHORTEST chain to each file
+ * rather than whatever route a depth-first walk happened to take.
+ */
+export function eagerClosureGraphOf(entryFile: string): Map<string, string | null> {
   const packageDirs = readWorkspacePackageDirs();
+  const cameFrom = new Map<string, string | null>([[entryFile, null]]);
   const queue = [entryFile];
-  const visited = new Set<string>();
-  while (queue.length > 0) {
-    const current = queue.pop();
-    if (!current || visited.has(current)) continue;
-    visited.add(current);
-    for (const specifier of eagerlyEvaluatedModules(current, fs.readFileSync(current, 'utf8'))) {
-      const resolved = specifier.startsWith('.')
-        ? resolveRelative(current, specifier)
-        : resolveWorkspace(specifier, packageDirs);
-      if (resolved) queue.push(resolved);
+  for (let head = 0; head < queue.length; head += 1) {
+    const current = queue[head];
+    if (current === undefined) continue;
+    for (const resolved of directEagerEdges(current, packageDirs)) {
+      if (cameFrom.has(resolved)) continue;
+      cameFrom.set(resolved, current);
+      queue.push(resolved);
     }
   }
-  return [...visited];
+  return cameFrom;
+}
+
+/**
+ * Every repo file evaluated as a consequence of importing `entryFile`.
+ *
+ * The returned SET is what callers pin; iteration order is unspecified and carries no
+ * meaning (it changed from depth- to breadth-first when `eagerClosureGraphOf` landed).
+ */
+export function eagerClosureOf(entryFile: string): string[] {
+  return [...eagerClosureGraphOf(entryFile).keys()];
 }
