@@ -1,7 +1,7 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import type { Rect } from '@agent-device/kernel/snapshot';
+import { containsPoint } from '@agent-device/kernel/rect';
 import {
   buildFillFailureDetails,
   isSensitiveFillDiagnosticNode,
@@ -387,21 +387,17 @@ function updateAndroidTextAtPointScan(
   x: number,
   y: number,
 ): void {
-  const containsPoint = containsAndroidPoint(candidate.rect, x, y);
-  if (containsPoint && candidate.editText) {
+  const atPoint = containsPoint(candidate.rect, x, y);
+  if (atPoint && candidate.editText) {
     scan.editAtPoint = smallerAndroidFillCandidate(scan.editAtPoint, candidate);
   }
   if (candidate.focused && candidate.editText) {
     scan.focusedEdit = smallerAndroidFillCandidate(scan.focusedEdit, candidate);
     return;
   }
-  if (containsPoint && candidate.text) {
+  if (atPoint && candidate.text) {
     scan.anyAtPoint = smallerAndroidFillCandidate(scan.anyAtPoint, candidate);
   }
-}
-
-function containsAndroidPoint(rect: Rect, x: number, y: number): boolean {
-  return x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height;
 }
 
 function smallerAndroidFillCandidate<T extends AndroidFillVerificationCandidate>(

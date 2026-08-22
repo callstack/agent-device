@@ -1,4 +1,5 @@
 import type { Point, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
+import { containsPoint } from '@agent-device/kernel/rect';
 import {
   areRectsApproximatelyEqual,
   normalizeRect,
@@ -132,7 +133,7 @@ function findNearestParentOwnedPoint(
   const rankedPoints = xCandidates.flatMap((x) =>
     yCandidates.flatMap((y) => {
       const point = { x: Math.round(x), y: Math.round(y) };
-      if (!containsPoint(searchRect, point)) return [];
+      if (!containsPoint(searchRect, point.x, point.y)) return [];
       const ranked = rankParentOwnedPoint(
         point,
         targetRect,
@@ -144,15 +145,6 @@ function findNearestParentOwnedPoint(
     }),
   );
   return rankedPoints.sort(compareRankedPoints)[0]?.point ?? null;
-}
-
-function containsPoint(rect: Rect, point: Point): boolean {
-  return (
-    point.x >= rect.x &&
-    point.x <= rect.x + rect.width &&
-    point.y >= rect.y &&
-    point.y <= rect.y + rect.height
-  );
 }
 
 function rankParentOwnedPoint(

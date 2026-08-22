@@ -2,7 +2,8 @@ import type {
   ScreenshotDiffRegion,
   ScreenshotDiffRegionOverlayMatch,
 } from './screenshot-diff-regions.ts';
-import type { Rect, ScreenshotOverlayRef } from '@agent-device/kernel/snapshot';
+import type { ScreenshotOverlayRef } from '@agent-device/kernel/snapshot';
+import { rectArea } from '@agent-device/kernel/rect';
 import { intersectArea } from '../utils/screenshot-geometry.ts';
 
 const MAX_MATCHES_PER_REGION = 3;
@@ -51,10 +52,6 @@ function findRegionOverlayMatches(
       rect: match.rect,
       regionCoveragePercentage: match.regionCoveragePercentage,
     }));
-}
-
-function rectArea(rect: Rect): number {
-  return rect.width * rect.height;
 }
 
 function roundPercentage(ratio: number): number {
