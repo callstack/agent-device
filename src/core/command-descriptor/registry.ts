@@ -255,7 +255,13 @@ const ALL_DEVICE_COMMAND_CAPABILITY = {
 const NO_PLATFORM_EXECUTION = { kind: 'none' } as const;
 const LEGACY_PLATFORM_EXECUTION = { kind: 'legacy' } as const;
 
-const GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS = {
+/**
+ * The daemon/recording traits every generic-route mutating command shares, migrated or not.
+ * Split from the legacy execution pair (`dispatch`/`capability`, see
+ * {@link LEGACY_LINUX_DEVICE_EXECUTION}) so a migrated descriptor spreads this alone instead of
+ * hand-expanding it minus the two fields migration strips.
+ */
+const GENERIC_MUTATING_COMMAND_TRAITS = {
   recordsSessionAction: true,
   recordingEffect: 'mutates-app',
   deviceClaimPolicy: 'require-owner',
@@ -264,20 +270,24 @@ const GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS = {
     refFrameEffect: 'may-invalidate',
     androidBlockingDialogGuard: true,
   },
-  dispatch: {},
-  capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
   timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
   batchable: true,
 } as const satisfies Pick<
   Extract<CommandDescriptor, { recordsSessionAction: true }>,
-  | 'recordsSessionAction'
-  | 'recordingEffect'
-  | 'deviceClaimPolicy'
-  | 'daemon'
-  | 'dispatch'
-  | 'capability'
-  | 'timeoutPolicy'
-  | 'batchable'
+  'recordsSessionAction' | 'recordingEffect' | 'deviceClaimPolicy' | 'daemon' | 'timeoutPolicy' | 'batchable'
+>;
+
+/**
+ * The legacy `dispatch`/`capability` pair a still-unmigrated generic-route mutating command
+ * carries alongside {@link GENERIC_MUTATING_COMMAND_TRAITS}; migration strips both together (one
+ * owner fact replaces the capability bucket, one bound operation replaces the dispatch leaf).
+ */
+const LEGACY_LINUX_DEVICE_EXECUTION = {
+  dispatch: {},
+  capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
+} as const satisfies Pick<
+  Extract<CommandDescriptor, { recordsSessionAction: true }>,
+  'dispatch' | 'capability'
 >;
 
 // click/fill/press/longpress differ only in their timeout budget and response
@@ -1234,21 +1244,11 @@ export const RAW_COMMAND_DESCRIPTORS = [
     catalog: { group: 'public' },
     frameworkTier: 'core',
     // R42 retires this command's capability bucket and its `dispatch` leaf together: admission is
-    // the owner's `back` fact, and the only execution is the bound operation. The remaining
-    // traits are `GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS` minus those two, plus the
-    // postActionObservation timeout trait it kept — admission-independent, like `type` kept its
-    // dialog guard.
-    recordsSessionAction: true,
-    recordingEffect: 'mutates-app',
-    deviceClaimPolicy: 'require-owner',
-    daemon: {
-      route: 'generic',
-      refFrameEffect: 'may-invalidate',
-      androidBlockingDialogGuard: true,
-    },
+    // the owner's `back` fact, and the only execution is the bound operation — the postActionObservation
+    // timeout trait it kept is admission-independent, like `type` kept its dialog guard.
+    ...GENERIC_MUTATING_COMMAND_TRAITS,
     timeoutPolicy: postActionObservationTimeoutPolicy('back', DEFAULT_TIMEOUT_POLICY),
     postActionObservation: postActionObservation('back'),
-    batchable: true,
     platformExecution: { kind: 'device-runtime', uses: [backRuntimeUse] },
   },
   {
@@ -1276,56 +1276,28 @@ export const RAW_COMMAND_DESCRIPTORS = [
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     // R43 retires this command's capability bucket and its `dispatch` leaf together: admission is
-    // the owner's `home` fact, and the only execution is the bound operation. The remaining
-    // traits are `GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS` minus those two.
-    recordsSessionAction: true,
-    recordingEffect: 'mutates-app',
-    deviceClaimPolicy: 'require-owner',
-    daemon: {
-      route: 'generic',
-      refFrameEffect: 'may-invalidate',
-      androidBlockingDialogGuard: true,
-    },
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: true,
+    // the owner's `home` fact, and the only execution is the bound operation.
+    ...GENERIC_MUTATING_COMMAND_TRAITS,
     platformExecution: { kind: 'device-runtime', uses: [homeRuntimeUse] },
   },
   {
     name: 'tv-remote',
-    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public', key: 'tvRemote' },
     frameworkTier: 'extended',
     // R45 retires this command's capability bucket and its `dispatch` leaf together: admission is
     // the owner's `tvRemote` fact, and the only execution is the bound operation.
-    recordsSessionAction: true,
-    recordingEffect: 'mutates-app',
-    daemon: {
-      route: 'generic',
-      refFrameEffect: 'may-invalidate',
-      androidBlockingDialogGuard: true,
-    },
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: true,
+    ...GENERIC_MUTATING_COMMAND_TRAITS,
     platformExecution: { kind: 'device-runtime', uses: [tvRemoteRuntimeUse] },
   },
   {
     name: 'orientation',
-    deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     // R44 retires this command's capability bucket and its `dispatch` leaf together: admission is
     // the owner's `setOrientation` fact, and the only execution is the bound operation.
-    recordsSessionAction: true,
-    recordingEffect: 'mutates-app',
-    daemon: {
-      route: 'generic',
-      refFrameEffect: 'may-invalidate',
-      androidBlockingDialogGuard: true,
-    },
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: true,
+    ...GENERIC_MUTATING_COMMAND_TRAITS,
     platformExecution: { kind: 'device-runtime', uses: [orientationRuntimeUse] },
   },
   {
@@ -1333,7 +1305,8 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'core',
-    ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS,
+    ...GENERIC_MUTATING_COMMAND_TRAITS,
+    ...LEGACY_LINUX_DEVICE_EXECUTION,
     timeoutPolicy: postActionObservationTimeoutPolicy('scroll', DEFAULT_TIMEOUT_POLICY),
     postActionObservation: postActionObservation('scroll'),
     platformExecution: LEGACY_PLATFORM_EXECUTION,
@@ -1362,18 +1335,8 @@ export const RAW_COMMAND_DESCRIPTORS = [
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     // R40 retires this command's capability bucket and its `dispatch` leaf together: admission is
-    // the owner's `focusPoint` fact, and the only execution is the bound operation. The remaining
-    // traits are `GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS` minus those two.
-    recordsSessionAction: true,
-    recordingEffect: 'mutates-app',
-    deviceClaimPolicy: 'require-owner',
-    daemon: {
-      route: 'generic',
-      refFrameEffect: 'may-invalidate',
-      androidBlockingDialogGuard: true,
-    },
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: true,
+    // the owner's `focusPoint` fact, and the only execution is the bound operation.
+    ...GENERIC_MUTATING_COMMAND_TRAITS,
     platformExecution: { kind: 'device-runtime', uses: [focusRuntimeUse] },
   },
   {
