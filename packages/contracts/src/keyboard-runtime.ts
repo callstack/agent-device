@@ -85,20 +85,28 @@ function requireKeyboardMethod<Method>(
 /**
  * Captures one selected owner's interactor authority for the lifetime of a request binding. The
  * owner is already chosen by the time a binder is called, so each entry point supplies its own
- * resolution and this holds only what both share: the runner context and the probe itself.
+ * resolution and this holds only what all three actions share: the runner context resolution.
  */
+async function resolveKeyboardInteractor(
+  signal: AbortSignal,
+  resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
+  input: KeyboardActionInput,
+): Promise<Interactor> {
+  signal.throwIfAborted();
+  return await resolveInteractor({
+    ...input.execution,
+    appBundleId: input.options?.appBundleId,
+    signal,
+  });
+}
+
 function bindKeyboardStatus(
   signal: AbortSignal,
   resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
 ): KeyboardStatusRuntimeOperations {
   return Object.freeze({
     keyboardStatus: async (input: KeyboardActionInput) => {
-      signal.throwIfAborted();
-      const interactor = await resolveInteractor({
-        ...input.execution,
-        appBundleId: input.options?.appBundleId,
-        signal,
-      });
+      const interactor = await resolveKeyboardInteractor(signal, resolveInteractor, input);
       return await requireKeyboardMethod(interactor.keyboardStatus, 'keyboard status').call(
         interactor,
       );
@@ -112,12 +120,7 @@ function bindKeyboardDismiss(
 ): KeyboardDismissRuntimeOperations {
   return Object.freeze({
     keyboardDismiss: async (input: KeyboardActionInput) => {
-      signal.throwIfAborted();
-      const interactor = await resolveInteractor({
-        ...input.execution,
-        appBundleId: input.options?.appBundleId,
-        signal,
-      });
+      const interactor = await resolveKeyboardInteractor(signal, resolveInteractor, input);
       return await requireKeyboardMethod(interactor.keyboardDismiss, 'keyboard dismiss').call(
         interactor,
       );
@@ -131,12 +134,7 @@ function bindKeyboardEnter(
 ): KeyboardEnterRuntimeOperations {
   return Object.freeze({
     keyboardEnter: async (input: KeyboardActionInput) => {
-      signal.throwIfAborted();
-      const interactor = await resolveInteractor({
-        ...input.execution,
-        appBundleId: input.options?.appBundleId,
-        signal,
-      });
+      const interactor = await resolveKeyboardInteractor(signal, resolveInteractor, input);
       return await requireKeyboardMethod(interactor.keyboardEnter, 'keyboard enter').call(
         interactor,
       );
