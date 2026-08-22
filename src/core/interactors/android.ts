@@ -121,7 +121,7 @@ export function createAndroidInteractor(
     appSwitcher: () => appSwitcherAndroid(device),
     tvRemote: (button, durationMs) => pressAndroidTvRemote(device, button, durationMs),
     keyboardStatus: () => getAndroidKeyboardState(device),
-    keyboardDismiss: () => dismissAndroidKeyboard(device),
+    keyboardDismiss: async () => ({ kind: 'ime-probe', ...(await dismissAndroidKeyboard(device)) }),
     keyboardEnter: async () => {
       await pressAndroidEnter(device);
       return {};

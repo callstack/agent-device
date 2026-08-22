@@ -54,7 +54,7 @@ export function createHarmonyInteractor(device: DeviceInfo, _runner?: RunnerCont
     tvRemote: unsupported('tv-remote'),
     keyboardDismiss: async () => {
       await pressHarmonyKeyboardKey(device, 'Back');
-      return {};
+      return { kind: 'acknowledged' };
     },
     keyboardEnter: async () => {
       await pressHarmonyKeyboardKey(device, 'Enter');

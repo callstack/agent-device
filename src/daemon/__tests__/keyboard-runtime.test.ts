@@ -71,6 +71,7 @@ function runtimeHarness(
     visible: true,
   }));
   const keyboardDismiss = vi.fn<() => Promise<KeyboardDismissResult>>(async () => ({
+    kind: 'ime-probe',
     dismissed: true,
     visible: false,
   }));
@@ -205,6 +206,7 @@ test('iOS dismiss reports the mechanism disclosure and its own message', async (
     enter: available,
   });
   harness.keyboardDismiss.mockResolvedValue({
+    kind: 'mechanism',
     dismissed: true,
     visible: false,
     wasVisible: true,
@@ -241,6 +243,7 @@ test('iOS dismiss degrades an unrecognized mechanism to the bare message', async
     enter: available,
   });
   harness.keyboardDismiss.mockResolvedValue({
+    kind: 'mechanism',
     dismissed: true,
     visible: false,
     wasVisible: true,
@@ -266,6 +269,7 @@ test('iOS dismiss omits a message mechanism claim when every mechanism failed', 
     enter: available,
   });
   harness.keyboardDismiss.mockResolvedValue({
+    kind: 'mechanism',
     dismissed: false,
     visible: true,
     wasVisible: true,
@@ -294,6 +298,7 @@ test('iOS dismiss omits a mechanism claim when the keyboard was never visible', 
     enter: available,
   });
   harness.keyboardDismiss.mockResolvedValue({
+    kind: 'mechanism',
     dismissed: false,
     visible: false,
     wasVisible: false,
@@ -321,6 +326,7 @@ test('harmonyos dismiss reports success with no structured fields beyond the mes
     dismiss: available,
     enter: available,
   });
+  harness.keyboardDismiss.mockResolvedValue({ kind: 'acknowledged' });
 
   const resolved = await resolveBoundKeyboardRuntime({
     device: harmonyDevice,
@@ -344,6 +350,7 @@ test('android dismiss reports the full IME probe evidence', async () => {
     enter: available,
   });
   harness.keyboardDismiss.mockResolvedValue({
+    kind: 'ime-probe',
     attempts: 2,
     wasVisible: true,
     dismissed: true,

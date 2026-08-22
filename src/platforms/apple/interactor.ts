@@ -171,6 +171,7 @@ export function createAppleInteractor(
         runnerOpts,
       );
       return {
+        kind: 'mechanism',
         wasVisible: readRunnerBoolean(result, 'wasVisible'),
         dismissed: readRunnerBoolean(result, 'dismissed'),
         visible: readRunnerBoolean(result, 'visible'),

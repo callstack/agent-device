@@ -1,4 +1,7 @@
-import type { KeyboardActionInput } from '@agent-device/contracts/keyboard-runtime';
+import type {
+  KeyboardActionInput,
+  KeyboardDismissResult,
+} from '@agent-device/contracts/keyboard-runtime';
 import {
   keyboardDismissUse,
   keyboardEnterUse,
@@ -66,6 +69,20 @@ function keyboardPlatformLabel(device: DeviceInfo): 'android' | 'harmonyos' | 'i
   return 'android';
 }
 
+/**
+ * `dismiss`'s wire `platform` label is derived from which owner shape came back (#1955 review),
+ * not re-derived from the device the way `status`/`enter` still do — an owner can only ever
+ * produce its own {@link KeyboardDismissResult} kind, so this mapping can't disagree with reality.
+ */
+const KEYBOARD_DISMISS_PLATFORM_LABEL: Record<
+  KeyboardDismissResult['kind'],
+  'android' | 'harmonyos' | 'ios'
+> = {
+  'ime-probe': 'android',
+  mechanism: 'ios',
+  acknowledged: 'harmonyos',
+};
+
 function keyboardActionInput(context: DaemonCommandContext): KeyboardActionInput {
   return {
     ...(context.appBundleId === undefined ? {} : { options: { appBundleId: context.appBundleId } }),
@@ -130,11 +147,11 @@ function executeKeyboardStatus(
 /** `keyboard dismiss`. */
 async function executeKeyboardDismiss(
   runtime: BoundDeviceRuntime<typeof keyboardDismissUse>,
-  platform: 'android' | 'harmonyos' | 'ios',
   context: DaemonCommandContext,
 ): Promise<Record<string, unknown>> {
   const result = await runtime.operations.keyboardDismiss(keyboardActionInput(context));
-  if (platform === 'ios') {
+  const platform = KEYBOARD_DISMISS_PLATFORM_LABEL[result.kind];
+  if (result.kind === 'mechanism') {
     return {
       platform,
       action: 'dismiss',
@@ -145,7 +162,7 @@ async function executeKeyboardDismiss(
       ...successText(iosKeyboardDismissMessage(result.dismissed === true, result.mechanism)),
     };
   }
-  if (platform === 'harmonyos') {
+  if (result.kind === 'acknowledged') {
     return { platform, action: 'dismiss', ...successText('Keyboard dismissed') };
   }
   return {
@@ -205,7 +222,7 @@ export async function resolveBoundKeyboardRuntime(
   if (action === 'dismiss') {
     return await admitKeyboardAction(
       { command: 'keyboard dismiss', device, use: keyboardDismissUse, inspectFacts, bindDevice },
-      (runtime, context) => executeKeyboardDismiss(runtime, platform, context),
+      (runtime, context) => executeKeyboardDismiss(runtime, context),
     );
   }
   return await admitKeyboardAction(

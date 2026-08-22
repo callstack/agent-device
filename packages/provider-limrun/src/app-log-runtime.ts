@@ -1,22 +1,16 @@
-import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppsFilter, ProviderPortReverseOptions } from '@agent-device/contracts/device';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
-import {
-  bindLimrunInteractionOperations,
-  limrunInteractionOperationFacts,
-  limrunKeyboardOperationFacts,
-  limrunNavigationOperationFacts,
-} from './interaction-operations.ts';
+import { bindLimrunInteractionOperations } from './interaction-operations.ts';
 import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import { AppError } from '@agent-device/kernel/errors';
-import { parseLimrunDeviceId } from './device.ts';
+import { isSupportedLimrunAppLogDevice, parseLimrunDeviceId } from './device.ts';
 import type {
   AppStateRuntimeResult,
   DeviceBinding,
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
   PlatformRuntimeOwner,
-  RuntimeFacts,
 } from '@agent-device/contracts/platform';
 import {
   appLogSessionArtifactsMatch,
@@ -25,17 +19,9 @@ import {
   createAppLogStartResult,
   readRecentNetworkTrafficFromText,
 } from '@agent-device/capture-kit';
-import {
-  applicationLifecycleOperationFacts,
-  availableApplicationLifecycleOperations,
-} from '@agent-device/contracts/application-lifecycle-runtime';
-import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/element-text-runtime';
+import { availableApplicationLifecycleOperations } from '@agent-device/contracts/application-lifecycle-runtime';
 import { providerRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
-import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
-import { selectorObservationRuntimeOperationFacts } from '@agent-device/contracts/selector-observation-runtime';
-import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
-import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
 import {
   createLimrunAppLogEnvelope,
   limrunAppLogDescriptorCodec,
@@ -45,10 +31,16 @@ import { startLimrunAppLogPoller, type LimrunAppLogReader } from './app-log-poll
 import { bindLimrunApplicationLifecycle } from './lifecycle.ts';
 import {
   createLimrunAppDeploymentOperations,
-  limrunAppDeploymentFacts,
   type LimrunAppDeploymentRuntimeOptions,
 } from './deployment-runtime.ts';
 import { createLimrunRequestOperationDrain } from './request-cancellation.ts';
+import {
+  deploymentOptions,
+  limrunAppLogFacts,
+  limrunAppLogRecoveryFacts,
+  limrunLifecycleFacts,
+  liveSessionUnavailable,
+} from './facts-runtime.ts';
 
 export type LimrunAppLogReconnectOutcome =
   | Readonly<{ status: 'opened'; reader: LimrunAppLogReader }>
@@ -81,116 +73,6 @@ export type LimrunPlatformRuntimeOwnerOptions = Omit<
     ): Promise<Record<string, unknown> | undefined>;
   }>;
 
-function deploymentOptions(
-  options: LimrunPlatformRuntimeOwnerOptions,
-): LimrunAppDeploymentRuntimeOptions {
-  return { ...options, isSessionActive: options.hasLiveSession };
-}
-
-const available = Object.freeze({ available: true } as const);
-const customSnapshotUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Custom snapshot actions are available only for Limrun iOS simulator sessions.',
-} as const);
-const viewportUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Limrun does not expose viewport resizing.',
-} as const);
-/**
- * A point read needs a local tool (adb uiautomator, the XCUITest runner). Limrun's transport
- * carries none of them, so the owner reports no live read and `get` answers from the captured
- * tree; provider ownership never borrows the local family read.
- */
-const elementTextUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Limrun-owned devices read element text from the captured tree only.',
-} as const);
-const recordingUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Limrun does not expose an exact-owner screen-recording runtime.',
-} as const);
-const headlessUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Headless boot is unavailable for provider-owned devices.',
-} as const);
-const liveSessionUnavailable = Object.freeze({
-  available: false,
-  reason: 'owner-capability-missing',
-  hint: 'Limrun requires a matching live provider session for this device.',
-} as const);
-const prepareUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Apple runner preparation is unavailable for Limrun-owned devices.',
-} as const);
-const iosAppStateUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Limrun iOS appstate is session-owned; no sessionless provider foreground probe is exposed.',
-} as const);
-const openTargetUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Limrun open requires a Limrun-owned iOS simulator or Android emulator.',
-} as const);
-const closeTargetUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Limrun close requires a Limrun-owned iOS simulator or Android emulator.',
-} as const);
-const runtimeHintsUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Runtime hints are not applied to provider-owned devices.',
-} as const);
-const portReverseUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Limrun port reverse requires an active Android Limrun session.',
-} as const);
-function limrunLifecycleFacts(device: DeviceInfo, live: boolean) {
-  const openTarget = limrunOpenTargetFact(device, live);
-  const closeTarget = limrunCloseTargetFact(device, live);
-  const portReverse = limrunPortReverseFact(device, live);
-  return applicationLifecycleOperationFacts({
-    resolveOpenTarget: openTarget,
-    prepareApplicationOpen: openTarget,
-    openApplication: openTarget,
-    applyRuntimeHints: runtimeHintsUnavailable,
-    clearRuntimeHints: runtimeHintsUnavailable,
-    closeApplication: closeTarget,
-    finalizeApplicationClose: closeTarget,
-    prepareAppleRunner: prepareUnavailable,
-    configureProviderPortReverse: portReverse,
-  });
-}
-
-function limrunOpenTargetFact(device: DeviceInfo, live: boolean) {
-  return isSupportedLimrunAppLogDevice(device)
-    ? live
-      ? available
-      : liveSessionUnavailable
-    : openTargetUnavailable;
-}
-
-function limrunCloseTargetFact(device: DeviceInfo, live: boolean) {
-  return isSupportedLimrunAppLogDevice(device)
-    ? live
-      ? available
-      : liveSessionUnavailable
-    : closeTargetUnavailable;
-}
-
-function limrunPortReverseFact(device: DeviceInfo, live: boolean) {
-  if (!live) return liveSessionUnavailable;
-  return device.platform === 'android' ? available : portReverseUnavailable;
-}
-
 export function createLimrunPlatformRuntimeOwner(
   options: LimrunPlatformRuntimeOwnerOptions,
 ): PlatformRuntimeOwner {
@@ -204,7 +86,7 @@ export function createLimrunPlatformRuntimeOwner(
     ownsDevice,
     inspectFacts: async (device) =>
       hasLiveSession(device)
-        ? facts(options, device)
+        ? limrunAppLogFacts(options, device)
         : createUnavailablePlatformRuntimeFacts(device, owner, {
             appLog: liveSessionUnavailable,
             appState: liveSessionUnavailable,
@@ -263,7 +145,9 @@ function bindLimrunAppLogs(
   signal: AbortSignal,
   recoveryOnly: boolean,
 ): DeviceBinding<PlatformRuntimeOperations> {
-  const runtimeFacts = recoveryOnly ? recoveryFacts(options, device) : facts(options, device);
+  const runtimeFacts = recoveryOnly
+    ? limrunAppLogRecoveryFacts(options, device)
+    : limrunAppLogFacts(options, device);
   const deploymentOperationDrain = createLimrunRequestOperationDrain();
   const recovery = createAppLogRecoveryOperations({
     codec: limrunAppLogDescriptorCodec,
@@ -434,117 +318,6 @@ async function currentSessionAvailable(
   return true;
 }
 
-function facts(
-  options: LimrunPlatformRuntimeOwnerOptions,
-  device: DeviceInfo,
-): RuntimeFacts<PlatformRuntimeOperations> {
-  const deployment = limrunAppDeploymentFacts(deploymentOptions(options), device);
-  const isAndroid = device.platform === 'android';
-  const customSnapshotFact =
-    isIosFamily(device) && device.kind === 'simulator' ? available : customSnapshotUnavailable;
-  return Object.freeze({
-    device: {
-      family: device.platform,
-      ...(device.appleOs === undefined ? {} : { appleOs: device.appleOs }),
-      kind: device.kind,
-      ...(device.target === undefined ? {} : { target: device.target }),
-      ...(device.iosPhysicalDeviceBackend === undefined
-        ? {}
-        : { iosPhysicalDeviceBackend: device.iosPhysicalDeviceBackend }),
-      providerMode: 'provider-runtime',
-    },
-    operations: {
-      appLogInspect: available,
-      appLogDoctor: available,
-      appLogStart: available,
-      appLogReattach: available,
-      appLogCleanup: available,
-      ...deployment,
-      appState: isAndroid ? available : iosAppStateUnavailable,
-      networkDump: available,
-      screenRecordingStart: recordingUnavailable,
-      screenRecordingReattach: recordingUnavailable,
-      screenRecordingCleanup: recordingUnavailable,
-      ...snapshotRuntimeOperationFacts({
-        capture: available,
-        customActions: customSnapshotFact,
-        withoutActiveApp: available,
-      }),
-      ...screenshotRuntimeOperationFacts({ capture: available }),
-      // Provider ownership is authoritative: no native text reading is exposed, so text waits
-      // on a Limrun-owned device poll the canonical tree rather than borrowing Apple's.
-      ...selectorObservationRuntimeOperationFacts({
-        findText: customSnapshotUnavailable,
-        findSelector: customSnapshotUnavailable,
-      }),
-      ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
-      // Focus rides the same provider interactor the captures do, and a live-session Limrun
-      // device always has one, so it is available wherever a capture is.
-      ...limrunInteractionOperationFacts(),
-      ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementTextUnavailable }),
-      ...limrunNavigationOperationFacts(device),
-      ...limrunKeyboardOperationFacts(device),
-      ensureReady: available,
-      bootTarget: available,
-      bootTargetHeadless: headlessUnavailable,
-      listApps: available,
-      shutdownTarget: {
-        available: false,
-        reason: 'unsupported-provider-mode',
-        hint: 'Limrun owns the target lifecycle for provider-owned devices.',
-      },
-      ...limrunLifecycleFacts(device, true),
-    },
-  });
-}
-
-function recoveryFacts(
-  options: LimrunPlatformRuntimeOwnerOptions,
-  device: DeviceInfo,
-): RuntimeFacts<PlatformRuntimeOperations> {
-  const normalFacts = facts(options, device);
-  return Object.freeze({
-    device: normalFacts.device,
-    operations: {
-      ...normalFacts.operations,
-      appLogInspect: liveSessionUnavailable,
-      appLogDoctor: liveSessionUnavailable,
-      appLogStart: liveSessionUnavailable,
-      appLogReattach: available,
-      appLogCleanup: available,
-      appState: liveSessionUnavailable,
-      networkDump: liveSessionUnavailable,
-      screenRecordingStart: liveSessionUnavailable,
-      screenRecordingReattach: liveSessionUnavailable,
-      screenRecordingCleanup: liveSessionUnavailable,
-      ...snapshotRuntimeOperationFacts({
-        capture: liveSessionUnavailable,
-        customActions: liveSessionUnavailable,
-        withoutActiveApp: liveSessionUnavailable,
-      }),
-      ...screenshotRuntimeOperationFacts({ capture: liveSessionUnavailable }),
-      ...selectorObservationRuntimeOperationFacts({
-        findText: liveSessionUnavailable,
-        findSelector: liveSessionUnavailable,
-      }),
-      ...viewportRuntimeOperationFacts({ setViewport: liveSessionUnavailable }),
-      ...limrunInteractionOperationFacts(liveSessionUnavailable),
-      ...limrunNavigationOperationFacts(device, liveSessionUnavailable),
-      ...limrunKeyboardOperationFacts(device, liveSessionUnavailable),
-      ensureReady: liveSessionUnavailable,
-      bootTarget: liveSessionUnavailable,
-      bootTargetHeadless: liveSessionUnavailable,
-      listApps: liveSessionUnavailable,
-      deployApp: liveSessionUnavailable,
-      materializeAppSource: liveSessionUnavailable,
-      deployMaterializedApp: liveSessionUnavailable,
-      sendPushNotification: liveSessionUnavailable,
-      shutdownTarget: liveSessionUnavailable,
-      ...limrunLifecycleFacts(device, false),
-    },
-  });
-}
-
 function backendForDevice(device: DeviceInfo): 'ios-simulator' | 'android' {
   return device.platform === 'apple' ? 'ios-simulator' : 'android';
 }
@@ -559,31 +332,5 @@ function descriptorMatchesDevice(descriptor: LimrunAppLogDescriptor, device: Dev
     (device.platform === 'apple'
       ? descriptor.platform === 'ios'
       : descriptor.platform === 'android')
-  );
-}
-
-function isSupportedLimrunAppLogDevice(device: DeviceInfo): boolean {
-  const parsed = parseLimrunDeviceId(device.id);
-  if (!parsed || device.target !== 'mobile') return false;
-  return parsed.platform === 'ios'
-    ? isSupportedLimrunIosDevice(device)
-    : isSupportedLimrunAndroidDevice(device);
-}
-
-function isSupportedLimrunIosDevice(device: DeviceInfo): boolean {
-  return (
-    device.platform === 'apple' &&
-    device.appleOs === 'ios' &&
-    device.kind === 'simulator' &&
-    device.iosPhysicalDeviceBackend === undefined
-  );
-}
-
-function isSupportedLimrunAndroidDevice(device: DeviceInfo): boolean {
-  return (
-    device.platform === 'android' &&
-    device.appleOs === undefined &&
-    device.kind === 'emulator' &&
-    device.iosPhysicalDeviceBackend === undefined
   );
 }

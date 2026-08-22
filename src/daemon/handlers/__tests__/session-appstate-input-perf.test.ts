@@ -45,7 +45,7 @@ function keyboardCapableRuntime(device: DeviceInfo) {
     facts,
     operations: {
       keyboardStatus: async () => ({ visible: false }),
-      keyboardDismiss: async () => ({ dismissed: true, visible: false }),
+      keyboardDismiss: async () => ({ kind: 'ime-probe', dismissed: true, visible: false }),
       keyboardEnter: async () => ({}),
     },
     [Symbol.asyncDispose]: async () => {},

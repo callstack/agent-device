@@ -185,22 +185,34 @@ export type KeyboardStatusResult = {
 };
 
 /**
- * Owner-shaped dismiss evidence: Android's IME probe fields, or iOS's `mechanism` disclosure
- * (#1598), or neither when HarmonyOS's HDC key press reports nothing beyond success.
+ * Owner-shaped dismiss evidence, discriminated by which owner produced it: Android's IME probe
+ * fields, or iOS's `mechanism` disclosure (#1598), or HarmonyOS's bare acknowledgment (its HDC
+ * key press reports nothing beyond success). The daemon derives the wire `platform` label from
+ * `kind` rather than re-deriving it from the device (#1955 review), so an owner can only ever
+ * produce its own result shape — an android-probe result under an `ios` label is unrepresentable.
  */
-export type KeyboardDismissResult = {
-  attempts?: number;
-  wasVisible?: boolean;
-  dismissed?: boolean;
-  visible?: boolean;
-  inputType?: string;
-  type?: string;
-  inputMethodPackage?: string;
-  focusedPackage?: string;
-  focusedResourceId?: string;
-  inputOwner?: string;
-  mechanism?: string;
-};
+export type KeyboardDismissResult =
+  | Readonly<{
+      kind: 'ime-probe';
+      attempts?: number;
+      wasVisible?: boolean;
+      dismissed?: boolean;
+      visible?: boolean;
+      inputType?: string;
+      type?: string;
+      inputMethodPackage?: string;
+      focusedPackage?: string;
+      focusedResourceId?: string;
+      inputOwner?: string;
+    }>
+  | Readonly<{
+      kind: 'mechanism';
+      wasVisible?: boolean;
+      dismissed?: boolean;
+      visible?: boolean;
+      mechanism?: string;
+    }>
+  | Readonly<{ kind: 'acknowledged' }>;
 
 /** Only the Apple runner echoes visibility around the return-key press; every other owner is blind. */
 export type KeyboardEnterResult = {
