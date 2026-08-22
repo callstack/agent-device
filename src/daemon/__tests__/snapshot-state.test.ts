@@ -1,5 +1,10 @@
 import { expect, test } from 'vitest';
 import { buildSnapshotState } from '../snapshot-state.ts';
+import { isNodeVisibleOnScreen } from '@agent-device/contracts/snapshot';
+import {
+  buildUiHierarchySnapshot,
+  parseUiHierarchyTree,
+} from '../../platforms/android/ui-hierarchy.ts';
 
 test('buildSnapshotState handles undefined nodes gracefully', () => {
   const state = buildSnapshotState({ nodes: undefined, truncated: undefined }, undefined);
@@ -35,6 +40,25 @@ test('buildSnapshotState carries structured snapshot quality verdicts', () => {
     reason: 'sparse tree',
     reasonCode: 'sparse-tree',
   });
+});
+
+test('buildSnapshotState preserves Android effective geometry for post-wire consumers', () => {
+  const xml = `<hierarchy>
+  <node class="android.widget.FrameLayout" bounds="[0,0][400,800]" visible-to-user="true">
+    <node class="android.widget.ScrollView" bounds="[0,100][300,500]" scrollable="true" visible-to-user="true">
+      <node class="android.widget.Button" text="Partially visible" bounds="[200,300][320,380]" clickable="true" visible-to-user="true" />
+    </node>
+  </node>
+</hierarchy>`;
+  const built = buildUiHierarchySnapshot(parseUiHierarchyTree(xml), undefined, {});
+  const state = buildSnapshotState({ nodes: built.nodes, backend: 'android' }, undefined);
+  const target = state.nodes.find((node) => node.label === 'Partially visible');
+
+  expect(target).toMatchObject({
+    rect: { x: 200, y: 300, width: 100, height: 80 },
+    hittable: true,
+  });
+  expect(target && isNodeVisibleOnScreen(target, state.nodes)).toBe(true);
 });
 
 test('buildSnapshotState handles nodes with missing fields', () => {

@@ -1,5 +1,6 @@
 import type { RawSnapshotNode, Rect, SnapshotOptions } from '@agent-device/kernel/snapshot';
 import { parseBounds } from '@agent-device/kernel/bounds';
+import { isPositiveFiniteRect, pickLargestRect } from '@agent-device/kernel/rect';
 import { decodeXmlCharacterReferences } from '@agent-device/xml';
 import { isScrollableType, normalizeSnapshotScope } from '@agent-device/contracts/snapshot';
 import {
@@ -10,6 +11,11 @@ import {
 } from './ui-hierarchy-node.ts';
 import { collectAndroidHiddenNodes } from './ui-hierarchy-visibility.ts';
 import { scopePresentedAndroidSnapshot } from './ui-hierarchy-scope.ts';
+import {
+  createAndroidSnapshotPresentationNode,
+  effectiveAndroidRect,
+  serializeAndroidRegularPresentationNode,
+} from './snapshot-presentation.ts';
 
 export type { AndroidUiHierarchy } from './ui-hierarchy-node.ts';
 import {
@@ -117,6 +123,8 @@ type AndroidSnapshotBuildState = {
   interactiveDescendantMemo: Map<AndroidNode, boolean>;
   /** Subtrees the regular projection hides (invisible / stale window / covered). Empty for raw. */
   hidden: ReadonlySet<AndroidNode>;
+  /** Largest helper-reported application/window frame, used as the regular viewport fallback. */
+  viewport?: Rect;
   truncated: boolean;
 };
 
@@ -127,6 +135,7 @@ export function buildUiHierarchySnapshot(
 ): AndroidBuiltSnapshot {
   const requestedDepth = options.depth ?? Number.POSITIVE_INFINITY;
   const scope = normalizeSnapshotScope(options.scope);
+  const viewport = resolveAndroidSnapshotViewport(tree);
   const state: AndroidSnapshotBuildState = {
     nodes: [],
     sourceNodes: [],
@@ -140,6 +149,7 @@ export function buildUiHierarchySnapshot(
     // C3: raw is the acquired tree (normalization only); regular additionally hides what Android
     // marks invisible, stale application windows, and covered same-window surfaces.
     hidden: options.raw ? new Set() : collectAndroidHiddenNodes(tree),
+    ...(viewport ? { viewport } : {}),
     truncated: false,
   };
 
@@ -173,38 +183,112 @@ function walkUiHierarchyNode(
   ancestorHittable: boolean = false,
   ancestorCollection: boolean = false,
   ancestorSystemChrome: boolean = false,
+  ancestorClip?: Rect,
 ): void {
-  if (state.maxNodes !== undefined && state.nodes.length >= state.maxNodes) {
-    state.truncated = true;
-    return;
-  }
-  if (depth > state.maxDepth || state.hidden.has(node)) return;
-
-  const include = state.options.raw
-    ? true
-    : shouldIncludeAndroidNode(
-        node,
-        state.options,
-        ancestorHittable,
-        hasInteractiveDescendant(state, node),
-        ancestorCollection,
-      );
-  const systemChrome =
-    ancestorSystemChrome || isAndroidSystemChromeWindowResourceId(node.identifier);
-  const currentIndex = include
-    ? appendAndroidSnapshotNode(state, node, parentIndex, systemChrome)
-    : parentIndex;
+  if (shouldStopAndroidWalk(state, node, depth)) return;
+  const effectiveRect = resolveAndroidEffectiveRect(state, node, ancestorClip);
+  const currentIndex = appendAndroidNodeIfPresented(
+    state,
+    node,
+    parentIndex,
+    ancestorHittable,
+    ancestorCollection,
+    ancestorSystemChrome,
+    effectiveRect,
+  );
   const nextAncestorHittable = ancestorHittable || isAgentTarget(node);
   const nextAncestorCollection = ancestorCollection || isCollectionContainerType(node.type);
+  const nextAncestorClip = resolveAndroidDescendantClip(state, node, effectiveRect, ancestorClip);
+  walkAndroidChildren(
+    state,
+    node,
+    depth,
+    currentIndex,
+    nextAncestorHittable,
+    nextAncestorCollection,
+    ancestorSystemChrome || isAndroidSystemChromeWindowResourceId(node.identifier),
+    nextAncestorClip,
+  );
+}
+
+function shouldStopAndroidWalk(
+  state: AndroidSnapshotBuildState,
+  node: AndroidNode,
+  depth: number,
+): boolean {
+  if (state.maxNodes !== undefined && state.nodes.length >= state.maxNodes) {
+    state.truncated = true;
+    return true;
+  }
+  return depth > state.maxDepth || state.hidden.has(node);
+}
+
+function resolveAndroidEffectiveRect(
+  state: AndroidSnapshotBuildState,
+  node: AndroidNode,
+  ancestorClip: Rect | undefined,
+): Rect | undefined {
+  return state.options.raw
+    ? node.rect
+    : effectiveAndroidRect(node.rect, node.windowRect ?? state.viewport, ancestorClip);
+}
+
+function appendAndroidNodeIfPresented(
+  state: AndroidSnapshotBuildState,
+  node: AndroidNode,
+  parentIndex: number | undefined,
+  ancestorHittable: boolean,
+  ancestorCollection: boolean,
+  ancestorSystemChrome: boolean,
+  effectiveRect: Rect | undefined,
+): number | undefined {
+  if (
+    !state.options.raw &&
+    !shouldIncludeAndroidNode(
+      node,
+      state.options,
+      ancestorHittable,
+      hasInteractiveDescendant(state, node),
+      ancestorCollection,
+    )
+  ) {
+    return parentIndex;
+  }
+  const systemChrome =
+    ancestorSystemChrome || isAndroidSystemChromeWindowResourceId(node.identifier);
+  return appendAndroidSnapshotNode(state, node, parentIndex, systemChrome, effectiveRect);
+}
+
+function resolveAndroidDescendantClip(
+  state: AndroidSnapshotBuildState,
+  node: AndroidNode,
+  effectiveRect: Rect | undefined,
+  ancestorClip: Rect | undefined,
+): Rect | undefined {
+  if (state.options.raw || !isAndroidScrollClipNode(node)) return ancestorClip;
+  return effectiveRect;
+}
+
+function walkAndroidChildren(
+  state: AndroidSnapshotBuildState,
+  node: AndroidNode,
+  depth: number,
+  parentIndex: number | undefined,
+  ancestorHittable: boolean,
+  ancestorCollection: boolean,
+  ancestorSystemChrome: boolean,
+  ancestorClip: Rect | undefined,
+): void {
   for (const child of node.children) {
     walkUiHierarchyNode(
       state,
       child,
       depth + 1,
-      currentIndex,
-      nextAncestorHittable,
-      nextAncestorCollection,
-      systemChrome,
+      parentIndex,
+      ancestorHittable,
+      ancestorCollection,
+      ancestorSystemChrome,
+      ancestorClip,
     );
     if (state.truncated) return;
   }
@@ -215,6 +299,7 @@ function appendAndroidSnapshotNode(
   node: AndroidNode,
   parentIndex: number | undefined,
   systemChrome: boolean,
+  effectiveRect: Rect | undefined,
 ): number {
   const currentIndex = state.nodes.length;
   // Snapshot filtering removes Compose layout wrappers. Keep depth aligned with
@@ -222,7 +307,7 @@ function appendAndroidSnapshotNode(
   // fixed sibling that follows scroll content can be re-parented under the last
   // retained row by normalizeSnapshotTree's depth fallback (#1377).
   state.sourceNodes.push(node);
-  state.nodes.push({
+  const rawNode: AndroidRawSnapshotNode = {
     index: currentIndex,
     type: node.type ?? undefined,
     label: node.label ?? undefined,
@@ -238,8 +323,29 @@ function appendAndroidSnapshotNode(
     parentIndex,
     ...androidScrollActionHints(node, state.hidden),
     ...(systemChrome ? { systemChrome: true } : {}),
-  });
+  };
+  const presentationNode = createAndroidSnapshotPresentationNode(rawNode, effectiveRect);
+  state.nodes.push(
+    state.options.raw
+      ? presentationNode.raw
+      : serializeAndroidRegularPresentationNode(presentationNode),
+  );
   return currentIndex;
+}
+
+function resolveAndroidSnapshotViewport(root: AndroidUiHierarchy): Rect | undefined {
+  const windowRects: Rect[] = [];
+  const stack = [...root.children];
+  while (stack.length > 0) {
+    const node = stack.pop()!;
+    if (isPositiveFiniteRect(node.windowRect)) windowRects.push(node.windowRect);
+    stack.push(...node.children);
+  }
+  return pickLargestRect(windowRects) ?? undefined;
+}
+
+function isAndroidScrollClipNode(node: AndroidNode): boolean {
+  return node.scrollable === true && isScrollableType(node.type);
 }
 
 function compactedAndroidNodeDepth(
