@@ -12,6 +12,12 @@ import {
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import { localRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
+import { bindLocalBackInteractor, backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
+import { bindLocalHomeInteractor, homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
+import {
+  bindLocalTvRemoteInteractor,
+  tvRemoteRuntimeOperationFacts,
+} from '@agent-device/contracts/tv-remote-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { bindVegaApplicationLifecycle } from './lifecycle.ts';
@@ -64,9 +70,30 @@ export function createVegaPlatformRuntime(host: PlatformRuntimeHost): PlatformRu
         device: request.device,
         owner: vegaOwner,
         facts,
-        operations: Object.freeze(
-          availableApplicationLifecycleOperations(lifecycle, facts.operations),
-        ),
+        operations: Object.freeze({
+          ...availableApplicationLifecycleOperations(lifecycle, facts.operations),
+          ...(facts.operations.back.available
+            ? bindLocalBackInteractor({
+                device: request.device,
+                signal: request.scope.signal,
+                resolveInteractor: host.localInteractors.resolve,
+              })
+            : {}),
+          ...(facts.operations.home.available
+            ? bindLocalHomeInteractor({
+                device: request.device,
+                signal: request.scope.signal,
+                resolveInteractor: host.localInteractors.resolve,
+              })
+            : {}),
+          ...(facts.operations.tvRemote.available
+            ? bindLocalTvRemoteInteractor({
+                device: request.device,
+                signal: request.scope.signal,
+                resolveInteractor: host.localInteractors.resolve,
+              })
+            : {}),
+        }),
         [Symbol.asyncDispose]: async () => undefined,
       }) satisfies DeviceBinding<PlatformRuntimeOperations>;
     },
@@ -87,12 +114,35 @@ const typeUnavailable = vegaUnavailable(
   'unsupported-platform-leaf',
   'type is not supported on Vega OS: the Vega runtime exposes remote navigation only.',
 );
+// `orientation` and every keyboard action never carried a Vega capability bucket at all; `back`,
+// `home`, and `tv-remote` did (the retired `vegaPlugin` closure), gated by the same VVD cell
+// their lifecycle open/close already require.
+const orientationUnavailable = vegaUnavailable(
+  'unsupported-platform-leaf',
+  'orientation is not supported on Vega OS.',
+);
+const keyboardUnavailable = vegaUnavailable(
+  'unsupported-platform-leaf',
+  'keyboard is not supported on Vega OS.',
+);
+const backUnavailable = vegaUnavailable(
+  'unsupported-device-kind',
+  'back currently supports only Vega Virtual Devices.',
+);
+const homeUnavailable = vegaUnavailable(
+  'unsupported-device-kind',
+  'home currently supports only Vega Virtual Devices.',
+);
+const tvRemoteUnavailable = vegaUnavailable(
+  'unsupported-device-kind',
+  'tv-remote currently supports only Vega Virtual Devices.',
+);
 
 function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> {
   const supported = device.kind === 'emulator' && device.target === 'tv';
   const openTarget = supported ? lifecycleAvailable : openTargetUnavailable;
   const closeTarget = supported ? lifecycleAvailable : closeTargetUnavailable;
-  return createUnavailablePlatformRuntimeFacts(device, vegaOwner, {
+  const unavailable = createUnavailablePlatformRuntimeFacts(device, vegaOwner, {
     appLog: unsupportedPlatformLeaf,
     network: unsupportedPlatformLeaf,
     screenshot: screenshotUnavailable,
@@ -102,6 +152,13 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
     focus: focusUnavailable,
     typeText: typeUnavailable,
     elementText: unsupportedPlatformLeaf,
+    back: backUnavailable,
+    home: homeUnavailable,
+    orientation: orientationUnavailable,
+    tvRemote: tvRemoteUnavailable,
+    keyboardStatus: keyboardUnavailable,
+    keyboardDismiss: keyboardUnavailable,
+    keyboardEnter: keyboardUnavailable,
     readiness: unsupportedPlatformLeaf,
     lifecycle: applicationLifecycleOperationFacts({
       resolveOpenTarget: openTarget,
@@ -114,6 +171,19 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
       prepareAppleRunner: appleRunnerUnavailable,
       configureProviderPortReverse: providerPortReverseUnavailable,
     }),
+  });
+  return Object.freeze({
+    device: unavailable.device,
+    operations: {
+      ...unavailable.operations,
+      // Remote navigation is the Vega runtime's first available interaction surface: the
+      // VVD-only gate the retired `vegaPlugin` closure applied to all three.
+      ...backRuntimeOperationFacts({ back: supported ? lifecycleAvailable : backUnavailable }),
+      ...homeRuntimeOperationFacts({ home: supported ? lifecycleAvailable : homeUnavailable }),
+      ...tvRemoteRuntimeOperationFacts({
+        tvRemote: supported ? lifecycleAvailable : tvRemoteUnavailable,
+      }),
+    },
   });
 }
 

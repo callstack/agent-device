@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { PUBLIC_COMMANDS } from '../../../command-catalog.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { vegaPlugin } from '../plugin.ts';
 
@@ -13,52 +12,17 @@ const VEGA_VVD = {
   booted: true,
 } satisfies DeviceInfo;
 
-const VEGA_PHYSICAL_TV: DeviceInfo = {
-  ...VEGA_VVD,
-  id: 'vega-physical-tv',
-  kind: 'device',
-};
-
-const VEGA_NON_TV: DeviceInfo = {
-  ...VEGA_VVD,
-  id: 'vega-non-tv',
-  target: 'mobile',
-};
-
-test('Vega plugin owns the Vega platform and tv-remote capability bucket', () => {
+test('Vega plugin owns the Vega platform and carries no capability closures', () => {
   assert.deepEqual(vegaPlugin.platforms, ['vega']);
   assert.equal(vegaPlugin.capability.bucket, 'vega');
 
-  const supportsTvRemote = vegaPlugin.capability.supportsByDefault[PUBLIC_COMMANDS.tvRemote];
-  const unsupportedHint = vegaPlugin.capability.unsupportedHintByDefault[PUBLIC_COMMANDS.tvRemote];
-
-  assert.ok(supportsTvRemote);
-  assert.ok(unsupportedHint);
-  assert.equal(supportsTvRemote(VEGA_VVD), true);
-  // Device kind is owned by the descriptor bucket; the plugin adds only the TV-target gate.
-  assert.equal(supportsTvRemote(VEGA_PHYSICAL_TV), true);
-  assert.equal(supportsTvRemote(VEGA_NON_TV), false);
-  assert.equal(unsupportedHint(VEGA_VVD), undefined);
-  assert.equal(
-    unsupportedHint(VEGA_PHYSICAL_TV),
-    'tv-remote currently supports only Vega Virtual Devices.',
-  );
-  assert.equal(
-    unsupportedHint(VEGA_NON_TV),
-    'tv-remote currently supports only Vega Virtual Devices.',
-  );
-
-  for (const command of [PUBLIC_COMMANDS.back, PUBLIC_COMMANDS.home]) {
-    const supports = vegaPlugin.capability.supportsByDefault[command];
-    assert.ok(supports);
-    assert.equal(supports(VEGA_VVD), true);
-    assert.equal(supports(VEGA_PHYSICAL_TV), true);
-    assert.equal(supports(VEGA_NON_TV), false);
-  }
-
-  // Lifecycle support belongs to exact runtime facts, not this legacy capability facet.
-  assert.equal(vegaPlugin.capability.supportsByDefault[PUBLIC_COMMANDS.open], undefined);
-  assert.equal(vegaPlugin.capability.supportsByDefault[PUBLIC_COMMANDS.close], undefined);
+  // R42/R43/R45 retired the plugin's only closures (the `back`/`home`/`tv-remote` TV-target
+  // gate): admission is now the platform-vega runtime's own facts, exercised in its owner suite
+  // (packages/platform-vega/src/runtime.test.ts). The literal type below carries no
+  // `supportsByDefault`/`unsupportedHintByDefault` key at all — a compile-time proof of
+  // retirement, since either key reappearing would fail this assignment.
+  const capability: Readonly<{ bucket: 'vega' }> = vegaPlugin.capability;
+  assert.equal(capability.bucket, 'vega');
 });
 
 test('Vega plugin creates the Vega interactor lazily', async () => {

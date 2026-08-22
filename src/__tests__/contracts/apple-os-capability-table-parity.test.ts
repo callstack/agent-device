@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { isAudioProbeSupportedDevice } from '@agent-device/contracts/audio-probe-support';
 import {
-  isIosFamily,
   isMacOs,
   resolveDeviceAppleOs,
   DEVICE_TARGETS,
@@ -51,11 +50,6 @@ const isMacOsOrAppleSimulator = (device: DeviceInfo): boolean =>
 const isIosOs = (device: DeviceInfo): boolean =>
   device.platform === 'apple' &&
   (device.appleOs ? device.appleOs === 'ios' : device.target !== 'tv');
-const supportsAndroidOrIosNonTv = (device: DeviceInfo): boolean =>
-  device.platform === 'android' || (isIosFamily(device) && device.target !== 'tv');
-const supportsTvRemote = (device: DeviceInfo): boolean =>
-  (device.platform === 'android' && device.target === 'tv') ||
-  (isIosFamily(device) && device.target === 'tv');
 const supportsCoreDevicePhysicalOperation = (device: DeviceInfo): boolean =>
   device.platform !== 'apple' ||
   device.kind !== 'device' ||
@@ -64,18 +58,17 @@ const coreDeviceOnlyPhysicalOperationHint = (device: DeviceInfo): string | undef
   supportsCoreDevicePhysicalOperation(device)
     ? undefined
     : 'This command requires a CoreDevice-backed physical iOS device. The selected XCTest backend supports open, close, interactions, snapshots, and screenshots.';
+// `home`/`keyboard`/`orientation`/`tv-remote` are gone from this table (R42/R43/R44/R45/R46
+// retired their AppleOS-table-reading closures along with their descriptor capability buckets);
+// their per-AppleOS admission now lives as owner facts in `packages/platform-apple/src/runtime.ts`.
 const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
   perf: supportsCoreDevicePhysicalOperation,
-  home: isNotMacOs,
   'app-switcher': isNotMacOs,
   clipboard: (device) =>
     device.platform === 'android' ||
     device.platform === 'linux' ||
     isMacOs(device) ||
     device.kind === 'simulator',
-  keyboard: supportsAndroidOrIosNonTv,
-  orientation: supportsAndroidOrIosNonTv,
-  'tv-remote': supportsTvRemote,
   alert: (device) =>
     device.platform === 'android' || isIosOs(device) || isMacOsOrAppleSimulator(device),
   settings: (device) =>
@@ -88,17 +81,6 @@ const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
 };
 const HINT_REF: Record<string, (device: DeviceInfo) => string | undefined> = {
   perf: coreDeviceOnlyPhysicalOperationHint,
-  'tv-remote': (device) => {
-    if (device.platform === 'android') {
-      return device.target === 'tv'
-        ? undefined
-        : 'tv-remote is supported only on Android TV targets.';
-    }
-    if (isIosFamily(device)) {
-      return device.target === 'tv' ? undefined : 'tv-remote is supported only on tvOS devices.';
-    }
-    return isMacOs(device) ? 'tv-remote is supported only on tvOS devices.' : undefined;
-  },
 };
 
 // ---------------------------------------------------------------------------

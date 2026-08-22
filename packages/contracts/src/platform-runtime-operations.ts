@@ -19,6 +19,11 @@ import type { ViewportRuntimeOperations } from './viewport-runtime.ts';
 import type { FocusRuntimeOperations } from './focus-runtime.ts';
 import type { TypeTextRuntimeOperations } from './type-text-runtime.ts';
 import type { ElementTextRuntimeOperations } from './element-text-runtime.ts';
+import type { BackRuntimeOperations } from './back-runtime.ts';
+import type { HomeRuntimeOperations } from './home-runtime.ts';
+import type { OrientationRuntimeOperations } from './orientation-runtime.ts';
+import type { TvRemoteRuntimeOperations } from './tv-remote-runtime.ts';
+import type { KeyboardRuntimeOperations } from './keyboard-runtime.ts';
 import type {
   DeviceReadinessRuntimeHost,
   DeviceReadinessRuntimeOperations,
@@ -55,6 +60,11 @@ export type PlatformRuntimeOperations = AppLogRuntimeOperations &
   FocusRuntimeOperations &
   TypeTextRuntimeOperations &
   ElementTextRuntimeOperations &
+  BackRuntimeOperations &
+  HomeRuntimeOperations &
+  OrientationRuntimeOperations &
+  TvRemoteRuntimeOperations &
+  KeyboardRuntimeOperations &
   DeviceReadinessRuntimeOperations &
   DeviceShutdownRuntimeOperations &
   ApplicationLifecycleRuntimeOperations;
@@ -76,6 +86,13 @@ export const captureSnapshotUse = defineUse({ required: ['captureSnapshot'] });
 export const viewportRuntimeUse = defineUse({ required: ['setViewport'] });
 export const focusRuntimeUse = defineUse({ required: ['focusPoint'] });
 export const typeTextRuntimeUse = defineUse({ required: ['typeText'] });
+export const backRuntimeUse = defineUse({ required: ['back'] });
+export const homeRuntimeUse = defineUse({ required: ['home'] });
+export const orientationRuntimeUse = defineUse({ required: ['setOrientation'] });
+export const tvRemoteRuntimeUse = defineUse({ required: ['tvRemote'] });
+export const keyboardStatusUse = defineUse({ required: ['keyboardStatus'] });
+export const keyboardDismissUse = defineUse({ required: ['keyboardDismiss'] });
+export const keyboardEnterUse = defineUse({ required: ['keyboardEnter'] });
 const captureSnapshotWithCustomActionsUse = defineUse({
   required: ['captureSnapshot', 'captureSnapshotWithCustomActions'],
 });
@@ -397,6 +414,19 @@ export const appStateUse = defineUse({ required: ['ensureReady', 'appState'] });
 export const appStateRuntimeUses = Object.freeze([appStateUse] as const);
 
 export const shutdownTargetUse = defineUse({ required: ['shutdownTarget'] });
+
+/**
+ * `keyboard`'s action-selected uses (ADR 0019 §9: one bind per handler). `status` is Android-only
+ * (parity with the retired leaf's per-family rejection of `status`/`get` everywhere else);
+ * `dismiss` and `enter` are the cross-platform legs. The daemon's `keyboard-runtime.ts` admits
+ * and binds exactly one of the three exported uses per request, keyed by the parsed action —
+ * never all three.
+ */
+export const keyboardRuntimePlanUses = Object.freeze([
+  keyboardStatusUse,
+  keyboardDismissUse,
+  keyboardEnterUse,
+] as const);
 
 export type PlatformRuntimeHost = AppLogRuntimeHost &
   NetworkRuntimeHost &

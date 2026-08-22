@@ -2,7 +2,7 @@ import { appleOsCapabilities } from './capabilities.ts';
 import type { PlatformPlugin } from '@agent-device/contracts/platform';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { isAudioProbeSupportedDevice } from '@agent-device/contracts/audio-probe-support';
-import { isTvOsDevice, resolveDeviceAppleOs, type DeviceInfo } from '@agent-device/kernel/device';
+import { resolveDeviceAppleOs, type DeviceInfo } from '@agent-device/kernel/device';
 import type { RunnerContext } from '@agent-device/contracts/interaction';
 
 // ---------------------------------------------------------------------------
@@ -33,18 +33,6 @@ const supportsCoreDevicePhysicalOperation = (device: DeviceInfo): boolean =>
   device.kind !== 'device' ||
   device.iosPhysicalDeviceBackend !== 'xctest';
 
-// `keyboard` (was `android || (ios && target !== 'tv')`). Off Apple: `android`.
-const supportsKeyboard = (device: DeviceInfo): boolean => {
-  const caps = appleOsCapabilities(device);
-  return caps ? caps.keyboard : device.platform === 'android';
-};
-
-// `orientation` (was `android || (ios && target !== 'tv')`). Off Apple: `android`.
-const supportsOrientation = (device: DeviceInfo): boolean => {
-  const caps = appleOsCapabilities(device);
-  return caps ? caps.orientation : device.platform === 'android';
-};
-
 // The Apple arm shared by `clipboard`/`settings` (was `macos || simulator`):
 // reachable on the macOS host directly, on every other Apple OS only on the simulator.
 // Off Apple this preserves the trailing `device.kind === 'simulator'` term verbatim.
@@ -61,28 +49,16 @@ const supportsAlertSurface = (device: DeviceInfo): boolean =>
   device.platform === 'android' ||
   (device.platform === 'apple' && resolveDeviceAppleOs(device) === 'ios') ||
   supportsHostOrSimulatorSurface(device);
-// `tv-remote` is Android-TV or tvOS only. Off Apple this preserves the Android-TV
-// branch so the relocated Apple closure stays equivalent to the full original
-// supports predicate under the parity guard; the closure is only consulted for Apple
-// devices in production capability routing.
-const supportsTvRemote = (device: DeviceInfo): boolean => {
-  if (device.platform === 'android') return device.target === 'tv';
-  return isTvOsDevice(device);
-};
 
 // Per-command support gates the Apple family applies by default, keyed exactly as in
 // the command-descriptor registry (a command absent here has no Apple gate).
 const APPLE_SUPPORTS_BY_DEFAULT: Record<string, (device: DeviceInfo) => boolean> = {
   [PUBLIC_COMMANDS.perf]: supportsCoreDevicePhysicalOperation,
-  [PUBLIC_COMMANDS.home]: supportsAppAndDeviceLifecycle,
   [PUBLIC_COMMANDS.appSwitcher]: supportsAppAndDeviceLifecycle,
   [PUBLIC_COMMANDS.clipboard]: (device) =>
     device.platform === 'android' ||
     device.platform === 'linux' ||
     supportsHostOrSimulatorSurface(device),
-  [PUBLIC_COMMANDS.keyboard]: supportsKeyboard,
-  [PUBLIC_COMMANDS.orientation]: supportsOrientation,
-  [PUBLIC_COMMANDS.tvRemote]: supportsTvRemote,
   [PUBLIC_COMMANDS.alert]: supportsAlertSurface,
   [PUBLIC_COMMANDS.settings]: (device) =>
     device.platform === 'android' || supportsHostOrSimulatorSurface(device),
@@ -94,16 +70,6 @@ const APPLE_UNSUPPORTED_HINT_BY_DEFAULT: Record<
   (device: DeviceInfo) => string | undefined
 > = {
   [PUBLIC_COMMANDS.perf]: coreDeviceOnlyPhysicalOperationHint,
-  [PUBLIC_COMMANDS.tvRemote]: (device) =>
-    device.platform === 'android'
-      ? device.target === 'tv'
-        ? undefined
-        : 'tv-remote is supported only on Android TV targets.'
-      : !appleOsCapabilities(device)
-        ? undefined
-        : isTvOsDevice(device)
-          ? undefined
-          : 'tv-remote is supported only on tvOS devices.',
 };
 
 function coreDeviceOnlyPhysicalOperationHint(device: DeviceInfo): string | undefined {

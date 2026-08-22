@@ -125,7 +125,11 @@ export const LINUX_PLATFORM_COVERAGE = {
     'writeLinuxClipboard uses xclip with stdin on X11',
     'Linux clipboard writes through the supported X11 host-tool seam',
   ),
-  [C.keyboard]: denial('keyboard', 'Linux capability declaration rejects native keyboard control'),
+  [C.keyboard]: contract(
+    LINUX_RUNTIME_EVIDENCE.path,
+    LINUX_RUNTIME_EVIDENCE.test,
+    'the exact-owner runtime fact rejects native keyboard control on every Linux leaf',
+  ),
   [C.install]: gap('No Linux-specific application installation command evidence exists yet'),
   [C.reinstall]: gap('No Linux-specific application reinstallation command evidence exists yet'),
   [C.push]: gap('No Linux-specific push delivery command evidence exists yet'),
@@ -207,10 +211,15 @@ export const LINUX_PLATFORM_COVERAGE = {
     LINUX_PROVIDER_EVIDENCE.test,
     'Linux provider scenario dispatches Super+D through the semantic input provider',
   ),
-  [C.tvRemote]: denial('tv-remote', 'Linux capability declaration rejects TV remote input'),
-  [C.orientation]: denial(
-    'orientation',
-    'Linux capability declaration rejects native orientation changes',
+  [C.tvRemote]: contract(
+    LINUX_RUNTIME_EVIDENCE.path,
+    LINUX_RUNTIME_EVIDENCE.test,
+    'the exact-owner runtime fact rejects TV remote input on every Linux leaf',
+  ),
+  [C.orientation]: contract(
+    LINUX_RUNTIME_EVIDENCE.path,
+    LINUX_RUNTIME_EVIDENCE.test,
+    'the exact-owner runtime fact rejects native orientation changes on every Linux leaf',
   ),
   [C.scroll]: contract(
     'src/platforms/linux/__tests__/input-actions.test.ts',

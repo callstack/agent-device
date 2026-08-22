@@ -30,14 +30,19 @@ import { inventoryUse } from '@agent-device/contracts/platform-module';
 import {
   appsRuntimeUse,
   appStateRuntimeUses,
+  backRuntimeUse,
   deviceBootRuntimeUses,
   findRuntimePlanUses,
   focusRuntimeUse,
+  homeRuntimeUse,
+  keyboardRuntimePlanUses,
+  orientationRuntimeUse,
   screenshotRuntimePlanUses,
   selectorCaptureRuntimePlanUses,
   selectorTextCaptureRuntimePlanUses,
   shutdownTargetUse,
   snapshotRuntimePlanUses,
+  tvRemoteRuntimeUse,
   typeTextRuntimeUse,
   viewportRuntimeUse,
   waitSelectorCaptureRuntimePlanUses,
@@ -228,7 +233,6 @@ function readOnlySubactionRecordingEffect(
 
 const APPLE_SIM_AND_DEVICE = { simulator: true, device: true };
 const ANDROID_ALL = { emulator: true, device: true, unknown: true };
-const VEGA_VVD = { emulator: true };
 const LINUX_DEVICE = { device: true };
 const LINUX_NONE = {};
 
@@ -763,6 +767,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
+    // R46 retires this command's capability bucket and its `dispatch` leaf together: admission is
+    // whichever action-selected fact (`keyboardStatus`/`keyboardDismiss`/`keyboardEnter`) the
+    // parsed action names, and the only execution is that one bound operation (ADR 0019 §9).
     recordsSessionAction: true,
     recordingEffect: keyboardRecordingEffect,
     daemon: {
@@ -770,15 +777,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
       refFrameEffect: keyboardRefFrameEffect,
       androidBlockingDialogGuard: true,
     },
-    dispatch: {},
-    capability: {
-      apple: APPLE_SIM_AND_DEVICE,
-      android: ANDROID_ALL,
-      linux: LINUX_NONE,
-    },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    platformExecution: { kind: 'device-runtime', uses: keyboardRuntimePlanUses },
   },
   {
     name: 'install',
@@ -1232,14 +1233,23 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'core',
-    ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS,
-    capability: {
-      ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS.capability,
-      vega: VEGA_VVD,
+    // R42 retires this command's capability bucket and its `dispatch` leaf together: admission is
+    // the owner's `back` fact, and the only execution is the bound operation. The remaining
+    // traits are `GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS` minus those two, plus the
+    // postActionObservation timeout trait it kept — admission-independent, like `type` kept its
+    // dialog guard.
+    recordsSessionAction: true,
+    recordingEffect: 'mutates-app',
+    deviceClaimPolicy: 'require-owner',
+    daemon: {
+      route: 'generic',
+      refFrameEffect: 'may-invalidate',
+      androidBlockingDialogGuard: true,
     },
     timeoutPolicy: postActionObservationTimeoutPolicy('back', DEFAULT_TIMEOUT_POLICY),
     postActionObservation: postActionObservation('back'),
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    batchable: true,
+    platformExecution: { kind: 'device-runtime', uses: [backRuntimeUse] },
   },
   {
     name: 'gesture',
@@ -1265,12 +1275,20 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
-    ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS,
-    capability: {
-      ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS.capability,
-      vega: VEGA_VVD,
+    // R43 retires this command's capability bucket and its `dispatch` leaf together: admission is
+    // the owner's `home` fact, and the only execution is the bound operation. The remaining
+    // traits are `GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS` minus those two.
+    recordsSessionAction: true,
+    recordingEffect: 'mutates-app',
+    deviceClaimPolicy: 'require-owner',
+    daemon: {
+      route: 'generic',
+      refFrameEffect: 'may-invalidate',
+      androidBlockingDialogGuard: true,
     },
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: true,
+    platformExecution: { kind: 'device-runtime', uses: [homeRuntimeUse] },
   },
   {
     name: 'tv-remote',
@@ -1278,6 +1296,8 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public', key: 'tvRemote' },
     frameworkTier: 'extended',
+    // R45 retires this command's capability bucket and its `dispatch` leaf together: admission is
+    // the owner's `tvRemote` fact, and the only execution is the bound operation.
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     daemon: {
@@ -1285,16 +1305,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
       refFrameEffect: 'may-invalidate',
       androidBlockingDialogGuard: true,
     },
-    dispatch: {},
-    capability: {
-      apple: APPLE_SIM_AND_DEVICE,
-      android: ANDROID_ALL,
-      vega: VEGA_VVD,
-      linux: LINUX_NONE,
-    },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    platformExecution: { kind: 'device-runtime', uses: [tvRemoteRuntimeUse] },
   },
   {
     name: 'orientation',
@@ -1302,6 +1315,8 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
+    // R44 retires this command's capability bucket and its `dispatch` leaf together: admission is
+    // the owner's `setOrientation` fact, and the only execution is the bound operation.
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     daemon: {
@@ -1309,15 +1324,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
       refFrameEffect: 'may-invalidate',
       androidBlockingDialogGuard: true,
     },
-    dispatch: {},
-    capability: {
-      apple: APPLE_SIM_AND_DEVICE,
-      android: ANDROID_ALL,
-      linux: LINUX_NONE,
-    },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    platformExecution: { kind: 'device-runtime', uses: [orientationRuntimeUse] },
   },
   {
     name: 'scroll',

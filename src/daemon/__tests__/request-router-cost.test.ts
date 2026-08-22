@@ -29,7 +29,7 @@ const mockDispatch = vi.mocked(dispatchCommand);
 // A representative, structurally rich daemon payload so the parity assertions
 // exercise nested objects/arrays rather than a trivial flat record.
 const REPRESENTATIVE_PAYLOAD = {
-  message: 'home-ok',
+  message: 'app-switcher-ok',
   detail: { nested: true, count: 3 },
   items: [1, 2, 3],
 } as const;
@@ -69,7 +69,7 @@ function baseRequest(overrides: Partial<DaemonRequest> = {}): DaemonRequest {
   return {
     token: 'test-token',
     session: 'cost-session',
-    command: 'home',
+    command: 'app-switcher',
     positionals: [],
     flags: {},
     ...overrides,
@@ -208,14 +208,14 @@ test('(d) error path: a failing request with includeCost:true produces NO cost',
 
 test('(e) boundary survival: meta.includeCost survives commandRpcParamsSchema parsing', () => {
   const parsed = commandRpcParamsSchema.parse({
-    command: 'home',
+    command: 'app-switcher',
     positionals: [],
     meta: { includeCost: true },
   });
   expect(parsed.meta?.includeCost).toBe(true);
 
   const parsedOff = commandRpcParamsSchema.parse({
-    command: 'home',
+    command: 'app-switcher',
     positionals: [],
     meta: {},
   });

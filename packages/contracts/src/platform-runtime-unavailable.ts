@@ -17,6 +17,11 @@ import { viewportRuntimeOperationFacts } from './viewport-runtime.ts';
 import { focusRuntimeOperationFacts } from './focus-runtime.ts';
 import { typeTextRuntimeOperationFacts } from './type-text-runtime.ts';
 import { elementTextRuntimeOperationFacts } from './element-text-runtime.ts';
+import { backRuntimeOperationFacts } from './back-runtime.ts';
+import { homeRuntimeOperationFacts } from './home-runtime.ts';
+import { orientationRuntimeOperationFacts } from './orientation-runtime.ts';
+import { tvRemoteRuntimeOperationFacts } from './tv-remote-runtime.ts';
+import { keyboardRuntimeOperationFacts } from './keyboard-runtime.ts';
 
 /**
  * A runtime-contract helper for provider ownership gaps. It never assigns lifecycle semantics:
@@ -35,6 +40,13 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   focus: RuntimeOperationUnavailability;
   typeText: RuntimeOperationUnavailability;
   elementText: RuntimeOperationUnavailability;
+  back: RuntimeOperationUnavailability;
+  home: RuntimeOperationUnavailability;
+  orientation: RuntimeOperationUnavailability;
+  tvRemote: RuntimeOperationUnavailability;
+  keyboardStatus: RuntimeOperationUnavailability;
+  keyboardDismiss: RuntimeOperationUnavailability;
+  keyboardEnter: RuntimeOperationUnavailability;
   readiness?: RuntimeOperationUnavailability;
   shutdown?: RuntimeOperationUnavailability;
   lifecycle: ApplicationLifecycleOperationFacts;
@@ -81,6 +93,13 @@ export function createUnavailablePlatformRuntimeFacts(
     focus,
     typeText,
     elementText,
+    back,
+    home,
+    orientation,
+    tvRemote,
+    keyboardStatus,
+    keyboardDismiss,
+    keyboardEnter,
     readiness,
     shutdown,
     lifecycle,
@@ -123,6 +142,15 @@ export function createUnavailablePlatformRuntimeFacts(
       ...focusRuntimeOperationFacts({ focus }),
       ...typeTextRuntimeOperationFacts({ type: typeText }),
       ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementText }),
+      ...backRuntimeOperationFacts({ back }),
+      ...homeRuntimeOperationFacts({ home }),
+      ...orientationRuntimeOperationFacts({ orientation }),
+      ...tvRemoteRuntimeOperationFacts({ tvRemote }),
+      ...keyboardRuntimeOperationFacts({
+        status: keyboardStatus,
+        dismiss: keyboardDismiss,
+        enter: keyboardEnter,
+      }),
       ensureReady: readiness,
       bootTarget: readiness,
       bootTargetHeadless: readiness,
@@ -157,6 +185,16 @@ function freezeUnavailableFacts(
     readiness: orNetwork(unavailable.readiness),
     shutdown: orNetwork(unavailable.shutdown),
     elementText: Object.freeze({ ...unavailable.elementText }),
+    // Navigation and keyboard cells are stated by their owner too: each differs by family
+    // (harmonyos drives back/home but not orientation/tvRemote; android alone answers a keyboard
+    // status read), so none of them may inherit a sibling's gap.
+    back: Object.freeze({ ...unavailable.back }),
+    home: Object.freeze({ ...unavailable.home }),
+    orientation: Object.freeze({ ...unavailable.orientation }),
+    tvRemote: Object.freeze({ ...unavailable.tvRemote }),
+    keyboardStatus: Object.freeze({ ...unavailable.keyboardStatus }),
+    keyboardDismiss: Object.freeze({ ...unavailable.keyboardDismiss }),
+    keyboardEnter: Object.freeze({ ...unavailable.keyboardEnter }),
     lifecycle: applicationLifecycleOperationFacts(unavailable.lifecycle),
   });
 }

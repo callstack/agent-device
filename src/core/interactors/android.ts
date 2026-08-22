@@ -10,6 +10,7 @@ import {
   homeAndroid,
   longPressAndroid,
   pressAndroid,
+  pressAndroidEnter,
   pressAndroidTvRemote,
   scrollAndroid,
   setAndroidOrientation,
@@ -24,6 +25,8 @@ import {
   type AndroidAdbProvider,
 } from '../../platforms/android/adb-executor.ts';
 import {
+  dismissAndroidKeyboard,
+  getAndroidKeyboardState,
   readAndroidClipboardText,
   writeAndroidClipboardText,
 } from '../../platforms/android/device-input-state.ts';
@@ -117,6 +120,12 @@ export function createAndroidInteractor(
     setOrientation: (orientation) => setAndroidOrientation(device, orientation),
     appSwitcher: () => appSwitcherAndroid(device),
     tvRemote: (button, durationMs) => pressAndroidTvRemote(device, button, durationMs),
+    keyboardStatus: () => getAndroidKeyboardState(device),
+    keyboardDismiss: () => dismissAndroidKeyboard(device),
+    keyboardEnter: async () => {
+      await pressAndroidEnter(device);
+      return {};
+    },
     readClipboard: () => readAndroidClipboardText(device),
     writeClipboard: (text) => writeAndroidClipboardText(device, text),
     setSetting: (setting, state, appId, options) =>

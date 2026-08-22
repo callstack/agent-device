@@ -60,7 +60,7 @@ beforeEach(() => {
 test('replay runs active-session actions inside the parent request provider scope', async () => {
   const root = mkdtempForTestSync('agent-device-replay-scope-');
   const replayPath = path.join(root, 'flow.ad');
-  fs.writeFileSync(replayPath, 'home\nback\n');
+  fs.writeFileSync(replayPath, 'app-switcher\nscroll down\n');
   const sessionStore = makeSessionStore('agent-device-replay-scope-');
   sessionStore.set('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
   const appleRunnerProvider = vi.fn(() => undefined);
@@ -92,7 +92,7 @@ test('replay runs active-session actions inside the parent request provider scop
 test('replay routes session-changing actions through the full request path', async () => {
   const root = mkdtempForTestSync('agent-device-replay-full-route-');
   const replayPath = path.join(root, 'flow.ad');
-  fs.writeFileSync(replayPath, 'runtime set --platform ios --metro-host localhost\nhome\n');
+  fs.writeFileSync(replayPath, 'runtime set --platform ios --metro-host localhost\napp-switcher\n');
   const sessionStore = makeSessionStore('agent-device-replay-full-route-');
   sessionStore.set('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
   const appleRunnerProvider = vi.fn(() => undefined);

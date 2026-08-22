@@ -3,6 +3,7 @@ import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
   PlatformRuntimeOwner,
+  RuntimeFacts,
   RuntimeOperationFact,
 } from '@agent-device/contracts/platform';
 import {
@@ -29,6 +30,15 @@ import {
   typeTextRuntimeOperationFacts,
 } from '@agent-device/contracts/type-text-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
+import { bindLocalBackInteractor, backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
+import { bindLocalHomeInteractor, homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
+import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
+import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
+import {
+  bindLocalKeyboardDismissInteractor,
+  bindLocalKeyboardEnterInteractor,
+  keyboardRuntimeOperationFacts,
+} from '@agent-device/contracts/keyboard-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createHarmonyAppLogRuntime } from './logs/runtime.ts';
 import {
@@ -142,6 +152,51 @@ function harmonyFocusFact(device: DeviceInfo): RuntimeOperationFact {
   return device.kind === 'emulator' || device.kind === 'device' ? available : focusKindUnavailable;
 }
 
+/**
+ * `orientation` and `tv-remote` never carried a HarmonyOS capability bucket: the family is absent
+ * from `HARMONYOS_SUPPORTED_COMMANDS` for both, so both are unavailable unconditionally — even
+ * though the interactor's own `setOrientation` is technically callable, admission never reached it.
+ */
+const harmonyPlatformLeafUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+} as const);
+
+/** Android's live IME status read has no HarmonyOS counterpart (parity with the retired leaf,
+ * which rejected `status`/`get` on every non-Android family). */
+const harmonyKeyboardStatusUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'keyboard status/get is not available through the public HarmonyOS HDC API; use keyboard dismiss or enter',
+} as const);
+
+/**
+ * The four navigation/keyboard operations HarmonyOS admits, each gated by its own fact. The
+ * Android runtime binds a near-identical shape (its own operation subset), but ADR 0019 forbids a
+ * `platform-common` package for two implementations to share — each family owns its own copy
+ * rather than tunnel through root or a sibling platform package.
+ */
+function harmonyNavigationAndKeyboardOperations(
+  // fallow-ignore-next-line code-duplication
+  host: PlatformRuntimeHost,
+  request: Parameters<PlatformRuntimeOwner['bind']>[0],
+  facts: RuntimeFacts<PlatformRuntimeOperations>,
+): Partial<DeviceBinding<PlatformRuntimeOperations>['operations']> {
+  const resolver = {
+    device: request.device,
+    signal: request.scope.signal,
+    resolveInteractor: host.localInteractors.resolve,
+  };
+  return {
+    ...(facts.operations.back.available ? bindLocalBackInteractor(resolver) : {}),
+    ...(facts.operations.home.available ? bindLocalHomeInteractor(resolver) : {}),
+    ...(facts.operations.keyboardDismiss.available
+      ? bindLocalKeyboardDismissInteractor(resolver)
+      : {}),
+    ...(facts.operations.keyboardEnter.available ? bindLocalKeyboardEnterInteractor(resolver) : {}),
+  };
+}
+
 export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): PlatformRuntimeOwner {
   const appLogs = createHarmonyAppLogRuntime(host);
   const inspectFacts = async (device: Parameters<typeof appLogs.inspectFacts>[0]) => {
@@ -187,6 +242,15 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         // HarmonyOS has no point-read tool: `get` answers from the captured tree, which is what
         // the legacy dispatch already did after its Apple-runner attempt failed.
         ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementTextUnavailable }),
+        ...backRuntimeOperationFacts({ back: harmonyFocusFact(device) }),
+        ...homeRuntimeOperationFacts({ home: harmonyFocusFact(device) }),
+        ...orientationRuntimeOperationFacts({ orientation: harmonyPlatformLeafUnavailable }),
+        ...tvRemoteRuntimeOperationFacts({ tvRemote: harmonyPlatformLeafUnavailable }),
+        ...keyboardRuntimeOperationFacts({
+          status: harmonyKeyboardStatusUnavailable,
+          dismiss: harmonyFocusFact(device),
+          enter: harmonyFocusFact(device),
+        }),
         ensureReady: available,
         bootTarget: unavailable,
         bootTargetHeadless: unavailable,
@@ -262,6 +326,7 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
                 resolveInteractor: host.localInteractors.resolve,
               })
             : {}),
+          ...harmonyNavigationAndKeyboardOperations(host, request, facts),
           listApps: async (input: { device: DeviceInfo; filter: 'all' | 'user-installed' }) =>
             await host.appInventory.harmonyos.listApps(
               input.device,

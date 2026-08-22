@@ -10,6 +10,7 @@ import { requireSessionOrExplicitSelector, resolveCommandDevice } from './sessio
 import { errorResponse, requireCommandSupported } from './response.ts';
 import { recordSessionAction } from './handler-utils.ts';
 import { handleRuntimeCommand } from './session-runtime-command.ts';
+import { resolveBoundKeyboardRuntime } from '../keyboard-runtime.ts';
 import { requireRuntimeBinding, requireRuntimeFacts } from './session-runtime-admission.ts';
 import { handleOpenCommand } from './session-open.ts';
 import { composeOpenWithInitialSnapshot } from './session-open-foreground.ts';
@@ -252,29 +253,83 @@ const handleSessionReplayCommandGroup: SessionCommandHandler = async ({
     throwIfCanceled,
   });
 
-async function handleKeyboardCommand(params: SessionCommandParams): Promise<DaemonResponse> {
-  const { req, sessionName, logPath, sessionStore } = params;
-  const session = sessionStore.get(sessionName);
-  const keyboardAction = req.positionals?.[0]?.trim().toLowerCase();
+/**
+ * A dismiss/enter/return sent with no session and no explicit iOS selector would target whatever
+ * app happens to be foreground on a later-resolved device, silently. Refuse it up front rather
+ * than let admission and binding run against a target the caller never named.
+ */
+function requireForegroundIosKeyboardSession(
+  session: SessionState | undefined,
+  keyboardAction: string | undefined,
+  flags: DaemonRequest['flags'],
+): DaemonResponse | undefined {
   const needsForegroundIosApp =
     keyboardAction === 'dismiss' || keyboardAction === 'enter' || keyboardAction === 'return';
-  if (!session && needsForegroundIosApp) {
-    const flags = req.flags ?? {};
-    const normalizedPlatform = flags.platform;
-    if (normalizedPlatform === 'ios') {
-      return errorResponse(
-        'SESSION_NOT_FOUND',
-        'iOS keyboard action requires an active session so the target app stays foregrounded. Run open first.',
-      );
-    }
+  if (session || !needsForegroundIosApp || flags?.platform !== 'ios') return undefined;
+  return errorResponse(
+    'SESSION_NOT_FOUND',
+    'iOS keyboard action requires an active session so the target app stays foregrounded. Run open first.',
+  );
+}
+
+async function executeBoundKeyboardCommand(params: {
+  bound: Extract<Awaited<ReturnType<typeof resolveBoundKeyboardRuntime>>, { ok: true }>;
+  req: DaemonRequest;
+  session: SessionState | undefined;
+  logPath: string;
+  sessionStore: SessionStore;
+  positionals: string[];
+}): Promise<DaemonResponse> {
+  const { bound, req, session, logPath, sessionStore, positionals } = params;
+  const dispatchContext = {
+    ...contextFromFlags(logPath, req.flags, session?.appBundleId, session?.trace?.outPath),
+    surface: session?.surface,
+  };
+  const result = await bound.execute(dispatchContext);
+  if (session) {
+    recordSessionAction(sessionStore, session, req, PUBLIC_COMMANDS.keyboard, result ?? {}, {
+      positionals,
+    });
   }
-  return await runSessionOrSelectorDispatch({
+  return { ok: true, data: result ?? {} };
+}
+
+async function handleKeyboardCommand(params: SessionCommandParams): Promise<DaemonResponse> {
+  const { req, sessionName, logPath, sessionStore, inspectFacts, bindDevice } = params;
+  const session = sessionStore.get(sessionName);
+  const positionals = req.positionals ?? [];
+  const flags = req.flags ?? {};
+
+  const foregroundGuard = requireForegroundIosKeyboardSession(
+    session,
+    positionals[0]?.trim().toLowerCase(),
+    flags,
+  );
+  if (foregroundGuard) return foregroundGuard;
+
+  const guard = requireSessionOrExplicitSelector(PUBLIC_COMMANDS.keyboard, session, flags);
+  if (guard) return guard;
+
+  const device = await resolveCommandDevice({ session, flags, ensureReady: true });
+  const bound = await resolveBoundKeyboardRuntime({
+    device,
+    positionals,
+    inspectFacts,
+    bindDevice,
+  });
+  if (!bound.ok) return bound.response;
+
+  if (session && resolveRefFrameEffect(req) === 'may-invalidate') {
+    expireRefFrame(session);
+  }
+
+  return await executeBoundKeyboardCommand({
+    bound,
     req,
-    sessionName,
+    session,
     logPath,
     sessionStore,
-    command: PUBLIC_COMMANDS.keyboard,
-    positionals: req.positionals ?? [],
+    positionals,
   });
 }
 

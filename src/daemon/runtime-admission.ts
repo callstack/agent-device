@@ -9,6 +9,8 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
 import { errorResponse, type DaemonFailureResponse } from './handlers/response.ts';
+import type { DaemonCommandContext } from './context.ts';
+import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';
 
 /** Builds the failure a command reports when its exact device cell does not admit an operation. */
 export type UnavailableRuntimeResponse = (
@@ -87,6 +89,41 @@ export async function admitRuntimeUse<
   const admitted = await admitRuntimeOperations({ ...request, required: request.use.required });
   if (admitted.type === 'response') return admitted;
   return { type: 'runtime', runtime: await admitted.bind(request.device, request.use) };
+}
+
+/**
+ * The generic-route admit-then-bind shape every single-use leaf shares (focus, back, home,
+ * orientation, tv-remote): admit the exact owner's fact, narrow the binding, and defer execution
+ * to a closure the dispatcher invokes with its resolved context. One shared shape here is what
+ * keeps five near-identical leaves from drifting into five copies of the same wiring.
+ */
+export async function resolveBoundGenericRuntime<
+  const Required extends readonly RuntimeOperationKey<PlatformRuntimeOperations>[],
+  const Preferred extends readonly Exclude<
+    RuntimeOperationKey<PlatformRuntimeOperations>,
+    Required[number]
+  >[],
+  const Conditional extends readonly Exclude<
+    RuntimeOperationKey<PlatformRuntimeOperations>,
+    Required[number] | Preferred[number]
+  >[],
+>(
+  request: Omit<RuntimeAdmissionRequest, 'required'> &
+    Readonly<{ use: RuntimeUse<PlatformRuntimeOperations, Required, Preferred, Conditional> }>,
+  execute: (
+    runtime: BoundDeviceRuntime<
+      RuntimeUse<PlatformRuntimeOperations, Required, Preferred, Conditional>
+    >,
+    dispatchContext: DaemonCommandContext,
+  ) => Promise<Record<string, unknown> | void>,
+): Promise<ResolvedGenericExecution> {
+  const admission = await admitRuntimeUse(request);
+  if (admission.type === 'response') return { ok: false, response: admission.response };
+  const runtime = admission.runtime;
+  return {
+    ok: true,
+    execute: async ({ dispatchContext }) => await execute(runtime, dispatchContext),
+  };
 }
 
 function requireFactsInspection(

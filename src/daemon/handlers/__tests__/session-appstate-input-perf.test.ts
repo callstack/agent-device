@@ -4,6 +4,19 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  keyboardRuntimeOperationFacts,
+  localRuntimeOwner,
+  narrowDeviceBinding,
+  type DeviceBinding,
+  type PlatformRuntimeOperations,
+  type RuntimeFacts,
+} from '@agent-device/contracts/platform';
+import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../request-runtime-binding.ts';
+import {
   mockDispatch,
   mockResolveTargetDevice,
   mockRunCmd,
@@ -13,6 +26,36 @@ import {
 } from './session-test-harness.ts';
 import type { SessionState } from '../../types.ts';
 import { handleSessionCommands } from './session-command-harness.ts';
+
+const available = Object.freeze({ available: true } as const);
+
+/** Admits every keyboard operation so the ADR 0014 seam runs on real admission, not a rejection. */
+function keyboardCapableRuntime(device: DeviceInfo) {
+  const facts: RuntimeFacts<PlatformRuntimeOperations> = {
+    device: { ...deviceShape(device), providerMode: 'local' },
+    operations: keyboardRuntimeOperationFacts({
+      status: available,
+      dismiss: available,
+      enter: available,
+    }) as RuntimeFacts<PlatformRuntimeOperations>['operations'],
+  };
+  const binding = {
+    device,
+    owner: localRuntimeOwner(device.platform),
+    facts,
+    operations: {
+      keyboardStatus: async () => ({ visible: false }),
+      keyboardDismiss: async () => ({ dismissed: true, visible: false }),
+      keyboardEnter: async () => ({}),
+    },
+    [Symbol.asyncDispose]: async () => {},
+  } satisfies DeviceBinding<PlatformRuntimeOperations>;
+  const inspectFacts: InspectDeviceRuntimeFacts = vi.fn(async () => facts);
+  const bindDevice = vi.fn(async (_device, use) =>
+    narrowDeviceBinding(binding, use),
+  ) as unknown as BindDeviceRuntime;
+  return { inspectFacts, bindDevice };
+}
 
 test('appstate on iOS requires active session on selected device', async () => {
   const sessionStore = makeSessionStore();
@@ -168,6 +211,7 @@ test('keyboard dismiss crosses the ADR 0014 seam while keyboard status preserves
   mockResolveTargetDevice.mockResolvedValue(device);
   mockDispatch.mockResolvedValue({});
   const logPath = path.join(os.tmpdir(), 'daemon.log');
+  const { inspectFacts, bindDevice } = keyboardCapableRuntime(device);
 
   // dismiss mutates the device → frame expires.
   sessionStore.set(sessionName, makeSession(sessionName, device));
@@ -183,6 +227,8 @@ test('keyboard dismiss crosses the ADR 0014 seam while keyboard status preserves
     logPath,
     sessionStore,
     invoke: noopInvoke,
+    inspectFacts,
+    bindDevice,
   });
   expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
 
@@ -200,6 +246,8 @@ test('keyboard dismiss crosses the ADR 0014 seam while keyboard status preserves
     logPath,
     sessionStore,
     invoke: noopInvoke,
+    inspectFacts,
+    bindDevice,
   });
   expect(sessionStore.get(sessionName)?.refFrameState).toBeUndefined();
 });

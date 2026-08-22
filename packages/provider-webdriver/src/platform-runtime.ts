@@ -8,10 +8,18 @@ import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
 } from '@agent-device/contracts/application-lifecycle-runtime';
+import { bindProviderBackInteractor, backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import {
   bindProviderFocusInteractor,
   focusRuntimeOperationFacts,
 } from '@agent-device/contracts/focus-runtime';
+import { bindProviderHomeInteractor, homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
+import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
+import {
+  bindProviderOrientationInteractor,
+  orientationRuntimeOperationFacts,
+} from '@agent-device/contracts/orientation-runtime';
+import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
 import {
   type DeviceBinding,
   type RuntimeFacts,
@@ -128,6 +136,39 @@ const elementTextUnavailable = Object.freeze({
   reason: 'unsupported-provider-mode',
   hint: 'WebDriver provider runtimes read element text from the captured tree only.',
 } as const);
+const backUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'This WebDriver provider runtime does not expose back for this device.',
+} as const);
+const homeUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'This WebDriver provider runtime does not expose home for this device.',
+} as const);
+const orientationUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'This WebDriver provider runtime does not expose orientation for this device.',
+} as const);
+/** The WebDriver interactor's own `tvRemote` always throws unsupported (no capability declares
+ * it), so this cell is unavailable unconditionally rather than gated by interactor reachability. */
+const tvRemoteUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'WebDriver provider runtimes do not expose tv-remote.',
+} as const);
+/**
+ * The retired leaf never routed `keyboard` through provider resolution at all — it dispatched
+ * directly by device platform, bypassing the interactor/provider seam entirely. Restating that as
+ * a fact means declaring it honestly unavailable here rather than guessing at untested provider
+ * behavior; see the unit record for the narrowing this states explicitly.
+ */
+const keyboardUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'WebDriver provider runtimes do not expose keyboard actions.',
+} as const);
 
 const appStateUnavailable = Object.freeze({
   available: false,
@@ -225,6 +266,33 @@ export function createWebDriverPlatformRuntimeOwner(
   });
 }
 
+/** The seven interactor-backed operations, each independently gated by its own admitted fact. */
+function webDriverInteractionOperations(
+  options: WebDriverPlatformRuntimeOptions,
+  device: DeviceInfo,
+  signal: AbortSignal,
+  facts: RuntimeFacts<PlatformRuntimeOperations>,
+): Partial<DeviceBinding<PlatformRuntimeOperations>['operations']> {
+  const resolver = {
+    device,
+    signal,
+    resolveInteractor: (runner: RunnerContext) => options.getInteractor?.(device, runner),
+  };
+  return {
+    ...(facts.operations.captureSnapshot.available ? bindProviderSnapshotInteractor(resolver) : {}),
+    ...(facts.operations.captureScreenshot.available
+      ? bindProviderScreenshotInteractor(resolver)
+      : {}),
+    ...(facts.operations.focusPoint.available ? bindProviderFocusInteractor(resolver) : {}),
+    ...(facts.operations.typeText.available ? bindProviderTypeTextInteractor(resolver) : {}),
+    ...(facts.operations.back.available ? bindProviderBackInteractor(resolver) : {}),
+    ...(facts.operations.home.available ? bindProviderHomeInteractor(resolver) : {}),
+    ...(facts.operations.setOrientation.available
+      ? bindProviderOrientationInteractor(resolver)
+      : {}),
+  };
+}
+
 function bindWebDriverPlatformRuntime(
   options: WebDriverPlatformRuntimeOptions,
   device: DeviceInfo,
@@ -244,34 +312,7 @@ function bindWebDriverPlatformRuntime(
       }),
       facts.operations,
     ),
-    ...(facts.operations.captureSnapshot.available
-      ? bindProviderSnapshotInteractor({
-          device,
-          signal,
-          resolveInteractor: (runner) => options.getInteractor?.(device, runner),
-        })
-      : {}),
-    ...(facts.operations.captureScreenshot.available
-      ? bindProviderScreenshotInteractor({
-          device,
-          signal,
-          resolveInteractor: (runner) => options.getInteractor?.(device, runner),
-        })
-      : {}),
-    ...(facts.operations.focusPoint.available
-      ? bindProviderFocusInteractor({
-          device,
-          signal,
-          resolveInteractor: (runner) => options.getInteractor?.(device, runner),
-        })
-      : {}),
-    ...(facts.operations.typeText.available
-      ? bindProviderTypeTextInteractor({
-          device,
-          signal,
-          resolveInteractor: (runner) => options.getInteractor?.(device, runner),
-        })
-      : {}),
+    ...webDriverInteractionOperations(options, device, signal, facts),
     networkDump: async (input) => {
       const recent = await options.host.appLogs.readRecent(input.sessionId, input.maxScanLines);
       const dump = readRecentNetworkTrafficFromText(recent.text, {
@@ -335,6 +376,13 @@ function webDriverFacts(
       focus: inactiveSession,
       typeText: inactiveSession,
       elementText: inactiveSession,
+      back: inactiveSession,
+      home: inactiveSession,
+      orientation: inactiveSession,
+      tvRemote: inactiveSession,
+      keyboardStatus: inactiveSession,
+      keyboardDismiss: inactiveSession,
+      keyboardEnter: inactiveSession,
       lifecycle: applicationLifecycleOperationFacts({
         resolveOpenTarget: inactiveSession,
         prepareApplicationOpen: inactiveSession,
@@ -359,6 +407,13 @@ function webDriverFacts(
     focus: focusUnavailable,
     typeText: typeUnavailable,
     elementText: elementTextUnavailable,
+    back: backUnavailable,
+    home: homeUnavailable,
+    orientation: orientationUnavailable,
+    tvRemote: tvRemoteUnavailable,
+    keyboardStatus: keyboardUnavailable,
+    keyboardDismiss: keyboardUnavailable,
+    keyboardEnter: keyboardUnavailable,
     lifecycle: webDriverLifecycleFacts(device),
   });
   // Both capture cells need the same reachability: an interactor this provider can drive, on a
@@ -388,6 +443,19 @@ function webDriverFacts(
       // reachability and nothing more: this provider drives touch wherever it can drive a capture.
       ...focusRuntimeOperationFacts({ focus: interactorCell(reachable, focusUnavailable) }),
       ...typeTextRuntimeOperationFacts({ type: interactorCell(reachable, typeUnavailable) }),
+      // `back`/`home`/`orientation` ride the same reachable interactor; `tvRemote` always throws
+      // unsupported in this interactor regardless of reachability (no capability declares it).
+      ...backRuntimeOperationFacts({ back: interactorCell(reachable, backUnavailable) }),
+      ...homeRuntimeOperationFacts({ home: interactorCell(reachable, homeUnavailable) }),
+      ...orientationRuntimeOperationFacts({
+        orientation: interactorCell(reachable, orientationUnavailable),
+      }),
+      ...tvRemoteRuntimeOperationFacts({ tvRemote: tvRemoteUnavailable }),
+      ...keyboardRuntimeOperationFacts({
+        status: keyboardUnavailable,
+        dismiss: keyboardUnavailable,
+        enter: keyboardUnavailable,
+      }),
       ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
       ensureReady: available,
       bootTarget: available,

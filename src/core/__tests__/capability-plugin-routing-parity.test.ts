@@ -106,11 +106,6 @@ const isMacOsOrAppleSimulator = (device: DeviceInfo): boolean =>
 const isIosOs = (device: DeviceInfo): boolean =>
   device.platform === 'apple' &&
   (device.appleOs ? device.appleOs === 'ios' : device.target !== 'tv');
-const supportsAndroidOrIosNonTv = (device: DeviceInfo): boolean =>
-  device.platform === 'android' || (isIosFamily(device) && device.target !== 'tv');
-const supportsTvRemote = (device: DeviceInfo): boolean =>
-  (device.platform === 'android' && device.target === 'tv') ||
-  (isIosFamily(device) && device.target === 'tv');
 const supportsHostAudioProbe = (device: DeviceInfo): boolean =>
   device.platform === 'web' ||
   (process.platform === 'darwin' &&
@@ -130,16 +125,12 @@ const coreDeviceOnlyPhysicalOperationHint = (device: DeviceInfo): string | undef
 // gains/loses a closure (or whose closure body changes) breaks parity.
 const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
   perf: supportsCoreDevicePhysicalOperation,
-  home: isNotMacOs,
   'app-switcher': isNotMacOs,
   clipboard: (device) =>
     device.platform === 'android' ||
     device.platform === 'linux' ||
     isMacOs(device) ||
     device.kind === 'simulator',
-  keyboard: supportsAndroidOrIosNonTv,
-  orientation: supportsAndroidOrIosNonTv,
-  'tv-remote': supportsTvRemote,
   alert: (device) =>
     device.platform === 'android' || isIosOs(device) || isMacOsOrAppleSimulator(device),
   settings: (device) =>
@@ -148,17 +139,6 @@ const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
 };
 const HINT_REF: Record<string, (device: DeviceInfo) => string | undefined> = {
   perf: coreDeviceOnlyPhysicalOperationHint,
-  'tv-remote': (device) => {
-    if (device.platform === 'android') {
-      return device.target === 'tv'
-        ? undefined
-        : 'tv-remote is supported only on Android TV targets.';
-    }
-    if (isIosFamily(device)) {
-      return device.target === 'tv' ? undefined : 'tv-remote is supported only on tvOS devices.';
-    }
-    return isMacOs(device) ? 'tv-remote is supported only on tvOS devices.' : undefined;
-  },
 };
 
 // Independent hardcoded oracle for the platform -> capability-bucket selection
@@ -171,18 +151,16 @@ const CAPABILITY_BUCKET_BY_PLATFORM: Record<Platform, keyof CommandCapability> =
   linux: 'linux',
   web: 'web',
 };
-const VEGA_VVD_ONLY_COMMANDS_REF = new Set(['back', 'home', 'tv-remote']);
+// R42/R43/R45 deleted the plugin's only `VEGA_VVD_ONLY_COMMANDS` closures (back/home/tv-remote);
+// nothing takes their place here since Vega now carries no `supportsByDefault` at all.
 const HARMONYOS_SUPPORTED_COMMANDS_REF = new Set([
   'perf',
-  'back',
   'app-switcher',
   'click',
   'fill',
   'find',
   'focus',
-  'home',
   'gesture',
-  'keyboard',
   'longpress',
   'press',
   'screenshot',
@@ -211,10 +189,7 @@ function isSupportedReference(command: string, device: DeviceInfo): boolean {
   if (!capability) return true;
   const byPlatform = capability[CAPABILITY_BUCKET_BY_PLATFORM[device.platform]];
   if (!byPlatform) return false;
-  const supports =
-    device.platform === 'vega' && VEGA_VVD_ONLY_COMMANDS_REF.has(command)
-      ? (candidate: DeviceInfo) => candidate.target === 'tv'
-      : SUPPORTS_REF[command];
+  const supports = SUPPORTS_REF[command];
   if (supports && !supports(device)) return false;
   const kind = (device.kind ?? 'unknown') as keyof NonNullable<CommandCapability['apple']>;
   return byPlatform[kind] === true;
@@ -260,14 +235,14 @@ test('HarmonyOS static capabilities omit runtime-backed command admissions', () 
     .filter((command) => isCommandSupportedOnDevice(command, HARMONYOS_EMULATOR))
     .sort();
 
+  // `back`/`home`/`keyboard` dropped out of the matrix entirely (R42/R43/R46 deleted their
+  // capability buckets), so they are absent here — not because HarmonyOS admission changed, but
+  // because there is no bucket left for `isCommandSupportedOnDevice` to consult at all.
   assert.deepEqual(availableCommands, [
     'app-switcher',
-    'back',
     'click',
     'fill',
     'gesture',
-    'home',
-    'keyboard',
     'longpress',
     'perf',
     'press',
@@ -282,15 +257,9 @@ test('(b.2) unsupportedHint closures are verbatim across the full device matrix'
   for (const command of commands) {
     const reference = HINT_REF[command];
     for (const device of SAMPLE_DEVICES) {
-      const expected =
-        device.platform === 'vega' && VEGA_VVD_ONLY_COMMANDS_REF.has(command)
-          ? device.kind === 'emulator' && device.target === 'tv'
-            ? undefined
-            : `${command} currently supports only Vega Virtual Devices.`
-          : reference?.(device);
       assert.equal(
         unsupportedHintForDevice(command, device),
-        expected,
+        reference?.(device),
         `${command} hint on ${device.id}`,
       );
     }
@@ -351,27 +320,13 @@ test('(b.2) the relocated Apple closures match the independent command contracts
 });
 
 test('(b.2) non-Apple families only carry their own non-portable support gates', () => {
-  // Most relocated closures are Apple-only. Audio is the one host-dependent command
-  // that also gates Android emulator support on macOS hosts, so Android carries only
-  // that command-specific predicate.
-  assert.deepEqual(Object.keys(getPlugin('android').capability.supportsByDefault ?? {}), [
-    'audio',
-    'tv-remote',
-  ]);
-  assert.deepEqual(Object.keys(getPlugin('android').capability.unsupportedHintByDefault ?? {}), [
-    'tv-remote',
-  ]);
-  assert.deepEqual(Object.keys(getPlugin('vega').capability.supportsByDefault ?? {}), [
-    'back',
-    'home',
-    'tv-remote',
-  ]);
-  assert.deepEqual(Object.keys(getPlugin('vega').capability.unsupportedHintByDefault ?? {}), [
-    'back',
-    'home',
-    'tv-remote',
-  ]);
-  for (const platform of ['linux', 'web'] as const) {
+  // Most relocated closures are Apple-only. Audio is the one host-dependent command that also
+  // gates Android emulator support on macOS hosts, so Android carries only that predicate —
+  // R45 deleted its `tv-remote` closure along with the descriptor's capability bucket.
+  assert.deepEqual(Object.keys(getPlugin('android').capability.supportsByDefault ?? {}), ['audio']);
+  assert.equal(getPlugin('android').capability.unsupportedHintByDefault, undefined);
+  // R42/R43/R45 deleted Vega's only closures (back/home/tv-remote); nothing replaces them.
+  for (const platform of ['vega', 'linux', 'web'] as const) {
     const capability = getPlugin(platform).capability;
     assert.equal(capability.supportsByDefault, undefined, `${platform} has no supportsByDefault`);
     assert.equal(

@@ -251,6 +251,25 @@ test('captures through only the active exact WebDriver interactor', async () => 
     reason: 'unsupported-provider-mode',
   });
   expect(binding.operations.readTextAtPoint).toBeUndefined();
+  // back/home/orientation ride the same reachable interactor focus/type do.
+  for (const operation of ['back', 'home', 'setOrientation'] as const) {
+    expect(binding.facts.operations[operation]).toEqual({ available: true });
+    expect(binding.operations[operation]).toBeTypeOf('function');
+  }
+  // tv-remote and every keyboard action always throw unsupported in this interactor regardless
+  // of reachability: no capability ever declared them.
+  for (const operation of [
+    'tvRemote',
+    'keyboardStatus',
+    'keyboardDismiss',
+    'keyboardEnter',
+  ] as const) {
+    expect(binding.facts.operations[operation]).toMatchObject({
+      available: false,
+      reason: 'unsupported-provider-mode',
+    });
+    expect(binding.operations[operation]).toBeUndefined();
+  }
   await expect(
     binding.operations.captureSnapshot?.({ options: { interactiveOnly: true } }),
   ).resolves.toEqual({ backend: 'android', nodes: [] });
@@ -291,6 +310,19 @@ test.each([
   expect(facts.operations.focusPoint.available).toBe(state.isSessionActive());
   expect(facts.operations.typeText.available).toBe(state.isSessionActive());
   expect(facts.operations.readTextAtPoint.available).toBe(false);
+  // back/home/orientation share focus/type's reachability gate; tv-remote and every keyboard
+  // action stay unavailable even for an active session with no reachable interactor.
+  expect(facts.operations.back.available).toBe(state.isSessionActive());
+  expect(facts.operations.home.available).toBe(state.isSessionActive());
+  expect(facts.operations.setOrientation.available).toBe(state.isSessionActive());
+  for (const operation of [
+    'tvRemote',
+    'keyboardStatus',
+    'keyboardDismiss',
+    'keyboardEnter',
+  ] as const) {
+    expect(facts.operations[operation].available).toBe(false);
+  }
   if (state.isSessionActive()) {
     const binding = await owner.bind({
       device,

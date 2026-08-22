@@ -225,6 +225,14 @@ export {
   focusRuntimeUse,
   typeTextRuntimeUse,
   viewportRuntimeUse,
+  backRuntimeUse,
+  homeRuntimeUse,
+  orientationRuntimeUse,
+  tvRemoteRuntimeUse,
+  keyboardRuntimePlanUses,
+  keyboardStatusUse,
+  keyboardDismissUse,
+  keyboardEnterUse,
 } from '../platform-runtime-operations.ts';
 export type {
   ScreenshotRuntimePlan,
@@ -315,6 +323,77 @@ export type {
   TypeTextRuntimeOperationFacts,
   TypeTextRuntimeOperations,
 } from '../type-text-runtime.ts';
+export {
+  bindLocalBackInteractor,
+  bindProviderBackInteractor,
+  backRuntimeOperationFacts,
+} from '../back-runtime.ts';
+export type {
+  BackInput,
+  BackRuntimeOperationFacts,
+  BackRuntimeOperations,
+  LocalBackInteractorResolver,
+  ProviderBackInteractorResolver,
+} from '../back-runtime.ts';
+export {
+  bindLocalHomeInteractor,
+  bindProviderHomeInteractor,
+  homeRuntimeOperationFacts,
+} from '../home-runtime.ts';
+export type {
+  HomeInput,
+  HomeRuntimeOperationFacts,
+  HomeRuntimeOperations,
+  LocalHomeInteractorResolver,
+  ProviderHomeInteractorResolver,
+} from '../home-runtime.ts';
+export {
+  bindLocalOrientationInteractor,
+  bindProviderOrientationInteractor,
+  orientationRuntimeOperationFacts,
+} from '../orientation-runtime.ts';
+export type {
+  LocalOrientationInteractorResolver,
+  OrientationRuntimeOperationFacts,
+  OrientationRuntimeOperations,
+  ProviderOrientationInteractorResolver,
+  SetOrientationInput,
+  SetOrientationResult,
+} from '../orientation-runtime.ts';
+export {
+  bindLocalTvRemoteInteractor,
+  bindProviderTvRemoteInteractor,
+  tvRemoteRuntimeOperationFacts,
+} from '../tv-remote-runtime.ts';
+export type {
+  LocalTvRemoteInteractorResolver,
+  ProviderTvRemoteInteractorResolver,
+  TvRemoteInput,
+  TvRemoteRuntimeOperationFacts,
+  TvRemoteRuntimeOperations,
+} from '../tv-remote-runtime.ts';
+export {
+  bindLocalKeyboardStatusInteractor,
+  bindProviderKeyboardStatusInteractor,
+  bindLocalKeyboardDismissInteractor,
+  bindProviderKeyboardDismissInteractor,
+  bindLocalKeyboardEnterInteractor,
+  bindProviderKeyboardEnterInteractor,
+  keyboardRuntimeOperationFacts,
+} from '../keyboard-runtime.ts';
+export type {
+  KeyboardActionInput,
+  KeyboardDismissResult,
+  KeyboardDismissRuntimeOperations,
+  KeyboardEnterResult,
+  KeyboardEnterRuntimeOperations,
+  KeyboardRuntimeOperationFacts,
+  KeyboardRuntimeOperations,
+  KeyboardStatusResult,
+  KeyboardStatusRuntimeOperations,
+  LocalKeyboardInteractorResolver,
+  ProviderKeyboardInteractorResolver,
+} from '../keyboard-runtime.ts';
 export { viewportRuntimeOperationFacts } from '../viewport-runtime.ts';
 export type {
   SetViewportInput,

@@ -157,6 +157,28 @@ test.each([
     });
     expect(binding.operations.captureScreenshot).toBeUndefined();
     expect(binding.operations.setViewport).toBeUndefined();
+    // Remote navigation is Vega's first available interaction surface: back/home/tv-remote share
+    // the same VVD-only gate the retired `vegaPlugin` closure applied to all three. Orientation
+    // and every keyboard action never carried a Vega capability bucket at all.
+    const supported = device.kind === 'emulator' && device.target === 'tv';
+    for (const operation of ['back', 'home', 'tvRemote'] as const) {
+      expect(binding.facts.operations[operation].available).toBe(supported);
+      expect(binding.operations[operation]).toBeTypeOf(supported ? 'function' : 'undefined');
+    }
+    expect(binding.facts.operations.setOrientation).toMatchObject({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+      hint: 'orientation is not supported on Vega OS.',
+    });
+    expect(binding.operations.setOrientation).toBeUndefined();
+    for (const operation of ['keyboardStatus', 'keyboardDismiss', 'keyboardEnter'] as const) {
+      expect(binding.facts.operations[operation]).toMatchObject({
+        available: false,
+        reason: 'unsupported-platform-leaf',
+        hint: 'keyboard is not supported on Vega OS.',
+      });
+      expect(binding.operations[operation]).toBeUndefined();
+    }
     expectLifecycleFacts(binding, legacy);
   },
 );

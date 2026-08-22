@@ -190,6 +190,127 @@ test('rejects the non-discovered Android simulator cell for appstate', async () 
   expect(binding.facts.operations.appState).toEqual(appStateUnavailable);
   expect(binding.operations.appState).toBeUndefined();
 });
+
+function androidNavigationHostFixture() {
+  return {
+    processTransports: { resolve: async () => ({ mode: 'local' as const }) },
+    appInventory: {
+      apple: { listApps: async () => [] },
+      android: { listApps: async () => [] },
+      harmonyos: { listApps: async () => [] },
+    },
+    appState: {
+      android: { run: async () => ({ stdout: '' }) },
+      harmonyos: { run: async () => ({ stdout: '' }) },
+    },
+    deviceReadiness: { android: { ensureReady: async (selected: DeviceInfo) => selected } },
+    localInteractors: { resolve: async () => ({}) },
+    screenRecording: {
+      android: {
+        resolve: async () => ({
+          mode: 'local' as const,
+          start: async () => {
+            throw new Error('unused');
+          },
+          signal: async () => true,
+          isRunning: async () => false,
+          exists: async () => false,
+          pull: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+          remove: async () => true,
+          readManifest: async () => undefined,
+          writeManifest: async () => {},
+          removeManifest: async () => {},
+        }),
+      },
+    },
+  } as unknown as PlatformRuntimeHost;
+}
+
+test.each([
+  ['emulator', device],
+  ['device', { ...device, kind: 'device' as const }],
+  ['unknown', unknownKindDevice],
+])(
+  'classifies Android %s back/home/orientation/keyboard facts through the shared touch gate',
+  async (_name, runtimeDevice) => {
+    const binding = await createAndroidPlatformRuntime(androidNavigationHostFixture()).bind({
+      device: runtimeDevice,
+      intent: { kind: 'ordinary' },
+      scope: {
+        signal: new AbortController().signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+    });
+    const { facts } = binding;
+
+    // back/home/orientation/keyboard status+dismiss+enter all ride the same adb-driven touch
+    // gate as focus/type: available for every real Android kind, parity with the retired buckets.
+    for (const operation of [
+      'back',
+      'home',
+      'setOrientation',
+      'keyboardStatus',
+      'keyboardDismiss',
+      'keyboardEnter',
+    ] as const) {
+      expect(facts.operations[operation]).toEqual({ available: true });
+      expect(binding.operations[operation]).toBeTypeOf('function');
+    }
+
+    // tv-remote additionally requires a real TV target; none of these rows carry one.
+    expect(facts.operations.tvRemote).toEqual({
+      available: false,
+      reason: 'unsupported-device-kind',
+      hint: 'tv-remote is supported only on Android TV targets.',
+    });
+    expect(binding.operations.tvRemote).toBeUndefined();
+  },
+);
+
+test('admits Android tv-remote only for a real TV target', async () => {
+  const tvDevice = { ...device, kind: 'emulator' as const, target: 'tv' as const };
+  const binding = await createAndroidPlatformRuntime(androidNavigationHostFixture()).bind({
+    device: tvDevice,
+    intent: { kind: 'ordinary' },
+    scope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+  });
+
+  expect(binding.facts.operations.tvRemote).toEqual({ available: true });
+  expect(binding.operations.tvRemote).toBeTypeOf('function');
+});
+
+test('the synthetic Android simulator cell refuses back/home/orientation/keyboard like every other touch operation', async () => {
+  const simulatorDevice = { ...device, id: 'android-simulator', kind: 'simulator' as const };
+  const binding = await createAndroidPlatformRuntime(androidNavigationHostFixture()).bind({
+    device: simulatorDevice,
+    intent: { kind: 'ordinary' },
+    scope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+  });
+  const { facts } = binding;
+
+  for (const operation of [
+    'back',
+    'home',
+    'setOrientation',
+    'tvRemote',
+    'keyboardStatus',
+    'keyboardDismiss',
+    'keyboardEnter',
+  ] as const) {
+    expect(facts.operations[operation].available).toBe(false);
+    expect(binding.operations[operation]).toBeUndefined();
+  }
+});
+
 type LegacyLifecycleCell = Readonly<{
   openTarget: boolean;
   prepareAppleRunner: boolean;

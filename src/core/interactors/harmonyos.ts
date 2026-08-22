@@ -12,6 +12,7 @@ import {
   longPressHarmony,
   performHarmonyGesture,
   pressHarmony,
+  pressHarmonyKeyboardKey,
   scrollHarmony,
   setHarmonyOrientation,
   typeHarmony,
@@ -51,6 +52,14 @@ export function createHarmonyInteractor(device: DeviceInfo, _runner?: RunnerCont
     setOrientation: (orientation) => setHarmonyOrientation(device, orientation),
     appSwitcher: () => appSwitcherHarmony(device),
     tvRemote: unsupported('tv-remote'),
+    keyboardDismiss: async () => {
+      await pressHarmonyKeyboardKey(device, 'Back');
+      return {};
+    },
+    keyboardEnter: async () => {
+      await pressHarmonyKeyboardKey(device, 'Enter');
+      return {};
+    },
     readClipboard: unsupported('clipboard'),
     writeClipboard: unsupported('clipboard'),
     setSetting: (setting, state, appId) => setHarmonySetting(device, setting, state, appId),

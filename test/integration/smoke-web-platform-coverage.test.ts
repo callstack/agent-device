@@ -41,8 +41,8 @@ test('web coverage exhaustively classifies the public catalog', () => {
 
 test('web coverage report has the expected classification counts', () => {
   assert.deepEqual(WEB_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY, {
-    capabilityDenial: 15,
-    contract: 12,
+    capabilityDenial: 10,
+    contract: 17,
     gap: 15,
     live: 12,
     total: 54,

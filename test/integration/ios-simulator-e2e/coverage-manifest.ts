@@ -183,14 +183,11 @@ export const IOS_SIMULATOR_E2E_COVERAGE = {
     'full:lifecycle-system',
     'custom-scheme event name and JSON payload render in the fixture',
   ),
-  [C.tvRemote]: {
-    assertion: 'iOS mobile simulator capability model rejects TV remote input',
-    level: 'capability-denial',
-    owner: {
-      path: 'test/integration/smoke-ios-simulator-coverage.test.ts',
-      test: 'capability classifications match executable simulator behavior',
-    },
-  },
+  [C.tvRemote]: contract(
+    'packages/platform-apple/src/runtime.test.ts',
+    'classifies back/home/orientation/tv-remote/keyboard facts for the %s leaf',
+    'tv-remote admission is owned by its exact-owner runtime fact: available only for the tvOS leaf, not the iOS mobile simulator',
+  ),
   [C.type]: live(
     'smoke:form-input',
     'AX-independent first-responder typing appends and is read back from a focused fixture field',

@@ -124,7 +124,11 @@ export const TVOS_PLATFORM_COVERAGE = {
   [C.replay]: gap('No tvOS-specific replay command evidence exists yet'),
   [C.test]: gap('No tvOS-specific test-suite command evidence exists yet'),
   [C.clipboard]: gap('No tvOS-specific clipboard command evidence exists yet'),
-  [C.keyboard]: denial('tvOS capability admission rejects keyboard input on the focus-only leaf'),
+  [C.keyboard]: contract(
+    'packages/platform-apple/src/runtime.test.ts',
+    'classifies back/home/orientation/tv-remote/keyboard facts for the %s leaf',
+    'the exact-owner runtime fact rejects keyboard input on the tvOS focus-only leaf',
+  ),
   [C.install]: contract(
     'packages/platform-apple/src/deployment/runtime.test.ts',
     'classifies deployment facts for the %s denominator cell',
@@ -186,11 +190,15 @@ export const TVOS_PLATFORM_COVERAGE = {
     'the existing provider scenario maps Home to the tvOS Home remote press',
   ),
   [C.tvRemote]: contract(
-    'src/core/__tests__/dispatch-tv-remote.test.ts',
-    'dispatch tv-remote sends native tvOS remotePress command',
-    'tvOS tv-remote dispatch emits the native remotePress runner command',
+    'packages/platform-apple/src/runtime.test.ts',
+    'classifies back/home/orientation/tv-remote/keyboard facts for the %s leaf',
+    'the exact-owner runtime fact admits tv-remote for the tvOS leaf, which drives navigation through XCUIRemote presses',
   ),
-  [C.orientation]: denial('tvOS capability admission rejects device orientation changes'),
+  [C.orientation]: contract(
+    'packages/platform-apple/src/runtime.test.ts',
+    'classifies back/home/orientation/tv-remote/keyboard facts for the %s leaf',
+    'the exact-owner runtime fact rejects device orientation changes on the tvOS leaf',
+  ),
   [C.scroll]: contract(
     TVOS_REMOTE_EVIDENCE.path,
     TVOS_REMOTE_EVIDENCE.test,

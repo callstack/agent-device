@@ -3,7 +3,9 @@ import type { AppsFilter, ProviderPortReverseOptions } from '@agent-device/contr
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
 import {
   bindLimrunInteractionOperations,
+  bindLimrunNavigationOperations,
   limrunInteractionOperationFacts,
+  limrunNavigationOperationFacts,
 } from './interaction-operations.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { parseLimrunDeviceId } from './device.ts';
@@ -33,6 +35,12 @@ import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screens
 import { selectorObservationRuntimeOperationFacts } from '@agent-device/contracts/selector-observation-runtime';
 import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
+import {
+  keyboardRuntimeOperationFacts,
+  bindProviderKeyboardStatusInteractor,
+  bindProviderKeyboardDismissInteractor,
+  bindProviderKeyboardEnterInteractor,
+} from '@agent-device/contracts/platform';
 import {
   createLimrunAppLogEnvelope,
   limrunAppLogDescriptorCodec,
@@ -125,6 +133,23 @@ const prepareUnavailable = Object.freeze({
   reason: 'unsupported-provider-mode',
   hint: 'Apple runner preparation is unavailable for Limrun-owned devices.',
 } as const);
+/**
+ * The retired leaf never routed `keyboard` through provider resolution at all — it dispatched
+ * directly by device platform, bypassing the interactor/provider seam entirely. The Android leg
+ * genuinely carries it (the same `createAndroidInteractor` factory the local family binds, added
+ * in this unit); the iOS leg has no such reuse, so it stays honestly unavailable rather than
+ * guessing at untested provider behavior.
+ */
+const keyboardUnavailableIos = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'Limrun iOS direct sessions do not expose keyboard actions.',
+} as const);
+const iosAppStateUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'Limrun iOS appstate is session-owned; no sessionless provider foreground probe is exposed.',
+} as const);
 const openTargetUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
@@ -207,6 +232,13 @@ export function createLimrunPlatformRuntimeOwner(
             focus: liveSessionUnavailable,
             typeText: liveSessionUnavailable,
             elementText: liveSessionUnavailable,
+            back: liveSessionUnavailable,
+            home: liveSessionUnavailable,
+            orientation: liveSessionUnavailable,
+            tvRemote: liveSessionUnavailable,
+            keyboardStatus: liveSessionUnavailable,
+            keyboardDismiss: liveSessionUnavailable,
+            keyboardEnter: liveSessionUnavailable,
             readiness: liveSessionUnavailable,
             shutdown: liveSessionUnavailable,
             lifecycle: limrunLifecycleFacts(device, false),
@@ -368,6 +400,38 @@ function bindLimrunAppLogs(
       runtimeFacts.operations,
     ),
     ...bindLimrunInteractionOperations({ device, signal, getInteractor: options.getInteractor }),
+    ...bindLimrunNavigationOperations({
+      device,
+      signal,
+      facts: {
+        back: runtimeFacts.operations.back,
+        home: runtimeFacts.operations.home,
+        setOrientation: runtimeFacts.operations.setOrientation,
+        tvRemote: runtimeFacts.operations.tvRemote,
+      },
+      getInteractor: options.getInteractor,
+    }),
+    ...(runtimeFacts.operations.keyboardStatus.available
+      ? bindProviderKeyboardStatusInteractor({
+          device,
+          signal,
+          resolveInteractor: (runner) => options.getInteractor(device, runner),
+        })
+      : {}),
+    ...(runtimeFacts.operations.keyboardDismiss.available
+      ? bindProviderKeyboardDismissInteractor({
+          device,
+          signal,
+          resolveInteractor: (runner) => options.getInteractor(device, runner),
+        })
+      : {}),
+    ...(runtimeFacts.operations.keyboardEnter.available
+      ? bindProviderKeyboardEnterInteractor({
+          device,
+          signal,
+          resolveInteractor: (runner) => options.getInteractor(device, runner),
+        })
+      : {}),
     ...createLimrunAppDeploymentOperations(
       deploymentOptions(options),
       device,
@@ -409,6 +473,10 @@ function facts(
   device: DeviceInfo,
 ): RuntimeFacts<PlatformRuntimeOperations> {
   const deployment = limrunAppDeploymentFacts(deploymentOptions(options), device);
+  const isAndroid = device.platform === 'android';
+  const keyboardFact = isAndroid ? available : keyboardUnavailableIos;
+  const customSnapshotFact =
+    isIosFamily(device) && device.kind === 'simulator' ? available : customSnapshotUnavailable;
   return Object.freeze({
     device: {
       family: device.platform,
@@ -427,24 +495,14 @@ function facts(
       appLogReattach: available,
       appLogCleanup: available,
       ...deployment,
-      appState:
-        device.platform === 'android'
-          ? available
-          : {
-              available: false,
-              reason: 'unsupported-provider-mode',
-              hint: 'Limrun iOS appstate is session-owned; no sessionless provider foreground probe is exposed.',
-            },
+      appState: isAndroid ? available : iosAppStateUnavailable,
       networkDump: available,
       screenRecordingStart: recordingUnavailable,
       screenRecordingReattach: recordingUnavailable,
       screenRecordingCleanup: recordingUnavailable,
       ...snapshotRuntimeOperationFacts({
         capture: available,
-        customActions:
-          isIosFamily(device) && device.kind === 'simulator'
-            ? available
-            : customSnapshotUnavailable,
+        customActions: customSnapshotFact,
         withoutActiveApp: available,
       }),
       ...screenshotRuntimeOperationFacts({ capture: available }),
@@ -459,6 +517,12 @@ function facts(
       // device always has one, so it is available wherever a capture is.
       ...limrunInteractionOperationFacts(),
       ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementTextUnavailable }),
+      ...limrunNavigationOperationFacts(device),
+      ...keyboardRuntimeOperationFacts({
+        status: keyboardFact,
+        dismiss: keyboardFact,
+        enter: keyboardFact,
+      }),
       ensureReady: available,
       bootTarget: available,
       bootTargetHeadless: headlessUnavailable,
@@ -504,6 +568,12 @@ function recoveryFacts(
       }),
       ...viewportRuntimeOperationFacts({ setViewport: liveSessionUnavailable }),
       ...limrunInteractionOperationFacts(liveSessionUnavailable),
+      ...limrunNavigationOperationFacts(device, liveSessionUnavailable),
+      ...keyboardRuntimeOperationFacts({
+        status: liveSessionUnavailable,
+        dismiss: liveSessionUnavailable,
+        enter: liveSessionUnavailable,
+      }),
       ensureReady: liveSessionUnavailable,
       bootTarget: liveSessionUnavailable,
       bootTargetHeadless: liveSessionUnavailable,

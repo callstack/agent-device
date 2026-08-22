@@ -153,6 +153,70 @@ function expectAppleSnapshotAvailability(
   );
 }
 
+test.each(Object.entries(leaves))(
+  'classifies back/home/orientation/tv-remote/keyboard facts for the %s leaf',
+  async (_name, device) => {
+    const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
+      device,
+      intent: { kind: 'ordinary' },
+      scope: {
+        signal: new AbortController().signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+    });
+    const { facts } = binding;
+
+    // Every simulator/device leaf supports back, tvOS's Menu remote press included — no
+    // apple-family closure ever gated it beyond device kind.
+    expect(facts.operations.back).toEqual({ available: true });
+    expect(binding.operations.back).toBeTypeOf('function');
+
+    // home is unavailable only on macOS, which drives an already-running app with no springboard.
+    const homeAvailable = device.appleOs !== 'macos';
+    expect(facts.operations.home.available).toBe(homeAvailable);
+    expect(binding.operations.home).toBeTypeOf(homeAvailable ? 'function' : 'undefined');
+
+    // orientation and keyboard dismiss/enter share mobile-input eligibility: unavailable on tvOS
+    // (focus-only XCUIRemote navigation) and macOS (an AppKit desktop host).
+    const mobileInputEligible = device.appleOs !== 'tvos' && device.appleOs !== 'macos';
+    expect(facts.operations.setOrientation.available).toBe(mobileInputEligible);
+    expect(binding.operations.setOrientation).toBeTypeOf(
+      mobileInputEligible ? 'function' : 'undefined',
+    );
+    expect(facts.operations.keyboardDismiss.available).toBe(mobileInputEligible);
+    expect(facts.operations.keyboardEnter.available).toBe(mobileInputEligible);
+    expect(binding.operations.keyboardDismiss).toBeTypeOf(
+      mobileInputEligible ? 'function' : 'undefined',
+    );
+    expect(binding.operations.keyboardEnter).toBeTypeOf(
+      mobileInputEligible ? 'function' : 'undefined',
+    );
+
+    // Apple never had a live keyboard status read: every eligible leaf still refuses status/get
+    // with the retired in-handler hint; ineligible leaves fall through the outer cell instead.
+    expect(facts.operations.keyboardStatus.available).toBe(false);
+    if (mobileInputEligible) {
+      expect(facts.operations.keyboardStatus).toHaveProperty(
+        'hint',
+        expect.stringContaining('keyboard status/get is currently supported only on Android'),
+      );
+    }
+    expect(binding.operations.keyboardStatus).toBeUndefined();
+
+    // tv-remote is available only for tvOS, which drives navigation through XCUIRemote presses.
+    const tvRemoteAvailable = device.appleOs === 'tvos';
+    expect(facts.operations.tvRemote.available).toBe(tvRemoteAvailable);
+    if (!tvRemoteAvailable) {
+      expect(facts.operations.tvRemote).toHaveProperty(
+        'hint',
+        'tv-remote is supported only on tvOS devices.',
+      );
+    }
+    expect(binding.operations.tvRemote).toBeTypeOf(tvRemoteAvailable ? 'function' : 'undefined');
+  },
+);
+
 test.each(['frontmost-app', 'desktop', 'menubar'] as const)(
   'routes the macOS %s surface through the exact Apple surface host',
   async (surface) => {

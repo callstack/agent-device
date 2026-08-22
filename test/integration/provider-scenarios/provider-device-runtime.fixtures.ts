@@ -15,6 +15,8 @@ import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
   bindProviderApplicationLifecycleInteractor,
+  bindProviderKeyboardDismissInteractor,
+  bindProviderKeyboardEnterInteractor,
   bindProviderSnapshotInteractor,
   invokeApplicationClose,
   invokeApplicationOpen,
@@ -151,6 +153,16 @@ async function bindProviderScenarioPlatformRuntime(
         signal: request.scope.signal,
         resolveInteractor: (runner) => runtime.getInteractor(request.device, runner),
       }),
+      ...bindProviderKeyboardDismissInteractor({
+        device: request.device,
+        signal: request.scope.signal,
+        resolveInteractor: (runner) => runtime.getInteractor(request.device, runner),
+      }),
+      ...bindProviderKeyboardEnterInteractor({
+        device: request.device,
+        signal: request.scope.signal,
+        resolveInteractor: (runner) => runtime.getInteractor(request.device, runner),
+      }),
       deployApp: async (input: AppDeploymentInput): Promise<AppDeploymentResult> => {
         const result = await runtime.installApp?.(request.device, input.app, input.appPath);
         if (result) return result;
@@ -236,6 +248,10 @@ function providerScenarioRuntimeFacts(
       listApps: fakeProviderUnavailable,
       ...unavailableDeploymentSnapshotAndShutdownOperationFacts,
       captureSnapshot: fakeProviderAvailable,
+      // Provider-owned iOS keyboard actions ride the same runner transport the shared interactor
+      // does (#1297): a fixture scenario that can drive the interactor at all can drive these.
+      keyboardDismiss: fakeProviderAvailable,
+      keyboardEnter: fakeProviderAvailable,
       deployApp: runtime.installApp ? fakeProviderAvailable : fakeProviderUnavailable,
       ...applicationLifecycleOperationFacts({
         resolveOpenTarget: fakeProviderAvailable,

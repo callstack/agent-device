@@ -521,7 +521,7 @@ test('direct daemon requests apply strip lock policy for existing sessions befor
   const response = await handler({
     token: 'test-token',
     session: 'qa-ios',
-    command: 'home',
+    command: 'app-switcher',
     positionals: [],
     flags: {
       target: 'tv',
@@ -608,7 +608,7 @@ test('batch preserves tenant-scoped session names across nested requests', async
     command: 'batch',
     positionals: [],
     flags: {
-      batchSteps: [{ command: 'home' }],
+      batchSteps: [{ command: 'app-switcher' }],
     },
     meta: {
       tenantId: 'tenant-a',
@@ -620,5 +620,5 @@ test('batch preserves tenant-scoped session names across nested requests', async
 
   expect(response.ok).toBe(true);
   expect(dispatchCalls).toBe(1);
-  expect(sessionStore.get('tenant-a:default')?.actions.at(-1)?.command).toBe('home');
+  expect(sessionStore.get('tenant-a:default')?.actions.at(-1)?.command).toBe('app-switcher');
 });

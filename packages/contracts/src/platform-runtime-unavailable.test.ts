@@ -34,6 +34,13 @@ test('generic unavailable binding preserves exact provider ownership and mode', 
     focus: { available: false, reason: 'unsupported-provider-mode' },
     typeText: { available: false, reason: 'unsupported-provider-mode' },
     elementText: { available: false, reason: 'unsupported-provider-mode' },
+    back: { available: false, reason: 'unsupported-provider-mode' },
+    home: { available: false, reason: 'unsupported-provider-mode' },
+    orientation: { available: false, reason: 'unsupported-provider-mode' },
+    tvRemote: { available: false, reason: 'unsupported-provider-mode' },
+    keyboardStatus: { available: false, reason: 'unsupported-provider-mode' },
+    keyboardDismiss: { available: false, reason: 'unsupported-provider-mode' },
+    keyboardEnter: { available: false, reason: 'unsupported-provider-mode' },
     lifecycle,
   });
 

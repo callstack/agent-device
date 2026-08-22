@@ -26,8 +26,10 @@ vi.mock('../response-views.ts', async (importOriginal) => {
     ...actual,
     RESPONSE_VIEWS: {
       ...actual.RESPONSE_VIEWS,
-      home: (data: Record<string, unknown>, level: string) =>
-        level === 'digest' ? { homeDigest: true, hadItems: Array.isArray(data.items) } : data,
+      'app-switcher': (data: Record<string, unknown>, level: string) =>
+        level === 'digest'
+          ? { appSwitcherDigest: true, hadItems: Array.isArray(data.items) }
+          : data,
     },
   };
 });
@@ -41,7 +43,7 @@ import { commandRpcParamsSchema } from '@agent-device/kernel/contracts';
 
 const mockDispatch = vi.mocked(dispatchCommand);
 
-const REPRESENTATIVE_PAYLOAD = { message: 'home-ok', items: [1, 2, 3] } as const;
+const REPRESENTATIVE_PAYLOAD = { message: 'app-switcher-ok', items: [1, 2, 3] } as const;
 
 function makeIosSession(name: string): SessionState {
   return {
@@ -94,9 +96,11 @@ beforeEach(() => {
 
 test('(a) default identity: responseLevel absent === default === no meta, byte-identical', async () => {
   const { handler } = makeHandler();
-  const noMeta = await handler(request('home'));
-  const emptyMeta = await handler(request('home', { meta: {} }));
-  const explicitDefault = await handler(request('home', { meta: { responseLevel: 'default' } }));
+  const noMeta = await handler(request('app-switcher'));
+  const emptyMeta = await handler(request('app-switcher', { meta: {} }));
+  const explicitDefault = await handler(
+    request('app-switcher', { meta: { responseLevel: 'default' } }),
+  );
 
   expect(JSON.stringify(noMeta)).toBe(JSON.stringify(emptyMeta));
   expect(JSON.stringify(noMeta)).toBe(JSON.stringify(explicitDefault));
@@ -105,35 +109,35 @@ test('(a) default identity: responseLevel absent === default === no meta, byte-i
 
 test('(b) digest applies the registered view, dropping the full payload', async () => {
   const { handler } = makeHandler();
-  const resp = await handler(request('home', { meta: { responseLevel: 'digest' } }));
+  const resp = await handler(request('app-switcher', { meta: { responseLevel: 'digest' } }));
   expect(resp.ok).toBe(true);
   if (!resp.ok) return;
-  expect(resp.data).toEqual({ homeDigest: true, hadItems: true });
+  expect(resp.data).toEqual({ appSwitcherDigest: true, hadItems: true });
   expect('message' in (resp.data ?? {})).toBe(false);
 });
 
 test('(c) full returns today’s shape (view passthrough) — byte-identical to default', async () => {
   const { handler } = makeHandler();
-  const full = await handler(request('home', { meta: { responseLevel: 'full' } }));
-  const def = await handler(request('home', { meta: { responseLevel: 'default' } }));
+  const full = await handler(request('app-switcher', { meta: { responseLevel: 'full' } }));
+  const def = await handler(request('app-switcher', { meta: { responseLevel: 'default' } }));
   expect(JSON.stringify(full)).toBe(JSON.stringify(def));
 });
 
 test('(d) digest composes with --cost: viewed data plus an additive cost block', async () => {
   const { handler } = makeHandler();
   const resp = await handler(
-    request('home', { meta: { responseLevel: 'digest', includeCost: true } }),
+    request('app-switcher', { meta: { responseLevel: 'digest', includeCost: true } }),
   );
   expect(resp.ok).toBe(true);
   if (!resp.ok) return;
-  expect(resp.data).toMatchObject({ homeDigest: true, hadItems: true });
+  expect(resp.data).toMatchObject({ appSwitcherDigest: true, hadItems: true });
   expect(typeof resp.data?.cost?.wallClockMs).toBe('number');
 });
 
 test('(e) digest on a command with no registered view is byte-identical to default', async () => {
   const { handler } = makeHandler();
-  const digest = await handler(request('back', { meta: { responseLevel: 'digest' } }));
-  const def = await handler(request('back', { meta: {} }));
+  const digest = await handler(request('scroll', { meta: { responseLevel: 'digest' } }));
+  const def = await handler(request('scroll', { meta: {} }));
   expect(JSON.stringify(digest)).toBe(JSON.stringify(def));
   if (digest.ok) expect(digest.data).toEqual(REPRESENTATIVE_PAYLOAD);
 });

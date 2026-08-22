@@ -6,7 +6,7 @@ import { successText } from '../utils/success-text.ts';
 import { readPointPositionals } from '../utils/validation.ts';
 import type { DaemonCommandContext } from './context.ts';
 import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';
-import { admitRuntimeUse, type RuntimeAdmissionBindings } from './runtime-admission.ts';
+import { resolveBoundGenericRuntime, type RuntimeAdmissionBindings } from './runtime-admission.ts';
 import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';
 
 /** `focus x y`, on the same positional parse its still-legacy touch siblings take. */
@@ -35,20 +35,16 @@ export async function resolveBoundFocusRuntime(
   } & RuntimeAdmissionBindings,
 ): Promise<ResolvedGenericExecution> {
   const point = readFocusPoint(params.positionals);
-  const admission = await admitRuntimeUse({
-    command: 'focus',
-    device: params.device,
-    use: focusRuntimeUse,
-    inspectFacts: params.inspectFacts,
-    bindDevice: params.bindDevice,
-  });
-  if (admission.type === 'response') return { ok: false, response: admission.response };
-  const runtime = admission.runtime;
-  return {
-    ok: true,
-    execute: async ({ dispatchContext }) =>
-      await executeFocusPoint(runtime, point, dispatchContext),
-  };
+  return await resolveBoundGenericRuntime(
+    {
+      command: 'focus',
+      device: params.device,
+      use: focusRuntimeUse,
+      inspectFacts: params.inspectFacts,
+      bindDevice: params.bindDevice,
+    },
+    (runtime, context) => executeFocusPoint(runtime, point, context),
+  );
 }
 
 /**

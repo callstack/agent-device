@@ -119,6 +119,7 @@ test.each([
     expect(binding.operations.typeText).toBeTypeOf(
       device.kind === 'device' ? 'function' : 'undefined',
     );
+    expectLinuxNavigationAndKeyboardFacts(binding, device);
     expect(binding.facts.operations.captureScreenshot.available).toBe(device.kind === 'device');
     expect(binding.operations.captureScreenshot).toBeTypeOf(
       device.kind === 'device' ? 'function' : 'undefined',
@@ -170,6 +171,34 @@ function expectLifecycleFacts(
       if (legacy[facet]) expect(binding.operations[name]).toBeTypeOf('function');
       else expect(binding.operations[name]).toBeUndefined();
     }
+  }
+}
+
+/**
+ * back/home parity with the retired capability bucket: the desktop is the only Linux cell with a
+ * target to drive. orientation/tv-remote/keyboard never carried a Linux bucket at all.
+ */
+function expectLinuxNavigationAndKeyboardFacts(
+  binding: DeviceBinding<PlatformRuntimeOperations>,
+  device: DeviceInfo,
+): void {
+  const desktop = device.kind === 'device';
+  expect(binding.facts.operations.back.available).toBe(desktop);
+  expect(binding.facts.operations.home.available).toBe(desktop);
+  expect(binding.operations.back).toBeTypeOf(desktop ? 'function' : 'undefined');
+  expect(binding.operations.home).toBeTypeOf(desktop ? 'function' : 'undefined');
+  for (const operation of [
+    'setOrientation',
+    'tvRemote',
+    'keyboardStatus',
+    'keyboardDismiss',
+    'keyboardEnter',
+  ] as const) {
+    expect(binding.facts.operations[operation]).toEqual({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+    });
+    expect(binding.operations[operation]).toBeUndefined();
   }
 }
 

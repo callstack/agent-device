@@ -139,12 +139,13 @@ test('live iOS scenarios reference fixture identifiers that exist', () => {
 });
 
 test('capability classifications match executable simulator behavior', () => {
+  const factOwnedCommands: readonly string[] = [PUBLIC_COMMANDS.viewport, PUBLIC_COMMANDS.tvRemote];
   for (const [command, entry] of Object.entries(IOS_SIMULATOR_E2E_COVERAGE)) {
-    if (command === PUBLIC_COMMANDS.viewport) {
+    if (factOwnedCommands.includes(command)) {
       assert.equal(
         entry.level,
         'command-contract',
-        'viewport admission belongs to the exact-owner runtime fact',
+        `${command} admission belongs to the exact-owner runtime fact, not the capability catalog`,
       );
       continue;
     }
@@ -164,9 +165,11 @@ test('capability classifications match executable simulator behavior', () => {
     }
   }
 
-  assert.equal(isCommandSupportedOnDevice(PUBLIC_COMMANDS.tvRemote, IOS_SIMULATOR), false);
-  assert.equal(IOS_SIMULATOR_E2E_COVERAGE[PUBLIC_COMMANDS.tvRemote].level, 'capability-denial');
-
+  assert.equal(
+    IOS_SIMULATOR_E2E_COVERAGE[PUBLIC_COMMANDS.tvRemote].level,
+    'command-contract',
+    'tv-remote denial is owned by exact platform runtime facts',
+  );
   assert.equal(
     IOS_SIMULATOR_E2E_COVERAGE[PUBLIC_COMMANDS.viewport].level,
     'command-contract',

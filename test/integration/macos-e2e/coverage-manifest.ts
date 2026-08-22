@@ -117,10 +117,10 @@ export const MACOS_PLATFORM_COVERAGE = {
     'provider:macos-desktop',
     'the provider scenario round-trips desktop clipboard text',
   ),
-  [C.keyboard]: denial(
-    'src/platforms/apple/capabilities.ts',
-    'readonly keyboard',
-    'macOS capability declarations reject hardware keyboard operations',
+  [C.keyboard]: contract(
+    'packages/platform-apple/src/runtime.test.ts',
+    'classifies back/home/orientation/tv-remote/keyboard facts for the %s leaf',
+    'the exact-owner runtime fact rejects keyboard actions on the macOS AppKit desktop leaf',
   ),
   [C.install]: contract(
     'packages/platform-apple/src/deployment/runtime.test.ts',
@@ -210,20 +210,20 @@ export const MACOS_PLATFORM_COVERAGE = {
     'performGestureApple composes macOS one-contact plans with the drag executor',
     'macOS gesture dispatch preserves the one-contact drag plan',
   ),
-  [C.home]: denial(
-    'src/platforms/apple/capabilities.ts',
-    'appAndDeviceLifecycle',
-    'macOS capability declarations reject mobile Home navigation',
+  [C.home]: contract(
+    'packages/platform-apple/src/runtime.test.ts',
+    'classifies back/home/orientation/tv-remote/keyboard facts for the %s leaf',
+    'the exact-owner runtime fact rejects mobile Home navigation on the macOS leaf, which drives an already-running app with no springboard',
   ),
-  [C.tvRemote]: denial(
-    'src/platforms/apple/plugin.ts',
-    'supportsTvRemote',
-    'the Apple plugin admits TV remote input only for tvOS or Android TV',
+  [C.tvRemote]: contract(
+    'packages/platform-apple/src/runtime.test.ts',
+    'classifies back/home/orientation/tv-remote/keyboard facts for the %s leaf',
+    'the exact-owner runtime fact admits TV remote input only for the tvOS leaf, not macOS',
   ),
-  [C.orientation]: denial(
-    'src/platforms/apple/capabilities.ts',
-    'readonly orientation',
-    'macOS capability declarations reject device orientation changes',
+  [C.orientation]: contract(
+    'packages/platform-apple/src/runtime.test.ts',
+    'classifies back/home/orientation/tv-remote/keyboard facts for the %s leaf',
+    'the exact-owner runtime fact rejects device orientation changes on the macOS leaf',
   ),
   [C.scroll]: live(
     'provider:macos-desktop',

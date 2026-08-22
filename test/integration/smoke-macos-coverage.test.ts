@@ -49,8 +49,8 @@ test('macOS coverage exhaustively classifies the public catalog', () => {
 
 test('macOS coverage report counts every manifest classification', () => {
   assert.deepEqual(MACOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY, {
-    capabilityDenial: 6,
-    contract: 15,
+    capabilityDenial: 2,
+    contract: 19,
     gap: 15,
     live: 18,
     total: 54,

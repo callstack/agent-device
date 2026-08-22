@@ -1,0 +1,214 @@
+import { expect, test, vi } from 'vitest';
+import {
+  localRuntimeOwner,
+  narrowDeviceBinding,
+  tvRemoteRuntimeOperationFacts,
+  tvRemoteRuntimeUse,
+  type DeviceBinding,
+  type DeviceRuntimeGateway,
+  type PlatformRuntimeOperations,
+  type RuntimeFacts,
+  type RuntimeOperationFact,
+} from '@agent-device/contracts/platform';
+import { deviceShape } from '@agent-device/kernel/device';
+import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
+import { LeaseRegistry } from '../lease-registry.ts';
+import { activateCompleteRefFrame } from '../ref-frame.ts';
+import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
+import type { GenericPlatformExecutionParams } from '../request-generic-dispatch.ts';
+import { resolveBoundTvRemoteRuntime } from '../tv-remote-runtime.ts';
+import { createRequestHandler } from './test-device-runtime-gateway.ts';
+
+const vegaVvd = {
+  id: 'vega-vvd',
+  name: 'Vega VVD',
+  platform: 'vega',
+  kind: 'emulator',
+  target: 'tv',
+  booted: true,
+} as const;
+const available = Object.freeze({ available: true } as const);
+const unavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind' as const,
+  hint: 'tv-remote currently supports only Vega Virtual Devices.',
+});
+
+function tvRemoteExecutionParams(
+  positionals: string[],
+  dispatchContext: GenericPlatformExecutionParams['dispatchContext'] = {},
+): GenericPlatformExecutionParams {
+  const session = makeSession('tv-remote-runtime', { device: vegaVvd });
+  return {
+    session,
+    sessionName: session.name,
+    logPath: '/tmp/daemon.log',
+    command: 'tv-remote',
+    request: { command: 'tv-remote', positionals, token: 't', session: session.name },
+    positionals,
+    out: undefined,
+    dispatchContext,
+  };
+}
+
+function runtimeHarness(fact: RuntimeOperationFact = available) {
+  const tvRemote = vi.fn(async () => undefined);
+  const facts: RuntimeFacts<PlatformRuntimeOperations> = {
+    device: { ...deviceShape(vegaVvd), providerMode: 'local' },
+    operations: { tvRemote: fact } as RuntimeFacts<PlatformRuntimeOperations>['operations'],
+  };
+  const binding = {
+    device: vegaVvd,
+    owner: localRuntimeOwner('vega'),
+    facts,
+    operations: { tvRemote },
+    [Symbol.asyncDispose]: async () => {},
+  } satisfies DeviceBinding<PlatformRuntimeOperations>;
+  const inspectFacts: InspectDeviceRuntimeFacts = vi.fn(async () => facts);
+  const bindDevice = vi.fn(async (_device, use) =>
+    narrowDeviceBinding(binding, use),
+  ) as unknown as BindDeviceRuntime;
+  const bind = vi.fn(async () => binding);
+  const gateway: DeviceRuntimeGateway<PlatformRuntimeOperations> = {
+    inspectFacts,
+    bind,
+    shutdown: async () => {},
+  };
+  return { tvRemote, inspectFacts, bindDevice, bind, gateway };
+}
+
+test('resolves one admitted binding and presses one remote button', async () => {
+  const harness = runtimeHarness(tvRemoteRuntimeOperationFacts({ tvRemote: available }).tvRemote);
+
+  const resolved = await resolveBoundTvRemoteRuntime({
+    device: vegaVvd,
+    positionals: ['down'],
+    inspectFacts: harness.inspectFacts,
+    bindDevice: harness.bindDevice,
+  });
+
+  expect(resolved.ok).toBe(true);
+  if (!resolved.ok) return;
+  expect(harness.bindDevice).toHaveBeenCalledWith(vegaVvd, tvRemoteRuntimeUse);
+  expect(await resolved.execute(tvRemoteExecutionParams(['down']))).toEqual({
+    action: 'tv-remote',
+    button: 'down',
+    message: 'Pressed TV remote down',
+  });
+  expect(harness.tvRemote).toHaveBeenCalledWith(
+    expect.objectContaining({ button: 'down', durationMs: undefined }),
+  );
+});
+
+test('forwards a validated duration and reports it in the response', async () => {
+  const harness = runtimeHarness();
+
+  const resolved = await resolveBoundTvRemoteRuntime({
+    device: vegaVvd,
+    positionals: ['select'],
+    durationMs: 500,
+    inspectFacts: harness.inspectFacts,
+    bindDevice: harness.bindDevice,
+  });
+  expect(resolved.ok).toBe(true);
+  if (!resolved.ok) return;
+  expect(await resolved.execute(tvRemoteExecutionParams(['select']))).toEqual({
+    action: 'tv-remote',
+    button: 'select',
+    durationMs: 500,
+    message: 'Pressed TV remote select',
+  });
+  expect(harness.tvRemote).toHaveBeenCalledWith(
+    expect.objectContaining({ button: 'select', durationMs: 500 }),
+  );
+});
+
+test('rejects an out-of-range duration before inspection or binding', async () => {
+  const harness = runtimeHarness();
+
+  await expect(
+    resolveBoundTvRemoteRuntime({
+      device: vegaVvd,
+      positionals: ['down'],
+      durationMs: 50_000,
+      inspectFacts: harness.inspectFacts,
+      bindDevice: harness.bindDevice,
+    }),
+  ).rejects.toThrow();
+  expect(harness.inspectFacts).not.toHaveBeenCalled();
+});
+
+test('rejects a missing button before inspection or binding', async () => {
+  const harness = runtimeHarness();
+
+  await expect(
+    resolveBoundTvRemoteRuntime({
+      device: vegaVvd,
+      positionals: [],
+      inspectFacts: harness.inspectFacts,
+      bindDevice: harness.bindDevice,
+    }),
+  ).rejects.toMatchObject({ code: 'INVALID_ARGS' });
+  expect(harness.inspectFacts).not.toHaveBeenCalled();
+  expect(harness.bindDevice).not.toHaveBeenCalled();
+});
+
+test('rejects an unavailable exact-owner fact before binding', async () => {
+  const harness = runtimeHarness(unavailable);
+
+  const resolved = await resolveBoundTvRemoteRuntime({
+    device: vegaVvd,
+    positionals: ['down'],
+    inspectFacts: harness.inspectFacts,
+    bindDevice: harness.bindDevice,
+  });
+
+  expect(resolved).toEqual({
+    ok: false,
+    response: {
+      ok: false,
+      error: {
+        code: 'UNSUPPORTED_OPERATION',
+        message: 'tv-remote is not supported on this device',
+        hint: unavailable.hint,
+      },
+    },
+  });
+  expect(harness.bindDevice).not.toHaveBeenCalled();
+});
+
+test('request router joins tv-remote admission to execution and ref invalidation', async () => {
+  const harness = runtimeHarness();
+  const sessionStore = makeSessionStore('agent-device-tv-remote-generic-');
+  const session = makeSession('tv-remote-runtime', { device: vegaVvd });
+  activateCompleteRefFrame(session);
+  sessionStore.set(session.name, session);
+  const handler = createRequestHandler({
+    logPath: '/tmp/daemon.log',
+    token: 't',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
+    deviceRuntimeGateway: harness.gateway,
+    trackDownloadableArtifact: () => 'artifact',
+  });
+
+  const response = await handler({
+    command: 'tv-remote',
+    positionals: ['down'],
+    token: 't',
+    session: session.name,
+    flags: {},
+    meta: { requestId: 'tv-remote-router-join' },
+  });
+
+  expect(response).toMatchObject({
+    ok: true,
+    data: { action: 'tv-remote', button: 'down', message: 'Pressed TV remote down' },
+  });
+  expect(session.refFrameState).toBe('expired');
+  expect(harness.bind).toHaveBeenCalledTimes(1);
+  expect(harness.tvRemote).toHaveBeenCalledTimes(1);
+});

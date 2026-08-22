@@ -4,6 +4,10 @@ import { resolveScreenshotGenericExecution } from './screenshot-runtime.ts';
 import type { ScreenshotRuntimeBindings } from './screenshot-runtime-binding.ts';
 import type { DaemonRequest, SessionState } from './types.ts';
 import { resolveBoundViewportRuntime } from './viewport-runtime.ts';
+import { resolveBoundBackRuntime } from './back-runtime.ts';
+import { resolveBoundHomeRuntime } from './home-runtime.ts';
+import { resolveBoundOrientationRuntime } from './orientation-runtime.ts';
+import { resolveBoundTvRemoteRuntime } from './tv-remote-runtime.ts';
 
 /**
  * The generic route's runtime-owned leaves (ADR 0019). Each one admits its own exact owner facts
@@ -27,6 +31,33 @@ export async function resolveGenericRuntimeExecution(
       return await resolveBoundViewportRuntime({
         device: params.session.device,
         positionals: params.req.positionals ?? [],
+        inspectFacts: params.inspectFacts,
+        bindDevice: params.bindDevice,
+      });
+    case 'back':
+      return await resolveBoundBackRuntime({
+        device: params.session.device,
+        inspectFacts: params.inspectFacts,
+        bindDevice: params.bindDevice,
+      });
+    case 'home':
+      return await resolveBoundHomeRuntime({
+        device: params.session.device,
+        inspectFacts: params.inspectFacts,
+        bindDevice: params.bindDevice,
+      });
+    case 'orientation':
+      return await resolveBoundOrientationRuntime({
+        device: params.session.device,
+        positionals: params.req.positionals ?? [],
+        inspectFacts: params.inspectFacts,
+        bindDevice: params.bindDevice,
+      });
+    case 'tv-remote':
+      return await resolveBoundTvRemoteRuntime({
+        device: params.session.device,
+        positionals: params.req.positionals ?? [],
+        durationMs: params.req.flags?.durationMs,
         inspectFacts: params.inspectFacts,
         bindDevice: params.bindDevice,
       });

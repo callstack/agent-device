@@ -57,6 +57,8 @@ const RUNNER_TRANSPORT_METHODS: Record<
   setOrientation: { invoke: (i) => i.setOrientation('portrait'), runnerCommand: 'rotate' },
   appSwitcher: { invoke: (i) => i.appSwitcher(), runnerCommand: 'appSwitcher' },
   tvRemote: { invoke: (i) => i.tvRemote('select'), runnerCommand: 'remotePress' },
+  keyboardDismiss: { invoke: (i) => i.keyboardDismiss!(), runnerCommand: 'keyboardDismiss' },
+  keyboardEnter: { invoke: (i) => i.keyboardEnter!(), runnerCommand: 'keyboardReturn' },
 };
 
 const LOCAL_TOOL_METHODS: Record<string, (interactor: Interactor) => Promise<unknown>> = {

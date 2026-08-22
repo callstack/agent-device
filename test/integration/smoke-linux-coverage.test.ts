@@ -39,11 +39,12 @@ test('Linux coverage exhaustively classifies the public catalog', () => {
 
 test('Linux coverage report has the expected classification counts', () => {
   assert.deepEqual(LINUX_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY, {
-    capabilityDenial: 11,
     // focus (#1925), click, and type are live via the replay: click resolves and lands on a
     // digit button, and the typed calculation's result is now selectable (see the manifest
-    // entries for the platform defects this fixed).
-    contract: 17,
+    // entries for the platform defects this fixed). keyboard/orientation/tv-remote moved from
+    // capability-denial to command-contract: they're fact-owned now, not catalog-owned.
+    capabilityDenial: 8,
+    contract: 20,
     gap: 18,
     live: 8,
     total: 54,

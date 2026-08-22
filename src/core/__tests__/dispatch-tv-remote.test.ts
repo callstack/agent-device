@@ -1,6 +1,5 @@
-import { beforeEach, test, vi } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import { promises as fs } from 'node:fs';
 
 vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
   const actual =
@@ -9,67 +8,32 @@ vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOrigi
 });
 
 import { dispatchCommand } from '../dispatch.ts';
-import { AppError } from '@agent-device/kernel/errors';
 import { runAppleRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
-import {
-  ANDROID_EMULATOR,
-  ANDROID_TV_DEVICE,
-  TVOS_SIMULATOR,
-} from '../../__tests__/test-utils/device-fixtures.ts';
+import { ANDROID_TV_DEVICE, TVOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import { withMockedAdb } from '../../__tests__/test-utils/mocked-binaries.ts';
 
 const mockRunAppleRunnerCommand = vi.mocked(runAppleRunnerCommand);
 
-beforeEach(() => {
-  vi.resetAllMocks();
-  mockRunAppleRunnerCommand.mockResolvedValue({ message: 'remotePress' });
-});
-
-test('dispatch tv-remote sends Android TV D-pad keyevents', async () => {
-  await withMockedAdb('agent-device-dispatch-tv-remote-', async (argsLogPath) => {
-    const result = await dispatchCommand(ANDROID_TV_DEVICE, 'tv-remote', ['right']);
-
-    assert.equal(result?.action, 'tv-remote');
-    assert.equal(result?.button, 'right');
-    const logged = await fs.readFile(argsLogPath, 'utf8');
-    assert.match(logged, /shell\ninput\nkeyevent\nKEYCODE_DPAD_RIGHT/);
-  });
-});
-
-test('dispatch tv-remote maps Android duration to longpress keyevent', async () => {
-  await withMockedAdb('agent-device-dispatch-tv-remote-longpress-', async (argsLogPath) => {
-    const result = await dispatchCommand(ANDROID_TV_DEVICE, 'tv-remote', ['select'], undefined, {
-      durationMs: 500,
+// R45 retired `tv-remote` from `DISPATCH_HANDLERS` and its dedicated handler function. Its
+// ADB D-pad-keyevent parity pin now lives on `pressAndroidTvRemote` directly
+// (`src/platforms/android/__tests__/input-actions.test.ts`); its tvOS runner routing is covered
+// by the Apple interactor's own runner-provider suite
+// (`src/platforms/apple/__tests__/interactor-runner-provider.test.ts`); its TV-target admission
+// (formerly an in-handler check, now an owner fact) and admitted-runtime behavior are covered in
+// `src/daemon/__tests__/tv-remote-runtime.test.ts`.
+test('legacy dispatch no longer reaches the tv-remote leaf on Android TV', async () => {
+  await withMockedAdb('agent-device-dispatch-tv-remote-retired-android-', async () => {
+    await assert.rejects(dispatchCommand(ANDROID_TV_DEVICE, 'tv-remote', ['right']), {
+      code: 'INVALID_ARGS',
+      message: 'Unknown command: tv-remote',
     });
-
-    assert.equal(result?.durationMs, 500);
-    const logged = await fs.readFile(argsLogPath, 'utf8');
-    assert.match(logged, /shell\ninput\nkeyevent\n--longpress\nKEYCODE_DPAD_CENTER/);
   });
 });
 
-test('dispatch tv-remote sends native tvOS remotePress command', async () => {
-  const result = await dispatchCommand(TVOS_SIMULATOR, 'tv-remote', ['back'], undefined, {
-    appBundleId: 'com.example.tv',
-    durationMs: 250,
+test('legacy dispatch no longer reaches the tv-remote leaf on tvOS', async () => {
+  await assert.rejects(dispatchCommand(TVOS_SIMULATOR, 'tv-remote', ['back']), {
+    code: 'INVALID_ARGS',
+    message: 'Unknown command: tv-remote',
   });
-
-  assert.equal(result?.button, 'back');
-  assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 1);
-  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
-    command: 'remotePress',
-    remoteButton: 'menu',
-    appBundleId: 'com.example.tv',
-    durationMs: 250,
-  });
-});
-
-test('dispatch tv-remote rejects non-TV targets before platform input', async () => {
-  await assert.rejects(
-    () => dispatchCommand(ANDROID_EMULATOR, 'tv-remote', ['down']),
-    (error: unknown) =>
-      error instanceof AppError &&
-      error.code === 'UNSUPPORTED_OPERATION' &&
-      /TV targets/.test(error.message),
-  );
+  assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
 });

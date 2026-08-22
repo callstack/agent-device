@@ -158,6 +158,29 @@ test.each([
   },
 );
 
+test('back/home/orientation/tv-remote/keyboard never carried a web capability bucket', async () => {
+  const binding = await createWebPlatformRuntime(host({ mode: 'transport-composed' })).bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: scope(),
+  });
+  for (const operation of [
+    'back',
+    'home',
+    'setOrientation',
+    'tvRemote',
+    'keyboardStatus',
+    'keyboardDismiss',
+    'keyboardEnter',
+  ] as const) {
+    expect(binding.facts.operations[operation]).toEqual({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+    });
+    expect(binding.operations[operation]).toBeUndefined();
+  }
+});
+
 test('binds viewport resizing through the local web interactor and honors cancellation', async () => {
   const setViewport = vi.fn(async () => undefined);
   const runtimeHost = {

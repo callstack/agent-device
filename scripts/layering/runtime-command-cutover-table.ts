@@ -26,7 +26,9 @@ import { retiredDispatchProjectionViolations } from './runtime-command-cutover-d
  * `cutoverTableDefects` rejects a duplicate; lifecycle starts at R28 after the accepted
  * shutdown, install/deploy, and application-lifecycle allocations. Snapshot starts at R32;
  * diff follows at R33, find at R35, get at R36, is at R37, screenshot at R39, wait at R38,
- * focus at R40, and type at R41 — the Wave 4 observation family is complete.
+ * focus at R40, and type at R41 — the Wave 4 observation family is complete. Wave 5's generic
+ * leaves follow: back at R42, home at R43, orientation at R44, tv-remote at R45, and the
+ * action-selected keyboard at R46.
  */
 export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
   {
@@ -661,6 +663,118 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
       routes: ['handleInteractionCommands'],
       operations: ['typeText'],
       operationOwners: { typeText: ['executeBoundTypeText'] },
+    },
+  },
+  {
+    rule: 'R42 back-runtime-cutover',
+    command: 'back',
+    subject: 'back navigation',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      // The dispatch-table arm; `back` had no dedicated named handler function to retire (its
+      // legacy body lived inline in the `DISPATCH_HANDLERS` literal). `back` also leaves the
+      // HarmonyOS overlay that granted it a capability bucket the descriptor never listed.
+      staticCommandSets: ['HARMONYOS_SUPPORTED_COMMANDS'],
+    },
+    runtimeTypeNames: ['BackRuntimeOperations'],
+    operations: { names: ['back'] },
+    singularExecution: {
+      routes: ['dispatchGenericCommand'],
+      operations: ['back'],
+      operationOwners: { back: ['executeBack'] },
+    },
+  },
+  {
+    rule: 'R43 home-runtime-cutover',
+    command: 'home',
+    subject: 'home navigation',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      // The dispatch-table arm; `home` had no dedicated named handler function to retire either.
+      // `home` also leaves the HarmonyOS overlay that granted it a capability bucket the
+      // descriptor never listed.
+      staticCommandSets: ['HARMONYOS_SUPPORTED_COMMANDS'],
+    },
+    runtimeTypeNames: ['HomeRuntimeOperations'],
+    operations: { names: ['home'] },
+    singularExecution: {
+      routes: ['dispatchGenericCommand'],
+      operations: ['home'],
+      operationOwners: { home: ['executeHome'] },
+    },
+  },
+  {
+    rule: 'R44 orientation-runtime-cutover',
+    command: 'orientation',
+    subject: 'device orientation',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      // The dispatch-table arm; `orientation` had no dedicated named handler function (its legacy
+      // body lived inline in the `DISPATCH_HANDLERS` literal). Its whole remaining legacy
+      // admission was the Apple family's `supportsOrientation` closure, deleted by name.
+      routeNames: ['supportsOrientation'],
+    },
+    runtimeTypeNames: ['OrientationRuntimeOperations'],
+    operations: { names: ['setOrientation'] },
+    singularExecution: {
+      routes: ['dispatchGenericCommand'],
+      operations: ['setOrientation'],
+      operationOwners: { setOrientation: ['executeSetOrientation'] },
+    },
+  },
+  {
+    rule: 'R45 tv-remote-runtime-cutover',
+    command: 'tv-remote',
+    subject: 'TV remote control',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      // The dispatch-table arm and its dedicated handler function.
+      routeNames: ['handleTvRemoteCommand'],
+    },
+    runtimeTypeNames: ['TvRemoteRuntimeOperations'],
+    operations: { names: ['tvRemote'] },
+    singularExecution: {
+      routes: ['dispatchGenericCommand'],
+      operations: ['tvRemote'],
+      operationOwners: { tvRemote: ['executeTvRemote'] },
+    },
+  },
+  {
+    rule: 'R46 keyboard-runtime-cutover',
+    command: 'keyboard',
+    subject: 'software keyboard control',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      // The dispatch-table arm and its three family-branching handler functions in
+      // `core/dispatch.ts`. `session.ts`'s own `handleKeyboardCommand` keeps its name — what
+      // changed is what it calls: `resolveBoundKeyboardRuntime` instead of `dispatchCommand`,
+      // which is why the operation owners below are the ONLY route into the three operations.
+      // `keyboard` also leaves the HarmonyOS overlay that granted it a capability bucket the
+      // descriptor never listed.
+      routeNames: [
+        'handleAndroidKeyboardCommand',
+        'handleHarmonyKeyboardCommand',
+        'handleIosKeyboardCommand',
+      ],
+      staticCommandSets: ['HARMONYOS_SUPPORTED_COMMANDS'],
+    },
+    runtimeTypeNames: ['KeyboardRuntimeOperations'],
+    operations: { names: ['keyboardStatus', 'keyboardDismiss', 'keyboardEnter'] },
+    singularExecution: {
+      // `keyboard` is action-selected (R35's lesson): the session route resolves exactly one of
+      // the three operations per request, binds once, and never all three together.
+      routes: ['resolveBoundKeyboardRuntime'],
+      operations: ['keyboardStatus', 'keyboardDismiss', 'keyboardEnter'],
+      operationOwners: {
+        keyboardStatus: ['executeKeyboardStatus'],
+        keyboardDismiss: ['executeKeyboardDismiss'],
+        keyboardEnter: ['executeKeyboardEnter'],
+      },
     },
   },
   {

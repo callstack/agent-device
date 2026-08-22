@@ -38,13 +38,10 @@ const WEB_DEVICE: KindMatrix = { device: true };
 const HARMONYOS_ALL: KindMatrix = { emulator: true, device: true };
 const HARMONYOS_SUPPORTED_COMMANDS = new Set<string>([
   'perf',
-  'back',
   'app-switcher',
   'click',
   'fill',
-  'home',
   'gesture',
-  'keyboard',
   'longpress',
   'press',
   'scroll',

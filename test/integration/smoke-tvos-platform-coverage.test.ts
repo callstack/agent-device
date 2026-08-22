@@ -43,8 +43,8 @@ test('tvOS coverage exhaustively classifies the public catalog', () => {
 
 test('tvOS coverage report has the expected classification counts', () => {
   assert.deepEqual(TVOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY, {
-    capabilityDenial: 3,
-    contract: 13,
+    capabilityDenial: 1,
+    contract: 15,
     gap: 38,
     live: 0,
     total: 54,

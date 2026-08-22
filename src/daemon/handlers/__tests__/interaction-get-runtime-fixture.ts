@@ -90,6 +90,13 @@ function elementReadFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOpera
     focus: unavailable,
     typeText: unavailable,
     elementText: unavailable,
+    back: unavailable,
+    home: unavailable,
+    orientation: unavailable,
+    tvRemote: unavailable,
+    keyboardStatus: unavailable,
+    keyboardDismiss: unavailable,
+    keyboardEnter: unavailable,
     screenshot: unavailable,
     lifecycle: applicationLifecycleOperationFacts({
       resolveOpenTarget: unavailable,

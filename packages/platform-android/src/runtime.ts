@@ -5,6 +5,8 @@ import type {
   PlatformRuntimeOperations,
   PlatformRuntimeOwner,
   EnsureReadyInput,
+  RuntimeFacts,
+  RuntimeOperationFact,
 } from '@agent-device/contracts/platform';
 import {
   applicationLifecycleOperationFacts,
@@ -33,6 +35,22 @@ import {
   typeTextRuntimeOperationFacts,
 } from '@agent-device/contracts/type-text-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
+import { bindLocalBackInteractor, backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
+import { bindLocalHomeInteractor, homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
+import {
+  bindLocalOrientationInteractor,
+  orientationRuntimeOperationFacts,
+} from '@agent-device/contracts/orientation-runtime';
+import {
+  bindLocalTvRemoteInteractor,
+  tvRemoteRuntimeOperationFacts,
+} from '@agent-device/contracts/tv-remote-runtime';
+import {
+  bindLocalKeyboardStatusInteractor,
+  bindLocalKeyboardDismissInteractor,
+  bindLocalKeyboardEnterInteractor,
+  keyboardRuntimeOperationFacts,
+} from '@agent-device/contracts/keyboard-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createAndroidAppLogRuntime } from './logs/runtime.ts';
 import { dumpAndroidNetworkTraffic } from './network/runtime.ts';
@@ -159,6 +177,52 @@ function androidTouchFact(device: DeviceInfo) {
   return device.kind === 'simulator' ? focusKindUnavailable : available;
 }
 
+const tvRemoteUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'tv-remote is supported only on Android TV targets.',
+} as const);
+/**
+ * Parity with the retired `androidPlugin` closure: the TV-target gate, whose hint fired
+ * regardless of device kind (the closure never distinguished the synthetic `simulator` row from
+ * a real non-TV device), so both refuse with the identical hint text.
+ */
+function androidTvRemoteFact(device: DeviceInfo): RuntimeOperationFact {
+  return device.kind !== 'simulator' && device.target === 'tv' ? available : tvRemoteUnavailable;
+}
+
+/**
+ * The seven navigation/keyboard operations, each independently gated by its own admitted fact.
+ * HarmonyOS's runtime binds a near-identical shape (its own operation subset), but ADR 0019
+ * forbids a `platform-common` package for two implementations to share — each family owns its
+ * own copy rather than tunnel through root or a sibling platform package.
+ */
+function androidNavigationAndKeyboardOperations(
+  // fallow-ignore-next-line code-duplication
+  host: PlatformRuntimeHost,
+  request: Parameters<PlatformRuntimeOwner['bind']>[0],
+  facts: RuntimeFacts<PlatformRuntimeOperations>,
+): Partial<DeviceBinding<PlatformRuntimeOperations>['operations']> {
+  const resolver = {
+    device: request.device,
+    signal: request.scope.signal,
+    resolveInteractor: host.localInteractors.resolve,
+  };
+  return {
+    ...(facts.operations.back.available ? bindLocalBackInteractor(resolver) : {}),
+    ...(facts.operations.home.available ? bindLocalHomeInteractor(resolver) : {}),
+    ...(facts.operations.setOrientation.available ? bindLocalOrientationInteractor(resolver) : {}),
+    ...(facts.operations.tvRemote.available ? bindLocalTvRemoteInteractor(resolver) : {}),
+    ...(facts.operations.keyboardStatus.available
+      ? bindLocalKeyboardStatusInteractor(resolver)
+      : {}),
+    ...(facts.operations.keyboardDismiss.available
+      ? bindLocalKeyboardDismissInteractor(resolver)
+      : {}),
+    ...(facts.operations.keyboardEnter.available ? bindLocalKeyboardEnterInteractor(resolver) : {}),
+  };
+}
+
 export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): PlatformRuntimeOwner {
   const appLogs = createAndroidAppLogRuntime(host);
   const inspectFacts = async (device: Parameters<typeof appLogs.inspectFacts>[0]) => {
@@ -196,6 +260,17 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         // synthetic `simulator` row is the only Android kind without a live read.
         ...elementTextRuntimeOperationFacts({
           readTextAtPoint: device.kind === 'simulator' ? elementTextKindUnavailable : available,
+        }),
+        ...backRuntimeOperationFacts({ back: androidTouchFact(device) }),
+        ...homeRuntimeOperationFacts({ home: androidTouchFact(device) }),
+        ...orientationRuntimeOperationFacts({ orientation: androidTouchFact(device) }),
+        ...tvRemoteRuntimeOperationFacts({ tvRemote: androidTvRemoteFact(device) }),
+        // The only owner with a live IME status read; dismiss/enter share every other
+        // interaction cell's kind gate (parity with the retired `keyboard` bucket).
+        ...keyboardRuntimeOperationFacts({
+          status: androidTouchFact(device),
+          dismiss: androidTouchFact(device),
+          enter: androidTouchFact(device),
         }),
         ensureReady: available,
         bootTarget: available,
@@ -278,6 +353,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
                 resolveInteractor: host.localInteractors.resolve,
               })
             : {}),
+          ...androidNavigationAndKeyboardOperations(host, request, facts),
           ensureReady: async (input: EnsureReadyInput) =>
             await ensureAndroidReady(
               host,

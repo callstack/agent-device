@@ -37,6 +37,13 @@ export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.fre
   focusPoint: unavailable,
   typeText: unavailable,
   ...elementTextRuntimeOperationFacts({ readTextAtPoint: unavailable }),
+  back: unavailable,
+  home: unavailable,
+  setOrientation: unavailable,
+  tvRemote: unavailable,
+  keyboardStatus: unavailable,
+  keyboardDismiss: unavailable,
+  keyboardEnter: unavailable,
 });
 
 /** Default facts for tests that are unrelated to application lifecycle commands. */

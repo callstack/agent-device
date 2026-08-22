@@ -6,7 +6,10 @@ const LARGEST_TYPE_CYCLE_ZONE_CEILINGS: Readonly<Record<string, number>> = {
   '(root)': 2,
   core: 8,
   'daemon-server': 14,
-  platforms: 2,
+  // R42/R43/R45 deleted `vega/plugin.ts`'s `PUBLIC_COMMANDS` import (the retired
+  // back/home/tv-remote closures were its only consumer), dropping it out of the cycle and
+  // leaving `apple/plugin.ts` as the platforms zone's sole remaining member.
+  platforms: 1,
 };
 
 export const DAEMON_MODULARITY_BASELINE = {

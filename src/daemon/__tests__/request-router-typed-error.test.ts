@@ -103,13 +103,13 @@ test('UNSUPPORTED_OPERATION errors carry supportedOn derived from the capability
   sessionStore.set('typed-error', makeIosSession('typed-error'));
   mockDispatch.mockRejectedValue(new AppError('UNSUPPORTED_OPERATION', 'nope on this platform'));
 
-  // `home` routes through the (mocked) generic dispatch and is platform-restricted.
-  const response = await handler(request('home'));
+  // `app-switcher` routes through the (mocked) generic dispatch and is platform-restricted.
+  const response = await handler(request('app-switcher'));
 
   expect(response.ok).toBe(false);
   if (response.ok) return;
-  const expected = supportedPlatformsForCommand('home');
-  expect(expected.length).toBeGreaterThan(0); // home is a platform-restricted command
+  const expected = supportedPlatformsForCommand('app-switcher');
+  expect(expected.length).toBeGreaterThan(0); // app-switcher is a platform-restricted command
   expect(response.error.supportedOn).toBe(expected.join(', '));
 });
 
@@ -118,7 +118,7 @@ test('DEVICE_IN_USE errors are flagged retriable; supportedOn stays absent', asy
   sessionStore.set('typed-error', makeIosSession('typed-error'));
   mockDispatch.mockRejectedValue(new AppError('DEVICE_IN_USE', 'device busy'));
 
-  const response = await handler(request('home'));
+  const response = await handler(request('app-switcher'));
 
   expect(response.ok).toBe(false);
   if (response.ok) return;
@@ -133,7 +133,7 @@ test('deterministic errors (INVALID_ARGS) are returned with the default shape â€
   // Conflicting explicit selector under a reject lock policy fails with INVALID_ARGS
   // before dispatch â€” a deterministic error.
   const response = await handler(
-    request('home', { flags: { udid: 'SIM-999' }, meta: { lockPolicy: 'reject' } }),
+    request('app-switcher', { flags: { udid: 'SIM-999' }, meta: { lockPolicy: 'reject' } }),
   );
 
   expect(response.ok).toBe(false);

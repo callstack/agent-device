@@ -29,6 +29,11 @@ import {
   typeTextRuntimeOperationFacts,
 } from '@agent-device/contracts/type-text-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
+import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
+import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
+import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
+import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
+import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { bindWebScreenRecordingRuntime } from './recording/runtime.ts';
@@ -65,6 +70,13 @@ const appsUnavailable = Object.freeze({
   hint: 'apps is not supported on web targets.',
 } as const);
 const appStateUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+} as const);
+// `back`, `home`, `orientation`, `tv-remote`, and every keyboard action never carried a web
+// capability bucket (the retired `WEB_SUPPORTED_COMMANDS` overlay never listed them), so all are
+// unavailable unconditionally.
+const navigationUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
 } as const);
@@ -291,6 +303,15 @@ function webRuntimeFacts(
       // The web backend has no point-addressed read: `get` answers from the captured DOM tree,
       // which is what the legacy dispatch already did once its Apple-runner attempt failed.
       ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementTextUnavailable }),
+      ...backRuntimeOperationFacts({ back: navigationUnavailable }),
+      ...homeRuntimeOperationFacts({ home: navigationUnavailable }),
+      ...orientationRuntimeOperationFacts({ orientation: navigationUnavailable }),
+      ...tvRemoteRuntimeOperationFacts({ tvRemote: navigationUnavailable }),
+      ...keyboardRuntimeOperationFacts({
+        status: navigationUnavailable,
+        dismiss: navigationUnavailable,
+        enter: navigationUnavailable,
+      }),
       ensureReady: readinessUnavailable,
       bootTarget: readinessUnavailable,
       bootTargetHeadless: readinessUnavailable,

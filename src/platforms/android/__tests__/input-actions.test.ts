@@ -1,6 +1,14 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { longPressAndroid, scrollAndroid, setAndroidOrientation } from '../input-actions.ts';
+import {
+  backAndroid,
+  homeAndroid,
+  longPressAndroid,
+  pressAndroidEnter,
+  pressAndroidTvRemote,
+  scrollAndroid,
+  setAndroidOrientation,
+} from '../input-actions.ts';
 import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
 import { withFakeAdb } from '../../../__tests__/test-utils/fake-adb.ts';
 import { withAndroidAdbProvider, type AndroidTouchInjector } from '../adb-executor.ts';
@@ -120,6 +128,50 @@ test('longPressAndroid sends a stationary semantic touch plan', async () => {
     },
   ]);
   assert.equal(result.backend, 'provider-native-touch');
+});
+
+test('backAndroid presses keyevent 4 (the Android interactor discards `mode`, matching the retired leaf)', async () => {
+  await withFakeAdb(
+    () => undefined,
+    async ({ calls, device }) => {
+      await backAndroid(device);
+      assert.deepEqual(calls, [['shell', 'input', 'keyevent', '4']]);
+    },
+  );
+});
+
+test('pressAndroidTvRemote sends D-pad keyevents, and --longpress for a positive duration', async () => {
+  await withFakeAdb(
+    () => undefined,
+    async ({ calls, device }) => {
+      await pressAndroidTvRemote(device, 'right');
+      await pressAndroidTvRemote(device, 'select', 500);
+      assert.deepEqual(calls, [
+        ['shell', 'input', 'keyevent', 'KEYCODE_DPAD_RIGHT'],
+        ['shell', 'input', 'keyevent', '--longpress', 'KEYCODE_DPAD_CENTER'],
+      ]);
+    },
+  );
+});
+
+test('homeAndroid presses keyevent 3', async () => {
+  await withFakeAdb(
+    () => undefined,
+    async ({ calls, device }) => {
+      await homeAndroid(device);
+      assert.deepEqual(calls, [['shell', 'input', 'keyevent', '3']]);
+    },
+  );
+});
+
+test('pressAndroidEnter presses the ENTER keyevent', async () => {
+  await withFakeAdb(
+    () => undefined,
+    async ({ calls, device }) => {
+      await pressAndroidEnter(device);
+      assert.deepEqual(calls, [['shell', 'input', 'keyevent', 'ENTER']]);
+    },
+  );
 });
 
 test('setAndroidOrientation locks auto-rotate and sets user rotation', async () => {

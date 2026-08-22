@@ -170,6 +170,44 @@ export type SnapshotOptions = BaseSnapshotOptions & {
   surface?: SessionSurface;
 };
 
+/**
+ * Android's live IME status read. Optional on {@link Interactor}: parity with the retired leaf,
+ * which refused `status`/`get` on every other family (no other platform's runner exposes one).
+ */
+export type KeyboardStatusResult = {
+  visible: boolean;
+  inputType?: string;
+  type?: string;
+  inputMethodPackage?: string;
+  focusedPackage?: string;
+  focusedResourceId?: string;
+  inputOwner?: string;
+};
+
+/**
+ * Owner-shaped dismiss evidence: Android's IME probe fields, or iOS's `mechanism` disclosure
+ * (#1598), or neither when HarmonyOS's HDC key press reports nothing beyond success.
+ */
+export type KeyboardDismissResult = {
+  attempts?: number;
+  wasVisible?: boolean;
+  dismissed?: boolean;
+  visible?: boolean;
+  inputType?: string;
+  type?: string;
+  inputMethodPackage?: string;
+  focusedPackage?: string;
+  focusedResourceId?: string;
+  inputOwner?: string;
+  mechanism?: string;
+};
+
+/** Only the Apple runner echoes visibility around the return-key press; every other owner is blind. */
+export type KeyboardEnterResult = {
+  visible?: boolean;
+  wasVisible?: boolean;
+};
+
 export type SnapshotResult = Omit<BackendSnapshotResult, 'backend' | 'nodes'> & {
   nodes?: RawSnapshotNode[];
   backend: Extract<
@@ -256,6 +294,12 @@ export type Interactor = {
   performGesture?(plan: GesturePlan): Promise<Record<string, unknown> | void>;
   appSwitcher(): Promise<void>;
   tvRemote(button: TvRemoteButton, durationMs?: number): Promise<void>;
+  /** Optional: only Android implements a live status read (see {@link KeyboardStatusResult}). */
+  keyboardStatus?(): Promise<KeyboardStatusResult>;
+  /** Optional: platforms with no keyboard-dismiss concept leave it undefined. */
+  keyboardDismiss?(): Promise<KeyboardDismissResult>;
+  /** Optional: platforms with no keyboard-return concept leave it undefined. */
+  keyboardEnter?(): Promise<KeyboardEnterResult>;
   readClipboard(): Promise<string>;
   writeClipboard(text: string): Promise<void>;
   setSetting(

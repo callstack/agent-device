@@ -188,10 +188,14 @@ export const ANDROID_EMULATOR_E2E_COVERAGE = {
     ANDROID_LIFECYCLE_CONTRACT_EVIDENCE,
     'provider scenario validates Android deep-link event delivery',
   ),
-  [C.tvRemote]: {
-    assertion: 'Android mobile emulator capability model rejects TV remote input',
-    level: 'capability-denial',
-  },
+  [C.tvRemote]: contract(
+    defineAndroidContractEvidence(
+      'packages/platform-android/src/runtime.test.ts',
+      [C.tvRemote],
+      'classifies Android %s back/home/orientation/keyboard facts through the shared touch gate',
+    ),
+    'Android tv-remote admission is owned by its exact-owner runtime fact: available only for a real Android TV target, not the mobile emulator',
+  ),
   [C.type]: live('smoke:form-input', 'typed suffix is read back from focused Android field'),
   [C.hover]: {
     assertion: 'Android emulator capability model rejects hover, a pointer-only web contract',

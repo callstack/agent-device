@@ -8,11 +8,36 @@ import {
   bindProviderTypeTextInteractor,
   typeTextRuntimeOperationFacts,
 } from '@agent-device/contracts/type-text-runtime';
+import {
+  bindProviderBackInteractor,
+  bindProviderHomeInteractor,
+  bindProviderOrientationInteractor,
+  bindProviderTvRemoteInteractor,
+  backRuntimeOperationFacts,
+  homeRuntimeOperationFacts,
+  orientationRuntimeOperationFacts,
+  tvRemoteRuntimeOperationFacts,
+} from '@agent-device/contracts/platform';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
 import type { RuntimeOperationUnavailability } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 const available = Object.freeze({ available: true } as const);
+const homeUnavailableIos = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'Limrun iOS direct sessions do not expose home yet.',
+} as const);
+const tvRemoteUnavailableIos = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'Limrun iOS direct sessions do not expose tv remote control.',
+} as const);
+const tvRemoteUnavailableAndroid = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'tv-remote is supported only on Android TV targets.',
+} as const);
 
 /**
  * The interactor-backed interaction cells a live Limrun session serves: everything here rides
@@ -45,5 +70,74 @@ export function bindLimrunInteractionOperations(
     ...bindProviderFocusInteractor({ device, signal, resolveInteractor }),
     ...bindProviderTypeTextInteractor({ device, signal, resolveInteractor }),
     ...bindProviderScreenshotInteractor({ device, signal, resolveInteractor }),
+  });
+}
+
+/**
+ * `back`/`home`/`orientation`/`tvRemote` differ by direct-session platform, unlike focus/type:
+ * the Android leg rides `session.dependencies.android.createInteractor` (`android.ts`) — the
+ * SAME factory the local Android family binds, so it carries the identical cell table (parity
+ * with the local owner, including the `device.target === 'tv'` gate for `tvRemote`). The iOS leg
+ * (`ios.ts`) implements `back`/`setOrientation` but explicitly refuses `home`/`tvRemote`.
+ */
+export function limrunNavigationOperationFacts(
+  device: DeviceInfo,
+  liveSessionUnavailable?: RuntimeOperationUnavailability,
+) {
+  if (liveSessionUnavailable) {
+    return Object.freeze({
+      ...backRuntimeOperationFacts({ back: liveSessionUnavailable }),
+      ...homeRuntimeOperationFacts({ home: liveSessionUnavailable }),
+      ...orientationRuntimeOperationFacts({ orientation: liveSessionUnavailable }),
+      ...tvRemoteRuntimeOperationFacts({ tvRemote: liveSessionUnavailable }),
+    });
+  }
+  if (device.platform === 'android') {
+    return Object.freeze({
+      ...backRuntimeOperationFacts({ back: available }),
+      ...homeRuntimeOperationFacts({ home: available }),
+      ...orientationRuntimeOperationFacts({ orientation: available }),
+      ...tvRemoteRuntimeOperationFacts({
+        tvRemote: device.target === 'tv' ? available : tvRemoteUnavailableAndroid,
+      }),
+    });
+  }
+  return Object.freeze({
+    ...backRuntimeOperationFacts({ back: available }),
+    ...homeRuntimeOperationFacts({ home: homeUnavailableIos }),
+    ...orientationRuntimeOperationFacts({ orientation: available }),
+    ...tvRemoteRuntimeOperationFacts({ tvRemote: tvRemoteUnavailableIos }),
+  });
+}
+
+/** Binds whichever navigation operations {@link limrunNavigationOperationFacts} admitted. */
+export function bindLimrunNavigationOperations(
+  params: Readonly<{
+    device: DeviceInfo;
+    signal: AbortSignal;
+    facts: Readonly<{
+      back: RuntimeOperationUnavailability | { available: true };
+      home: RuntimeOperationUnavailability | { available: true };
+      setOrientation: RuntimeOperationUnavailability | { available: true };
+      tvRemote: RuntimeOperationUnavailability | { available: true };
+    }>;
+    getInteractor(device: DeviceInfo, runner?: RunnerContext): Interactor | undefined;
+  }>,
+) {
+  const { device, signal, facts } = params;
+  const resolveInteractor = (runner: RunnerContext) => params.getInteractor(device, runner);
+  return Object.freeze({
+    ...(facts.back.available
+      ? bindProviderBackInteractor({ device, signal, resolveInteractor })
+      : {}),
+    ...(facts.home.available
+      ? bindProviderHomeInteractor({ device, signal, resolveInteractor })
+      : {}),
+    ...(facts.setOrientation.available
+      ? bindProviderOrientationInteractor({ device, signal, resolveInteractor })
+      : {}),
+    ...(facts.tvRemote.available
+      ? bindProviderTvRemoteInteractor({ device, signal, resolveInteractor })
+      : {}),
   });
 }

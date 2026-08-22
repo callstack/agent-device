@@ -31,8 +31,22 @@ import {
 } from '@agent-device/contracts/type-text-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
 import {
+  bindLocalBackInteractor,
+  backRuntimeOperationFacts,
+  bindLocalHomeInteractor,
+  homeRuntimeOperationFacts,
+  bindLocalOrientationInteractor,
+  orientationRuntimeOperationFacts,
+  bindLocalTvRemoteInteractor,
+  tvRemoteRuntimeOperationFacts,
+  bindLocalKeyboardDismissInteractor,
+  bindLocalKeyboardEnterInteractor,
+  keyboardRuntimeOperationFacts,
+} from '@agent-device/contracts/platform';
+import {
   isIosFamily,
   isMacOs,
+  isTvOsDevice,
   resolveDeviceAppleOs,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
@@ -239,6 +253,93 @@ function appleFocusFact(device: DeviceInfo): RuntimeOperationFact {
   return device.kind === 'simulator' || device.kind === 'device' ? available : focusKindUnavailable;
 }
 
+const backKindUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'back is supported on Apple simulators and physical devices.',
+} as const);
+/** No apple-family closure ever gated `back` beyond device kind: every Apple OS, tvOS included
+ * (the interactor drives the remote's Menu button there), supports it. */
+function appleBackFact(device: DeviceInfo): RuntimeOperationFact {
+  return device.kind === 'simulator' || device.kind === 'device' ? available : backKindUnavailable;
+}
+
+const homeKindUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'home is supported on Apple simulators and physical devices.',
+} as const);
+/** Parity with the retired `supportsAppAndDeviceLifecycle` closure: unavailable only on macOS,
+ * which drives an already-running app with no springboard home. */
+const homeLifecycleUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+} as const);
+function appleHomeFact(device: DeviceInfo): RuntimeOperationFact {
+  if (device.kind !== 'simulator' && device.kind !== 'device') return homeKindUnavailable;
+  return isMacOs(device) ? homeLifecycleUnavailable : available;
+}
+
+/**
+ * The per-AppleOS mobile-input eligibility `orientation` and `keyboard` (dismiss/enter) share:
+ * unavailable only on tvOS (focus-only XCUIRemote navigation, no orientation or keyboard) and
+ * macOS (an AppKit desktop host, no device orientation or software keyboard). Parity with the
+ * retired `supportsOrientation`/`supportsKeyboard` closures, which read the same per-OS table.
+ */
+function appleMobileInputEligible(device: DeviceInfo): boolean {
+  if (device.kind !== 'simulator' && device.kind !== 'device') return false;
+  const os = resolveDeviceAppleOs(device);
+  return os !== 'tvos' && os !== 'macos';
+}
+
+const orientationKindUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'orientation is supported on Apple simulators and physical devices.',
+} as const);
+const orientationOsUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+} as const);
+function appleOrientationFact(device: DeviceInfo): RuntimeOperationFact {
+  if (device.kind !== 'simulator' && device.kind !== 'device') return orientationKindUnavailable;
+  return appleMobileInputEligible(device) ? available : orientationOsUnavailable;
+}
+
+const tvRemoteUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'tv-remote is supported only on tvOS devices.',
+} as const);
+function appleTvRemoteFact(device: DeviceInfo): RuntimeOperationFact {
+  return (device.kind === 'simulator' || device.kind === 'device') && isTvOsDevice(device)
+    ? available
+    : tvRemoteUnavailable;
+}
+
+/** The outer keyboard cell: unavailable with no hint, matching the retired `supportsKeyboard`
+ * capability-bucket-level rejection (which carried no hint text of its own). */
+const keyboardCellUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+} as const);
+const keyboardStatusUnsupported = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'keyboard status/get is currently supported only on Android; use keyboard dismiss or enter on iOS',
+} as const);
+/** Apple never had a live keyboard status read: every eligible cell still refuses `status`/`get`
+ * with the retired in-handler hint. */
+function appleKeyboardStatusFact(device: DeviceInfo): RuntimeOperationFact {
+  return appleMobileInputEligible(device) ? keyboardStatusUnsupported : keyboardCellUnavailable;
+}
+function appleKeyboardDismissFact(device: DeviceInfo): RuntimeOperationFact {
+  return appleMobileInputEligible(device) ? available : keyboardCellUnavailable;
+}
+function appleKeyboardEnterFact(device: DeviceInfo): RuntimeOperationFact {
+  return appleMobileInputEligible(device) ? available : keyboardCellUnavailable;
+}
+
 export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformRuntimeOwner {
   const appLogs = createAppleAppLogRuntime(host);
   const inspectFacts = async (device: DeviceInfo) => {
@@ -281,6 +382,15 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         // exact kind cell (parity with the retired `type` bucket, `{ simulator, device }`).
         ...typeTextRuntimeOperationFacts({ type: appleFocusFact(device) }),
         ...elementTextRuntimeOperationFacts({ readTextAtPoint: appleElementTextFact(device) }),
+        ...backRuntimeOperationFacts({ back: appleBackFact(device) }),
+        ...homeRuntimeOperationFacts({ home: appleHomeFact(device) }),
+        ...orientationRuntimeOperationFacts({ orientation: appleOrientationFact(device) }),
+        ...tvRemoteRuntimeOperationFacts({ tvRemote: appleTvRemoteFact(device) }),
+        ...keyboardRuntimeOperationFacts({
+          status: appleKeyboardStatusFact(device),
+          dismiss: appleKeyboardDismissFact(device),
+          enter: appleKeyboardEnterFact(device),
+        }),
         ensureReady: readiness,
         bootTarget: boot,
         bootTargetHeadless: headlessUnavailable,
@@ -298,102 +408,155 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
       const logs = await appLogs.bind(request);
       const facts = await inspectFacts(request.device);
       const recordingFacts = facts.operations.screenRecordingStart;
-      return Object.freeze({
-        device: logs.device,
-        owner,
-        facts,
-        operations: Object.freeze({
-          ...logs.operations,
-          ...createAppleAppDeploymentOperations({
+      const captureOperations: Partial<DeviceBinding<PlatformRuntimeOperations>['operations']> = {
+        ...logs.operations,
+        ...createAppleAppDeploymentOperations({
+          host,
+          device: request.device,
+          signal: request.scope.signal,
+        }),
+        networkDump: async (input: NetworkDumpInput) =>
+          await dumpAppleNetworkTraffic(host, request.device, input, request.scope.signal),
+        ...whenAdmitted(recordingFacts, () =>
+          createAppleScreenRecordingOperations({
+            host,
+            device: request.device,
+            owner,
+            signal: request.scope.signal,
+          }),
+        ),
+        ...whenAdmitted(facts.operations.captureSnapshot, () =>
+          bindAppleSnapshotRuntime(host, {
+            device: request.device,
+            signal: request.scope.signal,
+          }),
+        ),
+        ...whenAdmitted(facts.operations.captureScreenshot, () =>
+          bindLocalScreenshotInteractor({
+            device: request.device,
+            signal: request.scope.signal,
+            resolveInteractor: host.localInteractors.resolve,
+          }),
+        ),
+        ...whenAdmitted(facts.operations.focusPoint, () =>
+          bindLocalFocusInteractor({
+            device: request.device,
+            signal: request.scope.signal,
+            resolveInteractor: host.localInteractors.resolve,
+          }),
+        ),
+        ...whenAdmitted(facts.operations.typeText, () =>
+          bindLocalTypeTextInteractor({
+            device: request.device,
+            signal: request.scope.signal,
+            resolveInteractor: host.localInteractors.resolve,
+          }),
+        ),
+        ...whenAdmitted(facts.operations.readTextAtPoint, () =>
+          bindElementTextRuntime({
+            device: request.device,
+            signal: request.scope.signal,
+            resolveInteractor: host.localInteractors.resolve,
+          }),
+        ),
+        ...whenAdmitted(facts.operations.findText, () =>
+          bindAppleFindTextRuntime(host, {
+            device: request.device,
+            signal: request.scope.signal,
+          }),
+        ),
+        ...whenAdmitted(facts.operations.findSelector, () =>
+          bindAppleFindSelectorRuntime(host, {
+            device: request.device,
+            signal: request.scope.signal,
+          }),
+        ),
+      };
+      const navigationOperations: Partial<DeviceBinding<PlatformRuntimeOperations>['operations']> =
+        {
+          ...whenAdmitted(facts.operations.back, () =>
+            bindLocalBackInteractor({
+              device: request.device,
+              signal: request.scope.signal,
+              resolveInteractor: host.localInteractors.resolve,
+            }),
+          ),
+          ...whenAdmitted(facts.operations.home, () =>
+            bindLocalHomeInteractor({
+              device: request.device,
+              signal: request.scope.signal,
+              resolveInteractor: host.localInteractors.resolve,
+            }),
+          ),
+          ...whenAdmitted(facts.operations.setOrientation, () =>
+            bindLocalOrientationInteractor({
+              device: request.device,
+              signal: request.scope.signal,
+              resolveInteractor: host.localInteractors.resolve,
+            }),
+          ),
+          ...whenAdmitted(facts.operations.tvRemote, () =>
+            bindLocalTvRemoteInteractor({
+              device: request.device,
+              signal: request.scope.signal,
+              resolveInteractor: host.localInteractors.resolve,
+            }),
+          ),
+          ...whenAdmitted(facts.operations.keyboardDismiss, () =>
+            bindLocalKeyboardDismissInteractor({
+              device: request.device,
+              signal: request.scope.signal,
+              resolveInteractor: host.localInteractors.resolve,
+            }),
+          ),
+          ...whenAdmitted(facts.operations.keyboardEnter, () =>
+            bindLocalKeyboardEnterInteractor({
+              device: request.device,
+              signal: request.scope.signal,
+              resolveInteractor: host.localInteractors.resolve,
+            }),
+          ),
+        };
+      const lifecycleOperations: Partial<DeviceBinding<PlatformRuntimeOperations>['operations']> = {
+        ...whenAdmitted(facts.operations.ensureReady, () => ({
+          ensureReady: async () =>
+            await ensureAppleReady(host, request.device, request.scope.signal),
+        })),
+        ...whenAdmitted(facts.operations.bootTarget, () => ({
+          bootTarget: async () =>
+            await ensureAppleReady(host, request.device, request.scope.signal),
+        })),
+        ...whenAdmitted(facts.operations.listApps, () => ({
+          listApps: async (input: { device: DeviceInfo; filter: 'all' | 'user-installed' }) =>
+            await host.appInventory.apple.listApps(
+              input.device,
+              input.filter,
+              request.scope.signal,
+            ),
+        })),
+        ...availableApplicationLifecycleOperations(
+          bindAppleApplicationLifecycle({
             host,
             device: request.device,
             signal: request.scope.signal,
           }),
-          networkDump: async (input: NetworkDumpInput) =>
-            await dumpAppleNetworkTraffic(host, request.device, input, request.scope.signal),
-          ...whenAdmitted(recordingFacts, () =>
-            createAppleScreenRecordingOperations({
-              host,
-              device: request.device,
-              owner,
-              signal: request.scope.signal,
-            }),
-          ),
-          ...whenAdmitted(facts.operations.captureSnapshot, () =>
-            bindAppleSnapshotRuntime(host, {
-              device: request.device,
-              signal: request.scope.signal,
-            }),
-          ),
-          ...whenAdmitted(facts.operations.captureScreenshot, () =>
-            bindLocalScreenshotInteractor({
-              device: request.device,
-              signal: request.scope.signal,
-              resolveInteractor: host.localInteractors.resolve,
-            }),
-          ),
-          ...whenAdmitted(facts.operations.focusPoint, () =>
-            bindLocalFocusInteractor({
-              device: request.device,
-              signal: request.scope.signal,
-              resolveInteractor: host.localInteractors.resolve,
-            }),
-          ),
-          ...whenAdmitted(facts.operations.typeText, () =>
-            bindLocalTypeTextInteractor({
-              device: request.device,
-              signal: request.scope.signal,
-              resolveInteractor: host.localInteractors.resolve,
-            }),
-          ),
-          ...whenAdmitted(facts.operations.readTextAtPoint, () =>
-            bindElementTextRuntime({
-              device: request.device,
-              signal: request.scope.signal,
-              resolveInteractor: host.localInteractors.resolve,
-            }),
-          ),
-          ...whenAdmitted(facts.operations.findText, () =>
-            bindAppleFindTextRuntime(host, {
-              device: request.device,
-              signal: request.scope.signal,
-            }),
-          ),
-          ...whenAdmitted(facts.operations.findSelector, () =>
-            bindAppleFindSelectorRuntime(host, {
-              device: request.device,
-              signal: request.scope.signal,
-            }),
-          ),
-          ...whenAdmitted(facts.operations.ensureReady, () => ({
-            ensureReady: async () =>
-              await ensureAppleReady(host, request.device, request.scope.signal),
-          })),
-          ...whenAdmitted(facts.operations.bootTarget, () => ({
-            bootTarget: async () =>
-              await ensureAppleReady(host, request.device, request.scope.signal),
-          })),
-          ...whenAdmitted(facts.operations.listApps, () => ({
-            listApps: async (input: { device: DeviceInfo; filter: 'all' | 'user-installed' }) =>
-              await host.appInventory.apple.listApps(
-                input.device,
-                input.filter,
-                request.scope.signal,
-              ),
-          })),
-          ...availableApplicationLifecycleOperations(
-            bindAppleApplicationLifecycle({
-              host,
-              device: request.device,
-              signal: request.scope.signal,
-            }),
-            facts.operations,
-          ),
-          ...whenAdmitted(facts.operations.shutdownTarget, () => ({
-            shutdownTarget: async () =>
-              await host.deviceShutdown.apple.shutdownTarget(request.device, request.scope.signal),
-          })),
-        }),
+          facts.operations,
+        ),
+        ...whenAdmitted(facts.operations.shutdownTarget, () => ({
+          shutdownTarget: async () =>
+            await host.deviceShutdown.apple.shutdownTarget(request.device, request.scope.signal),
+        })),
+      };
+      const operations: DeviceBinding<PlatformRuntimeOperations>['operations'] = {
+        ...captureOperations,
+        ...navigationOperations,
+        ...lifecycleOperations,
+      };
+      return Object.freeze({
+        device: logs.device,
+        owner,
+        facts,
+        operations: Object.freeze(operations),
         [Symbol.asyncDispose]: async () => await logs[Symbol.asyncDispose](),
       }) satisfies DeviceBinding<PlatformRuntimeOperations>;
     },

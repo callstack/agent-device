@@ -81,6 +81,30 @@ test.each([
   expect(facts.operations.typeText).toEqual({ available: true });
   expect(binding.operations.focusPoint).toBeTypeOf('function');
   expect(binding.operations.typeText).toBeTypeOf('function');
+  // back/home/keyboard dismiss+enter share focus's hdc-driven gate on both real kinds.
+  for (const operation of ['back', 'home', 'keyboardDismiss', 'keyboardEnter'] as const) {
+    expect(facts.operations[operation]).toEqual({ available: true });
+    expect(binding.operations[operation]).toBeTypeOf('function');
+  }
+  // orientation and tv-remote never carried a HarmonyOS capability bucket, so both stay
+  // unavailable unconditionally even though the interactor is technically callable.
+  expect(facts.operations.setOrientation).toEqual({
+    available: false,
+    reason: 'unsupported-platform-leaf',
+  });
+  expect(facts.operations.tvRemote).toEqual({
+    available: false,
+    reason: 'unsupported-platform-leaf',
+  });
+  expect(binding.operations.setOrientation).toBeUndefined();
+  expect(binding.operations.tvRemote).toBeUndefined();
+  // Android's live IME status read has no HarmonyOS counterpart.
+  expect(facts.operations.keyboardStatus).toEqual({
+    available: false,
+    reason: 'unsupported-platform-leaf',
+    hint: 'keyboard status/get is not available through the public HarmonyOS HDC API; use keyboard dismiss or enter',
+  });
+  expect(binding.operations.keyboardStatus).toBeUndefined();
   await expect(binding.operations.ensureReady?.({})).resolves.toMatchObject({ booted: true });
   await expect(
     binding.operations.listApps?.({ device: runtimeDevice, filter: 'all' }),
@@ -115,6 +139,21 @@ test('rejects the non-discovered HarmonyOS simulator cell for appstate', async (
   expect(binding.facts.operations.appState).toEqual(appStateUnavailable);
   expect(binding.facts.operations.setViewport).toMatchObject({ available: false });
   expect(binding.operations.appState).toBeUndefined();
+  // The synthetic simulator cell has no device behind it, so the hdc-driven navigation/keyboard
+  // gate refuses the same way focus/type does; orientation, tv-remote, and keyboard status stay
+  // unavailable regardless of kind.
+  for (const operation of [
+    'back',
+    'home',
+    'setOrientation',
+    'tvRemote',
+    'keyboardStatus',
+    'keyboardDismiss',
+    'keyboardEnter',
+  ] as const) {
+    expect(binding.facts.operations[operation].available).toBe(false);
+    expect(binding.operations[operation]).toBeUndefined();
+  }
 });
 
 type LegacyLifecycleCell = Readonly<{

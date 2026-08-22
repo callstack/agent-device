@@ -25,11 +25,6 @@ const androidPlugin = {
     bucket: 'android',
     supportsByDefault: {
       [PUBLIC_COMMANDS.audio]: isAudioProbeSupportedDevice,
-      [PUBLIC_COMMANDS.tvRemote]: (device) => device.target === 'tv',
-    },
-    unsupportedHintByDefault: {
-      [PUBLIC_COMMANDS.tvRemote]: (device) =>
-        device.target === 'tv' ? undefined : 'tv-remote is supported only on Android TV targets.',
     },
   },
   // Android exposes explicit frame-health and memory observations.

@@ -1,14 +1,10 @@
-import { parseDeviceRotation } from '@agent-device/contracts/device';
 import type { GesturePlan, Interactor, RunnerContext } from '@agent-device/contracts/interaction';
-import { parseTvRemoteButton } from '@agent-device/contracts/tv-remote';
-import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import { emitDiagnostic, withDiagnosticTimer } from '../utils/diagnostics.ts';
-import { isKeyboardAction, type KeyboardAction } from '../utils/keyboard-actions.ts';
 import { readLocationCoordinate } from '../utils/location-coordinates.ts';
 import { successText, withSuccessText } from '../utils/success-text.ts';
-import { requireIntInRange } from '../utils/validation.ts';
 import { parseTriggerAppEventArgs, resolveAppEventUrl } from './app-events.ts';
 import type { DescriptorDispatchCommandName } from './command-descriptor/registry.ts';
 import type { DispatchContext } from './dispatch-context.ts';
@@ -149,29 +145,11 @@ const DISPATCH_HANDLERS: Record<DispatchCommand, DispatchHandler> = {
     handleScrollCommand(interactor, positionals, context),
   'trigger-app-event': ({ device, interactor, positionals, context }) =>
     handleTriggerAppEventCommand(device, interactor, positionals, context),
-  back: async ({ interactor, context }) => {
-    await interactor.back(context?.backMode);
-    return { action: 'back', mode: context?.backMode ?? 'in-app', ...successText('Back') };
-  },
-  home: async ({ interactor }) => {
-    await interactor.home();
-    return { action: 'home', ...successText('Home') };
-  },
-  orientation: async ({ interactor, positionals }) => {
-    const requestedOrientation = parseDeviceRotation(positionals[0]);
-    const result = await interactor.setOrientation(requestedOrientation);
-    const orientation = result?.orientation ?? requestedOrientation;
-    return { action: 'orientation', orientation, ...successText(`Rotated to ${orientation}`) };
-  },
   'app-switcher': async ({ interactor }) => {
     await interactor.appSwitcher();
     return { action: 'app-switcher', ...successText('Opened app switcher') };
   },
   clipboard: ({ interactor, positionals }) => handleClipboardCommand(interactor, positionals),
-  keyboard: ({ device, positionals, context, runnerCtx }) =>
-    handleKeyboardCommand(device, positionals, context, runnerCtx),
-  'tv-remote': ({ device, interactor, positionals, context }) =>
-    handleTvRemoteCommand(device, interactor, positionals, context),
   settings: ({ device, interactor, positionals, context }) =>
     handleSettingsCommand(device, interactor, positionals, context),
 };
@@ -250,192 +228,6 @@ async function handleClipboardCommand(
     textLength: Array.from(text).length,
     ...successText('Clipboard updated'),
   };
-}
-
-async function handleTvRemoteCommand(
-  device: DeviceInfo,
-  interactor: Interactor,
-  positionals: string[],
-  context: DispatchContext | undefined,
-): Promise<Record<string, unknown>> {
-  if (device.target !== 'tv') {
-    throw new AppError('UNSUPPORTED_OPERATION', 'tv-remote is supported only on TV targets', {
-      hint: 'Select an Android TV, tvOS, or Vega OS target with --target tv.',
-    });
-  }
-  if (positionals.length !== 1) {
-    throw new AppError('INVALID_ARGS', 'tv-remote requires exactly one button');
-  }
-  const button = parseTvRemoteButton(positionals[0]);
-  const durationMs =
-    context?.durationMs === undefined
-      ? undefined
-      : requireIntInRange(context.durationMs, 'durationMs', 0, 10_000);
-  await interactor.tvRemote(button, durationMs);
-  return {
-    action: 'tv-remote',
-    button,
-    ...(durationMs !== undefined ? { durationMs } : {}),
-    ...successText(`Pressed TV remote ${button}`),
-  };
-}
-
-async function handleKeyboardCommand(
-  device: DeviceInfo,
-  positionals: string[],
-  context: DispatchContext | undefined,
-  runnerCtx: RunnerContext,
-): Promise<Record<string, unknown>> {
-  const action = (positionals[0] ?? 'status').toLowerCase();
-  if (!isKeyboardAction(action)) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'keyboard requires a subcommand: status, get, dismiss, enter, or return',
-    );
-  }
-  if (positionals.length > 1) {
-    throw new AppError('INVALID_ARGS', 'keyboard accepts at most one subcommand argument');
-  }
-  if (device.platform === 'android') {
-    return await handleAndroidKeyboardCommand(device, action);
-  }
-  if (device.platform === 'harmonyos') {
-    return await handleHarmonyKeyboardCommand(device, action);
-  }
-  if (isIosFamily(device)) {
-    return await handleIosKeyboardCommand(device, action, context, runnerCtx);
-  }
-  throw new AppError(
-    'UNSUPPORTED_OPERATION',
-    'keyboard is supported only on Android, HarmonyOS, and iOS',
-  );
-}
-
-async function handleHarmonyKeyboardCommand(
-  device: DeviceInfo,
-  action: KeyboardAction,
-): Promise<Record<string, unknown>> {
-  if (action !== 'dismiss' && action !== 'enter' && action !== 'return') {
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
-      'keyboard status/get is not available through the public HarmonyOS HDC API; use keyboard dismiss or enter',
-    );
-  }
-  const { pressHarmonyKeyboardKey } = await import('../platforms/harmonyos/input-actions.ts');
-  const key = action === 'dismiss' ? 'Back' : 'Enter';
-  await pressHarmonyKeyboardKey(device, key);
-  return {
-    platform: 'harmonyos',
-    action: action === 'dismiss' ? 'dismiss' : 'enter',
-    ...successText(action === 'dismiss' ? 'Keyboard dismissed' : 'Keyboard enter pressed'),
-  };
-}
-
-async function handleAndroidKeyboardCommand(
-  device: DeviceInfo,
-  action: KeyboardAction,
-): Promise<Record<string, unknown>> {
-  if (action === 'enter' || action === 'return') {
-    const { pressAndroidEnter } = await import('../platforms/android/input-actions.ts');
-    await pressAndroidEnter(device);
-    return {
-      platform: 'android',
-      action: 'enter',
-      ...successText('Keyboard enter pressed'),
-    };
-  }
-  if (action === 'dismiss') {
-    const { dismissAndroidKeyboard } = await import('../platforms/android/device-input-state.ts');
-    const result = await dismissAndroidKeyboard(device);
-    return {
-      platform: 'android',
-      action: 'dismiss',
-      attempts: result.attempts,
-      wasVisible: result.wasVisible,
-      dismissed: result.dismissed,
-      visible: result.visible,
-      inputType: result.inputType,
-      type: result.type,
-      inputMethodPackage: result.inputMethodPackage,
-      focusedPackage: result.focusedPackage,
-      focusedResourceId: result.focusedResourceId,
-      inputOwner: result.inputOwner,
-    };
-  }
-  const { getAndroidKeyboardState } = await import('../platforms/android/device-input-state.ts');
-  const state = await getAndroidKeyboardState(device);
-  return {
-    platform: 'android',
-    action: 'status',
-    visible: state.visible,
-    inputType: state.inputType,
-    type: state.type,
-    inputMethodPackage: state.inputMethodPackage,
-    focusedPackage: state.focusedPackage,
-    focusedResourceId: state.focusedResourceId,
-    inputOwner: state.inputOwner,
-  };
-}
-
-async function handleIosKeyboardCommand(
-  device: DeviceInfo,
-  action: KeyboardAction,
-  context: DispatchContext | undefined,
-  runnerCtx: RunnerContext,
-): Promise<Record<string, unknown>> {
-  if (action !== 'dismiss' && action !== 'enter' && action !== 'return') {
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
-      'keyboard status/get is currently supported only on Android; use keyboard dismiss or enter on iOS',
-    );
-  }
-  if (action === 'enter' || action === 'return') {
-    const { runAppleRunnerCommand } =
-      await import('../platforms/apple/core/runner/runner-client.ts');
-    const result = await runAppleRunnerCommand(
-      device,
-      { command: 'keyboardReturn', appBundleId: context?.appBundleId },
-      runnerCtx,
-    );
-    return {
-      platform: 'ios',
-      action: 'enter',
-      visible: result.visible,
-      wasVisible: result.wasVisible,
-      ...successText('Keyboard enter pressed'),
-    };
-  }
-  const { runAppleRunnerCommand } = await import('../platforms/apple/core/runner/runner-client.ts');
-  const result = await runAppleRunnerCommand(
-    device,
-    { command: 'keyboardDismiss', appBundleId: context?.appBundleId },
-    runnerCtx,
-  );
-  const mechanism =
-    typeof result.keyboardDismissMechanism === 'string'
-      ? result.keyboardDismissMechanism
-      : undefined;
-  return {
-    platform: 'ios',
-    action: 'dismiss',
-    wasVisible: result.wasVisible,
-    dismissed: result.dismissed,
-    visible: result.visible,
-    mechanism,
-    ...successText(iosKeyboardDismissMessage(result.dismissed === true, mechanism)),
-  };
-}
-
-// Discloses which mechanism actually resigned the keyboard (#1598): a
-// Discloses that the keyboard's own dismiss key did the work (#1598); a bare
-// "dismissed" would leave the caller unable to tell a vouched-for control tap
-// from app-side coincidence.
-function iosKeyboardDismissMessage(dismissed: boolean, mechanism: string | undefined): string {
-  if (!dismissed) return 'Keyboard already hidden';
-  if (mechanism === 'dismissKey') {
-    return 'Keyboard dismissed via its dismiss key';
-  }
-  return 'Keyboard dismissed';
 }
 
 async function handleSettingsCommand(

@@ -3,6 +3,8 @@ import {
   appStateUse,
   appsRuntimeUse,
   bootTargetUse,
+  type DeviceBinding,
+  type PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test, vi } from 'vitest';
@@ -296,6 +298,7 @@ test.each([
     reason: 'unsupported-provider-mode',
   });
   expect(binding.operations.readTextAtPoint).toBeUndefined();
+  expectLimrunNavigationAndKeyboardFacts(binding, runtimeDevice);
   await expect(
     binding.operations.listApps?.({ device: runtimeDevice, filter: 'all' }),
   ).resolves.toEqual([]);
@@ -364,3 +367,43 @@ test('fails closed for a stale Android identity before exposing facts or binding
   });
   expect(getAppState).not.toHaveBeenCalled();
 });
+
+/**
+ * back/orientation are admitted on both direct-session platforms; home/tv-remote differ by
+ * platform (the Android leg reuses the local family's interactor factory, the iOS leg refuses
+ * both explicitly); keyboard status/dismiss/enter reuse that same Android-only interactor.
+ */
+function expectLimrunNavigationAndKeyboardFacts(
+  binding: DeviceBinding<PlatformRuntimeOperations>,
+  runtimeDevice: DeviceInfo,
+): void {
+  const isAndroid = runtimeDevice.platform === 'android';
+  expect(binding.facts.operations.back).toEqual({ available: true });
+  expect(binding.operations.back).toBeTypeOf('function');
+  expect(binding.facts.operations.setOrientation).toEqual({ available: true });
+  expect(binding.operations.setOrientation).toBeTypeOf('function');
+  expect(binding.facts.operations.home.available).toBe(isAndroid);
+  expect(binding.operations.home).toBeTypeOf(isAndroid ? 'function' : 'undefined');
+  if (!isAndroid) {
+    expect(binding.facts.operations.home).toMatchObject({
+      hint: 'Limrun iOS direct sessions do not expose home yet.',
+    });
+  }
+  // tv-remote additionally requires a real TV target on the Android leg.
+  expect(binding.facts.operations.tvRemote.available).toBe(false);
+  expect(binding.operations.tvRemote).toBeUndefined();
+  expect(binding.facts.operations.tvRemote).toMatchObject({
+    hint: isAndroid
+      ? 'tv-remote is supported only on Android TV targets.'
+      : 'Limrun iOS direct sessions do not expose tv remote control.',
+  });
+  for (const operation of ['keyboardStatus', 'keyboardDismiss', 'keyboardEnter'] as const) {
+    expect(binding.facts.operations[operation].available).toBe(isAndroid);
+    expect(binding.operations[operation]).toBeTypeOf(isAndroid ? 'function' : 'undefined');
+    if (!isAndroid) {
+      expect(binding.facts.operations[operation]).toMatchObject({
+        hint: 'Limrun iOS direct sessions do not expose keyboard actions.',
+      });
+    }
+  }
+}

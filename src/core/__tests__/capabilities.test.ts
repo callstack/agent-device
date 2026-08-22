@@ -46,14 +46,6 @@ const androidEmulator: DeviceInfo = {
   kind: 'emulator',
 };
 
-const androidTvEmulator: DeviceInfo = {
-  platform: 'android',
-  id: 'emulator-5556',
-  name: 'Android TV',
-  kind: 'emulator',
-  target: 'tv',
-};
-
 const macOsDevice: DeviceInfo = {
   platform: 'apple',
   appleOs: 'macos',
@@ -118,24 +110,6 @@ test('device capability matrix stays consistent across shared command groups', (
         { device: iosDevice, expected: false, label: 'on iOS device' },
         { device: androidDevice, expected: true, label: 'on Android' },
         { device: macOsDevice, expected: true, label: 'on macOS' },
-      ],
-    },
-    {
-      commands: ['keyboard'],
-      checks: [
-        { device: iosSimulator, expected: true, label: 'on iOS sim' },
-        { device: iosDevice, expected: true, label: 'on iOS device' },
-        { device: androidDevice, expected: true, label: 'on Android' },
-      ],
-    },
-    {
-      commands: ['tv-remote'],
-      checks: [
-        { device: iosSimulator, expected: false, label: 'on iOS sim' },
-        { device: androidDevice, expected: false, label: 'on Android phone' },
-        { device: androidTvEmulator, expected: true, label: 'on Android TV' },
-        { device: macOsDevice, expected: false, label: 'on macOS' },
-        { device: tvOsSimulator, expected: true, label: 'on tvOS simulator' },
       ],
     },
     {
@@ -250,7 +224,7 @@ test('macOS supports the Apple runner interaction core but excludes mobile-only 
     [{ device: macOsDevice, expected: true, label: 'on macOS' }],
   );
   assertCommandSupport(
-    ['app-switcher', 'home', 'orientation'],
+    ['app-switcher'],
     [{ device: macOsDevice, expected: false, label: 'on macOS' }],
   );
 });
@@ -280,16 +254,6 @@ test('tvOS follows iOS capability matrix by device kind', () => {
     ['settings', 'alert'],
     [{ device: tvOsSimulator, expected: true, label: 'on tvOS simulator' }],
   );
-  assert.equal(
-    isCommandSupportedOnDevice('keyboard', tvOsSimulator),
-    false,
-    'keyboard on tvOS simulator',
-  );
-  assert.equal(
-    isCommandSupportedOnDevice('orientation', tvOsSimulator),
-    false,
-    'orientation on tvOS simulator',
-  );
 });
 
 test('Linux supports desktop interaction commands and blocks mobile/unsupported ones', () => {
@@ -317,7 +281,7 @@ test('Linux supports desktop interaction commands and blocks mobile/unsupported 
     [{ device: linuxDevice, expected: true, label: 'on Linux' }],
   );
   assertCommandSupport(
-    ['alert', 'app-switcher', 'keyboard', 'perf', 'orientation', 'settings', 'trigger-app-event'],
+    ['alert', 'app-switcher', 'perf', 'settings', 'trigger-app-event'],
     [{ device: linuxDevice, expected: false, label: 'on Linux' }],
   );
 });
@@ -346,14 +310,10 @@ test('web supports only the initial browser interaction slice', () => {
     [
       'alert',
       'app-switcher',
-      'back',
       'clipboard',
       'gesture',
-      'home',
-      'keyboard',
       'longpress',
       'perf',
-      'orientation',
       'settings',
       'swipe',
       'trigger-app-event',

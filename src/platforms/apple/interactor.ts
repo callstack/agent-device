@@ -164,6 +164,30 @@ export function createAppleInteractor(
         runnerOpts,
       );
     },
+    keyboardDismiss: async () => {
+      const result = await runAppleRunnerCommand(
+        device,
+        { command: 'keyboardDismiss', appBundleId: runnerContext.appBundleId },
+        runnerOpts,
+      );
+      return {
+        wasVisible: readRunnerBoolean(result, 'wasVisible'),
+        dismissed: readRunnerBoolean(result, 'dismissed'),
+        visible: readRunnerBoolean(result, 'visible'),
+        mechanism: readRunnerString(result, 'keyboardDismissMechanism'),
+      };
+    },
+    keyboardEnter: async () => {
+      const result = await runAppleRunnerCommand(
+        device,
+        { command: 'keyboardReturn', appBundleId: runnerContext.appBundleId },
+        runnerOpts,
+      );
+      return {
+        visible: readRunnerBoolean(result, 'visible'),
+        wasVisible: readRunnerBoolean(result, 'wasVisible'),
+      };
+    },
     readClipboard: () => readIosClipboardText(device),
     writeClipboard: (text) => writeIosClipboardText(device, text),
     setSetting: (setting, state, appId, options) =>
@@ -246,6 +270,16 @@ function mergeRunnerCallSignal(
     ...options,
     signal: options.signal ? AbortSignal.any([options.signal, signal]) : signal,
   };
+}
+
+function readRunnerBoolean(result: Record<string, unknown>, key: string): boolean | undefined {
+  const value = result[key];
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+function readRunnerString(result: Record<string, unknown>, key: string): string | undefined {
+  const value = result[key];
+  return typeof value === 'string' ? value : undefined;
 }
 
 function readRunnerOrientation(result: Record<string, unknown>): DeviceRotation {

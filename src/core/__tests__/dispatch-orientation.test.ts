@@ -1,6 +1,5 @@
-import { beforeEach, test, vi } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import { promises as fs } from 'node:fs';
 
 vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
   const actual =
@@ -15,51 +14,25 @@ import { withMockedAdb } from '../../__tests__/test-utils/mocked-binaries.ts';
 
 const mockRunAppleRunnerCommand = vi.mocked(runAppleRunnerCommand);
 
-beforeEach(() => {
-  vi.resetAllMocks();
-});
-
-test('dispatch orientation normalizes value aliases before Android execution', async () => {
-  await withMockedAdb('agent-device-dispatch-orientation-android-', async (argsLogPath) => {
-    const result = await dispatchCommand(ANDROID_EMULATOR, 'orientation', ['left']);
-
-    assert.equal(result?.action, 'orientation');
-    assert.equal(result?.orientation, 'landscape-left');
-
-    const logged = await fs.readFile(argsLogPath, 'utf8');
-    assert.match(logged, /shell\nsettings\nput\nsystem\naccelerometer_rotation\n0/);
-    assert.match(logged, /shell\nsettings\nput\nsystem\nuser_rotation\n1/);
+// R44 retired `orientation` from `DISPATCH_HANDLERS`. Its ADB-command-level parity pin now lives
+// on `setAndroidOrientation` directly (`src/platforms/android/__tests__/input-actions.test.ts`);
+// its iOS runner routing (including the mismatched-readback rejection) is covered by the Apple
+// interactor's own runner-provider suite
+// (`src/platforms/apple/__tests__/interactor-runner-provider.test.ts`); its admitted-runtime
+// behavior is covered in `src/daemon/__tests__/orientation-runtime.test.ts`.
+test('legacy dispatch no longer reaches the orientation leaf on Android', async () => {
+  await withMockedAdb('agent-device-dispatch-orientation-retired-android-', async () => {
+    await assert.rejects(dispatchCommand(ANDROID_EMULATOR, 'orientation', ['left']), {
+      code: 'INVALID_ARGS',
+      message: 'Unknown command: orientation',
+    });
   });
 });
 
-test('dispatch orientation sends normalized orientation to the iOS runner', async () => {
-  mockRunAppleRunnerCommand.mockResolvedValue({
-    message: 'rotate',
-    orientation: 'landscape-right',
+test('legacy dispatch no longer reaches the orientation leaf on iOS', async () => {
+  await assert.rejects(dispatchCommand(IOS_DEVICE, 'orientation', ['left']), {
+    code: 'INVALID_ARGS',
+    message: 'Unknown command: orientation',
   });
-  const result = await dispatchCommand(IOS_DEVICE, 'orientation', ['right'], undefined, {
-    appBundleId: 'com.example.app',
-  });
-
-  assert.equal(result?.action, 'orientation');
-  assert.equal(result?.orientation, 'landscape-right');
-  assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 1);
-  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
-    // `rotate` is the runner-protocol command name; the CLI command is `orientation`.
-    command: 'rotate',
-    orientation: 'landscape-right',
-    appBundleId: 'com.example.app',
-  });
-});
-
-test('dispatch orientation rejects a mismatched iOS runner readback', async () => {
-  mockRunAppleRunnerCommand.mockResolvedValue({
-    message: 'rotate',
-    orientation: 'portrait',
-  });
-
-  await assert.rejects(
-    dispatchCommand(IOS_DEVICE, 'orientation', ['left']),
-    /observed portrait after requesting landscape-left/,
-  );
+  assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
 });

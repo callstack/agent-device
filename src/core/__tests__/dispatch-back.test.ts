@@ -1,41 +1,24 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { promises as fs } from 'node:fs';
 import { dispatchCommand } from '../dispatch.ts';
 import { ANDROID_EMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import { withMockedAdb } from '../../__tests__/test-utils/mocked-binaries.ts';
 
-test('dispatch back defaults to in-app mode and keeps Android back on keyevent 4', async () => {
-  await withMockedAdb('agent-device-dispatch-back-modes-', async (argsLogPath) => {
-    for (const backMode of [undefined, 'in-app', 'system'] as const) {
-      const result = await dispatchCommand(ANDROID_EMULATOR, 'back', [], undefined, {
-        backMode,
-      });
+// R42 retired `back` from `DISPATCH_HANDLERS`; its ADB-command-level parity pin now lives on
+// `backAndroid` directly (`src/platforms/android/__tests__/input-actions.test.ts`), and its
+// admitted-runtime behavior in `src/daemon/__tests__/back-runtime.test.ts`.
+test('legacy dispatch no longer reaches the back leaf', async () => {
+  await withMockedAdb('agent-device-dispatch-back-retired-', async (argsLogPath) => {
+    await assert.rejects(
+      dispatchCommand(ANDROID_EMULATOR, 'back', [], undefined, { backMode: 'in-app' }),
+      { code: 'INVALID_ARGS', message: 'Unknown command: back' },
+    );
 
-      assert.equal(result?.action, 'back');
-      assert.equal(result?.mode, backMode ?? 'in-app');
-    }
-
-    const args = (await fs.readFile(argsLogPath, 'utf8')).trim().split('\n').filter(Boolean);
-    assert.deepEqual(args, [
-      '-s',
-      'emulator-5554',
-      'shell',
-      'input',
-      'keyevent',
-      '4',
-      '-s',
-      'emulator-5554',
-      'shell',
-      'input',
-      'keyevent',
-      '4',
-      '-s',
-      'emulator-5554',
-      'shell',
-      'input',
-      'keyevent',
-      '4',
-    ]);
+    const { promises: fs } = await import('node:fs');
+    await assert.rejects(
+      fs.readFile(argsLogPath, 'utf8'),
+      { code: 'ENOENT' },
+      'no adb command was ever issued, so the args log was never created',
+    );
   });
 });
