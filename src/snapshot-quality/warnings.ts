@@ -67,6 +67,11 @@ function stateWarning(verdict: SnapshotQualityVerdict): string[] {
     // (selector resolution, settle observation loops, system-modal probes) and never rendered it,
     // the daemon's session latch re-renders the warning once at the response seam.
     if (verdict.reasonCode === 'deferred' || verdict.reasonCode === 'requested-backend') return [];
+    if (verdict.reasonCode === 'presentation-failed') {
+      return [
+        `Agent Device could not safely present the captured accessibility tree and fell back to the ${verdict.backend} snapshot backend. This is an Agent Device runner bug, not an app accessibility-tree issue. Use screenshot as visual truth and report snapshotQuality.reason with the screenshot.`,
+      ];
+    }
     return [recoveredSnapshotQualityWarning(verdict.backend)];
   }
   if (verdict.state === 'sparse') {

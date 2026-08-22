@@ -3,6 +3,9 @@ import { test } from 'vitest';
 import { readSnapshotQualityVerdict } from '../verdict.ts';
 import { renderSnapshotQualityWarnings } from '../warnings.ts';
 
+const sharedRecoveryReason =
+  'iOS XCTest snapshot failed while serializing the accessibility tree. Error kAXErrorIllegalArgument getting snapshot for element <AXUIElementRef 0x1>';
+
 test("the runner-wire 'deferred' reasonCode survives parsing into warning suppression", () => {
   // End-to-end through the raw wire parser: 'deferred' must be a member of the accepted
   // reason-code set, or it is silently stripped and every downstream deferred behavior
@@ -36,13 +39,12 @@ test('penalty-deferred recovered captures suppress the fallback warning but keep
   ]);
 });
 
-test('renderSnapshotQualityWarnings keeps recovered snapshot copy concise', () => {
+test('non-presentation recovery keeps the generic warning for the same reason text', () => {
   const warnings = renderSnapshotQualityWarnings(
     {
       state: 'recovered',
       backend: 'private-ax',
-      reason:
-        'iOS XCTest snapshot failed while serializing the accessibility tree. Error kAXErrorIllegalArgument getting snapshot for element <AXUIElementRef 0x1>',
+      reason: sharedRecoveryReason,
       reasonCode: 'ax-rejected',
       effectiveDepth: 56,
     },
@@ -51,6 +53,24 @@ test('renderSnapshotQualityWarnings keeps recovered snapshot copy concise', () =
 
   assert.deepEqual(warnings, [
     'Detected an overly complex or slow accessibility tree. Fell back to the private-ax snapshot backend. It is OK to continue; use --json to inspect snapshotQuality.reason if you need recovery details.',
+    'Some deeper accessibility nodes were omitted; this tree is capped at depth 56. Re-run with --depth 56 --scope <container> only if you need deeper content.',
+  ]);
+});
+
+test('presentation failures identify a runner bug and preserve composed warnings', () => {
+  const warnings = renderSnapshotQualityWarnings(
+    {
+      state: 'recovered',
+      backend: 'private-ax',
+      reason: sharedRecoveryReason,
+      reasonCode: 'presentation-failed',
+      effectiveDepth: 56,
+    },
+    [],
+  );
+
+  assert.deepEqual(warnings, [
+    'Agent Device could not safely present the captured accessibility tree and fell back to the private-ax snapshot backend. This is an Agent Device runner bug, not an app accessibility-tree issue. Use screenshot as visual truth and report snapshotQuality.reason with the screenshot.',
     'Some deeper accessibility nodes were omitted; this tree is capped at depth 56. Re-run with --depth 56 --scope <container> only if you need deeper content.',
   ]);
 });
