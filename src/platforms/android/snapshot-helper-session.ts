@@ -22,6 +22,7 @@ import {
   waitForAndroidSnapshotHelperSessionReady,
 } from './snapshot-helper-session-protocol.ts';
 import {
+  type AndroidSnapshotHelperProcessExit,
   ANDROID_SNAPSHOT_HELPER_DEVICE_RETIREMENT_TIMEOUT_MS,
   ANDROID_SNAPSHOT_HELPER_HOST_PROCESS_EXIT_GRACE_MS,
   getAndroidSnapshotHelperSessionDeviceKey,
@@ -312,7 +313,18 @@ function matchesWhenBothDefined<Value>(a: Value | undefined, b: Value | undefine
 
 export async function stopAndroidSnapshotHelperSession(
   deviceKey: string,
-  options: { force?: boolean; signal?: AbortSignal; cause?: unknown } = {},
+  options: {
+    /** Skip the graceful quit entirely: kill the host process and stop the device runtime. */
+    force?: boolean;
+    /**
+     * Stop the device runtime even when the quit proved release. Recovery paths — a helper whose
+     * output failed content validation — restart the helper on purpose, so they cannot read "it
+     * quit politely" as a reason to leave a suspect process owning the runtime.
+     */
+    resetRuntime?: boolean;
+    signal?: AbortSignal;
+    cause?: unknown;
+  } = {},
 ): Promise<boolean> {
   const session = sessions.get(deviceKey);
   if (!session) return false;
@@ -320,9 +332,14 @@ export async function stopAndroidSnapshotHelperSession(
   const processExit = observeAndroidSnapshotHelperProcessExit(session.process);
   const force = options.force === true || options.signal?.aborted === true;
   const graceful = await requestGracefulSessionExit(session, processExit, force, options.signal);
-  // The helper releases UiAutomation inside its own quit handling, so an acknowledged quit whose
-  // process exit was then observed IS the release evidence. Anything less — including an ack whose
-  // exit never arrived — still needs the device-side stop.
+  const hostProcessEnded = processExit.hasEnded();
+  // The helper releases UiAutomation inside its own quit handling, so a quit it acknowledged and
+  // then completed IS the release evidence. Both halves are load-bearing: `exited` is what
+  // separates "the helper said it would quit" from "the helper finished quitting", and it counts
+  // only a clean exit of the process this teardown watched (see AndroidSnapshotHelperProcessExit).
+  // Anything less still needs the device-side stop. Declared residual: this is host-side evidence,
+  // so it is only as strong as adb's exit-code forwarding — a device without shell protocol v2 can
+  // report 0 for an instrumentation that did not finish, and the stop is then wrongly skipped.
   const runtimeReleaseConfirmed = graceful.acknowledged && graceful.exited;
   const cleanupTimeoutMs = !force
     ? FORWARD_TIMEOUT_MS
@@ -336,7 +353,6 @@ export async function stopAndroidSnapshotHelperSession(
     stopAndroidSnapshotHelperHostProcess({
       process: session.process,
       processExit,
-      alreadyExited: graceful.exited,
       timeoutMs: processExitTimeoutMs,
     }),
     settleAndroidSnapshotHelperSessionCleanup({
@@ -345,7 +361,7 @@ export async function stopAndroidSnapshotHelperSession(
       port: session.port,
       packageName: session.helper.packageName,
       timeoutMs: cleanupTimeoutMs,
-      forceStopRuntime: !runtimeReleaseConfirmed,
+      forceStopRuntime: options.resetRuntime === true || !runtimeReleaseConfirmed,
     }),
   ]);
   emitDiagnostic({
@@ -357,7 +373,7 @@ export async function stopAndroidSnapshotHelperSession(
       lifetimeMs: Date.now() - session.startedAtMs,
       quitAcknowledged: graceful.acknowledged,
       runtimeReleaseConfirmed,
-      forceKilled: !graceful.exited && processStopped,
+      forceKilled: !hostProcessEnded && processStopped,
       forced: force || options.signal?.aborted === true,
       runtimeForceStopped: cleanup.runtimeForceStopped,
       externalCleanupTimedOut: cleanup.timedOut,
@@ -375,10 +391,14 @@ export async function stopAndroidSnapshotHelperSession(
 
 async function requestGracefulSessionExit(
   session: AndroidSnapshotHelperSession,
-  processExit: Promise<void>,
+  processExit: AndroidSnapshotHelperProcessExit,
   force: boolean,
   signal: AbortSignal | undefined,
-): Promise<{ acknowledged: boolean; exited: boolean }> {
+): Promise<{
+  acknowledged: boolean;
+  /** The instrumentation this teardown asked to quit then finished on its own, cleanly. */
+  exited: boolean;
+}> {
   if (force) return { acknowledged: false, exited: false };
   const requestId = `quit-${Date.now()}`;
   try {
@@ -392,10 +412,11 @@ async function requestGracefulSessionExit(
     const exited =
       acknowledged &&
       (await waitForAndroidSnapshotHelperProcessExit(
-        processExit,
+        processExit.ended,
         SESSION_GRACEFUL_EXIT_TIMEOUT_MS,
         signal,
-      ));
+      )) &&
+      processExit.completedCleanly();
     return { acknowledged, exited };
   } catch {
     return { acknowledged: false, exited: false };
@@ -490,7 +511,7 @@ async function startAndroidSnapshotHelperSession(params: {
     }
     const [, cleanup] = await Promise.all([
       waitForAndroidSnapshotHelperProcessExit(
-        processExit,
+        processExit.ended,
         ANDROID_SNAPSHOT_HELPER_HOST_PROCESS_EXIT_GRACE_MS,
       ),
       settleAndroidSnapshotHelperSessionCleanup({

@@ -300,6 +300,46 @@ test('a quit acknowledged and followed by process exit skips the force-stop roun
   assert.equal(calls.some(isHelperRuntimeForceStop), false);
 });
 
+test('a quit acknowledged by a helper the host then killed still force-stops the runtime', async () => {
+  const calls: string[][] = [];
+  const processes: FakeAndroidProcess[] = [];
+  const provider = createSessionProvider({
+    calls,
+    processes,
+    quitExit: { code: null, signal: 'SIGKILL' },
+  });
+
+  await captureAndroidSnapshotWithHelperSession({
+    adb: provider.exec,
+    adbProvider: provider,
+    deviceKey: 'android:emulator-5554',
+  });
+  await resetAndroidSnapshotHelperSessions();
+
+  // The ack alone only says the helper heard us. A host process that ended on a signal says the
+  // transport died, not that the instrumentation finished releasing UiAutomation — so the second
+  // half of the release evidence is missing and the device-side stop must still run.
+  assert.equal(calls.some(isHelperRuntimeForceStop), true);
+});
+
+test('a quit acknowledged after the host process already died still force-stops the runtime', async () => {
+  const calls: string[][] = [];
+  const processes: FakeAndroidProcess[] = [];
+  const provider = createSessionProvider({ calls, processes });
+
+  await captureAndroidSnapshotWithHelperSession({
+    adb: provider.exec,
+    adbProvider: provider,
+    deviceKey: 'android:emulator-5554',
+  });
+  // The host `am instrument` child is gone before the teardown starts, yet the device-side helper
+  // answers `quit` through the still-open forward: positive evidence that it OUTLIVED its host.
+  processes[0]?.emitExit(0, null);
+  await resetAndroidSnapshotHelperSessions();
+
+  assert.equal(calls.some(isHelperRuntimeForceStop), true);
+});
+
 test('force terminates the helper when quit is not acknowledged', async () => {
   const calls: string[][] = [];
   const processes: FakeAndroidProcess[] = [];
@@ -397,6 +437,7 @@ type SessionProviderOptions = {
   calls: string[][];
   cleanupAborts?: string[][];
   processes?: FakeAndroidProcess[];
+  quitExit?: { code: number | null; signal: NodeJS.Signals | null };
   quitExitDelayMs?: number;
   quitResponseMode?: 'ok' | 'malformed';
   spawnArgs?: string[][];
@@ -431,8 +472,12 @@ function createSessionProvider(options: SessionProviderOptions): AndroidAdbProvi
               return;
             }
             socket.end(sessionResponse({ requestId, body: '' }));
+            const quitExit = options.quitExit ?? { code: 0, signal: null };
             server.close(() => {
-              setTimeout(() => process.emitExit(0, null), options.quitExitDelayMs ?? 0);
+              setTimeout(
+                () => process.emitExit(quitExit.code, quitExit.signal),
+                options.quitExitDelayMs ?? 0,
+              );
             });
             return;
           }

@@ -102,9 +102,10 @@ export async function settleAndroidSnapshotHelperSessionCleanup(params: {
   timeoutMs: number;
   /**
    * Whether the device runtime still needs `am force-stop`. Only a quit the helper acknowledged
-   * AND whose process exit was observed proves UiAutomation was released; every forced, timed-out,
-   * or aborted teardown must still stop the runtime, because a daemon that dies without sending
-   * `quit` would otherwise leave the helper squatting UiAutomation for the next command.
+   * AND then completed cleanly proves UiAutomation was released; every forced, timed-out, or
+   * aborted teardown must still stop the runtime, because a daemon that dies without sending
+   * `quit` would otherwise leave the helper squatting UiAutomation for the next command. Recovery
+   * paths that distrust the helper's output require the stop regardless of that evidence.
    */
   forceStopRuntime: boolean;
 }): Promise<{ timedOut: boolean; runtimeForceStopped: boolean }> {
@@ -128,14 +129,44 @@ export async function settleAndroidSnapshotHelperSessionCleanup(params: {
   };
 }
 
-export function observeAndroidSnapshotHelperProcessExit(process: AndroidAdbProcess): Promise<void> {
-  if (process.exitCode != null || process.signalCode != null) {
-    return Promise.resolve();
-  }
-  return new Promise((resolve) => {
-    process.once('close', () => resolve());
-    process.once('exit', () => resolve());
-  });
+/**
+ * Watches one host `adb shell am instrument` child, and remembers whether the end it saw is
+ * evidence that the instrumentation FINISHED rather than that the transport merely died.
+ */
+export type AndroidSnapshotHelperProcessExit = {
+  /** Resolves when the process is gone — already resolved when it was gone before observation. */
+  ended: Promise<void>;
+  /** Whether the process is gone, by any cause. */
+  hasEnded(): boolean;
+  /**
+   * Whether this observation started on a live process that then exited with code 0 and no
+   * terminating signal. A signal, a non-zero code, or a process that was already gone says the
+   * host child died: adb restarted, the transport dropped, something killed it. None of those say
+   * the device-side helper released UiAutomation — it can outlive its host through an open forward.
+   */
+  completedCleanly(): boolean;
+};
+
+export function observeAndroidSnapshotHelperProcessExit(
+  process: AndroidAdbProcess,
+): AndroidSnapshotHelperProcessExit {
+  const endedBeforeObservation = hasAndroidSnapshotHelperProcessEnded(process);
+  const ended = endedBeforeObservation
+    ? Promise.resolve()
+    : new Promise<void>((resolve) => {
+        process.once('close', () => resolve());
+        process.once('exit', () => resolve());
+      });
+  return {
+    ended,
+    hasEnded: () => hasAndroidSnapshotHelperProcessEnded(process),
+    completedCleanly: () =>
+      !endedBeforeObservation && process.exitCode === 0 && process.signalCode == null,
+  };
+}
+
+function hasAndroidSnapshotHelperProcessEnded(process: AndroidAdbProcess): boolean {
+  return process.exitCode != null || process.signalCode != null;
 }
 
 export async function waitForAndroidSnapshotHelperProcessExit(
@@ -167,17 +198,16 @@ export async function waitForAndroidSnapshotHelperProcessExit(
 
 export async function stopAndroidSnapshotHelperHostProcess(params: {
   process: AndroidAdbProcess;
-  processExit: Promise<void>;
-  alreadyExited: boolean;
+  processExit: AndroidSnapshotHelperProcessExit;
   timeoutMs: number;
 }): Promise<boolean> {
-  if (params.alreadyExited) return true;
+  if (params.processExit.hasEnded()) return true;
   try {
     params.process.kill('SIGTERM');
   } catch {
     // A completed instrumentation process can reject or ignore the signal.
   }
-  return await waitForAndroidSnapshotHelperProcessExit(params.processExit, params.timeoutMs);
+  return await waitForAndroidSnapshotHelperProcessExit(params.processExit.ended, params.timeoutMs);
 }
 
 export function resetAndroidSnapshotHelperRetirements(): void {

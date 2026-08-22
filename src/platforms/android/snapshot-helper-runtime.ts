@@ -15,11 +15,16 @@ export async function retireAndroidSnapshotHelperAfterContentFailure(params: {
   cause: unknown;
 }): Promise<void> {
   const retiredPersistentSession = await stopAndroidSnapshotHelperSession(params.deviceKey, {
+    // Content failure is a recovery path, not a clean release: the helper answered with output we
+    // could not trust, so the next capture must meet a runtime that was reset. The session stop
+    // owns that reset, so it is required here rather than layered on afterwards.
+    resetRuntime: true,
     signal: params.signal,
     cause: params.cause,
   });
   params.signal?.throwIfAborted();
   if (!retiredPersistentSession) {
+    // The suspect helper ran one-shot, so no session stop reset the runtime for us.
     await resetAndroidSnapshotHelperRuntime(params.adb, params.packageName);
   }
 }

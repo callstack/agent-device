@@ -16,7 +16,7 @@ beforeEach(() => {
   stopSession.mockReset();
 });
 
-test('content failure retirement does not layer a second reset over a persistent session stop', async () => {
+test('content failure retirement makes the session stop reset the runtime instead of layering a second one', async () => {
   stopSession.mockResolvedValueOnce(true);
   const calls: string[][] = [];
   const adb: AndroidAdbExecutor = async (args) => {
@@ -32,6 +32,10 @@ test('content failure retirement does not layer a second reset over a persistent
   });
 
   assert.equal(stopSession.mock.calls.length, 1);
+  // The session stop only force-stops the runtime when it has to. Recovery cannot read a clean quit
+  // as a reason to leave a suspect helper running, so it states that requirement instead of issuing
+  // a second `am force-stop` of its own.
+  assert.equal(stopSession.mock.calls[0]?.[1]?.resetRuntime, true);
   assert.equal(calls.length, 0);
 });
 

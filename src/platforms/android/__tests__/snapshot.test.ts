@@ -607,6 +607,33 @@ test('snapshotAndroid retires content-invalid daemon helper before the next requ
   );
 });
 
+test('content-invalid daemon helper retirement force-stops the helper runtime', async () => {
+  // Retirement after a content failure is a recovery path, not a release: the helper answered with
+  // output we could not trust, so the next capture must meet a runtime that was reset. A clean quit
+  // is evidence the helper let go of UiAutomation, never evidence that it was healthy.
+  const adbCalls: string[][] = [];
+  const spawnArgs: string[][] = [];
+  const processes: FakeAndroidProcess[] = [];
+  const provider = createPersistentSnapshotHelperProvider({
+    calls: adbCalls,
+    spawnArgs,
+    processes,
+    sessionXml: () => androidSystemWindowOnlyXml(),
+  });
+
+  await assert.rejects(
+    snapshotAndroid(device, {
+      helperAdb: provider,
+      helperArtifact,
+      helperSessionScope: 'daemon-session',
+    }),
+    /Android snapshot helper returned only non-application windows/,
+  );
+
+  assert.equal(processes[0]?.exitCode, 0, 'the session quit cleanly');
+  assert.equal(adbCalls.some(isHelperRuntimeReset), true);
+});
+
 test('snapshotAndroid falls back to one-shot capture after retiring a failed session', async () => {
   const adbCalls: string[][] = [];
   const spawnArgs: string[][] = [];
