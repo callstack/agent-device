@@ -43,11 +43,25 @@ import type { AppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 import type { ScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform';
 
+/** What `runSessionOrSelectorDispatch`'s `execute` thunk reports: either the early-exit response
+ * an admission refusal produces, or the result to record and return. */
+type SessionCommandExecutionOutcome =
+  | Readonly<{ ok: false; response: DaemonResponse }>
+  | Readonly<{ ok: true; result: Record<string, unknown> | void }>;
+
+/**
+ * The one orchestration every session/selector-route leaf shares: guard, resolve the device,
+ * admit-then-execute via the caller's own strategy, expire the ref frame if the command mutates,
+ * derive and record the next session. `execute` is where the two strategies session-route
+ * commands use today diverge — {@link legacySessionDispatchExecute} for a still-legacy command
+ * (capability gate, then `dispatchCommand`), or a bind-and-execute thunk like `keyboard`'s below
+ * for a migrated one — everything around it is identical either way, so it lives here once
+ * instead of once per command.
+ */
 // fallow-ignore-next-line complexity
 async function runSessionOrSelectorDispatch(params: {
   req: DaemonRequest;
   sessionName: string;
-  logPath: string;
   sessionStore: SessionStore;
   command: string;
   positionals: string[];
@@ -57,16 +71,20 @@ async function runSessionOrSelectorDispatch(params: {
     result: Record<string, unknown> | void,
     device: DeviceInfo,
   ) => Promise<SessionState> | SessionState;
+  execute: (
+    device: DeviceInfo,
+    session: SessionState | undefined,
+  ) => Promise<SessionCommandExecutionOutcome>;
 }): Promise<DaemonResponse> {
   const {
     req,
     sessionName,
-    logPath,
     sessionStore,
     command,
     positionals,
     recordPositionals,
     deriveNextSession,
+    execute,
   } = params;
   const session = sessionStore.get(sessionName);
   const flags = req.flags ?? {};
@@ -78,20 +96,18 @@ async function runSessionOrSelectorDispatch(params: {
     flags,
     ensureReady: true,
   });
-  const unsupported = requireCommandSupported(command, device);
-  if (unsupported) return unsupported;
+  const outcome = await execute(device, session);
+  if (!outcome.ok) return outcome.response;
 
   // ADR 0014 side-effect seam for session/selector-route leaves (keyboard
-  // dismiss/enter/return, push, trigger-app-event). Expire the frame before the
-  // dispatch when the classification says this request mutates; keyboard
+  // dismiss/enter/return, push, trigger-app-event). Expire the frame before
+  // recording when the classification says this request mutates; keyboard
   // status/get resolve to `preserve` and leave the frame untouched.
   if (session && resolveRefFrameEffect(req) === 'may-invalidate') {
     expireRefFrame(session);
   }
 
-  const result = await dispatchCommand(device, command, positionals, req.flags?.out, {
-    ...contextFromFlags(logPath, req.flags, session?.appBundleId, session?.trace?.outPath),
-  });
+  const result = outcome.result;
   if (session) {
     const nextSession = deriveNextSession
       ? await deriveNextSession(session, result, device)
@@ -104,6 +120,29 @@ async function runSessionOrSelectorDispatch(params: {
     }
   }
   return { ok: true, data: result ?? {} };
+}
+
+/** The still-legacy `execute` thunk: the capability gate and `dispatchCommand` call
+ * `runSessionOrSelectorDispatch` always ran inline before `execute` existed as a parameter. Every
+ * remaining unmigrated session-route command passes this until its own migration replaces it with
+ * a bind-and-execute thunk, same as `keyboard`'s {@link handleKeyboardCommand} below. */
+function legacySessionDispatchExecute(
+  command: string,
+  positionals: string[],
+  req: DaemonRequest,
+  logPath: string,
+): (
+  device: DeviceInfo,
+  session: SessionState | undefined,
+) => Promise<SessionCommandExecutionOutcome> {
+  return async (device, session) => {
+    const unsupported = requireCommandSupported(command, device);
+    if (unsupported) return { ok: false, response: unsupported };
+    const result = await dispatchCommand(device, command, positionals, req.flags?.out, {
+      ...contextFromFlags(logPath, req.flags, session?.appBundleId, session?.trace?.outPath),
+    });
+    return { ok: true, result };
+  };
 }
 
 // fallow-ignore-next-line complexity
@@ -272,76 +311,75 @@ function requireForegroundIosKeyboardSession(
   );
 }
 
-async function executeBoundKeyboardCommand(params: {
-  bound: Extract<Awaited<ReturnType<typeof resolveBoundKeyboardRuntime>>, { ok: true }>;
-  req: DaemonRequest;
-  session: SessionState | undefined;
-  logPath: string;
-  sessionStore: SessionStore;
-  positionals: string[];
-}): Promise<DaemonResponse> {
-  const { bound, req, session, logPath, sessionStore, positionals } = params;
-  const dispatchContext = {
-    ...contextFromFlags(logPath, req.flags, session?.appBundleId, session?.trace?.outPath),
-    surface: session?.surface,
-  };
-  const result = await bound.execute(dispatchContext);
-  if (session) {
-    recordSessionAction(sessionStore, session, req, PUBLIC_COMMANDS.keyboard, result ?? {}, {
+/**
+ * `keyboard`'s migrated `execute` thunk (ADR 0019 §9): bind whichever action-selected use the
+ * parsed action names, then run it. Replaces the resolve-then-record shape
+ * `runSessionOrSelectorDispatch` now owns — this only supplies what the generic route's
+ * `dispatchCommand` cannot: the bound runtime and the action-specific execution context.
+ */
+function keyboardSessionExecute(
+  positionals: string[],
+  inspectFacts: SessionCommandParams['inspectFacts'],
+  bindDevice: SessionCommandParams['bindDevice'],
+  req: DaemonRequest,
+  logPath: string,
+): (
+  device: DeviceInfo,
+  session: SessionState | undefined,
+) => Promise<SessionCommandExecutionOutcome> {
+  return async (device, session) => {
+    const bound = await resolveBoundKeyboardRuntime({
+      device,
       positionals,
+      inspectFacts,
+      bindDevice,
     });
-  }
-  return { ok: true, data: result ?? {} };
+    if (!bound.ok) return { ok: false, response: bound.response };
+    const dispatchContext = {
+      ...contextFromFlags(logPath, req.flags, session?.appBundleId, session?.trace?.outPath),
+      surface: session?.surface,
+    };
+    const result = await bound.execute(dispatchContext);
+    return { ok: true, result };
+  };
 }
 
 async function handleKeyboardCommand(params: SessionCommandParams): Promise<DaemonResponse> {
   const { req, sessionName, logPath, sessionStore, inspectFacts, bindDevice } = params;
-  const session = sessionStore.get(sessionName);
   const positionals = req.positionals ?? [];
-  const flags = req.flags ?? {};
 
   const foregroundGuard = requireForegroundIosKeyboardSession(
-    session,
+    sessionStore.get(sessionName),
     positionals[0]?.trim().toLowerCase(),
-    flags,
+    req.flags ?? {},
   );
   if (foregroundGuard) return foregroundGuard;
 
-  const guard = requireSessionOrExplicitSelector(PUBLIC_COMMANDS.keyboard, session, flags);
-  if (guard) return guard;
-
-  const device = await resolveCommandDevice({ session, flags, ensureReady: true });
-  const bound = await resolveBoundKeyboardRuntime({
-    device,
-    positionals,
-    inspectFacts,
-    bindDevice,
-  });
-  if (!bound.ok) return bound.response;
-
-  if (session && resolveRefFrameEffect(req) === 'may-invalidate') {
-    expireRefFrame(session);
-  }
-
-  return await executeBoundKeyboardCommand({
-    bound,
+  return await runSessionOrSelectorDispatch({
     req,
-    session,
-    logPath,
+    sessionName,
     sessionStore,
+    command: PUBLIC_COMMANDS.keyboard,
     positionals,
+    execute: keyboardSessionExecute(positionals, inspectFacts, bindDevice, req, logPath),
   });
 }
 
 async function handleTriggerAppEventCommand(params: SessionCommandParams): Promise<DaemonResponse> {
   const { req, sessionName, logPath, sessionStore } = params;
+  const positionals = req.positionals ?? [];
   return await runSessionOrSelectorDispatch({
     req,
     sessionName,
-    logPath,
     sessionStore,
     command: PUBLIC_COMMANDS.triggerAppEvent,
-    positionals: req.positionals ?? [],
+    positionals,
+    execute: legacySessionDispatchExecute(
+      PUBLIC_COMMANDS.triggerAppEvent,
+      positionals,
+      req,
+      logPath,
+    ),
     deriveNextSession: async (session, result) => {
       const eventUrl = typeof result?.eventUrl === 'string' ? result.eventUrl : undefined;
       const nextAppBundleId = eventUrl
