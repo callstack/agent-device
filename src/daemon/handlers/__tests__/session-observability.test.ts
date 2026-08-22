@@ -4,7 +4,10 @@ import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
 import type { AndroidAdbExecutor } from '../../../platforms/android/adb-executor.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
-import { makeAndroidSession, makeIosSession } from '../../../__tests__/test-utils/index.ts';
+import {
+  makeAndroidSession,
+  makeIosSession,
+} from '../../../__tests__/test-utils/session-factories.ts';
 import type { AppleXctracePerfCapture } from '../../../platforms/apple/core/perf-xctrace.ts';
 import type { DaemonResponse } from '../../types.ts';
 import { mkdtempForTest, mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';

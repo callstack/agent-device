@@ -3,8 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, expect, test } from 'vitest';
 import { INTERNAL_COMMANDS } from '../../../command-catalog.ts';
-import { makeIosSession, makeAuthoringSession } from '../../../__tests__/test-utils/index.ts';
 import {
+  makeIosSession,
+  makeAuthoringSession,
   authoringPublication,
   repairPublication,
 } from '../../../__tests__/test-utils/session-factories.ts';

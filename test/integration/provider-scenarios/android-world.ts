@@ -9,11 +9,11 @@ import type {
   AndroidAdbProvider,
 } from '../../../src/platforms/android/adb-executor.ts';
 import type { DeviceInventoryRequest } from '../../../src/core/dispatch-resolve.ts';
+import { ANDROID_IME_HELPER_FIXTURE_ARTIFACT } from '../../../src/__tests__/test-utils/android-ime-helper.ts';
 import {
-  ANDROID_IME_HELPER_FIXTURE_ARTIFACT,
   ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
   androidSnapshotHelperOutput,
-} from '../../../src/__tests__/test-utils/index.ts';
+} from '../../../src/__tests__/test-utils/android-snapshot-helper.ts';
 import { runCmd, runCmdBackground } from '../../../src/utils/exec.ts';
 import { validPng } from './assertions.ts';
 import { PROVIDER_SCENARIO_ANDROID } from './fixtures.ts';

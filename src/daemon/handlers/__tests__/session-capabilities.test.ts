@@ -2,13 +2,12 @@ import { test, expect, vi } from 'vitest';
 import path from 'node:path';
 import os from 'node:os';
 import { PUBLIC_COMMANDS } from '../../../command-catalog.ts';
+import { LINUX_DEVICE, WEB_DESKTOP_DEVICE } from '../../../__tests__/test-utils/device-fixtures.ts';
 import {
-  LINUX_DEVICE,
-  WEB_DESKTOP_DEVICE,
   makeAndroidSession,
   makeSession,
-  makeSessionStore,
-} from '../../../__tests__/test-utils/index.ts';
+} from '../../../__tests__/test-utils/session-factories.ts';
+import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';

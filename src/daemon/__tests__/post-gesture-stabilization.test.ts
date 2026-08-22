@@ -1,7 +1,7 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
-import { makeSnapshotState } from '../../__tests__/test-utils/index.ts';
+import { makeSnapshotState } from '../../__tests__/test-utils/snapshot-builders.ts';
 import { countDiagnosticEventsByPhase, withDiagnosticsScope } from '../../utils/diagnostics.ts';
 import { buildInteractionSurfaceSignature } from '../interaction-outcome-policy.ts';
 import {

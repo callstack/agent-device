@@ -19,7 +19,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from './test-utils/index.ts';
+} from './test-utils/loopback.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 const DAEMON_TOKEN = 'daemon-secret';

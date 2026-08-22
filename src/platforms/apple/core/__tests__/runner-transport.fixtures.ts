@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { IOS_DEVICE, IOS_SIMULATOR } from '../../../../__tests__/test-utils/index.ts';
+import { IOS_DEVICE, IOS_SIMULATOR } from '../../../../__tests__/test-utils/device-fixtures.ts';
 
 export const iosDevice = IOS_DEVICE;
 export const iosSimulator = IOS_SIMULATOR;

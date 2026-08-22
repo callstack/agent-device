@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { Point } from '@agent-device/kernel/snapshot';
-import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
+import { makeSnapshotState } from '../../../__tests__/test-utils/snapshot-builders.ts';
 import { createInteractionDevice } from './__tests__/test-utils/index.ts';
 import { ref, selector } from './selector-read-utils.ts';
 

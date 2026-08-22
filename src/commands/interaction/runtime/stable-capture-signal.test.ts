@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
+import { makeSnapshotState } from '../../../__tests__/test-utils/snapshot-builders.ts';
 import { stableCaptureSignal, stableCaptureSignalsEqual } from './stable-capture-signal.ts';
 import { elementSettingsSnapshot } from './stable-capture.fixtures.ts';
 

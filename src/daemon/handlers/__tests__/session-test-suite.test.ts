@@ -29,7 +29,7 @@ import {
 } from '../../../request/cancel.ts';
 import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { makeAndroidSession } from '../../../__tests__/test-utils/index.ts';
+import { makeAndroidSession } from '../../../__tests__/test-utils/session-factories.ts';
 
 function makeSessionStore(): SessionStore {
   const root = mkdtempForTestSync('agent-device-session-test-suite-');

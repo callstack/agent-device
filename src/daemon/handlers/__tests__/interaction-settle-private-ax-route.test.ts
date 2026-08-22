@@ -1,5 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
+import { makeSnapshotState } from '../../../__tests__/test-utils/snapshot-builders.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { contextFromFlags as buildDaemonContext } from '../../context.ts';

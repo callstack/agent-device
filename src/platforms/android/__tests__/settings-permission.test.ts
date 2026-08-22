@@ -2,11 +2,9 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { setAndroidSetting } from '../settings.ts';
 import { androidRevokedPermissionWarning } from '../settings-permission.ts';
-import {
-  ANDROID_EMULATOR,
-  assertRejectsAppError,
-  withFakeAdb,
-} from '../../../__tests__/test-utils/index.ts';
+import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
+import { assertRejectsAppError } from '../../../__tests__/test-utils/app-error.ts';
+import { withFakeAdb } from '../../../__tests__/test-utils/fake-adb.ts';
 
 // #1796. Two invariants decide every case here:
 //   * `pm` defaults grant/revoke and the permission-flag operations to UserHandle.USER_SYSTEM,

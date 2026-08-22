@@ -10,7 +10,7 @@ vi.mock('../core/device-inventory-context.ts', async (importOriginal) => ({
 }));
 vi.mock('../platforms/apple/core/app-resolution.ts', () => ({ detectSoleRunningIosSimulatorApp }));
 
-import { IOS_DEVICE, IOS_SIMULATOR } from '../__tests__/test-utils/index.ts';
+import { IOS_DEVICE, IOS_SIMULATOR } from '../__tests__/test-utils/device-fixtures.ts';
 import { buildIosOpenCommandHint, resolveSoleForegroundIosApp } from './ios-app-session-hint.ts';
 
 beforeEach(() => {

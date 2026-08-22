@@ -1,5 +1,5 @@
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
-import { makeSnapshotState } from '../../../src/__tests__/test-utils/index.ts';
+import { makeSnapshotState } from '../../../src/__tests__/test-utils/snapshot-builders.ts';
 
 /**
  * The permanent contract fixture trees (ADR 0011 Layer 3): the real

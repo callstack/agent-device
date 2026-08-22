@@ -17,7 +17,11 @@ vi.mock('../../platforms/android/emulator-lifecycle.ts', () => ({
 import { runCmd } from '../../utils/exec.ts';
 import { waitForAndroidBoot } from '../../platforms/android/emulator-lifecycle.ts';
 import { ensureBootedSimulator } from '../../platforms/apple/core/simulator.ts';
-import { ANDROID_EMULATOR, IOS_DEVICE, IOS_SIMULATOR } from '../../__tests__/test-utils/index.ts';
+import {
+  ANDROID_EMULATOR,
+  IOS_DEVICE,
+  IOS_SIMULATOR,
+} from '../../__tests__/test-utils/device-fixtures.ts';
 import { DEVICE_READY_CACHE_TTL_MS, ensureDeviceReady } from '../device-ready.ts';
 
 const mockRunCmd = vi.mocked(runCmd);

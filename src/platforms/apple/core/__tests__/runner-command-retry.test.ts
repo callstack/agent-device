@@ -1,6 +1,6 @@
 import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import { IOS_SIMULATOR } from '../../../../__tests__/test-utils/index.ts';
+import { IOS_SIMULATOR } from '../../../../__tests__/test-utils/device-fixtures.ts';
 import { clearRequestCanceled, markRequestCanceled } from '../../../../request/cancel.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { Deadline } from '../../../../utils/retry.ts';

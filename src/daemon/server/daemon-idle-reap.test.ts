@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, test, vi } from 'vitest';
-import { makeIosSession } from '../../__tests__/test-utils/index.ts';
+import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../types.ts';
 import {

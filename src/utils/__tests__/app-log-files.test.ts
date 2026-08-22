@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { assertThrowsAppError } from '../../__tests__/test-utils/index.ts';
+import { assertThrowsAppError } from '../../__tests__/test-utils/app-error.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { ensureAppLogPath, rotateAppLogIfNeeded } from '../app-log-files.ts';
 

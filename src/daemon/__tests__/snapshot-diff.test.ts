@@ -3,7 +3,10 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { buildSnapshotDiff, countSnapshotComparableLines } from '../../snapshot/snapshot-diff.ts';
 import { buildNodes as nodes } from '../../__tests__/test-utils/snapshot-builders.ts';
-import { PROPERTY_RUNS_SMALL, rawSnapshotNodesArb } from '../../__tests__/test-utils/index.ts';
+import {
+  PROPERTY_RUNS_SMALL,
+  rawSnapshotNodesArb,
+} from '../../__tests__/test-utils/property-arbitraries.ts';
 
 test('buildSnapshotDiff reports unchanged lines when snapshots are equal', () => {
   const previous = nodes([

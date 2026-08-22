@@ -1,4 +1,4 @@
-import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/index.ts';
+import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
 import { buildGesturePlan } from '@agent-device/contracts/interaction';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AndroidAdbExecutor } from '../adb-executor.ts';

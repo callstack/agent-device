@@ -7,7 +7,7 @@ import {
   createMemorySessionStore,
   localCommandPolicy,
 } from '../../../runtime.ts';
-import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
+import { makeSnapshotState } from '../../../__tests__/test-utils/snapshot-builders.ts';
 import { createFakeClock, selectorReadSnapshot } from './__tests__/test-utils/index.ts';
 
 test('runtime wait stable settles after two unchanged captures', async () => {

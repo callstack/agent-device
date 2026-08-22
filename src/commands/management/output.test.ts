@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { doctorCliOutput, managementCliOutputFormatters, openCliOutput } from './output.ts';
 import { markDoctorProgressRendered } from '../../utils/doctor-progress.ts';
-import { withNoColor } from '../../__tests__/test-utils/index.ts';
+import { withNoColor } from '../../__tests__/test-utils/color.ts';
 import type { AppOpenResult } from '@agent-device/contracts/client';
 
 describe('openCliOutput', () => {

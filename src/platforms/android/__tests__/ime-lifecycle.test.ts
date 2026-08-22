@@ -35,7 +35,7 @@ vi.mock('../ime-helper.ts', async (importOriginal) => {
   };
 });
 
-import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/index.ts';
+import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
 import { withAndroidAdbProvider, type AndroidAdbExecutor } from '../adb-executor.ts';
 import { resetAndroidImeHelperInstallCache } from '../ime-helper.ts';
 import {

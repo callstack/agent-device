@@ -8,7 +8,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from './test-utils/index.ts';
+} from './test-utils/loopback.ts';
 
 const PROXY_ARTIFACT_INVENTORY_ENTRY = {
   id: 'shot-1',

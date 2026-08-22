@@ -1,10 +1,8 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test } from 'vitest';
-import {
-  IOS_SIMULATOR,
-  makeIosSession,
-  makeSessionStore,
-} from '../../__tests__/test-utils/index.ts';
+import { IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
+import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import type { BindDeviceRuntime } from '../request-runtime-binding.ts';
 import { resolveBoundSnapshotCaptureRuntime } from '../snapshot-runtime-binding.ts';
 import type { DaemonRequest } from '../types.ts';

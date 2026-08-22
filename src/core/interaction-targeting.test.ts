@@ -3,10 +3,10 @@ import fc from 'fast-check';
 import { test } from 'vitest';
 import {
   distinctRectPairArb,
-  makeSnapshotState,
   PROPERTY_RUNS,
   scrollingContainerTypeArb,
-} from '../__tests__/test-utils/index.ts';
+} from '../__tests__/test-utils/property-arbitraries.ts';
+import { makeSnapshotState } from '../__tests__/test-utils/snapshot-builders.ts';
 import {
   classifyActionableTouchCandidates,
   resolveActionableTouchResolution,

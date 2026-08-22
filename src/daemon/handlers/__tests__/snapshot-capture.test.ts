@@ -5,7 +5,7 @@ import {
   ANDROID_EMULATOR,
   IOS_SIMULATOR,
   MACOS_DEVICE,
-} from '../../../__tests__/test-utils/index.ts';
+} from '../../../__tests__/test-utils/device-fixtures.ts';
 
 const captureSnapshotWithInteractor = vi.hoisted(() => vi.fn());
 vi.mock('../snapshot-interactor-capture.ts', () => ({ captureSnapshotWithInteractor }));

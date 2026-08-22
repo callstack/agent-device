@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
-import { IOS_SIMULATOR } from '../../../../__tests__/test-utils/index.ts';
+import { IOS_SIMULATOR } from '../../../../__tests__/test-utils/device-fixtures.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 import {
   flushDiagnosticsToSessionFile,

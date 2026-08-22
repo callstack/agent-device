@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
-import { assertThrowsAppError } from '../../__tests__/test-utils/index.ts';
+import { assertThrowsAppError } from '../../__tests__/test-utils/app-error.ts';
 
 // The recovery hints are pinned as literals, not imported from the module under test: an
 // assertion that compares the constant to itself stays green when the constant is deleted or

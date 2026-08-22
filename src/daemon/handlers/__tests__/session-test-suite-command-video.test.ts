@@ -10,7 +10,7 @@ import { beforeEach, test, vi } from 'vitest';
 import { SessionStore } from '../../session-store.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
 import type { DaemonRequest, DaemonResponse } from '../../types.ts';
-import { makeIosSession } from '../../../__tests__/test-utils/index.ts';
+import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { handleSessionReplayCommands } from '../session-replay.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import { replayScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';

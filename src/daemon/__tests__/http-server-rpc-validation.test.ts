@@ -6,7 +6,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '../../__tests__/test-utils/index.ts';
+} from '../../__tests__/test-utils/loopback.ts';
 
 type RpcErrorResponse = {
   jsonrpc: string;

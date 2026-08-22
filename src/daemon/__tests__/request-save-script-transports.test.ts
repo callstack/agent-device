@@ -24,7 +24,7 @@ import { SessionStore } from '../session-store.ts';
 import { createDaemonHttpServer } from '../server/http-server.ts';
 import { createSocketServer, listenNetServer } from '../server/transport.ts';
 import type { DaemonInvokeFn, DaemonResponse, SessionState } from '../types.ts';
-import { makeIosSession } from '../../__tests__/test-utils/index.ts';
+import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,

@@ -10,7 +10,8 @@ import {
   writeAndroidClipboardWithAdb,
 } from '../device-input-state.ts';
 import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../../utils/diagnostics.ts';
-import { assertRejectsAppError, withFakeAdb } from '../../../__tests__/test-utils/index.ts';
+import { assertRejectsAppError } from '../../../__tests__/test-utils/app-error.ts';
+import { withFakeAdb } from '../../../__tests__/test-utils/fake-adb.ts';
 import { mkdtempForTest } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 // The fake adb provider installs through the production withAndroidAdbProvider

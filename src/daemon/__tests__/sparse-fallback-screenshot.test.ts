@@ -1,7 +1,8 @@
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
-import { makeIosSession, mkdtempForTest } from '../../__tests__/test-utils/index.ts';
+import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
+import { mkdtempForTest } from '../../__tests__/test-utils/tmp-dir.ts';
 import { SessionStore } from '../session-store.ts';
 import { dispatchSnapshotViaRuntime } from '../snapshot-runtime.ts';
 import {

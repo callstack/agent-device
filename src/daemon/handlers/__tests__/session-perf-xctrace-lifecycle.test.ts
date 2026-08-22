@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { makeIosSession } from '../../../__tests__/test-utils/index.ts';
+import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import type { AppleXctracePerfCapture } from '../../../platforms/apple/core/perf-xctrace.ts';
 

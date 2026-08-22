@@ -2,7 +2,7 @@ import type { GesturePlan, Interactor, RunnerContext } from '@agent-device/contr
 import { AppError } from '@agent-device/kernel/errors';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { IOS_SIMULATOR } from '../../../__tests__/test-utils/index.ts';
+import { IOS_SIMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
 import type { RunnerCommand } from '../core/runner/runner-contract.ts';
 import type {
   AppleRunnerCommandOptions,

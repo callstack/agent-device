@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { IOS_SIMULATOR } from '../../../../__tests__/test-utils/index.ts';
+import { IOS_SIMULATOR } from '../../../../__tests__/test-utils/device-fixtures.ts';
 import {
   resolveAppleRunnerProvider,
   withAppleRunnerProvider,

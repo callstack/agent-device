@@ -6,12 +6,9 @@ import { LeaseRegistry } from '../lease-registry.ts';
 import { runRequestHandlerChain } from '../request-handler-chain.ts';
 import { getDaemonRouteOwnerFiles } from '../route-owner-files.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
-import {
-  LINUX_DEVICE,
-  makeIosSession,
-  makeSession,
-  makeSnapshotState,
-} from '../../__tests__/test-utils/index.ts';
+import { LINUX_DEVICE } from '../../__tests__/test-utils/device-fixtures.ts';
+import { makeIosSession, makeSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeSnapshotState } from '../../__tests__/test-utils/snapshot-builders.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { dispatchSwipeViaRuntime } from '../handlers/interaction-gesture.ts';
 import {

@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { IOS_DEVICE } from '../../../../__tests__/test-utils/index.ts';
+import { IOS_DEVICE } from '../../../../__tests__/test-utils/device-fixtures.ts';
 import {
   captureCoreDeviceScreenshot,
   shouldFallbackToRunnerForIosScreenshot,

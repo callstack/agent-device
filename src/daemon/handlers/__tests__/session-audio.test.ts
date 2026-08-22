@@ -2,14 +2,13 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
+import { IOS_DEVICE, WEB_DESKTOP_DEVICE } from '../../../__tests__/test-utils/device-fixtures.ts';
 import {
-  IOS_DEVICE,
-  WEB_DESKTOP_DEVICE,
   makeAndroidSession,
   makeIosSession,
   makeMacOsSession,
   makeSession,
-} from '../../../__tests__/test-utils/index.ts';
+} from '../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import type { WebProvider } from '../../../platforms/web/provider.ts';
 import { withWebProvider } from '../../../platforms/web/provider.ts';

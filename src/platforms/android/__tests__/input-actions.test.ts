@@ -7,13 +7,13 @@ import {
   setAndroidOrientation,
   typeAndroid,
 } from '../input-actions.ts';
+import { assertRejectsAppError } from '../../../__tests__/test-utils/app-error.ts';
+import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
 import {
-  assertRejectsAppError,
-  ANDROID_EMULATOR,
   ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
   androidSnapshotHelperScriptResponse,
-  withFakeAdb,
-} from '../../../__tests__/test-utils/index.ts';
+} from '../../../__tests__/test-utils/android-snapshot-helper.ts';
+import { withFakeAdb } from '../../../__tests__/test-utils/fake-adb.ts';
 import { withAndroidAdbProvider, type AndroidTouchInjector } from '../adb-executor.ts';
 
 // The fake adb provider installs through the production withAndroidAdbProvider

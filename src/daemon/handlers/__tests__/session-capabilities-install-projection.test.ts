@@ -2,7 +2,8 @@ import { expect, test } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
 import { PUBLIC_COMMANDS } from '../../../command-catalog.ts';
-import { makeAndroidSession, makeSessionStore } from '../../../__tests__/test-utils/index.ts';
+import { makeAndroidSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,

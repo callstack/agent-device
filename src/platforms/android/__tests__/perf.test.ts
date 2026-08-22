@@ -15,7 +15,7 @@ import {
   writeAndroidSimpleperfReport,
   type AndroidNativePerfSession,
 } from '../perf.ts';
-import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/index.ts';
+import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
 import { mkdtempForTest, mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 test('parseAndroidMemInfoSample supports legacy total row layout', () => {

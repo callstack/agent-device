@@ -2,7 +2,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import { handleSnapshotCommands as handleProductionSnapshotCommands } from '../snapshot.ts';
 import type { RawSnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { dispatchCommand } from '../../../core/dispatch.ts';
-import { makeAndroidSession } from '../../../__tests__/test-utils/index.ts';
+import { makeAndroidSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { expireRefFrame } from '../../ref-frame.ts';
 import { snapshotRuntimeFixture } from '../../__tests__/snapshot-runtime-fixture.ts';

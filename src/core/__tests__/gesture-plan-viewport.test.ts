@@ -13,7 +13,7 @@ import {
   COMPACT_VIEWPORTS,
   gestureInViewportArb,
   PROPERTY_RUNS_SMALL,
-} from '../../__tests__/test-utils/index.ts';
+} from '../../__tests__/test-utils/property-arbitraries.ts';
 import {
   assertAllSamplesInViewport,
   isErrorWithReason,

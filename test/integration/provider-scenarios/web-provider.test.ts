@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { WEB_DESKTOP_DEVICE } from '../../../src/__tests__/test-utils/index.ts';
+import { WEB_DESKTOP_DEVICE } from '../../../src/__tests__/test-utils/device-fixtures.ts';
 import type { WebProvider } from '../../../src/platforms/web/provider.ts';
 import { createProviderScenarioHarness } from './harness.ts';
 

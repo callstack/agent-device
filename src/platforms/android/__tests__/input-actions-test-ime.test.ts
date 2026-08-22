@@ -29,11 +29,11 @@ vi.mock('../ime-helper.ts', async (importOriginal) => {
   };
 });
 
+import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
 import {
-  ANDROID_EMULATOR,
   ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
   createAndroidSnapshotHelperExecutor,
-} from '../../../__tests__/test-utils/index.ts';
+} from '../../../__tests__/test-utils/android-snapshot-helper.ts';
 import { fillAndroid, typeAndroid } from '../input-actions.ts';
 import { withAndroidAdbProvider, type AndroidAdbExecutor } from '../adb-executor.ts';
 import {

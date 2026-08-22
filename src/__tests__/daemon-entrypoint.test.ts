@@ -12,7 +12,7 @@ import {
 } from '../daemon/artifact-tracking.ts';
 import { runCmdBackground } from '../utils/exec.ts';
 import { isProcessAlive, waitForProcessExit } from '../utils/host-process.ts';
-import { closeLoopbackServer, listenOnLoopback, waitForHttpOk } from './test-utils/index.ts';
+import { closeLoopbackServer, listenOnLoopback, waitForHttpOk } from './test-utils/loopback.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 type DaemonInfoFile = {

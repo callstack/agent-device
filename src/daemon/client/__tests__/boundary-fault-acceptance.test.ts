@@ -3,7 +3,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { assertRejectsAppError } from '../../../__tests__/test-utils/index.ts';
+import { assertRejectsAppError } from '../../../__tests__/test-utils/app-error.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import type { DaemonPaths } from '../../config.ts';
 import type { DaemonRequest } from '../../types.ts';

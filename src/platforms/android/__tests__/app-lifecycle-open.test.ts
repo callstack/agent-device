@@ -4,12 +4,9 @@ import { closeAndroidApp, openAndroidApp } from '../app-lifecycle.ts';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  assertRejectsAppError,
-  ANDROID_EMULATOR,
-  withFakeAdb,
-  type FakeAdbResponse,
-} from '../../../__tests__/test-utils/index.ts';
+import { assertRejectsAppError } from '../../../__tests__/test-utils/app-error.ts';
+import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
+import { withFakeAdb, type FakeAdbResponse } from '../../../__tests__/test-utils/fake-adb.ts';
 
 test('openAndroidApp rejects activity override for deep link URLs', async () => {
   const device: DeviceInfo = {

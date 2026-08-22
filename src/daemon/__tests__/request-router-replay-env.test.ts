@@ -2,7 +2,7 @@ import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/de
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { makeSessionStore } from '../../__tests__/test-utils/index.ts';
+import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';

@@ -59,7 +59,10 @@ import { Worker } from 'node:worker_threads';
 import { PNG } from '../../../utils/png.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../types.ts';
 import { SessionStore } from '../../session-store.ts';
-import { makeAndroidSession, makeIosSession } from '../../../__tests__/test-utils/index.ts';
+import {
+  makeAndroidSession,
+  makeIosSession,
+} from '../../../__tests__/test-utils/session-factories.ts';
 import { runReplayScriptSource } from '../session-replay-runtime.ts';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import {

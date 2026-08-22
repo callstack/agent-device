@@ -27,7 +27,7 @@ vi.mock('../../device-ready.ts', () => ({
 }));
 
 import { dispatchCommand, resolveTargetDevice } from '../../../core/dispatch.ts';
-import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/index.ts';
+import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
 import { withSystemSurfaceDisclosure } from '../system-surface-disclosure.ts';
 
 const mockDispatch = vi.mocked(dispatchCommand);

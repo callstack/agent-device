@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/index.ts';
+import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
 import type { AndroidAdbExecutor } from '../adb-executor.ts';
 import { sampleLegacyAndroidCpuPerf } from '../perf-legacy-cpu.ts';
 

@@ -11,7 +11,8 @@ import {
 } from '../app-deployment-resolution.ts';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { assertRejectsAppError, withFakeAdb } from '../../../__tests__/test-utils/index.ts';
+import { assertRejectsAppError } from '../../../__tests__/test-utils/app-error.ts';
+import { withFakeAdb } from '../../../__tests__/test-utils/fake-adb.ts';
 import { mkdtempForTest } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 // The fake adb provider installs through the production withAndroidAdbProvider

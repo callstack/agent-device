@@ -1,6 +1,7 @@
 import { expect, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { LINUX_DEVICE, makeSessionStore } from '../../../__tests__/test-utils/index.ts';
+import { LINUX_DEVICE } from '../../../__tests__/test-utils/device-fixtures.ts';
+import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,

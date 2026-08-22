@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 import { expect, test } from 'vitest';
-import { formatRef, PROPERTY_RUNS, refArb } from '../test-utils/index.ts';
+import { formatRef, PROPERTY_RUNS, refArb } from '../test-utils/property-arbitraries.ts';
 import { normalizeRef, splitRefGenerationSuffix } from '@agent-device/kernel/snapshot';
 
 // #1076 versioned refs: `~s<generation>` is accepted INPUT on every ref parse

@@ -10,7 +10,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   supportsLoopbackBind,
-} from '../../__tests__/test-utils/index.ts';
+} from '../../__tests__/test-utils/loopback.ts';
 import { runCmdBackground } from '../exec.ts';
 import { sendToDaemon } from '../../daemon/client/daemon-client.ts';
 import { computeDaemonCodeSignature } from '../../daemon/code-signature.ts';

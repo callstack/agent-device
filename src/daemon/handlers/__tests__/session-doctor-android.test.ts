@@ -27,7 +27,7 @@ vi.mock('../../../platforms/android/ime-helper.ts', async (importOriginal) => {
   };
 });
 
-import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/index.ts';
+import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
 import { appendAndroidChecks } from '../session-doctor-android.ts';
 import {
   resetAndroidTestImeActivationCacheForTests,

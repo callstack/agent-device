@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
-import { IOS_DEVICE, IOS_SIMULATOR } from '../../../../__tests__/test-utils/index.ts';
+import { IOS_DEVICE, IOS_SIMULATOR } from '../../../../__tests__/test-utils/device-fixtures.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 const {

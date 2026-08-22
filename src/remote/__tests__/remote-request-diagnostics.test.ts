@@ -9,7 +9,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '../../__tests__/test-utils/index.ts';
+} from '../../__tests__/test-utils/loopback.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const DAEMON_LOG_PATH = '/Users/daemon-host/.agent-device/sessions/default/requests/abc123.ndjson';

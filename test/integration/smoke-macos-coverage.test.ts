@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
-import { mkdtempForTest } from '../../src/__tests__/test-utils/index.ts';
+import { mkdtempForTest } from '../../src/__tests__/test-utils/tmp-dir.ts';
 import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
 import { isCommandSupportedOnDevice } from '../../src/core/capabilities.ts';
 import {

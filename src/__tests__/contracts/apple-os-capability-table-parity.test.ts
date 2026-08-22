@@ -23,7 +23,7 @@ import {
   TVOS_SIMULATOR,
   VISIONOS_SIMULATOR,
   WEB_DESKTOP_DEVICE,
-} from '../test-utils/index.ts';
+} from '../test-utils/device-fixtures.ts';
 import { APPLE_OS_CAPABILITIES } from '../../platforms/apple/capabilities.ts';
 import { getPlugin } from '../../core/platform-plugin-registry.ts';
 import { registerBuiltinPlatformPlugins } from '../../core/interactors/register-builtins.ts';

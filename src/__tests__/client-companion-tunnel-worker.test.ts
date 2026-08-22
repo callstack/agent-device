@@ -11,7 +11,7 @@ import {
   buildCompanionPayload,
   runCompanionTunnelWorker,
 } from '../client/client-companion-tunnel-worker.ts';
-import { closeLoopbackServer, listenOnLoopback } from './test-utils/index.ts';
+import { closeLoopbackServer, listenOnLoopback } from './test-utils/loopback.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 type Deferred<T> = {

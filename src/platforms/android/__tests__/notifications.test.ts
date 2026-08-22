@@ -1,7 +1,7 @@
 import { expect, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { pushAndroidNotification } from '../notifications.ts';
-import { withFakeAdb } from '../../../__tests__/test-utils/index.ts';
+import { withFakeAdb } from '../../../__tests__/test-utils/fake-adb.ts';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 

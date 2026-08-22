@@ -21,7 +21,7 @@ import {
   TVOS_SIMULATOR,
   VISIONOS_SIMULATOR,
   WEB_DESKTOP_DEVICE,
-} from '../../__tests__/test-utils/index.ts';
+} from '../../__tests__/test-utils/device-fixtures.ts';
 import {
   BASE_COMMAND_CAPABILITY_MATRIX,
   isCommandSupportedOnDevice,

@@ -45,11 +45,11 @@ import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '../../../../utils/exec.ts';
 import { retryWithPolicy } from '../../../../utils/retry.ts';
 import { PNG } from '../../../../utils/png.ts';
+import { assertRejectsAppError } from '../../../../__tests__/test-utils/app-error.ts';
 import {
-  assertRejectsAppError,
   withFakeAppleTool,
   type FakeAppleToolResponse,
-} from '../../../../__tests__/test-utils/index.ts';
+} from '../../../../__tests__/test-utils/fake-apple-tool.ts';
 import {
   IOS_TEST_DEVICE,
   IOS_TEST_SIMULATOR,

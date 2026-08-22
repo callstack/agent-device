@@ -17,7 +17,7 @@ vi.mock('../../platforms/web/agent-browser-lifecycle.ts', async (importOriginal)
   };
 });
 
-import { WEB_DESKTOP_DEVICE } from '../../__tests__/test-utils/index.ts';
+import { WEB_DESKTOP_DEVICE } from '../../__tests__/test-utils/device-fixtures.ts';
 import { SessionStore } from '../session-store.ts';
 import { cleanupWebBrowserOrphansForDaemonStartup } from './daemon-runtime.ts';
 import { installFakeManagedAgentBrowser } from '../../platforms/web/__tests__/test-utils.ts';

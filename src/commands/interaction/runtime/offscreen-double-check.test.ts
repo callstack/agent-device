@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import { ref, selector } from './selector-read-utils.ts';
-import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
+import { makeSnapshotState } from '../../../__tests__/test-utils/snapshot-builders.ts';
 import { createInteractionDevice } from './__tests__/test-utils/index.ts';
 
 // #1542: end-to-end coverage for the off-screen refusal double-check, next to

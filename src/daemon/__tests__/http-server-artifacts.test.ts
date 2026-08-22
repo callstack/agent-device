@@ -14,7 +14,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '../../__tests__/test-utils/index.ts';
+} from '../../__tests__/test-utils/loopback.ts';
 import { ANDROID_ARTIFACTS_CONTRACT_EVIDENCE } from './http-server-artifacts.coverage.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 

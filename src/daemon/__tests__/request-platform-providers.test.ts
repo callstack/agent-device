@@ -5,11 +5,13 @@ import {
   IOS_SIMULATOR,
   MACOS_DEVICE,
   WEB_DESKTOP_DEVICE,
+} from '../../__tests__/test-utils/device-fixtures.ts';
+import {
   makeAndroidSession,
   makeIosSession,
   makeMacOsSession,
   makeSession,
-} from '../../__tests__/test-utils/index.ts';
+} from '../../__tests__/test-utils/session-factories.ts';
 import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import {
   createLocalAppleToolProvider,

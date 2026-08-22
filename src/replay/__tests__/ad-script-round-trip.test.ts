@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { PROPERTY_RUNS, replayScriptArb } from '../../__tests__/test-utils/index.ts';
+import { PROPERTY_RUNS, replayScriptArb } from '../../__tests__/test-utils/property-arbitraries.ts';
 import {
   formatPortableActionLine,
   formatTargetAnnotationLines,

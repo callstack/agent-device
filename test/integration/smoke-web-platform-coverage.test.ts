@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
-import { WEB_DESKTOP_DEVICE, mkdtempForTest } from '../../src/__tests__/test-utils/index.ts';
+import { WEB_DESKTOP_DEVICE } from '../../src/__tests__/test-utils/device-fixtures.ts';
+import { mkdtempForTest } from '../../src/__tests__/test-utils/tmp-dir.ts';
 import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
 import { isCommandSupportedOnDevice } from '../../src/core/capabilities.ts';
 import {

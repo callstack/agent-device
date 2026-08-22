@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { likelyPlayableWebmContainer } from '../__tests__/test-utils/index.ts';
+import { likelyPlayableWebmContainer } from '../__tests__/test-utils/video-fixtures.ts';
 import { mkdtempForTestSync } from '../__tests__/test-utils/tmp-dir.ts';
 import { hasPlayableWebmStructure } from './video-webm.ts';
 

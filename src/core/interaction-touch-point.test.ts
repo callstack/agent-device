@@ -4,9 +4,9 @@ import type { Point, Rect } from '@agent-device/kernel/snapshot';
 import { test } from 'vitest';
 import {
   interactionTouchPointScenarioArb,
-  makeSnapshotState,
   PROPERTY_RUNS,
-} from '../__tests__/test-utils/index.ts';
+} from '../__tests__/test-utils/property-arbitraries.ts';
+import { makeSnapshotState } from '../__tests__/test-utils/snapshot-builders.ts';
 import { resolveInteractionTouchPoint } from './interaction-touch-point.ts';
 
 function containsPoint(rect: Rect, point: Point): boolean {

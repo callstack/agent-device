@@ -4,7 +4,7 @@ import {
   invalidateSimulatorStatusBarOverrideCache,
   prepareSimulatorStatusBarForScreenshot,
 } from '../screenshot-status-bar.ts';
-import { withFakeAppleTool } from '../../../../__tests__/test-utils/index.ts';
+import { withFakeAppleTool } from '../../../../__tests__/test-utils/fake-apple-tool.ts';
 import { IOS_TEST_SIMULATOR } from './apple-core-stub-helpers.ts';
 
 // The fake tool provider installs through the production withAppleToolProvider

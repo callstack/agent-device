@@ -18,7 +18,7 @@ import {
   MACOS_DEVICE,
   TVOS_SIMULATOR,
   WEB_DESKTOP_DEVICE,
-} from '../../__tests__/test-utils/index.ts';
+} from '../../__tests__/test-utils/device-fixtures.ts';
 import { getPlugin } from '../../core/platform-plugin-registry.ts';
 import { registerBuiltinPlatformPlugins } from '../../core/interactors/register-builtins.ts';
 

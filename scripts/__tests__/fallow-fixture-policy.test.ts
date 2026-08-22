@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'vitest';
-import { mkdtempForTest } from '../../src/__tests__/test-utils/index.ts';
+import { mkdtempForTest } from '../../src/__tests__/test-utils/tmp-dir.ts';
 import { runCmd } from '../../src/utils/exec.ts';
 
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');

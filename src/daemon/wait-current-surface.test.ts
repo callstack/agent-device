@@ -1,6 +1,6 @@
 import { expect, test, vi } from 'vitest';
 
-import { ANDROID_EMULATOR } from '../__tests__/test-utils/index.ts';
+import { ANDROID_EMULATOR } from '../__tests__/test-utils/device-fixtures.ts';
 import { maybeWaitTimeoutSurfaceResponse } from './wait-current-surface.ts';
 import type { BoundSelectorCapture } from './selector-capture-binding.ts';
 

@@ -1,11 +1,9 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { setAndroidSetting } from '../settings.ts';
-import {
-  ANDROID_EMULATOR,
-  assertRejectsAppError,
-  withFakeAdb,
-} from '../../../__tests__/test-utils/index.ts';
+import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
+import { assertRejectsAppError } from '../../../__tests__/test-utils/app-error.ts';
+import { withFakeAdb } from '../../../__tests__/test-utils/fake-adb.ts';
 
 // The fake adb provider installs through the production withAndroidAdbProvider
 // scope, so `calls` records device-scoped args without a leading `-s <serial>`.

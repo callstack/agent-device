@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import {
-  ANDROID_IME_HELPER_FIXTURE_ARTIFACT,
-  ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
-} from '../../../src/__tests__/test-utils/index.ts';
+import { ANDROID_IME_HELPER_FIXTURE_ARTIFACT } from '../../../src/__tests__/test-utils/android-ime-helper.ts';
+import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../../../src/__tests__/test-utils/android-snapshot-helper.ts';
 import type { AndroidAdbProvider } from '../../../src/platforms/android/adb-executor.ts';
 import { arrayEqual, assertCommandCall } from './assertions.ts';
 import { androidSettingsXml, androidSnapshotHelperOutput } from './android-world.ts';

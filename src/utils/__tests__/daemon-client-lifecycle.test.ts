@@ -35,7 +35,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   supportsLoopbackBind,
-} from '../../__tests__/test-utils/index.ts';
+} from '../../__tests__/test-utils/loopback.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmdDetachedMonitored, runCmdSync } from '../exec.ts';
 import { readProcessStartTime } from '../host-process.ts';

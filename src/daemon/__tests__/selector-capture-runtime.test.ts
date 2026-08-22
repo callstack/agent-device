@@ -1,7 +1,7 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { CaptureSnapshotInput, SnapshotResult } from '@agent-device/contracts/platform';
 import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
-import { makeIosSession } from '../../__tests__/test-utils/index.ts';
+import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { createSelectorCaptureRuntime } from '../selector-capture-runtime.ts';
 

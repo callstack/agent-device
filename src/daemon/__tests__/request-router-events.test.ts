@@ -6,7 +6,7 @@ import path from 'node:path';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import { makeIosSession } from '../../__tests__/test-utils/index.ts';
+import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 
 test('events reads the daemon-owned session timeline without appending poll noise', async () => {
   const sessionStore = makeSessionStore('agent-device-router-events-');

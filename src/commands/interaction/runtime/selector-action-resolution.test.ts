@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
+import { makeSnapshotState } from '../../../__tests__/test-utils/snapshot-builders.ts';
 import {
   ELEMENT14_DISTINCT_SUBTREE_NODES,
   EQUIVALENT_WRAPPER_CHAIN_NODES,

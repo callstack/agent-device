@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { IOS_DEVICE as SHARED_IOS_DEVICE } from '../../../../__tests__/test-utils/index.ts';
+import { IOS_DEVICE as SHARED_IOS_DEVICE } from '../../../../__tests__/test-utils/device-fixtures.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppError } from '@agent-device/kernel/errors';
 import { createAppleInteractor } from '../../interactor.ts';

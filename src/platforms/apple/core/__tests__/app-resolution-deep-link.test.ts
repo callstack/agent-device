@@ -7,7 +7,7 @@ import { resolveIosSimulatorDeepLinkBundleId } from '../app-resolution.ts';
 import {
   withFakeAppleTool,
   type FakeAppleToolResponse,
-} from '../../../../__tests__/test-utils/index.ts';
+} from '../../../../__tests__/test-utils/fake-apple-tool.ts';
 import { mkdtempForTest } from '../../../../__tests__/test-utils/tmp-dir.ts';
 import { IOS_TEST_SIMULATOR } from './apple-core-stub-helpers.ts';
 
