@@ -4,6 +4,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { buildSnapshotState } from '../../../daemon/snapshot-state.ts';
 import { parseUiHierarchy } from './ui-hierarchy-fixtures.ts';
+import {
+  AndroidSnapshotPresentationFailure,
+  isAndroidSnapshotPresentationFailure,
+} from '../snapshot-presentation.ts';
 
 // Android's scope leg of the golden table (#1832 C2). Android resolves `--scope` exactly once,
 // over the PRESENTED nodes of the requested projection, inside its projection; the daemon never
@@ -233,5 +237,38 @@ test('a match whose subtree presents nothing is skipped for the next candidate',
   assert.deepEqual(
     parseUiHierarchy(xml, undefined, { scope: 'settings' }).nodes.map((node) => node.label),
     ['Settings'],
+  );
+});
+
+test('hostile nested scope search is charged to the presentation budget', () => {
+  const depth = 180;
+  const opening = Array.from(
+    { length: depth },
+    () =>
+      '<node class="android.view.View" content-desc="target" bounds="[0,0][320,640]" visible-to-user="true">',
+  ).join('');
+  const xml = `<hierarchy>${opening}${'</node>'.repeat(depth)}</hierarchy>`;
+  const androidPresentation = {
+    deadlineAtMs: Number.POSITIVE_INFINITY,
+    maxWorkUnits: depth * 10,
+  };
+
+  assert.doesNotThrow(() =>
+    parseUiHierarchy(xml, undefined, { interactiveOnly: true, androidPresentation }),
+  );
+
+  assert.throws(
+    () =>
+      parseUiHierarchy(xml, undefined, {
+        interactiveOnly: true,
+        scope: 'target',
+        androidPresentation,
+      }),
+    (error: unknown) => {
+      assert.equal(isAndroidSnapshotPresentationFailure(error), true);
+      assert(error instanceof AndroidSnapshotPresentationFailure);
+      assert.equal(error.details.phase, 'complexity');
+      return true;
+    },
   );
 });

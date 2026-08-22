@@ -100,6 +100,17 @@ export function buildUiHierarchySnapshot(
         presentationBudget,
       );
     }
+    const { nodes, sourceNodes } = scope
+      ? scopePresentedAndroidSnapshot(
+          state,
+          tree.children,
+          scope,
+          requestedDepth,
+          presentationBudget,
+        )
+      : state;
+    const snapshot = { nodes, sourceNodes, analysis: state.analysis };
+    return state.truncated ? { ...snapshot, truncated: true } : snapshot;
   } catch (error) {
     if (isAndroidSnapshotPresentationFailure(error)) {
       error.analysis ??= state.analysis;
@@ -107,12 +118,6 @@ export function buildUiHierarchySnapshot(
     }
     throw error;
   }
-
-  const { nodes, sourceNodes } = scope
-    ? scopePresentedAndroidSnapshot(state, tree.children, scope, requestedDepth)
-    : state;
-  const snapshot = { nodes, sourceNodes, analysis: state.analysis };
-  return state.truncated ? { ...snapshot, truncated: true } : snapshot;
 }
 
 /**

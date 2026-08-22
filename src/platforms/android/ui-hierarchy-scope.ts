@@ -3,6 +3,7 @@ import {
   reindexSnapshotNodes,
   type SnapshotScopeCandidate,
 } from '@agent-device/contracts/snapshot';
+import type { AndroidSnapshotPresentationBudget } from './snapshot-presentation.ts';
 
 type PresentedNode = { index: number; depth?: number; parentIndex?: number };
 type SourceNode = SnapshotScopeCandidate & { depth: number; children: SourceNode[] };
@@ -46,21 +47,33 @@ export function scopePresentedAndroidSnapshot<
   roots: readonly Source[],
   scope: string,
   maxDepth: number,
+  budget: AndroidSnapshotPresentationBudget,
 ): AndroidPresentedNodes<Node, Source> {
   const presented = new Set<Source>(state.sourceNodes);
-  const scopeRoot = findAndroidScopeRoot(roots, scope, presented);
+  const order = collectDocumentOrder(roots, budget);
+  const contributing = collectPresentedSubtrees(order, presented, budget);
+  const scopeRoot = findAndroidScopeRoot(order, scope, contributing, budget);
   if (!scopeRoot) return { nodes: [], sourceNodes: [] };
 
-  const inScope = collectSubtree(scopeRoot);
-  const subtree = [...state.sourceNodes.entries()]
-    .filter(([, source]) => inScope.has(source))
-    .map(([position]) => position);
+  const inScope = new Set(collectDocumentOrder([scopeRoot], budget));
+  const subtree: number[] = [];
+  for (const [position, source] of state.sourceNodes.entries()) {
+    budget.check('work');
+    if (inScope.has(source)) subtree.push(position);
+  }
   if (subtree.length === 0) return { nodes: [], sourceNodes: [] };
 
-  const depthOffset = Math.min(...subtree.map((position) => state.nodes[position]?.depth ?? 0));
-  const positions = subtree.filter(
-    (position) => (state.nodes[position]?.depth ?? 0) - depthOffset <= maxDepth,
-  );
+  let depthOffset = Number.POSITIVE_INFINITY;
+  for (const position of subtree) {
+    budget.check('work');
+    depthOffset = Math.min(depthOffset, state.nodes[position]?.depth ?? 0);
+  }
+  const positions: number[] = [];
+  for (const position of subtree) {
+    budget.check('work');
+    if ((state.nodes[position]?.depth ?? 0) - depthOffset <= maxDepth) positions.push(position);
+  }
+  budget.consume(positions.length);
   return {
     nodes: reindexSnapshotNodes(
       positions.map((position) => state.nodes[position] as Node),
@@ -72,37 +85,56 @@ export function scopePresentedAndroidSnapshot<
 
 /** First document-order match whose subtree contributes presented content. */
 function findAndroidScopeRoot<Source extends SourceNode>(
-  roots: readonly Source[],
+  order: readonly Source[],
   scope: string,
-  presented: ReadonlySet<Source>,
+  contributing: ReadonlySet<Source>,
+  budget: AndroidSnapshotPresentationBudget,
 ): Source | null {
-  for (const node of documentOrder(roots)) {
-    if (matchesSnapshotScope(node, scope) && subtreeHasPresentedNode(node, presented)) return node;
+  for (const node of order) {
+    budget.check('work');
+    if (matchesSnapshotScope(node, scope) && contributing.has(node)) return node;
   }
   return null;
 }
 
-function* documentOrder<Source extends SourceNode>(roots: readonly Source[]): Generator<Source> {
+function collectDocumentOrder<Source extends SourceNode>(
+  roots: readonly Source[],
+  budget: AndroidSnapshotPresentationBudget,
+): Source[] {
+  const order: Source[] = [];
   const stack = [...roots].reverse();
   while (stack.length > 0) {
+    budget.check('work');
     const node = stack.pop() as Source;
-    yield node;
+    order.push(node);
     for (let index = node.children.length - 1; index >= 0; index -= 1) {
+      budget.check('work');
       stack.push(node.children[index] as Source);
     }
   }
+  return order;
 }
 
-function subtreeHasPresentedNode<Source extends SourceNode>(
-  root: Source,
+function collectPresentedSubtrees<Source extends SourceNode>(
+  order: readonly Source[],
   presented: ReadonlySet<Source>,
-): boolean {
-  for (const node of documentOrder([root])) {
-    if (presented.has(node)) return true;
+  budget: AndroidSnapshotPresentationBudget,
+): ReadonlySet<Source> {
+  const contributing = new Set<Source>();
+  for (let index = order.length - 1; index >= 0; index -= 1) {
+    budget.check('work');
+    const node = order[index] as Source;
+    if (presented.has(node)) {
+      contributing.add(node);
+      continue;
+    }
+    for (const child of node.children) {
+      budget.check('work');
+      if (contributing.has(child as Source)) {
+        contributing.add(node);
+        break;
+      }
+    }
   }
-  return false;
-}
-
-function collectSubtree<Source extends SourceNode>(root: Source): ReadonlySet<Source> {
-  return new Set(documentOrder([root]));
+  return contributing;
 }
