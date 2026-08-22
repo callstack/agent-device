@@ -17,11 +17,9 @@ import {
   type AndroidAdbProcess,
   type AndroidAdbProvider,
 } from '../adb-executor.ts';
-import {
-  captureAndroidSnapshotWithHelperSession,
-  getAndroidSnapshotHelperSessionDeviceKey,
-  resetAndroidSnapshotHelperSessions,
-} from '../snapshot-helper-session.ts';
+import { captureAndroidSnapshotWithHelperSession } from '../snapshot-helper-session.ts';
+import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
+import { getAndroidSnapshotHelperSessionDeviceKey } from '../snapshot-helper-retirement.ts';
 import { lowerAndroidTouchPlan } from '../touch-plan.ts';
 import { executeAndroidTouchHelperPlan, readAndroidTouchHelperViewport } from '../touch-helper.ts';
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../../../__tests__/test-utils/android-snapshot-helper.ts';

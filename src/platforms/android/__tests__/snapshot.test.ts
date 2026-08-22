@@ -24,7 +24,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '../../../utils/exec.ts';
 import { sleep } from '../adb.ts';
 import { resetAndroidSnapshotHelperInstallCache } from '../snapshot-helper-install.ts';
-import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session.ts';
+import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
 import { type AndroidAdbExecutor } from '../snapshot-helper.ts';
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../../../__tests__/test-utils/android-snapshot-helper.ts';
 import {

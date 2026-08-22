@@ -3,7 +3,7 @@ import { afterEach, beforeEach, test, vi } from 'vitest';
 import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
 import { AppError } from '@agent-device/kernel/errors';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
-import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session.ts';
+import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
 import { executeAndroidTouchPlan } from '../touch-executor.ts';
 import { lowerAndroidTouchPlan } from '../touch-plan.ts';
 import {

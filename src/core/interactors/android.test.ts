@@ -6,13 +6,13 @@ import {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createAndroidInteractor } from './android.ts';
 import { snapshotAndroid } from '../../platforms/android/snapshot.ts';
-import { fillAndroid, scrollAndroid } from '../../platforms/android/input-actions.ts';
+import { scrollAndroid } from '../../platforms/android/input-actions.ts';
+import { fillAndroid } from '../../platforms/android/text-input.ts';
 
 vi.mock('../../platforms/android/snapshot.ts', () => ({
   snapshotAndroid: vi.fn(),
 }));
 vi.mock('../../platforms/android/input-actions.ts', () => ({
-  fillAndroid: vi.fn(),
   scrollAndroid: vi.fn(),
   appSwitcherAndroid: vi.fn(),
   backAndroid: vi.fn(),
@@ -22,6 +22,9 @@ vi.mock('../../platforms/android/input-actions.ts', () => ({
   pressAndroid: vi.fn(),
   pressAndroidTvRemote: vi.fn(),
   setAndroidOrientation: vi.fn(),
+}));
+vi.mock('../../platforms/android/text-input.ts', () => ({
+  fillAndroid: vi.fn(),
   typeAndroid: vi.fn(),
 }));
 

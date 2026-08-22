@@ -2,6 +2,10 @@
 // plus a local TCP server standing in for the helper's session socket. Every test that observes
 // session lifetime (snapshot capture, fill verification samples, gesture/viewport transport) reads
 // the same fake, so "one warm session" means the same thing in all of them.
+//
+// `createSessionProvider` answers the session protocol alone and is where lifetime and teardown
+// evidence are steered from; `createPersistentSnapshotHelperProvider` adds the install probe,
+// viewport, and one-shot instrumentation the callers above it need.
 
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
@@ -129,6 +133,201 @@ export function createPersistentSnapshotHelperProvider(
   };
 }
 
+export type SessionProviderOptions = {
+  calls: string[][];
+  cleanupAborts?: string[][];
+  processes?: FakeAndroidProcess[];
+  quitExit?: { code: number | null; signal: NodeJS.Signals | null };
+  quitExitDelayMs?: number;
+  quitResponseMode?: 'ok' | 'malformed';
+  spawnArgs?: string[][];
+  responseMode?: 'ok' | 'malformed' | 'ui-automation-timeout';
+  responseDelayMs?: number;
+  forceStopDelayMs?: number;
+  recoveryFailure?: boolean;
+  stalledCleanup?: boolean;
+  stalledSnapshots?: number;
+  /** Whether `adb features` advertises the shell protocol that forwards device exit status. */
+  shellProtocolV2?: boolean;
+  /** Make the `adb features` probe fail the way an adb too old to know the command does. */
+  featureProbeFailure?: boolean;
+};
+
+export function createSessionProvider(options: SessionProviderOptions): AndroidAdbProvider {
+  let stalledSnapshots = options.stalledSnapshots ?? 0;
+  return {
+    exec: createSessionExec(options),
+    spawn: (args) => {
+      options.spawnArgs?.push(args);
+      const port = readSessionPort(args);
+      const process = new FakeAndroidProcess();
+      options.processes?.push(process);
+      let snapshotCount = 0;
+      const sockets = new Set<net.Socket>();
+      const server = net.createServer((socket) => {
+        sockets.add(socket);
+        socket.once('close', () => sockets.delete(socket));
+        socket.once('data', (chunk) => {
+          const command = chunk.toString('utf8').trim();
+          const [, requestId = ''] = command.split(/\s+/, 2);
+          if (command.startsWith('quit')) {
+            if (options.quitResponseMode === 'malformed') {
+              socket.end('not a session response');
+              return;
+            }
+            socket.end(sessionResponse({ requestId, body: '' }));
+            const quitExit = options.quitExit ?? { code: 0, signal: null };
+            server.close(() => {
+              setTimeout(
+                () => process.emitExit(quitExit.code, quitExit.signal),
+                options.quitExitDelayMs ?? 0,
+              );
+            });
+            return;
+          }
+          if (options.responseMode === 'malformed') {
+            socket.end('not a session response');
+            return;
+          }
+          if (options.responseMode === 'ui-automation-timeout') {
+            socket.end(
+              sessionResponse({
+                requestId,
+                body: '',
+                metadata: {
+                  ok: 'false',
+                  errorType: 'java.util.concurrent.TimeoutException',
+                  message: 'Timed out waiting for Android UiAutomation to connect',
+                },
+              }),
+            );
+            return;
+          }
+          snapshotCount += 1;
+          if (stalledSnapshots > 0) {
+            stalledSnapshots -= 1;
+            return;
+          }
+          const body = `<hierarchy><node text="snapshot ${snapshotCount}" /></hierarchy>`;
+          setTimeout(() => {
+            socket.end(
+              sessionResponse({
+                requestId,
+                body,
+                metadata: {
+                  waitForIdleTimeoutMs: '25',
+                  waitForIdleQuietMs: '25',
+                  timeoutMs: '5000',
+                  maxDepth: '128',
+                  maxNodes: '5000',
+                  rootPresent: 'true',
+                  captureMode: 'interactive-windows',
+                  windowCount: '1',
+                  nodeCount: '1',
+                  truncated: 'false',
+                  elapsedMs: '7',
+                },
+              }),
+            );
+          }, options.responseDelayMs ?? 0);
+        });
+      });
+      server.listen(port, '127.0.0.1', () => {
+        process.stdout.write(
+          [
+            'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
+            'INSTRUMENTATION_STATUS: sessionReady=true',
+            'INSTRUMENTATION_STATUS_CODE: 2',
+            '',
+          ].join('\n'),
+        );
+      });
+      process.onKill = () => {
+        for (const socket of sockets) socket.destroy();
+        if (server.listening) {
+          server.close(() => process.emitExit(0, null));
+        } else {
+          process.emitExit(0, null);
+        }
+      };
+      return process;
+    },
+  };
+}
+
+function createSessionExec(options: SessionProviderOptions): AndroidAdbExecutor {
+  return async (args, execOptions) => {
+    options.calls.push(args);
+    if (args[0] === 'features') return adbFeaturesResult(options);
+    const forceStopsRuntime = args.join(' ').includes('am force-stop');
+    await stallSessionCleanupIfConfigured(options, args, execOptions?.signal, forceStopsRuntime);
+    if (options.recoveryFailure && forceStopsRuntime) {
+      return { exitCode: 1, stdout: '', stderr: 'runtime still busy' };
+    }
+    await delayForceStopIfConfigured(options, execOptions?.signal, forceStopsRuntime);
+    return { exitCode: 0, stdout: '', stderr: '' };
+  };
+}
+
+function adbFeaturesResult(options: SessionProviderOptions): {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+} {
+  if (options.featureProbeFailure) {
+    return { exitCode: 1, stdout: '', stderr: 'adb: unknown command features' };
+  }
+  const features = [
+    'cmd',
+    'stat_v2',
+    'abb',
+    ...(options.shellProtocolV2 === false ? [] : ['shell_v2']),
+  ];
+  return { exitCode: 0, stdout: `${features.join('\n')}\n`, stderr: '' };
+}
+
+async function stallSessionCleanupIfConfigured(
+  options: SessionProviderOptions,
+  args: string[],
+  signal: AbortSignal | undefined,
+  forceStopsRuntime: boolean,
+): Promise<void> {
+  const removesForward = args[0] === 'forward' && args[1] === '--remove';
+  if (!options.stalledCleanup || !signal || (!removesForward && !forceStopsRuntime)) return;
+  await new Promise<never>((_resolve, reject) => {
+    const onAbort = () => {
+      options.cleanupAborts?.push(args);
+      reject(signal.reason);
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    if (signal.aborted) onAbort();
+  });
+}
+
+async function delayForceStopIfConfigured(
+  options: SessionProviderOptions,
+  signal: AbortSignal | undefined,
+  forceStopsRuntime: boolean,
+): Promise<void> {
+  if (!forceStopsRuntime || !options.forceStopDelayMs) return;
+  await waitForDelay(options.forceStopDelayMs, signal);
+}
+
+async function waitForDelay(delayMs: number, signal: AbortSignal | undefined): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, delayMs);
+    signal?.addEventListener('abort', onAbort, { once: true });
+    if (signal?.aborted) onAbort();
+  });
+}
+
 export function isAndroidHelperRuntimeForceStop(args: readonly string[]): boolean {
   return args[0] === 'shell' && args[1] === 'am' && args[2] === 'force-stop';
 }
@@ -198,6 +397,10 @@ function persistentSnapshotExecResult(
 ): ReturnType<AndroidAdbExecutor> {
   if (args.includes('--show-versioncode')) {
     return Promise.resolve(ANDROID_HELPER_INSTALLED_VERSION_PROBE);
+  }
+  // A current adb: it negotiated shell protocol v2, so a host exit status is the device's.
+  if (args[0] === 'features') {
+    return Promise.resolve({ exitCode: 0, stdout: 'cmd\nstat_v2\nshell_v2\n', stderr: '' });
   }
   if (args[0] === 'forward' || isAndroidHelperRuntimeForceStop(args)) {
     return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });

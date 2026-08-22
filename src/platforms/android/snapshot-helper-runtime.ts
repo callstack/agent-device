@@ -2,7 +2,7 @@ import { normalizeError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { sleep } from './adb.ts';
 import type { AndroidAdbExecutor } from './adb-executor.ts';
-import { stopAndroidSnapshotHelperSession } from './snapshot-helper-session.ts';
+import { stopAndroidSnapshotHelperSession } from './snapshot-helper-session-lifecycle.ts';
 
 const HELPER_RUNTIME_RESET_DELAY_MS = 150;
 const HELPER_RUNTIME_RESET_TIMEOUT_MS = 2_000;

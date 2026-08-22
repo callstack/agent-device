@@ -13,7 +13,7 @@ import {
   readAndroidFillTargetBeforeMutation,
   verifyAndroidFilledText,
 } from '../fill-verification.ts';
-import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session.ts';
+import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
 import {
   createPersistentSnapshotHelperProvider,
   isAndroidHelperForwardRemoval,

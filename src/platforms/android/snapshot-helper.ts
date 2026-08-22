@@ -1,13 +1,15 @@
 export { parseAndroidSnapshotHelperManifest } from './snapshot-helper-artifact.ts';
 export { captureAndroidSnapshotWithHelper } from './snapshot-helper-capture.ts';
+export { captureAndroidSnapshotWithHelperSession } from './snapshot-helper-session.ts';
 export {
-  captureAndroidSnapshotWithHelperSession,
-  getAndroidSnapshotHelperSessionDeviceKey,
-  isAndroidSnapshotHelperRetirementUnconfirmedError,
   resetAndroidSnapshotHelperSessions,
   stopAndroidSnapshotHelperSession,
   stopAndroidSnapshotHelperSessionForDevice,
-} from './snapshot-helper-session.ts';
+} from './snapshot-helper-session-lifecycle.ts';
+export {
+  getAndroidSnapshotHelperSessionDeviceKey,
+  isAndroidSnapshotHelperRetirementUnconfirmedError,
+} from './snapshot-helper-retirement.ts';
 export {
   ensureAndroidSnapshotHelper,
   forgetAndroidSnapshotHelperInstall,

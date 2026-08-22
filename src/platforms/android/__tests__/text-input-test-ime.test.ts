@@ -34,7 +34,7 @@ import {
   ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
   createAndroidSnapshotHelperExecutor,
 } from '../../../__tests__/test-utils/android-snapshot-helper.ts';
-import { fillAndroid, typeAndroid } from '../input-actions.ts';
+import { fillAndroid, typeAndroid } from '../text-input.ts';
 import { withAndroidAdbProvider, type AndroidAdbExecutor } from '../adb-executor.ts';
 import {
   resetAndroidTestImeActivationCacheForTests,

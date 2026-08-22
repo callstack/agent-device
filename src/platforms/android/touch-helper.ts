@@ -18,13 +18,15 @@ import type { AndroidLoweredTouchPlan } from './touch-plan.ts';
 import { resolveAndroidHelperArtifact } from './helper-package-install.ts';
 import { parseAndroidSnapshotHelperManifest } from './snapshot-helper-artifact.ts';
 import { ensureAndroidSnapshotHelper } from './snapshot-helper-install.ts';
+import { runAndroidSnapshotHelperSessionTouchCommand } from './snapshot-helper-session.ts';
 import {
   ensureAndroidSnapshotHelperSession,
+  stopAndroidSnapshotHelperSession,
+} from './snapshot-helper-session-lifecycle.ts';
+import {
   getAndroidSnapshotHelperSessionDeviceKey,
   recoverAndroidSnapshotHelperRetirement,
-  runAndroidSnapshotHelperSessionTouchCommand,
-  stopAndroidSnapshotHelperSession,
-} from './snapshot-helper-session.ts';
+} from './snapshot-helper-retirement.ts';
 import { buildAndroidSnapshotHelperCaptureOptions } from './snapshot-helper-capture.ts';
 import {
   ANDROID_SNAPSHOT_HELPER_PROTOCOL,

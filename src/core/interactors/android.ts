@@ -6,7 +6,6 @@ import {
 import {
   appSwitcherAndroid,
   backAndroid,
-  fillAndroid,
   focusAndroid,
   homeAndroid,
   longPressAndroid,
@@ -14,8 +13,8 @@ import {
   pressAndroidTvRemote,
   scrollAndroid,
   setAndroidOrientation,
-  typeAndroid,
 } from '../../platforms/android/input-actions.ts';
+import { fillAndroid, typeAndroid } from '../../platforms/android/text-input.ts';
 import {
   executeAndroidTouchPlan,
   readAndroidGestureViewport,
@@ -82,7 +81,8 @@ export function createAndroidInteractor(
     screenshot: (outPath, options) => screenshotAndroid(device, outPath, options),
     // uiautomator reads the node covering a point; `undefined` means nothing covers it.
     readTextAtPoint: async (point, options) => {
-      const { readAndroidTextAtPoint } = await import('../../platforms/android/input-actions.ts');
+      const { readAndroidTextAtPoint } =
+        await import('../../platforms/android/fill-verification.ts');
       const read = await readAndroidTextAtPoint(device, point.x, point.y, {
         helperSessionScope: androidHelperSessionScope(options?.appBundleId),
       });

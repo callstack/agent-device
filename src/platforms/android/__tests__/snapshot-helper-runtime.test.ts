@@ -4,7 +4,7 @@ import type { AndroidAdbExecutor } from '../adb-executor.ts';
 
 const { stopSession } = vi.hoisted(() => ({ stopSession: vi.fn() }));
 
-vi.mock('../snapshot-helper-session.ts', () => ({
+vi.mock('../snapshot-helper-session-lifecycle.ts', () => ({
   stopAndroidSnapshotHelperSession: stopSession,
 }));
 

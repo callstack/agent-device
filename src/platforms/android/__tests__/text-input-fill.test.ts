@@ -6,7 +6,7 @@ import {
   createAndroidSnapshotHelperExecutor,
 } from '../../../__tests__/test-utils/android-snapshot-helper.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { fillAndroid, typeAndroid } from '../input-actions.ts';
+import { fillAndroid, typeAndroid } from '../text-input.ts';
 import { withAndroidAdbProvider, type AndroidAdbExecutor } from '../adb-executor.ts';
 import {
   androidFillFailureDetails,
@@ -14,7 +14,7 @@ import {
   readAndroidTextAtPointInHierarchy,
   verifyAndroidFilledTextInHierarchy,
 } from '../fill-verification.ts';
-import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session.ts';
+import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
 import {
   createPersistentSnapshotHelperProvider,
   isAndroidHelperForwardRemoval,
