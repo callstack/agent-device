@@ -3,9 +3,9 @@ import Foundation
 import XCTest
 
 extension RunnerTests {
-  func testRegularPresentationPublishesGeometricActionabilityWithoutOcclusionOrTypeGate() throws {
-    // Non-vacuity: restoring the old raw `hittable` copy would make the covered button and the
-    // labeled image false, while dropping the enabled check would make the disabled button true.
+  func testRegularPresentationPreservesAcquiredActionabilityWhileApplyingGeometry() throws {
+    // Non-vacuity: dropping the acquired `hittable` check would upgrade the covered button and
+    // labeled image, while dropping the enabled check would make the disabled button true.
     let nodes = [
       RawAXNode(
         index: 0,
@@ -102,8 +102,9 @@ extension RunnerTests {
     )
     let presented = try XCTUnwrap(capture.payload.nodes)
 
-    XCTAssertEqual(presented.first { $0.label == "Covered button" }?.hittable, true)
-    XCTAssertEqual(presented.first { $0.label == "Labeled image" }?.hittable, true)
+    XCTAssertEqual(presented.first { $0.label == "Covered button" }?.hittable, false)
+    XCTAssertEqual(presented.first { $0.label == "Labeled image" }?.hittable, false)
+    XCTAssertEqual(presented.first { $0.label == "Overlay" }?.hittable, true)
     XCTAssertEqual(presented.first { $0.label == "Disabled button" }?.hittable, false)
   }
 

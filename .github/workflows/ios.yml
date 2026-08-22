@@ -178,7 +178,7 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testEffectiveGeometryIntersectsViewportAndAncestorClip \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testEffectiveGeometryKeepsReportedOriginWhenFullyClipped \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularPresentationRoutesThroughVisibilityFold \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularPresentationPublishesGeometricActionabilityWithoutOcclusionOrTypeGate \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularPresentationPreservesAcquiredActionabilityWhileApplyingGeometry \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotAcquisitionDoesNotReintroduceRunnerOcclusionScan \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotScopePolicyMatchesGoldenParityTable \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testScrollContainerTypeNamesMatchElementTypeSet \
