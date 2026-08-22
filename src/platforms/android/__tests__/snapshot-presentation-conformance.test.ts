@@ -73,7 +73,7 @@ function conformanceXml(fixture: ConformanceFixture, nodes: ConformanceNode[]): 
   return lines.join('\n');
 }
 
-test('Android presentation matches the shared RawAXNode to Presented fixture', () => {
+test('Android XML parsing and presentation match the shared acquisition-to-presentation fixture', () => {
   const fixture = JSON.parse(fs.readFileSync(TABLE_PATH, 'utf8')) as ConformanceFixture;
   assert.equal(fixture.version, 1);
   assert.ok(fixture.cases.length > 0);
