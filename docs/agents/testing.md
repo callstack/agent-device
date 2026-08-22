@@ -62,9 +62,12 @@ Read those entry files before running a lane; do not copy their changing environ
 
 ## Shared test utilities
 
-Before creating fixtures, inspect `src/__tests__/test-utils/index.ts` and import its named builders
-through the barrel. Shared `DeviceInfo`, session, snapshot, store, runtime-fact, and mocked-binary
-values belong in a sibling fixture module rather than repeated test literals.
+Before creating fixtures, inspect the modules under `src/__tests__/test-utils/` and import the named
+builders directly from the module that defines them (for example `session-factories.ts`,
+`device-fixtures.ts`, `store-factory.ts`). There is deliberately no barrel: importing through one
+made every test evaluate all helpers' transitive graphs. Shared `DeviceInfo`, session, snapshot,
+store, runtime-fact, and mocked-binary values belong in a sibling fixture module rather than
+repeated test literals.
 
 Use `mkdtempForTest` or `mkdtempForTestSync`. The Vitest global setup redirects `TMPDIR` for the
 whole run and removes it after every worker finishes; do not add per-test cleanup for directories
