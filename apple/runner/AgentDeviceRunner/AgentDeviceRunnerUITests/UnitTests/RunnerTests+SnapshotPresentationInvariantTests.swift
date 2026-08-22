@@ -91,7 +91,8 @@ extension RunnerTests {
 
     return SnapshotAcquisition(
       hint: CaptureHint(
-        projection: .regular, depth: nil, interactiveOnly: false, customActions: false),
+        projection: .regular, depth: nil, regularPresentedDepth: nil, interactiveOnly: false,
+        customActions: false),
       nodes: nodes,
       truncated: false,
       effectiveDepth: nil,
@@ -102,7 +103,8 @@ extension RunnerTests {
   func testRegularPresentationKeepsNestedClipGeometryCumulative() throws {
     let acquisition = SnapshotAcquisition(
       hint: CaptureHint(
-        projection: .regular, depth: nil, interactiveOnly: false, customActions: false),
+        projection: .regular, depth: nil, regularPresentedDepth: nil, interactiveOnly: false,
+        customActions: false),
       nodes: [
         Self.invariantNode(
           0,
@@ -163,7 +165,8 @@ extension RunnerTests {
   func testRegularPresentationKeepsFramelessSemanticCarriersNonActionableAndNonClipping() throws {
     let acquisition = SnapshotAcquisition(
       hint: CaptureHint(
-        projection: .regular, depth: nil, interactiveOnly: true, customActions: false),
+        projection: .regular, depth: nil, regularPresentedDepth: nil, interactiveOnly: true,
+        customActions: false),
       nodes: [
         Self.invariantNode(
           0,
