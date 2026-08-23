@@ -39,22 +39,46 @@ export async function repairMacOsRunnerProductsIfNeeded(
     if (await hasValidCodeSignature(productPath)) {
       continue;
     }
-    await runAppleToolCommand('codesign', ['--remove-signature', productPath], {
-      allowFailure: true,
-    });
-    try {
-      await runAppleToolCommand('codesign', ['--force', '--sign', '-', productPath]);
-    } catch (error) {
-      const appError = asAppError(error, 'COMMAND_FAILED');
-      throw new AppError('COMMAND_FAILED', 'Failed to repair macOS runner product signature', {
-        reason: 'RUNNER_PRODUCT_REPAIR_FAILED',
-        productPath,
-        xctestrunPath,
-        error: appError.message,
-        details: appError.details,
-      });
-    }
+    await resignRunnerProduct(productPath, xctestrunPath);
   }
+}
+
+async function resignRunnerProduct(productPath: string, xctestrunPath: string): Promise<void> {
+  await runAppleToolCommand('codesign', ['--remove-signature', productPath], {
+    allowFailure: true,
+  });
+  try {
+    // --deep is required: macOS runners build with CODE_SIGNING_ALLOWED=NO, so Xcode embeds the
+    // Apple test frameworks without re-signing them while dropping their sealed Modules/ entries.
+    // Signing only the outer bundle leaves those nested seals broken and the app unlaunchable.
+    await runAppleToolCommand('codesign', ['--force', '--deep', '--sign', '-', productPath]);
+  } catch (error) {
+    const appError = asAppError(error, 'COMMAND_FAILED');
+    throw repairFailure(productPath, xctestrunPath, appError.message, appError.details);
+  }
+
+  if (!(await hasValidCodeSignature(productPath))) {
+    throw repairFailure(
+      productPath,
+      xctestrunPath,
+      'Product still fails code signature verification after re-signing',
+    );
+  }
+}
+
+function repairFailure(
+  productPath: string,
+  xctestrunPath: string,
+  error: string,
+  details?: unknown,
+): AppError {
+  return new AppError('COMMAND_FAILED', 'Failed to repair macOS runner product signature', {
+    reason: 'RUNNER_PRODUCT_REPAIR_FAILED',
+    productPath,
+    xctestrunPath,
+    error,
+    details,
+  });
 }
 
 export function isExpectedRunnerRepairFailure(error: unknown): boolean {
