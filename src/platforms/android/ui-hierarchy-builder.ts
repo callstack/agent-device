@@ -1,4 +1,7 @@
-import type { AndroidSystemChromeProvenance } from '@agent-device/contracts/platform';
+import {
+  type AndroidSystemChromeProvenance,
+  isAndroidSystemChromeWindowResourceId,
+} from '@agent-device/contracts/android-system-chrome';
 import { isScrollableType, normalizeSnapshotScope } from '@agent-device/contracts/snapshot';
 import type { RawSnapshotNode, Rect, SnapshotOptions } from '@agent-device/kernel/snapshot';
 import { isPositiveFiniteRect, pickLargestRect } from '@agent-device/kernel/rect';
@@ -11,7 +14,6 @@ import {
   effectiveAndroidRect,
   serializeAndroidRegularPresentationNode,
 } from './snapshot-presentation.ts';
-import { isAndroidSystemChromeWindowResourceId } from '@agent-device/contracts/platform';
 
 type AndroidRawSnapshotNode = RawSnapshotNode & AndroidSystemChromeProvenance;
 
