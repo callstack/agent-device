@@ -26,30 +26,20 @@ import {
 
 /**
  * The seven navigation/keyboard operations every owner admits from the same shape: one fact,
- * one bind call, no owner mechanics in between. Naming the set here — rather than at each of the
- * seven owner call sites — is what lets an owner hand in its own facts instead of hand-writing the
- * same `facts.operations.<key>.available ? bind…(resolver) : {}` ternary seven times over.
+ * one bind call, no owner mechanics in between. This tuple is the single canonical declaration:
+ * the {@link NavigationInteractorOperation} union type is derived from it below, and
+ * `LOCAL_BINDERS`/`PROVIDER_BINDERS`'s `Record<NavigationInteractorOperation, …>` types are then
+ * checked against that derived union — so a member can never be added to one and silently missing
+ * from another (#1955 review: an earlier design declared the walk list as a plain
+ * `readonly NavigationInteractorOperation[]`, independently of the union it walked, which would
+ * have compiled even missing a member; a caller-maintained `operations: [...]` array duplicating
+ * this same set was removed for the identical reason in an earlier review round). Not
+ * caller-supplied: `facts[operation]` is the only thing that decides whether an operation binds —
+ * a key this tuple names but the caller's facts never define is simply never available
+ * (`facts[operation]?.available` reads `undefined`), which is how a caller passing a narrower,
+ * dedicated facts object (e.g. Limrun's keyboard-less navigation facts) opts a subset out.
  */
-export type NavigationInteractorOperation =
-  | 'back'
-  | 'home'
-  | 'setOrientation'
-  | 'tvRemote'
-  | 'keyboardStatus'
-  | 'keyboardDismiss'
-  | 'keyboardEnter';
-
-/**
- * The fixed set every bind call walks. Not caller-supplied: an owner naming its own subset here
- * (`operations: [...]`) alongside its own `facts` was a second source of truth that could drift
- * from what the facts actually admit (#1955 review) — an operation present and admitted in
- * `facts` but missing from a hand-maintained list would silently never bind. `facts[operation]`
- * is the only thing that decides whether an operation binds; a key this list names but the
- * caller's facts never define is simply never available (`facts[operation]?.available` reads
- * `undefined`), which is exactly how a caller passing a narrower, dedicated facts object (e.g.
- * Limrun's keyboard-less navigation facts) already opts a subset out today.
- */
-const NAVIGATION_INTERACTOR_OPERATIONS: readonly NavigationInteractorOperation[] = [
+const NAVIGATION_INTERACTOR_OPERATIONS = [
   'back',
   'home',
   'setOrientation',
@@ -57,7 +47,9 @@ const NAVIGATION_INTERACTOR_OPERATIONS: readonly NavigationInteractorOperation[]
   'keyboardStatus',
   'keyboardDismiss',
   'keyboardEnter',
-];
+] as const;
+
+export type NavigationInteractorOperation = (typeof NAVIGATION_INTERACTOR_OPERATIONS)[number];
 
 type LocalBinderParams = Readonly<{
   device: DeviceInfo;

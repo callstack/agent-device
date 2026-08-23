@@ -65,6 +65,71 @@ test('binds every admitted operation the facts name, not just the ones a caller 
   expect(operations.tvRemote).toBeTypeOf('function');
 });
 
+// #1955 review: the walk list and the per-operation binder records are both derived from one
+// canonical tuple now, so they can't drift at the type level — this pins the runtime behavior
+// that actually matters: every one of the seven operations binds when its fact admits it, not
+// just the two or three most tests happen to exercise.
+test('binds every one of the seven navigation operations when every fact admits it', async () => {
+  const back = vi.fn(async () => undefined);
+  const home = vi.fn(async () => undefined);
+  const setOrientation = vi.fn(async () => undefined);
+  const tvRemote = vi.fn(async () => undefined);
+  const keyboardStatus = vi.fn(async () => ({ visible: false }));
+  const keyboardDismiss = vi.fn(async () => ({ kind: 'acknowledged' }));
+  const keyboardEnter = vi.fn(async () => undefined);
+  const resolveInteractor = vi.fn(
+    async () =>
+      ({
+        back,
+        home,
+        setOrientation,
+        tvRemote,
+        keyboardStatus,
+        keyboardDismiss,
+        keyboardEnter,
+      }) as unknown as Interactor,
+  );
+
+  const operations = bindAdmittedLocalInteractorOperations({
+    device,
+    signal: new AbortController().signal,
+    resolveInteractor,
+    facts: {
+      back: available,
+      home: available,
+      setOrientation: available,
+      tvRemote: available,
+      keyboardStatus: available,
+      keyboardDismiss: available,
+      keyboardEnter: available,
+    },
+  });
+
+  expect(operations.back).toBeTypeOf('function');
+  expect(operations.home).toBeTypeOf('function');
+  expect(operations.setOrientation).toBeTypeOf('function');
+  expect(operations.tvRemote).toBeTypeOf('function');
+  expect(operations.keyboardStatus).toBeTypeOf('function');
+  expect(operations.keyboardDismiss).toBeTypeOf('function');
+  expect(operations.keyboardEnter).toBeTypeOf('function');
+
+  await operations.back?.({});
+  await operations.home?.({});
+  await operations.setOrientation?.({ rotation: 'landscape-left' });
+  await operations.tvRemote?.({ button: 'select' });
+  await operations.keyboardStatus?.({});
+  await operations.keyboardDismiss?.({});
+  await operations.keyboardEnter?.({});
+
+  expect(back).toHaveBeenCalledOnce();
+  expect(home).toHaveBeenCalledOnce();
+  expect(setOrientation).toHaveBeenCalledOnce();
+  expect(tvRemote).toHaveBeenCalledOnce();
+  expect(keyboardStatus).toHaveBeenCalledOnce();
+  expect(keyboardDismiss).toHaveBeenCalledOnce();
+  expect(keyboardEnter).toHaveBeenCalledOnce();
+});
+
 test('treats an operation missing from a partial facts map as unavailable', () => {
   const operations = bindAdmittedLocalInteractorOperations({
     device,
