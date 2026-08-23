@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import { runAppleToolCommand } from '../tool-provider.ts';
@@ -7,6 +8,25 @@ const RUNNER_PRODUCT_REPAIR_FAILURE_REASONS = new Set([
   'RUNNER_PRODUCT_MISSING',
   'RUNNER_PRODUCT_REPAIR_FAILED',
 ]);
+
+const EMBEDDED_TEST_SUPPORT_ITEMS = [
+  'Testing.framework',
+  'XCTAutomationSupport.framework',
+  'XCTest.framework',
+  'XCTestCore.framework',
+  'XCTestSupport.framework',
+  'XCUIAutomation.framework',
+  'XCUnit.framework',
+  'libXCTestSwiftSupport.dylib',
+] as const;
+
+const AD_HOC_RESIGN_ARGS = [
+  '--force',
+  // Designated requirements must be regenerated for the ad-hoc identity.
+  '--preserve-metadata=identifier,entitlements,flags,runtime',
+  '--sign',
+  '-',
+] as const;
 
 export async function repairMacOsRunnerProductsIfNeeded(
   device: DeviceInfo,
@@ -44,14 +64,14 @@ export async function repairMacOsRunnerProductsIfNeeded(
 }
 
 async function resignRunnerProduct(productPath: string, xctestrunPath: string): Promise<void> {
-  await runAppleToolCommand('codesign', ['--remove-signature', productPath], {
-    allowFailure: true,
-  });
   try {
-    // --deep is required: macOS runners build with CODE_SIGNING_ALLOWED=NO, so Xcode embeds the
-    // Apple test frameworks without re-signing them while dropping their sealed Modules/ entries.
-    // Signing only the outer bundle leaves those nested seals broken and the app unlaunchable.
-    await runAppleToolCommand('codesign', ['--force', '--deep', '--sign', '-', productPath]);
+    for (const itemName of EMBEDDED_TEST_SUPPORT_ITEMS) {
+      const itemPath = path.join(productPath, 'Contents', 'Frameworks', itemName);
+      if (fs.existsSync(itemPath)) {
+        await runAppleToolCommand('codesign', [...AD_HOC_RESIGN_ARGS, itemPath]);
+      }
+    }
+    await runAppleToolCommand('codesign', [...AD_HOC_RESIGN_ARGS, productPath]);
   } catch (error) {
     const appError = asAppError(error, 'COMMAND_FAILED');
     throw repairFailure(productPath, xctestrunPath, appError.message, appError.details);

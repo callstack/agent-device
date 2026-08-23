@@ -16,20 +16,27 @@ import { createLocalAppleToolProvider, withAppleToolProvider } from '../tool-pro
 const XCTESTRUN_PATH = '/tmp/agent-device-runner.xctestrun';
 
 test('repair re-signs nested code so the product passes deep verification', async () => {
-  const productPath = createProductPath();
+  const { productPath, embeddedItemPaths } = createProduct();
   const calls: string[][] = [];
-  // Nested Apple test frameworks lose their sealed Modules/ entries during the unsigned embed,
-  // so only a signature that reaches nested code clears deep verification.
   const provider = createCodesignProvider(
     calls,
-    (args) => args.includes('--deep') && args.includes('--sign'),
+    (args) => args.includes('--sign') && args.at(-1) === productPath,
   );
 
   await withAppleToolProvider(provider, async () => {
     await repairMacOsRunnerProductsIfNeeded(MACOS_DEVICE, [productPath], XCTESTRUN_PATH);
   });
 
-  assert.deepEqual(calls.at(-2), ['--force', '--deep', '--sign', '-', productPath]);
+  const signingArgs = [
+    '--force',
+    '--preserve-metadata=identifier,entitlements,flags,runtime',
+    '--sign',
+    '-',
+  ];
+  assert.deepEqual(calls.slice(1, -1), [
+    ...embeddedItemPaths.map((itemPath) => [...signingArgs, itemPath]),
+    [...signingArgs, productPath],
+  ]);
   assert.deepEqual(calls.at(-1), ['--verify', '--deep', '--strict', productPath]);
 });
 
@@ -51,10 +58,36 @@ test('repair fails when re-signing leaves the product unverifiable', async () =>
 });
 
 function createProductPath(): string {
+  return createProduct().productPath;
+}
+
+function createProduct(): {
+  productPath: string;
+  embeddedItemPaths: string[];
+} {
   const root = mkdtempForTestSync('agent-device-runner-products-');
   const productPath = path.join(root, 'AgentDeviceRunnerUITests-Runner.app');
   fs.mkdirSync(productPath);
-  return productPath;
+  const frameworksRoot = path.join(productPath, 'Contents', 'Frameworks');
+  const embeddedItemPaths = [
+    'Testing.framework',
+    'XCTAutomationSupport.framework',
+    'XCTest.framework',
+    'XCTestCore.framework',
+    'XCTestSupport.framework',
+    'XCUIAutomation.framework',
+    'XCUnit.framework',
+    'libXCTestSwiftSupport.dylib',
+  ].map((itemName) => path.join(frameworksRoot, itemName));
+  for (const itemPath of embeddedItemPaths) {
+    if (itemPath.endsWith('.framework')) {
+      fs.mkdirSync(itemPath, { recursive: true });
+    } else {
+      fs.mkdirSync(path.dirname(itemPath), { recursive: true });
+      fs.writeFileSync(itemPath, '');
+    }
+  }
+  return { productPath, embeddedItemPaths };
 }
 
 function createCodesignProvider(
