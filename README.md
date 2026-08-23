@@ -175,6 +175,10 @@ Yes. The typed Node.js client is a public surface over that same runtime, so an 
 
 With `agent-device`, an agent reads app state and chooses each command at run time. Teams use Appium, Detox, and Maestro to write and maintain test suites. `agent-device` can complement them by saving its runs as `.ad` scripts or exporting them as strict Maestro YAML.
 
+### Can I spectate the coding agent from my phone?
+
+No — `agent-device` drives the *app under test*. For a spectator/veto phone on the **desktop coding-agent host**, pair [Build Remote Agent](https://grokbuildremote.com/) through `gbr-agent` (`gbr/1`). Companion, not a replacement. See [docs/gbr.md](docs/gbr.md). Attach only `http://127.0.0.1:8788` or stdio `gbr-mcp`. Never commit mailbox keys.
+
 ### Can agent-device run in CI?
 
 Yes. Record a run as an `.ad` script, replay it in CI, and keep the screenshots and logs as artifacts; the [EAS workflow template](https://github.com/callstackincubator/eas-agent-device/blob/main/.eas/workflows/agent-qa-mobile.yml) is a working example.
@@ -202,6 +206,7 @@ Teams and developers at Callstack, JPMorgan Chase, [Expensify](https://www.calls
 
 - [Docs](https://oss.callstack.com/agent-device/)
 - [Agent-readable docs](https://oss.callstack.com/agent-device/llms-full.txt)
+- [Build Remote Agent companion](docs/gbr.md) — phone spectator for the desktop coding agent (`gbr/1`)
 
 ## Contributing
 
