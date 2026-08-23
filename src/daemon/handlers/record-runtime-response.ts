@@ -6,7 +6,7 @@ import type {
   RuntimeOperationUnavailability,
 } from '@agent-device/contracts/platform';
 import type { DaemonArtifact, DaemonResponse } from '../types.ts';
-import { deriveRecordingTelemetryPath } from '../recording-telemetry.ts';
+import { deriveRecordingTelemetryPath } from '../../recording/telemetry.ts';
 
 export function buildRecordingStartResponse(
   snapshot: ScreenRecordingLiveSnapshot,

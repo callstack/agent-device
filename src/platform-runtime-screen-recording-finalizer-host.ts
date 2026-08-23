@@ -4,7 +4,7 @@ import {
   overlayRecordingTouches,
   trimRecordingStart,
 } from './recording/overlay.ts';
-import { persistRecordingTelemetry } from './daemon/recording-telemetry.ts';
+import { persistRecordingTelemetry } from './recording/telemetry.ts';
 import { isPlayableVideo, waitForPlayableVideo, waitForStableFile } from './utils/video.ts';
 
 export function createScreenRecordingFinalizer(): ScreenRecordingRuntimeHost['finalize'] {

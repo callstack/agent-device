@@ -12,7 +12,7 @@ vi.mock('./utils/video.ts', () => ({
   waitForPlayableVideo: video.playable,
   isPlayableVideo: video.isPlayable,
 }));
-vi.mock('./daemon/recording-telemetry.ts', () => ({ persistRecordingTelemetry: telemetry }));
+vi.mock('./recording/telemetry.ts', () => ({ persistRecordingTelemetry: telemetry }));
 vi.mock('./recording/overlay.ts', () => ({
   getRecordingOverlaySupportWarning: () => undefined,
   overlayRecordingTouches: vi.fn(async () => {}),
