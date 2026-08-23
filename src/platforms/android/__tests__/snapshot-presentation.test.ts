@@ -156,6 +156,31 @@ test('regular Android invariant rejects a framed node outside its cumulative cli
   );
 });
 
+test('regular Android invariant validates disjoint roots against their owning windows', () => {
+  const statusBar = { x: 0, y: 0, width: 1080, height: 136 };
+  const dialog = { x: 28, y: 980, width: 1024, height: 513 };
+  const budget = createAndroidSnapshotPresentationBudget(
+    { deadlineAtMs: Number.POSITIVE_INFINITY },
+    100,
+  );
+
+  assert.doesNotThrow(() =>
+    validateAndroidRegularPresentation(
+      [
+        createAndroidSnapshotPresentationNode(
+          { index: 0, rect: statusBar },
+          statusBar,
+          false,
+          statusBar,
+        ),
+        createAndroidSnapshotPresentationNode({ index: 1, rect: dialog }, dialog, false, dialog),
+      ],
+      dialog,
+      budget,
+    ),
+  );
+});
+
 test('hostile nested Android presentation stays under a deterministic linear work cap', () => {
   const depth = 240;
   const opening = Array.from(

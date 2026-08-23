@@ -155,6 +155,7 @@ function walkUiHierarchyNode(
     ancestorCollection,
     ancestorSystemChrome,
     effectiveRect,
+    currentWindowRect,
   );
   const nextAncestorHittable = ancestorHittable || isAgentTarget(node);
   const nextAncestorCollection = ancestorCollection || isCollectionContainerType(node.type);
@@ -201,6 +202,7 @@ function appendAndroidNodeIfPresented(
   ancestorCollection: boolean,
   ancestorSystemChrome: boolean,
   effectiveRect: Rect | undefined,
+  windowRect: Rect | undefined,
 ): number | undefined {
   if (
     !state.options.raw &&
@@ -216,7 +218,14 @@ function appendAndroidNodeIfPresented(
   }
   const systemChrome =
     ancestorSystemChrome || isAndroidSystemChromeWindowResourceId(node.identifier);
-  return appendAndroidSnapshotNode(state, node, parentIndex, systemChrome, effectiveRect);
+  return appendAndroidSnapshotNode(
+    state,
+    node,
+    parentIndex,
+    systemChrome,
+    effectiveRect,
+    windowRect,
+  );
 }
 
 function resolveAndroidDescendantClip(
@@ -262,6 +271,7 @@ function appendAndroidSnapshotNode(
   parentIndex: number | undefined,
   systemChrome: boolean,
   effectiveRect: Rect | undefined,
+  windowRect: Rect | undefined,
 ): number {
   const currentIndex = state.nodes.length;
   // Snapshot filtering removes Compose layout wrappers. Keep depth aligned with
@@ -270,7 +280,7 @@ function appendAndroidSnapshotNode(
   // retained row by normalizeSnapshotTree's depth fallback (#1377).
   state.sourceNodes.push(node);
   const rawNode = createAndroidRawSnapshotNode(state, node, parentIndex, systemChrome);
-  publishAndroidPresentationNode(state, node, rawNode, effectiveRect);
+  publishAndroidPresentationNode(state, node, rawNode, effectiveRect, windowRect);
   return currentIndex;
 }
 
@@ -304,11 +314,13 @@ function publishAndroidPresentationNode(
   node: AndroidNode,
   rawNode: AndroidRawSnapshotNode,
   effectiveRect: Rect | undefined,
+  windowRect: Rect | undefined,
 ): void {
   const presentationNode = createAndroidSnapshotPresentationNode(
     rawNode,
     effectiveRect,
     !state.options.raw && isAndroidScrollClipNode(node),
+    windowRect,
   );
   state.presentationNodes.push(presentationNode);
   state.nodes.push(

@@ -132,17 +132,20 @@ export type AndroidSnapshotPresentationNode = {
   raw: RawSnapshotNode;
   effectiveRect?: Rect;
   clipsDescendants?: boolean;
+  windowRect?: Rect;
 };
 
 export function createAndroidSnapshotPresentationNode(
   raw: RawSnapshotNode,
   effectiveRect?: Rect,
   clipsDescendants?: boolean,
+  windowRect?: Rect,
 ): AndroidSnapshotPresentationNode {
   return {
     raw,
     ...(effectiveRect ? { effectiveRect } : {}),
     ...(clipsDescendants ? { clipsDescendants: true } : {}),
+    ...(windowRect ? { windowRect } : {}),
   };
 }
 
@@ -210,10 +213,7 @@ export function validateAndroidRegularPresentation(
 
   for (const node of nodes) {
     budget.check('regular-invariant');
-    const ancestorClip =
-      node.raw.parentIndex === undefined
-        ? viewport
-        : (clipIncludingNodeByIndex.get(node.raw.parentIndex) ?? viewport);
+    const ancestorClip = resolvePresentationAncestorClip(node, clipIncludingNodeByIndex, viewport);
     const frame = node.effectiveRect;
 
     if (!frame || !isPositiveFiniteRect(frame)) {
@@ -250,6 +250,16 @@ export function validateAndroidRegularPresentation(
 
     clipIncludingNodeByIndex.set(node.raw.index, node.clipsDescendants ? frame : ancestorClip);
   }
+}
+
+function resolvePresentationAncestorClip(
+  node: AndroidSnapshotPresentationNode,
+  clipIncludingNodeByIndex: ReadonlyMap<number, Rect | undefined>,
+  viewport: Rect | undefined,
+): Rect | undefined {
+  const parentIndex = node.raw.parentIndex;
+  if (parentIndex === undefined) return node.windowRect ?? viewport;
+  return clipIncludingNodeByIndex.get(parentIndex) ?? node.windowRect ?? viewport;
 }
 
 function containsRect(frame: Rect, clip: Rect): boolean {
