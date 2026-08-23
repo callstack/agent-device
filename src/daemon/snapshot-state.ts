@@ -1,5 +1,8 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import { snapshotCaptureAnnotationsFrom } from '@agent-device/contracts/capture';
+import {
+  readSnapshotOcclusionContextEvidence,
+  snapshotCaptureAnnotationsFrom,
+} from '@agent-device/contracts/capture';
 import { isAndroidInputMethodNode } from '@agent-device/contracts/android-input-ownership';
 import {
   attachRefs,
@@ -9,7 +12,11 @@ import {
   type SnapshotBackend,
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
-import { annotateCoveredSnapshotNodes } from '../snapshot/snapshot-occlusion.ts';
+import {
+  annotateCoveredSnapshotNodes,
+  annotateSnapshotNodesCoveredByPolicy,
+} from '../snapshot/snapshot-occlusion.ts';
+import { coveredAndroidReplacementNodeIndexes } from '../snapshot/android-replacement-surface-occlusion.ts';
 import { scopeSnapshotNodes } from '../snapshot/snapshot-desktop-surface.ts';
 import { normalizeSnapshotTree, pruneGroupNodes } from '../core/snapshot-tree-ingestion.ts';
 import { presentIosInteractiveSnapshot } from './snapshot-presentation/ios/index.ts';
@@ -37,7 +44,14 @@ export function buildSnapshotState(
 ): SnapshotState {
   const rawNodes = data?.nodes ?? [];
   const snapshotRaw = flags?.snapshotRaw;
-  const normalizedNodes = normalizeSnapshotTree(snapshotRaw ? rawNodes : pruneGroupNodes(rawNodes));
+  const backendAnnotatedNodes = annotateBackendReplacementSurfaces(
+    data,
+    rawNodes,
+    snapshotRaw === true,
+  );
+  const normalizedNodes = normalizeSnapshotTree(
+    snapshotRaw ? backendAnnotatedNodes : pruneGroupNodes(backendAnnotatedNodes),
+  );
   const presentableNodes = shouldPresentIosInteractiveSnapshot(data?.backend, flags)
     ? presentIosInteractiveSnapshot(normalizedNodes)
     : normalizedNodes;
@@ -49,10 +63,7 @@ export function buildSnapshotState(
   const nodes = attachRefs(
     snapshotRaw
       ? scopedNodes
-      : annotateCoveredSnapshotNodes(scopedNodes, {
-          isAdditionalOverlayNode:
-            data?.backend === 'android' ? isAndroidInputMethodNode : undefined,
-        }),
+      : annotateCoveredSnapshotNodes(scopedNodes, overlayOptionsForBackend(data?.backend)),
   );
   return {
     nodes,
@@ -66,6 +77,32 @@ export function buildSnapshotState(
     // route-level comparisons on the next capture.
     comparisonSafe: isAndroidComparisonSafeSnapshot(data?.backend, flags),
   };
+}
+
+function annotateBackendReplacementSurfaces(
+  owner: object & { backend?: SnapshotBackend },
+  nodes: RawSnapshotNode[],
+  raw: boolean,
+): RawSnapshotNode[] {
+  return owner.backend === 'android' && !raw
+    ? annotateAndroidReplacementSurfaces(owner, nodes)
+    : nodes;
+}
+
+function overlayOptionsForBackend(backend: SnapshotBackend | undefined) {
+  return backend === 'android' ? { isAdditionalOverlayNode: isAndroidInputMethodNode } : {};
+}
+
+function annotateAndroidReplacementSurfaces(
+  owner: object,
+  nodes: RawSnapshotNode[],
+): RawSnapshotNode[] {
+  const context = readSnapshotOcclusionContextEvidence(owner);
+  const coveredSourceIndexes = coveredAndroidReplacementNodeIndexes(context?.nodes ?? nodes);
+  return annotateSnapshotNodesCoveredByPolicy(nodes, (node) => {
+    const sourceIndex = context?.sourceIndexByNodeIndex.get(node.index) ?? node.index;
+    return coveredSourceIndexes.has(sourceIndex);
+  });
 }
 
 /**

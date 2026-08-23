@@ -64,7 +64,5 @@ export type AndroidSnapshotBackendMetadata = {
     workUnits: number;
     maxWorkUnits?: number;
   };
-  /** API 23 helper output carries no `drawing-order`; covered same-window surfaces are not pruned. */
-  occlusionScanUnavailable?: boolean;
 };
 export type FindLocator = 'any' | 'text' | 'label' | 'value' | 'role' | 'id';

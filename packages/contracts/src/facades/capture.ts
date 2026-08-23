@@ -54,9 +54,15 @@ export type {
 } from '../snapshot-types.ts';
 export {
   attachSnapshotClickabilityEvidence,
+  attachSnapshotOcclusionContextEvidence,
   copySnapshotClickabilityEvidence,
+  copySnapshotPrivateEvidence,
   readSnapshotClickabilityEvidence,
-} from '../snapshot-clickability.ts';
-export type { SnapshotClickabilityEvidence } from '../snapshot-clickability.ts';
+  readSnapshotOcclusionContextEvidence,
+} from '../snapshot-private-evidence.ts';
+export type {
+  SnapshotClickabilityEvidence,
+  SnapshotOcclusionContextEvidence,
+} from '../snapshot-private-evidence.ts';
 export { readViewportDimensions } from '../viewport.ts';
 export type { ViewportCommandResult } from '../viewport.ts';

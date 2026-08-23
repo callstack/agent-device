@@ -260,32 +260,7 @@ export function parseUiHierarchyTree(xml: string): AndroidUiHierarchy {
     }
     const attrs = readAndroidUiNodeMetadata(token);
     const parent = stack[stack.length - 1]!;
-    const node: AndroidUiHierarchy = {
-      type: attrs.className,
-      label: attrs.text || attrs.desc,
-      value: attrs.text,
-      identifier: attrs.resourceId,
-      packageName: attrs.packageName,
-      rect: attrs.rect,
-      enabled: attrs.enabled,
-      focused: attrs.focused,
-      visibleToUser: attrs.visibleToUser,
-      drawingOrder: attrs.drawingOrder,
-      clickable: attrs.clickable === true,
-      focusable: attrs.focusable === true,
-      scrollable: attrs.scrollable,
-      canScrollForward: attrs.canScrollForward,
-      canScrollBackward: attrs.canScrollBackward,
-      windowIndex: attrs.windowIndex,
-      windowType: attrs.windowType,
-      windowLayer: attrs.windowLayer,
-      windowActive: attrs.windowActive,
-      windowFocused: attrs.windowFocused,
-      windowRect: attrs.windowRect,
-      depth: parent.depth + 1,
-      parentIndex: undefined,
-      children: [],
-    };
+    const node = normalizeAndroidUiHierarchyNode(attrs, parent.depth + 1);
     parent.children.push(node);
     if (!token.endsWith('/>')) {
       stack.push(node);
@@ -293,4 +268,40 @@ export function parseUiHierarchyTree(xml: string): AndroidUiHierarchy {
     match = tokenRegex.exec(xml);
   }
   return root;
+}
+
+/**
+ * The one anti-corruption boundary from helper/API-specific metadata to presentation input.
+ * Acquisition-only facts such as API-24 `drawingOrder` deliberately stop here, so adding a helper
+ * or Android-version difference cannot silently change snapshot membership downstream.
+ */
+function normalizeAndroidUiHierarchyNode(
+  attrs: AndroidUiNodeMetadata,
+  depth: number,
+): AndroidUiHierarchy {
+  return {
+    type: attrs.className,
+    label: attrs.text || attrs.desc,
+    value: attrs.text,
+    identifier: attrs.resourceId,
+    packageName: attrs.packageName,
+    rect: attrs.rect,
+    enabled: attrs.enabled,
+    focused: attrs.focused,
+    visibleToUser: attrs.visibleToUser,
+    clickable: attrs.clickable === true,
+    focusable: attrs.focusable === true,
+    scrollable: attrs.scrollable,
+    canScrollForward: attrs.canScrollForward,
+    canScrollBackward: attrs.canScrollBackward,
+    windowIndex: attrs.windowIndex,
+    windowType: attrs.windowType,
+    windowLayer: attrs.windowLayer,
+    windowActive: attrs.windowActive,
+    windowFocused: attrs.windowFocused,
+    windowRect: attrs.windowRect,
+    depth,
+    parentIndex: undefined,
+    children: [],
+  };
 }

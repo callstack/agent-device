@@ -39,7 +39,7 @@ import { withMethodScope } from '../../utils/method-scope.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
 import {
-  copySnapshotClickabilityEvidence,
+  copySnapshotPrivateEvidence,
   snapshotCaptureAnnotationsFrom,
 } from '@agent-device/contracts/capture';
 
@@ -108,7 +108,7 @@ export function createAndroidInteractor(
           }),
         { backend: 'android' },
       );
-      return copySnapshotClickabilityEvidence(result, {
+      return copySnapshotPrivateEvidence(result, {
         nodes: result.nodes ?? [],
         truncated: result.truncated ?? false,
         backend: 'android',

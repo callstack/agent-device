@@ -12,10 +12,10 @@ export function parseUiHierarchy(
   maxNodes: number | undefined,
   options: AndroidUiHierarchySnapshotOptions,
 ): { nodes: RawSnapshotNode[]; truncated?: boolean; analysis: AndroidSnapshotAnalysis } {
-  const { sourceNodes: _sourceNodes, ...snapshot } = buildUiHierarchySnapshot(
-    parseUiHierarchyTree(xml),
-    maxNodes,
-    options,
-  );
+  const {
+    sourceNodes: _sourceNodes,
+    occlusionContext: _occlusionContext,
+    ...snapshot
+  } = buildUiHierarchySnapshot(parseUiHierarchyTree(xml), maxNodes, options);
   return snapshot;
 }

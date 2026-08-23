@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
 import {
   readSnapshotClickabilityEvidence,
+  readSnapshotOcclusionContextEvidence,
   type SnapshotClickabilityEvidence,
 } from '@agent-device/contracts/capture';
 import { snapshotAndroid } from '../snapshot.ts';
@@ -92,6 +93,7 @@ test('snapshotAndroid captures the hierarchy once and retains clickability off-w
     raw: true,
   });
   const evidence = readSnapshotClickabilityEvidence(result);
+  const occlusionContext = readSnapshotOcclusionContextEvidence(result);
 
   assert.equal(hierarchyCaptures, 1);
   assert.equal(evidence?.kind, 'exact');
@@ -103,7 +105,18 @@ test('snapshotAndroid captures the hierarchy once and retains clickability off-w
     ],
     [false, true, false],
   );
+  assert.ok(occlusionContext);
+  assert.equal(occlusionContext?.nodes.length, result.nodes.length);
+  assert.deepEqual(
+    [...occlusionContext.sourceIndexByNodeIndex],
+    [
+      [0, 0],
+      [1, 1],
+      [2, 2],
+    ],
+  );
   assert.equal(JSON.stringify(result).includes('clickable'), false);
+  assert.equal(JSON.stringify(result).includes('sourceIndexByNodeIndex'), false);
 });
 
 function helperOutput(): string {

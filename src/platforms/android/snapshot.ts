@@ -16,7 +16,10 @@ import {
   type SnapshotQualityVerdict,
   type SnapshotOptions,
 } from '@agent-device/kernel/snapshot';
-import { attachSnapshotClickabilityEvidence } from '@agent-device/contracts/capture';
+import {
+  attachSnapshotClickabilityEvidence,
+  attachSnapshotOcclusionContextEvidence,
+} from '@agent-device/contracts/capture';
 import { deriveMobileSnapshotHiddenContentHints } from '../../snapshot/mobile-snapshot-semantics.ts';
 import {
   buildUiHierarchySnapshot,
@@ -109,7 +112,7 @@ export async function snapshotAndroid(
   const capture = await captureAndroidUiHierarchy(device, options, adb);
   const xml = capture.xml;
   const tree = parseUiHierarchyTree(xml);
-  const androidSnapshot = withOcclusionScanDisclosure(capture.metadata, tree);
+  const androidSnapshot = capture.metadata;
   const presentationOptions: AndroidUiHierarchySnapshotOptions = {
     ...options,
     androidPresentation: {
@@ -131,7 +134,7 @@ export async function snapshotAndroid(
         interactiveSnapshot: built,
       });
     }
-    const { sourceNodes: _sourceNodes, ...snapshot } = built;
+    const { sourceNodes: _sourceNodes, occlusionContext, ...snapshot } = built;
     const result = {
       ...snapshot,
       ...androidSnapshotTruncationFields(truncated),
@@ -139,7 +142,7 @@ export async function snapshotAndroid(
       quality: { state: 'healthy', backend: 'android-helper' } as const,
     };
     return attachSnapshotClickabilityEvidence(
-      result,
+      attachSnapshotOcclusionContextEvidence(result, occlusionContext),
       buildAndroidSnapshotClickabilityEvidence(built),
     );
   } catch (error) {
@@ -185,37 +188,6 @@ function attachAndroidPresentationFailureEvidence(params: {
     },
     { kind: 'exact', provider: 'android-helper', clickableByNodeIndex: new Map() },
   );
-}
-
-/**
- * C1 disclosure (#1832): the covered-sibling pruner keys on `drawing-order`, which the helper can
- * only serialize on API 24+. On API 23 the same screen therefore presents a different node set —
- * covered React Native navigation surfaces stay in — and nothing else in the payload says so. This
- * is disclosure only; neutrality is restored when occlusion moves to the daemon annotator.
- */
-function withOcclusionScanDisclosure(
-  metadata: AndroidSnapshotBackendMetadata,
-  tree: AndroidUiHierarchy,
-): AndroidSnapshotBackendMetadata {
-  return androidTreeCarriesDrawingOrder(tree) === false
-    ? { ...metadata, occlusionScanUnavailable: true }
-    : metadata;
-}
-
-/**
- * Whether the acquired tree carries `drawing-order` (helper output on API 24+). `undefined` for
- * an empty tree: nothing was acquired, so nothing is disclosed. Read on the PARSED tree, before any
- * projection, because the answer must not depend on what membership later keeps.
- */
-function androidTreeCarriesDrawingOrder(root: AndroidUiHierarchy): boolean | undefined {
-  const stack = [...root.children];
-  if (stack.length === 0) return undefined;
-  while (stack.length > 0) {
-    const node = stack.pop()!;
-    if (node.drawingOrder !== undefined) return true;
-    stack.push(...node.children);
-  }
-  return false;
 }
 
 function mergeAndroidSnapshotTruncation(

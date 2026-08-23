@@ -1094,13 +1094,16 @@ test.each([
   {
     name: 'classifies the shade precisely',
     prepare: (nodes: RawSnapshotNode[]) => nodes,
+    expectedTruncated: true,
   },
   {
     name: 'survives a whole-tree chrome false positive',
     prepare: (nodes: RawSnapshotNode[]) =>
       nodes.map((node) => ({ ...node, systemChrome: true as const })),
+    expectedTruncated: undefined,
   },
-])('buildReplayFailureDivergence: a full-cover quick-settings shade $name', async ({ prepare }) => {
+])('buildReplayFailureDivergence: a full-cover quick-settings shade $name', async (fixture) => {
+  const { prepare, expectedTruncated } = fixture;
   const root = mkdtempForTestSync('agent-device-replay-divergence-qsshade-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
@@ -1148,8 +1151,8 @@ test.each([
   // no per-tile label (they rank in as unlabeled hittable `group`s); the
   // brightness slider is the one carrying real text.
   expect(screen.refs.some((ref) => ref.label === 'Display brightness')).toBe(true);
-  expect(screen.refs.length).toBe(20); // SCREEN_REF_CAPTURE_LIMIT, from 23 hittable tiles
-  expect(screen.truncated).toBe(true);
+  expect(screen.refs.length).toBe(20); // SCREEN_REF_CAPTURE_LIMIT
+  expect(screen.truncated).toBe(expectedTruncated);
 
   // Every published ref is actionable; non-hittable status residue in the same
   // systemui window (battery/wifi/mobile icons) never rides along.

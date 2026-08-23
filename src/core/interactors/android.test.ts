@@ -1,7 +1,9 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import {
   attachSnapshotClickabilityEvidence,
+  attachSnapshotOcclusionContextEvidence,
   readSnapshotClickabilityEvidence,
+  readSnapshotOcclusionContextEvidence,
 } from '@agent-device/contracts/capture';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createAndroidInteractor } from './android.ts';
@@ -56,11 +58,17 @@ test('preserves Android clickability evidence through the interactor snapshot ad
     clickableByNodeIndex: new Map<number, boolean | undefined>([[0, true]]),
   };
   attachSnapshotClickabilityEvidence(captured, evidence);
+  const occlusionContext = {
+    nodes: captured.nodes,
+    sourceIndexByNodeIndex: new Map([[0, 0]]),
+  };
+  attachSnapshotOcclusionContextEvidence(captured, occlusionContext);
   snapshotAndroidMock.mockResolvedValue(captured);
 
   const result = await createAndroidInteractor(device).snapshot({});
 
   expect(readSnapshotClickabilityEvidence(result)).toEqual(evidence);
+  expect(readSnapshotOcclusionContextEvidence(result)).toEqual(occlusionContext);
   expect(result.quality).toEqual({ state: 'healthy', backend: 'android-helper' });
   expect(JSON.stringify(result)).not.toContain('clickable');
 });

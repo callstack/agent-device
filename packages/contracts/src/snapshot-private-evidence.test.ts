@@ -2,9 +2,12 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
   attachSnapshotClickabilityEvidence,
+  attachSnapshotOcclusionContextEvidence,
   copySnapshotClickabilityEvidence,
+  copySnapshotPrivateEvidence,
   readSnapshotClickabilityEvidence,
-} from './snapshot-clickability.ts';
+  readSnapshotOcclusionContextEvidence,
+} from './snapshot-private-evidence.ts';
 
 test('retains exact evidence without adding enumerable snapshot or node fields', () => {
   const node = { index: 0, identifier: 'save' };
@@ -20,6 +23,21 @@ test('retains exact evidence without adding enumerable snapshot or node fields',
   assert.deepEqual(readSnapshotClickabilityEvidence(snapshot), evidence);
   assert.deepEqual(Object.keys(node), ['index', 'identifier']);
   assert.equal(JSON.stringify(snapshot).includes('clickable'), false);
+});
+
+test('copies private occlusion context without adding public fields', () => {
+  const source = {};
+  const target = { nodes: [] };
+  const context = {
+    nodes: [{ index: 7, type: 'android.widget.Button' }],
+    sourceIndexByNodeIndex: new Map([[0, 7]]),
+  };
+
+  attachSnapshotOcclusionContextEvidence(source, context);
+  copySnapshotPrivateEvidence(source, target);
+
+  assert.deepEqual(readSnapshotOcclusionContextEvidence(target), context);
+  assert.deepEqual(JSON.parse(JSON.stringify(target)), { nodes: [] });
 });
 
 test('copies evidence across internal snapshot construction without serializing the sidecar', () => {

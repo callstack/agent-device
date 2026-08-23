@@ -35,6 +35,12 @@ import {
   type FakeAndroidProcess,
 } from './snapshot-helper-session.fixtures.ts';
 import { withAndroidAdbProvider, type AndroidAdbProvider } from '../adb-executor.ts';
+import { buildSnapshotState } from '../../../daemon/snapshot-state.ts';
+import {
+  copySnapshotPrivateEvidence,
+  readSnapshotOcclusionContextEvidence,
+} from '@agent-device/contracts/capture';
+import { coveredAndroidReplacementNodeIndexes } from '../../../snapshot/android-replacement-surface-occlusion.ts';
 
 const VALID_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+b9xkAAAAASUVORK5CYII=',
@@ -360,28 +366,37 @@ test('snapshotAndroid reports helper-side truncation on the public snapshot resu
   assert.equal(result.androidSnapshot.helperTruncated, true);
 });
 
-test('snapshotAndroid discloses an unavailable occlusion scan when the helper tree carries no drawing-order (API 23)', async () => {
-  const captured: string[] = [];
-  const helperAdb: AndroidAdbExecutor = async (args) => {
-    if (args.includes('--show-versioncode')) return installedHelperProbe;
-    if (args.includes('instrument')) {
-      const xml = captured.shift();
-      if (!xml) throw new Error('unexpected extra capture');
-      return { exitCode: 0, stdout: helperOutput(xml), stderr: '' };
-    }
-    throw new Error(`unexpected helper adb args: ${args.join(' ')}`);
-  };
-  const button = (drawingOrder: string) =>
-    `<node class="android.widget.Button" text="Go" bounds="[0,0][100,40]" clickable="true" visible-to-user="true"${drawingOrder} />`;
+test('scoped Android captures retain broad off-wire context for daemon occlusion', async () => {
+  const xml = `<hierarchy>
+  <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true">
+    <node class="android.view.ViewGroup" bounds="[0,0][390,844]" clickable="true" visible-to-user="true">
+      <node class="android.widget.Button" text="Modal action" bounds="[24,420][366,480]" clickable="true" visible-to-user="true"/>
+    </node>
+    <node class="android.widget.Button" text="Behind the modal" bounds="[0,220][280,280]" clickable="true" visible-to-user="true"/>
+  </node>
+</hierarchy>`;
+  const captured = await snapshotAndroidWithHelper(androidSnapshotHelperAdb(xml), {
+    scope: 'Behind the modal',
+  });
+  const context = readSnapshotOcclusionContextEvidence(captured);
 
-  captured.push(`<hierarchy>${button('')}</hierarchy>`);
-  const api23 = await snapshotAndroid(device, { helperAdb, helperArtifact });
-  assert.equal(api23.androidSnapshot.occlusionScanUnavailable, true);
+  assert.ok(context);
+  assert.deepEqual(
+    captured.nodes.map(({ index, type, label, hittable }) => ({ index, type, label, hittable })),
+    [{ index: 0, type: 'android.widget.Button', label: 'Behind the modal', hittable: true }],
+  );
+  assert.deepEqual([...context.sourceIndexByNodeIndex], [[0, 3]]);
+  assert.deepEqual([...coveredAndroidReplacementNodeIndexes(context.nodes)], [3]);
 
-  captured.push(`<hierarchy>${button(' drawing-order="1"')}</hierarchy>`);
-  const api24 = await snapshotAndroid(device, { helperAdb, helperArtifact });
-  assert.equal(api24.androidSnapshot.occlusionScanUnavailable, undefined);
-  assert.equal('occlusionScanUnavailable' in api24.androidSnapshot, false);
+  const daemonCapture = copySnapshotPrivateEvidence(captured, {
+    ...captured,
+    backend: 'android' as const,
+  });
+  const published = buildSnapshotState(daemonCapture, { snapshotScope: 'Behind the modal' });
+
+  assert.equal(published.nodes.length, 1);
+  assert.equal(published.nodes[0]?.label, 'Behind the modal');
+  assert.equal(published.nodes[0]?.interactionBlocked, 'covered');
 });
 
 test('snapshotAndroid emits helper phase diagnostics', async () => {

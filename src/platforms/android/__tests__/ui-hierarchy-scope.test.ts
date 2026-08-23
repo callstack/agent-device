@@ -250,7 +250,7 @@ test('hostile nested scope search is charged to the presentation budget', () => 
   const xml = `<hierarchy>${opening}${'</node>'.repeat(depth)}</hierarchy>`;
   const androidPresentation = {
     deadlineAtMs: Number.POSITIVE_INFINITY,
-    maxWorkUnits: depth * 10,
+    maxWorkUnits: depth * 7,
   };
 
   assert.doesNotThrow(() =>

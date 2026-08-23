@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { buildSnapshotState } from '../../../daemon/snapshot-state.ts';
 import { isNodeVisibleOnScreen } from '@agent-device/contracts/snapshot';
-import { androidUiNodes } from '../ui-hierarchy.ts';
+import { androidUiNodes, parseUiHierarchyTree } from '../ui-hierarchy.ts';
 import { parseUiHierarchy } from './ui-hierarchy-fixtures.ts';
 
 test('parseUiHierarchy does not truncate when no max node count is requested', () => {
@@ -164,6 +164,7 @@ test('androidUiNodes exposes decoded Android hierarchy metadata', () => {
       windowRect: { x: 0, y: 0, width: 390, height: 844 },
     },
   ]);
+  assert.equal('drawingOrder' in parseUiHierarchyTree(xml).children[0]!, false);
 });
 
 test('parseUiHierarchy discards stale inactive Android application windows', () => {
@@ -278,23 +279,24 @@ test('parseUiHierarchy reads an omitted clickable attribute the same as clickabl
   </node>
 </hierarchy>`;
 
-  const omitted = parseUiHierarchy(tree(''), 800, {});
-  const explicitFalse = parseUiHierarchy(tree('clickable="false"'), 800, {});
+  const publish = (xml: string) =>
+    buildSnapshotState({ nodes: parseUiHierarchy(xml, 800, {}).nodes, backend: 'android' }, {});
+  const omitted = publish(tree(''));
+  const explicitFalse = publish(tree('clickable="false"'));
 
   assert.deepEqual(
     explicitFalse.nodes.map((node) => [node.label, node.hittable]),
     omitted.nodes.map((node) => [node.label, node.hittable]),
   );
-  // Both encodings must also agree that the foreground surface covers the background one.
+  // Both encodings must also agree that the foreground surface blocks the background one.
   for (const result of [omitted, explicitFalse]) {
     assert.equal(
       result.nodes.some((node) => node.label === 'Foreground tile'),
       true,
     );
-    assert.equal(
-      result.nodes.some((node) => node.label === 'Background row'),
-      false,
-    );
+    const covered = result.nodes.find((node) => node.label === 'Background row');
+    assert.equal(covered?.hittable, false);
+    assert.equal(covered?.interactionBlocked, 'covered');
   }
 });
 
@@ -312,10 +314,9 @@ test('parseUiHierarchy hides Android nodes that are not visible to the user in r
   );
 });
 
-test('raw Android snapshots are the acquired tree: invisible, stale-window and covered subtrees stay (C3)', () => {
-  // The three regular-projection pruners are membership, not acquisition. `--raw` keeps every node
-  // the helper serialized (normalization only), so `interactive ⊆ regular ⊆ raw` holds by
-  // construction and pruned content is recoverable for diagnosis.
+test('raw Android snapshots retain acquisition-only nodes while publication annotates covered actions (C1/C3)', () => {
+  // Invisible and stale-window classification belongs to regular presentation. Occlusion does not
+  // change membership: daemon publication keeps covered controls visible but non-actionable.
   const xml = `<hierarchy>
   <node window-index="0" window-type="1" window-layer="10" window-active="false" window-focused="false" class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="0">
     <node class="android.widget.Button" text="Stale window action" bounds="[0,0][390,60]" clickable="true" visible-to-user="true" drawing-order="1"/>
@@ -341,8 +342,19 @@ test('raw Android snapshots are the acquired tree: invisible, stale-window and c
     'Covered drawer action',
     'Invisible action',
   ]);
-  assert.deepEqual(labels({}), ['Foreground action']);
-  assert.deepEqual(labels({ interactiveOnly: true }), ['Foreground action']);
+  assert.deepEqual(labels({}), ['Foreground action', 'Covered drawer action']);
+  assert.deepEqual(labels({ interactiveOnly: true }), [
+    'Foreground action',
+    'Covered drawer action',
+  ]);
+  const published = buildSnapshotState(
+    { nodes: parseUiHierarchy(xml, 800, {}).nodes, backend: 'android' },
+    {},
+  );
+  assert.equal(
+    published.nodes.find((node) => node.label === 'Covered drawer action')?.interactionBlocked,
+    'covered',
+  );
 });
 
 test('parseUiHierarchy prunes descendants of Android nodes that are not visible to the user', () => {
@@ -361,7 +373,7 @@ test('parseUiHierarchy prunes descendants of Android nodes that are not visible 
   );
 });
 
-test('parseUiHierarchy prunes lower drawing-order subtrees covered by a foreground sibling', () => {
+test('published Android snapshots keep covered replacement surfaces but block their actions uniformly across API levels', () => {
   // A pushed screen (header, scrollable body, footer) drawn above a still-attached drawer surface.
   // The pushed screen's presented content lies over the drawer's content, so the drawer is covered.
   const xml = `<hierarchy>
@@ -382,15 +394,34 @@ test('parseUiHierarchy prunes lower drawing-order subtrees covered by a foregrou
   </node>
 </hierarchy>`;
 
-  const result = parseUiHierarchy(xml, 800, {});
+  const publish = (capturedXml: string) =>
+    buildSnapshotState(
+      { nodes: parseUiHierarchy(capturedXml, 800, {}).nodes, backend: 'android' },
+      {},
+    );
+  const api24 = publish(xml);
+  const api23 = publish(xml.replaceAll(/ drawing-order="\d+"/g, ''));
+
   assert.equal(
-    result.nodes.some((node) => node.label === 'Foreground action'),
+    api24.nodes.some((node) => node.label === 'Foreground action'),
     true,
   );
-  assert.equal(
-    result.nodes.some((node) => node.label === 'Hidden drawer action'),
-    false,
+  assert.deepEqual(
+    api24.nodes.map(({ label, hittable, interactionBlocked }) => ({
+      label,
+      hittable,
+      interactionBlocked,
+    })),
+    api23.nodes.map(({ label, hittable, interactionBlocked }) => ({
+      label,
+      hittable,
+      interactionBlocked,
+    })),
   );
+  const covered = api24.nodes.find((node) => node.label === 'Hidden drawer action');
+  assert.equal(covered?.hittable, false);
+  assert.equal(covered?.interactionBlocked, 'covered');
+  assert.deepEqual(covered?.presentationHints, ['covered']);
 });
 
 test('parseUiHierarchy keeps app content under a full-screen overlay holding one floating icon (#1806)', () => {
@@ -408,11 +439,16 @@ test('parseUiHierarchy keeps app content under a full-screen overlay holding one
   </node>
 </hierarchy>`;
 
-  const result = parseUiHierarchy(xml, 800, {});
+  const result = buildSnapshotState(
+    { nodes: parseUiHierarchy(xml, 800, {}).nodes, backend: 'android' },
+    {},
+  );
   assert.deepEqual(
     result.nodes.filter((node) => node.label).map((node) => node.label),
     ['Editor', 'Save', 'dokit_contentview_id_DokitFrameLayout[1]', 'DoKit'],
   );
+  assert.equal(result.nodes.find((node) => node.label === 'Save')?.hittable, true);
+  assert.equal(result.nodes.find((node) => node.label === 'Save')?.interactionBlocked, undefined);
 });
 
 test('parseUiHierarchy keeps app content beside an empty labelled full-screen placeholder (#1806)', () => {
@@ -729,8 +765,8 @@ test('parseUiHierarchy keeps an overlapped text leaf drawn inside a composite wi
   );
 });
 
-test('parseUiHierarchy still condemns a clickable leaf covered by a foreground sibling', () => {
-  // A tap-to-dismiss scrim is itself a touch target, so it hides its whole box.
+test('published Android snapshots block a clickable leaf covered by a foreground sibling', () => {
+  // A tap-to-dismiss scrim is itself a touch target, so it blocks controls under its whole box.
   const xml = `<hierarchy>
   <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="0">
     <node class="android.view.ViewGroup" bounds="[0,0][390,844]" clickable="true" enabled="true" visible-to-user="true" drawing-order="2">
@@ -740,15 +776,17 @@ test('parseUiHierarchy still condemns a clickable leaf covered by a foreground s
   </node>
 </hierarchy>`;
 
-  const result = parseUiHierarchy(xml, 800, {});
+  const result = buildSnapshotState(
+    { nodes: parseUiHierarchy(xml, 800, {}).nodes, backend: 'android' },
+    {},
+  );
   assert.equal(
     result.nodes.some((node) => node.label === 'Modal action'),
     true,
   );
-  assert.equal(
-    result.nodes.some((node) => node.label === 'Behind the modal'),
-    false,
-  );
+  const covered = result.nodes.find((node) => node.label === 'Behind the modal');
+  assert.equal(covered?.hittable, false);
+  assert.equal(covered?.interactionBlocked, 'covered');
 });
 
 test('parseUiHierarchy ignores attribute-name prefix spoofing', () => {

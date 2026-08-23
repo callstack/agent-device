@@ -36,6 +36,10 @@ export type AndroidUiHierarchySnapshotOptions = SnapshotOptions & {
 export type AndroidBuiltSnapshot = {
   nodes: AndroidRawSnapshotNode[];
   sourceNodes: AndroidUiHierarchy[];
+  occlusionContext: {
+    nodes: readonly AndroidRawSnapshotNode[];
+    sourceIndexByNodeIndex: ReadonlyMap<number, number>;
+  };
   truncated?: boolean;
   analysis: AndroidSnapshotAnalysis;
 };
@@ -48,7 +52,7 @@ type AndroidSnapshotBuildState = {
   options: AndroidUiHierarchySnapshotOptions;
   analysis: AndroidSnapshotAnalysis;
   interactiveDescendantMemo: Map<AndroidNode, boolean>;
-  /** Subtrees the regular projection hides (invisible / stale window / covered). Empty for raw. */
+  /** Subtrees the regular projection hides (invisible / stale window). Empty for raw. */
   hidden: ReadonlySet<AndroidNode>;
   /** Largest helper-reported application/window frame, used as the regular viewport fallback. */
   viewport?: Rect;
@@ -80,7 +84,7 @@ export function buildUiHierarchySnapshot(
     analysis,
     interactiveDescendantMemo: new Map(),
     // C3: raw is the acquired tree (normalization only); regular additionally hides what Android
-    // marks invisible, stale application windows, and covered same-window surfaces.
+    // marks invisible and stale application windows. Daemon publication alone owns occlusion.
     hidden: new Set(),
     presentationBudget,
     presentationNodes: [],
@@ -102,6 +106,10 @@ export function buildUiHierarchySnapshot(
         presentationBudget,
       );
     }
+    const occlusionContextNodes = state.nodes;
+    const sourceIndexBySourceNode = new Map(
+      state.sourceNodes.map((sourceNode, index) => [sourceNode, index]),
+    );
     const { nodes, sourceNodes } = scope
       ? scopePresentedAndroidSnapshot(
           state,
@@ -111,7 +119,23 @@ export function buildUiHierarchySnapshot(
           presentationBudget,
         )
       : state;
-    const snapshot = { nodes, sourceNodes, analysis: state.analysis };
+    const snapshot = {
+      nodes,
+      sourceNodes,
+      occlusionContext: {
+        nodes: occlusionContextNodes,
+        sourceIndexByNodeIndex: new Map(
+          sourceNodes.flatMap((sourceNode, index) => {
+            const sourceIndex = sourceIndexBySourceNode.get(sourceNode);
+            const nodeIndex = nodes[index]?.index;
+            return sourceIndex === undefined || nodeIndex === undefined
+              ? []
+              : [[nodeIndex, sourceIndex] as const];
+          }),
+        ),
+      },
+      analysis: state.analysis,
+    };
     return state.truncated ? { ...snapshot, truncated: true } : snapshot;
   } catch (error) {
     if (isAndroidSnapshotPresentationFailure(error)) {

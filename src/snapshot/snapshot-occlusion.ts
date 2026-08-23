@@ -56,6 +56,7 @@ type OcclusionScan = {
 };
 
 export type SnapshotOcclusionOptions = {
+  /** Backend-declared overlay roots that use the shared geometric scan (for example Android IME). */
   isAdditionalOverlayNode?: (node: RawSnapshotNode) => boolean;
 };
 
@@ -89,8 +90,26 @@ export function annotateCoveredSnapshotNodes(
     if (!isCandidateTouchNode(node)) continue;
     if (findCoveringNode(scan, position, node, options)) coveredPositions.push(position);
   }
-  if (coveredPositions.length === 0) return nodes;
+  return annotateCoveredPositions(nodes, coveredPositions);
+}
 
+/** Applies backend-owned covered decisions through the same publication annotation contract. */
+export function annotateSnapshotNodesCoveredByPolicy(
+  nodes: RawSnapshotNode[],
+  isCovered: (node: RawSnapshotNode) => boolean,
+): RawSnapshotNode[] {
+  const coveredPositions: number[] = [];
+  for (const [position, node] of nodes.entries()) {
+    if (isCandidateTouchNode(node) && isCovered(node)) coveredPositions.push(position);
+  }
+  return annotateCoveredPositions(nodes, coveredPositions);
+}
+
+function annotateCoveredPositions(
+  nodes: RawSnapshotNode[],
+  coveredPositions: readonly number[],
+): RawSnapshotNode[] {
+  if (coveredPositions.length === 0) return nodes;
   const annotated = [...nodes];
   for (const position of coveredPositions) {
     const node = nodes[position]!;
