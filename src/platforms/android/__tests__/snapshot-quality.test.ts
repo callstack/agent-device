@@ -8,7 +8,7 @@ import {
   androidSnapshotQualityHelperArtifact,
 } from './snapshot-quality-fixtures.ts';
 import { resetAndroidSnapshotHelperInstallCache } from '../snapshot-helper-install.ts';
-import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session.ts';
+import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
 
 beforeEach(async () => {
   await resetAndroidSnapshotHelperSessions();
