@@ -1,5 +1,6 @@
 import type { Rect } from '@agent-device/kernel/snapshot';
 import type { AndroidSnapshotPresentationBudget } from './snapshot-presentation.ts';
+import { unionCoverage } from './rect-coverage.ts';
 import {
   hasMeaningfulLabel,
   hasPositiveRect,
@@ -155,81 +156,6 @@ function paintsOwnBox(node: AndroidNode, hidden: ReadonlySet<AndroidNode>): bool
     node.scrollable === true ||
     (retainedChildren(node, hidden).length === 0 && hasMeaningfulLabel(node))
   );
-}
-
-/** Fraction of the covered rects' union that lies under the covering rects' union. */
-function unionCoverage(
-  coveringRects: Rect[],
-  coveredRects: Rect[],
-  presentationBudget?: AndroidSnapshotPresentationBudget,
-): number {
-  const xs = compressedEdges([...coveringRects, ...coveredRects], (rect) => [
-    rect.x,
-    rect.x + rect.width,
-  ]);
-  const ys = compressedEdges([...coveringRects, ...coveredRects], (rect) => [
-    rect.y,
-    rect.y + rect.height,
-  ]);
-  const xIndex = createEdgeIndex(xs, presentationBudget);
-  const yIndex = createEdgeIndex(ys, presentationBudget);
-  const covering = markCells(coveringRects, xIndex, yIndex, presentationBudget);
-  const covered = markCells(coveredRects, xIndex, yIndex, presentationBudget);
-  const rows = ys.length - 1;
-  const columns = xs.length - 1;
-  presentationBudget?.consume(columns * rows);
-  let coveredArea = 0;
-  let overlapArea = 0;
-  for (let column = 0; column < columns; column += 1) {
-    presentationBudget?.check('work');
-    const width = xs[column + 1]! - xs[column]!;
-    for (let row = 0; row < rows; row += 1) {
-      const cell = column * rows + row;
-      if (!covered[cell]) continue;
-      const area = width * (ys[row + 1]! - ys[row]!);
-      coveredArea += area;
-      if (covering[cell]) overlapArea += area;
-    }
-  }
-  return coveredArea <= 0 ? 0 : overlapArea / coveredArea;
-}
-
-function compressedEdges(rects: Rect[], edgesOf: (rect: Rect) => [number, number]): number[] {
-  return [...new Set(rects.flatMap(edgesOf))].sort((left, right) => left - right);
-}
-
-function createEdgeIndex(
-  edges: number[],
-  presentationBudget?: AndroidSnapshotPresentationBudget,
-): ReadonlyMap<number, number> {
-  presentationBudget?.consume(edges.length);
-  return new Map(edges.map((edge, index) => [edge, index]));
-}
-
-function markCells(
-  rects: Rect[],
-  xIndex: ReadonlyMap<number, number>,
-  yIndex: ReadonlyMap<number, number>,
-  presentationBudget?: AndroidSnapshotPresentationBudget,
-): Uint8Array {
-  const rows = yIndex.size - 1;
-  const columns = xIndex.size - 1;
-  const cellCount = columns * rows;
-  presentationBudget?.consume(cellCount);
-  const cells = new Uint8Array(cellCount);
-  for (const rect of rects) {
-    presentationBudget?.check('work');
-    const firstColumn = xIndex.get(rect.x)!;
-    const lastColumn = xIndex.get(rect.x + rect.width)!;
-    const firstRow = yIndex.get(rect.y)!;
-    const lastRow = yIndex.get(rect.y + rect.height)!;
-    for (let column = firstColumn; column < lastColumn; column += 1) {
-      presentationBudget?.check('work');
-      presentationBudget?.consume(lastRow - firstRow);
-      cells.fill(1, column * rows + firstRow, column * rows + lastRow);
-    }
-  }
-  return cells;
 }
 
 /**

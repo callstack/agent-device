@@ -209,36 +209,35 @@ test('hostile nested Android presentation stays under a deterministic linear wor
   );
 });
 
-test('broad Android presentation rejects an oversized descendant footprint budget', () => {
+test('broad sibling footprints resolve coverage inside the deterministic budget', () => {
   const siblingCount = 24;
-  const buttons = (offset: number) =>
+  const buttons = (labelPrefix: string) =>
     Array.from({ length: siblingCount }, (_, index) => {
-      const x = offset + index * 16;
+      const x = index * 16;
       const y = 16 + index * 16;
-      return `<node class="android.widget.Button" text="${offset}-${index}" bounds="[${x},${y}][${x + 8},${y + 8}]" clickable="true" visible-to-user="true" />`;
+      return `<node class="android.widget.Button" text="${labelPrefix}-${index}" bounds="[${x},${y}][${x + 8},${y + 8}]" clickable="true" visible-to-user="true" />`;
     }).join('');
   const tree = parseUiHierarchyTree(
     `<hierarchy><node class="android.widget.FrameLayout" bounds="[0,0][512,512]" visible-to-user="true">
-      <node class="android.view.ViewGroup" drawing-order="1" bounds="[0,0][512,512]" visible-to-user="true">${buttons(0)}</node>
-      <node class="android.view.ViewGroup" drawing-order="2" bounds="[0,0][512,512]" visible-to-user="true">${buttons(0)}</node>
+      <node class="android.view.ViewGroup" drawing-order="1" bounds="[0,0][512,512]" visible-to-user="true">${buttons('covered')}</node>
+      <node class="android.view.ViewGroup" drawing-order="2" bounds="[0,0][512,512]" visible-to-user="true">${buttons('covering')}</node>
     </node></hierarchy>`,
   );
 
-  assert.throws(
-    () =>
-      buildUiHierarchySnapshot(tree, undefined, {
-        androidPresentation: {
-          deadlineAtMs: Number.POSITIVE_INFINITY,
-          maxWorkUnits: 1024,
-        },
-      }),
-    (error: unknown) => {
-      assert.equal(isAndroidSnapshotPresentationFailure(error), true);
-      assert(error instanceof AndroidSnapshotPresentationFailure);
-      assert.equal(error.details.phase, 'complexity');
-      assert(error.details.workUnits > 1024);
-      return true;
+  const built = buildUiHierarchySnapshot(tree, undefined, {
+    androidPresentation: {
+      deadlineAtMs: Number.POSITIVE_INFINITY,
+      maxWorkUnits: 1024,
     },
+  });
+
+  assert.equal(
+    built.nodes.some((node) => node.label?.startsWith('covered-')),
+    false,
+  );
+  assert.equal(
+    built.nodes.filter((node) => node.label?.startsWith('covering-')).length,
+    siblingCount,
   );
 });
 
@@ -253,6 +252,7 @@ test('hostile equal-order same-rect siblings charge the broad candidate scan', (
     `<hierarchy><node class="android.widget.FrameLayout" bounds="[0,0][100,100]" visible-to-user="true">${siblings}</node></hierarchy>`,
   );
 
+  // Equal drawing orders skip coverage calculation, so this isolates the sibling candidate scan.
   assert.throws(
     () =>
       buildUiHierarchySnapshot(tree, undefined, {
@@ -287,7 +287,7 @@ test('default budget admits a bounded flat hierarchy', () => {
   assert.equal(built.nodes.length, 101);
 });
 
-test('one-axis footprint indexing remains inside the deterministic work budget', () => {
+test('dense one-axis footprints resolve coverage inside the deterministic budget', () => {
   const childCount = 80;
   const labels = Array.from(
     { length: childCount },
@@ -301,19 +301,19 @@ test('one-axis footprint indexing remains inside the deterministic work budget',
     </node></hierarchy>`,
   );
 
-  assert.throws(
-    () =>
-      buildUiHierarchySnapshot(tree, undefined, {
-        androidPresentation: {
-          deadlineAtMs: Number.POSITIVE_INFINITY,
-          maxWorkUnits: 1650,
-        },
-      }),
-    (error: unknown) => {
-      assert.equal(isAndroidSnapshotPresentationFailure(error), true);
-      assert(error instanceof AndroidSnapshotPresentationFailure);
-      assert.equal(error.details.phase, 'complexity');
-      return true;
+  const built = buildUiHierarchySnapshot(tree, undefined, {
+    androidPresentation: {
+      deadlineAtMs: Number.POSITIVE_INFINITY,
+      maxWorkUnits: 1650,
     },
+  });
+
+  assert.equal(
+    built.nodes.some((node) => node.label?.startsWith('Label ')),
+    false,
+  );
+  assert.equal(
+    built.nodes.some((node) => node.label === 'Cover'),
+    true,
   );
 });
