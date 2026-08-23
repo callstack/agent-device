@@ -98,7 +98,10 @@ function annotateAndroidReplacementSurfaces(
   nodes: RawSnapshotNode[],
 ): RawSnapshotNode[] {
   const context = readSnapshotOcclusionContextEvidence(owner);
-  const coveredSourceIndexes = coveredAndroidReplacementNodeIndexes(context?.nodes ?? nodes);
+  const coveredSourceIndexes = coveredAndroidReplacementNodeIndexes(
+    context?.nodes ?? nodes,
+    context?.androidSiblingOrderByNodeIndex,
+  );
   return annotateSnapshotNodesCoveredByPolicy(nodes, (node) => {
     const sourceIndex = context?.sourceIndexByNodeIndex.get(node.index) ?? node.index;
     return coveredSourceIndexes.has(sourceIndex);

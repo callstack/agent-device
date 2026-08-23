@@ -28,4 +28,6 @@ export type AndroidSnapshotBackendMetadata = {
     workUnits: number;
     maxWorkUnits?: number;
   };
+  /** API 23 exposes no sibling drawing order, so same-window occlusion fails conservative. */
+  occlusionScanUnavailable?: boolean;
 };

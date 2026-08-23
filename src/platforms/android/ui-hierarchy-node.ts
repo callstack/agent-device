@@ -35,6 +35,22 @@ export type AndroidUiHierarchy = {
 
 export type AndroidNode = AndroidUiHierarchy;
 
+export type AndroidSiblingOrder = { parent: AndroidNode; order: number };
+
+const siblingOrderByNode = new WeakMap<AndroidNode, AndroidSiblingOrder>();
+
+export function attachAndroidSiblingOrder(
+  node: AndroidNode,
+  siblingOrder: AndroidSiblingOrder | undefined,
+): AndroidNode {
+  if (siblingOrder) siblingOrderByNode.set(node, siblingOrder);
+  return node;
+}
+
+export function readAndroidSiblingOrder(node: AndroidNode): AndroidSiblingOrder | undefined {
+  return siblingOrderByNode.get(node);
+}
+
 /** A node a touch can act on. */
 function isTouchTarget(node: AndroidNode): boolean {
   return node.clickable;

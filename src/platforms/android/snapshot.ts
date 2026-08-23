@@ -69,6 +69,7 @@ import {
   type AndroidSnapshotPresentationFailure,
   type AndroidSnapshotPresentationOptions,
 } from './snapshot-presentation.ts';
+import { readAndroidSiblingOrder } from './ui-hierarchy-node.ts';
 
 const HELPER_INSTALL_TIMEOUT_MS = 30_000;
 /**
@@ -112,7 +113,7 @@ export async function snapshotAndroid(
   const capture = await captureAndroidUiHierarchy(device, options, adb);
   const xml = capture.xml;
   const tree = parseUiHierarchyTree(xml);
-  const androidSnapshot = capture.metadata;
+  const androidSnapshot = withOcclusionScanDisclosure(capture.metadata, tree);
   const presentationOptions: AndroidUiHierarchySnapshotOptions = {
     ...options,
     androidPresentation: {
@@ -195,6 +196,26 @@ function mergeAndroidSnapshotTruncation(
   metadata: AndroidSnapshotBackendMetadata,
 ): boolean | undefined {
   return snapshotTruncated === true || metadata.helperTruncated === true ? true : snapshotTruncated;
+}
+
+function withOcclusionScanDisclosure(
+  metadata: AndroidSnapshotBackendMetadata,
+  tree: AndroidUiHierarchy,
+): AndroidSnapshotBackendMetadata {
+  return androidTreeCarriesDrawingOrder(tree) === false
+    ? { ...metadata, occlusionScanUnavailable: true }
+    : metadata;
+}
+
+function androidTreeCarriesDrawingOrder(root: AndroidUiHierarchy): boolean | undefined {
+  const pending = [...root.children];
+  if (pending.length === 0) return undefined;
+  while (pending.length > 0) {
+    const node = pending.pop()!;
+    if (readAndroidSiblingOrder(node) !== undefined) return true;
+    pending.push(...node.children);
+  }
+  return false;
 }
 
 function androidSnapshotTruncationFields(

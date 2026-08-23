@@ -17,29 +17,46 @@ export type SnapshotClickabilityEvidence =
       reason: 'maestro-clickable-not-exposed-by-provider';
     };
 
-const evidenceBySnapshotObject = new WeakMap<object, SnapshotClickabilityEvidence>();
+export type AndroidSiblingOrderEvidence = { group: number; order: number };
 
 export type SnapshotOcclusionContextEvidence = {
   /** Broad normalized presentation input retained when the public result is scoped. */
   nodes: readonly RawSnapshotNode[];
   /** Public input node index to its corresponding index in `nodes`. */
   sourceIndexByNodeIndex: ReadonlyMap<number, number>;
+  /** Exact Android order plus an opaque original-sibling group (API 24+). */
+  androidSiblingOrderByNodeIndex?: ReadonlyMap<number, AndroidSiblingOrderEvidence>;
 };
 
-const occlusionContextBySnapshotObject = new WeakMap<object, SnapshotOcclusionContextEvidence>();
+type SnapshotPrivateEvidence = {
+  clickability?: SnapshotClickabilityEvidence;
+  occlusionContext?: SnapshotOcclusionContextEvidence;
+};
+
+const privateEvidenceBySnapshotObject = new WeakMap<object, SnapshotPrivateEvidence>();
+
+function attachSnapshotPrivateEvidence<T extends object>(
+  owner: T,
+  evidence: SnapshotPrivateEvidence,
+): T {
+  privateEvidenceBySnapshotObject.set(owner, {
+    ...privateEvidenceBySnapshotObject.get(owner),
+    ...evidence,
+  });
+  return owner;
+}
 
 export function attachSnapshotClickabilityEvidence<T extends object>(
   owner: T,
   evidence: SnapshotClickabilityEvidence,
 ): T {
-  evidenceBySnapshotObject.set(owner, evidence);
-  return owner;
+  return attachSnapshotPrivateEvidence(owner, { clickability: evidence });
 }
 
 export function readSnapshotClickabilityEvidence(
   owner: object | null | undefined,
 ): SnapshotClickabilityEvidence | undefined {
-  return owner ? evidenceBySnapshotObject.get(owner) : undefined;
+  return owner ? privateEvidenceBySnapshotObject.get(owner)?.clickability : undefined;
 }
 
 export function copySnapshotClickabilityEvidence<T extends object>(
@@ -54,14 +71,13 @@ export function attachSnapshotOcclusionContextEvidence<T extends object>(
   owner: T,
   evidence: SnapshotOcclusionContextEvidence,
 ): T {
-  occlusionContextBySnapshotObject.set(owner, evidence);
-  return owner;
+  return attachSnapshotPrivateEvidence(owner, { occlusionContext: evidence });
 }
 
 export function readSnapshotOcclusionContextEvidence(
   owner: object | null | undefined,
 ): SnapshotOcclusionContextEvidence | undefined {
-  return owner ? occlusionContextBySnapshotObject.get(owner) : undefined;
+  return owner ? privateEvidenceBySnapshotObject.get(owner)?.occlusionContext : undefined;
 }
 
 /** Copies every non-serializable capture fact needed before daemon publication. */
@@ -69,9 +85,6 @@ export function copySnapshotPrivateEvidence<T extends object>(
   source: object | null | undefined,
   target: T,
 ): T {
-  const withClickability = copySnapshotClickabilityEvidence(source, target);
-  const occlusionContext = readSnapshotOcclusionContextEvidence(source);
-  return occlusionContext
-    ? attachSnapshotOcclusionContextEvidence(withClickability, occlusionContext)
-    : withClickability;
+  const evidence = source ? privateEvidenceBySnapshotObject.get(source) : undefined;
+  return evidence ? attachSnapshotPrivateEvidence(target, evidence) : target;
 }

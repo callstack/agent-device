@@ -61,6 +61,7 @@ export {
   readSnapshotOcclusionContextEvidence,
 } from '../snapshot-private-evidence.ts';
 export type {
+  AndroidSiblingOrderEvidence,
   SnapshotClickabilityEvidence,
   SnapshotOcclusionContextEvidence,
 } from '../snapshot-private-evidence.ts';

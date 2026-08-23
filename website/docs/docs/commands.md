@@ -339,12 +339,12 @@ agent-device get attrs @e1
   source checkout must run `pnpm build:android` before Android verification. The helper serializes
   Android interactive window roots when available, so keyboard and system-overlay nodes can appear
   alongside the app root; `androidSnapshot.captureMode` and `androidSnapshot.windowCount` describe
-  the capture. Android `--raw` is the acquired tree: it keeps nodes Android marks invisible and
-  stale application windows. Default and `-i` snapshots keep same-window covered surfaces visible
-  for diagnosis but mark their controls `interactionBlocked: "covered"`, so selectors cannot act
-  on stale React Native screens. This result is identical on API 23 and newer even though API 23
-  cannot report the acquisition-only `drawing-order` attribute. The helper does not report
-  `checked`/`selected` state, and it caps
+  the capture. Default and `-i` snapshots keep same-window covered surfaces visible for diagnosis
+  and mark exactly ordered covered controls `interactionBlocked: "covered"`, so selectors cannot
+  act on stale React Native screens. API 23 cannot report sibling `drawing-order`, so this scan fails
+  conservative and `androidSnapshot.occlusionScanUnavailable: true` discloses the difference.
+  Android `--raw` is the acquired tree: it also keeps nodes Android marks invisible and stale
+  application windows. The helper does not report `checked`/`selected` state, and it caps
   captures at 5000 nodes before any `--scope` applies (`truncated: true`).
 - `--scope <text|@ref>` returns the subtree of the first node in document order whose label, value,
   or identifier contains the scope text (case-insensitive) and whose subtree still has content in

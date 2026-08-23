@@ -1094,16 +1094,14 @@ test.each([
   {
     name: 'classifies the shade precisely',
     prepare: (nodes: RawSnapshotNode[]) => nodes,
-    expectedTruncated: true,
   },
   {
     name: 'survives a whole-tree chrome false positive',
     prepare: (nodes: RawSnapshotNode[]) =>
       nodes.map((node) => ({ ...node, systemChrome: true as const })),
-    expectedTruncated: undefined,
   },
 ])('buildReplayFailureDivergence: a full-cover quick-settings shade $name', async (fixture) => {
-  const { prepare, expectedTruncated } = fixture;
+  const { prepare } = fixture;
   const root = mkdtempForTestSync('agent-device-replay-divergence-qsshade-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
@@ -1152,7 +1150,9 @@ test.each([
   // brightness slider is the one carrying real text.
   expect(screen.refs.some((ref) => ref.label === 'Display brightness')).toBe(true);
   expect(screen.refs.length).toBe(20); // SCREEN_REF_CAPTURE_LIMIT
-  expect(screen.truncated).toBe(expectedTruncated);
+  // This synthetic backend result has no private sibling-order evidence. Publication therefore
+  // fails conservative and discloses that more actionable refs exist beyond the response limit.
+  expect(screen.truncated).toBe(true);
 
   // Every published ref is actionable; non-hittable status residue in the same
   // systemui window (battery/wifi/mobile icons) never rides along.

@@ -2,10 +2,16 @@ import {
   type AndroidSystemChromeProvenance,
   isAndroidSystemChromeWindowResourceId,
 } from '@agent-device/contracts/android-system-chrome';
+import type { AndroidSiblingOrderEvidence } from '@agent-device/contracts/capture';
 import { isScrollableType, normalizeSnapshotScope } from '@agent-device/contracts/snapshot';
 import type { RawSnapshotNode, Rect, SnapshotOptions } from '@agent-device/kernel/snapshot';
 import { isPositiveFiniteRect, pickLargestRect } from '@agent-device/kernel/rect';
-import { isAgentTarget, type AndroidNode, type AndroidUiHierarchy } from './ui-hierarchy-node.ts';
+import {
+  isAgentTarget,
+  readAndroidSiblingOrder,
+  type AndroidNode,
+  type AndroidUiHierarchy,
+} from './ui-hierarchy-node.ts';
 import { collectAndroidHiddenNodes } from './ui-hierarchy-visibility.ts';
 import { scopePresentedAndroidSnapshot } from './ui-hierarchy-scope.ts';
 import { isCollectionContainerType, shouldIncludeAndroidNode } from './ui-hierarchy-inclusion.ts';
@@ -39,6 +45,7 @@ export type AndroidBuiltSnapshot = {
   occlusionContext: {
     nodes: readonly AndroidRawSnapshotNode[];
     sourceIndexByNodeIndex: ReadonlyMap<number, number>;
+    androidSiblingOrderByNodeIndex: ReadonlyMap<number, AndroidSiblingOrderEvidence>;
   };
   truncated?: boolean;
   analysis: AndroidSnapshotAnalysis;
@@ -133,6 +140,7 @@ export function buildUiHierarchySnapshot(
               : [[nodeIndex, sourceIndex] as const];
           }),
         ),
+        androidSiblingOrderByNodeIndex: collectAndroidSiblingOrders(state.sourceNodes),
       },
       analysis: state.analysis,
     };
@@ -144,6 +152,24 @@ export function buildUiHierarchySnapshot(
     }
     throw error;
   }
+}
+
+function collectAndroidSiblingOrders(
+  sourceNodes: readonly AndroidNode[],
+): ReadonlyMap<number, AndroidSiblingOrderEvidence> {
+  const groupByParent = new Map<AndroidNode, number>();
+  const orders = new Map<number, AndroidSiblingOrderEvidence>();
+  for (const [index, sourceNode] of sourceNodes.entries()) {
+    const siblingOrder = readAndroidSiblingOrder(sourceNode);
+    if (!siblingOrder) continue;
+    let group = groupByParent.get(siblingOrder.parent);
+    if (group === undefined) {
+      group = groupByParent.size;
+      groupByParent.set(siblingOrder.parent, group);
+    }
+    orders.set(index, { group, order: siblingOrder.order });
+  }
+  return orders;
 }
 
 /**

@@ -101,8 +101,8 @@ The APK emits instrumentation status records using
 The XML node attributes intentionally mirror acquisition facts decoded by the host, including
 `visible-to-user`, `drawing-order`, bounds, text/description/id, interaction booleans, and window
 metadata on window roots. The helper emits `drawing-order` on Android API 24+ and omits it on API
-23, where the platform API is unavailable. The host keeps that difference at the acquisition
-metadata boundary; normalized snapshot presentation does not consume it.
+23, where the platform API is unavailable. The host keeps that fact as private capture evidence;
+the daemon uses it to annotate covered actions without adding it to normalized snapshot nodes.
 
 Each XML chunk is sent with:
 

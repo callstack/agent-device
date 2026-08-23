@@ -4,6 +4,15 @@ import { buildSnapshotState } from '../../../daemon/snapshot-state.ts';
 import { isNodeVisibleOnScreen } from '@agent-device/contracts/snapshot';
 import { androidUiNodes, parseUiHierarchyTree } from '../ui-hierarchy.ts';
 import { parseUiHierarchy } from './ui-hierarchy-fixtures.ts';
+import { copySnapshotPrivateEvidence } from '@agent-device/contracts/capture';
+
+function publishUiHierarchy(xml: string) {
+  const captured = parseUiHierarchy(xml, 800, {});
+  return buildSnapshotState(
+    copySnapshotPrivateEvidence(captured, { ...captured, backend: 'android' as const }),
+    {},
+  );
+}
 
 test('parseUiHierarchy does not truncate when no max node count is requested', () => {
   const xml = [
@@ -279,10 +288,8 @@ test('parseUiHierarchy reads an omitted clickable attribute the same as clickabl
   </node>
 </hierarchy>`;
 
-  const publish = (xml: string) =>
-    buildSnapshotState({ nodes: parseUiHierarchy(xml, 800, {}).nodes, backend: 'android' }, {});
-  const omitted = publish(tree(''));
-  const explicitFalse = publish(tree('clickable="false"'));
+  const omitted = publishUiHierarchy(tree(''));
+  const explicitFalse = publishUiHierarchy(tree('clickable="false"'));
 
   assert.deepEqual(
     explicitFalse.nodes.map((node) => [node.label, node.hittable]),
@@ -347,10 +354,7 @@ test('raw Android snapshots retain acquisition-only nodes while publication anno
     'Foreground action',
     'Covered drawer action',
   ]);
-  const published = buildSnapshotState(
-    { nodes: parseUiHierarchy(xml, 800, {}).nodes, backend: 'android' },
-    {},
-  );
+  const published = publishUiHierarchy(xml);
   assert.equal(
     published.nodes.find((node) => node.label === 'Covered drawer action')?.interactionBlocked,
     'covered',
@@ -373,7 +377,7 @@ test('parseUiHierarchy prunes descendants of Android nodes that are not visible 
   );
 });
 
-test('published Android snapshots keep covered replacement surfaces but block their actions uniformly across API levels', () => {
+test('published Android snapshots use exact API 24 order and fail conservative without it', () => {
   // A pushed screen (header, scrollable body, footer) drawn above a still-attached drawer surface.
   // The pushed screen's presented content lies over the drawer's content, so the drawer is covered.
   const xml = `<hierarchy>
@@ -394,34 +398,20 @@ test('published Android snapshots keep covered replacement surfaces but block th
   </node>
 </hierarchy>`;
 
-  const publish = (capturedXml: string) =>
-    buildSnapshotState(
-      { nodes: parseUiHierarchy(capturedXml, 800, {}).nodes, backend: 'android' },
-      {},
-    );
-  const api24 = publish(xml);
-  const api23 = publish(xml.replaceAll(/ drawing-order="\d+"/g, ''));
+  const api24 = publishUiHierarchy(xml);
+  const api23 = publishUiHierarchy(xml.replaceAll(/ drawing-order="\d+"/g, ''));
 
   assert.equal(
     api24.nodes.some((node) => node.label === 'Foreground action'),
     true,
   );
-  assert.deepEqual(
-    api24.nodes.map(({ label, hittable, interactionBlocked }) => ({
-      label,
-      hittable,
-      interactionBlocked,
-    })),
-    api23.nodes.map(({ label, hittable, interactionBlocked }) => ({
-      label,
-      hittable,
-      interactionBlocked,
-    })),
-  );
   const covered = api24.nodes.find((node) => node.label === 'Hidden drawer action');
   assert.equal(covered?.hittable, false);
   assert.equal(covered?.interactionBlocked, 'covered');
   assert.deepEqual(covered?.presentationHints, ['covered']);
+  const unavailable = api23.nodes.find((node) => node.label === 'Hidden drawer action');
+  assert.equal(unavailable?.hittable, true);
+  assert.equal(unavailable?.interactionBlocked, undefined);
 });
 
 test('parseUiHierarchy keeps app content under a full-screen overlay holding one floating icon (#1806)', () => {
@@ -439,10 +429,7 @@ test('parseUiHierarchy keeps app content under a full-screen overlay holding one
   </node>
 </hierarchy>`;
 
-  const result = buildSnapshotState(
-    { nodes: parseUiHierarchy(xml, 800, {}).nodes, backend: 'android' },
-    {},
-  );
+  const result = publishUiHierarchy(xml);
   assert.deepEqual(
     result.nodes.filter((node) => node.label).map((node) => node.label),
     ['Editor', 'Save', 'dokit_contentview_id_DokitFrameLayout[1]', 'DoKit'],
@@ -776,10 +763,7 @@ test('published Android snapshots block a clickable leaf covered by a foreground
   </node>
 </hierarchy>`;
 
-  const result = buildSnapshotState(
-    { nodes: parseUiHierarchy(xml, 800, {}).nodes, backend: 'android' },
-    {},
-  );
+  const result = publishUiHierarchy(xml);
   assert.equal(
     result.nodes.some((node) => node.label === 'Modal action'),
     true,

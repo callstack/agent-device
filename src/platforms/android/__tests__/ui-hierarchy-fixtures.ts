@@ -1,4 +1,5 @@
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import { attachSnapshotOcclusionContextEvidence } from '@agent-device/contracts/capture';
 import {
   buildUiHierarchySnapshot,
   parseUiHierarchyTree,
@@ -14,8 +15,8 @@ export function parseUiHierarchy(
 ): { nodes: RawSnapshotNode[]; truncated?: boolean; analysis: AndroidSnapshotAnalysis } {
   const {
     sourceNodes: _sourceNodes,
-    occlusionContext: _occlusionContext,
+    occlusionContext,
     ...snapshot
   } = buildUiHierarchySnapshot(parseUiHierarchyTree(xml), maxNodes, options);
-  return snapshot;
+  return attachSnapshotOcclusionContextEvidence(snapshot, occlusionContext);
 }

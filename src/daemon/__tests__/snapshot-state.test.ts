@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import { buildSnapshotState } from '../snapshot-state.ts';
 import { isNodeVisibleOnScreen } from '@agent-device/contracts/snapshot';
+import { attachSnapshotOcclusionContextEvidence } from '@agent-device/contracts/capture';
 import {
   buildUiHierarchySnapshot,
   parseUiHierarchyTree,
@@ -202,6 +203,118 @@ test('buildSnapshotState marks Android app content covered by IME overlays as bl
     interactionBlocked: 'covered',
     presentationHints: ['covered'],
   });
+});
+
+test('buildSnapshotState keeps a sparse Android overlay actionable above scrollable app content', () => {
+  const nodes = [
+    {
+      index: 0,
+      depth: 0,
+      type: 'android.widget.FrameLayout',
+      rect: { x: 0, y: 0, width: 400, height: 800 },
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'android.widget.ScrollView',
+      rect: { x: 0, y: 0, width: 400, height: 800 },
+      hittable: true,
+    },
+    {
+      index: 2,
+      depth: 2,
+      parentIndex: 1,
+      type: 'android.widget.Button',
+      label: 'Save',
+      rect: { x: 20, y: 700, width: 360, height: 60 },
+      hittable: true,
+    },
+    {
+      index: 3,
+      depth: 1,
+      parentIndex: 0,
+      type: 'android.widget.FrameLayout',
+      rect: { x: 0, y: 0, width: 400, height: 800 },
+    },
+    {
+      index: 4,
+      depth: 2,
+      parentIndex: 3,
+      type: 'android.widget.ImageView',
+      label: 'Tools',
+      rect: { x: 330, y: 350, width: 50, height: 50 },
+      hittable: true,
+    },
+  ];
+  const state = buildSnapshotState(
+    attachSnapshotOcclusionContextEvidence(
+      { nodes, backend: 'android' as const },
+      {
+        nodes,
+        sourceIndexByNodeIndex: new Map(nodes.map((node) => [node.index, node.index])),
+        androidSiblingOrderByNodeIndex: new Map([
+          [1, { group: 0, order: 1 }],
+          [3, { group: 0, order: 2 }],
+        ]),
+      },
+    ),
+    undefined,
+  );
+
+  expect(state.nodes.find((node) => node.label === 'Save')).toMatchObject({ hittable: true });
+  expect(state.nodes.find((node) => node.label === 'Tools')).toMatchObject({ hittable: true });
+  expect(state.nodes.find((node) => node.label === 'Tools')?.interactionBlocked).toBeUndefined();
+});
+
+test('buildSnapshotState handles a maximum-size deeply nested Android replacement candidate', () => {
+  const nestedSurface = Array.from({ length: 4998 }, (_, offset) => {
+    const index = offset + 1;
+    const isLeaf = index === 4998;
+    return {
+      index,
+      depth: index,
+      parentIndex: index === 1 ? 0 : index - 1,
+      type: isLeaf ? 'android.widget.Button' : 'android.view.ViewGroup',
+      rect: { x: 0, y: 0, width: 400, height: 800 },
+      ...(isLeaf ? { label: 'Deep action', hittable: true } : {}),
+    };
+  });
+  const nodes = [
+    {
+      index: 0,
+      depth: 0,
+      type: 'android.widget.FrameLayout',
+      rect: { x: 0, y: 0, width: 400, height: 800 },
+    },
+    ...nestedSurface,
+    {
+      index: 4999,
+      depth: 1,
+      parentIndex: 0,
+      type: 'android.widget.Button',
+      label: 'Sibling action',
+      rect: { x: 0, y: 0, width: 400, height: 800 },
+      hittable: true,
+    },
+  ];
+  const state = buildSnapshotState(
+    attachSnapshotOcclusionContextEvidence(
+      { nodes, backend: 'android' as const },
+      {
+        nodes,
+        sourceIndexByNodeIndex: new Map(nodes.map((node) => [node.index, node.index])),
+        androidSiblingOrderByNodeIndex: new Map([
+          [1, { group: 0, order: 2 }],
+          [4999, { group: 0, order: 1 }],
+        ]),
+      },
+    ),
+    undefined,
+  );
+
+  expect(state.nodes.some((node) => node.label === 'Deep action')).toBe(true);
+  expect(state.nodes.some((node) => node.label === 'Sibling action')).toBe(true);
 });
 
 test('buildSnapshotState treats large Android IME subtrees as one overlay root', () => {

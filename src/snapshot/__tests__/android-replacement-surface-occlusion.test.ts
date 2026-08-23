@@ -17,7 +17,18 @@ test('dominant Android replacement surfaces cover stale sibling actions without 
     { ...node(5, 4, 'android.widget.Button', [0, 260, 280, 60]), label: 'Stale', hittable: true },
   ];
 
-  assert.deepEqual([...coveredAndroidReplacementNodeIndexes(nodes)], [4, 5]);
+  assert.deepEqual(
+    [
+      ...coveredAndroidReplacementNodeIndexes(
+        nodes,
+        siblingOrders([
+          [1, 2],
+          [4, 1],
+        ]),
+      ),
+    ],
+    [4, 5],
+  );
 });
 
 test('sparse floating Android overlays do not cover a richer app surface', () => {
@@ -34,7 +45,18 @@ test('sparse floating Android overlays do not cover a richer app surface', () =>
     },
   ];
 
-  assert.deepEqual([...coveredAndroidReplacementNodeIndexes(nodes)], []);
+  assert.deepEqual(
+    [
+      ...coveredAndroidReplacementNodeIndexes(
+        nodes,
+        siblingOrders([
+          [1, 1],
+          [4, 2],
+        ]),
+      ),
+    ],
+    [],
+  );
 });
 
 test('side-by-side Android surfaces remain independently actionable', () => {
@@ -50,7 +72,39 @@ test('side-by-side Android surfaces remain independently actionable', () => {
     },
   ];
 
-  assert.deepEqual([...coveredAndroidReplacementNodeIndexes(nodes)], []);
+  assert.deepEqual(
+    [
+      ...coveredAndroidReplacementNodeIndexes(
+        nodes,
+        siblingOrders([
+          [1, 2],
+          [3, 1],
+        ]),
+      ),
+    ],
+    [],
+  );
+});
+
+test('presentation reparenting never compares order from different source sibling groups', () => {
+  const nodes: RawSnapshotNode[] = [
+    node(0, undefined, 'android.widget.FrameLayout', [0, 0, 400, 800]),
+    { ...node(1, 0, 'android.widget.Button', [0, 0, 400, 800]), label: 'First', hittable: true },
+    { ...node(2, 0, 'android.widget.Button', [0, 0, 400, 800]), label: 'Second', hittable: true },
+  ];
+
+  assert.deepEqual(
+    [
+      ...coveredAndroidReplacementNodeIndexes(
+        nodes,
+        new Map([
+          [1, { group: 0, order: 1 }],
+          [2, { group: 1, order: 2 }],
+        ]),
+      ),
+    ],
+    [],
+  );
 });
 
 test('mutually full Android surfaces stay actionable when normalized geometry cannot order them', () => {
@@ -62,7 +116,18 @@ test('mutually full Android surfaces stay actionable when normalized geometry ca
     { ...node(4, 3, 'android.widget.Button', [20, 500, 360, 60]), label: 'Second', hittable: true },
   ];
 
-  assert.deepEqual([...coveredAndroidReplacementNodeIndexes(nodes)], []);
+  assert.deepEqual(
+    [
+      ...coveredAndroidReplacementNodeIndexes(
+        nodes,
+        siblingOrders([
+          [1, 1],
+          [3, 1],
+        ]),
+      ),
+    ],
+    [],
+  );
 });
 
 test('maximum-size flat Android captures stay within the linear classifier shape', () => {
@@ -77,8 +142,20 @@ test('maximum-size flat Android captures stay within the linear classifier shape
     });
   }
 
-  assert.deepEqual([...coveredAndroidReplacementNodeIndexes(nodes)], []);
+  assert.deepEqual(
+    [
+      ...coveredAndroidReplacementNodeIndexes(
+        nodes,
+        siblingOrders(nodes.slice(1).map((candidate) => [candidate.index, 1])),
+      ),
+    ],
+    [],
+  );
 });
+
+function siblingOrders(entries: ReadonlyArray<readonly [number, number]>) {
+  return new Map(entries.map(([index, order]) => [index, { group: 0, order }]));
+}
 
 function node(
   index: number,

@@ -366,13 +366,37 @@ test('snapshotAndroid reports helper-side truncation on the public snapshot resu
   assert.equal(result.androidSnapshot.helperTruncated, true);
 });
 
+test('snapshotAndroid discloses unavailable sibling order for API 23 helper trees', async () => {
+  const captured: string[] = [];
+  const helperAdb: AndroidAdbExecutor = async (args) => {
+    if (args.includes('--show-versioncode')) return installedHelperProbe;
+    if (args.includes('instrument')) {
+      const xml = captured.shift();
+      if (!xml) throw new Error('unexpected extra capture');
+      return { exitCode: 0, stdout: helperOutput(xml), stderr: '' };
+    }
+    throw new Error(`unexpected helper adb args: ${args.join(' ')}`);
+  };
+  const button = (drawingOrder: string) =>
+    `<node class="android.widget.Button" text="Go" bounds="[0,0][100,40]" clickable="true" visible-to-user="true"${drawingOrder} />`;
+
+  captured.push(`<hierarchy>${button('')}</hierarchy>`);
+  const api23 = await snapshotAndroid(device, { helperAdb, helperArtifact });
+  assert.equal(api23.androidSnapshot.occlusionScanUnavailable, true);
+
+  captured.push(`<hierarchy>${button(' drawing-order="1"')}</hierarchy>`);
+  const api24 = await snapshotAndroid(device, { helperAdb, helperArtifact });
+  assert.equal(api24.androidSnapshot.occlusionScanUnavailable, undefined);
+  assert.equal('occlusionScanUnavailable' in api24.androidSnapshot, false);
+});
+
 test('scoped Android captures retain broad off-wire context for daemon occlusion', async () => {
   const xml = `<hierarchy>
   <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true">
-    <node class="android.view.ViewGroup" bounds="[0,0][390,844]" clickable="true" visible-to-user="true">
+    <node class="android.view.ViewGroup" bounds="[0,0][390,844]" clickable="true" visible-to-user="true" drawing-order="2">
       <node class="android.widget.Button" text="Modal action" bounds="[24,420][366,480]" clickable="true" visible-to-user="true"/>
     </node>
-    <node class="android.widget.Button" text="Behind the modal" bounds="[0,220][280,280]" clickable="true" visible-to-user="true"/>
+    <node class="android.widget.Button" text="Behind the modal" bounds="[0,220][280,280]" clickable="true" visible-to-user="true" drawing-order="1"/>
   </node>
 </hierarchy>`;
   const captured = await snapshotAndroidWithHelper(androidSnapshotHelperAdb(xml), {
@@ -386,7 +410,15 @@ test('scoped Android captures retain broad off-wire context for daemon occlusion
     [{ index: 0, type: 'android.widget.Button', label: 'Behind the modal', hittable: true }],
   );
   assert.deepEqual([...context.sourceIndexByNodeIndex], [[0, 3]]);
-  assert.deepEqual([...coveredAndroidReplacementNodeIndexes(context.nodes)], [3]);
+  assert.deepEqual(
+    [
+      ...coveredAndroidReplacementNodeIndexes(
+        context.nodes,
+        context.androidSiblingOrderByNodeIndex,
+      ),
+    ],
+    [3],
+  );
 
   const daemonCapture = copySnapshotPrivateEvidence(captured, {
     ...captured,

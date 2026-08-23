@@ -5,7 +5,11 @@ import {
 import type { Rect } from '@agent-device/kernel/snapshot';
 import { parseBounds } from '@agent-device/kernel/bounds';
 import { decodeXmlCharacterReferences } from '@agent-device/xml';
-import type { AndroidNode, AndroidUiHierarchy } from './ui-hierarchy-node.ts';
+import {
+  attachAndroidSiblingOrder,
+  type AndroidNode,
+  type AndroidUiHierarchy,
+} from './ui-hierarchy-node.ts';
 
 export type { AndroidUiHierarchy } from './ui-hierarchy-node.ts';
 export { buildUiHierarchySnapshot } from './ui-hierarchy-builder.ts';
@@ -260,7 +264,7 @@ export function parseUiHierarchyTree(xml: string): AndroidUiHierarchy {
     }
     const attrs = readAndroidUiNodeMetadata(token);
     const parent = stack[stack.length - 1]!;
-    const node = normalizeAndroidUiHierarchyNode(attrs, parent.depth + 1);
+    const node = normalizeAndroidUiHierarchyNode(attrs, parent.depth + 1, parent);
     parent.children.push(node);
     if (!token.endsWith('/>')) {
       stack.push(node);
@@ -278,30 +282,34 @@ export function parseUiHierarchyTree(xml: string): AndroidUiHierarchy {
 function normalizeAndroidUiHierarchyNode(
   attrs: AndroidUiNodeMetadata,
   depth: number,
+  parent: AndroidNode,
 ): AndroidUiHierarchy {
-  return {
-    type: attrs.className,
-    label: attrs.text || attrs.desc,
-    value: attrs.text,
-    identifier: attrs.resourceId,
-    packageName: attrs.packageName,
-    rect: attrs.rect,
-    enabled: attrs.enabled,
-    focused: attrs.focused,
-    visibleToUser: attrs.visibleToUser,
-    clickable: attrs.clickable === true,
-    focusable: attrs.focusable === true,
-    scrollable: attrs.scrollable,
-    canScrollForward: attrs.canScrollForward,
-    canScrollBackward: attrs.canScrollBackward,
-    windowIndex: attrs.windowIndex,
-    windowType: attrs.windowType,
-    windowLayer: attrs.windowLayer,
-    windowActive: attrs.windowActive,
-    windowFocused: attrs.windowFocused,
-    windowRect: attrs.windowRect,
-    depth,
-    parentIndex: undefined,
-    children: [],
-  };
+  return attachAndroidSiblingOrder(
+    {
+      type: attrs.className,
+      label: attrs.text || attrs.desc,
+      value: attrs.text,
+      identifier: attrs.resourceId,
+      packageName: attrs.packageName,
+      rect: attrs.rect,
+      enabled: attrs.enabled,
+      focused: attrs.focused,
+      visibleToUser: attrs.visibleToUser,
+      clickable: attrs.clickable === true,
+      focusable: attrs.focusable === true,
+      scrollable: attrs.scrollable,
+      canScrollForward: attrs.canScrollForward,
+      canScrollBackward: attrs.canScrollBackward,
+      windowIndex: attrs.windowIndex,
+      windowType: attrs.windowType,
+      windowLayer: attrs.windowLayer,
+      windowActive: attrs.windowActive,
+      windowFocused: attrs.windowFocused,
+      windowRect: attrs.windowRect,
+      depth,
+      parentIndex: undefined,
+      children: [],
+    },
+    attrs.drawingOrder === undefined ? undefined : { parent, order: attrs.drawingOrder },
+  );
 }
