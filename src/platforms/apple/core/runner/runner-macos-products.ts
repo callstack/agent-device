@@ -9,17 +9,6 @@ const RUNNER_PRODUCT_REPAIR_FAILURE_REASONS = new Set([
   'RUNNER_PRODUCT_REPAIR_FAILED',
 ]);
 
-const EMBEDDED_TEST_SUPPORT_ITEMS = [
-  'Testing.framework',
-  'XCTAutomationSupport.framework',
-  'XCTest.framework',
-  'XCTestCore.framework',
-  'XCTestSupport.framework',
-  'XCUIAutomation.framework',
-  'XCUnit.framework',
-  'libXCTestSwiftSupport.dylib',
-] as const;
-
 const AD_HOC_RESIGN_ARGS = [
   '--force',
   // Designated requirements must be regenerated for the ad-hoc identity.
@@ -65,11 +54,15 @@ export async function repairMacOsRunnerProductsIfNeeded(
 
 async function resignRunnerProduct(productPath: string, xctestrunPath: string): Promise<void> {
   try {
-    for (const itemName of EMBEDDED_TEST_SUPPORT_ITEMS) {
-      const itemPath = path.join(productPath, 'Contents', 'Frameworks', itemName);
-      if (fs.existsSync(itemPath)) {
-        await runAppleToolCommand('codesign', [...AD_HOC_RESIGN_ARGS, itemPath]);
-      }
+    const frameworksPath = path.join(productPath, 'Contents', 'Frameworks');
+    const embeddedCodePaths = fs.existsSync(frameworksPath)
+      ? fs
+          .readdirSync(frameworksPath)
+          .sort()
+          .map((itemName) => path.join(frameworksPath, itemName))
+      : [];
+    for (const embeddedCodePath of embeddedCodePaths) {
+      await runAppleToolCommand('codesign', [...AD_HOC_RESIGN_ARGS, embeddedCodePath]);
     }
     await runAppleToolCommand('codesign', [...AD_HOC_RESIGN_ARGS, productPath]);
   } catch (error) {

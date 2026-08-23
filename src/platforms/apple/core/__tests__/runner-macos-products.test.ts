@@ -15,7 +15,7 @@ import { createLocalAppleToolProvider, withAppleToolProvider } from '../tool-pro
 
 const XCTESTRUN_PATH = '/tmp/agent-device-runner.xctestrun';
 
-test('repair re-signs nested code so the product passes deep verification', async () => {
+test('repair discovers and re-signs nested code before the product', async () => {
   const { productPath, embeddedItemPaths } = createProduct();
   const calls: string[][] = [];
   const provider = createCodesignProvider(
@@ -70,14 +70,9 @@ function createProduct(): {
   fs.mkdirSync(productPath);
   const frameworksRoot = path.join(productPath, 'Contents', 'Frameworks');
   const embeddedItemPaths = [
-    'Testing.framework',
-    'XCTAutomationSupport.framework',
-    'XCTest.framework',
-    'XCTestCore.framework',
-    'XCTestSupport.framework',
-    'XCUIAutomation.framework',
-    'XCUnit.framework',
-    'libXCTestSwiftSupport.dylib',
+    'FutureTestSupport.framework',
+    'AnotherTestSupport.framework',
+    'libFutureTestSupport.dylib',
   ].map((itemName) => path.join(frameworksRoot, itemName));
   for (const itemPath of embeddedItemPaths) {
     if (itemPath.endsWith('.framework')) {
@@ -87,7 +82,7 @@ function createProduct(): {
       fs.writeFileSync(itemPath, '');
     }
   }
-  return { productPath, embeddedItemPaths };
+  return { productPath, embeddedItemPaths: embeddedItemPaths.sort() };
 }
 
 function createCodesignProvider(
