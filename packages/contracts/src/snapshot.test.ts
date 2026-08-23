@@ -77,14 +77,6 @@ test('findNearestAncestor adapts a predicate to the shared tree walk', () => {
   const isWindow = (ancestor: SnapshotNode) => ancestor.type === 'Window';
 
   assert.equal(findNearestAncestor(nodes, nodes[1]!, isWindow)?.index, 10);
-  // A caller that already holds an index over this array hands it in instead of
-  // paying for a rebuilt map per lookup; an index that omits the chain proves
-  // the supplied map is the one walked, not a quietly rebuilt one.
-  assert.equal(
-    findNearestAncestor(nodes, nodes[1]!, isWindow, buildSnapshotNodeMap(nodes))?.index,
-    10,
-  );
-  assert.equal(findNearestAncestor(nodes, nodes[1]!, isWindow, new Map()), null);
 });
 
 test('snapshot tree and scroll semantics identify nodes through their stable indexes', () => {

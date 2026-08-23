@@ -1,9 +1,6 @@
 import { centerOfRect, type SnapshotState } from '@agent-device/kernel/snapshot';
 import {
-  buildActionableTouchTopology,
-  type ActionableTouchTopology,
-} from '../../core/actionable-touch-topology.ts';
-import {
+  createActionableTouchResolver,
   isRootInteractionContainer,
   resolveActionableTouchResolution,
 } from '../../core/interaction-targeting.ts';
@@ -32,20 +29,21 @@ export function preferOnscreenMatches(
     );
   });
   const preferred = onscreen.length > 0 ? onscreen : matches;
-  // The only topology build site for the pass, and only once there is really
-  // something to order: one candidate answers no comparative question, so it
-  // must not pay for an index over the whole capture.
   if (preferred.length < 2) return preferred;
-  return rankInteractiveMatches(preferred, nodes, buildActionableTouchTopology(nodes));
+  return rankInteractiveMatches(preferred, nodes, createActionableTouchResolver(nodes));
 }
 
 function rankInteractiveMatches(
   matches: SnapshotState['nodes'],
   nodes: SnapshotState['nodes'],
-  topology: ActionableTouchTopology,
+  resolveTouch: ReturnType<typeof createActionableTouchResolver>,
 ): SnapshotState['nodes'] {
   return matches
-    .map((node, index) => ({ node, index, score: interactiveMatchScore(node, nodes, topology) }))
+    .map((node, index) => ({
+      node,
+      index,
+      score: interactiveMatchScore(node, nodes, resolveTouch),
+    }))
     .sort((left, right) => {
       if (right.score !== left.score) return right.score - left.score;
       return rectArea(left.node) - rectArea(right.node) || left.index - right.index;
@@ -56,9 +54,9 @@ function rankInteractiveMatches(
 function interactiveMatchScore(
   node: SnapshotState['nodes'][number],
   nodes: SnapshotState['nodes'],
-  topology: ActionableTouchTopology,
+  resolveTouch: ReturnType<typeof createActionableTouchResolver>,
 ): number {
-  const resolution = resolveActionableTouchResolution(nodes, node, topology);
+  const resolution = resolveTouch(node);
   if (resolution.reason === 'covered') return 0;
   const resolved = resolvedTouchScore(resolution, nodes[0]);
   if (resolved > 0) return resolved;

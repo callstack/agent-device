@@ -7,9 +7,9 @@ import {
   scrollingContainerTypeArb,
 } from '../__tests__/test-utils/property-arbitraries.ts';
 import { makeSnapshotState } from '../__tests__/test-utils/snapshot-builders.ts';
-import { buildActionableTouchTopology } from './actionable-touch-topology.ts';
 import {
   classifyActionableTouchCandidates,
+  createActionableTouchResolver,
   resolveActionableTouchResolution,
 } from './interaction-targeting.ts';
 import {
@@ -204,20 +204,16 @@ test('falls back to the original node when no usable touch target exists', () =>
   assert.equal(resolution.node.label, 'Virtual item');
 });
 
-test('a prebuilt topology answers every policy branch exactly as the unindexed walk does', () => {
+test('the batch resolver preserves every actionability policy branch', () => {
   const snapshot = makeSnapshotState(INDEXED_PARITY_POLICY_NODES);
-  const topology = buildActionableTouchTopology(snapshot.nodes);
+  const resolveTouch = createActionableTouchResolver(snapshot.nodes);
 
   const unindexed = snapshot.nodes.map((node) =>
     resolveActionableTouchResolution(snapshot.nodes, node),
   );
-  const indexed = snapshot.nodes.map((node) =>
-    resolveActionableTouchResolution(snapshot.nodes, node, topology),
-  );
+  const indexed = snapshot.nodes.map(resolveTouch);
 
   assert.deepEqual(indexed, unindexed);
-  // Pinned rather than merely equal: two identically broken implementations
-  // would also be deeply equal to each other.
   assert.deepEqual(
     indexed.map((resolution) => [resolution.node.index, resolution.reason]),
     [

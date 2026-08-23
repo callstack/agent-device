@@ -12,7 +12,7 @@ import {
   type SnapshotPreferredBackend,
 } from '@agent-device/kernel/snapshot';
 import { SNAPSHOT_BACKEND_CAPABILITIES } from '../../../src/snapshot-quality/backend-capabilities.ts';
-import { isSemanticTouchTarget } from '../../../src/core/interaction-targeting.ts';
+import { isSemanticTouchTarget } from '../../../src/core/touch-semantics.ts';
 
 export type SnapshotBackendConformanceFixture = {
   screen: string;

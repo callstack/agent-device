@@ -3,13 +3,10 @@ import { centerOfRect } from '@agent-device/kernel/snapshot';
 import { containsPoint, pickLargestRect } from '@agent-device/kernel/rect';
 import {
   findNearestAncestor,
+  findSnapshotAncestor,
   normalizeType,
   isViewportRootNode,
 } from '@agent-device/contracts/snapshot';
-import {
-  buildActionableTouchTopology,
-  type ActionableTouchTopology,
-} from './actionable-touch-topology.ts';
 import { isSnapshotNodeInteractionBlocked } from '../snapshot/snapshot-occlusion.ts';
 import {
   areRectsApproximatelyEqual,
@@ -17,20 +14,7 @@ import {
   resolveRectCenter,
 } from '../utils/rect-center.ts';
 import { intersectArea } from '../utils/screenshot-geometry.ts';
-
-const SEMANTIC_TOUCH_ROLE_FRAGMENTS = [
-  'button',
-  'link',
-  'menuitem',
-  'tabitem',
-  'textfield',
-  'searchfield',
-  'securetextfield',
-  'checkbox',
-  'radio',
-  'switch',
-  'cell',
-];
+import { isSemanticTouchTarget } from './touch-semantics.ts';
 
 type ActionableTouchResolutionReason =
   | 'same-rect-descendant'
@@ -45,32 +29,31 @@ type ActionableTouchResolution = {
   reason: ActionableTouchResolutionReason;
 };
 
+type ActionableTouchIndex = {
+  nodesByIndex: ReadonlyMap<number, SnapshotNode>;
+  childrenByParentIndex: ReadonlyMap<number, readonly SnapshotNode[]>;
+  viewportRootRects: readonly Rect[];
+};
+
 type ActionableTouchCandidateClassification =
   | { kind: 'equivalent'; node: SnapshotNode }
   | { kind: 'ambiguous'; candidates: SnapshotNode[] };
 
-/**
- * Mutating selector matches may collapse only when their tree structure proves
- * that they describe one action: every candidate is on one ancestor/descendant
- * chain and every candidate resolves to the same actionable node. Geometry may
- * help resolve a wrapper to its control, but never chooses between branches.
- */
 export function classifyActionableTouchCandidates(
   nodes: SnapshotNode[],
   candidates: SnapshotNode[],
 ): ActionableTouchCandidateClassification {
   const first = candidates[0];
   if (!first) return { kind: 'ambiguous', candidates };
-  // One index for the whole classification: the ancestry chain and every
-  // candidate's resolution ask the same tree the same three questions.
-  const topology = buildActionableTouchTopology(nodes);
-  if (!candidatesFormSingleAncestryChain(candidates, topology.nodesByIndex)) {
+  const index = buildActionableTouchIndex(nodes);
+  if (!candidatesFormSingleAncestryChain(candidates, index.nodesByIndex)) {
     return { kind: 'ambiguous', candidates };
   }
-  const actionable = resolveActionableTouchResolution(nodes, first, topology).node;
+  const actionable = resolveActionableTouchResolutionWithIndex(nodes, first, index).node;
   for (const candidate of candidates.slice(1)) {
     if (
-      resolveActionableTouchResolution(nodes, candidate, topology).node.index !== actionable.index
+      resolveActionableTouchResolutionWithIndex(nodes, candidate, index).node.index !==
+      actionable.index
     ) {
       return { kind: 'ambiguous', candidates };
     }
@@ -109,13 +92,6 @@ function isAncestorOf(
   return false;
 }
 
-/**
- * The tree's viewport root as an interaction target: a viewport root node whose
- * rect is exactly the tree root's. Promotion that lands here has retargeted to
- * "the screen" rather than to the thing that matched, which is why the
- * `hittable-ancestor-below-root` promotion stage declines it and `find`
- * excludes it from candidacy and ranking.
- */
 export function isRootInteractionContainer(
   node: SnapshotNode,
   root: SnapshotNode | undefined,
@@ -132,61 +108,84 @@ export function isRootInteractionContainer(
   );
 }
 
-/**
- * @internal Exposed for focused policy tests.
- *
- * `topology` is an optional prebuilt index over THIS `nodes` array. It changes
- * only how the three whole-tree lookups below are answered, never which node or
- * reason comes back — a caller resolving one target may keep omitting it rather
- * than pay for an index it uses once.
- */
 export function resolveActionableTouchResolution(
   nodes: SnapshotNode[],
   node: SnapshotNode,
-  topology?: ActionableTouchTopology,
+): ActionableTouchResolution {
+  return resolveActionableTouchResolutionWithIndex(nodes, node);
+}
+
+/** Resolves many candidates against one snapshot without rebuilding its indexes. */
+export function createActionableTouchResolver(
+  nodes: SnapshotNode[],
+): (node: SnapshotNode) => ActionableTouchResolution {
+  const index = buildActionableTouchIndex(nodes);
+  return (node) => resolveActionableTouchResolutionWithIndex(nodes, node, index);
+}
+
+function resolveActionableTouchResolutionWithIndex(
+  nodes: SnapshotNode[],
+  node: SnapshotNode,
+  index?: ActionableTouchIndex,
 ): ActionableTouchResolution {
   if (isSnapshotNodeInteractionBlocked(node)) {
     return { node, reason: 'covered' };
   }
-  const descendant = findPreferredActionableDescendant(nodes, node, topology);
-  if (descendant?.rect && resolveRectCenter(descendant.rect)) {
-    return { node: descendant, reason: 'same-rect-descendant' };
+  return (
+    resolvePreferredDescendant(nodes, node, index) ??
+    resolveSemanticTarget(node) ??
+    resolveHittableAncestor(nodes, node, index) ?? { node, reason: 'original' }
+  );
+}
+
+function resolvePreferredDescendant(
+  nodes: SnapshotNode[],
+  node: SnapshotNode,
+  index: ActionableTouchIndex | undefined,
+): ActionableTouchResolution | null {
+  const descendant = findPreferredActionableDescendant(nodes, node, index);
+  return descendant?.rect && resolveRectCenter(descendant.rect)
+    ? { node: descendant, reason: 'same-rect-descendant' }
+    : null;
+}
+
+function resolveSemanticTarget(node: SnapshotNode): ActionableTouchResolution | null {
+  return isSemanticTouchTarget(node) && node.rect && resolveRectCenter(node.rect)
+    ? { node, reason: 'semantic-target' }
+    : null;
+}
+
+function resolveHittableAncestor(
+  nodes: SnapshotNode[],
+  node: SnapshotNode,
+  index: ActionableTouchIndex | undefined,
+): ActionableTouchResolution | null {
+  const ancestor = findNearestHittableAncestor(nodes, node, index);
+  if (!ancestor?.rect || isSnapshotNodeInteractionBlocked(ancestor)) return null;
+  if (!resolveRectCenter(ancestor.rect)) return null;
+  if (isOverlyBroadAncestor(node, ancestor, nodes, index)) {
+    return { node, reason: 'overly-broad-ancestor' };
   }
-  if (isSemanticTouchTarget(node) && node.rect && resolveRectCenter(node.rect)) {
-    return { node, reason: 'semantic-target' };
-  }
-  const ancestor = findNearestHittableAncestor(nodes, node, topology);
-  if (
-    ancestor?.rect &&
-    !isSnapshotNodeInteractionBlocked(ancestor) &&
-    resolveRectCenter(ancestor.rect)
-  ) {
-    if (isOverlyBroadAncestor(node, ancestor, nodes, topology)) {
-      return { node, reason: 'overly-broad-ancestor' };
-    }
-    return { node: ancestor, reason: 'hittable-ancestor' };
-  }
-  return { node, reason: 'original' };
+  return { node: ancestor, reason: 'hittable-ancestor' };
 }
 
 function findNearestHittableAncestor(
   nodes: SnapshotNode[],
   node: SnapshotNode,
-  topology: ActionableTouchTopology | undefined,
+  index: ActionableTouchIndex | undefined,
 ): SnapshotNode | null {
   if (node.hittable) return node;
-  return findNearestAncestor(
-    nodes,
-    node,
-    (parent) => parent.hittable === true,
-    topology?.nodesByIndex,
+  const isHittable = (parent: SnapshotNode) => parent.hittable === true;
+  if (!index) return findNearestAncestor(nodes, node, isHittable);
+  return findSnapshotAncestor(nodes, node, index.nodesByIndex, (parent) =>
+    isHittable(parent) ? parent : null,
   );
 }
 
 function findPreferredActionableDescendant(
   nodes: SnapshotNode[],
   node: SnapshotNode,
-  topology: ActionableTouchTopology | undefined,
+  index: ActionableTouchIndex | undefined,
 ): SnapshotNode | null {
   const targetRect = normalizeRect(node.rect);
   if (!targetRect) return null;
@@ -195,8 +194,8 @@ function findPreferredActionableDescendant(
   const visited = new Set<string>();
   while (!visited.has(current.ref)) {
     visited.add(current.ref);
-    const children = topology
-      ? (topology.childrenByParentIndex.get(current.index) ?? [])
+    const children = index
+      ? (index.childrenByParentIndex.get(current.index) ?? [])
       : nodes.filter((candidate) => candidate.parentIndex === current.index);
     const sameRectChildren = children.filter((candidate) => {
       if (!candidate.hittable || isSnapshotNodeInteractionBlocked(candidate)) return false;
@@ -212,30 +211,11 @@ function findPreferredActionableDescendant(
   return current === node ? null : current;
 }
 
-/**
- * THE canonical interactive-role classification for touch: a node whose
- * type/role/subrole names a control that independently receives taps. Shared
- * by the hittable-ancestor promotion above and #1280's press-retarget
- * competing-descendant guard (`press-retarget.ts`) — one list, never a
- * parallel copy.
- */
-export function isSemanticTouchTarget(node: SnapshotNode): boolean {
-  const roles = [node.type, node.role, node.subrole].map((value) => normalizeType(value ?? ''));
-  return roles.some(isSemanticTouchRole);
-}
-
-function isSemanticTouchRole(role: string): boolean {
-  // Match Tab exactly so broad roles like Table/TabBar do not become touch targets.
-  return (
-    role === 'tab' || SEMANTIC_TOUCH_ROLE_FRAGMENTS.some((fragment) => role.includes(fragment))
-  );
-}
-
 function isOverlyBroadAncestor(
   node: SnapshotNode,
   ancestor: SnapshotNode,
   nodes: SnapshotNode[],
-  topology: ActionableTouchTopology | undefined,
+  index: ActionableTouchIndex | undefined,
 ): boolean {
   const nodeRect = normalizeRect(node.rect);
   const ancestorRect = normalizeRect(ancestor.rect);
@@ -243,7 +223,7 @@ function isOverlyBroadAncestor(
   if (isScrollingContainer(ancestor) && !areRectsApproximatelyEqual(nodeRect, ancestorRect)) {
     return true;
   }
-  const rootViewportRect = resolveRootViewportRect(nodes, nodeRect, topology);
+  const rootViewportRect = resolveRootViewportRect(nodes, nodeRect, index);
   if (!rootViewportRect) return false;
   if (!isRectViewportSized(ancestorRect, rootViewportRect)) return false;
   return !areRectsApproximatelyEqual(nodeRect, ancestorRect);
@@ -266,11 +246,11 @@ function isScrollingContainer(node: SnapshotNode): boolean {
 function resolveRootViewportRect(
   nodes: SnapshotNode[],
   targetRect: Rect,
-  topology: ActionableTouchTopology | undefined,
+  index: ActionableTouchIndex | undefined,
 ): Rect | null {
   const targetCenter = centerOfRect(targetRect);
   const viewportRects =
-    topology?.viewportRootRects ??
+    index?.viewportRootRects ??
     nodes
       .filter(isViewportRootNode)
       .map((node) => normalizeRect(node.rect))
@@ -281,6 +261,25 @@ function resolveRootViewportRect(
     containsPoint(rect, targetCenter.x, targetCenter.y),
   );
   return pickLargestRect(containingRects.length > 0 ? containingRects : viewportRects);
+}
+
+function buildActionableTouchIndex(nodes: readonly SnapshotNode[]): ActionableTouchIndex {
+  const nodesByIndex = new Map<number, SnapshotNode>();
+  const childrenByParentIndex = new Map<number, SnapshotNode[]>();
+  const viewportRootRects: Rect[] = [];
+  for (const node of nodes) {
+    nodesByIndex.set(node.index, node);
+    if (typeof node.parentIndex === 'number') {
+      const children = childrenByParentIndex.get(node.parentIndex);
+      if (children) children.push(node);
+      else childrenByParentIndex.set(node.parentIndex, [node]);
+    }
+    if (isViewportRootNode(node)) {
+      const rect = normalizeRect(node.rect);
+      if (rect) viewportRootRects.push(rect);
+    }
+  }
+  return { nodesByIndex, childrenByParentIndex, viewportRootRects };
 }
 
 function isRectViewportSized(rect: Rect, viewportRect: Rect): boolean {

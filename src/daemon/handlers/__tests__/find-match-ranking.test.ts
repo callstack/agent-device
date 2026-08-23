@@ -1,47 +1,20 @@
 import assert from 'node:assert/strict';
-import { beforeEach, test, vi } from 'vitest';
+import { test } from 'vitest';
 import type { RawSnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { makeSnapshotState } from '../../../__tests__/test-utils/snapshot-builders.ts';
-import { buildActionableTouchTopology } from '../../../core/actionable-touch-topology.ts';
 import { preferOnscreenMatches } from '../find-match-ranking.ts';
-
-/**
- * The builder stays REAL — `vi.fn` only wraps it, so ranking consumes production
- * topology data and the wrapper reports how many times the pass built one. The
- * alternative (a test double) would prove the call happened and nothing about
- * what ranking then read.
- */
-vi.mock('../../../core/actionable-touch-topology.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../core/actionable-touch-topology.ts')>();
-  return {
-    ...actual,
-    buildActionableTouchTopology: vi.fn(actual.buildActionableTouchTopology),
-  };
-});
-
-const buildTopology = vi.mocked(buildActionableTouchTopology);
-
-beforeEach(() => {
-  buildTopology.mockClear();
-});
 
 const VIEWPORT = { x: 0, y: 0, width: 390, height: 844 };
 const DUPLICATE_MATCH_COUNT = 32;
 
-/**
- * Counts whole-array `filter`/`map` calls on the snapshot tree. Every function
- * is bound to the target so a counted scan cannot re-enter the proxy and
- * inflate its own count; `matches` is a different array, so ranking's own
- * legitimate on-screen filter is never mistaken for a full-tree scan.
- */
 function observeWholeTreeScans(nodes: SnapshotState['nodes']): {
   observed: SnapshotState['nodes'];
-  scans: { filter: number; map: number };
+  scans: { iterations: number; filter: number; map: number };
 } {
-  const scans = { filter: 0, map: 0 };
+  const scans = { iterations: 0, filter: 0, map: 0 };
   const observed = new Proxy(nodes, {
     get(target, property) {
+      if (property === Symbol.iterator) scans.iterations += 1;
       if (property === 'filter' || property === 'map') scans[property] += 1;
       const value = Reflect.get(target, property) as unknown;
       return typeof value === 'function' ? value.bind(target) : value;
@@ -151,15 +124,14 @@ const MIXED_SCORE_NODES: RawSnapshotNode[] = [
   },
 ];
 
-test('a multi-match ranking pass indexes the tree once and never rescans it', () => {
+test('a multi-match ranking pass scans the tree once', () => {
   const snapshot = duplicateHeavyCapture();
   const matches = snapshot.nodes.slice(1);
   const { observed, scans } = observeWholeTreeScans(snapshot.nodes);
 
   const ranked = preferOnscreenMatches(matches, observed);
 
-  assert.equal(buildTopology.mock.calls.length, 1);
-  assert.deepEqual(scans, { filter: 0, map: 0 });
+  assert.deepEqual(scans, { iterations: 1, filter: 0, map: 0 });
   assert.deepEqual(
     ranked.map((node) => node.ref),
     [...matches].reverse().map((node) => node.ref),
@@ -172,8 +144,7 @@ test('a single match returns without indexing the tree', () => {
 
   const ranked = preferOnscreenMatches([snapshot.nodes[1]!], observed);
 
-  assert.equal(buildTopology.mock.calls.length, 0);
-  assert.deepEqual(scans, { filter: 0, map: 0 });
+  assert.deepEqual(scans, { iterations: 0, filter: 0, map: 0 });
   assert.deepEqual(
     ranked.map((node) => node.ref),
     [snapshot.nodes[1]!.ref],
@@ -186,10 +157,11 @@ test('a capture without a root rect returns matches unranked and unindexed', () 
     ...MIXED_SCORE_NODES.slice(1),
   ]);
   const matches = snapshot.nodes.slice(1);
+  const { observed, scans } = observeWholeTreeScans(snapshot.nodes);
 
-  const ranked = preferOnscreenMatches(matches, snapshot.nodes);
+  const ranked = preferOnscreenMatches(matches, observed);
 
-  assert.equal(buildTopology.mock.calls.length, 0);
+  assert.deepEqual(scans, { iterations: 0, filter: 0, map: 0 });
   assert.deepEqual(
     ranked.map((node) => node.ref),
     matches.map((node) => node.ref),

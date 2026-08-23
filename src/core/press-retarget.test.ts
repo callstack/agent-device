@@ -397,7 +397,7 @@ test('resolvePressRecordingTarget P2a contrast: a container with a UNIQUE id kee
 
 // ---------------------------------------------------------------------------
 // P2b (#1280 re-review): the guard is built from the canonical interactive
-// classification (`isSemanticTouchTarget`, core/interaction-targeting.ts),
+// classification (`isSemanticTouchTarget`, core/touch-semantics.ts),
 // not a parallel list — roles the old private fragment list missed must
 // block. And a geometry condition: the selected descendant's rect center
 // must lie INSIDE the container's rect, else the replay tap point is not

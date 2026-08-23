@@ -5,7 +5,7 @@ import {
   normalizeRect,
   resolveRectCenter,
 } from '../utils/rect-center.ts';
-import { isSemanticTouchTarget } from './interaction-targeting.ts';
+import { isSemanticTouchTarget } from './touch-semantics.ts';
 
 export type InteractionTouchPointResolution =
   | { kind: 'resolved'; point: Point; strategy: 'center' | 'parent-owned' }

@@ -18,7 +18,7 @@ import { resolveRectCenter } from '../utils/rect-center.ts';
 import { demoteNonUniqueLocalIdentity, readNodeLocalIdentity } from '@agent-device/ad-script';
 import { buildIndexMap } from '../replay/target-evidence-tree.ts';
 import { normalizeSelectorText } from '@agent-device/selectors';
-import { isSemanticTouchTarget } from './interaction-targeting.ts';
+import { isSemanticTouchTarget } from './touch-semantics.ts';
 
 /**
  * Rule 3's fail-closed guard: a descendant that could independently receive
