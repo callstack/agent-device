@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, test } from 'vitest';
+import { test } from 'vitest';
 
 import { MACOS_DEVICE } from '../../../../__tests__/test-utils/device-fixtures.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   isExpectedRunnerRepairFailure,
@@ -14,13 +14,6 @@ import {
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../tool-provider.ts';
 
 const XCTESTRUN_PATH = '/tmp/agent-device-runner.xctestrun';
-const tempRoots: string[] = [];
-
-afterEach(() => {
-  while (tempRoots.length > 0) {
-    fs.rmSync(tempRoots.pop() as string, { recursive: true, force: true });
-  }
-});
 
 test('repair re-signs nested code so the product passes deep verification', async () => {
   const productPath = createProductPath();
@@ -58,8 +51,7 @@ test('repair fails when re-signing leaves the product unverifiable', async () =>
 });
 
 function createProductPath(): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-runner-products-'));
-  tempRoots.push(root);
+  const root = mkdtempForTestSync('agent-device-runner-products-');
   const productPath = path.join(root, 'AgentDeviceRunnerUITests-Runner.app');
   fs.mkdirSync(productPath);
   return productPath;
