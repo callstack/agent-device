@@ -22,6 +22,8 @@ import {
 
 type AndroidRawSnapshotNode = RawSnapshotNode & AndroidSystemChromeProvenance;
 
+const ANDROID_PRESENTATION_WORK_UNITS_PER_NODE = 128;
+
 export type AndroidSnapshotAnalysis = {
   rawNodeCount: number;
   maxDepth: number;
@@ -65,7 +67,7 @@ export function buildUiHierarchySnapshot(
   const analysis = analyzeAndroidTree(tree);
   const presentationBudget = createAndroidSnapshotPresentationBudget(
     options.androidPresentation,
-    Math.max(1024, analysis.rawNodeCount * 64),
+    Math.max(1024, analysis.rawNodeCount * ANDROID_PRESENTATION_WORK_UNITS_PER_NODE),
   );
   const state: AndroidSnapshotBuildState = {
     nodes: [],

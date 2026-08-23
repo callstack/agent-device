@@ -245,6 +245,23 @@ test('hostile equal-order same-rect siblings charge the broad candidate scan', (
   );
 });
 
+test('default budget admits a bounded flat hierarchy', () => {
+  const siblings = Array.from(
+    { length: 100 },
+    (_, index) =>
+      `<node class="android.widget.Button" text="Sibling ${index}" bounds="[0,0][100,100]" clickable="true" drawing-order="1" visible-to-user="true" />`,
+  ).join('');
+  const tree = parseUiHierarchyTree(
+    `<hierarchy><node class="android.widget.FrameLayout" bounds="[0,0][100,100]" visible-to-user="true">${siblings}</node></hierarchy>`,
+  );
+
+  const built = buildUiHierarchySnapshot(tree, undefined, {
+    androidPresentation: { deadlineAtMs: Number.POSITIVE_INFINITY },
+  });
+
+  assert.equal(built.nodes.length, 101);
+});
+
 test('one-axis footprint indexing remains inside the deterministic work budget', () => {
   const childCount = 80;
   const labels = Array.from(

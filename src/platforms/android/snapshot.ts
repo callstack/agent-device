@@ -163,7 +163,16 @@ function attachAndroidPresentationFailureEvidence(params: {
       nodes: [],
       truncated: true,
       analysis: params.failure.analysis ?? { rawNodeCount: 0, maxDepth: 0 },
-      androidSnapshot: params.androidSnapshot,
+      androidSnapshot: {
+        ...params.androidSnapshot,
+        presentationFailure: {
+          phase: params.failure.details.phase,
+          workUnits: params.failure.details.workUnits,
+          ...(params.failure.details.maxWorkUnits !== undefined
+            ? { maxWorkUnits: params.failure.details.maxWorkUnits }
+            : {}),
+        },
+      },
       quality: {
         state: 'sparse',
         backend: 'android-helper',

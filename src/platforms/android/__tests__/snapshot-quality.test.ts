@@ -47,6 +47,11 @@ test('snapshotAndroid discards the whole projection after a presentation deadlin
 
   assert.deepEqual(result.nodes, []);
   assert.equal(result.truncated, true);
+  assert.deepEqual(result.androidSnapshot.presentationFailure, {
+    phase: 'deadline',
+    workUnits: 1,
+    maxWorkUnits: 1024,
+  });
   assert.deepEqual((result as typeof result & { quality?: unknown }).quality, {
     state: 'sparse',
     backend: 'android-helper',
