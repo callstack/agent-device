@@ -181,9 +181,10 @@ async function readReusableLocalDaemon(settings: DaemonClientSettings): Promise<
   if (!existing) return null;
 
   const existingReachable = await canConnectReusableDaemon(existing, settings.transportPreference);
-  if (isReusableDaemonInfo(existing, existingReachable)) return existing;
+  const takeoverReason = await resolveDaemonTakeoverReason(existing, existingReachable);
+  if (!takeoverReason) return existing;
 
-  emitDaemonTakeoverNotice(existing, existingReachable, settings.paths.baseDir);
+  emitDaemonTakeoverNotice(existing, takeoverReason, settings.paths.baseDir);
   await stopDaemonProcessForTakeover(existing);
   removeDaemonInfo(settings.paths.infoPath);
   return null;
@@ -210,29 +211,33 @@ function isDaemonTransportUnavailableError(error: unknown): boolean {
   );
 }
 
-function isReusableDaemonInfo(info: DaemonInfo, reachable: boolean): boolean {
-  return (
-    info.version === readVersion() &&
-    info.codeSignature === resolveLocalDaemonCodeSignature() &&
-    reachable
-  );
+/**
+ * Why this daemon cannot be reused, or `undefined` when it can be.
+ *
+ * One ladder answers both questions, so a daemon can never be reused and
+ * announced as replaced, or replaced without a reason to print. The code
+ * signature is asked for after the version because it is the expensive check
+ * (`resolveLocalDaemonCodeSignature`), and a version mismatch already decides.
+ */
+async function resolveDaemonTakeoverReason(
+  info: DaemonInfo,
+  reachable: boolean,
+): Promise<string | undefined> {
+  if (info.version !== readVersion()) return `version mismatch (client v${readVersion()})`;
+  if (info.codeSignature !== (await resolveLocalDaemonCodeSignature())) {
+    return 'code-signature mismatch';
+  }
+  if (!reachable) return 'unreachable';
+  return undefined;
 }
 
-function emitDaemonTakeoverNotice(info: DaemonInfo, reachable: boolean, stateDir: string): void {
+function emitDaemonTakeoverNotice(info: DaemonInfo, reason: string, stateDir: string): void {
   try {
     const identity = info.version ? `pid ${info.pid}, v${info.version}` : `pid ${info.pid}`;
-    const reason = resolveDaemonTakeoverReason(info, reachable);
     process.stderr.write(`Replacing daemon (${identity}) in ${stateDir}: ${reason}\n`);
   } catch {
     // The takeover notice is best effort; never fail the command on stderr issues.
   }
-}
-
-function resolveDaemonTakeoverReason(info: DaemonInfo, reachable: boolean): string {
-  if (info.version !== readVersion()) return `version mismatch (client v${readVersion()})`;
-  if (info.codeSignature !== resolveLocalDaemonCodeSignature()) return 'code-signature mismatch';
-  if (!reachable) return 'unreachable';
-  return 'not reusable';
 }
 
 async function startLocalDaemon(settings: DaemonClientSettings): Promise<EnsuredDaemon> {

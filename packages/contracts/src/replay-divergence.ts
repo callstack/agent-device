@@ -1,6 +1,5 @@
 import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import { redactDiagnosticData } from '@agent-device/kernel/redaction';
-import { isRecord } from './json.ts';
 
 /**
  * ADR 0012 migration steps 2 + 4: structured replay divergence report.
@@ -191,14 +190,17 @@ export type ReplayDivergenceResume =
  * Every field the returned type declares is checked, the two optional ones
  * included: this is the owning interface for the shape, so a payload it
  * accepts cannot type as `repairSessionHeld: true` while carrying something
- * else.
+ * else. The narrowing is structural and local, like this module's other
+ * wire readers: the divergence façade is pinned at the modules it evaluates,
+ * and `json.ts` is not otherwise one of them.
  */
 export function readReplayDivergenceResume(
   divergence: unknown,
 ): ReplayDivergenceResume | undefined {
-  if (!isRecord(divergence) || !isRecord(divergence.resume)) return undefined;
-  const resume = divergence.resume;
-  if (typeof resume.allowed !== 'boolean') return undefined;
+  const resume = (divergence as Record<string, unknown> | null | undefined)?.resume as
+    | Record<string, unknown>
+    | undefined;
+  if (typeof resume?.allowed !== 'boolean') return undefined;
   if (!Number.isInteger(resume.from) || typeof resume.planDigest !== 'string') return undefined;
   if (!resume.allowed && typeof resume.reason !== 'string') return undefined;
   if (resume.repairSessionHeld !== undefined && resume.repairSessionHeld !== true) return undefined;

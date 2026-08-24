@@ -27,12 +27,12 @@ test('resolveDaemonLaunchSpec probes the entry candidates once per process', () 
   assert.equal(existsSpy.mock.calls.length, probeCalls);
 });
 
-test('resolveLocalDaemonCodeSignature re-reads the filesystem on every call', () => {
+test('resolveLocalDaemonCodeSignature re-reads the filesystem on every call', async () => {
   resetAllProcessMemosForTests();
 
-  const first = resolveLocalDaemonCodeSignature();
+  const first = await resolveLocalDaemonCodeSignature();
   const statSpy = vi.spyOn(fs, 'statSync');
-  const second = resolveLocalDaemonCodeSignature();
+  const second = await resolveLocalDaemonCodeSignature();
 
   assert.equal(second, first);
   // Not memoized in either mode: a long-lived client (the MCP server) has to
@@ -41,18 +41,21 @@ test('resolveLocalDaemonCodeSignature re-reads the filesystem on every call', ()
   assert.ok(statSpy.mock.calls.length > 0);
 });
 
-test('resolveLocalDaemonCodeSignature agrees with the uncached walk over the launch entry', () => {
+test('resolveLocalDaemonCodeSignature agrees with the uncached walk over the launch entry', async () => {
   resetAllProcessMemosForTests();
   const spec = resolveDaemonLaunchSpec();
   const entryPath = spec.useSrc ? spec.srcPath : spec.distPath;
 
-  assert.equal(resolveLocalDaemonCodeSignature(), computeDaemonCodeSignature(entryPath, spec.root));
+  assert.equal(
+    await resolveLocalDaemonCodeSignature(),
+    computeDaemonCodeSignature(entryPath, spec.root),
+  );
 });
 
-test('a source client fingerprints the source entry through the stat-validated cache', () => {
+test('a source client fingerprints the source entry through the stat-validated cache', async () => {
   // A built checkout runs Vitest without `--experimental-strip-types`, so
-  // every other test in this file routes the DIST branch of the ternary. This
-  // is the branch the cache exists for; stub the mode marker to reach it.
+  // every other test in this file routes the DIST branch. This is the branch
+  // the cache exists for; stub the mode marker to reach it.
   const execArgv = process.execArgv;
   process.execArgv = [...execArgv, '--experimental-strip-types'];
   resetAllProcessMemosForTests();
@@ -60,10 +63,10 @@ test('a source client fingerprints the source entry through the stat-validated c
     const spec = resolveDaemonLaunchSpec();
     assert.equal(spec.useSrc, true);
     const expected = computeDaemonCodeSignature(spec.srcPath, spec.root);
-    assert.equal(resolveLocalDaemonCodeSignature(), expected);
+    assert.equal(await resolveLocalDaemonCodeSignature(), expected);
 
     const readSpy = vi.spyOn(fs, 'readFileSync');
-    assert.equal(resolveLocalDaemonCodeSignature(), expected);
+    assert.equal(await resolveLocalDaemonCodeSignature(), expected);
     const sourceReads = readSpy.mock.calls
       .map(([target]) => target)
       .filter((target): target is string => typeof target === 'string')

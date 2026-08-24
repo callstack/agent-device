@@ -266,7 +266,16 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
  * only), so its pin is also the assertion that composing the registry stays metadata-eager.
  */
 export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
-  'src/cli.ts': 363,
+  // 362 -> 364 in #2004, which cuts per-invocation work and pays two modules for it:
+  // `src/utils/ttl-memo.ts` (version.ts now resolves the package version and the project root
+  // once per process instead of re-reading package.json several times an invocation) and
+  // `src/daemon/client/daemon-launch-spec.ts` (the launch-entry probe, split out of the 726-line
+  // daemon-client-lifecycle.ts). Both run on the path every local command already takes, so
+  // neither has a lazy seam to hide behind -- unlike `src/daemon/code-signature-cache.ts`, which
+  // the same PR added and only a source checkout reaches, and which therefore loads on demand
+  // (`resolveLocalDaemonCodeSignature`) rather than appearing here.
+  'src/cli.ts': 364,
+c9b32809 (fix(daemon): keep the code-signature cache out of the startup closure)
   'src/platform-runtime.ts': 39,
   'src/core/dispatch.ts': 83,
   'src/core/capabilities.ts': 75,

@@ -4,7 +4,6 @@ import { AppError } from '@agent-device/kernel/errors';
 import { createTtlMemo } from '../../utils/ttl-memo.ts';
 import { findProjectRoot } from '../../utils/version.ts';
 import { computeDaemonCodeSignature } from '../code-signature.ts';
-import { resolveCachedDaemonCodeSignature } from '../code-signature-cache.ts';
 
 export type DaemonLaunchSpec = {
   root: string;
@@ -57,13 +56,20 @@ export function resolveDaemonLaunchSpec(): DaemonLaunchSpec {
  * stat-validated cache (`code-signature-cache.ts`), which returns the
  * identical signature in ~1.5ms.
  *
+ * The cache loads on demand, which is why this is async: an installed client
+ * runs the dist arm on every invocation and never reaches it, so a static
+ * import would put the cache and its atomic-publish dependency in the startup
+ * closure of a CLI that cannot use them (`eager-closure-budgets.ts`).
+ *
  * Deliberately NOT memoized, unlike the launch spec above: a long-lived
  * client (the MCP server) must still notice a daemon rebuilt underneath it,
  * and the cache is what makes re-answering that question per request cheap.
  */
-export function resolveLocalDaemonCodeSignature(): string {
+export async function resolveLocalDaemonCodeSignature(): Promise<string> {
   const launchSpec = resolveDaemonLaunchSpec();
-  return launchSpec.useSrc
-    ? resolveCachedDaemonCodeSignature(launchSpec.srcPath, launchSpec.root)
-    : computeDaemonCodeSignature(launchSpec.distPath, launchSpec.root);
+  if (!launchSpec.useSrc) {
+    return computeDaemonCodeSignature(launchSpec.distPath, launchSpec.root);
+  }
+  const { resolveCachedDaemonCodeSignature } = await import('../code-signature-cache.ts');
+  return resolveCachedDaemonCodeSignature(launchSpec.srcPath, launchSpec.root);
 }
