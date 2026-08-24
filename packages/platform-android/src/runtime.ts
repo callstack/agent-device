@@ -14,48 +14,28 @@ import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
 } from '@agent-device/contracts/application-lifecycle-runtime';
-import {
-  bindElementTextRuntime,
-  elementTextRuntimeOperationFacts,
-} from '@agent-device/contracts/element-text-runtime';
-import {
-  bindLocalFocusInteractor,
-  focusRuntimeOperationFacts,
-} from '@agent-device/contracts/focus-runtime';
+import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/element-text-runtime';
+import { focusRuntimeOperationFacts } from '@agent-device/contracts/focus-runtime';
 import {
   ANDROID_TV_MULTI_TOUCH_UNSUPPORTED_HINT,
   TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
 } from '@agent-device/contracts/gesture-admission';
-import {
-  bindLocalGestureInteractor,
-  gestureRuntimeOperationFacts,
-} from '@agent-device/contracts/gesture-runtime';
-import {
-  bindLocalScrollInteractor,
-  scrollRuntimeOperationFacts,
-} from '@agent-device/contracts/scroll-runtime';
-import { localRuntimeOwner, whenAdmitted } from '@agent-device/contracts/platform-runtime';
-import {
-  bindLocalScreenshotInteractor,
-  screenshotRuntimeOperationFacts,
-} from '@agent-device/contracts/screenshot-runtime';
+import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
+import { scrollRuntimeOperationFacts } from '@agent-device/contracts/scroll-runtime';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
 import { selectorObservationRuntimeOperationFacts } from '@agent-device/contracts/selector-observation-runtime';
 import {
   bindLocalSnapshotInteractor,
   snapshotRuntimeOperationFacts,
 } from '@agent-device/contracts/snapshot-runtime';
-import {
-  bindLocalTypeTextInteractor,
-  typeTextRuntimeOperationFacts,
-} from '@agent-device/contracts/type-text-runtime';
-import {
-  bindLocalTouchInteractor,
-  touchRuntimeOperationFacts,
-} from '@agent-device/contracts/touch-runtime';
+import { typeTextRuntimeOperationFacts } from '@agent-device/contracts/type-text-runtime';
+import { touchRuntimeOperationFacts } from '@agent-device/contracts/touch-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
-import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
+import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
+import { bindLocalInteractorOperationSet } from '@agent-device/contracts/local-interactor-operation-set';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
@@ -302,6 +282,12 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           dismiss: androidTouchFact(device),
           enter: androidTouchFact(device),
         }),
+        // `cmd clipboard get/set text` runs over adb on every real Android kind, so read and
+        // write share the same cell the retired `clipboard` bucket declared.
+        ...clipboardRuntimeOperationFacts({
+          read: androidTouchFact(device),
+          write: androidTouchFact(device),
+        }),
         ensureReady: available,
         bootTarget: available,
         bootTargetHeadless: device.kind === 'emulator' ? available : headlessUnavailable,
@@ -349,12 +335,6 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
             await dumpAndroidNetworkTraffic(host, request.device, input, request.scope.signal),
           ...recording,
           ...androidInteractionOperations(host, request, facts),
-          ...bindAdmittedLocalInteractorOperations({
-            device: request.device,
-            signal: request.scope.signal,
-            resolveInteractor: host.localInteractors.resolve,
-            facts: facts.operations,
-          }),
           ensureReady: async (input: EnsureReadyInput) =>
             await ensureAndroidReady(
               host,
@@ -428,20 +408,10 @@ function androidInteractionOperations(
   };
   return {
     ...(facts.operations.captureSnapshot.available ? bindLocalSnapshotInteractor(resolver) : {}),
-    ...(facts.operations.captureScreenshot.available
-      ? bindLocalScreenshotInteractor(resolver)
-      : {}),
-    ...(facts.operations.focusPoint.available ? bindLocalFocusInteractor(resolver) : {}),
-    ...bindLocalGestureInteractor({ ...resolver, facts: facts.operations }),
-    ...(facts.operations.scrollDirection.available ? bindLocalScrollInteractor(resolver) : {}),
-    ...(facts.operations.typeText.available ? bindLocalTypeTextInteractor(resolver) : {}),
-    ...whenAdmitted(facts.operations.tapPoint, () =>
-      bindLocalTouchInteractor({
-        ...resolver,
-        facts: facts.operations,
-        pause: async (milliseconds) => await host.clock.sleep(milliseconds, request.scope.signal),
-      }),
-    ),
-    ...(facts.operations.readTextAtPoint.available ? bindElementTextRuntime(resolver) : {}),
+    ...bindLocalInteractorOperationSet({
+      ...resolver,
+      facts: facts.operations,
+      pause: async (milliseconds) => await host.clock.sleep(milliseconds, request.scope.signal),
+    }),
   };
 }

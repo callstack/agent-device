@@ -101,6 +101,8 @@ function createAdmissionFacts(
       keyboardStatus: unavailable,
       keyboardDismiss: unavailable,
       keyboardEnter: unavailable,
+      readClipboard: unavailable,
+      writeClipboard: unavailable,
       ...touchRuntimeOperationFacts({
         tap: unavailable,
         longPress: unavailable,

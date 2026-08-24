@@ -56,6 +56,7 @@ import {
   createAppleAppDeploymentOperations,
 } from './deployment/runtime.ts';
 import { appleNavigationFacts, createAppleNavigationOperations } from './navigation/runtime.ts';
+import { appleSystemFacts, createAppleSystemOperations } from './system/runtime.ts';
 import {
   bindAppleFindSelectorRuntime,
   bindAppleFindTextRuntime,
@@ -301,6 +302,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         }),
         ...elementTextRuntimeOperationFacts({ readTextAtPoint: appleElementTextFact(device) }),
         ...appleNavigationFacts(device),
+        ...appleSystemFacts(device),
         ensureReady: readiness,
         bootTarget: boot,
         bootTargetHeadless: headlessUnavailable,
@@ -405,6 +407,11 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
           }),
         ),
         ...createAppleNavigationOperations({
+          host,
+          device: request.device,
+          signal: request.scope.signal,
+        }),
+        ...createAppleSystemOperations({
           host,
           device: request.device,
           signal: request.scope.signal,

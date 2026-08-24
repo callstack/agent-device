@@ -1,5 +1,11 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { bindLocalBackInteractor, bindProviderBackInteractor } from './back-runtime.ts';
+import {
+  bindLocalClipboardReadInteractor,
+  bindLocalClipboardWriteInteractor,
+  bindProviderClipboardReadInteractor,
+  bindProviderClipboardWriteInteractor,
+} from './clipboard-runtime.ts';
 import { bindLocalHomeInteractor, bindProviderHomeInteractor } from './home-runtime.ts';
 import {
   bindLocalKeyboardDismissInteractor,
@@ -25,17 +31,18 @@ import {
 } from './tv-remote-runtime.ts';
 
 /**
- * The seven navigation/keyboard operations every owner admits from the same shape: one fact,
- * one bind call, no owner mechanics in between. This tuple is the single canonical declaration:
- * the {@link NavigationInteractorOperation} union type is derived from it below, and
- * `LOCAL_BINDERS`/`PROVIDER_BINDERS`'s `Record<NavigationInteractorOperation, …>` types are then
- * checked against that derived union — so a member can never be added to one and silently missing
- * from another. Not caller-supplied: `facts[operation]` is the only thing that decides whether an
- * operation binds — a key this tuple names but the caller's facts never define is simply never
- * available (`facts[operation]?.available` reads `undefined`), which is how a caller passing a
- * narrower, dedicated facts object (e.g. Limrun's keyboard-less navigation facts) opts a subset out.
+ * Every operation whose whole binding is "one fact, one bind call, no owner mechanics in between"
+ * — the navigation/keyboard leaves and the system-surface leaves that joined them in Wave 6. This
+ * tuple is the single canonical declaration: the {@link CatalogInteractorOperation} union type is
+ * derived from it below, and `LOCAL_BINDERS`/`PROVIDER_BINDERS`'s
+ * `Record<CatalogInteractorOperation, …>` types are then checked against that derived union — so a
+ * member can never be added to one and silently missing from another. Not caller-supplied:
+ * `facts[operation]` is the only thing that decides whether an operation binds — a key this tuple
+ * names but the caller's facts never define is simply never available
+ * (`facts[operation]?.available` reads `undefined`), which is how a caller passing a narrower,
+ * dedicated facts object (e.g. Limrun's keyboard-less navigation facts) opts a subset out.
  */
-const NAVIGATION_INTERACTOR_OPERATIONS = [
+const CATALOG_INTERACTOR_OPERATIONS = [
   'back',
   'home',
   'setOrientation',
@@ -43,9 +50,11 @@ const NAVIGATION_INTERACTOR_OPERATIONS = [
   'keyboardStatus',
   'keyboardDismiss',
   'keyboardEnter',
+  'readClipboard',
+  'writeClipboard',
 ] as const;
 
-export type NavigationInteractorOperation = (typeof NAVIGATION_INTERACTOR_OPERATIONS)[number];
+export type CatalogInteractorOperation = (typeof CATALOG_INTERACTOR_OPERATIONS)[number];
 
 type LocalBinderParams = Readonly<{
   device: DeviceInfo;
@@ -60,7 +69,7 @@ type ProviderBinderParams = Readonly<{
 
 const LOCAL_BINDERS: Readonly<
   Record<
-    NavigationInteractorOperation,
+    CatalogInteractorOperation,
     (params: LocalBinderParams) => Partial<PlatformRuntimeOperations>
   >
 > = Object.freeze({
@@ -71,11 +80,13 @@ const LOCAL_BINDERS: Readonly<
   keyboardStatus: bindLocalKeyboardStatusInteractor,
   keyboardDismiss: bindLocalKeyboardDismissInteractor,
   keyboardEnter: bindLocalKeyboardEnterInteractor,
+  readClipboard: bindLocalClipboardReadInteractor,
+  writeClipboard: bindLocalClipboardWriteInteractor,
 });
 
 const PROVIDER_BINDERS: Readonly<
   Record<
-    NavigationInteractorOperation,
+    CatalogInteractorOperation,
     (params: ProviderBinderParams) => Partial<PlatformRuntimeOperations>
   >
 > = Object.freeze({
@@ -86,6 +97,8 @@ const PROVIDER_BINDERS: Readonly<
   keyboardStatus: bindProviderKeyboardStatusInteractor,
   keyboardDismiss: bindProviderKeyboardDismissInteractor,
   keyboardEnter: bindProviderKeyboardEnterInteractor,
+  readClipboard: bindProviderClipboardReadInteractor,
+  writeClipboard: bindProviderClipboardWriteInteractor,
 });
 
 /**
@@ -95,15 +108,15 @@ const PROVIDER_BINDERS: Readonly<
  * `limrunNavigationOperationFacts`), that flat map directly — which may cover only the subset of
  * operations the owner admits at all, so a missing key here is simply never bindable.
  */
-type NavigationOperationFacts = Readonly<
-  Partial<Record<NavigationInteractorOperation, RuntimeOperationFact>>
+type CatalogOperationFacts = Readonly<
+  Partial<Record<CatalogInteractorOperation, RuntimeOperationFact>>
 >;
 
-/** Walks every navigation operation against one binder table, binding each the facts admitted. */
+/** Walks every catalog operation against one binder table, binding each the facts admitted. */
 function bindAdmittedInteractorOperations<Resolver>(
   binders: Readonly<
     Record<
-      NavigationInteractorOperation,
+      CatalogInteractorOperation,
       (params: {
         device: DeviceInfo;
         signal: AbortSignal;
@@ -115,12 +128,12 @@ function bindAdmittedInteractorOperations<Resolver>(
     device: DeviceInfo;
     signal: AbortSignal;
     resolveInteractor: Resolver;
-    facts: NavigationOperationFacts;
+    facts: CatalogOperationFacts;
   }>,
 ): Partial<PlatformRuntimeOperations> {
   const { device, signal, resolveInteractor, facts } = params;
   const bound: Partial<PlatformRuntimeOperations> = {};
-  for (const operation of NAVIGATION_INTERACTOR_OPERATIONS) {
+  for (const operation of CATALOG_INTERACTOR_OPERATIONS) {
     if (facts[operation]?.available) {
       Object.assign(bound, binders[operation]({ device, signal, resolveInteractor }));
     }
@@ -130,7 +143,7 @@ function bindAdmittedInteractorOperations<Resolver>(
 
 /**
  * Binds whichever local operations the owner's own facts admitted. The owner keeps full
- * authority — its facts alone decide what binds — this only removes the seven-times-repeated
+ * authority — its facts alone decide what binds — this only removes the once-per-operation
  * ternary that read them.
  */
 export function bindAdmittedLocalInteractorOperations(
@@ -138,7 +151,7 @@ export function bindAdmittedLocalInteractorOperations(
     device: DeviceInfo;
     signal: AbortSignal;
     resolveInteractor: LocalInteractorOperationResolver;
-    facts: NavigationOperationFacts;
+    facts: CatalogOperationFacts;
   }>,
 ): Partial<PlatformRuntimeOperations> {
   return bindAdmittedInteractorOperations(LOCAL_BINDERS, params);
@@ -154,7 +167,7 @@ export function bindAdmittedProviderInteractorOperations(
     device: DeviceInfo;
     signal: AbortSignal;
     resolveInteractor: ProviderInteractorOperationResolver;
-    facts: NavigationOperationFacts;
+    facts: CatalogOperationFacts;
   }>,
 ): Partial<PlatformRuntimeOperations> {
   return bindAdmittedInteractorOperations(PROVIDER_BINDERS, params);

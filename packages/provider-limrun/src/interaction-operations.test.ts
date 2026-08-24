@@ -2,7 +2,10 @@ import type { Interactor, RunnerContext } from '@agent-device/contracts/interact
 import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test } from 'vitest';
-import { limrunNavigationOperationFacts } from './interaction-operations.ts';
+import {
+  limrunClipboardOperationFacts,
+  limrunNavigationOperationFacts,
+} from './interaction-operations.ts';
 
 const iosDevice: DeviceInfo = {
   platform: 'apple',
@@ -46,6 +49,28 @@ test('the Android leg admits back/home/orientation and gates tv-remote on a real
 
   const tv = limrunNavigationOperationFacts(androidTvDevice);
   expect(tv.tvRemote).toEqual({ available: true });
+});
+
+// R55: the Android leg reuses the local family's `createAndroidInteractor`, so `cmd clipboard
+// get/set text` reaches the device exactly as it does locally; the iOS leg's own clipboard
+// methods throw, so both halves stay unavailable there.
+test('clipboard follows the same Android-reuse / iOS-refusal split its siblings do', () => {
+  const android = limrunClipboardOperationFacts(androidMobileDevice);
+  expect(android.readClipboard).toEqual({ available: true });
+  expect(android.writeClipboard).toEqual({ available: true });
+
+  const ios = limrunClipboardOperationFacts(iosDevice);
+  const refusal = {
+    available: false,
+    reason: 'unsupported-provider-mode',
+    hint: 'Limrun iOS direct sessions do not expose clipboard access yet.',
+  };
+  expect(ios.readClipboard).toEqual(refusal);
+  expect(ios.writeClipboard).toEqual(refusal);
+
+  const stale = limrunClipboardOperationFacts(androidMobileDevice, liveSessionUnavailable);
+  expect(stale.readClipboard).toEqual(liveSessionUnavailable);
+  expect(stale.writeClipboard).toEqual(liveSessionUnavailable);
 });
 
 test('the iOS leg admits back/orientation but explicitly refuses home and tv-remote', () => {

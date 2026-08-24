@@ -251,8 +251,15 @@ test('captures through only the active exact WebDriver interactor', async () => 
     reason: 'unsupported-provider-mode',
   });
   expect(binding.operations.readTextAtPoint).toBeUndefined();
-  // back/home/orientation ride the same reachable interactor focus/type do.
-  for (const operation of ['back', 'home', 'setOrientation'] as const) {
+  // back/home/orientation and both clipboard halves ride the same reachable interactor
+  // focus/type do; the declared-capability gate stays inside the interactor.
+  for (const operation of [
+    'back',
+    'home',
+    'setOrientation',
+    'readClipboard',
+    'writeClipboard',
+  ] as const) {
     expect(binding.facts.operations[operation]).toEqual({ available: true });
     expect(binding.operations[operation]).toBeTypeOf('function');
   }
@@ -315,6 +322,8 @@ test.each([
   expect(facts.operations.back.available).toBe(state.isSessionActive());
   expect(facts.operations.home.available).toBe(state.isSessionActive());
   expect(facts.operations.setOrientation.available).toBe(state.isSessionActive());
+  expect(facts.operations.readClipboard.available).toBe(state.isSessionActive());
+  expect(facts.operations.writeClipboard.available).toBe(state.isSessionActive());
   for (const operation of [
     'tvRemote',
     'keyboardStatus',

@@ -33,7 +33,8 @@ const supportsCoreDevicePhysicalOperation = (device: DeviceInfo): boolean =>
   device.kind !== 'device' ||
   device.iosPhysicalDeviceBackend !== 'xctest';
 
-// The Apple arm shared by `clipboard`/`settings` (was `macos || simulator`):
+// The Apple arm `settings` uses (was `macos || simulator`); `clipboard` retired its own copy of
+// this closure with R55, which restated it as the Apple owner's clipboard facts:
 // reachable on the macOS host directly, on every other Apple OS only on the simulator.
 // Off Apple this preserves the trailing `device.kind === 'simulator'` term verbatim.
 const supportsHostOrSimulatorSurface = (device: DeviceInfo): boolean => {
@@ -55,10 +56,6 @@ const supportsAlertSurface = (device: DeviceInfo): boolean =>
 const APPLE_SUPPORTS_BY_DEFAULT: Record<string, (device: DeviceInfo) => boolean> = {
   [PUBLIC_COMMANDS.perf]: supportsCoreDevicePhysicalOperation,
   [PUBLIC_COMMANDS.appSwitcher]: supportsAppAndDeviceLifecycle,
-  [PUBLIC_COMMANDS.clipboard]: (device) =>
-    device.platform === 'android' ||
-    device.platform === 'linux' ||
-    supportsHostOrSimulatorSurface(device),
   [PUBLIC_COMMANDS.alert]: supportsAlertSurface,
   [PUBLIC_COMMANDS.settings]: (device) =>
     device.platform === 'android' || supportsHostOrSimulatorSurface(device),

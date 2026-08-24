@@ -104,7 +104,7 @@ test('device capability matrix stays consistent across shared command groups', (
       ],
     },
     {
-      commands: ['settings', 'clipboard'],
+      commands: ['settings'],
       checks: [
         { device: iosSimulator, expected: true, label: 'on iOS sim' },
         { device: iosDevice, expected: false, label: 'on iOS device' },
@@ -293,11 +293,13 @@ test('web supports only the initial browser interaction slice', () => {
       'fill',
       'focus',
       'find',
-      // `gesture` and `swipe` (R42/R44) join the migrated commands here for the same reason
-      // `focus`, `find`, `screenshot`, `scroll`, `snapshot`, `type` and `wait` already do: a
-      // command whose admission comes from exact owner facts carries no capability-matrix row,
-      // and a command with no row is not decided by this matrix at all. The web owner refuses
-      // every gesture tier — `platform-web/src/runtime.test.ts` is where that cell is pinned.
+      // `clipboard` (R55), `gesture` and `swipe` (R42/R44) join the migrated commands here for
+      // the same reason `focus`, `find`, `screenshot`, `scroll`, `snapshot`, `type` and `wait`
+      // already do: a command whose admission comes from exact owner facts carries no
+      // capability-matrix row, and a command with no row is not decided by this matrix at all.
+      // The web owner refuses every gesture tier and both clipboard halves —
+      // `platform-web/src/runtime.test.ts` is where those cells are pinned.
+      'clipboard',
       'gesture',
       'get',
       'hover',
@@ -313,7 +315,7 @@ test('web supports only the initial browser interaction slice', () => {
     [{ device: webDevice, expected: true, label: 'on web' }],
   );
   assertCommandSupport(
-    ['alert', 'app-switcher', 'clipboard', 'perf', 'settings', 'trigger-app-event'],
+    ['alert', 'app-switcher', 'perf', 'settings', 'trigger-app-event'],
     [{ device: webDevice, expected: false, label: 'on web' }],
   );
   assertCommandSupport(

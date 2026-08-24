@@ -177,8 +177,8 @@ function expectLifecycleFacts(
 }
 
 /**
- * back/home parity with the retired capability bucket: the desktop is the only Linux cell with a
- * target to drive. orientation/tv-remote/keyboard never carried a Linux bucket at all.
+ * back/home/clipboard parity with the retired capability buckets: the desktop is the only Linux
+ * cell with a target to drive. orientation/tv-remote/keyboard never carried a Linux bucket at all.
  */
 function expectLinuxNavigationAndKeyboardFacts(
   binding: DeviceBinding<PlatformRuntimeOperations>,
@@ -189,6 +189,12 @@ function expectLinuxNavigationAndKeyboardFacts(
   expect(binding.facts.operations.home.available).toBe(desktop);
   expect(binding.operations.back).toBeTypeOf(desktop ? 'function' : 'undefined');
   expect(binding.operations.home).toBeTypeOf(desktop ? 'function' : 'undefined');
+  // R55: `clipboard`'s retired bucket was `{ device: true }` too — wl-clipboard/xclip/xsel drive
+  // the desktop session's selection, and no other Linux cell has one.
+  expect(binding.facts.operations.readClipboard.available).toBe(desktop);
+  expect(binding.facts.operations.writeClipboard.available).toBe(desktop);
+  expect(binding.operations.readClipboard).toBeTypeOf(desktop ? 'function' : 'undefined');
+  expect(binding.operations.writeClipboard).toBeTypeOf(desktop ? 'function' : 'undefined');
   for (const operation of [
     'setOrientation',
     'tvRemote',

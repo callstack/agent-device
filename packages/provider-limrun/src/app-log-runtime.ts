@@ -107,6 +107,8 @@ export function createLimrunPlatformRuntimeOwner(
             keyboardStatus: liveSessionUnavailable,
             keyboardDismiss: liveSessionUnavailable,
             keyboardEnter: liveSessionUnavailable,
+            readClipboard: liveSessionUnavailable,
+            writeClipboard: liveSessionUnavailable,
             readiness: liveSessionUnavailable,
             shutdown: liveSessionUnavailable,
             lifecycle: limrunLifecycleFacts(device, false),

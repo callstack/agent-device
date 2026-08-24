@@ -44,6 +44,8 @@ test('generic unavailable binding preserves exact provider ownership and mode', 
     keyboardStatus: { available: false, reason: 'unsupported-provider-mode' },
     keyboardDismiss: { available: false, reason: 'unsupported-provider-mode' },
     keyboardEnter: { available: false, reason: 'unsupported-provider-mode' },
+    readClipboard: { available: false, reason: 'unsupported-provider-mode' },
+    writeClipboard: { available: false, reason: 'unsupported-provider-mode' },
     lifecycle,
   });
 

@@ -1,0 +1,80 @@
+import { expect, test, vi } from 'vitest';
+import type { Interactor } from '@agent-device/contracts/interaction';
+import type { AppleOS, DeviceInfo } from '@agent-device/kernel/device';
+import { appleSystemFacts, createAppleSystemOperations } from './runtime.ts';
+
+function appleDevice(
+  appleOs: AppleOS,
+  kind: DeviceInfo['kind'],
+  overrides: Partial<DeviceInfo> = {},
+): DeviceInfo {
+  return {
+    platform: 'apple',
+    appleOs,
+    id: `${appleOs}-${kind}`,
+    name: `${appleOs} ${kind}`,
+    kind,
+    booted: true,
+    ...overrides,
+  };
+}
+
+/**
+ * The R55 parity cell table, restated as facts. The retired admission was the `clipboard`
+ * capability bucket (`{ simulator: true, device: true }`) intersected with the Apple plugin's
+ * `supportsHostOrSimulatorSurface` closure — `macos || simulator`. Every row below is that
+ * verdict; the one deliberate narrowing is watchOS, which the bucket admitted as a simulator but
+ * for which no XCUITest interactor can be constructed at all (the same reading `appleBackFact`
+ * takes).
+ */
+test.each([
+  { appleOs: 'ios', kind: 'simulator', expected: true },
+  { appleOs: 'ios', kind: 'device', expected: false },
+  { appleOs: 'ipados', kind: 'simulator', expected: true },
+  { appleOs: 'ipados', kind: 'device', expected: false },
+  { appleOs: 'tvos', kind: 'simulator', expected: true },
+  { appleOs: 'tvos', kind: 'device', expected: false },
+  { appleOs: 'visionos', kind: 'simulator', expected: true },
+  { appleOs: 'visionos', kind: 'device', expected: false },
+  { appleOs: 'macos', kind: 'device', expected: true },
+  { appleOs: 'watchos', kind: 'simulator', expected: false },
+] as const)(
+  'clipboard on an Apple $appleOs $kind is available: $expected',
+  ({ appleOs, kind, expected }) => {
+    const facts = appleSystemFacts(appleDevice(appleOs, kind));
+    expect(facts.readClipboard.available).toBe(expected);
+    expect(facts.writeClipboard.available).toBe(expected);
+  },
+);
+
+test('a non-simulator, non-device Apple kind is refused by kind, with its own reason', () => {
+  const facts = appleSystemFacts(appleDevice('ios', 'emulator'));
+  expect(facts.readClipboard).toEqual({
+    available: false,
+    reason: 'unsupported-device-kind',
+    hint: 'clipboard is supported on Apple simulators and the macOS host.',
+  });
+});
+
+test('binds both clipboard halves for an admitted cell and neither for a refused one', () => {
+  const resolve = vi.fn(async () => ({}) as unknown as Interactor);
+  const host = { localInteractors: { resolve } };
+  const signal = new AbortController().signal;
+
+  const admitted = createAppleSystemOperations({
+    host,
+    device: appleDevice('ios', 'simulator'),
+    signal,
+  });
+  expect(admitted.readClipboard).toBeTypeOf('function');
+  expect(admitted.writeClipboard).toBeTypeOf('function');
+
+  const refused = createAppleSystemOperations({
+    host,
+    device: appleDevice('ios', 'device'),
+    signal,
+  });
+  expect(refused.readClipboard).toBeUndefined();
+  expect(refused.writeClipboard).toBeUndefined();
+  expect(resolve).not.toHaveBeenCalled();
+});

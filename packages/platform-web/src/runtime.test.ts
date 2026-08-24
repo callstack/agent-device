@@ -199,6 +199,21 @@ test.each([
   },
 );
 
+test('clipboard never carried a web capability bucket', async () => {
+  const binding = await createWebPlatformRuntime(host({ mode: 'transport-composed' })).bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: scope(),
+  });
+  for (const operation of ['readClipboard', 'writeClipboard'] as const) {
+    expect(binding.facts.operations[operation]).toEqual({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+    });
+    expect(binding.operations[operation]).toBeUndefined();
+  }
+});
+
 test('back/home/orientation/tv-remote/keyboard never carried a web capability bucket', async () => {
   const binding = await createWebPlatformRuntime(host({ mode: 'transport-composed' })).bind({
     device,

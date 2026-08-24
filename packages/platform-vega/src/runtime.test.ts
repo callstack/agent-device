@@ -179,6 +179,15 @@ test.each([
       });
       expect(binding.operations[operation]).toBeUndefined();
     }
+    // R55: Vega never carried a `clipboard` bucket either.
+    for (const operation of ['readClipboard', 'writeClipboard'] as const) {
+      expect(binding.facts.operations[operation]).toMatchObject({
+        available: false,
+        reason: 'unsupported-platform-leaf',
+        hint: 'clipboard is not supported on Vega OS.',
+      });
+      expect(binding.operations[operation]).toBeUndefined();
+    }
     expectLifecycleFacts(binding, legacy);
   },
 );

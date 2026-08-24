@@ -59,16 +59,12 @@ const coreDeviceOnlyPhysicalOperationHint = (device: DeviceInfo): string | undef
     ? undefined
     : 'This command requires a CoreDevice-backed physical iOS device. The selected XCTest backend supports open, close, interactions, snapshots, and screenshots.';
 // `home`/`keyboard`/`orientation`/`tv-remote` are gone from this table (R42/R43/R44/R45/R46
-// retired their AppleOS-table-reading closures along with their descriptor capability buckets);
-// their per-AppleOS admission now lives as owner facts in `packages/platform-apple/src/runtime.ts`.
+// retired their AppleOS-table-reading closures along with their descriptor capability buckets),
+// and `clipboard` left with R55; their per-AppleOS admission now lives as owner facts in
+// `packages/platform-apple/src/runtime.ts` and its `system/`, `navigation/` siblings.
 const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
   perf: supportsCoreDevicePhysicalOperation,
   'app-switcher': isNotMacOs,
-  clipboard: (device) =>
-    device.platform === 'android' ||
-    device.platform === 'linux' ||
-    isMacOs(device) ||
-    device.kind === 'simulator',
   alert: (device) =>
     device.platform === 'android' || isIosOs(device) || isMacOsOrAppleSimulator(device),
   settings: (device) =>

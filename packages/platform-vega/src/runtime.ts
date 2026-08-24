@@ -131,6 +131,10 @@ const keyboardUnavailable = vegaUnavailable(
   'unsupported-platform-leaf',
   'keyboard is not supported on Vega OS.',
 );
+const clipboardUnavailable = vegaUnavailable(
+  'unsupported-platform-leaf',
+  'clipboard is not supported on Vega OS.',
+);
 const backUnavailable = vegaUnavailable(
   'unsupported-device-kind',
   'back currently supports only Vega Virtual Devices.',
@@ -167,6 +171,8 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
     home: homeUnavailable,
     orientation: orientationUnavailable,
     tvRemote: tvRemoteUnavailable,
+    readClipboard: clipboardUnavailable,
+    writeClipboard: clipboardUnavailable,
     keyboardStatus: keyboardUnavailable,
     keyboardDismiss: keyboardUnavailable,
     keyboardEnter: keyboardUnavailable,

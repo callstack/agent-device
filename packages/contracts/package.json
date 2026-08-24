@@ -95,6 +95,10 @@
       "types": "./src/facades/client.ts",
       "default": "./src/facades/client.ts"
     },
+    "./clipboard-runtime": {
+      "types": "./src/clipboard-runtime.ts",
+      "default": "./src/clipboard-runtime.ts"
+    },
     "./command": {
       "types": "./src/facades/command.ts",
       "default": "./src/facades/command.ts"
@@ -186,6 +190,10 @@
     "./keyboard-runtime": {
       "types": "./src/keyboard-runtime.ts",
       "default": "./src/keyboard-runtime.ts"
+    },
+    "./local-interactor-operation-set": {
+      "types": "./src/local-interactor-operation-set.ts",
+      "default": "./src/local-interactor-operation-set.ts"
     },
     "./logs-runtime-plan": {
       "types": "./src/logs-runtime-plan.ts",

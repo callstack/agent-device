@@ -1,14 +1,7 @@
-import { dispatchCommand } from '../../core/dispatch.ts';
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
-import { publicPlatformString } from '@agent-device/kernel/device';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
-import { contextFromFlags } from '../context.ts';
 import { handleReleaseMaterializedPathsCommand } from './session-app-source-deployment.ts';
-import { requireSessionOrExplicitSelector, resolveCommandDevice } from './session-device-utils.ts';
-import { errorResponse, requireCommandSupported } from './response.ts';
-import { recordSessionAction } from './handler-utils.ts';
 import { handleRuntimeCommand } from './session-runtime-command.ts';
 import { requireRuntimeBinding, requireRuntimeFacts } from './session-runtime-admission.ts';
 import { handleOpenCommand } from './session-open.ts';
@@ -25,6 +18,7 @@ import { handleSessionStateCommands } from './session-state.ts';
 import { handleSessionObservabilityCommands } from './session-observability.ts';
 import { handleSessionReplayCommands } from './session-replay.ts';
 import { handleSessionScriptPublication } from './session-script-publication.ts';
+import { handleSessionClipboardCommand } from './session-clipboard.ts';
 import { handleDoctorCommand } from './session-doctor.ts';
 import { handlePrepareCommand } from './session-prepare.ts';
 import type { DescriptorSessionRouteCommandName } from '../../core/command-descriptor/registry.ts';
@@ -39,45 +33,6 @@ import type { DeviceClaimReconciler } from '../device-claims.ts';
 import type { AppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 import type { ScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform';
-
-// fallow-ignore-next-line complexity
-async function handleClipboardCommand(params: {
-  req: DaemonRequest;
-  sessionName: string;
-  logPath: string;
-  sessionStore: SessionStore;
-}): Promise<DaemonResponse> {
-  const { req, sessionName, logPath, sessionStore } = params;
-  const session = sessionStore.get(sessionName);
-  const flags = req.flags ?? {};
-  const guard = requireSessionOrExplicitSelector(PUBLIC_COMMANDS.clipboard, session, flags);
-  if (guard) return guard;
-
-  const action = (req.positionals?.[0] ?? '').toLowerCase();
-  if (action !== 'read' && action !== 'write') {
-    return errorResponse('INVALID_ARGS', 'clipboard requires a subcommand: read or write');
-  }
-
-  const device = await resolveCommandDevice({
-    session,
-    flags,
-    ensureReady: true,
-  });
-  const unsupported = requireCommandSupported(PUBLIC_COMMANDS.clipboard, device);
-  if (unsupported) return unsupported;
-
-  const result = await dispatchCommand(
-    device,
-    PUBLIC_COMMANDS.clipboard,
-    req.positionals ?? [],
-    req.flags?.out,
-    {
-      ...contextFromFlags(logPath, req.flags, session?.appBundleId, session?.trace?.outPath),
-    },
-  );
-  recordSessionAction(sessionStore, session, req, req.command, result ?? {});
-  return { ok: true, data: { platform: publicPlatformString(device), ...(result ?? {}) } };
-}
 
 export type SessionCommandInput = {
   req: DaemonRequest;
@@ -231,8 +186,15 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
       inspectFacts,
       bindDevice,
     }),
-  clipboard: async ({ req, sessionName, logPath, sessionStore }) =>
-    await handleClipboardCommand({ req, sessionName, logPath, sessionStore }),
+  clipboard: async ({ req, sessionName, logPath, sessionStore, inspectFacts, bindDevice }) =>
+    await handleSessionClipboardCommand({
+      req,
+      sessionName,
+      logPath,
+      sessionStore,
+      inspectFacts,
+      bindDevice,
+    }),
   keyboard: handleKeyboardCommand,
   perf: handleSessionObservabilityCommandGroup,
   logs: handleSessionObservabilityCommandGroup,

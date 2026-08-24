@@ -38,6 +38,7 @@ import {
   gestureRuntimePlanUses,
   homeRuntimeUse,
   hoverRuntimeUses,
+  clipboardRuntimePlanUses,
   keyboardRuntimePlanUses,
   longPressRuntimeUses,
   orientationRuntimeUse,
@@ -240,7 +241,6 @@ function readOnlySubactionRecordingEffect(
 
 const APPLE_SIM_AND_DEVICE = { simulator: true, device: true };
 const ANDROID_ALL = { emulator: true, device: true, unknown: true };
-const LINUX_DEVICE = { device: true };
 const LINUX_NONE = {};
 
 // ---------------------------------------------------------------------------
@@ -747,18 +747,15 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
+    // R55 retires this command's capability bucket and its `dispatch` leaf together: admission is
+    // whichever action-selected fact (`readClipboard`/`writeClipboard`) the parsed subcommand
+    // names, and the only execution is that one bound operation (ADR 0019 §9).
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
     daemon: { route: 'session', refFrameEffect: 'preserve' },
-    capability: {
-      apple: APPLE_SIM_AND_DEVICE,
-      android: ANDROID_ALL,
-      linux: LINUX_DEVICE,
-    },
-    dispatch: {},
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    platformExecution: { kind: 'device-runtime', uses: clipboardRuntimePlanUses },
   },
   {
     name: 'keyboard',

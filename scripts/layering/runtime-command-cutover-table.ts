@@ -30,6 +30,7 @@ import { retiredDispatchProjectionViolations } from './runtime-command-cutover-d
  * leaves follow: back at R42, home at R43, orientation at R44, tv-remote at R45, and the
  * action-selected keyboard at R46.
  * The gesture cluster follows the touch leaves: gesture at R52, scroll at R53, swipe at R54.
+ * Wave 6 closure starts at R55 clipboard.
  */
 export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
   {
@@ -1075,7 +1076,45 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
       },
     },
   },
+  {
+    rule: 'R55 clipboard-runtime-cutover',
+    command: 'clipboard',
+    subject: 'device clipboard',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      // The dispatch-table arm and its `core/dispatch.ts` handler. The daemon route function was
+      // renamed to `handleSessionClipboardCommand` when it moved out of the over-budget
+      // `handlers/session.ts`, so this name is now genuinely absent from production rather than
+      // shadowed by a surviving namesake.
+      routeNames: ['handleClipboardCommand'],
+    },
+    admissionMember: {
+      forms: ['computed-property'],
+      files: ['src/platforms/apple/plugin.ts'],
+      message: 'Apple plugin retains a legacy clipboard support or hint closure',
+    },
+    runtimeTypeNames: ['ClipboardRuntimeOperations'],
+    operations: { names: ['readClipboard', 'writeClipboard'] },
+    singularExecution: {
+      // `clipboard` is action-selected (R35's lesson): the session route resolves exactly one of
+      // the two operations per request, binds once, and never both together.
+      routes: ['resolveBoundClipboardRuntime'],
+      operations: ['readClipboard', 'writeClipboard'],
+      operationOwners: {
+        readClipboard: ['executeClipboardRead'],
+        writeClipboard: ['executeClipboardWrite'],
+      },
+    },
+    extensions: [clipboardRetiredDispatchProjectionProof],
+  },
 ];
+
+function clipboardRetiredDispatchProjectionProof(
+  sources: ReadonlyMap<string, string>,
+): UnruledViolation[] {
+  return retiredDispatchProjectionViolations(sources, 'clipboard');
+}
 
 function snapshotRetiredDispatchProjectionProof(
   sources: ReadonlyMap<string, string>,

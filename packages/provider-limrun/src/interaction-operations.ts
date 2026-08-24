@@ -17,6 +17,7 @@ import {
   scrollRuntimeOperationFacts,
 } from '@agent-device/contracts/scroll-runtime';
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
+import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
 import { bindProviderScreenshotInteractor } from '@agent-device/contracts/screenshot-runtime';
@@ -119,6 +120,11 @@ const keyboardUnavailableIos = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
   hint: 'Limrun iOS direct sessions do not expose keyboard actions.',
+} as const);
+const clipboardUnavailableIos = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'Limrun iOS direct sessions do not expose clipboard access yet.',
 } as const);
 
 /**
@@ -237,6 +243,22 @@ export function limrunNavigationOperationFacts(
  * interactor factory `limrunNavigationOperationFacts` above describes; the iOS leg has no tested
  * provider keyboard behavior, so it stays unavailable.
  */
+/**
+ * `clipboard` shares the split its siblings have: the Android leg rides
+ * `session.dependencies.android.createInteractor` — the SAME factory the local Android family
+ * binds, so `cmd clipboard get/set text` reaches the device exactly as it does locally — while
+ * the iOS leg's own `readClipboard`/`writeClipboard` throw, so both cells stay unavailable there
+ * and carry the interactor's wording.
+ */
+export function limrunClipboardOperationFacts(
+  device: DeviceInfo,
+  liveSessionUnavailable?: RuntimeOperationUnavailability,
+) {
+  const cell =
+    liveSessionUnavailable ?? (device.platform === 'android' ? available : clipboardUnavailableIos);
+  return Object.freeze({ ...clipboardRuntimeOperationFacts({ read: cell, write: cell }) });
+}
+
 export function limrunKeyboardOperationFacts(
   device: DeviceInfo,
   liveSessionUnavailable?: RuntimeOperationUnavailability,

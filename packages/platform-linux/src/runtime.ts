@@ -14,48 +14,24 @@ import {
   availableApplicationLifecycleOperations,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
-import {
-  bindElementTextRuntime,
-  elementTextRuntimeOperationFacts,
-} from '@agent-device/contracts/element-text-runtime';
-import {
-  bindLocalFocusInteractor,
-  focusRuntimeOperationFacts,
-} from '@agent-device/contracts/focus-runtime';
+import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/element-text-runtime';
+import { focusRuntimeOperationFacts } from '@agent-device/contracts/focus-runtime';
 import { TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT } from '@agent-device/contracts/gesture-admission';
-import {
-  bindLocalGestureInteractor,
-  gestureRuntimeOperationFacts,
-} from '@agent-device/contracts/gesture-runtime';
-import {
-  bindLocalScrollInteractor,
-  scrollRuntimeOperationFacts,
-} from '@agent-device/contracts/scroll-runtime';
+import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
+import { scrollRuntimeOperationFacts } from '@agent-device/contracts/scroll-runtime';
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
-import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
-import {
-  localRuntimeOwner,
-  sameRuntimeOwner,
-  whenAdmitted,
-} from '@agent-device/contracts/platform-runtime';
+import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
+import { bindLocalInteractorOperationSet } from '@agent-device/contracts/local-interactor-operation-set';
+import { localRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
-import {
-  bindLocalScreenshotInteractor,
-  screenshotRuntimeOperationFacts,
-} from '@agent-device/contracts/screenshot-runtime';
+import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
 import {
   captureSnapshotSignal,
   snapshotRuntimeOperationFacts,
   type CaptureSnapshotInput,
 } from '@agent-device/contracts/snapshot-runtime';
-import {
-  bindLocalTypeTextInteractor,
-  typeTextRuntimeOperationFacts,
-} from '@agent-device/contracts/type-text-runtime';
-import {
-  bindLocalTouchInteractor,
-  touchRuntimeOperationFacts,
-} from '@agent-device/contracts/touch-runtime';
+import { typeTextRuntimeOperationFacts } from '@agent-device/contracts/type-text-runtime';
+import { touchRuntimeOperationFacts } from '@agent-device/contracts/touch-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { bindLinuxApplicationLifecycle } from './lifecycle.ts';
@@ -133,6 +109,10 @@ const homeKindUnavailable = unavailableLinuxRuntimeFact(
   'unsupported-device-kind',
   'home is supported only for the Linux desktop device.',
 );
+const clipboardKindUnavailable = unavailableLinuxRuntimeFact(
+  'unsupported-device-kind',
+  'clipboard is supported only for the Linux desktop device.',
+);
 // `orientation`, `tv-remote`, and every keyboard action never carried a Linux capability bucket
 // at all (the retired descriptors declared `linux: {}`), so they are unavailable unconditionally.
 const linuxPlatformLeafUnavailable = unsupportedPlatformLeaf;
@@ -167,16 +147,6 @@ export function createLinuxPlatformRuntime(host: PlatformRuntimeHost): PlatformR
             ? linuxSnapshotOperations(host, request)
             : {}),
           ...linuxInteractionOperations(host, request, facts),
-          ...whenAdmitted(facts.operations.tapPoint, () =>
-            bindLocalTouchInteractor({
-              facts: facts.operations,
-              device: request.device,
-              signal: request.scope.signal,
-              resolveInteractor: host.localInteractors.resolve,
-              pause: async (milliseconds) =>
-                await host.clock.sleep(milliseconds, request.scope.signal),
-            }),
-          ),
         }),
         [Symbol.asyncDispose]: async () => undefined,
       }) satisfies DeviceBinding<PlatformRuntimeOperations>;
@@ -196,20 +166,11 @@ function linuxInteractionOperations(
     signal: request.scope.signal,
     resolveInteractor: host.localInteractors.resolve,
   };
-  return {
-    ...(facts.operations.captureScreenshot.available
-      ? bindLocalScreenshotInteractor(resolver)
-      : {}),
-    ...(facts.operations.focusPoint.available ? bindLocalFocusInteractor(resolver) : {}),
-    ...bindLocalGestureInteractor({ ...resolver, facts: facts.operations }),
-    ...(facts.operations.scrollDirection.available ? bindLocalScrollInteractor(resolver) : {}),
-    ...(facts.operations.typeText.available ? bindLocalTypeTextInteractor(resolver) : {}),
-    ...(facts.operations.readTextAtPoint.available ? bindElementTextRuntime(resolver) : {}),
-    ...bindAdmittedLocalInteractorOperations({
-      ...resolver,
-      facts: facts.operations,
-    }),
-  };
+  return bindLocalInteractorOperationSet({
+    ...resolver,
+    facts: facts.operations,
+    pause: async (milliseconds) => await host.clock.sleep(milliseconds, request.scope.signal),
+  });
 }
 
 function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> {
@@ -231,6 +192,8 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
     home: homeKindUnavailable,
     orientation: linuxPlatformLeafUnavailable,
     tvRemote: linuxPlatformLeafUnavailable,
+    readClipboard: clipboardKindUnavailable,
+    writeClipboard: clipboardKindUnavailable,
     keyboardStatus: linuxPlatformLeafUnavailable,
     keyboardDismiss: linuxPlatformLeafUnavailable,
     keyboardEnter: linuxPlatformLeafUnavailable,
@@ -285,6 +248,12 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
       // is the only Linux cell with a target to drive.
       ...backRuntimeOperationFacts({ back: linuxDesktopFact(device, backKindUnavailable) }),
       ...homeRuntimeOperationFacts({ home: linuxDesktopFact(device, homeKindUnavailable) }),
+      // Parity with the retired `clipboard` capability bucket (`{ device: true }`): wl-clipboard
+      // / xclip / xsel drive the desktop session's selection, and no other Linux cell has one.
+      ...clipboardRuntimeOperationFacts({
+        read: linuxDesktopFact(device, clipboardKindUnavailable),
+        write: linuxDesktopFact(device, clipboardKindUnavailable),
+      }),
     },
   });
 }

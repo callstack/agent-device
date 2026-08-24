@@ -126,11 +126,6 @@ const coreDeviceOnlyPhysicalOperationHint = (device: DeviceInfo): string | undef
 const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
   perf: supportsCoreDevicePhysicalOperation,
   'app-switcher': isNotMacOs,
-  clipboard: (device) =>
-    device.platform === 'android' ||
-    device.platform === 'linux' ||
-    isMacOs(device) ||
-    device.kind === 'simulator',
   alert: (device) =>
     device.platform === 'android' || isIosOs(device) || isMacOsOrAppleSimulator(device),
   settings: (device) =>

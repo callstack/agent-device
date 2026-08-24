@@ -122,7 +122,6 @@ const DISPATCH_HANDLERS: Record<DispatchCommand, DispatchHandler> = {
     await interactor.appSwitcher();
     return { action: 'app-switcher', ...successText('Opened app switcher') };
   },
-  clipboard: ({ interactor, positionals }) => handleClipboardCommand(interactor, positionals),
   settings: ({ device, interactor, positionals, context }) =>
     handleSettingsCommand(device, interactor, positionals, context),
 };
@@ -173,33 +172,6 @@ async function handleTriggerAppEventCommand(
     eventUrl,
     transport: 'deep-link',
     ...successText(`Triggered app event: ${eventName}`),
-  };
-}
-
-async function handleClipboardCommand(
-  interactor: Interactor,
-  positionals: string[],
-): Promise<Record<string, unknown>> {
-  const action = (positionals[0] ?? '').toLowerCase();
-  if (action !== 'read' && action !== 'write') {
-    throw new AppError('INVALID_ARGS', 'clipboard requires a subcommand: read or write');
-  }
-  if (action === 'read') {
-    if (positionals.length !== 1) {
-      throw new AppError('INVALID_ARGS', 'clipboard read does not accept additional arguments');
-    }
-    const text = await interactor.readClipboard();
-    return { action, text };
-  }
-  if (positionals.length < 2) {
-    throw new AppError('INVALID_ARGS', 'clipboard write requires text (use "" to clear clipboard)');
-  }
-  const text = positionals.slice(1).join(' ');
-  await interactor.writeClipboard(text);
-  return {
-    action,
-    textLength: Array.from(text).length,
-    ...successText('Clipboard updated'),
   };
 }
 

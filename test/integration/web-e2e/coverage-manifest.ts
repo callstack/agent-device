@@ -138,7 +138,11 @@ export const WEB_PLATFORM_COVERAGE = {
   [C.test]: gap(
     "Web test-suite execution has no executable web evidence: ReplayTestPlatform = Exclude<PlatformSelector, 'web'> structurally excludes web from the declared-platform filter, so `test --platform web` can never select a script (proven by a regression test in session-command-replay.test.ts) — that is evidence of what the command cannot do, not that it works on web",
   ),
-  [C.clipboard]: denial('Web capability model rejects native clipboard operations'),
+  [C.clipboard]: contract(
+    'packages/platform-web/src/runtime.test.ts',
+    'clipboard never carried a web capability bucket',
+    'the exact-owner runtime fact rejects native clipboard operations on the web target',
+  ),
   [C.keyboard]: contract(
     'packages/platform-web/src/runtime.test.ts',
     'back/home/orientation/tv-remote/keyboard never carried a web capability bucket',

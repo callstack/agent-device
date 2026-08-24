@@ -24,6 +24,7 @@ import {
 } from '@agent-device/contracts/scroll-runtime';
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
+import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
@@ -195,6 +196,18 @@ const keyboardUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
   hint: 'WebDriver provider runtimes do not expose keyboard actions.',
+} as const);
+
+/**
+ * The interactor's own `readClipboard`/`writeClipboard` call `requireSupport('clipboard.read')` /
+ * `('clipboard.write')`, so a provider whose declared capability map refuses the extension still
+ * refuses at call time. This cell states the seam the same way `back`/`home` do: what the fact
+ * answers is whether this runtime has a reachable interactor to ask at all.
+ */
+const clipboardUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'This WebDriver provider runtime does not expose clipboard access for this device.',
 } as const);
 
 const appStateUnavailable = Object.freeze({
@@ -421,6 +434,8 @@ function webDriverFacts(
       keyboardStatus: inactiveSession,
       keyboardDismiss: inactiveSession,
       keyboardEnter: inactiveSession,
+      readClipboard: inactiveSession,
+      writeClipboard: inactiveSession,
       lifecycle: applicationLifecycleOperationFacts({
         resolveOpenTarget: inactiveSession,
         prepareApplicationOpen: inactiveSession,
@@ -455,6 +470,8 @@ function webDriverFacts(
     keyboardStatus: keyboardUnavailable,
     keyboardDismiss: keyboardUnavailable,
     keyboardEnter: keyboardUnavailable,
+    readClipboard: clipboardUnavailable,
+    writeClipboard: clipboardUnavailable,
     lifecycle: webDriverLifecycleFacts(device),
   });
   // Both capture cells need the same reachability: an interactor this provider can drive, on a
@@ -518,6 +535,12 @@ function webDriverFacts(
         status: keyboardUnavailable,
         dismiss: keyboardUnavailable,
         enter: keyboardUnavailable,
+      }),
+      // Clipboard rides the same reachable interactor `back`/`home` do; the declared-capability
+      // gate stays inside the interactor, where it already lives.
+      ...clipboardRuntimeOperationFacts({
+        read: interactorCell(reachable, clipboardUnavailable),
+        write: interactorCell(reachable, clipboardUnavailable),
       }),
       ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
       ensureReady: available,

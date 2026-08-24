@@ -105,6 +105,15 @@ test.each([
     hint: 'keyboard status/get is not available through the public HarmonyOS HDC API; use keyboard dismiss or enter',
   });
   expect(binding.operations.keyboardStatus).toBeUndefined();
+  // R55: HarmonyOS never carried a `clipboard` bucket and is absent from the HarmonyOS overlay
+  // set, so neither half was ever admitted here.
+  for (const operation of ['readClipboard', 'writeClipboard'] as const) {
+    expect(facts.operations[operation]).toEqual({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+    });
+    expect(binding.operations[operation]).toBeUndefined();
+  }
   await expect(binding.operations.ensureReady?.({})).resolves.toMatchObject({ booted: true });
   await expect(
     binding.operations.listApps?.({ device: runtimeDevice, filter: 'all' }),
@@ -150,6 +159,8 @@ test('rejects the non-discovered HarmonyOS simulator cell for appstate', async (
     'keyboardStatus',
     'keyboardDismiss',
     'keyboardEnter',
+    'readClipboard',
+    'writeClipboard',
   ] as const) {
     expect(binding.facts.operations[operation].available).toBe(false);
     expect(binding.operations[operation]).toBeUndefined();

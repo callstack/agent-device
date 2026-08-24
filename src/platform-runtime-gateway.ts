@@ -322,6 +322,8 @@ function unavailableProviderBinding(
     keyboardStatus: unavailable,
     keyboardDismiss: unavailable,
     keyboardEnter: unavailable,
+    readClipboard: unavailable,
+    writeClipboard: unavailable,
     lifecycle: unavailableProviderLifecycleFacts(unavailable),
   });
 }
@@ -353,6 +355,8 @@ function unavailableProviderFacts(runtime: ProviderDeviceRuntime, device: Device
       keyboardStatus: unavailable,
       keyboardDismiss: unavailable,
       keyboardEnter: unavailable,
+      readClipboard: unavailable,
+      writeClipboard: unavailable,
       readiness: unavailable,
       lifecycle: unavailableProviderLifecycleFacts(unavailable),
     },

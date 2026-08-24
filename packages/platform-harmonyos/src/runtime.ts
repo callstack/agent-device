@@ -25,6 +25,7 @@ import {
 } from '@agent-device/contracts/scroll-runtime';
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
+import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
 import { localRuntimeOwner, whenAdmitted } from '@agent-device/contracts/platform-runtime';
@@ -276,6 +277,12 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
           status: harmonyKeyboardStatusUnavailable,
           dismiss: harmonyFocusFact(device),
           enter: harmonyFocusFact(device),
+        }),
+        // HarmonyOS never carried a `clipboard` capability bucket and is absent from the
+        // HarmonyOS overlay set, so no clipboard cell was ever admitted here.
+        ...clipboardRuntimeOperationFacts({
+          read: harmonyPlatformLeafUnavailable,
+          write: harmonyPlatformLeafUnavailable,
         }),
         ensureReady: available,
         bootTarget: unavailable,

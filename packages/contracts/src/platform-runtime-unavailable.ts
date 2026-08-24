@@ -24,6 +24,7 @@ import { homeRuntimeOperationFacts } from './home-runtime.ts';
 import { orientationRuntimeOperationFacts } from './orientation-runtime.ts';
 import { tvRemoteRuntimeOperationFacts } from './tv-remote-runtime.ts';
 import { keyboardRuntimeOperationFacts } from './keyboard-runtime.ts';
+import { clipboardRuntimeOperationFacts } from './clipboard-runtime.ts';
 import { touchRuntimeOperationFacts } from './touch-runtime.ts';
 
 /**
@@ -53,6 +54,8 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   keyboardStatus: RuntimeOperationUnavailability;
   keyboardDismiss: RuntimeOperationUnavailability;
   keyboardEnter: RuntimeOperationUnavailability;
+  readClipboard: RuntimeOperationUnavailability;
+  writeClipboard: RuntimeOperationUnavailability;
   readiness?: RuntimeOperationUnavailability;
   shutdown?: RuntimeOperationUnavailability;
   lifecycle: ApplicationLifecycleOperationFacts;
@@ -109,6 +112,8 @@ export function createUnavailablePlatformRuntimeFacts(
     keyboardStatus,
     keyboardDismiss,
     keyboardEnter,
+    readClipboard,
+    writeClipboard,
     readiness,
     shutdown,
     lifecycle,
@@ -178,6 +183,7 @@ export function createUnavailablePlatformRuntimeFacts(
         dismiss: keyboardDismiss,
         enter: keyboardEnter,
       }),
+      ...clipboardRuntimeOperationFacts({ read: readClipboard, write: writeClipboard }),
       ensureReady: readiness,
       bootTarget: readiness,
       bootTargetHeadless: readiness,
@@ -225,6 +231,11 @@ function freezeUnavailableFacts(
     keyboardStatus: Object.freeze({ ...unavailable.keyboardStatus }),
     keyboardDismiss: Object.freeze({ ...unavailable.keyboardDismiss }),
     keyboardEnter: Object.freeze({ ...unavailable.keyboardEnter }),
+    // Clipboard cells are stated by their owner for the same reason: the surface differs by leaf
+    // and kind (an Apple simulator has one, a physical non-macOS Apple device does not), and read
+    // and write can diverge on a provider whose extension exposes only one half.
+    readClipboard: Object.freeze({ ...unavailable.readClipboard }),
+    writeClipboard: Object.freeze({ ...unavailable.writeClipboard }),
     lifecycle: applicationLifecycleOperationFacts(unavailable.lifecycle),
   });
 }

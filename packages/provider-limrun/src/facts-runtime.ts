@@ -15,6 +15,7 @@ import {
 import {
   limrunInteractionOperationFacts,
   limrunKeyboardOperationFacts,
+  limrunClipboardOperationFacts,
   limrunNavigationOperationFacts,
 } from './interaction-operations.ts';
 
@@ -185,6 +186,7 @@ export function limrunAppLogFacts(
       ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementTextUnavailable }),
       ...limrunNavigationOperationFacts(device),
       ...limrunKeyboardOperationFacts(device),
+      ...limrunClipboardOperationFacts(device),
       ensureReady: available,
       bootTarget: available,
       bootTargetHeadless: headlessUnavailable,
@@ -232,6 +234,7 @@ export function limrunAppLogRecoveryFacts(
       ...limrunInteractionOperationFacts(device, liveSessionUnavailable),
       ...limrunNavigationOperationFacts(device, liveSessionUnavailable),
       ...limrunKeyboardOperationFacts(device, liveSessionUnavailable),
+      ...limrunClipboardOperationFacts(device, liveSessionUnavailable),
       ensureReady: liveSessionUnavailable,
       bootTarget: liveSessionUnavailable,
       bootTargetHeadless: liveSessionUnavailable,

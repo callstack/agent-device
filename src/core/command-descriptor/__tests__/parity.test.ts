@@ -53,6 +53,7 @@ const NO_CAPABILITY_PUBLIC_COMMANDS = new Set<string>([
   PUBLIC_COMMANDS.batch,
   PUBLIC_COMMANDS.boot,
   PUBLIC_COMMANDS.capabilities,
+  PUBLIC_COMMANDS.clipboard,
   PUBLIC_COMMANDS.close,
   PUBLIC_COMMANDS.devices,
   PUBLIC_COMMANDS.diff,

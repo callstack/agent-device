@@ -245,6 +245,9 @@ export {
   keyboardStatusUse,
   keyboardDismissUse,
   keyboardEnterUse,
+  clipboardRuntimePlanUses,
+  clipboardReadUse,
+  clipboardWriteUse,
 } from '../platform-runtime-operations.ts';
 export type {
   GestureRuntimePlan,
