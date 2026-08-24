@@ -16,6 +16,9 @@ const SUBPROCESS_STUB_TESTS: readonly string[] = [
   'src/__tests__/client-metro.test.ts',
   // The SUT is the subprocess watchdog: a node subprocess per case, one hangs on purpose (#1414).
   'scripts/fuzz/harness.test.ts',
+  // The daemon takeover test launches a branch-named daemon per case to prove
+  // that worktree identity does not strand the predecessor (#1545).
+  'src/daemon/__tests__/daemon-process-takeover.test.ts',
 ];
 
 // The fuzz corpus replay, which must not run under V8 coverage instrumentation.
