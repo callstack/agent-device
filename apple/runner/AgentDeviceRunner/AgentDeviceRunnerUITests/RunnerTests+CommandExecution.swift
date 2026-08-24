@@ -2190,7 +2190,12 @@ extension RunnerTests {
         Self.alertCommandTimeout(timeoutMs: command.timeoutMs)
       )
       guard let alert = resolveAlert(app: activeApp, deadline: deadline) else {
-        return Response(ok: false, error: ErrorPayload(message: "alert not found"))
+        // Typed so the host retries on absence alone: a transport or runner failure carries no
+        // code and must not be mistaken for "no alert yet" (ALERT_NOT_FOUND_RUNNER_CODE).
+        return Response(
+          ok: false,
+          error: ErrorPayload(code: "ALERT_NOT_FOUND", message: "alert not found")
+        )
       }
       return handleAlert(alert, action: action, deadline: deadline)
     case .gesture:

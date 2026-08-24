@@ -287,9 +287,14 @@ struct AgentDeviceMacOSHelper {
     let surface = optionValue(arguments: Array(arguments.dropFirst()), name: "--surface")
     let app = try resolveTargetApplication(bundleId: bundleId, surface: surface)
     guard let alertElement = findAlertElement(appElement: AXUIElementCreateApplication(app.processIdentifier)) else {
+      // `reason` is the typed channel the host retries on; the message is for humans only.
       throw HelperError.commandFailed(
         "alert not found",
-        details: ["bundleId": app.bundleIdentifier ?? "", "appName": app.localizedName ?? ""]
+        details: [
+          "reason": "alert-not-found",
+          "bundleId": app.bundleIdentifier ?? "",
+          "appName": app.localizedName ?? "",
+        ]
       )
     }
     let buttons = collectButtons(root: alertElement)

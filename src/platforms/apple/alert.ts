@@ -1,5 +1,7 @@
 import {
   ALERT_ACTION_RETRY_MS,
+  ALERT_NOT_FOUND_REASON,
+  ALERT_NOT_FOUND_RUNNER_CODE,
   ALERT_POLL_INTERVAL_MS,
   DEFAULT_ALERT_TIMEOUT_MS,
 } from '@agent-device/contracts/alert-contract';
@@ -15,9 +17,14 @@ import { runMacOsAlertAction } from './os/macos/helper.ts';
 
 /**
  * Apple's four alert legs. R59 moved them here from the daemon: how long to look for a transient
- * alert, how many times to re-ask a runner that answers "alert not found", and which of the two
- * Apple backends answers at all are family mechanics, not request policy. What the caller supplies
- * is the window it allows and the session's target; everything else is this family's.
+ * alert, how many times to re-ask a backend that reports the alert is not there yet, and which of
+ * the two Apple backends answers at all are family mechanics, not request policy. What the caller
+ * supplies is the window it allows and the session's target; everything else is this family's.
+ *
+ * Absence is the one retriable outcome, and both backends state it as typed evidence — the XCTest
+ * runner as `ALERT_NOT_FOUND`, the macOS helper as `reason: 'alert-not-found'`. Nothing here reads
+ * an error message: a transport, runner or helper failure that happened to mention an alert would
+ * otherwise be retried until the window expired and then reported as a timeout, hiding the cause.
  */
 type NativeAlertAction = 'get' | 'accept' | 'dismiss';
 
@@ -75,8 +82,11 @@ export async function awaitAppleAlert(
       const budgetMs = firstAttempt ? timeout : remainingBudgetMs(start, timeout);
       firstAttempt = false;
       return await runAlert('get', budgetMs);
-    } catch {
-      // keep waiting
+    } catch (error) {
+      // Only a typed absence is worth waiting out. Anything else — a dead runner, an unreachable
+      // helper, a canceled request — is reported as itself rather than spent as poll budget and
+      // relabeled `alert wait timed out`.
+      if (!isAlertNotFoundError(error)) throw error;
     }
     await sleep(ALERT_POLL_INTERVAL_MS);
   }
@@ -84,9 +94,9 @@ export async function awaitAppleAlert(
 }
 
 /**
- * Accept and dismiss retry only while the backend keeps saying the alert is not there yet — a
- * sheet that is still animating in. Any other failure is reported on its first occurrence, and
- * an exhausted retry window carries the scoped-snapshot fallback the agent needs next.
+ * Accept and dismiss retry only while the backend keeps reporting a typed absence — a sheet that
+ * is still animating in. Any other failure is reported on its first occurrence, and an exhausted
+ * retry window carries the scoped-snapshot fallback the agent needs next.
  */
 export async function actOnAppleAlert(
   device: DeviceInfo,
@@ -127,7 +137,16 @@ function withAlertFallbackHint(error: unknown): unknown {
   });
 }
 
+/**
+ * Absence, as the backend itself classified it. The XCTest runner's `ALERT_NOT_FOUND` arrives as
+ * `details.runnerErrorCode` (it stays `COMMAND_FAILED` on the wire, like `RUNNER_BUSY`); the macOS
+ * helper's arrives as `details.reason`, forwarded verbatim from its JSON error envelope.
+ */
 function isAlertNotFoundError(error: unknown): boolean {
-  const message = String((error as { message?: unknown })?.message ?? '').toLowerCase();
-  return message.includes('alert not found') || message.includes('no alert');
+  if (!(error instanceof AppError)) return false;
+  const details = error.details ?? {};
+  return (
+    details['runnerErrorCode'] === ALERT_NOT_FOUND_RUNNER_CODE ||
+    details['reason'] === ALERT_NOT_FOUND_REASON
+  );
 }

@@ -4,6 +4,10 @@ import { afterEach, test, vi } from 'vitest';
 vi.mock('../core/runner/runner-client.ts', () => ({ runAppleRunnerCommand: vi.fn() }));
 vi.mock('../os/macos/helper.ts', () => ({ runMacOsAlertAction: vi.fn() }));
 
+import {
+  ALERT_NOT_FOUND_REASON,
+  ALERT_NOT_FOUND_RUNNER_CODE,
+} from '@agent-device/contracts/alert-contract';
 import { AppError } from '@agent-device/kernel/errors';
 import { IOS_SIMULATOR, MACOS_DEVICE } from '../../../__tests__/test-utils/device-fixtures.ts';
 import { runAppleRunnerCommand } from '../core/runner/runner-client.ts';
@@ -13,6 +17,20 @@ import { actOnAppleAlert, awaitAppleAlert, readAppleAlert } from '../alert.ts';
 const mockRunner = vi.mocked(runAppleRunnerCommand);
 const mockHelper = vi.mocked(runMacOsAlertAction);
 const runnerOptions = {};
+
+/**
+ * Absence as each backend states it. The message is deliberately the same prose the old predicate
+ * matched on, so a test that passes here is passing on the typed evidence and nothing else.
+ */
+function runnerAbsence(): AppError {
+  return new AppError('COMMAND_FAILED', 'alert not found', {
+    runnerErrorCode: ALERT_NOT_FOUND_RUNNER_CODE,
+  });
+}
+
+function helperAbsence(): AppError {
+  return new AppError('COMMAND_FAILED', 'alert not found', { reason: ALERT_NOT_FOUND_REASON });
+}
 
 afterEach(() => {
   vi.useRealTimers();
@@ -40,7 +58,7 @@ test('a wait polls until one attempt answers, and the first attempt gets the who
   let calls = 0;
   mockRunner.mockImplementation(async () => {
     calls += 1;
-    if (calls === 1) throw new AppError('COMMAND_FAILED', 'alert not found');
+    if (calls === 1) throw runnerAbsence();
     return { title: 'Camera Access' };
   });
 
@@ -56,7 +74,7 @@ test('a wait polls until one attempt answers, and the first attempt gets the who
 
 test('a wait that never sees an alert reports the timeout rather than the last attempt error', async () => {
   vi.useFakeTimers();
-  mockRunner.mockRejectedValue(new AppError('COMMAND_FAILED', 'alert not found'));
+  mockRunner.mockRejectedValue(runnerAbsence());
 
   const outcome = awaitAppleAlert(IOS_SIMULATOR, runnerOptions, { timeoutMs: 900 }).then(
     () => undefined,
@@ -87,7 +105,7 @@ test('an accept retries only while the backend says the alert is not there yet',
 
 test('an exhausted accept carries the scoped-snapshot fallback the agent needs next', async () => {
   vi.useFakeTimers();
-  mockRunner.mockRejectedValue(new AppError('COMMAND_FAILED', 'alert not found'));
+  mockRunner.mockRejectedValue(runnerAbsence());
 
   const outcome = actOnAppleAlert(IOS_SIMULATOR, runnerOptions, 'accept').then(
     () => undefined,
@@ -97,6 +115,67 @@ test('an exhausted accept carries the scoped-snapshot fallback the agent needs n
   const error = (await outcome) as AppError;
 
   assert.equal(error.message, 'alert not found');
+  assert.match(String(error.details?.hint), /scoped snapshot/i);
+});
+
+// The whole point of typing absence: a backend that failed for any other reason must not be
+// retried until the window expires and then reported as a timeout. These three pin that the
+// evidence — not the message text — is what decides.
+test('a wait propagates a non-absence failure instead of spending it as poll budget', async () => {
+  vi.useFakeTimers();
+  let calls = 0;
+  // The message deliberately says "alert not found"; only the missing typed evidence matters.
+  mockRunner.mockImplementation(async () => {
+    calls += 1;
+    throw new AppError('COMMAND_FAILED', 'runner transport closed: alert not found');
+  });
+
+  const outcome = awaitAppleAlert(IOS_SIMULATOR, runnerOptions, { timeoutMs: 5_000 }).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  await vi.advanceTimersByTimeAsync(6_000);
+
+  assert.match(String(((await outcome) as Error).message), /runner transport closed/);
+  assert.equal(calls, 1);
+});
+
+test('an action does not retry a failure that only reads like an absence', async () => {
+  vi.useFakeTimers();
+  let calls = 0;
+  mockRunner.mockImplementation(async () => {
+    calls += 1;
+    throw new AppError('COMMAND_FAILED', 'no alert service on this runner');
+  });
+
+  const outcome = actOnAppleAlert(IOS_SIMULATOR, runnerOptions, 'dismiss').then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  await vi.advanceTimersByTimeAsync(3_500);
+  const error = (await outcome) as AppError;
+
+  assert.equal(calls, 1);
+  // The fallback hint is absence-only advice, so an untyped failure must not carry it either.
+  assert.equal(error.details?.hint, undefined);
+});
+
+test('the macOS helper states absence as a typed reason, and the family retries it', async () => {
+  vi.useFakeTimers();
+  let calls = 0;
+  mockHelper.mockImplementation(async () => {
+    calls += 1;
+    throw helperAbsence();
+  });
+
+  const outcome = actOnAppleAlert(MACOS_DEVICE, runnerOptions, 'accept').then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  await vi.advanceTimersByTimeAsync(3_500);
+  const error = (await outcome) as AppError;
+
+  assert.ok(calls > 1, 'a typed absence is retried');
   assert.match(String(error.details?.hint), /scoped snapshot/i);
 });
 

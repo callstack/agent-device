@@ -2134,7 +2134,15 @@ test('wait selector bypasses a fresh matching session snapshot', async () => {
   );
 });
 
-test('alert accept retries on "alert not found" and succeeds on second attempt', async () => {
+/**
+ * Absence as the XCTest runner states it (`ALERT_NOT_FOUND` surfaces as `details.runnerErrorCode`).
+ * The retry and the fallback hint key on that evidence, never on the message text.
+ */
+function alertAbsence(message = 'alert not found'): AppError {
+  return new AppError('COMMAND_FAILED', message, { runnerErrorCode: 'ALERT_NOT_FOUND' });
+}
+
+test('alert accept retries a typed alert absence and succeeds on the second attempt', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim';
   sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
@@ -2142,7 +2150,7 @@ test('alert accept retries on "alert not found" and succeeds on second attempt',
   let calls = 0;
   mockRunnerCommand.mockImplementation(async () => {
     calls += 1;
-    if (calls === 1) throw new AppError('COMMAND_FAILED', 'alert not found');
+    if (calls === 1) throw alertAbsence();
     return { accepted: true };
   });
 
@@ -2163,41 +2171,16 @@ test('alert accept retries on "alert not found" and succeeds on second attempt',
   });
 });
 
-test('alert accept does not retry on non-alert errors', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'ios-sim';
-  sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
-
-  let calls = 0;
-  mockRunnerCommand.mockImplementation(async () => {
-    calls += 1;
-    throw new AppError('COMMAND_FAILED', 'runner crashed');
-  });
-
-  await expect(
-    handleSnapshotCommands({
-      req: {
-        token: 't',
-        session: sessionName,
-        command: 'alert',
-        positionals: ['accept'],
-        flags: {},
-      },
-      sessionName,
-      logPath: '/tmp/daemon.log',
-      sessionStore,
-    }),
-  ).rejects.toThrow('runner crashed');
-
-  expect(calls).toBe(1);
-});
+// The non-absence case moved to `src/platforms/apple/__tests__/alert.test.ts` with the retry policy
+// itself (R59), where it also covers a failure whose message merely reads like an absence — the
+// case this daemon-altitude copy could not distinguish.
 
 test('alert accept adds a scoped-snapshot hint after retrying alert-not-found failures', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim';
   sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
 
-  mockRunnerCommand.mockRejectedValue(new AppError('COMMAND_FAILED', 'alert not found'));
+  mockRunnerCommand.mockRejectedValue(alertAbsence());
 
   let thrown: unknown;
   try {
@@ -2222,7 +2205,7 @@ test('alert accept adds a scoped-snapshot hint after retrying alert-not-found fa
   expect((thrown as AppError).details?.hint).toMatch(/scoped snapshot/i);
 });
 
-test('alert dismiss retries on "no alert" message', async () => {
+test('alert dismiss retries a typed absence whatever the message says', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim';
   sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
@@ -2230,7 +2213,7 @@ test('alert dismiss retries on "no alert" message', async () => {
   let calls = 0;
   mockRunnerCommand.mockImplementation(async () => {
     calls += 1;
-    if (calls < 3) throw new AppError('COMMAND_FAILED', 'no alert present');
+    if (calls < 3) throw alertAbsence('no alert present');
     return { dismissed: true };
   });
 
