@@ -1,6 +1,7 @@
 import { isInfrastructureBootFailureReason } from '../../platforms/boot-diagnostics.ts';
 import type { DaemonResponse } from '../types.ts';
 import type { ReplaySuiteTestResult } from '@agent-device/contracts/replay';
+import { isDeviceClaimConflictReason } from '../device-claim-conflict.ts';
 
 const REPLAY_INFRASTRUCTURE_FAILURE_MESSAGE_PATTERNS = [
   'failed to start daemon',
@@ -37,6 +38,7 @@ function hasInfrastructureFailureDetails(details: Record<string, unknown> | unde
   if (details?.recovery === 'runner_recycle_budget_exhausted') return true;
   const reason = typeof details?.reason === 'string' ? details.reason : '';
   if (reason === 'timeout_cleanup_pending') return true;
+  if (isDeviceClaimConflictReason(reason)) return true;
   return reason ? isInfrastructureBootFailureReason(reason) : false;
 }
 

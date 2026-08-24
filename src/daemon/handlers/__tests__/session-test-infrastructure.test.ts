@@ -86,6 +86,31 @@ test('isReplayInfrastructureFailure accepts typed runner recycle exhaustion', ()
   assert.equal(isReplayInfrastructureFailure(response), true);
 });
 
+test('isReplayInfrastructureFailure does not infer a device claim from message text', () => {
+  const response: DaemonResponse = {
+    ok: false,
+    error: {
+      code: 'REPLAY_DIVERGENCE',
+      message: 'macOS device host-macos-local is owned by another session.',
+    },
+  };
+
+  assert.equal(isReplayInfrastructureFailure(response), false);
+});
+
+test('isReplayInfrastructureFailure keeps untyped DEVICE_IN_USE failures behavioral', () => {
+  const response: DaemonResponse = {
+    ok: false,
+    error: {
+      code: 'DEVICE_IN_USE',
+      message: 'The requested device is busy with another session.',
+      retriable: true,
+    },
+  };
+
+  assert.equal(isReplayInfrastructureFailure(response), false);
+});
+
 test('isReplayInfrastructureFailure rejects normal replay failures', () => {
   const response: DaemonResponse = {
     ok: false,
