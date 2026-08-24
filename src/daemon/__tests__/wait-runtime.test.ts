@@ -308,17 +308,6 @@ test('a provider owner that cannot capture fails closed instead of borrowing the
 // the SAME binding rather than reaching a second capture owner.
 // ---------------------------------------------------------------------------
 
-/**
- * The 1ms timeout races the real clock: on a loaded CI host the first capture can take longer
- * than 1ms to resolve, so `runWithinWaitDeadline` classifies it `capture-stalled` (or, once a
- * later poll is readable, `capture-truncated`) instead of a completed target-absent poll, and
- * `maybeWaitTimeoutSurfaceResponse` skips the decoration outright (see wait-current-surface.ts).
- * A fake clock removes the race the same way `runFill` does in
- * packages/provider-webdriver/src/webdriver-interactor.test.ts: virtual time only advances when
- * `advanceTimersByTimeAsync` says so, so the mocked (instant, non-timer) capture always resolves
- * before the deadline timer is due, on any host (docs/agents/testing.md: production time must
- * never be real time in tests).
- */
 test('a timed-out wait decorates its failure through the same single binding', async () => {
   vi.useFakeTimers();
   try {
@@ -326,16 +315,9 @@ test('a timed-out wait decorates its failure through the same single binding', a
       nodesPerPoll: [[{ index: 0, depth: 0, type: 'Button', label: 'Checkout', hittable: true }]],
     });
 
-    // Settled-shaped from the start: a rejection that lands while the clock is being advanced
-    // would otherwise be unhandled until the await below.
-    const pending = runWait(['text', 'Ready', '1'], harness).then(
-      (value) => ({ rejected: false, value }) as const,
-      (error: unknown) => ({ rejected: true, error }) as const,
-    );
+    const pending = runWait(['text', 'Ready', '1'], harness);
     await vi.advanceTimersByTimeAsync(5_000);
-    const settled = await pending;
-    if (settled.rejected) throw settled.error;
-    const { response } = settled.value;
+    const { response } = await pending;
 
     expect(response.ok).toBe(false);
     if (response.ok) return;
