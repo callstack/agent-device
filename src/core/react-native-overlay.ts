@@ -1,7 +1,6 @@
 import {
   centerOfRect,
   type Point,
-  type RawSnapshotNode,
   type Rect,
   type SnapshotNode,
 } from '@agent-device/kernel/snapshot';
@@ -9,16 +8,10 @@ import { rectArea } from '@agent-device/kernel/rect';
 import {
   isReactNativeCollapsedWarningBanner,
   isReactNativeCollapsedWarningLabel,
-  isReactNativeCollapsedWarningWrapperCandidate as isReactNativeCollapsedWarningWrapperCandidateContract,
-  isReactNativeCollapsedWarningWrapperWithVisibleBanner as isReactNativeCollapsedWarningWrapperWithVisibleBannerContract,
-  isReactNativeOverlayDismissLabel as isReactNativeOverlayDismissLabelContract,
-  isReactNativeOverlayMinimizeLabel as isReactNativeOverlayMinimizeLabelContract,
+  isReactNativeOverlayDismissLabel,
+  isReactNativeOverlayMinimizeLabel,
 } from '@agent-device/contracts/react-native-overlay';
-
-type ReactNativeOverlayNode = Pick<
-  RawSnapshotNode,
-  'index' | 'type' | 'role' | 'subrole' | 'label' | 'value' | 'identifier' | 'rect' | 'hittable'
->;
+import type { ReactNativeOverlayNode } from '@agent-device/contracts/react-native-overlay';
 
 export type ReactNativeOverlayState = {
   detected: boolean;
@@ -73,35 +66,6 @@ export function analyzeReactNativeOverlay(nodes: SnapshotNode[]): ReactNativeOve
     collapsedNodes: facts.collapsedNodes,
     primaryAction,
   };
-}
-
-// Public through commands/react-native/overlay.ts; fallow cannot resolve this export * barrel.
-// fallow-ignore-next-line unused-export
-export function isReactNativeCollapsedWarningWrapperCandidate(
-  node: ReactNativeOverlayNode,
-): boolean {
-  return isReactNativeCollapsedWarningWrapperCandidateContract(node);
-}
-
-// Public through commands/react-native/overlay.ts; fallow cannot resolve this export * barrel.
-// fallow-ignore-next-line unused-export
-export function isReactNativeCollapsedWarningWrapperWithVisibleBanner(
-  node: ReactNativeOverlayNode,
-  descendants: ReactNativeOverlayNode[],
-): boolean {
-  return isReactNativeCollapsedWarningWrapperWithVisibleBannerContract(node, descendants);
-}
-
-// Public through commands/react-native/overlay.ts; fallow cannot resolve this export * barrel.
-// fallow-ignore-next-line unused-export
-export function isReactNativeOverlayDismissLabel(label: string): boolean {
-  return isReactNativeOverlayDismissLabelContract(label);
-}
-
-// Public through commands/react-native/overlay.ts; fallow cannot resolve this export * barrel.
-// fallow-ignore-next-line unused-export
-export function isReactNativeOverlayMinimizeLabel(label: string): boolean {
-  return isReactNativeOverlayMinimizeLabelContract(label);
 }
 
 function collectReactNativeOverlayFacts(nodes: SnapshotNode[]): ReactNativeOverlayFacts {

@@ -1,33 +1,15 @@
 import assert from 'node:assert/strict';
-import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
-import fc from 'fast-check';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { expect, test } from 'vitest';
-import { PROPERTY_RUNS } from '../../../__tests__/test-utils/property-arbitraries.ts';
 import {
   AndroidSnapshotPresentationFailure,
   createAndroidSnapshotPresentationNode,
   createAndroidSnapshotPresentationBudget,
-  effectiveAndroidRect,
   isAndroidSnapshotPresentationFailure,
-  serializeAndroidRegularPresentationNode,
   validateAndroidRegularPresentation,
 } from '../snapshot-presentation.ts';
 import { buildUiHierarchySnapshot, parseUiHierarchyTree } from '../ui-hierarchy.ts';
 import { parseUiHierarchy } from './ui-hierarchy-fixtures.ts';
-
-const rectArb = fc.record({
-  x: fc.integer({ min: -500, max: 500 }),
-  y: fc.integer({ min: -500, max: 500 }),
-  width: fc.integer({ min: -20, max: 500 }),
-  height: fc.integer({ min: -20, max: 500 }),
-});
-
-const positiveRectArb = fc.record({
-  x: fc.integer({ min: -500, max: 500 }),
-  y: fc.integer({ min: -500, max: 500 }),
-  width: fc.integer({ min: 1, max: 500 }),
-  height: fc.integer({ min: 1, max: 500 }),
-});
 
 test('regular Android snapshots publish cumulative effective geometry while raw keeps reported bounds', () => {
   const xml = `<hierarchy>
@@ -80,37 +62,6 @@ test('regular Android snapshots clip descendants to their owning window', () => 
     hittable: undefined,
   });
 });
-
-test('property: effective Android geometry stays inside every positive clip and never upgrades actionability', () => {
-  fc.assert(
-    fc.property(rectArb, positiveRectArb, positiveRectArb, (reported, viewport, ancestorClip) => {
-      const effective = effectiveAndroidRect(reported, viewport, ancestorClip);
-      const raw = { index: 0, depth: 0, rect: reported, hittable: true as const };
-      const carrier = createAndroidSnapshotPresentationNode(raw, effective);
-      const regular = serializeAndroidRegularPresentationNode(carrier);
-
-      expect(carrier.raw.rect).toEqual(reported);
-      expect(regular.rect).toEqual(effective);
-      if (effective && effective.width > 0 && effective.height > 0) {
-        expect(rectContains(viewport, effective)).toBe(true);
-        expect(rectContains(ancestorClip, effective)).toBe(true);
-        expect(regular.hittable).toBe(true);
-      } else {
-        expect(regular.hittable).toBeUndefined();
-      }
-    }),
-    { numRuns: PROPERTY_RUNS },
-  );
-});
-
-function rectContains(outer: Rect, inner: Rect): boolean {
-  return (
-    inner.x >= outer.x &&
-    inner.y >= outer.y &&
-    inner.x + inner.width <= outer.x + Math.max(0, outer.width) &&
-    inner.y + inner.height <= outer.y + Math.max(0, outer.height)
-  );
-}
 
 test('regular Android invariant rejects a framed node outside its cumulative clip', () => {
   const budget = createAndroidSnapshotPresentationBudget(

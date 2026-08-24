@@ -1,34 +1,27 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
+import { resolveImportEdges } from './model.ts';
+import { workspaceSpecifierTargets } from './package-boundaries.ts';
+import { listTrackedTypeScriptFiles } from './tracked-sources.ts';
 
-function trackedFiles(): string[] {
-  return execFileSync(
-    'git',
-    ['ls-files', '--', 'packages/contracts', 'src/daemon', 'src/snapshot'],
-    {
-      cwd: process.cwd(),
-      encoding: 'utf8',
-    },
-  )
-    .trim()
-    .split('\n')
-    .filter(Boolean);
-}
+const repoRoot = path.resolve(import.meta.dirname, '../..');
 
-test('snapshot presentation has one host facet and no daemon-owned presentation subtree', () => {
-  const files = trackedFiles();
-  assert.ok(
-    files.includes('packages/contracts/src/snapshot-presentation.ts'),
-    'the neutral presentation carrier must be owned by contracts',
+test('snapshot presentation cannot import daemon assembly', () => {
+  const files = listTrackedTypeScriptFiles(repoRoot);
+  const sources = new Map(
+    files.map((file) => [file, fs.readFileSync(path.join(repoRoot, file), 'utf8')]),
   );
-  assert.ok(
-    files.includes('src/snapshot/snapshot-presentation/tree.ts'),
-    'host-side presentation helpers must live under the snapshot facet',
+  const violations = resolveImportEdges(sources, workspaceSpecifierTargets(repoRoot)).filter(
+    (edge) =>
+      edge.file.startsWith('src/snapshot/snapshot-presentation/') &&
+      edge.target.startsWith('src/daemon/'),
   );
+
   assert.deepEqual(
-    files.filter((file) => file.startsWith('src/daemon/snapshot-presentation/')),
+    violations.map((edge) => `${edge.file}:${edge.line} -> ${edge.target}`),
     [],
-    'daemon assembly must not regain a presentation-owned subtree',
+    'the snapshot presentation facet must not depend on daemon assembly',
   );
 });

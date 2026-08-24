@@ -2,11 +2,9 @@ import type { Rect } from '@agent-device/kernel/snapshot';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import {
   createSnapshotPresentationNode,
-  foldSnapshotRect as effectiveAndroidRect,
-  serializeRegularSnapshotPresentationNode as serializeAndroidRegularPresentationNode,
+  serializeRegularSnapshotPresentationNode,
 } from '@agent-device/contracts/snapshot-presentation';
 import type { SnapshotPresentationNode } from '@agent-device/contracts/snapshot-presentation';
-export { effectiveAndroidRect, serializeAndroidRegularPresentationNode };
 
 export type AndroidSnapshotPresentationNode = SnapshotPresentationNode & {
   clipsDescendants?: boolean;
@@ -162,7 +160,7 @@ export function validateAndroidRegularPresentation(
       // A helper may report a clickable node outside a scroll clip. The regular serializer clears
       // that actionability claim when its effective geometry is empty, so validate the wire-facing
       // projection rather than treating the raw acquisition fact as a presentation violation.
-      if (serializeAndroidRegularPresentationNode(node).hittable === true) {
+      if (serializeRegularSnapshotPresentationNode(node).hittable === true) {
         throw new AndroidSnapshotPresentationFailure(
           `Android regular snapshot node ${node.raw.index} with degenerate effective geometry was marked hittable`,
           {

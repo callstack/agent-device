@@ -1,6 +1,6 @@
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 
-type ReactNativeOverlayNode = Pick<
+export type ReactNativeOverlayNode = Pick<
   RawSnapshotNode,
   'index' | 'type' | 'role' | 'subrole' | 'label' | 'value' | 'identifier' | 'rect' | 'hittable'
 >;

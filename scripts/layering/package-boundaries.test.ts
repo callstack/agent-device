@@ -693,9 +693,15 @@ test('Node resolution enforces the exports map at runtime', () => {
     .resolve('@agent-device/contracts/snapshot-presentation');
   assert.ok(
     contractsSnapshotPresentationResolved.endsWith(
-      'packages/contracts/src/facades/snapshot-presentation.ts',
+      'packages/contracts/src/snapshot-presentation.ts',
     ),
     contractsSnapshotPresentationResolved,
+  );
+  const contractsReactNativeOverlayResolved = import.meta
+    .resolve('@agent-device/contracts/react-native-overlay');
+  assert.ok(
+    contractsReactNativeOverlayResolved.endsWith('packages/contracts/src/react-native-overlay.ts'),
+    contractsReactNativeOverlayResolved,
   );
   const providerWebDriverResolved = import.meta.resolve('@agent-device/provider-webdriver');
   assert.ok(
