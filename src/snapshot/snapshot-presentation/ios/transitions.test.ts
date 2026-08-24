@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { makeSnapshotState } from '../../../__tests__/test-utils/snapshot-builders.ts';
 import { createInteractionDevice } from '../../../commands/interaction/runtime/__tests__/test-utils/index.ts';
-import { buildSnapshotState } from '../../snapshot-state.ts';
+import { buildSnapshotState } from '../../../daemon/snapshot-state.ts';
 import { presentIosInteractiveSnapshot } from './index.ts';
 import { navigationTitleWithAppProvidedDetailsAffordanceNodes } from './transitions.fixtures.ts';
 

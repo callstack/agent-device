@@ -6,6 +6,14 @@ import {
   type SnapshotNode,
 } from '@agent-device/kernel/snapshot';
 import { rectArea } from '@agent-device/kernel/rect';
+import {
+  isReactNativeCollapsedWarningBanner,
+  isReactNativeCollapsedWarningLabel,
+  isReactNativeCollapsedWarningWrapperCandidate as isReactNativeCollapsedWarningWrapperCandidateContract,
+  isReactNativeCollapsedWarningWrapperWithVisibleBanner as isReactNativeCollapsedWarningWrapperWithVisibleBannerContract,
+  isReactNativeOverlayDismissLabel as isReactNativeOverlayDismissLabelContract,
+  isReactNativeOverlayMinimizeLabel as isReactNativeOverlayMinimizeLabelContract,
+} from '@agent-device/contracts/react-native-overlay';
 
 type ReactNativeOverlayNode = Pick<
   RawSnapshotNode,
@@ -42,19 +50,6 @@ const REACT_NATIVE_STACK_FRAME_PATTERNS = [
   /\b[\w.$<>/-]+\.(?:tsx?|jsx?):\d+(?::\d+)?\b/,
   /\b[\w.$<>/-]+\.(?:tsx?|jsx?)\s+\(\d+:\d+\)/,
 ] as const;
-const COLLAPSED_WARNING_PREFIX_PATTERNS = [
-  /^!,\s+/,
-  /^(warn|warning|error):\s+/,
-  /\b(?:possible\s+)?unhandled (?:promise )?rejection\b/,
-] as const;
-const COLLAPSED_WARNING_TEXT_MARKERS = [
-  'open debugger to view warnings',
-  'getsnapshot should be cached to avoid an infinite loop',
-  'unique "key" prop',
-  "unique 'key' prop",
-  'virtualizedlists should never be nested',
-  'failed prop type',
-] as const;
 const CLOSE_ICON_LABELS = new Set(['x', '×', '✕', '✖', '⨯']);
 
 export function formatReactNativeOverlayWarning(nodes: SnapshotNode[]): string | undefined {
@@ -80,24 +75,33 @@ export function analyzeReactNativeOverlay(nodes: SnapshotNode[]): ReactNativeOve
   };
 }
 
+// Public through commands/react-native/overlay.ts; fallow cannot resolve this export * barrel.
+// fallow-ignore-next-line unused-export
 export function isReactNativeCollapsedWarningWrapperCandidate(
   node: ReactNativeOverlayNode,
 ): boolean {
-  return (
-    isReactNativeCollapsedWarningLabel(node.label?.trim()) && isFullScreenOverlayRect(node.rect)
-  );
+  return isReactNativeCollapsedWarningWrapperCandidateContract(node);
 }
 
+// Public through commands/react-native/overlay.ts; fallow cannot resolve this export * barrel.
+// fallow-ignore-next-line unused-export
 export function isReactNativeCollapsedWarningWrapperWithVisibleBanner(
   node: ReactNativeOverlayNode,
   descendants: ReactNativeOverlayNode[],
 ): boolean {
-  const nodeLabel = node.label?.trim();
-  if (!nodeLabel || !isReactNativeCollapsedWarningWrapperCandidate(node)) return false;
-  return descendants.some(
-    (descendant) =>
-      descendant.label?.trim() === nodeLabel && isReactNativeCollapsedWarningBanner(descendant),
-  );
+  return isReactNativeCollapsedWarningWrapperWithVisibleBannerContract(node, descendants);
+}
+
+// Public through commands/react-native/overlay.ts; fallow cannot resolve this export * barrel.
+// fallow-ignore-next-line unused-export
+export function isReactNativeOverlayDismissLabel(label: string): boolean {
+  return isReactNativeOverlayDismissLabelContract(label);
+}
+
+// Public through commands/react-native/overlay.ts; fallow cannot resolve this export * barrel.
+// fallow-ignore-next-line unused-export
+export function isReactNativeOverlayMinimizeLabel(label: string): boolean {
+  return isReactNativeOverlayMinimizeLabelContract(label);
 }
 
 function collectReactNativeOverlayFacts(nodes: SnapshotNode[]): ReactNativeOverlayFacts {
@@ -193,15 +197,6 @@ function isReactNativeOverlayDetected(params: {
   );
 }
 
-function isReactNativeCollapsedWarningLabel(rawLabel: string | undefined): boolean {
-  const label = rawLabel?.trim().toLowerCase();
-  if (!label) return false;
-  return (
-    COLLAPSED_WARNING_TEXT_MARKERS.some((marker) => label.includes(marker)) ||
-    COLLAPSED_WARNING_PREFIX_PATTERNS.some((pattern) => pattern.test(label))
-  );
-}
-
 function isReactNativeOpenDebuggerWarningLabel(label: string): boolean {
   return label.includes('open debugger to view warnings') || /^!,\s+open debugger\b/.test(label);
 }
@@ -210,20 +205,12 @@ function isDismissControlLabel(label: string): boolean {
   return isReactNativeOverlayDismissLabel(label) || isCloseLabel(label) || isCloseIconLabel(label);
 }
 
-export function isReactNativeOverlayDismissLabel(label: string): boolean {
-  return /^dismiss(?:\s*\([^)]*\))?$/i.test(label);
-}
-
 function isCloseLabel(label: string): boolean {
   return /^close(?:\s*\([^)]*\))?$/i.test(label);
 }
 
 function isCloseIconLabel(label: string): boolean {
   return CLOSE_ICON_LABELS.has(label);
-}
-
-export function isReactNativeOverlayMinimizeLabel(label: string): boolean {
-  return /^minimi[sz]e(?:\b|\s|\()/i.test(label);
 }
 
 function isCollapsedWarningSummaryLabel(label: string): boolean {
@@ -240,16 +227,6 @@ function isSafeCollapsedWarningCoordinateFallback(node: SnapshotNode): boolean {
     (isReactNativeOpenDebuggerWarningLabel(label) || isCollapsedWarningSummaryLabel(label)) &&
     isReactNativeCollapsedWarningBanner(node)
   );
-}
-
-function isFullScreenOverlayRect(rect: RawSnapshotNode['rect']): boolean {
-  if (!rect) return false;
-  return rect.x <= 1 && rect.y <= 1 && rect.width >= 300 && rect.height >= 600;
-}
-
-function isReactNativeCollapsedWarningBanner(node: ReactNativeOverlayNode): boolean {
-  if (!node.rect) return false;
-  return node.rect.width >= 120 && node.rect.height >= 36 && node.rect.height <= 180;
 }
 
 function collectOverlayNodes(

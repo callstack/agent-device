@@ -63,6 +63,26 @@ The daemon should make degraded output observable. If an iOS interactive snapsho
 application root or another sparse shape, surface a structured quality verdict and warning so
 agents know the snapshot is degraded output rather than proof that the screen has no controls.
 
+## Host-side ownership boundary
+
+The shared TypeScript side has one snapshot-presentation facet. The neutral acquisition-to-presented
+carrier and clip-fold geometry contract live in `@agent-device/contracts/snapshot-presentation`; the
+host-side iOS post-wire policies and shared tree helpers live under `src/snapshot/snapshot-presentation/`.
+Platform-specific presentation adapters retain only the policy mechanics that cannot yet cross their
+runtime boundary. Daemon assembly owns only the ordering of capture, compaction, occlusion, and ref
+publication. It does not own the presentation vocabulary or a second geometry carrier.
+
+Android acquisition remains in its platform module and adapts its raw hierarchy to the shared
+carrier. Swift keeps its runner-side `SnapshotPresentation` implementation because it consumes the
+capture-plan tier before the process boundary. The contract fixture under
+`contracts/fixtures/snapshot-presentation-conformance.json` is the shared proof between those
+runtimes; it does not imply that Swift and TypeScript share an implementation.
+
+This is the first ownership slice of the Wave 4 debt tracked by #1983. Freshness recovery,
+timeout evidence, and screenshot-overlay policy retain their existing daemon adapters until their
+neutral host seams are extracted; new consumers must use the facet rather than add another daemon
+presentation path.
+
 ## Regression Notes
 
 PR #639 made XCTest AX serialization failures explicit instead of swallowing them as empty

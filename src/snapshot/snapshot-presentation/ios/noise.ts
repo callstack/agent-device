@@ -5,7 +5,7 @@ import {
   isReactNativeCollapsedWarningWrapperWithVisibleBanner,
   isReactNativeOverlayDismissLabel,
   isReactNativeOverlayMinimizeLabel,
-} from '../../../core/react-native-overlay.ts';
+} from '@agent-device/contracts/react-native-overlay';
 import { normalizeType } from '@agent-device/contracts/snapshot';
 import { collectIosScrollIndicatorPresentation } from './scroll.ts';
 import {

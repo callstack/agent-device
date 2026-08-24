@@ -24,7 +24,7 @@ import {
 } from '../../touch-reference-frame.ts';
 import { isPositiveFiniteRect, rectContains } from '@agent-device/kernel/rect';
 import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';
-import { buildIosInteractiveSnapshotPresentation } from '../../snapshot-presentation/ios/index.ts';
+import { buildIosInteractiveSnapshotPresentation } from '../../../snapshot/snapshot-presentation/ios/index.ts';
 
 export const MAESTRO_OBSERVATION_POLL_MS = MAESTRO_RUNTIME_ADAPTER_POLICY.observationPollMs;
 export type DaemonMaestroRuntimeDependencies = {

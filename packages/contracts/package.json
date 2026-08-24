@@ -252,6 +252,10 @@
       "types": "./src/facades/replay.ts",
       "default": "./src/facades/replay.ts"
     },
+    "./react-native-overlay": {
+      "types": "./src/facades/react-native-overlay.ts",
+      "default": "./src/facades/react-native-overlay.ts"
+    },
     "./screen-recording-runtime": {
       "types": "./src/screen-recording-runtime.ts",
       "default": "./src/screen-recording-runtime.ts"
@@ -291,6 +295,10 @@
     "./snapshot": {
       "types": "./src/facades/snapshot.ts",
       "default": "./src/facades/snapshot.ts"
+    },
+    "./snapshot-presentation": {
+      "types": "./src/facades/snapshot-presentation.ts",
+      "default": "./src/facades/snapshot-presentation.ts"
     },
     "./snapshot-runtime": {
       "types": "./src/snapshot-runtime.ts",
