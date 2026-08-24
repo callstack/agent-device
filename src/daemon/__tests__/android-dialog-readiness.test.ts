@@ -1,10 +1,19 @@
-import { expect, test, vi } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 
+/**
+ * Recovery reads the daemon presentation, and Android publication derives covered state from the
+ * acquisition evidence the capture envelope carries (#1981). The fake capture is therefore built by
+ * the production constructor: a bare `{ nodes }` throws inside publication, and recovery would then
+ * report "recovery failed" for a fixture reason rather than a device one.
+ */
 vi.mock('../../platforms/android/snapshot.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../platforms/android/snapshot.ts')>();
+  const { makeAndroidSnapshotCapture } =
+    await import('../../__tests__/test-utils/android-snapshot-capture.ts');
   return {
     ...actual,
-    snapshotAndroid: vi.fn(async () => ({ nodes: anrDialogNodes() })),
+    snapshotAndroid: vi.fn(async () => makeAndroidSnapshotCapture(screenNodes)),
   };
 });
 
@@ -26,8 +35,17 @@ const NORMAL_FOCUS_DUMP = `  mCurrentFocus=Window{a1b2c3 u0 ${APP}/${APP}.MainAc
 const ANR_FOCUS_DUMP = `  mCurrentFocus=Window{ffeedd u0 Application Not Responding: ${APP}}`;
 const SYSTEM_DIALOG_DUMP =
   '  mCurrentFocus=Window{ffeedd u0 Application Not Responding: com.android.systemui}';
+const CLOSE_APP_RECT = { x: 100, y: 600, width: 220, height: 80 };
+const CLOSE_APP_TAP = ['shell', 'input', 'tap', '210', '640'];
 
-function anrDialogNodes() {
+/** What the mocked capture publishes: the screen the case under test is recovering from. */
+let screenNodes: RawSnapshotNode[];
+
+beforeEach(() => {
+  screenNodes = anrDialogNodes();
+});
+
+function anrDialogNodes(): RawSnapshotNode[] {
   return [
     {
       index: 0,
@@ -39,9 +57,30 @@ function anrDialogNodes() {
       index: 1,
       type: 'android.widget.Button',
       label: 'Close app',
-      rect: { x: 100, y: 600, width: 220, height: 80 },
+      rect: CLOSE_APP_RECT,
     },
   ];
+}
+
+/**
+ * The same dialog with a foreground sheet drawn over it: the "Close app" is in the tree but nothing
+ * a user could touch. #1832 — recovery acts on what is reachable, never on raw text.
+ */
+function coveredCloseAppNodes(): RawSnapshotNode[] {
+  return [
+    ...anrDialogNodes(),
+    {
+      index: 2,
+      type: 'com.google.android.material.bottomsheet.BottomSheetDialog',
+      identifier: 'com.example:id/bottom_sheet',
+      hittable: true,
+      rect: { x: 0, y: 0, width: 1080, height: 2400 },
+    },
+  ];
+}
+
+function tapCalls(calls: string[][]): string[][] {
+  return calls.filter((call) => call[1] === 'input' && call[2] === 'tap');
 }
 
 /**
@@ -69,9 +108,9 @@ test('an ANR that surfaces between two commands is recovered by the next pre-dis
   const session = makeAndroidSession('readiness-anr-between', { appBundleId: APP });
   let anr = false;
 
-  const readiness = await withFakeAdb(
+  const { readiness, calls } = await withFakeAdb(
     deviceShowing(() => (anr ? ANR_FOCUS_DUMP : null)),
-    async ({ device }) => {
+    async ({ device, calls }) => {
       session.device = device;
       await ensureAndroidBlockingSystemDialogReady({
         session,
@@ -79,11 +118,12 @@ test('an ANR that surfaces between two commands is recovered by the next pre-dis
         phase: 'after-command',
       });
       anr = true;
-      return await ensureAndroidBlockingSystemDialogReady({
+      const readiness = await ensureAndroidBlockingSystemDialogReady({
         session,
         command: 'tap',
         phase: 'before-command',
       });
+      return { readiness, calls };
     },
   );
 
@@ -91,6 +131,36 @@ test('an ANR that surfaces between two commands is recovered by the next pre-dis
     status: 'recovered',
     warning: `Recovered Android app ANR before tap: closed and relaunched ${APP}.`,
   });
+  // Recovering means the dialog was actually dismissed on the device, so the reported status is
+  // pinned to the tap that did it rather than to the status value alone.
+  expect(tapCalls(calls)).toEqual([CLOSE_APP_TAP]);
+});
+
+test('an ANR whose Close app is covered is not tapped, and recovery reports failure', async () => {
+  // #1832: recovery reads the presentation's occlusion result, so a "Close app" that a foreground
+  // surface covers is unreachable. Tapping it anyway would land the tap on whatever is on top.
+  const session = makeAndroidSession('readiness-anr-covered', { appBundleId: APP });
+  screenNodes = coveredCloseAppNodes();
+
+  const { calls } = await withFakeAdb(
+    deviceShowing(() => ANR_FOCUS_DUMP),
+    async ({ device, calls }) => {
+      session.device = device;
+      await expect(
+        ensureAndroidBlockingSystemDialogReady({
+          session,
+          command: 'tap',
+          phase: 'before-command',
+        }),
+      ).rejects.toMatchObject({
+        code: 'COMMAND_FAILED',
+        message: expect.stringContaining('Android app ANR blocked tap'),
+      });
+      return { calls };
+    },
+  );
+
+  expect(tapCalls(calls)).toEqual([]);
 });
 
 test('a system dialog that surfaces between two commands blocks the next command', async () => {

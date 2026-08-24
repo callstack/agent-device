@@ -198,6 +198,18 @@ What changed:
   `main` either) but emits `android_blocking_dialog_unobserved`, and nothing about that dump can be
   carried forward as evidence.
 
+- **CI — rebased again onto `main`'s #1981.** The PR's Coverage lane tests the branch merged into
+  `main`, and #1981 landed there after the first rebase: Android publication now derives covered
+  state from acquisition evidence that travels in an opaque capture envelope, and
+  `readAndroidSnapshotNodes` goes through `androidSnapshotPublicationInput`. This branch's new
+  `android-dialog-readiness.test.ts` mocked `snapshotAndroid` with a bare `{ nodes }`, so
+  publication threw, the ANR recovery's own catch reported "Automatic recovery failed", and two
+  cases failed on a fixture defect that looked like broken recovery. The fixture now builds its
+  capture with the production constructor (`makeAndroidSnapshotCapture`), the recovered case pins
+  the tap that dismissed the dialog rather than the status alone, and a new case pins #1832 on the
+  readiness path: a "Close app" covered by a foreground surface is never tapped and recovery
+  reports failure.
+
 Left open, not in this pass: **F5** (the ANR poll is attempt-bounded, so cheaper probes shortened
 its wall-clock window), **F6** (the promoted `type` path has no delivery or helper-version check),
 **F7** (`#1832` citations corrected to `#592` where this pass rewrote them; other `#1832`
