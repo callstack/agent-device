@@ -17,7 +17,7 @@ export const APPROVED_SEAMS: readonly ApprovedSeam[] = [
     field: 'fetch',
     target: 'fetch',
     reason:
-      "AuthIo.fetch injects the fetch global, which has no module boundary vi.mock can " +
+      'AuthIo.fetch injects the fetch global, which has no module boundary vi.mock can ' +
       'intercept. auth-session.test.ts injects it directly for exact per-call assertions.',
   },
   {

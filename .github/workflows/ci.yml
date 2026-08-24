@@ -80,7 +80,8 @@ jobs:
       # anything) as on an unapproved seam, so the allowlist can't drift out of sync with the code
       # it describes. See scripts/di-seams/model.ts and its tests.
       - name: Fail if test-only DI seams reappear in production code
-        run: pnpm check:di-seams
+        uses: ./.github/actions/run-gate
+        with: { gate: di-seams }
 
       - name: Run oxlint
         uses: ./.github/actions/run-gate

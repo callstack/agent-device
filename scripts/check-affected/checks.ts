@@ -39,6 +39,7 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   // make every root-checkout validation install it implicitly.
   gate('test-app-typecheck', 'Expo test app typecheck', 'test-app:typecheck', false),
   gate('layering', 'Import-direction layering guard', 'check:layering'),
+  gate('di-seams', 'Test-only DI seam guard', 'check:di-seams'),
   gate('fallow', 'Fallow code-quality audit', 'check:fallow'),
   gate('mcp-metadata', 'MCP registry metadata sync', 'check:mcp-metadata'),
   gate('build', 'Build (tsdown + declarations)', 'build'),

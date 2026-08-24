@@ -137,7 +137,7 @@
     "check:coverage-changed": "node --experimental-strip-types scripts/coverage-changed/run.ts",
     "check:coverage-changed:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/coverage-changed/model.test.ts scripts/coverage-changed/run.test.ts",
     "check:layering": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/layering/*.test.ts && node --experimental-strip-types scripts/layering/check.ts",
-    "check:di-seams": "node --experimental-strip-types --test scripts/di-seams/*.test.ts && node --experimental-strip-types scripts/di-seams/check.ts",
+    "check:di-seams": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/di-seams/*.test.ts && node --experimental-strip-types scripts/di-seams/check.ts",
     "depgraph": "node --experimental-strip-types scripts/depgraph/build.ts",
     "depgraph:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/depgraph/model.test.ts scripts/depgraph/affected.test.ts",
     "check:production-exports": "fallow dead-code --config fallow-production-exports.json --production --unused-exports --fail-on-issues",

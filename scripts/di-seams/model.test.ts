@@ -54,9 +54,7 @@ test('checkSeams flags an unapproved field name in an approved file, even for an
 });
 
 test('checkSeams flags a seam under a different target, even for an approved field name', () => {
-  const matches = findSeamMatches([
-    { path: 'src/x.ts', source: 'fetchImpl?: typeof otherFn;' },
-  ]);
+  const matches = findSeamMatches([{ path: 'src/x.ts', source: 'fetchImpl?: typeof otherFn;' }]);
   const { violations } = checkSeams(matches, [
     { file: 'src/x.ts', field: 'fetchImpl', target: 'fetch', reason: 'test' },
   ]);
@@ -65,9 +63,10 @@ test('checkSeams flags a seam under a different target, even for an approved fie
 });
 
 test('checkSeams reports an approval as stale when its triple matches nothing', () => {
-  const { staleApprovals, violations } = checkSeams([], [
-    { file: 'src/x.ts', field: 'fetchImpl', target: 'fetch', reason: 'test' },
-  ]);
+  const { staleApprovals, violations } = checkSeams(
+    [],
+    [{ file: 'src/x.ts', field: 'fetchImpl', target: 'fetch', reason: 'test' }],
+  );
   assert.equal(violations.length, 0);
   assert.equal(staleApprovals.length, 1);
   assert.equal(staleApprovals[0]?.field, 'fetchImpl');
