@@ -14,7 +14,6 @@ import {
   createLiveDeviceHarness,
   type LiveDeviceContext,
 } from '../live-device-e2e/runtime.ts';
-import { assertPngFile } from '../provider-scenarios/assertions.ts';
 import { runLiveReplayTestSuite } from '../live-device-e2e/replay-suite.ts';
 import { writeCoverageReport } from '../live-device-e2e/coverage.ts';
 import {
@@ -75,7 +74,7 @@ async function runLinuxCommandEvidence(): Promise<void> {
 async function runCommandEvidence(context: LinuxContext): Promise<void> {
   await runCommandDiscoveryEvidence(context);
   await runSnapshotEvidence(context);
-  await runArtifactEvidence(context);
+  await runEventEvidence(context);
 }
 
 async function runCommandDiscoveryEvidence(context: LinuxContext): Promise<void> {
@@ -186,24 +185,7 @@ function assertLinuxBatchResults(json: any): void {
   assert.equal(second.command, 'snapshot', JSON.stringify(json));
 }
 
-async function runArtifactEvidence(context: LinuxContext): Promise<void> {
-  const screenshotPath = path.join(context.artifactDir, 'linux-command-evidence.png');
-  await runStep(context, 'capture a Linux artifact for inventory', ['screenshot', screenshotPath]);
-  assertPngFile(screenshotPath);
-
-  const artifacts = await runStep(context, 'list Linux session artifacts', ['artifacts']);
-  const artifactEntries = artifacts.json?.data?.artifacts;
-  assert.ok(Array.isArray(artifactEntries), JSON.stringify(artifacts.json));
-  assert.ok(
-    artifactEntries.some(
-      (entry: Record<string, unknown>) =>
-        entry.artifactType === 'screenshot' &&
-        String(entry.path ?? entry.filename ?? '').includes(path.basename(screenshotPath)),
-    ),
-    `Linux artifact inventory did not include the screenshot: ${JSON.stringify(artifacts.json)}`,
-  );
-  verifyCommand(context, C.artifacts, 'artifact inventory exposes the live screenshot');
-
+async function runEventEvidence(context: LinuxContext): Promise<void> {
   const timeline = await collectPagedEventTimeline((cursor) => readLinuxEventPage(context, cursor));
   for (const command of [C.open, C.snapshot]) {
     assert.ok(

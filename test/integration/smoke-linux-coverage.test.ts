@@ -46,12 +46,14 @@ test('Linux coverage exhaustively classifies the public catalog', () => {
 test('Linux coverage report has the expected classification counts', () => {
   assert.deepEqual(LINUX_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY, {
     // focus (#1925), click, and type remain live via the existing replay. The separate
-    // command-evidence lane adds ten generic-command rows without changing that replay. Keyboard,
-    // orientation, and tv-remote remain fact-owned command-contract rows, not catalog denials.
+    // command-evidence lane adds nine generic-command rows without changing that replay. Artifact
+    // inventory remains a gap because local Linux screenshot paths are not daemon-downloadable.
+    // Keyboard, orientation, and tv-remote remain fact-owned command-contract rows, not catalog
+    // denials.
     capabilityDenial: 7,
     contract: 21,
-    gap: 8,
-    live: 18,
+    gap: 9,
+    live: 17,
     total: 54,
   });
 

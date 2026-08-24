@@ -2,7 +2,6 @@ import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
 
 /** Commands exercised by the separate Linux/Xvfb command-evidence lane. */
 export const LINUX_COMMAND_EVIDENCE_COMMANDS = [
-  PUBLIC_COMMANDS.artifacts,
   PUBLIC_COMMANDS.capabilities,
   PUBLIC_COMMANDS.doctor,
   PUBLIC_COMMANDS.events,

@@ -96,7 +96,9 @@ const gap = (assertion: string): LinuxPlatformCoverageEntry => ({
  * work, not an implicit claim that a generic command works.
  */
 export const LINUX_PLATFORM_COVERAGE = {
-  [C.artifacts]: commandEvidenceLive('the command-evidence lane lists a live screenshot artifact'),
+  [C.artifacts]: gap(
+    'No Linux live command creates a downloadable daemon artifact for inventory yet',
+  ),
   [C.devices]: contract(
     LINUX_PROVIDER_EVIDENCE.path,
     LINUX_PROVIDER_EVIDENCE.test,
